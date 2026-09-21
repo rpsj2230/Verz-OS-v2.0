@@ -9,10 +9,10 @@ What an administrator would need to manage, read out of the schema, the routes a
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
 - 76 tables, from `brain.db.Base.metadata`.
 - 24 installation values, from `brain.install.INSTALLATION`.
-- 129 routes under `/api/v1` and `/setup`, from the API's internal document.
+- 133 routes under `/api/v1` and `/setup`, from the API's internal document.
 - 68 console addresses, from the route table in `console/src/App.tsx`.
-- 44 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 52 routes.
-- 35 gaps recorded, and 12 routes no screen calls.
+- 45 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 53 routes.
+- 35 gaps recorded, and 13 routes no screen calls.
 
 ## Area by area
 
@@ -29,8 +29,10 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `GET /api/v1/govern/capabilities` | `/capabilities` |
 | `GET /api/v1/govern/data-steward` | `/people`, `/people/:subject` |
 | `GET /api/v1/govern/elevation` | `/elevation` |
+| `GET /api/v1/govern/packs` | `/people/:subject` |
 | `GET /api/v1/govern/people` | `/people`, `/people/:subject` |
 | `GET /api/v1/govern/roles` | `/roles` |
+| `GET /api/v1/govern/roles/misconfigurations` | `/roles` |
 | `GET /api/v1/govern/scopes` | `/people/:subject`, `/scopes` |
 | `GET /api/v1/govern/sessions` | `/sessions` |
 | `GET /api/v1/govern/sign-ins` | `/sign-in-links` |
@@ -44,6 +46,7 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `POST /api/v1/govern/elevation/requests/{request_id}/decision` | `/elevation` |
 | `POST /api/v1/govern/grants` | `/people`, `/people/:subject` |
 | `POST /api/v1/govern/grants/removal` | `/people`, `/people/:subject` |
+| `POST /api/v1/govern/packs/assignment` | `/people`, `/people/:subject` |
 | `POST /api/v1/govern/sessions/end` | `/sessions` |
 | `POST /api/v1/govern/sessions/end-several` | `/sessions` |
 | `POST /api/v1/govern/sign-ins/unlink` | `/sign-in-links` |
@@ -216,6 +219,7 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `GET /api/v1/govern/library` | `/library` |
 | `GET /api/v1/govern/memory` | `/memory/:subject` |
 | `GET /api/v1/records/{entity}` | `/records/:entity` |
+| `GET /api/v1/records/{entity}/access` | **no screen** |
 | `POST /api/v1/classifications/{entity}/columns/{column}/review` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` |
 | `POST /api/v1/govern/learning/undo` | `/learning` |
 
@@ -424,7 +428,7 @@ No gap recorded.
 
 ## Every write the console sends, followed to the system
 
-Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 47 of 52 write routes have all three proved or not applicable, 6 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
+Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 48 of 53 write routes have all three proved or not applicable, 6 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
 
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
@@ -451,6 +455,7 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /api/v1/govern/learning/undo` | `/learning` | `test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next` in `tests/unit/test_memory_store.py` (database, in CI) | `test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next` in `tests/unit/test_memory_store.py` (database, in CI) | `test_an_undo_writes_the_correction_and_the_next_reading_no_longer_recalls_the_learning` in `tests/unit/test_estate_routes.py` |
 | `POST /api/v1/govern/legal-holds` | `/retention` | `test_a_hold_is_placed_lifted_once_and_kept` in `tests/unit/test_retention_store.py` (database, in CI) | `test_each_retention_write_the_console_makes_appends_one_entry_naming_its_own_actor` in `tests/unit/test_retention_audit.py` (database, in CI) | `test_a_hold_placed_through_the_store_keeps_its_rows_from_the_sweep_and_lifted_releases_them` in `tests/unit/test_console_control_audit.py` (database, in CI) |
 | `POST /api/v1/govern/legal-holds/lift` | `/retention` | `test_a_hold_is_placed_lifted_once_and_kept` in `tests/unit/test_retention_store.py` (database, in CI) | `test_each_retention_write_the_console_makes_appends_one_entry_naming_its_own_actor` in `tests/unit/test_retention_audit.py` (database, in CI) | `test_a_hold_placed_through_the_store_keeps_its_rows_from_the_sweep_and_lifted_releases_them` in `tests/unit/test_console_control_audit.py` (database, in CI) |
+| `POST /api/v1/govern/packs/assignment` | `/people`, `/people/:subject` | `test_an_assignment_reaches_the_row_the_ledger_and_the_resolver` in `tests/unit/test_govern_pack_routes.py` (database, in CI) | `test_an_assignment_reaches_the_row_the_ledger_and_the_resolver` in `tests/unit/test_govern_pack_routes.py` (database, in CI) | `test_an_assignment_reaches_the_row_the_ledger_and_the_resolver` in `tests/unit/test_govern_pack_routes.py` (database, in CI) |
 | `POST /api/v1/govern/prompts/{agent_id}` | `/prompts` | `test_an_instruction_edit_and_its_give_back_reach_the_install_the_ledger_and_the_prompt` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_an_instruction_edit_and_its_give_back_reach_the_install_the_ledger_and_the_prompt` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_an_instruction_edit_and_its_give_back_reach_the_install_the_ledger_and_the_prompt` in `tests/unit/test_console_control_audit.py` (database, in CI) |
 | `POST /api/v1/govern/prompts/{agent_id}/give-back` | `/prompts` | `test_an_instruction_edit_and_its_give_back_reach_the_install_the_ledger_and_the_prompt` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_an_instruction_edit_and_its_give_back_reach_the_install_the_ledger_and_the_prompt` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_an_instruction_edit_and_its_give_back_reach_the_install_the_ledger_and_the_prompt` in `tests/unit/test_console_control_audit.py` (database, in CI) |
 | `POST /api/v1/govern/retention/release` | `/retention` | `test_a_release_names_the_newest_report_and_is_withdrawn_by_being_marked` in `tests/unit/test_retention_store.py` (database, in CI) | `test_each_retention_write_the_console_makes_appends_one_entry_naming_its_own_actor` in `tests/unit/test_retention_audit.py` (database, in CI) | `test_a_released_sweep_is_started_to_act_and_a_withdrawn_one_to_report` in `tests/unit/test_worker_schedule.py` (database, in CI) |

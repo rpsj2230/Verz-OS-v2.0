@@ -51,7 +51,7 @@ import {
   REVIEW_DECISION_API_PATH,
   elevationDecisionApiPath,
 } from "../../src/pages/governPeopleQuery";
-import { GRANTS_API_PATH, REMOVAL_API_PATH } from "../../src/pages/governQuery";
+import { GRANTS_API_PATH, PACK_ASSIGNMENT_API_PATH, REMOVAL_API_PATH } from "../../src/pages/governQuery";
 import { actionPath } from "../../src/pages/jobsQuery";
 import { rungApiPath } from "../../src/pages/matrixQuery";
 import { providerCheckApiPath, providerSwitchApiPath } from "../../src/pages/modelsQuery";
@@ -179,6 +179,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/sign-ins",
       "/api/v1/govern/data-steward",
       "/api/v1/govern/staff_sources*",
+      "/api/v1/govern/packs*",
+      "/api/v1/govern/roles/misconfigurations",
     ],
     tables: [
       "auth.principal",
@@ -400,6 +402,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/records/{entity}",
       "/api/v1/classifications*",
       "/api/v1/govern/artifacts",
+      "/api/v1/records/{entity}/access",
     ],
     tables: [
       "know.item",
@@ -734,6 +737,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
       "automationStopApiPath",
       automationStopApiPath("quote-helper", "auto_one"),
     ),
+  ],
+  "src/pages/People.tsx PACK_ASSIGNMENT_API_PATH": [
+    at("POST /api/v1/govern/packs/assignment", "PACK_ASSIGNMENT_API_PATH", PACK_ASSIGNMENT_API_PATH),
   ],
 };
 
@@ -1088,6 +1094,11 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: t("test_automation_run_store", "test_the_console_starts_and_stops_as_the_application_role_and_the_ledger_says_who", true),
     audit: t("test_automation_run_store", "test_the_console_starts_and_stops_as_the_application_role_and_the_ledger_says_who", true),
     behaviour: t("test_automation_schedule_routes", "test_the_owner_stops_their_own_without_approval_and_a_bystander_cannot"),
+  },
+  "POST /api/v1/govern/packs/assignment": {
+    row: t("test_govern_pack_routes", "test_an_assignment_reaches_the_row_the_ledger_and_the_resolver", true),
+    audit: t("test_govern_pack_routes", "test_an_assignment_reaches_the_row_the_ledger_and_the_resolver", true),
+    behaviour: t("test_govern_pack_routes", "test_an_assignment_reaches_the_row_the_ledger_and_the_resolver", true),
   },
 };
 

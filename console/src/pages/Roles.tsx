@@ -21,11 +21,16 @@
  * library and imports no stylesheet of its own, which is `App.tsx`'s rule for `Overview`,
  * `Agents` and `NotFound`: a chunk for it would buy a round trip and save no bytes.
  *
- * Task ids: M27.7.5
+ * Task ids: M27.7.5, M1.8.4
  */
 
 import { useResource } from "../api/useResource";
-import { ROLES_API_PATH, readRoles } from "./governQuery";
+import {
+  MISCONFIGURATIONS_API_PATH,
+  ROLES_API_PATH,
+  readMisconfigurations,
+  readRoles,
+} from "./governQuery";
 import { FailureNotice } from "../ui/FailureNotice";
 
 export const ROLES_HEADING = "Roles";
@@ -97,12 +102,60 @@ function RolesAnswerView() {
   );
 }
 
+export const MISCONFIGURED_HEADING = "Approver role and approve permission";
+
+/** What the flag is for, said once above it. */
+export const MISCONFIGURED_LEDE =
+  "The approve permission alone decides who may approve. These people hold the Approver role " +
+  "without it, or hold it without the role, which is a misconfiguration either way.";
+
+/** Nobody this reader may see is misconfigured. */
+export const NONE_MISCONFIGURED = "Nobody you may see holds one without the other.";
+
+export const MISCONFIGURED_LIST_LABEL = "Approver misconfigurations";
+
+/**
+ * The Approver flag (M1.8.4). Its own request, so a reader who may open this screen and not the
+ * People screen is refused this section in the API's words and still sees the catalogue.
+ */
+function Misconfigured() {
+  const answer = useResource<unknown>(MISCONFIGURATIONS_API_PATH);
+  if (answer.failure) {
+    return <FailureNotice failure={answer.failure} />;
+  }
+  if (answer.busy) {
+    return (
+      <p className="note" role="status">
+        Loading.
+      </p>
+    );
+  }
+  const rows = readMisconfigurations(answer.data);
+  if (rows.length === 0) {
+    return <p className="note">{NONE_MISCONFIGURED}</p>;
+  }
+  return (
+    <ul className="roster" aria-label={MISCONFIGURED_LIST_LABEL}>
+      {rows.map((row) => (
+        <li key={`${row.principal_id}-${row.kind}`}>
+          <code>{row.principal_id}</code> {row.sentence}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function Roles() {
   return (
     <article className="page">
       <h1>{ROLES_HEADING}</h1>
       <p className="lede">{ROLES_LEDE}</p>
       <RolesAnswerView />
+      <section className="card">
+        <h2>{MISCONFIGURED_HEADING}</h2>
+        <p className="note">{MISCONFIGURED_LEDE}</p>
+        <Misconfigured />
+      </section>
     </article>
   );
 }

@@ -46,15 +46,22 @@
  * `App.tsx` and nothing here is in the entry chunk. The measurement, before and after, is
  * in the README.
  *
- * Task ids: M32.5.1.2, M32.5.2.1, M32.5.2.2
+ * Task ids: M32.5.1.2, M32.5.2.1, M32.5.2.2, M1.9.1
  */
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { useResource } from "../api/useResource";
+import { FailureNotice } from "../ui/FailureNotice";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { DataTable } from "../components/DataTable";
 import { SchemaForm } from "../components/SchemaForm";
 import { useServerPage } from "../components/useServerPage";
 import {
+  ACCESS_QUERY_SCHEMA,
+  ACCESS_QUERY_UI,
+  readAudience,
+  recordAccessApiPath,
+  submittedAccess,
   columnsFor,
   ENTITY_FIELD,
   LIMIT_FIELD,
@@ -114,6 +121,66 @@ function RecordRows({ entity, limit }: { readonly entity: string; readonly limit
   );
 }
 
+/** Said under the access form: what it answers, and for whom. */
+export const ACCESS_LEDE =
+  "Name one record by a column and its value to see who else can see it. It opens only for a " +
+  "record you can see yourself.";
+
+/** Nobody this reader may be told about can see it. */
+export const NOBODY_SHOWN = "Nobody you may see on the People screen can see this record.";
+
+export const AUDIENCE_LIST_LABEL = "People who can see this record";
+
+function Audience({ path }: { readonly path: string }) {
+  const answer = useResource<unknown>(path);
+  if (answer.failure) {
+    return <FailureNotice failure={answer.failure} />;
+  }
+  if (answer.busy) {
+    return (
+      <p className="note" role="status">
+        Loading.
+      </p>
+    );
+  }
+  const people = readAudience(answer.data);
+  if (people.length === 0) {
+    return <p className="note">{NOBODY_SHOWN}</p>;
+  }
+  return (
+    <ul className="roster" aria-label={AUDIENCE_LIST_LABEL}>
+      {people.map((one) => (
+        <li key={one.principal_id}>
+          {one.display_name} <code>{one.principal_id}</code>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Who can see one record of this entity (M1.9.1). Asks nothing until a record is named. */
+function RecordAccess({ entity }: { readonly entity: string }) {
+  const [path, setPath] = useState<string | null>(null);
+  return (
+    <section className="card">
+      <p className="note">{ACCESS_LEDE}</p>
+      <SchemaForm
+        caption="Who can see a record"
+        schema={ACCESS_QUERY_SCHEMA}
+        uiSchema={ACCESS_QUERY_UI}
+        formData={{}}
+        onSubmit={(submitted) => {
+          const asked = submittedAccess(submitted);
+          if (asked !== null) {
+            setPath(recordAccessApiPath(entity, asked.column, asked.value));
+          }
+        }}
+      />
+      {path === null ? null : <Audience key={path} path={path} />}
+    </section>
+  );
+}
+
 export function Records() {
   const { entity } = useParams();
   const [search] = useSearchParams();
@@ -160,7 +227,10 @@ export function Records() {
         // answer with something plausible. It is the same reset `useServerPage` performs on
         // a filter change and for the same reason. Nothing can observe it today, because
         // the route issues no cursor and the grid draws no pager for it.
-        <RecordRows key={entity} entity={entity} limit={limit} />
+        <>
+          <RecordRows key={entity} entity={entity} limit={limit} />
+          <RecordAccess key={`access-${entity}`} entity={entity} />
+        </>
       )}
     </article>
   );

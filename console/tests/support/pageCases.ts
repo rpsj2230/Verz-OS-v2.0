@@ -999,6 +999,7 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
       "/api/v1/govern/people": PEOPLE,
       "/api/v1/govern/scopes": SCOPES,
       "/api/v1/govern/data-steward": NO_STEWARD,
+      "/api/v1/govern/packs": { packs: [{ slug: "helpdesk", label: UNBROKEN, capabilities: [UNBROKEN] }] },
     },
   },
   "/roles": {
@@ -1016,6 +1017,9 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
           },
         ],
         holders_are_not_recorded_yet: true,
+      },
+      "/api/v1/govern/roles/misconfigurations": {
+        items: [{ principal_id: "u_2", kind: "role_without_capability", sentence: UNBROKEN }],
       },
     },
   },
