@@ -1020,6 +1020,12 @@ const ACTS = {
     text: "Model and provider choice as configuration, including a local-only profile with no external provider",
     why: "owner 2026-09-21, item 80: installs use hosted providers (Claude, OpenAI, DeepSeek, Moonshot Kimi); no local-only profile is needed. Provider and model choice is already configuration (Routing screen)",
   },
+  "M41.3.2": {
+    kind: "DECIDED",
+    gate: false,
+    text: "No duplicated repository anywhere, because a copy diverges the first time a bug is fixed in one and not the other and nothing says so",
+    why: "owner 2026-09-21, item 77: the product lives only in the rpsj2230/Verz-OS-v2.0 repository; his other repositories are outside the product and are not to be touched or raised",
+  },
 };
 
 //: Why the two conditional acceptance leaves do not gate the cutover, kept here because the
