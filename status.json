@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-09-21T18:23:41.128828+00:00",
-  "commit": "cd8dd49",
-  "commit_subject": "Needs you asks whether a directory group may grant packs or only roles",
+  "generated_at": "2026-09-21T18:59:46.952509+00:00",
+  "commit": "33dc43d",
+  "commit_subject": "Directory groups map to roles and sync at sign-in, simulate logs what it withholds, break-glass tells the Super Admins",
   "total": 1595,
-  "done": 317,
-  "percent": 19.9,
+  "done": 320,
+  "percent": 20.1,
   "acts": 47,
   "decided": 107,
   "current_wave": 0,
@@ -26,12 +26,12 @@
       "wave": 1,
       "name": "The gate",
       "total": 165,
-      "done": 136,
-      "percent": 82.4,
+      "done": 139,
+      "percent": 84.2,
       "in_progress": 0,
       "ready_for_testing": 0,
       "blocked": 0,
-      "open": 29,
+      "open": 26,
       "acts": 1,
       "decided": 7
     },
@@ -107,7 +107,7 @@
       "name": "Foundation and repository",
       "wave": 0,
       "total": 40,
-      "done": 39,
+      "done": 40,
       "acts": 1,
       "decided": 0
     },
@@ -116,7 +116,7 @@
       "name": "Identity, users, roles, permissions",
       "wave": 1,
       "total": 50,
-      "done": 43,
+      "done": 44,
       "acts": 0,
       "decided": 1
     },
@@ -143,7 +143,7 @@
       "name": "Redaction and data protection",
       "wave": 1,
       "total": 19,
-      "done": 18,
+      "done": 19,
       "acts": 0,
       "decided": 0
     },
@@ -511,6 +511,7 @@
     "M0.3.6",
     "M0.3.7",
     "M0.4.1",
+    "M0.4.2",
     "M0.4.3",
     "M0.4.4",
     "M0.4.5",
@@ -540,6 +541,7 @@
     "M1.2.2",
     "M1.2.3",
     "M1.2.4",
+    "M1.2.5",
     "M1.3.1",
     "M1.3.2",
     "M1.3.3",
@@ -755,6 +757,7 @@
     "M4.1.6",
     "M4.2.1",
     "M4.2.2",
+    "M4.2.3",
     "M4.2.4",
     "M4.2.5",
     "M4.3.1",
@@ -835,7 +838,7 @@
     }
   },
   "wave_records": {},
-  "closed_today": 158,
+  "closed_today": 161,
   "next_up": [
     "M31.3.2.3",
     "M31.3.2.4",
@@ -844,6 +847,18 @@
     "M41.3.1"
   ],
   "recent": [
+    {
+      "sha": "33dc43d",
+      "at": "2026-09-21T18:47:58+00:00",
+      "subject": "Directory groups map to roles and sync at sign-in, simulate logs what it withholds, break-glass tells the Super Admins",
+      "closed": "M1.2.5,M4.2.3"
+    },
+    {
+      "sha": "47f34ae",
+      "at": "2026-09-21T18:40:00+00:00",
+      "subject": "The full profile is one compose file, and the analyser it lacked is Presidio's own image",
+      "closed": "M0.4.2"
+    },
     {
       "sha": "434dd92",
       "at": "2026-09-21T18:06:54+00:00",
@@ -951,18 +966,6 @@
       "at": "2026-09-21T10:04:34+00:00",
       "subject": "Service accounts act at their owner's live reach, partners hold only windows, people can be disabled",
       "closed": "M1.1.6,M1.1.7,M1.2.4,M1.8.1,M1.8.2"
-    },
-    {
-      "sha": "dbe4d7c",
-      "at": "2026-09-21T09:58:37+00:00",
-      "subject": "Keep the Keycloak admin password out of kcadm's argv, after the first real setup run",
-      "closed": "M1.1.1,M1.1.4"
-    },
-    {
-      "sha": "630d773",
-      "at": "2026-09-21T09:49:08+00:00",
-      "subject": "The staff list is read nightly with a kept credential, applied, and shown on its screen",
-      "closed": "M1.6.1,M1.6.10,M1.6.12,M1.6.2,M1.6.3,M1.6.4,M1.6.7,M1.6.8,M1.6.9,M1.8.6"
     }
   ]
 }
