@@ -86,6 +86,7 @@ somebody wrote, and it is the reason the table is worth reading.
 | `DEPLOY_UUID` | every profile | you | none | Not used by your install. As above. |
 | `INFERENCE_IMAGE` | standard, full | you | none | The inference server's image. No image is published for this service yet, so `standard` and `full` refuse to start until you name one. |
 | `INSTALL_ACCENT_COLOUR` | every profile | you | yes | One hex colour the console's accents are derived from. |
+| `INSTALL_BROKERED_CLIENT_ID` | every profile | you | yes | The client id of the application you registered with that directory: a Google OAuth client or a Microsoft Entra app registration. `unset` means sign-in is not brokered. Its secret is never set here: it is a file in the identity provider's vault, see [Authentication](authentication.md). |
 | `INSTALL_BROKERED_DIRECTORY` | every profile | you | yes | Which directory sign-in is brokered to: `google`, `microsoft`, `lark`, `ldap` or `none`. `none` means the identity provider holds the passwords itself. |
 | `INSTALL_COMPANY_NAME` | every profile | wizard | yes | Your own name, as your staff should see it on every screen. |
 | `INSTALL_CURRENCY` | every profile | you | yes | The ISO 4217 code money figures are rendered in. `XXX` is the code meaning no currency, so an install that has not chosen one shows something visibly unset rather than a figure that reads correctly in the wrong currency. |

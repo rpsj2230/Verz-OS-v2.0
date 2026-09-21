@@ -88,13 +88,57 @@ to change its staff source today.
    creates nobody, and the console's Staff sources trial says that nothing on the server can read a
    live source rather than showing an empty one.
 
-**What `INSTALL_BROKERED_DIRECTORY` does not do yet.** The wizard writes it so that the directory
-your staff list comes from is also the one people sign in through. Nothing in the product sets that
-brokering up: the realm this product imports carries no Google, Microsoft or Lark identity
-provider, and the only reader of the setting today is the statement the system makes about its own
-privacy posture, which says whether sign-in is brokered. Until your directory is added to the realm
-in the identity provider's own admin console, people sign in with accounts held in the realm
-itself, whichever source you chose.
+**What `INSTALL_BROKERED_DIRECTORY` does.** The wizard writes it so that the directory your staff
+list comes from is also the one people sign in through. For **Google Workspace** and **Microsoft
+Entra** the realm then carries that directory as an identity provider, restricted to your own
+domain or tenant, which is the location you gave on the staff list screen. It is never brokered
+without one: a Google broker with no domain, or a Microsoft broker with no tenant, lets anybody
+with an account at that vendor sign in and be given an account here. **Lark and LDAP are not
+brokered** by this release, and people sign in with accounts held in the realm. Whenever the
+setting names a directory that is not brokered, the Settings screen's findings say why, in a
+sentence naming the setting to change.
+
+To switch brokering on for Google Workspace or Microsoft Entra:
+
+1. Register an application with your directory. In Google Cloud that is an OAuth client of type
+   "Web application"; in Microsoft Entra it is an app registration for your own tenant only. Give
+   it this redirect URI, with your identity provider's address, your realm (`INSTALL_OIDC_REALM`,
+   `brain` unless you changed it) and `google` or `microsoft` as the last word but one:
+
+   ```
+   https://<identity-provider-host>/realms/<realm>/broker/<google-or-microsoft>/endpoint
+   ```
+
+2. Put the application's client id in your `.env` as `INSTALL_BROKERED_CLIENT_ID`. It is not a
+   secret, and it is shown on the Settings screen.
+
+3. Put the application's client secret in the identity provider's vault, on the server. It is a
+   file named `<realm>_brokered-directory-client-secret` (an underscore inside the realm's own name
+   is written twice), readable by the identity provider's user, 1000. This asks for the secret,
+   which you paste, then press Ctrl-D; `<project>` is your compose project's name:
+
+   ```
+   docker run --rm -i -v <project>_keycloak-vault:/vault alpine sh -c 'umask 077; cat > /vault/<realm>_brokered-directory-client-secret; chown 1000 /vault/<realm>_brokered-directory-client-secret'
+   ```
+
+   The realm holds only a reference to that file, never the secret.
+
+4. On a new install, start the stack: the realm is imported with the identity provider in it. On
+   an install whose realm already exists, Keycloak does not import it again, so add the identity
+   provider to it. Sign the admin tool in as step 3 of "Adding the second factor to a realm imported
+   before this release" describes, then, from the server:
+
+   ```
+   docker compose exec -T app python -m brain.ops.realm_import --identity-provider > identity-provider.json
+   docker compose cp identity-provider.json keycloak:/tmp/identity-provider.json
+   docker compose exec keycloak /opt/keycloak/bin/kcadm.sh create identity-provider/instances -r <realm> -f /tmp/identity-provider.json
+   ```
+
+   The first command reads the values the wizard saved as well as your `.env`. When there is
+   nothing to broker it prints the reason and writes nothing to the file, and the other two
+   should not be run.
+
+5. Open the sign-in page. It offers your directory beside the password form.
 
 ## Reading the staff list on the wizard's screen
 
@@ -879,6 +923,7 @@ than thirty. A slow start beats a container that never becomes ready.
 | The commands for adding the second factor to a realm imported before this release | **nobody. They were written from the identity provider's 26.0 source and admin documentation and have not been run against a server.** |
 | That a realm imported from this release registers every required action the identity provider registers itself, with its settings, and puts only the one-time code in front of everybody | `test_keycloak_realm.py`, against the realm file |
 | The commands for registering the required actions on a realm imported before this release | **nobody. They were written from the identity provider's 26.0 source and admin documentation and have not been run against a server.** |
+| The identity provider entry a brokered directory becomes, and the refusals without a domain or tenant | `tests/unit/test_brokering.py` and `tests/unit/test_realm_import.py`, over the entry Keycloak is handed. **The commands for adding it to an existing realm, the vault file and a real Google or Microsoft sign-in have not been run against a server.** |
 | **Everything else on this page** | **nobody. Prose, kept true by hand.** |
 
 ## Task ids

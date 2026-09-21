@@ -127,6 +127,11 @@ def test_the_importer_is_found_reading_its_setting_so_the_scan_is_not_blind() ->
     assert settings_the_importer_reads() == {
         realm_import.ORIGIN_SETTING,
         realm_import.REALM_SETTING,
+        realm_import.CLIENT_ID_SETTING,
+        realm_import.BROKER_SETTING,
+        realm_import.BROKER_CLIENT_SETTING,
+        realm_import.STAFF_SOURCE_SETTING,
+        realm_import.STAFF_LOCATION_SETTING,
     }
 
 

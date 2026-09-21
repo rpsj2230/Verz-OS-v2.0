@@ -113,7 +113,10 @@ for field in sslRequired defaultSignatureAlgorithm revokeRefreshToken ssoSession
   [ "$value" != "MISSING" ] || fail "$field did not survive the import"
 done
 
-for client in brain-console brain-api brain-sync; do
+# The console's client is named by INSTALL_OIDC_CLIENT_ID, which brain.ops.realm_import writes
+# into the realm in place of the shipped brain-console.
+CONSOLE_CLIENT="${INSTALL_OIDC_CLIENT_ID:-brain-console}"
+for client in "$CONSOLE_CLIENT" brain-api brain-sync; do
   found=$("$KCADM" get clients -r "$REALM" --query "clientId=$client" | jq -r 'length')
   [ "$found" = "1" ] || fail "client $client is not present after import (found $found)"
   echo "    client $client ok"

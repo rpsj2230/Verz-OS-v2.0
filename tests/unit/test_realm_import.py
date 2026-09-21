@@ -438,3 +438,83 @@ def test_the_command_writes_the_realm_and_refuses_without_an_installation(
 
     assert main([]) == 2
     assert "usage" in capsys.readouterr().err
+
+
+def test_the_console_client_is_registered_under_the_installations_client_id() -> None:
+    """The console signs in as `INSTALL_OIDC_CLIENT_ID`; the realm registered `brain-console`
+    whatever that said. Delete this and an install that sets its own id has a console asking for
+    a client its realm does not have."""
+    from brain.install import BY_NAME
+    from brain.ops.realm_import import CLIENT_ID_SETTING, SHIPPED_CONSOLE_CLIENT
+
+    reviewed = json.loads(REALM.read_text(encoding="utf-8"))
+    named = json.loads(importable_realm(REALM, {**CONFIGURED, CLIENT_ID_SETTING: "acme-console"}))
+    unset = json.loads(importable_realm(REALM, CONFIGURED))
+
+    assert BY_NAME[CLIENT_ID_SETTING].default == SHIPPED_CONSOLE_CLIENT
+    assert [one["clientId"] for one in reviewed["clients"]].count("brain-console") == 1
+    named_ids = [one["clientId"] for one in named["clients"]]
+    assert "acme-console" in named_ids and "brain-console" not in named_ids
+    renamed = {one["clientId"]: one for one in named["clients"]}["acme-console"]
+    assert (
+        renamed["publicClient"] is True
+        and renamed["redirectUris"] == _console(unset)["redirectUris"]
+    )
+
+
+@pytest.mark.parametrize("taken", ["brain-api", "brain-sync", "account", "acme console"])
+def test_a_console_client_id_another_client_holds_or_that_is_no_id_is_refused(taken: str) -> None:
+    """**Two clients under one id sign the console in against whichever Keycloak finds first.**
+    Delete this and `INSTALL_OIDC_CLIENT_ID=brain-api` imports a realm with two `brain-api`s."""
+    from brain.ops.realm_import import CLIENT_ID_SETTING
+
+    with pytest.raises(RealmError, match=CLIENT_ID_SETTING):
+        importable_realm(REALM, {**CONFIGURED, CLIENT_ID_SETTING: taken})
+
+
+def test_a_brokered_directory_is_added_to_the_realm_and_an_unbrokered_one_is_not() -> None:
+    """The realm Keycloak imports carries the broker the settings describe. Delete this and
+    `brain.identity.brokering` can be right while nothing puts its entry in the realm, which is
+    where `INSTALL_BROKERED_DIRECTORY` sat until 2026-09-21."""
+    brokered_env = {
+        **CONFIGURED,
+        "INSTALL_BROKERED_DIRECTORY": "microsoft",
+        "INSTALL_BROKERED_CLIENT_ID": "00000000-0000-0000-0000-000000000001",
+        "INSTALL_STAFF_SOURCE": "microsoft_entra",
+        "INSTALL_STAFF_SOURCE_LOCATION": "northwind.example",
+    }
+    with_broker = json.loads(importable_realm(REALM, brokered_env))
+    without = json.loads(importable_realm(REALM, CONFIGURED))
+    refused = json.loads(
+        importable_realm(REALM, {**brokered_env, "INSTALL_STAFF_SOURCE_LOCATION": "common"})
+    )
+
+    def aliases(realm: dict[str, list[dict[str, str]]]) -> list[str]:
+        return [one["alias"] for one in realm["identityProviders"]]
+
+    assert aliases(with_broker) == [*aliases(without), "microsoft"]
+    assert aliases(refused) == aliases(without)
+    entry = with_broker["identityProviders"][-1]
+    assert entry["config"]["tenantId"] == "northwind.example"
+    assert entry["config"]["clientSecret"].startswith("${vault.")
+
+
+def test_the_identity_provider_command_prints_the_entry_or_the_reason(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """For a realm that already exists, where Keycloak will not import again. Delete this and the
+    documented `--identity-provider` step can stop printing an entry kcadm accepts."""
+    for name in ("BRAIN_DATABASE_URL", "DATABASE_URL"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("INSTALL_BROKERED_DIRECTORY", "google")
+    monkeypatch.setenv("INSTALL_BROKERED_CLIENT_ID", "1234-web.apps.googleusercontent.example")
+    monkeypatch.setenv("INSTALL_STAFF_SOURCE", "google_workspace")
+    monkeypatch.setenv("INSTALL_STAFF_SOURCE_LOCATION", "northwind.example")
+    assert main(["--identity-provider"]) == 0
+    assert json.loads(capsys.readouterr().out)["config"]["hostedDomain"] == "northwind.example"
+
+    monkeypatch.setenv("INSTALL_STAFF_SOURCE_LOCATION", "unset")
+    assert main(["--identity-provider"]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == "" and "INSTALL_STAFF_SOURCE_LOCATION" in captured.err

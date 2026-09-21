@@ -66,6 +66,19 @@ The placeholder is a reserved documentation domain that can never resolve, and t
 refuses to emit a realm still carrying it, so the failure is the import, loudly, naming the
 setting to supply. See `A_DEFAULT_ADDRESS_IMPORTS_AND_A_MISSING_ONE_STOPS`.
 
+---
+
+**The console's client id and the brokered directory are the install's too, since 2026-09-21.**
+The console already signed in as `INSTALL_OIDC_CLIENT_ID`, and the realm registered
+`brain-console` whatever that said, so an install that set its own id had a console asking for a
+client its realm did not have. The shipped client is renamed here, and a name another client of
+the realm already holds is refused, because two clients under one id is a realm whose sign-in
+depends on which one Keycloak finds first. `INSTALL_BROKERED_DIRECTORY` becomes an identity
+provider entry here as well; `brain.identity.brokering` decides the entry and this module is the
+reader that hands it the values. `--identity-provider` prints that entry alone, for a realm that
+already exists: Keycloak imports a realm only when it has none of that name, and the wizard's
+answer is saved after the first import has run.
+
 Task ids: M41.1.5
 """
 
@@ -78,6 +91,7 @@ from pathlib import Path
 from typing import Any, Final
 from urllib.parse import urlsplit
 
+from brain.identity.brokering import Brokering, brokering
 from brain.install import InstallError, value_of
 
 #: The prefix that marks a key as documentation rather than configuration. One character,
@@ -163,6 +177,25 @@ THE_REALM_TAKES_ONE_ORIGIN_BECAUSE_KEYCLOAK_TAKES_ONE_LOGOUT_URL: Final = (
     "wrong for the other: sessions ended at the identity provider are never pushed to the "
     "second. Refusing is the smaller failure, and it is a failure at import rather than a "
     "logout that appears to work."
+)
+
+
+#: The console's client id and the name the reviewed realm registers it under, which is the
+#: declared default of that setting; a test holds all three together.
+CLIENT_ID_SETTING: Final = "INSTALL_OIDC_CLIENT_ID"
+SHIPPED_CONSOLE_CLIENT: Final = "brain-console"
+
+#: The four settings the brokered identity provider is built from. See `brain.identity.brokering`.
+BROKER_SETTING: Final = "INSTALL_BROKERED_DIRECTORY"
+BROKER_CLIENT_SETTING: Final = "INSTALL_BROKERED_CLIENT_ID"
+STAFF_SOURCE_SETTING: Final = "INSTALL_STAFF_SOURCE"
+STAFF_LOCATION_SETTING: Final = "INSTALL_STAFF_SOURCE_LOCATION"
+
+#: Why a console client id another client already holds is refused.
+ONE_CLIENT_ID_NAMES_ONE_CLIENT: Final = (
+    "Keycloak looks a client up by its id, and a realm holding two clients under one id signs "
+    "the console in against whichever it finds first, which may be a confidential service "
+    "client with none of the console's flow settings. Refused at the import, naming the id."
 )
 
 
@@ -257,6 +290,44 @@ def unconfigured_addresses(node: Any, *, path: str = "realm") -> list[str]:
     return found
 
 
+def name_console_client(realm: dict[str, Any], client_id: str) -> None:
+    """Rename the shipped console client to this installation's id, in place.
+
+    See `ONE_CLIENT_ID_NAMES_ONE_CLIENT`. A realm with no shipped console client is refused
+    too, because the console would then have no client to sign in as at all.
+    """
+    wanted = client_id.strip()
+    if not wanted or any(ch.isspace() for ch in wanted):
+        msg = f"{CLIENT_ID_SETTING} is {client_id!r}, which is not a client id"
+        raise RealmError(msg)
+    clients = realm.get("clients", [])
+    console = [one for one in clients if one.get("clientId") == SHIPPED_CONSOLE_CLIENT]
+    if len(console) != 1:
+        msg = f"the realm registers {len(console)} {SHIPPED_CONSOLE_CLIENT!r} clients, not one"
+        raise RealmError(msg)
+    others = {one.get("clientId") for one in clients if one is not console[0]}
+    if wanted in others:
+        msg = f"{CLIENT_ID_SETTING} is {wanted!r}. {ONE_CLIENT_ID_NAMES_ONE_CLIENT}"
+        raise RealmError(msg)
+    console[0]["clientId"] = wanted
+
+
+def brokered(
+    env: Mapping[str, str] | None = None, saved: Mapping[str, str] | None = None
+) -> Brokering:
+    """The identity provider this installation's settings ask for, or why there is none.
+
+    The reader of the four values, so the importer's container is handed every one of them
+    (`tests/unit/test_realm_importer_settings.py` reads the names out of this file).
+    """
+    return brokering(
+        directory=value_of(BROKER_SETTING, env, saved),
+        client_id=value_of(BROKER_CLIENT_SETTING, env, saved),
+        staff_source=value_of(STAFF_SOURCE_SETTING, env, saved),
+        location=value_of(STAFF_LOCATION_SETTING, env, saved),
+    )
+
+
 def importable_realm(source: Path, env: Mapping[str, str] | None = None) -> str:
     """The reviewed realm as JSON Keycloak accepts, addressed to this installation.
 
@@ -281,7 +352,15 @@ def importable_realm(source: Path, env: Mapping[str, str] | None = None) -> str:
             f"({', '.join(remaining)}). {A_DEFAULT_ADDRESS_IMPORTS_AND_A_MISSING_ONE_STOPS}"
         )
         raise RealmError(msg)
+    name_console_client(realm, value_of(CLIENT_ID_SETTING, env))
+    broker = brokered(env)
+    if broker.provider:
+        realm.setdefault("identityProviders", []).append(broker.provider)
     return json.dumps(realm, indent=2)
+
+
+#: The command that prints the brokered identity provider alone.
+IDENTITY_PROVIDER_FLAG: Final = "--identity-provider"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -293,10 +372,24 @@ def main(argv: list[str] | None = None) -> int:
     as well, and those are configuration Keycloak stores verbatim, so the shell path quietly
     imported a different realm from the compose path. It also had nowhere to put the
     installation's own origin. One transform with tests answers both.
+
+    `--identity-provider` prints only the brokered directory's entry, resolved with the values
+    the setup wizard saved, for `kcadm.sh create identity-provider/instances` on a realm that
+    already exists. It exits 1 with the reason when there is nothing to broker.
     """
     args = argv if argv is not None else sys.argv[1:]
+    if args == [IDENTITY_PROVIDER_FLAG]:
+        broker = brokered(saved=_saved_in_database())
+        if not broker.provider:
+            print(f"realm_import: {broker.problem or 'sign-in is not brokered'}", file=sys.stderr)
+            return 1
+        print(json.dumps(broker.provider, indent=2))
+        return 0
     if len(args) != 1:
-        print("usage: python -m brain.ops.realm_import <realm-export.json>", file=sys.stderr)
+        print(
+            "usage: python -m brain.ops.realm_import <realm-export.json> | --identity-provider",
+            file=sys.stderr,
+        )
         return 2
     try:
         print(importable_realm(Path(args[0])))
@@ -304,6 +397,32 @@ def main(argv: list[str] | None = None) -> int:
         print(f"realm_import: {exc}", file=sys.stderr)
         return 1
     return 0
+
+
+def _saved_in_database() -> Mapping[str, str]:
+    """The installation values the wizard saved, or none when this process has no database.
+
+    Imported here rather than at the top, because the realm importer's own container has no
+    database and must not need its driver to strip comments from a file.
+    """
+    import asyncio
+
+    from brain.ops.install_settings import refresh
+    from brain.session import make_app_engine, make_session_factory
+    from brain.settings import Settings
+
+    url = Settings().database_url
+    if not url:
+        return {}
+
+    async def load() -> Mapping[str, str]:
+        engine = make_app_engine(url)
+        try:
+            return await refresh(make_session_factory(engine))
+        finally:
+            await engine.dispose()
+
+    return asyncio.run(load())
 
 
 def comment_keys(node: Any, *, path: str = "realm", inside_free_form: bool = False) -> list[str]:
