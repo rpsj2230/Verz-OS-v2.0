@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-21T10:07:15.073328+00:00",
-  "commit": "cc7a087",
-  "commit_subject": "The owner's server is his first company's production install, the starter pack waits for Wave 3, and the installer requirement is his own row",
+  "generated_at": "2026-09-21T10:16:36.078213+00:00",
+  "commit": "8542d1f",
+  "commit_subject": "A handover runs end to end on a scratch install in CI, and reads the saved settings",
   "total": 1598,
   "done": 251,
   "percent": 15.7,
