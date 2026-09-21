@@ -20,6 +20,7 @@ from typing import Any
 
 import pytest
 from pydantic import BaseModel, ValidationError
+from structlog.testing import capture_logs
 
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.envelope import Entity, Redaction, TypedResult
@@ -37,6 +38,7 @@ from brain.core.redaction import (
     MAX_DEPTH,
     OPAQUE_CAPABILITY,
     OPAQUE_LABEL,
+    SIMULATION_EVENT,
     AccessRequest,
     ChannelAdapterRegistry,
     ChannelPathError,
@@ -762,6 +764,57 @@ def test_a_simulation_reports_a_withheld_record_as_a_flag_not_a_count() -> None:
     assert not any(
         isinstance(v, int) and not isinstance(v, bool) for v in report.model_dump().values()
     )
+
+
+def test_a_simulation_writes_one_log_line_of_names_and_counts() -> None:
+    """M4.2.3's log half: a simulation writes exactly one structured line naming the fields that
+    would be withheld and counting them, the counts agreeing with the enforcing walk's own trace.
+    Delete this and simulate goes back to writing nothing, or to one line per record."""
+    entitlement = person("u_weiling").entitlement()
+    result = result_of(a_client(tickets=(a_ticket(),)), a_client())
+    with capture_logs() as logged:
+        report = simulate_redaction(result, entitlement=entitlement, policy=POLICY, now=NOW)
+    lines = [one for one in logged if one["event"] == SIMULATION_EVENT]
+    assert len(lines) == 1
+    [line] = lines
+    assert set(line) == {
+        "event",
+        "log_level",
+        "policy_epoch",
+        "ent_hash",
+        "would_withhold",
+        "withheld_fields",
+        "withheld_records",
+    }
+    trace = redact(result, entitlement=entitlement, policy=POLICY, now=NOW).trace
+    assert line["would_withhold"] == list(report.would_withhold)
+    assert line["withheld_fields"] == len(trace.redactions) > len(report.would_withhold)
+    assert line["withheld_records"] == 0
+
+
+def test_no_value_from_a_simulated_record_reaches_the_log() -> None:
+    """The canaries, the record ids and the ordinary values of every record walked are absent
+    from everything a simulation logs, including when whole records are withheld. Delete this
+    and a preview of a policy writes the contract values it was previewing into the log."""
+    result = result_of(a_client(tickets=(a_ticket(),)), a_client())
+    with capture_logs() as logged:
+        report = simulate_redaction(
+            result, entitlement=person("u_jason").entitlement(), policy=POLICY, now=NOW
+        )
+    text = repr(logged)
+    values = (
+        *CANARIES.values(),
+        "c_0447",
+        "t_9",
+        "SNM Construction Pte Ltd",
+        "SSL renewal",
+        "2026-11-14",
+    )
+    assert logged
+    assert all(value not in text for value in values)
+    [line] = [one for one in logged if one["event"] == SIMULATION_EVENT]
+    assert report.would_withhold_a_record
+    assert line["withheld_records"] == 2
 
 
 def test_two_policies_can_be_simulated_and_diffed() -> None:

@@ -94,7 +94,7 @@ from cryptography.exceptions import InvalidSignature, UnsupportedAlgorithm
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
-from brain.identity.bearer import TokenAuthority
+from brain.identity.bearer import MembershipObserver, TokenAuthority
 from brain.identity.oidc import JwksCache, KeySet, PrincipalDirectory, SigningKey
 from brain.identity.roles import IdentityError
 from brain.install import value_of
@@ -370,6 +370,7 @@ def keycloak_authority(
     get: Callable[[str], bytes],
     clock: Callable[[], datetime],
     env: Mapping[str, str] | None = None,
+    memberships: MembershipObserver | None = None,
 ) -> TokenAuthority:
     """The token authority for this installation's realm.
 
@@ -387,4 +388,5 @@ def keycloak_authority(
         verify=verify_rs256,
         directory=directory,
         leeway=TOKEN_LEEWAY,
+        memberships=memberships,
     )

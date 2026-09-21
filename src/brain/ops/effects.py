@@ -417,6 +417,16 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.identity.role_store:RoleRecords.one": Repeat.READS,
         "brain.identity.role_store:RoleRecords.appoint": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.identity.role_store:RoleRecords.retire": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # The group mapping on the Roles screen, and the sync at sign-in. A rule is one row and a
+        # repeat meets the one-live-rule-per-group index; a retirement finds no live row the
+        # second time; a sync reconciles to the token, so a repeat changes nothing.
+        "brain.identity.group_sync:GroupRuleRecords.rules": Repeat.READS,
+        "brain.identity.group_sync:GroupRuleRecords.synced": Repeat.READS,
+        "brain.identity.group_sync:GroupRuleRecords.one": Repeat.READS,
+        "brain.identity.group_sync:GroupRuleRecords.add": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.identity.group_sync:GroupRuleRecords.retire": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.identity.group_sync:Applies.apply": Repeat.SAME_RESULT_WHEN_REPEATED,
+        "brain.identity.bearer:MembershipObserver.observe": Repeat.SAME_RESULT_WHEN_REPEATED,
         # The Elevation requests screen. A request is a row, and a repeat is a second request the
         # screen lists; a decision is one transaction on a pending row, and a repeat finds it
         # decided.
@@ -424,6 +434,8 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.gate.elevation_store:ElevationRecords.file": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.gate.elevation_store:ElevationRecords.approve": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.gate.elevation_store:ElevationRecords.deny": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # The break-glass notices a Super Admin reads on the Elevation screen: a read.
+        "brain.gate.elevation_store:NoticeRecords.addressed_to": Repeat.READS,
         "brain.ops.erasure:Hold.is_active": Repeat.READS,
         "brain.ops.erasure:StoreEraser.count_for": Repeat.READS,
         "brain.ops.erasure:StoreEraser.erase": Repeat.SAME_RESULT_WHEN_REPEATED,

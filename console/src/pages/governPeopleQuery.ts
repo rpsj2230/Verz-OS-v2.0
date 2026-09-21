@@ -528,3 +528,25 @@ export function when(value: string | null): string {
     minute: "2-digit",
   });
 }
+
+// ------------------------------------------------------- break-glass notices (M1.2.5)
+
+export const BREAK_GLASS_NOTICES_API_PATH = "/govern/elevation/notices";
+
+/** One break-glass session this reader was told about, as `GET /govern/elevation/notices` says. */
+export interface BreakGlassNoticeRow {
+  readonly session_id: string;
+  readonly principal_id: string;
+  readonly authorised_by: string;
+  readonly reason: string;
+  readonly lapses_at: string;
+  readonly told_at: string;
+}
+
+export function readBreakGlassNotices(payload: unknown): readonly BreakGlassNoticeRow[] {
+  if (typeof payload !== "object" || payload === null) {
+    return [];
+  }
+  const found = (payload as { items?: unknown }).items;
+  return Array.isArray(found) ? (found as BreakGlassNoticeRow[]) : [];
+}

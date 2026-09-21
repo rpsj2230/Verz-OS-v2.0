@@ -1120,6 +1120,28 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
       "/api/v1/govern/roles/misconfigurations": {
         items: [{ principal_id: "u_2", kind: "role_without_capability", sentence: UNBROKEN }],
       },
+      "/api/v1/govern/roles/group-rules": {
+        rules: [
+          {
+            id: "r-1",
+            idp_group: UNBROKEN,
+            role: "auditor",
+            scope: null,
+            created_by: UNBROKEN,
+            created_at: "2019-03-04T09:00:00Z",
+          },
+        ],
+        synced: [
+          {
+            principal_id: UNBROKEN,
+            role: "auditor",
+            source_group: UNBROKEN,
+            first_seen_at: "2019-03-04T09:00:00Z",
+            last_seen_at: "2019-03-04T09:00:00Z",
+          },
+        ],
+        editable: true,
+      },
     },
   },
   "/capabilities": {
@@ -1889,7 +1911,21 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     address: "/elevation",
     signedIn: true,
     drawsValues: true,
-    answers: { "/api/v1/govern/elevation": ELEVATION },
+    answers: {
+      "/api/v1/govern/elevation": ELEVATION,
+      "/api/v1/govern/elevation/notices": {
+        items: [
+          {
+            session_id: "s-1",
+            principal_id: UNBROKEN,
+            authorised_by: UNBROKEN,
+            reason: "lockout",
+            lapses_at: "2019-03-04T13:00:00Z",
+            told_at: "2019-03-04T09:00:00Z",
+          },
+        ],
+      },
+    },
   },
   "/subscribers": {
     address: "/subscribers",

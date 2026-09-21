@@ -95,6 +95,9 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "Sends the connection test and the first sync's dry run, which keep nothing: no setting, no " +
     "credential and no member is written, which tests/unit/test_staff_connect.py holds for both. " +
     "Saving the connection and applying the first sync have their own requests and are confirmed.",
+  "src/pages/GroupRules.tsx GROUP_RULES_API_PATH":
+    "Maps a directory group to a role. One live rule per group, so a second is refused rather than " +
+    "written over, groups only ever add a role, and retiring a rule is the confirmed control beside it.",
   "src/pages/People.tsx PACK_ASSIGNMENT_API_PATH":
     "Assigns a capability pack. Entitlements are additive only, an assignment replaces nothing, and " +
     "taking one back is the Access review's removal, which is confirmed.",

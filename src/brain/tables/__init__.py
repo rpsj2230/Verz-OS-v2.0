@@ -55,6 +55,7 @@ from brain.tables.artifact import ArtifactRow
 from brain.tables.audit import AuditEntryRow
 from brain.tables.automation import AutomationOwnerRow
 from brain.tables.automation_run import AutomationRunRow, AutomationScheduleRow
+from brain.tables.break_glass_notice import BreakGlassNoticeRow
 from brain.tables.browsing import BrowserEnvelopeRow
 from brain.tables.budget import BudgetVersionRow
 from brain.tables.channel_event import ChannelEventRow
@@ -81,6 +82,7 @@ from brain.tables.gate import (
     ScopeRow,
     TeamRow,
 )
+from brain.tables.group_role_rule import GroupRoleRuleRow
 from brain.tables.identity import (
     DirectoryRoleGrantRow,
     PrincipalIdentityRow,
@@ -327,6 +329,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0104_compliance_record_and_decision_entries. Neither points at anything.
     "ops.breach_case",
     "ops.sensitive_referral",
+    # 0109_group_role_rule
+    "auth.group_role_rule",
+    "gate.break_glass_notice",
 )
 
 __all__ = [
@@ -343,6 +348,7 @@ __all__ = [
     "AutomationRunRow",
     "AutomationScheduleRow",
     "BreachCaseRow",
+    "BreakGlassNoticeRow",
     "BrowserEnvelopeRow",
     "BudgetVersionRow",
     "CanonicalEntityRow",
@@ -372,6 +378,7 @@ __all__ = [
     "FieldPolicyRow",
     "GoldenQuestionRow",
     "GrantsVersionRow",
+    "GroupRoleRuleRow",
     "KnowledgeItemRow",
     "LearningRow",
     "LegalHoldRow",

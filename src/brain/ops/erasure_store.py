@@ -225,6 +225,9 @@ SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
         # A request for access is the asker's question and goes with them. `0101`.
         "gate.access_request": "asker_id",
         "gate.automation_owner": "owner_principal_id",
+        # A break-glass session a standing Super Admin was told about, addressed to them (`0109`).
+        # `0109` grants no way for a row to leave, so an erasure keeps these and reports them kept.
+        "gate.break_glass_notice": "recipient_id",
         "gate.capability_grant": "principal_id",
         "gate.capability_pack_assignment": "principal_id",
         "gate.department_lead": "principal_id",
@@ -294,6 +297,8 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "er.canonical",
         "er.identifier",
         "er.link",
+        # Which directory group confers which role (`0109`): `created_by` is an actor, not an owner.
+        "auth.group_role_rule",
         "gate.capability_pack",
         "gate.capability_registry",
         # A delivered message's channel, its external id and an instant: `0100` keeps no sender

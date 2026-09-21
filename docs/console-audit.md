@@ -7,19 +7,19 @@ What an administrator would need to manage, read out of the schema, the routes a
 ## What was measured
 
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
-- 90 tables, from `brain.db.Base.metadata`.
+- 92 tables, from `brain.db.Base.metadata`.
 - 27 installation values, from `brain.install.INSTALLATION`.
-- 184 routes under `/api/v1` and `/setup`, from the API's internal document.
+- 188 routes under `/api/v1` and `/setup`, from the API's internal document.
 - 72 console addresses, from the route table in `console/src/App.tsx`.
-- 67 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 84 routes.
-- 38 gaps recorded, and 21 routes no screen calls.
+- 69 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 86 routes.
+- 38 gaps recorded, and 23 routes no screen calls.
 
 ## Area by area
 
 ### People, roles, permissions and access control
 
 - **Screens:** `/`, `/people`, `/people/:subject`, `/roles`, `/capabilities`, `/scopes`, `/access_review`, `/elevation`, `/sessions`, `/sign-in-links`, `/staff_sources`, `/access-requests`
-- **Tables:** `auth.principal`, `auth.principal_identity`, `auth.session`, `auth.directory_role_grant`, `gate.capability_grant`, `gate.capability_pack`, `gate.capability_pack_assignment`, `gate.capability_registry`, `gate.scope`, `gate.grants_version`, `gate.policy_epoch`, `gate.review_decision`, `gate.elevation_request`, `auth.staff_member`, `auth.staff_sync_run`, `auth.service_account`, `auth.api_key`, `gate.access_request`, `gate.role_grant`
+- **Tables:** `auth.principal`, `auth.principal_identity`, `auth.session`, `auth.directory_role_grant`, `gate.capability_grant`, `gate.capability_pack`, `gate.capability_pack_assignment`, `gate.capability_registry`, `gate.scope`, `gate.grants_version`, `gate.policy_epoch`, `gate.review_decision`, `gate.elevation_request`, `auth.staff_member`, `auth.staff_sync_run`, `auth.service_account`, `auth.api_key`, `gate.access_request`, `gate.role_grant`, `auth.group_role_rule`, `gate.break_glass_notice`
 - **Installation values:** `INSTALL_OIDC_ISSUER`, `INSTALL_OIDC_REALM`, `INSTALL_OIDC_CLIENT_ID`, `INSTALL_OIDC_REDIRECT_URIS`, `INSTALL_BROKERED_DIRECTORY`, `INSTALL_STAFF_SOURCE`, `INSTALL_STAFF_SOURCE_LOCATION`, `INSTALL_BROKERED_CLIENT_ID`
 
 | Route | Called by |
@@ -30,9 +30,11 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `GET /api/v1/govern/capabilities` | `/capabilities` |
 | `GET /api/v1/govern/data-steward` | `/people`, `/people/:subject` |
 | `GET /api/v1/govern/elevation` | `/elevation` |
+| `GET /api/v1/govern/elevation/notices` | `/elevation` |
 | `GET /api/v1/govern/packs` | `/people/:subject` |
 | `GET /api/v1/govern/people` | `/people`, `/people/:subject` |
 | `GET /api/v1/govern/roles` | `/roles` |
+| `GET /api/v1/govern/roles/group-rules` | `/roles` |
 | `GET /api/v1/govern/roles/holders` | `/roles` |
 | `GET /api/v1/govern/roles/misconfigurations` | `/roles` |
 | `GET /api/v1/govern/scopes` | `/people/:subject`, `/scopes` |
@@ -59,6 +61,8 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `POST /api/v1/govern/people/enable` | `/departments` |
 | `POST /api/v1/govern/roles/appointment` | **no screen** |
 | `POST /api/v1/govern/roles/deputy` | **no screen** |
+| `POST /api/v1/govern/roles/group-rules` | **no screen** |
+| `POST /api/v1/govern/roles/group-rules/retirement` | **no screen** |
 | `POST /api/v1/govern/roles/removal` | **no screen** |
 | `POST /api/v1/govern/service-accounts` | **no screen** |
 | `POST /api/v1/govern/service-accounts/keys` | **no screen** |
@@ -78,7 +82,7 @@ What an administrator would need to manage, read out of the schema, the routes a
 - **Gap.** A grant written from People and grants cannot be given an expiry, and the screen says so beside the form. Recorded: Buildable today: POST /api/v1/govern/grants takes not_after and the form's proposal schema has no field for it. It is left to the change reworking member grants, which is in progress beside this one and owns that form.
 - **Gap.** A pack cannot be assigned or withdrawn, and a capability that arrived through a pack cannot be removed. Recorded: No route writes gate.capability_pack_assignment. brain.govern_routes.remove_grant refuses a pack's capability in the ordinary words, because withdrawing it removes every other capability in the pack.
 - **Gap.** Roles, capabilities and scopes are read and never changed. Recorded: No route writes gate.scope or the role and capability registries; they are declared by the product and by migrations.
-- **Gap.** Nobody is sent a notice when somebody asks for an elevation or is given one. Recorded: The people to tell are the standing Super Admins, and no table records who holds a role (M1.3.2), so brain.console.elevation.client_recipients has nobody to compute; the audit ledger is the record, and the Elevation requests screen says so.
+- **Gap.** A break-glass notice to the standing Super Admins is shown on their Elevation screen and is not sent by email or chat, and nobody is told when somebody only asks. Recorded: Nothing records a Super Admin's email address or chat identity for a notice to be sent to: auth.principal holds no address and principal_identity holds digests. The notice is written in the approval's transaction to gate.break_glass_notice and read by its recipient; a request is not an elevation until it is approved.
 - **Gap.** The identity provider and the staff source cannot be changed after setup. Recorded: Set by the first-run wizard, which saves them to ops.setting, and no route changes one afterwards; changing one today is editing the server's environment file or the row by hand.
 - **Gap.** A service account and its keys are registered, issued, revoked and retired through /api/v1/govern/service-accounts, and no screen calls it. Open leaf `M27.11.5`.
 
@@ -483,7 +487,7 @@ No gap recorded.
 
 ## Every write the console sends, followed to the system
 
-Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 71 of 84 write routes have all three proved or not applicable, 12 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
+Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 73 of 86 write routes have all three proved or not applicable, 12 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
 
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
@@ -529,6 +533,8 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /api/v1/govern/retention/withdrawal` | `/retention` | `test_a_release_names_the_newest_report_and_is_withdrawn_by_being_marked` in `tests/unit/test_retention_store.py` (database, in CI) | `test_each_retention_write_the_console_makes_appends_one_entry_naming_its_own_actor` in `tests/unit/test_retention_audit.py` (database, in CI) | `test_a_released_sweep_is_started_to_act_and_a_withdrawn_one_to_report` in `tests/unit/test_worker_schedule.py` (database, in CI) |
 | `POST /api/v1/govern/roles/appointment` | **no screen** | `test_an_appointment_through_the_routes_reaches_the_row_and_the_ledger_with_its_reason` in `tests/unit/test_role_grant.py` (database, in CI) | `test_an_appointment_through_the_routes_reaches_the_row_and_the_ledger_with_its_reason` in `tests/unit/test_role_grant.py` (database, in CI) | `test_the_last_two_super_admins_cannot_be_reduced_to_one` in `tests/unit/test_role_grant.py` |
 | `POST /api/v1/govern/roles/deputy` | **no screen** | `test_the_guard_keeps_deputies_depth_one_and_the_table_keeps_them_bounded` in `tests/unit/test_role_grant.py` (database, in CI) | `test_an_appointment_through_the_routes_reaches_the_row_and_the_ledger_with_its_reason` in `tests/unit/test_role_grant.py` (database, in CI) | `test_a_deputy_covers_a_standing_holder_and_never_another_deputy` in `tests/unit/test_role_grant.py` |
+| `POST /api/v1/govern/roles/group-rules` | **no screen** | `test_mapping_and_retiring_through_the_routes_reach_the_rows_and_the_ledger` in `tests/unit/test_group_sync.py` (database, in CI) | `test_mapping_and_retiring_through_the_routes_reach_the_rows_and_the_ledger` in `tests/unit/test_group_sync.py` (database, in CI) | `test_a_sign_in_writes_and_removes_synced_rows_and_the_ledger_records_both` in `tests/unit/test_group_sync.py` (database, in CI) |
+| `POST /api/v1/govern/roles/group-rules/retirement` | **no screen** | `test_mapping_and_retiring_through_the_routes_reach_the_rows_and_the_ledger` in `tests/unit/test_group_sync.py` (database, in CI) | `test_mapping_and_retiring_through_the_routes_reach_the_rows_and_the_ledger` in `tests/unit/test_group_sync.py` (database, in CI) | `test_mapping_and_retiring_through_the_routes_reach_the_rows_and_the_ledger` in `tests/unit/test_group_sync.py` (database, in CI) |
 | `POST /api/v1/govern/roles/removal` | **no screen** | `test_an_appointment_through_the_routes_reaches_the_row_and_the_ledger_with_its_reason` in `tests/unit/test_role_grant.py` (database, in CI) | `test_an_appointment_through_the_routes_reaches_the_row_and_the_ledger_with_its_reason` in `tests/unit/test_role_grant.py` (database, in CI) | `test_the_guard_refuses_a_removal_below_the_floor_and_allows_one_above_it` in `tests/unit/test_role_grant.py` (database, in CI) |
 | `POST /api/v1/govern/sessions/end` | `/sessions` | `test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request` in `tests/unit/test_session_store.py` (database, in CI) | `test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request` in `tests/unit/test_session_store.py` (database, in CI) | `test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request` in `tests/unit/test_session_store.py` (database, in CI) |
 | `POST /api/v1/govern/sessions/end-several` | `/sessions` | `test_several_sessions_are_ended_one_at_a_time_each_decided_by_the_single_endings_question` in `tests/unit/test_session_routes.py` | `test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request` in `tests/unit/test_session_store.py` (database, in CI) | `test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request` in `tests/unit/test_session_store.py` (database, in CI) |

@@ -23,13 +23,17 @@
  * said the row is decidable, and the route asks `may_approve` or `may_decide` again whatever this
  * page drew. A write is followed by a fresh request, keyed on a counter.
  *
- * Task ids: M27.7.8, M27.8.6
+ * **The break-glass notices addressed to the reader are their own section.** Each standing Super
+ * Admin who took no part in an approval is told of the session it opened (M1.2.5).
+ *
+ * Task ids: M27.7.8, M27.8.6, M1.2.5
  */
 
 import { useCallback, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
+import { useResource } from "../api/useResource";
 import { ListControls, NOTHING_MATCHES, ShowMore } from "../components/ListControls";
 import { narrows } from "../components/listing";
 import { useListing } from "../components/useListing";
@@ -38,6 +42,7 @@ import { FailureNotice } from "../ui/FailureNotice";
 import { FieldProblems, problemAttributes } from "../ui/FieldProblems";
 import {
   ASK_BLANKS,
+  BREAK_GLASS_NOTICES_API_PATH,
   ELEVATION_DECISIONS,
   ELEVATION_REQUESTS_API_PATH,
   STATE_WORDS,
@@ -49,6 +54,7 @@ import {
   elevationDecisionApiPath,
   elevationQuestion,
   personAddress,
+  readBreakGlassNotices,
   readElevation,
   reasonWords,
   when,
@@ -431,6 +437,42 @@ function Requests({
   );
 }
 
+export const TOLD_HEADING = "Emergency access you were told about";
+export const TOLD_LEDE =
+  "Every approved elevation opens a break-glass session, and each standing Super Admin who took " +
+  "no part in it is told here: who took the access, who allowed it, why, and when it ends on its own.";
+export const NOTHING_TOLD = "You have not been told about any emergency access.";
+export const TOLD_LIST_LABEL = "Emergency access you were told about";
+
+/** The notices addressed to this reader (M1.2.5). Its own request, so a failure stays here. */
+function ToldAbout({ version }: { readonly version: number }) {
+  const answer = useResource<unknown>(BREAK_GLASS_NOTICES_API_PATH, version);
+  if (answer.failure) {
+    return <FailureNotice failure={answer.failure} />;
+  }
+  if (answer.busy) {
+    return (
+      <p className="note" role="status">
+        Loading.
+      </p>
+    );
+  }
+  const told = readBreakGlassNotices(answer.data);
+  if (told.length === 0) {
+    return <p className="note">{NOTHING_TOLD}</p>;
+  }
+  return (
+    <ul className="roster" aria-label={TOLD_LIST_LABEL}>
+      {told.map((one) => (
+        <li key={one.session_id}>
+          <code>{one.principal_id}</code> took emergency access for {reasonWords(one.reason)},
+          allowed by <code>{one.authorised_by}</code>, until {when(one.lapses_at)}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function Elevation() {
   // A counter, so two changes in a row ask twice. Never rendered.
   const [version, setVersion] = useState(0);
@@ -451,6 +493,11 @@ export function Elevation() {
         </p>
       )}
       <Requests version={version} onChanged={onChanged} />
+      <section className="card">
+        <h2>{TOLD_HEADING}</h2>
+        <p className="note">{TOLD_LEDE}</p>
+        <ToldAbout version={version} />
+      </section>
     </article>
   );
 }

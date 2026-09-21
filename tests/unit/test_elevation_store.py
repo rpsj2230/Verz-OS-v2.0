@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import re
 import uuid
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any, Final
@@ -30,13 +30,14 @@ from sqlalchemy.schema import CreateIndex, CreateTable
 
 from brain.audit.ledger import IDENTIFIER, AuditChain, AuditEntry
 from brain.audit.record import AuditRecorder, ElevationChange
+from brain.console.elevation import ElevationError, client_recipients
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.scope import Scope
 from brain.db import metadata
 from brain.gate.elevation_store import ElevationRecords, PendingRequest, StoredElevations
 from brain.gate.entitlement_store import StoredEntitlements
 from brain.govern_people_routes import approval_grant
-from brain.identity.roles import BreakGlassReason
+from brain.identity.roles import BreakGlassReason, RoleGrant
 from brain.session import make_session_factory
 from brain.tables import elevation as table_module
 from brain.tables.gate import CAPABILITY_PATTERN, SLUG_SQL_PATTERN
@@ -202,10 +203,15 @@ def through_0062(database: str) -> Iterator[str]:
         yield url
 
 
+#: The standing Super Admins every approval tells (M1.2.5): the approver is one of them, so the
+#: other two are told and the approver is not.
+SUPER_ADMINS: Final = ("u_approver", "u_sa_one", "u_sa_two")
+
+
 def seeded(url: str) -> None:
-    """A requester and an approver in web, a named scope, and a grant of the capability that lapsed
-    long ago, which is what a person elevated once before holds."""
-    for pid in ("u_requester", "u_approver"):
+    """A requester and an approver in web, a named scope, a grant of the capability that lapsed
+    long ago, which is what a person elevated once before holds, and the standing Super Admins."""
+    for pid in ("u_requester", *SUPER_ADMINS):
         sql(
             url,
             "INSERT INTO auth.principal (id, kind, employment, display_name, primary_department)"
@@ -225,6 +231,13 @@ def seeded(url: str) -> None:
         CAPABILITY,
         LONG_AGO,
     )
+    for pid in SUPER_ADMINS:
+        sql(
+            url,
+            "INSERT INTO gate.role_grant (principal_id, role, granted_by, reason)"
+            " VALUES (%s, 'super_admin', 'u_seed', 'standing')",
+            pid,
+        )
 
 
 def entries(url: str) -> list[AuditEntry]:
@@ -250,6 +263,16 @@ def entries(url: str) -> list[AuditEntry]:
 
 def grant_for(pending: PendingRequest, requester: EntitlementSet, at: datetime) -> Any:
     return approval_grant(pending, approver=APPROVER, requester=requester, at=at)
+
+
+def tell(role_grants: Sequence[RoleGrant], pending: PendingRequest, at: datetime) -> Any:
+    """The route's `tell`, for the approver these tests use: `client_recipients` or None."""
+    try:
+        return client_recipients(
+            role_grants, subject_id=pending.request.principal_id, authorised_by="u_approver", now=at
+        )
+    except ElevationError:
+        return None
 
 
 def test_an_approved_elevation_widens_the_requester_and_after_its_lapse_it_does_not() -> None:
@@ -289,6 +312,7 @@ def test_an_approved_elevation_widens_the_requester_and_after_its_lapse_it_does_
                     ent_hash="b" * 32,
                     trace_id="trace-approve",
                     grant_for=grant_for,
+                    tell=tell,
                 )
                 assert decided is not None and decided.lapses_at is not None
                 resolver = StoredEntitlements(sessions)
@@ -314,7 +338,20 @@ def test_an_approved_elevation_widens_the_requester_and_after_its_lapse_it_does_
             " AND reason = 'an old elevation'",
         )
         chain = entries(url)
+        notices = sql(
+            url,
+            "SELECT recipient_id, principal_id, authorised_by, reason, lapses_at = %s"
+            " FROM gate.break_glass_notice WHERE request_id = %s ORDER BY recipient_id",
+            decided.lapses_at,
+            decided.request_id,
+        )
 
+    # M1.2.5: the standing Super Admins who took no part are told, in the approval's transaction.
+    assert decided.notified == ("u_sa_one", "u_sa_two")
+    assert notices == [
+        ("u_sa_one", "u_requester", "u_approver", "incident_response", True),
+        ("u_sa_two", "u_requester", "u_approver", "incident_response", True),
+    ]
     assert rows == [("approved", "u_approver", True, "u_approver", True)]
     assert retired == 1
     wanted = Capability(value=CAPABILITY)
@@ -404,6 +441,7 @@ def test_a_denial_is_recorded_and_every_refused_decision_writes_nothing() -> Non
                         ent_hash="b" * 32,
                         trace_id="t",
                         grant_for=grant_for,
+                        tell=tell,
                     ),
                     await store.approve(
                         nowhere,
@@ -411,6 +449,7 @@ def test_a_denial_is_recorded_and_every_refused_decision_writes_nothing() -> Non
                         ent_hash="b" * 32,
                         trace_id="t",
                         grant_for=grant_for,
+                        tell=tell,
                     ),
                     await store.approve(
                         own,
@@ -418,6 +457,7 @@ def test_a_denial_is_recorded_and_every_refused_decision_writes_nothing() -> Non
                         ent_hash="b" * 32,
                         trace_id="t",
                         grant_for=as_requester,
+                        tell=tell,
                     ),
                 ]
                 denied = await store.deny(

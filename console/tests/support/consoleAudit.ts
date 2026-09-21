@@ -59,6 +59,8 @@ import {
   APPOINTMENT_API_PATH,
   DEPUTY_API_PATH,
   GRANTS_API_PATH,
+  GROUP_RULES_API_PATH,
+  GROUP_RULE_RETIREMENT_API_PATH,
   PACK_ASSIGNMENT_API_PATH,
   REMOVAL_API_PATH,
   ROLE_REMOVAL_API_PATH,
@@ -219,6 +221,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/govern/roles/appointment",
       "/api/v1/govern/roles/deputy",
       "/api/v1/govern/roles/removal",
+      "/api/v1/govern/roles/group-rules*",
     ],
     tables: [
       "auth.principal",
@@ -240,6 +243,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "auth.api_key",
       "gate.access_request",
       "gate.role_grant",
+      "auth.group_role_rule",
+      "gate.break_glass_notice",
     ],
     installation: [
       "INSTALL_OIDC_ISSUER",
@@ -266,9 +271,9 @@ export const AREAS: Readonly<Record<string, Area>> = {
         because: "No route writes gate.scope or the role and capability registries; they are declared by the product and by migrations.",
       },
       {
-        what: "Nobody is sent a notice when somebody asks for an elevation or is given one.",
+        what: "A break-glass notice to the standing Super Admins is shown on their Elevation screen and is not sent by email or chat, and nobody is told when somebody only asks.",
         because:
-          "The people to tell are the standing Super Admins, and no table records who holds a role (M1.3.2), so brain.console.elevation.client_recipients has nobody to compute; the audit ledger is the record, and the Elevation requests screen says so.",
+          "Nothing records a Super Admin's email address or chat identity for a notice to be sent to: auth.principal holds no address and principal_identity holds digests. The notice is written in the approval's transaction to gate.break_glass_notice and read by its recipient; a request is not an elevation until it is approved.",
       },
       { what: "The identity provider and the staff source cannot be changed after setup.", because: ONCE_BY_THE_WIZARD },
       {
@@ -882,6 +887,16 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
     at("POST /api/v1/govern/roles/appointment", "APPOINTMENT_API_PATH", APPOINTMENT_API_PATH),
     at("POST /api/v1/govern/roles/deputy", "DEPUTY_API_PATH", DEPUTY_API_PATH),
   ],
+  "src/pages/GroupRules.tsx GROUP_RULES_API_PATH": [
+    at("POST /api/v1/govern/roles/group-rules", "GROUP_RULES_API_PATH", GROUP_RULES_API_PATH),
+  ],
+  "src/pages/GroupRules.tsx GROUP_RULE_RETIREMENT_API_PATH": [
+    at(
+      "POST /api/v1/govern/roles/group-rules/retirement",
+      "GROUP_RULE_RETIREMENT_API_PATH",
+      GROUP_RULE_RETIREMENT_API_PATH,
+    ),
+  ],
   "src/pages/RoleControls.tsx ROLE_REMOVAL_API_PATH": [
     at("POST /api/v1/govern/roles/removal", "ROLE_REMOVAL_API_PATH", ROLE_REMOVAL_API_PATH),
   ],
@@ -953,6 +968,11 @@ const BRANDING_SAVED = t(
   "test_saving_a_company_name_writes_its_row_and_the_console_header_draws_it_next",
 );
 const INSTRUCTIONS_PRESSED = audited("test_an_instruction_edit_and_its_give_back_reach_the_install_the_ledger_and_the_prompt");
+const GROUP_RULES_PRESSED = t(
+  "test_group_sync",
+  "test_mapping_and_retiring_through_the_routes_reach_the_rows_and_the_ledger",
+  true,
+);
 const ROLES_PRESSED = t(
   "test_role_grant",
   "test_an_appointment_through_the_routes_reaches_the_row_and_the_ledger_with_its_reason",
@@ -1463,6 +1483,16 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: ROLES_PRESSED,
     audit: ROLES_PRESSED,
     behaviour: t("test_role_grant", "test_the_guard_refuses_a_removal_below_the_floor_and_allows_one_above_it", true),
+  },
+  "POST /api/v1/govern/roles/group-rules": {
+    row: GROUP_RULES_PRESSED,
+    audit: GROUP_RULES_PRESSED,
+    behaviour: t("test_group_sync", "test_a_sign_in_writes_and_removes_synced_rows_and_the_ledger_records_both", true),
+  },
+  "POST /api/v1/govern/roles/group-rules/retirement": {
+    row: GROUP_RULES_PRESSED,
+    audit: GROUP_RULES_PRESSED,
+    behaviour: GROUP_RULES_PRESSED,
   },
   "POST /api/v1/govern/packs/assignment": {
     row: t("test_govern_pack_routes", "test_an_assignment_reaches_the_row_the_ledger_and_the_resolver", true),

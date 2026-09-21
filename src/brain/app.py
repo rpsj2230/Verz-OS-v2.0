@@ -71,6 +71,7 @@ from brain.api_routes import GateWiring, passage_search_for, second_factor_neede
 from brain.api_routes import router as api_router
 from brain.approval_routes import router as approval_router
 from brain.artifact_routes import router as artifact_router
+from brain.attribution import trace_of_request
 from brain.audit.ledger import TRACE_ID
 from brain.audit_routes import router as audit_router
 from brain.automation_gallery_routes import router as automation_gallery_router
@@ -114,6 +115,7 @@ from brain.govern_pack_routes import router as govern_pack_router
 from brain.govern_people_routes import router as govern_people_router
 from brain.govern_role_routes import router as govern_role_router
 from brain.govern_routes import router as govern_router
+from brain.group_rule_routes import router as group_rule_router
 from brain.identity.administration_reconciliation import (
     TRACE_PREFIX as RECONCILIATION_TRACE,
 )
@@ -124,6 +126,7 @@ from brain.identity.administration_reconciliation import (
 )
 from brain.identity.bearer import TokenAuthority, log_refusal, refusal_headers
 from brain.identity.first_administrator import FirstAdministrators
+from brain.identity.group_sync import GroupSync, StoredGroupRules
 from brain.identity.keycloak_tokens import http_get, keycloak_authority
 from brain.identity.oidc import SIGN_IN_PROMPT, TokenRefusedError
 from brain.identity.principal_directory import StoredDirectory
@@ -776,7 +779,13 @@ def wirings_for(
     """
     try:
         authority = keycloak_authority(
-            directory=StoredDirectory(sessions), get=get, clock=clock, env=env
+            directory=StoredDirectory(sessions),
+            get=get,
+            clock=clock,
+            env=env,
+            # Each interactive sign-in's groups, applied through the rules on the Roles screen.
+            # See `brain.identity.group_sync`.
+            memberships=GroupSync(StoredGroupRules(sessions), trace=trace_of_request),
         )
     except (InstallError, IdentityError) as exc:
         log.error("sign-in is not configured, so nothing behind it will answer", error=str(exc))
@@ -1277,6 +1286,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Who holds each role, and appointing, deputising and removing one. See
     # `brain.govern_role_routes`.
     app.include_router(govern_role_router)
+    # Which identity-provider group confers which role, on the Roles screen, and what the sync
+    # has written from them. See `brain.group_rule_routes`.
+    app.include_router(group_rule_router)
     # The Skills screen, SCREEN 6 of `docs/screens.html`. A router of its own because what it
     # answers about is neither a grant nor an agent: it is the skill library, its review queue and
     # the procedures the agents a reader may see are pinned to. Its three writes add a skill,

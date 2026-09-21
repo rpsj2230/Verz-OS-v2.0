@@ -23,17 +23,24 @@ is the ledger saying truthfully that the old row was taken off the table. A gran
 lapsed is not retired: the resolver would have returned it, and `may_approve` refuses a capability
 the requester already holds.
 
+**The standing Super Admins are told in the same transaction (M1.2.5).** An approval opens a
+break-glass session. The live Super Admin grants in `gate.role_grant` are read under the same
+transaction and handed to the route's `tell`, which is `brain.console.elevation.client_recipients`:
+this module decides nothing about who is told. One `gate.break_glass_notice` row per recipient is
+written beside the grant, so a session and its notices are both or neither, and an approval with
+nobody independent to tell is refused like any other and writes nothing.
+
 **The lapse needs nobody.** Nothing here ends an elevation. `gate.held_grants` stops returning the
 grant at its `not_after`, the resolved reach says when with `next_grant_lapse`, and
 `brain.gate.resolve` retires a cached reach at that instant.
 
-Task ids: M27.7.8
+Task ids: M27.7.8, M1.2.5
 """
 
 from __future__ import annotations
 
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Final, Protocol, runtime_checkable
@@ -46,10 +53,14 @@ from sqlalchemy.sql.dml import ReturningInsert, ReturningUpdate
 from brain.core.entitlement import EntitlementSet
 from brain.gate.entitlement_store import PRINCIPAL_SETTING, RESOLVE, entitlements_from
 from brain.identity.packs import SubjectGrant
+from brain.identity.role_store import role_grant_of
+from brain.identity.roles import Role, RoleGrant
 from brain.tables.audit import ACTOR_SETTING, ENT_HASH_SETTING, TRACE_ID_SETTING
+from brain.tables.break_glass_notice import BreakGlassNoticeRow
 from brain.tables.elevation import ElevationDecision, ElevationRequestRow
 from brain.tables.gate import CapabilityGrantRow, ScopeRow
 from brain.tables.identity import PrincipalRow
+from brain.tables.role_grant import RoleGrantRow
 
 #: Why the grant and the decision cannot come apart.
 THE_GRANT_AND_THE_DECISION_ARE_ONE_WRITE: Final = (
@@ -110,6 +121,8 @@ class Decided:
     decision: ElevationDecision
     decided_at: datetime
     lapses_at: datetime | None
+    #: The standing Super Admins told of the break-glass session an approval opened.
+    notified: tuple[str, ...] = ()
 
 
 @runtime_checkable
@@ -143,8 +156,10 @@ class ElevationRecords(Protocol):
         ent_hash: str,
         trace_id: str,
         grant_for: Callable[[PendingRequest, EntitlementSet, datetime], SubjectGrant | None],
+        tell: Callable[[Sequence[RoleGrant], PendingRequest, datetime], tuple[str, ...] | None],
     ) -> Decided | None:
-        """Approve a pending request into the grant `grant_for` builds, or None and no write."""
+        """Approve a pending request into the grant `grant_for` builds, telling whom `tell` names
+        from the live Super Admin grants, or None and no write."""
         ...
 
     async def deny(
@@ -321,6 +336,48 @@ def deciding(
     )
 
 
+def super_admin_grants() -> Select[tuple[RoleGrantRow]]:
+    """Every live Super Admin grant held by a live, enabled person.
+
+    Deputies and lapsed grants are read too: whether a grant is standing at the approval's instant
+    is `brain.identity.roles.standing_super_admins`' question, asked by the route's `tell`.
+    """
+    return (
+        select(RoleGrantRow)
+        .join(
+            PrincipalRow,
+            (PrincipalRow.id == RoleGrantRow.principal_id)
+            & PrincipalRow.deleted_at.is_(None)
+            & PrincipalRow.disabled_at.is_(None),
+        )
+        .where(RoleGrantRow.role == Role.SUPER_ADMIN.value, RoleGrantRow.deleted_at.is_(None))
+    )
+
+
+def telling(
+    request: StoredRequest, *, recipient_id: str, authorised_by: str, lapses_at: datetime
+) -> Any:
+    """One notice of the session an approval opened, addressed to one standing Super Admin."""
+    return insert(BreakGlassNoticeRow).values(
+        request_id=request.request_id,
+        recipient_id=recipient_id,
+        principal_id=request.principal_id,
+        authorised_by=authorised_by,
+        reason=request.reason,
+        lapses_at=lapses_at,
+    )
+
+
+def notices_addressed_to(recipient_id: str, limit: int) -> Select[tuple[BreakGlassNoticeRow]]:
+    """The notices one person was sent, newest first."""
+    return (
+        select(BreakGlassNoticeRow)
+        .where(BreakGlassNoticeRow.recipient_id == recipient_id)
+        .order_by(BreakGlassNoticeRow.created_at.desc(), BreakGlassNoticeRow.id)
+        .limit(limit)
+    )
+
+
 def _stored(row: Any, *, grant_live: bool = False) -> StoredRequest:
     return StoredRequest(
         request_id=row[0],
@@ -430,6 +487,7 @@ class StoredElevations:
         ent_hash: str,
         trace_id: str,
         grant_for: Callable[[PendingRequest, EntitlementSet, datetime], SubjectGrant | None],
+        tell: Callable[[Sequence[RoleGrant], PendingRequest, datetime], tuple[str, ...] | None],
     ) -> Decided | None:
         try:
             async with self._sessions() as session, session.begin():
@@ -466,12 +524,26 @@ class StoredElevations:
                 ).scalar_one_or_none()
                 if decided is None:
                     raise _RefusedError
+                held = (await session.execute(super_admin_grants())).scalars().all()
+                told = tell([role_grant_of(one) for one in held], pending, at)
+                if not told:
+                    raise _RefusedError
+                for recipient in told:
+                    await session.execute(
+                        telling(
+                            pending.request,
+                            recipient_id=recipient,
+                            authorised_by=approver_id,
+                            lapses_at=grant.not_after,
+                        )
+                    )
                 return Decided(
                     request_id=request_id,
                     principal_id=principal_id,
                     decision=ElevationDecision.APPROVED,
                     decided_at=decided,
                     lapses_at=grant.not_after,
+                    notified=told,
                 )
         except (_RefusedError, IntegrityError):
             return None
@@ -514,3 +586,28 @@ class StoredElevations:
                 )
         except (_RefusedError, IntegrityError):
             return None
+
+
+# ------------------------------------------------------------------ the notices
+
+
+@runtime_checkable
+class NoticeRecords(Protocol):
+    """What the Elevation screen reads of the break-glass notices. `StoredNotices` is one."""
+
+    async def addressed_to(self, recipient_id: str, *, limit: int) -> list[BreakGlassNoticeRow]:
+        """The notices this person was sent, newest first, at most `limit`."""
+        ...
+
+
+@dataclass(frozen=True)
+class StoredNotices:
+    """`gate.break_glass_notice` over the application's pool."""
+
+    sessions: async_sessionmaker[AsyncSession]
+
+    async def addressed_to(self, recipient_id: str, *, limit: int) -> list[BreakGlassNoticeRow]:
+        async with self.sessions() as session:
+            return list(
+                (await session.execute(notices_addressed_to(recipient_id, limit))).scalars()
+            )

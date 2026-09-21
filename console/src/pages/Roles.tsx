@@ -12,6 +12,9 @@
  * `RoleControls.tsx` lists the holders this reader may see beside the controls that appoint,
  * deputise and remove.
  *
+ * **Which directory group confers which role is its own section.** `GroupRules.tsx` lists the
+ * rules and the roles the sync wrote from them, beside the controls that map and retire a group.
+ *
  * **Nothing here decides who may see it.** The request is identical for every caller; a reader
  * without the grant is refused by the API and the refusal is rendered in the API's own words.
  *
@@ -19,7 +22,7 @@
  * form library, which is `App.tsx`'s rule for `Overview`, `Agents` and `NotFound`, and the
  * holders' controls are plain labelled inputs for the same reason.
  *
- * Task ids: M27.7.5, M1.8.4, M1.3.2
+ * Task ids: M27.7.5, M1.8.4, M1.3.2, M1.1.5
  */
 
 import { useResource } from "../api/useResource";
@@ -30,6 +33,7 @@ import {
   readRoles,
 } from "./governQuery";
 import { FailureNotice } from "../ui/FailureNotice";
+import { GroupRules } from "./GroupRules";
 import { RoleControls } from "./RoleControls";
 
 export const ROLES_HEADING = "Roles";
@@ -139,6 +143,7 @@ export function Roles() {
       <p className="lede">{ROLES_LEDE}</p>
       <RolesAnswerView />
       <RoleControls />
+      <GroupRules />
       <section className="card">
         <h2>{MISCONFIGURED_HEADING}</h2>
         <p className="note">{MISCONFIGURED_LEDE}</p>

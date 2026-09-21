@@ -228,7 +228,10 @@ NOTICES: Final[tuple[Notice, ...]] = (
         title="Somebody took emergency access",
         told="Every standing super administrator other than the person and whoever allowed it.",
         about="Who took it, who allowed it and until when.",
-        how="No channel is chosen for it yet, so nothing sends it.",
+        how=(
+            "Written to each of them when the access is approved, and shown on their Elevation "
+            "screen. No channel sends it by email or chat yet."
+        ),
         composed_by="brain.identity.roles:open_break_glass",
         fixed_because=A_NOTICE_THAT_EXISTS_TO_CATCH_MISUSE_HAS_NO_SWITCH,
     ),

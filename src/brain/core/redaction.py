@@ -1295,6 +1295,20 @@ class SimulationReport(BaseModel):
     would_withhold_a_record: bool = False
 
 
+#: The event name of the one line a simulation logs (M4.2.3).
+SIMULATION_EVENT: Final = "redaction.simulated"
+
+#: Why the log line is built from the report's names and the trace's counts and nothing else.
+A_SIMULATION_LOGS_NAMES_AND_COUNTS_AND_NEVER_A_VALUE: Final = (
+    "A simulation is how somebody previews a policy against real records, so the records it "
+    "walked are real and the log outlives the preview. The line carries the policy epoch, the "
+    "reader's reach digest, the withheld field names and two counts, each read off the report or "
+    "the trace, which already refuse a value; no field of the payload, no record id and no "
+    "path is passed to the logger. The counts are for an operator reading logs, and never reach "
+    "the admin's screen, which gets a flag rather than a number (M4.3.2)."
+)
+
+
 def simulate_redaction[T: Entity](
     result: TypedResult[T],
     *,
@@ -1307,17 +1321,31 @@ def simulate_redaction[T: Entity](
     Note what this does not do: it does not relax anything. Simulation runs the real gate,
     which is the same reason screen 13's preview is computed by the real gate rather than
     by an estimator. A preview with its own logic is the component most likely to lie.
+
+    It writes one structured log line saying what would be withheld, in names and counts only
+    (M4.2.3), so a policy being trialled leaves a record an operator can read afterwards.
     """
     answer = redact(result, entitlement=entitlement, policy=policy, now=now)
-    withheld_records = any(
-        item.reason is DropReason.NO_VISIBLE_FIELD for item in answer.trace.dropped
-    )
-    return SimulationReport(
+    withheld_records = [
+        item for item in answer.trace.dropped if item.reason is DropReason.NO_VISIBLE_FIELD
+    ]
+    report = SimulationReport(
         policy_epoch=answer.trace.policy_epoch,
         ent_hash=answer.trace.ent_hash,
         would_withhold=answer.trace.withheld_field_names(),
-        would_withhold_a_record=withheld_records,
+        would_withhold_a_record=bool(withheld_records),
     )
+    # One line per simulation, built only from names and counts: see
+    # `A_SIMULATION_LOGS_NAMES_AND_COUNTS_AND_NEVER_A_VALUE`.
+    log.info(
+        SIMULATION_EVENT,
+        policy_epoch=report.policy_epoch,
+        ent_hash=report.ent_hash,
+        would_withhold=list(report.would_withhold),
+        withheld_fields=len(answer.trace.redactions),
+        withheld_records=len(withheld_records),
+    )
+    return report
 
 
 # ------------------------------------------------------- request access (M4.3.4)

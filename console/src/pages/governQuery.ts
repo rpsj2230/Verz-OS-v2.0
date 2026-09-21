@@ -601,3 +601,75 @@ export function submittedDeputy(data: unknown): DeputyBody | null {
   }
   return { grant_id: grantId, principal_id: principal, days, reason };
 }
+
+// ------------------------------------------------- directory group mapping (M1.1.5)
+
+export const GROUP_RULES_API_PATH = "/govern/roles/group-rules";
+export const GROUP_RULE_RETIREMENT_API_PATH = "/govern/roles/group-rules/retirement";
+
+/** One group-to-role rule as `GET /api/v1/govern/roles/group-rules` answers it. */
+export interface GroupRuleRow {
+  readonly id: string;
+  readonly idp_group: string;
+  readonly role: string;
+  readonly created_by: string;
+  readonly created_at: string;
+}
+
+/** One role the sync wrote from somebody's group membership. */
+export interface SyncedRow {
+  readonly principal_id: string;
+  readonly role: string;
+  readonly source_group: string;
+  readonly first_seen_at: string;
+  readonly last_seen_at: string;
+}
+
+export interface GroupRulesPage {
+  readonly rules: readonly GroupRuleRow[];
+  readonly synced: readonly SyncedRow[];
+  readonly editable: boolean;
+}
+
+export function readGroupRules(payload: unknown): GroupRulesPage {
+  if (typeof payload !== "object" || payload === null) {
+    return { rules: [], synced: [], editable: false };
+  }
+  const found = payload as { rules?: unknown; synced?: unknown; editable?: unknown };
+  return {
+    rules: Array.isArray(found.rules) ? (found.rules as GroupRuleRow[]) : [],
+    synced: Array.isArray(found.synced) ? (found.synced as SyncedRow[]) : [],
+    editable: found.editable === true,
+  };
+}
+
+export interface GroupRuleBody {
+  readonly idp_group: string;
+  readonly role: string;
+  readonly reason: string;
+  readonly scope_slug?: string;
+}
+
+/** What the mapping form submitted, from named keys only, or null. */
+export function submittedGroupRule(data: unknown): GroupRuleBody | null {
+  if (typeof data !== "object" || data === null) {
+    return null;
+  }
+  const fields = data as Record<string, unknown>;
+  const group = fields["idp_group"];
+  const role = fields["role"];
+  const reason = fields["reason"];
+  if (typeof group !== "string" || typeof role !== "string" || typeof reason !== "string") {
+    return null;
+  }
+  if (group.trim() === "" || role === "" || reason === "") {
+    return null;
+  }
+  const slug = fields["scope_slug"];
+  return {
+    idp_group: group.trim(),
+    role,
+    reason,
+    ...(typeof slug === "string" && slug !== "" ? { scope_slug: slug } : {}),
+  };
+}
