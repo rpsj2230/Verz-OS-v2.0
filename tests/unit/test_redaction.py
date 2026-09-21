@@ -630,6 +630,71 @@ def test_reverting_a_policy_change_restores_the_epoch() -> None:
     assert restored.epoch() == original
 
 
+def test_the_epoch_changes_when_only_a_derivation_changes() -> None:
+    """M4.2.4 says any field policy change, and a derivation is one: dropping it lets a
+    caller short of `cost` read `sell_price` and `margin` again. Until 2026-09-21 the epoch
+    did not digest it, so the answer cache kept serving rows withheld under the old closure.
+
+    Asserted against the mask as well, so the test shows the change is one a caller sees.
+    Delete this and a derivation edit is invisible to every cache keyed on the epoch."""
+    base = FieldPolicy(
+        rules=(
+            FieldRule.of("price", "sell_price", "read:price.sell_price", Classification.INTERNAL),
+            FieldRule.of("price", "margin", "read:price.margin", Classification.INTERNAL),
+            FieldRule(
+                entity="price",
+                field="cost",
+                required_capability=Capability(value="read:price.cost"),
+                classification=Classification.RESTRICTED,
+                derived_from=("sell_price", "margin"),
+            ),
+        )
+    )
+    dropped = base.with_rules(
+        FieldRule.of("price", "cost", "read:price.cost", Classification.RESTRICTED)
+    )
+    caller = ent("read:price.sell_price", "read:price.margin")
+    fields = ["sell_price", "margin", "cost"]
+    before = compute_mask("price", fields, entitlement=caller, policy=base, row={})
+    after = compute_mask("price", fields, entitlement=caller, policy=dropped, row={})
+
+    assert before.allowed != after.allowed
+    assert base.epoch() != dropped.epoch()
+
+
+def test_the_order_a_derivation_is_written_in_does_not_move_the_epoch() -> None:
+    """A derivation is a set, and a frozenset's order changes between processes. Two
+    processes with one policy would otherwise key the same answer two ways."""
+
+    def cost(*inputs: str) -> FieldPolicy:
+        return FieldPolicy(
+            rules=(
+                FieldRule(
+                    entity="price",
+                    field="cost",
+                    required_capability=Capability(value="read:price.cost"),
+                    classification=Classification.RESTRICTED,
+                    derived_from=inputs,
+                ),
+            )
+        )
+
+    assert cost("sell_price", "margin").epoch() == cost("margin", "sell_price").epoch()
+
+
+def test_a_derivation_input_must_name_a_field() -> None:
+    """A record key is a name, so an input that is not one never matches and the closure
+    silently protects nothing; the epoch's separators also rely on it."""
+    with pytest.raises(ValidationError, match="not a field name"):
+        FieldRule(
+            entity="price",
+            field="cost",
+            required_capability=Capability(value="read:price.cost"),
+            classification=Classification.RESTRICTED,
+            derived_from=("sell_price", "margin|x"),
+        )
+
+
 def test_the_epoch_travels_with_every_answer() -> None:
     """A trace that does not say which policy produced it cannot be replayed, so nobody
     can tell whether an old answer was correct at the time."""

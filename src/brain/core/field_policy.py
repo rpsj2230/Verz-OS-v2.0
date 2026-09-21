@@ -164,6 +164,17 @@ class FieldRule(BaseModel):
             raise ValueError(msg)
         return self
 
+    @field_validator("derived_from")
+    @classmethod
+    def _derived_from_names_fields(cls, v: tuple[str, ...]) -> tuple[str, ...]:
+        """Every input is a field name: a record key must be one, so anything else never
+        matches, and the epoch's separators rely on it."""
+        bad = [name for name in v if not re.match(NAME_PATTERN, name)]
+        if bad:
+            msg = f"derived_from={bad!r} names something that is not a field name"
+            raise ValueError(msg)
+        return v
+
     @field_validator("counts")
     @classmethod
     def _counts_names_a_field(cls, v: str) -> str:
@@ -357,10 +368,15 @@ class FieldPolicy(BaseModel):
         contain, and a tightening that did not move the epoch would leave every cached
         answer still emitting the count it was just told to withhold.
 
-        The separator is safe without length-prefixing because none of the five parts can
-        contain a pipe: entity, field and the count declaration match `NAME_PATTERN` or are
-        empty, the capability grammar admits only letters, digits, underscore, colon, dot
-        and a trailing star, and a classification is one of four fixed words.
+        The derivation is digested too (M4.2.4): dropping one changes what `compute_mask`
+        withholds, and it was left out until 2026-09-21, so that edit kept the epoch. Sorted,
+        because it is a set and a frozenset's order differs between processes.
+
+        The separator is safe without length-prefixing because none of the six parts can
+        contain a pipe: entity, field, the count declaration and every derivation input match
+        `NAME_PATTERN` or are empty, the capability grammar admits only letters, digits,
+        underscore, colon, dot and a trailing star, and a classification is one of four
+        fixed words. A comma joins the derivation inputs, and a name cannot contain one.
         """
         parts = sorted(
             "|".join(
@@ -370,6 +386,7 @@ class FieldPolicy(BaseModel):
                     rule.required_capability.value,
                     rule.classification.value,
                     rule.counts,
+                    ",".join(sorted(set(rule.derived_from))),
                 )
             )
             for rule in self.rules
