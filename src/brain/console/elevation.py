@@ -96,9 +96,9 @@ the elevation's lapse inside the approver's own. And the one that is new: **the 
 already hold anything covering the capability**, because `EntitlementSet.scope_for` intersects
 every grant covering one, so a second grant of what somebody holds narrows them, and approving it
 would take reach away while the ledger said it gave some. See
-`AN_ELEVATION_OF_WHAT_IS_ALREADY_HELD_WOULD_NARROW_IT`. Nobody is notified: `client_recipients`
-computes recipients from role grants and no table holds one (M1.3.2), so the ledger entries are the
-record and the screen says so rather than claiming a notice.
+`AN_ELEVATION_OF_WHAT_IS_ALREADY_HELD_WOULD_NARROW_IT`. The standing Super Admins are told:
+`client_recipients` computes them from the `gate.role_grant` rows `brain.gate.elevation_store`
+reads inside the approval, and a notice per recipient is written in the same transaction (M1.2.5).
 
 **Who is shown a request is the requester and whoever may decide it.** `requests_shown` answers it
 with `may_authorise` over the requester's row, the same question the decision asks, so a request

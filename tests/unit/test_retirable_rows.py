@@ -125,6 +125,11 @@ RECIPES: Final[dict[str, Recipe]] = {
         "principal_id = 'u_rr_{n}'",
         parents=(PERSON,),
     ),
+    "auth.group_role_rule": Recipe(
+        "INSERT INTO auth.group_role_rule (idp_group, role, created_by, reason)"
+        " VALUES ('rr_group_{n}', 'auditor', 'u_admin', 'measured')",
+        "idp_group = 'rr_group_{n}'",
+    ),
     "gate.capability_pack": Recipe(
         "INSERT INTO gate.capability_pack (name, description, capabilities)"
         " VALUES ('rr_pack_{n}', 'described', ARRAY['read:price_list'])",

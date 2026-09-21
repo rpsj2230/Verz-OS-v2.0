@@ -49,6 +49,11 @@ side ending it. The listing is `requests_shown`: a requester's own and those the
 `tests/unit/test_elevation_store.py` is the database half, and it asks the resolver on both sides of
 the lapse.
 
+**An approval is a break-glass session, and the standing Super Admins are told of it (M1.2.5).**
+The store writes one notice per standing Super Admin in the approval's transaction, the decision
+says who was told, and `GET /govern/elevation/notices` answers each person the notices addressed to
+them and nobody else's.
+
 **One of the four still says more about what is missing than about what is there, and that is the
 design rather than an apology.** The Subscribers screen lists who is told what and says
 how that stops, pointing at the two screens that stop it rather than offering a second button for
@@ -72,7 +77,7 @@ single decision's store call, its lock, its `may` and its trigger, with its own 
 the order asked. Elevations are not decided in bulk. See
 `AN_ELEVATION_IS_DECIDED_ON_ITS_OWN_REASON`.
 
-Task ids: M27.7.4, M27.7.8, M27.7.9, M27.7.12, M27.8.6, M1.2.3
+Task ids: M27.7.4, M27.7.8, M27.7.9, M27.7.12, M27.8.6, M1.2.3, M1.2.5
 """
 
 from __future__ import annotations
@@ -94,8 +99,10 @@ from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked, Asking
 from brain.console.elevation import (
     ELEVATION_CONTROL,
+    ElevationError,
     ElevationRequest,
     ElevationState,
+    client_recipients,
     landing,
     may_approve,
     may_decide,
@@ -147,8 +154,10 @@ from brain.core.scope import Scope
 from brain.core.scope_sql import PredicateRefusedError
 from brain.gate.elevation_store import (
     ElevationRecords,
+    NoticeRecords,
     PendingRequest,
     StoredElevations,
+    StoredNotices,
     StoredRequest,
 )
 from brain.gate.review_store import (
@@ -174,7 +183,7 @@ from brain.identity.organisation_store import (
 )
 from brain.identity.packs import SubjectGrant
 from brain.identity.principal_state_store import A_DISABLE_IS_REVERSIBLE_AND_A_LEAVER_IS_NOT
-from brain.identity.roles import BREAK_GLASS_MAX, BreakGlassReason, IdentityError
+from brain.identity.roles import BREAK_GLASS_MAX, BreakGlassReason, IdentityError, RoleGrant
 from brain.identity.teams import PrincipalSubject
 from brain.identity.teams import Team as TeamRecord
 from brain.listing import MAX_SEVERAL, Column, ListAsked, Listing, each_of
@@ -250,10 +259,10 @@ WHAT_IS_RECORDED_ABOUT_AN_ELEVATION: Final = (
     "and when an approved one lapses. Asking, approving and denying are each recorded in the audit "
     "ledger, and an approval is recorded again as the grant it wrote."
 )
-NOBODY_IS_TOLD_YET: Final = (
-    "Nobody is sent a notice when somebody asks or is approved. The people who should be told are "
-    "the standing Super Admins, and this install does not record who holds a role, so the audit "
-    "ledger is the record."
+WHO_IS_TOLD_ABOUT_AN_ELEVATION: Final = (
+    "When a request is approved, every standing Super Admin who took no part in it is told, and "
+    "sees it under Emergency access you were told about on this screen. An approval with nobody "
+    "independent to tell is refused. Nobody is told when somebody only asks."
 )
 AUTHORISING_IS_THE_ACCESS_REVIEW_AUTHORITY: Final = (
     "Approving or denying an elevation takes the same authority the Access review screen asks for, "
@@ -653,7 +662,7 @@ class ElevationPage(BaseModel):
     truncated: bool = False
     what: str = AN_ELEVATION_IS_A_GRANT_WITH_A_CLOCK_ON_IT
     recorded: str = WHAT_IS_RECORDED_ABOUT_AN_ELEVATION
-    notified: str = NOBODY_IS_TOLD_YET
+    notified: str = WHO_IS_TOLD_ABOUT_AN_ELEVATION
     authorising: str = AUTHORISING_IS_THE_ACCESS_REVIEW_AUTHORITY
 
 
@@ -692,6 +701,29 @@ class ElevationDecided(BaseModel):
     decision: ElevationDecision
     decided_at: datetime
     lapses_at: datetime | None
+    #: The standing Super Admins told of the break-glass session an approval opened (M1.2.5).
+    notified: tuple[str, ...] = ()
+
+
+class BreakGlassNoticeView(BaseModel):
+    """One break-glass session this reader was told about: who, why, who allowed it, until when."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    session_id: str
+    principal_id: str
+    authorised_by: str
+    reason: BreakGlassReason
+    lapses_at: datetime
+    told_at: datetime
+
+
+class BreakGlassNotices(BaseModel):
+    """The notices addressed to this reader and nobody else. No count of anybody else's."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    items: tuple[BreakGlassNoticeView, ...]
 
 
 class HoldingKind(enum.StrEnum):
@@ -995,6 +1027,17 @@ def elevation_records_of(request: Request) -> ElevationRecords:
     if factory is None:
         raise Failed("no database on this process")
     return StoredElevations(factory)
+
+
+def notice_records_of(request: Request) -> NoticeRecords:
+    """`app.state.break_glass_notices` when something put one there, and the database otherwise."""
+    found = getattr(request.app.state, "break_glass_notices", None)
+    if isinstance(found, NoticeRecords):
+        return found
+    factory = sessions_of(request)
+    if factory is None:
+        raise Failed("no database on this process")
+    return StoredNotices(factory)
 
 
 def review_store_of(request: Request) -> StoredReview:
@@ -1846,12 +1889,26 @@ async def decide_elevation(
         ) -> SubjectGrant | None:
             return approval_grant(pending, approver=reach, requester=requester, at=at)
 
+        def tell(
+            role_grants: Sequence[RoleGrant], pending: PendingRequest, at: datetime
+        ) -> tuple[str, ...] | None:
+            try:
+                return client_recipients(
+                    role_grants,
+                    subject_id=pending.request.principal_id,
+                    authorised_by=decider,
+                    now=at,
+                )
+            except ElevationError:
+                return None
+
         decided = await store.approve(
             request_id,
             approver_id=decider,
             ent_hash=reach.ent_hash(),
             trace_id=_trace_id(),
             grant_for=grant_for,
+            tell=tell,
         )
     else:
 
@@ -1874,6 +1931,33 @@ async def decide_elevation(
         decision=decided.decision,
         decided_at=decided.decided_at,
         lapses_at=decided.lapses_at,
+        notified=decided.notified,
+    )
+
+
+@router.get(
+    "/govern/elevation/notices", response_model=BreakGlassNotices, responses=COMMON_RESPONSES
+)
+async def break_glass_notices(request: Request, asked: Asked) -> BreakGlassNotices:
+    """The break-glass sessions this reader was told about, as a standing Super Admin (M1.2.5).
+
+    Open to every signed-in caller and answered from the caller's own principal id alone, so a
+    reader who was told nothing is shown nothing, identically to one who may not be told.
+    """
+    rows = await notice_records_of(request).addressed_to(asked.caller.principal.id, limit=MAX_ROWS)
+    return BreakGlassNotices(
+        items=tuple(
+            BreakGlassNoticeView(
+                session_id=str(row.request_id),
+                principal_id=row.principal_id,
+                authorised_by=row.authorised_by,
+                reason=BreakGlassReason(row.reason),
+                lapses_at=row.lapses_at,
+                told_at=row.created_at,
+            )
+            for row in rows
+            if row.recipient_id == asked.caller.principal.id
+        )
     )
 
 

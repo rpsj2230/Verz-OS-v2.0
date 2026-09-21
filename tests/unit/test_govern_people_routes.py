@@ -17,7 +17,7 @@ Task ids: M27.7.4, M27.7.8, M27.7.9, M27.7.12, M27.8.6
 from __future__ import annotations
 
 import uuid
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, ClassVar
@@ -56,7 +56,7 @@ from brain.gate.review_store import (
 from brain.identity.bearer import TokenAuthority
 from brain.identity.organisation_store import OrganisationRecords, Person
 from brain.identity.packs import SubjectGrant
-from brain.identity.roles import BreakGlassReason
+from brain.identity.roles import BreakGlassReason, Role, RoleGrant
 from brain.identity.teams import PrincipalSubject
 from brain.ops.jobs import NAMES_THAT_WOULD_BE_A_HIDDEN_COUNT
 from brain.ops.outbox import EventKind, Subscriber
@@ -357,6 +357,17 @@ class Elevations(ElevationRecords):
         self.scope: NamedScope | None = NamedScope(
             slug="web_all", predicate={"department": "web"}, is_department=False, label=""
         )
+        #: The Super Admin grants the store would read for `tell` (M1.2.5).
+        self.super_admins: list[RoleGrant] = [
+            RoleGrant(
+                principal_id=pid,
+                role=Role.SUPER_ADMIN,
+                granted_by="u_seed",
+                reason="standing",
+                granted_at=LONG_AGO,
+            )
+            for pid in ("u_admin", "u_sa_one")
+        ]
 
     async def requests(self, *, limit: int) -> tuple[tuple[StoredRequest, ...], bool]:
         self.calls.append("requests")
@@ -393,6 +404,7 @@ class Elevations(ElevationRecords):
         ent_hash: str,
         trace_id: str,
         grant_for: Callable[[PendingRequest, EntitlementSet, datetime], SubjectGrant | None],
+        tell: Callable[[Sequence[RoleGrant], PendingRequest, datetime], tuple[str, ...] | None],
     ) -> ElevationDecided | None:
         self.calls.append("approve")
         one = self._pending(request_id)
@@ -402,8 +414,12 @@ class Elevations(ElevationRecords):
             principal_id=one.principal_id, grants=self.REACHES.get(one.principal_id, ())
         )
         at = datetime.now(UTC)
-        grant = grant_for(PendingRequest(request=one, scope=self.scope), requester, at)
+        pending = PendingRequest(request=one, scope=self.scope)
+        grant = grant_for(pending, requester, at)
         if grant is None:
+            return None
+        told = tell(self.super_admins, pending, at)
+        if not told:
             return None
         self.granted.append(grant)
         return ElevationDecided(
@@ -412,6 +428,7 @@ class Elevations(ElevationRecords):
             decision=ElevationDecision.APPROVED,
             decided_at=at,
             lapses_at=grant.not_after,
+            notified=told,
         )
 
     async def deny(
@@ -875,6 +892,30 @@ def test_an_approval_writes_the_grant_the_request_asked_for_and_a_denial_is_reco
     assert approved.json()["lapses_at"] is not None
     assert denied.status_code == 200, denied.text
     assert wired.elevations.denied == [(other.request_id, "u_elsewhere")]
+
+
+def test_an_approval_tells_the_standing_super_admins_who_took_no_part(wired: Wired) -> None:
+    """M1.2.5 at the route: the approver is a standing Super Admin and is not told, the other one
+    is, and the decision says so. Delete this and the route hands the store a `tell` that tells
+    the approver, or nobody, and the notice reaches the one person who already knew."""
+    asked = a_request("u_2", "web")
+    wired.elevations.stored = [asked]
+    approved = decide_request(wired, "u_admin", asked, "approved")
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["notified"] == ["u_sa_one"]
+
+
+def test_an_approval_with_nobody_independent_to_tell_is_refused_and_grants_nothing(
+    wired: Wired,
+) -> None:
+    """`client_recipients` refuses when every standing Super Admin took part. Delete this and a
+    break-glass session opens with nobody told, which is an unaudited admin account."""
+    asked = a_request("u_2", "web")
+    wired.elevations.stored = [asked]
+    wired.elevations.super_admins = wired.elevations.super_admins[:1]
+    refused = decide_request(wired, "u_admin", asked, "approved")
+    assert refused.status_code == 404
+    assert wired.elevations.granted == []
 
 
 def test_every_refused_decision_is_one_refusal(wired: Wired) -> None:
