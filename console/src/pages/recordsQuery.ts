@@ -290,3 +290,56 @@ export function rowIdentity(rows: readonly RecordRow[]): ReadonlyMap<RecordRow, 
   });
   return identity;
 }
+
+// ------------------------------------------------ who can see a record (M1.9.1)
+
+/**
+ * Where the API answers who can see the one record a column and value name. The API opens it only
+ * for a reader who can already see that record, and answers anybody else as it answers an entity
+ * that is not there.
+ */
+export function recordAccessApiPath(entity: string, column: string, value: string): string {
+  const term = encodeURIComponent(`${column}:${value}`);
+  return `/records/${encodeURIComponent(entity)}/access?filter=${term}`;
+}
+
+export const ACCESS_QUERY_SCHEMA: RJSFSchema = Object.freeze<RJSFSchema>({
+  type: "object",
+  required: ["column", "value"],
+  properties: {
+    column: { type: "string", title: "column", minLength: 1, maxLength: 120, pattern: "^[a-z][a-z0-9_.]*$" },
+    value: { type: "string", title: "value", minLength: 1, maxLength: 200 },
+  },
+});
+
+export const ACCESS_QUERY_UI: UiSchema = Object.freeze<UiSchema>({
+  "ui:submitButtonOptions": { submitText: "Show who can see it" },
+});
+
+/** The column and value the access form submitted, or null. */
+export function submittedAccess(data: unknown): { column: string; value: string } | null {
+  if (typeof data !== "object" || data === null) {
+    return null;
+  }
+  const fields = data as Record<string, unknown>;
+  const column = fields["column"];
+  const value = fields["value"];
+  if (typeof column !== "string" || typeof value !== "string" || column === "" || value === "") {
+    return null;
+  }
+  return { column, value };
+}
+
+/** One person the API says can see the record. */
+export interface PersonWhoSees {
+  readonly principal_id: string;
+  readonly display_name: string;
+}
+
+export function readAudience(payload: unknown): readonly PersonWhoSees[] {
+  if (typeof payload !== "object" || payload === null) {
+    return [];
+  }
+  const found = (payload as { people?: unknown }).people;
+  return Array.isArray(found) ? (found as PersonWhoSees[]) : [];
+}

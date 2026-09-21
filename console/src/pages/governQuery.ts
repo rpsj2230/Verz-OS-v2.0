@@ -382,3 +382,113 @@ export interface GrantRemoval {
   readonly principal_id: string;
   readonly capability: string;
 }
+
+// ------------------------------------------------------------ packs (M1.4.3)
+
+export const PACKS_API_PATH = "/govern/packs";
+export const PACK_ASSIGNMENT_API_PATH = "/govern/packs/assignment";
+
+/** One pack as `GET /api/v1/govern/packs` answers it. */
+export interface PackRow {
+  readonly slug: string;
+  readonly label: string;
+  readonly capabilities: readonly string[];
+}
+
+/** The packs a reader may choose from; empty for a reader who may not name capabilities. */
+export function readPacks(payload: unknown): readonly PackRow[] {
+  if (typeof payload !== "object" || payload === null) {
+    return [];
+  }
+  const found = (payload as { packs?: unknown }).packs;
+  return Array.isArray(found) ? (found as PackRow[]) : [];
+}
+
+/** The fields a pack assignment sends, in the order the form shows them. */
+export const PACK_FIELDS = ["principal_id", "pack_slug", "scope_slug", "reason"] as const;
+
+/**
+ * The form a pack is assigned through, with the bounds `PackProposal` declares. The pack and the
+ * scope are chosen from what this reader was answered; a scope that restricts nothing is refused
+ * by the route, because a pack assignment must be bound to a scope.
+ */
+export function packSchema(packs: readonly string[], slugs: readonly string[]): RJSFSchema {
+  return Object.freeze<RJSFSchema>({
+    type: "object",
+    required: [...PACK_FIELDS],
+    properties: {
+      principal_id: { type: "string", title: "principal_id", minLength: 1, maxLength: MAX_PRINCIPAL_CHARS },
+      pack_slug: {
+        type: "string",
+        title: "pack_slug",
+        minLength: MIN_SLUG_CHARS,
+        maxLength: MAX_SLUG_CHARS,
+        ...(packs.length > 0 ? { enum: [...packs] } : {}),
+      },
+      scope_slug: {
+        type: "string",
+        title: "scope_slug",
+        minLength: MIN_SLUG_CHARS,
+        maxLength: MAX_SLUG_CHARS,
+        ...(slugs.length > 0 ? { enum: [...slugs] } : {}),
+      },
+      reason: { type: "string", title: "reason", minLength: 1, maxLength: MAX_REASON_CHARS },
+    },
+  });
+}
+
+export const PACK_UI: UiSchema = Object.freeze<UiSchema>({
+  "ui:submitButtonOptions": { submitText: "Assign this pack" },
+});
+
+/** The body of one pack assignment. */
+export interface PackProposal {
+  readonly principal_id: string;
+  readonly pack_slug: string;
+  readonly scope_slug: string;
+  readonly reason: string;
+}
+
+/** What the pack form submitted, assembled from four named keys, or null. */
+export function submittedPack(data: unknown): PackProposal | null {
+  if (typeof data !== "object" || data === null) {
+    return null;
+  }
+  const fields = data as Record<string, unknown>;
+  const principal_id = fields["principal_id"];
+  const pack_slug = fields["pack_slug"];
+  const scope_slug = fields["scope_slug"];
+  const reason = fields["reason"];
+  if (
+    typeof principal_id !== "string" ||
+    typeof pack_slug !== "string" ||
+    typeof scope_slug !== "string" ||
+    typeof reason !== "string" ||
+    principal_id === "" ||
+    pack_slug === "" ||
+    scope_slug === "" ||
+    reason === ""
+  ) {
+    return null;
+  }
+  return { principal_id, pack_slug, scope_slug, reason };
+}
+
+// ------------------------------------------------- the Approver flag (M1.8.4)
+
+export const MISCONFIGURATIONS_API_PATH = "/govern/roles/misconfigurations";
+
+/** One person whose Approver role and approve permission disagree. */
+export interface MisconfigurationRow {
+  readonly principal_id: string;
+  readonly kind: string;
+  readonly sentence: string;
+}
+
+export function readMisconfigurations(payload: unknown): readonly MisconfigurationRow[] {
+  if (typeof payload !== "object" || payload === null) {
+    return [];
+  }
+  const found = (payload as { items?: unknown }).items;
+  return Array.isArray(found) ? (found as MisconfigurationRow[]) : [];
+}

@@ -47,7 +47,7 @@
  * steward and an install set up before the setup wizard named one names them here. See
  * `components/DataStewardCard.tsx`.
  *
- * Task ids: M27.7.3, M27.7.7, M27.8.4, M27.9.9
+ * Task ids: M27.7.3, M27.7.7, M27.8.4, M27.9.9, M1.4.3
  */
 
 import { useCallback, useMemo, useState } from "react";
@@ -63,6 +63,12 @@ import { DataStewardCard } from "../components/DataStewardCard";
 import { SchemaForm } from "../components/SchemaForm";
 import {
   GRANTS_API_PATH,
+  PACK_ASSIGNMENT_API_PATH,
+  PACK_UI,
+  PACKS_API_PATH,
+  packSchema,
+  readPacks,
+  submittedPack,
   PROPOSAL_UI,
   REMOVAL_API_PATH,
   PEOPLE_API_PATH,
@@ -327,6 +333,65 @@ function GrantForm({ subject, onWritten }: { readonly subject: string; readonly 
 }
 
 /**
+ * The form a capability pack is assigned through (M1.4.3). Every grant the pack means must be one
+ * this caller could write on its own, which the route decides; the pack and scope lists are what
+ * this reader was answered, so the ordinary case needs no typing.
+ */
+function PackForm({ subject, onWritten }: { readonly subject: string; readonly onWritten: () => void }) {
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  const [busy, setBusy] = useState(false);
+  const scopes = useResource<unknown>(scopeChoicesApiPath());
+  const packs = useResource<unknown>(PACKS_API_PATH);
+  const schema = useMemo(
+    () =>
+      packSchema(
+        readPacks(packs.data).map((one) => one.slug),
+        readScopesPage(scopes.data).scopes.map((one) => one.slug),
+      ),
+    [packs.data, scopes.data],
+  );
+  const principalId = principalIn(subject);
+
+  const write = useCallback(
+    (submitted: unknown) => {
+      const proposal = submittedPack(submitted);
+      if (proposal === null) {
+        return;
+      }
+      setBusy(true);
+      void (async () => {
+        const result = await request<unknown>(PACK_ASSIGNMENT_API_PATH, {
+          method: "POST",
+          body: proposal,
+        });
+        setBusy(false);
+        if (!result.ok) {
+          setFailure(result.failure);
+          return;
+        }
+        setFailure(null);
+        onWritten();
+      })();
+    },
+    [onWritten],
+  );
+
+  return (
+    <section className="card">
+      <SchemaForm
+        caption={`Assign a pack to ${subject}`}
+        schema={schema}
+        uiSchema={PACK_UI}
+        formData={principalId === null ? {} : { principal_id: principalId }}
+        failure={failure}
+        busy={busy}
+        onSubmit={write}
+      />
+    </section>
+  );
+}
+
+/**
  * The listing itself, and the open subject beside it.
  *
  * The list is `useListing`'s, so its search, its capability filter, its order and "Show more" are
@@ -395,7 +460,10 @@ function PeopleRows({
        * the screen at all.
        */}
       {open !== null && openPage.editable ? (
-        <GrantForm subject={open.subject} onWritten={onWritten} />
+        <>
+          <GrantForm subject={open.subject} onWritten={onWritten} />
+          <PackForm subject={open.subject} onWritten={onWritten} />
+        </>
       ) : null}
 
       {openSubject !== undefined && !opened.busy && opened.failure === null && open === null ? (

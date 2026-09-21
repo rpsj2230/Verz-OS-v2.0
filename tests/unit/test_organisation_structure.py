@@ -73,6 +73,7 @@ from brain.identity.organisation_store import (
     StructureRefusal,
 )
 from brain.identity.teams import Team as TeamRecord
+from brain.identity.teams import references_team, team_scope
 from brain.ops.replica_store import Served
 from brain.ops.starter import COMPANY_SCOPE
 from brain.ops.starter_store import furnish
@@ -511,6 +512,7 @@ class Structure(StructureRecords):
         departments: Sequence[str],
         may_know: Callable[[ScopeRecord | None], bool],
         by: Attribution,
+        team: str | None = None,
     ) -> Structured:
         if (refused := self._asked("draw_scope", by)) is not None:
             return refused
@@ -520,6 +522,8 @@ class Structure(StructureRecords):
             return StructureRefusal.NOT_WRITABLE
         if not set(departments) <= set(self.departments):
             return StructureRefusal.UNKNOWN_DEPARTMENT
+        if team is not None and (departments[0], team) not in self.teams:
+            return StructureRefusal.NOT_WRITABLE
         self.scopes[scope.slug] = scope
         return LONG_AGO
 
@@ -1448,3 +1452,91 @@ def test_retiring_the_company_wide_scope_furnishing_wrote_is_refused_with_a_sent
     )
     assert live == [(COMPANY_SCOPE.slug,)]
     assert found == [(GRANTED_BY, f"scope:{COMPANY_SCOPE.slug}", {"change": "created"})]
+
+
+# ------------------------------------------------------------------ team scopes (M1.5.2)
+def test_a_team_scope_is_its_departments_clause_and_the_teams() -> None:
+    """M1.5.2: a scope predicate may reference a team. Delete this and a team scope could drop the
+    department clause and admit a same-named team in every department."""
+    record = drawn("web_design", "Web design", ["web"], "design")
+    assert record.scope == team_scope("web.design")
+    assert references_team(record.scope)
+    with pytest.raises(ValueError, match="one department"):
+        drawn("both_design", "Design", ["web", "finance"], "design")
+
+
+def test_a_team_scope_is_drawn_for_a_live_team_and_refused_for_one_that_is_not_there() -> None:
+    """The route half of M1.5.2. Delete this and a scope can name a team nobody created, or a team
+    scope can never be drawn at all."""
+    structure = seeded()
+    with client_over(structure) as client:
+        drawn_one = post(
+            client,
+            "u_elsewhere",
+            "/govern/departments/scopes",
+            {"slug": "web_design", "label": "Web design", "departments": ["web"], "team": "design"},
+        )
+        missing = post(
+            client,
+            "u_elsewhere",
+            "/govern/departments/scopes",
+            {"slug": "web_ops", "label": "Web ops", "departments": ["web"], "team": "ops"},
+        )
+        two = post(
+            client,
+            "u_admin",
+            "/govern/departments/scopes",
+            {
+                "slug": "x_design",
+                "label": "Design",
+                "departments": ["web", "finance"],
+                "team": "design",
+            },
+        )
+    assert drawn_one.status_code == 201, drawn_one.text
+    assert structure.scopes["web_design"].scope == team_scope("web.design")
+    assert missing.status_code == 404
+    assert "web_ops" not in structure.scopes
+    assert two.status_code == 422
+
+
+def test_a_grant_over_a_team_scope_resolves_to_that_team() -> None:
+    """M1.5.2 on PostgreSQL: a team is created, a scope over it is drawn, a grant is written over
+    that scope by name, and the resolver gives its holder the team predicate. Delete this and the
+    store can write a team scope the grant route cannot resolve. **Skips without a server.**"""
+    with through_0086("brain_structure_team_scope") as url:
+        a_person(url, "u_admin")
+        a_person(url, "u_holder")
+        answers = pressing(
+            url,
+            (
+                ("u_admin", "/govern/departments", {"slug": "web", "name": "Web"}),
+                (
+                    "u_admin",
+                    "/govern/departments/team",
+                    {"department": "web", "slug": "design", "name": "Design"},
+                ),
+                (
+                    "u_admin",
+                    "/govern/departments/scopes",
+                    {"slug": "web_ops", "label": "Ops", "departments": ["web"], "team": "ops"},
+                ),
+                (
+                    "u_admin",
+                    "/govern/departments/scopes",
+                    {
+                        "slug": "web_design",
+                        "label": "Design",
+                        "departments": ["web"],
+                        "team": "design",
+                    },
+                ),
+                granting(GRANTED, "web_design"),
+            ),
+        )
+        held = held_scope(url, "u_holder", GRANTED)
+
+    assert [one.status for one in answers] == [201, 201, 404, 201, 201], [
+        one.body for one in answers
+    ]
+    assert held == team_scope("web.design")

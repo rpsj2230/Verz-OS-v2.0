@@ -59,7 +59,12 @@ import {
   removeLabel,
   removeQuestion,
 } from "../src/pages/People";
-import { HOLDERS_ARE_NOT_RECORDED, NO_ROLES } from "../src/pages/Roles";
+import {
+  HOLDERS_ARE_NOT_RECORDED,
+  MISCONFIGURED_LIST_LABEL,
+  NONE_MISCONFIGURED,
+  NO_ROLES,
+} from "../src/pages/Roles";
 import { NO_CAPABILITIES } from "../src/pages/Capabilities";
 import { NO_DEPARTMENTS, NO_SCOPES, RESTRICTS_NOTHING } from "../src/pages/Scopes";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
@@ -89,6 +94,7 @@ interface Answers {
   readonly scopes?: unknown;
   readonly roles?: unknown;
   readonly capabilities?: unknown;
+  readonly misconfigurations?: unknown;
   /** The status and body of whichever write the test makes. */
   readonly written?: { status?: number; body?: unknown };
 }
@@ -155,7 +161,9 @@ async function consoleAt(
         });
       }
       const body =
-        url.includes("/api/v1/govern/people") && answers.people !== undefined
+        url.includes("/api/v1/govern/roles/misconfigurations")
+          ? (answers.misconfigurations ?? null)
+          : url.includes("/api/v1/govern/people") && answers.people !== undefined
           ? answers.people
           : url.includes("/api/v1/govern/scopes") && answers.scopes !== undefined
             ? answers.scopes
@@ -590,6 +598,39 @@ describe("the roles screen", () => {
 
     expect(container.textContent).toContain(NO_ROLES);
     expect(readRoles({ roles: [] })).toEqual([]);
+  });
+});
+
+describe("the approver flag on the roles screen", () => {
+  const ROLE = {
+    roles: [{ role: "approver", exists_to: "Approve", typical_count: "a few", scope_required: true }],
+    holders_are_not_recorded_yet: true,
+  };
+
+  test("each misconfigured person is drawn with the sentence the API gave", async () => {
+    // What breaks if this is deleted: the M1.8.4 flag is answered and never shown, so a person
+    // holding the Approver role and no approve permission stays invisible on the console.
+    const { container } = await consoleAt("/roles", {
+      roles: ROLE,
+      misconfigurations: {
+        items: [
+          { principal_id: "u_role_only", kind: "role_without_capability", sentence: "Holds the role only." },
+        ],
+      },
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("u_role_only");
+    });
+    expect(container.textContent).toContain("Holds the role only.");
+    expect(container.querySelector(`[aria-label="${MISCONFIGURED_LIST_LABEL}"]`)).not.toBeNull();
+  });
+
+  test("an empty flag says nobody is misconfigured rather than drawing nothing", async () => {
+    // What breaks if this is deleted: an empty answer renders as a blank section.
+    const { container } = await consoleAt("/roles", { roles: ROLE, misconfigurations: { items: [] } });
+    await waitFor(() => {
+      expect(container.textContent).toContain(NONE_MISCONFIGURED);
+    });
   });
 });
 

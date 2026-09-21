@@ -78,6 +78,9 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "Binds a sign-in to a person. A subject already bound elsewhere is refused with a 409 rather " +
     "than re-pointed, so nothing existing is replaced; unlinking is the destructive act and it is " +
     "confirmed.",
+  "src/pages/People.tsx PACK_ASSIGNMENT_API_PATH":
+    "Assigns a capability pack. Entitlements are additive only, an assignment replaces nothing, and " +
+    "taking one back is the Access review's removal, which is confirmed.",
 };
 
 /** How many times a non-GET `method:` or an `openStream(` call is written in the control files. */

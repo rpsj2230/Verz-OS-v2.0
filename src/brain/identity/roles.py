@@ -870,13 +870,24 @@ def approver_mismatches(
         for principal_id, entitlement in entitlements.items()
         if any(grant.capability.verb == APPROVE_VERB for grant in entitlement.grants)
     }
+    return mismatches_between(holds_role, holds_capability)
 
+
+def mismatches_between(
+    holds_role: Iterable[str], holds_capability: Iterable[str]
+) -> tuple[RoleMismatch, ...]:
+    """The two set differences `approver_mismatches` reports, over principal ids (M1.8.4).
+
+    Split out so the console, which knows role holders from the directory and approvers from the
+    grant rows it may show, reaches the same comparison rather than restating it.
+    """
+    role, capability = set(holds_role), set(holds_capability)
     out = [
         RoleMismatch(principal_id=pid, kind=RoleMismatchKind.ROLE_WITHOUT_CAPABILITY)
-        for pid in sorted(holds_role - holds_capability)
+        for pid in sorted(role - capability)
     ]
     out += [
         RoleMismatch(principal_id=pid, kind=RoleMismatchKind.CAPABILITY_WITHOUT_ROLE)
-        for pid in sorted(holds_capability - holds_role)
+        for pid in sorted(capability - role)
     ]
     return tuple(out)

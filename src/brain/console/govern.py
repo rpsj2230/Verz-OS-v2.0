@@ -147,9 +147,18 @@ from brain.console.reads import permitted
 from brain.console.screens import SCREENS, Group, Screen, screen
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.identity.packs import SubjectGrant, revoke_capability
-from brain.identity.roles import ROLE_SPECS, Role, RoleGrant, RoleSpec, role_capability_leaks
+from brain.identity.roles import (
+    APPROVE_VERB,
+    ROLE_SPECS,
+    Role,
+    RoleGrant,
+    RoleMismatch,
+    RoleSpec,
+    mismatches_between,
+    role_capability_leaks,
+)
 from brain.identity.sessions import Session, SessionRegistry
-from brain.identity.teams import PrincipalSubject
+from brain.identity.teams import PrincipalSubject, SubjectKind
 from brain.ops.denial_alerts import ALERT_TEXT, DenialPattern, reach
 from brain.ops.jobs import hidden_count_fields
 from brain.ops.limits import DenialShape
@@ -738,6 +747,53 @@ def role_holders(
         if one.record.is_active(now)
         and _in_reach(entitlement, screen("roles").read.requires, one.where, now)
     )
+
+
+def people_shown[T](
+    placed: Sequence[Placed[T]],
+    entitlement: EntitlementSet,
+    now: datetime | None = None,
+) -> tuple[Placed[T], ...]:
+    """The people this reader may be shown by name: the People screen's read over where each sits.
+
+    The record access view (M1.9.1) lists who can see a record, which is a list of people, so it
+    is narrowed by the same question the People screen asks of each row.
+    """
+    return tuple(
+        one
+        for one in placed
+        if _in_reach(entitlement, screen("people").read.requires, one.where, now)
+    )
+
+
+def approver_misconfigurations(
+    holdings: Sequence[Placed[SubjectGrant]],
+    approver_role: Sequence[Placed[str]],
+    entitlement: EntitlementSet,
+    now: datetime | None = None,
+) -> tuple[RoleMismatch, ...]:
+    """Who holds the Approver role without an approve permission, or the reverse (M1.8.4).
+
+    Judged only over what this reader may already see: holders through the Roles screen's read
+    against where they sit, approvers through `people`, whose capabilities are named only with
+    the vocabulary's grant. A reader who may not name capabilities is judged nothing, because
+    either half of a mismatch then says what somebody holds.
+    """
+    if not may_name_capabilities(entitlement, now):
+        return ()
+    holders = [
+        one.record
+        for one in approver_role
+        if _in_reach(entitlement, screen("roles").read.requires, one.where, now)
+    ]
+    prefix = f"{SubjectKind.PRINCIPAL.value}:"
+    approvers = [
+        row.subject.removeprefix(prefix)
+        for row in people(holdings, entitlement, now)
+        if row.subject.startswith(prefix)
+        and any(Capability(value=one).verb == APPROVE_VERB for one in row.capabilities)
+    ]
+    return mismatches_between(holders, approvers)
 
 
 # --------------------------------------------------------------- access review (M27.3.6)
