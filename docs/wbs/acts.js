@@ -89,6 +89,12 @@ const ACTS = {
     text: "Private GitHub repo, branch protection, CODEOWNERS on the three core files",
     why: "owner's decision 2026-09-21: the repository stays public on purpose for now and he makes it private and protects main himself before go-live; not to be raised again until then",
   },
+  "M5.1.1": {
+    kind: "DECIDED",
+    gate: false,
+    text: "LiteLLM SDK integration as a driver only, never as a proxy",
+    why: "owner 2026-09-21, item 86: the product calls each provider directly with its own retries, timeouts and fallbacks; no LiteLLM",
+  },
   "M24.3.5": {
     kind: "DECIDED",
     gate: false,
