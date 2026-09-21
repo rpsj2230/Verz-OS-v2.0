@@ -4268,7 +4268,8 @@
     "M38.4.2.2": 5,
     "M38.4.2.3": 5,
     "M38.4.2.4": 5,
-    "M38.4.2.5": 5
+    "M38.4.2.5": 5,
+    "M38.5.3": 3
    },
    "leaf_acts": {
     "M38.1.1.5": {
@@ -4732,7 +4733,7 @@
     },
     "M41.3.2": {
      "status": "BLOCKED",
-     "why": "owner question: is the v1 repository archived",
+     "why": "owner archives the unused verz-company-brain-v2 copy now (item 77) and the v1 repository at go-live",
      "updated": "2026-09-21"
     }
    }
