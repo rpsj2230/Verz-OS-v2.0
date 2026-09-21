@@ -12648,7 +12648,7 @@
    "proof": [
     "M42.7.2"
    ],
-   "decision": null
+   "decision": "needs-rupash 77: the product lives only in rpsj2230/Verz-OS-v2.0; the owner's other repositories are out of scope"
   },
   {
    "id": "DEC-11",
@@ -15208,7 +15208,7 @@
    "proof": [
     "M29.3.2"
    ],
-   "decision": null
+   "decision": "needs-rupash 77: the product lives only in rpsj2230/Verz-OS-v2.0; the owner's other repositories are out of scope"
   },
   {
    "id": "GAP2-22",

@@ -2,8 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**2 items are open: 77 and 81.** Each says in plain terms what it is, what I recommend, and
-every step.
+**1 item is open: 81.** It says in plain terms what it is, what I recommend, and every step.
 
 # Open
 
@@ -28,19 +27,12 @@ index and live read, never a bulk copy.
    if Lark asks.
 5. Tell me "Lark permission added".
 
-## 77. Archive the unused copy `verz-company-brain-v2` (two minutes)
-
-**In plain terms:** you said you no longer use `verz-company-brain-v2`; the product is
-`rpsj2230/Verz-OS-v2.0`. Archiving makes the old copy read-only, so nobody fixes something there by
-mistake, and it can be un-archived any time. The v1 repository `verz-company-brain` stays until
-go-live and is recorded as your go-live step. **Recommendation: archive the v2 copy now.**
-
-1. Sign in to GitHub as **rupashverz** and open the repository **verz-company-brain-v2**.
-2. Click **Settings**, scroll to the bottom (**Danger Zone**), click **Archive this repository**.
-3. Type the repository name to confirm, then **I understand, archive this repository**.
-4. Tell me "v2 copy archived".
-
 # Answered
+
+## 77. Your other GitHub repositories - DECIDED: out of scope
+
+The product lives only in `rpsj2230/Verz-OS-v2.0`. Your other repositories are left alone and not
+raised again, so M41.3.2 is decided as not needed as written.
 
 ## 83. The Maintenance agent in Lark (M38.5.3) - DECIDED: end of Wave 3
 
