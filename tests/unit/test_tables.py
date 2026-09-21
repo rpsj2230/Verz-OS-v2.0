@@ -69,6 +69,7 @@ from brain.models.routing import FallbackTrigger, RungRole, Tier
 from brain.ops.migration_policy import check_file
 from brain.tables.identity import SessionEndReason
 from brain.tables.routing import ATTEMPT_OUTCOMES
+from tests.fixtures.amended_tables import created_ddl
 
 REPO = Path(__file__).resolve().parents[2]
 VERSIONS = REPO / "migrations" / "versions"
@@ -117,6 +118,7 @@ MIGRATION_DEPLOYMENT_RECORD = VERSIONS / "0091_deployment_record.py"
 MIGRATION_VAULT_ACCESS = VERSIONS / "0093_vault_leases_and_audit.py"
 MIGRATION_STAFF_ROSTER = VERSIONS / "0096_staff_roster.py"
 MIGRATION_SERVICE_ACCOUNTS = VERSIONS / "0095_service_accounts_and_partner_reach.py"
+MIGRATION_MODEL_REGISTRY = VERSIONS / "0097_model_registry_and_matrix_gate.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -319,6 +321,12 @@ VAULT_ACCESS_TABLES: tuple[str, ...] = ("ops.vault_access",)
 STAFF_ROSTER_TABLES: tuple[str, ...] = ("auth.staff_member", "auth.staff_sync_run")
 #: And the two 0095 adds: the API caller that is not a person, and the keys it signs in with.
 SERVICE_ACCOUNT_TABLES: tuple[str, ...] = ("auth.service_account", "auth.api_key")
+#: And the three 0097 adds: the provider registry, the golden questions and the matrix changes.
+MODEL_REGISTRY_TABLES: tuple[str, ...] = (
+    "ops.model_provider",
+    "ops.golden_question",
+    "ops.routing_change",
+)
 
 ALL_TABLES = (
     CORE_TABLES
@@ -366,6 +374,7 @@ ALL_TABLES = (
     + VAULT_ACCESS_TABLES
     + STAFF_ROSTER_TABLES
     + SERVICE_ACCOUNT_TABLES
+    + MODEL_REGISTRY_TABLES
 )
 
 
@@ -1113,6 +1122,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert staff_roster.TABLES == STAFF_ROSTER_TABLES
     service_accounts = migration_module(MIGRATION_SERVICE_ACCOUNTS)
     assert service_accounts.TABLES == SERVICE_ACCOUNT_TABLES
+    model_registry = migration_module(MIGRATION_MODEL_REGISTRY)
+    assert model_registry.TABLES == MODEL_REGISTRY_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1182,6 +1193,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(vault_access.TABLES)
         + tuple(staff_roster.TABLES)
         + tuple(service_accounts.TABLES)
+        + tuple(model_registry.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1232,6 +1244,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(vault_access.TABLES),
         set(staff_roster.TABLES),
         set(service_accounts.TABLES),
+        set(model_registry.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"
@@ -1734,7 +1747,7 @@ def test_the_resolver_migration_builds_each_table_exactly_as_the_model_declares_
     importing them, so the copy needs something comparing it or it rots without saying so.
     The comparison is on rendered DDL, so a difference in type, width, nullability, default
     or constraint is caught rather than a difference in how either file is written."""
-    expected = squash(str(CreateTable(table(qualified)).compile(dialect=DIALECT)))
+    expected = squash(created_ddl(table(qualified), DIALECT))
     assert expected in as_amended(resolver_sql("upgrade"))
 
 

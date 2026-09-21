@@ -83,7 +83,17 @@ document plane.
 Scope: no connection, no clock and no log line of its own. The search, the model, the sink and
 the meter are handed in.
 
-Task ids: M3.9.3, M8.1.4, M9.2.1, M6.4.2
+**A model that declines on content is answered once, through abstention** (M5.4.1). A refusal
+the provider reports as an error arrives as a failure the chain stopped on, marked `refused`, and
+becomes the same refusal a refusal inside a successful reply becomes; it is never tried on another
+model, and it is not reported as a model nobody could reach.
+
+**An agent's pinned model is tried first** (M5.7.3): `AgentRecord.model_pin` goes to the executor,
+which walks the rung serving it before the agent's tier. **The call names what it sends** (M5.6.4):
+the question, the passages and any skill descriptions, as `brain.models.disclosure` categories on
+every attempt row; a golden question asked by the matrix gate is recorded as that instead.
+
+Task ids: M3.9.3, M8.1.4, M9.2.1, M6.4.2, M5.4.1, M5.7.3, M5.6.4
 """
 
 from __future__ import annotations
@@ -125,8 +135,10 @@ from brain.knowledge.document_tools import (
     KnowledgePassage,
 )
 from brain.models.adapter import is_refusal
-from brain.models.driver import DriverMessage, DriverResponse, Role
+from brain.models.disclosure import DataCategory
+from brain.models.driver import DriverMessage, DriverResponse, ProviderUnavailable, Role
 from brain.models.metering import Meter
+from brain.models.registry import ModelPin
 from brain.models.routing import RoutingRequest, Tier, classify_tier
 from brain.tools.registry import ToolRegistry
 from brain.tools.skills import (
@@ -275,6 +287,8 @@ class AnswerModel(Protocol):
         trace_id: str,
         agent_version: str | None = None,
         max_output_tokens: int | None = None,
+        pin: ModelPin | None = None,
+        categories: Sequence[DataCategory] = (),
     ) -> DriverResponse:
         """One call through the chain for one request, metered on `meter`, or a `Degraded`."""
         ...
@@ -371,6 +385,9 @@ class ModelLane:
     model: AnswerModel
     agent_version: str | None = None
     agent: AgentRun | None = None
+    #: What the question is recorded as having been, on the attempt rows. The matrix gate asks
+    #: golden questions and says so; every other caller asks a person's question.
+    question_category: DataCategory = DataCategory.QUESTION
 
 
 @dataclass(frozen=True)
@@ -458,6 +475,18 @@ def messages_of(layout: PromptLayout) -> tuple[DriverMessage, DriverMessage]:
     )
 
 
+def sent_categories(
+    question: DataCategory, payload: ChannelPayload, cards: Sequence[SkillCard]
+) -> tuple[DataCategory, ...]:
+    """What a prompt built from these carries, as `brain.models.disclosure` categories."""
+    found = [question]
+    if payload.records:
+        found.append(DataCategory.DOCUMENT_PASSAGES)
+    if cards:
+        found.append(DataCategory.SKILL_DESCRIPTIONS)
+    return tuple(found)
+
+
 def prompt_bytes(messages: Sequence[DriverMessage]) -> int:
     """The UTF-8 length of every turn, an upper bound on a byte-level tokeniser's count."""
     return sum(len(one.content.encode("utf-8")) for one in messages)
@@ -517,15 +546,24 @@ async def draft(
     agent = lane.agent
     cards = () if agent is None else skill_cards(agent, caller=entitlement, now=now)
     messages = messages_of(prompt_for(question, payload, cards))
-    response = await lane.model.complete(
-        messages,
-        tier=tier_for(messages, None if agent is None else agent.record.tier),
-        lane=Lane.ANSWER,
-        meter=meter,
-        trace_id=trace_id,
-        agent_version=lane.agent_version,
-        max_output_tokens=settings_for(Lane.ANSWER).max_output_tokens,
-    )
+    try:
+        response = await lane.model.complete(
+            messages,
+            tier=tier_for(messages, None if agent is None else agent.record.tier),
+            lane=Lane.ANSWER,
+            meter=meter,
+            trace_id=trace_id,
+            agent_version=lane.agent_version,
+            max_output_tokens=settings_for(Lane.ANSWER).max_output_tokens,
+            pin=None if agent is None else agent.record.model_pin,
+            categories=sent_categories(lane.question_category, payload, cards),
+        )
+    except ProviderUnavailable as failed:
+        if not failed.failure.refused:
+            raise
+        # M5.4.1: the provider declined on content. Answered once, as the refusal a declining
+        # reply becomes, and never tried on another model: the chain already stopped on it.
+        return Drafted(outcome=refused(scope, detail="the model declined on content"), asked=True)
     if is_refusal(response.finish_reason):
         return Drafted(outcome=refused(scope, detail="the model declined on content"), asked=True)
     text = response.text.strip()

@@ -128,7 +128,9 @@ from brain.ops.openbao import (
     VaultUnreachableError,
 )
 from brain.ops.provider_keys import (
+    PROCESS_ADDED_SLOTS,
     PROVIDER_SLOTS,
+    AddedProviderSlots,
     ProviderSlot,
     load_into_environment,
     names_in_environment,
@@ -484,11 +486,13 @@ class Credentials:
         outranking: frozenset[str] = frozenset(),
         environ: MutableMapping[str, str] | None = None,
         writes: CredentialWrites | None = None,
+        added: AddedProviderSlots | None = None,
     ) -> None:
         self._vault = vault
         self._outranking = outranking
         self._environ = environ
         self._writes = writes
+        self._added = PROCESS_ADDED_SLOTS if added is None else added
 
     def __repr__(self) -> str:
         return f"Credentials(configured={self.configured}, outranking={sorted(self._outranking)})"
@@ -511,8 +515,27 @@ class Credentials:
         if writes is None:
             return self
         return Credentials(
-            self._vault, outranking=self._outranking, environ=self._environ, writes=writes
+            self._vault,
+            outranking=self._outranking,
+            environ=self._environ,
+            writes=writes,
+            added=self._added,
         )
+
+    def slots(self) -> tuple[CredentialSlot, ...]:
+        """Every provider slot this process writes: the built-in ones and the added ones."""
+        added = tuple(
+            CredentialSlot(path=one.path, description=one.description, provider=one)
+            for one in self._added.slots()
+        )
+        return (*(SLOTS[path] for path in sorted(SLOTS)), *added)
+
+    def slot_at(self, path: str) -> CredentialSlot | None:
+        """The provider slot at `path`, built-in or added, or None when there is none."""
+        for one in self.slots():
+            if one.path == path:
+                return one
+        return None
 
     def _vault_or_refuse(self) -> CredentialVault:
         if self._vault is None:
@@ -623,7 +646,7 @@ class Credentials:
         vault = self._vault_or_refuse()
         now_seen: dict[str, datetime | None] = dict(seen)
         loaded: list[str] = []
-        for provider in PROVIDER_SLOTS:
+        for provider in (*PROVIDER_SLOTS, *self._added.slots()):
             if provider.env_var in self._outranking:
                 continue
             try:

@@ -46,6 +46,8 @@ minute. A variable the environment file sets still outranks the vault.
 | `providers/anthropic` | Anthropic | `ANTHROPIC_API_KEY` | Claude, the default reasoner |
 | `providers/openai` | OpenAI | `OPENAI_API_KEY` | Embeddings, and a fallback for completion |
 | `providers/moonshot` | Moonshot | `MOONSHOT_API_KEY` | The cheaper reasoner; the v1 system routes here by default |
+| `providers/deepseek` | DeepSeek | `DEEPSEEK_API_KEY` | DeepSeek, reached through its OpenAI-compatible interface |
+| `providers/<name>` | A provider added from the console | `BRAIN_PROVIDER_<NAME>_KEY` | An OpenAI-compatible provider an administrator added on Models and health; its key is written with it and its address is never edited |
 
 Since 2026-09-16 a provider key is **put in from the browser**: the setup wizard keeps the key
 it asks for, and an administrator holding `admin:credential` sets or replaces one from the

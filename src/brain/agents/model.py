@@ -100,6 +100,7 @@ from brain.core.envelope import SideEffect
 from brain.core.scope import Scope
 from brain.gate.catalogue import AgentCeiling
 from brain.knowledge.visibility import Visibility, scope_for
+from brain.models.registry import ModelPin
 from brain.models.routing import DEFAULT_TIER, TIER_LADDER, Tier
 
 # ------------------------------------------------------------------ written-down reasons
@@ -293,6 +294,9 @@ class AgentRecord(BaseModel):
     #: a free string would let an agent name a pool that classifies to nothing and answers
     #: from whatever the default happens to be that month.
     tier: Tier = DEFAULT_TIER
+    #: A provider and model an administrator pinned (M5.7.3), tried before the tier's chain,
+    #: which stands behind it. None, the usual case, is the tier alone.
+    model_pin: ModelPin | None = None
     audience: AgentAudience
     authority: AgentAuthority
     created_by: str = Field(min_length=1, max_length=OWNER_ID_CHARS)

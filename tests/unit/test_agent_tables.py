@@ -34,6 +34,7 @@ from brain.knowledge.visibility import Visibility
 from brain.models.routing import TIER_LADDER, Tier
 from brain.ops.migration_policy import check_file
 from brain.tables.agent import AgentRow
+from tests.fixtures.amended_tables import created_ddl
 
 REPO = Path(__file__).resolve().parents[2]
 MIGRATION = REPO / "migrations" / "versions" / "0014_agent.py"
@@ -122,7 +123,7 @@ def test_the_migration_builds_the_table_the_model_declares() -> None:
     Python."""
     assert _migration().TABLES == ("agent.agent",)
     upgrade = _squash(_rendered("upgrade"))
-    assert _squash(str(CreateTable(_table()).compile(dialect=_DIALECT))) in upgrade
+    assert _squash(created_ddl(_table(), _DIALECT)) in upgrade
 
 
 def test_the_migration_creates_both_indexes_the_model_declares() -> None:

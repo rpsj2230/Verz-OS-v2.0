@@ -32,14 +32,14 @@ has to take effect immediately, because it is how an install stops sending text 
 drivers and their HTTP client are what is built at start, in `brain.ops.model_service`, and
 assembling from them is a pure function over a few dozen rows.
 
-**Every assembled rung promises no residency, whatever its provider.** `ops.routing_rung` carries
-a deployment id, a provider and a model and has no region or residency class, because the
-deployment registry M5.1 names was never built (`brain.tables.routing` says so). A `Deployment`
-built from a row is therefore `ResidencyClass.GLOBAL` in region `global`, which
-`ResidencyRequirement.satisfied_by` never accepts for a constrained scope. That is the direction
-that fails closed: a residency-constrained request finds no compliant rung and is refused rather
-than sent somewhere nobody documented. See
-`A_ROW_WITH_NO_REGION_PROMISES_NO_RESIDENCY`.
+**A rung promises the residency its provider's registry row documents, and no other.**
+`ops.routing_rung` carries a deployment id, a provider and a model and no region. Since `0097`
+the provider registry (`brain.models.registry`, M5.5.3) records where each provider processes, so
+`assemble` gives a rung its provider's documented region and class. A provider with no row, or a
+row that names no region, is `ResidencyClass.GLOBAL`, which `ResidencyRequirement.satisfied_by`
+never accepts for a constrained scope. That is the direction that fails closed: a
+residency-constrained request finds no compliant rung and is refused rather than sent somewhere
+nobody documented. See `A_ROW_WITH_NO_REGION_PROMISES_NO_RESIDENCY`.
 
 **The `local` profile is the default and anything unrecognised is read as it.** `brain.install`
 declares `INSTALL_MODEL_PROFILE` with `local` as its default because "a client who has not chosen
@@ -49,18 +49,19 @@ not a choice either, so it keeps text on the client's hardware.
 Scope: pure. The rows, the switches, the keys and the drivers are parameters; nothing here opens
 a connection, reads the environment or reads a clock.
 
-Task ids: M27.8.8, M5.1.2
+Task ids: M27.8.8, M5.1.2, M5.5.3
 """
 
 from __future__ import annotations
 
 import enum
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from types import MappingProxyType
 from typing import Final
 
 from brain.models.driver import ModelDriver
+from brain.models.registry import ProviderRecord
 from brain.models.routing import (
     TIER_CONTEXT_WINDOW,
     Deployment,
@@ -84,11 +85,11 @@ A_RUNG_THAT_CANNOT_ANSWER_IS_LEFT_OUT_AND_SAYS_WHY: Final = (
 
 #: Why a rung assembled from a row satisfies no residency constraint.
 A_ROW_WITH_NO_REGION_PROMISES_NO_RESIDENCY: Final = (
-    "ops.routing_rung records a deployment, a provider and a model, and no region, because the "
-    "deployment registry that would hold one was never built. A residency claim nobody wrote "
-    "down is not one this system can make, so every assembled rung is global, which no "
-    "constrained scope accepts. A regulated question is refused rather than routed to a "
-    "location nobody documented."
+    "ops.routing_rung records a deployment, a provider and a model, and no region. The region "
+    "comes from the provider's row in the registry, and a provider nobody documented there is "
+    "global, which no constrained scope accepts. A residency claim nobody wrote down is not one "
+    "this system can make, so a regulated question is refused rather than routed to a location "
+    "nobody documented."
 )
 
 #: What the install's model profile may be, as `brain.install` declares it.
@@ -163,6 +164,9 @@ class LadderRung:
     timeout_seconds: float
     max_concurrency: int
     enabled: bool
+    #: Where the provider processes, from its registry row. Global when nobody documented it.
+    region: str = UNDOCUMENTED_REGION
+    residency_class: ResidencyClass = ResidencyClass.GLOBAL
 
     def routing_rung(self) -> RoutingRung:
         """The policy layer's rung, through its own checks. See `A_ROW_WITH_NO_REGION_...`."""
@@ -174,8 +178,8 @@ class LadderRung:
                 id=self.deployment_id,
                 provider=self.provider,
                 model=self.model,
-                region=UNDOCUMENTED_REGION,
-                residency_class=ResidencyClass.GLOBAL,
+                region=self.region,
+                residency_class=self.residency_class,
                 context_window=TIER_CONTEXT_WINDOW[self.tier],
                 enabled=self.enabled,
             ),
@@ -241,6 +245,8 @@ class Assembly:
     answering: tuple[LadderRung, ...]
     skipped: tuple[Skipped, ...]
     drivers: Mapping[str, ModelDriver]
+    #: The provider rows this assembly read, by slug: their lane overrides and their terms.
+    registry: Mapping[str, ProviderRecord] = field(default_factory=lambda: MappingProxyType({}))
 
     @property
     def chain(self) -> RoutingChain:
@@ -269,15 +275,24 @@ def assemble(
     switched_off: frozenset[str],
     held: frozenset[str],
     drivers: Mapping[str, ModelDriver],
+    registry: Mapping[str, ProviderRecord] | None = None,
 ) -> Assembly:
     """Split the live ladder into what can be called now and what cannot, in ladder order.
 
     `held` names providers, not environment variables, so nothing about where a key lives
-    reaches this module. `drivers` is keyed by provider, as `DriverRegistry` is.
+    reaches this module. `drivers` is keyed by provider, as `DriverRegistry` is. `registry` is
+    the provider rows by slug; a rung takes its provider's documented region from it.
     """
+    documented = registry or {}
     answering: list[LadderRung] = []
     skipped: list[Skipped] = []
-    for one in sorted(rungs, key=lambda r: (r.tier.value, r.position)):
+    for row in sorted(rungs, key=lambda r: (r.tier.value, r.position)):
+        record = documented.get(row.provider)
+        one = (
+            row
+            if record is None
+            else replace(row, region=record.region, residency_class=record.residency_class)
+        )
         reason = skip_reason(
             one, profile=profile, switched_off=switched_off, held=held, drivers=drivers
         )
@@ -289,4 +304,5 @@ def assemble(
         answering=tuple(answering),
         skipped=tuple(skipped),
         drivers=MappingProxyType(dict(drivers)),
+        registry=MappingProxyType(dict(documented)),
     )

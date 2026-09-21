@@ -69,6 +69,40 @@ const MATRIX = {
   editable: true,
 };
 
+/**
+ * The matrix gate's two answers on the Routing screen: one held change with its failing case, and
+ * one golden question, whose question, asker and case id are tokens with nowhere to break.
+ */
+const ROUTING_CHANGES = {
+  items: [
+    {
+      id: "22222222-2222-4222-8222-222222222222",
+      kind: "edit",
+      status: "held",
+      rung_id: RUNG_ID,
+      proposed: {},
+      failing: [{ case: UNBROKEN, reason: UNBROKEN }],
+      reasons: [UNBROKEN],
+      quality_share: 0.5,
+      proposed_by: UNBROKEN,
+      decided_at: "2019-03-04T09:00:00Z",
+      rung: null,
+    },
+  ],
+};
+
+const GOLDEN_QUESTIONS = {
+  items: [
+    {
+      id: "33333333-3333-4333-8333-333333333333",
+      question: UNBROKEN,
+      asked_as: UNBROKEN,
+      expect: "refuse",
+      created_by: UNBROKEN,
+    },
+  ],
+};
+
 const CLASSIFICATION = {
   entity: "price_list",
   columns: [
@@ -110,6 +144,8 @@ const WORKSPACE = {
       set_by: "steward-one",
     },
   ],
+  // The profile's tier and pinned model (M5.7.3), drawn on the Profile pane.
+  profile: { tier: "main", model_pin_provider: null, model_pin_model: null },
 };
 
 /** The automation gallery on an agent's Automations tab, whose outcome and schedule cannot break. */
@@ -828,13 +864,21 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     address: "/routing",
     signedIn: true,
     drawsValues: true,
-    answers: { "/api/v1/routing/rungs": MATRIX },
+    answers: {
+      "/api/v1/routing/rungs": MATRIX,
+      "/api/v1/routing/changes": ROUTING_CHANGES,
+      "/api/v1/routing/golden-questions": GOLDEN_QUESTIONS,
+    },
   },
   "/routing/:rungId": {
     address: `/routing/${RUNG_ID}`,
     signedIn: true,
     drawsValues: true,
-    answers: { "/api/v1/routing/rungs": MATRIX },
+    answers: {
+      "/api/v1/routing/rungs": MATRIX,
+      "/api/v1/routing/changes": ROUTING_CHANGES,
+      "/api/v1/routing/golden-questions": GOLDEN_QUESTIONS,
+    },
   },
   "/classification": { address: "/classification", signedIn: true, drawsValues: false, answers: {} },
   "/classification/:entity": {

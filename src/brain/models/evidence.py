@@ -37,7 +37,7 @@ without moving its breaker either way. See `ONLY_THE_PROVIDERS_OWN_FAILURE_IS_IL
 
 Scope: pure. The attempts are a parameter.
 
-Task ids: M27.8.8, M5.3.4
+Task ids: M27.8.8, M5.3.4, M5.4.1
 """
 
 from __future__ import annotations
@@ -77,10 +77,16 @@ OK: Final = "ok"
 #: The outcome an attempt that stopped the chain is recorded under: a failure with no trigger.
 STOPPED: Final = "stopped"
 
+#: The outcome an attempt the provider declined on content is recorded under (M5.4.1). It stops
+#: the chain as `stopped` does and says why, so nobody reads a refusal as our request being wrong.
+REFUSED: Final = "refused"
+
 #: Every outcome an attempt can finish with: an answer, a stop, or a member of the closed
 #: trigger set. `brain.tables.routing.ATTEMPT_OUTCOMES` is the column's copy and a test holds the
 #: two equal; this one is built here so the health layer imports no table.
-OUTCOMES: Final[frozenset[str]] = frozenset({OK, STOPPED, *(one.value for one in FallbackTrigger)})
+OUTCOMES: Final[frozenset[str]] = frozenset(
+    {OK, REFUSED, STOPPED, *(one.value for one in FallbackTrigger)}
+)
 
 #: Outcomes that are the provider's own failure. See the reason constant.
 ILL_HEALTH: Final[frozenset[str]] = frozenset(
@@ -120,9 +126,11 @@ class Attempt:
 
 
 def outcome_of(failure: DriverFailure | None) -> str:
-    """What an attempt is recorded as: `ok`, its trigger, or `stopped` when it had none."""
+    """What an attempt is recorded as: `ok`, `refused`, its trigger, or `stopped` with none."""
     if failure is None:
         return OK
+    if failure.refused:
+        return REFUSED
     trigger = failure.trigger
     return STOPPED if trigger is None else trigger.value
 

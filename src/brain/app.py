@@ -53,6 +53,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from brain.agent_about_routes import router as agent_about_router
+from brain.agent_model_routes import router as agent_model_router
 from brain.agent_routes import router as agent_router
 from brain.api import (
     ErrorBody,
@@ -138,6 +139,7 @@ from brain.ops.credentials import credentials_at_start, keep_refreshing
 from brain.ops.default_ladder_store import SessionLadderWriter
 from brain.ops.install_settings import refresh as refresh_install_settings
 from brain.ops.log_store import start_log_store, stop_log_store
+from brain.ops.matrix_gate_run import InstallMatrixGate
 from brain.ops.model_service import (
     ModelService,
     held_providers,
@@ -156,6 +158,7 @@ from brain.ops.vault_renewal import keep_renewing, renewer_at_start
 from brain.ops.webhook_admin import signing_secrets_at_start
 from brain.principal_state_routes import router as principal_state_router
 from brain.prompt_routes import router as prompt_router
+from brain.provider_registry_routes import router as provider_registry_router
 from brain.provider_routes import router as provider_router
 from brain.readiness import (
     CACHE_PART,
@@ -522,6 +525,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # switch or a key saved from the console takes effect without a restart. See
     # `brain.ops.model_service` and `brain.models.assembly`.
     app.state.models = model_service_at_start(app.state.db_sessions)
+    # The matrix gate a Routing screen change is run through before it takes traffic (M5.6.2).
+    # Reads the state above at each change, so it asks the rules and registry of that moment.
+    app.state.matrix_gate = InstallMatrixGate(app.state)
     # The default routing ladder: written by the wizard as it appoints, through this writer, and
     # reconciled here for an install that has been set up and whose ladder nobody has ever held.
     # After the installation settings and the vault's keys, because the profile and the held
@@ -1244,6 +1250,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # `admin:routing_matrix` over everything, the ladder as the next call will walk it with each
     # rung's measured health, and a metered check. See `brain.provider_routes`.
     app.include_router(provider_router)
+    # The provider registry: terms and lane overrides recorded, an OpenAI-compatible provider
+    # added with its key written to the vault first, and the register exported. See
+    # `brain.provider_registry_routes`.
+    app.include_router(provider_registry_router)
+    # An agent's pinned provider and model, tried before its tier. See `brain.agent_model_routes`.
+    app.include_router(agent_model_router)
     # Departments and teams, Elevation, Access review and Subscribers, beside People in Govern. A
     # router of its own because one of its four is the only write that records a review decision,
     # and two of its screens say what the install does not store rather than drawing an empty

@@ -201,3 +201,37 @@ def test_an_assembled_rung_promises_no_residency_so_a_constrained_request_is_ref
     with pytest.raises(NoCompliantRoute):
         built.chain.select(Tier.MAIN, residency=constrained).require()
     assert built.chain.select(Tier.MAIN, now=datetime(2019, 1, 1, tzinfo=UTC)).rungs == (only,)
+
+
+def test_a_rung_takes_the_region_its_providers_registry_row_documents() -> None:
+    """M5.5.3: a provider documented as region-pinned makes its rungs satisfy that region, and a
+    provider documented only as global, or not at all, still satisfies none.
+
+    Delete this and the registry's region is stored, shown and never reaches a rung."""
+    from brain.models.registry import ProviderKind, ProviderRecord
+
+    pinned = ProviderRecord(
+        slug="anthropic",
+        kind=ProviderKind.BUILTIN,
+        label="Claude",
+        processing_region="eu-west-1",
+        residency_class=ResidencyClass.REGION_PINNED,
+    )
+    built = assemble(
+        (rung("anthropic"), rung("openai", position=1)),
+        profile=HOSTED_PROFILE,
+        switched_off=frozenset(),
+        held=frozenset({"anthropic", "openai"}),
+        drivers=drivers("anthropic", "openai"),
+        registry={"anthropic": pinned},
+    )
+    first, second = built.chain.rungs
+    constrained = ResidencyRequirement(allowed_regions=frozenset({"eu-west-1"}))
+
+    assert (first.deployment.region, first.deployment.residency_class) == (
+        "eu-west-1",
+        ResidencyClass.REGION_PINNED,
+    )
+    assert constrained.satisfied_by(first.deployment)
+    assert not constrained.satisfied_by(second.deployment)
+    assert built.registry["anthropic"] == pinned

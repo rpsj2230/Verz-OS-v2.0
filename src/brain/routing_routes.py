@@ -32,15 +32,24 @@ forbids extra keys, so a console that sent one is refused rather than obeyed. Se
 `ROLE_IS_DERIVED_AND_NEVER_TYPED`, and read it with the note below about what is actually
 in the database today.
 
-**What is not built, stated rather than implied.** `migrations/versions/0003` creates the
-column, the check constraint and the grants, and it creates no `ops.routing_rung_role()`
-trigger; the comment on `RoutingRungRow.role` says one derives the value on write and no
-such function exists in the migration. So today the column is exactly the claim the design
-says it must not be, and the only thing standing between the estate and a hand-typed label
-is that nothing has ever written to this table. This module does not fix that, because a
-trigger is M5.3.2 and belongs in a migration with its own tests. What it does is refuse to
-be the thing that makes the gap matter: no write path here accepts a role, so when the
-trigger lands nothing has to be taken back.
+**The role is derived by `0097`'s `ops.routing_rung_role()` trigger** (M5.3.2), on every
+insert and update, from the rung's position and provider against the lowest live position in its
+tier. No write path here accepts a role, and the insert below writes the same derivation only
+because the column is not null; the trigger overwrites it either way.
+
+**A change takes traffic only after the matrix gate passes it** (M5.6.2). An edit and a new
+rung are each run through `brain.ops.matrix_gate_run`: the install's golden questions are asked
+through the answer lane with an executor planning from the changed ladder, and the permission
+canaries are asked; a regression holds the change. Every change is written to
+`ops.routing_change` with what the gate found, applied or held, and the held ones are listed with
+their failing cases for the Routing screen. A process that cannot run the gate holds the change
+and says so. **These writes need the matrix write held over everything**, because the gate's
+pass and fail on a golden question asked as another person is a fact about what that person's
+questions come back with, and a department-scoped editor must not be able to learn it.
+
+**A rung can be added at the end of a tier**, naming a provider this install can call and one of
+its models, which is how a provider added from the console (M5.7.2) takes traffic. Where a rung
+sits in the chain is otherwise still not editable here, for the reason below.
 
 **Four numbers are editable and eight columns are not.** `attempts`, `timeout_seconds`,
 `max_concurrency` and `enabled` are the operational dials: they change with load and with a
@@ -91,28 +100,43 @@ is switched on. There is one order because the order is the chain: see
 `A_CHAIN_HAS_ONE_ORDER`. And there is no act on several rungs at once: see
 `A_RUNG_IS_SAVED_ONE_AT_A_TIME`.
 
-Task ids: M5.3.3, M27.8.6
+Task ids: M5.3.3, M27.8.6, M5.3.2, M5.6.2, M5.7.2
 """
 
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Annotated, Any, Final
 
 import structlog
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import Numeric, Select, Update, select, update
+from sqlalchemy import Insert, Numeric, Select, Update, func, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.api import API_PREFIX, COMMON_RESPONSES, Page
 from brain.api_routes import Asked
 from brain.console.read_replica import StalenessBanner
-from brain.core.entitlement import Capability
+from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.errors import Absent, Failed
 from brain.listing import Column, ListAsked, Listing
+from brain.models.registry import MODEL_NAME_PATTERN, SLUG_PATTERN
+from brain.models.routing import TIER_LADDER, RungRole, Tier
+from brain.ops.default_ladder_store import UNRESTRICTED_SCOPE
+from brain.ops.matrix_gate import GateVerdict, MatrixChange, RungAddition
+from brain.ops.matrix_gate import RungEdit as GateRungEdit
+from brain.ops.matrix_gate_run import MAX_GOLDEN_QUESTIONS, GateUnavailableError, MatrixGate
 from brain.ops.replica_store import ConsoleReads
 from brain.tables.audit import attributed_to
+from brain.tables.identity import PrincipalRow
+from brain.tables.model_registry import (
+    ChangeKind,
+    ChangeStatus,
+    GoldenExpectation,
+    GoldenQuestionRow,
+    RoutingChangeRow,
+)
 from brain.tables.routing import RoutingRungRow
 
 log = structlog.get_logger()
@@ -137,8 +161,18 @@ ROLE_IS_DERIVED_AND_NEVER_TYPED: Final = (
     "A rung's role is what its position and its provider make it, so a label a person types "
     "is a second answer to a question the chain has already answered, and the two disagree "
     "the moment a rung moves. The console shows a primary sitting third and believes it. "
-    "M5.3.2 derives the column in a trigger; until then nothing writes it, and this module "
-    "makes sure that stays true by having nowhere to put a role that arrives."
+    "M5.3.2 derives the column in a trigger on every write, and this module has nowhere to put "
+    "a role that arrives."
+)
+
+#: Why a change is judged before it is applied.
+A_MATRIX_CHANGE_TAKES_TRAFFIC_ONLY_AFTER_THE_GATE_PASSES_IT: Final = (
+    "A rung edit changes the chain the next question walks. Applied at once, a change that "
+    "stops the ladder answering, or makes it answer something a golden question says it must "
+    "refuse, is found by the next person to ask. So the change is tried first on a copy of the "
+    "ladder against the golden questions and the permission canaries, and applied only when "
+    "nothing regressed; a held change keeps its failing cases where the Routing screen shows "
+    "them."
 )
 
 #: Why a boolean about the caller is on the response, and what it must never be used for.
@@ -318,6 +352,111 @@ class RungEdit(BaseModel):
     enabled: bool
 
 
+class RungAdd(BaseModel):
+    """A new rung at the end of a tier: what it calls and its numbers. Refuses anything else."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    tier: Tier
+    provider: Annotated[str, Field(pattern=SLUG_PATTERN)]
+    model: Annotated[str, Field(pattern=MODEL_NAME_PATTERN)]
+    attempts: Annotated[int, Field(ge=MIN_ATTEMPTS, le=SMALLINT_MAX)]
+    timeout_seconds: Annotated[float, Field(gt=0, le=MAX_TIMEOUT_SECONDS)]
+    max_concurrency: Annotated[int, Field(ge=MIN_CONCURRENCY, le=SMALLINT_MAX)]
+
+
+class FailingCaseView(BaseModel):
+    """One case the gate failed, by its id and the reason in a sentence. Never an answer."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    case: str
+    reason: str
+
+
+class RoutingChangeView(BaseModel):
+    """One matrix change and what the gate found: applied, or held with its failing cases."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    id: str
+    kind: ChangeKind
+    status: ChangeStatus
+    rung_id: str | None
+    proposed: dict[str, Any]
+    failing: list[FailingCaseView]
+    reasons: list[str]
+    quality_share: float | None
+    proposed_by: str
+    decided_at: datetime
+    #: The rung as the database holds it after an applied change; null for a held one.
+    rung: RungView | None = None
+
+
+class RoutingChangePage(BaseModel):
+    """The most recent matrix changes, newest first. Bounded, and never a count."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    items: list[RoutingChangeView]
+
+
+class GoldenQuestionAsked(BaseModel):
+    """A golden question: its text, the principal it is asked as, and what it must come to."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    question: Annotated[str, Field(min_length=1, max_length=2000)]
+    asked_as: Annotated[str, Field(min_length=1, max_length=128)]
+    expect: GoldenExpectation
+
+
+class GoldenQuestionView(BaseModel):
+    """One golden question as the Routing screen lists it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    id: str
+    question: str
+    asked_as: str
+    expect: GoldenExpectation
+    created_by: str
+
+
+class GoldenQuestionPage(BaseModel):
+    """Every live golden question, oldest first, up to the gate's own bound."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    items: list[GoldenQuestionView]
+
+
+def may_govern(reach: EntitlementSet, now: datetime) -> bool:
+    """Whether this reach holds the matrix write over everything. See the module docstring."""
+    scope = reach.scope_for(MATRIX_WRITE, now)
+    return scope is not None and scope.is_unrestricted()
+
+
+def change_view(row: RoutingChangeRow, rung: RungView | None = None) -> RoutingChangeView:
+    """One stored change, field by field."""
+    return RoutingChangeView(
+        id=str(row.id),
+        kind=ChangeKind(row.kind),
+        status=ChangeStatus(row.status),
+        rung_id=None if row.rung_id is None else str(row.rung_id),
+        proposed=dict(row.proposed),
+        failing=[
+            FailingCaseView(case=str(one.get("case", "")), reason=str(one.get("reason", "")))
+            for one in row.failing
+        ],
+        reasons=[str(one) for one in row.reasons],
+        quality_share=None if row.quality_share is None else float(row.quality_share),
+        proposed_by=row.proposed_by,
+        decided_at=row.decided_at,
+        rung=rung,
+    )
+
+
 def view_of(row: RoutingRungRow) -> RungView:
     """One row, copied field by field.
 
@@ -369,6 +508,119 @@ def live_rungs(limit: int) -> Select[tuple[RoutingRungRow]]:
         select(RoutingRungRow)
         .where(RoutingRungRow.deleted_at.is_(None))
         .order_by(RoutingRungRow.tier, RoutingRungRow.position)
+        .limit(limit)
+    )
+
+
+def live_rung(rung_id: uuid.UUID) -> Select[tuple[RoutingRungRow]]:
+    """One live rung by id, or nothing. `deleted_at` tested here as well as by the policy."""
+    return select(RoutingRungRow).where(
+        RoutingRungRow.id == rung_id, RoutingRungRow.deleted_at.is_(None)
+    )
+
+
+def tier_rungs(tier: Tier) -> Select[tuple[RoutingRungRow]]:
+    """A tier's live rungs in chain order, which is what an added rung's place is read from."""
+    return (
+        select(RoutingRungRow)
+        .where(RoutingRungRow.tier == tier.value, RoutingRungRow.deleted_at.is_(None))
+        .order_by(RoutingRungRow.position)
+        .limit(MAX_RUNGS_PER_PAGE)
+    )
+
+
+def role_for(position: int, provider: str, peers: list[RoutingRungRow]) -> RungRole:
+    """The role `0097`'s trigger derives, so the not-null column holds the same word it will."""
+    if not peers or position < peers[0].position:
+        return RungRole.PRIMARY
+    if peers[0].provider == provider:
+        return RungRole.SAME_PROVIDER_FAILOVER
+    return RungRole.CROSS_PROVIDER_FAILOVER
+
+
+def add_rung(new_id: uuid.UUID, addition: RungAddition, position: int, role: RungRole) -> Insert:
+    """The INSERT for an added rung, at the end of its tier, returning the row."""
+    return (
+        insert(RoutingRungRow)
+        .values(
+            id=new_id,
+            tier=addition.tier.value,
+            scope=UNRESTRICTED_SCOPE,
+            position=position,
+            role=role.value,
+            deployment_id=addition.deployment_id,
+            provider=addition.provider,
+            model=addition.model,
+            attempts=addition.attempts,
+            timeout_seconds=addition.timeout_seconds,
+            max_concurrency=addition.max_concurrency,
+            enabled=True,
+        )
+        .returning(RoutingRungRow)
+    )
+
+
+def record_change(
+    change: MatrixChange,
+    verdict: GateVerdict,
+    *,
+    rung_id: uuid.UUID | None,
+    by: str,
+    at: datetime,
+) -> Insert:
+    """The `ops.routing_change` row for one decided change, returning it."""
+    if isinstance(change, GateRungEdit):
+        kind = ChangeKind.EDIT
+        proposed: dict[str, Any] = {
+            "attempts": change.attempts,
+            "timeout_seconds": change.timeout_seconds,
+            "max_concurrency": change.max_concurrency,
+            "enabled": change.enabled,
+        }
+    else:
+        kind = ChangeKind.ADD
+        proposed = {
+            "tier": change.tier.value,
+            "provider": change.provider,
+            "model": change.model,
+            "attempts": change.attempts,
+            "timeout_seconds": change.timeout_seconds,
+            "max_concurrency": change.max_concurrency,
+        }
+    return (
+        insert(RoutingChangeRow)
+        .values(
+            kind=kind.value,
+            rung_id=rung_id,
+            proposed=proposed,
+            status=(ChangeStatus.APPLIED if verdict.may_apply else ChangeStatus.HELD).value,
+            failing=[]
+            if verdict.may_apply
+            else [{"case": case, "reason": reason} for case, reason in verdict.failing],
+            reasons=list(verdict.reasons),
+            quality_share=verdict.quality_share,
+            proposed_by=by,
+            decided_at=at,
+        )
+        .returning(RoutingChangeRow)
+    )
+
+
+def recent_changes(limit: int) -> Select[tuple[RoutingChangeRow]]:
+    """The most recent changes, newest first, bounded."""
+    return (
+        select(RoutingChangeRow)
+        .order_by(RoutingChangeRow.decided_at.desc(), RoutingChangeRow.id)
+        .limit(limit)
+    )
+
+
+def live_golden(limit: int) -> Select[tuple[GoldenQuestionRow]]:
+    """The live golden questions, oldest first, bounded."""
+    return (
+        select(GoldenQuestionRow)
+        .where(GoldenQuestionRow.deleted_at.is_(None))
+        .order_by(GoldenQuestionRow.created_at, GoldenQuestionRow.id)
         .limit(limit)
     )
 
@@ -440,6 +692,102 @@ def _require_console_reads(request: Request) -> ConsoleReads:
     if isinstance(found, ConsoleReads):
         return found
     return ConsoleReads(_require_sessions(request))
+
+
+#: What a change is held with on a process that cannot run the gate.
+NO_GATE_HERE: Final = (
+    "the matrix gate cannot run on this server process, which has no database, model service or "
+    "tool registry, so the change was held rather than applied unchecked"
+)
+
+#: How many recent changes the Routing screen is shown.
+RECENT_CHANGES: Final = 20
+
+
+def gate_of(request: Request) -> MatrixGate | None:
+    """The matrix gate this process was built with, or None."""
+    found = getattr(request.app.state, "matrix_gate", None)
+    return found if found is not None and hasattr(found, "decide") else None
+
+
+async def _through_gate(
+    request: Request,
+    asked: Asked,
+    change: MatrixChange,
+    factory: async_sessionmaker[AsyncSession],
+) -> RoutingChangeView:
+    """Run the gate for `change`, then apply and record it, or record it held."""
+    new_id = uuid.uuid4()
+    gate = gate_of(request)
+    verdict: GateVerdict
+    try:
+        if gate is None:
+            raise GateUnavailableError
+        verdict = await gate.decide(change, now=asked.now, new_rung_id=str(new_id))
+    except GateUnavailableError:
+        verdict = GateVerdict(
+            may_apply=False, failing=(), reasons=(NO_GATE_HERE,), quality_share=None
+        )
+    trace_id = str(structlog.contextvars.get_contextvars().get("trace_id", ""))
+    async with factory() as session:
+        applied: RoutingRungRow | None = None
+        if verdict.may_apply:
+            # Who is saving, at what reach, for which request, for the entry `0059`'s trigger
+            # appends: a rung has no column naming who changed it.
+            for statement in attributed_to(
+                actor_id=asked.caller.principal.id,
+                ent_hash=asked.reach.ent_hash(),
+                trace_id=trace_id,
+            ):
+                await session.execute(statement)
+            if isinstance(change, GateRungEdit):
+                applied = (
+                    await session.execute(
+                        apply_edit(
+                            uuid.UUID(change.rung_id),
+                            RungEdit(
+                                attempts=change.attempts,
+                                timeout_seconds=change.timeout_seconds,
+                                max_concurrency=change.max_concurrency,
+                                enabled=change.enabled,
+                            ),
+                        )
+                    )
+                ).scalar_one_or_none()
+                if applied is None:
+                    await session.rollback()
+                    log.info("routing rung not editable", rung=change.rung_id)
+                    raise _no_matrix_here()
+            else:
+                peers = list((await session.execute(tier_rungs(change.tier))).scalars().all())
+                position = (max(one.position for one in peers) + 1) if peers else 0
+                applied = (
+                    await session.execute(
+                        add_rung(
+                            new_id, change, position, role_for(position, change.provider, peers)
+                        )
+                    )
+                ).scalar_one_or_none()
+        rung_id = (
+            applied.id
+            if applied is not None
+            else (uuid.UUID(change.rung_id) if isinstance(change, GateRungEdit) else None)
+        )
+        recorded = (
+            await session.execute(
+                record_change(
+                    change, verdict, rung_id=rung_id, by=asked.caller.principal.id, at=asked.now
+                )
+            )
+        ).scalar_one()
+        await session.commit()
+    log.info(
+        "routing change decided",
+        applied=verdict.may_apply,
+        failing=len(verdict.failing),
+        principal=asked.caller.principal.id,
+    )
+    return change_view(recorded, None if applied is None else view_of(applied))
 
 
 def _no_matrix_here() -> Absent:
@@ -526,48 +874,164 @@ async def rungs(request: Request, asked: Asked, listed: MatrixQuery) -> RungPage
     )
 
 
-@router.patch("/routing/rungs/{rung_id}", response_model=RungView, responses=COMMON_RESPONSES)
+@router.patch(
+    "/routing/rungs/{rung_id}", response_model=RoutingChangeView, responses=COMMON_RESPONSES
+)
 async def edit_rung(
     request: Request,
     rung_id: uuid.UUID,
     edit: RungEdit,
     asked: Asked,
-) -> RungView:
-    """Change the four operational numbers on one rung.
+) -> RoutingChangeView:
+    """Change the four operational numbers on one rung, once the matrix gate passes it.
 
-    The write capability, not the read one, and the same refusal either way: a caller who
-    may read the matrix and not change it gets the answer a caller who may not read it gets,
-    so the reply says nothing about which half they are missing.
+    The write capability over everything, not the read one, and the same refusal either way: a
+    caller who may read the matrix and not change it gets the answer a caller who may not read
+    it gets, so the reply says nothing about which half they are missing.
 
     A rung that is not there, or is retired, is the same refusal again. The id came from a
     page this caller was already shown, so an id that matches nothing means the matrix moved
     underneath them, and reporting that as a different outcome would be this route
     explaining a race it did not observe.
 
-    The transaction is committed here rather than by a dependency, because there is one
-    statement in it and nothing to compose it with. When a second write lands, the unit of
-    work belongs one level up.
+    Held or applied, the answer is the change as `ops.routing_change` records it. See
+    `A_MATRIX_CHANGE_TAKES_TRAFFIC_ONLY_AFTER_THE_GATE_PASSES_IT`.
     """
-    if not asked.reach.holds(MATRIX_WRITE, asked.now):
+    if not may_govern(asked.reach, asked.now):
         log.info("routing matrix not editable", principal=asked.caller.principal.id)
         raise _no_matrix_here()
 
     factory = _require_sessions(request)
     async with factory() as session:
-        # Who is saving, at what reach, for which request, for the entry `0059`'s trigger appends:
-        # a rung has no column naming who changed it, so the trigger reads these or records the
-        # database role as an inferred actor.
-        trace_id = str(structlog.contextvars.get_contextvars().get("trace_id", ""))
-        for statement in attributed_to(
-            actor_id=asked.caller.principal.id, ent_hash=asked.reach.ent_hash(), trace_id=trace_id
-        ):
-            await session.execute(statement)
-        row = (await session.execute(apply_edit(rung_id, edit))).scalar_one_or_none()
-        if row is None:
-            # Rolled back rather than committed, so a refused edit leaves no transaction
-            # open on the pool. Nothing was written; the rollback is about the connection.
-            await session.rollback()
-            log.info("routing rung not editable", rung=str(rung_id))
+        found = (await session.execute(live_rung(rung_id))).scalar_one_or_none()
+    if found is None:
+        log.info("routing rung not editable", rung=str(rung_id))
+        raise _no_matrix_here()
+    change = GateRungEdit(
+        rung_id=str(rung_id),
+        attempts=edit.attempts,
+        timeout_seconds=edit.timeout_seconds,
+        max_concurrency=edit.max_concurrency,
+        enabled=edit.enabled,
+    )
+    return await _through_gate(request, asked, change, factory)
+
+
+@router.post("/routing/rungs", response_model=RoutingChangeView, responses=COMMON_RESPONSES)
+async def add(request: Request, addition: RungAdd, asked: Asked) -> RoutingChangeView:
+    """Add a rung at the end of a tier, once the matrix gate passes it (M5.7.2, M5.6.2).
+
+    The provider must be one this install can call; the executor then assembles the rung like
+    any other, so a provider with no key or switched off is left out with that reason.
+    """
+    if not may_govern(asked.reach, asked.now):
+        log.info("routing matrix not editable", principal=asked.caller.principal.id)
+        raise _no_matrix_here()
+    if addition.tier not in TIER_LADDER:
+        raise _no_matrix_here()
+    factory = _require_sessions(request)
+    change = RungAddition(
+        tier=addition.tier,
+        provider=addition.provider,
+        model=addition.model,
+        attempts=addition.attempts,
+        timeout_seconds=addition.timeout_seconds,
+        max_concurrency=addition.max_concurrency,
+    )
+    return await _through_gate(request, asked, change, factory)
+
+
+@router.get("/routing/changes", response_model=RoutingChangePage, responses=COMMON_RESPONSES)
+async def changes(request: Request, asked: Asked) -> RoutingChangePage:
+    """The most recent matrix changes, applied and held, with every held one's failing cases."""
+    if not may_govern(asked.reach, asked.now):
+        log.info("routing changes not answerable", principal=asked.caller.principal.id)
+        raise _no_matrix_here()
+    factory = _require_sessions(request)
+    async with factory() as session:
+        rows = (await session.execute(recent_changes(RECENT_CHANGES))).scalars().all()
+    return RoutingChangePage(items=[change_view(one) for one in rows])
+
+
+@router.get(
+    "/routing/golden-questions", response_model=GoldenQuestionPage, responses=COMMON_RESPONSES
+)
+async def golden_questions(request: Request, asked: Asked) -> GoldenQuestionPage:
+    """Every live golden question a matrix change is asked."""
+    if not may_govern(asked.reach, asked.now):
+        log.info("golden questions not answerable", principal=asked.caller.principal.id)
+        raise _no_matrix_here()
+    factory = _require_sessions(request)
+    async with factory() as session:
+        rows = (await session.execute(live_golden(MAX_GOLDEN_QUESTIONS))).scalars().all()
+    return GoldenQuestionPage(
+        items=[
+            GoldenQuestionView(
+                id=str(one.id),
+                question=one.question,
+                asked_as=one.asked_as,
+                expect=GoldenExpectation(one.expect),
+                created_by=one.created_by,
+            )
+            for one in rows
+        ]
+    )
+
+
+@router.post(
+    "/routing/golden-questions", response_model=GoldenQuestionPage, responses=COMMON_RESPONSES
+)
+async def add_golden_question(
+    request: Request, body: GoldenQuestionAsked, asked: Asked
+) -> GoldenQuestionPage:
+    """Record a golden question, asked as a principal the directory holds."""
+    if not may_govern(asked.reach, asked.now):
+        log.info("golden questions not editable", principal=asked.caller.principal.id)
+        raise _no_matrix_here()
+    factory = _require_sessions(request)
+    async with factory() as session:
+        known = (
+            await session.execute(
+                select(PrincipalRow.id).where(
+                    PrincipalRow.id == body.asked_as,
+                    PrincipalRow.deleted_at.is_(None),
+                    PrincipalRow.disabled_at.is_(None),
+                )
+            )
+        ).scalar_one_or_none()
+        if known is None:
+            # One refusal whether the id is unknown or retired, for the matrix's own reason.
             raise _no_matrix_here()
+        await session.execute(
+            insert(GoldenQuestionRow).values(
+                question=body.question.strip(),
+                asked_as=body.asked_as,
+                expect=body.expect.value,
+                created_by=asked.caller.principal.id,
+            )
+        )
         await session.commit()
-        return view_of(row)
+    return await golden_questions(request, asked)
+
+
+@router.post(
+    "/routing/golden-questions/{question_id}/retire",
+    response_model=GoldenQuestionPage,
+    responses=COMMON_RESPONSES,
+)
+async def retire_golden_question(
+    request: Request, question_id: uuid.UUID, asked: Asked
+) -> GoldenQuestionPage:
+    """Retire a golden question. A change is no longer asked it."""
+    if not may_govern(asked.reach, asked.now):
+        log.info("golden questions not editable", principal=asked.caller.principal.id)
+        raise _no_matrix_here()
+    factory = _require_sessions(request)
+    async with factory() as session:
+        await session.execute(
+            update(GoldenQuestionRow)
+            .where(GoldenQuestionRow.id == question_id, GoldenQuestionRow.deleted_at.is_(None))
+            .values(deleted_at=func.statement_timestamp())
+        )
+        await session.commit()
+    return await golden_questions(request, asked)

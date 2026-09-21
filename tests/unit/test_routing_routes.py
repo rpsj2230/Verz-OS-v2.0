@@ -20,7 +20,7 @@ checked after the database is looked at makes an unentitled caller's answer depe
 whether the process has a pool, which publishes the deployment's state to anybody who can
 reach the port.
 
-Task ids: M5.3.3
+Task ids: M5.3.3, M5.6.2, M5.3.2
 """
 
 from __future__ import annotations
@@ -44,6 +44,8 @@ from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.errors import Absent
 from brain.core.scope import Clause, Op, Scope
 from brain.listing import DEFAULT_PAGE_ROWS, MAX_PAGE_ROWS
+from brain.ops.matrix_gate import GateVerdict, MatrixChange, RungAddition
+from brain.ops.matrix_gate import RungEdit as GateRungEdit
 from brain.ops.replica_store import ConsoleReads
 from brain.routing_routes import (
     MATRIX_READ,
@@ -57,6 +59,7 @@ from brain.routing_routes import (
     apply_edit,
     live_rungs,
 )
+from brain.tables.model_registry import RoutingChangeRow
 from brain.tables.routing import RoutingRungRow
 from tests.fixtures.http_client import Response
 from tests.unit.test_api_routes import (
@@ -146,19 +149,41 @@ def rung(
 
 
 class StubResult:
-    """What `AsyncSession.execute` hands back, in the two shapes the routes read."""
+    """What `AsyncSession.execute` hands back, in the shapes the routes read."""
 
-    def __init__(self, rows: Sequence[RoutingRungRow]) -> None:
+    def __init__(self, rows: Sequence[Any]) -> None:
         self._rows = tuple(rows)
 
     def scalars(self) -> StubResult:
         return self
 
-    def all(self) -> tuple[RoutingRungRow, ...]:
+    def all(self) -> tuple[Any, ...]:
         return self._rows
 
-    def scalar_one_or_none(self) -> RoutingRungRow | None:
+    def scalar_one_or_none(self) -> Any:
         return self._rows[0] if self._rows else None
+
+    def scalar_one(self) -> Any:
+        assert len(self._rows) == 1, self._rows
+        return self._rows[0]
+
+
+def change_row_from(statement: Any) -> RoutingChangeRow:
+    """The `ops.routing_change` row an INSERT would return, built from its own parameters."""
+    values = statement.compile().params
+    row = RoutingChangeRow(
+        id=uuid.uuid4(),
+        kind=values["kind"],
+        rung_id=values["rung_id"],
+        proposed=values["proposed"],
+        status=values["status"],
+        failing=values["failing"],
+        reasons=values["reasons"],
+        quality_share=values["quality_share"],
+        proposed_by=values["proposed_by"],
+        decided_at=values["decided_at"],
+    )
+    return row
 
 
 class Executed:
@@ -169,6 +194,9 @@ class Executed:
         self.statements: list[Any] = []
         self.committed = 0
         self.rolled_back = 0
+        self.changes: list[RoutingChangeRow] = []
+        self.others: tuple[Any, ...] = ()
+        self.principals: tuple[Any, ...] = ("u_named",)
 
 
 #: The recorder for the session below. A module-level handle rather than an argument, because
@@ -186,6 +214,16 @@ class StubSession(AsyncSession):
 
     async def execute(self, statement: Any, *args: Any, **kwargs: Any) -> Any:
         _EXECUTED.statements.append(statement)
+        table = getattr(getattr(statement, "table", None), "fullname", None)
+        if table == "ops.routing_change" and statement.is_insert:
+            recorded = change_row_from(statement)
+            _EXECUTED.changes.append(recorded)
+            return StubResult((recorded,))
+        froms = [str(one) for one in getattr(statement, "get_final_froms", lambda: [])()]
+        if any("principal" in one for one in froms):
+            return StubResult(_EXECUTED.principals)
+        if any("golden_question" in one for one in froms):
+            return StubResult(_EXECUTED.others)
         return StubResult(_EXECUTED.rows)
 
     async def commit(self) -> None:
@@ -221,6 +259,9 @@ def client(executed: Executed) -> Iterator[TestClient]:
         # The lifespan built its console reads over whatever DATABASE_URL named, and CI names a
         # real database. Replacing the factory without them would read the matrix from there.
         app.state.console_reads = None
+        app.state.matrix_gate = GATE
+        GATE.verdict = PASSING
+        GATE.asked.clear()
         yield c
 
 
@@ -233,6 +274,24 @@ def unwired() -> Iterator[TestClient]:
         app.state.db_sessions = None
         app.state.console_reads = None
         yield c
+
+
+PASSING = GateVerdict(may_apply=True, failing=(), reasons=(), quality_share=1.0)
+
+
+class ScriptedGate:
+    """A `MatrixGate` answering the verdict a test sets, and keeping every change it was asked."""
+
+    def __init__(self) -> None:
+        self.verdict = PASSING
+        self.asked: list[MatrixChange] = []
+
+    async def decide(self, change: MatrixChange, *, now: datetime, new_rung_id: str) -> GateVerdict:
+        self.asked.append(change)
+        return self.verdict
+
+
+GATE = ScriptedGate()
 
 
 def _wiring() -> Any:
@@ -575,7 +634,7 @@ def test_an_edit_that_matches_no_live_rung_is_the_same_refusal_again(
     assert response.status_code == 404
     assert response.json()["message"] == Absent.public_message
     assert executed.committed == 0, "a refused edit committed a transaction"
-    assert executed.rolled_back == 1, "a refused edit left its transaction open"
+    assert GATE.asked == [], "an edit naming no rung was run through the gate"
 
 
 def test_an_accepted_edit_answers_the_row_the_database_holds(
@@ -602,8 +661,9 @@ def test_an_accepted_edit_answers_the_row_the_database_holds(
     )
 
     assert response.status_code == 200
-    assert response.json()["attempts"] == 1
-    assert response.json()["timeout_seconds"] == 12.0
+    assert response.json()["status"] == "applied"
+    assert response.json()["rung"]["attempts"] == 1
+    assert response.json()["rung"]["timeout_seconds"] == 12.0
     assert executed.committed == 1
 
 
@@ -825,3 +885,181 @@ def test_the_matrix_is_absent_from_the_publicly_served_document() -> None:
 
     for path in public_operations(app):
         assert "routing" not in path
+
+
+# ------------------------------------------------------------------ the matrix gate (M5.6.2)
+def test_a_change_the_gate_holds_never_reaches_the_ladder_and_its_failing_cases_are_shown(
+    client: TestClient, executed: Executed
+) -> None:
+    """M5.6.2: a regression holds the change with the failing cases shown.
+
+    The gate answers held with one failing golden question; the ladder is never updated, the
+    change is recorded as held with that case and its reason, and the response carries both.
+
+    Delete this and the route can apply the edit before, or whatever, the gate said, which is a
+    matrix change taking traffic that nothing checked."""
+    GATE.verdict = GateVerdict(
+        may_apply=False,
+        failing=(("q-1", "did not answer: absent"),),
+        reasons=("quality is 0.000 against a floor of 0.900",),
+        quality_share=0.0,
+    )
+
+    response = write(client, "u_admin", rung_id=str(executed.rows[0].id))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "held"
+    assert body["failing"] == [{"case": "q-1", "reason": "did not answer: absent"}]
+    assert body["rung"] is None
+    assert isinstance(GATE.asked[0], GateRungEdit)
+    updates = [one for one in executed.statements if getattr(one, "is_update", False)]
+    assert updates == [], "a held change updated the ladder"
+    assert [one.status for one in executed.changes] == ["held"]
+
+
+def test_a_change_the_gate_passes_is_applied_and_recorded_as_applied(
+    client: TestClient, executed: Executed
+) -> None:
+    """The positive half. Delete this and a gate that holds everything passes the test above."""
+    response = write(client, "u_admin", rung_id=str(executed.rows[0].id))
+
+    assert response.json()["status"] == "applied"
+    updates = [one for one in executed.statements if getattr(one, "is_update", False)]
+    assert len(updates) == 1
+    assert [one.status for one in executed.changes] == ["applied"]
+    assert executed.changes[0].failing == []
+
+
+def test_a_process_that_cannot_run_the_gate_holds_the_change_and_says_why(
+    client: TestClient, executed: Executed
+) -> None:
+    """No gate is not a pass. Delete this and a process built without one applies every change
+    unchecked, which is the failure the gate exists to prevent."""
+    client.app.state.matrix_gate = None  # type: ignore[attr-defined]
+
+    response = write(client, "u_admin", rung_id=str(executed.rows[0].id))
+
+    assert response.json()["status"] == "held"
+    assert response.json()["reasons"] == [routing_routes.NO_GATE_HERE]
+
+
+def test_a_department_scoped_editor_cannot_change_the_matrix_or_read_its_changes(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The gate's pass and fail on a question asked as another person is a fact about what
+    their questions come back with, so these writes need the matrix write over everything.
+
+    Delete this and an editor scoped to one department can learn, one golden question at a
+    time, what another department's people are answered."""
+    # The write over one department only: the gate's pass and fail are not for this caller.
+    monkeypatch.setitem(
+        MATRIX_GRANTS,
+        "u_prefix",
+        (_grant(MATRIX_READ.value, WHOLE), _grant(MATRIX_WRITE.value, ELSEWHERE)),
+    )
+    token = token_for("u_prefix", claims=SECOND_FACTOR)
+    headers = {"authorization": f"Bearer {token}"}
+
+    assert write(client, "u_prefix").status_code == 404
+    assert client.get(f"{API_PREFIX}/routing/changes", headers=headers).status_code == 404
+    assert client.get(f"{API_PREFIX}/routing/golden-questions", headers=headers).status_code == 404
+    assert GATE.asked == []
+
+
+def test_a_rung_is_added_at_the_end_of_its_tier_only_through_the_gate(
+    client: TestClient, executed: Executed
+) -> None:
+    """M5.7.2 takes traffic this way: a new rung for a provider's model, judged first.
+
+    The insert comes after the tier's last position and carries no role the caller chose.
+    Delete this and a rung can be added with no gate in front of it, or in the middle of a
+    chain where the unique position index refuses it at some later moment."""
+    token = token_for("u_admin", claims=SECOND_FACTOR)
+    body = {
+        "tier": "main",
+        "provider": "deepseek",
+        "model": "deepseek-chat",
+        "attempts": 1,
+        "timeout_seconds": 20.0,
+        "max_concurrency": 4,
+    }
+
+    response = client.post(RUNGS_PATH, headers={"authorization": f"Bearer {token}"}, json=body)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "applied"
+    assert isinstance(GATE.asked[0], RungAddition)
+    inserts = [
+        one
+        for one in executed.statements
+        if getattr(one, "is_insert", False) and one.table.fullname == "ops.routing_rung"
+    ]
+    assert len(inserts) == 1
+    params = inserts[0].compile().params
+    assert params["position"] == max(one.position for one in executed.rows) + 1
+    assert params["provider"] == "deepseek"
+    assert params["role"] == "cross_provider_failover"
+
+
+def test_an_added_rung_names_a_role_only_the_trigger_decides() -> None:
+    """The not-null column is written with what `0097`'s trigger derives, never a caller's word.
+
+    Delete this and the insert can carry a role that disagrees with the trigger for the instant
+    before it runs, which a console reading the returned row would show."""
+    peers = [rung(position=0)]
+    assert routing_routes.role_for(0, "anthropic", []).value == "primary"
+    assert routing_routes.role_for(1, "anthropic", peers).value == "same_provider_failover"
+    assert routing_routes.role_for(1, "moonshot", peers).value == "cross_provider_failover"
+    assert "role" not in routing_routes.RungAdd.model_fields
+
+
+def test_a_golden_question_is_recorded_only_as_a_principal_the_directory_holds(
+    client: TestClient, executed: Executed
+) -> None:
+    """An unknown principal is the one refusal; a known one is written.
+
+    Delete this and a golden question can be asked as an id nobody holds, which the resolver
+    answers with no reach, so every must-refuse case passes and proves nothing."""
+    token = token_for("u_admin", claims=SECOND_FACTOR)
+    headers = {"authorization": f"Bearer {token}"}
+    question = {"question": "how many hours are left", "asked_as": "u_named", "expect": "answer"}
+
+    executed.principals = ()
+    refused = client.post(f"{API_PREFIX}/routing/golden-questions", headers=headers, json=question)
+    executed.principals = ("u_named",)
+    kept = client.post(f"{API_PREFIX}/routing/golden-questions", headers=headers, json=question)
+
+    assert refused.status_code == 404
+    assert kept.status_code == 200
+    inserts = [
+        one
+        for one in executed.statements
+        if getattr(one, "is_insert", False) and one.table.fullname == "ops.golden_question"
+    ]
+    assert len(inserts) == 1
+
+
+def test_a_retired_golden_question_is_marked_retired_and_asked_no_more(
+    client: TestClient, executed: Executed
+) -> None:
+    """Retiring sets `deleted_at` on that question and only that question, which the gate's read
+    and the list both leave out.
+
+    Delete this and a retired question can go on holding every change, or retiring can hard-delete
+    the record of what was once asked."""
+    token = token_for("u_admin", claims=SECOND_FACTOR)
+    question_id = uuid.uuid4()
+
+    response = client.post(
+        f"{API_PREFIX}/routing/golden-questions/{question_id}/retire",
+        headers={"authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    (update,) = [one for one in executed.statements if getattr(one, "is_update", False)]
+    sql = str(update.compile())
+    assert update.table.fullname == "ops.golden_question"
+    assert "deleted_at=statement_timestamp()" in sql.replace(" ", "")
+    assert "deleted_at IS NULL" in sql
+    assert question_id in update.compile().params.values()

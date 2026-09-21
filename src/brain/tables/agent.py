@@ -87,6 +87,9 @@ VISIBILITY_IN = one_of("visibility", Visibility)
 #: by this constraint for the row that arrived some other way.
 TIER_IN = one_of("tier", TIER_LADDER)
 
+#: `0097`. A pin is a provider and a model together, or no pin at all.
+MODEL_PIN_BOTH_OR_NEITHER = "(model_pin_provider IS NULL) = (model_pin_model IS NULL)"
+
 #: The largest side effect a run through this agent may have, from the envelope's own enum.
 SIDE_EFFECT_IN = one_of("max_side_effect", SideEffect)
 
@@ -206,6 +209,12 @@ class AgentRow(TimestampMixin, Base):
     #: Terminal. Nothing in `brain.agents.lifecycle` clears it.
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # ----------------------------------------------------------------- model pin
+    #: A provider and model an administrator pinned, tried before the tier's chain (M5.7.3).
+    #: Both or neither, since `0097`: a provider with no model names nothing to call.
+    model_pin_provider: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    model_pin_model: Mapped[str | None] = mapped_column(String(120), nullable=True)
+
     __table_args__ = (
         CheckConstraint(SLUG_GRAMMAR, name="slug_grammar"),
         CheckConstraint(_present("display_name"), name="display_name_present"),
@@ -218,6 +227,7 @@ class AgentRow(TimestampMixin, Base):
         CheckConstraint(REQUIRED_WITHIN_ALLOWED, name="required_within_allowed"),
         CheckConstraint(SIDE_EFFECT_IN, name="max_side_effect"),
         CheckConstraint(_present("created_by"), name="created_by_present"),
+        CheckConstraint(MODEL_PIN_BOTH_OR_NEITHER, name="model_pin_both_or_neither"),
         # The selection path's index: everything an audience test needs, over the rows that
         # can actually be chosen. Partial, because a disabled or archived agent is never in
         # a selection set and indexing it would make the common query read rows it discards.

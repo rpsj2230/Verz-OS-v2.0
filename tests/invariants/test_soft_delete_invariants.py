@@ -165,6 +165,20 @@ def soft_deleted_tables() -> frozenset[str]:
     return frozenset(key for key, table in metadata.tables.items() if "deleted_at" in table.c)
 
 
+def built_after_the_repair() -> frozenset[str]:
+    """Soft-deleted tables a migration after `0046` built, read from each migration's `TABLES`.
+
+    They did not exist when `0045` and `0046` repaired the policies, so a replay to `0045` cannot
+    find them hidden; each is built with the repaired policy from its first migration, which the
+    rules below hold on the current schema.
+    """
+    found: set[str] = set()
+    for path in sorted(VERSIONS.glob("*.py")):
+        if path.stem[:4].isdigit() and int(path.stem[:4]) > 46:
+            found.update(getattr(_module(path), "TABLES", ()))
+    return frozenset(found) & soft_deleted_tables()
+
+
 def _on(policies: dict[tuple[str, str], Policy], table: str) -> list[Policy]:
     return [one for (on, _), one in sorted(policies.items()) if on == table]
 
@@ -321,9 +335,10 @@ def test_the_rules_find_the_defect_on_the_schema_before_it_was_repaired() -> Non
     before = replay(before="0045")
     hidden = {one.split(":")[0] for one in hidden_from_its_own_retirement(before)}
 
-    # 0095's two tables did not exist before 0045, and were written with 0045's policies.
-    born_repaired = {"auth.service_account", "auth.api_key"}
-    assert hidden == soft_deleted_tables() - {"gate.fast_path_rule"} - born_repaired
+    # Tables built after the repair (0095's two, 0097's two) did not exist before 0045 and were
+    # written with 0045's policies; they are read from each later migration's `TABLES`.
+    assert {"auth.service_account", "auth.api_key"} <= built_after_the_repair()
+    assert hidden == soft_deleted_tables() - {"gate.fast_path_rule"} - built_after_the_repair()
     assert len(hidden) == 16
     assert [one.split(":")[0] for one in brought_back(before)] == ["gate.fast_path_rule"]
     assert {one.split(":")[0] for one in hidden_from_its_own_retirement(replay("0046"))} == {

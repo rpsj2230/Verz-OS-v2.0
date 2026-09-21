@@ -58,6 +58,17 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
   ],
   "src/pages/Elevation.tsx": [{ pattern: "/elevation", index: 0, writes: true }],
   "src/pages/Matrix.tsx": [{ pattern: "/routing/:rungId", index: 1, writes: true }],
+  // After the matrix's own search form: the golden question, then the rung to add.
+  "src/components/MatrixGate.tsx": [
+    { pattern: "/routing", index: 1, writes: true },
+    { pattern: "/routing", index: 2, writes: true },
+  ],
+  // The add form is the only form until a provider's terms are opened, which draws theirs first.
+  "src/components/ProviderRegister.tsx": [
+    { pattern: "/models", index: 0, writes: true },
+    { pattern: "/models", opener: "Record terms", index: 0, writes: true },
+  ],
+  "src/components/AgentModelPin.tsx": [{ pattern: "/agents/:agentId", opener: "Profile", index: 0, writes: true }],
   "src/pages/Notifications.tsx": [
     { pattern: "/notifications", index: 0, writes: true },
     { pattern: "/notifications", index: 1, writes: true },

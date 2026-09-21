@@ -45,12 +45,13 @@ means it. `names_in_environment` is how a process remembers which names that was
 a key written from the console into a slot the environment file also sets can be reported as
 outranked rather than as in use.
 
-Task ids: M5.1.2, M27.8.7, M31.3.2.5
+Task ids: M5.1.2, M27.8.7, M31.3.2.5, M5.7.1, M5.7.2
 """
 
 from __future__ import annotations
 
 import re
+import threading
 from collections.abc import Iterable, Mapping, MutableMapping
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -68,6 +69,7 @@ __all__ = [
     "PROVIDER_SLOTS",
     "STATIC_PREFIX",
     "ProviderSlot",
+    "added_slot",
     "assert_static_path",
     "load_into_environment",
     "names_in_environment",
@@ -135,7 +137,69 @@ PROVIDER_SLOTS: tuple[ProviderSlot, ...] = (
         env_var="MOONSHOT_API_KEY",
         description="The cheaper reasoner; the v1 system routes to it by default",
     ),
+    ProviderSlot(
+        slug="deepseek",
+        env_var="DEEPSEEK_API_KEY",
+        description="DeepSeek, reached through its OpenAI-compatible interface",
+    ),
 )
+
+#: What an added provider's environment variable is called: the slug between a prefix and a
+#: suffix no built-in provider's variable uses, so an added provider can never set one of theirs.
+ADDED_ENV_PREFIX = "BRAIN_PROVIDER_"
+ADDED_ENV_SUFFIX = "_KEY"
+
+
+def added_slot(slug: str) -> ProviderSlot:
+    """The key slot of a provider an administrator added from the console (M5.7.2).
+
+    Its vault path is `providers/<slug>`, which the application policy's `providers/data/+`
+    already admits, and its variable is `BRAIN_PROVIDER_<SLUG>_KEY`. Refuses a built-in slug:
+    an added provider named `openai` would be a second writer of the key every question to
+    OpenAI goes out with, at an address a person typed.
+    """
+    if any(one.slug == slug for one in PROVIDER_SLOTS):
+        msg = f"{slug!r} is a built-in provider, so it cannot be added"
+        raise ValueError(msg)
+    return ProviderSlot(
+        slug=slug,
+        env_var=f"{ADDED_ENV_PREFIX}{slug.upper()}{ADDED_ENV_SUFFIX}",
+        description=f"The key for {slug}, a provider added from the console",
+    )
+
+
+class AddedProviderSlots:
+    """The key slots of the providers added from the console, as this process last read them.
+
+    An added provider exists only as a row, so the process learns its slot when it reads the
+    registry (`brain.ops.model_service`, on every planned call and every Models screen read), and
+    the minute's key refresh (`brain.ops.credentials.Credentials.refresh`) then loads its key.
+    A lock, because the refresh runs in a worker thread and the registry is read on the loop.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._slots: dict[str, ProviderSlot] = {}
+
+    def learn(self, slugs: Iterable[str]) -> None:
+        """Replace what this process knows with the live added providers' slugs."""
+        found = {slug: added_slot(slug) for slug in slugs}
+        with self._lock:
+            self._slots = found
+
+    def slots(self) -> tuple[ProviderSlot, ...]:
+        """Every added provider's slot this process knows, by slug."""
+        with self._lock:
+            return tuple(self._slots[slug] for slug in sorted(self._slots))
+
+    def slot(self, slug: str) -> ProviderSlot | None:
+        """One added provider's slot, or None when this process has not read it."""
+        with self._lock:
+            return self._slots.get(slug)
+
+
+#: The one this process holds. A process-wide fact, like the environment the keys are put in.
+PROCESS_ADDED_SLOTS = AddedProviderSlots()
 
 
 def read_static(vault: StaticKvReader, path: str) -> str:

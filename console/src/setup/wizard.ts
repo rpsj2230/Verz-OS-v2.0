@@ -171,7 +171,7 @@ export const SCREENS: readonly Screen[] = Object.freeze([
       question("model_profile", "Where questions are answered", { choices: ["local", "hosted"] }),
       question("model_provider", "Model provider", {
         required: false,
-        choices: ["anthropic", "openai", "moonshot"],
+        choices: ["anthropic", "openai", "moonshot", "deepseek"],
       }),
       question("provider_key", "Key from your provider account", {
         required: false,

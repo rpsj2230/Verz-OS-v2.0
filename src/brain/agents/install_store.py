@@ -127,6 +127,8 @@ def agent_values(record: AgentRecord) -> dict[str, Any]:
         "display_name": record.display_name,
         "persona": record.persona,
         "tier": record.tier.value,
+        "model_pin_provider": None if record.model_pin is None else record.model_pin.provider,
+        "model_pin_model": None if record.model_pin is None else record.model_pin.model,
         "visibility": record.audience.level.value,
         "owner_id": record.audience.owner_id,
         "department": record.audience.department or None,

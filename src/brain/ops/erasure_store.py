@@ -229,6 +229,10 @@ SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
         "obs.request_telemetry": "principal",
         # A budget's subject is a person, a department or an agent; only a person's id matches.
         "ops.budget_version": "subject",
+        # A golden question asked as a person (`0097`). An administrator wrote it, but it names the
+        # person it is asked as; `0097` grants no way for a row to leave, so an erasure keeps these
+        # and reports them kept, and a question asked as nobody is refused by the resolver.
+        "ops.golden_question": "asked_as",
         "ops.operation": "principal_id",
         "ops.question_asked": "principal_id",
         "ops.spend_actual": "principal_id",
@@ -293,6 +297,9 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         # A deploy keeps an image, a commit, task ids and digests: `0091` keeps no principal.
         "ops.deployment_record",
         "ops.model_attempt",
+        # A provider's terms and a matrix change name the administrator who wrote them, an actor
+        # and not an owner (`0097`).
+        "ops.model_provider",
         "ops.outbox_delivery",
         "ops.outbox_event",
         "ops.plugin_install",
@@ -303,6 +310,7 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "ops.report_refresh",
         "ops.retention_release",
         "ops.retention_report",
+        "ops.routing_change",
         "ops.routing_rung",
         "ops.routing_tier",
         "ops.setting",

@@ -56,6 +56,14 @@ import {
 import { GRANTS_API_PATH, PACK_ASSIGNMENT_API_PATH, REMOVAL_API_PATH } from "../../src/pages/governQuery";
 import { actionPath } from "../../src/pages/jobsQuery";
 import { rungApiPath } from "../../src/pages/matrixQuery";
+import { ADD_RUNG_API_PATH, GOLDEN_API_PATH, retireGoldenApiPath } from "../../src/pages/matrixGateQuery";
+import {
+  ADD_PROVIDER_API_PATH,
+  REGISTER_API_PATH as PROVIDER_REGISTER_API_PATH,
+  retireProviderApiPath,
+  termsApiPath,
+} from "../../src/pages/providerRegisterQuery";
+import { modelPinApiPath } from "../../src/pages/agentModelPinQuery";
 import { providerCheckApiPath, providerSwitchApiPath } from "../../src/pages/modelsQuery";
 import { editPath, giveBackPath } from "../../src/pages/promptsQuery";
 import {
@@ -273,13 +281,26 @@ export const AREAS: Readonly<Record<string, Area>> = {
   },
   "AI providers, models and the routing between them": {
     screens: ["/models", "/routing", "/routing/:rungId"],
-    routes: ["/api/v1/operate/models", "/api/v1/models/providers*", "/api/v1/routing/rungs*"],
-    tables: ["ops.routing_rung", "ops.routing_tier", "ops.model_attempt"],
+    routes: [
+      "/api/v1/operate/models",
+      "/api/v1/models/providers*",
+      "/api/v1/routing/rungs*",
+      "/api/v1/routing/changes",
+      "/api/v1/routing/golden-questions*",
+    ],
+    tables: [
+      "ops.routing_rung",
+      "ops.routing_tier",
+      "ops.model_attempt",
+      "ops.model_provider",
+      "ops.golden_question",
+      "ops.routing_change",
+    ],
     installation: ["INSTALL_MODEL_PROFILE", "INSTALL_MODEL_ENDPOINT", "INSTALL_EMBEDDING_DIMENSIONS"],
     gaps: [
       {
-        what: "Saving a routing rung changes the chain the next model call walks and no answer: the answer lane still answers from fast-path rules and calls no model, so today only a provider check from Models and health reaches a saved rung.",
-        leaf: "M27.8.8",
+        what: "A provider's terms and an added provider's retirement are logged and not on the audit ledger: the ledger's action list gains no provider entry in this release.",
+        leaf: "M5.6.4",
       },
       { what: "A provider key cannot be written or replaced from a screen after setup.", leaf: "M27.8.8" },
       { what: "The model profile and endpoint cannot be changed after setup.", because: ONCE_BY_THE_WIZARD },
@@ -291,6 +312,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/agents",
       "/api/v1/agents/{agent_id}/workspace",
       "/api/v1/agents/{agent_id}/about",
+      "/api/v1/agents/{agent_id}/model-pin",
       "/api/v1/agent-templates",
       "/api/v1/approvals*",
     ],
@@ -611,6 +633,7 @@ export const READ_AFTER_AN_ACTION: Readonly<
     built: STAFF_LIST_REGISTRATION_PATH,
     versioned: false,
   },
+  "GET /api/v1/models/providers-register": { screen: "/models", spelled: "REGISTER_API_PATH", built: PROVIDER_REGISTER_API_PATH },
   "GET /api/v1/agents/{agent_id}/automation-templates/{template_id}/preview": {
     screen: "/agents/:agentId/:tab",
     spelled: "automationPreviewApiPath",
@@ -688,6 +711,29 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
     at("POST /api/v1/jobs/{name}/run", "actionPath", actionPath("run", "spend_report_refresh")),
   ],
   "src/pages/Matrix.tsx rungApiPath(rung.id)": [at("PATCH /api/v1/routing/rungs/{rung_id}", "rungApiPath", rungApiPath("rung-1"))],
+  "src/components/MatrixGate.tsx GOLDEN_API_PATH": [
+    at("POST /api/v1/routing/golden-questions", "GOLDEN_API_PATH", GOLDEN_API_PATH),
+  ],
+  "src/components/MatrixGate.tsx retireGoldenApiPath(asked.row.id)": [
+    at(
+      "POST /api/v1/routing/golden-questions/{question_id}/retire",
+      "retireGoldenApiPath",
+      retireGoldenApiPath("33333333-3333-4333-8333-333333333333"),
+    ),
+  ],
+  "src/components/MatrixGate.tsx ADD_RUNG_API_PATH": [at("POST /api/v1/routing/rungs", "ADD_RUNG_API_PATH", ADD_RUNG_API_PATH)],
+  "src/components/ProviderRegister.tsx termsApiPath(asked.provider)": [
+    at("PUT /api/v1/models/providers/{provider}/terms", "termsApiPath", termsApiPath("anthropic")),
+  ],
+  "src/components/ProviderRegister.tsx retireProviderApiPath(asked.provider)": [
+    at("POST /api/v1/models/providers/{provider}/retire", "retireProviderApiPath", retireProviderApiPath("acme_llm")),
+  ],
+  "src/components/ProviderRegister.tsx ADD_PROVIDER_API_PATH": [
+    at("POST /api/v1/models/providers", "ADD_PROVIDER_API_PATH", ADD_PROVIDER_API_PATH),
+  ],
+  "src/components/AgentModelPin.tsx modelPinApiPath(agentId)": [
+    at("PUT /api/v1/agents/{agent_id}/model-pin", "modelPinApiPath", modelPinApiPath("quote-helper")),
+  ],
   "src/pages/Models.tsx providerSwitchApiPath(pending.provider)": [
     at("PUT /api/v1/models/providers/{provider}", "providerSwitchApiPath", providerSwitchApiPath("anthropic")),
   ],
@@ -992,6 +1038,59 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
       "test_a_rung_saved_on_the_routing_screen_is_the_rung_the_next_call_walks",
       true,
     ),
+  },
+  "POST /api/v1/routing/golden-questions": {
+    row: t("test_routing_routes", "test_a_golden_question_is_recorded_only_as_a_principal_the_directory_holds"),
+    audit: {
+      none: "A golden question is a check the matrix gate asks and is logged, not written to the audit ledger; the changes it holds are recorded in ops.routing_change.",
+      leaf: "M5.6.2",
+    },
+    behaviour: t("test_matrix_gate", "test_a_change_that_stops_the_ladder_answering_is_held_with_the_failing_question_shown"),
+  },
+  "POST /api/v1/routing/golden-questions/{question_id}/retire": {
+    row: t("test_routing_routes", "test_a_retired_golden_question_is_marked_retired_and_asked_no_more"),
+    audit: {
+      none: "Retiring a golden question is logged, not written to the audit ledger.",
+      leaf: "M5.6.2",
+    },
+    behaviour: t("test_matrix_gate", "test_a_gate_with_no_golden_questions_holds_the_change_and_says_to_record_some"),
+  },
+  "POST /api/v1/routing/rungs": {
+    row: t("test_routing_routes", "test_a_rung_is_added_at_the_end_of_its_tier_only_through_the_gate"),
+    audit: audited("test_a_rung_saved_from_the_screen_leaves_its_row_and_an_entry_naming_what_moved"),
+    behaviour: t("test_model_calls", "test_a_provider_added_from_the_console_answers_through_the_ladder_with_no_release"),
+  },
+  "PUT /api/v1/models/providers/{provider}/terms": {
+    row: t("test_provider_registry_routes", "test_terms_recorded_for_a_built_in_provider_write_its_first_registry_row"),
+    audit: {
+      none: "A provider's terms are logged and not written to the audit ledger in this release.",
+      leaf: "M5.6.4",
+    },
+    behaviour: t(
+      "test_model_calls",
+      "test_a_constrained_call_skips_an_undocumented_rung_for_the_documented_one_behind_it",
+    ),
+  },
+  "POST /api/v1/models/providers/{provider}/retire": {
+    row: t("test_provider_registry_routes", "test_an_added_provider_is_retired_and_a_built_in_one_cannot_be"),
+    audit: {
+      none: "Retiring an added provider is logged and not written to the audit ledger in this release.",
+      leaf: "M5.6.4",
+    },
+    behaviour: t("test_model_assembly", "test_a_provider_with_no_driver_is_told_which_of_the_two_things_is_missing"),
+  },
+  "POST /api/v1/models/providers": {
+    row: t("test_provider_registry_routes", "test_an_added_provider_has_its_key_kept_in_its_own_slot_before_its_row_is_written"),
+    audit: t("test_credential_routes", "test_a_key_set_from_the_console_is_recorded_as_its_setter_with_their_reach_and_trace"),
+    behaviour: t("test_model_calls", "test_a_provider_added_from_the_console_answers_through_the_ladder_with_no_release"),
+  },
+  "PUT /api/v1/agents/{agent_id}/model-pin": {
+    row: t("test_agent_model_routes", "test_an_administrator_pins_a_model_a_rung_serves_and_it_is_written_to_the_agent"),
+    audit: {
+      none: "An agent's pin is logged and not written to the audit ledger in this release.",
+      leaf: "M5.7.3",
+    },
+    behaviour: t("test_model_calls", "test_a_pinned_model_is_tried_first_even_from_another_tier"),
   },
   "PUT /api/v1/models/providers/{provider}": {
     row: t("test_model_service", "test_the_stores_read_the_ladder_write_attempts_by_id_and_keep_a_switch", true),

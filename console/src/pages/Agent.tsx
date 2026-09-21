@@ -40,7 +40,10 @@
  * not download the workspace or its stylesheet. `tests/agent-page.test.tsx` holds that against
  * the static import graph from `main.tsx`.
  *
- * Task ids: M39.1.2.1, M39.1.2.3, M39.1.2.5, M39.1.1.5, M39.6.1.3
+ * The profile begins with the agent's model: its tier, and a provider and model an administrator
+ * may pin for it (`components/AgentModelPin.tsx`, M5.7.3).
+ *
+ * Task ids: M39.1.2.1, M39.1.2.3, M39.1.2.5, M39.1.1.5, M39.6.1.3, M5.7.3
  */
 
 import { useCallback, useMemo, useState, type ReactNode } from "react";
@@ -48,10 +51,12 @@ import { useParams } from "react-router-dom";
 import { useResource } from "../api/useResource";
 import { AgentCapabilities, AgentFiguresView } from "../components/AgentAssembly";
 import { AgentWorkspace } from "../components/AgentWorkspace";
+import { AgentModelPin } from "../components/AgentModelPin";
 import { AgentAutomations } from "../components/AgentAutomations";
 import { AutomationGallery } from "../components/AutomationGallery";
 import { CompositionDiff } from "../components/CompositionDiff";
 import { agentWorkspaceApiPath, readAgentWorkspace } from "./agentQuery";
+import { readModelChoice } from "./agentModelPinQuery";
 import { agentAutomationsApiPath } from "./agentAutomationsQuery";
 import { AUTOMATIONS_TAB, automationGalleryApiPath } from "./automationGalleryQuery";
 import { FailureNotice } from "../ui/FailureNotice";
@@ -125,6 +130,8 @@ function AgentAnswer({
 }) {
   const answer = useResource<unknown>(agentWorkspaceApiPath(agentId));
   const workspace = useMemo(() => readAgentWorkspace(answer.data), [answer.data]);
+  // The tier and the pinned model, for a reader the workspace gave a profile (M5.7.3).
+  const choice = useMemo(() => readModelChoice(answer.data), [answer.data]);
 
   if (answer.failure) {
     return (
@@ -156,6 +163,7 @@ function AgentAnswer({
       }
       profile={
         <>
+          {choice === null ? null : <AgentModelPin agentId={agentId} choice={choice} />}
           <CompositionDiff rows={workspace.composition} />
           <AgentCapabilities
             connectors={workspace.connectors}

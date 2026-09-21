@@ -61,7 +61,6 @@ from brain.api_routes import Asked
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.errors import Absent, BrainError, Failed
 from brain.ops.credentials import (
-    SLOTS,
     TOLD,
     CredentialProblemError,
     Credentials,
@@ -198,7 +197,7 @@ def listing(store: Credentials) -> CredentialsView:
     answer for one slot will not answer for the next, and a list half known and half not is a
     list somebody reads as half held.
     """
-    slots = [SLOTS[path] for path in sorted(SLOTS)]
+    slots = list(store.slots())
     try:
         found: list[Held] = [store.held(slot) for slot in slots]
     except CredentialsUnavailableError as unavailable:
@@ -272,11 +271,13 @@ async def set_credential(
     if not may_manage(asked.reach, asked.now):
         log.info("credentials not answerable", principal=asked.caller.principal.id)
         raise _not_answerable()
-    slot: CredentialSlot | None = SLOTS.get(f"{family}/{name}")
+    store = credentials_of(request)
+    # A built-in slot, or the slot of a provider added from the console that this process has
+    # read from the registry (M5.7.2), so an added provider's key is replaced here as well.
+    slot: CredentialSlot | None = store.slot_at(f"{family}/{name}")
     if slot is None:
         log.info("credential slot not answerable", principal=asked.caller.principal.id)
         raise _not_answerable()
-    store = credentials_of(request)
     try:
         kept = await store.keep(
             slot,

@@ -19,6 +19,7 @@
  * Task ids: M27.2.3, M27.8.8
  */
 
+import { DOWNLOAD_REGISTER } from "../src/pages/providerRegisterQuery";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
@@ -165,6 +166,8 @@ function provider(name: string, extra: Record<string, unknown> = {}): Record<str
     switched_at: null,
     key_held: name === "local" ? null : true,
     credential: null,
+    registered: null,
+    disclosed: [],
     ...extra,
   };
 }
@@ -775,7 +778,12 @@ describe("the provider controls", () => {
       [PROVIDERS]: () => json(providers({ editable: false })),
     });
 
-    expect(container.querySelectorAll("button, form, input")).toHaveLength(0);
+    // The register's download is the one control every reader of this screen may use: it reads the
+    // register, and the route answers it to whoever may read the screen.
+    const controls = [...container.querySelectorAll("button, form, input")].filter(
+      (one) => one.textContent !== DOWNLOAD_REGISTER,
+    );
+    expect(controls).toHaveLength(0);
     const edit = [...container.querySelectorAll("a")].filter((one) => one.textContent === "Edit routing");
     expect(edit.map((one) => one.getAttribute("href"))).toEqual([MATRIX_PATH]);
   });
