@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-21T10:16:36.078213+00:00",
-  "commit": "8542d1f",
-  "commit_subject": "A handover runs end to end on a scratch install in CI, and reads the saved settings",
+  "generated_at": "2026-09-21T10:30:36.544506+00:00",
+  "commit": "97acd0f",
+  "commit_subject": "Needs you: items 72, 73 and 74 are done, and item 77 asks one question about the old copies",
   "total": 1598,
   "done": 251,
   "percent": 15.7,
