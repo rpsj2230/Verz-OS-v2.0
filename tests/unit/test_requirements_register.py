@@ -376,7 +376,7 @@ def test_the_command_counts_a_requirement_delivered_from_the_commits_that_closed
     git("config", "user.email", "t@example.com")
     git("config", "user.name", "T")
     git("add", "-A")
-    git("commit", "-m", "M1.1.1: the building leaf\n\nCloses: M1.1.2\n")
+    git("commit", "-m", "M1.1.1: the building leaf\n\nCloses: M1.1.2\nProved-in-ci: unit\n")
 
     assert main(tmp_path) == 0
     assert "2 requirements, 2 covered by a task and a proof, 1 delivered" in capsys.readouterr().out
