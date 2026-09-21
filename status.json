@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-09-21T09:47:47.521873+00:00",
-  "commit": "860e7d9",
-  "commit_subject": "The automation gallery test waits for focus on Not now instead of reading it at once",
+  "generated_at": "2026-09-21T10:02:38.735242+00:00",
+  "commit": "22251d0",
+  "commit_subject": "Needs you item 81 says the Lark permission is for checking who may read a page, not for copying it",
   "total": 1598,
-  "done": 228,
-  "percent": 14.3,
+  "done": 244,
+  "percent": 15.3,
   "acts": 47,
   "decided": 102,
   "current_wave": 0,
@@ -13,11 +13,11 @@
       "wave": 0,
       "name": "Foundation",
       "total": 133,
-      "done": 97,
-      "percent": 72.9,
+      "done": 101,
+      "percent": 75.9,
       "in_progress": 0,
-      "ready_for_testing": 5,
-      "blocked": 8,
+      "ready_for_testing": 3,
+      "blocked": 6,
       "open": 23,
       "acts": 3,
       "decided": 4
@@ -26,12 +26,12 @@
       "wave": 1,
       "name": "The gate",
       "total": 167,
-      "done": 73,
-      "percent": 43.7,
+      "done": 85,
+      "percent": 50.9,
       "in_progress": 0,
       "ready_for_testing": 0,
       "blocked": 0,
-      "open": 94,
+      "open": 82,
       "acts": 1,
       "decided": 5
     },
@@ -107,7 +107,7 @@
       "name": "Foundation and repository",
       "wave": 0,
       "total": 40,
-      "done": 34,
+      "done": 36,
       "acts": 1,
       "decided": 0
     },
@@ -116,7 +116,7 @@
       "name": "Identity, users, roles, permissions",
       "wave": 1,
       "total": 50,
-      "done": 18,
+      "done": 30,
       "acts": 0,
       "decided": 1
     },
@@ -386,7 +386,7 @@
       "name": "Application scaffold and runtime",
       "wave": 0,
       "total": 38,
-      "done": 24,
+      "done": 26,
       "acts": 0,
       "decided": 2
     },
@@ -505,6 +505,8 @@
     "M0.3.1",
     "M0.3.2",
     "M0.3.3",
+    "M0.3.4",
+    "M0.3.6",
     "M0.3.7",
     "M0.4.3",
     "M0.4.4",
@@ -525,8 +527,10 @@
     "M0.6.6",
     "M0.6.7",
     "M0.7.1",
+    "M1.1.1",
     "M1.1.2",
     "M1.1.3",
+    "M1.1.4",
     "M1.2.1",
     "M1.2.2",
     "M1.3.1",
@@ -541,7 +545,17 @@
     "M1.4.8",
     "M1.5.1",
     "M1.5.2",
+    "M1.6.1",
+    "M1.6.10",
+    "M1.6.12",
+    "M1.6.2",
+    "M1.6.3",
+    "M1.6.4",
+    "M1.6.7",
+    "M1.6.8",
+    "M1.6.9",
     "M1.8.4",
+    "M1.8.6",
     "M1.9.1",
     "M12.1.5",
     "M12.1.6",
@@ -625,6 +639,8 @@
     "M31.1.4.2",
     "M31.1.4.3",
     "M31.2.1.1",
+    "M31.2.1.2",
+    "M31.2.1.3",
     "M31.2.1.5",
     "M31.2.2.1",
     "M31.2.2.2",
@@ -729,29 +745,9 @@
     "M6.2.6"
   ],
   "leaf_status": {
-    "M0.3.4": {
-      "status": "BLOCKED",
-      "why": "server change needs owner permission: add the PgBouncer pools per ops/vps/POOLING.md",
-      "updated": "2026-09-21"
-    },
     "M0.3.5": {
       "status": "BLOCKED",
-      "why": "server change needs owner permission: add the PgBouncer pools per ops/vps/POOLING.md",
-      "updated": "2026-09-21"
-    },
-    "M0.3.6": {
-      "status": "BLOCKED",
-      "why": "repo half done (brain.deployment.postgres_settings); install half needs owner permission, ops/vps/POOLING.md",
-      "updated": "2026-09-21"
-    },
-    "M31.2.1.2": {
-      "status": "READY FOR TESTING",
-      "why": "engine tests pass for session and transaction pooling; closing needs PgBouncer on the install (M0.3.4)",
-      "updated": "2026-09-21"
-    },
-    "M31.2.1.3": {
-      "status": "READY FOR TESTING",
-      "why": "engine tests pass for session and transaction pooling; closing needs PgBouncer on the install (M0.3.4)",
+      "why": "staging runs no worker; the session pool is added with the worker, which is next (owner allowed server changes)",
       "updated": "2026-09-21"
     },
     "M31.2.1.4": {
@@ -801,15 +797,33 @@
     }
   },
   "wave_records": {},
-  "closed_today": 69,
+  "closed_today": 85,
   "next_up": [
     "M0.2.5",
-    "M0.3.4",
     "M0.3.5",
-    "M0.3.6",
-    "M0.4.1"
+    "M0.4.1",
+    "M31.1.1.5",
+    "M31.1.2.2"
   ],
   "recent": [
+    {
+      "sha": "dbe4d7c",
+      "at": "2026-09-21T09:58:37+00:00",
+      "subject": "Keep the Keycloak admin password out of kcadm's argv, after the first real setup run",
+      "closed": "M1.1.1,M1.1.4"
+    },
+    {
+      "sha": "630d773",
+      "at": "2026-09-21T09:49:08+00:00",
+      "subject": "The staff list is read nightly with a kept credential, applied, and shown on its screen",
+      "closed": "M1.6.1,M1.6.10,M1.6.12,M1.6.2,M1.6.3,M1.6.4,M1.6.7,M1.6.8,M1.6.9,M1.8.6"
+    },
+    {
+      "sha": "7796b5a",
+      "at": "2026-09-21T09:48:38+00:00",
+      "subject": "PgBouncer and explicit database memory are live on staging, and the pooled engine is proved there",
+      "closed": "M0.3.4,M0.3.6,M31.2.1.2,M31.2.1.3"
+    },
     {
       "sha": "1adc977",
       "at": "2026-09-21T09:29:14+00:00",
@@ -911,24 +925,6 @@
       "at": "2026-09-17T03:40:48+00:00",
       "subject": "The Admin Console build plan is in the work breakdown: five waves and an end-to-end proof per module group, appended as M27.9 to M27.14",
       "closed": "M27.14,M27.9"
-    },
-    {
-      "sha": "5c1a5a6",
-      "at": "2026-09-17T01:37:53+00:00",
-      "subject": "The permission canaries run twice a day as every reach an install holds and Quality says whether they passed, and Questions and gaps lists the questions no connected source could answer",
-      "closed": "M27.7.18"
-    },
-    {
-      "sha": "fdfa47f",
-      "at": "2026-09-17T01:20:01+00:00",
-      "subject": "An administrator reads the application's warnings and errors from the console, with every value taken out on the way in and a storm held to a bounded number of rows",
-      "closed": "M27.8.14"
-    },
-    {
-      "sha": "1d25b7f",
-      "at": "2026-09-16T23:51:10+00:00",
-      "subject": "A model can be called now, every call is metered onto its request's ledger row, and providers are switched on and off and checked from the Models screen with health measured from real attempts",
-      "closed": "M27.7.14"
     }
   ]
 }
