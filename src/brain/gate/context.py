@@ -197,12 +197,33 @@ class Recorder:
             )
         self.steps.append(step)
 
+    def identified(self, principal_id: str, channel: Channel) -> None:
+        """Enter IDENTIFY with who is asking and the channel their credential names.
+
+        The channel is set here rather than at construction, because an HTTP arrival learns it
+        from the token and the recorder is built before the token is read. See
+        `AN_ARRIVAL_IS_RECORDED_BEFORE_ITS_CHANNEL_IS_KNOWN`.
+        """
+        self.enter(GateStep.IDENTIFY)
+        self.principal_id = principal_id
+        self.channel = channel
+        self.traffic_class = traffic_class_for(channel)
+
     def note(self, message: str) -> None:
         """A line for the trace. Never a field value; see the redaction rules."""
         self.notes.append(message)
 
     def reached(self, step: GateStep) -> bool:
         return step in self.steps
+
+
+#: Why the HTTP ingress opens its recorder on a channel it may correct at IDENTIFY.
+AN_ARRIVAL_IS_RECORDED_BEFORE_ITS_CHANNEL_IS_KNOWN = (
+    "An HTTP request's channel is read from its token's claims, and the recorder is built before "
+    "any token is read so a request refused at identification still leaves a trace. It is "
+    "opened as API, the channel with the fewest verbs, and `Recorder.identified` replaces it. "
+    "Nothing between the two consults the channel or the traffic class."
+)
 
 
 def open_trace(trace_id: str, received_at: datetime, channel: Channel) -> Recorder:

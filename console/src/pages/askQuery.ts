@@ -31,7 +31,11 @@
  * frames and a status, and there is no spend figure, no duration and no token count anywhere
  * in them. A screen that showed one would be showing a number this console made up.
  *
- * Task ids: M42.6.3
+ * **The agent a person picks travels beside the question and decides nothing here.** `askBody`
+ * adds the id when one was chosen, and `brain.gate.select.select_agent` decides whether this
+ * person may use it; the picker lists the roster `GET /api/v1/agents` sent (M3.9.8).
+ *
+ * Task ids: M42.6.3, M3.9.8
  */
 
 import type { AnswerEvent } from "../api/events";
@@ -81,12 +85,18 @@ export const MAX_QUESTION_CHARS = 4000;
  * the route's too: `StringConstraints(strip_whitespace=True)` means a question with spaces
  * round it is the same question, so this console sends the same string the cache would key.
  */
-export function askBody(question: string): { readonly question: string } | null {
+export function askBody(
+  question: string,
+  agent = "",
+): { readonly question: string; readonly agent?: string } | null {
   const asked = question.trim();
   if (asked === "" || asked.length > MAX_QUESTION_CHARS) {
     return null;
   }
-  return { question: asked };
+  // The picker's id, sent only when somebody chose one. The route judges it like any name, so
+  // an agent the person may not use answers exactly as one that does not exist.
+  const named = agent.trim();
+  return named === "" ? { question: asked } : { question: asked, agent: named };
 }
 
 /**

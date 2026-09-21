@@ -73,11 +73,17 @@
  * own `x-trace-id` is kept from when it opened and drawn under the frame's sentence, which is the
  * reference the server's log has that failure under.
  *
- * Task ids: M42.6.3, M35.2.1.3, M27.8.5
+ * **A person can name the agent that answers, from the agents they may see.** The picker is the
+ * roster `GET /api/v1/agents` returns, which the API filters by audience before this page sees it,
+ * and it is drawn only when that roster has an entry. The id goes beside the question; the route
+ * decides whether this person may use it, and an agent they may not use answers exactly as one
+ * that does not exist, so the picker cannot be a way to find out which agents are there (M3.9.8).
+ *
+ * Task ids: M42.6.3, M35.2.1.3, M27.8.5, M3.9.8
  */
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { openStream } from "../api/client";
+import { openStream, request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
 import { FieldProblems, problemAttributes } from "../ui/FieldProblems";
 import { Notice } from "../ui/Notice";
@@ -91,6 +97,7 @@ import {
   type AnswerView,
 } from "./askQuery";
 import { FailureNotice, NO_REFERENCE_CAME_BACK } from "../ui/FailureNotice";
+import { readRoster, ROSTER_API_PATH, type RosterEntryView } from "./agentsQuery";
 
 /** The console address of this screen. */
 export const ASK_ADDRESS = "/ask";
@@ -145,6 +152,13 @@ export const FOCUS_IS_RETURNED_AND_NEVER_TAKEN =
   "learns the answer is ready, and it does so only when their focus is still nowhere or " +
   "still on the form: a reader who went somewhere else while waiting is not moved.";
 
+/** The agent picker's label, and its first choice, which leaves the choice to the router. */
+export const AGENT_LABEL = "Answer as";
+export const ANY_AGENT = "Whichever agent suits the question";
+
+/** The id tying the picker to its label. */
+const AGENT_FIELD_ID = "ask-agent";
+
 /** The id tying the label to the field. One field on the page, so one id. */
 const QUESTION_FIELD_ID = "ask-question";
 
@@ -169,6 +183,24 @@ const QUESTION_NAME = "question";
 export function Ask() {
   const [question, setQuestion] = useState("");
   const [asking, setAsking] = useState<Asking>(IDLE);
+  const [agents, setAgents] = useState<readonly RosterEntryView[]>([]);
+  const [agent, setAgent] = useState("");
+
+  // The agents this person may see, for the picker. A roster that did not come back is no
+  // picker rather than an error: the question can still be asked, and the router chooses.
+  useEffect(() => {
+    let live = true;
+    void (async () => {
+      const listed = await request<unknown>(ROSTER_API_PATH);
+      const roster = listed.ok ? readRoster(listed.data) : null;
+      if (live && roster !== null) {
+        setAgents(roster.entries);
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, []);
 
   // The stream in flight, so that leaving the page stops reading it. Without this, a page
   // that has gone still holds a reader and still sets state, which React reports as a
@@ -192,7 +224,7 @@ export function Ask() {
   const ask = useCallback(
     (submitted: FormEvent<HTMLFormElement>) => {
       submitted.preventDefault();
-      const body = askBody(question);
+      const body = askBody(question, agent);
       if (body === null) {
         // Not a question the route would take. Doing nothing is the answer: a request known
         // to be refused is a round trip spent to be told what this console already knew.
@@ -228,7 +260,7 @@ export function Ask() {
         }
       })();
     },
-    [question],
+    [question, agent],
   );
 
   const { view, busy, failure, traceId } = asking;
@@ -271,6 +303,27 @@ export function Ask() {
           onChange={(changed) => setQuestion(changed.target.value)}
         />
         <FieldProblems problems={problems} form={QUESTION_FIELD_ID} names={QUESTION_NAME} />
+        {agents.length > 0 ? (
+          <>
+            <label className="ask__label" htmlFor={AGENT_FIELD_ID}>
+              {AGENT_LABEL}
+            </label>
+            <select
+              id={AGENT_FIELD_ID}
+              className="form-control"
+              value={agent}
+              disabled={busy}
+              onChange={(changed) => setAgent(changed.target.value)}
+            >
+              <option value="">{ANY_AGENT}</option>
+              {agents.map((one) => (
+                <option key={one.agentId} value={one.agentId}>
+                  {one.displayName}
+                </option>
+              ))}
+            </select>
+          </>
+        ) : null}
         <div className="form-actions">
           <button
             type="submit"
