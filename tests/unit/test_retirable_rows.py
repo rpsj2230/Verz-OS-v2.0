@@ -169,6 +169,16 @@ RECIPES: Final[dict[str, Recipe]] = {
         " '{{\"clauses\": []}}', {n}, 'primary', 'deployment', 'provider', 'model', 1, 1, 1)",
         "position = {n}",
     ),
+    "ops.model_provider": Recipe(
+        "INSERT INTO ops.model_provider (slug, kind, label, updated_by)"
+        " VALUES ('rr_provider_{n}', 'builtin', 'Provider', 'u_admin')",
+        "slug = 'rr_provider_{n}'",
+    ),
+    "ops.golden_question": Recipe(
+        "INSERT INTO ops.golden_question (question, asked_as, expect, created_by)"
+        " VALUES ('question {n}', 'u_rr_{n}', 'answer', 'u_admin')",
+        "question = 'question {n}'",
+    ),
     "gate.capability_registry": Recipe(
         "INSERT INTO gate.capability_registry (capability, description)"
         " VALUES ('read:rr_{n}', 'described')",

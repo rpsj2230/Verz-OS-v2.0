@@ -73,6 +73,7 @@ from brain.models.routing import (
     SkipReason,
     Tier,
     seed_chain,
+    trigger_for,
 )
 
 pytestmark = pytest.mark.invariant
@@ -435,14 +436,18 @@ def test_a_driver_failure_has_nowhere_to_record_an_opinion_of_the_reply() -> Non
     closure one layer lower, where an adapter author is actually writing code, so "the
     answer looked weak so I set a trigger" cannot be expressed at all."""
     fields = set(DriverFailure.__dataclass_fields__)
+    # `refused` (M5.4.1) is the provider's own machine field saying it declined, a transport
+    # fact; it is not an input to `trigger_for`, whose signature is asserted below.
     assert fields == {
         "deployment_id",
         "status",
         "timed_out",
         "connection_failed",
         "context_exceeded",
+        "refused",
         "detail",
     }
+    assert "refused" not in inspect.signature(trigger_for).parameters
     forbidden = {"quality", "score", "confidence", "text", "reply", "content", "length"}
     assert fields.isdisjoint(forbidden)
 

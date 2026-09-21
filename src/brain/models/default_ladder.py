@@ -143,6 +143,8 @@ DEFAULT_MODELS: Final[Mapping[str, Mapping[Tier, str]]] = MappingProxyType(
         "moonshot": MappingProxyType(
             {Tier.MAIN: "kimi-k2-0905-preview", Tier.HEAVY: "kimi-k2-0905-preview"}
         ),
+        # DeepSeek's two OpenAI-compatible names: the chat model and the reasoning one (M5.7.1).
+        "deepseek": MappingProxyType({Tier.MAIN: "deepseek-chat", Tier.HEAVY: "deepseek-reasoner"}),
         LOCAL_PROVIDER: MappingProxyType(
             {Tier.MAIN: LOCAL_COMPLETION_MODEL, Tier.HEAVY: LOCAL_COMPLETION_MODEL}
         ),

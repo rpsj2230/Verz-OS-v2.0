@@ -199,6 +199,16 @@ def test_a_content_policy_refusal_does_not_reach_the_next_model() -> None:
     failure = failure_from(ContentPolicyRefusedError(status=503), deployment_id=PRIMARY)
     assert failure.trigger is None
     assert failure.status is None
+    # M5.4.1: recorded as a refusal, so the attempt row and the answer lane can say so.
+    assert failure.refused is True
+
+
+def test_an_ordinary_failure_is_not_recorded_as_a_refusal() -> None:
+    """The sibling of the refusal rule. Delete this and every stopped call can be read as a
+    model declining on content, which the answer lane turns into an abstention that hides an
+    outage."""
+    assert failure_from(TransportStatusError(400), deployment_id=PRIMARY).refused is False
+    assert failure_from(RuntimeError("x"), deployment_id=PRIMARY).refused is False
 
 
 def test_a_refusal_that_arrives_as_an_ordinary_answer_stays_an_answer() -> None:

@@ -12,11 +12,13 @@ not a trigger, nothing of the request in an exception) holds for these transport
 construction rather than by a second copy.
 
 **Two wire shapes, and a closed table of which provider speaks which.** Anthropic's Messages API
-is one; the chat completions shape OpenAI published is the other, and Moonshot and every local
-inference runtime speak it too. `PROVIDER_WIRES` names each provider this system holds a key
-slot for, its address and its shape, built beside `brain.ops.provider_keys.PROVIDER_SLOTS` and
-held to it by a test, so a slot with no wire is a failing test rather than a rung that cannot
-answer. See `A_PROVIDER_IS_REACHED_AT_ITS_OWN_ADDRESS_AND_NEVER_ONE_A_PERSON_TYPED`.
+is one; the chat completions shape OpenAI published is the other, and Moonshot, DeepSeek and every
+local inference runtime speak it too. A provider an administrator adds from the console speaks it
+as well, at the address written when it was added (`added_wire`, M5.7.2). `PROVIDER_WIRES`
+names each provider this system holds a key slot for, its address and its shape, built beside
+`brain.ops.provider_keys.PROVIDER_SLOTS` and held to it by a test, so a slot with no wire is a
+failing test rather than a rung that cannot answer. See
+`A_PROVIDER_IS_REACHED_AT_ITS_OWN_ADDRESS_AND_NEVER_ONE_A_PERSON_TYPED`.
 
 **The address is the product's, never the console's.** A provider's base URL is not a setting.
 Somebody who can edit where a provider is reached can point the key every question is sent with
@@ -24,7 +26,9 @@ at a server they run, which is the redirection `brain.credential_routes` refuses
 admin for. The one address that is configuration is the install's own inference server, and it
 is resolved where every other reader of it resolves it: `INSTALL_MODEL_ENDPOINT` through
 `brain.install.value_of`, refused by `brain.knowledge.embed_policy.endpoint_refusals` when it is
-not an origin.
+not an origin. A provider added from the console (M5.7.2) has an address a person typed, and
+keeps this argument by never having it edited: the address and a key in the provider's own slot
+are written together, so nobody can move a key somebody else entered.
 
 **The key is read at the moment the header is built, from the environment it was loaded into,
 and it goes nowhere else.** `brain.ops.provider_keys` puts a key into the process environment
@@ -56,7 +60,7 @@ exceptions, which is the leak `NOTHING_FROM_THE_REQUEST_IN_AN_EXCEPTION` names. 
 client.* `ModelDriver` is synchronous on purpose and the executor runs a call in a worker thread,
 so a synchronous client is the one that matches the seam.
 
-Task ids: M5.1.1, M5.1.2
+Task ids: M5.1.1, M5.1.2, M5.7.1, M5.7.2
 """
 
 from __future__ import annotations
@@ -131,6 +135,7 @@ DEFAULT_MAX_OUTPUT_TOKENS: Final = 1024
 ANTHROPIC_BASE_URL: Final = "https://api.anthropic.com"
 OPENAI_BASE_URL: Final = "https://api.openai.com/v1"
 MOONSHOT_BASE_URL: Final = "https://api.moonshot.ai/v1"
+DEEPSEEK_BASE_URL: Final = "https://api.deepseek.com"
 
 #: The provider name a rung uses for this install's own inference server. Not a key slot: the
 #: server needs no key, and it sits inside the client's network.
@@ -216,8 +221,28 @@ PROVIDER_WIRES: Final[Mapping[str, ProviderWire]] = MappingProxyType(
             base_url=MOONSHOT_BASE_URL,
             slot=_slot("moonshot"),
         ),
+        "deepseek": ProviderWire(
+            provider="deepseek",
+            wire=Wire.CHAT_COMPLETIONS,
+            base_url=DEEPSEEK_BASE_URL,
+            slot=_slot("deepseek"),
+        ),
     }
 )
+
+
+def added_wire(slug: str, base_url: str, slot: ProviderSlot) -> ProviderWire:
+    """A provider an administrator added from the console: chat completions at its address.
+
+    The address is the one written when the provider was added and never edited, with the key
+    written into the provider's own slot at the same moment; see
+    `brain.models.registry.AN_ADDED_PROVIDERS_ADDRESS_IS_BOUND_TO_THE_KEY_ENTERED_WITH_IT`. Refuses
+    anything but https, because the key is a bearer token on every request.
+    """
+    if not base_url.startswith("https://"):
+        msg = f"{slug} is reached at {base_url!r}, and an added provider is reached over https"
+        raise ValueError(msg)
+    return ProviderWire(provider=slug, wire=Wire.CHAT_COMPLETIONS, base_url=base_url, slot=slot)
 
 
 def local_wire(address: str) -> ProviderWire:

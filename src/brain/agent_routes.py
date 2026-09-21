@@ -260,6 +260,7 @@ from brain.gate.context import TrafficClass
 from brain.gate.leash import Leash
 from brain.knowledge.visibility import Visibility
 from brain.listing import Column, ListAsked, Listing, Plan
+from brain.models.registry import ModelPin
 from brain.models.routing import Tier
 from brain.ops.spend import Actual, SpendError
 from brain.routing_routes import sessions_of
@@ -694,6 +695,9 @@ class ProfileView(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     tier: str
+    #: The provider and model an administrator pinned (M5.7.3), tried before the tier, or null.
+    model_pin_provider: str | None = None
+    model_pin_model: str | None = None
     #: `AgentAudience.level`: personal, department or company. The steward and the department
     #: already reach the audience; the level word is the Settings read's, as 4.1a row 14 says.
     audience_level: str
@@ -782,6 +786,11 @@ def record_of(row: AgentRow) -> AgentRecord | None:
             display_name=row.display_name,
             persona=row.persona,
             tier=Tier(row.tier),
+            model_pin=(
+                None
+                if row.model_pin_provider is None or row.model_pin_model is None
+                else ModelPin(provider=row.model_pin_provider, model=row.model_pin_model)
+            ),
             audience=AgentAudience(
                 level=Visibility(row.visibility),
                 owner_id=row.owner_id,
@@ -1276,6 +1285,8 @@ def profile_view(record: AgentRecord, setup: Configured, asked: Asking) -> Profi
     )
     return ProfileView(
         tier=record.tier.value,
+        model_pin_provider=None if record.model_pin is None else record.model_pin.provider,
+        model_pin_model=None if record.model_pin is None else record.model_pin.model,
         audience_level=record.audience.level.value,
         ceiling=AgentCeilingView(
             rows=words.rows,

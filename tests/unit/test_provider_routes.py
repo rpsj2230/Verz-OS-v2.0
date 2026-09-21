@@ -46,6 +46,7 @@ from brain.models.calls import LadderState, ModelCalls
 from brain.models.driver import DriverRequest, ModelDriver
 from brain.models.evidence import Attempt
 from brain.models.routing import Tier
+from brain.ops.matrix_gate import GateVerdict
 from brain.ops.model_service import (
     PROVIDER_NAMESPACE,
     ModelService,
@@ -78,7 +79,13 @@ from tests.unit.test_api_routes import (
 PROVIDERS = f"{API_PREFIX}/models/providers"
 
 #: The tables a rung save and a check touch, built from the models on a scratch server.
-RUNG_TABLES = ("ops.routing_rung", "ops.model_attempt", "ops.setting")
+RUNG_TABLES = (
+    "ops.routing_rung",
+    "ops.model_attempt",
+    "ops.setting",
+    "ops.model_provider",
+    "ops.routing_change",
+)
 DIALECT = create_engine("postgresql+psycopg://", poolclass=NullPool).dialect
 
 MODEL_READ = screen("models").read.requires
@@ -173,7 +180,15 @@ class Estate:
         )
         return LadderState(rungs=self.rungs, switched_off=off, attempts=self.attempts)
 
-    async def started(self, *, trace_id: str, rung_id: str, sequence: int, at: datetime) -> str:
+    async def started(
+        self,
+        *,
+        trace_id: str,
+        rung_id: str,
+        sequence: int,
+        at: datetime,
+        categories: tuple[str, ...] = (),
+    ) -> str:
         self.attempt_rows.append((rung_id, "started"))
         return str(len(self.attempt_rows))
 
@@ -197,7 +212,15 @@ class AttemptLog:
     def __init__(self, estate: Estate) -> None:
         self.estate = estate
 
-    async def started(self, *, trace_id: str, rung_id: str, sequence: int, at: datetime) -> str:
+    async def started(
+        self,
+        *,
+        trace_id: str,
+        rung_id: str,
+        sequence: int,
+        at: datetime,
+        categories: tuple[str, ...] = (),
+    ) -> str:
         return await self.estate.started(
             trace_id=trace_id, rung_id=rung_id, sequence=sequence, at=at
         )
@@ -337,7 +360,13 @@ def test_a_reader_is_shown_every_provider_and_every_rung_as_the_next_call_will_s
         "local",
     ]
     held = {one["provider"]: one["key_held"] for one in view["providers"]}
-    assert held == {"anthropic": True, "openai": False, "moonshot": True, "local": None}
+    assert held == {
+        "anthropic": True,
+        "openai": False,
+        "moonshot": True,
+        "deepseek": False,
+        "local": None,
+    }
     assert all(one["switched_on"] for one in view["providers"])
     assert all(one["credential"] is None for one in view["providers"])
     rungs = {one["deployment_id"]: one for one in view["rungs"]}
@@ -388,6 +417,7 @@ def test_the_vaults_answer_is_served_only_to_a_reader_who_may_manage_credentials
         "anthropic": True,
         "openai": True,
         "moonshot": True,
+        "deepseek": True,
         "local": False,
     }
     assert unmanaged["vault"] is None
@@ -618,6 +648,9 @@ def test_a_rung_saved_on_the_routing_screen_is_the_rung_the_next_call_walks(esta
                     client=httpx.Client(),
                 )
                 app.state.request_recorders = (Ledger(),)
+                # The gate passes each save: this is the save reaching the next call, and the
+                # gate's own run is `tests/unit/test_matrix_gate.py`'s.
+                app.state.matrix_gate = _PassingGate()
                 out = {"attempts": 1, "max_concurrency": 2, "timeout_seconds": 12, "enabled": False}
                 back = {
                     "attempts": 1,
@@ -638,3 +671,14 @@ def test_a_rung_saved_on_the_routing_screen_is_the_rung_the_next_call_walks(esta
         (sent,) = estate.sent
         assert sent.timeout_seconds == 9.5
         assert sql(url, "SELECT rung_id::text, outcome FROM ops.model_attempt") == [(rung_id, "ok")]
+        assert sql(url, "SELECT status FROM ops.routing_change ORDER BY decided_at") == [
+            ("applied",),
+            ("applied",),
+        ]
+
+
+class _PassingGate:
+    """A `brain.ops.matrix_gate_run.MatrixGate` that lets every change take traffic."""
+
+    async def decide(self, change: object, *, now: object, new_rung_id: str) -> GateVerdict:
+        return GateVerdict(may_apply=True, failing=(), reasons=(), quality_share=None)

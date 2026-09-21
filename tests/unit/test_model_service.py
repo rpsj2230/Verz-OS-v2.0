@@ -208,7 +208,7 @@ def test_switching_an_unknown_provider_is_refused_before_anything_is_written() -
 
 # ------------------------------------------------------------------ against a database
 
-TABLES = ("ops.routing_rung", "ops.model_attempt", "ops.setting")
+TABLES = ("ops.routing_rung", "ops.model_attempt", "ops.setting", "ops.model_provider")
 
 
 @pytest.fixture(scope="module")
@@ -240,7 +240,13 @@ def test_the_stores_read_the_ladder_write_attempts_by_id_and_keep_a_switch(datab
 
     Delete this and the statements are only ever compiled, and the first time one runs is on an
     install, which is where `brain.routing_routes` says its own write was first exercised."""
-    sql(database, "TRUNCATE ops.model_attempt, ops.routing_rung, ops.setting")
+    sql(database, "TRUNCATE ops.model_attempt, ops.routing_rung, ops.setting, ops.model_provider")
+    sql(
+        database,
+        "INSERT INTO ops.model_provider (slug, kind, label, processing_region, residency_class, "
+        "lane_overrides, updated_by) VALUES ('moonshot', 'builtin', 'Moonshot', 'eu-west-1', "
+        "'region_pinned', '{\"answer\": {\"timeout_seconds\": 8}}'::jsonb, 'u_admin')",
+    )
     first = _rung(
         database, deployment="anthropic-main", provider="anthropic", tier="main", position=0
     )
@@ -254,7 +260,9 @@ def test_the_stores_read_the_ladder_write_attempts_by_id_and_keep_a_switch(datab
     now = datetime.now(UTC)
 
     async def through() -> tuple[Any, Any]:
-        token = await attempts.started(trace_id=TRACE, rung_id=first, sequence=0, at=now)
+        token = await attempts.started(
+            trace_id=TRACE, rung_id=first, sequence=0, at=now, categories=("question",)
+        )
         await attempts.finished(
             token, at=now + timedelta(seconds=1), outcome="timeout", status=None
         )
@@ -283,3 +291,8 @@ def test_the_stores_read_the_ladder_write_attempts_by_id_and_keep_a_switch(datab
         ("anthropic-main", "timeout")
     ]
     assert sql(database, "SELECT outcome FROM ops.model_attempt") == [("timeout",)]
+    # M5.6.4 and M5.5.3: what the attempt sent, and the registry row read with the ladder.
+    assert sql(database, "SELECT data_categories FROM ops.model_attempt") == [(["question"],)]
+    (moonshot,) = current.providers
+    assert (moonshot.slug, moonshot.region) == ("moonshot", "eu-west-1")
+    assert moonshot.client.lanes[Lane.ANSWER].timeout_seconds == 8.0

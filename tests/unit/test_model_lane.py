@@ -727,3 +727,34 @@ def test_a_trace_emitted_for_a_model_answer_names_the_passage_policy_and_the_rea
     assert isinstance(trace, RedactionTrace)
     assert trace.policy_epoch == PASSAGE_POLICY.epoch()
     assert trace.ent_hash == CALLER.ent_hash()
+
+
+# --- M5.4.1 and M5.6.4 --------------------------------------------------------------------------
+
+
+def test_a_refusal_the_provider_reports_as_an_error_is_the_refused_abstention() -> None:
+    """M5.4.1: a model's content refusal is recorded and answered once through abstention, never
+    tried on another model. A provider that declines with an error body arrives as a failure the
+    chain stopped on, marked refused, and lands on the same `refused` abstention as a declining
+    reply, with the attempt row saying `refused`.
+
+    Delete this and a refusal reported as an error is shown as a model nobody could reach."""
+    from brain.models.adapter import ContentPolicyRefusedError
+
+    run = ask(reply=ContentPolicyRefusedError(status=400))
+
+    assert run.raised is None
+    assert run.answered is not None and run.answered.abstention is not None
+    assert run.answered.abstention.reason is AbstentionReason.REFUSED
+    assert len(run.sent) == 1
+    assert run.attempts.outcomes() == [("main-0", 0, "refused")]
+
+
+def test_the_attempt_row_names_the_categories_of_data_the_prompt_carried() -> None:
+    """M5.6.4: the question and the passages, as `brain.models.disclosure` names them.
+
+    Delete this and the provider register counts calls with nothing said about what they sent."""
+    run = ask()
+
+    categories = [row["categories"] for row in run.attempts.rows.values()]
+    assert categories == [("document_passages", "question")]

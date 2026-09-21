@@ -99,7 +99,16 @@ TRACE_ID_CHARS = 64
 #: at length; the short version is that a quality trigger has no falsifiable off condition,
 #: so the retry loop it drives terminates on luck. A column that could record one would be
 #: somewhere to put the number afterwards, which is how the argument gets reopened.
-ATTEMPT_OUTCOMES: tuple[str, ...] = ("ok", "stopped", *sorted(t.value for t in FallbackTrigger))
+#:
+#: `refused` since `0097`: the provider declined on content (M5.4.1). It stops the chain like
+#: `stopped` and is its own word, so the attempt row says the model refused rather than that our
+#: request was wrong, and the answer lane turns it into an abstention.
+ATTEMPT_OUTCOMES: tuple[str, ...] = (
+    "ok",
+    "refused",
+    "stopped",
+    *sorted(t.value for t in FallbackTrigger),
+)
 
 
 class RoutingTierRow(TimestampMixin, SoftDeleteMixin, Base):
@@ -302,8 +311,15 @@ class ModelAttemptRow(Base):
     #: timeout, or a rung that was never called because its breaker was open.
     status_code: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
 
+    #: Which categories of data this attempt sent the provider, as a JSON array of
+    #: `brain.models.disclosure.DataCategory` values (M5.6.4). Names of kinds, never content.
+    data_categories: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
+
     __table_args__ = (
         CheckConstraint(one_of("outcome", ATTEMPT_OUTCOMES), name="outcome"),
+        CheckConstraint("jsonb_typeof(data_categories) = 'array'", name="data_categories_array"),
         CheckConstraint("sequence >= 0", name="sequence_non_negative"),
         CheckConstraint(
             "finished_at IS NULL OR finished_at >= started_at",

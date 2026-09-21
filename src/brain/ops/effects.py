@@ -289,6 +289,13 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.models.calls:Ladder.current": Repeat.READS,
         "brain.models.calls:AttemptLog.started": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.models.calls:AttemptLog.finished": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # Providers added from the console: a driver per row, built once and kept, and which of
+        # their keys this process's environment holds.
+        "brain.models.calls:AddedProviders.drivers": Repeat.DERIVED_STATE,
+        "brain.models.calls:AddedProviders.held": Repeat.READS,
+        # The matrix gate asks the golden questions through the lane: model calls that leave
+        # nothing at the provider, and attempt rows under a trace of their own per question.
+        "brain.ops.matrix_gate_run:MatrixGate.decide": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         # The default ladder: rows in `ops.routing_rung`, written under a lock and refused by the
         # table's unique live position when the ladder is already held.
         "brain.models.default_ladder:LadderWriter.write": Repeat.WRITES_THIS_SYSTEMS_DATABASE,

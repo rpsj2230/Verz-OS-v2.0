@@ -42,7 +42,11 @@
  * own. `matrixQuery.ts` is imported for its path and its reader, and its only imports of the form
  * library are types, which a build erases.
  *
- * Task ids: M27.2.3, M27.8.8
+ * **The provider register sits under the health card** (`components/ProviderRegister.tsx`): each provider's
+ * processing region, retention and training terms, agreement and lane overrides, what it has been
+ * sent by category with counts, a provider added with its key, and the register downloaded.
+ *
+ * Task ids: M27.2.3, M27.8.8, M5.6.4, M5.7.2
  */
 
 import { useCallback, useMemo, useState, type ReactNode } from "react";
@@ -54,6 +58,7 @@ import { ConfirmAction } from "../components/ConfirmAction";
 import { Chip } from "../ui/Chip";
 import { FailureNotice } from "../ui/FailureNotice";
 import { chainApiPath, MATRIX_PATH, readMatrixPage, type RungRow } from "./matrixQuery";
+import { ProviderRegister } from "../components/ProviderRegister";
 import {
   answerLatencyApiPath,
   answerReading,
@@ -641,6 +646,13 @@ function ProviderHealth({ models }: { readonly models: ModelsBody }) {
               }}
             />
             <RungsTable body={body} />
+            <ProviderRegister
+              data={written !== null ? written : answer.data}
+              onWritten={(plan) => {
+                setFailure(null);
+                setWritten(plan);
+              }}
+            />
           </>
         )}
       </Answered>

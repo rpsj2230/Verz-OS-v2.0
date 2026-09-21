@@ -289,6 +289,7 @@ def failure_from(exc: BaseException, *, deployment_id: str) -> DriverFailure:
         # full cost, on a rung that will decline in exactly the same way.
         return DriverFailure(
             deployment_id=deployment_id,
+            refused=True,
             detail=f"{kind}: declined on content policy, so the chain stops here",
         )
     if isinstance(exc, TransportTimeoutError):

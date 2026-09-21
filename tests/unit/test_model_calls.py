@@ -3,7 +3,8 @@
 Driven with a ladder, an attempt log and drivers held in memory, so the walk is inspected as the
 policy layer describes it and nothing opens a socket or a connection.
 
-Task ids: M27.7.14, M27.8.8, M5.3.4, M5.4.6, M5.5.4
+Task ids: M27.7.14, M27.8.8, M5.3.4, M5.4.6, M5.5.4, M5.5.2, M5.1.3, M5.7.3, M5.6.4, M5.4.1,
+M5.7.2
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ import pytest
 from brain.core.lane import Lane
 from brain.models.adapter import (
     Completion,
+    ContentPolicyRefusedError,
     ContextWindowExceededError,
     SdkDriver,
     TransportConnectionError,
@@ -32,21 +34,25 @@ from brain.models.calls import (
     LadderState,
     ModelCalls,
 )
+from brain.models.disclosure import DataCategory
 from brain.models.driver import (
     DriverMessage,
     DriverRequest,
     DriverResponse,
+    LaneOverride,
     ModelDriver,
     ProviderUnavailable,
     Role,
 )
 from brain.models.evidence import Attempt
 from brain.models.metering import Meter
+from brain.models.registry import ModelPin, ProviderKind, ProviderRecord
 from brain.models.routing import (
     BREAKER_BASE_COOLDOWN_SECONDS,
     BREAKER_CONSECUTIVE_FAILURES,
     FallbackTrigger,
     NoCompliantRoute,
+    ResidencyClass,
     ResidencyRequirement,
     Tier,
 )
@@ -85,9 +91,15 @@ class Ladder:
     rungs: tuple[LadderRung, ...]
     switched_off: frozenset[str] = frozenset()
     attempts: tuple[Attempt, ...] = ()
+    providers: tuple[ProviderRecord, ...] = ()
 
     async def current(self, now: datetime) -> LadderState:
-        return LadderState(rungs=self.rungs, switched_off=self.switched_off, attempts=self.attempts)
+        return LadderState(
+            rungs=self.rungs,
+            switched_off=self.switched_off,
+            attempts=self.attempts,
+            providers=self.providers,
+        )
 
 
 @dataclass
@@ -96,9 +108,22 @@ class Log:
 
     rows: dict[str, dict[str, object]] = field(default_factory=dict)
 
-    async def started(self, *, trace_id: str, rung_id: str, sequence: int, at: datetime) -> str:
+    async def started(
+        self,
+        *,
+        trace_id: str,
+        rung_id: str,
+        sequence: int,
+        at: datetime,
+        categories: tuple[str, ...] = (),
+    ) -> str:
         token = f"t{len(self.rows)}"
-        self.rows[token] = {"trace_id": trace_id, "rung_id": rung_id, "sequence": sequence}
+        self.rows[token] = {
+            "trace_id": trace_id,
+            "rung_id": rung_id,
+            "sequence": sequence,
+            "categories": categories,
+        }
         return token
 
     async def finished(self, token: str, *, at: datetime, outcome: str, status: int | None) -> None:
@@ -618,3 +643,287 @@ def test_a_residency_constrained_call_with_no_compliant_rung_is_refused_and_call
 
     assert anywhere.sent == []
     assert log.rows == {}
+
+
+# ------------------------------------------------------------------ the pin (M5.7.3)
+def test_a_pinned_model_is_tried_first_even_from_another_tier() -> None:
+    """M5.7.3: the pin is tried first, whichever tier holds its rung.
+
+    Delete this and a pin is stored, shown on the Settings tab, and never used."""
+    primary = Scripted(ok())
+    pinned = Scripted(ok())
+    calls, log = executor(
+        Ladder((rung("anthropic"), rung("moonshot", tier=Tier.HEAVY, model="kimi-k2"))),
+        {"anthropic": primary, "moonshot": pinned},
+    )
+
+    answered = complete(calls, Meter(), pin=ModelPin(provider="moonshot", model="kimi-k2"))
+
+    assert answered.deployment_id == "moonshot-heavy-0"
+    assert primary.sent == []
+    assert [row["rung_id"] for row in log.rows.values()] == ["heavy-0"]
+
+
+def test_a_pinned_model_that_fails_falls_back_to_the_agents_tier_and_is_not_tried_twice() -> None:
+    """The tier stands behind the pin: a pin that fails on the closed set moves to the tier's
+    chain, which leaves the pinned rung out.
+
+    Delete this and a pinned provider's outage is an agent that answers nothing, or a pinned rung
+    that sits in the tier too and is asked twice in one request."""
+    pinned = Scripted(TransportConnectionError())
+    backup = Scripted(ok())
+    calls, log = executor(
+        Ladder((rung("moonshot", model="kimi-k2"), rung("anthropic", position=1))),
+        {"moonshot": pinned, "anthropic": backup},
+    )
+
+    answered = complete(calls, Meter(), pin=ModelPin(provider="moonshot", model="kimi-k2"))
+
+    assert answered.deployment_id == "anthropic-main-1"
+    assert len(pinned.sent) == 1
+    assert [row["rung_id"] for row in log.rows.values()] == ["main-0", "main-1"]
+
+
+def test_a_pin_naming_no_answering_rung_is_passed_over_for_the_tier() -> None:
+    """A pin is a choice among the ladder's models, not a way round it.
+
+    Delete this and a pin naming a switched-off or unkeyed provider stops the agent answering."""
+    tier = Scripted(ok())
+    calls, _ = executor(Ladder((rung("anthropic"),)), {"anthropic": tier})
+
+    answered = complete(calls, Meter(), pin=ModelPin(provider="moonshot", model="kimi-k2"))
+
+    assert answered.deployment_id == "anthropic-main-0"
+
+
+def test_a_refusal_from_the_pinned_model_is_not_tried_on_the_tier() -> None:
+    """M5.4.1 holds through a pin: a content refusal stops the chain, pinned or not.
+
+    Delete this and a pin becomes the way a declined question is shopped to a second model."""
+    pinned = Scripted(ContentPolicyRefusedError(status=400))
+    backup = Scripted(ok())
+    calls, log = executor(
+        Ladder((rung("moonshot", model="kimi-k2"), rung("anthropic", position=1))),
+        {"moonshot": pinned, "anthropic": backup},
+    )
+
+    with pytest.raises(ProviderUnavailable) as refused:
+        complete(calls, Meter(), pin=ModelPin(provider="moonshot", model="kimi-k2"))
+
+    assert refused.value.failure.refused is True
+    assert backup.sent == []
+    assert log.outcomes() == [("main-0", 0, "refused")]
+
+
+def test_a_content_refusal_is_recorded_as_refused_and_never_reaches_the_next_rung() -> None:
+    """M5.4.1 at the executor: one attempt, recorded `refused`, and the second rung never called.
+
+    Delete this and a declined question is tried on every model in the chain."""
+    first = Scripted(ContentPolicyRefusedError(status=503))
+    second = Scripted(ok())
+    calls, log = executor(
+        Ladder((rung("anthropic"), rung("moonshot", position=1))),
+        {"anthropic": first, "moonshot": second},
+    )
+
+    with pytest.raises(ProviderUnavailable):
+        complete(calls, Meter())
+
+    assert second.sent == []
+    assert log.outcomes() == [("main-0", 0, "refused")]
+
+
+# ------------------------------------------------------------- lane overrides (M5.1.3)
+def record(
+    slug: str,
+    *,
+    lanes: dict[Lane, LaneOverride] | None = None,
+    region: str = "global",
+    residency: ResidencyClass = ResidencyClass.GLOBAL,
+) -> ProviderRecord:
+    return ProviderRecord(
+        slug=slug,
+        kind=ProviderKind.BUILTIN,
+        label=slug,
+        processing_region=region,
+        residency_class=residency,
+        lane_overrides=lanes or {},
+    )
+
+
+def test_a_providers_lane_override_sets_the_timeout_and_attempts_each_try_runs_at() -> None:
+    """M5.1.3: the answer lane's override for a provider is what the request is sent with.
+
+    Delete this and the overrides edited on the Models screen are stored and never applied."""
+    flaky = Scripted(TransportConnectionError(), ok())
+    calls, log = executor(
+        Ladder(
+            (rung("anthropic"),),
+            providers=(
+                record(
+                    "anthropic", lanes={Lane.ANSWER: LaneOverride(timeout_seconds=7.5, attempts=2)}
+                ),
+            ),
+        ),
+        {"anthropic": flaky},
+    )
+
+    assert complete(calls, Meter()).deployment_id == "anthropic-main-0"
+    assert [one.timeout_seconds for one in flaky.sent] == [7.5, 7.5]
+    assert len(log.rows) == 2
+
+
+def test_an_override_for_another_lane_leaves_this_lane_at_the_rungs_numbers() -> None:
+    """The sibling: overrides are per lane. Delete this and a task-lane timeout meant for
+    overnight work is what a person waiting on the answer lane gets."""
+    transport = Scripted(ok())
+    calls, _ = executor(
+        Ladder(
+            (rung("anthropic"),),
+            providers=(record("anthropic", lanes={Lane.TASK: LaneOverride(timeout_seconds=90.0)}),),
+        ),
+        {"anthropic": transport},
+    )
+
+    complete(calls, Meter())
+
+    assert transport.sent[0].timeout_seconds == 12.0
+
+
+# ------------------------------------------------------ residency from the registry (M5.5.2)
+def test_a_constrained_call_skips_an_undocumented_rung_for_the_documented_one_behind_it() -> None:
+    """M5.5.2 end to end: the registry documents one provider as pinned to a region, the rung
+    ahead of it is undocumented and global, and a request pinned to that region skips the first
+    for the second rather than degrading to it.
+
+    Delete this and the registry's region is stored and never reaches routing."""
+    anywhere = Scripted(ok())
+    in_region = Scripted(ok())
+    calls, _ = executor(
+        Ladder(
+            (rung("anthropic"), rung("moonshot", position=1)),
+            providers=(
+                record("moonshot", region="eu-west-1", residency=ResidencyClass.REGION_PINNED),
+            ),
+        ),
+        {"anthropic": anywhere, "moonshot": in_region},
+    )
+
+    answered = complete(
+        calls,
+        Meter(),
+        residency=ResidencyRequirement(allowed_regions=frozenset({"eu-west-1"})),
+    )
+
+    assert answered.deployment_id == "moonshot-main-1"
+    assert anywhere.sent == []
+
+
+# ----------------------------------------------------------- what was sent (M5.6.4)
+def test_every_attempt_records_the_categories_of_data_it_sent() -> None:
+    """M5.6.4: the attempt row carries what the prompt carried, on every try.
+
+    Delete this and the provider register counts nothing, however much was sent."""
+    flaky = Scripted(TransportConnectionError(), ok())
+    calls, log = executor(
+        Ladder((rung("anthropic", attempts=2),)),
+        {"anthropic": flaky},
+    )
+
+    complete(
+        calls,
+        Meter(),
+        categories=(DataCategory.QUESTION, DataCategory.DOCUMENT_PASSAGES),
+    )
+
+    assert [row["categories"] for row in log.rows.values()] == [
+        ("document_passages", "question"),
+        ("document_passages", "question"),
+    ]
+
+
+# ------------------------------------------------------ an added provider (M5.7.2)
+class Added:
+    """An `AddedProviders` handing back one driver for each added record, and a key for each."""
+
+    def __init__(self, transport: Scripted) -> None:
+        self.transport = transport
+
+    def drivers(self, records: Sequence[ProviderRecord]) -> dict[str, ModelDriver]:
+        return {
+            one.slug: SdkDriver(provider=one.slug, transport=self.transport)
+            for one in records
+            if one.kind is ProviderKind.OPENAI_COMPATIBLE
+        }
+
+    def held(self, records: Sequence[ProviderRecord]) -> frozenset[str]:
+        return frozenset(one.slug for one in records if one.kind is ProviderKind.OPENAI_COMPATIBLE)
+
+
+def test_a_provider_added_from_the_console_answers_through_the_ladder_with_no_release() -> None:
+    """M5.7.2: a row and a key are all an added provider needs to answer a rung naming it.
+
+    Delete this and an added provider sits on the Models screen with every rung naming it left
+    out for want of a transport."""
+    added = Scripted(ok())
+    ladder = Ladder(
+        (rung("acme_llm", model="acme-large"),),
+        providers=(
+            ProviderRecord(
+                slug="acme_llm",
+                kind=ProviderKind.OPENAI_COMPATIBLE,
+                label="Acme",
+                base_url="https://llm.example.test/v1",
+                models=("acme-large",),
+            ),
+        ),
+    )
+    calls = ModelCalls(
+        ladder=ladder,
+        attempts=Log(),
+        drivers={},
+        profile=lambda: HOSTED_PROFILE,
+        held=frozenset,
+        clock=lambda: T0,
+        added=Added(added),
+    )
+
+    assert complete(calls, Meter()).deployment_id == "acme_llm-main-0"
+    assert len(added.sent) == 1
+
+
+def test_an_added_provider_cannot_replace_a_built_in_providers_driver() -> None:
+    """The product's own drivers win a name clash. Delete this and a row named like a built-in
+    provider would carry that provider's questions to an address a person typed."""
+    builtin = Scripted(ok())
+    impostor = Scripted(ok())
+
+    class Clashing(Added):
+        def drivers(self, records: Sequence[ProviderRecord]) -> dict[str, ModelDriver]:
+            return {"anthropic": SdkDriver(provider="anthropic", transport=self.transport)}
+
+    calls = ModelCalls(
+        ladder=Ladder((rung("anthropic"),)),
+        attempts=Log(),
+        drivers={"anthropic": SdkDriver(provider="anthropic", transport=builtin)},
+        profile=lambda: HOSTED_PROFILE,
+        held=lambda: frozenset({"anthropic"}),
+        clock=lambda: T0,
+        added=Clashing(impostor),
+    )
+
+    complete(calls, Meter())
+
+    assert len(builtin.sent) == 1
+    assert impostor.sent == []
+
+
+def test_a_trial_plans_from_the_changed_ladder_and_leaves_the_live_one_alone() -> None:
+    """M5.6.2's copy: `trying` changes what a plan reads and nothing else.
+
+    Delete this and the matrix gate's trial can reach, or be, the live ladder."""
+    calls, _ = executor(Ladder((rung("anthropic"),)), {"anthropic": Scripted(ok())})
+    trial = calls.trying(lambda rungs: ())
+
+    assert asyncio.run(trial.planned()).state.rungs == ()
+    assert len(asyncio.run(calls.planned()).state.rungs) == 1

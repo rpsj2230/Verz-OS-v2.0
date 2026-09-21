@@ -88,6 +88,7 @@ from brain.tables.identity import (
 from brain.tables.knowledge import KnowledgeItemRow
 from brain.tables.learning import CorrectionRow, LearningRow
 from brain.tables.memory import AdaptiveMemoryRow, PersistentMemoryRow
+from brain.tables.model_registry import GoldenQuestionRow, ModelProviderRow, RoutingChangeRow
 from brain.tables.operation import OperationRow
 from brain.tables.organisation import DepartmentLeadRow, TeamMembershipRow
 from brain.tables.outbox import OutboxDeliveryRow, OutboxEventRow, WebhookSubscriberRow
@@ -300,6 +301,10 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # key at its account.
     "auth.service_account",
     "auth.api_key",
+    # 0097_model_registry_and_matrix_gate. Only the change points at anything: the rung it edits.
+    "ops.model_provider",
+    "ops.golden_question",
+    "ops.routing_change",
 )
 
 __all__ = [
@@ -340,6 +345,7 @@ __all__ = [
     "ErasureRequestRow",
     "FastPathRuleRow",
     "FieldPolicyRow",
+    "GoldenQuestionRow",
     "GrantsVersionRow",
     "KnowledgeItemRow",
     "LearningRow",
@@ -347,6 +353,7 @@ __all__ = [
     "MessageRole",
     "MessageRow",
     "ModelAttemptRow",
+    "ModelProviderRow",
     "OperationRow",
     "OutboxDeliveryRow",
     "OutboxEventRow",
@@ -364,6 +371,7 @@ __all__ = [
     "RetentionReleaseRow",
     "RetentionReportRow",
     "ReviewDecisionRow",
+    "RoutingChangeRow",
     "RoutingRungRow",
     "RoutingTierRow",
     "ScopeRow",

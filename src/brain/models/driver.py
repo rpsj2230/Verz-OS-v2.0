@@ -186,6 +186,11 @@ class DriverFailure:
     timed_out: bool = False
     connection_failed: bool = False
     context_exceeded: bool = False
+    #: The provider declined on content (M5.4.1). A transport fact, not a judgement: the
+    #: provider said so in a machine field. It is not an input to `trigger`, so a refusal
+    #: stops the chain, and it is carried so the attempt row says `refused` and the answer
+    #: lane abstains rather than reporting an outage.
+    refused: bool = False
     #: Free text for the log and the trace. Never parsed, and never consulted by
     #: `trigger`: a decision that reads an error string is a decision that changes when a
     #: provider rewords a message.

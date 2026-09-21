@@ -271,7 +271,7 @@ def test_a_start_names_the_local_server_or_the_first_held_key_s_provider_in_slot
 
     Delete this and two processes holding the same keys can name different providers, or a hosted
     install with no key is written a ladder for a provider it cannot call."""
-    assert [one.slug for one in PROVIDER_SLOTS] == ["anthropic", "openai", "moonshot"]
+    assert [one.slug for one in PROVIDER_SLOTS] == ["anthropic", "openai", "moonshot", "deepseek"]
     assert provider_at_start(profile, held) == expected
 
 

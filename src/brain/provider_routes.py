@@ -47,13 +47,18 @@ sentence is a fact an administrator needs; that it answered, which deployment an
 and what it cost, are. It is recorded on the metadata ledger and not as a question, because it is
 not one. See `A_CHECK_IS_A_REQUEST_AND_NOT_A_PROBE`.
 
+**Each provider is shown with its registry row and what it has been sent** (M5.6.4): the
+processing region, the retention and training terms, the agreement link and the lane overrides
+from `ops.model_provider`, and per category of data the number of attempts that carried it, from
+`ops.model_attempt`. A provider added from the console (M5.7.2) is listed, switched and checked
+like a built-in one. The rows are written by `brain.provider_registry_routes`.
+
 **Not written, and said.** A provider switch is an `ops.setting` row, so it keeps its last change
 on the row and `0059`'s trigger appends a `setting` entry for it:
-`brain.ops.setting_store.A_SWITCH_SHOWS_ITS_LAST_CHANGE_AND_THE_LEDGER_KEEPS_EVERY_ONE`. Nothing
-adds a rung or a provider: rungs are rows an installer writes, and a provider is a transport in
-`brain.models.wire`, which is the product's to extend.
+`brain.ops.setting_store.A_SWITCH_SHOWS_ITS_LAST_CHANGE_AND_THE_LEDGER_KEEPS_EVERY_ONE`. A rung is
+added through the matrix gate (`brain.routing_routes`), never here.
 
-Task ids: M27.8.8, M27.2.3
+Task ids: M27.8.8, M27.2.3, M5.6.4, M5.7.1, M5.7.2
 """
 
 from __future__ import annotations
@@ -79,8 +84,11 @@ from brain.credential_routes import SlotView, credentials_of, listing, may_manag
 from brain.gate.finish import Finished, ModelCallOutcome, Origin, RequestRecorder, finish
 from brain.models.assembly import HOSTED_PROFILE, LOCAL_PROFILE, TOLD, RungSkip, local_only
 from brain.models.calls import ModelCalls, Planned, chain_of
+from brain.models.disclosure import TOLD as CATEGORY_TOLD
+from brain.models.disclosure import DataCategory
 from brain.models.driver import DriverMessage, ProviderUnavailable, Role
 from brain.models.metering import Meter
+from brain.models.registry import ProviderKind, ProviderRecord
 from brain.models.routing import TIER_LADDER, BreakerState, FallbackTrigger, NoCompliantRoute, Tier
 from brain.models.wire import LOCAL_PROVIDER
 from brain.operate_routes import MODELS_SCREEN
@@ -89,6 +97,8 @@ from brain.ops.credentials import VaultState
 from brain.ops.model_service import (
     KNOWN_PROVIDERS,
     ModelService,
+    disclosure_counts,
+    disclosures,
     switch_provider,
     switch_states,
 )
@@ -152,6 +162,7 @@ CHECK_TOLD: Final = {
         "The provider refused the request. Check that its key is valid and that the model the "
         "rung names exists on the provider's account."
     ),
+    "refused": "The model declined the check sentence on content grounds.",
     FallbackTrigger.CONNECTION_ERROR.value: "The provider could not be reached from this server.",
     FallbackTrigger.TIMEOUT.value: "The provider did not answer inside the rung's timeout.",
     FallbackTrigger.RATE_LIMITED.value: (
@@ -167,6 +178,45 @@ CHECK_TOLD: Final = {
 
 
 # ------------------------------------------------------------------------ the shapes
+
+
+class LaneOverrideView(BaseModel):
+    """One lane's override of a provider's rung numbers (M5.1.3). Null leaves the rung's own."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    lane: str
+    timeout_seconds: float | None
+    attempts: int | None
+
+
+class RegisteredView(BaseModel):
+    """A provider's registry row: where it processes and what the company agreed with it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    label: str
+    kind: ProviderKind
+    #: Only for an added provider. Never editable: see `brain.models.registry`.
+    base_url: str | None
+    models: list[str]
+    processing_region: str
+    residency_class: str
+    storage_location: str
+    retention_terms: str
+    training_terms: str
+    agreement_url: str | None
+    lane_overrides: list[LaneOverrideView]
+
+
+class DisclosedView(BaseModel):
+    """One category of data a provider has been sent, and how many attempts carried it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    category: DataCategory
+    told: str
+    attempts: int
 
 
 class ProviderStateView(BaseModel):
@@ -187,6 +237,10 @@ class ProviderStateView(BaseModel):
     #: The vault's own answer for the provider's slot, only for a reader who may manage
     #: credentials. See `A_KEY_THAT_ANSWERS_HERE_AND_A_KEY_THE_VAULT_HOLDS_ARE_TWO_FACTS`.
     credential: SlotView | None
+    #: The registry row, or null for a provider nobody has recorded terms for.
+    registered: RegisteredView | None = None
+    #: What this provider has been sent, by category, with counts. Empty when nothing was.
+    disclosed: list[DisclosedView] = []
 
 
 class RungStateView(BaseModel):
@@ -277,6 +331,39 @@ def normalised_profile(profile: str) -> str:
     return LOCAL_PROFILE if local_only(profile) else HOSTED_PROFILE
 
 
+def registered_view(record: ProviderRecord) -> RegisteredView:
+    """One registry record as the screen shows it."""
+    return RegisteredView(
+        label=record.label,
+        kind=record.kind,
+        base_url=record.base_url,
+        models=list(record.models),
+        processing_region=record.processing_region,
+        residency_class=record.residency_class.value,
+        storage_location=record.storage_location,
+        retention_terms=record.retention_terms,
+        training_terms=record.training_terms,
+        agreement_url=record.agreement_url,
+        lane_overrides=[
+            LaneOverrideView(
+                lane=lane.value,
+                timeout_seconds=override.timeout_seconds,
+                attempts=override.attempts,
+            )
+            for lane, override in sorted(record.lane_overrides.items())
+        ],
+    )
+
+
+def listed_providers(plan: Planned) -> tuple[str, ...]:
+    """The built-in providers, then those added from the console, then the local server."""
+    added = tuple(
+        one.slug for one in plan.state.providers if one.kind is ProviderKind.OPENAI_COMPATIBLE
+    )
+    builtin = tuple(one for one in KNOWN_PROVIDERS if one != LOCAL_PROVIDER)
+    return (*builtin, *added, LOCAL_PROVIDER)
+
+
 def providers_view(
     plan: Planned,
     *,
@@ -284,25 +371,39 @@ def providers_view(
     reach: EntitlementSet,
     now: datetime,
     vault: tuple[VaultState, dict[str, SlotView]] | None,
+    disclosed: dict[str, dict[DataCategory, int]] | None = None,
 ) -> ProvidersView:
     """The plan and the switch rows, as one reader may be shown them.
 
     `vault` is None unless the reader may manage credentials; see the module docstring.
+    `disclosed` is the attempts per provider and category of data (M5.6.4).
     """
     described = {one.slug: one.description for one in PROVIDER_SLOTS}
+    records = {one.slug: one for one in plan.state.providers}
+    sent = disclosed or {}
     providers = []
-    for slug in KNOWN_PROVIDERS:
+    for slug in listed_providers(plan):
         switched = switches.get(slug)
+        record = records.get(slug)
         providers.append(
             ProviderStateView(
                 provider=slug,
-                description=described.get(slug, "This install's own inference server"),
+                description=(
+                    record.label
+                    if record is not None and record.kind is ProviderKind.OPENAI_COMPATIBLE
+                    else described.get(slug, "This install's own inference server")
+                ),
                 hosted=slug != LOCAL_PROVIDER,
                 switched_on=True if switched is None else switched[0],
                 switched_by=None if switched is None else switched[1],
                 switched_at=None if switched is None else switched[2],
                 key_held=None if slug == LOCAL_PROVIDER else slug in plan.held,
                 credential=None if vault is None else vault[1].get(slug),
+                registered=None if record is None else registered_view(record),
+                disclosed=[
+                    DisclosedView(category=category, told=CATEGORY_TOLD[category], attempts=count)
+                    for category, count in sorted(sent.get(slug, {}).items())
+                ],
             )
         )
     skipped = {(one.rung.tier, one.rung.position): one for one in plan.assembly.skipped}
@@ -389,6 +490,21 @@ async def _switches(request: Request) -> dict[str, tuple[bool, str, datetime]]:
     }
 
 
+async def _disclosed(request: Request) -> dict[str, dict[DataCategory, int]]:
+    """Attempts per provider and category of data sent. Empty without a database."""
+    factory = _sessions(request)
+    if factory is None:
+        return {}
+    try:
+        async with factory() as session:
+            rows = (await session.execute(disclosures())).all()
+    except Exception as exc:
+        # A count that cannot be read is not a count of zero; the screen shows no counts.
+        log.warning("models.disclosures_unreadable", error=type(exc).__name__)
+        return {}
+    return disclosure_counts([(str(p), str(c), int(n)) for p, c, n in rows])
+
+
 async def _vault_for(
     request: Request, reach: EntitlementSet, now: datetime
 ) -> tuple[VaultState, dict[str, SlotView]] | None:
@@ -418,7 +534,13 @@ async def _view(request: Request, asked: Asked, calls: ModelCalls) -> ProvidersV
         reach=asked.reach,
         now=asked.now,
         vault=await _vault_for(request, asked.reach, asked.now),
+        disclosed=await _disclosed(request),
     )
+
+
+def switchable(plan: Planned) -> tuple[str, ...]:
+    """Every provider a switch or a check may name: built in, added, and the local server."""
+    return listed_providers(plan)
 
 
 router = APIRouter(prefix=API_PREFIX, tags=["models"])
@@ -443,14 +565,17 @@ async def switch(
     if not may_switch(asked.reach, asked.now):
         log.info("provider switch refused", principal=asked.caller.principal.id)
         raise _not_answerable()
-    if provider not in KNOWN_PROVIDERS:
+    known = switchable(await models_of(request).calls.planned())
+    if provider not in known:
         log.info("provider switch names no provider", principal=asked.caller.principal.id)
         raise _not_answerable()
     factory = _sessions(request)
     if factory is None:
         raise Failed("no database on this process")
     async with factory() as session:
-        await switch_provider(session, provider, on=body.on, by=asked.caller.principal.id)
+        await switch_provider(
+            session, provider, on=body.on, by=asked.caller.principal.id, known=known
+        )
         await session.commit()
     log.info(
         "provider switched", provider=provider, on=body.on, principal=asked.caller.principal.id
@@ -466,14 +591,14 @@ async def check(request: Request, provider: str, asked: Asked) -> CheckView:
     if not may_switch(asked.reach, asked.now):
         log.info("provider check refused", principal=asked.caller.principal.id)
         raise _not_answerable()
-    if provider not in KNOWN_PROVIDERS:
+    calls = models_of(request).calls
+    plan = await calls.planned()
+    if provider not in switchable(plan):
         log.info("provider check names no provider", principal=asked.caller.principal.id)
         raise _not_answerable()
-    calls = models_of(request).calls
     trace_id = _trace_id()
     origin = Origin(trace_id=trace_id, principal=asked.caller.principal, channel=asked.channel)
     meter = Meter()
-    plan = await calls.planned()
     tier = check_tier(plan, provider)
     view = await _checked(calls, plan, provider, tier, meter=meter, trace_id=trace_id)
     recorders: tuple[RequestRecorder, ...] = tuple(
@@ -531,10 +656,13 @@ async def _checked(
             trace_id=trace_id,
             max_output_tokens=CHECK_MAX_OUTPUT_TOKENS,
             provider=provider,
+            categories=(DataCategory.CHECK_SENTENCE,),
         )
     except ProviderUnavailable as failed:
         trigger = failed.failure.trigger
         outcome = "stopped" if trigger is None else trigger.value
+        if failed.failure.refused:
+            outcome = "refused"
         return _unanswered(
             provider, outcome, CHECK_TOLD[outcome], status=failed.failure.status, trace_id=trace_id
         )

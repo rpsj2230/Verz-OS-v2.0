@@ -69,6 +69,7 @@ from brain.gate.prefix import build_prefix
 from brain.jobs_routes import SCHEDULE_AUTHORITY
 from brain.knowledge.visibility import Visibility
 from brain.ops.features import SCHEDULE_CONTROL, is_on
+from brain.ops.matrix_gate import GateVerdict
 from brain.ops.retention import sweep
 from brain.ops.retention_store import active_holds, lift_hold, place_hold
 from brain.ops.schedule import Owed
@@ -339,6 +340,13 @@ def wanted(*expected: tuple[str, AuditEntry]) -> list[tuple[str, str, dict[str, 
     return [(actor, one.subject, dict(one.details)) for actor, one in expected]
 
 
+class PassingGate:
+    """A `brain.ops.matrix_gate_run.MatrixGate` that lets every change take traffic."""
+
+    async def decide(self, change: object, *, now: object, new_rung_id: str) -> GateVerdict:
+        return GateVerdict(may_apply=True, failing=(), reasons=(), quality_share=None)
+
+
 def pressed[T](
     url: str,
     grants: Mapping[str, tuple[Grant, ...]],
@@ -354,6 +362,9 @@ def pressed[T](
             app.state.gate = gate_wiring(grants)
             app.state.db_sessions = make_session_factory(built)
             app.state.console_reads = None
+            # The matrix gate passes every change here: what is under test is the write and its
+            # ledger entry, and the gate's own run is `tests/unit/test_matrix_gate.py`'s.
+            app.state.matrix_gate = PassingGate()
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(transport=transport, base_url="http://brain") as client:
                 return await presses(client)

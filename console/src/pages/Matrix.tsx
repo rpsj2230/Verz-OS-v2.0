@@ -47,7 +47,12 @@
  * including a person who only opens the overview. `App.tsx` loads this route on demand and
  * `tests/bundle-split.test.ts` walks the static import graph to prove it.
  *
- * Task ids: M5.3.3, M27.8.4
+ * **A save goes through the matrix gate, and a held save says so with its failing cases.** Since
+ * M5.6.2 the PATCH answers the change as `ops.routing_change` recorded it: applied, or held because
+ * a golden question or a permission canary regressed on the changed ladder. A held change is drawn
+ * above the matrix with the cases that held it, from `components/MatrixGate.tsx`, and the rung keeps its numbers.
+ *
+ * Task ids: M5.3.3, M27.8.4, M5.6.2
  */
 
 import { useCallback, useMemo, useState } from "react";
@@ -77,6 +82,8 @@ import {
   type RungRow,
 } from "./matrixQuery";
 import { ConfirmAction } from "../components/ConfirmAction";
+import { ChangeDecided, MatrixGate } from "../components/MatrixGate";
+import { readChange, type ChangeRow } from "./matrixGateQuery";
 
 /**
  * What is said when the page came back full.
@@ -110,19 +117,19 @@ export function saveRungQuestion(rung: RungRow): string {
 /**
  * What a save does, in words that are true on every install today.
  *
- * **It writes the row, and it does not change how a question is routed.** Nothing on the answer
- * path reads `ops.routing_rung` yet: the chain a request runs through is `brain.models.routing.
- * seed_chain`, which `brain.tables.routing` calls the runtime source of truth for want of anywhere
- * else to be. A confirmation promising that the next question would wait twelve seconds would be
- * a person agreeing to something the system will not do, which is the one thing a confirmation
- * may not be. `docs/console-audit.md` lists the gap, and this sentence changes on the day it closes.
+ * **It is judged before it takes traffic.** `brain.models.calls` reads the ladder on every call, so
+ * an applied edit is the chain the next question walks; since M5.6.2 the edit is first run against
+ * the golden questions and the permission canaries, and a regression holds it with the failing
+ * cases shown. A confirmation promising the new numbers unconditionally would be a person agreeing
+ * to something the system may refuse, which is the one thing a confirmation may not be.
  */
 export function saveRungConsequence(edit: RungEdit): string {
   return (
-    `The rung's row will hold ${String(edit.attempts)} attempt${edit.attempts === 1 ? "" : "s"}, ` +
+    `The rung would hold ${String(edit.attempts)} attempt${edit.attempts === 1 ? "" : "s"}, ` +
     `a ${String(edit.timeout_seconds)} second timeout and at most ${String(edit.max_concurrency)} at once, ` +
-    `and will be switched ${edit.enabled ? "on" : "off"}. Questions are routed by the chain this ` +
-    "release carries, which does not read that row yet, so no answer changes until it does."
+    `and be switched ${edit.enabled ? "on" : "off"}. The change is run against the golden questions ` +
+    "and the permission canaries first: if nothing regresses the next question walks it, and if " +
+    "something does it is held with the failing cases shown and the rung keeps its numbers."
   );
 }
 
@@ -139,7 +146,7 @@ function RungEditor({
   onSaved,
 }: {
   readonly rung: RungRow;
-  readonly onSaved: () => void;
+  readonly onSaved: (decided: ChangeRow | null) => void;
 }) {
   const [failure, setFailure] = useState<ApiFailure | null>(null);
   const [busy, setBusy] = useState(false);
@@ -174,11 +181,11 @@ function RungEditor({
           return;
         }
         setFailure(null);
-        // The answer is discarded and the matrix is asked again. The route returns the
-        // stored row and this could render it, but then the row in the grid and the row in
-        // the form would be two copies of one thing that can disagree, and the one a reader
-        // trusts would be whichever was on the screen.
-        onSaved();
+        // The change as the gate decided it goes up to the page, which draws a held one with its
+        // cases, and the matrix is asked again. The stored row is not drawn from the answer: the
+        // row in the grid and the row in the form would be two copies of one thing that can
+        // disagree, and the one a reader trusts would be whichever was on the screen.
+        onSaved(readChange(result.data));
       })();
     },
     [rung.id, onSaved],
@@ -233,7 +240,7 @@ function MatrixRows({
 }: {
   readonly openRungId: string | undefined;
   readonly version: number;
-  readonly onSaved: () => void;
+  readonly onSaved: (decided: ChangeRow | null) => void;
 }) {
   const listing = useListing<RungRow>(MATRIX_API_PATH, { choices: MATRIX_FILTERS, version });
   const opened = useResource<unknown>(openRungId === undefined ? null : openRungApiPath(openRungId), version);
@@ -280,6 +287,20 @@ function MatrixRows({
       {openRungId !== undefined && open === null && !opened.busy && opened.failure === null ? (
         <p className="note">{NO_SUCH_RUNG}</p>
       ) : null}
+
+      {/*
+       * The gate's changes and golden questions are asked for whatever the editable flag says and
+       * whichever rung is open, so neither decides what is asked: a reader the API refuses is shown
+       * its refusal. Its forms are drawn for an editor on the matrix itself, and not while one
+       * rung's editor is open, so the open rung's form is the only form beside it.
+       */}
+      <MatrixGate
+        version={version}
+        editable={page.editable && openRungId === undefined}
+        onChanged={() => {
+          onSaved(null);
+        }}
+      />
     </>
   );
 }
@@ -290,7 +311,12 @@ export function Matrix() {
   // value is never rendered: it is a key, and a key that reached the screen would be a
   // number describing how many times somebody had saved.
   const [version, setVersion] = useState(0);
-  const onSaved = useCallback(() => {
+  // The last change a save on this page decided, drawn above the matrix when the gate held it.
+  const [decided, setDecided] = useState<ChangeRow | null>(null);
+  const onSaved = useCallback((change: ChangeRow | null) => {
+    if (change !== null) {
+      setDecided(change);
+    }
     setVersion((current) => current + 1);
   }, []);
 
@@ -300,6 +326,12 @@ export function Matrix() {
       <p className="lede">
         Which model handles a request, in what order, and what each rung is allowed to spend.
       </p>
+
+      {decided === null || decided.status !== "held" ? null : (
+        <section className="card" role="status" aria-label="The change was held">
+          <ChangeDecided change={decided} />
+        </section>
+      )}
 
       <MatrixRows openRungId={rungId} version={version} onSaved={onSaved} />
     </article>
