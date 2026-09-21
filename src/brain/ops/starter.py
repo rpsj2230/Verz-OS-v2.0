@@ -362,7 +362,40 @@ def declared_sentences() -> tuple[tuple[Capability, str], ...]:
         )
         for kind in sorted(SUBJECT_KINDS)
     )
+    said.extend(checked_elsewhere())
     return tuple(said)
+
+
+def checked_elsewhere() -> tuple[tuple[Capability, str], ...]:
+    """The capabilities code checks that no screen, plane or audit kind declares (M1.7.1).
+
+    Each is the declaring module's own constant, imported where it is used, so a renamed value
+    moves here with it. Until these were listed, each was required by a served path and absent
+    from the registry an install is furnished with, so the Capabilities screen never named it.
+    Imported inside the function because several of these modules sit above this one.
+    """
+    from brain.agents.lifecycle import AGENT_PUBLICATION_CAPABILITY
+    from brain.audit.reads import READ_LOG_CAPABILITY
+    from brain.browsing.sessions import ACT_ON_SURFACE_CAPABILITY, BROWSE_SURFACE
+    from brain.core.redaction import OPAQUE_CAPABILITY
+    from brain.knowledge.verification import VERIFIER_CAPABILITY
+    from brain.knowledge.visibility import PROMOTION_CAPABILITY
+    from brain.ops.feedback import FLAG_CAPABILITY
+    from brain.ops.jobs import DEAD_LETTER_CAPABILITY
+    from brain.tools.run_skill import SCRIPT_CAPABILITY
+
+    return (
+        (AGENT_PUBLICATION_CAPABILITY, "Approves publishing an agent to a wider audience."),
+        (PROMOTION_CAPABILITY, "Approves promoting a knowledge item to a wider audience."),
+        (SCRIPT_CAPABILITY, "Runs an approved skill's script in its sandbox."),
+        (READ_LOG_CAPABILITY, "Reads other people's entries in the audit read log."),
+        (BROWSE_SURFACE, "Reads a declared browser surface."),
+        (ACT_ON_SURFACE_CAPABILITY, "Acts on a declared browser surface."),
+        (DEAD_LETTER_CAPABILITY, "Reads somebody else's dead-lettered jobs."),
+        (VERIFIER_CAPABILITY, "Shows who verified a knowledge item on its badge."),
+        (OPAQUE_CAPABILITY, "Reads what an opaque tool returns, which no field policy classifies."),
+        (FLAG_CAPABILITY, "Flags an answer as wrong."),
+    )
 
 
 def vocabulary(

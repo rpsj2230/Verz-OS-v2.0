@@ -40,6 +40,7 @@ from brain.ops.starter import (
     Declared,
     Default,
     agents,
+    checked_elsewhere,
     described_by_grammar,
     roles,
     starter_gaps,
@@ -390,6 +391,7 @@ def test_every_capability_the_product_declares_is_in_the_vocabulary_once_with_wo
         *(f"read:audit.{kind}" for kind in SUBJECT_KINDS),
         *GRANTED_AT_APPOINTMENT,
         *(one.value for one in STARTER_PACK.capabilities),
+        *(capability.value for capability, _ in checked_elsewhere()),
     }
 
     assert set(values) == expected
