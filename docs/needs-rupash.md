@@ -2,9 +2,8 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**6 items are open: 85, 87, 89, 91, 93 and 94.** Item 94 (a password to replace) is the most
-urgent; item 85 (your AI provider keys) unblocks the most. Each says in plain terms what it is,
-what I recommend, and every step.
+**3 items are open: 85, 91 and 93.** Item 85 (your AI provider keys) unblocks the most. Each says in
+plain terms what it is, what I recommend, and every step.
 
 # Open
 
@@ -25,26 +24,6 @@ M5.6.1 and M5.6.3.
 4. Press **Check** on each provider.
 5. Tell me "keys added". I then confirm each one answers and record the checks.
 
-## 87. Where the daily audit fingerprint is kept (M24.3.3)
-
-**In plain terms:** once a day the Brain publishes a short fingerprint of its audit trail somewhere
-the database administrator cannot change, so nobody can quietly rewrite history. You decided in
-item 8 on a private GitHub repository for now. **Recommendation: a new private repository just for
-this.** Five minutes.
-
-1. On GitHub (account rpsj2230) click **New repository**, name it `brain-audit-anchor`, choose
-   **Private**, tick **Add a README**, **Create repository**.
-2. In that repository: **Settings** > **Branches** > **Add branch protection rule**, pattern
-   `main`, leave **Allow force pushes** and **Allow deletions** unticked, **Create**.
-3. Tell me "anchor repo created". I connect the daily job to it and check the first fingerprint.
-
-## 89. Directory sign-ins other than your own (M1.6.6)
-
-**In plain terms:** the Brain can read staff lists from Lark, Microsoft Entra and a Google Sheet.
-A fourth option, a company's own Active Directory (LDAP), has no directory behind it to build or
-test against. **Recommendation: mark it "not needed until a client uses Active Directory".**
-Reply "mark LDAP not needed now" or "build LDAP".
-
 ## 91. Checks only you can do on your install (after Wave 1 lands)
 
 **In plain terms:** a few requirements are about how the Brain behaves for real people, so the
@@ -61,20 +40,23 @@ Everything else for LDAP is built and tested (encrypted connection only, read-on
 accounts treated as leavers). **Recommendation: allow it,** on the same terms as the database
 driver already allowed. Reply "allow ldap3".
 
-## 94. Replace the application's database password (letters and digits only)
-
-**In plain terms:** the post-deploy checks could not read a password containing `%` and `$`, and
-their error message printed part of it into the server's log. The product is being fixed so no
-message can ever show a database address again, but the part that was printed should be retired.
-
-1. Make a new password in your password manager: 32 characters, letters and digits only.
-2. `ssh verz-vps`, then `docker exec -it $(docker ps -qf name=^db-c74) psql -U brain -d brain`
-3. Type `\password brain_app`, paste the new password twice, then `\q`.
-4. In Coolify: project, Brain resource, **Environment Variables**, edit `BRAIN_DATABASE_URL`,
-   replace only the password part, keep **Is Literal?** ticked, **Save**. Do not press Redeploy.
-5. Tell me "password changed"; I redeploy through the normal path and check everything.
-
 # Answered
+
+## 89. LDAP / Active Directory - DECIDED: build it ready to use
+
+Not needed for your install, but built so a later company with Active Directory can choose it and
+connect. The adapter is built and tested; item 93 asks to allow its library.
+
+## 87. Where the daily audit fingerprint is kept - DONE 2026-09-21
+
+The private repository `rpsj2230/brain-audit-anchor` holds it, written by a deploy key that can
+reach nothing else. GitHub refuses branch protection on a private repository without GitHub Pro,
+so the daily job itself checks that the last fingerprint is still there.
+
+## 94. The application's database password - DONE 2026-09-21
+
+You replaced it with letters and digits only; the application and the post-deploy checks both
+connect with it, and every check passed.
 
 ## 90. Lark staff list - DECIDED: built into the Connect Lark flow
 
