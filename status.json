@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-21T07:01:46.521333+00:00",
-  "commit": "31d7a30",
-  "commit_subject": "The health gate, the deployment record and sign-in readiness close on staging proof",
+  "generated_at": "2026-09-21T07:23:38.755260+00:00",
+  "commit": "e6fde3a",
+  "commit_subject": "CI boots the lite compose file by name and runs the previous release on the new schema",
   "total": 1599,
   "done": 174,
   "percent": 10.9,
