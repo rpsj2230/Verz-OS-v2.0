@@ -658,6 +658,7 @@ def through_0095(database: str) -> Iterator[str]:
         ("0049", "0050"),
         ("0053", "0054"),
         ("0096", "0095"),
+        ("0095", "0095b"),
     )
     with retirable(database) as url:
         if not has_pgvector(url):

@@ -305,6 +305,7 @@ export const ACTION_PHRASES: Readonly<Record<string, string>> = Object.freeze({
   organisation: "placed in a team or made a lead, or ended",
   elevation: "asked for more, or approved or denied",
   vault_access: "answered a call about",
+  principal_state: "disabled or enabled",
 });
 
 /** The phrase for an action, or its code when the vocabulary has outgrown this console. */

@@ -865,9 +865,7 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
   },
   "POST /api/v1/govern/people/enable": {
     row: DISABLE_REACHES_THE_ROW_THE_LEDGER_AND_THE_TOKEN,
-    audit: {
-      none: "Enabling somebody ends no session and no trigger records a change to auth.principal, so the ledger has no entry for it; the disable it reverses is recorded through the session_end entries 0050 appends.",
-    },
+    audit: DISABLE_REACHES_THE_ROW_THE_LEDGER_AND_THE_TOKEN,
     behaviour: DISABLE_REACHES_THE_ROW_THE_LEDGER_AND_THE_TOKEN,
   },
   "POST /api/v1/govern/elevation/requests": {

@@ -585,6 +585,12 @@ class AuditAction(enum.StrEnum):
     #: The actor is the vault, `secrets_vault`, because the principal behind a token is not in the
     #: log; the HMAC in the details ties calls by one token together without naming it.
     VAULT_ACCESS = "vault_access"
+    #: A person was disabled, or enabled again. Which is in the details. Written by `0095b`'s
+    #: trigger on `auth.principal`, one entry per change of `disabled_at` between set and unset,
+    #: so restoring somebody's access is on the record as surely as taking it away. Fifteen
+    #: characters, inside the column's sixteen. Not `session_end`, which is about one sitting:
+    #: a disable with no session open ends none, and an enable ends none ever.
+    PRINCIPAL_STATE = "principal_state"
 
 
 # --------------------------------------------------------------------- redaction

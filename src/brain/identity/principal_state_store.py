@@ -17,9 +17,11 @@ design: a session is evidence about the moment it opened. A leaver whose grants 
 access review's removal or `lifecycle.disable`, not this. See
 `A_DISABLE_IS_REVERSIBLE_AND_A_LEAVER_IS_NOT`.
 
-**The act is attributed in its own transaction.** `brain.actor_id`, `brain.ent_hash` and
-`brain.trace_id` are set before the update, so the `session_end` entries `0050`'s trigger appends
-for the sessions the cascade ends name the administrator rather than `unattributed`.
+**The act is recorded, both ways, and attributed in its own transaction.** `0095b`'s trigger
+appends one `principal_state` entry for a disable and one for an enable, so restoring access is on
+the record as surely as taking it away. `brain.actor_id`, `brain.ent_hash` and `brain.trace_id` are
+set before the update, so that entry, and the `session_end` entries `0050` appends for the sessions
+the cascade ends, name the administrator rather than `unattributed`.
 
 **Only a change is written.** Disabling somebody already disabled, or enabling somebody enabled,
 writes nothing and says so, so two administrators pressing at once record one act.

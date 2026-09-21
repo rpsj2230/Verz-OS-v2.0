@@ -246,6 +246,7 @@ def test_a_disable_ends_the_session_refuses_the_token_and_an_enable_returns_the_
             "SELECT actor_id, subject, trace_id FROM obs.audit_entry"
             " WHERE action = 'session_end' ORDER BY seq",
         )
+        states = state_entries(url)
 
     assert before.principal.id == "u_joiner"
     assert disabled is not None and disabled.outcome is StateChange.CHANGED
@@ -257,6 +258,102 @@ def test_a_disable_ends_the_session_refuses_the_token_and_an_enable_returns_the_
     assert "read:client.hours" in [grant.capability.value for grant in held_on.grants]
     assert rows == [("kc-live", "principal_disabled")]
     assert entries == [("u_admin", "principal:u_joiner", "trace-disable")]
+    assert [(e.actor_id, e.subject, e.trace_id, dict(e.details)) for e in states] == [
+        ("u_admin", "principal:u_joiner", "trace-disable", {"change": "disabled"}),
+        ("u_admin", "principal:u_joiner", "trace-enable", {"change": "enabled"}),
+    ]
+    assert all(e.recompute_hash() == e.entry_hash for e in states)
+
+
+def state_entries(url: str) -> list[Any]:
+    """The `principal_state` entries, oldest first, as `AuditEntry` so each can be re-hashed."""
+    from brain.audit.ledger import AuditEntry
+    from tests.fixtures.scratch_postgres import sql
+
+    rows = sql(
+        url,
+        "SELECT seq, at, actor_id, action, subject, ent_hash, trace_id, details, prev_hash,"
+        " entry_hash FROM obs.audit_entry WHERE action = 'principal_state' ORDER BY seq",
+    )
+    names = ("seq", "at", "actor_id", "action", "subject", "ent_hash", "trace_id", "details")
+    return [
+        AuditEntry(**dict(zip((*names, "prev_hash", "entry_hash"), row, strict=True)))
+        for row in rows
+    ]
+
+
+def test_the_trigger_writes_the_details_the_recorder_writes() -> None:
+    """Delete this and the entry `0095b`'s trigger writes can drift from the one
+    `AuditRecorder.principal_state` writes, so a chain held in memory and the database disagree
+    about what an enable looks like."""
+    from brain.audit.ledger import AuditChain
+    from brain.audit.record import AuditRecorder, PrincipalStateChange
+    from tests.unit.test_tables import VERSIONS, migration_module
+
+    recorder = AuditRecorder(
+        AuditChain(),
+        actor_id="u_admin",
+        ent_hash="0" * 32,
+        trace_id="t",
+        clock=lambda: datetime.now(UTC),
+    )
+    for change in PrincipalStateChange:
+        entry = recorder.principal_state(principal_id="u_joiner", change=change)
+        assert dict(entry.details) == {"change": change.value}
+    body = migration_module(VERSIONS / "0095b_principal_state_audit.py").TRIGGER_FUNCTION
+    for change in PrincipalStateChange:
+        assert f"'{change.value}'" in body
+
+
+def test_a_press_that_changes_nothing_and_a_statement_nobody_attributed_are_recorded_honestly() -> (
+    None
+):
+    """Exactly one entry per change. Disabling somebody already disabled writes no entry, and a
+    hand-written statement with no actor set is recorded as unattributed rather than refused.
+    Delete this and a second press can append a second entry for one act, or a disable at a prompt
+    at midnight can fail for want of a setting."""
+    from tests.fixtures.scratch_postgres import admin_url
+
+    admin_url()
+    from brain.identity.principal_state_store import StoredPrincipalStates
+    from brain.session import make_session_factory
+    from tests.fixtures.scratch_postgres import run, sql
+    from tests.unit.test_automation_owner_store import app_engine
+    from tests.unit.test_entitlement_store import a_principal
+    from tests.unit.test_service_accounts import through_0095
+
+    with through_0095("brain_ps_once") as url:
+        a_principal(url, "u_one")
+
+        async def go() -> list[Any]:
+            engine = app_engine(url)
+            try:
+                states = StoredPrincipalStates(make_session_factory(engine))
+                return [
+                    await states.set_disabled(
+                        "u_one",
+                        disabled=True,
+                        may=lambda _department: True,
+                        by="u_admin",
+                        ent_hash="",
+                        trace_id="",
+                    )
+                    for _ in range(2)
+                ]
+            finally:
+                await engine.dispose()
+
+        first, second = run(go)
+        sql(url, "UPDATE auth.principal SET disabled_at = NULL WHERE id = 'u_one'")
+        sql(url, "UPDATE auth.principal SET display_name = 'Renamed' WHERE id = 'u_one'")
+        states = state_entries(url)
+
+    assert first is not None and first.outcome is StateChange.CHANGED
+    assert second is not None and second.outcome is StateChange.ALREADY
+    assert [(e.actor_id, dict(e.details)) for e in states] == [
+        ("u_admin", {"change": "disabled"}),
+        ("unattributed", {"change": "enabled", "actor": "unattributed"}),
+    ]
 
 
 def test_the_organisation_page_says_whether_the_reader_may_disable_and_what_it_does() -> None:
