@@ -532,6 +532,24 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.principal_state_routes:PrincipalStateStore.set_disabled": (
             Repeat.WRITES_THIS_SYSTEMS_DATABASE
         ),
+        # The compliance stores (`0104`): a referral, a named person, a breach case, a denial.
+        "brain.ops.breach_store:BreachCases.open": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.ops.breach_store:BreachCases.cases": Repeat.READS,
+        "brain.ops.breach_store:BreachCases.move": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.ops.denial_store:Denials.denied": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.ops.read_counts_store:ReadCountSource.counts": Repeat.READS,
+        "brain.ops.sensitive_referral_store:SensitiveReferrals.refer": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
+        "brain.ops.sensitive_referral_store:SensitiveReferrals.named": Repeat.READS,
+        "brain.ops.sensitive_referral_store:SensitiveReferrals.name": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
+        "brain.ops.sensitive_referral_store:SensitiveReferrals.mine": Repeat.READS,
+        "brain.ops.sensitive_referral_store:SensitiveReferrals.handle": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
+        "brain.ops.sensitive_referral_store:SensitiveReferrals.tally": Repeat.READS,
     }
 )
 

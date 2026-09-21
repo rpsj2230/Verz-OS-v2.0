@@ -88,6 +88,7 @@ from brain.cache import (
 )
 from brain.channels.widget import allowed_origins
 from brain.classification_routes import router as classification_router
+from brain.compliance_routes import router as compliance_router
 from brain.connector_routes import router as connector_router
 from brain.console_static import mount_console_entry, mount_console_fallback
 from brain.core.errors import Absent, BrainError, Outcome, to_public
@@ -1358,6 +1359,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Asking for access: one constant reply to the asker, and the owner's own list, which is how
     # a request is delivered. See `brain.access_request_routes`.
     app.include_router(access_request_router)
+    # The Compliance screen: a sensitive topic's named person and the referrals routed to them, the
+    # processing register per connector, and breach cases with the PDPA clock, behind
+    # `admin:compliance` over everything. See `brain.compliance_routes`.
+    app.include_router(compliance_router)
 
     @app.get("/health/live", response_model=Health, tags=["health"])
     async def live() -> Health:

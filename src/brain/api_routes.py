@@ -129,6 +129,8 @@ from pydantic import BaseModel, ConfigDict, JsonValue, StringConstraints
 from brain.agents.model import AGENT_ID_CHARS
 from brain.agents.template import config_hash
 from brain.api import API_PREFIX, COMMON_RESPONSES, Page
+from brain.audit.compliance import intercept
+from brain.audit.record import DenyReason
 from brain.core.department import gaps_for_question
 from brain.core.entitlement import EntitlementSet
 from brain.core.envelope import TypedResult
@@ -158,9 +160,17 @@ from brain.identity.oidc import TokenRefusal, TokenRefusedError, VerifiedClaims
 from brain.identity.roles import NoStandingEntitlement
 from brain.identity.sessions import reach_for
 from brain.knowledge.document_tools import SEARCH_DOCUMENTS, KnowledgePassage
-from brain.knowledge.rows import DEFAULT_ROW_LIMIT, MAX_ROW_LIMIT, RowRequest, row_scope_for
+from brain.knowledge.rows import (
+    DEFAULT_ROW_LIMIT,
+    MAX_ROW_LIMIT,
+    RowRequest,
+    entity_capability,
+    row_scope_for,
+)
 from brain.knowledge.search import KNOWLEDGE_READ
+from brain.ops.denial_store import Denial, Denials, StoredDenials, record_beside
 from brain.ops.model_service import ModelService
+from brain.ops.sensitive_referral_store import SensitiveReferrals, StoredSensitiveReferrals
 from brain.ops.trace_sink import CountingTraceSink
 from brain.tools.registry import ToolRegistry
 from brain.tools.startup import classification_for
@@ -566,6 +576,20 @@ def page_from(payload: ChannelPayload) -> RecordPage:
 router = APIRouter(prefix=API_PREFIX, tags=["gate"])
 
 
+def denials_of(request: Request) -> Denials | None:
+    """Where this process records a refusal: what a test installed, the database, or nowhere."""
+    found = getattr(request.app.state, "denials", None)
+    if isinstance(found, Denials):
+        return found
+    sessions = getattr(request.app.state, "db_sessions", None)
+    return StoredDenials(sessions) if sessions is not None else None
+
+
+def _bound_trace_id() -> str:
+    """The id the trace middleware bound, or `untraced` where it bound none."""
+    return str(structlog.contextvars.get_contextvars().get("trace_id", "")) or "untraced"
+
+
 @router.get("/me", response_model=CallerView, responses=COMMON_RESPONSES)
 async def me(asked: Asked) -> CallerView:
     """Who this token belongs to, and what it can be exercised at.
@@ -668,6 +692,22 @@ async def records(
             tools=len(matching),
             reaches=reaches,
         )
+        if classification is not None and len(matching) == 1 and not reaches:
+            # The one cause that is a refusal rather than an absence: the entity is served and no
+            # grant reaches it. Recorded beside the 404, never in its path; see
+            # `brain.ops.denial_store`, which says why.
+            record_beside(
+                denials_of(request),
+                Denial(
+                    actor_id=asked.reach.principal_id,
+                    ent_hash=asked.reach.ent_hash(),
+                    trace_id=_bound_trace_id(),
+                    subject_kind="entity",
+                    subject_id=entity,
+                    capability=entity_capability(entity),
+                    reason=DenyReason.NO_GRANT,
+                ),
+            )
         raise Absent(f"{entity!r} is not answerable for this caller")
 
     handler = registry.get(matching[0].name).handler
@@ -914,6 +954,36 @@ def caching_of(
     )
 
 
+def sensitive_referrals_of(request: Request) -> SensitiveReferrals | None:
+    """Where this process files a referral: what a test installed, the database, or nowhere."""
+    found = getattr(request.app.state, "sensitive_referrals", None)
+    if isinstance(found, SensitiveReferrals):
+        return found
+    sessions = getattr(request.app.state, "db_sessions", None)
+    return StoredSensitiveReferrals(sessions) if sessions is not None else None
+
+
+async def referred(request: Request, asked: Asking, question: str) -> str | None:
+    """The referral sentence for a sensitive question, filed first; None for any other question.
+
+    A process with nowhere to file one refuses with the fault every caller gets for a missing
+    store, rather than telling the asker a note went to somebody when it went nowhere.
+    """
+    decision = intercept(question, trace_id=_bound_trace_id())
+    if decision.topic is None:
+        return None
+    store = sensitive_referrals_of(request)
+    if store is None:
+        raise Failed("no database on this process")
+    await store.refer(
+        asked_by=asked.reach.principal_id,
+        topic=decision.topic,
+        ent_hash=asked.reach.ent_hash(),
+        trace_id=_bound_trace_id(),
+    )
+    return decision.reply()
+
+
 @router.post("/answer", responses=COMMON_RESPONSES)
 async def answer(request: Request, asked: Asked, ask: Question) -> StreamingResponse:
     """One question, answered as a stream of events, at this caller's reach.
@@ -957,6 +1027,10 @@ async def answer(request: Request, asked: Asked, ask: Question) -> StreamingResp
     # from the directory and the channel from the token's claims. `Origin` refuses an id the
     # audit ledger would not accept, which is a process fault identical for every caller.
     origin = Origin(trace_id=trace_id, principal=asked.caller.principal, channel=asked.channel)
+    # Before the front half and the lane, so before the cache and any model: a sensitive question
+    # is routed to its topic's named person and recorded without what was asked, and the asker is
+    # told one sentence whatever the topic (M24.2.2). See `brain.audit.compliance`.
+    referral = await referred(request, asked, ask.question)
 
     # IDENTIFY and ENTITLE ran in `asking` before this handler could; they are entered here, in
     # order, so the front half's refusal to start before ENTITLE is a real check on this path.
@@ -985,7 +1059,11 @@ async def answer(request: Request, asked: Asked, ask: Question) -> StreamingResp
             ),
             registry=registry.definitions(),
             now=asked.now,
-            caching=caching_of(request.app.state, policies, sources),
+            # A referred question is looked up in no store: the step is entered and misses, as it
+            # does on a process with none, so the request row reads as any other question's.
+            caching=None
+            if referral is not None
+            else caching_of(request.app.state, policies, sources),
         )
         answered = await answer_lane(
             address.question,
@@ -1009,6 +1087,7 @@ async def answer(request: Request, asked: Asked, ask: Question) -> StreamingResp
             model=model_lane_of(request.app.state) if front.calls_a_model else None,
             front=front.record(),
             gaps=gaps_for_question(address.question, knowledge),
+            referral=referral,
         )
     except BrainError:
         # Already in the taxonomy, already has a public message, already maps to a status.

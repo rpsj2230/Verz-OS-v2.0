@@ -422,7 +422,16 @@ def test_the_referral_cannot_vary_because_it_takes_no_arguments() -> None:
     referral = render_referral().lower()
     for topic in SensitiveTopic:
         assert topic.value.replace("_", " ") not in referral
-    for word in ("grievance", "whistleblow", "harassment", "disciplinary", "complaint"):
+    for word in (
+        "grievance",
+        "whistleblow",
+        "harassment",
+        "disciplinary",
+        "complaint",
+        "salary",
+        "medical",
+        "legal",
+    ):
         assert not re.search(rf"\b{word}", referral), f"the referral names {word}"
 
 

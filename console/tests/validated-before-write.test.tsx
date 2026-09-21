@@ -95,6 +95,15 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
   ],
   "src/pages/SignInLinks.tsx": [{ pattern: "/sign-in-links", index: 1, writes: true }],
   "src/pages/StaffSources.tsx": [{ pattern: "/staff_sources", index: 0, writes: true }],
+  // The naming form, then the four forms of the one open case, then the form that opens a case.
+  "src/pages/Compliance.tsx": [
+    { pattern: "/compliance", index: 0, writes: true },
+    { pattern: "/compliance", index: 1, writes: true },
+    { pattern: "/compliance", index: 2, writes: true },
+    { pattern: "/compliance", index: 3, writes: true },
+    { pattern: "/compliance", index: 4, writes: true },
+    { pattern: "/compliance", index: 5, writes: true },
+  ],
   "src/pages/Webhooks.tsx": [
     { pattern: "/webhooks", index: 0, writes: false },
     { pattern: "/webhooks", opener: "Replace secret", index: 1, writes: true },

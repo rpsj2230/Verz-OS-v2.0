@@ -733,6 +733,7 @@ def test_a_head_holds_the_three_governance_kinds_and_none_of_the_other_eight() -
     assert HEAD_AUDIT_SUBJECT_KINDS == ("agent", "leash", "principal")
     assert left_out == [
         "artifact",
+        "breach",
         "connector",
         "credential",
         "department",

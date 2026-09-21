@@ -124,6 +124,7 @@ MIGRATION_ACCESS_REQUEST = VERSIONS / "0101_access_request.py"
 MIGRATION_SENSITIVE_READ = VERSIONS / "0098_sensitive_reads_and_budget_audit.py"
 MIGRATION_REQUIREMENT_CHECK = VERSIONS / "0099_requirement_check.py"
 MIGRATION_ROLE_GRANT = VERSIONS / "0102_role_grant_and_team_grants.py"
+MIGRATION_COMPLIANCE = VERSIONS / "0104_compliance_record_and_decision_entries.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -338,6 +339,8 @@ CHANNEL_EVENT_TABLES: tuple[str, ...] = ("gate.channel_event",)
 ACCESS_REQUEST_TABLES: tuple[str, ...] = ("gate.access_request",)
 #: And the one 0102 adds: who holds a platform role, as a person granted it.
 ROLE_GRANT_TABLES: tuple[str, ...] = ("gate.role_grant",)
+#: And the two 0104 adds: the breach cases and the sensitive referrals.
+COMPLIANCE_TABLES: tuple[str, ...] = ("ops.breach_case", "ops.sensitive_referral")
 
 SENSITIVE_READ_TABLES: tuple[str, ...] = ("ops.sensitive_read",)
 
@@ -395,6 +398,7 @@ ALL_TABLES = (
     + SENSITIVE_READ_TABLES
     + REQUIREMENT_CHECK_TABLES
     + ROLE_GRANT_TABLES
+    + COMPLIANCE_TABLES
 )
 
 
@@ -1160,6 +1164,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert requirement_check.TABLES == REQUIREMENT_CHECK_TABLES
     role_grant = migration_module(MIGRATION_ROLE_GRANT)
     assert role_grant.TABLES == ROLE_GRANT_TABLES
+    compliance = migration_module(MIGRATION_COMPLIANCE)
+    assert compliance.TABLES == COMPLIANCE_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1235,6 +1241,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(sensitive_read.TABLES)
         + tuple(requirement_check.TABLES)
         + tuple(role_grant.TABLES)
+        + tuple(compliance.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1291,6 +1298,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(sensitive_read.TABLES),
         set(requirement_check.TABLES),
         set(role_grant.TABLES),
+        set(compliance.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

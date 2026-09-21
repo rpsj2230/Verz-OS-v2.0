@@ -398,8 +398,12 @@ def test_the_migration_audits_the_three_tables_widens_the_grammar_and_grants_not
         ) in upgrade
         assert f"DROP TRIGGER {table}_is_audited ON gate.{table}" in downgrade
         assert f"DROP FUNCTION {function}()" in downgrade
-    assert squash(f"CHECK (subject ~ '{SUBJECT_PATTERN}')") in upgrade
-    assert squash(migration.WIDENED_SUBJECTS) == squash(f"subject ~ '{SUBJECT_PATTERN}'")
+    # `0104` widened the grammar again for `breach`, so this migration's grammar is the one that
+    # replaced, and the model's is the one that replaced it.
+    later = migration_module(MIGRATION.with_name("0104_compliance_record_and_decision_entries.py"))
+    assert squash(f"CHECK ({migration.WIDENED_SUBJECTS})") in upgrade
+    assert squash(migration.WIDENED_SUBJECTS) == squash(later.NARROWER_SUBJECTS)
+    assert squash(later.WIDENED_SUBJECTS) == squash(f"subject ~ '{SUBJECT_PATTERN}'")
     assert squash(f"CHECK ({migration.NARROWER_SUBJECTS}) NOT VALID") in downgrade
     assert "GRANT" not in upgrade
     assert migration.TABLES == ()

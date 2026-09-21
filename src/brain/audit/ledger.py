@@ -130,6 +130,8 @@ SUBJECT_KINDS = frozenset(
         # A department with its teams, and a scope, since 2026-09-17. See ORGANISATION below.
         "department",
         "scope",
+        # A suspected personal-data breach, since 2026-09-21. See BREACH below.
+        "breach",
     }
 )
 
@@ -591,6 +593,11 @@ class AuditAction(enum.StrEnum):
     #: characters, inside the column's sixteen. Not `session_end`, which is about one sitting:
     #: a disable with no session open ends none, and an enable ends none ever.
     PRINCIPAL_STATE = "principal_state"
+    #: A suspected personal-data breach was opened, assessed, notified to the Commission or to the
+    #: people in it, excused from telling them, or closed. Which is in the details, and never what
+    #: happened, whose data it was or how many. Written by `0104`'s trigger on `ops.breach_case`,
+    #: so the clock the regulator asks about has its own record of who moved it and when.
+    BREACH = "breach"
 
 
 # --------------------------------------------------------------------- redaction

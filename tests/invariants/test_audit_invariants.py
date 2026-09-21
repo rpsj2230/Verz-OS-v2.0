@@ -301,6 +301,7 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
         "elevation requested, approved or denied": AuditAction.ELEVATION,
         "secrets vault answered a call about a slot": AuditAction.VAULT_ACCESS,
         "person disabled or enabled again": AuditAction.PRINCIPAL_STATE,
+        "breach case opened, assessed, notified or closed": AuditAction.BREACH,
     }
     assert set(required.values()) == set(AuditAction)
     assert {action.value for action in AuditAction} == {
@@ -332,6 +333,7 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
         "elevation",
         "vault_access",
         "principal_state",
+        "breach",
     }
     # Every value fits the column, which is `VARCHAR(16)`. This is not decoration: the two
     # other names considered for the eighth member were `attachment_change` at seventeen
