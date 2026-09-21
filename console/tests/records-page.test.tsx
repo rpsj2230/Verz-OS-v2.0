@@ -41,6 +41,8 @@ import {
   recordsAddress,
   recordsApiPath,
   rowIdentity,
+  recordAccessApiPath,
+  submittedAccess,
   submittedQuery,
 } from "../src/pages/recordsQuery";
 import { Lock } from "../src/ui/Lock";
@@ -533,5 +535,66 @@ describe("what a cell may render", () => {
     expect(valueCell({ getValue: () => 1200 })).toBe("1200");
     expect(valueCell({ getValue: () => 0 })).toBe("0");
     expect(valueCell({ getValue: () => false })).toBe("false");
+  });
+});
+
+describe("who can see a record", () => {
+  test("the address names the entity and one column-and-value filter, encoded", () => {
+    // What breaks if this is deleted: a value with a colon or a space becomes a second term or a
+    // malformed query, and the API answers a different record from the one named.
+    expect(recordAccessApiPath("price_list", "sku", "WEB 1:2")).toBe(
+      "/records/price_list/access?filter=sku%3AWEB%201%3A2",
+    );
+    expect(submittedAccess({ column: "sku", value: "WEB-1" })).toEqual({ column: "sku", value: "WEB-1" });
+    expect(submittedAccess({ column: "", value: "WEB-1" })).toBeNull();
+  });
+
+  test("naming a record asks the access route and draws who the API says can see it", async () => {
+    // What breaks if this is deleted: M1.9.1's view is served and no console screen reaches it.
+    const idp = fakeIdentityProvider({
+      api(url) {
+        if (url.includes("/access?")) {
+          return new Response(
+            JSON.stringify({ people: [{ principal_id: "u_2", display_name: "Wei" }], truncated: false }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        if (!url.includes("/api/v1/records/")) {
+          return null;
+        }
+        return new Response(JSON.stringify(page([])), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      },
+    });
+    const loaded = await loadConsole({ idp });
+    await signIn(loaded);
+    const { routes } = await import("../src/App");
+    const router = createMemoryRouter(routes, { initialEntries: ["/records/price_list"] });
+    const { container } = render(<RouterProvider router={router} />);
+    await waitFor(() => {
+      if (!container.querySelector("#root_column")) {
+        throw new Error("the access form has not arrived");
+      }
+    });
+    const column = container.querySelector<HTMLInputElement>("#root_column");
+    const value = container.querySelector<HTMLInputElement>("#root_value");
+    if (column === null || value === null) {
+      throw new Error("the access form has no fields");
+    }
+    fireEvent.change(column, { target: { value: "sku" } });
+    fireEvent.change(value, { target: { value: "WEB-1001" } });
+    const form = column.closest("form");
+    if (form === null) {
+      throw new Error("the access fields are in no form");
+    }
+    fireEvent.submit(form);
+    await waitFor(() => {
+      expect(container.textContent).toContain("Wei");
+    });
+    expect(idp.urls.some((one) => one.includes("/api/v1/records/price_list/access?filter=sku%3AWEB-1001"))).toBe(
+      true,
+    );
   });
 });

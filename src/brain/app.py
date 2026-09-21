@@ -102,6 +102,7 @@ from brain.gate.finish import RequestRecorder
 from brain.gate.resolve import EntitlementCache
 from brain.gate.rule_store import load_rules, rule_ids
 from brain.gate.suspension_store import StoredSuspensions
+from brain.govern_pack_routes import router as govern_pack_router
 from brain.govern_people_routes import router as govern_people_router
 from brain.govern_routes import router as govern_router
 from brain.identity.administration_reconciliation import (
@@ -168,6 +169,7 @@ from brain.readiness import (
     vault_answers,
     vault_configured,
 )
+from brain.record_access_routes import router as record_access_router
 from brain.report_routes import router as report_router
 from brain.retention_routes import router as retention_router
 from brain.routing_routes import router as routing_router
@@ -1106,6 +1108,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Mounted here and nowhere else. An unmounted router is the failure this repository keeps
     # finding, and the timeout middleware three paragraphs up is the most recent one.
     app.include_router(api_router)
+    # Who can see a record, for somebody who can already see it. See `brain.record_access_routes`.
+    app.include_router(record_access_router)
     # The routing matrix. A second router rather than more routes on the first, because the
     # rules differ: `api_routes` answers about entities, where the name itself is enumerable,
     # and this one answers about the model chain, where it is not. Both take the same
@@ -1193,6 +1197,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # reader is refused a configuration screen, and the two writes defer entirely to
     # `brain.console.scoped_authority` and `brain.console.govern`. See `brain.govern_routes`.
     app.include_router(govern_router)
+    # Assigning a capability pack, and the Approver misconfiguration flag on the Roles screen.
+    # Every grant a pack means goes through the same authority a single grant does. See
+    # `brain.govern_pack_routes`.
+    app.include_router(govern_pack_router)
     # The Skills screen, SCREEN 6 of `docs/screens.html`. A router of its own because what it
     # answers about is neither a grant nor an agent: it is the skill library, its review queue and
     # the procedures the agents a reader may see are pinned to. Its three writes add a skill,

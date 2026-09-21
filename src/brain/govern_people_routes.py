@@ -550,13 +550,15 @@ class ScopeDrawing(BaseModel):
     slug: Slug
     label: Name
     departments: list[Slug] = Field(min_length=1, max_length=MOST_DEPARTMENTS_IN_A_SCOPE)
+    #: A team of the one department named, so the scope references that team (M1.5.2).
+    team: Slug | None = None
 
     @model_validator(mode="after")
     def _the_types_accept_it(self) -> Self:
         if len(set(self.departments)) != len(self.departments):
             msg = "a department is named twice"
             raise ValueError(msg)
-        drawn(self.slug, self.label, self.departments)
+        drawn(self.slug, self.label, self.departments, self.team)
         return self
 
 
@@ -1613,7 +1615,7 @@ async def draw_scope(request: Request, body: ScopeDrawing, asked: Asked) -> Stru
     because the caller's authority already reaches it.
     """
     reach, now = asked.reach, asked.now
-    record = drawn(body.slug, body.label, body.departments)
+    record = drawn(body.slug, body.label, body.departments, body.team)
     if not may_draw_scope(reach, record.scope, now):
         log.info("scope not drawable", principal=asked.caller.principal.id)
         raise _not_organisable_here()
@@ -1622,7 +1624,11 @@ async def draw_scope(request: Request, body: ScopeDrawing, asked: Asked) -> Stru
         return may_know_taken_scope(reach, held, now)
 
     outcome = await structure_records_of(request).draw_scope(
-        scope=record, departments=tuple(body.departments), may_know=may_know, by=_by(asked)
+        scope=record,
+        departments=tuple(body.departments),
+        team=body.team,
+        may_know=may_know,
+        by=_by(asked),
     )
     return _structured(
         outcome, asked, kind="scope", slug=body.slug, change="created", taken=A_SCOPE_NAME_IS_TAKEN

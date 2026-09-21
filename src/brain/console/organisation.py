@@ -109,6 +109,7 @@ from brain.core.department import Department as DepartmentRecord
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.scope import Op, Scope
 from brain.identity.organisation_store import StructureRefusal
+from brain.identity.teams import TeamError, team_path, team_scope
 from brain.ops.jobs import hidden_count_fields
 
 #: Why a team needs no decision of its own.
@@ -531,17 +532,28 @@ def founded(slug: str, name: str) -> tuple[DepartmentRecord, ScopeRecord]:
     return draft.department, draft.defining_scope
 
 
-def drawn(slug: str, label: str, departments: Sequence[str]) -> ScopeRecord:
-    """The scope a creation writes: over one department, or a named set of them.
+def drawn(
+    slug: str, label: str, departments: Sequence[str], team: str | None = None
+) -> ScopeRecord:
+    """The scope a creation writes: over one department, a named set of them, or one team.
 
     `brain.core.department.membership_scope`, which renders one department as an equality and
     several as a membership test, and `ScopeRecord`, whose construction refuses a predicate that is
     not conjunctive or can match nothing. Never flagged as a department's own: that one is written
     with its department. Raises `ValueError` for anything the types refuse.
+
+    A team scope (M1.5.2) is `brain.identity.teams.team_scope`, the department's clause and the
+    team's, so it is inside its department by construction and names exactly one of them.
     """
     try:
-        scope = membership_scope(departments)
-    except DepartmentError as refused:
+        if team is not None:
+            if len(departments) != 1:
+                msg = "a team scope names the one department its team belongs to"
+                raise ValueError(msg)
+            scope = team_scope(team_path(departments[0], team))
+        else:
+            scope = membership_scope(departments)
+    except (DepartmentError, TeamError) as refused:
         raise ValueError(str(refused)) from None
     return ScopeRecord(slug=slug, scope=scope, is_department=False, label=label)
 

@@ -266,9 +266,11 @@ class StructureRecords(Protocol):
         departments: Sequence[str],
         may_know: Callable[[ScopeRecord | None], bool],
         by: Attribution,
+        team: str | None = None,
     ) -> Structured:
         """Write a scope over live departments. A taken slug is `NAME_TAKEN` only if `may_know`
-        says so about the live scope holding it, and the ordinary refusal otherwise."""
+        says so about the live scope holding it, and the ordinary refusal otherwise. A `team`
+        must be a live team of the one department named, or the ordinary refusal."""
         ...
 
     async def retire_scope(
@@ -888,6 +890,7 @@ class StoredOrganisation:
         departments: Sequence[str],
         may_know: Callable[[ScopeRecord | None], bool],
         by: Attribution,
+        team: str | None = None,
     ) -> Structured:
         try:
             async with self._sessions() as session, session.begin():
@@ -906,6 +909,11 @@ class StoredOrganisation:
                 )
                 if not set(departments) <= live:
                     raise _StructureRefusedError(StructureRefusal.UNKNOWN_DEPARTMENT)
+                if team is not None and (
+                    len(departments) != 1
+                    or (await session.execute(one_team(departments[0], team))).first() is None
+                ):
+                    raise _StructureRefusedError(StructureRefusal.NOT_WRITABLE)
                 return (await session.execute(founding_scope(scope))).scalar_one()
         except _StructureRefusedError as refused:
             return refused.why
