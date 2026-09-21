@@ -306,6 +306,10 @@ jobs:
         # route that reaches it, has to pass through something setting it; otherwise its ledger
         # entry carries thirty-two zeros and a transaction number, and verifies anyway.
         run: uv run python -m brain.ops.sweeps write_attribution
+      - name: Every capability the product checks can be granted from the console
+        # M1.7.1. A route or screen checking a capability the furnished registry lacks is a
+        # control nobody on any install can be given.
+        run: uv run python -m brain.ops.sweeps capability_registry
       - name: Migration policy
         # Autogenerate is very often nearly right, and nearly right passes review. These
         # are the three ways it is wrong that a diff does not show: a rename written as a

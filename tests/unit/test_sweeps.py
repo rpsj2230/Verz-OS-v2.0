@@ -1,6 +1,6 @@
 """The schema and registry sweeps.
 
-Task ids: M0.5.4, M0.5.5, M0.5.6, M0.5.7, M0.5.8
+Task ids: M0.5.4, M0.5.5, M0.5.6, M0.5.7, M0.5.8, M1.7.1
 """
 
 from __future__ import annotations
@@ -1179,3 +1179,60 @@ def test_the_house_style_sweep_reads_the_documents_this_repository_serves() -> N
     assert any(":3" in one for one in raised.value.findings), raised.value.findings
 
     sweep_house_style()
+
+
+# ------------------------------------------------------- the capability registry (M1.7.1)
+def test_every_capability_the_product_checks_is_in_the_furnished_registry() -> None:
+    """M1.7.1 on this tree. Delete this and a screen or route can require a capability that no
+    install registers, so nobody can ever be granted it from the console."""
+    from brain.ops.starter import vocabulary
+
+    required = sweeps.required_capabilities()
+    furnished = {one.capability.value for one in vocabulary()}
+    assert set(required) <= furnished
+    assert sweeps.registry_gaps(required, furnished) == []
+
+
+def test_a_capability_missing_from_the_registry_fails_the_sweep(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The refusal. Delete this and a sweep that passes whatever the registry holds stays green."""
+    from brain.ops import starter
+
+    real = starter.vocabulary()
+    monkeypatch.setattr(
+        starter,
+        "vocabulary",
+        lambda: tuple(one for one in real if one.capability.value != "read:job.dead_letter"),
+    )
+    with pytest.raises(sweeps.SweepFailure) as raised:
+        sweeps.sweep_capability_registry()
+    assert len(raised.value.findings) == 1
+    assert raised.value.findings[0].startswith("read:job.dead_letter (")
+
+
+def test_the_sweep_reads_constants_built_at_import_and_leaves_data_and_wildcards_out() -> None:
+    """What the sweep reads. Delete this and it can stop importing modules, missing a capability
+    built from a noun at import time, or start asking about a connected source's data fields."""
+    required = sweeps.required_capabilities()
+    assert "read:audit_read" in required
+    assert "invoke:skill_script" in required
+    assert "read:client.name" not in required
+    assert "read:member.*" not in required
+
+
+def test_a_capability_the_grant_route_would_refuse_is_a_finding() -> None:
+    """Grantable means the grant route's grammar accepts it. Delete this and a registered value
+    nobody can write a grant of passes."""
+    findings = sweeps.registry_gaps({"Read:Bad": "here"}, ["Read:Bad"])
+    assert findings == ["Read:Bad (here) is not a capability the grant route accepts"]
+
+
+def test_a_field_the_products_own_policy_requires_is_required_and_a_connectors_is_not() -> None:
+    """The model lane's passage policy shows a passage's section only to a holder of
+    `read:knowledge.section`, which no furnished registry held until the sweep read field policies.
+    Delete this and a field the product itself classifies can require a read nobody can be granted,
+    or a connected source's data fields can be demanded of the product's registry."""
+    required = sweeps.required_capabilities()
+    assert "read:knowledge.section" in required
+    assert "read:deal.amount" not in required

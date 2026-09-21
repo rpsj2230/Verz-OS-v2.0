@@ -11,7 +11,7 @@ Sweeps that need a database skip with exit 0 when DATABASE_URL is unset, and say
 is deliberate: a developer without Postgres should not be blocked, but CI always has one,
 so the check is never actually skipped where it counts.
 
-Task ids: M0.5.4, M0.5.5, M0.5.6, M0.5.7, M0.5.8, M2.1.5
+Task ids: M0.5.4, M0.5.5, M0.5.6, M0.5.7, M0.5.8, M2.1.5, M1.7.1
 """
 
 from __future__ import annotations
@@ -1085,6 +1085,111 @@ def sweep_write_attribution() -> None:
     print("ok: every console write sets the reach digest and the trace its ledger entry carries")
 
 
+# ------------------------------------------------------------ the capability registry (M1.7.1)
+
+#: Files whose capability literals are a data vocabulary: the fields an agent template's ceiling or
+#: a knowledge column names over a company's own records. Those are granted over a connected
+#: source through the data steward, not furnished with the product, so they are not asked here.
+DATA_VOCABULARY_FILES: tuple[str, ...] = ("agents/catalogue.py", "knowledge/columns.py")
+
+#: Why the sweep reads both the imported constants and the source text.
+A_CAPABILITY_CHECKED_ANYWHERE_MUST_BE_GRANTABLE: str = (
+    "A route or screen that checks a capability nobody can be granted is a control nobody on any "
+    "install can reach. A module-level constant is how most checks name theirs, including the ones "
+    "built from a noun at import time, and a literal written inside a function is how the rest do, "
+    "so both are read and each must be in the registry every install is furnished with."
+)
+
+
+def required_capabilities() -> dict[str, str]:
+    """Every capability the product checks, and one place each is declared.
+
+    Every console and member screen's read and every plane of both surfaces; every module-level
+    `Capability` in the package, read by importing it, and every field a module-level field policy
+    outside the connectors requires; and every `Capability(value="...")` in the
+    source outside `DATA_VOCABULARY_FILES`. A wildcard is a grant covering registered capabilities
+    and never a requirement, so it is left out.
+    """
+    import ast
+    import importlib
+    import pkgutil
+
+    import brain
+    from brain.console.reads import Plane, member_plane_capability, plane_capability
+    from brain.console.screens import SCREENS
+    from brain.core.entitlement import Capability
+    from brain.core.field_policy import FieldPolicy
+    from brain.member.shell import MEMBER_SCREENS
+
+    found: dict[str, str] = {}
+    for one in SCREENS:
+        found.setdefault(one.read.requires.value, f"console screen {one.key}")
+    for member in MEMBER_SCREENS:
+        found.setdefault(member.read.requires.value, f"member screen {member.key}")
+    for plane in Plane:
+        found.setdefault(plane_capability(plane).value, "console plane")
+        found.setdefault(member_plane_capability(plane).value, "member plane")
+    for info in pkgutil.walk_packages(brain.__path__, "brain."):
+        module = importlib.import_module(info.name)
+        for name, value in sorted(vars(module).items()):
+            if isinstance(value, Capability):
+                found.setdefault(value.value, f"{info.name}.{name}")
+            # A module-level field policy is the product classifying its own entity, so every
+            # field it shows needs a grantable read; a connector's policy is its source's data.
+            elif isinstance(value, FieldPolicy) and not info.name.startswith("brain.connectors."):
+                for rule in value.rules:
+                    found.setdefault(rule.required_capability.value, f"{info.name}.{name}")
+    for path in sorted(SRC.rglob("*.py")):
+        where = path.relative_to(SRC).as_posix()
+        if where in DATA_VOCABULARY_FILES:
+            continue
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)):
+                continue
+            if node.func.id != "Capability":
+                continue
+            for keyword in node.keywords:
+                value = keyword.value
+                literal = value.value if isinstance(value, ast.Constant) else None
+                if keyword.arg == "value" and isinstance(literal, str):
+                    found.setdefault(literal, f"{where}:{node.lineno}")
+    return {value: where for value, where in found.items() if not value.endswith(".*")}
+
+
+def registry_gaps(required: dict[str, str], furnished: Iterable[str]) -> list[str]:
+    """Each required capability the furnished registry lacks, or the grant route would refuse."""
+    from brain.core.entitlement import CAPABILITY_RE
+
+    registered = set(furnished)
+    findings: list[str] = []
+    for value, where in sorted(required.items()):
+        if value not in registered:
+            findings.append(
+                f"{value} ({where}) is not in the registry an install is furnished with; declare "
+                "it in brain.ops.starter so the Capabilities screen names it"
+            )
+        elif CAPABILITY_RE.fullmatch(value) is None:
+            findings.append(f"{value} ({where}) is not a capability the grant route accepts")
+    return findings
+
+
+def sweep_capability_registry() -> None:
+    """Every capability a served route or console screen requires can be granted (M1.7.1).
+
+    Furnishing registers `brain.ops.starter.vocabulary` on every start, the Capabilities screen
+    lists that registry, and `POST /govern/grants` writes any capability in its grammar. So a
+    capability is grantable from the console exactly when it is in that vocabulary and parses.
+    See `A_CAPABILITY_CHECKED_ANYWHERE_MUST_BE_GRANTABLE`.
+    """
+    from brain.ops.starter import vocabulary
+
+    required = required_capabilities()
+    findings = registry_gaps(required, (one.capability.value for one in vocabulary()))
+    if findings:
+        raise SweepFailure(findings)
+    print(f"ok: all {len(required)} capabilities the product checks are furnished and grantable")
+
+
 SWEEPS = {
     "rls": sweep_rls,
     "grant_isolation": sweep_grant_isolation,
@@ -1097,6 +1202,7 @@ SWEEPS = {
     "house_style": sweep_house_style,
     "install_from_empty": sweep_install_from_empty,
     "write_attribution": sweep_write_attribution,
+    "capability_registry": sweep_capability_registry,
 }
 
 
