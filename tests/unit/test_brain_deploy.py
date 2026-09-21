@@ -42,6 +42,53 @@ STUB = r"""#!/bin/sh
 S="$STUB_STATE"
 echo "$*" >> "$S/calls"
 ready_image() { grep -qxF "$1" "$S/good"; }
+# The other containers, one per line of `containers`:
+# name project service config-image image-id restart health(- for none) state
+if [ "$1" = ps ]; then
+  shift; all=0; proj=""; svc=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -a) all=1 ;;
+      --filter) shift
+        case "$1" in
+          label=com.docker.compose.project=*) proj="${1#label=com.docker.compose.project=}" ;;
+          label=com.docker.compose.service=*) svc="${1#label=com.docker.compose.service=}" ;;
+        esac ;;
+    esac
+    shift
+  done
+  if [ -s "$S/running" ] && [ "$proj" = stub-project ] \
+     && { [ -z "$svc" ] || [ "$svc" = app ]; }; then
+    echo "app-stub-service"
+  fi
+  awk -v p="$proj" -v s="$svc" -v a="$all" \
+    '(p == "" || $2 == p) && (s == "" || $3 == s) && (a == 1 || $8 == "running") { print $1 }' \
+    "$S/containers"
+  exit 0
+fi
+if [ "$1" = inspect ]; then
+  line="$(awk -v n="$2" '$1 == n' "$S/containers")"
+  if [ -n "$line" ]; then
+    asked="$*"
+    set -- $line
+    case "$asked" in
+      *RestartPolicy*) echo "$2|$3|$4|$6" ;;
+      *State.Status*) h="$7"; [ "$h" = - ] && h=""; echo "$5|$8|$h" ;;
+      *compose.project*) echo "$2" ;;
+    esac
+    exit 0
+  fi
+fi
+[ "$1 $2" = "compose logs" ] && exit 0
+if [ "$1" = compose ] && [ "${6:-app}" != app ]; then
+  bad=0; grep -qxF "$6" "$S/broken" && bad=1
+  awk -v s="$6" -v i="$(cat "$S/tag")" -v b="$bad" \
+    '$2 == "stub-project" && $3 == s {
+       $5 = i; if (b) { if ($7 == "-") $8 = "restarting"; else $7 = "unhealthy" } } { print }' \
+    "$S/containers" > "$S/containers.new"
+  mv "$S/containers.new" "$S/containers"
+  exit 0
+fi
 case "$1" in
   pull) exit 0 ;;
   image)
@@ -99,6 +146,7 @@ class Ran:
     running: str
     published: str
     output: str
+    containers: dict[str, list[str]]
 
 
 #: The app's networks as `docker inspect` lists them, by name, each with the compose project
@@ -114,6 +162,8 @@ def deploy(
     failed_before: int = 0,
     stub: str = STUB,
     networks: tuple[tuple[str, str], ...] = ONE_NETWORK,
+    containers: tuple[str, ...] = (),
+    broken: tuple[str, ...] = (),
 ) -> Ran:
     """Run the real script once: the app runs `running`, the registry's tag is `NEW`."""
     state = tmp_path / "state"
@@ -135,6 +185,10 @@ def deploy(
         encoding="utf-8",
         newline="\n",
     )
+    for name, rows in (("containers", containers), ("broken", broken)):
+        (state / name).write_text(
+            "".join(f"{one}\n" for one in rows), encoding="utf-8", newline="\n"
+        )
     uuid_file = tmp_path / "uuid"
     uuid_file.write_text(UUID, encoding="utf-8", newline="\n")
     faildir = tmp_path / "failed"
@@ -167,6 +221,10 @@ def deploy(
         running=(state / "running").read_text(encoding="utf-8").strip(),
         published=published.read_text(encoding="utf-8") if published.exists() else "",
         output=done.stdout + done.stderr,
+        containers={
+            line.split()[0]: line.split()
+            for line in (state / "containers").read_text(encoding="utf-8").splitlines()
+        },
     )
 
 
@@ -376,3 +434,99 @@ def test_every_record_carries_the_task_ids_baked_into_the_image_and_reads_as_a_d
         for call in ran.calls
     )
     assert Deployment.from_line(ran.published.splitlines()[0]) == parsed
+
+
+#: The app's compose project as the owner's install runs it, plus what shares the server: a
+#: container of another project named like the worker and running this very image, and one from
+#: the other `verz-brain` project the server also hosts.
+REPO_IMAGE = "ghcr.io/rpsj2230/verz-brain-v2.0"
+INSTALL = (
+    f"brain-worker-{UUID} stub-project brain-worker {REPO_IMAGE}:latest {OLD}"
+    " unless-stopped healthy running",
+    f"brain-parse-worker-{UUID} stub-project brain-parse-worker {REPO_IMAGE}:v2 {OLD}"
+    " unless-stopped - running",
+    f"migrate-{UUID} stub-project migrate {REPO_IMAGE}:latest {OLD} no - running",
+    f"pgbouncer-{UUID} stub-project pgbouncer edoburu/pgbouncer:v1.24.1-p1 sha256:pgb"
+    " unless-stopped healthy running",
+    f"brain-worker-{UUID}x other-project worker {REPO_IMAGE}:latest {OLD}"
+    " unless-stopped healthy running",
+    "verz-brain-worker-1 verz-brain worker verz-brain-worker sha256:foreign"
+    " unless-stopped - running",
+)
+FOREIGN = (f"brain-worker-{UUID}x", "verz-brain-worker-1")
+
+
+def test_every_service_on_the_same_image_follows_the_app_once_it_is_ready_and_nothing_else(
+    tmp_path: Path,
+) -> None:
+    """Found on the install on 2026-09-21: only `app` was recreated, so the worker kept running
+    the old image and a worker fix never reached it. Now each service of the app's compose
+    project on this repository follows, one at a time, waited for, and only once the app answers
+    ready on the new image. The one-shot `migrate`, a service on another image, and two
+    containers outside the project (one named like the worker and on this very image) are left
+    alone.
+
+    Delete this and the worker can silently stay on the old release again, or a name match can
+    recreate a container that belongs to another project on the shared server."""
+    ran = deploy(tmp_path, running=OLD, good={OLD, NEW}, containers=INSTALL)
+
+    assert ran.code == 0, ran.output
+    ups = [call for call in ran.calls if call.startswith("compose up")]
+    assert ups == [
+        "compose up -d --force-recreate --no-deps app",
+        "compose up -d --force-recreate --no-deps brain-worker",
+        "compose up -d --force-recreate --no-deps brain-parse-worker",
+    ]
+    app_up = ran.calls.index(ups[0])
+    app_ready = next(
+        i
+        for i, c in enumerate(ran.calls)
+        if i > app_up and c.startswith(f"exec app-{UUID} ") and "health/ready" in c
+    )
+    worker_up = ran.calls.index(ups[1])
+    waited = first(ran.calls, "ps -a --filter label=com.docker.compose.project=stub-project")
+    assert app_ready < worker_up < waited < ran.calls.index(ups[2])
+    assert ran.containers[f"brain-worker-{UUID}"][4] == NEW
+    assert ran.containers[f"brain-parse-worker-{UUID}"][4] == NEW
+    for untouched in (f"migrate-{UUID}", *FOREIGN):
+        assert ran.containers[untouched][4] != NEW
+    # A foreign container may be looked at, never acted on.
+    assert not any(
+        name in call for call in ran.calls if not call.startswith("inspect") for name in FOREIGN
+    )
+    assert ran.records[0]["outcome"] == "deployed"
+    assert ran.records[0]["services_updated"] == "brain-worker,brain-parse-worker"
+    assert ran.records[0]["services_failed"] == ""
+
+
+def test_a_worker_that_fails_on_the_new_image_is_reported_and_the_healthy_app_is_kept(
+    tmp_path: Path,
+) -> None:
+    """A worker that is not healthy on the new image does not roll back an app that is: the old
+    worker is gone either way. The failure is logged loudly and recorded, the next service is
+    still tried, and the run exits non-zero so the journal shows it.
+
+    Delete this and a failed worker can pass as a clean deploy, or pull a healthy app back."""
+    ran = deploy(
+        tmp_path, running=OLD, good={OLD, NEW}, containers=INSTALL, broken=("brain-worker",)
+    )
+
+    assert ran.code == 1
+    assert not any(call.startswith("tag ") for call in ran.calls)
+    assert ran.running == NEW
+    assert "SERVICE NOT UPDATED: brain-worker" in ran.output
+    assert [one["outcome"] for one in ran.records] == ["deployed"]
+    assert ran.records[0]["services_updated"] == "brain-parse-worker"
+    assert ran.records[0]["services_failed"] == "brain-worker"
+    assert '"services_failed":"brain-worker"' in ran.published
+
+
+def test_an_image_the_gate_held_back_never_reaches_the_workers(tmp_path: Path) -> None:
+    """The workers follow the app only when the app is ready on the new image.
+
+    Delete this and a worker can be moved onto an image the gate refused."""
+    ran = deploy(tmp_path, running=OLD, good={OLD}, containers=INSTALL)
+
+    assert ran.code == 1
+    assert ran.containers[f"brain-worker-{UUID}"][4] == OLD
+    assert not any(call.startswith("compose") for call in ran.calls)

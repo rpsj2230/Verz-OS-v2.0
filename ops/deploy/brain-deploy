@@ -19,7 +19,10 @@
 #    old container ran is pinned back onto the tag by its id and the container is recreated from
 #    it. By id, not by tag: `:latest` has already moved to the broken build, and a rollback that
 #    re-pulled it would redeploy the failure and read as a rollback that worked.
-# 4. The record (M38.1.3.5). Every way a deploy ends appends one line to the host's
+# 4. The other services on the same image. A worker built from this image is recreated only after
+#    the app is ready on it, one service at a time, each waited for. Until 2026-09-21 only `app`
+#    was recreated, so a fix to the worker never reached the worker. See update_siblings.
+# 5. The record (M38.1.3.5). Every way a deploy ends appends one line to the host's
 #    deployments.jsonl, including the ones where the application never came up, and once a
 #    container answers ready the whole file is handed to `python -m brain.ops.deployment_store`
 #    inside it, which takes in whatever the database's history lacks. The Version and updates
@@ -125,11 +128,12 @@ task_ids() {
   printf '%s' "$ids"
 }
 
-# One line per deploy, appended, never rewritten. The format is `brain.ops.deployments`'.
+# One line per deploy, appended, never rewritten. The format is `brain.ops.deployments`'; the
+# two service lists are extra keys its parser ignores, there for whoever reads the file.
 record() {
   mkdir -p "$(dirname "$RECORD")"
-  printf '{"at":"%s","outcome":"%s","commit":"%s","image":"%s","previous":"%s","task_ids":"%s"}\n' \
-    "$(date -Is)" "$1" "$2" "$3" "$4" "${5:-}" >> "$RECORD"
+  printf '{"at":"%s","outcome":"%s","commit":"%s","image":"%s","previous":"%s","task_ids":"%s","services_updated":"%s","services_failed":"%s"}\n' \
+    "$(date -Is)" "$1" "$2" "$3" "$4" "${5:-}" "${6:-}" "${7:-}" >> "$RECORD"
 }
 
 # Hand the whole file to the history inside a container that answers. Never fails the deploy:
@@ -166,6 +170,80 @@ choose_networks() {
          --format '{{index .Labels "com.docker.compose.project"}}' 2>/dev/null)" = "$project" ]; then
       NETWORK="$net"
       break
+    fi
+  done
+}
+
+# The repository of an image reference, without its tag or digest: `host:5000/a/b:tag` is
+# `host:5000/a/b`. A colon after the last slash is a tag; one before it is a registry port.
+repo_of() {
+  local ref="${1%%@*}"
+  case "${ref##*/}" in
+    *:*) ref="${ref%:*}" ;;
+  esac
+  printf '%s' "$ref"
+}
+
+# A recreated service is ready when it runs the new image and is healthy, or, with no health
+# check, is still running on a second look (a crashing process shows as restarting or exited).
+wait_service() {
+  local svc="$1" project="$2" i=0 seen=0 name state
+  while [ "$i" -lt "$READY_TRIES" ]; do
+    name="$(docker ps -a --filter "label=com.docker.compose.project=$project"       --filter "label=com.docker.compose.service=$svc" --format '{{.Names}}' | head -n 1 || true)"
+    if [ -n "$name" ]; then
+      state="$(docker inspect "$name"         --format '{{.Image}}|{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{end}}'         2>/dev/null || true)"
+      case "$state" in
+        "$NEW|running|healthy") return 0 ;;
+        "$NEW|running|")
+          seen=$((seen + 1))
+          [ "$seen" -ge 2 ] && return 0 ;;
+        *) seen=0 ;;
+      esac
+    fi
+    i=$((i + 1))
+    sleep "$READY_GAP"
+  done
+  return 1
+}
+
+# Every other running service of the app's own compose project whose image is this repository,
+# recreated one at a time after the app is ready. Membership is the compose project label, asked
+# of docker and checked again per container, never a name: the server is shared with another
+# project whose containers are named like these. One-shot services (restart "no", `migrate`)
+# are left alone for the reason `app` is recreated with --no-deps. A service that fails is
+# reported, never rolled back: the app is healthy and the old worker is already gone.
+UPDATED=""
+FAILED_SERVICES=""
+update_siblings() {
+  local project name meta c_project svc image restart want
+  local -a services=()
+  project="$(docker inspect "$APP" --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null || true)"
+  if [ -z "$project" ]; then
+    log "$APP carries no compose project label; no other service is recreated"
+    return 0
+  fi
+  want="$(repo_of "$IMAGE")"
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    meta="$(docker inspect "$name" --format '{{index .Config.Labels "com.docker.compose.project"}}|{{index .Config.Labels "com.docker.compose.service"}}|{{.Config.Image}}|{{.HostConfig.RestartPolicy.Name}}' 2>/dev/null || true)"
+    IFS='|' read -r c_project svc image restart <<< "$meta"
+    [ "$c_project" = "$project" ] || continue
+    [ -n "$svc" ] && [ "$svc" != app ] && [ "$svc" != migrate ] || continue
+    [ -n "$restart" ] && [ "$restart" != no ] || continue
+    [ "$(repo_of "$image")" = "$want" ] || continue
+    case " ${services[*]:-} " in *" $svc "*) continue ;; esac
+    services+=("$svc")
+  done < <(docker ps --filter "label=com.docker.compose.project=$project" --format '{{.Names}}' || true)
+
+  for svc in ${services[@]+"${services[@]}"}; do
+    log "recreating $svc on $NEW"
+    if docker compose up -d --force-recreate --no-deps "$svc" && wait_service "$svc" "$project"; then
+      log "$svc is ready on $NEW"
+      UPDATED="${UPDATED:+$UPDATED,}$svc"
+    else
+      log "SERVICE NOT UPDATED: $svc is not ready on $NEW within $((READY_TRIES * READY_GAP))s; $APP stays on $NEW"
+      docker compose logs --tail 40 "$svc" 2>&1 || true
+      FAILED_SERVICES="${FAILED_SERVICES:+$FAILED_SERVICES,}$svc"
     fi
   done
 }
@@ -241,8 +319,14 @@ docker compose up -d --force-recreate --no-deps app
 if wait_ready "$APP"; then
   log "$APP is ready on $NEW"
   rm -f "$(fail_file "$NEW")"
-  record deployed "$(commit_of "$APP")" "$NEW" "$PREVIOUS" "$IDS"
+  update_siblings
+  log "services updated: ${UPDATED:-none}; services failed: ${FAILED_SERVICES:-none}"
+  record deployed "$(commit_of "$APP")" "$NEW" "$PREVIOUS" "$IDS" "$UPDATED" "$FAILED_SERVICES"
   publish_history "$APP"
+  if [ -n "$FAILED_SERVICES" ]; then
+    log "DEPLOY INCOMPLETE: $APP is on $NEW but $FAILED_SERVICES is not"
+    exit 1
+  fi
   exit 0
 fi
 
