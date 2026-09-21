@@ -15,3 +15,11 @@ with their evidence so the commit is kept.
 | M31.1.2.2 | tests/unit/test_app_wiring.py: an in-flight request finishes under a real uvicorn shutdown |
 | M0.2.5 | the TypedResult entity-tag tests (mypy and runtime) |
 | M41.1.4, M41.1.5, M41.1.7 | Install > Settings on the owner's install shows branding, identity provider and storage values, each with its source |
+
+## Wave 1, models (closed 2026-09-22)
+
+| Task | Evidence |
+| --- | --- |
+| M5.6.2 | tests/unit/test_matrix_gate.py: a routing change that stops the ladder answering a golden question is held, with the failing question shown |
+| M5.6.4 | tests/unit/test_provider_registry_routes.py: the register exports every provider's region, retention, training terms and agreement link with call counts |
+| M5.7.2 | tests/unit/test_model_calls.py: a provider added from the console answers through the ladder with no release; its key goes to its own vault slot |
