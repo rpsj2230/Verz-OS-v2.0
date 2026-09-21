@@ -300,8 +300,14 @@ def test_the_decided_leaves_are_the_register_points_that_are_not_plugins() -> No
     for leaf, flag in decided.items():
         if leaf in register:
             continue
+        # Or the owner decided it on the Needs you page, and the item it names is there.
+        owner = re.match(r"owner \d{4}-\d{2}-\d{2}, item (\d+):", flag["why"])
+        if owner:
+            needs = (repo / "docs" / "needs-rupash.md").read_text(encoding="utf-8")
+            assert f"\n## {owner.group(1)}. " in needs, (leaf, flag["why"])
+            continue
         merged = re.match(r"Merged into (M\d+(?:\.\d+)+),", flag["why"])
-        assert merged, f"{leaf} is decided for a reason that is neither item 58 nor a merge"
+        assert merged, f"{leaf} is decided for a reason that is not item 58, a merge or the owner"
         assert merged.group(1) in leaves and merged.group(1) not in decided, (leaf, flag["why"])
 
 
