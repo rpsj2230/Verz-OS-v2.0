@@ -72,7 +72,14 @@ AGE_REFUSES_WHAT_SOMEBODY_CHOSE: Final = (
 )
 
 #: Direct dependencies past `STALE_AFTER` that somebody has reviewed, with what they found.
-REVIEWED_STALE: Final[Mapping[tuple[str, str], str]] = {}
+REVIEWED_STALE: Final[Mapping[tuple[str, str], str]] = {
+    ("pypi", "ldap3"): (
+        "newest release 2.9.1 on 2021-07-18, repository cannatag/ldap3 not archived and still "
+        "pushed to in 2026. LDAPv3 has not changed since RFC 4511, and the permissive alternatives "
+        "bind the C OpenLDAP library or are unmaintained, so the owner allowed it knowing its age; "
+        "owner decision 2026-09-22, needs-rupash item 93"
+    ),
+}
 
 #: Archived repositories somebody has reviewed, with what they found. Reviewed by the agent that
 #: wrote this on 2026-09-17, not by the owner; replacing the parent removes the entry.
@@ -140,6 +147,7 @@ class OwnerDecision:
 
 
 _ITEM_70: Final = "owner decision 2026-09-21, needs-rupash item 70"
+_ITEM_93: Final = "owner decision 2026-09-22, needs-rupash item 93"
 
 #: Components outside the allowlist that the owner allowed. Keyed by component and pinned to
 #: the licence, never by licence alone, so another dependency under one of these licences is
@@ -170,6 +178,14 @@ OWNER_ALLOWED: Final[Mapping[tuple[str, str], OwnerDecision]] = {
     ("pypi", "regex"): OwnerDecision(
         "Apache-2.0 AND CNRI-Python",
         f"CNRI-Python is a permissive licence on the code regex derives from CPython; {_ITEM_70}",
+    ),
+    # LGPL for this library by name, on psycopg's terms: imported, never vendored or patched,
+    # pinned in uv.lock so a client could swap it. Its classifier is read as this id for ldap3
+    # alone, in brain.ops.sweeps._CLASSIFIER_TO_SPDX_FOR.
+    ("pypi", "ldap3"): OwnerDecision(
+        "LGPL-3.0-or-later",
+        "the LDAP and Active Directory staff source's client (M1.6.6), used unmodified and "
+        f"replaceable, which the LGPL permits in a proprietary product; {_ITEM_93}",
     ),
 }
 
@@ -445,7 +461,10 @@ def pypi_liveness(component: Component, fetch: Fetch, archived: Archived) -> Liv
     )
     return Liveness(
         licence=declared_licence(
-            pinned.get("license_expression"), pinned.get("license"), pinned.get("classifiers") or ()
+            pinned.get("license_expression"),
+            pinned.get("license"),
+            pinned.get("classifiers") or (),
+            name=component.name,
         ),
         last_release=_newest(stamps),
         repository=repository,

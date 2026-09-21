@@ -14,7 +14,8 @@ is the position `brain.connectors` deliberately refused when it put the transpor
 callable and tested the parse against recorded payloads instead. So each adapter takes the
 pages a caller has already fetched, by whatever means that caller likes, and turns them into
 records. Nothing here opens a socket, and `tests/fixtures/roster_payloads.py` is what they
-are parsed against.
+are parsed against. The transports are next door: `brain.connectors.staff_directories` for the
+three that answer over HTTP, and `brain.connectors.ldap_directory` for a directory.
 
 **The parser reads and the trust decides, and those are two different layers on purpose.**
 An adapter carries whatever the payload said into `StaffRecord`, including a department a
@@ -222,6 +223,9 @@ class RosterReading:
     #: rooms, service accounts, referrals and rows with nothing to join on. Named rather than
     #: counted, because an operator reading "four rows skipped" cannot act on it.
     dropped: tuple[str, ...] = ()
+    #: Casefolded work address to their manager's casefolded work address, for a source that
+    #: says who manages whom and only where the manager was in the same read. Empty elsewhere.
+    managers: Mapping[str, str] = field(default_factory=dict)
 
 
 def _assemble(
@@ -233,6 +237,7 @@ def _assemble(
     stable_ids: Mapping[str, str],
     aliases: Mapping[str, tuple[str, ...]],
     dropped: Sequence[str],
+    managers: Mapping[str, str] | None = None,
 ) -> RosterReading:
     """Build the reading. The one place a `Roster` is constructed in this file.
 
@@ -251,6 +256,7 @@ def _assemble(
         stable_ids=dict(stable_ids),
         aliases=dict(aliases),
         dropped=tuple(dropped),
+        managers=dict(managers or {}),
     )
 
 
@@ -827,10 +833,16 @@ class LdapSource:
     **A group is its full distinguished name.** Matching a rule on the common name alone would
     make `CN=Approvers,OU=Groups` and `CN=Approvers,OU=Legacy` the same group, which is how a
     retired group goes on conferring a role.
+
+    **`more_pages` is the paged results cookie still outstanding when the reader stopped**, which
+    is the server saying there is more, read exactly as a size limit is. **`manager` is a
+    distinguished name** and is resolved to an address only against entries in this same read:
+    a manager outside the search base is somebody this roster does not list.
     """
 
     entries: Sequence[tuple[str | None, Mapping[str, Sequence[str]]]]
     result_code: int = LDAP_SUCCESS
+    more_pages: bool = False
     configured_trust: frozenset[Asserts] | None = None
 
     def roster(self) -> Roster:
@@ -848,6 +860,8 @@ class LdapSource:
         people: list[StaffRecord] = []
         dropped: list[str] = []
         stable: dict[str, str] = {}
+        address_at: dict[str, str] = {}
+        manager_named: dict[str, str] = {}
         referred = False
         for name, attributes in self.entries:
             if name is None:
@@ -869,17 +883,26 @@ class LdapSource:
                 dropped.append(f"{name}: {built}")
                 continue
             people.append(built)
+            folded = built.work_address.casefold()
             identifier = _attribute(attributes, "objectGUID") or _attribute(attributes, "entryUUID")
             if identifier:
-                stable[built.work_address.casefold()] = identifier
+                stable[folded] = identifier
+            address_at[name.casefold()] = folded
+            manager = _attribute(attributes, "manager")
+            if manager:
+                manager_named[folded] = manager.casefold()
+        managers = {
+            person: address_at[boss] for person, boss in manager_named.items() if boss in address_at
+        }
         return _assemble(
             LDAP,
             people,
-            complete=self.result_code == LDAP_SUCCESS and not referred,
+            complete=self.result_code == LDAP_SUCCESS and not referred and not self.more_pages,
             configured=self.configured_trust,
             stable_ids=stable,
             aliases={},
             dropped=dropped,
+            managers=managers,
         )
 
 

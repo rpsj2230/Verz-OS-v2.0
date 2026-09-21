@@ -209,7 +209,19 @@ is the catalogue, and a test holds this table to it):
 | `connector_keys/laravel` | laravel | SELECT on the allowlisted views only | SELECT on tables; any write |
 | `connector_keys/lark_base` | lark_base | bitable:app:readonly; base:record:read | base:record:write; drive:drive |
 | `connector_keys/lark_wiki` | lark_wiki | wiki:wiki:readonly | docs:document edit scopes |
+| `connector_keys/staff_source` | staff_source | read on the staff directory only; for LDAP a service account that may bind and search and nothing more | any write; for LDAP an administrator or an account that may reset passwords or groups |
 | `connector_keys/xero` | xero | accounting.transactions.read; accounting.contacts.read | any .write scope |
+
+`connector_keys/staff_source` is not a connected source: it is the staff list's credential, one
+slot whichever kind of staff source the install chose, written from the setup wizard or the Staff
+sources screen and read by the scheduled staff sync (`brain.ops.staff_sync_run`) through the same
+run lease. For Lark and Microsoft Entra it holds `<application id>:<secret>`, for a Google Sheet an
+API key, and for LDAP or Active Directory `<service account>:<password>`, where the service account
+is a distinguished name or `name@domain`. That account is created in the directory for this alone:
+an ordinary user that can bind and search, never an administrator, and never one delegated to
+reset passwords or change groups. The directory address and search go in
+`INSTALL_STAFF_SOURCE_LOCATION`, never the password (`brain.connectors.ldap_directory` refuses a
+location carrying one).
 
 Until both are done, connecting a source is refused with a sentence saying the vault refused, and
 nothing is recorded as connected.

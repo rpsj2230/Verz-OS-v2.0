@@ -20,13 +20,15 @@ with a sentence and write no member, and the table's own check refuses a failed 
 anybody. So a refused credential is a line on the Staff sources screen rather than a night on
 which everybody appeared to leave. See `A_RUN_THAT_COULD_NOT_READ_CHANGED_NOBODY`.
 
-**What each source is read with, and the three that are not read on a schedule.** Lark and
+**What each source is read with, and the two that are not read on a schedule.** Lark and
 Microsoft Entra take the application's own identifier and secret, kept as one value
 `<id>:<secret>`, and exchange them for a tenant token, which is the shape a schedule needs: no
-person is signed in at two in the morning. A Google Sheet takes an API key. A hand-kept
+person is signed in at two in the morning. A Google Sheet takes an API key. An LDAP directory
+takes a read-only service account kept as `<bind name>:<password>`, bound over TLS by
+`brain.connectors.ldap_directory` on a thread, because its client is blocking. A hand-kept
 spreadsheet is read when somebody uploads it and there is nothing to read on a schedule; Google
-Workspace needs a signed service-account assertion and LDAP a directory client, neither of which
-this product carries, and each says so on its run. See `WHAT_EACH_SOURCE_IS_READ_WITH`.
+Workspace needs a signed service-account assertion this product cannot make, and says so on its
+run. See `WHAT_EACH_SOURCE_IS_READ_WITH`.
 
 Rejected: reading the directory from the application process when somebody opens the screen. The
 application holds no read on a connector key by policy, and a roster read on page load would
@@ -37,7 +39,7 @@ contact the company's directory every time anybody looked.
 Option A names, from the same roster, once the roster's transaction has committed. A failure there
 is logged and changes nothing the roster wrote, for that module's reason (M1.8.3).
 
-Task ids: M1.6.1, M1.6.2, M1.6.4, M1.6.12, M1.8.6, M1.8.3, M1.8.9
+Task ids: M1.6.1, M1.6.2, M1.6.4, M1.6.6, M1.6.12, M1.8.6, M1.8.3, M1.8.9
 """
 
 from __future__ import annotations
@@ -54,6 +56,7 @@ import httpx
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from brain.connectors.ldap_directory import LdapBindRefusedError, read_directory
 from brain.connectors.staff_directories import (
     GOOGLE_SHEETS_URL,
     LARK_PLATFORMS,
@@ -126,13 +129,14 @@ A_RUN_THAT_COULD_NOT_READ_CHANGED_NOBODY: Final = (
     "that names anybody."
 )
 
-#: Why each source is read the way it is, and why three are not read on a schedule.
+#: Why each source is read the way it is, and why two are not read on a schedule.
 WHAT_EACH_SOURCE_IS_READ_WITH: Final = (
     "A schedule runs with nobody signed in, so a directory is read with the application's own "
     "credential rather than a person's session: Lark and Microsoft exchange an application's "
-    "identifier and secret for a tenant token, and a Google Sheet takes an API key. A hand-kept "
-    "spreadsheet is read when uploaded, and Google Workspace and LDAP need a signer and a "
-    "directory client this product does not carry, so their runs say so and change nobody."
+    "identifier and secret for a tenant token, a Google Sheet takes an API key, and an LDAP "
+    "directory binds a read-only service account over TLS. A hand-kept spreadsheet is read when "
+    "uploaded, and Google Workspace needs a signer this product does not carry, so its runs say "
+    "so and change nobody."
 )
 
 #: Why the run reads the saved settings as well as the environment.
@@ -200,10 +204,6 @@ NOT_READ_ON_A_SCHEDULE: Final[Mapping[str, str]] = {
     GOOGLE_WORKSPACE: (
         "Google Workspace is not read on a schedule yet: it needs a service account with "
         "domain-wide delegation, which this product cannot sign for. Nobody was changed."
-    ),
-    LDAP: (
-        "An LDAP directory is not read on a schedule yet: this product carries no directory "
-        "client. Nobody was changed."
     ),
 }
 CREDENTIAL_SHAPE: Final = (
@@ -316,11 +316,27 @@ async def read_google_sheet(fetch: Fetch, credential: str, location: str) -> Sta
     return GoogleSheetSource(payload=answer.body)
 
 
+async def read_ldap(fetch: Fetch, credential: str, location: str) -> StaffSource:
+    """Bind the kept service account over TLS and page the directory, on a thread.
+
+    `fetch` is unused: a directory is not HTTP. The client blocks, so it runs off the loop. A
+    refused bind is the credential's refusal, in `CREDENTIAL_REFUSED_PREFIX`'s words, and never
+    names the account or its password.
+    """
+    del fetch
+    try:
+        return await asyncio.to_thread(read_directory, location, credential)
+    except LdapBindRefusedError as refused:
+        msg = f"{CREDENTIAL_REFUSED_PREFIX}: {refused}. {NOBODY_CHANGED}"
+        raise CredentialRefusedError(msg) from None
+
+
 #: The sources read on a schedule, by the name `INSTALL_STAFF_SOURCE` takes.
 READERS: Final[Mapping[str, Reader]] = {
     LARK: read_lark,
     MICROSOFT_ENTRA: read_microsoft,
     GOOGLE_SHEET: read_google_sheet,
+    LDAP: read_ldap,
 }
 
 

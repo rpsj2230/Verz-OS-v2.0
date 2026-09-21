@@ -49,6 +49,10 @@ NOT_A_CONNECTOR = frozenset(
         # arguing why a roster's shapes are a second file rather than recordings in this corpus.
         # `tests/unit/test_staff_directories.py` drives it against that file.
         "staff_directories",
+        # Reading an LDAP directory or Active Directory as a staff source, for the same reason:
+        # `tests/unit/test_ldap_directory.py` drives it against `roster_payloads.py`'s recorded
+        # directory entries and against ldap3's own mock server.
+        "ldap_directory",
     }
 )
 

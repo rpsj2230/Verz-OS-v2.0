@@ -175,6 +175,35 @@ def test_a_permissive_package_is_not_caught_by_the_copyleft_reading() -> None:
     assert declared_licence(None, "Apache 2.0", ()) == ""
 
 
+LGPLV3_CLASSIFIER = "License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)"
+
+
+def test_ldap3s_classifier_reads_as_the_licence_its_source_grants_and_for_ldap3_alone() -> None:
+    """Item 93 (M1.6.6). ldap3 2.9.1's real metadata: no expression, "LGPL v3" as free text and
+    the LGPLv3 classifier, which names neither -only nor -or-later. It is read as the or-later
+    its source headers grant, for ldap3 by name; any other package carrying that classifier is
+    still the classifier text, and refused. Delete this and either the owner's decision refuses
+    the library he allowed, or the classifier admits every LGPL package after it unread."""
+    assert declared_licence(None, "LGPL v3", [LGPLV3_CLASSIFIER], name="ldap3") == (
+        "LGPL-3.0-or-later"
+    )
+    assert declared_licence(None, "LGPL v3", [LGPLV3_CLASSIFIER], name="another") == (
+        LGPLV3_CLASSIFIER
+    )
+    assert declared_licence(None, "LGPL v3", [LGPLV3_CLASSIFIER]) == LGPLV3_CLASSIFIER
+    ours = Component("pypi", "ldap3", "2.9.1", "uv.lock", direct=True)
+    stranger = Component("pypi", "another", "1.0.0", "uv.lock", direct=True)
+    found = liveness_findings(
+        [ours, stranger],
+        {
+            ("pypi", "ldap3"): alive("LGPL-3.0-or-later"),
+            ("pypi", "another"): alive(LGPLV3_CLASSIFIER),
+        },
+        now=NOW,
+    )
+    assert len(found.refused) == 1 and "another" in found.refused[0]
+
+
 def test_an_npm_package_under_an_allowed_licence_passes_and_one_outside_is_refused() -> None:
     """Delete this and the npm half of the audit can refuse everything or nothing."""
     good = Component("npm", "left", "1.0.0", "lock", "MIT")
@@ -199,9 +228,10 @@ def test_a_decision_the_owner_has_not_made_is_named_by_component_not_by_licence(
     assert len(found.refused) == 1 and "another-font" in found.refused[0]
 
 
-def test_the_owners_seven_licence_decisions_pass_and_admit_nothing_else() -> None:
-    """Item 70 (M0.7.1): the owner allowed exactly these seven components. Delete this and the
-    GPL squid entry can become a GPL entry for anything, or a font licence for any font."""
+def test_the_owners_eight_licence_decisions_pass_and_admit_nothing_else() -> None:
+    """Items 70 (M0.7.1) and 93 (M1.6.6): the owner allowed exactly these eight components.
+    Delete this and the GPL squid entry can become a GPL entry for anything, or a font licence
+    for any font."""
     assert set(OWNER_ALLOWED) == {
         ("image", "postgres"),
         ("image", "pgvector/pgvector"),
@@ -210,8 +240,12 @@ def test_the_owners_seven_licence_decisions_pass_and_admit_nothing_else() -> Non
         ("npm", "@fontsource/ibm-plex-sans"),
         ("npm", "@fontsource/poppins"),
         ("pypi", "regex"),
+        ("pypi", "ldap3"),
     }
-    assert all("needs-rupash item 70" in one.reason for one in OWNER_ALLOWED.values())
+    assert all(
+        "needs-rupash item 70" in one.reason or "needs-rupash item 93" in one.reason
+        for one in OWNER_ALLOWED.values()
+    )
     allowed = [
         Component("npm", "@fontsource/poppins", "5.2.7", "lock", "OFL-1.1"),
         Component("image", "ubuntu/squid", "ubuntu/squid:6", "compose"),
