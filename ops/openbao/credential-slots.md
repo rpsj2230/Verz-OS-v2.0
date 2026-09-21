@@ -97,8 +97,9 @@ install, and none is written into this repository.
 6. Remove any `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` or `MOONSHOT_API_KEY` line from the
    environment file once the vault holds that key. A variable the environment sets outranks the
    vault on every start, so a key replaced from the console would otherwise not be the one in use.
-7. Restart the application, and turn on the audit device if it is not on (`enable-audit.sh`),
-   because the vault's log is the one record of each write by path until the ledger has one.
+7. Restart the application, and check `bao audit list` shows `file/` and `stdout/`, because the
+   vault's log is the one record of each write by path until the ledger has one. Both are
+   declared in `compose.yml`; a vault missing them is running some other compose file.
 
 **Why step 5 is an overlay.** The vault's network is created by the vault's own compose project,
 so it exists only on a server that runs the vault, and a base compose file naming it would stop

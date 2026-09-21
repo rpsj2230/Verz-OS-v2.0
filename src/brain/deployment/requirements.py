@@ -211,6 +211,16 @@ RUNTIME_REQUIREMENTS: Final[tuple[Requirement, ...]] = (
         ),
     ),
     Requirement(
+        what="swap off or encrypted, where the secrets vault runs",
+        minimum="",
+        why=(
+            "the secrets vault keeps decrypted keys in memory, and OpenBao 2.4 no longer locks "
+            "that memory, so swap can write those keys to disk unencrypted. To remove the risk, "
+            "turn swap off (swapoff -a, and delete the swap line from /etc/fstab) or move it "
+            "onto dm-crypt; zram stays in memory and is fine"
+        ),
+    ),
+    Requirement(
         what="a reverse proxy terminating TLS on 443",
         minimum="",
         why=NOTHING_IN_THIS_DEPLOYMENT_PUBLISHES_A_PORT,

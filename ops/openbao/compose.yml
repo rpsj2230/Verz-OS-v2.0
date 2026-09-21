@@ -18,27 +18,50 @@ services:
     image: openbao/openbao:2.4.1
     container_name: brain-vault
     restart: unless-stopped
-    cap_add:
-      # Lets the process lock its memory so secrets are never written to swap. Without it
-      # the vault warns and continues, and the swap file becomes a copy of every key it
-      # has decrypted since boot.
-      - IPC_LOCK
     environment:
+      # The address `bao` itself uses inside this container. Its default is https, and the
+      # listener below has no TLS, so without this the healthcheck and every
+      # `docker exec brain-vault bao ...` get a TLS error instead of an answer.
+      BAO_ADDR: http://127.0.0.1:8200
+      # No memory locking: OpenBao 2.4 dropped mlock, and 2.4.1 refuses to start with a
+      # `disable_mlock` line, asking for it removed. Keeping secrets out of swap is now the
+      # host's job: swap off or encrypted, a requirement the installer checks
+      # (brain.deployment.requirements). Nothing locks memory, so no IPC_LOCK capability.
+      #
+      # The two audit devices are declared here because OpenBao 2.4 refuses `bao audit enable`
+      # over the API. Declared in config, recreating the container brings them back with it.
+      # The file device writes to its own volume with mode 0644 so the worker, another user,
+      # can ship it (brain.ops.vault_audit_ship); the stdout device goes to the docker log, a
+      # second sink that fills at a different rate, so one full disk does not stop the vault.
+      # OpenBao's file device special-cases "stdout" only; "stderr" is read as a file name.
       BAO_LOCAL_CONFIG: |
         storage "file" { path = "/openbao/file" }
         listener "tcp" {
           address     = "0.0.0.0:8200"
           tls_disable = 1
         }
-        disable_mlock = false
+        audit "file" "file" {
+          options {
+            file_path     = "/openbao/logs/audit.log"
+            log_raw       = "false"
+            hmac_accessor = "true"
+            mode          = "0644"
+          }
+        }
+        audit "file" "stdout" {
+          options {
+            file_path = "stdout"
+            log_raw   = "false"
+          }
+        }
         ui = false
     command: server
     volumes:
       - brain-vault-data:/openbao/file
-      # The audit log, on its own volume. Separate from the storage volume deliberately:
-      # an audit log that fills the same disk the vault stores its data on takes both out
-      # at once, and the vault refuses every request the moment it cannot write an audit
-      # entry. Two volumes means a full log is a full log.
+      # The file audit device's log, on its own volume. Separate from the storage volume
+      # deliberately: an audit log that fills the same disk the vault stores its data on takes
+      # both out at once, and the vault refuses every request the moment it cannot write an
+      # audit entry. Two volumes means a full log is a full log.
       - brain-vault-logs:/openbao/logs
     expose:
       - "8200"
@@ -51,7 +74,7 @@ services:
     healthcheck:
       # 501 is "sealed", which is healthy: the container is up and waiting to be opened.
       # Treating sealed as unhealthy would restart it on a loop and no amount of unsealing
-      # would stick.
+      # would stick. It relies on BAO_ADDR above; without it every probe is a TLS error.
       test: ["CMD-SHELL", "bao status 2>&1 | grep -qE 'Sealed +(true|false)'"]
       interval: 30s
       timeout: 5s

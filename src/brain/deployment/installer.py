@@ -744,8 +744,8 @@ PLAN: Final[tuple[Step, ...]] = (
         name="open the secrets vault and give this install its tokens",
         run=vault_setup.open_run(INSTALL_HOME, INSTALL_ENV_FILE),
         why=(
-            "opens the vault with the pieces just made, turns on its audit devices, enables the "
-            "engines the product writes to, loads the policies, mints the application's and the "
+            "opens the vault with the pieces just made, enables the engines the product writes "
+            "to, loads the policies, mints the application's and the "
             "worker's tokens with a period, appends them to the environment file with the "
             "vault's address, and revokes the root token. See "
             "vault_setup.THE_ROOT_CREDENTIAL_LIVES_FOR_ONE_STEP"

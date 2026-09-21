@@ -40,7 +40,8 @@ it. Three things it takes on the command line:
 | `--console-address` | the address your reverse proxy will serve the console on | It asks, if you are at a terminal, and blank is a fine answer. Nothing in this deployment publishes a port, so this address is a fact about the proxy in front of the server and the script has no way to discover it. Given none, the last line tells you what the address depends on rather than inventing one. |
 
 There is also `--no-install-docker`, which is the flag for a server where you would rather
-install Docker yourself, `--no-vault`, and `--help`.
+install Docker yourself, `--no-vault`, `--accept-unencrypted-swap` (see "Before you start"), and
+`--help`.
 
 **`--no-vault` is accepted for `lite` alone, and it costs something.** The installer runs the
 secrets vault on every profile, because every credential the console and the setup wizard keep
@@ -91,7 +92,7 @@ away from the plan the tests are written against.
 
 ## Before you start
 
-The server needs six things, and each of them is a requirement rather than a preference. The
+The server needs seven things, and each of them is a requirement rather than a preference. The
 list lives in `brain.deployment.requirements.RUNTIME_REQUIREMENTS`, where each entry carries the
 sentence saying what breaks without it, because a requirement whose reason nobody wrote down is
 one that gets waived by the person under the most time pressure. The short version:
@@ -101,6 +102,7 @@ one that gets waived by the person under the most time pressure. The short versi
 - Docker Compose v2, as the `docker compose` subcommand and not the older `docker-compose`
 - `curl` and `tar`
 - `openssl`
+- swap off or encrypted (dm-crypt, or zram) where the secrets vault runs, or its risk accepted
 - a reverse proxy terminating TLS on port 443
 
 The Compose version is the one that catches people out and it fails silently. Every memory
@@ -109,6 +111,14 @@ ignores that whole block without a warning**. An install on the old tool comes u
 every container unlimited, `docker stats` shows no ceiling anywhere, and the first runaway
 query takes the machine with it. Check with `docker compose version`, not with
 `docker-compose --version`.
+
+Swap is on the list because the secrets vault keeps decrypted keys in memory and OpenBao 2.4 no
+longer locks that memory, so swap can write those keys to disk unencrypted. Most VPS and cloud
+images ship a plain swap file, so the installer does not turn them away: when `/proc/swaps` shows
+swap that is not dm-crypt or zram, it says so and asks you to type `yes`, or, in a run with no
+terminal, needs `--accept-unencrypted-swap`. Without either it stops. The acceptance is printed
+in the install output. To remove the risk instead, run `swapoff -a` and delete the swap line
+from `/etc/fstab`, or move swap onto dm-crypt. With `--no-vault` nothing is asked.
 
 The reverse proxy is on the list because nothing in this deployment publishes a port. See
 [network.md](network.md) for what to point where.

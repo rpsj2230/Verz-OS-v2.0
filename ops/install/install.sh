@@ -11,6 +11,7 @@ BRAIN_RELEASE=""
 BRAIN_CONSOLE_ADDRESS=""
 BRAIN_INSTALL_DOCKER="yes"
 BRAIN_VAULT="yes"
+BRAIN_ACCEPT_SWAP="no"
 BRAIN_REFUSALS=0
 
 say() { printf "%s\n" "$1"; }
@@ -29,12 +30,13 @@ ask() {
 usage() {
   say "usage: install.sh --release <tag> [--profile <name>] [--console-address <url>]"
   say ""
-  say "  --profile            one of: lite standard full. Asked for if you leave it out"
-  say "  --release            the release tag to install. Required, and never latest"
-  say "  --console-address    the address your reverse proxy will serve the console on"
-  say "  --no-install-docker  do not install Docker, say what to run instead"
-  say "  --no-vault           run no secrets vault, accepted only for: lite"
-  say "  --help               print this and stop"
+  say "  --profile                  one of: lite standard full. Asked for if you leave it out"
+  say "  --release                  the release tag to install. Required, and never latest"
+  say "  --console-address          the address your reverse proxy will serve the console on"
+  say "  --no-install-docker        do not install Docker, say what to run instead"
+  say "  --no-vault                 run no secrets vault, accepted only for: lite"
+  say "  --accept-unencrypted-swap  go ahead although the vault's memory can reach plain swap"
+  say "  --help                     print this and stop"
   say ""
   say "  BRAIN_RELEASE_URL must be set in the environment: it is the address of the release archive."
 }
@@ -46,6 +48,7 @@ while test "$#" -gt 0; do
     --console-address) BRAIN_CONSOLE_ADDRESS="${2:?--console-address needs the address your reverse proxy will serve}"; shift 2 ;;
     --no-install-docker) BRAIN_INSTALL_DOCKER="no"; shift ;;
     --no-vault) BRAIN_VAULT="no"; shift ;;
+    --accept-unencrypted-swap) BRAIN_ACCEPT_SWAP="yes"; shift ;;
     --help|-h) usage; exit 0 ;;
     *) usage >&2; fail "unknown option: $1" ;;
   esac
@@ -90,6 +93,26 @@ for one in curl tar; do
   command -v "$one" >/dev/null 2>&1 || refuse "$one is not installed. the installer fetches one release archive and unpacks it. It does not clone a repository, because a build that fetches a second repository is the shape brain.ops.independence.duplication_gaps refuses"
 done
 command -v openssl >/dev/null 2>&1 || refuse "openssl is not installed. every password and key is minted on this server during the install, and a generator that is not a CSPRNG is a credential somebody can reproduce"
+BRAIN_SWAP_PLAIN=""
+if test "$BRAIN_VAULT" != "no" && test -r /proc/swaps; then
+  while read -r BRAIN_SWAP _; do
+    case "$BRAIN_SWAP" in
+      Filename|/dev/zram*) ;;
+      /dev/dm-*) grep -q "^CRYPT-" "/sys/block/${BRAIN_SWAP#/dev/}/dm/uuid" 2>/dev/null || BRAIN_SWAP_PLAIN="$BRAIN_SWAP_PLAIN $BRAIN_SWAP" ;;
+      *) BRAIN_SWAP_PLAIN="$BRAIN_SWAP_PLAIN $BRAIN_SWAP" ;;
+    esac
+  done < /proc/swaps
+fi
+if test -n "$BRAIN_SWAP_PLAIN"; then
+  say "  note: this machine swaps to$BRAIN_SWAP_PLAIN, which is not encrypted. the secrets vault keeps decrypted keys in memory, and OpenBao 2.4 no longer locks that memory, so swap can write those keys to disk unencrypted. To remove the risk, turn swap off (swapoff -a, and delete the swap line from /etc/fstab) or move it onto dm-crypt; zram stays in memory and is fine"
+  if test "$BRAIN_ACCEPT_SWAP" = "yes"; then
+    say "  accepted: unencrypted swap, by --accept-unencrypted-swap"
+  elif test -t 0 && test "$(ask "Type yes to continue with unencrypted swap:" "--accept-unencrypted-swap was not given")" = "yes"; then
+    say "  accepted: unencrypted swap, by typing yes at this terminal"
+  else
+    refuse "unencrypted swap was not accepted. To go ahead with it, run again and type yes at the prompt, or pass --accept-unencrypted-swap. the secrets vault keeps decrypted keys in memory, and OpenBao 2.4 no longer locks that memory, so swap can write those keys to disk unencrypted. To remove the risk, turn swap off (swapoff -a, and delete the swap line from /etc/fstab) or move it onto dm-crypt; zram stays in memory and is fine"
+  fi
+fi
 say "  note: a reverse proxy terminating TLS on 443 is part of this install and nothing running on this machine can check for it. Every service uses \`expose\` and none uses \`ports\`, so after a complete install the console is reachable from other containers and from nowhere else. That is right for the database, the cache and the pooler, and it means the reverse proxy holding the certificate is part of the install rather than an optional extra. No compose file in this repository declares one, so it is a requirement on the server and not on the stack. See docs/install/network.md."
 test "$BRAIN_REFUSALS" -eq 0 || fail "this machine cannot run it yet, for the reasons above. Nothing has been written. When a reason is one you cannot fix on this machine, docs/install/install.md has the sequence by hand"
 
@@ -283,15 +306,6 @@ else
     printf "%s" "$(vault_piece "$piece")" | docker exec -i -e BAO_ADDR=http://127.0.0.1:8200 brain-vault bao write sys/unseal key=- >/dev/null
   done
   docker exec -e BAO_ADDR=http://127.0.0.1:8200 brain-vault bao status >/dev/null 2>&1 || fail "the vault is still sealed after 3 of its pieces. Nothing has been written to the environment file. Open it with ops/openbao/UNSEAL.md, then finish by hand under Finishing what the installer began"
-  BRAIN_VAULT_AUDIT="$(as_vault_root audit list 2>/dev/null || true)"
-  case "$BRAIN_VAULT_AUDIT" in
-    *"file/"*) ;;
-    *) as_vault_root audit enable -path=file file file_path=/openbao/logs/audit.log log_raw=false hmac_accessor=true mode=0644 >/dev/null ;;
-  esac
-  case "$BRAIN_VAULT_AUDIT" in
-    *"stderr/"*) ;;
-    *) as_vault_root audit enable -path=stderr file file_path=stderr log_raw=false >/dev/null ;;
-  esac
   BRAIN_VAULT_ENGINES="$(as_vault_root secrets list)" || fail "the vault would not list its engines under the root token. Finish by hand with ops/openbao/UNSEAL.md, under Finishing what the installer began"
   for engine in providers webhooks connector_keys; do
     case "$BRAIN_VAULT_ENGINES" in

@@ -101,7 +101,7 @@ person running the install with three of the holders:
    `docker exec -it brain-vault bao operator unseal`.
 2. Generate a root token with the same three holders: `docker exec -it brain-vault bao operator
    generate-root -init`, then the steps it prints. It leaves a record that it happened.
-3. With that token, do what the installer did not: `sh ops/openbao/enable-audit.sh`; enable any
+3. With that token, do what the installer did not: enable any
    of `providers`, `webhooks` and `connector_keys` that `bao secrets list` does not show, each as
    `bao secrets enable -path=<name> kv-v2`; `sh ops/openbao/load-policies.sh`; then the
    `connector-run` token role and the source slots, steps 3 and 4 of "A connected source's key" in
@@ -120,11 +120,21 @@ then revoke the new one with step 6.
 
 For a server where the installer cannot run. Every step below is one the installer makes.
 
+**Before step 1: swap.** The vault keeps decrypted keys in memory and OpenBao 2.4 no longer
+locks that memory, so swap can write them to disk. Best is `cat /proc/swaps` listing nothing,
+or only dm-crypt (`/dev/dm-N` whose `/sys/block/dm-N/dm/uuid` starts `CRYPT-`) or zram devices:
+turn swap off (`swapoff -a`, and remove the line from `/etc/fstab`) or encrypt it. A plain swap
+file is a risk you can accept; the installer asks for `yes`, or `--accept-unencrypted-swap`.
+
 **Step 1. Start the vault.**
 
     docker compose -f ops/openbao/compose.yml up -d
 
-You should see one container running and reporting itself as sealed.
+You should see one container running and reporting itself as sealed. Its two audit devices,
+`file/` (the log volume, read by the worker) and `stdout/` (the docker log), are declared in the
+compose file and come up with it: OpenBao 2.4 refuses to enable an audit device over the API, so
+there is no step for them, and recreating the container keeps them. `BAO_ADDR` is set in the
+container, so `docker exec brain-vault bao ...` needs no address.
 
 **Step 2. Initialise it. This happens exactly once, ever.**
 
