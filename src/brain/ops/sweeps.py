@@ -667,6 +667,22 @@ _CLASSIFIER_TO_SPDX = {
     "License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)": "MPL-2.0",
 }
 
+#: Classifiers read as an SPDX id for ONE named distribution, because the classifier alone does
+#: not say which licence it is. "GNU Lesser General Public License v3 (LGPLv3)" names neither
+#: `-only` nor `-or-later`, and mapping it in the table above would admit every package that
+#: carries it without anybody reading one. So the reading is keyed by distribution and records
+#: who read the source to settle it. Each entry needs an owner decision in
+#: `brain.ops.dependency_policy.OWNER_ALLOWED` under the same id.
+_CLASSIFIER_TO_SPDX_FOR: dict[tuple[str, str], str] = {
+    # ldap3 2.9.1 publishes no License-Expression, "LGPL v3" as free text and this classifier;
+    # every source file's header grants version 3 "or (at your option) any later version".
+    # Owner decision 2026-09-22, needs-rupash item 93 (M1.6.6).
+    (
+        "ldap3",
+        "License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)",
+    ): "LGPL-3.0-or-later",
+}
+
 
 #: Why the expression is parsed with precedence rather than split on its operators.
 SPDX_AND_BINDS_TIGHTER_THAN_OR = (
@@ -805,7 +821,10 @@ def installed_licences() -> dict[str, str]:
         if not name:
             continue
         found[name] = declared_licence(
-            meta.get("License-Expression"), meta.get("License"), meta.get_all("Classifier") or ()
+            meta.get("License-Expression"),
+            meta.get("License"),
+            meta.get_all("Classifier") or (),
+            name=name,
         )
     return found
 
@@ -825,13 +844,17 @@ A_COPYLEFT_CLASSIFIER_IS_A_DECLARATION_NOT_A_SILENCE = (
 _COPYLEFT_CLASSIFIER_RE = re.compile(r"General Public License|GPL")
 
 
-def declared_licence(expression: str | None, plain: str | None, classifiers: Iterable[str]) -> str:
+def declared_licence(
+    expression: str | None, plain: str | None, classifiers: Iterable[str], *, name: str = ""
+) -> str:
     """The licence one distribution declares, from the three places metadata can say it.
 
     Shared by the installed environment and `brain.ops.dependency_policy`, which reads the same
     three fields from the package index for a lock nothing has installed, so both answer alike.
     Empty means the distribution declared nothing this can read. See
     `A_COPYLEFT_CLASSIFIER_IS_A_DECLARATION_NOT_A_SILENCE` for the one case that is not empty.
+    `name` is the distribution's, and only matters for a classifier `_CLASSIFIER_TO_SPDX_FOR`
+    reads for that distribution alone.
     """
     declared = (expression or "").strip()
     if declared:
@@ -843,6 +866,8 @@ def declared_licence(expression: str | None, plain: str | None, classifiers: Ite
     for classifier in named:
         if classifier in _CLASSIFIER_TO_SPDX:
             return _CLASSIFIER_TO_SPDX[classifier]
+        if (name.lower(), classifier) in _CLASSIFIER_TO_SPDX_FOR:
+            return _CLASSIFIER_TO_SPDX_FOR[(name.lower(), classifier)]
     for words in (*(one for one in named if one.startswith("License ::")), stated):
         if _COPYLEFT_CLASSIFIER_RE.search(words):
             return words

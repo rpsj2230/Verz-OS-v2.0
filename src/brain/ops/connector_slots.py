@@ -18,12 +18,18 @@ a connector in this build, and its scopes are cheapest to argue before the day i
 connectable. `slot_gaps` holds the catalogue to `brain.ops.connectable`'s two lists in both
 directions, and to the scopes each connectable source's hint tells a person to ask for.
 
+**The staff list has one slot, whichever source it is read from.** An install chooses one staff
+source at a time and `brain.ops.staff_sync_run` reads `connector_keys/staff_source` for it, so the
+slot is defined here beside the connected sources' with scopes that cover every kind, the LDAP
+service account named outright because it is the one kind whose account is a person-shaped login
+an administrator creates by hand. A slot per kind would be three slots nothing reads.
+
 **The words go into a shell command, so their alphabet is closed.** `SAFE_SCOPE` admits letters,
 digits, spaces and `._:*,-`, and no quote, so the installer can single-quote a value without
 escaping anything. A scope that needs another character is a reason to change this constant and
 the installer's quoting together, deliberately.
 
-Task ids: M38.4.1.3
+Task ids: M38.4.1.3, M1.6.6
 """
 
 from __future__ import annotations
@@ -51,6 +57,10 @@ A_SLOT_IS_DEFINED_BEFORE_IT_IS_FILLED: Final = (
 #: What a scope may be spelled with. See the module docstring.
 SAFE_SCOPE: Final = r"^[A-Za-z0-9 ._:*,-]{1,120}$"
 _SAFE_SCOPE_RE: Final = re.compile(SAFE_SCOPE)
+
+#: The slot the staff list is read with. `brain.ops.staff_sync_run.STAFF_SOURCE_SLOT` is its
+#: reader, and a test holds the two equal rather than importing the run into this catalogue.
+STAFF_LIST: Final = "staff_source"
 
 #: The custom metadata keys the installer writes on a slot.
 REQUEST_KEY: Final = "scopes"
@@ -115,6 +125,17 @@ SLOT_SCOPES: Final[Mapping[str, SlotScopes]] = MappingProxyType(
                 refuse=("docs:document edit scopes",),
             ),
             SlotScopes(
+                STAFF_LIST,
+                request=(
+                    "read on the staff directory only",
+                    "for LDAP a service account that may bind and search and nothing more",
+                ),
+                refuse=(
+                    "any write",
+                    "for LDAP an administrator or an account that may reset passwords or groups",
+                ),
+            ),
+            SlotScopes(
                 "xero",
                 request=("accounting.transactions.read", "accounting.contacts.read"),
                 refuse=("any .write scope",),
@@ -130,7 +151,7 @@ def slot_gaps() -> tuple[str, ...]:
     A source with no slot, a slot for no source, and a connectable source whose hint does not name
     a scope its slot asks for, each as a sentence. Empty is the only acceptable answer.
     """
-    known = set(CONNECTABLE) | set(NOT_FROM_THE_CONSOLE)
+    known = set(CONNECTABLE) | set(NOT_FROM_THE_CONSOLE) | {STAFF_LIST}
     found = [
         f"{name} has a connector and no credential slot"
         for name in sorted(known - set(SLOT_SCOPES))
