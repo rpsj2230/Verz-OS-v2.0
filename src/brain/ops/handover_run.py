@@ -630,9 +630,9 @@ class PsycopgDatabase:
     """
 
     def __init__(self, url: str, *, lock_timeout_seconds: int = LOCK_TIMEOUT_SECONDS) -> None:
-        from brain.db import libpq_url
+        from brain.db import libpq_conninfo
 
-        self._url = libpq_url(url)
+        self._url = libpq_conninfo(url)
         self._lock_timeout = lock_timeout_seconds
         self._snapshot: psycopg.Connection[tuple[Any, ...]] | None = None
 

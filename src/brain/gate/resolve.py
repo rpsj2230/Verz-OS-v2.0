@@ -66,6 +66,7 @@ from typing import Final, Protocol
 
 from brain.core.entitlement import EntitlementSet
 from brain.core.errors import BrainError, Outcome
+from brain.ops.safe_error import describe
 
 #: How long a resolved entitlement may live in the cache. Short enough that a missed
 #: version bump is measured in seconds, long enough to matter across a burst of requests
@@ -219,7 +220,9 @@ async def resolve(
         # source and the store are the same database, so a failure here means the load is
         # about to fail too, and the only thing the fall-through achieves is a second
         # error and a thundering herd onto a database that is already unwell.
-        raise ResolutionFailedError(f"reading grants version for {principal_id}: {exc}") from exc
+        raise ResolutionFailedError(
+            f"reading grants version for {principal_id}: {describe(exc)}"
+        ) from exc
     key = cache_key(principal_id, version)
 
     cached = await cache.get(key)
@@ -237,7 +240,9 @@ async def resolve(
         # Broad on purpose. Whatever the driver raises, a caller of this function must see
         # a failure it can distinguish from holding nothing, not a psycopg error leaking
         # through the gate with a connection string in its message.
-        raise ResolutionFailedError(f"loading entitlements for {principal_id}: {exc}") from exc
+        raise ResolutionFailedError(
+            f"loading entitlements for {principal_id}: {describe(exc)}"
+        ) from exc
 
     if loaded.principal_id != principal_id:
         # The catastrophic failure, and one comparison to rule out. A store returning the

@@ -94,6 +94,7 @@ from brain.ops.connector_sync_run import (
 )
 from brain.ops.head_audit_store import rewrite_head_audit_reach
 from brain.ops.openbao import VaultUnreachableError
+from brain.ops.safe_error import redact
 from brain.ops.secrets import SecretsUnavailableError
 from brain.ops.staff_sync_store import (
     RunRecord,
@@ -368,7 +369,7 @@ async def sync_staff_on(
                 sessions, chosen.name, now, clock, RunOutcome.UNREACHABLE, detail
             )
         except (StaffSourceError, ValueError) as refused:
-            detail = _sentence(str(refused))
+            detail = _sentence(redact(str(refused)))
             return await _record_failure(
                 sessions, chosen.name, now, clock, RunOutcome.MISCONFIGURED, detail
             )

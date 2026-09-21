@@ -85,7 +85,7 @@ from langgraph.checkpoint.postgres import PostgresSaver
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
-from brain.db import libpq_url
+from brain.db import libpq_conninfo
 from brain.ops.checkpoints import (
     ERROR_CHANNEL,
     CheckpointerConfig,
@@ -143,7 +143,7 @@ def checkpointer_pool_settings(config: CheckpointerConfig) -> Mapping[str, objec
         msg = "this connection is not one a checkpointer may use: " + "; ".join(refusals)
         raise CheckpointerError(msg)
     return {
-        "conninfo": libpq_url(config.url),
+        "conninfo": libpq_conninfo(config.url),
         "min_size": 1,
         "max_size": WORKER_CHECKPOINTER_CONNECTIONS,
         "kwargs": {
@@ -300,7 +300,7 @@ def install_checkpointer(config: CheckpointerConfig) -> tuple[str, ...]:
     back on. Returns what it did, one sentence per step.
     """
     checkpointer_pool_settings(config)
-    dsn = libpq_url(config.url)
+    dsn = libpq_conninfo(config.url)
     schema = config.schema
     done: list[str] = []
     with psycopg.connect(dsn, autocommit=True) as conn:

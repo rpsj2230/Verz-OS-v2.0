@@ -12,6 +12,7 @@ from brain.db import (
     NAMING_CONVENTION,
     SCHEMAS,
     Base,
+    libpq_conninfo,
     libpq_url,
     metadata,
     normalise_database_url,
@@ -246,8 +247,67 @@ def test_every_direct_psycopg_connection_goes_through_the_converter() -> None:
     for module in (schema_check, sweeps):
         source = inspect.getsource(module)
         for line in source.splitlines():
-            if "psycopg.connect(" in line and "libpq_url" not in line:
+            if "psycopg.connect(" in line and "libpq_conninfo" not in line:
                 assert "_needs_db()" in source, (
                     f"{module.__name__} calls psycopg.connect on a URL that never passed "
-                    f"through libpq_url: {line.strip()}"
+                    f"through libpq_conninfo: {line.strip()}"
                 )
+
+
+#: What the owner's install had: a bare `%` libpq refuses to decode, and a `$` for good measure.
+AWKWARD_PASSWORD = "s3cr%zzEt$w0rd%"
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        f"postgresql+psycopg://brain:{AWKWARD_PASSWORD}@db:5432/brain?sslmode=require",
+        f"postgresql://brain:{AWKWARD_PASSWORD}@db:5432/brain?sslmode=require",
+    ],
+)
+def test_a_password_libpq_cannot_decode_reaches_psycopg_intact(url: str) -> None:
+    """Found on the owner's install on 2026-09-21: the engine connected and every post-deploy
+    check failed with `invalid percent-encoded token`, because libpq decodes a URL itself.
+    Asserted with psycopg's own parser: the password arrives exactly as written."""
+    import psycopg.conninfo
+    from sqlalchemy.engine import make_url
+
+    parsed = psycopg.conninfo.conninfo_to_dict(libpq_conninfo(url))
+
+    assert parsed["password"] == make_url(url).password == AWKWARD_PASSWORD
+    assert (parsed["host"], parsed["port"], parsed["user"], parsed["dbname"]) == (
+        "db",
+        "5432",
+        "brain",
+        "brain",
+    )
+    assert parsed["sslmode"] == "require"
+
+
+def test_a_percent_encoded_password_is_decoded_once() -> None:
+    parsed = __import__("psycopg").conninfo.conninfo_to_dict(
+        libpq_conninfo("postgresql+psycopg://brain:p%25w%24rd@db/brain")
+    )
+    assert parsed["password"] == "p%w$rd"
+
+
+def test_the_raw_url_is_what_libpq_refuses() -> None:
+    """The reason the converter exists, pinned so a psycopg that starts accepting it is noticed."""
+    import psycopg.conninfo
+
+    with pytest.raises(psycopg.ProgrammingError):
+        psycopg.conninfo.conninfo_to_dict(f"postgresql://brain:{AWKWARD_PASSWORD}@db/brain")
+
+
+def test_no_production_module_hands_psycopg_a_url() -> None:
+    """Every caller in `src/brain` goes through `libpq_conninfo`; `libpq_url` keeps the URL form
+    and so keeps libpq's percent-decoding, which is the defect."""
+    from pathlib import Path
+
+    src = Path(__file__).resolve().parents[2] / "src" / "brain"
+    offenders = [
+        str(path.relative_to(src))
+        for path in src.rglob("*.py")
+        if path.name != "db.py" and "libpq_url(" in path.read_text(encoding="utf-8")
+    ]
+    assert offenders == []

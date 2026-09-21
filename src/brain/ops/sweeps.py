@@ -22,7 +22,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from brain.core.envelope import TOOL_NAME_PATTERN
-from brain.db import libpq_url
+from brain.db import libpq_conninfo
 from brain.ops import console_design, console_screens
 from brain.ops.independence import NOT_OF_THIS_REPOSITORY
 
@@ -86,7 +86,7 @@ SKIPPED_FOR_WANT_OF_A_DATABASE = (
 
 
 def _needs_db() -> str | None:
-    """The database URL in the form `psycopg.connect` accepts, or None.
+    """The database address as the conninfo `psycopg.connect` accepts, or None.
 
     Converted here rather than at each call site, because every caller of this opens a
     connection without SQLAlchemy and every deployment writes the URL in SQLAlchemy's form.
@@ -96,7 +96,7 @@ def _needs_db() -> str | None:
     from brain.settings import Settings
 
     url = Settings().database_url
-    return libpq_url(url) if url else None
+    return libpq_conninfo(url) if url else None
 
 
 # --------------------------------------------------------------------- rls

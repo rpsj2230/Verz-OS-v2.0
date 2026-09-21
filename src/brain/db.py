@@ -118,6 +118,38 @@ def libpq_url(url: str) -> str:
     return f"{base}://{rest}" if plus else url
 
 
+def libpq_conninfo(url: str) -> str:
+    """The URL as libpq keyword/value pairs, parsed once by SQLAlchemy: what psycopg is handed.
+
+    libpq percent-decodes a URL itself and refuses a password with a bare `%` in it (`invalid
+    percent-encoded token`), where SQLAlchemy's `make_url` keeps it. Found on the owner's install
+    on 2026-09-21: the application's engine connected and every post-deploy check did not. Parsing
+    with `make_url` and passing components through `make_conninfo`, which quotes each value, means
+    any password the engine accepts reaches psycopg intact. Query parameters (`sslmode`, `host`
+    for a socket) are carried over.
+    """
+    if "://" not in url:
+        return url  # already keyword/value, the form libpq wants
+    from psycopg.conninfo import make_conninfo
+    from sqlalchemy.engine import make_url
+
+    parsed = make_url(url)
+    params: dict[str, str | int] = {}
+    for key, given in parsed.query.items():
+        params[key] = given[-1] if isinstance(given, tuple) else given
+    component: str | int | None
+    for key, component in (
+        ("host", parsed.host),
+        ("port", parsed.port),
+        ("user", parsed.username),
+        ("password", parsed.password),
+        ("dbname", parsed.database),
+    ):
+        if component is not None and component != "":
+            params[key] = component
+    return make_conninfo("", **params)
+
+
 class TimestampMixin:
     """created_at and updated_at, set by the database rather than the application.
 

@@ -48,10 +48,10 @@ def row_counts(database_url: str) -> dict[str, int]:
     import psycopg
     from psycopg import sql
 
-    from brain.db import SCHEMAS, libpq_url
+    from brain.db import SCHEMAS, libpq_conninfo
 
     counts: dict[str, int] = {}
-    with psycopg.connect(libpq_url(database_url)) as conn, conn.cursor() as cur:
+    with psycopg.connect(libpq_conninfo(database_url)) as conn, conn.cursor() as cur:
         cur.execute(
             """
             SELECT n.nspname, c.relname FROM pg_class c

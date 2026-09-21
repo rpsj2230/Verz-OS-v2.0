@@ -179,10 +179,10 @@ def test_a_failed_version_read_raises_rather_than_leaking_the_driver_error() -> 
     driver raises crosses the gate unchanged, and psycopg's own message names the host, the
     address and the password it tried.
 
-    The driver's message is deliberately kept in `detail`, which goes to the log, and
-    deliberately kept out of `public_message`, which is what a person is shown. Both halves
-    are asserted: an error that told nobody anything would pass a test written only about
-    the leak, and would make the outage undiagnosable.
+    The driver's error is kept in `detail`, which goes to the log, as its class and a redacted
+    sentence (`brain.ops.safe_error.describe`), and kept out of `public_message` entirely. Until
+    2026-09-21 `detail` carried the password on purpose; a log line may not, so the password is
+    now asserted absent from both halves, and the class and the operation present in the log's.
 
     Deleting this leaves the guard with nothing holding it, and the next refactor that
     tidies a try block away restores the leak silently."""
@@ -193,7 +193,8 @@ def test_a_failed_version_read_raises_rather_than_leaking_the_driver_error() -> 
     assert "172.18.0.3" not in to_public(exc)
     # And the operator still gets what they need, in the half that only reaches a log.
     assert "grants version" in exc.detail
-    assert "hunter2" in exc.detail
+    assert "RuntimeError" in exc.detail
+    assert "hunter2" not in exc.detail
 
 
 def test_a_failed_version_read_is_a_refusal_and_not_a_slower_answer() -> None:

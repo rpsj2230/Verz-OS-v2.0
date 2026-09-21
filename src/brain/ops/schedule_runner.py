@@ -76,7 +76,7 @@ from typing import Final
 
 import psycopg
 
-from brain.db import libpq_url
+from brain.db import libpq_conninfo
 from brain.knowledge.item_store import run_reverification_now
 from brain.ops.automation_run_store import run_automations_now
 from brain.ops.canary_run import run_canaries_now
@@ -243,7 +243,7 @@ def retention_sweep(now: datetime, report_only: bool, database_url: str) -> str:
     than before, so the sweep's report is written whatever the partitions do, and a failure in
     either is the run's failure.
     """
-    with psycopg.connect(libpq_url(database_url), prepare_threshold=None) as conn:
+    with psycopg.connect(libpq_conninfo(database_url), prepare_threshold=None) as conn:
         swept = run_retention_sweep(conn, now=now, report_only=report_only)
         partitions = maintain_ledger_partitions(conn, now=now, report_only=report_only)
     return f"{swept}\n{partitions.summary()}"
@@ -334,7 +334,7 @@ def erasure_queue(now: datetime, report_only: bool, database_url: str) -> str:
     a connection row-level security narrows, because a row a policy hides is a row the erasure
     would neither count nor retire. `prepare_threshold=None` for the reason `retention_sweep` gives.
     """
-    with psycopg.connect(libpq_url(database_url), prepare_threshold=None) as conn:
+    with psycopg.connect(libpq_conninfo(database_url), prepare_threshold=None) as conn:
         return drain_erasure_queue(conn, now=now, report_only=report_only)
 
 

@@ -409,11 +409,11 @@ def test_needs_db_reads_the_environment(monkeypatch: pytest.MonkeyPatch) -> None
     skip on a host that names the database only as `BRAIN_DATABASE_URL`."""
     monkeypatch.delenv("BRAIN_DATABASE_URL", raising=False)
     monkeypatch.setenv("DATABASE_URL", "postgresql://localhost/x")
-    assert sweeps._needs_db() == "postgresql://localhost/x"
+    assert sweeps._needs_db() == "host=localhost dbname=x"
     monkeypatch.delenv("DATABASE_URL")
     assert sweeps._needs_db() is None
     monkeypatch.setenv("BRAIN_DATABASE_URL", "postgresql://localhost/y")
-    assert sweeps._needs_db() == "postgresql://localhost/y"
+    assert sweeps._needs_db() == "host=localhost dbname=y"
 
 
 # --------------------------------------------------------------- grammars
