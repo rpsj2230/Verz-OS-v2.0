@@ -39,6 +39,7 @@ from brain.audit.record import (
     ACTION_BY_METHOD,
     ApprovalVerdict,
     AuditRecorder,
+    BreachChange,
     ConnectorChange,
     DenyReason,
     ElevationChange,
@@ -388,6 +389,7 @@ CALLS: dict[str, dict[str, object]] = {
     "sign_in": {"principal_id": "u_weiling", "change": SignInChange.BOUND},
     "session_end": {"principal_id": "u_weiling", "reason": SessionEndReason.ENDED_FROM_CONSOLE},
     "principal_state": {"principal_id": "u_weiling", "change": PrincipalStateChange.ENABLED},
+    "breach": {"case_id": "3b1f7c2e-8d4a-4e6b-9f0c-1a2b3c4d5e6f", "change": BreachChange.OPENED},
     "certification": {
         "grant_id": "1f0e6a4c-2b8d-4f7a-9c1e-5d3b2a7f8e90",
         "decision": ReviewDecision.KEEP,

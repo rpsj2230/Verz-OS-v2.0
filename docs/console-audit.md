@@ -7,11 +7,11 @@ What an administrator would need to manage, read out of the schema, the routes a
 ## What was measured
 
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
-- 88 tables, from `brain.db.Base.metadata`.
+- 90 tables, from `brain.db.Base.metadata`.
 - 24 installation values, from `brain.install.INSTALLATION`.
-- 164 routes under `/api/v1` and `/setup`, from the API's internal document.
-- 70 console addresses, from the route table in `console/src/App.tsx`.
-- 59 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 70 routes.
+- 176 routes under `/api/v1` and `/setup`, from the API's internal document.
+- 72 console addresses, from the route table in `console/src/App.tsx`.
+- 62 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 78 routes.
 - 36 gaps recorded, and 21 routes no screen calls.
 
 ## Area by area
@@ -401,22 +401,34 @@ No gap recorded.
 
 ### Backup and recovery
 
-- **Screens:** `/recovery`, `/retention`
-- **Tables:** `ops.retention_release`, `ops.retention_report`, `obs.legal_hold`, `ops.erasure_request`
+- **Screens:** `/recovery`, `/retention`, `/compliance`, `/referrals`
+- **Tables:** `ops.retention_release`, `ops.retention_report`, `obs.legal_hold`, `ops.erasure_request`, `ops.breach_case`, `ops.sensitive_referral`
 - **Installation values:** none
 
 | Route | Called by |
 | --- | --- |
+| `GET /api/v1/govern/compliance/breaches` | `/compliance` |
+| `GET /api/v1/govern/compliance/register` | `/compliance` |
+| `GET /api/v1/govern/compliance/topics` | `/compliance` |
 | `GET /api/v1/govern/erasures` | `/retention` |
 | `GET /api/v1/govern/retention` | `/retention` |
 | `GET /api/v1/govern/retention/controls` | `/retention` |
 | `GET /api/v1/govern/retention/exports` | `/retention` |
 | `GET /api/v1/install/recovery` | `/recovery` |
+| `GET /api/v1/me/referrals` | `/referrals` |
+| `POST /api/v1/govern/compliance/breaches` | `/compliance` |
+| `POST /api/v1/govern/compliance/breaches/{case_id}/assessment` | `/compliance` |
+| `POST /api/v1/govern/compliance/breaches/{case_id}/close` | `/compliance` |
+| `POST /api/v1/govern/compliance/breaches/{case_id}/commission` | `/compliance` |
+| `POST /api/v1/govern/compliance/breaches/{case_id}/exception` | `/compliance` |
+| `POST /api/v1/govern/compliance/breaches/{case_id}/individuals` | `/compliance` |
 | `POST /api/v1/govern/erasures` | `/retention` |
 | `POST /api/v1/govern/legal-holds` | `/retention` |
 | `POST /api/v1/govern/legal-holds/lift` | `/retention` |
 | `POST /api/v1/govern/retention/release` | `/retention` |
 | `POST /api/v1/govern/retention/withdrawal` | `/retention` |
+| `POST /api/v1/me/referrals/{referral_id}/handled` | `/referrals` |
+| `PUT /api/v1/govern/compliance/topics/{topic}` | `/compliance` |
 
 - **Gap.** A recovery drill cannot be started, and a restore cannot be verified, from the console. Open leaf `M30.3.9`.
 
@@ -461,7 +473,7 @@ No gap recorded.
 
 ## Every write the console sends, followed to the system
 
-Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 59 of 70 write routes have all three proved or not applicable, 9 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
+Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 66 of 78 write routes have all three proved or not applicable, 9 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
 
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
@@ -479,6 +491,12 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /api/v1/data-transfer/exports` | `/import-export` | `test_an_export_leaves_its_record_and_a_publish_entry_naming_what_left_and_who_took_it` in `tests/unit/test_data_export_store.py` (database, in CI) | `test_an_export_leaves_its_record_and_a_publish_entry_naming_what_left_and_who_took_it` in `tests/unit/test_data_export_store.py` (database, in CI) | `test_the_listing_offers_the_export_to_a_reader_who_may_take_it_and_shows_only_their_own` in `tests/unit/test_data_transfer_routes.py` |
 | `POST /api/v1/govern/access-review/decision` | `/access_review` | `test_keeping_and_removing_reach_the_rows_the_ledger_and_what_the_holder_is_resolved_to` in `tests/unit/test_review_store.py` (database, in CI) | `test_keeping_and_removing_reach_the_rows_the_ledger_and_what_the_holder_is_resolved_to` in `tests/unit/test_review_store.py` (database, in CI) | `test_keeping_and_removing_reach_the_rows_the_ledger_and_what_the_holder_is_resolved_to` in `tests/unit/test_review_store.py` (database, in CI) |
 | `POST /api/v1/govern/access-review/decisions` | `/access_review` | `test_several_holdings_are_decided_one_at_a_time_each_by_the_single_decisions_question` in `tests/unit/test_govern_people_routes.py` | `test_keeping_and_removing_reach_the_rows_the_ledger_and_what_the_holder_is_resolved_to` in `tests/unit/test_review_store.py` (database, in CI) | `test_keeping_and_removing_reach_the_rows_the_ledger_and_what_the_holder_is_resolved_to` in `tests/unit/test_review_store.py` (database, in CI) |
+| `POST /api/v1/govern/compliance/breaches` | `/compliance` | `test_each_breach_step_writes_its_column_and_one_breach_entry_in_the_same_transaction` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_each_breach_step_writes_its_column_and_one_breach_entry_in_the_same_transaction` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_a_case_shows_its_clock_from_the_awareness_and_its_findings` in `tests/unit/test_compliance_routes.py` |
+| `POST /api/v1/govern/compliance/breaches/{case_id}/assessment` | `/compliance` | `test_each_breach_step_writes_its_column_and_one_breach_entry_in_the_same_transaction` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_each_breach_step_writes_its_column_and_one_breach_entry_in_the_same_transaction` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_a_case_shows_its_clock_from_the_awareness_and_its_findings` in `tests/unit/test_compliance_routes.py` |
+| `POST /api/v1/govern/compliance/breaches/{case_id}/close` | `/compliance` | `test_each_breach_step_writes_its_column_and_one_breach_entry_in_the_same_transaction` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_each_breach_step_writes_its_column_and_one_breach_entry_in_the_same_transaction` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_a_case_shows_its_clock_from_the_awareness_and_its_findings` in `tests/unit/test_compliance_routes.py` |
+| `POST /api/v1/govern/compliance/breaches/{case_id}/commission` | `/compliance` | `test_each_breach_step_writes_its_column_and_one_breach_entry_in_the_same_transaction` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_each_breach_step_writes_its_column_and_one_breach_entry_in_the_same_transaction` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_a_case_shows_its_clock_from_the_awareness_and_its_findings` in `tests/unit/test_compliance_routes.py` |
+| `POST /api/v1/govern/compliance/breaches/{case_id}/exception` | `/compliance` | `test_each_breach_step_writes_its_column_and_one_breach_entry_in_the_same_transaction` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_each_breach_step_writes_its_column_and_one_breach_entry_in_the_same_transaction` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_a_case_shows_its_clock_from_the_awareness_and_its_findings` in `tests/unit/test_compliance_routes.py` |
+| `POST /api/v1/govern/compliance/breaches/{case_id}/individuals` | `/compliance` | `test_each_breach_step_writes_its_column_and_one_breach_entry_in_the_same_transaction` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_each_breach_step_writes_its_column_and_one_breach_entry_in_the_same_transaction` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_a_case_shows_its_clock_from_the_awareness_and_its_findings` in `tests/unit/test_compliance_routes.py` |
 | `POST /api/v1/govern/data-steward` | `/people`, `/people/:subject` | `test_an_administrator_names_themselves_steward_over_http_once_and_is_told_why_not_twice` in `tests/unit/test_data_steward_routes.py` (database, in CI) | `test_every_steward_grant_leaves_a_ledger_entry_naming_who_made_it` in `tests/unit/test_data_steward.py` (database, in CI) | `test_a_steward_named_at_setup_grants_a_source_s_read_on_and_the_administrator_cannot` in `tests/unit/test_data_steward.py` (database, in CI) |
 | `POST /api/v1/govern/departments/lead` | `/departments` | `test_placing_and_appointing_reach_the_rows_the_ledger_and_the_departments_page` in `tests/unit/test_organisation_store.py` (database, in CI) | `test_placing_and_appointing_reach_the_rows_the_ledger_and_the_departments_page` in `tests/unit/test_organisation_store.py` (database, in CI) | `test_placing_and_appointing_reach_the_rows_the_ledger_and_the_departments_page` in `tests/unit/test_organisation_store.py` (database, in CI) |
 | `POST /api/v1/govern/departments/membership` | `/departments` | `test_placing_and_appointing_reach_the_rows_the_ledger_and_the_departments_page` in `tests/unit/test_organisation_store.py` (database, in CI) | `test_placing_and_appointing_reach_the_rows_the_ledger_and_the_departments_page` in `tests/unit/test_organisation_store.py` (database, in CI) | `test_placing_and_appointing_reach_the_rows_the_ledger_and_the_departments_page` in `tests/unit/test_organisation_store.py` (database, in CI) |
@@ -508,6 +526,7 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /api/v1/jobs/{name}/pause` | `/jobs` | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_job_paused_from_the_screen_is_left_unstarted_by_the_next_tick_and_resumed_is_started` in `tests/unit/test_console_controls_reach_behaviour.py` |
 | `POST /api/v1/jobs/{name}/resume` | `/jobs` | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_job_paused_from_the_screen_is_left_unstarted_by_the_next_tick_and_resumed_is_started` in `tests/unit/test_console_controls_reach_behaviour.py` |
 | `POST /api/v1/jobs/{name}/run` | `/jobs` | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_run_asked_for_from_the_screen_is_started_by_the_next_tick_even_while_paused` in `tests/unit/test_console_controls_reach_behaviour.py` |
+| `POST /api/v1/me/referrals/{referral_id}/handled` | `/referrals` | `test_a_referral_is_filed_without_content_and_read_only_by_its_person` in `tests/unit/test_compliance_store.py` (database, in CI) | **None.** Marking a referral handled writes handled_at and handled_by on its row and no ledger entry: an entry that only a sensitive question writes is the disclosure brain.audit.compliance.intercept argues against. | `test_a_referral_marked_handled_is_shown_handled` in `tests/unit/test_compliance_routes.py` |
 | `POST /api/v1/models/providers` | `/models` | `test_an_added_provider_has_its_key_kept_in_its_own_slot_before_its_row_is_written` in `tests/unit/test_provider_registry_routes.py` | `test_a_key_set_from_the_console_is_recorded_as_its_setter_with_their_reach_and_trace` in `tests/unit/test_credential_routes.py` | `test_a_provider_added_from_the_console_answers_through_the_ladder_with_no_release` in `tests/unit/test_model_calls.py` |
 | `POST /api/v1/models/providers/{provider}/check` | `/models` | `test_a_check_is_one_metered_call_recorded_on_the_ledger_and_never_as_a_question` in `tests/unit/test_provider_routes.py` | Not applicable: A check changes no setting and no record an administrator manages; it is a metered call on the request ledger, not a change to audit. | `test_a_check_is_one_metered_call_recorded_on_the_ledger_and_never_as_a_question` in `tests/unit/test_provider_routes.py` |
 | `POST /api/v1/models/providers/{provider}/retire` | `/models` | `test_an_added_provider_is_retired_and_a_built_in_one_cannot_be` in `tests/unit/test_provider_registry_routes.py` | **None.** Retiring an added provider is logged and not written to the audit ledger in this release. Leaf `M5.6.4`. | `test_a_provider_with_no_driver_is_told_which_of_the_two_things_is_missing` in `tests/unit/test_model_assembly.py` |
@@ -531,6 +550,7 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /setup/staff-source/sign-in` | `/first-run` | Not applicable: It answers the directory's own sign-in page for the setup code's holder and writes nothing. | Not applicable: Nothing changes when a sign-in page is asked for, so there is nothing to record. | `test_a_directory_is_chosen_signed_in_to_and_its_list_pulled` in `tests/unit/test_setup_staff_routes.py` |
 | `POST /setup/staff-source/trial` | `/first-run` | `test_a_trial_that_read_the_directory_keeps_its_credential_for_the_nightly_sync` in `tests/unit/test_setup_staff_routes.py` | `test_a_trial_that_read_the_directory_keeps_its_credential_for_the_nightly_sync` in `tests/unit/test_setup_staff_routes.py` | `test_a_directory_is_chosen_signed_in_to_and_its_list_pulled` in `tests/unit/test_setup_staff_routes.py` |
 | `PUT /api/v1/agents/{agent_id}/model-pin` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_an_administrator_pins_a_model_a_rung_serves_and_it_is_written_to_the_agent` in `tests/unit/test_agent_model_routes.py` | **None.** An agent's pin is logged and not written to the audit ledger in this release. Leaf `M5.7.3`. | `test_a_pinned_model_is_tried_first_even_from_another_tier` in `tests/unit/test_model_calls.py` |
+| `PUT /api/v1/govern/compliance/topics/{topic}` | `/compliance` | `test_naming_a_person_writes_one_route_row_and_a_setting_entry_without_the_value` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_naming_a_person_writes_one_route_row_and_a_setting_entry_without_the_value` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_a_sensitive_question_is_routed_to_the_person_named_for_its_topic` in `tests/unit/test_compliance_routes.py` |
 | `PUT /api/v1/govern/staff_sources/credential` | `/staff_sources` | `test_the_credential_is_replaced_into_its_slot_recorded_and_never_sent_back` in `tests/unit/test_staff_sync_routes.py` | `test_a_credential_write_appends_exactly_the_entry_the_recorder_writes_and_the_chain_holds` in `tests/unit/test_credential_writes.py` (database, in CI) | `test_a_scheduled_run_reads_lark_with_the_kept_credential_and_applies_the_plan` in `tests/unit/test_staff_sync_run.py` |
 | `PUT /api/v1/install/settings/{name}` | `/settings` | `test_saving_a_company_name_writes_its_row_and_the_console_header_draws_it_next` in `tests/unit/test_settings_routes.py` | **None.** The route sets the audit attribution 0059's trigger reads, which BRANDING_SAVED asserts over a stub; no scratch-Postgres test yet reads the ledger entry back. | `test_saving_a_company_name_writes_its_row_and_the_console_header_draws_it_next` in `tests/unit/test_settings_routes.py` |
 | `PUT /api/v1/models/providers/{provider}` | `/models` | `test_the_stores_read_the_ladder_write_attempts_by_id_and_keep_a_switch` in `tests/unit/test_model_service.py` (database, in CI) | **None.** The write is an ops.setting row, which migration 0059's trigger records as a setting entry naming the key, the change and the writer, and no test follows this route's write to that entry. | `test_switching_a_provider_off_takes_its_rungs_out_of_the_next_plan_at_once` in `tests/unit/test_provider_routes.py` |

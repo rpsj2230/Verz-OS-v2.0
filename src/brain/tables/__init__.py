@@ -59,6 +59,7 @@ from brain.tables.browsing import BrowserEnvelopeRow
 from brain.tables.budget import BudgetVersionRow
 from brain.tables.channel_event import ChannelEventRow
 from brain.tables.chat import ConversationRow, MessageRole, MessageRow
+from brain.tables.compliance import BreachCaseRow, SensitiveReferralRow
 from brain.tables.config import SettingRow, SettingType
 from brain.tables.connector_connection import ConnectorConnectionRow
 from brain.tables.connector_sync import ConnectorSyncRow
@@ -323,6 +324,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     "ops.requirement_check",
     # 0102_role_grant_and_team_grants
     "gate.role_grant",
+    # 0104_compliance_record_and_decision_entries. Neither points at anything.
+    "ops.breach_case",
+    "ops.sensitive_referral",
 )
 
 __all__ = [
@@ -338,6 +342,7 @@ __all__ = [
     "AutomationOwnerRow",
     "AutomationRunRow",
     "AutomationScheduleRow",
+    "BreachCaseRow",
     "BrowserEnvelopeRow",
     "BudgetVersionRow",
     "CanonicalEntityRow",
@@ -398,6 +403,7 @@ __all__ = [
     "RoutingTierRow",
     "ScopeRow",
     "SensitiveReadRow",
+    "SensitiveReferralRow",
     "ServiceAccountRow",
     "SessionRow",
     "SettingRow",

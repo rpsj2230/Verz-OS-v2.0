@@ -120,6 +120,7 @@ describe("the menu a department is given", () => {
       "/approvals",
       "/records",
       "/access-requests",
+      "/referrals",
     ]);
     for (const address of ABOUT_THE_SERVER) {
       expect(drawn.hrefs).not.toContain(address);
@@ -146,7 +147,7 @@ describe("the menu a department is given", () => {
     // department admin every screen about this server while the request is in flight and for good
     // when it fails. `A_MENU_NOBODY_ANSWERED_OFFERS_ONLY_YOUR_OWN_WORK` is the argument.
     expect(A_MENU_NOBODY_ANSWERED_OFFERS_ONLY_YOUR_OWN_WORK).toContain("only the screens");
-    const ownWork = ["/ask", "/me", "/approvals", "/records", "/access-requests"];
+    const ownWork = ["/ask", "/me", "/approvals", "/records", "/access-requests", "/referrals"];
 
     const pending = await shellAnswering((url) => answerNavigation(url, departmentConsole()));
     expect(menu(pending).hrefs).toEqual(ownWork);

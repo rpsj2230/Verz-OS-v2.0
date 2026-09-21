@@ -80,6 +80,7 @@ export const USE: NavGroup = {
     { to: "/approvals", label: "Approvals" },
     { to: "/records", label: "Records" },
     { to: "/access-requests", label: "Access requests" },
+    { to: "/referrals", label: "Referred to me" },
   ],
 };
 
@@ -162,6 +163,7 @@ const GROUPS: readonly NavGroup[] = [
       { to: "/import-export", label: "Import and export" },
       { to: "/subscribers", label: "Subscribers and notifications" },
       { to: "/classification", label: "Classification" },
+      { to: "/compliance", label: "Compliance" },
     ],
   },
   {

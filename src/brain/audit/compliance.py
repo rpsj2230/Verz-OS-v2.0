@@ -93,37 +93,46 @@ from brain.audit.ledger import FIELD_NAME, IDENTIFIER, TRACE_ID
 
 
 class SensitiveTopic(enum.StrEnum):
-    """What the interception recognises. Closed, and it never leaves this module.
+    """What the interception recognises. Closed, and it leaves this module for two places only.
 
-    Three members rather than one, and the distinction is used for exactly one thing: the
-    suppressed aggregate a data protection officer reads to confirm the control is running.
-    Nothing else may branch on it. In particular the referral does not, which is the point
-    of `render_referral` taking no arguments.
+    One member per subject the owner named (M24.2.2): HR, grievance, harassment,
+    whistleblowing, salary, medical and legal matters. The distinction is used for two things:
+    choosing the named person a referral is routed to, and the suppressed aggregate a data
+    protection officer reads to confirm the control is running. The referral the asker reads
+    does not branch on it, which is the point of `render_referral` taking no arguments.
     """
 
-    #: The asker's own employment: pay, appraisal, discipline, leave, health.
+    #: The asker's own employment: appraisal, discipline, leave, notice, resignation.
     HR_PERSONAL = "hr_personal"
     #: A complaint about treatment at work, whoever it is about.
     GRIEVANCE = "grievance"
     #: A report of misconduct, made or contemplated.
     WHISTLEBLOWING = "whistleblowing"
+    #: Harassment or bullying, of the asker or of somebody else.
+    HARASSMENT = "harassment"
+    #: Somebody's pay: the asker's own, or a colleague's.
+    SALARY = "salary"
+    #: Health, sickness, a medical condition or a disability.
+    MEDICAL = "medical"
+    #: A legal claim, advice or proceedings involving the asker or the company.
+    LEGAL = "legal"
 
 
-#: Where a sensitive question is sent instead. One route for every topic, deliberately.
+#: What an intercepted asker reads. One sentence for every topic and every named person.
 #:
-#: Rejected: a per-topic route, which reads as more helpful and is a disclosure. The
-#: referral is delivered into a conversation, and conversations are stored, replayed into
-#: session memory and rendered in the console. A transcript containing the whistleblowing
-#: hotline tells whoever opens it what was raised, which is exactly the fact the
-#: interception exists to protect. One route, triaged by a person, discloses nothing.
+#: **The question is routed to the named person for its topic, and the sentence does not say
+#: who.** Until 2026-09-21 this pointed everybody at one route in the staff handbook, because a
+#: per-topic route written into the reply would put the topic into a stored transcript: the
+#: whistleblowing hotline in a conversation tells whoever opens it what was raised. The owner's
+#: sentence asks for the named person for each topic, and both hold at once when the routing
+#: happens beside the conversation rather than in it: `brain.ops.sensitive_referral_store`
+#: writes the referral where only that person reads it, and the transcript holds this.
 #:
-#: A deployment edits this constant. It is not a parameter for the same reason.
-CONFIDENTIAL_ROUTE: Final = "the confidential reporting route in the staff handbook"
-
+#: Rejected: naming the person here. It is the per-topic route again, one name per topic.
 REFERRAL_TEXT: Final = (
-    "This is not something to put through me, and I have not looked anything up. "
-    f"Please go to {CONFIDENTIAL_ROUTE}, which sits outside this system and outside "
-    "your reporting line."
+    "This is not something to put through me, and I have not looked anything up. A note that "
+    "you asked, without what you wrote, has gone to the person who handles these questions, "
+    "and they will contact you directly, outside your reporting line."
 )
 
 #: What the trace is allowed to say about how a request was handled. One constant, so it
@@ -183,9 +192,14 @@ TOPIC_PATTERNS: Final[tuple[tuple[SensitiveTopic, re.Pattern[str]], ...]] = (
         re.compile(r"\b(?:anonymous(?:ly)?|confidential(?:ly)?)\s+report\w*\b"),
     ),
     (SensitiveTopic.WHISTLEBLOWING, re.compile(r"\bspeak[- ]?up\s+(?:policy|line|channel)\b")),
+    (SensitiveTopic.HARASSMENT, re.compile(r"\bharass(?:ment|ed|ing)?\b")),
+    (SensitiveTopic.HARASSMENT, re.compile(r"\bbull(?:y|ied|ying)\b")),
+    (
+        SensitiveTopic.HARASSMENT,
+        re.compile(r"\binappropriate\s+(?:touching|comments?|behaviou?r|advances)\b"),
+    ),
+    (SensitiveTopic.HARASSMENT, re.compile(r"\bsexual(?:ly)?\s+(?:assault\w*|misconduct)\b")),
     (SensitiveTopic.GRIEVANCE, re.compile(r"\bgrievance\b")),
-    (SensitiveTopic.GRIEVANCE, re.compile(r"\bharass(?:ment|ed|ing)?\b")),
-    (SensitiveTopic.GRIEVANCE, re.compile(r"\bbull(?:y|ied|ying)\b")),
     (SensitiveTopic.GRIEVANCE, re.compile(r"\bdiscriminat\w*\s+against\b")),
     (SensitiveTopic.GRIEVANCE, re.compile(r"\bhostile work environment\b")),
     (
@@ -196,11 +210,39 @@ TOPIC_PATTERNS: Final[tuple[tuple[SensitiveTopic, re.Pattern[str]], ...]] = (
         SensitiveTopic.GRIEVANCE,
         re.compile(r"\b(?:file|raise|lodge|submit)\s+(?:a\s+)?(?:formal\s+)?complaint\b"),
     ),
+    (SensitiveTopic.LEGAL, re.compile(r"\b(?:sue|sues|suing|sued)\b")),
+    (SensitiveTopic.LEGAL, re.compile(r"\blaw\s?suits?\b")),
+    (
+        SensitiveTopic.LEGAL,
+        re.compile(r"\blegal\s+(?:action|advice|claim|proceedings|counsel|case)\b"),
+    ),
+    (SensitiveTopic.LEGAL, re.compile(r"\b(?:my|a|an employment)\s+lawyer\b")),
+    (SensitiveTopic.LEGAL, re.compile(r"\bemployment tribunal\b")),
+    (
+        SensitiveTopic.MEDICAL,
+        re.compile(
+            r"\bmy\s+(?:medical|health|diagnosis|illness|condition|surgery|pregnancy|"
+            r"disability|sick leave|medical leave|medical certificate)\b"
+        ),
+    ),
+    (
+        SensitiveTopic.MEDICAL,
+        re.compile(r"\b(?:mental health|medical condition|sick leave|medical leave|disability)\b"),
+    ),
+    (
+        SensitiveTopic.SALARY,
+        re.compile(r"\bmy\s+(?:salary|pay|payslip|bonus|increment|pay rise|wages?|compensation)\b"),
+    ),
+    (SensitiveTopic.SALARY, re.compile(r"\bsalar(?:y|ies)\s+(?:of|for)\b")),
+    (
+        SensitiveTopic.SALARY,
+        re.compile(r"\bhow much (?:does|do|did) (?:\w+ ){1,3}(?:earn|get paid)\b"),
+    ),
     (
         SensitiveTopic.HR_PERSONAL,
         re.compile(
-            r"\bmy\s+(?:salary|pay|payslip|bonus|increment|appraisal|performance review|"
-            r"probation|notice period|leave balance|annual leave|medical leave)\b"
+            r"\bmy\s+(?:appraisal|performance review|probation|notice period|leave balance|"
+            r"annual leave)\b"
         ),
     ),
     (
@@ -304,15 +346,17 @@ def intercept(question: str, *, trace_id: str) -> Interception:
     it after the cache means an intercepted question can be served from, and written to, a
     keyed store, and a cache entry is an artefact that outlives the conversation. Running it
     after SELECT means an agent has already been chosen for it, and choosing an agent is a
-    read of the catalogue that leaves its own trail. Wiring that call site is not part of
-    this leaf: `brain/gate/context.py` is not in this change's allowlist, so today this
-    function is correct and uncalled.
+    read of the catalogue that leaves its own trail. The call site is
+    `brain.api_routes.answer`, which calls it first, before the answer lane is entered, so
+    before the cache, selection and any model (2026-09-21).
 
     **No audit entry is written, and that is deliberate.** `AuditAction` is closed and holds
     no member for this, which is the right answer rather than a missing one: an entry that an
     intercepted request writes and an ordinary one does not *is* the disclosure, sitting in
-    the longest-retained and most widely read table in the system. The evidence that the
-    control runs is the suppressed aggregate below, and nothing else.
+    the longest-retained and most widely read table in the system. The record the owner asked
+    for is `obs.sensitive_referral`: who asked, when, the topic and the named person, with no
+    content, read only by that person. The evidence that the control runs is the suppressed
+    aggregate below.
 
     **The timing channel is not closed here, and this module cannot close it.** A referral
     returned in ten milliseconds where an answer takes two seconds is observable to anyone
