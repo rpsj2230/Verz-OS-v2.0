@@ -1,0 +1,95 @@
+# The personal data analyser: Microsoft Presidio's own image, unmodified.
+#
+# **Why this file exists now.** `brain.ops.wiring` has budgeted a `presidio-analyzer`
+# component in `standard` and `full` since the profiles were written, and until 2026-09-21 no
+# compose file declared a service by that name, so both profiles spent memory on a container
+# nobody could start. That was the last of the four reasons `brain.ops.compose` gave for there
+# being no `docker-compose.full.yml`; the owner moved M0.4.2 into Wave 1 beside the redactor
+# (M4) so that this could be decided rather than carried.
+#
+# **The decisions, each with what it rests on.**
+#
+# | what | value | rests on |
+# | --- | --- | --- |
+# | image | mcr.microsoft.com/presidio-analyzer:2.2.362 | the newest release tag on MCR on 2026-09-21; MIT, `brain.ops.dependency_policy.IMAGE_TERMS` |
+# | port | 3000 | the image's own `ENV PORT=3000`, set again below so the address is not an inference |
+# | memory | 1536M | the upstream Kubernetes chart requests 1500Mi for this image, whose default NLP engine loads spaCy's `en_core_web_lg` at start |
+# | readiness | an analysis of a probe returns the entity asked for | `brain.ops.wiring`'s `ready_when` for this component |
+#
+# **The memory figure replaced a budget of 512 MiB, and the old figure could not have worked.**
+# It was written before anybody chose an image, and the official image loads the large English
+# spaCy model before it answers anything. 1536 is Microsoft's own request for this container,
+# which is a published figure and not a measurement taken here. The CI job
+# `presidio-analyzer` in `.github/workflows/ci.yml` starts this exact service, waits for this
+# healthcheck and records what `docker stats` says it holds, which is the measurement.
+#
+# **The healthcheck asks for a detection, not a heartbeat.** `/health` answers as soon as
+# Flask is listening. `/analyze` runs the spaCy pipeline over the text on every call whatever
+# entities are requested, so an answer to it proves the model is loaded and serving. The probe
+# is a card number that passes the Luhn check and is the industry's published test number, so
+# it is a known positive by pattern and never anybody's data; `CREDIT_CARD` is used rather than
+# an email address because the email recogniser consults the public suffix list, and a probe
+# that could reach for the network is a probe whose answer depends on the network.
+#
+# **Reachable by name from the application and from nothing else.** `expose`, never `ports`,
+# and one network, `pii`, which is internal and declared identically in `docker-compose.yml`,
+# `docker-compose.lite.yml` and here. The text sent to this service is the text about to leave
+# the building, so it gets the rule `docker-compose.inference.yml` applies to documents: no
+# route off the host, no connection string to the Brain's database (`Wiring.NONE`), and no
+# volume it could write a copy into. The address the product dials is
+# `brain.ops.pii.analyzer_address`, which defaults to this service's name and port on a
+# profile that deploys it, and `BRAIN_PRESIDIO_URL` overrides it; nothing else names it.
+#
+# **It is a detector, never an authorisation boundary**, which is the sentence `brain.ops.pii`
+# opens with. A detection is telemetry and a scrub, and an analyser that is down degrades the
+# scrub rather than removing it, because the deterministic recognisers run in the Brain's own
+# process.
+#
+# No `profiles:` key, deliberately. A service carrying one starts only when that profile is
+# named in `COMPOSE_PROFILES` or `--profile`, and the installer names neither, so the key
+# would make this a container that never starts on the installs it exists for.
+#
+# Task ids: M0.4.2
+
+services:
+  presidio-analyzer:
+    image: mcr.microsoft.com/presidio-analyzer:2.2.362
+    restart: unless-stopped
+    environment:
+      # The image's defaults, written out so the port the application dials is stated in the
+      # file the address test reads, and so one gunicorn worker is a decision rather than a
+      # default: each worker loads its own copy of the model.
+      PORT: "3000"
+      WORKERS: "1"
+    networks:
+      # One network, internal, no default entry. A second entry here is a route off the host
+      # for every piece of text somebody is about to send to a model.
+      - pii
+    expose:
+      - "3000"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          curl -fsS -m 8 -H 'Content-Type: application/json'
+          -d '{"text":"card 4111111111111111","language":"en","entities":["CREDIT_CARD"]}'
+          http://127.0.0.1:3000/analyze | grep -q CREDIT_CARD
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      # The large English model is read from the image at start, which takes most of a minute
+      # on a small host. A shorter grace period marks a healthy start as a failure.
+      start_period: 120s
+    deploy:
+      resources:
+        limits:
+          # Matches the `presidio-analyzer` component in `brain.ops.wiring`, which is where the
+          # budget is decided and what every profile's arithmetic is computed from.
+          memory: 1536M
+
+networks:
+  # Declared identically in `docker-compose.yml` and `docker-compose.lite.yml`, which put the
+  # application on it. `tests/unit/test_compose_networks.py` holds every declaration of one
+  # network equal.
+  pii:
+    internal: true

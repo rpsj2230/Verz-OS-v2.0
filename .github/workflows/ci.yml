@@ -637,6 +637,68 @@ jobs:
         if: always()
         run: docker compose down -v
 
+  # M0.4.2. The personal data analyser is the one service the full profile gained on
+  # 2026-09-21, and its image, port, readiness probe and memory limit were chosen from
+  # Microsoft's published figures rather than measured here. This starts that exact service
+  # from its own file and measures them: the probe goes healthy, a name is found (so the spaCy
+  # model is loaded and serving), what it holds is below its limit, and its network has no
+  # route out. The whole full profile is not started, and cannot be anywhere yet: two of its
+  # images (`INFERENCE_IMAGE`, `MATCHER_IMAGE`) are not published, and it reserves more memory
+  # than a hosted runner has. `docker compose config` on the one file is the check that the
+  # merge is a valid project; `tests/unit/test_compose.py` holds it equal to its sources.
+  presidio:
+    name: The personal data analyser starts, answers and fits its limit
+    runs-on: ubuntu-latest
+    needs: changes
+    if: ${{ needs.changes.outputs.tasks_only != 'true' }}
+    env:
+      COMPOSE_FILE: docker-compose.presidio.yml
+    steps:
+      - uses: actions/checkout@v4
+      - name: The one-file full profile is a valid compose project
+        env:
+          APP_IMAGE: ci
+          INFERENCE_IMAGE: ci
+          MATCHER_IMAGE: ci
+          INSTALL_OIDC_REDIRECT_URIS: ci
+          KEYCLOAK_ADMIN: ci
+          KEYCLOAK_ADMIN_PASSWORD: ci
+          KEYCLOAK_DB_PASSWORD: ci
+          KEYCLOAK_HOSTNAME: ci
+        run: docker compose -f docker-compose.full.yml config --quiet
+      - name: Start the analyser and wait for its own healthcheck
+        run: |
+          docker compose up -d --wait --wait-timeout 300 || {
+            echo "::error::presidio-analyzer did not become healthy"
+            docker compose ps; docker compose logs --tail 80; exit 1
+          }
+      - name: A name is found, so the model is serving and not only the web server
+        run: |
+          out=$(docker compose exec -T presidio-analyzer curl -fsS -m 20 \
+            -H 'Content-Type: application/json' \
+            -d '{"text":"Please call David Johnson tomorrow.","language":"en","entities":["PERSON"]}' \
+            http://127.0.0.1:3000/analyze)
+          echo "$out"
+          echo "$out" | grep -q PERSON || { echo "::error::no PERSON found"; exit 1; }
+      - name: What it holds is below its limit
+        run: |
+          id=$(docker compose ps -q presidio-analyzer)
+          docker stats --no-stream --format '{{.Name}} {{.MemUsage}} {{.MemPerc}}' "$id"
+          used=$(docker stats --no-stream --format '{{.MemPerc}}' "$id" | tr -d '%')
+          limit=$(docker inspect -f '{{.HostConfig.Memory}}' "$id")
+          echo "limit bytes: $limit, used: $used%"
+          [ "$limit" = "$((1536 * 1024 * 1024))" ] || { echo "::error::limit is $limit"; exit 1; }
+          awk -v u="$used" 'BEGIN { exit !(u < 90) }' || { echo "::error::holding $used% of its limit"; exit 1; }
+      - name: Its network has no route out
+        run: |
+          if docker compose exec -T presidio-analyzer curl -fsS -m 8 -o /dev/null https://pypi.org; then
+            echo "::error::the analyser reached the internet"; exit 1
+          fi
+          echo "no route out, as the internal network declares"
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
+
   # M41.2.6 and M41.4.1 on a real install rather than over fakes. `brain.ops.handover_run` is
   # tested against a dictionary pretending to be a database and another pretending to be an
   # object store, and neither can refuse a COPY, sign a request wrongly or keep a schema a drop

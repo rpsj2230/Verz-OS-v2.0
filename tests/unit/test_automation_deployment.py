@@ -204,7 +204,9 @@ def test_the_application_keeps_its_own_network_while_joining_the_shared_one() ->
     Delete this and `default` can be tidied out of a list where it looks redundant."""
     app = _app_compose()["services"]["app"]
 
-    assert set(app["networks"]) == {"default", TOOL_API}
+    # `pii` is the personal data analyser's internal network, joined since 2026-09-21; see
+    # `docker-compose.presidio.yml`.
+    assert set(app["networks"]) == {"default", TOOL_API, "pii"}
 
 
 def test_the_shared_network_is_declared_identically_internal_and_never_external() -> None:

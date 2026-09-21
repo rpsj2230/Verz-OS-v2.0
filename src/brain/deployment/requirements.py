@@ -23,8 +23,8 @@ each. That cannot work, because `docker-compose.lite.yml` and `docker-compose.ym
 same four services, so a derivation picks up both and every service is then declared twice with
 which one runs decided by the order of the `-f` flags. So the list is written down, and
 `brain.ops.compose.components_with_no_service` asked about that list is what refuses a profile
-whose file set cannot start it. Asked today it names `presidio-analyzer` for `standard` and for
-`full`, which is the first of the four reasons there is no aggregate compose file.
+whose file set cannot start it. It named `presidio-analyzer` for `standard` and `full` until
+2026-09-21, when `docker-compose.presidio.yml` gave it a service; asked today it names nothing.
 
 **The port requirement is the one that surprises a reader.** No service in any compose file in
 this repository declares `ports:`, only `expose:`, so a fresh server that has run the install
@@ -107,7 +107,13 @@ COMPOSE_FILES_FOR: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
             "docker-compose.objectstore.yml",
             "docker-compose.keycloak.yml",
             "docker-compose.inference.yml",
+            # The personal data analyser, budgeted in `standard` since the profiles were
+            # written and given a service on 2026-09-21. See `docker-compose.presidio.yml`.
+            "docker-compose.presidio.yml",
         ),
+        # The ten source files rather than `docker-compose.full.yml`, which is their merge:
+        # the overlays (tunnel, vault, split, browser) are chosen by which files a profile
+        # names, and the merge is held equal to these by `tests/unit/test_compose.py`.
         "full": FULL_PROFILE_FILES,
     }
 )

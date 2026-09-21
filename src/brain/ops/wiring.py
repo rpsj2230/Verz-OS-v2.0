@@ -334,8 +334,11 @@ COMPONENTS: Final[tuple[Component, ...]] = (
         ready_when="pg_isready answers for the keycloak database",
     ),
     Component(
+        # 1536 rather than the 512 written before an image was chosen: the official image
+        # loads spaCy's large English model at start, and 1500Mi is Microsoft's own request
+        # for it. See `docker-compose.presidio.yml`, and the CI job that measures it.
         name="presidio-analyzer",
-        memory_mib=512,
+        memory_mib=1536,
         profiles=frozenset({"standard", "full"}),
         wiring=Wiring.NONE,
         ready_when="the analyser returns a detection for a known-positive probe string",

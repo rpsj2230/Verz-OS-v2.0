@@ -57,6 +57,7 @@ import yaml
 from brain.browsing.launcher import overlays_for as browser_overlays_for
 from brain.deployment.app_environment import VAULT_OVERLAY, worker_vault_overlays_for
 from brain.deployment.requirements import COMPOSE_FILES_FOR, files_for
+from brain.ops.compose import FULL_PROFILE_FILE
 from brain.ops.split import overlays_for as split_overlays_for
 from brain.ops.streaming_replica import OVERLAY as REPLICA_OVERLAY
 from brain.ops.tunnel import overlays_for
@@ -121,7 +122,11 @@ ROUTE_OUT: Final[Mapping[str, Mapping[str, str]]] = {
 
 #: Services that run work somebody outside this repository assembled or trained. No reason
 #: written in `ROUTE_OUT` is good enough for these, which is why they are named twice.
-SANDBOXED: Final = frozenset({"activepieces", "inference-server", "record-matcher"})
+#: The personal data analyser is here because it runs a model trained elsewhere over text that
+#: has not been scrubbed yet.
+SANDBOXED: Final = frozenset(
+    {"activepieces", "inference-server", "record-matcher", "presidio-analyzer"}
+)
 
 
 def load(name: str) -> dict[str, Any]:
@@ -131,7 +136,12 @@ def load(name: str) -> dict[str, Any]:
 
 def compositions() -> dict[str, tuple[str, ...]]:
     """Every set of files the product composes into one project, in `-f` order."""
-    found: dict[str, tuple[str, ...]] = {STAGING: (STAGING,)}
+    # The full profile as one file is the merge of its sources and is started on its own, so
+    # it is a composition of its own. `test_compose.py` holds it equal to the merge.
+    found: dict[str, tuple[str, ...]] = {
+        STAGING: (STAGING,),
+        FULL_PROFILE_FILE: (FULL_PROFILE_FILE,),
+    }
     for profile in sorted(COMPOSE_FILES_FOR):
         files = files_for(profile)
         found[profile] = files

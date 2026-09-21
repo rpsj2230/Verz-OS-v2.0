@@ -184,6 +184,10 @@ class Settings(BaseSettings):
     #: request and this address receives the text of the document itself. See
     #: `brain.ops.inference.inference_config_conflicts`.
     inference_url: str = ""
+    #: Where the personal data analyser answers. Empty takes the product's own service on a
+    #: profile that deploys one, and `brain.config.check` refuses a value on one that does
+    #: not; `brain.ops.pii.analyzer_address` is the one reader.
+    presidio_url: str = ""
     #: Whether this install looks for a newer release at all. Off unless an install switches it
     #: on, because a look is a request leaving the client's network; see
     #: `brain.deployment.release_feed.A_CHECK_NOBODY_SWITCHED_ON_IS_A_DISCLOSURE_NOBODY_AGREED_TO`.

@@ -1,0 +1,786 @@
+# The full profile as one file (M0.4.2). GENERATED: do not edit.
+#
+# This is the merge of the files in `brain.ops.compose.FULL_PROFILE_FILES`, as Compose
+# merges them when they are named with -f in that order. Edit the source file and run
+#
+#     uv run python -m brain.ops.compose
+#
+# `tests/unit/test_compose.py` fails while this file and that merge differ. Every choice
+# in here is argued in the header of the file it came from; the merge keeps none of the
+# comments, so read those, not this.
+#
+# Sources:
+#   docker-compose.yml
+#   docker-compose.worker.yml
+#   docker-compose.parse-worker.yml
+#   docker-compose.objectstore.yml
+#   docker-compose.keycloak.yml
+#   docker-compose.langfuse.yml
+#   docker-compose.inference.yml
+#   docker-compose.automation.yml
+#   docker-compose.matcher.yml
+#   docker-compose.presidio.yml
+
+services:
+  app:
+    image: ${APP_IMAGE:?set APP_IMAGE to the image and release tag this install runs}
+    restart: unless-stopped
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://brain:${POSTGRES_PASSWORD}@pgbouncer:5432/brain
+      VALKEY_URL: redis://cache:6379/0
+      BRAIN_ENV: ${BRAIN_ENV:-production}
+      APP_ROLE_PASSWORD: ${APP_ROLE_PASSWORD:-}
+      BRAIN_DATABASE_URL: ${BRAIN_DATABASE_URL:-}
+      APP_IMAGE: ${APP_IMAGE:?set APP_IMAGE to the image and release tag this install runs}
+      BRAIN_SETUP_SECRET: ${BRAIN_SETUP_SECRET:-}
+      BRAIN_SETUP_ISSUED_AT: ${BRAIN_SETUP_ISSUED_AT:-}
+      BRAIN_PROFILE: ${BRAIN_PROFILE:-}
+      BRAIN_RUN_MIGRATIONS: ${BRAIN_RUN_MIGRATIONS:-}
+      BRAIN_REQUEST_TIMEOUT_SECONDS: ${BRAIN_REQUEST_TIMEOUT_SECONDS:-}
+      BRAIN_CORS_ORIGINS: ${BRAIN_CORS_ORIGINS:-}
+      BRAIN_WIDGET_ORIGINS: ${BRAIN_WIDGET_ORIGINS:-}
+      BRAIN_MIGRATION_DATABASE_URL: ${BRAIN_MIGRATION_DATABASE_URL:-}
+      BRAIN_TOOL_SOURCE: ${BRAIN_TOOL_SOURCE:-}
+      BRAIN_READ_REPLICA_URL: ${BRAIN_READ_REPLICA_URL:-}
+      BRAIN_RELEASE_CHECK: ${BRAIN_RELEASE_CHECK:-}
+      BRAIN_RELEASE_FEED_URL: ${BRAIN_RELEASE_FEED_URL:-}
+      BRAIN_LANGFUSE_HOST: ${BRAIN_LANGFUSE_HOST:-}
+      BRAIN_LANGFUSE_PUBLIC_KEY: ${BRAIN_LANGFUSE_PUBLIC_KEY:-}
+      BRAIN_LANGFUSE_SECRET_KEY: ${BRAIN_LANGFUSE_SECRET_KEY:-}
+      BRAIN_INFERENCE_URL: ${BRAIN_INFERENCE_URL:-}
+      BRAIN_PRESIDIO_URL: ${BRAIN_PRESIDIO_URL:-}
+      INSTALL_COMPANY_NAME: ${INSTALL_COMPANY_NAME:-}
+      INSTALL_PRODUCT_NAME: ${INSTALL_PRODUCT_NAME:-}
+      INSTALL_LOGO_URL: ${INSTALL_LOGO_URL:-}
+      INSTALL_ACCENT_COLOUR: ${INSTALL_ACCENT_COLOUR:-}
+      INSTALL_SENDER_ADDRESS: ${INSTALL_SENDER_ADDRESS:-}
+      INSTALL_OIDC_ISSUER: ${INSTALL_OIDC_ISSUER:-}
+      INSTALL_OIDC_REALM: ${INSTALL_OIDC_REALM:-}
+      INSTALL_OIDC_CLIENT_ID: ${INSTALL_OIDC_CLIENT_ID:-}
+      INSTALL_OIDC_REDIRECT_URIS: ${INSTALL_OIDC_REDIRECT_URIS:-}
+      INSTALL_BROKERED_DIRECTORY: ${INSTALL_BROKERED_DIRECTORY:-}
+      INSTALL_BROKERED_CLIENT_ID: ${INSTALL_BROKERED_CLIENT_ID:-}
+      INSTALL_STAFF_SOURCE: ${INSTALL_STAFF_SOURCE:-}
+      INSTALL_STAFF_SOURCE_LOCATION: ${INSTALL_STAFF_SOURCE_LOCATION:-}
+      INSTALL_MODEL_PROFILE: ${INSTALL_MODEL_PROFILE:-}
+      INSTALL_MODEL_ENDPOINT: ${INSTALL_MODEL_ENDPOINT:-}
+      INSTALL_EMBEDDING_DIMENSIONS: ${INSTALL_EMBEDDING_DIMENSIONS:-}
+      INSTALL_EMBEDDING_REVISION: ${INSTALL_EMBEDDING_REVISION:-}
+      INSTALL_OBJECT_STORE_URL: ${INSTALL_OBJECT_STORE_URL:-}
+      INSTALL_OBJECT_STORE_PREFIX: ${INSTALL_OBJECT_STORE_PREFIX:-}
+      INSTALL_OBJECT_STORE_BACKEND: ${INSTALL_OBJECT_STORE_BACKEND:-}
+      INSTALL_VECTOR_STORE: ${INSTALL_VECTOR_STORE:-}
+      INSTALL_LOCALES: ${INSTALL_LOCALES:-}
+      INSTALL_CURRENCY: ${INSTALL_CURRENCY:-}
+      INSTALL_TIME_ZONE: ${INSTALL_TIME_ZONE:-}
+      INSTALL_LARK_USES: ${INSTALL_LARK_USES:-}
+      INSTALL_LARK_PLATFORM: ${INSTALL_LARK_PLATFORM:-}
+      INSTALL_LARK_BASE: ${INSTALL_LARK_BASE:-}
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+    networks:
+    - default
+    - tool-api
+    - pii
+    healthcheck:
+      test:
+      - CMD
+      - python
+      - -c
+      - import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health/ready',timeout=4).status==200 else 1)
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+  pgbouncer:
+    image: edoburu/pgbouncer:v1.24.1-p1
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: '5432'
+      DB_USER: brain
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_NAME: brain
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: '200'
+      DEFAULT_POOL_SIZE: '20'
+      AUTH_TYPE: scram-sha-256
+      AUTH_QUERY: SELECT rolname, CASE WHEN rolvaliduntil < now() THEN NULL ELSE rolpassword END FROM pg_authid WHERE rolname = $$1 AND rolcanlogin AND NOT rolsuper AND NOT rolbypassrls
+    expose:
+    - '5432'
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -h 127.0.0.1 -p 5432 -U brain
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 20s
+  db:
+    image: pgvector/pgvector:pg18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: brain
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: brain
+    volumes:
+    - brain-db:/var/lib/postgresql
+    expose:
+    - '5432'
+    command: 'postgres -c shared_buffers=512MB -c work_mem=16MB -c maintenance_work_mem=256MB -c autovacuum_work_mem=128MB -c max_connections=100
+
+      '
+    deploy:
+      resources:
+        limits:
+          memory: 2048M
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U brain -d brain
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  cache:
+    image: valkey/valkey:8-alpine
+    restart: unless-stopped
+    command:
+    - valkey-server
+    - --maxmemory
+    - 384mb
+    - --maxmemory-policy
+    - allkeys-lru
+    - --save
+    - ''
+    expose:
+    - '6379'
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    healthcheck:
+      test:
+      - CMD
+      - valkey-cli
+      - ping
+      interval: 10s
+      timeout: 3s
+      retries: 5
+  brain-worker:
+    image: ${APP_IMAGE:?set APP_IMAGE to the image and release tag this install runs}
+    restart: unless-stopped
+    profiles:
+    - standard
+    - full
+    depends_on:
+      pgbouncer-session:
+        condition: service_healthy
+    command:
+    - python
+    - -m
+    - brain.ops.worker
+    environment:
+      QUEUE_URL: postgresql+psycopg://brain:${POSTGRES_PASSWORD}@pgbouncer-session:5432/brain
+      DATABASE_URL: postgresql+psycopg://brain:${POSTGRES_PASSWORD}@pgbouncer:5432/brain
+      BRAIN_CHECKPOINTER_URL: postgresql+psycopg://brain:${POSTGRES_PASSWORD}@pgbouncer-session:5432/brain
+      BRAIN_WORKER_SLOTS_HUMAN_INTERACTIVE: '0'
+      BRAIN_WORKER_SLOTS_HUMAN_ASYNC: '4'
+      BRAIN_WORKER_SLOTS_AUTOMATION: '2'
+      BRAIN_WORKER_SLOTS_SYSTEM: '1'
+      BRAIN_WORKER_SLOT_CLASS: standard
+      BRAIN_WORKER_POOL_MAX: '15'
+      MALLOC_ARENA_MAX: '2'
+      PYTHONUNBUFFERED: '1'
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+    healthcheck:
+      test:
+      - CMD
+      - python
+      - -m
+      - brain.ops.worker
+      - --ready
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 30s
+  pgbouncer-session:
+    image: edoburu/pgbouncer:v1.24.1-p1
+    restart: unless-stopped
+    profiles:
+    - standard
+    - full
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: '5432'
+      DB_USER: brain
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_NAME: brain
+      POOL_MODE: session
+      DEFAULT_POOL_SIZE: '20'
+      MAX_DB_CONNECTIONS: '20'
+      MAX_CLIENT_CONN: '24'
+      QUERY_WAIT_TIMEOUT: '30'
+      AUTH_TYPE: scram-sha-256
+      AUTH_QUERY: SELECT rolname, CASE WHEN rolvaliduntil < now() THEN NULL ELSE rolpassword END FROM pg_authid WHERE rolname = $$1 AND rolcanlogin AND NOT rolsuper AND NOT rolbypassrls
+    expose:
+    - '5432'
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -h 127.0.0.1 -p 5432 -U brain
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 20s
+  brain-parse-worker:
+    image: ${APP_IMAGE:?set APP_IMAGE to the image and release tag this install runs}
+    restart: unless-stopped
+    profiles:
+    - standard
+    - full
+    depends_on:
+      pgbouncer-session:
+        condition: service_healthy
+    command:
+    - python
+    - -m
+    - brain.ops.worker
+    environment:
+      BRAIN_WORKER_COMPONENT: brain-parse-worker
+      QUEUE_URL: postgresql+psycopg://brain:${POSTGRES_PASSWORD}@pgbouncer-session:5432/brain
+      DATABASE_URL: postgresql+psycopg://brain:${POSTGRES_PASSWORD}@pgbouncer:5432/brain
+      BRAIN_WORKER_SLOTS_HUMAN_INTERACTIVE: '0'
+      BRAIN_WORKER_SLOTS_HUMAN_ASYNC: '0'
+      BRAIN_WORKER_SLOTS_AUTOMATION: '0'
+      BRAIN_WORKER_SLOTS_SYSTEM: '1'
+      BRAIN_WORKER_SLOT_CLASS: whole_container
+      BRAIN_WORKER_POOL_MAX: '5'
+      MALLOC_ARENA_MAX: '2'
+      PYTHONUNBUFFERED: '1'
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    healthcheck:
+      test:
+      - CMD
+      - python
+      - -m
+      - brain.ops.worker
+      - --ready
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 30s
+  seaweedfs:
+    image: chrislusf/seaweedfs:3.80
+    restart: unless-stopped
+    environment:
+      GOMEMLIMIT: 192MiB
+    command:
+    - server
+    - -dir=/data
+    - -s3
+    - -s3.port=8333
+    - -s3.config=/etc/seaweedfs/s3.json
+    - -master.volumeSizeLimitMB=1024
+    - -volume.index=leveldb
+    volumes:
+    - seaweedfs:/data
+    - /opt/brain/settings/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
+    expose:
+    - '8333'
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - -qO-
+      - http://127.0.0.1:8333/status
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+  seaweedfs-init:
+    image: chrislusf/seaweedfs:3.80
+    restart: 'no'
+    depends_on:
+      seaweedfs:
+        condition: service_healthy
+    entrypoint:
+    - /bin/sh
+    - /opt/provision.sh
+    environment:
+      WEED_MASTER: seaweedfs:9333
+    volumes:
+    - /opt/brain/settings/seaweedfs/provision.sh:/opt/provision.sh:ro
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+  keycloak-db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?set KEYCLOAK_DB_PASSWORD}
+      POSTGRES_INITDB_ARGS: --data-checksums
+    command:
+    - postgres
+    - -c
+    - shared_buffers=64MB
+    - -c
+    - work_mem=4MB
+    - -c
+    - max_connections=30
+    volumes:
+    - keycloak-db:/var/lib/postgresql
+    networks:
+    - identity
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U keycloak -d keycloak
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+  keycloak-realm:
+    image: ${APP_IMAGE:?set APP_IMAGE to the image and release tag this install runs}
+    restart: 'no'
+    command:
+    - python
+    - -c
+    - "from pathlib import Path\nfrom brain.ops.realm_import import importable_realm\nout = Path(\"/out/realm-export.json\")\nout.write_text(\n    importable_realm(Path(\"/app/ops/keycloak/realm-export.json\")), encoding=\"utf-8\"\n)\nprint(f\"wrote {out} for --import-realm\")\n"
+    environment:
+      INSTALL_OIDC_REDIRECT_URIS: ${INSTALL_OIDC_REDIRECT_URIS:?set INSTALL_OIDC_REDIRECT_URIS}
+      INSTALL_OIDC_REALM: ${INSTALL_OIDC_REALM:-}
+      INSTALL_OIDC_CLIENT_ID: ${INSTALL_OIDC_CLIENT_ID:-}
+      INSTALL_BROKERED_DIRECTORY: ${INSTALL_BROKERED_DIRECTORY:-}
+      INSTALL_BROKERED_CLIENT_ID: ${INSTALL_BROKERED_CLIENT_ID:-}
+      INSTALL_STAFF_SOURCE: ${INSTALL_STAFF_SOURCE:-}
+      INSTALL_STAFF_SOURCE_LOCATION: ${INSTALL_STAFF_SOURCE_LOCATION:-}
+    volumes:
+    - realm-import:/out
+    networks:
+    - identity
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    restart: unless-stopped
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+      keycloak-realm:
+        condition: service_completed_successfully
+    command:
+    - start
+    - --import-realm
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?set KEYCLOAK_DB_PASSWORD}
+      KC_VAULT: file
+      KC_VAULT_DIR: /opt/keycloak/vault
+      KC_DB_POOL_MAX_SIZE: '15'
+      KC_DB_POOL_MIN_SIZE: '2'
+      KC_DB_POOL_INITIAL_SIZE: '2'
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:?set KEYCLOAK_ADMIN}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set KEYCLOAK_ADMIN_PASSWORD}
+      KC_PROXY_HEADERS: xforwarded
+      KC_HTTP_ENABLED: 'true'
+      KC_HOSTNAME: ${KEYCLOAK_HOSTNAME:?set KEYCLOAK_HOSTNAME}
+      KC_HOSTNAME_STRICT: 'true'
+      KC_HEALTH_ENABLED: 'true'
+      JAVA_OPTS_APPEND: -XX:MaxRAMPercentage=70 -XX:InitialRAMPercentage=40
+    volumes:
+    - realm-import:/opt/keycloak/data/import:ro
+    - keycloak-vault:/opt/keycloak/vault:ro
+    networks:
+    - identity
+    - proxy
+    expose:
+    - '8080'
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - 'exec 3<>/dev/tcp/127.0.0.1/9000 && echo -e ''GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n'' >&3 && grep -q ''"status": "UP"'' <&3'
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 90s
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+  langfuse-web:
+    image: langfuse/langfuse:3
+    restart: unless-stopped
+    depends_on:
+      langfuse-clickhouse:
+        condition: service_healthy
+      langfuse-cache:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://langfuse:${LANGFUSE_POSTGRES_PASSWORD}@db:5432/langfuse?connection_limit=5
+      CLICKHOUSE_URL: http://langfuse-clickhouse:8123
+      CLICKHOUSE_USER: langfuse
+      CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD}
+      REDIS_CONNECTION_STRING: redis://langfuse-cache:6379/0
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse-events
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://seaweedfs:8333
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: ${LANGFUSE_S3_ACCESS_KEY_ID}
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_S3_SECRET_ACCESS_KEY}
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: 'true'
+      NEXTAUTH_URL: ${LANGFUSE_PUBLIC_URL}
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET}
+      SALT: ${LANGFUSE_SALT}
+      ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY}
+      NODE_OPTIONS: --max-old-space-size=384
+      TELEMETRY_ENABLED: 'false'
+    expose:
+    - '3000'
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - -qO-
+      - http://127.0.0.1:3000/api/public/health
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+  langfuse-worker:
+    image: langfuse/langfuse-worker:3
+    restart: unless-stopped
+    depends_on:
+      langfuse-clickhouse:
+        condition: service_healthy
+      langfuse-cache:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://langfuse:${LANGFUSE_POSTGRES_PASSWORD}@db:5432/langfuse?connection_limit=5
+      CLICKHOUSE_URL: http://langfuse-clickhouse:8123
+      CLICKHOUSE_USER: langfuse
+      CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD}
+      REDIS_CONNECTION_STRING: redis://langfuse-cache:6379/0
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse-events
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://seaweedfs:8333
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: ${LANGFUSE_S3_ACCESS_KEY_ID}
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_S3_SECRET_ACCESS_KEY}
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: 'true'
+      SALT: ${LANGFUSE_SALT}
+      ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY}
+      NODE_OPTIONS: --max-old-space-size=288
+      TELEMETRY_ENABLED: 'false'
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - -qO-
+      - http://127.0.0.1:3030/api/health
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+  langfuse-clickhouse:
+    image: clickhouse/clickhouse-server:24.12-alpine
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_USER: langfuse
+      CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_DB: default
+    volumes:
+    - /opt/brain/settings/langfuse/clickhouse-memory.xml:/etc/clickhouse-server/config.d/memory.xml:ro
+    - langfuse-clickhouse:/var/lib/clickhouse
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    expose:
+    - '8123'
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - -qO-
+      - http://127.0.0.1:8123/?query=SELECT%201
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 45s
+  langfuse-cache:
+    image: valkey/valkey:8-alpine
+    restart: unless-stopped
+    command:
+    - valkey-server
+    - --maxmemory
+    - 96mb
+    - --maxmemory-policy
+    - noeviction
+    - --save
+    - ''
+    expose:
+    - '6379'
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    healthcheck:
+      test:
+      - CMD
+      - valkey-cli
+      - ping
+      interval: 10s
+      timeout: 3s
+      retries: 5
+  inference-server:
+    image: ${INFERENCE_IMAGE:?set INFERENCE_IMAGE; no image is published for this service yet}
+    restart: unless-stopped
+    profiles:
+    - standard
+    - full
+    networks:
+    - inference
+    environment:
+      INFERENCE_MAX_REQUEST_BYTES: '67108864'
+      INFERENCE_REQUESTS_AT_ONCE: '1'
+      INFERENCE_EMBEDDING_MODEL: qwen3-embedding-0.6b
+      INFERENCE_ENTITY_MODEL: gliner
+      INFERENCE_PARSING_MODEL: docling-layout-and-tableformer
+      INFERENCE_MODEL_DIR: /models
+      HF_HUB_OFFLINE: '1'
+      OMP_NUM_THREADS: '2'
+      MALLOC_ARENA_MAX: '2'
+      PYTHONUNBUFFERED: '1'
+    volumes:
+    - inference-models:/models:ro
+    expose:
+    - '8080'
+    healthcheck:
+      test:
+      - CMD
+      - python
+      - -m
+      - inference_server.ready
+      interval: 20s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+    deploy:
+      resources:
+        limits:
+          memory: 3072M
+  activepieces:
+    image: activepieces/activepieces:0.39.5
+    restart: unless-stopped
+    depends_on:
+      automation-db:
+        condition: service_healthy
+    networks:
+    - automation
+    - tool-api
+    environment:
+      AP_ENGINE_EXECUTABLE_PATH: /usr/src/app/dist/packages/engine/main.js
+      AP_ENVIRONMENT: prod
+      AP_EXECUTION_MODE: SANDBOX_CODE_ONLY
+      AP_FRONTEND_URL: ${AUTOMATION_PUBLIC_URL}
+      AP_POSTGRES_HOST: automation-db
+      AP_POSTGRES_PORT: '5432'
+      AP_POSTGRES_DATABASE: activepieces
+      AP_POSTGRES_USERNAME: activepieces
+      AP_POSTGRES_PASSWORD: ${AUTOMATION_DB_PASSWORD}
+      AP_QUEUE_MODE: MEMORY
+      AP_ENCRYPTION_KEY: ${AUTOMATION_ENCRYPTION_KEY}
+      AP_JWT_SECRET: ${AUTOMATION_JWT_SECRET}
+      HTTP_PROXY: http://automation-egress:3128
+      HTTPS_PROXY: http://automation-egress:3128
+      NO_PROXY: app,automation-db,automation-egress,localhost,127.0.0.1
+      AP_TELEMETRY_ENABLED: 'false'
+    expose:
+    - '80'
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - -qO-
+      - http://127.0.0.1/api/v1/flags
+      interval: 20s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+  automation-egress:
+    image: ubuntu/squid:6.10-24.04_edge
+    restart: unless-stopped
+    networks:
+    - automation
+    - egress
+    volumes:
+    - /opt/brain/settings/automation/egress.conf:/etc/squid/squid.conf:ro
+    expose:
+    - '3128'
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - squid -k check || exit 1
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+  automation-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    networks:
+    - automation
+    environment:
+      POSTGRES_DB: activepieces
+      POSTGRES_USER: activepieces
+      POSTGRES_PASSWORD: ${AUTOMATION_DB_PASSWORD}
+    volumes:
+    - automation-db:/var/lib/postgresql/data
+    expose:
+    - '5432'
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U activepieces -d activepieces
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  record-matcher:
+    image: ${MATCHER_IMAGE:?set MATCHER_IMAGE; build matcher/Dockerfile, no image is published}
+    restart: 'no'
+    profiles:
+    - full
+    command:
+    - python
+    - -m
+    - brain.resolution.splink_job
+    - --export
+    - /exports/export.duckdb
+    - --suggestions
+    - /suggestions
+    networks:
+    - matcher
+    environment:
+      MALLOC_ARENA_MAX: '2'
+      OMP_NUM_THREADS: '2'
+      PYTHONUNBUFFERED: '1'
+    volumes:
+    - matcher-exports:/exports:ro
+    - matcher-suggestions:/suggestions
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+  presidio-analyzer:
+    image: mcr.microsoft.com/presidio-analyzer:2.2.362
+    restart: unless-stopped
+    environment:
+      PORT: '3000'
+      WORKERS: '1'
+    networks:
+    - pii
+    expose:
+    - '3000'
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - 'curl -fsS -m 8 -H ''Content-Type: application/json'' -d ''{"text":"card 4111111111111111","language":"en","entities":["CREDIT_CARD"]}'' http://127.0.0.1:3000/analyze | grep -q CREDIT_CARD'
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+networks:
+  default: null
+  tool-api:
+    name: brain-tool-api
+    internal: true
+  pii:
+    internal: true
+  identity:
+    internal: true
+  proxy:
+    external: true
+    name: coolify
+  inference:
+    internal: true
+  automation:
+    internal: true
+  egress: null
+  matcher:
+    internal: true
+volumes:
+  brain-db: null
+  seaweedfs: null
+  keycloak-db: null
+  realm-import: null
+  keycloak-vault: null
+  langfuse-clickhouse: null
+  inference-models: null
+  automation-db: null
+  matcher-exports: null
+  matcher-suggestions: null

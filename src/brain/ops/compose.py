@@ -1,30 +1,42 @@
-"""Why the `full` profile is eight compose files and not one, computed from the files.
+"""The `full` profile as one file, and the checks that had to pass before it could be one.
 
 `docker-compose.lite.yml` is the `lite` profile as a file an operator can point at, and M0.4.2
-asks for the same thing for `full`. **That file is not written, and this module is the reason
-in a form that stops being true the moment somebody fixes it.** Four things stand between the
-eight files a `full` install composes today and the one file the leaf asks for. Every one of
-them is a fact about the product rather than about a particular server, and every one is
-computed here rather than argued in a paragraph that nothing recomputes.
+asks for the same thing for `full`. **`docker-compose.full.yml` is that file since 2026-09-21,
+and it is generated rather than written**: `full_profile_document` merges the files in
+`FULL_PROFILE_FILES` the way Compose merges `-f` files, `python -m brain.ops.compose` writes the
+result, and `tests/unit/test_compose.py` fails when the file on disk and the merge of its
+sources differ. Four things stood between those files and one file, every one computed here
+rather than argued in a paragraph that nothing recomputes, and all four are closed.
+
+**Generated, and not a hand copy, because a copy was the reason this module refused it.** The
+objection recorded below was a ninth file every edit to eight others had to be copied into.
+A merge nobody types has no copying in it: the obligation is one command, and the test that
+catches a forgotten run names it. `lite` is kept by hand because it is one file's copy of one
+file; this is ten files' union, and a union typed by hand is the argument-order defect
+`TWO_DECLARATIONS_OF_ONE_SERVICE_ARE_SETTLED_BY_ARGUMENT_ORDER` describes, moved into a
+reviewer's head. The installer still composes the ten files by name (`COMPOSE_FILES_FOR`),
+because its overlays are chosen by which files a profile names; the two are the same project
+by construction.
 
 **The reason is not the memory arithmetic, and saying so matters because that was the previous
-answer.** `brain.ops.wiring.budget_breaches("full")` reports the profile wanting 8320 MiB of
-wave 2 against 1720 MiB spare, on the one machine this repository has been measured against.
-That is a fact about that machine. This repository is the product and every company installs
-it on their own server, so "it does not fit the development host" is not a reason to refuse to
-describe the profile: a client with a larger machine runs `full`, and that is what the profile
-is for. What such a file owes its reader is the size of host it needs, and `host_mib_for`
-computes it rather than leaving it to be guessed.
+answer.** `brain.ops.wiring.budget_breaches("full")` compares wave 2 against the spare memory
+of the one machine this repository has been measured against. That is a fact about that
+machine. This repository is the product and every company installs it on their own server,
+so "it does not fit the development host" is not a reason to refuse to describe the profile:
+a client with a larger machine runs `full`, and that is what the profile is for. What the file
+owes its reader is the size of host it needs, and `host_mib_for` computes it rather than
+leaving it to be guessed.
 
-**What does stop the file being written, and what used to.** One of the four is left, and the
-other three were closed on 2026-09-10 by `docs/needs-rupash.md` item 43. Each is still computed
-here, because a reason that stops being recomputed is a reason that comes back.
+**What stopped the file being written.** Three of the four were closed on 2026-09-10 by
+`docs/needs-rupash.md` item 43 and the fourth on 2026-09-21. Each is still computed here,
+because a reason that stops being recomputed is a reason that comes back, and a merge of files
+that fail one of them is a single file that fails it.
 
-A component of the profile has no service anywhere. `components_with_no_service` names it, and
-the aggregate cannot be complete while a container in the budget has no declaration to copy.
-Writing one would mean choosing an image, a port and a readiness probe for a container nobody
-here has run, which is the one thing a file whose whole purpose is to be the profile must not
-do. **This is the one that is still open.**
+A component of the profile had no service anywhere. `components_with_no_service` named it:
+`presidio-analyzer`, budgeted in `standard` and `full` with nothing to start. It was the one a
+decision about deployment files could not close, because closing it meant choosing an image, a
+port and a readiness probe. **Closed on 2026-09-21 by `docker-compose.presidio.yml`**, which
+names Microsoft's own image by version and argues each of those choices in its header.
 
 One service was declared twice, with different bodies. `docker-compose.langfuse.yml` names
 `seaweedfs` deliberately, so that a project composing it beside the object store gets one
@@ -61,27 +73,25 @@ point of asserting a set rather than a count: the check survived the finding bei
 fifth relative bind mount fails a test; it does not fail a deploy that was already failing for
 four other reasons.
 
-Rejected: writing the aggregate anyway, with the four defects carried into it. The precedent
-was there, because `docker-compose.langfuse.yml` and `docker-compose.inference.yml` are both
-written for hosts and images that do not exist and say so. The difference is what the file
-would be for. Those two are one component each, argued in one place, and their absence of a
-host is a sentence in a header. An aggregate is a second copy of eight files whose only
-purpose is to be deployable in one piece, so a copy that cannot come up is a maintenance
-obligation paid for nothing, and the obligation is permanent: every edit to any of the eight
-then has to be copied across or a test goes red.
+Rejected, until the fourth reason closed: writing the aggregate with the defects carried into
+it. An aggregate is the whole profile in one piece, so one that cannot come up is worse than
+none, and a hand-kept copy of eight files was an obligation paid for nothing. Both halves of
+that objection are answered now: nothing is left for the file to carry, and nobody copies it.
 
 Rejected: reading the compose files here. Every function takes documents somebody else parsed,
 which is the split `brain.ops.connections` keeps and for the same reason. A check that had to
 find and open files could not be asked about a file that does not exist yet, and the test
 suite is where `yaml.safe_load` belongs so that what is checked is the deployment rather than
-a second copy of it kept in Python.
+a second copy of it kept in Python. `main` is the one exception and it is an entry point, not
+a check: it reads the sources, calls `full_profile_text` and writes the file.
 
-Task ids: none
+Task ids: M0.4.2
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 from typing import Any, Final
 from urllib.parse import urlsplit
 
@@ -164,27 +174,35 @@ FULL_PROFILE_FILES: Final = (
     "docker-compose.inference.yml",
     "docker-compose.automation.yml",
     "docker-compose.matcher.yml",
+    "docker-compose.presidio.yml",
 )
+
+#: The file `full_profile_text` produces and `main` writes, beside its sources.
+FULL_PROFILE_FILE: Final = "docker-compose.full.yml"
+
+#: The top-level sections a merge carries. Anything else in a source is refused rather than
+#: dropped, so a `secrets:` block added to one file cannot vanish from the aggregate.
+MERGED_SECTIONS: Final = ("services", "networks", "volumes")
 
 #: The file whose services are the baseline `brain.ops.wiring.PRODUCTION_BASELINE_MIB`
 #: already accounts for. Everything outside it is expected to be a budgeted component, and
 #: `unbudgeted_services` is what reports the ones that are not.
 BASELINE_FILE: Final = "docker-compose.yml"
 
-#: The four reasons, with the figures the functions below produce.
+#: The four reasons, and that none is left, with the figures the functions below produce.
 #:
-#: Written out because the next person to ask "why is there no full compose file" will read a
-#: sentence rather than run a function, and a sentence with numbers in it goes stale silently.
+#: Written out because the next person to ask about the full compose file will read a sentence
+#: rather than run a function, and a sentence with numbers in it goes stale silently.
 #: `tests/unit/test_compose.py` compares every figure here against what the files say, in the
 #: shape `wiring.A_SET_THAT_DOES_NOT_FIT_ALONE_NEVER_FITS_BESIDE_ANYTHING` is held to.
-THE_FULL_PROFILE_IS_NOT_ONE_FILE_YET: Final = (
-    "The full profile is 21 containers across 9 compose files, reserving 13184 MiB, and it "
-    "needs a host with 13952 MiB to spare once the component that has no service is deployed "
-    "too. One thing stops it being written as one file: presidio-analyzer is budgeted and has "
-    "no service anywhere. The other three are closed. 0 services take something they need at "
-    "startup from a bind mount that a stored compose resolves to nothing, seaweedfs is "
-    "described once and named twice, and the 2 services connecting to a database no compose "
-    "file creates are pointed at one the install creates before it starts them."
+THE_FULL_PROFILE_IS_ONE_FILE: Final = (
+    "The full profile is 22 containers across 10 compose files, merged into "
+    "docker-compose.full.yml, reserving 14720 MiB, and it needs a host with 14976 MiB to "
+    "spare. Nothing stops it being one file: 0 components are budgeted with no service, 0 "
+    "services take something they need at startup from a bind mount that a stored compose "
+    "resolves to nothing, seaweedfs is described once and named twice, and the 2 services "
+    "connecting to a database no compose file creates are pointed at one the install creates "
+    "before it starts them."
 )
 
 
@@ -455,6 +473,96 @@ def host_mib_for(profile: str, files: ComposeFiles) -> int:
     return deployment_mib(files) + undeployed_mib(profile, files) + HOST_RESERVE_MIB
 
 
+def full_profile_document(files: ComposeFiles) -> dict[str, Any]:
+    """The documents merged as Compose merges `-f` files, for the sections this product uses.
+
+    Every name is kept once, in the order the files first mention it. A name with no body in
+    one file and a body in another takes the body, which is the reference shape
+    `A_NAME_WITH_NO_BODY_IS_A_REFERENCE_AND_NOT_A_SECOND_DECLARATION` describes. **Two bodies
+    that differ are refused rather than settled**, because Compose would settle them by flag
+    order and a generated file would then fossilise whichever order this loop happened to use.
+    A top-level key outside `MERGED_SECTIONS` is refused for the same reason: dropped silently,
+    it is configuration the one-file profile does not have.
+    """
+    merged: dict[str, dict[str, Any]] = {section: {} for section in MERGED_SECTIONS}
+    for name in files:
+        document = files[name]
+        unknown = sorted(str(key) for key in document if key not in MERGED_SECTIONS)
+        if unknown:
+            msg = f"{name} has top-level keys a merge would drop: {unknown}"
+            raise ComposeError(msg)
+        for section in MERGED_SECTIONS:
+            block = document.get(section) or {}
+            if not isinstance(block, Mapping):
+                msg = f"{name}: the {section} block is not a mapping"
+                raise ComposeError(msg)
+            for key, body in block.items():
+                seen = merged[section].get(str(key))
+                if not body:
+                    merged[section].setdefault(str(key), seen)
+                elif seen and seen != body:
+                    msg = (
+                        f"{section} {key!r} is described differently in two files, and a merge "
+                        "would have to pick one by the order of the -f flags"
+                    )
+                    raise ComposeError(msg)
+                else:
+                    merged[section][str(key)] = body
+    return {section: body for section, body in merged.items() if body}
+
+
+#: The header `full_profile_text` writes. Comments do not survive a merge, so it says where
+#: the argued versions live.
+FULL_PROFILE_HEADER: Final = (
+    "# The full profile as one file (M0.4.2). GENERATED: do not edit.\n"
+    "#\n"
+    "# This is the merge of the files in `brain.ops.compose.FULL_PROFILE_FILES`, as Compose\n"
+    "# merges them when they are named with -f in that order. Edit the source file and run\n"
+    "#\n"
+    "#     uv run python -m brain.ops.compose\n"
+    "#\n"
+    "# `tests/unit/test_compose.py` fails while this file and that merge differ. Every choice\n"
+    "# in here is argued in the header of the file it came from; the merge keeps none of the\n"
+    "# comments, so read those, not this.\n"
+    "#\n"
+    "# Sources:\n"
+)
+
+
+def full_profile_text(files: ComposeFiles) -> str:
+    """`docker-compose.full.yml` as text: the header, the sources, then the merge.
+
+    PyYAML is imported here rather than at the top because it is a development dependency and
+    this module is imported by the installer's plan inside the product image.
+    """
+    import yaml
+
+    sources = "".join(f"#   {name}\n" for name in files)
+    body = yaml.safe_dump(
+        full_profile_document(files), sort_keys=False, width=4096, allow_unicode=True
+    )
+    return f"{FULL_PROFILE_HEADER}{sources}\n{body}"
+
+
+def main(repo: Path | None = None) -> Path:
+    """Write `docker-compose.full.yml` from its sources, and say where.
+
+    The one function here that opens a file, and it decides nothing: it parses the sources,
+    hands them to `full_profile_text` and writes the result with Unix line endings, because
+    this machine's default would put CRLF into a file a Linux server reads.
+    """
+    import yaml
+
+    root = Path.cwd() if repo is None else repo
+    files = {
+        name: yaml.safe_load((root / name).read_text(encoding="utf-8")) or {}
+        for name in FULL_PROFILE_FILES
+    }
+    target = root / FULL_PROFILE_FILE
+    target.write_text(full_profile_text(files), encoding="utf-8", newline="\n")
+    return target
+
+
 def _services_in(document: ComposeDoc) -> dict[str, Any]:
     """The services block, or an empty one for a document that has none."""
     services = document.get("services") or {}
@@ -573,3 +681,7 @@ def _limit_mib(body: Any, *, where: str) -> int:
     if text.endswith("G"):
         return int(float(text[:-1]) * 1024)
     return int(float(text.rstrip("M")))
+
+
+if __name__ == "__main__":
+    print(main())

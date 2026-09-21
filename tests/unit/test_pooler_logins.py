@@ -36,6 +36,8 @@ FILES: Final = (
     "docker-compose.lite.yml",
     "docker-compose.staging.yml",
     "docker-compose.worker.yml",
+    # The generated merge of the full profile carries both poolers its sources ship.
+    "docker-compose.full.yml",
 )
 
 #: The image whose entrypoint was read. Its database entry says `auth_user=${DB_USER}`, which

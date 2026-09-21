@@ -1,49 +1,51 @@
 """One command on a fresh server, and why it is a file list rather than a file.
 
-M0.4.2 asks for `docker-compose.full.yml` and `brain.ops.compose` refuses to write it, with
-four computed reasons. M42.5.1 asks for one command on a fresh server. Read together those
-two look like a contradiction, and they are not, because **one command and one file are
-different things and only one of them was ever asked for**. `docker compose -f a.yml -f b.yml
-... up -d` is one command over eight files.
+M0.4.2 asks for `docker-compose.full.yml`, and since 2026-09-21 it exists as the generated
+merge of the full profile's files (`brain.ops.compose.full_profile_text`). M42.5.1 asks for one
+command on a fresh server, and **one command and one file are different things**: the installer
+keeps composing the files by name, because the overlays below are chosen by which files a
+profile names, and the merge is held equal to them by test. `docker compose -f a.yml -f b.yml
+... up -d` is one command over ten files.
 
-**The aggregate file would make the install worse, not better, and the reason is the third of
-those four.** `A_RELATIVE_BIND_MOUNT_IS_EMPTY_IN_A_STORED_COMPOSE` is not a fact about an
-aggregate file; it is a fact about a *deployment path* that stores its own copy of a compose
-file with no repository beside it. Four services take something they need at startup from
-`./ops/...`, and on that path docker creates an empty directory there and starts the container
-anyway, so a memory ceiling, an egress allowlist and a set of object-store credentials all go
-missing with nothing to read. An installer that unpacks the release archive into one directory
-and runs compose *from that directory* has the repository beside the file, so those mounts
-resolve. Writing the aggregate would reintroduce the trap at the exact moment the installer had
-removed it, and would add the permanent obligation `brain.ops.compose` rejects: eight files
-that must be copied into a ninth or a test goes red.
+**While mounts were relative, an aggregate would have made the install worse, and the reason was
+the third of those four.** (All four mounts are absolute since 2026-09-10; kept as the record of
+why the plan names files.) `A_RELATIVE_BIND_MOUNT_IS_EMPTY_IN_A_STORED_COMPOSE` is not a fact
+about an aggregate file; it is a fact about a *deployment path* that stores its own copy of a
+compose file with no repository beside it. Four services take something they need at startup
+from `./ops/...`, and on that path docker creates an empty directory there and starts the
+container anyway, so a memory ceiling, an egress allowlist and a set of object-store credentials
+all go missing with nothing to read. An installer that unpacks the release archive into one
+directory and runs compose *from that directory* has the repository beside the file, so those
+mounts resolve. Writing the aggregate would reintroduce the trap at the exact moment the
+installer had removed it, and would add the permanent obligation `brain.ops.compose` rejects:
+eight files that must be copied into a ninth or a test goes red.
 
-**Two of the four reasons are not about packaging at all.** `presidio-analyzer` is budgeted and
-no compose file declares a service for it, and two services connect to a database nothing
-creates. Both block `standard` or `full` coming up under any packaging, aggregate or not. The
-remaining one, `seaweedfs` declared twice with bodies that disagree, is settled by the order of
-the `-f` flags either way, and the flag list is the better home for it: an order declared in
+**Two of the four reasons are not about packaging at all.** `presidio-analyzer` was budgeted
+with no compose file declaring a service for it (closed 2026-09-21 by
+`docker-compose.presidio.yml`), and two services connect to a database nothing creates. Both
+blocked `standard` or `full` coming up under any packaging, aggregate or not. The remaining one,
+`seaweedfs` declared twice with bodies that disagree, is settled by the order of the `-f` flags
+either way, and the flag list is the better home for it: an order declared in
 `COMPOSE_FILES_FOR` is a decision a reviewer can read, where a merge fossilised into an
 aggregate file is a decision nobody can see was made.
 
-**Three of the four are closed, and the plan is where two of them were closed.**
+**All four are closed, and the plan is where two of them were closed.**
 `docs/needs-rupash.md` item 43 decided all three on 2026-09-09. The settings four containers
 read at startup are created by a step of this plan and mounted by absolute path, so what a
 container reads no longer depends on where its compose file was stored: see `INSTALL_SETTINGS`
 and `settings_not_created`. The trace ledger's database and login are created by another step,
 before anything that needs them is started: see `CREATED_DATABASES`. The object store is
 described once, in its own file, and named with no body in the trace ledger's, which is a
-reference rather than a second copy that a test would have to hold equal for ever. What is left
-is `presidio-analyzer`, and it is the one that cannot be closed by a decision about deployment
-files, because closing it means choosing an image, a port and a readiness probe for a container
-nobody here has run.
+reference rather than a second copy that a test would have to hold equal for ever. The last,
+`presidio-analyzer`, was closed on 2026-09-21 by `docker-compose.presidio.yml`, which pins
+Microsoft's own image and argues its port, probe and memory limit in its header.
 
 **So the honest answer is per profile, and it is computed rather than asserted.**
 `one_command_blockers` asks those questions of a profile's own file set, and it asks two more:
 whether anything publishes a port, and whether every settings file a container mounts is one
 this plan creates. `lite` is one file, four services and one finding, which is the port. Since
-2026-09-10 `standard` and `full` report the same finding and one more, which is the component
-with no service, and both of those are true of any packaging.
+2026-09-21 `standard` and `full` report the same one finding, the port, which is true of any
+packaging and is the reverse proxy `NOTHING_IN_THIS_DEPLOYMENT_PUBLISHES_A_PORT` requires.
 
 **The other rule this module keeps is that a client's values move through the installer and
 never into it.** A script that echoes what it set has put a password in a terminal scrollback
