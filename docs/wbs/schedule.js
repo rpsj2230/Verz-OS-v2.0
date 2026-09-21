@@ -31,6 +31,8 @@ module.exports = {
   // from the programme by this map; the total is unchanged and the work is only re-dated to
   // the wave that can actually do it.
   LEAF_WAVE:{
+    // The full profile needs presidio, which the redactor (M4) uses: owner, 2026-09-21, item 77.
+    "M0.4.2":1,
     // "What is live after each wave" - each line is that wave's own exit criterion.
     "M38.2.2.2":1, "M38.2.2.3":2, "M38.2.2.4":3, "M38.2.2.5":4, "M38.2.2.6":5,
     // A smoke test needs a real person asking a real question, so the gate must exist.

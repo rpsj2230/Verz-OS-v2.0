@@ -102,7 +102,9 @@
     "Factory helpers for principals, scopes and grants",
     "The dependency policy is proved by a recorded CI run that refuses a deliberately added copyleft dependency and an archived one, accepts the permissive licences on the allowlist for every image, and finds no component needing a commercial key in production"
    ],
-   "leaf_waves": {},
+   "leaf_waves": {
+    "M0.4.2": 1
+   },
    "leaf_acts": {
     "M0.1.1": {
      "kind": "ACT",
@@ -128,11 +130,6 @@
     "M0.3.6": {
      "status": "BLOCKED",
      "why": "repo half done (brain.deployment.postgres_settings); install half needs owner permission, ops/vps/POOLING.md",
-     "updated": "2026-09-21"
-    },
-    "M0.4.2": {
-     "status": "BLOCKED",
-     "why": "presidio-analyzer has no service in the repo; image, port and health check undecided",
      "updated": "2026-09-21"
     },
     "M0.7.1": {
@@ -4745,7 +4742,12 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
-   "leaf_decided": {},
+   "leaf_decided": {
+    "M41.1.6": {
+     "kind": "DECIDED",
+     "why": "owner 2026-09-21, item 80: installs use hosted providers (Claude, OpenAI, DeepSeek, Moonshot Kimi); no local-only profile is needed. Provider and model choice is already configuration (Routing screen)"
+    }
+   },
    "act_groups": {},
    "leaf_progress": {
     "M41.2.7": {

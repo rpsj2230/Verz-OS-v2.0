@@ -59,11 +59,6 @@ const PROGRESS = {
     why: "repo half done (brain.deployment.postgres_settings); install half needs owner permission, ops/vps/POOLING.md",
     updated: "2026-09-21",
   },
-  "M0.4.2": {
-    status: "BLOCKED",
-    why: "presidio-analyzer has no service in the repo; image, port and health check undecided",
-    updated: "2026-09-21",
-  },
   "M0.7.1": {
     status: "BLOCKED",
     why: "owner decision: 7 licences await the allowlist (postgres/pgvector, ubuntu/squid, three @fontsource fonts, regex); recommended allow all",

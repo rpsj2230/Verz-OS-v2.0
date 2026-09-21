@@ -173,7 +173,7 @@
    "proof": [
     "M5.6.3"
    ],
-   "decision": null
+   "decision": "needs-rupash 80: hosted providers only (Claude, OpenAI, DeepSeek, Moonshot Kimi); no local-only profile"
   },
   {
    "id": "ARC-A-011",
@@ -4554,7 +4554,7 @@
    "proof": [
     "M5.6.3"
    ],
-   "decision": null
+   "decision": "needs-rupash 80: hosted providers only (Claude, OpenAI, DeepSeek, Moonshot Kimi); no local-only profile"
   },
   {
    "id": "FEAT-11.2",
@@ -4655,7 +4655,7 @@
    "proof": [
     "M5.6.3"
    ],
-   "decision": null
+   "decision": "needs-rupash 80: hosted providers only (Claude, OpenAI, DeepSeek, Moonshot Kimi); no local-only profile"
   },
   {
    "id": "FEAT-11.8",
@@ -4670,7 +4670,7 @@
    "proof": [
     "M5.6.1"
    ],
-   "decision": null
+   "decision": "needs-rupash 80: hosted providers only (Claude, OpenAI, DeepSeek, Moonshot Kimi); no local-only profile"
   },
   {
    "id": "FEAT-11.9",
@@ -11158,7 +11158,7 @@
    "proof": [
     "M5.6.1"
    ],
-   "decision": null
+   "decision": "needs-rupash 80: hosted providers only (Claude, OpenAI, DeepSeek, Moonshot Kimi); no local-only profile"
   },
   {
    "id": "REQ-43",

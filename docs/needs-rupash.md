@@ -2,137 +2,142 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**12 items are open.** Items 70 to 80 were raised on 2026-09-21 while finishing Wave 0: each is a
-Wave 0 task that cannot be finished without you, with the task ids it unblocks and what I recommend.
+**5 items are open: 72, 73, 74, 77 and 81.** Each says in plain terms what it is, what I recommend,
+and every step.
 
 # Open
 
-## 70. Allow seven licences in the dependency policy
+## 72. Two words to type into GitHub, to switch the post-deploy checks on
 
-**Unblocks:** M0.7.1. **What happens now:** the dependency audit lists them as awaiting you.
-**Recommendation: allow all seven.** The postgres and pgvector images (PostgreSQL licence, permissive
-like BSD); ubuntu/squid (GPL-2.0-or-later, allowed for that image only: it runs unmodified in its
-own container and nothing links to it); the three bundled fonts IBM Plex Mono, IBM Plex Sans and
-Poppins (OFL-1.1, a font licence that allows bundling with the notice kept); regex (CNRI-Python,
-the same family as PSF-2.0, already allowed). **What you do:** reply "allow the seven licences".
+**In plain terms:** after every deploy, your server now checks that nobody can see data they should
+not. This switch tells GitHub to wait for that check and show a red mark if it fails.
+**Recommendation: do it now.** It takes one minute and changes nothing on the site.
 
-## 71. Four unfixed Debian vulnerabilities in the base image, accepted until 2026-10-21
+1. Open the repository on GitHub and click **Settings** (top right of the repository page).
+2. In the left menu click **Secrets and variables**, then **Actions**.
+3. Click the **Variables** tab (next to **Secrets**), then the green **New repository variable**.
+4. In **Name** type exactly `POST_DEPLOY_CHECKS`. In **Value** type exactly `on`.
+5. Click **Add variable**. Tell me, and I watch the next deploy to confirm it reads the verdict.
 
-**Unblocks:** nothing further; this is for you to confirm or overrule. The new vulnerability scan
-found four critical findings in the base image (CVE-2025-7458 in sqlite, CVE-2026-13221,
-CVE-2026-42496 and CVE-2026-8376 in perl-base). Debian has no fix for any of them. No module
-imports sqlite3, the application never runs Perl, and perl-base cannot be removed from Debian. I
-recorded each as a 30-day exception in `ops/security/vulnerability-exceptions.json`; on 21 October
-the scan fails again and forces a re-check. They were already in every image before; the scan only
-now reports them. **Recommendation: accept.** The alternative is moving to a different base image.
+## 73. Let me change the stored settings in Coolify: create an API key for me
 
-## 72. One GitHub variable to switch the post-deploy checks on
+**In plain terms:** Coolify is the control panel that runs the Brain on your server, and it keeps
+its own master copy of the settings. Three jobs need that master copy changed: a connection
+manager in front of the database (PgBouncer, which shares a few database connections between
+many requests so the database never runs out), one memory setting for the database's clean-up
+job, and the secrets vault you approved (item 75). Changing the file on disk directly would be
+undone the next time anyone presses Deploy in Coolify, so I need Coolify's own API. The key you
+create stays on your server; I never see it, my commands only read it there.
+**Recommendation: do it.** About five minutes for you. I then take a database backup first,
+make the three changes, redeploy, and check each one. The database restarts once, for seconds.
 
-**Server half DONE on 2026-09-21** (you allowed server changes): the new `brain-deploy` and
-`brain-autodeploy` are installed (checksums match the repository, old copies kept in
-`/root/brain-deploy-backup-20260921`), and the timer allows 15 minutes. The first deploy through
-them, commit 5254748, passed the health gate, replaced the app, wrote 26 deploys into the
-deployment history, and passed the row-level security sweep and the permission canaries.
-`/api/deploy-checks.json` shows the verdict.
+1. On your laptop, open PowerShell and run `ssh -L 8000:127.0.0.1:8000 verz-vps`. Leave that
+   window open: it is the private tunnel to Coolify.
+2. In your browser open `http://localhost:8000` and sign in to Coolify.
+3. In Coolify's left menu click **Keys & Tokens**, then the **API Tokens** tab.
+4. In **Description** type `brain-server`. Tick **read**, **write** and **deploy** (not root).
+   Click **Create**. Coolify shows the key once: click the copy icon beside it.
+   If Coolify says the API is disabled: left menu **Settings**, find **API Access**, switch it
+   on, **Save**, and repeat this step.
+5. Open a second PowerShell window and run `ssh verz-vps`.
+6. Run `nano /root/.coolify-api-token`. Paste the key (right-click pastes in PowerShell). Press
+   **Ctrl+O**, then **Enter** to save, then **Ctrl+X** to close.
+7. Run `chmod 600 /root/.coolify-api-token` so only the server's administrator can read it.
+8. Type `exit` in both windows, and tell me "token saved".
 
-**Left, yours because it is a GitHub setting:** on GitHub open the repository, then **Settings** >
-**Secrets and variables** > **Actions** > **Variables** tab > **New repository variable**. Name
-`POST_DEPLOY_CHECKS`, value `on`, **Add variable**. From then on each Deploy run waits for the
-verdict and goes red if a check fails.
+## 74. Give the application its own limited database login
 
-## 73. PgBouncer pools and explicit Postgres memory: a Coolify API token, then I do it
+**In plain terms:** today the application opens the database with the master key. The master key
+ignores the company's access rules, so if a bug in the application ever asked for rows a person
+must not see, the database would hand them over. With its own limited login, the database itself
+refuses, even if the application gets it wrong. Migrations (the schema updates on each release)
+keep using the master key. The console Overview already shows this as "database login: not ready".
+**Recommendation: do it right after item 73.** Ten minutes. You type one password twice and
+paste one line; I do the rest (the compose change and the check).
 
-**Unblocks:** M0.3.4, M0.3.5, M0.3.6, and closing M31.2.1.2 to M31.2.1.4. The change is to
-Coolify's stored copy of the compose file (`ops/vps/POOLING.md`). Editing the file on disk would be
-silently undone the next time anyone presses Deploy in Coolify, so I stopped rather than do that.
-There is no Coolify API token on the server, and no backup job for the Brain database that I could
-find, and the database restarts once during this change.
+1. Make a password in your password manager: **32 characters, letters and digits only** (no symbols,
+   because it goes inside a web-style address where symbols break it). Keep it open.
+2. In PowerShell run `ssh verz-vps`.
+3. Run `docker exec -it $(docker ps -qf name=^db-) psql -U brain -d brain`. You are now inside the
+   database, at a prompt ending in `=#`.
+4. Type `\password brain_app` and press Enter. Paste the password when it asks, press Enter, paste it
+   again, press Enter. Nothing is shown as you paste; that is normal.
+5. Type `SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = 'brain_app';` and press
+   Enter. It must show `brain_app | f | f` (f means false: not a master key). Type `\q` to leave.
+6. In Coolify (tunnel as in item 73): open the Brain resource, then **Environment Variables**. Click
+   **+ Add**, name `BRAIN_DATABASE_URL`, value
+   `postgresql+psycopg://brain_app:PASSWORD@pgbouncer:5432/brain`, with PASSWORD replaced by your
+   password. Tick nothing else, **Save**. Do not press Deploy.
+7. Tell me "login set". I add the two lines that pass it to the application (and keep migrations on
+   the master key), deploy, and check that the Overview shows "database login: ready".
 
-1. In Coolify (through your SSH tunnel): **Keys & Tokens** > **API tokens** > **Create**, name
-   `brain-server`, tick **write** and **deploy**, and copy the token.
-2. `ssh verz-vps`, then `nano /root/.coolify-api-token`, paste it, save, then `chmod 600 /root/.coolify-api-token`.
-3. Tell me. I then take a database dump, change the stored compose through Coolify's API, deploy,
-   and check it as POOLING.md says.
+## 77. Archive the v1 repository
 
-## 74. The application logs in to the database as the superuser
+**In plain terms:** v1 and v2 must not both look alive, or a fix lands in one and not the other.
+v1 lives in your other GitHub account, which I cannot see. **Recommendation: archive it** (it
+becomes read-only and can be un-archived any time).
 
-**Unblocks:** M31.4.2. On staging every request runs as a login that can bypass row-level security,
-so the database would not stop a bug in the gate. The repository half lands with pull request #28 (merged):
-the bundled pooler then admits the application's own login `brain_app` and refuses superusers.
-After #28 is deployed I give you the exact commands for your Coolify setup: a password for
-`brain_app` typed at a psql prompt, two environment values in Coolify
-(`BRAIN_DATABASE_URL` for the application, `BRAIN_MIGRATION_DATABASE_URL` for migrations), and a
-redeploy. The console Overview then shows the database login as ready.
+1. Sign in to GitHub with the account that owns v1 and open the v1 repository.
+2. **Settings**, scroll to the bottom (**Danger Zone**), **Archive this repository**, type the
+   name to confirm, **I understand, archive this repository**.
+3. Tell me "v1 archived". The first release tag waits until Wave 0 is accepted, as you agreed.
 
-## 75. A secrets vault on staging
+## 81. One read-only permission for your Lark app, so the wiki connector can store pages
 
-**Unblocks:** M31.3.2.1, M31.3.2.3 to M31.3.2.6, M31.1.1.5, M38.4.1.3. Staging runs no vault, so
-leases, rotation and audit shipping cannot be seen working there. **Recommendation:** yes; it is the
-same vault a client install gets. **What you do:** say yes, and I give you the commands from
-`ops/openbao/UNSEAL.md` for your server.
+**In plain terms:** the Brain may only store a wiki page once it knows who is allowed to read that
+page, so it never shows a restricted page to the wrong person. I checked Lark's own command-line
+tool: the page listing it reads today carries no permission information at all, so the connector
+holds back every page and stores nothing. Lark does answer "who may read this page" through a
+separate call, and that call needs one extra read-only permission on your Lark app. It lets the
+Brain read who has access; it cannot change anything.
+**Recommendation: add it.** Five minutes. The connector work itself is in Wave 2; with the
+permission in place I can record one real answer and build the rule from it.
 
-## 76. How GitHub may reach the staging database for the invariant run
-
-**Unblocks:** M38.2.1.2. The workflow **Staging invariants** exists, but staging's database is only
-reachable inside Docker and the firewall is on. **Recommendation:** a self-hosted GitHub runner on
-the server, which reaches the database without opening a port. The other options are publishing
-the port to GitHub's address ranges (very wide) or an SSH key stored in GitHub. Tell me which.
-
-## 77. Release tags, v1, and the full profile
-
-**Unblocks:** M41.3.1, M41.3.2, M0.4.2. (a) **May I cut the first release tag** once Wave 0 is
-accepted? (b) **Is the v1 repository archived?** If yes, M41.3.2 closes. (c) The full profile needs
-a presidio service nobody here has run. **Recommendation:** move M0.4.2 to Wave 1 beside the redactor
-(M4), which is what uses presidio.
-
-## 78. The Lark wiki connector stores no page
-
-Lark's documented node listing has no `has_member_setting` field, and the connector withholds any
-page whose permissions it cannot read, so it stores nothing. **Recommendation:** let me capture one
-real response from your wiki, read-only, to see whether the field exists in practice; if not, the
-connector needs a read-only Drive permission scope to read page permissions another way.
-
-## 79. Sign in to staging in Claude's browser pane
-
-**Unblocks** closing M38.1.3.5, M41.2.6, M31.4.1, M31.1.4.4 and the Settings, Version, Connectors
-and Secrets vault screens. Those pages are behind sign-in and I never type your password. **What you
-do:** open the browser pane in this app, go to the staging address, sign in with your two-step
-code, and tell me.
-
-## 63. Switch on a second login factor in the consoles you use
-
-**What you do: one setting in each console. Everything else in this item is done.**
-
-**Done.** You deleted the three unused GitHub secrets on 2026-09-16. I checked your server's login
-keys read-only and there was no old deploy key to remove, and the address allowlist placeholder is
-in a template nothing on your server uses.
-
-**Left, and it is yours because it is a security setting inside each product.** Switch on a second
-factor in each console you sign in to. The steps are the same shape in all three: sign in, open your
-own account settings, and add an authenticator app.
-
-1. **Coolify.** Sign in through your usual SSH tunnel. Click your avatar in the top right and choose
-   **Profile**. Find **Two-Factor Authentication** and press **Enable**. Scan the QR code with an
-   authenticator app on your phone, type the six-digit code back in to confirm, and save the recovery
-   codes somewhere that is not the server.
-2. **Keycloak admin console.** Sign in as the administrator. Click your name in the top right, choose
-   **Manage account**, then **Account security**, then **Signing in**. Under **Two-factor
-   authentication** press **Set up authenticator application**, scan the QR code, and enter the code.
-   If you would rather require it of everyone, that is **Authentication** then **Required actions**
-   in the admin console, where **Configure OTP** can be set as a default action.
-3. **Langfuse**, only if you run it. Sign in, open **Settings** from the user menu, and follow the
-   two-factor section there.
-
-Tell me when they are on and I close this item.
-
-## 80. A local model for the local-only profile
-
-**Unblocks:** M41.1.6. The local-only profile blocks every hosted provider, as designed, but the
-inference server serves no model that can answer a question, so a local-only install cannot answer
-anything. **Recommendation:** decide this in Wave 1 with the model routing work (M5); nothing in
-Wave 0 depends on it. **What you do:** reply "move M41.1.6 to Wave 1", or name the model you want.
+1. Open the Lark developer console (`open.larksuite.com/app`) and sign in as the app's owner.
+2. Click the Brain's app, then in the left menu **Development Configuration** >
+   **Permissions & Scopes**.
+3. Search for `docs:permission.member:retrieve` and click **Add** (it is listed as read-only).
+4. In the left menu open **Version Management & Release**, **Create a version**, add a note
+   such as "read page permissions", and **Submit for release**. Approve it as the workspace admin
+   if Lark asks.
+5. Tell me "Lark permission added".
 
 # Answered
+
+## 80. A local model for the local-only profile - DECIDED: hosted providers only
+
+You use Claude (Anthropic), OpenAI, DeepSeek and Moonshot Kimi; no local-only profile is needed.
+M41.1.6 is recorded as decided. Provider keys are asked for in Wave 1 (M5.7.1).
+
+## 79. Sign in to staging in Claude's browser pane - DONE
+
+## 78. The Lark wiki connector stores no page - DECIDED: my recommendation
+
+Checking now with the Lark command-line tool, read-only, whether a real wiki page carries the
+permission field; the fix follows from what it shows.
+
+## 77. Release tags and the full profile - DECIDED: my recommendation
+
+The first release tag is cut when Wave 0 is accepted. The full profile (M0.4.2) moves to Wave 1,
+beside the redactor that uses presidio. Archiving v1 is item 77 above.
+
+## 76. How GitHub reaches the staging database - DECIDED: it does not
+
+You said to do what is best. Not a self-hosted runner: the repository is public, and a runner on
+your server would run code from anyone's pull request. The server runs the invariant checks itself
+after each deploy, beside the security checks it already runs, and reports only passed or failed.
+
+## 75. A secrets vault on staging - DECIDED: yes
+
+I set it up once item 73's key is saved, because it changes Coolify's stored settings.
+
+## 71. Four unfixed Debian findings - DECIDED: accepted until 2026-10-21
+
+## 70. Seven licences - DECIDED: all seven allowed
+
+## 63. A second login factor in the consoles - DONE
+
+You have Google Authenticator set up.
 
 ## 69. Make the repository private and protect main - DEFERRED by you, on purpose
 

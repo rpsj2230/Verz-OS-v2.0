@@ -1002,6 +1002,12 @@ const ACTS = {
     gate: false,
     text: "Commission a penetration test of the owner's install before the first company data is connected, and record each finding with its fix or accepted risk",
   },
+  "M41.1.6": {
+    kind: "DECIDED",
+    gate: false,
+    text: "Model and provider choice as configuration, including a local-only profile with no external provider",
+    why: "owner 2026-09-21, item 80: installs use hosted providers (Claude, OpenAI, DeepSeek, Moonshot Kimi); no local-only profile is needed. Provider and model choice is already configuration (Routing screen)",
+  },
 };
 
 //: Why the two conditional acceptance leaves do not gate the cutover, kept here because the
