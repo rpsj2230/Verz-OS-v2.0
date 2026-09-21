@@ -2,32 +2,11 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**10 items are open: 81, 85 to 91, 93 and 94.** Item 94 (a password to replace) is the most
+**6 items are open: 85, 87, 89, 91, 93 and 94.** Item 94 (a password to replace) is the most
 urgent; item 85 (your AI provider keys) unblocks the most. Each says in plain terms what it is,
 what I recommend, and every step.
 
 # Open
-
-## 81. One read-only permission for your Lark app, so the Brain can check who may read a wiki page
-
-**In plain terms:** as you decided, connectors do not copy your data into the Brain. It keeps only
-a small index (titles, where each page lives, who may see it) and reads a page live from Lark when
-a question needs it, so the database stays light. Before it reads a page for someone, it must know
-whether that person is allowed to see it. I checked Lark's own command-line tool: the page listing
-carries no permission information, so today the Brain can tell nobody apart and holds every page
-back. Lark answers "who may read this page" through a separate call, which needs one extra
-read-only permission on your Lark app. It reads who has access; it cannot change anything.
-**Recommendation: add it.** Five minutes. The connector itself is built in Wave 2, to your rule:
-index and live read, never a bulk copy.
-
-1. Open the Lark developer console (`open.larksuite.com/app`) and sign in as the app's owner.
-2. Click the Brain's app, then in the left menu **Development Configuration** >
-   **Permissions & Scopes**.
-3. Search for `docs:permission.member:retrieve` and click **Add** (it is listed as read-only).
-4. In the left menu open **Version Management & Release**, **Create a version**, add a note
-   such as "read page permissions", and **Submit for release**. Approve it as the workspace admin
-   if Lark asks.
-5. Tell me "Lark permission added".
 
 ## 85. Your four AI provider keys (the most useful thing you can do today)
 
@@ -46,13 +25,6 @@ M5.6.1 and M5.6.3.
 4. Press **Check** on each provider.
 5. Tell me "keys added". I then confirm each one answers and record the checks.
 
-## 86. One wording question on how the Brain calls the AI providers (M5.1.1)
-
-**In plain terms:** a task written early says calls go through a library called LiteLLM. The Brain
-calls each provider directly instead, with the retries, timeouts and fallbacks written and tested
-in the product itself, which is one less moving part and nothing hidden. **Recommendation: accept
-the direct calls** and I record M5.1.1 as decided. Reply "accept direct calls", or "use LiteLLM".
-
 ## 87. Where the daily audit fingerprint is kept (M24.3.3)
 
 **In plain terms:** once a day the Brain publishes a short fingerprint of its audit trail somewhere
@@ -66,33 +38,12 @@ this.** Five minutes.
    `main`, leave **Allow force pushes** and **Allow deletions** unticked, **Create**.
 3. Tell me "anchor repo created". I connect the daily job to it and check the first fingerprint.
 
-## 88. What happens to a leaver's agents (M1.8.9)
-
-**In plain terms:** when someone leaves, the agents they own can either keep running under a
-temporary owner until a new owner accepts them, or stop until someone takes them over. Two tasks
-disagree. **Recommendation: stop them until a new owner accepts,** so nothing runs for weeks with
-nobody responsible. Reply "stop them" or "keep them running".
-
 ## 89. Directory sign-ins other than your own (M1.6.6)
 
 **In plain terms:** the Brain can read staff lists from Lark, Microsoft Entra and a Google Sheet.
 A fourth option, a company's own Active Directory (LDAP), has no directory behind it to build or
 test against. **Recommendation: mark it "not needed until a client uses Active Directory".**
 Reply "mark LDAP not needed now" or "build LDAP".
-
-## 90. Lark staff list read for your own install (M1.6.5)
-
-**In plain terms:** the nightly staff sync reads your company's people from Lark. It needs your
-Lark app to be allowed to read the contact list. This can be done in the same visit as item 81.
-
-1. Lark developer console (`open.larksuite.com/app`), the Brain's app, **Permissions & Scopes**.
-2. Add `contact:user.base:readonly` and `contact:department.base:readonly` (read-only).
-3. **Development Configuration** > **Permissions & Scopes** > **Data range**: set the contact range
-   to **All members**.
-4. **Version Management & Release**: create a version and submit it (approve as admin).
-5. Open the console's **Staff sources** screen and use **Replace credential** to paste
-   `App ID:App Secret` from the app's **Credentials & Basic Info** page.
-6. Tell me "Lark contacts added". The next nightly run then lists your people on that screen.
 
 ## 91. Checks only you can do on your install (after Wave 1 lands)
 
@@ -124,6 +75,26 @@ message can ever show a database address again, but the part that was printed sh
 5. Tell me "password changed"; I redeploy through the normal path and check everything.
 
 # Answered
+
+## 90. Lark staff list - DECIDED: built into the Connect Lark flow
+
+The Lark contact permissions and the staff-list connection are part of the Connect Lark flow
+below; nothing to do in Lark by hand.
+
+## 88. A leaver's agents - DECIDED: they stop until a new owner accepts
+
+## 86. How the Brain calls AI providers - DECIDED: direct calls
+
+The Brain calls each provider directly, with retries, timeouts and fallbacks in the product; no
+LiteLLM. M5.1.1 is recorded as decided.
+
+## 81. Connecting Lark - DECIDED: a Connect Lark flow in the console
+
+You have not created a Lark app yet, and you do not need to by hand. The console gets a Connect
+Lark flow that walks you from creating the app in Lark's developer console, screen by screen, to
+choosing what it is used for (staff list, knowledge from Wiki and Base, chat channel), pasting its
+App ID and Secret into the vault, testing each use, and switching them on. Knowledge follows your
+rule: a small index, content read live, never bulk-copied. Being built now.
 
 ## 84. The server's swap file and the vault - DECIDED: accepted for now
 

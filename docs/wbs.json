@@ -518,7 +518,12 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
-   "leaf_decided": {},
+   "leaf_decided": {
+    "M5.1.1": {
+     "kind": "DECIDED",
+     "why": "owner 2026-09-21, item 86: the product calls each provider directly with its own retries, timeouts and fallbacks; no LiteLLM"
+    }
+   },
    "act_groups": {},
    "leaf_progress": {}
   },
