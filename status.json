@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-21T11:46:03.822942+00:00",
-  "commit": "7e6058c",
-  "commit_subject": "/answer runs the gate's front half before any model, and a refusal becomes a request its owner reads",
+  "generated_at": "2026-09-21T11:56:28.421086+00:00",
+  "commit": "750eb35",
+  "commit_subject": "The secrets vault starts on OpenBao 2.4.1, declares its audit devices and answers its healthcheck",
   "total": 1598,
   "done": 270,
   "percent": 16.9,
