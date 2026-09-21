@@ -10,7 +10,7 @@ names come from `brain.ops.sweeps.SWEEPS`, not from a list typed out twice. Addi
 and forgetting to wire it up now fails a test rather than passing silently, which is what
 happened to `one_tool_grammar` on the day it was written.
 
-Task ids: M12.1.6, M38.1.2.1, M30.2.1
+Task ids: M12.1.6, M38.1.2.1, M30.2.1, M0.4.1, M31.2.2.3
 """
 
 from __future__ import annotations
@@ -766,3 +766,65 @@ def test_the_staging_run_asks_the_staging_database_and_refuses_to_run_without_on
         'uv run python -m brain.ops.schema_check "$DATABASE_URL"',
     ]
     assert [r for r in runs if r in ordered] == ordered
+
+
+# ------------------------------------------- the lite profile is the file CI starts (M0.4.1)
+def test_the_stack_ci_starts_is_the_file_the_installer_deploys_for_lite() -> None:
+    """The tracker audit reopened M0.4.1 because nothing ran `docker-compose.lite.yml`: CI
+    started `docker-compose.yml` and the lite file was only held equal to it on paper.
+
+    Asserted against the installer's own list rather than a literal, so the file CI boots and
+    the file a lite install deploys cannot drift apart. Delete this and the stack job can go
+    back to starting a different file while the lite profile's header goes on calling itself
+    tested."""
+    from brain.deployment.requirements import files_for
+
+    stack = _workflow()["jobs"]["stack"]
+    assert files_for("lite") == ("docker-compose.lite.yml",)
+    assert stack["env"]["COMPOSE_FILE"] == files_for("lite")[0]
+    assert "docker compose up" in _stack_run_commands()
+    assert " -f " not in _stack_run_commands(), "a -f flag would override COMPOSE_FILE"
+
+
+# ------------------------------- the previous release against the new schema (M31.2.2.3)
+def _previous_release_phases() -> list[tuple[str, str]]:
+    """Each live command of the job, labelled with the checkout it runs in."""
+    phases: list[tuple[str, str]] = []
+    for step in _workflow()["jobs"]["previous_release"]["steps"]:
+        where = "previous" if "previous" in str(step.get("working-directory", "")) else "this"
+        for line in str(step.get("run", "")).splitlines():
+            if line.strip() and not line.lstrip().startswith("#"):
+                phases.append((where, line.strip()))
+    return phases
+
+
+def test_the_previous_release_runs_against_the_schema_this_release_migrates() -> None:
+    """A deploy runs the new migrations while the previous release is still serving. The order
+    is the test: the previous release builds its schema, this release migrates it, and only
+    then does the previous release write and read. Run in any other order it proves nothing,
+    because the old code would be talking to its own schema.
+
+    Delete this and the job can be reordered or pointed at this checkout for every phase, and
+    it stays green while testing one release against itself."""
+    phases = _previous_release_phases()
+    wanted = [
+        ("previous", "uv run alembic upgrade head"),
+        ("this", "uv run alembic upgrade head"),
+        ("previous", "uv run python -m brain.seed"),
+        ("previous", "uv run python -m brain.seed --smoke"),
+    ]
+    positions = [phases.index(phase) for phase in wanted]
+    assert positions == sorted(positions), phases
+
+
+def test_the_previous_release_is_what_main_ran_before_this_change() -> None:
+    """Every push to main deploys, so the release serving during the migration is main's
+    previous commit: the pull request's base, or the push's `before`. A job that picked this
+    commit instead would compare a release with itself, and pass for every migration."""
+    job = _workflow()["jobs"]["previous_release"]
+    assert job["env"]["PREVIOUS_SHA"] == (
+        "${{ github.event.pull_request.base.sha || github.event.before }}"
+    )
+    assert job["steps"][0]["with"]["fetch-depth"] == 0
+    assert job.get("if") == "${{ needs.changes.outputs.tasks_only != 'true' }}"
+    assert "pgvector" in job["services"]["postgres"]["image"]

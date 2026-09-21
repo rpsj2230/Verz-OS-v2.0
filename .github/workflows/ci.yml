@@ -550,7 +550,12 @@ jobs:
     # Job level, not step level. Set per-step, the later `docker compose exec` calls run
     # without POSTGRES_PASSWORD and compose resolves it to an empty string - which looks
     # like the migrations never ran rather than like a missing variable.
+    #
+    # M0.4.1: the stack started is `docker-compose.lite.yml`, by name, because that is the file
+    # `ops/install/install.sh` deploys for the lite profile. `docker-compose.yml` is what Coolify
+    # deploys, and `test_repo_shape.py` holds the two equal as parsed YAML.
     env:
+      COMPOSE_FILE: docker-compose.lite.yml
       APP_IMAGE: brain:ci
       POSTGRES_PASSWORD: ci-test-password
       BRAIN_ENV: staging
@@ -792,3 +797,69 @@ jobs:
         env:
           HEAD_REF: ${{ github.head_ref }}
         run: uv run python -m brain.ops.conventions --branch "$HEAD_REF"
+
+  # M31.2.2.3. A deploy is not an instant: the migrations run, and until the old container stops
+  # the new schema serves the previous release's code. `brain.deployment.compatibility` reads the
+  # migration text and cannot run anything; this job runs the previous release against the new
+  # schema. Every push to main deploys, so the previous release is what main was before this
+  # change: the pull request's base, or the push's `before`.
+  previous_release:
+    name: The previous release runs on the new schema
+    runs-on: ubuntu-latest
+    needs: changes
+    if: ${{ needs.changes.outputs.tasks_only != 'true' }}
+    services:
+      postgres:
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_PASSWORD: previous-release
+          POSTGRES_DB: brain_previous
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:previous-release@localhost:5432/brain_previous
+      APP_ROLE_PASSWORD: previous-release-app
+      PREVIOUS_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - name: Which release came before, and whether this change migrates anything
+        # No migration means the schema is the previous release's own, so there is nothing to
+        # test. An unknown previous commit is not a pass: it fails, and says why.
+        id: previous
+        run: |
+          git cat-file -e "$PREVIOUS_SHA^{commit}" || { echo "::error::previous release $PREVIOUS_SHA is not in this checkout"; exit 1; }
+          if git diff --quiet "$PREVIOUS_SHA" "$GITHUB_SHA" -- migrations/; then
+            echo "migrates=false" >> "$GITHUB_OUTPUT"; echo "no migration since $PREVIOUS_SHA"
+          else
+            echo "migrates=true" >> "$GITHUB_OUTPUT"
+            git worktree add --detach "$RUNNER_TEMP/previous" "$PREVIOUS_SHA"
+          fi
+      - name: The previous release builds its schema
+        if: ${{ steps.previous.outputs.migrates == 'true' }}
+        working-directory: ${{ runner.temp }}/previous
+        run: |
+          uv sync --locked
+          uv run alembic upgrade head
+      - name: This release migrates it, as a deploy does
+        if: ${{ steps.previous.outputs.migrates == 'true' }}
+        run: |
+          uv sync --locked
+          uv run alembic upgrade head
+      - name: The previous release writes to the new schema and answers from it
+        # The window itself: the old code loading the demo company exercises its inserts, and
+        # the smoke question exercises its reads, against tables this release has just changed.
+        if: ${{ steps.previous.outputs.migrates == 'true' }}
+        working-directory: ${{ runner.temp }}/previous
+        run: |
+          uv run python -m brain.seed
+          uv run python -m brain.seed --smoke
