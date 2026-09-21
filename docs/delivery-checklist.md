@@ -4,11 +4,18 @@
 
 Work in the plan that no commit can close. Every item here is done by a person, on the week of a migration, with a client. They are counted separately from the build for that reason: the percentage on the build page measures work that closes by being written, and these do not.
 
-45 items, 7 of which gate the cutover.
+47 items, 7 of which gate the cutover.
 
 **The items marked GATES CUTOVER are refused rather than listed.** `brain.migration.decommission` will not report a completed cutover while any of them is unrecorded, because their absence has a security consequence and a list nothing gates is a list nobody reads.
 
 **The items marked NOT CODE HERE could not be built by anybody in this repository.** They name one company's own things, and the first rule of this repository is that no company's details go into it. They are recorded rather than left looking undone, so nobody spends a day trying to make them fit.
+
+## M0 Foundation and repository
+
+### M0.1 Repository and tooling
+
+- [ ] `M0.1.1` Private GitHub repo, branch protection, CODEOWNERS on the three core files
+  - owner's decision 2026-09-21: the repository stays public on purpose for now and he makes it private and protects main himself before go-live; not to be raised again until then
 
 ## M30 Hosting, delivery and recovery
 
@@ -113,6 +120,13 @@ Work in the plan that no commit can close. Every item here is done by a person, 
 - [ ] `M37.7.7` Commission a penetration test of the owner's install before the first company data is connected, and record each finding with its fix or accepted risk
 
 ## M38 Continuous delivery and live status
+
+### M38.1 Pipeline, built in wave 0 so every wave can ship
+
+#### M38.1.1 Laptop to GitHub
+
+- [ ] `M38.1.1.5` CODEOWNERS forcing review on the gate, the redactor and the catalogue projection
+  - owner's decision 2026-09-21: the repository stays public on purpose for now and he makes it private and protects main himself before go-live; not to be raised again until then
 
 ### M38.2 Deploy at the end of every wave
 

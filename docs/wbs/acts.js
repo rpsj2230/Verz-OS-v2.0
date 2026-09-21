@@ -83,6 +83,12 @@ const ACTS = {
   // close nine leaves with nine files nothing calls, which is the state the register refuses
   // in A_PROTOCOL_NOTHING_IMPLEMENTS_MAKES_THE_REGISTER_COMPLETE_AND_WORSE. A point gets a
   // contract on the day a real plug-in for it exists, and is tested against that plug-in.
+  "M0.1.1": {
+    kind: "ACT",
+    gate: false,
+    text: "Private GitHub repo, branch protection, CODEOWNERS on the three core files",
+    why: "owner's decision 2026-09-21: the repository stays public on purpose for now and he makes it private and protects main himself before go-live; not to be raised again until then",
+  },
   "M29.1.6": {
     kind: "DECIDED",
     gate: false,
@@ -922,6 +928,12 @@ const ACTS = {
     gate: false,
     text: "Estimator correction from actuals",
     why: "Merged into M21.2.4, which asks for the same outcome: Estimator correction from actuals. Owner approved merging duplicates on 2026-09-17.",
+  },
+  "M38.1.1.5": {
+    kind: "ACT",
+    gate: false,
+    text: "CODEOWNERS forcing review on the gate, the redactor and the catalogue projection",
+    why: "owner's decision 2026-09-21: the repository stays public on purpose for now and he makes it private and protects main himself before go-live; not to be raised again until then",
   },
   "M38.1.2.2": {
     kind: "DECIDED",
