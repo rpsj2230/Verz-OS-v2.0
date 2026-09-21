@@ -94,6 +94,7 @@ import {
   transferApiPath,
 } from "../../src/pages/staffSourcesQuery";
 import { CONNECTORS_API_PATH, disconnectApiPath } from "../../src/pages/connectorsQuery";
+import { LARK_API_PATH, LARK_TEST_API_PATH } from "../../src/pages/larkConnectQuery";
 import { REGISTER_API_PATH, secretApiPath, switchOffApiPath } from "../../src/pages/webhooksQuery";
 import {
   PASSWORD_API_PATH as RELAY_PASSWORD_API_PATH,
@@ -401,7 +402,12 @@ export const AREAS: Readonly<Record<string, Area>> = {
   },
   "Connectors and third-party integrations": {
     screens: ["/connectors"],
-    routes: ["/api/v1/connectors", "/api/v1/connectors/{connector}/disconnect"],
+    routes: [
+      "/api/v1/connectors",
+      "/api/v1/connectors/{connector}/disconnect",
+      "/api/v1/connectors/lark-app",
+      "/api/v1/connectors/lark-app/test",
+    ],
     tables: [
       "ops.connector_connection",
       "ops.connector_sync",
@@ -411,7 +417,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "er.identifier",
       "er.link",
     ],
-    installation: [],
+    installation: ["INSTALL_LARK_USES", "INSTALL_LARK_PLATFORM", "INSTALL_LARK_BASE"],
     gaps: [
       {
         what: "A connected source is read and kept, and no question is answered from what is kept.",
@@ -424,9 +430,19 @@ export const AREAS: Readonly<Record<string, Area>> = {
           "brain.ops.limits records no verified call ceiling for it and brain.connectors.throttle.limits_for refuses to invent one; its row carries brain.ops.connector_sync.NO_VERIFIED_CEILING.",
       },
       {
-        what: "Freshdesk, Google Drive, the Laravel views, Lark Base and Lark Wiki cannot be connected from a screen.",
+        what: "Freshdesk, Google Drive and the Laravel views cannot be connected from a screen.",
         because:
           "Each needs a visibility rule, a department declaration or a key file the form cannot collect, which brain.ops.connectable.NOT_FROM_THE_CONSOLE says for each.",
+      },
+      {
+        what: "Connect Lark switches knowledge from Wiki and Base on, and no question is answered from Lark yet.",
+        because:
+          "The Lark knowledge connector that keeps the minimal index and reads pages and records live is still to be built over the settings Connect Lark writes; brain.ops.lark_connect.KNOWLEDGE_IS_SWITCHED_ON_AND_NOTHING_IS_COPIED says so on the screen.",
+      },
+      {
+        what: "The Lark chat channel is set up and tested and does not yet receive Lark's events.",
+        because:
+          "No channel in this release receives a webhook, so there is no address for Lark's Events and callbacks page to verify; brain.ops.lark_connect.THE_CHANNEL_RECEIVER_IS_NOT_BUILT_YET says so in the steps.",
       },
     ],
   },
@@ -843,6 +859,10 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
     at("POST /api/v1/connectors/{connector}/disconnect", "disconnectApiPath", disconnectApiPath("xero")),
   ],
   "src/components/ConnectSource.tsx CONNECTORS_API_PATH": [at("POST /api/v1/connectors", "CONNECTORS_API_PATH", CONNECTORS_API_PATH)],
+  "src/components/ConnectLark.tsx LARK_TEST_API_PATH": [
+    at("POST /api/v1/connectors/lark-app/test", "LARK_TEST_API_PATH", LARK_TEST_API_PATH),
+  ],
+  "src/components/ConnectLark.tsx LARK_API_PATH": [at("POST /api/v1/connectors/lark-app", "LARK_API_PATH", LARK_API_PATH)],
   "src/components/AutomationGallery.tsx automationInstallApiPath(agentId)": [
     at("POST /api/v1/agents/{agent_id}/automations", "automationInstallApiPath", automationInstallApiPath("quote-helper")),
   ],
@@ -1046,6 +1066,16 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: CONNECTION_REACHES_THE_ROW_AND_THE_LEDGER,
     audit: CONNECTION_REACHES_THE_ROW_AND_THE_LEDGER,
     behaviour: A_CONNECTED_SOURCE_IS_READ_AND_A_DISCONNECTED_ONE_IS_NOT,
+  },
+  "POST /api/v1/connectors/lark-app": {
+    row: t("test_lark_connect", "test_a_save_keeps_one_credential_in_each_uses_slot_and_switches_them_on"),
+    audit: A_SETTING_ENTRY_NO_TEST_FOLLOWS,
+    behaviour: t("test_lark_connect", "test_after_a_save_each_use_says_where_it_stands"),
+  },
+  "POST /api/v1/connectors/lark-app/test": {
+    row: { notApplicable: "A Lark test writes no row here or in Lark: every request after the token exchange is a read, which the fake Lark server records." },
+    audit: { notApplicable: "Nothing is written, so there is nothing for the ledger to record, and the secret is never logged." },
+    behaviour: t("test_lark_connect", "test_the_test_route_reports_each_use_and_writes_nothing"),
   },
   "POST /api/v1/connectors/{connector}/disconnect": {
     row: CONNECTION_REACHES_THE_ROW_AND_THE_LEDGER,

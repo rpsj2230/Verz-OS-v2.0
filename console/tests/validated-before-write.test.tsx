@@ -43,7 +43,8 @@ interface FormCase {
 
 /** Every form in a file that also holds a write, by file. The count is checked against the source. */
 const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
-  "src/components/ConnectSource.tsx": [{ pattern: "/connectors", index: 0, writes: true }],
+  // Index 0 on the Connectors screen is Connect Lark's form, judged below.
+  "src/components/ConnectSource.tsx": [{ pattern: "/connectors", index: 1, writes: true }],
   // The connect form is the first form on the staff sources page; the credential form follows it.
   "src/components/ConnectStaffSource.tsx": [{ pattern: "/staff_sources", index: 0, writes: true }],
   "src/components/DataStewardCard.tsx": [{ pattern: "/people", index: 1, writes: true }],
@@ -119,6 +120,12 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
  * Checked, not trusted: an entry for a file that no longer holds both fails the first test.
  */
 const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
+  "src/components/ConnectLark.tsx":
+    "Its Test and Save buttons stay disabled until an App ID and an App Secret are typed, so a " +
+    "blank form cannot be sent. What is typed is judged by the API before anything reaches Lark: " +
+    "input_problems answers 422 by field for a malformed App ID, secret or Base link, which " +
+    "tests/unit/test_lark_connect.py holds with nothing sent to " +
+    "the fake Lark server, and tests/lark-connect.test.tsx drives the form.",
   "src/pages/Settings.tsx":
     "Each branding row's form sends one value, and the API judges it with branding_problem before " +
     "anything is written, answering 422 with a sentence drawn beside the field. " +

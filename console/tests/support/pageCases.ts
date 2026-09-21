@@ -1549,6 +1549,34 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     signedIn: true,
     drawsValues: true,
     answers: {
+      // Connect Lark's guide, every drawn value the unbroken token.
+      "/api/v1/connectors/lark-app": {
+        uses: [
+          {
+            name: "staff_list",
+            label: UNBROKEN,
+            what: UNBROKEN,
+            scopes: [],
+            switched_on: true,
+            key_held: true,
+            status: UNBROKEN,
+            may_switch_on: true,
+          },
+        ],
+        chosen: ["staff_list"],
+        steps: [{ title: UNBROKEN, text: UNBROKEN }],
+        scopes: [{ name: UNBROKEN, what: UNBROKEN, read_only: true }],
+        platforms: ["larksuite.com"],
+        platform: "larksuite.com",
+        base: "",
+        developer_console: "https://open.larksuite.com/app",
+        events_address: "",
+        channel_note: UNBROKEN,
+        knowledge_note: UNBROKEN,
+        test_note: UNBROKEN,
+        staff_sources_screen: "/staff_sources",
+        vault_told: "",
+      },
       "/api/v1/connectors": {
         connectors: [
           {

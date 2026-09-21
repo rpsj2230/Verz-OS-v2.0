@@ -98,6 +98,10 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
   "src/pages/People.tsx PACK_ASSIGNMENT_API_PATH":
     "Assigns a capability pack. Entitlements are additive only, an assignment replaces nothing, and " +
     "taking one back is the Access review's removal, which is confirmed.",
+  "src/components/ConnectLark.tsx LARK_TEST_API_PATH":
+    "Testing a Lark connection exchanges the pasted credential for a token and makes small reads; " +
+    "it writes nothing here or in Lark and keeps nothing it read, which " +
+    "tests/unit/test_lark_connect.py holds over the requests a fake Lark server received.",
 };
 
 /** How many times a non-GET `method:` or an `openStream(` call is written in the control files. */

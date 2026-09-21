@@ -48,6 +48,7 @@ import { request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
 import { useResource } from "../api/useResource";
 import { ConfirmAction } from "../components/ConfirmAction";
+import { ConnectLark } from "../components/ConnectLark";
 import { ConnectSource } from "../components/ConnectSource";
 import { Chip } from "../ui/Chip";
 import { FailureNotice } from "../ui/FailureNotice";
@@ -458,6 +459,9 @@ function ConnectorsPage({
       {wasRead(list) ? list.rows.map((row) => <ConnectedDetail key={`trust-${row.name}`} row={row} />) : null}
 
       {page.evidence.length === 0 ? null : <EvidenceCard rows={page.evidence} />}
+
+      {/* Lark has a flow of its own, from creating the app to switching each use on. */}
+      <ConnectLark />
 
       <ConnectCard page={page} onConnected={onChanged} />
 

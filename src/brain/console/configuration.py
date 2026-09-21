@@ -137,6 +137,7 @@ GROUP_ORDER: Final[tuple[Belongs, ...]] = (
     Belongs.MODELS,
     Belongs.STORAGE,
     Belongs.LOCALE,
+    Belongs.CONNECTORS,
 )
 
 #: What each group is called on the screen.
@@ -146,6 +147,7 @@ GROUP_TITLES: Final[Mapping[Belongs, str]] = {
     Belongs.MODELS: "Models and providers",
     Belongs.STORAGE: "Storage locations",
     Belongs.LOCALE: "Language, currency and time zone",
+    Belongs.CONNECTORS: "Connected applications",
 }
 
 #: Where a group that is not changed here is changed instead, in the console's own words.
@@ -164,6 +166,10 @@ CHANGED_ELSEWHERE: Final[Mapping[Belongs, str]] = {
         "already in it, and every stored key still names the old place."
     ),
     Belongs.LOCALE: "Set in the setup wizard or the environment file, then a restart.",
+    Belongs.CONNECTORS: (
+        "Set by the Connect Lark flow on the Connectors screen, which keeps the app's credential "
+        "in the vault first and switches each use on only after that."
+    ),
 }
 
 #: The groups whose values this screen writes. See `ONLY_BRANDING_IS_CHANGED_HERE`.
@@ -200,6 +206,9 @@ READ_BY: Final[Mapping[str, tuple[str, ...]]] = {
     "INSTALL_LOCALES": ("brain.locale",),
     "INSTALL_CURRENCY": ("brain.locale",),
     "INSTALL_TIME_ZONE": ("brain.locale",),
+    "INSTALL_LARK_USES": ("brain.lark_connect_routes",),
+    "INSTALL_LARK_PLATFORM": ("brain.lark_connect_routes",),
+    "INSTALL_LARK_BASE": ("brain.lark_connect_routes",),
 }
 
 #: How a Keycloak issuer ends: the realm's name is its last path segment.

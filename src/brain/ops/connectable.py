@@ -231,18 +231,18 @@ NOT_FROM_THE_CONSOLE: Final[Mapping[str, NotConnectable]] = MappingProxyType(
             name="lark_base",
             label="Lark Base",
             why=(
-                "It is connected to one table of one Base and kept under a visibility rule "
-                "written by somebody who has read that table's columns. This screen has no way to "
-                "name the columns or write the rule yet, so it is connected at the server."
+                "It is connected through Connect Lark on this screen, which creates the Lark app, "
+                "tests it and switches knowledge from one Base on. It is not listed here because "
+                "its records are read live and never synced into this system."
             ),
         ),
         "lark_wiki": NotConnectable(
             name="lark_wiki",
             label="Lark Wiki",
             why=(
-                "It is connected to named wiki spaces, each declared with the department whose "
-                "knowledge it is. This screen has no way to declare a space yet, so it is "
-                "connected at the server."
+                "It is connected through Connect Lark on this screen, which creates the Lark app, "
+                "tests it and switches knowledge from the shared wiki spaces on. It is not listed "
+                "here because its pages are read live and never synced into this system."
             ),
         ),
     }
