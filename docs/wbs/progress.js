@@ -34,11 +34,6 @@ const STATUSES = ["OPEN", "IN PROGRESS", "READY FOR TESTING", "BLOCKED"];
 
 //: Leaf id to where it stands. Ordered by id.
 const PROGRESS = {
-  "M38.5.1": {
-    status: "READY FOR TESTING",
-    why: "on staging the checks ran after deploy 5254748 and passed (/api/deploy-checks.json); the Deploy run reads the verdict once the owner sets POST_DEPLOY_CHECKS",
-    updated: "2026-09-21",
-  },
   "M0.7.1": {
     status: "BLOCKED",
     why: "owner decision: 7 licences await the allowlist (postgres/pgvector, ubuntu/squid, three @fontsource fonts, regex); recommended allow all",

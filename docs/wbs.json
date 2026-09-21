@@ -4323,11 +4323,6 @@
      "status": "READY FOR TESTING",
      "why": "WAVE_RECORDS and /build/waves are live on staging; proved when the first wave is accepted and recorded",
      "updated": "2026-09-21"
-    },
-    "M38.5.1": {
-     "status": "READY FOR TESTING",
-     "why": "on staging the checks ran after deploy 5254748 and passed (/api/deploy-checks.json); the Deploy run reads the verdict once the owner sets POST_DEPLOY_CHECKS",
-     "updated": "2026-09-21"
     }
    }
   },
