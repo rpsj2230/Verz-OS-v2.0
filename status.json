@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-09-21T09:02:19.890788+00:00",
-  "commit": "e6f2901",
-  "commit_subject": "Allow the owner's seven licences and run database invariants after deploy",
+  "generated_at": "2026-09-21T09:21:28.745225+00:00",
+  "commit": "a91b966",
+  "commit_subject": "A sensitive tool always waits for approval, and the reach deciders are proved agent-blind",
   "total": 1598,
-  "done": 204,
-  "percent": 12.8,
+  "done": 219,
+  "percent": 13.7,
   "acts": 47,
   "decided": 102,
   "current_wave": 0,
@@ -26,12 +26,12 @@
       "wave": 1,
       "name": "The gate",
       "total": 167,
-      "done": 49,
-      "percent": 29.3,
+      "done": 64,
+      "percent": 38.3,
       "in_progress": 0,
       "ready_for_testing": 0,
       "blocked": 0,
-      "open": 118,
+      "open": 103,
       "acts": 1,
       "decided": 5
     },
@@ -134,7 +134,7 @@
       "name": "The gate",
       "wave": 1,
       "total": 41,
-      "done": 15,
+      "done": 30,
       "acts": 0,
       "decided": 0
     },
@@ -577,6 +577,21 @@
     "M3.5.4",
     "M3.6.1",
     "M3.6.2",
+    "M3.7.1",
+    "M3.7.3",
+    "M3.7.4",
+    "M3.8.1",
+    "M3.8.2",
+    "M3.8.3",
+    "M3.8.4",
+    "M3.8.5",
+    "M3.8.6",
+    "M3.9.1",
+    "M3.9.2",
+    "M3.9.3",
+    "M3.9.4",
+    "M3.9.5",
+    "M3.9.6",
     "M30.1.1",
     "M30.1.2",
     "M30.2.1",
@@ -777,7 +792,7 @@
     }
   },
   "wave_records": {},
-  "closed_today": 45,
+  "closed_today": 60,
   "next_up": [
     "M0.2.5",
     "M0.3.4",
@@ -786,6 +801,12 @@
     "M0.4.1"
   ],
   "recent": [
+    {
+      "sha": "a91b966",
+      "at": "2026-09-21T09:11:05+00:00",
+      "subject": "A sensitive tool always waits for approval, and the reach deciders are proved agent-blind",
+      "closed": "M3.7.1,M3.7.3,M3.7.4,M3.8.1,M3.8.2,M3.8.3,M3.8.4,M3.8.5,M3.8.6,M3.9.1,M3.9.2,M3.9.3,M3.9.4,M3.9.5,M3.9.6"
+    },
     {
       "sha": "e6f2901",
       "at": "2026-09-21T08:52:56+00:00",
@@ -899,12 +920,6 @@
       "at": "2026-09-16T23:51:08+00:00",
       "subject": "The worker delivers webhooks through issue_once and the Webhooks screen shows what it did; the Notifications screen says who is told what, switches a notice off and configures the email relay with a test message",
       "closed": "M27.7.12,M27.8.11,M27.8.12"
-    },
-    {
-      "sha": "2b55e1f",
-      "at": "2026-09-16T23:51:06+00:00",
-      "subject": "An administrator places people in teams, appoints a department's lead, and decides elevation requests that grant one capability and lapse on their own",
-      "closed": "M27.7.4,M27.7.8"
     }
   ]
 }
