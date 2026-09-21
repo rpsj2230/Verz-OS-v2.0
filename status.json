@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-09-21T04:30:50.845654+00:00",
-  "commit": "9fb9367",
-  "commit_subject": "Every connector replays documented-shape cassettes, and the console says what each was tested against",
+  "generated_at": "2026-09-21T04:41:00.441842+00:00",
+  "commit": "1b0b742",
+  "commit_subject": "Five foundation tasks close with proof, and the rest of Wave 0's statuses are set by hand",
   "total": 1601,
-  "done": 159,
-  "percent": 9.9,
+  "done": 164,
+  "percent": 10.2,
   "acts": 45,
   "decided": 101,
   "current_wave": 0,
@@ -13,12 +13,12 @@
       "wave": 0,
       "name": "Foundation",
       "total": 137,
-      "done": 79,
-      "percent": 57.7,
+      "done": 84,
+      "percent": 61.3,
       "in_progress": 0,
-      "ready_for_testing": 3,
-      "blocked": 0,
-      "open": 55,
+      "ready_for_testing": 4,
+      "blocked": 4,
+      "open": 45,
       "acts": 1,
       "decided": 3
     },
@@ -107,7 +107,7 @@
       "name": "Foundation and repository",
       "wave": 0,
       "total": 41,
-      "done": 26,
+      "done": 29,
       "acts": 0,
       "decided": 0
     },
@@ -449,7 +449,7 @@
       "name": "Continuous delivery and live status",
       "wave": 0,
       "total": 51,
-      "done": 19,
+      "done": 21,
       "acts": 3,
       "decided": 1
     },
@@ -492,7 +492,9 @@
   ],
   "done_task_ids": [
     "M0.1.2",
+    "M0.1.3",
     "M0.1.4",
+    "M0.1.5",
     "M0.1.6",
     "M0.2.1",
     "M0.2.2",
@@ -506,6 +508,7 @@
     "M0.3.7",
     "M0.4.3",
     "M0.4.4",
+    "M0.4.5",
     "M0.5.1",
     "M0.5.2",
     "M0.5.4",
@@ -618,8 +621,10 @@
     "M38.1.3.1",
     "M38.1.3.2",
     "M38.1.4.1",
+    "M38.2.1.6",
     "M38.2.2.1",
     "M38.3.1.1",
+    "M38.3.1.2",
     "M38.3.1.3",
     "M38.3.1.4",
     "M38.3.2.1",
@@ -660,32 +665,68 @@
     "M6.2.6"
   ],
   "leaf_status": {
+    "M0.3.4": {
+      "status": "BLOCKED",
+      "why": "server change needs owner permission: add the PgBouncer pools per ops/vps/POOLING.md",
+      "updated": "2026-09-21"
+    },
+    "M0.3.5": {
+      "status": "BLOCKED",
+      "why": "server change needs owner permission: add the PgBouncer pools per ops/vps/POOLING.md",
+      "updated": "2026-09-21"
+    },
+    "M0.3.6": {
+      "status": "BLOCKED",
+      "why": "repo half done (brain.deployment.postgres_settings); install half needs owner permission, ops/vps/POOLING.md",
+      "updated": "2026-09-21"
+    },
+    "M0.4.2": {
+      "status": "BLOCKED",
+      "why": "presidio-analyzer has no service in the repo; image, port and health check undecided",
+      "updated": "2026-09-21"
+    },
+    "M31.2.1.2": {
+      "status": "READY FOR TESTING",
+      "why": "engine tests pass for session and transaction pooling; closing needs PgBouncer on the install (M0.3.4)",
+      "updated": "2026-09-21"
+    },
+    "M31.2.1.3": {
+      "status": "READY FOR TESTING",
+      "why": "engine tests pass for session and transaction pooling; closing needs PgBouncer on the install (M0.3.4)",
+      "updated": "2026-09-21"
+    },
+    "M31.2.1.4": {
+      "status": "READY FOR TESTING",
+      "why": "engine tests pass for session and transaction pooling; closing needs PgBouncer on the install (M0.3.4)",
+      "updated": "2026-09-21"
+    },
     "M38.2.1.1": {
       "status": "READY FOR TESTING",
-      "why": "WAVE_RECORDS in docs/wbs/progress.js and the /build/waves page that lists it; no wave has closed yet, so the record is empty",
-      "updated": "2026-09-17"
+      "why": "WAVE_RECORDS and /build/waves are live on staging; proved when the first wave is accepted and recorded",
+      "updated": "2026-09-21"
     },
-    "M38.2.1.6": {
+    "M38.4.1.1": {
       "status": "READY FOR TESTING",
-      "why": "/build/waves: per wave closed, open, in progress, ready for testing and blocked with reasons, from the status baked into the image",
-      "updated": "2026-09-17"
-    },
-    "M38.3.1.2": {
-      "status": "READY FOR TESTING",
-      "why": "the Status file workflow commits status.json to the status branch after each green CI on main; it has not run yet, so the first merge after this lands is the test",
-      "updated": "2026-09-17"
+      "why": "live on staging at 9fb9367; the Connectors card needs checking signed in",
+      "updated": "2026-09-21"
     }
   },
   "wave_records": {},
-  "closed_today": 0,
+  "closed_today": 5,
   "next_up": [
     "M0.1.1",
-    "M0.1.3",
-    "M0.1.5",
     "M0.2.5",
-    "M0.3.4"
+    "M0.3.4",
+    "M0.3.5",
+    "M0.3.6"
   ],
   "recent": [
+    {
+      "sha": "1b0b742",
+      "at": "2026-09-21T04:40:08+00:00",
+      "subject": "Five foundation tasks close with proof, and the rest of Wave 0's statuses are set by hand",
+      "closed": "M0.1.3,M0.1.5,M0.4.5,M38.2.1.6,M38.3.1.2"
+    },
     {
       "sha": "a884c6c",
       "at": "2026-09-17T09:58:11+00:00",
@@ -799,12 +840,6 @@
       "at": "2026-09-16T19:19:53+00:00",
       "subject": "An administrator adds a skill from a pasted or uploaded SKILL.md, somebody else approves it, the screen says what it is trusted to reach, and it is assigned to an agent through attach_skill without widening anybody",
       "closed": "M42.6.4"
-    },
-    {
-      "sha": "98a7656",
-      "at": "2026-09-16T18:34:21+00:00",
-      "subject": "Every screen tells loading, empty, unreachable and failed apart, a grant removal and a rung save ask first, a blank webhook registration is refused before it is confirmed, and the console audit is generated from the code and served at /build/console-audit",
-      "closed": "M27.8.1,M27.8.3,M27.8.4,M27.8.5"
     }
   ]
 }
