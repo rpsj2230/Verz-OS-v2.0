@@ -48,6 +48,9 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "its facts are drawn above the two buttons, which tests/approvals-page.test.tsx holds, so the " +
     "card is the statement of what will happen and to what, and a second step would ask the approver " +
     "to confirm a confirmation. A rejection's button stays disabled until a reason is chosen.",
+  "src/pages/AccessRequests.tsx ACCESS_REQUESTS_API_PATH":
+    "Sending a request for access ends and replaces nothing: it is addressed to whoever can decide " +
+    "it, and the decision is a grant written on the Roles screen, which is where anything changes.",
   "src/pages/Ask.tsx ANSWER_API_PATH":
     "Asking a question changes nothing an administrator manages: the answer is computed for the " +
     "reader and nothing they hold is ended or replaced.",

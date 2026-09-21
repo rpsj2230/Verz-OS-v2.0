@@ -146,6 +146,7 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
   "/departments": { bulk: A_ROW_IS_A_DEPARTMENT_AND_A_PLACEMENT_NAMES_A_PERSON },
   "/elevation": { bulk: AN_ELEVATION_IS_DECIDED_ON_ITS_OWN_REASON },
   "/access_review": {},
+  "/access-requests": { bulk: READ_ONLY },
 };
 
 /**

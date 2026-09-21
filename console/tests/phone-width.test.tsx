@@ -298,7 +298,7 @@ describe("every registered page at a phone's width", () => {
       const links = [...(nav as Element).querySelectorAll("a")];
       const everySection = SHELL_PATTERNS.filter((one) => !one.includes(":") && !one.includes("*"));
       const departments = departmentConsole(UNBROKEN).sections as { entries: { to: string }[] }[];
-      const ownWork = ["/ask", "/me", "/approvals", "/records"];
+      const ownWork = ["/ask", "/me", "/approvals", "/records", "/access-requests"];
       const sections =
         pattern === "/department"
           ? [...departments.flatMap((one) => one.entries.map((entry) => entry.to)), ...ownWork]

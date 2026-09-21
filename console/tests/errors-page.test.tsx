@@ -17,6 +17,7 @@ import {
   LOG_IS_ON_THE_LOGS_SCREEN,
   NO_JOB_FAILURES,
   NO_REQUEST_FAILURES,
+  NOT_SCREENED,
   PROCESS_LOG_IS_NOT_KEPT,
 } from "../src/pages/errorsQuery";
 import { json, mountPage, settled, type Answer } from "./support/pageHarness";
@@ -45,6 +46,10 @@ function page(overrides: Record<string, unknown> = {}): Record<string, unknown> 
         lane: "model",
         status: "degraded",
         duration_ms: 812.4,
+        risk_score: 55,
+        routed_lane: "answer",
+        selection_stage: "addressed",
+        selected_agent: "AGENT-SENTINEL",
       },
     ],
     requests_truncated: true,
@@ -78,6 +83,40 @@ describe("what the Errors screen draws", () => {
     expect(text).toContain("812 ms");
     expect(text).toContain(FULL_LIST);
     expect(text).toContain(PROCESS_LOG_IS_NOT_KEPT);
+  });
+
+  test("a failed question shows what the gate's front half decided about it", async () => {
+    // What breaks if this is deleted: the risk score, the routed lane and the agent written on every
+    // request and read by no screen (M3.4.2, M3.6.3), or a request the front half never saw drawn
+    // with a made-up score rather than "Not recorded".
+    const { container } = await errorsPage({ [LIST]: () => json(page()) });
+    const row = [...container.querySelectorAll("tbody tr")].find((one) =>
+      (one.textContent ?? "").includes("REFERENCE-SENTINEL"),
+    );
+    const cells = [...(row?.querySelectorAll("td") ?? [])].map((one) => one.textContent);
+    expect(cells.slice(-3)).toEqual(["55", "answer", "AGENT-SENTINEL (named by the person)"]);
+  });
+
+  test("a failed question the front half never saw says so rather than showing a score", async () => {
+    // What breaks if this is deleted: an automation's failed tool call drawn with a zero risk score
+    // or a made-up lane, which a reader would believe.
+    const unscreened = {
+      reference: "PLAIN-SENTINEL",
+      received_at: "2019-03-06T08:30:00Z",
+      lane: "fast",
+      status: "failed",
+      duration_ms: 3,
+      risk_score: null,
+      routed_lane: null,
+      selection_stage: null,
+      selected_agent: null,
+    };
+    const { container } = await errorsPage({ [LIST]: () => json(page({ requests: [unscreened] })) });
+    const plain = [...container.querySelectorAll("tbody tr")].find((one) =>
+      (one.textContent ?? "").includes("PLAIN-SENTINEL"),
+    );
+    const plainCells = [...(plain?.querySelectorAll("td") ?? [])].map((one) => one.textContent);
+    expect(plainCells.slice(-3)).toEqual([NOT_SCREENED, NOT_SCREENED, NOT_SCREENED]);
   });
 
   test("two empty lists are two sentences, and the log sentence leaves when the API stops sending it", async () => {

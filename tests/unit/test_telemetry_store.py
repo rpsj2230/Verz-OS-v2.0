@@ -416,7 +416,7 @@ def built(database: str) -> Iterator[str]:
     try:
         migrate(database, "stamp", "0038")
         migrate(database, "upgrade", "0039")
-        migrate(database, "stamp", "0093")
+        migrate(database, "stamp", "0097")
         migrate(database, "upgrade", "0100")
         yield scratch
     finally:

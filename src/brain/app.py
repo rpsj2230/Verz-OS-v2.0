@@ -52,6 +52,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from brain.access_request_routes import router as access_request_router
 from brain.agent_about_routes import router as agent_about_router
 from brain.agent_model_routes import router as agent_model_router
 from brain.agent_routes import router as agent_router
@@ -79,9 +80,11 @@ from brain.cache import (
     NoEntitlementCache,
     OwnedAsyncValkeyClient,
     PostgresVersionSource,
+    ValkeyAnswerStore,
     ValkeyEntitlementCache,
     check_reachable_async,
     make_async_client,
+    make_client,
 )
 from brain.channels.widget import allowed_origins
 from brain.classification_routes import router as classification_router
@@ -603,12 +606,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.first_administrators = None
     app.state.key_client = None
     app.state.valkey = None
+    # The answer cache `/answer`'s front half looks in, only where a cache is configured. With
+    # none the CACHE step still runs and misses; see `brain.api_routes.caching_of`. Its own
+    # synchronous client, because `brain.gate.answer_cache.AnswerStore` is synchronous.
+    app.state.answer_store = None
+    app.state.answer_client = None
     priming: asyncio.Task[None] | None = None
     if app.state.db_sessions is not None:
         app.state.key_client = key_set_client()
         if settings.valkey_url:
             cache_client = make_async_client(settings.valkey_url)
             app.state.valkey = cache_client
+            answer_client = make_client(settings.valkey_url)
+            app.state.answer_client = answer_client
+            app.state.answer_store = ValkeyAnswerStore(answer_client)
 
             async def cache_probe() -> bool:
                 return await check_reachable_async(cache_client)
@@ -673,6 +684,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         valkey: OwnedAsyncValkeyClient | None = getattr(app.state, "valkey", None)
         if valkey is not None:
             await valkey.aclose()
+        # `ValkeyClient` declares no close, deliberately; the object that built it holds one.
+        close_answers = getattr(getattr(app.state, "answer_client", None), "close", None)
+        if callable(close_answers):
+            close_answers()
         console_reads = getattr(app.state, "console_reads", None)
         if console_reads is not None:
             await console_reads.close()
@@ -1315,6 +1330,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Disabling a person and enabling them again, from the Departments and teams screen, behind the
     # grant decision in a scope admitting their row. See `brain.principal_state_routes`.
     app.include_router(principal_state_router)
+    # Asking for access: one constant reply to the asker, and the owner's own list, which is how
+    # a request is delivered. See `brain.access_request_routes`.
+    app.include_router(access_request_router)
 
     @app.get("/health/live", response_model=Health, tags=["health"])
     async def live() -> Health:

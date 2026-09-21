@@ -37,10 +37,11 @@ decides what a person may watch arriving, and the first place is the one with th
 front of it.
 
 **Redaction happens exactly where the records route does it**, through
-`brain.core.redaction.serialise_for_channel` with the caller's own reach. Not a second
-enforcement point: the same one, called from a second place, which is the difference between
-defence in depth and two rules that can disagree. The row reader was already handed the same
-entitlement, so the scope predicate was inside the query as well as around the result.
+`brain.core.redaction.redact` (which `serialise_for_channel` wraps) with the caller's own reach.
+Not a second enforcement point: the same one, called from a second place, which is the
+difference between defence in depth and two rules that can disagree. The row reader was already
+handed the same entitlement, so the scope predicate was inside the query as well as around the
+result.
 
 **The abstention is classified from the post-redaction payload**, which is what makes DENIED
 and ABSENT one event here. A record this caller may not see is not in the payload, so it
@@ -92,7 +93,17 @@ reported would have to be threaded out through every one of those returns. A wra
 miss a return, and it counts a read that raised, which is a call the lane made. See
 `brain.gate.finish.A_TOOL_CALL_IS_COUNTED_WHEN_IT_STARTS`.
 
-Task ids: M30.5.2, M21.3.4, M3.9.3
+**The trace handed to the sink is the redactor's own (M4.4.4).** The lane calls `redact`, which
+returns the payload and the trace together, and gives the payload to the frames and the pair to
+`compose`. Until 2026-09-21 it called `serialise_for_channel` and built an empty trace beside it,
+so the sink recorded that nothing was redacted on requests where something was.
+
+**A department the question names and the reader cannot reach is stated, in the same words
+whether it exists or not (M2.2.4).** The route passes the gaps `brain.core.department` planned from
+the question and the reader's own scope; the lane appends them to the text of an answer and of a
+refusal alike, so their presence cannot tell the two apart.
+
+Task ids: M30.5.2, M21.3.4, M3.9.3, M4.4.4, M2.2.4
 """
 
 from __future__ import annotations
@@ -104,16 +115,12 @@ from typing import Final
 
 import structlog
 
+from brain.core.department import Gap
 from brain.core.entitlement import EntitlementSet
 from brain.core.envelope import TypedResult
 from brain.core.field_policy import FieldPolicy
 from brain.core.lane import Lane
-from brain.core.redaction import (
-    ChannelPayload,
-    RedactedAnswer,
-    RedactionTrace,
-    serialise_for_channel,
-)
+from brain.core.redaction import ChannelPayload, redact
 from brain.gate.abstain import (
     Abstention,
     SearchScope,
@@ -134,7 +141,7 @@ from brain.gate.fast_lane import (
     respond,
     unserved_match,
 )
-from brain.gate.finish import Finished, Origin, RequestRecorder, attributable, finish
+from brain.gate.finish import Finished, FrontRecord, Origin, RequestRecorder, attributable, finish
 from brain.gate.model_lane import ModelLane, draft
 from brain.gate.streaming import AnswerStream, Progress, at_tool_input_start, cache_hit
 from brain.knowledge.rows import RowRecord, RowRequest
@@ -297,6 +304,8 @@ async def answer_lane(
     clock: Callable[[], datetime],
     cached: CachedAnswer | None = None,
     model: ModelLane | None = None,
+    front: FrontRecord | None = None,
+    gaps: Sequence[Gap] = (),
 ) -> Answered:
     """Answer one question, and finish the request once whatever the answer was.
 
@@ -322,6 +331,9 @@ async def answer_lane(
     on it. One `Meter` is made here per request and handed to that step, and it is what the
     ledger row's lane and usage are read from: see
     `A_REQUEST_IS_RECORDED_UNDER_THE_LANE_WHOSE_BUDGET_IT_SPENT`.
+
+    `front` is what `brain.gate.front.run_front_half` decided, carried to the request row; `gaps`
+    are the departments the question named outside the reader's reach, stated after the text.
     """
     attributable(origin, entitlement.principal_id)
     calls = ToolCalls()
@@ -342,6 +354,7 @@ async def answer_lane(
             meter=meter,
             trace_id=origin.trace_id,
             calls=calls,
+            gaps=tuple(gaps),
         )
         return outcome
     finally:
@@ -358,6 +371,7 @@ async def answer_lane(
                 lane=LANE if usage is None else MODEL_LANE,
                 tool_calls=calls.started,
                 model_usage=usage,
+                front=front,
             ),
         )
 
@@ -377,6 +391,7 @@ async def _outcome(
     meter: Meter,
     trace_id: str,
     calls: ToolCalls,
+    gaps: tuple[Gap, ...] = (),
 ) -> Answered:
     """Answer one question, or decline, and hand back the frames either way.
 
@@ -416,6 +431,7 @@ async def _outcome(
         return _abstained(
             stream,
             frames,
+            gaps,
             nothing_connected(
                 scope,
                 detail="no row readers" if unserved is None else "no reader for a matched rule",
@@ -437,6 +453,7 @@ async def _outcome(
             meter=meter,
             trace_id=trace_id,
             calls=calls,
+            gaps=gaps,
         )
 
     frames.append(stream.step(at_tool_input_start()))
@@ -454,7 +471,7 @@ async def _outcome(
     if found is None:
         # No rule matched, two did, or two records answered to one name. One sentence for all
         # three: see THE_ASKER_IS_NEVER_TOLD_WHICH_KIND_OF_NOTHING_HAPPENED.
-        return _abstained(stream, frames, nothing_retrieved(scope, detail="no single rule"))
+        return _abstained(stream, frames, gaps, nothing_retrieved(scope, detail="no single rule"))
 
     policy = policies.get(found.entity)
     if policy is None:
@@ -462,9 +479,11 @@ async def _outcome(
         # answered like every other nothing. Redacting against a default policy would be the
         # other option and it is the one that ships an unclassified column.
         log.warning("answer.no_policy", entity=found.entity, rule=found.rule_id)
-        return _abstained(stream, frames, nothing_retrieved(scope, detail="unclassified"))
+        return _abstained(stream, frames, gaps, nothing_retrieved(scope, detail="unclassified"))
 
-    payload = serialise_for_channel(found.result, entitlement=entitlement, policy=policy, now=now)
+    # The redactor's own pair, so the trace the sink records is the one that did the work.
+    redacted = redact(found.result, entitlement=entitlement, policy=policy, now=now)
+    payload = redacted.payload
 
     sentence = served_from(found, payload)
     declined = abstention_for_search(
@@ -484,18 +503,13 @@ async def _outcome(
     if declined is None and not sentence:
         declined = _withheld_or_absent(found, payload, scope)
     if declined is not None:
-        return _abstained(stream, frames, declined)
+        return _abstained(stream, frames, gaps, declined)
 
-    composed = compose(
-        served_from(found, payload),
-        _redacted(payload, policy=policy, entitlement=entitlement),
-        sink=sink,
-        now=now,
-    )
+    composed = compose(served_from(found, payload), redacted, sink=sink, now=now)
 
     for citation in composed.citations:
         frames.append(stream.citation(citation))
-    frames.append(stream.text(_with_scope(composed.text, scope)))
+    frames.append(stream.text(_with_gaps(_with_scope(composed.text, scope), gaps)))
     frames.append(stream.done())
 
     return Answered(frames=tuple(frames), composed=composed)
@@ -528,6 +542,7 @@ async def _answered_by_model(
     meter: Meter,
     trace_id: str,
     calls: ToolCalls,
+    gaps: tuple[Gap, ...] = (),
 ) -> Answered:
     """The model step's frames, after the understanding and checking steps.
 
@@ -557,11 +572,11 @@ async def _answered_by_model(
     if drafted.asked:
         frames.append(stream.step(Progress.COMPOSING))
     if isinstance(drafted.outcome, Abstention):
-        return _abstained(stream, frames, drafted.outcome)
+        return _abstained(stream, frames, gaps, drafted.outcome)
     composed = drafted.outcome
     for citation in composed.citations:
         frames.append(stream.citation(citation))
-    frames.append(stream.text(_with_scope(composed.text, scope)))
+    frames.append(stream.text(_with_gaps(_with_scope(composed.text, scope), gaps)))
     frames.append(stream.done())
     return Answered(frames=tuple(frames), composed=composed)
 
@@ -600,7 +615,9 @@ def _withheld_or_absent(
     return nothing_retrieved(scope, detail=f"{found.entity}.{found.field} absent")
 
 
-def _abstained(stream: AnswerStream, frames: list[str], declined: Abstention) -> Answered:
+def _abstained(
+    stream: AnswerStream, frames: list[str], gaps: Sequence[Gap], declined: Abstention
+) -> Answered:
     """Close the stream with the one sentence the asker is allowed to hear.
 
     `for_asker` rather than anything assembled here, because `AbstentionNotice` has no reason
@@ -608,7 +625,7 @@ def _abstained(stream: AnswerStream, frames: list[str], declined: Abstention) ->
     """
     notice = declined.for_asker()
     return Answered(
-        frames=(*frames, stream.text(notice.render()), stream.done()),
+        frames=(*frames, stream.text(_with_gaps(notice.render(), gaps)), stream.done()),
         abstention=declined,
     )
 
@@ -624,29 +641,14 @@ def _with_scope(text: str, scope: SearchScope) -> str:
     return f"{text} {statement}" if statement else text
 
 
-def _redacted(
-    payload: ChannelPayload, *, policy: FieldPolicy, entitlement: EntitlementSet
-) -> RedactedAnswer:
-    """Pair the payload with a trace, for `compose`, which wants the redaction's own result.
+def _with_gaps(text: str, gaps: Sequence[Gap]) -> str:
+    """The text, followed by one sentence per department named outside the reader's reach.
 
-    `serialise_for_channel` deliberately returns the payload alone, so a channel adapter
-    calling it cannot reach the trace, the redaction reasons or the dropped records. This
-    lane is such a caller and is held to the same limit, so the trace it can build carries
-    the two facts it does have, the policy epoch and the entitlement hash, and no redactions
-    and no drops.
-
-    **That is a real gap and it is stated rather than hidden.** An auditor opening this trace
-    reference learns which policy version and which reach the answer was computed at, and
-    learns nothing about what was withheld, because this lane was never told. Closing it
-    means calling `redact_for_gate`, which takes a `GateContext` and a `Recorder`, which is
-    the pipeline that does not exist yet. An empty list of redactions is not a claim that
-    nothing was redacted: `RedactionTrace` puts the counts where only an auditor reads them,
-    and an auditor reading a count of zero here would be reading this module's ignorance.
+    `Gap.message` and `Gap.request_access`, which carry the name the asker typed and nothing
+    about whether it exists or what is behind it. Appended to answers and refusals alike.
     """
-    return RedactedAnswer(
-        payload=payload,
-        trace=RedactionTrace(policy_epoch=policy.epoch(), ent_hash=entitlement.ent_hash()),
-    )
+    stated = " ".join(f"{gap.message} {gap.request_access}" for gap in gaps)
+    return f"{text} {stated}" if stated else text
 
 
 async def frames_of(answered: Answered) -> AsyncIterator[str]:

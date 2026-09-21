@@ -79,6 +79,7 @@ export const USE: NavGroup = {
     { to: "/me", label: "My workspace" },
     { to: "/approvals", label: "Approvals" },
     { to: "/records", label: "Records" },
+    { to: "/access-requests", label: "Access requests" },
   ],
 };
 

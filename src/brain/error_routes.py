@@ -104,6 +104,13 @@ class RequestFailureView(BaseModel):
     lane: str
     status: str
     duration_ms: float
+    #: What the gate's front half decided (M3.4.2, M3.6.3), or null for a request it did not
+    #: run for: the question's injection score, the lane it was routed to, and which stage of
+    #: selection chose which agent. A score and names, never the question.
+    risk_score: int | None = None
+    routed_lane: str | None = None
+    selection_stage: str | None = None
+    selected_agent: str | None = None
 
 
 class ErrorsPage(BaseModel):
@@ -149,9 +156,9 @@ def failed_runs(
 
 def failed_requests(
     start: datetime, end: datetime
-) -> Select[tuple[str, datetime, str, str, float]]:
-    """Failed and degraded requests that arrived in `[start, end)`, newest first. Five columns
-    and none of them names a person."""
+) -> Select[tuple[str, datetime, str, str, float, int | None, str | None, str | None, str | None]]:
+    """Failed and degraded requests that arrived in `[start, end)`, newest first. Nine columns
+    and none of them names a person: the four front-half decisions name an agent at most."""
     return (
         select(
             RequestTelemetryRow.trace_id,
@@ -159,6 +166,10 @@ def failed_requests(
             RequestTelemetryRow.lane,
             RequestTelemetryRow.status,
             RequestTelemetryRow.duration_ms,
+            RequestTelemetryRow.risk_score,
+            RequestTelemetryRow.routed_lane,
+            RequestTelemetryRow.selection_stage,
+            RequestTelemetryRow.selected_agent,
         )
         .where(
             RequestTelemetryRow.status.in_(FAILED_REQUESTS),
@@ -232,8 +243,14 @@ async def errors(
                 lane=lane,
                 status=status,
                 duration_ms=duration,
+                risk_score=risk,
+                routed_lane=routed,
+                selection_stage=stage,
+                selected_agent=agent,
             )
-            for trace_id, received, lane, status, duration in found[:MAX_FAILURES]
+            for trace_id, received, lane, status, duration, risk, routed, stage, agent in found[
+                :MAX_FAILURES
+            ]
         ],
         requests_truncated=len(found) > MAX_FAILURES,
     )

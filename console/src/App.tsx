@@ -98,6 +98,7 @@ import { Notifications } from "./pages/Notifications";
 import { RETURN_PATH as STAFF_LIST_RETURN_PATH } from "./setup/staffList";
 import { FIRST_RUN_PATH } from "./setup/wizard";
 import { Notice } from "./ui/Notice";
+import { AccessRequests } from "./pages/AccessRequests";
 
 /**
  * The records screen, fetched when somebody asks for it.
@@ -436,6 +437,7 @@ export const routes: RouteObject[] = [
       { path: "retention", element: <Retention /> },
       { path: "capabilities", element: <Capabilities /> },
       { path: "scopes", element: <Scopes /> },
+      { path: "access-requests", element: <AccessRequests /> },
       { path: "*", element: <NotFound /> },
     ],
   },

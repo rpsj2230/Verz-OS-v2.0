@@ -120,6 +120,7 @@ MIGRATION_STAFF_ROSTER = VERSIONS / "0096_staff_roster.py"
 MIGRATION_SERVICE_ACCOUNTS = VERSIONS / "0095_service_accounts_and_partner_reach.py"
 MIGRATION_MODEL_REGISTRY = VERSIONS / "0097_model_registry_and_matrix_gate.py"
 MIGRATION_GATE_FRONT_HALF = VERSIONS / "0100_gate_front_half.py"
+MIGRATION_ACCESS_REQUEST = VERSIONS / "0101_access_request.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -330,6 +331,8 @@ MODEL_REGISTRY_TABLES: tuple[str, ...] = (
 )
 #: And the one 0100 adds: the dedupe key of every inbound channel message.
 CHANNEL_EVENT_TABLES: tuple[str, ...] = ("gate.channel_event",)
+#: And the one 0101 adds: a request for access, addressed to who can decide it.
+ACCESS_REQUEST_TABLES: tuple[str, ...] = ("gate.access_request",)
 
 ALL_TABLES = (
     CORE_TABLES
@@ -379,6 +382,7 @@ ALL_TABLES = (
     + SERVICE_ACCOUNT_TABLES
     + MODEL_REGISTRY_TABLES
     + CHANNEL_EVENT_TABLES
+    + ACCESS_REQUEST_TABLES
 )
 
 
@@ -1130,6 +1134,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert model_registry.TABLES == MODEL_REGISTRY_TABLES
     channel_event = migration_module(MIGRATION_GATE_FRONT_HALF)
     assert channel_event.TABLES == CHANNEL_EVENT_TABLES
+    access_request = migration_module(MIGRATION_ACCESS_REQUEST)
+    assert access_request.TABLES == ACCESS_REQUEST_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1201,6 +1207,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(service_accounts.TABLES)
         + tuple(model_registry.TABLES)
         + tuple(channel_event.TABLES)
+        + tuple(access_request.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1253,6 +1260,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(service_accounts.TABLES),
         set(model_registry.TABLES),
         set(channel_event.TABLES),
+        set(access_request.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"
@@ -2136,3 +2144,29 @@ def test_0100_adds_the_front_half_columns_nullable_and_drops_them_on_the_way_dow
         assert table("obs.request_telemetry").columns[column].nullable
         assert f"ALTER TABLE obs.request_telemetry DROP COLUMN {column}" in down
     assert "DROP TABLE gate.channel_event" in down
+
+
+# ------------------------------------------------------------------ 0101, access requests
+def test_0101_builds_the_access_request_table_exactly_as_the_model_declares_it() -> None:
+    """The request table's DDL, from the model, appears in 0101's rendered upgrade, the
+    one-subject check included, and the downgrade takes it away again.
+
+    Delete this and the model and the migration can disagree about what a request names."""
+    expected = squash(str(CreateTable(table("gate.access_request")).compile(dialect=DIALECT)))
+    up = squash(rendered("upgrade", MIGRATION_ACCESS_REQUEST))
+    assert expected in up
+    assert "CREATE INDEX ix_gate_access_request_owner_id" in up
+    assert "DROP TABLE gate.access_request" in squash(
+        rendered("downgrade", MIGRATION_ACCESS_REQUEST)
+    )
+
+
+def test_0101_copies_every_check_and_width_it_shares_with_the_model() -> None:
+    """The migration's copied predicates and widths are the model's."""
+    migration = migration_module(MIGRATION_ACCESS_REQUEST)
+    found = checks("gate.access_request")
+    assert found["ck_access_request_one_subject"] == migration.ONE_SUBJECT
+    columns = table("gate.access_request").columns
+    assert columns["question"].type.length == migration.QUESTION_CHARS  # type: ignore[attr-defined]
+    assert columns["requested_capability"].type.length == migration.CAPABILITY_CHARS  # type: ignore[attr-defined]
+    assert columns["department"].type.length == migration.SLUG_CHARS  # type: ignore[attr-defined]

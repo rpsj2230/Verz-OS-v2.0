@@ -65,6 +65,26 @@ export function errorsApiPath(hours: number): string {
   return `${ERRORS_API_PATH}?hours=${String(hours)}`;
 }
 
+/** What a request's front-half columns say when the gate's front half did not run for it. */
+export const NOT_SCREENED = "Not recorded";
+
+/** How the agent was chosen, in words, from `brain.gate.select.SelectionStage`. */
+export const STAGE_WORDS: Readonly<Record<string, string>> = {
+  addressed: "named by the person",
+  binding: "bound to the channel",
+  rule: "chosen by a rule",
+  classifier: "chosen by the classifier",
+  default: "the default",
+};
+
+/** The agent a request was answered as, and how it was chosen (M3.6.3). */
+export function agentWords(agent: string | null | undefined, stage: string | null | undefined): string {
+  if (!agent) {
+    return NOT_SCREENED;
+  }
+  return stage ? `${agent} (${STAGE_WORDS[stage] ?? stage})` : agent;
+}
+
 /** How a request ended, in words, from `brain.ops.telemetry.RequestStatus`. */
 export const STATUS_WORDS: Readonly<Record<string, string>> = {
   failed: "Failed",

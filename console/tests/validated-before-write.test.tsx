@@ -57,6 +57,7 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
     { pattern: "/departments", index: 2, writes: true },
   ],
   "src/pages/Elevation.tsx": [{ pattern: "/elevation", index: 0, writes: true }],
+  "src/pages/AccessRequests.tsx": [{ pattern: "/access-requests", index: 0, writes: true }],
   "src/pages/Matrix.tsx": [{ pattern: "/routing/:rungId", index: 1, writes: true }],
   // After the matrix's own search form: the golden question, then the rung to add.
   "src/components/MatrixGate.tsx": [

@@ -71,8 +71,8 @@ class Ledgers:
         self.runs: list[tuple[str, datetime, datetime | None, str | None]] = [
             ("spend_report_refresh", AGO, AGO, LEAKY)
         ]
-        self.requests: list[tuple[str, datetime, str, str, float]] = [
-            (REFERENCE, AGO, "model", "failed", 812.0)
+        self.requests: list[tuple[object, ...]] = [
+            (REFERENCE, AGO, "answer", "failed", 812.0, 55, "answer", "addressed", "finance")
         ]
         self.bound: list[list[str]] = []
 
@@ -84,7 +84,17 @@ class Ledgers:
             names = next(v for v in statement.compile().params.values() if isinstance(v, list))
             self.bound.append(names)
             return Result(Row(one) for one in self.runs if one[0] in names)
-        if columns == ["trace_id", "received_at", "lane", "status", "duration_ms"]:
+        if columns == [
+            "trace_id",
+            "received_at",
+            "lane",
+            "status",
+            "duration_ms",
+            "risk_score",
+            "routed_lane",
+            "selection_stage",
+            "selected_agent",
+        ]:
             return Result(Row(one) for one in self.requests)
         return None
 
@@ -120,7 +130,17 @@ def test_a_reader_of_both_screens_sees_a_failed_job_by_kind_and_a_failed_request
         }
     ]
     assert body["requests"][0]["reference"] == REFERENCE
-    assert set(body["requests"][0]) == {"reference", "received_at", "lane", "status", "duration_ms"}
+    assert set(body["requests"][0]) == {
+        "reference",
+        "received_at",
+        "lane",
+        "status",
+        "duration_ms",
+        "risk_score",
+        "routed_lane",
+        "selection_stage",
+        "selected_agent",
+    }
     assert "someone@example.invalid" not in str(body)
     # The log is kept since `brain.ops.log_capture`, so the page points at the Logs screen.
     assert body["process_log_is_not_kept"] is False
@@ -170,7 +190,9 @@ def test_a_list_that_came_back_full_says_so_and_carries_no_figure(
 ) -> None:
     """Delete this and a truncated list reads as every failure there was."""
     client, _ = served
-    ledgers.requests = [(REFERENCE, AGO, "model", "failed", 1.0)] * (MAX_FAILURES + 1)
+    ledgers.requests = [(REFERENCE, AGO, "answer", "failed", 1.0, None, None, None, None)] * (
+        MAX_FAILURES + 1
+    )
 
     body = get(client, "u_admin", ERRORS).json()
 
@@ -178,3 +200,16 @@ def test_a_list_that_came_back_full_says_so_and_carries_no_figure(
     assert body["requests_truncated"] is True
     assert body["jobs_truncated"] is False
     assert not {key for key in body if "count" in key or "total" in key}
+
+
+def test_a_failed_request_shows_what_the_gates_front_half_decided(
+    served: tuple[TestClient, Stub],
+) -> None:
+    """M3.4.2 and M3.6.3 on the screen: the risk score, the routed lane, the selection stage and
+    the agent, from the request row, beside the reference.
+
+    Delete this and the four columns are written on every request and read by no screen."""
+    client, _ = served
+    row = get(client, "u_admin", ERRORS).json()["requests"][0]
+    assert (row["risk_score"], row["routed_lane"]) == (55, "answer")
+    assert (row["selection_stage"], row["selected_agent"]) == ("addressed", "finance")

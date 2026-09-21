@@ -11,7 +11,7 @@ loop at all.
 **A model is shown the post-redaction payload and nothing else.** The passages are fetched with
 the caller's reach inside the query (`brain.knowledge.search.reach_predicate`, through the
 registered `knowledge.search_documents` handler), then walked by
-`brain.core.redaction.serialise_for_channel` with that same reach, and the prompt is rendered from
+`brain.core.redaction.redact` with that same reach, and the prompt is rendered from
 the `ChannelPayload` that comes out. There is no other variable in `draft` holding a record, so
 there is nothing a prompt could be built from by mistake. Retrieval is the first wall and the
 redactor is the last, and the redactor runs even though the query already narrowed, for the
@@ -109,13 +109,7 @@ from brain.core.entitlement import EntitlementSet
 from brain.core.envelope import TypedResult
 from brain.core.field_policy import Classification, FieldPolicy, FieldRule
 from brain.core.lane import Lane
-from brain.core.redaction import (
-    ID_KEYS,
-    ChannelPayload,
-    RedactedAnswer,
-    RedactionTrace,
-    serialise_for_channel,
-)
+from brain.core.redaction import ID_KEYS, ChannelPayload, RedactedAnswer, redact
 from brain.gate.abstain import (
     Abstention,
     SearchScope,
@@ -157,7 +151,7 @@ from brain.tools.skills import (
 A_MODEL_IS_SHOWN_THE_REDACTED_PAYLOAD_AND_NOTHING_ELSE: Final = (
     "A model's context is copied into a provider's logs, echoed in its reply and quoted by the "
     "person who reads that reply, so anything in it has been disclosed to the asker. The prompt "
-    "is therefore rendered from the ChannelPayload serialise_for_channel returned for this "
+    "is therefore rendered from the ChannelPayload the redactor returned for this "
     "caller's reach, and the typed result the search returned is never in scope where the "
     "prompt is built. A passage withheld from the caller and a field locked on one they may "
     "read are not in the payload, so they cannot be in the prompt, the trace, the ledger row "
@@ -530,9 +524,10 @@ async def draft(
     """
     searching()
     found = await lane.search.passages(question, entitlement=entitlement, now=now)
-    payload = shown(
-        serialise_for_channel(found, entitlement=entitlement, policy=PASSAGE_POLICY, now=now)
-    )
+    # The redactor's own trace travels to the sink with the payload, so what it withheld is
+    # recorded in names and counts (M4.4.4). The payload alone reaches the prompt.
+    redacted = redact(found, entitlement=entitlement, policy=PASSAGE_POLICY, now=now)
+    payload = shown(redacted.payload)
     # `found` is not read again below this line. See
     # A_MODEL_IS_SHOWN_THE_REDACTED_PAYLOAD_AND_NOTHING_ELSE.
     del found
@@ -573,14 +568,6 @@ async def draft(
             asked=True,
         )
     composed = compose(
-        text,
-        RedactedAnswer(
-            payload=payload,
-            trace=RedactionTrace(
-                policy_epoch=PASSAGE_POLICY.epoch(), ent_hash=entitlement.ent_hash()
-            ),
-        ),
-        sink=sink,
-        now=now,
+        text, RedactedAnswer(payload=payload, trace=redacted.trace), sink=sink, now=now
     )
     return Drafted(outcome=composed, asked=True)

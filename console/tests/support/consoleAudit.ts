@@ -32,6 +32,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ANSWER_API_PATH } from "../../src/pages/askQuery";
+import { ACCESS_REQUESTS_API_PATH } from "../../src/pages/accessRequestsQuery";
 import { automationStartApiPath, automationStopApiPath } from "../../src/pages/agentAutomationsQuery";
 import { STEWARD_API_PATH } from "../../src/pages/dataStewardQuery";
 import { automationInstallApiPath, automationPreviewApiPath } from "../../src/pages/automationGalleryQuery";
@@ -173,7 +174,7 @@ const ONCE_BY_THE_WIZARD =
 /** Every area of the standard, keyed by the standard's own words. */
 export const AREAS: Readonly<Record<string, Area>> = {
   "People, roles, permissions and access control": {
-    screens: ["/", "/people", "/people/:subject", "/roles", "/capabilities", "/scopes", "/access_review", "/elevation", "/sessions", "/sign-in-links", "/staff_sources"],
+    screens: ["/", "/people", "/people/:subject", "/roles", "/capabilities", "/scopes", "/access_review", "/elevation", "/sessions", "/sign-in-links", "/staff_sources", "/access-requests"],
     routes: [
       "/api/v1/me",
       "/api/v1/console/navigation",
@@ -194,6 +195,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/govern/people/disable",
       "/api/v1/govern/people/enable",
       "/api/v1/govern/service-accounts*",
+      "/api/v1/access-requests",
     ],
     tables: [
       "auth.principal",
@@ -213,6 +215,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "auth.staff_sync_run",
       "auth.service_account",
       "auth.api_key",
+      "gate.access_request",
     ],
     installation: [
       "INSTALL_OIDC_ISSUER",
@@ -615,6 +618,8 @@ export const NOT_ADMINISTERED: Readonly<Record<string, string>> = {
     "Called by a running automation with its owner's reach, not by a person at a screen; installing the automation is the console's part.",
   "chat.conversation": "What a person asked and was answered belongs to them; no store queries it yet (brain.chat.threads) and usage is reported without the words.",
   "chat.message": "The same as chat.conversation: a person's own words, reported on and never managed.",
+  "gate.channel_event":
+    "The dedupe key of each inbound channel message, claimed once by brain.gate.event_store.first_delivery and read by nothing else; there is nothing in it for anybody to manage.",
 };
 
 /**
@@ -685,6 +690,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
     at("POST /api/v1/approvals/{suspension_id}/decision", "approvalDecisionApiPath", approvalDecisionApiPath("sus-1")),
   ],
   "src/pages/Ask.tsx ANSWER_API_PATH": [at("POST /api/v1/answer", "ANSWER_API_PATH", ANSWER_API_PATH)],
+  "src/pages/AccessRequests.tsx ACCESS_REQUESTS_API_PATH": [
+    at("POST /api/v1/access-requests", "ACCESS_REQUESTS_API_PATH", ACCESS_REQUESTS_API_PATH),
+  ],
   "src/pages/Classification.tsx reviewApiPath(entity, row.column)": [
     at("POST /api/v1/classifications/{entity}/columns/{column}/review", "reviewApiPath", reviewApiPath("price_list", "cost")),
   ],
@@ -950,6 +958,14 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: t("test_suspension_store", "test_a_decided_approval_leaves_one_ledger_entry_that_survives_a_restart", true),
     audit: t("test_suspension_store", "test_a_decided_approval_leaves_one_ledger_entry_that_survives_a_restart", true),
     behaviour: t("test_suspension_store", "test_an_approved_suspension_is_what_resume_reads_and_a_rejected_one_is_not_run", true),
+  },
+  "POST /api/v1/access-requests": {
+    row: t("test_access_request_store", "test_a_request_is_stored_and_its_owner_reads_it_back_as_the_application_role", true),
+    audit: {
+      notApplicable:
+        "A request changes nothing anybody holds: it is a row addressed to its owner, and a decision is a grant written on the Roles screen, which is recorded there.",
+    },
+    behaviour: t("test_access_request_routes", "test_the_owner_reads_the_requests_addressed_to_them_and_nobody_else_does"),
   },
   "POST /api/v1/answer": {
     row: { notApplicable: "Asking a question writes no row an administrator manages." },
