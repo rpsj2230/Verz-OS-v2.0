@@ -13,9 +13,12 @@ the table's unique fingerprint refuses a second copy if two runs ever raced past
 deploy that failed, and the rollback that recorded it, are both taken in by the next deploy that
 reaches a ready container, and nothing is recorded twice.
 
-**On the login, never on `brain_app`.** The application role holds SELECT on the table and no
-more (`0091`), so no request can add or change a deploy. This module is imported by nothing the
-application's sessions reach, which is what `brain.ops.application_privileges` checks.
+**On the owner's login, never on `brain_app`.** The application role holds SELECT on the table
+and no more (`0091`), so no request can add or change a deploy. This module is imported by nothing
+the application's sessions reach, which is what `brain.ops.application_privileges` checks. It runs
+inside the app container, whose `BRAIN_DATABASE_URL` is `brain_app` once an install narrows it, so
+it connects with `Settings.owner_database_url` and not `database_url`: found on an install, where
+every deploy's history write was refused on `deployment_record`.
 
 **Serialised by an advisory lock in the transaction**, so two deploys finishing together cannot
 both read the same head and write two rows claiming the same place.
@@ -99,9 +102,13 @@ def main(argv: Sequence[str] | None = None, stdin: Iterable[str] | None = None) 
     except DeploymentRecordError as error:
         print(f"REFUSED: {error}. Nothing was recorded.", file=sys.stderr)
         return EXIT_REFUSED
-    url = Settings().database_url.strip()
+    url = Settings().owner_database_url()
     if not url:
-        print("DATABASE_URL is not set, so there is nowhere to record deploys", file=sys.stderr)
+        print(
+            "neither BRAIN_MIGRATION_DATABASE_URL nor DATABASE_URL is set, so there is nowhere "
+            "to record deploys",
+            file=sys.stderr,
+        )
         return EXIT_USAGE
     engine = create_engine(normalise_database_url(url))
     try:
