@@ -86,16 +86,17 @@ becomes read-only and can be un-archived any time).
    name to confirm, **I understand, archive this repository**.
 3. Tell me "v1 archived". The first release tag waits until Wave 0 is accepted, as you agreed.
 
-## 81. One read-only permission for your Lark app, so the wiki connector can store pages
+## 81. One read-only permission for your Lark app, so the Brain can check who may read a wiki page
 
-**In plain terms:** the Brain may only store a wiki page once it knows who is allowed to read that
-page, so it never shows a restricted page to the wrong person. I checked Lark's own command-line
-tool: the page listing it reads today carries no permission information at all, so the connector
-holds back every page and stores nothing. Lark does answer "who may read this page" through a
-separate call, and that call needs one extra read-only permission on your Lark app. It lets the
-Brain read who has access; it cannot change anything.
-**Recommendation: add it.** Five minutes. The connector work itself is in Wave 2; with the
-permission in place I can record one real answer and build the rule from it.
+**In plain terms:** as you decided, connectors do not copy your data into the Brain. It keeps only
+a small index (titles, where each page lives, who may see it) and reads a page live from Lark when
+a question needs it, so the database stays light. Before it reads a page for someone, it must know
+whether that person is allowed to see it. I checked Lark's own command-line tool: the page listing
+carries no permission information, so today the Brain can tell nobody apart and holds every page
+back. Lark answers "who may read this page" through a separate call, which needs one extra
+read-only permission on your Lark app. It reads who has access; it cannot change anything.
+**Recommendation: add it.** Five minutes. The connector itself is built in Wave 2, to your rule:
+index and live read, never a bulk copy.
 
 1. Open the Lark developer console (`open.larksuite.com/app`) and sign in as the app's owner.
 2. Click the Brain's app, then in the left menu **Development Configuration** >
