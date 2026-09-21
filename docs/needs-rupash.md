@@ -28,17 +28,23 @@ index and live read, never a bulk copy.
    if Lark asks.
 5. Tell me "Lark permission added".
 
-## 77. The old copies of the Brain in your other GitHub account
+## 77. Archive the unused copy `verz-company-brain-v2` (two minutes)
 
-**In plain terms:** the product is `rpsj2230/Verz-OS-v2.0`, and it stays. Your `rupashverz` account
-holds two older copies of the Brain: `verz-company-brain` (v1) and `verz-company-brain-v2` (the
-August copy). A fix made in the product never reaches them, which is what M41.3.2 is about.
-**Recommendation:** do nothing now, and archive both at go-live, once nobody depends on them. It is
-recorded as your go-live step.
-**One question:** does `verz-company-brain-v2` run anything live today, or is it only an old copy?
-Reply "v2 copy is not live" or "v2 copy is live".
+**In plain terms:** you said you no longer use `verz-company-brain-v2`; the product is
+`rpsj2230/Verz-OS-v2.0`. Archiving makes the old copy read-only, so nobody fixes something there by
+mistake, and it can be un-archived any time. The v1 repository `verz-company-brain` stays until
+go-live and is recorded as your go-live step. **Recommendation: archive the v2 copy now.**
+
+1. Sign in to GitHub as **rupashverz** and open the repository **verz-company-brain-v2**.
+2. Click **Settings**, scroll to the bottom (**Danger Zone**), click **Archive this repository**.
+3. Type the repository name to confirm, then **I understand, archive this repository**.
+4. Tell me "v2 copy archived".
 
 # Answered
+
+## 83. The Maintenance agent in Lark (M38.5.3) - DECIDED: end of Wave 3
+
+It needs connectors, knowledge and agents, which Waves 2 and 3 build, so it moves there.
 
 ## 74. The application's own limited database login - DONE 2026-09-21
 

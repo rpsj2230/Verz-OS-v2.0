@@ -31,6 +31,8 @@ module.exports = {
   // from the programme by this map; the total is unchanged and the work is only re-dated to
   // the wave that can actually do it.
   LEAF_WAVE:{
+    // The Maintenance agent needs connectors, knowledge and agents (Waves 2-3): owner, 2026-09-21, item 77.
+    "M38.5.3":3,
     // The starter pack needs the template signing key built in Wave 3: owner, 2026-09-21, item 82.
     "M41.2.7":3,
     // The full profile needs presidio, which the redactor (M4) uses: owner, 2026-09-21, item 77.

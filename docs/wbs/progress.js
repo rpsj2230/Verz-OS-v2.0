@@ -34,6 +34,11 @@ const STATUSES = ["OPEN", "IN PROGRESS", "READY FOR TESTING", "BLOCKED"];
 
 //: Leaf id to where it stands. Ordered by id.
 const PROGRESS = {
+  "M41.3.2": {
+    status: "BLOCKED",
+    why: "owner archives the unused verz-company-brain-v2 copy now (item 77) and the v1 repository at go-live",
+    updated: "2026-09-21",
+  },
   "M38.5.1": {
     status: "READY FOR TESTING",
     why: "on staging the checks ran after deploy 5254748 and passed (/api/deploy-checks.json); the Deploy run reads the verdict once the owner sets POST_DEPLOY_CHECKS",
@@ -62,11 +67,6 @@ const PROGRESS = {
   "M41.3.1": {
     status: "BLOCKED",
     why: "a release tag needs the owner's go-ahead",
-    updated: "2026-09-21",
-  },
-  "M41.3.2": {
-    status: "BLOCKED",
-    why: "owner question: is the v1 repository archived",
     updated: "2026-09-21",
   },
 };
