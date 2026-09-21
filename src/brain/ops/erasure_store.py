@@ -176,6 +176,14 @@ A_CORRECTION_OUTLIVES_ITS_MEMORY_OR_THE_MEMORY_COMES_BACK: Final = (
     "correction while the memory it marked is kept would put what was corrected back into recall"
 )
 
+#: Why the staff roster and its runs are kept by an erasure (added with `0096`, 2026-09-21).
+A_ROSTER_ROW_IS_THE_SOURCES_AND_RETURNS_WHILE_THE_SOURCE_LISTS_THEM: Final = (
+    "a roster row is the company's staff list as its own source states it, keyed by the digest of "
+    "a work address and joined to no principal; removing it while the directory still lists the "
+    "person writes it back on the next nightly run, so a person leaves the roster by leaving the "
+    "source, and a run's record of who joined and left is kept as the ledger's entries are"
+)
+
 # ---------------------------------------------------------------------------- figures
 #: The name the queue finishes a request under, which `0060`'s trigger writes as the actor.
 ERASURE_QUEUE_ACTOR: Final = "erasure-queue"
@@ -305,6 +313,8 @@ RETAINED: Final[Mapping[str, str]] = MappingProxyType(
         "mem.correction": A_CORRECTION_OUTLIVES_ITS_MEMORY_OR_THE_MEMORY_COMES_BACK,
         "mem.learning": A_CORRECTION_OUTLIVES_ITS_MEMORY_OR_THE_MEMORY_COMES_BACK,
         "ops.erasure_request": THE_REQUEST_IS_THE_PROOF_AND_IS_KEPT,
+        "auth.staff_member": A_ROSTER_ROW_IS_THE_SOURCES_AND_RETURNS_WHILE_THE_SOURCE_LISTS_THEM,
+        "auth.staff_sync_run": A_ROSTER_ROW_IS_THE_SOURCES_AND_RETURNS_WHILE_THE_SOURCE_LISTS_THEM,
     }
 )
 

@@ -92,7 +92,10 @@ KNOWN_ORPHANS = frozenset(
 #: `restore_drill` joined it on 2026-09-14. `brain.console.recovery_view` asks `drill_due`
 #: and `brain.ops.backup_manifest.read_drills` asks `verification_of`, and nothing performs a
 #: drill, so the rehearsal is exactly as unscheduled as it was and now says so on a screen.
-WIRED_BUT_NOT_SCHEDULED = frozenset({"spend_correction", "directory_sync", "restore_drill"})
+#:
+#: `directory_sync` left it on 2026-09-21 for `SCHEDULED_BY_THE_WORKER`, when
+#: `brain.ops.staff_sync_run` gave the nightly read a runner.
+WIRED_BUT_NOT_SCHEDULED = frozenset({"spend_correction", "restore_drill"})
 
 #: Controls the worker's schedule starts, which is the state the two sets above are waiting for.
 #:
@@ -121,6 +124,9 @@ WIRED_BUT_NOT_SCHEDULED = frozenset({"spend_correction", "directory_sync", "rest
 #:
 #: `connector_sync` joined on 2026-09-17 the day it was registered, reading every connected source
 #: that is due through `brain.ops.connector_sync_run`.
+#:
+#: `directory_sync` joined on 2026-09-21 from `WIRED_BUT_NOT_SCHEDULED`: `brain.ops.staff_sync_run`
+#: reads the chosen staff list with the kept credential, applies the dry run and records the run.
 SCHEDULED_BY_THE_WORKER = frozenset(
     {
         "retention_sweep",
@@ -133,6 +139,7 @@ SCHEDULED_BY_THE_WORKER = frozenset(
         "automation_run",
         "connector_sync",
         "vault_audit_ship",
+        "directory_sync",
     }
 )
 

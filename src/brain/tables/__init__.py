@@ -106,6 +106,7 @@ from brain.tables.routing import ModelAttemptRow, RoutingRungRow, RoutingTierRow
 from brain.tables.schedule import ControlRunRow
 from brain.tables.skill import SkillAssignmentRow, SkillReviewRow, SkillRow
 from brain.tables.spend import ReportRefreshRow, SpendActualRow
+from brain.tables.staff import StaffMemberRow, StaffSyncRunRow
 from brain.tables.suspension import SuspensionRow
 from brain.tables.telemetry import RequestTelemetryRow
 from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
@@ -290,6 +291,10 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0093_vault_leases_and_audit. Points at nothing: a slot is a value, so the record of who read
     # a key outlives the key.
     "ops.vault_access",
+    # 0096_staff_roster. Point at nothing: a member is a digest and a run names its source as a
+    # value, so neither hangs from a principal a later offboarding retires.
+    "auth.staff_member",
+    "auth.staff_sync_run",
 )
 
 __all__ = [
@@ -363,6 +368,8 @@ __all__ = [
     "SkillReviewRow",
     "SkillRow",
     "SpendActualRow",
+    "StaffMemberRow",
+    "StaffSyncRunRow",
     "SuspensionRow",
     "TeamMembershipRow",
     "TeamRow",

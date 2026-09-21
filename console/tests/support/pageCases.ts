@@ -1063,7 +1063,37 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     address: "/staff_sources",
     signedIn: true,
     drawsValues: true,
-    answers: { "/api/v1/govern/staff_sources": STAFF_SOURCES },
+    answers: {
+      "/api/v1/govern/staff_sources": STAFF_SOURCES,
+      // The nightly sync's three reads, each carrying the unbroken token where a value is drawn.
+      "/api/v1/govern/staff_sources/runs": {
+        runs: [
+          {
+            source: UNBROKEN,
+            started_at: "2999-03-02T02:00:00Z",
+            finished_at: "2999-03-02T02:00:05Z",
+            outcome: UNBROKEN,
+            detail: UNBROKEN,
+            added: [UNBROKEN],
+            marked_left: [],
+            renamed: [],
+            withheld: [],
+            changed_nobody: false,
+          },
+        ],
+      },
+      "/api/v1/govern/staff_sources/credential": {
+        slot: "connector_keys/staff_source",
+        held: true,
+        set_at: null,
+        vault: "ready",
+        told: "The secrets vault answered.",
+        form: UNBROKEN,
+      },
+      "/api/v1/govern/staff_sources/transfers": {
+        transfers: [{ agent_id: UNBROKEN, display_name: UNBROKEN, owner_id: UNBROKEN, running: true }],
+      },
+    },
   },
   // The five install screens. Each draws a value the API sent, so the unbroken identifier is on
   // every one of them: a fact's value, a release statement, a copy's timestamp, a ceiling's name

@@ -81,6 +81,14 @@ on its listing at all and an outbound call on its second route. The `Asked` depe
 imported from `brain.api_routes` rather than re-declared, so there is one spelling of `asking`
 and a route here cannot acquire a subtly different one.
 
+**Since 2026-09-21 the scheduled sync runs, and four addresses here show and serve it.**
+`brain.ops.staff_sync_run` reads the chosen source in the worker and applies the plan; this
+module still applies nothing. `/runs` is what each run added, marked as having left or held back,
+at the trial's plane because it names people; `/credential` says whether the secret the worker
+reads with is held and replaces it under `admin:credential` over everything, through the
+credentials screen's own write; `/transfers` lists the agents whose owner a run marked as having
+left and lets a reader who may adopt one take it on (M1.8.9). The trial below is unchanged.
+
 **What has never run.** No live staff source has been read by anything in this repository, so
 the trial's success path is exercised against a source built in a test and never against a
 directory. What is tested is every refusal, the order the checks happen in, and that the plan a
@@ -96,11 +104,12 @@ its own and it is not the leaf. `console/src/pages/Recovery.tsx` declines M27.7.
 words and for the same shape, and the rule both follow is that a screen which is reachable and
 cannot answer is not the leaf.
 
-Task ids: none
+Task ids: M1.6.12, M1.8.6, M1.8.9
 """
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -108,9 +117,15 @@ from typing import Final, Protocol, cast
 
 import structlog
 from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, model_validator
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from brain.api import API_PREFIX, COMMON_RESPONSES
+from brain.agent_routes import record_of
+from brain.agents.lifecycle import transfer_ownership
+from brain.agents.model import AgentError, AgentRecord
+from brain.api import API_PREFIX, COMMON_RESPONSES, NoEchoRoute
 from brain.api_routes import Asked
 from brain.console.staff_source_view import (
     THE_SCREEN,
@@ -120,9 +135,20 @@ from brain.console.staff_source_view import (
     choices,
     may_trial,
     selection,
+    transfers_for,
     trial,
 )
+from brain.core.errors import Absent, Failed
+from brain.credential_routes import (
+    NOT_KEPT_STATUS,
+    CredentialNotKeptView,
+    CredentialProblemsView,
+    CredentialProblemView,
+    credentials_of,
+    may_manage,
+)
 from brain.identity.directory import DirectoryAssertion
+from brain.identity.staff_roster import APPLIED_OUTCOMES
 from brain.identity.staff_source import (
     STAFF_SOURCE_LOCATION_SETTING,
     STAFF_SOURCE_SETTING,
@@ -131,6 +157,17 @@ from brain.identity.staff_source import (
     StaffSource,
 )
 from brain.identity.staff_sync import DryRun
+from brain.install import value_of
+from brain.ops.credentials import (
+    TOLD,
+    CredentialProblemError,
+    CredentialsUnavailableError,
+    VaultState,
+    connector_key_slot,
+)
+from brain.ops.staff_sync_run import STAFF_SOURCE_SLOT
+from brain.ops.staff_sync_store import RunRecord, read_leavers, read_runs
+from brain.tables.agent import AgentRow
 
 log = structlog.get_logger()
 
@@ -436,6 +473,9 @@ class TrialView(BaseModel):
 
     trial: TrialRunView | None = None
     unread: str = ""
+    #: What happened to the credential a first-run trial read with, or empty. See
+    #: `brain.setup_staff_routes.keep_for_the_schedule`; the console's trial never keeps one.
+    credential: str = ""
 
     @model_validator(mode="after")
     def _one_or_the_other(self) -> TrialView:
@@ -527,7 +567,7 @@ def run_view(one: Trial) -> TrialRunView:
 
 # -------------------------------------------------------------------- the routes
 
-router = APIRouter(prefix=API_PREFIX, tags=["staff sources"])
+router = APIRouter(prefix=API_PREFIX, tags=["staff sources"], route_class=NoEchoRoute)
 
 #: Where this screen lives, which is the screen's own key so that
 #: `brain.ops.console_screens.routed_screen_keys` matches the console's address against the
@@ -619,3 +659,337 @@ def sources_offered(rows: Sequence[SourceOptionView]) -> tuple[str, ...]:
     message somebody gets when they mistype agree without either being sorted.
     """
     return tuple(one.name for one in rows)
+
+
+# ================================================================ what the scheduled sync did
+# Added on 2026-09-21 with `brain.ops.staff_sync_run`. Four addresses, and none of them applies a
+# plan: the worker applies, and these show what it did, keep the credential it reads, and hand a
+# leaver's agent to whoever takes it on.
+
+#: Why the runs are read at the trial's plane and not the page's.
+A_RUN_NAMES_PEOPLE_SO_IT_IS_READ_AS_THE_TRIAL_IS: Final = (
+    "A run's record names who joined, who left and who moved, which is the same statement about "
+    "the company's staff a trial makes. So it is answered to whoever may run the trial and to "
+    "nobody else, and a reader who may not is answered what an install that has never run is "
+    "answered: no runs."
+)
+
+#: Why the credential is managed under admin:credential held over everything.
+THE_STAFF_SOURCE_CREDENTIAL_IS_A_CREDENTIAL: Final = (
+    "The secret the staff sync reads the directory with is a credential like a provider key: it "
+    "reaches every person in the company, so a grant scoped to one department is not a grant "
+    "here. It is written with the credentials screen's own authority and its own write, "
+    "recorded in the ledger by that write, and never read back."
+)
+
+#: What the credential is for each source, in the words the screen shows.
+CREDENTIAL_FORMS: Final[Mapping[str, str]] = {
+    "lark": (
+        "The custom app's App ID, a colon, then its App Secret. The app needs the contact "
+        "permissions to read users and departments, published."
+    ),
+    "microsoft_entra": (
+        "The application's client ID, a colon, then a client secret. Give it the application "
+        "(not delegated) Microsoft Graph permission User.Read.All, with admin consent."
+    ),
+    "google_sheet": "A Google API key with the Sheets API enabled, for a sheet shared by link.",
+}
+
+#: Said when this install's chosen source has no scheduled reader and so takes no credential.
+NO_CREDENTIAL_NEEDED: Final = (
+    "The chosen staff list is not read on a schedule, so it takes no credential here."
+)
+
+
+class StaffSyncRunView(BaseModel):
+    """One scheduled run, as `auth.staff_sync_run` holds it. Names and sentences, no address."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    source: str
+    started_at: datetime
+    finished_at: datetime
+    outcome: str
+    detail: str
+    added: list[str]
+    marked_left: list[str]
+    renamed: list[str]
+    withheld: list[str]
+    #: True for every outcome but applied and unchanged: the run wrote no member.
+    changed_nobody: bool
+
+
+class RunsView(BaseModel):
+    """The newest runs, newest first. Empty for a reader who may not see them."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    runs: list[StaffSyncRunView]
+
+
+class StaffCredentialView(BaseModel):
+    """Whether the staff source's credential is held and when it was written. Never the value."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    slot: str
+    #: None when the vault could not be asked, which `told` says in words.
+    held: bool | None
+    set_at: datetime | None
+    vault: str
+    told: str
+    #: What to paste for the chosen source, or why nothing is needed.
+    form: str
+
+
+class StaffCredentialAsked(BaseModel):
+    """The one field a write carries."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    value: str
+
+
+class TransferView(BaseModel):
+    """One agent whose steward the roster marks as having left, which this reader may take on."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    agent_id: str
+    display_name: str
+    owner_id: str
+    #: False when somebody had already stopped it. The listing itself stops nothing.
+    running: bool
+
+
+class TransfersView(BaseModel):
+    """The agents waiting for a new owner, in id order, with no count of any left out."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    transfers: list[TransferView]
+
+
+class TransferTakenView(BaseModel):
+    """An agent that now answers to the reader who took it on."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    agent_id: str
+    owner_id: str
+
+
+def run_record_view(one: RunRecord) -> StaffSyncRunView:
+    """One stored run, copied field by field."""
+    return StaffSyncRunView(
+        source=one.source,
+        started_at=one.started_at,
+        finished_at=one.finished_at,
+        outcome=one.outcome.value,
+        detail=one.detail,
+        added=list(one.added),
+        marked_left=list(one.marked_left),
+        renamed=list(one.renamed),
+        withheld=list(one.withheld),
+        changed_nobody=one.outcome not in APPLIED_OUTCOMES,
+    )
+
+
+def credential_form(env: Mapping[str, str] | None = None) -> str:
+    """What the chosen source's credential is, or that it takes none."""
+    return CREDENTIAL_FORMS.get(value_of(STAFF_SOURCE_SETTING, env), NO_CREDENTIAL_NEEDED)
+
+
+def sessions_of(request: Request) -> async_sessionmaker[AsyncSession] | None:
+    """The session factory this process was built with, or None, in `routing_routes`' shape."""
+    found = getattr(request.app.state, "db_sessions", None)
+    return found if isinstance(found, async_sessionmaker) else None
+
+
+RUNS_PATH: Final = f"{SCREEN_PATH}/runs"
+CREDENTIAL_PATH: Final = f"{SCREEN_PATH}/credential"
+TRANSFERS_PATH: Final = f"{SCREEN_PATH}/transfers"
+
+#: The slot the staff source's credential is kept in, which the worker's reader names too.
+STAFF_CREDENTIAL_SLOT: Final = connector_key_slot(STAFF_SOURCE_SLOT)
+
+
+@router.get(RUNS_PATH, response_model=RunsView, responses=COMMON_RESPONSES)
+async def staff_sync_runs(request: Request, asked: Asked) -> RunsView:
+    """The newest scheduled runs: who each added, marked as having left or moved, and why not.
+
+    Asked with `may_trial` before the database is touched. See
+    `A_RUN_NAMES_PEOPLE_SO_IT_IS_READ_AS_THE_TRIAL_IS`.
+    """
+    if not may_trial(asked.reach, asked.now):
+        return RunsView(runs=[])
+    factory = sessions_of(request)
+    if factory is None:
+        return RunsView(runs=[])
+    async with factory() as session, session.begin():
+        found = await read_runs(session)
+    return RunsView(runs=[run_record_view(one) for one in found])
+
+
+def _credential_not_answerable() -> Absent:
+    return Absent("the staff source credential is not answerable for this caller")
+
+
+@router.get(CREDENTIAL_PATH, response_model=StaffCredentialView, responses=COMMON_RESPONSES)
+async def staff_credential(request: Request, asked: Asked) -> StaffCredentialView:
+    """Whether the credential the staff sync reads with is held. Reads the vault's metadata only.
+
+    See `THE_STAFF_SOURCE_CREDENTIAL_IS_A_CREDENTIAL` for the authority.
+    """
+    if not may_manage(asked.reach, asked.now):
+        raise _credential_not_answerable()
+    store = credentials_of(request)
+    try:
+        held = await asyncio.to_thread(store.held, STAFF_CREDENTIAL_SLOT)
+    except CredentialsUnavailableError as unavailable:
+        return StaffCredentialView(
+            slot=STAFF_CREDENTIAL_SLOT.path,
+            held=None,
+            set_at=None,
+            vault=unavailable.state.value,
+            told=TOLD[unavailable.state],
+            form=credential_form(),
+        )
+    return StaffCredentialView(
+        slot=STAFF_CREDENTIAL_SLOT.path,
+        held=held.held,
+        set_at=held.set_at,
+        vault=VaultState.READY.value,
+        told=TOLD[VaultState.READY],
+        form=credential_form(),
+    )
+
+
+#: What a person is told when the credential was kept.
+CREDENTIAL_KEPT: Final = (
+    "The credential is held in the vault. The next scheduled run reads with it."
+)
+
+
+@router.put(CREDENTIAL_PATH, response_model=StaffCredentialView, responses=COMMON_RESPONSES)
+async def replace_staff_credential(
+    request: Request, body: StaffCredentialAsked, asked: Asked
+) -> JSONResponse:
+    """Replace the staff source's credential. The next scheduled run reads with it.
+
+    The credentials screen's own write, `Credentials.keep`, so the ledger records it as every
+    other credential write is recorded, and nothing sent comes back.
+    """
+    if not may_manage(asked.reach, asked.now):
+        raise _credential_not_answerable()
+    store = credentials_of(request)
+    trace_id = str(structlog.contextvars.get_contextvars().get("trace_id", ""))
+    try:
+        kept = await store.keep(
+            STAFF_CREDENTIAL_SLOT,
+            body.value,
+            actor=asked.reach.principal_id,
+            trace_id=trace_id,
+            ent_hash=asked.reach.ent_hash(),
+        )
+    except CredentialProblemError as refused:
+        told = CredentialProblemsView(
+            problems=tuple(
+                CredentialProblemView(field="value", code=one.code, message=one.message)
+                for one in refused.problems
+            )
+        )
+        return JSONResponse(status_code=422, content=told.model_dump(mode="json"))
+    except CredentialsUnavailableError as unavailable:
+        view = CredentialNotKeptView(
+            message=TOLD[unavailable.state],
+            trace_id=trace_id,
+            slot=STAFF_CREDENTIAL_SLOT.path,
+            vault=unavailable.state,
+        )
+        return JSONResponse(
+            status_code=NOT_KEPT_STATUS[unavailable.state], content=view.model_dump(mode="json")
+        )
+    answered = StaffCredentialView(
+        slot=kept.slot,
+        held=True,
+        set_at=kept.set_at,
+        vault=VaultState.READY.value,
+        told=CREDENTIAL_KEPT,
+        form=credential_form(),
+    )
+    return JSONResponse(status_code=200, content=answered.model_dump(mode="json"))
+
+
+async def _leavers_agents(session: AsyncSession) -> tuple[frozenset[str], list[AgentRecord]]:
+    """The roster's leavers and every agent any of them owns, as records."""
+    leavers = await read_leavers(session)
+    if not leavers:
+        return leavers, []
+    rows = (
+        await session.execute(
+            select(AgentRow).where(AgentRow.owner_id.in_(sorted(leavers))).order_by(AgentRow.id)
+        )
+    ).scalars()
+    return leavers, [one for one in (record_of(row) for row in rows) if one is not None]
+
+
+@router.get(TRANSFERS_PATH, response_model=TransfersView, responses=COMMON_RESPONSES)
+async def staff_transfers(request: Request, asked: Asked) -> TransfersView:
+    """The agents whose owner the staff sync marked as having left, that this reader may take.
+
+    No refusal, for `A_REFUSED_READER_AND_A_READER_WHO_REACHES_NOTHING_ARE_ONE_ANSWER`: a reader
+    who may take none of them is answered the empty list an install with no leavers answers.
+    """
+    factory = sessions_of(request)
+    if factory is None:
+        return TransfersView(transfers=[])
+    async with factory() as session, session.begin():
+        leavers, records = await _leavers_agents(session)
+    return TransfersView(
+        transfers=[
+            TransferView(
+                agent_id=one.agent_id,
+                display_name=one.display_name,
+                owner_id=one.audience.owner_id,
+                running=one.disabled_at is None,
+            )
+            for one in transfers_for(records, leavers=leavers, reader=asked.reach, now=asked.now)
+        ]
+    )
+
+
+@router.post(
+    TRANSFERS_PATH + "/{agent_id}", response_model=TransferTakenView, responses=COMMON_RESPONSES
+)
+async def take_transfer(request: Request, agent_id: str, asked: Asked) -> TransferTakenView:
+    """Become the owner of a leaver's agent. The steward moves and the ceiling does not.
+
+    Decided again under a lock on the agent row, so the owner this reader was shown is the owner
+    replaced. An agent this reader may not take, one whose owner has not left, and one that does
+    not exist are one refusal. See
+    `staff_source_view.A_LEAVERS_AGENT_RUNS_AT_THE_REACH_IT_HAD_UNTIL_SOMEBODY_TAKES_IT`.
+    """
+    factory = sessions_of(request)
+    if factory is None:
+        raise Failed("no database on this process")
+    refused = Absent("that agent is not waiting for a new owner you may be")
+    async with factory() as session, session.begin():
+        leavers = await read_leavers(session)
+        row = (
+            await session.execute(select(AgentRow).where(AgentRow.id == agent_id).with_for_update())
+        ).scalar_one_or_none()
+        record = None if row is None else record_of(row)
+        if record is None or not transfers_for(
+            [record], leavers=leavers, reader=asked.reach, now=asked.now
+        ):
+            raise refused
+        try:
+            moved = transfer_ownership(record, to_owner=asked.caller.principal, now=asked.now)
+        except AgentError as why:
+            raise refused from why
+        await session.execute(
+            update(AgentRow).where(AgentRow.id == agent_id).values(owner_id=moved.audience.owner_id)
+        )
+    log.info("leaver's agent taken on", agent=agent_id, principal=asked.caller.principal.id)
+    return TransferTakenView(agent_id=moved.agent_id, owner_id=moved.audience.owner_id)

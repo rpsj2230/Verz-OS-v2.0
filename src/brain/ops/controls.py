@@ -534,7 +534,10 @@ CONTROLS: Final[tuple[Control, ...]] = (
     ),
     Control(
         name="directory_sync",
+        # The run joined on 2026-09-21: the worker's schedule starts it daily, it calls `dry_run`
+        # with the roster the last applied run left behind, and applies that plan.
         symbols=(
+            "brain.ops.staff_sync_run:run_staff_sync_now",
             "brain.identity.staff_sync:is_due",
             "brain.identity.staff_sync:due_at",
             "brain.identity.staff_sync:dry_run",

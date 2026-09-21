@@ -65,7 +65,7 @@ import {
 } from "../../src/pages/retentionQuery";
 import { END_SESSIONS_API_PATH, END_SESSION_API_PATH } from "../../src/pages/sessionsQuery";
 import { LINK_API_PATH, UNLINK_API_PATH } from "../../src/pages/signInLinksQuery";
-import { TRIAL_API_PATH } from "../../src/pages/staffSourcesQuery";
+import { CREDENTIAL_API_PATH, TRIAL_API_PATH, transferApiPath } from "../../src/pages/staffSourcesQuery";
 import { CONNECTORS_API_PATH, disconnectApiPath } from "../../src/pages/connectorsQuery";
 import { REGISTER_API_PATH, secretApiPath, switchOffApiPath } from "../../src/pages/webhooksQuery";
 import {
@@ -196,6 +196,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "gate.policy_epoch",
       "gate.review_decision",
       "gate.elevation_request",
+      "auth.staff_member",
+      "auth.staff_sync_run",
     ],
     installation: [
       "INSTALL_OIDC_ISSUER",
@@ -241,7 +243,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       },
       {
         what: "Nothing applies the staff list's teams and leads on a schedule.",
-        because: "brain.identity.organisation_sync plans them and brain.identity.organisation_store applies a plan, and no job runs either, which is true of the whole staff sync: dry_run is read by the Staff sources screen and nothing applies a roster.",
+        because: "brain.identity.organisation_sync plans them and brain.identity.organisation_store applies a plan, and no job runs either. The nightly staff sync (brain.ops.staff_sync_run, since 2026-09-21) applies the roster's people and marks leavers, and not its teams or leads.",
       },
     ],
   },
@@ -661,6 +663,12 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/components/StaffListCheck.tsx TRIAL_PATH": [
     at("POST /setup/staff-source/trial", "TRIAL_PATH", STAFF_LIST_TRIAL_PATH, false),
   ],
+  "src/pages/StaffSources.tsx CREDENTIAL_API_PATH": [
+    at("PUT /api/v1/govern/staff_sources/credential", "CREDENTIAL_API_PATH", CREDENTIAL_API_PATH),
+  ],
+  "src/pages/StaffSources.tsx transferApiPath(agentId)": [
+    at("POST /api/v1/govern/staff_sources/transfers/{agent_id}", "transferApiPath", transferApiPath("a_quotes")),
+  ],
   "src/pages/Jobs.tsx actionPath(asked.action, asked.row.control)": [
     at("POST /api/v1/jobs/{name}/pause", "actionPath", actionPath("pause", "spend_report_refresh")),
     at("POST /api/v1/jobs/{name}/resume", "actionPath", actionPath("resume", "spend_report_refresh")),
@@ -912,9 +920,26 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     behaviour: t("test_setup_staff_routes", "test_a_directory_is_chosen_signed_in_to_and_its_list_pulled"),
   },
   "POST /setup/staff-source/trial": {
-    row: { notApplicable: "A read of a staff list writes nothing: nobody is added, and the client secret it signs in with is not kept." },
-    audit: { notApplicable: "A read changes nothing an administrator manages, so there is nothing to record." },
+    row: t("test_setup_staff_routes", "test_a_trial_that_read_the_directory_keeps_its_credential_for_the_nightly_sync"),
+    audit: t("test_setup_staff_routes", "test_a_trial_that_read_the_directory_keeps_its_credential_for_the_nightly_sync"),
     behaviour: t("test_setup_staff_routes", "test_a_directory_is_chosen_signed_in_to_and_its_list_pulled"),
+  },
+  "PUT /api/v1/govern/staff_sources/credential": {
+    row: t("test_staff_sync_routes", "test_the_credential_is_replaced_into_its_slot_recorded_and_never_sent_back"),
+    audit: t(
+      "test_credential_writes",
+      "test_a_credential_write_appends_exactly_the_entry_the_recorder_writes_and_the_chain_holds",
+      true,
+    ),
+    behaviour: t("test_staff_sync_run", "test_a_scheduled_run_reads_lark_with_the_kept_credential_and_applies_the_plan"),
+  },
+  "POST /api/v1/govern/staff_sources/transfers/{agent_id}": {
+    row: t("test_staff_sync_routes", "test_taking_a_leavers_agent_moves_the_owner_and_never_the_reach"),
+    audit: {
+      notApplicable:
+        "No ledger entry is written when an agent's owner moves: agent.agent has no audit trigger, so the change is logged by the route and recorded on the row alone. Recorded here as a gap rather than hidden.",
+    },
+    behaviour: t("test_staff_sync_routes", "test_taking_a_leavers_agent_moves_the_owner_and_never_the_reach"),
   },
   "POST /api/v1/jobs/{name}/pause": {
     row: SETTINGS_PRESSED,

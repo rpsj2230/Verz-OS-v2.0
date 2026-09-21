@@ -74,6 +74,7 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
     { pattern: "/retention", index: 2, writes: true },
   ],
   "src/pages/SignInLinks.tsx": [{ pattern: "/sign-in-links", index: 1, writes: true }],
+  "src/pages/StaffSources.tsx": [{ pattern: "/staff_sources", index: 0, writes: true }],
   "src/pages/Webhooks.tsx": [
     { pattern: "/webhooks", index: 0, writes: false },
     { pattern: "/webhooks", opener: "Replace secret", index: 1, writes: true },
