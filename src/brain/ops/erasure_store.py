@@ -278,6 +278,9 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "er.link",
         "gate.capability_pack",
         "gate.capability_registry",
+        # A delivered message's channel, its external id and an instant: `0100` keeps no sender
+        # and no text, so a claim says a message arrived and nothing about whose it was.
+        "gate.channel_event",
         "gate.department",
         "gate.fast_path_rule",
         "gate.field_policy",
