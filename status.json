@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-21T05:25:33.177660+00:00",
-  "commit": "e197b1b",
-  "commit_subject": "Dependency policy proof, vulnerability scan, post-deploy checks, install-shaped migrations, traceability gate",
+  "generated_at": "2026-09-21T06:02:25.553444+00:00",
+  "commit": "784d7f2",
+  "commit_subject": "Deploys are health-gated, rolled back and recorded, and the Version screen lists them",
   "total": 1601,
   "done": 164,
   "percent": 10.2,
