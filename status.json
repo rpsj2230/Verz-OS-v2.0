@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-09-21T14:58:57.657955+00:00",
-  "commit": "30f1723",
-  "commit_subject": "Needs you records the owner's answers: Connect Lark is built into the console, direct provider calls, leavers' agents stop",
+  "generated_at": "2026-09-21T15:25:53.832832+00:00",
+  "commit": "422ad04",
+  "commit_subject": "Eleven foundation tasks close again, with their evidence in a file so the commit is not dropped as empty",
   "total": 1595,
-  "done": 284,
-  "percent": 17.8,
+  "done": 302,
+  "percent": 18.9,
   "acts": 47,
   "decided": 107,
   "current_wave": 0,
@@ -13,12 +13,12 @@
       "wave": 0,
       "name": "Foundation",
       "total": 128,
-      "done": 110,
-      "percent": 85.9,
+      "done": 123,
+      "percent": 96.1,
       "in_progress": 0,
-      "ready_for_testing": 2,
+      "ready_for_testing": 1,
       "blocked": 1,
-      "open": 15,
+      "open": 3,
       "acts": 3,
       "decided": 7
     },
@@ -26,12 +26,12 @@
       "wave": 1,
       "name": "The gate",
       "total": 165,
-      "done": 116,
-      "percent": 70.3,
+      "done": 121,
+      "percent": 73.3,
       "in_progress": 0,
       "ready_for_testing": 0,
       "blocked": 0,
-      "open": 49,
+      "open": 44,
       "acts": 1,
       "decided": 7
     },
@@ -107,7 +107,7 @@
       "name": "Foundation and repository",
       "wave": 0,
       "total": 40,
-      "done": 37,
+      "done": 39,
       "acts": 1,
       "decided": 0
     },
@@ -116,7 +116,7 @@
       "name": "Identity, users, roles, permissions",
       "wave": 1,
       "total": 50,
-      "done": 36,
+      "done": 41,
       "acts": 0,
       "decided": 1
     },
@@ -386,7 +386,7 @@
       "name": "Application scaffold and runtime",
       "wave": 0,
       "total": 38,
-      "done": 30,
+      "done": 35,
       "acts": 0,
       "decided": 2
     },
@@ -449,7 +449,7 @@
       "name": "Continuous delivery and live status",
       "wave": 0,
       "total": 48,
-      "done": 28,
+      "done": 31,
       "acts": 4,
       "decided": 3
     },
@@ -476,7 +476,7 @@
       "name": "Client independence, built in rather than stripped out",
       "wave": 0,
       "total": 20,
-      "done": 15,
+      "done": 18,
       "acts": 0,
       "decided": 2
     },
@@ -500,6 +500,7 @@
     "M0.2.2",
     "M0.2.3",
     "M0.2.4",
+    "M0.2.5",
     "M0.2.6",
     "M0.2.7",
     "M0.3.1",
@@ -509,6 +510,7 @@
     "M0.3.5",
     "M0.3.6",
     "M0.3.7",
+    "M0.4.1",
     "M0.4.3",
     "M0.4.4",
     "M0.4.5",
@@ -539,6 +541,9 @@
     "M1.2.3",
     "M1.2.4",
     "M1.3.1",
+    "M1.3.2",
+    "M1.3.3",
+    "M1.3.4",
     "M1.3.5",
     "M1.4.1",
     "M1.4.2",
@@ -550,6 +555,7 @@
     "M1.4.8",
     "M1.5.1",
     "M1.5.2",
+    "M1.5.3",
     "M1.6.1",
     "M1.6.10",
     "M1.6.12",
@@ -563,6 +569,7 @@
     "M1.8.2",
     "M1.8.4",
     "M1.8.6",
+    "M1.8.7",
     "M1.9.1",
     "M12.1.5",
     "M12.1.6",
@@ -647,20 +654,25 @@
     "M31.1.1.4",
     "M31.1.1.5",
     "M31.1.2.1",
+    "M31.1.2.2",
     "M31.1.2.3",
     "M31.1.2.4",
     "M31.1.3.1",
     "M31.1.3.2",
     "M31.1.3.3",
+    "M31.1.3.4",
     "M31.1.3.5",
+    "M31.1.4.1",
     "M31.1.4.2",
     "M31.1.4.3",
+    "M31.1.4.4",
     "M31.2.1.1",
     "M31.2.1.2",
     "M31.2.1.3",
     "M31.2.1.5",
     "M31.2.2.1",
     "M31.2.2.2",
+    "M31.2.2.3",
     "M31.2.2.4",
     "M31.2.2.5",
     "M31.3.1.1",
@@ -692,6 +704,7 @@
     "M37.4.3.4",
     "M37.5.1.1",
     "M37.6.1.3",
+    "M38.1.1.1",
     "M38.1.1.2",
     "M38.1.1.3",
     "M38.1.1.4",
@@ -706,6 +719,7 @@
     "M38.1.3.5",
     "M38.1.4.1",
     "M38.1.4.4",
+    "M38.2.1.2",
     "M38.2.1.6",
     "M38.2.2.1",
     "M38.3.1.1",
@@ -719,6 +733,7 @@
     "M38.3.2.5",
     "M38.4.1.1",
     "M38.4.1.3",
+    "M38.5.1",
     "M38.5.2",
     "M4.1.1",
     "M4.1.2",
@@ -741,6 +756,9 @@
     "M41.1.1",
     "M41.1.2",
     "M41.1.3",
+    "M41.1.4",
+    "M41.1.5",
+    "M41.1.7",
     "M41.1.8",
     "M41.1.9",
     "M41.2.1",
@@ -795,11 +813,6 @@
       "why": "WAVE_RECORDS and /build/waves are live on staging; proved when the first wave is accepted and recorded",
       "updated": "2026-09-21"
     },
-    "M38.5.1": {
-      "status": "READY FOR TESTING",
-      "why": "on staging the checks ran after deploy 5254748 and passed (/api/deploy-checks.json); the Deploy run reads the verdict once the owner sets POST_DEPLOY_CHECKS",
-      "updated": "2026-09-21"
-    },
     "M41.3.1": {
       "status": "BLOCKED",
       "why": "a release tag needs the owner's go-ahead",
@@ -807,15 +820,33 @@
     }
   },
   "wave_records": {},
-  "closed_today": 125,
+  "closed_today": 143,
   "next_up": [
-    "M0.2.5",
-    "M0.4.1",
-    "M31.1.2.2",
-    "M31.1.3.4",
-    "M31.1.4.1"
+    "M31.3.2.3",
+    "M31.3.2.4",
+    "M31.3.2.5",
+    "M38.2.1.1",
+    "M41.3.1"
   ],
   "recent": [
+    {
+      "sha": "422ad04",
+      "at": "2026-09-21T15:24:52+00:00",
+      "subject": "Eleven foundation tasks close again, with their evidence in a file so the commit is not dropped as empty",
+      "closed": "M0.2.5,M0.4.1,M31.1.2.2,M31.1.3.4,M31.1.4.1,M31.1.4.4,M31.2.2.3,M38.1.1.1,M41.1.4,M41.1.5,M41.1.7"
+    },
+    {
+      "sha": "1903fe3",
+      "at": "2026-09-21T15:23:33+00:00",
+      "subject": "The post-deploy checks and the invariant run against the install close on proof, and Needs you is down to three items",
+      "closed": "M38.2.1.2,M38.5.1"
+    },
+    {
+      "sha": "2e011b4",
+      "at": "2026-09-21T15:16:55+00:00",
+      "subject": "Who holds a role is recorded, deputies and the Super Admin floor hold in the database, teams take grants",
+      "closed": "M1.3.2,M1.3.3,M1.3.4,M1.5.3,M1.8.7"
+    },
     {
       "sha": "dcaf277",
       "at": "2026-09-21T14:57:16+00:00",
@@ -917,24 +948,6 @@
       "at": "2026-09-21T08:09:32+00:00",
       "subject": "An agent the person names is chosen first, and a test watches the gate's order on /answer",
       "closed": "M3.1.1,M3.2.1,M3.2.3,M3.2.4,M3.3.3,M3.4.3,M3.4.4,M3.5.1,M3.5.4,M3.6.1,M3.6.2"
-    },
-    {
-      "sha": "6847895",
-      "at": "2026-09-21T08:06:50+00:00",
-      "subject": "The lifespan attaches the vault client, and the vault screen says which policies its token carries",
-      "closed": "M31.1.1.2,M31.3.2.2"
-    },
-    {
-      "sha": "a4dc7cc",
-      "at": "2026-09-21T07:53:03+00:00",
-      "subject": "The field policy epoch moves when a derivation changes, and every shipped adapter is checked",
-      "closed": "M2.2.1,M2.2.2,M4.1.1,M4.1.2,M4.1.3,M4.1.4,M4.1.5,M4.1.6,M4.2.1,M4.2.2,M4.2.4,M4.2.5,M4.3.1,M4.3.2,M4.4.1,M4.4.2"
-    },
-    {
-      "sha": "31d7a30",
-      "at": "2026-09-21T07:00:30+00:00",
-      "subject": "The health gate, the deployment record and sign-in readiness close on staging proof",
-      "closed": "M31.4.1,M38.1.3.3,M38.1.3.5"
     }
   ]
 }
