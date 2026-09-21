@@ -2169,7 +2169,12 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
-   "leaf_decided": {},
+   "leaf_decided": {
+    "M24.3.5": {
+     "kind": "DECIDED",
+     "why": "owner 2026-09-21, item 92: owner 2026-09-09, item 48: option A was chosen and this leaf describes option B; recorded on the Needs you page as item 92"
+    }
+   },
    "act_groups": {},
    "leaf_progress": {}
   },

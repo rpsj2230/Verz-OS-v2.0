@@ -89,6 +89,12 @@ const ACTS = {
     text: "Private GitHub repo, branch protection, CODEOWNERS on the three core files",
     why: "owner's decision 2026-09-21: the repository stays public on purpose for now and he makes it private and protects main himself before go-live; not to be raised again until then",
   },
+  "M24.3.5": {
+    kind: "DECIDED",
+    gate: false,
+    text: "Every audit entry records the department of its subject at the moment it is written, so a department admin's audit grant reads that department's activity and never another's, and a later move of the subject does not rewrite past entries",
+    why: "owner 2026-09-21, item 92: owner 2026-09-09, item 48: option A was chosen and this leaf describes option B; recorded on the Needs you page as item 92",
+  },
   "M29.1.6": {
     kind: "DECIDED",
     gate: false,

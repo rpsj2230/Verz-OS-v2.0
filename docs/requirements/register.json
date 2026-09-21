@@ -14952,7 +14952,7 @@
    "proof": [
     "M2.3.2"
    ],
-   "decision": null
+   "decision": "needs-rupash 92: item 48 chose option A, and M24.3.5 described option B"
   },
   {
    "id": "GAP2-04",
