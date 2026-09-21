@@ -29,11 +29,15 @@ projected for it.
 score travels on `FrontHalf` to the leash, which may only tighten autonomy, and to the request
 row through `FrontHalf.record`, which is where M3.4.2 and M3.6.3 are written as decided.
 
+**What the lookup found nothing for is stored after it is answered, by `remember`.** It takes the
+`FrontHalf` and the same `Caching` the lookup used, so the key is built from one set of parts; only
+an answer the lane composed is stored, never a refusal, and a hit is never stored again.
+
 Rejected: putting this inside `brain.gate.answer.answer_lane`. That module is the lane's, and the
 front half decides things about a request whatever lane it lands in; a task-lane run needs the
 same five steps.
 
-Task ids: M3.1.2, M3.4.1, M3.4.2, M3.6.3, M3.9.7
+Task ids: M3.1.2, M3.4.1, M3.4.2, M3.5.2, M3.6.3, M3.9.7
 """
 
 from __future__ import annotations
@@ -45,7 +49,7 @@ from datetime import datetime
 from brain.core.entitlement import EntitlementSet
 from brain.core.envelope import ToolDefinition
 from brain.core.lane import Lane
-from brain.gate.answer_cache import AnswerStore, lookup
+from brain.gate.answer_cache import AnswerStore, lookup, store_answer
 from brain.gate.cache_key import CachedAnswer, NotCacheableError, key_for
 from brain.gate.catalogue import AgentCeiling, ProjectedCatalogue, project
 from brain.gate.classify import LaneDecision, classify_lane
@@ -113,6 +117,8 @@ class FrontHalf:
     cached: CachedAnswer | None
     tier: TierDecision | None
     catalogue: ProjectedCatalogue | None
+    #: The selected agent's setup, whose configuration hash an answer is stored under.
+    setup: AgentSetup
 
     @property
     def calls_a_model(self) -> bool:
@@ -178,7 +184,7 @@ def run_front_half(
     recorder.enter(GateStep.CACHE)
     cached = _cached(question, reach, setup, caching, now)
     if cached is not None:
-        return FrontHalf(screened, lane, selection, cached, tier=None, catalogue=None)
+        return FrontHalf(screened, lane, selection, cached, None, None, setup)
 
     recorder.enter(GateStep.ROUTE)
     tier = classify_tier(
@@ -189,11 +195,11 @@ def run_front_half(
         )
     )
     if tier.tier is Tier.NONE:
-        return FrontHalf(screened, lane, selection, None, tier=tier, catalogue=None)
+        return FrontHalf(screened, lane, selection, None, tier, None, setup)
 
     recorder.enter(GateStep.PROJECT)
     catalogue = project(registry, reach, setup.ceiling, now=now, universal=universal)
-    return FrontHalf(screened, lane, selection, None, tier=tier, catalogue=catalogue)
+    return FrontHalf(screened, lane, selection, None, tier, catalogue, setup)
 
 
 def _cached(
@@ -219,3 +225,43 @@ def _cached(
     except NotCacheableError:
         return None
     return lookup(key, caching.store, now)
+
+
+def remember(
+    question: str,
+    answer: str,
+    *,
+    front: FrontHalf,
+    reach: EntitlementSet,
+    caching: Caching | None,
+    now: datetime,
+) -> str | None:
+    """Store an answer computed on this request under the key its lookup used, or decline.
+
+    The key's parts are the ones `_cached` looked up with: this reach's hash, the selected
+    agent's configuration hash, the epochs and the sources. So the next asker who could have
+    been handed this answer is exactly the next asker whose lookup finds it
+    (`AN_ANSWER_IS_STORED_UNDER_THE_KEY_ITS_OWN_LOOKUP_USED`). A hit is never stored again,
+    because that would reset its age and serve an old answer as a new one.
+    """
+    if caching is None or front.cached is not None:
+        return None
+    return store_answer(
+        question,
+        answer,
+        ent_hash=reach.ent_hash(),
+        agent_config_hash=front.setup.config_hash,
+        policy_epoch=caching.policy_epoch,
+        source_epochs=dict(caching.source_epochs),
+        sources=caching.sources,
+        store=caching.store,
+        now=now,
+    )
+
+
+#: Why storing takes the front half's own decisions rather than a key.
+AN_ANSWER_IS_STORED_UNDER_THE_KEY_ITS_OWN_LOOKUP_USED = (
+    "The lookup and the store must agree on every part of the key, or an answer is stored where "
+    "nobody finds it, or found by somebody it was not computed for. Both read the reach, the "
+    "selected agent's setup and one Caching value, so there is one set of parts and not two."
+)

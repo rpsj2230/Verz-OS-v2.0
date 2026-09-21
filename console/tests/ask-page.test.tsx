@@ -24,7 +24,7 @@
  * the URL" is asserted over every address the console touched rather than over the one
  * somebody thought to check.
  *
- * Task ids: M42.6.3
+ * Task ids: M42.6.3, M3.9.8
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -34,6 +34,8 @@ import { ANSWER_EVENTS, EVENT_STREAM, eventIn, framesIn } from "../src/api/event
 import { NOT_FOUND_MESSAGE } from "../src/api/errors";
 import { NO_REFERENCE_CAME_BACK } from "../src/ui/FailureNotice";
 import {
+  AGENT_LABEL,
+  ANY_AGENT,
   ASK_ADDRESS,
   ASK_HEADING,
   ASK_LABEL,
@@ -71,6 +73,7 @@ import { readConsoleFile } from "./support/repo";
 const CONSOLE_ORIGIN = "https://console.test";
 const ANSWER_API = "/api/v1/answer";
 const ANSWER_ROUTE = "/api/v1/answer";
+const ROSTER_API = "/api/v1/agents";
 const SHEET = "src/styles/app.css";
 
 /** The narrowest phone this page is held to, in CSS pixels. */
@@ -128,10 +131,17 @@ interface Mounted {
 }
 
 /** The console on the ask screen, with the stand-in API answering whatever the test hands it. */
-async function askScreen(answer: () => Response): Promise<Mounted> {
+async function askScreen(answer: () => Response, roster?: unknown): Promise<Mounted> {
   const idp = fakeIdentityProvider({
     api(url) {
-      return new URL(url, CONSOLE_ORIGIN).pathname === ANSWER_API ? answer() : null;
+      const path = new URL(url, CONSOLE_ORIGIN).pathname;
+      if (path === ROSTER_API && roster !== undefined) {
+        return new Response(JSON.stringify(roster), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return path === ANSWER_API ? answer() : null;
     },
   });
   const loaded = await loadConsole({ idp, path: ASK_ADDRESS });
@@ -684,5 +694,50 @@ describe("the ask screen without a mouse and on a phone", () => {
 
     expect([...reachable].filter((file) => file.includes("components/DataTable"))).toEqual([]);
     expect([...reachable].filter((file) => file.includes("components/SchemaForm"))).toEqual([]);
+  });
+});
+
+// --------------------------------------------------------------- naming the agent (M3.9.8)
+
+describe("naming the agent that answers", () => {
+  const roster = {
+    items: [{ agent_id: "helper", display_name: "Helper" }],
+    truncated: false,
+  };
+
+  test("the picker lists the roster the API sent, and the chosen id travels beside the question", async () => {
+    // What breaks if this is deleted: a person in the web application has no way to address an
+    // agent, which the route has routed by since M3.9.8, or the picker's value never reaches
+    // the body and every question goes to the router's choice.
+    const { container, idp } = await askScreen(whole(answerFrames("An answer.")), roster);
+    const picker = await waitFor(() => {
+      const found = container.querySelector("select");
+      if (!found) {
+        throw new Error("the picker has not arrived");
+      }
+      return found;
+    });
+    expect(container.textContent).toContain(AGENT_LABEL);
+    expect([...picker.options].map((one) => [one.value, one.textContent])).toEqual([
+      ["", ANY_AGENT],
+      ["helper", "Helper"],
+    ]);
+
+    fireEvent.change(picker, { target: { value: "helper" } });
+    ask(container, QUESTION);
+    await waitFor(() => {
+      expect(asked(idp)).toHaveLength(1);
+    });
+    expect(asked(idp)[0]?.body).toEqual({ question: QUESTION, agent: "helper" });
+  });
+
+  test("with no agent chosen the body is the question alone, and with no roster there is no picker", async () => {
+    // The positive siblings: leaving the choice to the router sends no agent at all, and a
+    // roster that did not come back draws nothing rather than an empty control.
+    expect(askBody(" a question ", "")).toEqual({ question: "a question" });
+    expect(askBody(" a question ", " helper ")).toEqual({ question: "a question", agent: "helper" });
+
+    const { container } = await askScreen(whole(answerFrames("An answer.")));
+    expect(container.querySelector("select")).toBeNull();
   });
 });

@@ -17,7 +17,7 @@ The request path identifies, entitles and narrows, then runs `brain.gate.front.r
 2026-09-21), and only then calls the model. `tests/invariants/test_front_half.py` holds the chain
 itself to that order; this holds `/answer` to it end to end.
 
-Task ids: M3.9.7
+Task ids: M3.9.7, M3.1.2, M3.1.3
 """
 
 from __future__ import annotations
@@ -343,3 +343,89 @@ def test_the_agent_the_person_picked_reaches_selection_and_one_they_may_not_use_
         if one.front
     ]
     assert stages == [("addressed", "brain"), ("default", "brain"), ("default", "brain")]
+
+
+# ------------------------------------------------------------ the recorder and the whole chain
+
+
+class Opened(list[Recorder]):
+    """Every recorder the route opened, kept so its steps can be read after the response."""
+
+
+@pytest.fixture
+def opened(monkeypatch: pytest.MonkeyPatch) -> Opened:
+    """`open_trace` wrapped where the route calls it, so the recorder it built is kept."""
+    import brain.api_routes as routes
+
+    kept = Opened()
+
+    def keeping(trace_id: str, received_at: datetime, channel: Channel) -> Recorder:
+        recorder = open_trace(trace_id, received_at, channel)
+        kept.append(recorder)
+        return recorder
+
+    monkeypatch.setattr(routes, "open_trace", keeping)
+    return kept
+
+
+def test_the_recorder_is_built_at_ingress_before_identification(
+    client: TestClient, observed: Observed
+) -> None:
+    """M3.1.3 on the real route: the recorder's constructor runs before the token is read.
+
+    Delete this and the recorder can go back to being built inside the handler, after `asking`
+    identified the caller, which is where it was until 2026-09-21."""
+    STEP_OF[open_trace.__code__] = "record"
+    try:
+        assert _ask(client, UNANSWERED_BY_RULES) == 200
+    finally:
+        del STEP_OF[open_trace.__code__]
+    assert observed.index("record") < observed.index("identify")
+
+
+def test_a_request_refused_at_identification_still_opened_a_recorder(
+    client: TestClient, opened: Opened
+) -> None:
+    """The failure most worth a trace is the one where identification went wrong, and it leaves
+    a recorder at RECORD with no principal, rather than nothing.
+
+    Delete this and a refused request can leave no trace at all, because the recorder is built
+    only for callers who identified."""
+    assert _ask(client, UNANSWERED_BY_RULES, token_for=None) == 401
+    (recorder,) = opened
+    assert recorder.steps == [GateStep.RECORD]
+    assert recorder.principal_id is None
+
+
+def test_the_whole_chain_enters_every_step_in_order_on_a_model_answer(
+    client: TestClient, opened: Opened
+) -> None:
+    """M3.1.2 on the real route: every step boundary from RECORD to COMPOSE is entered, in the
+    order `GateStep` declares, on one recorder, and IDENTIFY sets the channel the token named.
+
+    Delete this and the back half can run with no boundaries at all, so a step skipped or
+    reordered after the model is chosen reads as a refactor."""
+    assert _ask(client, UNANSWERED_BY_RULES) == 200
+    (recorder,) = opened
+    assert recorder.steps == [
+        GateStep.RECORD,
+        GateStep.IDENTIFY,
+        *FRONT_STEPS[1:],
+        GateStep.INVOKE,
+        GateStep.REDACT,
+        GateStep.COMPOSE,
+    ]
+    assert recorder.channel is Channel.CONSOLE
+    assert recorder.principal_id == READER
+
+
+def test_a_rule_answer_enters_the_back_half_in_order_with_no_model_called(
+    client: TestClient, transport: Scripted, opened: Opened
+) -> None:
+    """The positive sibling on the fast path: a rule's answer reads a row, redacts it and composes
+    a sentence, entering INVOKE, REDACT and COMPOSE in order, and no model is called."""
+    assert _ask(client, "what is the price of WEB-1001") == 200
+    (recorder,) = opened
+    assert recorder.steps[:3] == [GateStep.RECORD, GateStep.IDENTIFY, GateStep.ENTITLE]
+    assert recorder.steps[-3:] == [GateStep.INVOKE, GateStep.REDACT, GateStep.COMPOSE]
+    assert transport.sent == []

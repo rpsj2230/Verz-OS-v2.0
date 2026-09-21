@@ -22,9 +22,9 @@ question, and the day the two disagree the permissive one is whichever runs firs
 
 Where it is called: `/answer` takes the picker's id through `from_web` and hands it to
 `brain.gate.front.run_front_half`, which selects; `brain.channels.inbound.claim` reads a chat's
-leading mention through `from_mention`. What is not there yet, stated: `/answer` knows one agent,
-`brain.api_routes.DEFAULT_AGENT`, until the agent roster is read on that route, so a name other
-than it selects the default, and no inbound chat route is served for the mention to arrive on.
+leading mention through `from_mention`. `/answer` reads the agent roster, `brain.gate.roster`, so
+any agent the person may run can be named. What is not there yet, stated: no inbound chat route is
+served for the mention to arrive on.
 
 Task ids: M3.9.8
 """

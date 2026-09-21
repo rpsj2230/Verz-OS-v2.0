@@ -103,7 +103,12 @@ whether it exists or not (M2.2.4).** The route passes the gaps `brain.core.depar
 the question and the reader's own scope; the lane appends them to the text of an answer and of a
 refusal alike, so their presence cannot tell the two apart.
 
-Task ids: M30.5.2, M21.3.4, M3.9.3, M4.4.4, M2.2.4
+**The back half enters its steps on the request's recorder (M3.1.2).** A row read or a passage
+search is INVOKE, the redactor is REDACT and the sentence or the model's prose is COMPOSE, each
+entered before the work it names, so the order `GateStep` declares is checked on the whole path
+and not only in front of the model. A cache hit enters none of them: nothing was invoked.
+
+Task ids: M30.5.2, M21.3.4, M3.9.3, M4.4.4, M2.2.4, M3.1.2
 """
 
 from __future__ import annotations
@@ -133,6 +138,7 @@ from brain.gate.abstain import (
 from brain.gate.answer_cache import serve_cached
 from brain.gate.cache_key import CachedAnswer
 from brain.gate.compose import ComposedAnswer, TraceSink, compose
+from brain.gate.context import GateStep, Recorder
 from brain.gate.fast_lane import (
     FastLaneAnswer,
     FastPathRule,
@@ -259,6 +265,9 @@ class Answered:
     abstention: Abstention | None = None
     #: True when the answer came from the cache and no read happened.
     from_cache: bool = False
+    #: The answer's text exactly as the text frame carries it, present only beside `composed`.
+    #: What the answer cache stores, so a later hit says what this answer said.
+    text: str | None = None
 
     def __post_init__(self) -> None:
         if not self.frames:
@@ -269,6 +278,10 @@ class Answered:
                 "an outcome that is both an answer and an abstention leaves the caller to "
                 "pick, and the one they pick is the one they wrote the branch for first"
             )
+            raise ValueError(msg)
+        if self.text is not None and self.composed is None:
+            # Text with no answer beside it is a refusal's words, which the cache must not keep.
+            msg = "an answer's text is carried only beside the answer it is the text of"
             raise ValueError(msg)
 
 
@@ -307,6 +320,7 @@ async def answer_lane(
     front: FrontRecord | None = None,
     gaps: Sequence[Gap] = (),
     referral: str | None = None,
+    recorder: Recorder | None = None,
 ) -> Answered:
     """Answer one question, and finish the request once whatever the answer was.
 
@@ -361,6 +375,7 @@ async def answer_lane(
             calls=calls,
             gaps=tuple(gaps),
             referral=referral,
+            recorder=recorder,
         )
         return outcome
     finally:
@@ -403,6 +418,7 @@ async def _outcome(
     calls: ToolCalls,
     gaps: tuple[Gap, ...] = (),
     referral: str | None = None,
+    recorder: Recorder | None = None,
 ) -> Answered:
     """Answer one question, or decline, and hand back the frames either way.
 
@@ -470,9 +486,11 @@ async def _outcome(
             trace_id=trace_id,
             calls=calls,
             gaps=gaps,
+            recorder=recorder,
         )
 
     frames.append(stream.step(at_tool_input_start()))
+    _enter(recorder, GateStep.INVOKE)
     found = await respond(question, rules=rules, readers=readers, entitlement=entitlement, now=now)
 
     # Emitted here rather than inside the branch below, and the reason is the second leak
@@ -498,6 +516,7 @@ async def _outcome(
         return _abstained(stream, frames, gaps, nothing_retrieved(scope, detail="unclassified"))
 
     # The redactor's own pair, so the trace the sink records is the one that did the work.
+    _enter(recorder, GateStep.REDACT)
     redacted = redact(found.result, entitlement=entitlement, policy=policy, now=now)
     payload = redacted.payload
 
@@ -521,14 +540,9 @@ async def _outcome(
     if declined is not None:
         return _abstained(stream, frames, gaps, declined)
 
+    _enter(recorder, GateStep.COMPOSE)
     composed = compose(served_from(found, payload), redacted, sink=sink, now=now)
-
-    for citation in composed.citations:
-        frames.append(stream.citation(citation))
-    frames.append(stream.text(_with_gaps(_with_scope(composed.text, scope), gaps)))
-    frames.append(stream.done())
-
-    return Answered(frames=tuple(frames), composed=composed)
+    return _answered(stream, frames, gaps, composed, scope)
 
 
 def _referred(referral: str) -> Answered:
@@ -580,6 +594,7 @@ async def _answered_by_model(
     trace_id: str,
     calls: ToolCalls,
     gaps: tuple[Gap, ...] = (),
+    recorder: Recorder | None = None,
 ) -> Answered:
     """The model step's frames, after the understanding and checking steps.
 
@@ -604,18 +619,14 @@ async def _answered_by_model(
         meter=meter,
         trace_id=trace_id,
         searching=calls.start,
+        entering=None if recorder is None else recorder.enter,
     )
     frames.append(stream.step(Progress.READING))
     if drafted.asked:
         frames.append(stream.step(Progress.COMPOSING))
     if isinstance(drafted.outcome, Abstention):
         return _abstained(stream, frames, gaps, drafted.outcome)
-    composed = drafted.outcome
-    for citation in composed.citations:
-        frames.append(stream.citation(citation))
-    frames.append(stream.text(_with_gaps(_with_scope(composed.text, scope), gaps)))
-    frames.append(stream.done())
-    return Answered(frames=tuple(frames), composed=composed)
+    return _answered(stream, frames, gaps, drafted.outcome, scope)
 
 
 def _withheld_or_absent(
@@ -650,6 +661,32 @@ def _withheld_or_absent(
     if withheld:
         return not_entitled(scope, detail=f"{found.entity}.{found.field} locked")
     return nothing_retrieved(scope, detail=f"{found.entity}.{found.field} absent")
+
+
+def _enter(recorder: Recorder | None, step: GateStep) -> None:
+    """Enter a back-half step on the request's recorder, when the caller brought one."""
+    if recorder is not None:
+        recorder.enter(step)
+
+
+def _answered(
+    stream: AnswerStream,
+    frames: list[str],
+    gaps: Sequence[Gap],
+    composed: ComposedAnswer,
+    scope: SearchScope,
+) -> Answered:
+    """Close the stream with the citations, then the prose, then done.
+
+    One function for the fast path and the model step, so the text the frame carries and the
+    text the cache stores are one value and cannot drift.
+    """
+    text = _with_gaps(_with_scope(composed.text, scope), gaps)
+    for citation in composed.citations:
+        frames.append(stream.citation(citation))
+    frames.append(stream.text(text))
+    frames.append(stream.done())
+    return Answered(frames=tuple(frames), composed=composed, text=text)
 
 
 def _abstained(

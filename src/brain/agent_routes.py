@@ -258,6 +258,7 @@ from brain.core.principal import PrincipalKind
 from brain.core.scope import Scope
 from brain.gate.context import TrafficClass
 from brain.gate.leash import Leash
+from brain.gate.roster import viewer_for
 from brain.knowledge.visibility import Visibility
 from brain.listing import Column, ListAsked, Listing, Plan
 from brain.models.registry import ModelPin
@@ -913,13 +914,10 @@ def install_of(
 def viewer_of(asked: Asking) -> AgentViewer:
     """The caller, as an audience question is asked about them.
 
-    See `THE_VIEWER_IS_THEIR_PRIMARY_DEPARTMENT_UNTIL_MEMBERSHIP_IS_READ`.
+    See `THE_VIEWER_IS_THEIR_PRIMARY_DEPARTMENT_UNTIL_MEMBERSHIP_IS_READ`. Decided by
+    `brain.gate.roster.viewer_for`, which `/answer` selects agents for, so the two agree.
     """
-    department = asked.caller.principal.primary_department
-    return AgentViewer(
-        principal_id=asked.caller.principal.id,
-        departments=frozenset({department}) if department else frozenset(),
-    )
+    return viewer_for(asked.caller.principal)
 
 
 def roster_entry(record: AgentRecord, *, ceilings: bool) -> RosterEntry:

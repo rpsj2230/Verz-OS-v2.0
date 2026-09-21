@@ -37,7 +37,7 @@ import contextlib
 import re
 import time
 import uuid
-from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, MutableMapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, MutableMapping, Sequence
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Final, Literal
@@ -55,7 +55,9 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from brain.access_request_routes import router as access_request_router
 from brain.agent_about_routes import router as agent_about_router
 from brain.agent_model_routes import router as agent_model_router
+from brain.agent_routes import every_agent, record_of
 from brain.agent_routes import router as agent_router
+from brain.agents.model import AgentRecord
 from brain.api import (
     ErrorBody,
     FailureBodyMiddleware,
@@ -105,6 +107,7 @@ from brain.gate.admission import SECOND_FACTOR_NEEDED_MESSAGE
 from brain.gate.entitlement_store import StoredEntitlements
 from brain.gate.finish import RequestRecorder
 from brain.gate.resolve import EntitlementCache
+from brain.gate.roster import AgentRoster
 from brain.gate.rule_store import load_rules, rule_ids
 from brain.gate.suspension_store import StoredSuspensions
 from brain.govern_pack_routes import router as govern_pack_router
@@ -535,6 +538,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # rules, because a lane with no sink cannot compose at all.
     app.state.trace_sink = CountingTraceSink()
     app.state.request_recorders = request_recorders_for(app.state.db_sessions)
+    # The stored agents `/answer` may select from, read once per question (M3.9.8).
+    app.state.agent_roster = agent_roster_for(app.state.db_sessions)
     # The model driver, assembled once over this install's database: a driver per provider this
     # product can reach, sharing one HTTP client this lifespan closes. Which rungs answer is read
     # per call from the ladder, the provider switches and the keys this process holds, so a
@@ -864,6 +869,27 @@ def request_recorders_for(
         GapRecorder(sessions),
         SensitiveReadRecorder(sessions),
     )
+
+
+def agent_roster_for(
+    sessions: async_sessionmaker[AsyncSession] | None,
+) -> AgentRoster | None:
+    """How `/answer` reads the stored agents, or None on a process with no database.
+
+    Every agent, as the Agents screen reads them; `brain.gate.roster.answer_roster` keeps the ones
+    the person asking may run. A row that does not construct is left out, for
+    `brain.agent_routes.record_of`'s reason.
+    """
+    if sessions is None:
+        return None
+    factory = sessions
+
+    async def read() -> Sequence[AgentRecord]:
+        async with factory() as session:
+            rows = (await session.execute(every_agent())).scalars().all()
+        return [one for one in (record_of(row) for row in rows) if one is not None]
+
+    return read
 
 
 def suspension_store_for(

@@ -115,8 +115,8 @@ from __future__ import annotations
 
 import hashlib
 import inspect
-from collections.abc import Awaitable, Callable, Mapping, Sequence
-from dataclasses import dataclass
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Annotated, Any, Final, cast
 
@@ -126,7 +126,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, JsonValue, StringConstraints
 
-from brain.agents.model import AGENT_ID_CHARS
+from brain.agents.model import AGENT_ID_CHARS, AgentRecord
 from brain.agents.template import config_hash
 from brain.api import API_PREFIX, COMMON_RESPONSES, Page
 from brain.audit.compliance import intercept
@@ -149,12 +149,19 @@ from brain.gate.answer import answer_lane, frames_of
 from brain.gate.answer_cache import AnswerStore
 from brain.gate.caches import MAX_QUESTION_CHARS
 from brain.gate.catalogue import AgentCeiling
-from brain.gate.context import Channel, GateStep, open_trace
+from brain.gate.context import Channel, GateStep, Recorder, open_trace
 from brain.gate.fast_lane import RowReader
 from brain.gate.finish import Origin, RequestRecorder
-from brain.gate.front import AgentSetup, Caching, Choosing, run_front_half
-from brain.gate.model_lane import PASSAGE_POLICY, DocumentSearchTool, ModelLane
+from brain.gate.front import AgentSetup, Caching, Choosing, remember, run_front_half
+from brain.gate.model_lane import PASSAGE_POLICY, AgentRun, DocumentSearchTool, ModelLane
 from brain.gate.resolve import EntitlementCache, EntitlementStore, VersionSource, resolve
+from brain.gate.roster import (
+    AgentRoster,
+    AnswerRoster,
+    answer_roster,
+    run_entitlement,
+    viewer_for,
+)
 from brain.identity.bearer import Caller, TokenAuthority, authenticate
 from brain.identity.oidc import TokenRefusal, TokenRefusedError, VerifiedClaims
 from brain.identity.roles import NoStandingEntitlement
@@ -829,7 +836,12 @@ def row_readers(registry: ToolRegistry) -> dict[tuple[str, str], RowReader]:
 
 
 def reachable_sources(registry: ToolRegistry, asked: Asking) -> tuple[str, ...]:
-    """The sources this caller may be told about, for the scope statement.
+    """The sources this caller may be told about, for the scope statement. See `sources_at`."""
+    return sources_at(registry, asked.reach, asked.now)
+
+
+def sources_at(registry: ToolRegistry, reach: EntitlementSet, now: datetime) -> tuple[str, ...]:
+    """The sources a reach may be told about: the caller's own, or an agent's run reach.
 
     `row_scope_for` and never a check written here, for the reason the records route gives: it
     is the same function `read_rows` consults, so "does this caller reach rows of this kind"
@@ -846,7 +858,7 @@ def reachable_sources(registry: ToolRegistry, asked: Asking) -> tuple[str, ...]:
                 for definition in registry.definitions()
                 if definition.entity
                 and definition.source
-                and row_scope_for(definition.entity, asked.reach, asked.now) is not None
+                and row_scope_for(definition.entity, reach, now) is not None
             }
         )
     )
@@ -900,9 +912,23 @@ def model_lane_of(state: Any) -> ModelLane | None:
     return ModelLane(search=search, model=models.calls)
 
 
-#: The agent `/answer` answers as until an agent roster is read on this route: the person asking,
-#: through every tool the process registered, with no side effect. See `default_agents`.
+#: The agent `/answer` answers as when nobody is addressed and nothing else selects: the person
+#: asking, through every tool the process registered, with no side effect. See `default_agents`.
 DEFAULT_AGENT: Final = "brain"
+
+
+def model_lane_for(
+    state: Any, agent: AgentRecord | None, registry: ToolRegistry
+) -> ModelLane | None:
+    """The model step, carrying the selected agent when a stored one was chosen (M3.9.8).
+
+    The agent's tier and pinned model reach the call through `AgentRun`; its skill pins are not
+    read on this route yet, so it runs with none. See `brain.gate.roster`.
+    """
+    lane = model_lane_of(state)
+    if lane is None or agent is None:
+        return lane
+    return replace(lane, agent=AgentRun(record=agent, pins=(), library=(), registry=registry))
 
 
 def default_agents(registry: ToolRegistry) -> dict[str, AgentSetup]:
@@ -984,8 +1010,52 @@ async def referred(request: Request, asked: Asking, question: str) -> str | None
     return decision.reply()
 
 
+async def recorded_at_ingress(request: Request) -> AsyncIterator[Recorder]:
+    """The request's recorder, built as it arrives and before anybody is identified (M3.1.3).
+
+    A dependency named ahead of `Asked` in the route's signature, and FastAPI solves a route's
+    dependencies in the order they are declared, so `asking` runs after this. The trace id is the
+    one the trace middleware vouched for or minted, read from the log context rather than from
+    the header, because the header is what the caller proposed and the bound value is what this
+    system decided. A request refused at identification leaves the log line below behind, with
+    its trace id and the steps it reached, which is the recorder's reason for coming first.
+    """
+    del request
+    trace_id = str(structlog.contextvars.get_contextvars().get("trace_id", ""))
+    # See AN_ARRIVAL_IS_RECORDED_BEFORE_ITS_CHANNEL_IS_KNOWN.
+    recorder = open_trace(trace_id, datetime.now(UTC), Channel.API)
+    try:
+        yield recorder
+    finally:
+        if not recorder.reached(GateStep.IDENTIFY):
+            log.info("gate.stopped_before_identify", steps=[one.name for one in recorder.steps])
+
+
+#: The recorder a gated route takes. Declare it before `Asked`: see `recorded_at_ingress`.
+Ingress = Annotated[Recorder, Depends(recorded_at_ingress)]
+
+
+async def roster_of(state: Any, asked: Asking, registry: ToolRegistry) -> AnswerRoster:
+    """The agents this person may be answered by: the default and every stored agent they may run.
+
+    The stored agents come from `brain.app.lifespan`'s `agent_roster`, read on each question so an
+    agent disabled a moment ago cannot be selected; a process with no database has only the
+    default. `brain.gate.roster.answer_roster` decides which of them this person may use.
+    """
+    read: AgentRoster | None = getattr(state, "agent_roster", None)
+    records = await read() if read is not None else ()
+    return answer_roster(
+        records,
+        viewer_for(asked.caller.principal),
+        default=default_agents(registry),
+        tool_names=(one.name for one in registry.definitions()),
+    )
+
+
 @router.post("/answer", responses=COMMON_RESPONSES)
-async def answer(request: Request, asked: Asked, ask: Question) -> StreamingResponse:
+async def answer(
+    request: Request, recorder: Ingress, asked: Asked, ask: Question
+) -> StreamingResponse:
     """One question, answered as a stream of events, at this caller's reach.
 
     **The first route in this application that answers a question rather than serving rows.**
@@ -1019,59 +1089,61 @@ async def answer(request: Request, asked: Asked, ask: Question) -> StreamingResp
     # `request_recorders_for`. Empty on a process with no database, which has nowhere to hold
     # a record and nowhere a report could read one from.
     recorders: tuple[RequestRecorder, ...] = getattr(request.app.state, "request_recorders", ())
-    # The id the trace middleware vouched for or minted, bound before identification ran. Read
-    # from the log context rather than from the header, because the header is what the caller
-    # proposed and the bound value is what this system decided.
-    trace_id = str(structlog.contextvars.get_contextvars().get("trace_id", ""))
     # Built from what `asking` resolved and nothing the request carried: the principal came
     # from the directory and the channel from the token's claims. `Origin` refuses an id the
     # audit ledger would not accept, which is a process fault identical for every caller.
-    origin = Origin(trace_id=trace_id, principal=asked.caller.principal, channel=asked.channel)
+    origin = Origin(
+        trace_id=recorder.trace_id, principal=asked.caller.principal, channel=asked.channel
+    )
     # Before the front half and the lane, so before the cache and any model: a sensitive question
     # is routed to its topic's named person and recorded without what was asked, and the asker is
     # told one sentence whatever the topic (M24.2.2). See `brain.audit.compliance`.
     referral = await referred(request, asked, ask.question)
 
-    # IDENTIFY and ENTITLE ran in `asking` before this handler could; they are entered here, in
-    # order, so the front half's refusal to start before ENTITLE is a real check on this path.
-    recorder = open_trace(trace_id, asked.now, asked.channel)
-    recorder.principal_id = asked.caller.principal.id
-    recorder.enter(GateStep.IDENTIFY)
+    # IDENTIFY and ENTITLE ran in `asking`, after the recorder was opened at ingress; they are
+    # entered here, in order, so the front half's refusal to start before ENTITLE is a real check.
+    recorder.identified(asked.caller.principal.id, asked.channel)
     recorder.ent_hash = asked.reach.ent_hash()
     recorder.enter(GateStep.ENTITLE)
     address = from_web(ask.question, ask.agent)
-    agents = default_agents(registry)
     policies = field_policies(registry)
-    sources = reachable_sources(registry, asked)
-    knowledge = asked.reach.scope_for(KNOWLEDGE_READ, asked.now)
+    # A referred question is looked up in no store and stored in none: the step is entered and
+    # misses, as it does on a process with none, so the request row reads as any other's.
+    caching = (
+        None
+        if referral is not None
+        else caching_of(request.app.state, policies, reachable_sources(registry, asked))
+    )
 
     try:
+        roster = await roster_of(request.app.state, asked, registry)
         front = run_front_half(
             address.question,
             recorder=recorder,
             reach=asked.reach,
             channel=asked.channel,
-            agents=agents,
+            agents=roster.agents,
             choosing=Choosing(
-                visible_agents=frozenset(agents),
+                visible_agents=roster.visible,
                 default_agent=DEFAULT_AGENT,
                 addressed=address.agent_id,
             ),
             registry=registry.definitions(),
             now=asked.now,
-            # A referred question is looked up in no store: the step is entered and misses, as it
-            # does on a process with none, so the request row reads as any other question's.
-            caching=None
-            if referral is not None
-            else caching_of(request.app.state, policies, sources),
+            caching=caching,
         )
+        # A stored agent answers at the caller's reach narrowed by its ceiling, and the default
+        # at the caller's own. Everything read below is read at that reach and no other.
+        agent = roster.records.get(front.selection.agent_id)
+        reach = run_entitlement(asked.reach, agent)
+        sources = sources_at(registry, reach, asked.now)
         answered = await answer_lane(
             address.question,
             origin=origin,
             recorders=recorders,
             rules=rules,
             readers=row_readers(registry),
-            entitlement=asked.reach,
+            entitlement=reach,
             policies=policies,
             reachable_sources=sources,
             sink=sink,
@@ -1084,11 +1156,25 @@ async def answer(request: Request, asked: Asked, ask: Question) -> StreamingResp
             cached=front.cached,
             # Only a request the front half routed to a tier may reach a model, so no model is
             # called before ROUTE and PROJECT: a fast-lane question answers or abstains.
-            model=model_lane_of(request.app.state) if front.calls_a_model else None,
+            model=model_lane_for(request.app.state, agent, registry)
+            if front.calls_a_model
+            else None,
             front=front.record(),
-            gaps=gaps_for_question(address.question, knowledge),
+            gaps=gaps_for_question(address.question, reach.scope_for(KNOWLEDGE_READ, asked.now)),
+            recorder=recorder,
             referral=referral,
         )
+        if answered.text is not None:
+            # An answer computed on this request at this reach, stored under the key its own
+            # lookup used (M3.5.2). A hit, a refusal and a fault carry no text and are not kept.
+            remember(
+                address.question,
+                answered.text,
+                front=front,
+                reach=asked.reach,
+                caching=caching,
+                now=asked.now,
+            )
     except BrainError:
         # Already in the taxonomy, already has a public message, already maps to a status.
         raise

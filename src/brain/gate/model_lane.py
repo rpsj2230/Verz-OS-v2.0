@@ -120,6 +120,7 @@ from brain.gate.abstain import (
 from brain.gate.caches import MAX_QUESTION_CHARS
 from brain.gate.catalogue import EmptyCatalogueError
 from brain.gate.compose import ComposedAnswer, TraceSink, compose
+from brain.gate.context import GateStep
 from brain.gate.effort import settings_for
 from brain.gate.prefix import PromptLayout, build_prefix, lay_out
 from brain.knowledge.document_tools import (
@@ -500,6 +501,11 @@ def tier_for(messages: Sequence[DriverMessage], requested: Tier | None = None) -
 # ------------------------------------------------------------------------------ the step
 
 
+def _unrecorded(step: GateStep) -> None:
+    """A draft whose caller keeps no recorder, such as the matrix gate's golden questions."""
+    del step
+
+
 async def draft(
     question: str,
     *,
@@ -511,21 +517,26 @@ async def draft(
     meter: Meter,
     trace_id: str,
     searching: Callable[[], None],
+    entering: Callable[[GateStep], None] | None = None,
 ) -> Drafted:
     """Find the passages, redact them, and ask a model only when something survived.
 
-    `searching` is called once, before the search starts, so the lane counts the tool call the
-    way it counts a row read: when it starts, whatever comes back.
+    `entering` enters INVOKE, REDACT and COMPOSE on the request's recorder before the search, the
+    redactor and the model call. `searching` is called once, before the search starts, so the
+    lane counts the tool call the way it counts a row read: when it starts, whatever comes back.
 
     The order is the argument of the module docstring, top to bottom: the search at this reach,
     the redactor at this reach, the abstention from the payload, the prompt from the payload, the
     call, and the composition from the payload. The reply reaches `compose` as text and nowhere
     else.
     """
+    step = entering or _unrecorded
+    step(GateStep.INVOKE)
     searching()
     found = await lane.search.passages(question, entitlement=entitlement, now=now)
     # The redactor's own trace travels to the sink with the payload, so what it withheld is
     # recorded in names and counts (M4.4.4). The payload alone reaches the prompt.
+    step(GateStep.REDACT)
     redacted = redact(found, entitlement=entitlement, policy=PASSAGE_POLICY, now=now)
     payload = shown(redacted.payload)
     # `found` is not read again below this line. See
@@ -541,6 +552,8 @@ async def draft(
     agent = lane.agent
     cards = () if agent is None else skill_cards(agent, caller=entitlement, now=now)
     messages = messages_of(prompt_for(question, payload, cards))
+    # The model writes the prose, so its call is the composing step and follows the redactor.
+    step(GateStep.COMPOSE)
     try:
         response = await lane.model.complete(
             messages,
