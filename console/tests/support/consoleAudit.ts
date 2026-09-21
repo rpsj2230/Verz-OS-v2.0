@@ -203,6 +203,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "INSTALL_BROKERED_DIRECTORY",
       "INSTALL_STAFF_SOURCE",
       "INSTALL_STAFF_SOURCE_LOCATION",
+      "INSTALL_BROKERED_CLIENT_ID",
     ],
     gaps: [
       {

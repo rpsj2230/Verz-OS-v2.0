@@ -43,6 +43,11 @@ source. A setting nothing reads is configuration that changes nothing when someb
 which is how `INSTALL_SENDER_ADDRESS`, `INSTALL_OIDC_REALM` and `INSTALL_VECTOR_STORE` sat declared
 and unread until 2026-09-17. See `A_SETTING_NOTHING_READS_CHANGES_NOTHING`.
 
+**Where a setting is chosen and not in effect, the screen says so.** A brokered directory the
+realm will not broker is a finding, with `brain.identity.brokering`'s reason. A local profile on a
+release whose inference server serves no model that answers is said in the profile sentence,
+which until 2026-09-21 told the reader questions were "answered by the inference server alone".
+
 Task ids: M41.1.4, M41.1.5, M41.1.6, M41.1.7
 """
 
@@ -59,6 +64,9 @@ from brain.install import BY_NAME, INSTALLATION, Belongs, Setting, saved_values
 from brain.knowledge.search import vector_store_refusal
 from brain.locale import LocaleError, accent_set
 from brain.models.assembly import local_only
+from brain.models.default_ladder import LOCAL_COMPLETION_MODEL
+from brain.ops.inference import SERVED_MODELS
+from brain.ops.realm_import import brokered
 from brain.settings import process_environment
 
 # ------------------------------------------------------------------- written-down reasons
@@ -103,6 +111,12 @@ AN_ENVIRONMENT_VALUE_CHANGES_ON_RESTART: Final = (
 A_SAVED_VALUE_APPLIES_AT_ONCE_HERE_AND_ON_RESTART_ELSEWHERE: Final = (
     "Saved in the database. This process uses it from the next page it serves; any other "
     "application process uses it after it restarts."
+)
+
+#: Added to the profile sentence when the local profile is chosen and nothing local can answer.
+LOCAL_PROFILE_HAS_NO_MODEL_THAT_ANSWERS: Final = (
+    "The inference server this release ships serves no model that writes an answer, so "
+    "questions reach no model until one is served there or the profile is hosted."
 )
 
 #: Said on a required identity setting nobody supplied.
@@ -169,11 +183,12 @@ READ_BY: Final[Mapping[str, tuple[str, ...]]] = {
         "brain.ops.handover_run",
         "brain.settings_routes",
     ),
-    "INSTALL_OIDC_CLIENT_ID": ("brain.console_static",),
+    "INSTALL_OIDC_CLIENT_ID": ("brain.console_static", "brain.ops.realm_import"),
     "INSTALL_OIDC_REDIRECT_URIS": ("brain.ops.realm_import",),
-    "INSTALL_BROKERED_DIRECTORY": ("brain.adoption",),
-    "INSTALL_STAFF_SOURCE": ("brain.identity.staff_source",),
-    "INSTALL_STAFF_SOURCE_LOCATION": ("brain.identity.staff_source",),
+    "INSTALL_BROKERED_DIRECTORY": ("brain.adoption", "brain.ops.realm_import"),
+    "INSTALL_BROKERED_CLIENT_ID": ("brain.ops.realm_import",),
+    "INSTALL_STAFF_SOURCE": ("brain.identity.staff_source", "brain.ops.realm_import"),
+    "INSTALL_STAFF_SOURCE_LOCATION": ("brain.identity.staff_source", "brain.ops.realm_import"),
     "INSTALL_MODEL_PROFILE": ("brain.ops.model_service", "brain.app"),
     "INSTALL_MODEL_ENDPOINT": ("brain.knowledge.embed_policy",),
     "INSTALL_EMBEDDING_DIMENSIONS": ("brain.knowledge.search",),
@@ -315,10 +330,13 @@ def profile_told(
     """What the model profile means for where text goes, in `brain.models.assembly`'s own rule."""
     profile = resolved("INSTALL_MODEL_PROFILE", env, saved).value
     if local_only(profile):
-        return (
+        told = (
             f"The profile is {profile!r}, so no text leaves this install: every hosted provider "
-            "is skipped whatever the Models screen switches, and questions are answered by the "
-            "inference server alone."
+            "is skipped whatever the Models screen switches, and questions go to the inference "
+            "server alone."
+        )
+        return (
+            told if local_model_answers() else f"{told} {LOCAL_PROFILE_HAS_NO_MODEL_THAT_ANSWERS}"
         )
     return (
         f"The profile is {profile!r}, so a hosted provider the Models screen switches on may be "
@@ -363,7 +381,18 @@ def findings(
             )
     if refused := vector_store_refusal(env, saved):
         found.append(refused)
+    if problem := brokered(env, saved).problem:
+        found.append(problem)
     return tuple(found)
+
+
+def local_model_answers() -> bool:
+    """Whether the inference server this release declares serves the model a local rung asks for.
+
+    The name the default ladder writes against the names `brain.ops.inference` declares, so this
+    turns true on the day a completion model is added there and nobody has to remember this.
+    """
+    return LOCAL_COMPLETION_MODEL in {one.name for one in SERVED_MODELS}
 
 
 # ---------------------------------------------------------------------------- the edits

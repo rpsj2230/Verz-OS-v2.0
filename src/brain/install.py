@@ -252,6 +252,17 @@ INSTALLATION: Final[tuple[Setting, ...]] = (
         default="none",
     ),
     Setting(
+        name="INSTALL_BROKERED_CLIENT_ID",
+        belongs=Belongs.IDENTITY,
+        meaning=(
+            "The client id of the application registered with that directory: a Google OAuth "
+            "client or a Microsoft Entra app registration. `unset` means nobody has said, and "
+            "sign-in is then not brokered. Its secret is never a setting: it is a file in the "
+            "identity provider's vault, see docs/install/authentication.md."
+        ),
+        default="unset",
+    ),
+    Setting(
         name="INSTALL_STAFF_SOURCE",
         belongs=Belongs.IDENTITY,
         meaning=(

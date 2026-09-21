@@ -127,6 +127,13 @@ services:
       INSTALL_OIDC_REDIRECT_URIS: ${INSTALL_OIDC_REDIRECT_URIS:?set INSTALL_OIDC_REDIRECT_URIS}
       # Declared with a default, so a blank arrives as unset and the importer takes the default.
       INSTALL_OIDC_REALM: ${INSTALL_OIDC_REALM:-}
+      # The console's client id and the brokered directory, all declared with defaults. See
+      # `brain.identity.brokering`: nothing is brokered unless all four say which tenant.
+      INSTALL_OIDC_CLIENT_ID: ${INSTALL_OIDC_CLIENT_ID:-}
+      INSTALL_BROKERED_DIRECTORY: ${INSTALL_BROKERED_DIRECTORY:-}
+      INSTALL_BROKERED_CLIENT_ID: ${INSTALL_BROKERED_CLIENT_ID:-}
+      INSTALL_STAFF_SOURCE: ${INSTALL_STAFF_SOURCE:-}
+      INSTALL_STAFF_SOURCE_LOCATION: ${INSTALL_STAFF_SOURCE_LOCATION:-}
     volumes:
       # Only the output. The reviewed realm arrives inside the image rather than through a
       # bind mount, because this Coolify installation deploys a stored compose with no
@@ -170,6 +177,11 @@ services:
       KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
       KC_DB_USERNAME: keycloak
       KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?set KEYCLOAK_DB_PASSWORD}
+      # Keycloak's file vault, where a brokered directory's client secret is a file an operator
+      # writes on the server, so the realm carries a `${vault...}` reference and never the
+      # secret. Empty until somebody brokers; see docs/install/authentication.md.
+      KC_VAULT: file
+      KC_VAULT_DIR: /opt/keycloak/vault
       # **Bounded, because an unbounded client runs at its server's ceiling for ever.**
       # Keycloak's own default is 100 and this database admits 30, so before this line was
       # here Keycloak opened every connection the server would give it and held all thirty
@@ -220,6 +232,7 @@ services:
       # Read-only: a container that could write here would let a change made by clicking
       # survive a restart, which is the drift `ops/keycloak/setup.sh` exists to prevent.
       - realm-import:/opt/keycloak/data/import:ro
+      - keycloak-vault:/opt/keycloak/vault:ro
     networks:
       - identity
       - proxy
@@ -254,3 +267,4 @@ networks:
 volumes:
   keycloak-db:
   realm-import:
+  keycloak-vault:
