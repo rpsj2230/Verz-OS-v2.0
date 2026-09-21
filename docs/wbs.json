@@ -103,15 +103,18 @@
     "The dependency policy is proved by a recorded CI run that refuses a deliberately added copyleft dependency and an archived one, accepts the permissive licences on the allowlist for every image, and finds no component needing a commercial key in production"
    ],
    "leaf_waves": {},
-   "leaf_acts": {},
-   "leaf_decided": {},
-   "act_groups": {},
-   "leaf_progress": {
+   "leaf_acts": {
     "M0.1.1": {
-     "status": "BLOCKED",
-     "why": "owner GitHub settings: repository is public and main has no branch protection; CODEOWNERS is being added",
-     "updated": "2026-09-21"
-    },
+     "kind": "ACT",
+     "gate": false,
+     "why": "owner's decision 2026-09-21: the repository stays public on purpose for now and he makes it private and protects main himself before go-live; not to be raised again until then"
+    }
+   },
+   "leaf_decided": {},
+   "act_groups": {
+    "M0.1": "Repository and tooling"
+   },
+   "leaf_progress": {
     "M0.3.4": {
      "status": "BLOCKED",
      "why": "server change needs owner permission: add the PgBouncer pools per ops/vps/POOLING.md",
@@ -4291,6 +4294,11 @@
     "M38.4.2.5": 5
    },
    "leaf_acts": {
+    "M38.1.1.5": {
+     "kind": "ACT",
+     "gate": false,
+     "why": "owner's decision 2026-09-21: the repository stays public on purpose for now and he makes it private and protects main himself before go-live; not to be raised again until then"
+    },
     "M38.2.1.3": {
      "kind": "ACT",
      "gate": false,
@@ -4314,15 +4322,12 @@
     }
    },
    "act_groups": {
+    "M38.1": "Pipeline, built in wave 0 so every wave can ship",
+    "M38.1.1": "Laptop to GitHub",
     "M38.2": "Deploy at the end of every wave",
     "M38.2.1": "Wave close ritual"
    },
    "leaf_progress": {
-    "M38.1.1.5": {
-     "status": "BLOCKED",
-     "why": "owner GitHub settings: CODEOWNERS only forces review once branch protection requires it",
-     "updated": "2026-09-21"
-    },
     "M38.1.3.3": {
      "status": "BLOCKED",
      "why": "server change needs owner permission: copy ops/deploy/brain-deploy to /usr/local/bin on the server",

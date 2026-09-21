@@ -34,11 +34,6 @@ const STATUSES = ["OPEN", "IN PROGRESS", "READY FOR TESTING", "BLOCKED"];
 
 //: Leaf id to where it stands. Ordered by id.
 const PROGRESS = {
-  "M0.1.1": {
-    status: "BLOCKED",
-    why: "owner GitHub settings: repository is public and main has no branch protection; CODEOWNERS is being added",
-    updated: "2026-09-21",
-  },
   "M0.3.4": {
     status: "BLOCKED",
     why: "server change needs owner permission: add the PgBouncer pools per ops/vps/POOLING.md",
@@ -77,11 +72,6 @@ const PROGRESS = {
   "M31.2.1.4": {
     status: "READY FOR TESTING",
     why: "engine tests pass for session and transaction pooling; closing needs PgBouncer on the install (M0.3.4)",
-    updated: "2026-09-21",
-  },
-  "M38.1.1.5": {
-    status: "BLOCKED",
-    why: "owner GitHub settings: CODEOWNERS only forces review once branch protection requires it",
     updated: "2026-09-21",
   },
   "M38.1.3.3": {
