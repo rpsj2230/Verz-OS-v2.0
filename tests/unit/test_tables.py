@@ -126,6 +126,7 @@ MIGRATION_REQUIREMENT_CHECK = VERSIONS / "0099_requirement_check.py"
 MIGRATION_ROLE_GRANT = VERSIONS / "0102_role_grant_and_team_grants.py"
 MIGRATION_COMPLIANCE = VERSIONS / "0104_compliance_record_and_decision_entries.py"
 MIGRATION_GROUP_ROLE_RULE = VERSIONS / "0109_group_role_rule.py"
+MIGRATION_MODEL_HEALTH = VERSIONS / "0108_provider_health_and_residency.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -344,6 +345,12 @@ ROLE_GRANT_TABLES: tuple[str, ...] = ("gate.role_grant",)
 COMPLIANCE_TABLES: tuple[str, ...] = ("ops.breach_case", "ops.sensitive_referral")
 #: And the two 0109 adds: which group confers which role, and who was told of a break-glass.
 GROUP_ROLE_RULE_TABLES: tuple[str, ...] = ("auth.group_role_rule", "gate.break_glass_notice")
+#: And the three 0108 adds: provider health rings, chain-depth alerts, residency constraints.
+MODEL_HEALTH_TABLES: tuple[str, ...] = (
+    "ops.provider_health",
+    "ops.chain_depth_alert",
+    "ops.residency_constraint",
+)
 
 SENSITIVE_READ_TABLES: tuple[str, ...] = ("ops.sensitive_read",)
 
@@ -403,6 +410,7 @@ ALL_TABLES = (
     + ROLE_GRANT_TABLES
     + COMPLIANCE_TABLES
     + GROUP_ROLE_RULE_TABLES
+    + MODEL_HEALTH_TABLES
 )
 
 
@@ -1172,6 +1180,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert compliance.TABLES == COMPLIANCE_TABLES
     group_role_rule = migration_module(MIGRATION_GROUP_ROLE_RULE)
     assert group_role_rule.TABLES == GROUP_ROLE_RULE_TABLES
+    model_health = migration_module(MIGRATION_MODEL_HEALTH)
+    assert model_health.TABLES == MODEL_HEALTH_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1249,6 +1259,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(role_grant.TABLES)
         + tuple(compliance.TABLES)
         + tuple(group_role_rule.TABLES)
+        + tuple(model_health.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1307,6 +1318,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(role_grant.TABLES),
         set(compliance.TABLES),
         set(group_role_rule.TABLES),
+        set(model_health.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

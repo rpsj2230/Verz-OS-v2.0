@@ -208,7 +208,17 @@ def test_switching_an_unknown_provider_is_refused_before_anything_is_written() -
 
 # ------------------------------------------------------------------ against a database
 
-TABLES = ("ops.routing_rung", "ops.model_attempt", "ops.setting", "ops.model_provider")
+#: `ops.routing_tier`, `ops.residency_constraint` and `ops.provider_health` are read with the
+#: ladder since 0108, so a database without them is a ladder nobody could read.
+TABLES = (
+    "ops.routing_rung",
+    "ops.model_attempt",
+    "ops.setting",
+    "ops.model_provider",
+    "ops.routing_tier",
+    "ops.residency_constraint",
+    "ops.provider_health",
+)
 
 
 @pytest.fixture(scope="module")

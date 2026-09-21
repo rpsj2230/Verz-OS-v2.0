@@ -1,6 +1,6 @@
 # What the background worker may do with the secrets vault.
 #
-# Task ids: M31.3.2.2, M31.3.2.3, M27.8.12, M42.6.2, M42.6.5
+# Task ids: M31.3.2.2, M31.3.2.3, M27.8.12, M42.6.2, M42.6.5, M5.4.7
 #
 # The worker runs scheduled and queued work, so its runs are longer than a request and
 # nobody is watching them. Two differences from the application follow from that, and both
@@ -32,6 +32,32 @@ path "connectors/creds/laravel_readonly" {
 # nothing more: no create, update or delete, because a process nobody watches must not be able to
 # replace the key every receiver checks. No metadata, because the worker has no screen to tell.
 path "webhooks/data/+" {
+  capabilities = ["read"]
+}
+
+# The four model providers' keys, read to probe a provider and for nothing else (M5.4.7). The
+# worker's schedule runs the model health prober (brain.ops.model_probe_run) every minute, and a
+# probe is an authenticated request, so without a key there is no probe and a dead provider stays in
+# rotation until a person's question finds it. Named one at a time and never providers/data/+,
+# because the same engine holds the mail relay's password at providers/mail_relay and the keys of
+# providers added from the console, and the prober needs neither. Read and nothing more: a process
+# nobody watches must not be able to replace the key every question is sent with. No metadata: the
+# worker has no screen to tell. The key is kept in the worker's memory for a quarter of an hour and
+# never enters its environment. A slot added to brain.ops.provider_keys.PROVIDER_SLOTS is added
+# here too, and tests/unit/test_vault_policies.py holds the two lists equal.
+path "providers/data/anthropic" {
+  capabilities = ["read"]
+}
+
+path "providers/data/openai" {
+  capabilities = ["read"]
+}
+
+path "providers/data/moonshot" {
+  capabilities = ["read"]
+}
+
+path "providers/data/deepseek" {
   capabilities = ["read"]
 }
 

@@ -53,19 +53,26 @@ from `ops.model_provider`, and per category of data the number of attempts that 
 `ops.model_attempt`. A provider added from the console (M5.7.2) is listed, switched and checked
 like a built-in one. The rows are written by `brain.provider_registry_routes`.
 
+**The screen also shows what routes a question and what the routing has noticed** (M5.2.2,
+M5.4.3, M5.4.8, M5.5.1): each tier's window and escalation headroom as the router reads them from
+`ops.routing_tier`, marked configured or the product's default; each rung's probes beside its live
+calls, from `ops.provider_health`; the residency constraints attached to scopes; and the chain-depth
+alerts of the last day. They are edited through `brain.model_health_routes`, under the same write
+capability as a switch, and each answer is this view.
+
 **Not written, and said.** A provider switch is an `ops.setting` row, so it keeps its last change
 on the row and `0059`'s trigger appends a `setting` entry for it:
 `brain.ops.setting_store.A_SWITCH_SHOWS_ITS_LAST_CHANGE_AND_THE_LEDGER_KEEPS_EVERY_ONE`. A rung is
 added through the matrix gate (`brain.routing_routes`), never here.
 
-Task ids: M27.8.8, M27.2.3, M5.6.4, M5.7.1, M5.7.2
+Task ids: M27.8.8, M27.2.3, M5.6.4, M5.7.1, M5.7.2, M5.2.2, M5.4.3, M5.4.8, M5.5.1
 """
 
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime
-from typing import Final
+from datetime import UTC, datetime, timedelta
+from typing import Any, Final
 
 import structlog
 from fastapi import APIRouter, Request
@@ -91,6 +98,7 @@ from brain.models.driver import DriverMessage, ProviderUnavailable, Role
 from brain.models.metering import Meter
 from brain.models.registry import ProviderKind, ProviderRecord
 from brain.models.routing import TIER_LADDER, BreakerState, FallbackTrigger, NoCompliantRoute, Tier
+from brain.models.tier_rules import TierTable
 from brain.models.wire import LOCAL_PROVIDER
 from brain.operate_routes import MODELS_SCREEN
 from brain.ops.credentials import TOLD as VAULT_TOLD
@@ -103,6 +111,7 @@ from brain.ops.model_service import (
     switch_provider,
     switch_states,
 )
+from brain.ops.provider_health_store import live_constraints, recent_alerts
 from brain.ops.provider_keys import PROVIDER_SLOTS
 from brain.ops.telemetry_store import TelemetryRecorder
 from brain.routing_routes import MATRIX_WRITE
@@ -147,6 +156,10 @@ CHECK_PROMPT: Final = "Reply with the single word: ready"
 #: The output ceiling on a check. A one-word reply needs far fewer; the margin is for a model that
 #: says a sentence anyway, and the ceiling is what stops it saying a page.
 CHECK_MAX_OUTPUT_TOKENS: Final = 16
+
+#: How far back the screen lists chain-depth alerts. A day: an alert older than that has either
+#: been acted on or is a pattern the provider health figures already show.
+ALERT_WINDOW: Final = timedelta(hours=24)
 
 #: What an administrator is told about a check that did not answer, by the failure it ended on.
 CHECK_TOLD: Final = {
@@ -266,6 +279,52 @@ class RungStateView(BaseModel):
     unhealthy_because: str | None
     live_seen: int
     live_failed: int
+    #: The probe ring `ops.provider_health` keeps for this deployment (M5.4.3, M5.4.7).
+    probes_seen: int = 0
+    probes_failed: int = 0
+    #: When the prober last claimed a probe of it, and when live traffic last reached it.
+    last_probe_at: datetime | None = None
+    last_live_at: datetime | None = None
+
+
+class RoutingTierView(BaseModel):
+    """One tier's numbers as the router reads them (M5.2.2)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    tier: str
+    context_window: int
+    escalation_headroom: float
+    #: True when an `ops.routing_tier` row governs it; false when it runs at the product default.
+    configured: bool
+
+
+class ResidencyConstraintView(BaseModel):
+    """One residency constraint and the scope it is attached to (M5.5.1)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    id: str
+    scope: dict[str, Any]
+    allowed_regions: list[str] | None
+    on_prem_only: bool
+    note: str
+    created_by: str
+    created_at: datetime
+
+
+class ChainDepthAlertView(BaseModel):
+    """One chain-depth alert the live path raised (M5.4.8). Names a mechanism, never a question."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    raised_at: datetime
+    level: str
+    tier: str
+    depth: int
+    served_by: str | None
+    reason: str
+    trace_id: str
 
 
 class ProvidersView(BaseModel):
@@ -284,6 +343,12 @@ class ProvidersView(BaseModel):
     #: The vault's state and sentence, only beside `credential`, for the same reader.
     vault: VaultState | None
     vault_told: str | None
+    #: Each ladder tier's window and headroom as the router reads them.
+    tiers: list[RoutingTierView] = []
+    #: The live residency constraints, oldest first.
+    residency: list[ResidencyConstraintView] = []
+    #: The chain-depth alerts of the last `ALERT_WINDOW`, newest first.
+    depth_alerts: list[ChainDepthAlertView] = []
 
 
 class ProviderSwitchAsked(BaseModel):
@@ -365,6 +430,19 @@ def listed_providers(plan: Planned) -> tuple[str, ...]:
     return (*builtin, *added, LOCAL_PROVIDER)
 
 
+def tier_views(table: TierTable) -> list[RoutingTierView]:
+    """Each ladder tier's numbers, cheapest first, as the plan's table holds them."""
+    return [
+        RoutingTierView(
+            tier=tier.value,
+            context_window=table.windows[tier],
+            escalation_headroom=table.headroom[tier],
+            configured=tier in table.configured,
+        )
+        for tier in TIER_LADDER
+    ]
+
+
 def providers_view(
     plan: Planned,
     *,
@@ -373,12 +451,16 @@ def providers_view(
     now: datetime,
     vault: tuple[VaultState, dict[str, SlotView]] | None,
     disclosed: dict[str, dict[DataCategory, int]] | None = None,
+    residency: list[ResidencyConstraintView] | None = None,
+    alerts: list[ChainDepthAlertView] | None = None,
 ) -> ProvidersView:
     """The plan and the switch rows, as one reader may be shown them.
 
     `vault` is None unless the reader may manage credentials; see the module docstring.
-    `disclosed` is the attempts per provider and category of data (M5.6.4).
+    `disclosed` is the attempts per provider and category of data (M5.6.4). `residency` and
+    `alerts` are read beside the plan, because the plan carries constraints without their ids.
     """
+    rings = {one.deployment_id: one for one in plan.state.rings}
     described = {one.slug: one.description for one in PROVIDER_SLOTS}
     records = {one.slug: one for one in plan.state.providers}
     sent = disclosed or {}
@@ -414,6 +496,7 @@ def providers_view(
     for row in rows:
         rung = ladder[(row.tier, row.position)]
         left_out = skipped.get((row.tier, row.position))
+        stored = rings.get(row.deployment_id)
         rungs.append(
             RungStateView(
                 rung_id=rung.rung_id,
@@ -434,6 +517,10 @@ def providers_view(
                 ),
                 live_seen=row.live_seen,
                 live_failed=row.live_failed,
+                probes_seen=0 if stored is None else len(stored.probe),
+                probes_failed=0 if stored is None else sum(1 for p in stored.probe if not p.ok),
+                last_probe_at=None if stored is None else stored.last_probe_at,
+                last_live_at=None if stored is None else stored.last_live_at,
             )
         )
     return ProvidersView(
@@ -444,6 +531,9 @@ def providers_view(
         editable=may_switch(reach, now),
         vault=None if vault is None else vault[0],
         vault_told=None if vault is None else VAULT_TOLD[vault[0]],
+        tiers=tier_views(plan.tiers),
+        residency=residency or [],
+        depth_alerts=alerts or [],
     )
 
 
@@ -506,6 +596,56 @@ async def _disclosed(request: Request) -> dict[str, dict[DataCategory, int]]:
     return disclosure_counts([(str(p), str(c), int(n)) for p, c, n in rows])
 
 
+async def _residency(request: Request) -> list[ResidencyConstraintView]:
+    """The live residency constraints with their ids. Empty without a database."""
+    factory = _sessions(request)
+    if factory is None:
+        return []
+    try:
+        async with factory() as session:
+            rows = (await session.execute(live_constraints())).scalars().all()
+    except Exception as exc:
+        log.warning("models.residency_unreadable", error=type(exc).__name__)
+        return []
+    return [
+        ResidencyConstraintView(
+            id=str(row.id),
+            scope=dict(row.scope),
+            allowed_regions=None if row.allowed_regions is None else list(row.allowed_regions),
+            on_prem_only=row.on_prem_only,
+            note=row.note,
+            created_by=row.created_by,
+            created_at=row.created_at,
+        )
+        for row in rows
+    ]
+
+
+async def _alerts(request: Request, now: datetime) -> list[ChainDepthAlertView]:
+    """The chain-depth alerts of the last `ALERT_WINDOW`. Empty without a database."""
+    factory = _sessions(request)
+    if factory is None:
+        return []
+    try:
+        async with factory() as session:
+            rows = (await session.execute(recent_alerts(now - ALERT_WINDOW))).scalars().all()
+    except Exception as exc:
+        log.warning("models.depth_alerts_unreadable", error=type(exc).__name__)
+        return []
+    return [
+        ChainDepthAlertView(
+            raised_at=row.raised_at,
+            level=row.level,
+            tier=row.tier,
+            depth=row.depth,
+            served_by=row.served_by,
+            reason=row.reason,
+            trace_id=row.trace_id,
+        )
+        for row in rows
+    ]
+
+
 async def _vault_for(
     request: Request, reach: EntitlementSet, now: datetime
 ) -> tuple[VaultState, dict[str, SlotView]] | None:
@@ -536,6 +676,8 @@ async def _view(request: Request, asked: Asked, calls: ModelCalls) -> ProvidersV
         now=asked.now,
         vault=await _vault_for(request, asked.reach, asked.now),
         disclosed=await _disclosed(request),
+        residency=await _residency(request),
+        alerts=await _alerts(request, asked.now),
     )
 
 

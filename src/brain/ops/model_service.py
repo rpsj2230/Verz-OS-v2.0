@@ -48,7 +48,13 @@ slot is handed to `brain.ops.provider_keys.PROCESS_ADDED_SLOTS` so the minute's 
 its key. A row the registry cannot hold is left out and logged, and its provider then has no row,
 which is `global` and the rung's own numbers: the conservative reading of an unreadable claim.
 
-Task ids: M27.8.8, M5.3.4, M5.1.2, M5.7.2, M5.6.4
+**The tier rows, the residency constraints and the stored health rings are read in that same
+session** (`brain.ops.provider_health_store`), so the tier a request lands in, the regions it may
+go to and the probes that fenced a rung off are the ones in force at the moment it planned. The
+executor is handed the ring and alert stores too, so every attempt reaches `ops.provider_health`
+and every chain that went deep reaches `ops.chain_depth_alert`.
+
+Task ids: M27.8.8, M5.3.4, M5.1.2, M5.7.2, M5.6.4, M5.2.2, M5.4.3, M5.4.8, M5.5.1
 """
 
 from __future__ import annotations
@@ -82,6 +88,16 @@ from brain.models.wire import (
     added_wire,
     http_transport,
     local_wire,
+)
+from brain.ops.provider_health_store import (
+    SessionDepthAlerts,
+    SessionHealth,
+    constraint_of,
+    live_constraints,
+    live_tiers,
+    rings_of,
+    stored_rings,
+    tier_rules_of,
 )
 from brain.ops.provider_keys import (
     PROCESS_ADDED_SLOTS,
@@ -358,6 +374,9 @@ class SessionLadder:
                 states = await switch_states(session)
                 found = (await session.execute(recent_attempts(now - EVIDENCE_WINDOW))).all()
                 registered = (await session.execute(live_providers())).scalars().all()
+                tiers = (await session.execute(live_tiers())).scalars().all()
+                constraints = (await session.execute(live_constraints())).scalars().all()
+                rings = (await session.execute(stored_rings())).scalars().all()
         except Exception as exc:
             log.warning("models.ladder_unreadable", error=type(exc).__name__)
             return LadderState(rungs=(), switched_off=frozenset(KNOWN_PROVIDERS), attempts=())
@@ -366,6 +385,11 @@ class SessionLadder:
         )
         return LadderState(
             providers=providers,
+            tiers=tier_rules_of(tiers),
+            residency=tuple(
+                found for found in (constraint_of(row) for row in constraints) if found
+            ),
+            rings=tuple(rings_of(row) for row in rings),
             rungs=tuple(ladder_rung_of(row) for row in rows),
             switched_off=switched_off_in(states),
             attempts=tuple(
@@ -566,6 +590,8 @@ def model_service_at_start(
         held=held_providers,
         clock=wall_clock,
         added=AddedProviderDrivers(owned),
+        health=SessionHealth(sessions) if sessions is not None else None,
+        alerts=SessionDepthAlerts(sessions),
     )
     log.info(
         "model drivers built",

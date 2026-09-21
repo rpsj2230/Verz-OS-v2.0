@@ -35,9 +35,27 @@ without moving its breaker either way. See `ONLY_THE_PROVIDERS_OWN_FAILURE_IS_IL
 **A deployment with no attempt has no health record at all**, and `measured` in
 `brain.console.model_matrix` is how a screen tells that apart from a closed breaker.
 
+**Probes are replayed beside the attempts, and never as attempts.** The background prober
+(`brain.ops.model_probe_run`) cannot write an attempt row, because a probe belongs to no trace and
+no request, and it must not: `health.PROBE_OUTCOMES_STAY_OUT_OF_THE_LIVE_RING`. Its outcomes are
+kept in `ops.provider_health`'s probe ring, each with its instant, and `replayed` takes them as a
+second stream, interleaved by time and handed to `ProviderHealth.record_probe`, which is the only
+transition that lets a probe move a breaker: a half-open admission, or two failures on a deployment
+with no current live traffic. That is what makes the prober's work reach a person's next question
+in every process, by the same replay that makes the attempts agree. See
+`A_PROBE_REACHES_THE_BREAKER_ONLY_THROUGH_RECORD_PROBE`.
+
+**`ops.provider_health` keeps both rings, bounded by count and not by age** (M5.4.3). The live ring
+is appended by the executor after every attempt that answered or failed on the provider's side,
+and the probe ring by the prober. The breaker is still replayed from the attempts inside the
+window; what the stored live ring adds is the record that outlives that window, so a rung nothing
+has called for an hour still shows its last twenty outcomes and when the newest was. `RingEntry`
+and `ring_of` are the rows' shape, read leniently: an entry this release cannot read is left out
+rather than failing the plan.
+
 Scope: pure. The attempts are a parameter.
 
-Task ids: M27.8.8, M5.3.4, M5.4.1
+Task ids: M27.8.8, M5.3.4, M5.4.1, M5.4.3, M5.4.7
 """
 
 from __future__ import annotations
@@ -49,8 +67,8 @@ from types import MappingProxyType
 from typing import Final
 
 from brain.models.driver import DriverFailure
-from brain.models.health import ProviderHealth
-from brain.models.routing import FallbackTrigger
+from brain.models.health import PROBE_WINDOW, ProviderHealth
+from brain.models.routing import BREAKER_LIVE_WINDOW, FallbackTrigger
 
 # ------------------------------------------------------------------- written-down reasons
 
@@ -62,6 +80,21 @@ HEALTH_IS_REPLAYED_FROM_THE_ATTEMPTS_SO_EVERY_PROCESS_AGREES: Final = (
     "every process after every call and they race. Replaying the attempts gives every process "
     "and the screen the same breaker from rows nobody overwrites."
 )
+
+#: Why probe outcomes are replayed through `record_probe` and never as attempts.
+A_PROBE_REACHES_THE_BREAKER_ONLY_THROUGH_RECORD_PROBE: Final = (
+    "A probe is a synthetic request the worker chose to send, so it is not an attempt and never "
+    "enters the live ring. Replayed beside the attempts it goes through "
+    "ProviderHealth.record_probe, which lets it settle a half-open breaker and open an idle one on "
+    "two failures, and nothing else. Written as an attempt it would move the fail ratio and the "
+    "prober would vote on its own verdict."
+)
+
+#: How many live outcomes `ops.provider_health` keeps per deployment: the breaker's own window.
+LIVE_RING_CAP: Final = BREAKER_LIVE_WINDOW
+
+#: How many probe outcomes it keeps: the probe window `ProviderHealth` reads.
+PROBE_RING_CAP: Final = PROBE_WINDOW
 
 #: Why only three outcomes open a breaker.
 ONLY_THE_PROVIDERS_OWN_FAILURE_IS_ILL_HEALTH: Final = (
@@ -125,6 +158,73 @@ class Attempt:
             raise EvidenceError(msg)
 
 
+@dataclass(frozen=True)
+class Probe:
+    """One probe that came back: which deployment, when it was sent, and whether it answered."""
+
+    deployment_id: str
+    at: datetime
+    ok: bool
+
+    def __post_init__(self) -> None:
+        if self.at.tzinfo is None:
+            msg = "a naive probe instant orders probes by the server's offset rather than by time"
+            raise EvidenceError(msg)
+
+
+@dataclass(frozen=True)
+class RingEntry:
+    """One outcome in a stored ring: whether it answered, and when."""
+
+    ok: bool
+    at: datetime
+
+    def stored(self) -> dict[str, object]:
+        """The entry as the ring's jsonb holds it."""
+        return {"ok": self.ok, "at": self.at.isoformat()}
+
+
+def ring_of(stored: object) -> tuple[RingEntry, ...]:
+    """A stored ring, oldest first, leaving out any entry this release cannot read."""
+    if not isinstance(stored, list):
+        return ()
+    found: list[RingEntry] = []
+    for one in stored:
+        if not isinstance(one, dict):
+            continue
+        ok, at = one.get("ok"), one.get("at")
+        if not isinstance(ok, bool) or not isinstance(at, str):
+            continue
+        try:
+            when = datetime.fromisoformat(at)
+        except ValueError:
+            continue
+        if when.tzinfo is None:
+            continue
+        found.append(RingEntry(ok=ok, at=when))
+    return tuple(found)
+
+
+@dataclass(frozen=True)
+class StoredRings:
+    """One deployment's `ops.provider_health` row: both rings and the two instants."""
+
+    deployment_id: str
+    provider: str
+    live: tuple[RingEntry, ...] = ()
+    probe: tuple[RingEntry, ...] = ()
+    last_live_at: datetime | None = None
+    last_probe_at: datetime | None = None
+
+    def probes(self, since: datetime) -> tuple[Probe, ...]:
+        """The probe outcomes inside the replay window, as the replay takes them."""
+        return tuple(
+            Probe(deployment_id=self.deployment_id, at=one.at, ok=one.ok)
+            for one in self.probe
+            if one.at >= since
+        )
+
+
 def outcome_of(failure: DriverFailure | None) -> str:
     """What an attempt is recorded as: `ok`, `refused`, its trigger, or `stopped` with none."""
     if failure is None:
@@ -135,23 +235,34 @@ def outcome_of(failure: DriverFailure | None) -> str:
     return STOPPED if trigger is None else trigger.value
 
 
-def replayed(attempts: Iterable[Attempt]) -> Mapping[str, ProviderHealth]:
-    """Every attempted deployment's health, from its attempts in the order they finished.
+def replayed(
+    attempts: Iterable[Attempt], probes: Iterable[Probe] = ()
+) -> Mapping[str, ProviderHealth]:
+    """Every attempted or probed deployment's health, from its evidence in the order it arrived.
 
-    Ties on the instant are broken by the deployment and then by the outcome, so two readings of
-    the same rows replay them in the same order and reach the same breaker.
+    Ties on the instant are broken by the deployment, then attempts before probes, then by the
+    outcome, so two readings of the same rows replay them in the same order and reach the same
+    breaker. Probes go through `record_probe` alone: see
+    `A_PROBE_REACHES_THE_BREAKER_ONLY_THROUGH_RECORD_PROBE`.
     """
+    events: list[tuple[datetime, str, int, str, Attempt | Probe]] = [
+        (one.finished_at, one.deployment_id, 0, one.outcome, one) for one in attempts
+    ]
+    events += [(one.at, one.deployment_id, 1, str(one.ok), one) for one in probes]
     found: dict[str, ProviderHealth] = {}
-    for one in sorted(attempts, key=lambda a: (a.finished_at, a.deployment_id, a.outcome)):
-        known = found.get(one.deployment_id, ProviderHealth.for_deployment(one.deployment_id))
+    for at, deployment, _, _, one in sorted(events, key=lambda e: e[:4]):
+        known = found.get(deployment, ProviderHealth.for_deployment(deployment))
+        if isinstance(one, Probe):
+            found[deployment] = known.record_probe(ok=one.ok, now=at, jitter=0.0)
+            continue
         # Advanced to the attempt's instant first, as the executor's own admission does before
         # it sends: an attempt that answered after a cooldown ended is the half-open request
         # coming back clean, and recorded against a breaker still reading open it would be
         # dropped as a stray and the provider would stay out of rotation on the screen.
-        health = known.advance(one.finished_at)
+        health = known.advance(at)
         if one.outcome == OK:
-            health = health.record_live_success(one.finished_at)
+            health = health.record_live_success(at)
         elif one.outcome in ILL_HEALTH:
-            health = health.record_live_failure(one.finished_at, jitter=0.0)
-        found[one.deployment_id] = health
+            health = health.record_live_failure(at, jitter=0.0)
+        found[deployment] = health
     return MappingProxyType(found)

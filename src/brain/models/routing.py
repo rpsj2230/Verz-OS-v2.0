@@ -258,6 +258,7 @@ def classify_tier(
     request: RoutingRequest,
     *,
     windows: Mapping[Tier, int] = TIER_CONTEXT_WINDOW,
+    headroom: Mapping[Tier, float] | None = None,
 ) -> TierDecision:
     """Pick a tier. Pure, total, and the same every time for the same inputs.
 
@@ -270,7 +271,10 @@ def classify_tier(
     5. escalate upward while the estimate exceeds the tier's headroom.
 
     `windows` is injectable so a caller holding the real chain can pass the measured
-    windows from `RoutingChain.narrowest_window` instead of the seed constants.
+    windows from `RoutingChain.narrowest_window` instead of the seed constants, and
+    `headroom` so the executor can pass each tier's escalation fraction from its
+    `ops.routing_tier` row (`brain.models.tier_rules`). A tier missing from `headroom`
+    escalates at `ESCALATION_HEADROOM`.
     """
     if request.lane is Lane.FAST:
         # A pin arriving on the fast lane is a contradiction, and the fast lane wins. Its
@@ -332,20 +336,23 @@ def classify_tier(
         tier = Tier.MAIN
         steps.append(f"residency-constrained scope, so not on {Tier.SMALL}")
 
+    def fraction(of: Tier) -> float:
+        return ESCALATION_HEADROOM if headroom is None else headroom.get(of, ESCALATION_HEADROOM)
+
     while True:
         window = windows.get(tier, 0)
-        if request.estimated_context_tokens <= window * ESCALATION_HEADROOM:
+        if request.estimated_context_tokens <= window * fraction(tier):
             break
         higher = _next_tier_up(tier)
         if higher is None:
             break
         steps.append(
             f"{request.estimated_context_tokens:,} tokens is over "
-            f"{ESCALATION_HEADROOM:.0%} of {tier}'s {window:,}, so up to {higher}"
+            f"{fraction(tier):.0%} of {tier}'s {window:,}, so up to {higher}"
         )
         tier = higher
 
-    overflows = request.estimated_context_tokens > windows.get(tier, 0) * ESCALATION_HEADROOM
+    overflows = request.estimated_context_tokens > windows.get(tier, 0) * fraction(tier)
     if overflows:
         steps.append("still over the headroom at the top tier; trim the prompt, do not re-route")
 
