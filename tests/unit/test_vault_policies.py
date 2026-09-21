@@ -31,7 +31,7 @@ import pytest
 from brain.ops.credentials import SLOTS
 from brain.ops.limits import SOURCE_CEILINGS
 from brain.ops.provider_keys import PROVIDER_SLOTS, ProviderSlot
-from brain.ops.secrets import VaultRole
+from brain.ops.secrets import VaultRole, policy_of
 
 REPO = Path(__file__).resolve().parents[2]
 POLICIES = REPO / "ops" / "openbao" / "policies"
@@ -46,7 +46,7 @@ PROVIDERS: list[ProviderSlot] = sorted(PROVIDER_SLOTS, key=lambda slot: slot.slu
 def _policy_file(role: VaultRole) -> Path:
     """Where a role's policy lives. `browser_runner` is `browser-runner.hcl`: the enum spells
     a Python identifier and a vault policy name is conventionally hyphenated."""
-    return POLICIES / f"{role.value.replace('_', '-')}.hcl"
+    return POLICIES / f"{policy_of(role)}.hcl"
 
 
 def _granted_paths(text: str) -> dict[str, list[str]]:
@@ -98,6 +98,17 @@ def test_every_role_the_code_can_ask_as_has_a_policy_of_its_own(role: VaultRole)
     assert _granted_paths(where.read_text(encoding="utf-8")), (
         f"{where.name} grants nothing; a policy with no live rule is not a narrower policy"
     )
+
+
+def test_the_policy_name_a_role_is_judged_against_is_the_file_the_loader_loads() -> None:
+    """The loader writes each file under its basename, and the Secrets vault screen judges a token
+    against `policy_of(role)`. Asserted against the directory itself, not against `policy_of`, so
+    the two cannot move together. Delete this and `browser_runner` can be checked against a policy
+    named with an underscore that no vault holds, and every correctly minted token reads as wrong.
+    """
+    loaded = {one.stem for one in POLICIES.glob("*.hcl")}
+    assert {policy_of(role) for role in VaultRole} <= loaded
+    assert policy_of(VaultRole.BROWSER_RUNNER) == "browser-runner"
 
 
 def test_the_three_policies_are_three_different_policies() -> None:

@@ -10,14 +10,21 @@
  * vault's own log. There is no control here: keys are written on the Models and Connectors screens,
  * and opening a sealed vault is three people at a terminal, which the seal's sentence says.
  *
- * Task ids: M31.3.2.1, M31.3.2.3, M31.3.2.4, M31.3.2.5, M31.3.2.6, M38.4.1.3
+ * Task ids: M31.3.2.1, M31.3.2.2, M31.3.2.3, M31.3.2.4, M31.3.2.5, M31.3.2.6, M38.4.1.3
  */
 
 import { useResource } from "../api/useResource";
 import { FailureNotice } from "../ui/FailureNotice";
 import { Notice } from "../ui/Notice";
 import { SOMETHING_DID_NOT_WORK } from "./Overview";
-import { VAULT_API_PATH, readVault, sealInWords, slotInWords, type VaultSlot } from "./vaultQuery";
+import {
+  VAULT_API_PATH,
+  readVault,
+  sealInWords,
+  slotInWords,
+  tokenInWords,
+  type VaultSlot,
+} from "./vaultQuery";
 
 export const VAULT_HEADING = "Secrets vault";
 export const VAULT_CRUMB = "Install › Secrets vault";
@@ -100,6 +107,21 @@ function VaultBody() {
         </dl>
         <p className="note">{page.told}</p>
         {page.slots_unread ? <p className="note">{page.slots_unread}</p> : null}
+      </section>
+
+      <section className="card" aria-label="This process's token">
+        <h2>This process's token</h2>
+        <dl className="fields">
+          <div className="fields__row">
+            <dt>Policy</dt>
+            <dd>{tokenInWords(page.token_policy)}</dd>
+          </div>
+          <div className="fields__row">
+            <dt>Carries</dt>
+            <dd>{page.token_policies.length ? page.token_policies.join(", ") : "-"}</dd>
+          </div>
+        </dl>
+        <p className="note">{page.token_told}</p>
       </section>
 
       <section className="card">

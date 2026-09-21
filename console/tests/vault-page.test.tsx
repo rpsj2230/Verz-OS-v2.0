@@ -7,7 +7,7 @@
  * sealed vault drawn as a vault with no keys, a slot the installer defined drawn as missing, a
  * process with no database drawn as zero leases, and a control on a screen whose API offers none.
  *
- * Task ids: M31.3.2.1, M31.3.2.3, M31.3.2.4, M31.3.2.5, M31.3.2.6, M38.4.1.3
+ * Task ids: M31.3.2.1, M31.3.2.2, M31.3.2.3, M31.3.2.4, M31.3.2.5, M31.3.2.6, M38.4.1.3
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -35,6 +35,9 @@ function vault(overrides: Partial<VaultBody> = {}): VaultBody {
     seal: "open",
     told: "The secrets vault is open.",
     slots_unread: "",
+    token_policy: "own",
+    token_policies: ["application", "default"],
+    token_told: "This process's token carries the application policy and no other.",
     providers: [
       {
         slot: "providers/anthropic",
@@ -107,6 +110,24 @@ describe("what the secrets vault screen shows", () => {
     expect(connectors).toContain("Defined, empty");
     expect(connectors).toContain("crm.objects.contacts.read");
     expect(connectors).toContain("crm.objects.*.write");
+  });
+
+  test("the policies this process's token carries are named, and a root token is not its own", async () => {
+    // What breaks if this is deleted: a root token in BRAIN_VAULT_TOKEN reads as a healthy vault,
+    // because nothing on the screen says which policies the token carries.
+    const own = await mount((url) => (url.pathname === SCREEN ? json(vault()) : null));
+    const ownCard = own.querySelector(`[aria-label="This process's token"]`)?.textContent ?? "";
+    expect(ownCard).toContain("Its own policy only");
+    expect(ownCard).toContain("application, default");
+    const root = await mount((url) =>
+      url.pathname === SCREEN
+        ? json(vault({ token_policy: "other", token_policies: ["root"], token_told: "mint one" }))
+        : null,
+    );
+    const rootCard = root.querySelector(`[aria-label="This process's token"]`)?.textContent ?? "";
+    expect(rootCard).toContain("Not its own policy alone");
+    expect(rootCard).toContain("root");
+    expect(rootCard).toContain("mint one");
   });
 
   test("each source's leases are counted by how they ended, with rotation and shipping beside them", async () => {

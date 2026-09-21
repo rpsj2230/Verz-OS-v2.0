@@ -21,7 +21,15 @@ run. Nothing defines a provider slot ahead of its key, so a provider's is held o
 version times and custom metadata and no field of the secret, and `SlotReport` has nowhere to put
 one.
 
-Task ids: M31.3.2.1, M38.4.1.3
+**Which policies this process's token carries is said, because a policy per role is only a policy
+per role while each process holds its own.** Three policy files and an installer that mints the
+application's token against `application` say nothing about the token actually in this process's
+environment: a root token pasted in during a repair carries every capability and every screen
+works. `auth/token/lookup-self` names the token's policies, so the screen says whether it carries
+its own role's policy alone (with the vault's `default`, which the installer does not strip). See
+`A_ROLES_POLICY_HOLDS_ONLY_WHILE_ITS_PROCESS_CARRIES_IT_ALONE`.
+
+Task ids: M31.3.2.1, M31.3.2.2, M38.4.1.3
 """
 
 from __future__ import annotations
@@ -31,11 +39,12 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from types import MappingProxyType
-from typing import Final, Protocol
+from typing import Final, Protocol, runtime_checkable
 
 from brain.ops.connector_slots import SLOT_SCOPES, SlotScopes
 from brain.ops.credentials import SLOTS
-from brain.ops.openbao import SealStatus, StaticVersion, VaultRefusedError
+from brain.ops.openbao import SealStatus, StaticVersion, TokenStanding, VaultRefusedError
+from brain.ops.secrets import VaultRole, policy_of
 
 # ------------------------------------------------------------------ written-down reasons
 
@@ -46,6 +55,19 @@ THE_SEAL_IS_ASKED_BEFORE_ANY_SLOT: Final = (
     "The seal status answers for anybody, so it is asked first, and slots are asked only of a "
     "vault that is open."
 )
+
+
+#: Why a token carrying more than its role's policy is reported rather than accepted.
+A_ROLES_POLICY_HOLDS_ONLY_WHILE_ITS_PROCESS_CARRIES_IT_ALONE: Final = (
+    "Each process's vault token is minted against its own role's policy, so the application cannot "
+    "read a connector's key and the browser runner reaches no database. A token carrying root or "
+    "another role's policy works on every screen and is wider than the process holding it, so the "
+    "screen says so rather than calling the vault healthy."
+)
+
+#: The one policy a token may carry beside its role's: the vault attaches it unless told not to,
+#: and it grants a token's view of itself.
+BESIDE_ITS_OWN: Final = frozenset({"default"})
 
 
 class Seal(enum.StrEnum):
@@ -111,6 +133,81 @@ class SlotReport:
     refuse: tuple[str, ...] = ()
 
 
+class TokenPolicy(enum.StrEnum):
+    """Whether this process's token carries its own role's policy and nothing wider."""
+
+    #: Its role's policy, and at most the vault's `default` beside it.
+    OWN = "own"
+    #: Anything else: root, another role's policy, or its own missing.
+    OTHER = "other"
+    #: Not asked, or the vault did not say.
+    UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True)
+class TokenReport:
+    """The policies this process's token carries, as the vault named them, and a sentence."""
+
+    state: TokenPolicy
+    policies: tuple[str, ...]
+    told: str
+
+
+POLICIES_UNKNOWN: Final = (
+    "The vault was not asked, or did not say, which policies this token carries."
+)
+
+
+def token_says(state: TokenPolicy, role: VaultRole) -> str:
+    """The sentence beside a token's policies."""
+    own = policy_of(role)
+    if state is TokenPolicy.OWN:
+        return (
+            f"This process's token carries the {own} policy and no other, so it can do what "
+            f"ops/openbao/policies/{own}.hcl grants and nothing more."
+        )
+    if state is TokenPolicy.OTHER:
+        return (
+            f"This process's token does not carry the {own} policy alone, so it is wider or "
+            f"narrower than this process should be. Mint one with bao token create -orphan "
+            f"-policy={own} -period=768h and replace BRAIN_VAULT_TOKEN: "
+            "ops/openbao/credential-slots.md."
+        )
+    return POLICIES_UNKNOWN
+
+
+def token_policy_of(policies: tuple[str, ...], role: VaultRole) -> TokenPolicy:
+    """OWN only when the role's policy is present and nothing but `default` is beside it."""
+    if not policies:
+        return TokenPolicy.UNKNOWN
+    own = policy_of(role)
+    if own in policies and set(policies) <= {own} | BESIDE_ITS_OWN:
+        return TokenPolicy.OWN
+    return TokenPolicy.OTHER
+
+
+@runtime_checkable
+class TokenLookup(Protocol):
+    """A reader that can also say what its own token carries. `OpenBaoVault` is one."""
+
+    def token_standing(self) -> TokenStanding:
+        """The token's standing, policies included."""
+        ...
+
+
+def token_report(reader: object, role: VaultRole) -> TokenReport:
+    """What this process's token carries. Never raises for the vault."""
+    if not isinstance(reader, TokenLookup):
+        return TokenReport(TokenPolicy.UNKNOWN, (), POLICIES_UNKNOWN)
+    try:
+        policies = tuple(sorted(reader.token_standing().policies))
+    except Exception:
+        # Broad for `report`'s reason: whatever stopped the answer, the vault did not say.
+        return TokenReport(TokenPolicy.UNKNOWN, (), POLICIES_UNKNOWN)
+    state = token_policy_of(policies, role)
+    return TokenReport(state, policies, token_says(state, role))
+
+
 @dataclass(frozen=True)
 class VaultReport:
     """The vault's seal, a sentence about it, and every slot."""
@@ -121,6 +218,8 @@ class VaultReport:
     connectors: tuple[SlotReport, ...]
     #: Why the slots are unknown when the vault is open and they are, or empty.
     slots_unread: str = ""
+    #: What this process's own token carries; unknown unless the vault is open.
+    token: TokenReport = TokenReport(TokenPolicy.UNKNOWN, (), POLICIES_UNKNOWN)
 
 
 class VaultStatusReader(Protocol):
@@ -168,7 +267,9 @@ def _unknown(
     )
 
 
-def report(reader: VaultStatusReader | None) -> VaultReport:
+def report(
+    reader: VaultStatusReader | None, role: VaultRole = VaultRole.APPLICATION
+) -> VaultReport:
     """The vault as this process can see it. Never raises for the vault; see the module doc."""
     providers = [(path, SLOTS[path].description) for path in sorted(SLOTS)]
     connectors = [SLOT_SCOPES[name] for name in sorted(SLOT_SCOPES)]
@@ -191,6 +292,7 @@ def report(reader: VaultStatusReader | None) -> VaultReport:
                 seal = Seal.OPEN
     if reader is None or seal is not Seal.OPEN:
         return VaultReport(seal, SEAL_SAYS[seal], unknown_providers, unknown_connectors)
+    token = token_report(reader, role)
     try:
         held_providers = tuple(
             _provider(reader, path, description) for path, description in providers
@@ -198,13 +300,13 @@ def report(reader: VaultStatusReader | None) -> VaultReport:
         held_connectors = tuple(_connector(reader, one) for one in connectors)
     except VaultRefusedError:
         return VaultReport(
-            seal, SEAL_SAYS[seal], unknown_providers, unknown_connectors, SLOTS_REFUSED
+            seal, SEAL_SAYS[seal], unknown_providers, unknown_connectors, SLOTS_REFUSED, token
         )
     except Exception:
         return VaultReport(
-            seal, SEAL_SAYS[seal], unknown_providers, unknown_connectors, SLOTS_SILENT
+            seal, SEAL_SAYS[seal], unknown_providers, unknown_connectors, SLOTS_SILENT, token
         )
-    return VaultReport(seal, SEAL_SAYS[seal], held_providers, held_connectors)
+    return VaultReport(seal, SEAL_SAYS[seal], held_providers, held_connectors, token=token)
 
 
 def _provider(reader: VaultStatusReader, path: str, description: str) -> SlotReport:

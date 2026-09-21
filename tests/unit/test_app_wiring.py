@@ -24,10 +24,12 @@ import time
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
+from typing import cast
 
 import httpx
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -44,6 +46,7 @@ from brain.app import (
     VAULT_CHECK,
     Settings,
     create_app,
+    vault_at_start,
 )
 from brain.automation_routes import AutomationWiring
 from brain.cache import (
@@ -64,6 +67,8 @@ from brain.identity.principal_store import StoredPrincipals
 from brain.identity.sign_in_binding import Binding, SignInBindings, sign_in_bindings
 from brain.ops.automation_owner_store import StoredAutomations
 from brain.ops.credentials import Credentials
+from brain.ops.model_service import ModelService
+from brain.ops.openbao import OpenBaoVault
 from brain.ops.replica_store import console_reads_for
 from brain.readiness import (
     DISCOVERY_PATH,
@@ -81,6 +86,7 @@ from brain.session import (
     make_session_factory,
 )
 from brain.sign_in_routes import FINISH_PATH, SIGN_INS_PATH
+from brain.vault_routes import vault_reader_of
 from tests.fixtures.scratch_postgres import drop, fresh, run
 from tests.unit.test_entitlement_store import a_grant, a_principal, resolver
 from tests.unit.test_keycloak_tokens import ISSUER, Idp, token
@@ -538,6 +544,49 @@ def test_a_configured_vault_decides_readiness(
     assert response.json()["checks"][VAULT_CHECK] is answers
     assert part(response.json(), VAULT_CHECK)["gates"] is True
     assert asked and asked[0] == ("https://vault.invalid:8200", "t-for-the-test")
+
+
+def test_the_lifespan_attaches_all_four_handles_and_the_vault_screen_reads_the_one_client(
+    monkeypatch: pytest.MonkeyPatch, realm: Realm
+) -> None:
+    """M31.1.1.2: database pool, Valkey, OpenBao client and model registry, each on app.state after
+    start, and the first three named on readiness. Delete this and the vault client can go back to
+    being built per request from the settings, so the lifespan attaches three of the four and the
+    Secrets vault screen reads through a client nothing at start ever built."""
+    reachable_database(monkeypatch)
+    monkeypatch.setattr("brain.app.vault_answers", lambda *_a: True)
+    monkeypatch.setattr("brain.app.credentials_at_start", lambda *_a, **_k: Credentials(None))
+    monkeypatch.setattr("brain.app.renewer_at_start", lambda *_a, **_k: None)
+    cache = Valkey()
+    monkeypatch.setattr("brain.app.make_async_client", lambda _url: cache)
+    settings = Settings(
+        env="development",
+        database_url=UNANSWERED,
+        valkey_url=CACHE_URL,
+        vault_address="https://vault.invalid:8200",
+        vault_token="t-for-the-test",
+    )
+    app = create_app(settings)
+    with TestClient(app) as c:
+        ready = c.get("/health/ready").json()
+        # The route reads `request.app` and nothing else of the request.
+        seen = vault_reader_of(cast("Request", SimpleNamespace(app=app)))
+        assert app.state.db_engine is not None and app.state.db_sessions is not None
+        assert app.state.valkey is cache
+        assert isinstance(app.state.vault, OpenBaoVault)
+        assert isinstance(app.state.models, ModelService)
+        assert seen is app.state.vault
+    for name in ("database", CACHE_CHECK, VAULT_CHECK):
+        assert part(ready, name)["gates"] is True
+
+
+def test_no_vault_client_is_attached_where_none_is_named_or_its_address_is_not_a_url() -> None:
+    """The positive case is the test above. Delete this and a half-configured vault stops the
+    process at start rather than reporting readiness's vault part as not ready."""
+    assert vault_at_start("", "") is None
+    assert vault_at_start("https://vault.invalid:8200", "") is None
+    assert vault_at_start("vault.invalid:8200", "t") is None
+    assert isinstance(vault_at_start("https://vault.invalid:8200", "t"), OpenBaoVault)
 
 
 def test_a_database_that_goes_away_after_start_turns_readiness_to_503(

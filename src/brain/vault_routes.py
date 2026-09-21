@@ -19,7 +19,11 @@ and no others. No count of what was left out. See
 **Never a value, and never a token.** The slots come from metadata, the leases are counts of four
 words, the shipping is counts and an instant; no field on the answer could hold more.
 
-Task ids: M31.3.2.1, M31.3.2.3, M31.3.2.4, M31.3.2.5, M31.3.2.6, M38.4.1.3
+**Which policies the application's own token carries is on the screen**, and whether that is the
+application policy alone. See
+`brain.ops.vault_status.A_ROLES_POLICY_HOLDS_ONLY_WHILE_ITS_PROCESS_CARRIES_IT_ALONE`.
+
+Task ids: M31.3.2.1, M31.3.2.2, M31.3.2.3, M31.3.2.4, M31.3.2.5, M31.3.2.6, M38.4.1.3
 """
 
 from __future__ import annotations
@@ -41,12 +45,16 @@ from brain.credential_routes import may_manage
 from brain.ops.connector_lease import RUN_LEASE_TTL
 from brain.ops.connector_sync_store import LeaseCounts, StoredLeaseCounts
 from brain.ops.credentials import A_KEY_REPLACED_IN_THE_VAULT_IS_USED_WITHOUT_A_RESTART
-from brain.ops.openbao import OpenBaoVault
-from brain.ops.secrets import VaultRole
 from brain.ops.vault_audit_ship import StoredVaultAccess, VaultAccessRecords
-from brain.ops.vault_status import Seal, SlotReport, SlotState, VaultStatusReader, report
+from brain.ops.vault_status import (
+    Seal,
+    SlotReport,
+    SlotState,
+    TokenPolicy,
+    VaultStatusReader,
+    report,
+)
 from brain.routing_routes import sessions_of
-from brain.settings import Settings
 
 log = structlog.get_logger()
 
@@ -127,6 +135,9 @@ class VaultView(BaseModel):
     seal: Seal
     told: str
     slots_unread: str
+    token_policy: TokenPolicy
+    token_policies: tuple[str, ...]
+    token_told: str
     providers: tuple[VaultSlotView, ...]
     connectors: tuple[VaultSlotView, ...]
     leases: tuple[LeaseView, ...] | None
@@ -151,19 +162,13 @@ def slot_view(one: SlotReport) -> VaultSlotView:
 
 
 def vault_reader_of(request: Request) -> VaultStatusReader | None:
-    """What `app.state.vault_reader` holds, or a client from the settings, or None with no vault."""
+    """What `app.state.vault_reader` holds (a test's reader), or the vault client the lifespan
+    attached as `app.state.vault`, or None with no vault. One client for the process, built at
+    start, rather than one per request from the settings."""
     found = getattr(request.app.state, "vault_reader", None)
-    if found is not None:
-        return found  # type: ignore[no-any-return]  # app.state is untyped; tests set a reader
-    settings = getattr(request.app.state, "settings", None)
-    if not isinstance(settings, Settings) or not settings.vault_address or not settings.vault_token:
-        return None
-    try:
-        return OpenBaoVault(
-            settings.vault_address, settings.vault_token, role=VaultRole.APPLICATION
-        )
-    except ValueError:
-        return None
+    if found is None:
+        found = getattr(request.app.state, "vault", None)
+    return found
 
 
 def lease_counts_of(request: Request) -> LeaseCounts | None:
@@ -234,6 +239,9 @@ async def vault(request: Request, asked: Asked) -> VaultView:
         seal=found.seal,
         told=found.told,
         slots_unread=found.slots_unread,
+        token_policy=found.token.state,
+        token_policies=found.token.policies,
+        token_told=found.token.told,
         providers=tuple(slot_view(one) for one in found.providers),
         connectors=tuple(slot_view(one) for one in found.connectors),
         leases=leases,

@@ -143,9 +143,11 @@ from brain.ops.model_service import (
     model_service_at_start,
 )
 from brain.ops.object_store import backup_objects, object_store_at_start
+from brain.ops.openbao import OpenBaoVault
 from brain.ops.question_gap_store import GapRecorder
 from brain.ops.question_store import QuestionRecorder
 from brain.ops.replica_store import console_reads_for
+from brain.ops.secrets import VaultRole
 from brain.ops.starter_store import furnish as furnish_install
 from brain.ops.telemetry_store import TelemetryRecorder
 from brain.ops.trace_sink import CountingTraceSink
@@ -291,9 +293,10 @@ class Health(BaseModel):
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings: Settings = app.state.settings
     log.info("starting", env=settings.env, commit=settings.resolved_commit())
-    # Dependency handles attach here as they land: database pool, cache, secret store,
-    # model registry. Readiness reads app.state.ready, so an unattached dependency shows
-    # as not-ready rather than as a working instance.
+    # The four handles attach here: the database pool (`db_engine`, `db_sessions`), Valkey
+    # (`valkey`), the OpenBao client (`vault`) and the model registry (`models`). The first three
+    # are named parts on readiness; the models are not, as a driver per provider is built whatever
+    # is configured, so a part for them would always say ready. See `vault_at_start`.
     app.state.ready = {}
     # Named on readiness and never counted. See SIGN_IN_IS_REPORTED_AND_DOES_NOT_GATE_READINESS.
     app.state.reported = {}
@@ -317,6 +320,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # This process's own vault token, renewed by this process, because OpenBao renews a token
     # only for whoever presents it. See `brain.ops.vault_renewal`.
     renewer = renewer_at_start(settings.vault_address, settings.vault_token)
+    # The one vault client the screens read through, under the application's role.
+    app.state.vault = vault_at_start(settings.vault_address, settings.vault_token)
     # A vault the install names decides readiness; one it does not name is shown as not
     # configured. See `brain.readiness.A_PART_NOBODY_CONFIGURED_IS_NAMED_AND_NEVER_COUNTED`.
     if vault_configured(settings.vault_address, settings.vault_token):
@@ -668,6 +673,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # Before the engine goes, so what is waiting is written. See `brain.ops.log_store`.
         await stop_log_store(getattr(app.state, "log_store", None))
         await dispose(getattr(app.state, "db_engine", None))
+
+
+def vault_at_start(address: str, token: str) -> OpenBaoVault | None:
+    """The application's OpenBao client, or None when no vault is named or its address is not a
+    URL. Never raises: a wrong address is readiness's `vault` part saying not ready, not a process
+    that will not start. Constructing one asks the vault nothing."""
+    if not address or not token:
+        return None
+    try:
+        return OpenBaoVault(address, token, role=VaultRole.APPLICATION)
+    except ValueError:
+        return None
 
 
 def key_set_client() -> httpx.Client:
