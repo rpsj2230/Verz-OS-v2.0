@@ -2,7 +2,8 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**1 item is open: 81.** It says in plain terms what it is, what I recommend, and every step.
+**2 items are open: 81 and 84.** Each says in plain terms what it is, what I recommend, and
+every step.
 
 # Open
 
@@ -27,7 +28,25 @@ index and live read, never a bulk copy.
    if Lark asks.
 5. Tell me "Lark permission added".
 
+## 84. Your server's swap file and the secrets vault
+
+**In plain terms:** the vault keeps decrypted keys in memory. When a server runs low on memory it
+can move some of it to a swap file on disk, and your server has a 2 GB swap file, not encrypted,
+with 1.2 GB in use. The newest vault version no longer stops that itself; it asks that swap be off
+or encrypted. The server is shared with your other project, so I have not touched it.
+**Recommendation: accept this for now** and turn swap off or encrypt it when you next change the
+server; with 7 GB free there is room. If you want it done now, reply "turn swap off" and I will
+check your other project's memory first and do it.
+
 # Answered
+
+## 75. A secrets vault on your install - DONE 2026-09-21
+
+The vault runs beside the Brain in its own project, so a redeploy never locks it. It is opened,
+its audit logs are on, the three role policies and the seven connector key slots are defined, and
+the application and worker each have a token that carries only their own policy. Every readiness
+part now reports ready, the vault included. Move the five unseal pieces into your password manager
+and delete the file, as I described in chat.
 
 ## 77. Your other GitHub repositories - DECIDED: out of scope
 
