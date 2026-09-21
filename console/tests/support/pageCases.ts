@@ -250,7 +250,32 @@ const STAFF_SOURCES = {
     refusal: "",
     ready: true,
   },
-  not_written_here: UNBROKEN,
+  how_to_choose: UNBROKEN,
+};
+
+/**
+ * One guide for connecting a staff source, whose title, steps and help are unbreakable tokens.
+ * The form is drawn, because the reader may connect, so the forms test opens it.
+ */
+const STAFF_SOURCE_GUIDES = {
+  guides: [
+    {
+      source: "lark",
+      title: UNBROKEN,
+      where: UNBROKEN,
+      steps: [UNBROKEN],
+      fields: [
+        { key: "location", label: "Platform", help: UNBROKEN, secret: false, example: "larksuite.com" },
+        { key: "app_id", label: "App ID", help: UNBROKEN, secret: false, example: "cli_a" },
+        { key: "app_secret", label: "App Secret", help: UNBROKEN, secret: true, example: "" },
+      ],
+      connectable: true,
+      unavailable: "",
+      chosen: true,
+    },
+  ],
+  may_connect: true,
+  schedule: UNBROKEN,
 };
 
 /**
@@ -1139,6 +1164,7 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     drawsValues: true,
     answers: {
       "/api/v1/govern/staff_sources": STAFF_SOURCES,
+      "/api/v1/govern/staff_sources/guides": STAFF_SOURCE_GUIDES,
       // The nightly sync's three reads, each carrying the unbroken token where a value is drawn.
       "/api/v1/govern/staff_sources/runs": {
         runs: [
@@ -1165,7 +1191,7 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         form: UNBROKEN,
       },
       "/api/v1/govern/staff_sources/transfers": {
-        transfers: [{ agent_id: UNBROKEN, display_name: UNBROKEN, owner_id: UNBROKEN, running: true }],
+        transfers: [{ agent_id: UNBROKEN, display_name: UNBROKEN, owner_id: UNBROKEN, running: false }],
       },
     },
   },

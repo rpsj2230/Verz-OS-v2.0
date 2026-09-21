@@ -69,9 +69,9 @@ from brain.install import hold_saved, value_of
 from brain.ops.jobs import hidden_count_fields
 from brain.staff_source_routes import (
     ADDRESSES,
-    CHOOSING_A_SOURCE_IS_NOT_A_WRITE_THIS_APPLICATION_HAS,
     NOTHING_HERE_READS_A_LIVE_STAFF_SOURCE,
     SCREEN_PATH,
+    WHERE_A_SOURCE_IS_CHOSEN,
     RoleAssertionView,
     RosterPersonView,
     SelectionView,
@@ -430,20 +430,19 @@ def test_no_shape_on_this_screen_can_carry_a_count_of_what_was_withheld() -> Non
     )
 
 
-def test_the_screen_says_where_a_source_is_chosen_because_no_route_writes_one(
+def test_the_screen_says_a_source_is_chosen_on_it_and_that_the_server_needs_no_edit(
     client: TestClient,
 ) -> None:
-    """Delete this and the screen looks unfinished rather than honest.
+    """Delete this and the page can go back to telling somebody to edit a file on the server.
 
-    The choice and the location are installation settings and nothing in this application writes
-    one, so a picker here would collect an answer and have nowhere to send it. The sentence
-    names both settings, which is what makes it actionable rather than an apology.
+    Since 2026-09-21 a source is connected on this screen and saved in `ops.setting`, so the
+    sentence the page carries says where on the screen, and that nothing on the server changes.
     """
     page = body(client, PAGE_PATH, "u_admin")
 
-    assert page["not_written_here"] == CHOOSING_A_SOURCE_IS_NOT_A_WRITE_THIS_APPLICATION_HAS
-    assert STAFF_SOURCE_SETTING in page["not_written_here"]
-    assert STAFF_SOURCE_LOCATION_SETTING in page["not_written_here"]
+    assert page["how_to_choose"] == WHERE_A_SOURCE_IS_CHOSEN
+    assert "Connect a staff source" in page["how_to_choose"]
+    assert "not_written_here" not in page
 
 
 @pytest.mark.parametrize("path", [PAGE_PATH, TRIAL_PATH])
@@ -451,9 +450,9 @@ def test_neither_address_answers_a_verb_that_could_write(client: TestClient, pat
     """Delete this and a write can be added to a screen whose whole subject is a read.
 
     A trial reads a source and changes nothing, and applying what one proposes is a different
-    authority that belongs to whatever runs the scheduled sync. The property is that there is no
-    verb here at all rather than a verb that refuses, so this asserts the method is not allowed
-    rather than that a POST is refused for want of a capability.
+    authority: the first sync, at its own address, under the two authorities a connection needs.
+    The property is that there is no verb on these two addresses at all rather than a verb that
+    refuses, so this asserts the method is not allowed rather than that a POST is refused.
     """
     token = token_for("u_admin", claims={"amr": ["otp"]})
     answer = client.post(path, headers={"authorization": f"Bearer {token}"}, json={})

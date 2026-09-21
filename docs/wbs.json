@@ -231,7 +231,7 @@
     "The staff source credential given at setup is kept in the vault for the scheduled sync and replaced from the console, and a sync whose credential is refused changes nobody and says so on the staff sources screen",
     "Appointing one person as both Super Admin and Connector Admin shows a separation-of-duties warning that must be acknowledged with a reason, and the acknowledgement is recorded in the audit trail",
     "Every permissions requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves",
-    "When the staff sync marks a person as a leaver, every agent they own is listed for transfer on the console and keeps running at no wider reach than before until a new owner accepts it",
+    "When the staff sync marks a person as a leaver, every agent they own is stopped and listed for transfer on the console until a new owner accepts it, which starts it again at no wider reach than before and records the change of owner in the audit ledger (owner decision 2026-09-21: stop rather than keep running)",
     "A record's access view, showing who can see that record, opens only for someone who can already see it"
    ],
    "leaf_waves": {},

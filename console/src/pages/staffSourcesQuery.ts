@@ -17,12 +17,12 @@
  * which is a wider disclosure than the screen it sits on. `TRIAL_API_PATH` is therefore not
  * fetched when the page mounts; see `A_TRIAL_IS_A_REQUEST_SOMEBODY_MAKES`.
  *
- * **There is no control here for choosing a source or pointing it anywhere, and that is not a
- * gap in this file.** The choice and the location are installation settings, written once by the
- * setup wizard into the install's own environment and read by `brain.install.value_of`; no route
- * in the API writes an installation setting. The API sends the sentence saying so and this page
- * renders it, rather than composing one in a browser or drawing a form that would post to
- * nothing. See `A_CONTROL_THAT_POSTS_TO_NOTHING_IS_WORSE_THAN_NO_CONTROL`.
+ * **Choosing and connecting a source happens here since 2026-09-21.** The API saves the choice and
+ * its location in `ops.setting`, the table the Settings screen writes, and keeps the credential in
+ * the vault slot the nightly sync reads, so nothing on the server is edited. The steps each vendor
+ * needs are the API's (`brain.console.staff_source_guide`), fetched from `GUIDES_API_PATH` and
+ * drawn by `components/ConnectStaffSource.tsx`; a console that wrote its own would be a second
+ * account of a vendor's menus. See `A_SOURCE_IS_CONNECTED_FROM_THIS_SCREEN`.
  *
  * **No count of anything, anywhere.** The options are the whole of what an install may choose or
  * none of them, and a trial is the whole plan or a refusal, so there is no partial answer for a
@@ -66,16 +66,15 @@ export const A_TRIAL_IS_A_REQUEST_SOMEBODY_MAKES =
   "answered. So there is a button, and nothing is asked until it is pressed.";
 
 /**
- * Written down because the absence of a form on a configuration screen reads as unfinished.
+ * Written down because the screen used to say the opposite, and the old sentence is the one a
+ * reader remembers.
  */
-export const A_CONTROL_THAT_POSTS_TO_NOTHING_IS_WORSE_THAN_NO_CONTROL =
-  "Which staff list this install reads and where that list is are installation settings. The " +
-  "setup wizard writes them once at first run into the install's own environment and nothing " +
-  "in the API writes one afterwards, so a picker or a text box here would collect an answer " +
-  "and have nowhere to send it. The sentence the API returns says where the values are set " +
-  "instead. It is carried on the response rather than written here for the reason every " +
-  "sentence on these screens is: a console that composed its own would be a second account of " +
-  "how this product is configured, out of step with the API within a release.";
+export const A_SOURCE_IS_CONNECTED_FROM_THIS_SCREEN =
+  "Which staff list this install reads, and where it is, are chosen on this screen: the API " +
+  "saves both in ops.setting, where the Settings screen's values live and the nightly sync " +
+  "reads them before every run, and keeps the credential in the vault. The steps for each " +
+  "vendor come from the API, so the console draws them rather than keeping a copy that goes " +
+  "stale when a vendor renames a menu.";
 
 /**
  * Written down because this screen is the one place the design of record cannot be followed.
@@ -111,7 +110,7 @@ export const STAFF_SOURCES_LABEL = "Staff sources";
 const NOTHING: StaffSources = Object.freeze({
   options: [],
   selection: null,
-  not_written_here: "",
+  how_to_choose: "",
 });
 
 /**
@@ -133,7 +132,7 @@ export function readStaffSources(payload: unknown): StaffSources {
   const body = payload as {
     options?: unknown;
     selection?: unknown;
-    not_written_here?: unknown;
+    how_to_choose?: unknown;
   };
   if (!Array.isArray(body.options)) {
     return NOTHING;
@@ -141,8 +140,7 @@ export function readStaffSources(payload: unknown): StaffSources {
   return {
     options: body.options as SourceOption[],
     selection: (body.selection ?? null) as Selection | null,
-    not_written_here:
-      typeof body.not_written_here === "string" ? body.not_written_here : "",
+    how_to_choose: typeof body.how_to_choose === "string" ? body.how_to_choose : "",
   };
 }
 
@@ -225,3 +223,101 @@ export function readCredential(payload: unknown): StaffCredential | null {
 
 /** What a blank credential is told, beside the field, before anything is confirmed or sent. */
 export const CREDENTIAL_BLANK = "Paste the credential before replacing the one the sync reads with.";
+
+// ======================================================== connecting a source from this screen
+// Added on 2026-09-21 (M27.7.2). One read, loaded with the page because it is product text and
+// contacts nobody, and four writes: a test that keeps nothing, the connection, the first sync's dry
+// run and its apply, each at its own address so the press that shows a plan cannot apply it.
+
+/** How to connect one kind of source, as `brain.staff_source_routes.GuideView` sends it. */
+export type Guide = components["schemas"]["GuideView"];
+/** One box on a connect form. */
+export type GuideField = components["schemas"]["GuideFieldView"];
+/** Every guide, whether this reader may connect, and what happens after the first sync. */
+export type Guides = components["schemas"]["GuidesView"];
+/** What a connection test read. */
+export type ConnectionTest = components["schemas"]["ConnectionTestView"];
+/** A connection saved. */
+export type Connected = components["schemas"]["StaffConnectedView"];
+/** The first sync's dry run, or what applying it did. */
+export type FirstSync = components["schemas"]["FirstSyncView"];
+
+export const GUIDES_API_PATH = "/govern/staff_sources/guides";
+export const CONNECTION_TEST_API_PATH = "/govern/staff_sources/test";
+export const CONNECT_API_PATH = "/govern/staff_sources/connect";
+export const FIRST_SYNC_API_PATH = "/govern/staff_sources/first-sync";
+export const APPLY_FIRST_SYNC_API_PATH = "/govern/staff_sources/first-sync/apply";
+
+/** The guides, or null for an unreadable body, which draws no connect section at all. */
+export function readGuides(payload: unknown): Guides | null {
+  if (typeof payload !== "object" || payload === null) {
+    return null;
+  }
+  const body = payload as Partial<Guides>;
+  return Array.isArray(body.guides) && typeof body.may_connect === "boolean"
+    ? (body as Guides)
+    : null;
+}
+
+/** The guide a reader starts on: the one this install chose, else the first that can connect. */
+export function startingGuide(guides: readonly Guide[]): Guide | null {
+  return guides.find((one) => one.chosen) ?? guides.find((one) => one.connectable) ?? guides[0] ?? null;
+}
+
+/** Empty boxes for a guide, one per field. */
+export function blankValues(guide: Guide): Record<string, string> {
+  return Object.fromEntries(guide.fields.map((one) => [one.key, ""]));
+}
+
+/**
+ * The labels of the boxes left empty, so a form sent blank says what to fill in before anything
+ * is sent. The API refuses the same thing in its own words; this is the half that sends nothing.
+ */
+export function blankLabels(guide: Guide, values: Readonly<Record<string, string>>): string[] {
+  return guide.fields.filter((one) => (values[one.key] ?? "").trim() === "").map((one) => one.label);
+}
+
+/** What a form with empty boxes is told, beside the button, before anything is sent. */
+export function fillIn(labels: readonly string[]): string {
+  return `Fill in every box before testing: ${labels.join(", ")}.`;
+}
+
+/** The body every one of the four writes sends: the kind of source and its boxes. */
+export function connectBody(
+  guide: Guide,
+  values: Readonly<Record<string, string>>,
+  useHeld = false,
+): { source: string; values: Record<string, string>; use_held?: boolean } {
+  const boxes = useHeld ? heldBoxes(guide) : guide.fields;
+  const sent = Object.fromEntries(boxes.map((one) => [one.key, (values[one.key] ?? "").trim()]));
+  return useHeld ? { source: guide.source, values: sent, use_held: true } : { source: guide.source, values: sent };
+}
+
+/** The key of the one box every guide asks for that is never part of the credential. */
+export const LOCATION_KEY = "location";
+
+/**
+ * The boxes a connection with a credential the vault already holds still needs: where the list is,
+ * and no credential box at all, because the API refuses a secret sent in that mode.
+ */
+export function heldBoxes(guide: Guide): Guide["fields"] {
+  return guide.fields.filter((one) => one.key === LOCATION_KEY);
+}
+
+/** A test's answer, or null for an unreadable body. */
+export function readConnectionTest(payload: unknown): ConnectionTest | null {
+  if (typeof payload !== "object" || payload === null) {
+    return null;
+  }
+  const body = payload as Partial<ConnectionTest>;
+  return typeof body.read === "boolean" && typeof body.told === "string" ? (body as ConnectionTest) : null;
+}
+
+/** A first sync's answer, or null for an unreadable body. */
+export function readFirstSync(payload: unknown): FirstSync | null {
+  if (typeof payload !== "object" || payload === null) {
+    return null;
+  }
+  const body = payload as Partial<FirstSync>;
+  return typeof body.applied === "boolean" && Array.isArray(body.added) ? (body as FirstSync) : null;
+}

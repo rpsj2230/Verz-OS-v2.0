@@ -598,6 +598,14 @@ class AuditAction(enum.StrEnum):
     #: happened, whose data it was or how many. Written by `0104`'s trigger on `ops.breach_case`,
     #: so the clock the regulator asks about has its own record of who moved it and when.
     BREACH = "breach"
+    #: An agent's owner changed: somebody accepted an agent whose owner the staff sync marked as
+    #: having left, or any other statement moved `agent.agent.owner_id`. The owner before and after
+    #: are in the details. Written by `0105`'s trigger on `agent.agent`, so a change made at a
+    #: prompt is recorded as surely as one made from the Staff sources screen. Eleven characters.
+    #: Not `publish`, which is an artefact, and not `compose_change`, which is what an agent
+    #: carries: who answers for an agent is neither, and "who took over the agent that did this"
+    #: is the question asked after it did something nobody expected (M1.8.9).
+    AGENT_OWNER = "agent_owner"
 
 
 # --------------------------------------------------------------------- redaction
