@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-21T11:21:12.609304+00:00",
-  "commit": "90cdfaf",
-  "commit_subject": "A matrix change is judged before it takes traffic, providers carry their terms, one can be added from the console, and an agent's model can be pinned",
+  "generated_at": "2026-09-21T11:35:06.316969+00:00",
+  "commit": "d7435c8",
+  "commit_subject": "The worker sets its schema after connecting, so a session pooler admits it, and schedules as the owner",
   "total": 1598,
   "done": 266,
   "percent": 16.6,
