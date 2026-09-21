@@ -2,8 +2,8 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**2 items are open: 81 and 84.** Each says in plain terms what it is, what I recommend, and
-every step.
+**9 items are open: 81, 84 and 85 to 91.** Item 85 (your AI provider keys) unblocks the most. Each
+says in plain terms what it is, what I recommend, and every step.
 
 # Open
 
@@ -38,7 +38,84 @@ or encrypted. The server is shared with your other project, so I have not touche
 server; with 7 GB free there is room. If you want it done now, reply "turn swap off" and I will
 check your other project's memory first and do it.
 
+## 85. Your four AI provider keys (the most useful thing you can do today)
+
+**In plain terms:** the Brain answers questions with Claude (Anthropic), OpenAI, DeepSeek and
+Moonshot Kimi, as you decided. The routing, fallbacks, timeouts and cost limits are built and
+tested, but no key is held yet, so nothing can be proved on your install and nothing answers for
+real. Each key goes straight into the secrets vault; it is never shown again or written anywhere
+else. **Recommendation: add all four in one sitting,** about ten minutes. Unblocks M5.1.2, M5.7.1,
+M5.6.1 and M5.6.3.
+
+1. Get a key from each provider's website: Anthropic console (API keys), OpenAI platform (API
+   keys), DeepSeek platform (API keys), Moonshot platform (API keys). Keep each one open.
+2. Open the console (signed in) and go to **Models and health** in the left menu.
+3. On each provider's row use its key control, paste that provider's key and save. The row should
+   then say a key is held.
+4. Press **Check** on each provider.
+5. Tell me "keys added". I then confirm each one answers and record the checks.
+
+## 86. One wording question on how the Brain calls the AI providers (M5.1.1)
+
+**In plain terms:** a task written early says calls go through a library called LiteLLM. The Brain
+calls each provider directly instead, with the retries, timeouts and fallbacks written and tested
+in the product itself, which is one less moving part and nothing hidden. **Recommendation: accept
+the direct calls** and I record M5.1.1 as decided. Reply "accept direct calls", or "use LiteLLM".
+
+## 87. Where the daily audit fingerprint is kept (M24.3.3)
+
+**In plain terms:** once a day the Brain publishes a short fingerprint of its audit trail somewhere
+the database administrator cannot change, so nobody can quietly rewrite history. You decided in
+item 8 on a private GitHub repository for now. **Recommendation: a new private repository just for
+this.** Five minutes.
+
+1. On GitHub (account rpsj2230) click **New repository**, name it `brain-audit-anchor`, choose
+   **Private**, tick **Add a README**, **Create repository**.
+2. In that repository: **Settings** > **Branches** > **Add branch protection rule**, pattern
+   `main`, leave **Allow force pushes** and **Allow deletions** unticked, **Create**.
+3. Tell me "anchor repo created". I connect the daily job to it and check the first fingerprint.
+
+## 88. What happens to a leaver's agents (M1.8.9)
+
+**In plain terms:** when someone leaves, the agents they own can either keep running under a
+temporary owner until a new owner accepts them, or stop until someone takes them over. Two tasks
+disagree. **Recommendation: stop them until a new owner accepts,** so nothing runs for weeks with
+nobody responsible. Reply "stop them" or "keep them running".
+
+## 89. Directory sign-ins other than your own (M1.6.6)
+
+**In plain terms:** the Brain can read staff lists from Lark, Microsoft Entra and a Google Sheet.
+A fourth option, a company's own Active Directory (LDAP), has no directory behind it to build or
+test against. **Recommendation: mark it "not needed until a client uses Active Directory".**
+Reply "mark LDAP not needed now" or "build LDAP".
+
+## 90. Lark staff list read for your own install (M1.6.5)
+
+**In plain terms:** the nightly staff sync reads your company's people from Lark. It needs your
+Lark app to be allowed to read the contact list. This can be done in the same visit as item 81.
+
+1. Lark developer console (`open.larksuite.com/app`), the Brain's app, **Permissions & Scopes**.
+2. Add `contact:user.base:readonly` and `contact:department.base:readonly` (read-only).
+3. **Development Configuration** > **Permissions & Scopes** > **Data range**: set the contact range
+   to **All members**.
+4. **Version Management & Release**: create a version and submit it (approve as admin).
+5. Open the console's **Staff sources** screen and use **Replace credential** to paste
+   `App ID:App Secret` from the app's **Credentials & Basic Info** page.
+6. Tell me "Lark contacts added". The next nightly run then lists your people on that screen.
+
+## 91. Checks only you can do on your install (after Wave 1 lands)
+
+**In plain terms:** a few requirements are about how the Brain behaves for real people, so the
+proof is you trying them and recording what you saw on the new **Requirement checks** screen.
+When Wave 1 is deployed I will send you a short list, about 30 minutes in one sitting (department
+isolation, a staff member's first day, the model checks). Nothing to do yet.
+
 # Answered
+
+## 92. The department audit task that contradicted your decision (M24.3.5) - DECIDED by item 48
+
+M24.3.5 asked for option B of item 48; you chose option A on 2026-09-09, so it is recorded as
+decided as not needed as written.
 
 ## 75. A secrets vault on your install - DONE 2026-09-21
 
