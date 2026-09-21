@@ -94,6 +94,11 @@ NOT_A_REQUEST_WITH_A_REACH: Final[Mapping[str, str]] = MappingProxyType(
             "the setup code, before any principal holds a reach, so there is no writer's reach to "
             "carry and the entry records the unsupplied digest, which is the truth."
         ),
+        "brain.identity.administration_reconciliation:reconcile_super_admin_roles": (
+            "Runs when the process starts, recording a first administrator appointed before role "
+            "grants existed as Super Admin, once: no request and no person pressing anything, so "
+            "no reach and no trace, and the actor is first run, as at the appointment."
+        ),
         "brain.identity.administration_reconciliation:reconcile_first_administrators": (
             "Runs when the process starts, granting an administrator what was added to the "
             "administration set since they were appointed: no request, no person pressing "

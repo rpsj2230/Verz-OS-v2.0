@@ -88,6 +88,9 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "Binds a sign-in to a person. A subject already bound elsewhere is refused with a 409 rather " +
     "than re-pointed, so nothing existing is replaced; unlinking is the destructive act and it is " +
     "confirmed.",
+  "src/pages/RoleControls.tsx path":
+    "Appoints somebody to a role, or a deputy for at most thirty days. A role grant replaces " +
+    "nothing, and taking one away is the removal beside it, which is confirmed.",
   "src/pages/People.tsx PACK_ASSIGNMENT_API_PATH":
     "Assigns a capability pack. Entitlements are additive only, an assignment replaces nothing, and " +
     "taking one back is the Access review's removal, which is confirmed.",

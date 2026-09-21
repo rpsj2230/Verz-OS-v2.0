@@ -230,6 +230,9 @@ SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
         "gate.elevation_request": "principal_id",
         "gate.grants_version": "principal_id",
         "gate.review_decision": "principal_id",
+        # A role a person was appointed to. Retired like a grant, and refused by `0102`'s guard
+        # when it would leave fewer than two Super Admins, so an erasure cannot lock the install.
+        "gate.role_grant": "principal_id",
         "gate.suspension": "principal_id",
         "gate.team_membership": "principal_id",
         "know.chunk": "owner_id",

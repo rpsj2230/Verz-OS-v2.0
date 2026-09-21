@@ -329,6 +329,9 @@ class StubResult:
     def one_or_none(self) -> Any:
         return self._rows[0] if self._rows else None
 
+    def first(self) -> Any:
+        return self._rows[0] if self._rows else None
+
     def scalar_one_or_none(self) -> Any:
         if not self._rows:
             return None
@@ -355,6 +358,8 @@ class Executed:
         #: Set to raise from the insert, which is how a foreign key and a unique index both
         #: arrive: as an `IntegrityError` from the driver with a constraint name on it.
         self.integrity: bool = False
+        #: Whether the team a grant names is a live team (`one_team`).
+        self.team_live: bool = True
         self.statements: list[str] = []
         self.committed = 0
         self.rolled_back = 0
@@ -366,6 +371,8 @@ class Executed:
         read and a fixture keyed on order is a fixture that silently answers the wrong table
         the day somebody reorders two lines.
         """
+        if "FROM gate.team " in sql:
+            return StubResult([(uuid.uuid4(),)] if self.team_live else [])
         if "capability_pack_assignment" in sql:
             return StubResult(self.assignments)
         if "capability_registry" in sql:
@@ -879,18 +886,14 @@ def test_the_roles_screen_answers_the_six_and_never_a_capability_beside_one(
             assert not CAPABILITY_RE.search(str(value)), value
 
 
-def test_the_roles_screen_says_nothing_about_who_holds_one(client: TestClient) -> None:
-    """There is no holder listing, because there is no table to build one from.
-
-    `role_grant` is M1.3.2 and does not exist; `auth.directory_role_grant` records what a
-    directory asserts, which is a different fact. The response says so in a field rather than
-    leaving the absence to be read as an empty list.
-
-    Delete this and the obvious next change is to read the directory table under this heading,
-    which puts "the identity provider says so" and "somebody appointed them" under one word."""
+def test_the_role_catalogue_carries_no_holders_beside_the_six(client: TestClient) -> None:
+    """Holders are `GET /govern/roles/holders`, from `gate.role_grant`, and never folded into a
+    role's description. Delete this and the catalogue grows a holders field read from the
+    directory, which puts "the identity provider says so" and "somebody appointed them" under
+    one word."""
     body = get(client, ROLES_PATH, "u_admin").json()
 
-    assert body["holders_are_not_recorded_yet"] is True
+    assert set(body) == {"roles"}
     assert all("holders" not in one for one in body["roles"])
 
 
@@ -1659,3 +1662,82 @@ def test_the_screens_this_router_serves_are_the_keys_the_registry_holds() -> Non
     assert screen(ROLES_SCREEN).read.requires == Capability(value="read:role")
     assert screen(VOCABULARY_SCREEN).read.requires == Capability(value="read:capability")
     assert screen(PEOPLE_SCREEN).read.plane is Plane.CONFIGURATION
+
+
+# ------------------------------------------------------------------ team grants (M1.5.3)
+def team_proposal(**changed: object) -> dict[str, object]:
+    body: dict[str, object] = {
+        "team_path": f"{MAINTENANCE}.pumps",
+        "capability": GRANTED,
+        "scope_slug": MAINTENANCE,
+        "reason": "the pumps team needs it",
+    }
+    body.update(changed)
+    return body
+
+
+def test_a_grant_may_name_a_live_team_and_is_written_with_no_principal(
+    client: TestClient, executed: Executed
+) -> None:
+    """M1.5.3 at the route: the team is the subject, one row, no principal. Delete this and a
+    team can never be granted anything from the console."""
+    executed.scopes = [
+        scope_row(slug=MAINTENANCE, predicate={"department": MAINTENANCE}, is_department=True)
+    ]
+    executed.written = grant_row(principal_id="u_2", scope=IN_MAINTENANCE)
+
+    response = propose(client, "u_admin", body=team_proposal())
+
+    assert response.status_code == 201, response.text
+    [insert] = [
+        one for one in executed.statements if one.startswith("INSERT INTO gate.capability_grant")
+    ]
+    assert "team_path" in insert
+
+
+def test_a_grant_naming_a_team_nobody_created_is_the_ordinary_refusal(
+    client: TestClient, executed: Executed
+) -> None:
+    """Delete this and a grant to a team that does not exist is written and confers nothing."""
+    executed.scopes = [
+        scope_row(slug=MAINTENANCE, predicate={"department": MAINTENANCE}, is_department=True)
+    ]
+    executed.team_live = False
+
+    response = propose(client, "u_admin", body=team_proposal())
+
+    assert response.status_code == 404
+    assert not [one for one in executed.statements if one.startswith("INSERT")]
+
+
+def test_a_team_grant_bounded_to_another_department_is_refused(
+    client: TestClient, executed: Executed
+) -> None:
+    """`teams.assert_within_department` at the route. Delete this and a finance-scoped grant to a
+    maintenance team reads as bounded while reaching the wrong rows."""
+    executed.scopes = [scope_row(slug=FINANCE, predicate={"department": FINANCE})]
+
+    response = propose(client, "u_admin", body=team_proposal(scope_slug=FINANCE))
+
+    assert response.status_code == 404
+    assert not [one for one in executed.statements if one.startswith("INSERT")]
+
+
+def test_a_grant_names_a_person_or_a_team_and_never_both_or_neither(client: TestClient) -> None:
+    """Delete this and a body naming both writes a row the subject checks refuse as a 500."""
+    both = team_proposal(principal_id="u_2")
+    neither = {key: value for key, value in team_proposal().items() if key != "team_path"}
+    assert propose(client, "u_admin", body=both).status_code == 422
+    assert propose(client, "u_admin", body=neither).status_code == 422
+
+
+def test_a_team_grant_is_removed_by_the_team_and_the_capability() -> None:
+    """The removal statement for a team names the team. Delete this and removing a team grant
+    matches a person's row, or nothing."""
+    rendered_sql = str(
+        retire_grant(None, GRANTED, f"{MAINTENANCE}.pumps").compile(
+            compile_kwargs={"literal_binds": True}
+        )
+    )
+    assert "gate.capability_grant.team_path = 'maintenance.pumps'" in rendered_sql
+    assert "principal_id" not in rendered_sql.split("WHERE")[1]

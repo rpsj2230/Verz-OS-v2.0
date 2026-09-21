@@ -84,6 +84,15 @@ class PackHolding:
 type Holding = GrantHolding | PackHolding
 
 
+def held_by(holding: Holding) -> str:
+    """Who holds this row. A team's grant is never loaded here: see `review_grants`."""
+    principal = holding.row.principal_id
+    if principal is None:
+        msg = "a team's grant is not reviewed person by person"
+        raise ValueError(msg)
+    return principal
+
+
 @dataclass(frozen=True)
 class LastDecision:
     """The newest decision about one row: what, by whom, and the database's instant."""
@@ -125,7 +134,10 @@ def review_grants(limit: int) -> Select[tuple[CapabilityGrantRow, str, str | Non
             & (PrincipalRow.deleted_at.is_(None)),
             isouter=True,
         )
-        .where(CapabilityGrantRow.deleted_at.is_(None))
+        # A team's grant (M1.5.3) is reviewed as the team's, which this round does not yet do.
+        .where(
+            CapabilityGrantRow.deleted_at.is_(None), CapabilityGrantRow.principal_id.is_not(None)
+        )
         .order_by(CapabilityGrantRow.principal_id, CapabilityGrantRow.capability)
         .limit(limit)
     )
@@ -189,7 +201,11 @@ def one_grant_to_decide(
             & (PrincipalRow.deleted_at.is_(None)),
             isouter=True,
         )
-        .where(CapabilityGrantRow.id == row_id, CapabilityGrantRow.deleted_at.is_(None))
+        .where(
+            CapabilityGrantRow.id == row_id,
+            CapabilityGrantRow.deleted_at.is_(None),
+            CapabilityGrantRow.principal_id.is_not(None),
+        )
         .with_for_update(of=CapabilityGrantRow)
     )
 
@@ -357,7 +373,7 @@ class StoredReview:
         log.info("review.decided", principal=holding.row.principal_id, decided_by=decided_by)
         return Decided(
             row_id=holding.row.id,
-            principal_id=holding.row.principal_id,
+            principal_id=held_by(holding),
             decision=decision,
             decided_at=stamped,
         )
