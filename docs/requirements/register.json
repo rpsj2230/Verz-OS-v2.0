@@ -13180,7 +13180,7 @@
    "proof": [
     "M42.7.2"
    ],
-   "decision": null
+   "decision": "needs-rupash 82: the owner's server is the first company's production install; later companies get their own server via the installer"
   },
   {
    "id": "DEC-44",
@@ -13482,7 +13482,7 @@
     "M42.2.10",
     "M42.6.7"
    ],
-   "decision": null
+   "decision": "needs-rupash 82: the owner's server is the first company's production install; later companies get their own server via the installer"
   },
   {
    "id": "RWD-04",
@@ -18494,6 +18494,26 @@
     "M27.14.1"
    ],
    "decision": null
+  },
+  {
+   "id": "OWN3-1",
+   "source": "owner, 2026-09-21 (chat): installing the Company Brain for company 2, company 3 and so on",
+   "area": "Installer",
+   "requirement": "Each later company's Brain is installed on its own server, any AWS instance or VPS, by a guided installer with a clean, simple interface that also connects its connectors and channels, so the Brain is ready to use when the installer finishes.",
+   "leaves": [
+    "M42.5.1",
+    "M42.5.4",
+    "M42.5.7",
+    "M42.5.9",
+    "M42.5.14",
+    "M42.5.16",
+    "M42.6.6"
+   ],
+   "proof": [
+    "M42.5.17",
+    "M42.4.7"
+   ],
+   "decision": "needs-rupash 82: recorded as OWN3-1 with two new installer tasks"
   }
  ]
 }

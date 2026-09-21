@@ -39,11 +39,6 @@ const PROGRESS = {
     why: "on staging the checks ran after deploy 5254748 and passed (/api/deploy-checks.json); the Deploy run reads the verdict once the owner sets POST_DEPLOY_CHECKS",
     updated: "2026-09-21",
   },
-  "M38.1.3.4": {
-    status: "READY FOR TESTING",
-    why: "installed on staging 2026-09-21 and the first deploy passed its gate; rollback is proved only by an image that never reports ready",
-    updated: "2026-09-21",
-  },
   "M0.3.5": {
     status: "BLOCKED",
     why: "staging runs no worker; the session pool is added with the worker, which is next (owner allowed server changes)",
@@ -59,24 +54,9 @@ const PROGRESS = {
     why: "engine tests pass for session and transaction pooling; closing needs PgBouncer on the install (M0.3.4)",
     updated: "2026-09-21",
   },
-  "M38.1.4.2": {
-    status: "BLOCKED",
-    why: "server change needs owner permission",
-    updated: "2026-09-21",
-  },
-  "M38.1.4.3": {
-    status: "BLOCKED",
-    why: "server change needs owner permission",
-    updated: "2026-09-21",
-  },
   "M38.2.1.1": {
     status: "READY FOR TESTING",
     why: "WAVE_RECORDS and /build/waves are live on staging; proved when the first wave is accepted and recorded",
-    updated: "2026-09-21",
-  },
-  "M41.2.7": {
-    status: "BLOCKED",
-    why: "needs the signing key slot, which arrives in Wave 3",
     updated: "2026-09-21",
   },
   "M41.3.1": {

@@ -390,6 +390,18 @@ const ACTS = {
   // about to be deployed carries the source the commit says it does, which `schema_check`
   // already does for the schema and nothing does for the code. That is a leaf somebody should
   // write, and it is not this one.
+  "M38.1.4.2": {
+    kind: "DECIDED",
+    gate: false,
+    text: "Staging on the same server, separate compose project and database",
+    why: "owner 2026-09-21, item 82: the owner's server is the first company's production install, not a staging copy; every later company runs its own server set up by the installer. Each release is still gated by CI, the health gate, rollback and the post-deploy checks",
+  },
+  "M38.1.4.3": {
+    kind: "DECIDED",
+    gate: false,
+    text: "Production, deployed on every push once staging has passed the same commit",
+    why: "owner 2026-09-21, item 82: the owner's server is the first company's production install, not a staging copy; every later company runs its own server set up by the installer. Each release is still gated by CI, the health gate, rollback and the post-deploy checks",
+  },
   "M38.2.1.3": {
     kind: "ACT",
     gate: false,
