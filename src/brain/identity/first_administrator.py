@@ -302,6 +302,7 @@ ADMINISTRATION: Final[tuple[str, ...]] = (
     "admin:operations_alert",
     "admin:operations_incident",
     "admin:plugin",
+    "admin:requirement_check",
     "admin:retention",
     "admin:routing_matrix",
     "admin:schedule",

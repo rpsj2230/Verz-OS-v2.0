@@ -372,6 +372,10 @@ async def answer_lane(
                 tool_calls=calls.started,
                 model_usage=usage,
                 front=front,
+                # The agent the model step ran, for the sensitive read recorder (M24.3.2).
+                agent_id=None
+                if model is None or model.agent is None
+                else model.agent.record.agent_id,
             ),
         )
 

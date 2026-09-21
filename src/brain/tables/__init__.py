@@ -97,6 +97,7 @@ from brain.tables.outbox import OutboxDeliveryRow, OutboxEventRow, WebhookSubscr
 from brain.tables.plugin import PluginInstallRow, PluginVersionRow
 from brain.tables.projection import ProjectedRecordRow
 from brain.tables.question_gap import QuestionGapRow
+from brain.tables.requirement_check import RequirementCheckRow
 from brain.tables.resolution import (
     CanonicalEntityRow,
     EntityAliasRow,
@@ -107,6 +108,7 @@ from brain.tables.retention import LegalHoldRow, RetentionReleaseRow, RetentionR
 from brain.tables.review import ReviewDecisionRow
 from brain.tables.routing import ModelAttemptRow, RoutingRungRow, RoutingTierRow
 from brain.tables.schedule import ControlRunRow
+from brain.tables.sensitive_read import SensitiveReadRow
 from brain.tables.service_account import ApiKeyRow, ServiceAccountRow
 from brain.tables.skill import SkillAssignmentRow, SkillReviewRow, SkillRow
 from brain.tables.spend import ReportRefreshRow, SpendActualRow
@@ -312,6 +314,12 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0101_access_request. Points at nothing: the asker and the owner are values, so a request
     # outlives a change to either.
     "gate.access_request",
+    # 0098_sensitive_reads_and_budget_audit. Points at nothing: the reader and the subject are
+    # values, so the record of who read somebody's record outlives both.
+    "ops.sensitive_read",
+    # 0099_requirement_check. Points at nothing: a requirement is a register id and the person a
+    # value, so the record of what was checked outlives both.
+    "ops.requirement_check",
 )
 
 __all__ = [
@@ -377,6 +385,7 @@ __all__ = [
     "QuestionGapRow",
     "ReportRefreshRow",
     "RequestTelemetryRow",
+    "RequirementCheckRow",
     "RetentionReleaseRow",
     "RetentionReportRow",
     "ReviewDecisionRow",
@@ -384,6 +393,7 @@ __all__ = [
     "RoutingRungRow",
     "RoutingTierRow",
     "ScopeRow",
+    "SensitiveReadRow",
     "ServiceAccountRow",
     "SessionRow",
     "SettingRow",

@@ -654,7 +654,8 @@ CONTROLS: Final[tuple[Control, ...]] = (
     ),
     Control(
         name="audit_anchor",
-        symbols=("brain.audit.anchor:take_anchor",),
+        # The stored ledger's head since 2026-09-21: `take_anchor` was handed an empty chain.
+        symbols=("brain.audit.chain_check:published_head",),
         guards=(
             "that entries cannot be removed from the end of the audit ledger without it "
             "being detectable, which the hash chain on its own cannot show"

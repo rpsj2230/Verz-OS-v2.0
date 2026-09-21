@@ -128,6 +128,14 @@ const ROWS: Row[] = [
   { action: "leash_change", actor_id: "u_steward", subject_kind: "agent", subject_id: "helper" },
 ];
 
+
+/** The control that fetches more entries, found by its words: the verification card has buttons too. */
+function showMore(container: HTMLElement): HTMLButtonElement | undefined {
+  return [...container.querySelectorAll<HTMLButtonElement>("button.button")].find((one) =>
+    (one.textContent ?? "").startsWith("Show "),
+  );
+}
+
 describe("what the audit screen asks for", () => {
   test("every parameter a page sends is one the route declares", async () => {
     // What breaks if this is deleted: a filter the API ignores. FastAPI drops an undeclared query
@@ -139,7 +147,7 @@ describe("what the audit screen asks for", () => {
       (url) => (url.pathname === AUDIT_OPERATION ? json(ledgerPage(ROWS, { next: "c1" })) : null),
     );
     await settled(container);
-    fireEvent.click(container.querySelector("button.button") as HTMLElement);
+    fireEvent.click(showMore(container) as HTMLElement);
     await waitFor(() => {
       expect(asked(idp, AUDIT_OPERATION)).toHaveLength(2);
     });
@@ -294,13 +302,13 @@ describe("what the audit screen shows", () => {
         : json(ledgerPage(ROWS, { next: "c1" }));
     });
     await settled(container);
-    fireEvent.click(container.querySelector("button.button") as HTMLElement);
+    fireEvent.click(showMore(container) as HTMLElement);
 
     await waitFor(() => {
       expect(container.textContent).toContain("principal u_old");
     });
     expect(container.textContent).toContain("principal u_wide");
-    expect(container.querySelector("button.button")).toBeNull();
+    expect(showMore(container)).toBeUndefined();
     expect(asked(idp, AUDIT_OPERATION)).toHaveLength(2);
   });
 

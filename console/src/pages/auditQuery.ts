@@ -351,3 +351,91 @@ export function when(value: string): string {
     minute: "2-digit",
   });
 }
+
+// ------------------------------------------------------------------- the verification job
+
+/** One walk of the whole ledger, as `brain.audit_routes.VerificationView` sends it. */
+export type Verification = components["schemas"]["VerificationView"];
+
+/** Where the API runs the job (M24.1.2, M24.3.3). */
+export const VERIFICATION_API_PATH = "/audit/verification";
+
+/** The published head a person copies from the anchor store, as the form holds it. */
+export interface PublishedHead {
+  readonly seq: string;
+  readonly head: string;
+  readonly takenAt: string;
+}
+
+export const EMPTY_HEAD: PublishedHead = Object.freeze({ seq: "", head: "", takenAt: "" });
+
+/** What each blank or malformed field of the published head is told. */
+export const HEAD_PROBLEMS = Object.freeze({
+  seq: "Copy the sequence number from the newest anchor file.",
+  head: "Copy the 64-character head digest from the same anchor file.",
+  takenAt: "Copy when that anchor was taken, as the anchor file writes it.",
+});
+
+/**
+ * The fields of a published head that are blank or malformed, in form order. Checked here so a
+ * half-copied anchor never reaches the API, which would refuse it with a less useful sentence.
+ */
+export function headProblems(head: PublishedHead): readonly (keyof typeof HEAD_PROBLEMS)[] {
+  const problems: (keyof typeof HEAD_PROBLEMS)[] = [];
+  if (!/^\d+$/.test(head.seq.trim())) {
+    problems.push("seq");
+  }
+  if (!/^[0-9a-f]{64}$/.test(head.head.trim())) {
+    problems.push("head");
+  }
+  if (Number.isNaN(new Date(head.takenAt.trim()).getTime()) || head.takenAt.trim() === "") {
+    problems.push("takenAt");
+  }
+  return problems;
+}
+
+/** The request body: the published head when one is given, nothing when the chain alone is walked. */
+export function verificationBody(head: PublishedHead | null): Record<string, unknown> {
+  if (head === null) {
+    return {};
+  }
+  return {
+    published: {
+      seq: Number(head.seq.trim()),
+      head: head.head.trim(),
+      taken_at: new Date(head.takenAt.trim()).toISOString(),
+    },
+  };
+}
+
+/** Read `VerificationView`, or null when the body is not one. */
+export function readVerification(payload: unknown): Verification | null {
+  if (typeof payload !== "object" || payload === null) {
+    return null;
+  }
+  const body = payload as { continuous?: unknown; caveats?: unknown; completeness?: unknown };
+  if (typeof body.continuous !== "boolean" || !Array.isArray(body.caveats)) {
+    return null;
+  }
+  return payload as Verification;
+}
+
+/** What `continuous` means, in words. Never "verified": see `brain.audit.verify`. */
+export function continuityInWords(found: Verification): string {
+  if (found.continuous) {
+    return "No entry in the ledger was edited, removed or reordered.";
+  }
+  const broken = found.break_found;
+  return broken === null || broken === undefined
+    ? "The chain does not hold."
+    : `The chain stops holding at entry ${String(broken.seq)}: ${broken.reason.replace(/_/g, " ")}.`;
+}
+
+/** What `completeness` means, in words. */
+export const COMPLETENESS_WORDS: Readonly<Record<string, string>> = Object.freeze({
+  anchored: "The last published head is still in the ledger, unchanged.",
+  unanchored: "No published head was checked, so entries removed from the end would not show.",
+  anchor_missing:
+    "The ledger no longer holds the entry the published head names: entries were removed or " +
+    "rewritten after it was published.",
+});

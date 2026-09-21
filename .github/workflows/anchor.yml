@@ -1,4 +1,4 @@
-# Records the audit ledger's head in this repository, on a schedule.
+# Records the audit ledger's head in a separate repository, on a schedule.
 #
 # The audit chain proves nobody edited an old entry. It proves nothing about deletion from
 # the end: remove the newest twenty entries and what remains verifies perfectly, because a
@@ -6,16 +6,24 @@
 # into a detectable fact.
 #
 # **This pulls; the server never pushes.** GitHub Actions reads the digest from the running
-# application and commits it here. The alternative, having the server write its own anchor,
-# needs a write credential on the one machine the anchor is supposed to be independent of,
-# and then anyone who could delete audit entries could also write an anchor agreeing with
-# the deletion. Nothing new lands on the VPS for this to work.
+# application and commits it to the anchor repository. The alternative, having the server write
+# its own anchor, needs a write credential on the one machine the anchor is supposed to be
+# independent of, and then anyone who could delete audit entries could also write an anchor
+# agreeing with the deletion. Nothing new lands on the server for this to work.
 #
-# The tamper-evidence is git's own history. An anchor committed on Tuesday stays visible in
-# the log even if somebody later rewrites the file, and force-pushing over it is both
-# blocked on this branch and loud.
+# **Where the anchors go is the install's, and is read from two settings of this repository:**
+# the variable `ANCHOR_REPOSITORY` (`owner/name` of a private repository holding nothing else)
+# and the secret `ANCHOR_DEPLOY_KEY`, an SSH deploy key with write access to that repository
+# only. Neither is written here, for the reason `BRAIN_URL` is not: a repository name in this
+# file is one company's value inside the product. The server holds neither.
 #
-# Task ids: M24.1.2
+# **The anchor repository's history is not protected by GitHub**: a private repository on a free
+# plan cannot have branch protection, so a force-push over it is refused by nothing. What this
+# workflow relies on instead is its own check, every run, that the last head it published is
+# still in the ledger with the same digest. Rewriting the anchor history to agree with a
+# truncated ledger needs the deploy key, which lives only in this repository's secrets.
+#
+# Task ids: M24.1.2, M24.3.3
 
 name: Anchor
 
@@ -27,7 +35,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  # Read only: the anchors are pushed with the deploy key to the anchor repository, never here.
+  contents: read
 
 concurrency:
   # Two runs committing anchors at once produce a push race, and the loser retries against
@@ -39,9 +48,37 @@ jobs:
   anchor:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Refuse to run without the anchor store once an install is being anchored
+        id: store
+        env:
+          BRAIN_URL: ${{ vars.BRAIN_URL }}
+          ANCHOR_REPOSITORY: ${{ vars.ANCHOR_REPOSITORY }}
+          ANCHOR_DEPLOY_KEY: ${{ secrets.ANCHOR_DEPLOY_KEY }}
+        run: |
+          set -euo pipefail
+          # No BRAIN_URL is a repository nobody has deployed, and it anchors nothing quietly.
+          # BRAIN_URL without the store is an install whose anchors have nowhere to go, which
+          # is the failure this workflow exists to prevent, so it is a failed run.
+          if [ -z "${BRAIN_URL:-}" ]; then
+            echo "no BRAIN_URL repository variable; no anchor this run"
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ -z "${ANCHOR_REPOSITORY:-}" ] || [ -z "${ANCHOR_DEPLOY_KEY:-}" ]; then
+            echo "::error::BRAIN_URL is set but ANCHOR_REPOSITORY or the ANCHOR_DEPLOY_KEY secret is missing, so the ledger's head has nowhere to be published"
+            exit 1
+          fi
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+
+      - name: Check out the anchor repository with its deploy key
+        if: steps.store.outputs.configured == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.ANCHOR_REPOSITORY }}
+          ssh-key: ${{ secrets.ANCHOR_DEPLOY_KEY }}
 
       - name: Read the ledger head
+        if: steps.store.outputs.configured == 'true'
         id: read
         env:
           BRAIN_URL: ${{ vars.BRAIN_URL }}
@@ -76,6 +113,60 @@ jobs:
           "
           echo "taken=true" >> "$GITHUB_OUTPUT"
 
+      - name: Check the last published head is still in the ledger
+        # M24.3.3. The head published last time says entry N existed with that digest. A ledger
+        # that now lacks N, or holds a different digest there, lost or rewrote entries after that
+        # head was published, and a chain walk on the server cannot see it. This run is where it
+        # is seen: the finding is committed beside the anchors and the run fails, so the
+        # repository's owner is told by GitHub rather than by somebody remembering to look.
+        id: covers
+        if: steps.read.outputs.taken == 'true'
+        env:
+          BRAIN_URL: ${{ vars.BRAIN_URL }}
+        run: |
+          set -euo pipefail
+          python - <<'CHECK'
+          import datetime, glob, json, os, urllib.error, urllib.request
+
+          out = open(os.environ["GITHUB_OUTPUT"], "a")
+          published = sorted(glob.glob("anchors/*.json"))
+          if not published:
+              print("no earlier anchor; nothing to check against")
+              out.write("missing=false\n")
+              raise SystemExit(0)
+          last = published[-1]
+          before = json.load(open(last))
+          if set(before["head"]) == {"0"}:
+              print("the last anchor recorded an empty ledger; nothing to check against")
+              out.write("missing=false\n")
+              raise SystemExit(0)
+          now = json.load(open("anchor.json"))
+          url = f"{os.environ['BRAIN_URL']}/api/audit/anchor/{before['seq']}"
+          try:
+              with urllib.request.urlopen(url, timeout=20) as answer:
+                  held = json.load(answer).get("head")
+          except (urllib.error.URLError, ValueError) as exc:
+              # A release without the route, or no answer: not a finding, and said so.
+              print(f"entry {before['seq']} could not be asked about ({exc}); not checked")
+              out.write("missing=false\n")
+              raise SystemExit(0)
+          if held is None or now["seq"] < before["seq"]:
+              verdict = "removed"
+          elif held != before["head"]:
+              verdict = "rewritten"
+          else:
+              verdict = "held"
+          print(f"entry {before['seq']} from {last}: {verdict}")
+          if verdict == "held":
+              out.write("missing=false\n")
+              raise SystemExit(0)
+          os.makedirs("anchors/findings", exist_ok=True)
+          stamp = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H%M%SZ")
+          finding = {"anchor": last, "head": before["head"], "seq": before["seq"], "verdict": verdict}
+          json.dump(finding, open(f"anchors/findings/{stamp}.json", "w"), sort_keys=True)
+          out.write("missing=true\n")
+          CHECK
+
       - name: Commit it
         if: steps.read.outputs.taken == 'true'
         run: |
@@ -86,7 +177,9 @@ jobs:
           stamp="$(date -u +%Y-%m-%d)"
           mv anchor.json "anchors/$stamp.json"
 
-          if git diff --quiet -- anchors/; then
+          # `git status` and not `git diff`: a new day's file is untracked, and `git diff` never
+          # sees an untracked file, so every new anchor was reported as "nothing to commit".
+          if [ -z "$(git status --porcelain -- anchors/)" ]; then
             echo "the head has not moved since the last anchor; nothing to commit"
             exit 0
           fi
@@ -99,3 +192,9 @@ jobs:
           # nobody reads, and these commits never conflict with anything but each other.
           git pull --rebase --quiet
           git push
+
+      - name: Fail the run when entries were removed after the last published head
+        if: steps.covers.outputs.missing == 'true'
+        run: |
+          echo "the ledger no longer holds the entry the last published head names; see anchors/findings"
+          exit 1

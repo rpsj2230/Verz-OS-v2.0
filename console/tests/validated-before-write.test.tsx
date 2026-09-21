@@ -45,6 +45,11 @@ interface FormCase {
 const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
   "src/components/ConnectSource.tsx": [{ pattern: "/connectors", index: 0, writes: true }],
   "src/components/DataStewardCard.tsx": [{ pattern: "/people", index: 1, writes: true }],
+  // Index 0 is the ledger's filter bar, which only narrows; index 1 checks a published head.
+  "src/pages/Audit.tsx": [
+    { pattern: "/audit", index: 0, writes: false },
+    { pattern: "/audit", index: 1, writes: true },
+  ],
   "src/pages/Classification.tsx": [
     { pattern: "/classification/:entity/:column", index: 0, writes: false },
     { pattern: "/classification/:entity/:column", index: 1, writes: true },
@@ -80,6 +85,7 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
     { pattern: "/people/:subject", index: 2, writes: true },
   ],
   "src/pages/Prompts.tsx": [{ pattern: "/prompts", opener: "Edit instructions", index: 0, writes: true }],
+  "src/pages/RequirementChecks.tsx": [{ pattern: "/requirement-checks", index: 0, writes: true }],
   "src/pages/Retention.tsx": [
     { pattern: "/retention", index: 0, writes: true },
     { pattern: "/retention", index: 1, writes: true },

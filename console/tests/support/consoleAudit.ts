@@ -37,7 +37,8 @@ import { automationStartApiPath, automationStopApiPath } from "../../src/pages/a
 import { STEWARD_API_PATH } from "../../src/pages/dataStewardQuery";
 import { automationInstallApiPath, automationPreviewApiPath } from "../../src/pages/automationGalleryQuery";
 import { approvalDecisionApiPath } from "../../src/pages/approvalsQuery";
-import { historyApiPath } from "../../src/pages/auditQuery";
+import { historyApiPath, VERIFICATION_API_PATH } from "../../src/pages/auditQuery";
+import { CHECKS_API_PATH } from "../../src/pages/requirementChecksQuery";
 import { UNDO_API_PATH } from "../../src/pages/learningQuery";
 import { reviewApiPath } from "../../src/pages/classificationQuery";
 import { assignPath, reviewPath, SKILLS_API_PATH } from "../../src/pages/skillsQuery";
@@ -561,9 +562,9 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "The audit trail: who changed what, and when": {
-    screens: ["/audit"],
-    routes: ["/api/v1/audit*"],
-    tables: ["obs.audit_entry"],
+    screens: ["/audit", "/requirement-checks"],
+    routes: ["/api/v1/audit*", "/api/v1/requirements/checks"],
+    tables: ["obs.audit_entry", "ops.sensitive_read", "ops.requirement_check"],
     installation: [],
     gaps: [],
   },
@@ -815,6 +816,12 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   ],
   "src/pages/People.tsx PACK_ASSIGNMENT_API_PATH": [
     at("POST /api/v1/govern/packs/assignment", "PACK_ASSIGNMENT_API_PATH", PACK_ASSIGNMENT_API_PATH),
+  ],
+  "src/pages/Audit.tsx VERIFICATION_API_PATH": [
+    at("POST /api/v1/audit/verification", "VERIFICATION_API_PATH", VERIFICATION_API_PATH),
+  ],
+  "src/pages/RequirementChecks.tsx CHECKS_API_PATH": [
+    at("POST /api/v1/requirements/checks", "CHECKS_API_PATH", CHECKS_API_PATH),
   ],
 };
 
@@ -1267,6 +1274,21 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: t("test_govern_pack_routes", "test_an_assignment_reaches_the_row_the_ledger_and_the_resolver", true),
     audit: t("test_govern_pack_routes", "test_an_assignment_reaches_the_row_the_ledger_and_the_resolver", true),
     behaviour: t("test_govern_pack_routes", "test_an_assignment_reaches_the_row_the_ledger_and_the_resolver", true),
+  },
+  "POST /api/v1/audit/verification": {
+    row: { notApplicable: "Walking the ledger reads it and writes nothing." },
+    audit: { notApplicable: "A verification changes nothing, so there is nothing to record." },
+    behaviour: t("test_chain_check", "test_a_truncated_ledger_is_reported_through_the_route"),
+  },
+  "POST /api/v1/requirements/checks": {
+    row: t("test_requirement_check_routes", "test_the_store_keeps_every_check_and_reads_back_the_newest_per_requirement", true),
+    audit: {
+      none: "A check is an append-only row attributed to the person who recorded it, and is not written to the ledger: brain.tables.requirement_check argues why.",
+    },
+    behaviour: t(
+      "test_requirement_check_routes",
+      "test_a_check_is_recorded_as_the_person_asking_on_the_running_release_and_read_back",
+    ),
   },
 };
 

@@ -178,21 +178,21 @@ def test_a_symbol_the_tree_does_not_declare_is_found() -> None:
 def test_a_name_bound_inside_a_function_is_not_declared_at_module_level() -> None:
     """Delete this and the registry can name something no scheduler could import.
 
-    `brain.docs_routes` imports `take_anchor` inside a function body, so a check that walked
+    `brain.docs_routes` imports `published_head` inside a function body, so a check that walked
     the whole tree rather than the module's top level would report every locally bound name
     as importable from that module.
     """
-    assert not is_declared("brain.docs_routes:take_anchor")
-    assert is_declared("brain.audit.anchor:take_anchor")
+    assert not is_declared("brain.docs_routes:published_head")
+    assert is_declared("brain.audit.chain_check:published_head")
 
 
 def test_a_call_from_inside_a_function_body_is_still_a_call_site() -> None:
     """Delete this and the one control that actually runs reads as an orphan.
 
-    `brain.docs_routes.audit_anchor` imports and calls `take_anchor` inside the handler, and
+    `brain.docs_routes.audit_anchor` imports and calls `published_head` inside the handler, and
     a scan that only looked at module-level imports would have found nothing.
     """
-    assert "brain.docs_routes" in call_sites("brain.audit.anchor:take_anchor")
+    assert "brain.docs_routes" in call_sites("brain.audit.chain_check:published_head")
 
 
 def test_a_function_called_only_from_its_own_module_has_no_call_site() -> None:
@@ -656,7 +656,7 @@ def test_a_declared_invocation_that_disagrees_with_the_source_is_reported() -> N
     understating = (
         _control(
             name="anchor_copy",
-            symbols=("brain.audit.anchor:take_anchor",),
+            symbols=("brain.audit.chain_check:published_head",),
             invoked_by=Invocation.NOTHING,
         ),
     )

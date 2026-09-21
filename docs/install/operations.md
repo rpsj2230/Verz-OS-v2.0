@@ -401,6 +401,26 @@ follows the deploy and something an operator can see and disable without a relea
 **Which mechanisms do you switch on first?** The backup one, then the drill that proves it,
 before anything else on the list.
 
+## Publishing the audit ledger's head somewhere the database cannot reach
+
+The audit chain shows an edited entry but not a removed tail: delete the newest entries and what
+is left still verifies. The Anchor workflow (`.github/workflows/anchor.yml`) closes that. Every six
+hours it reads `/api/audit/anchor` from the install, commits the day's head to a separate private
+repository, and first asks the install for the digest at the last head it published; if that
+entry is gone or changed, it commits a finding under `anchors/findings/` and the run fails.
+
+It needs three settings on the repository the workflow runs in:
+
+1. The variable `BRAIN_URL`: the install's address.
+2. The variable `ANCHOR_REPOSITORY`: `owner/name` of a private repository used for nothing else.
+3. The secret `ANCHOR_DEPLOY_KEY`: an SSH deploy key with write access to that repository only.
+
+With `BRAIN_URL` set and either of the other two missing, the run fails rather than anchoring
+nothing. A private repository on a free plan cannot have branch protection, so its history is
+guarded by the workflow's own check and by the deploy key living only in these secrets; before
+a client contract promises anything about audit records, move the anchors to write-once storage.
+The same check can be run by hand from the Audit screen: "Walk and check the published head".
+
 ## A read replica for the console, if you add one
 
 This is optional. `docker-compose.replica.yml` creates a replica on the same server as the

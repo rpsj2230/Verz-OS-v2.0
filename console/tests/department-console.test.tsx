@@ -62,6 +62,7 @@ const ABOUT_THE_SERVER = [
   "/features",
   "/storage",
   "/vault",
+  "/requirement-checks",
 ];
 
 /** Mount the shell against a stand-in API answering the navigation with `answer`. */

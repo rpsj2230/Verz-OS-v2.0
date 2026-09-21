@@ -865,7 +865,8 @@ def test_a_step_that_went_through_is_finished_once_as_a_call_that_was_not_refuse
 
     assert isinstance(payload, ChannelPayload)
     (finished,) = kept.seen
-    assert finished.outcome == ToolCallOutcome(refused=False)
+    # What the caller was handed rides on the outcome, for the sensitive read recorder (M24.3.2).
+    assert finished.outcome == ToolCallOutcome(refused=False, disclosed=payload)
     assert finished.origin == _origin()
     assert (finished.at, finished.completed_at) == (NOW, DONE)
     assert finished.entitlement_hash == _plan_reach().ent_hash()

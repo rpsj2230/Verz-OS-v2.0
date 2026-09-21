@@ -169,6 +169,14 @@ THE_REQUEST_IS_THE_PROOF_AND_IS_KEPT: Final = (
     "it would remove the only proof that the person's right was honoured"
 )
 
+#: Why a sensitive read is kept by the erasure of the person whose record was read (M24.3.2).
+A_READ_OF_A_RECORD_IS_THE_LEDGERS_AND_IS_KEPT: Final = (
+    "each row is the source of a record_read ledger entry naming the same reader, record kind and "
+    "subject, and the ledger is the audit store, which no erasure reaches; removing the row would "
+    "remove nothing the ledger does not still say, and needs a DELETE the append-only table grants "
+    "nobody"
+)
+
 #: Why a learning and a correction are kept by the erasure of the person whose memory they name.
 A_CORRECTION_OUTLIVES_ITS_MEMORY_OR_THE_MEMORY_COMES_BACK: Final = (
     "a learning and a correction name a memory by its id and hold neither the person nor anything "
@@ -319,6 +327,9 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "ops.routing_rung",
         "ops.routing_tier",
         "ops.setting",
+        # A requirement check keeps a register id, an outcome and who checked: an actor, not an
+        # owner, so nothing in it is anybody's (`0099`).
+        "ops.requirement_check",
         # A vault call keeps a slot, an operation and the HMAC of a token's accessor: `0093` keeps
         # no principal, and the digest names a token no candidate list can reverse without the key.
         "ops.vault_access",
@@ -336,6 +347,7 @@ RETAINED: Final[Mapping[str, str]] = MappingProxyType(
         "ops.erasure_request": THE_REQUEST_IS_THE_PROOF_AND_IS_KEPT,
         "auth.staff_member": A_ROSTER_ROW_IS_THE_SOURCES_AND_RETURNS_WHILE_THE_SOURCE_LISTS_THEM,
         "auth.staff_sync_run": A_ROSTER_ROW_IS_THE_SOURCES_AND_RETURNS_WHILE_THE_SOURCE_LISTS_THEM,
+        "ops.sensitive_read": A_READ_OF_A_RECORD_IS_THE_LEDGERS_AND_IS_KEPT,
     }
 )
 
