@@ -81,7 +81,7 @@ the channel ceiling `channel_for` reads from it.
 Scope: no network call is made here. The key set arrives through a `KeySource` the caller
 supplies, which is what `oidc.JwksCache` already is.
 
-Task ids: M1.1.2, M1.1.7, M1.8.2
+Task ids: M1.1.2, M1.1.7, M1.8.2, M1.1.5
 """
 
 from __future__ import annotations
@@ -103,6 +103,7 @@ from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.gate.admission import Assurance
 from brain.identity.oidc import (
     DEFAULT_LEEWAY,
+    ClaimMapping,
     KeySet,
     PrincipalDirectory,
     SignatureVerifier,
@@ -111,6 +112,7 @@ from brain.identity.oidc import (
     TokenRefusedError,
     UnmappedSubject,
     VerifiedClaims,
+    map_claims,
     parse_unverified,
     principal_for,
     validate_token,
@@ -251,6 +253,25 @@ class SessionLedger(Protocol):
     ) -> SessionStanding:
         """Record the session if it is new, and say whether it may still be used."""
         ...
+
+
+class MembershipObserver(Protocol):
+    """Told the groups an interactive sign-in's token carries. `brain.identity.group_sync` is one.
+
+    A protocol here rather than an import, so this module keeps reading no table itself.
+    """
+
+    async def observe(self, principal_id: str, groups: Sequence[str], *, now: datetime) -> None:
+        """Apply the identity provider's group memberships for this person (M1.1.5)."""
+        ...
+
+
+#: Why a failed group sync is logged and never refuses the sign-in.
+A_GROUP_SYNC_FAILURE_DOES_NOT_REFUSE_A_SIGN_IN: Final = (
+    "Groups only ever add a role, so a sync that could not run has added nothing, and the "
+    "person still holds exactly what every other grant gives them. Refusing the sign-in "
+    "would turn a database hiccup in a side table into a company-wide outage."
+)
 
 
 def started_at_of(claims: VerifiedClaims) -> datetime:
@@ -424,6 +445,8 @@ class TokenAuthority:
     verify: SignatureVerifier
     directory: PrincipalDirectory
     leeway: timedelta = DEFAULT_LEEWAY
+    #: Told each interactive sign-in's groups, when something configured one (M1.1.5).
+    memberships: MembershipObserver | None = None
 
     async def authenticate(self, header: str | None, *, now: datetime) -> Caller:
         """A verified caller, or `TokenRefusedError`. Never anything in between.
@@ -487,7 +510,22 @@ class TokenAuthority:
                 raise TokenRefusedError(TokenRefusal.LOGGED_OUT, claims.session_id)
             if standing is SessionStanding.SOMEBODY_ELSES:
                 raise TokenRefusedError(TokenRefusal.SESSION_MISMATCH, claims.session_id)
+        if claims.session_id is not None and self.memberships is not None:
+            await self._observe(found.id, claims, now=now)
         return Caller(principal=found, claims=claims, assurance=assurance)
+
+    async def _observe(self, principal_id: str, claims: VerifiedClaims, *, now: datetime) -> None:
+        """Hand the token's groups to the sync.
+
+        See `A_GROUP_SYNC_FAILURE_DOES_NOT_REFUSE_A_SIGN_IN`.
+        """
+        if self.memberships is None:
+            return
+        groups = map_claims(claims, ClaimMapping()).groups
+        try:
+            await self.memberships.observe(principal_id, groups, now=now)
+        except Exception as exc:  # a sync failure must not refuse the request; see above
+            log.warning("group sync did not run", principal=principal_id, error=type(exc).__name__)
 
     async def _key_caller(self, presented: str, *, now: datetime) -> Caller:
         """The caller behind an API key, or the one refusal. See the module docstring."""
