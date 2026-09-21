@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-21T04:41:00.441842+00:00",
-  "commit": "1b0b742",
-  "commit_subject": "Five foundation tasks close with proof, and the rest of Wave 0's statuses are set by hand",
+  "generated_at": "2026-09-21T05:25:33.177660+00:00",
+  "commit": "e197b1b",
+  "commit_subject": "Dependency policy proof, vulnerability scan, post-deploy checks, install-shaped migrations, traceability gate",
   "total": 1601,
   "done": 164,
   "percent": 10.2,
