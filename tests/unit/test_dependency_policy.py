@@ -21,6 +21,7 @@ from brain.ops.dependency_policy import (
     ARCHIVED_ADDITION,
     COPYLEFT_ADDITION,
     IMAGE_TERMS,
+    OWNER_ALLOWED,
     STALE_AFTER,
     Component,
     ImageTerms,
@@ -184,15 +185,64 @@ def test_an_npm_package_under_an_allowed_licence_passes_and_one_outside_is_refus
     ]
 
 
-def test_a_decision_the_owner_has_not_made_is_named_by_component_not_by_licence() -> None:
-    """The fonts wait on the owner. A second package under the same font licence must still be
-    refused. Delete this and somebody keys the table by licence, and every OFL package after it
-    is admitted by a decision nobody took."""
-    waiting = Component("npm", "@fontsource/poppins", "5.2.7", "lock", "OFL-1.1")
+def test_a_decision_the_owner_has_not_made_is_named_by_component_not_by_licence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A waiting component is listed; a second package under the same licence must still be
+    refused. Delete this and somebody keys the table by licence, and every package after it is
+    admitted by a decision nobody took."""
+    monkeypatch.setitem(policy.AWAITING_THE_OWNER, ("npm", "waiting-font"), "OFL-1.1")
+    waiting = Component("npm", "waiting-font", "1.0.0", "lock", "OFL-1.1")
     newcomer = Component("npm", "another-font", "1.0.0", "lock", "OFL-1.1")
     found = offline_findings([waiting, newcomer])
-    assert len(found.awaiting) == 1 and "@fontsource/poppins" in found.awaiting[0]
+    assert len(found.awaiting) == 1 and "waiting-font" in found.awaiting[0]
     assert len(found.refused) == 1 and "another-font" in found.refused[0]
+
+
+def test_the_owners_seven_licence_decisions_pass_and_admit_nothing_else() -> None:
+    """Item 70 (M0.7.1): the owner allowed exactly these seven components. Delete this and the
+    GPL squid entry can become a GPL entry for anything, or a font licence for any font."""
+    assert set(OWNER_ALLOWED) == {
+        ("image", "postgres"),
+        ("image", "pgvector/pgvector"),
+        ("image", "ubuntu/squid"),
+        ("npm", "@fontsource/ibm-plex-mono"),
+        ("npm", "@fontsource/ibm-plex-sans"),
+        ("npm", "@fontsource/poppins"),
+        ("pypi", "regex"),
+    }
+    assert all("needs-rupash item 70" in one.reason for one in OWNER_ALLOWED.values())
+    allowed = [
+        Component("npm", "@fontsource/poppins", "5.2.7", "lock", "OFL-1.1"),
+        Component("image", "ubuntu/squid", "ubuntu/squid:6", "compose"),
+        Component("image", "postgres", "postgres:17", "compose"),
+    ]
+    found = offline_findings(allowed)
+    assert found.refused == [] and found.awaiting == []
+    others = [
+        Component("npm", "another-font", "1.0.0", "lock", "OFL-1.1"),
+        Component("npm", "gpl-thing", "1.0.0", "lock", "GPL-2.0-or-later"),
+    ]
+    assert len(offline_findings(others).refused) == 2
+
+
+def test_an_owner_allowed_component_under_a_new_licence_is_refused_again() -> None:
+    """The decision is pinned to the licence he read. Delete this and a relicensed release of
+    an allowed package (say, to AGPL) ships on a decision about a different licence."""
+    relicensed = Component("npm", "@fontsource/poppins", "9.0.0", "lock", "AGPL-3.0-only")
+    found = offline_findings([relicensed])
+    assert len(found.refused) == 1 and "allowed it under 'OFL-1.1' only" in found.refused[0]
+    component = Component("pypi", "regex", "2026.9.3", "uv.lock")
+    ok = liveness_findings(
+        [component], {("pypi", "regex"): alive(licence="Apache-2.0 AND CNRI-Python")}, now=NOW
+    )
+    assert ok.refused == [] and ok.awaiting == []
+
+
+def test_the_real_tree_has_nothing_awaiting_the_owner() -> None:
+    """Item 70 decided every waiting component. Delete this and a new wait goes unnoticed."""
+    assert policy.AWAITING_THE_OWNER == {}
+    assert offline_findings(locked(REPO)).awaiting == []
 
 
 def test_an_image_with_no_terms_or_needing_a_commercial_key_is_refused(

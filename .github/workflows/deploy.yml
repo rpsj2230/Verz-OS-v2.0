@@ -235,10 +235,12 @@ jobs:
 
   staging_checks:
     name: Staging permission canaries and RLS sweep
-    # M38.5.1. The server's deploy timer runs both checks inside the container it has just
+    # M38.5.1, M38.2.1.2. The server's deploy timer runs the permission canaries, the RLS sweep,
+    # the schema check and the database invariants inside the container it has just
     # deployed (`ops/deploy/brain-autodeploy`, `brain.ops.post_deploy`) and the application serves
     # the verdict. Nothing here reaches the database: the verdict is read from the site, and it
-    # says passed, failed or not run and never what a check found.
+    # says passed, failed or not run and never what a check found. The job keeps its name because
+    # the Release workflow finds it by that name (CHECKS_JOB).
     #
     # A failure here makes this Deploy run red, and the Release workflow refuses to put a release
     # tag on a commit whose Deploy run did not pass this job. That is the promotion it stops.
@@ -250,7 +252,7 @@ jobs:
     needs: [build, deploy]
     runs-on: ubuntu-latest
     steps:
-      - name: Both checks passed on staging for this commit
+      - name: Every post-deploy check passed on staging for this commit
         env:
           SHA: ${{ needs.build.outputs.sha }}
           SITE: ${{ vars.BRAIN_URL }}
@@ -260,10 +262,10 @@ jobs:
             import json, os, sys
             d = json.load(sys.stdin)
             commit = str(d.get("commit", ""))
-            verdicts = (d.get("rls"), d.get("canaries"))
+            verdicts = tuple(d.get(k) for k in ("rls", "canaries", "schema", "invariants"))
             if not commit or not os.environ["SHA"].startswith(commit):
                 print("wait")
-            elif verdicts == ("passed", "passed"):
+            elif all(v == "passed" for v in verdicts):
                 print("passed")
             elif "failed" in verdicts:
                 print("failed")

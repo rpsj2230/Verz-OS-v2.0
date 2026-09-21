@@ -1,6 +1,6 @@
 """The post-deploy checks' verdict, the page that serves it, and the two workflows that act on it.
 
-Task ids: M38.5.1
+Task ids: M38.5.1, M38.2.1.2
 """
 
 from __future__ import annotations
@@ -18,7 +18,18 @@ import yaml
 from fastapi.testclient import TestClient
 
 from brain.ops import post_deploy
-from brain.ops.post_deploy import FAILED, NOT_RUN, PASSED, read_recorded, run_checks, served
+from brain.ops.post_deploy import (
+    CHECKS,
+    DATABASE_INVARIANTS,
+    FAILED,
+    NOT_RUN,
+    PASSED,
+    database_invariants,
+    invariant_checks,
+    read_recorded,
+    run_checks,
+    served,
+)
 from brain.ops.sweeps import SweepFailure
 
 REPO = Path(__file__).resolve().parents[2]
@@ -34,17 +45,52 @@ def rls_off() -> None:
     raise SweepFailure(["row-level security disabled on secret_table"])
 
 
-def test_both_checks_passing_is_a_pass() -> None:
+def checks(**overrides: Any) -> dict[str, Any]:
+    return {"rls": fine, "canaries": fine, "schema": fine, "invariants": fine, **overrides}
+
+
+def test_every_check_passing_is_a_pass() -> None:
     """The positive case. Delete this and a verdict that is always failed passes every refusal."""
-    verdict = run_checks("abc1234", rls=fine, canaries=fine, now=NOW)
-    assert verdict.passed and (verdict.rls, verdict.canaries) == (PASSED, PASSED)
+    verdict = run_checks("abc1234", **checks(), now=NOW)
+    assert verdict.passed and all(getattr(verdict, name) == PASSED for name in CHECKS)
+
+
+@pytest.mark.parametrize("name", ["schema", "invariants"])
+def test_a_failed_schema_or_invariant_check_fails_the_verdict(name: str) -> None:
+    """M38.2.1.2. Delete this and `passed` can go on reading only the first two checks."""
+    verdict = run_checks("abc1234", **checks(**{name: rls_off}), now=NOW)
+    assert getattr(verdict, name) == FAILED and not verdict.passed
+
+
+def test_every_database_invariant_runs_and_one_failure_fails_them_all(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Delete this and the first failing invariant hides the rest, or a failure passes."""
+    ran: list[str] = []
+    with pytest.raises(SweepFailure) as raised:
+        database_invariants({"first": rls_off, "second": lambda: ran.append("second")})
+    assert ran == ["second"] and raised.value.findings == ["first failed"]
+    assert "secret_table" in capsys.readouterr().err
+    database_invariants({"only": fine})
+
+
+def test_the_invariants_bound_to_a_database_are_the_ones_documented() -> None:
+    """Delete this and `DATABASE_INVARIANTS` can describe checks `main` no longer runs."""
+
+    class Settings:
+        database_url = "postgresql+psycopg://x@localhost/x"
+        migration_database_url = ""
+
+    assert list(invariant_checks(Settings())) == [name for name, _ in DATABASE_INVARIANTS]
 
 
 def test_a_failed_sweep_fails_and_the_canaries_still_run() -> None:
     """Both halves are reported whatever the other found. Delete this and the first failure hides
     whether the second check would have failed too."""
     ran: list[str] = []
-    verdict = run_checks("abc1234", rls=rls_off, canaries=lambda: ran.append("canaries"), now=NOW)
+    verdict = run_checks(
+        "abc1234", **checks(rls=rls_off, canaries=lambda: ran.append("canaries")), now=NOW
+    )
     assert (verdict.rls, verdict.canaries, ran) == (FAILED, PASSED, ["canaries"])
     assert not verdict.passed
 
@@ -55,7 +101,7 @@ def test_a_canary_that_raises_fails(capsys: pytest.CaptureFixture[str]) -> None:
     def leak() -> None:
         raise RuntimeError("the canaries found something")
 
-    verdict = run_checks("abc1234", rls=fine, canaries=leak, now=NOW)
+    verdict = run_checks("abc1234", **checks(canaries=leak), now=NOW)
     assert verdict.canaries == FAILED and not verdict.passed
     assert "the canaries found something" in capsys.readouterr().err
 
@@ -63,13 +109,22 @@ def test_a_canary_that_raises_fails(capsys: pytest.CaptureFixture[str]) -> None:
 def test_the_served_document_names_no_finding(tmp_path: Path) -> None:
     """The public page says passed or failed and never which table. Delete this and a finding's
     words reach a page anybody on the internet can read."""
-    verdict = run_checks("abc1234", rls=rls_off, canaries=fine, now=NOW)
+    verdict = run_checks("abc1234", **checks(rls=rls_off), now=NOW)
     recorded = json.loads(json.dumps(verdict.__dict__))
     recorded["rls"] = "row-level security disabled on secret_table"
+    recorded["invariants"] = "2 migration(s) not applied: 0087_secret"
     page = served("abc1234", recorded)
-    assert page["rls"] == FAILED
-    assert "secret_table" not in json.dumps(page)
-    assert set(page) == {"commit", "rls", "canaries", "checked_at"}
+    assert page["rls"] == FAILED and page["invariants"] == FAILED
+    assert "secret" not in json.dumps(page)
+    assert set(page) == {"commit", "rls", "canaries", "schema", "invariants", "checked_at"}
+
+
+def test_a_verdict_an_older_image_wrote_reports_the_new_checks_as_not_run() -> None:
+    """A verdict with no schema or invariants field never ran them. Delete this and it reads as
+    failed, or worse, somebody makes a missing field read as passed."""
+    old = {"commit": "abc1234", "rls": PASSED, "canaries": PASSED, "checked_at": "t"}
+    page = served("abc1234", old)
+    assert (page["schema"], page["invariants"]) == (NOT_RUN, NOT_RUN)
 
 
 def test_a_verdict_for_another_commit_is_not_run() -> None:
@@ -77,7 +132,7 @@ def test_a_verdict_for_another_commit_is_not_run() -> None:
     serving an unchecked commit shows the previous commit's pass."""
     old = {"commit": "old1234", "rls": PASSED, "canaries": PASSED, "checked_at": "x"}
     assert served("new5678", old)["rls"] == NOT_RUN
-    assert served("new5678", None)["canaries"] == NOT_RUN
+    assert all(served("new5678", None)[name] == NOT_RUN for name in CHECKS)
     assert served("old1234", old)["rls"] == PASSED
 
 
@@ -98,15 +153,13 @@ def test_the_route_serves_the_recorded_verdict_for_the_commit_it_runs(
     from brain.app import create_app
 
     result = tmp_path / "brain-post-deploy.json"
-    result.write_text(
-        json.dumps({"commit": "abc1234", "rls": PASSED, "canaries": PASSED, "checked_at": "t"}),
-        encoding="utf-8",
-    )
+    everything = {"commit": "abc1234", **dict.fromkeys(CHECKS, PASSED), "checked_at": "t"}
+    result.write_text(json.dumps(everything), encoding="utf-8")
     monkeypatch.setattr(post_deploy, "RESULT", result)
     monkeypatch.setattr(post_deploy.read_recorded, "__defaults__", (result,))
     monkeypatch.setenv("BRAIN_COMMIT_SHA", "abc1234")
     body = TestClient(create_app()).get("/api/deploy-checks.json").json()
-    assert body == {"commit": "abc1234", "rls": PASSED, "canaries": PASSED, "checked_at": "t"}
+    assert body == everything
 
 
 # ------------------------------------------------------------------------------ the workflows
@@ -130,22 +183,30 @@ def _decide(body: str, sha: str) -> str:
     return done.stdout.strip()
 
 
+ALL_PASSED = {"rls": PASSED, "canaries": PASSED, "schema": PASSED, "invariants": PASSED}
+
+
 @pytest.mark.parametrize(
     ("page", "decision"),
     [
-        ({"commit": "abc1234", "rls": PASSED, "canaries": PASSED}, "passed"),
-        ({"commit": "abc1234", "rls": FAILED, "canaries": PASSED}, "failed"),
-        ({"commit": "abc1234", "rls": PASSED, "canaries": FAILED}, "failed"),
+        ({"commit": "abc1234", **ALL_PASSED}, "passed"),
+        ({"commit": "abc1234", **ALL_PASSED, "rls": FAILED}, "failed"),
+        ({"commit": "abc1234", **ALL_PASSED, "canaries": FAILED}, "failed"),
+        ({"commit": "abc1234", **ALL_PASSED, "schema": FAILED}, "failed"),
+        ({"commit": "abc1234", **ALL_PASSED, "invariants": FAILED}, "failed"),
+        ({"commit": "abc1234", **ALL_PASSED, "invariants": NOT_RUN}, "wait"),
+        ({"commit": "abc1234", "rls": PASSED, "canaries": PASSED}, "wait"),
         ({"commit": "abc1234", "rls": NOT_RUN, "canaries": NOT_RUN}, "wait"),
         ({"commit": "0ld1234", "rls": FAILED, "canaries": FAILED}, "wait"),
-        ({"commit": "", "rls": PASSED, "canaries": PASSED}, "wait"),
+        ({"commit": "", **ALL_PASSED}, "wait"),
     ],
 )
-def test_the_deploy_workflow_passes_only_both_checks_for_this_commit(
+def test_the_deploy_workflow_passes_only_every_check_for_this_commit(
     page: dict[str, str], decision: str
 ) -> None:
     """The decision the Deploy workflow makes, run as it runs. Delete this and the job can pass on
-    the previous commit's verdict, or on an empty commit, which `"".startswith` would allow."""
+    the previous commit's verdict, on an empty commit, which `"".startswith` would allow, or on a
+    page from before the schema and invariant checks existed."""
     assert _decide(json.dumps(page), "abc1234def") == decision
 
 
