@@ -40,7 +40,7 @@ jobs:
           fi
           files=$(git diff --name-only "$BASE" "$GITHUB_SHA")
           echo "$files"
-          if [ -n "$files" ] && ! echo "$files" | grep -Evq '^docs/(wbs/(wbs-[a-f]|acts|schedule|progress)\.js|wbs\.json|tracker\.html|delivery-checklist\.md|requirements/register\.json|tracker-audit-[0-9-]+\.md)$'; then
+          if [ -n "$files" ] && ! echo "$files" | grep -Evq '^docs/(wbs/(wbs-[a-f]|acts|schedule|progress)\.js|wbs\.json|tracker\.html|delivery-checklist\.md|requirements/register\.json|tracker-audit-[0-9-]+\.md|needs-rupash\.md|architecture\.html)$'; then
             echo "tasks_only=true" >> "$GITHUB_OUTPUT"
           else
             echo "tasks_only=false" >> "$GITHUB_OUTPUT"
