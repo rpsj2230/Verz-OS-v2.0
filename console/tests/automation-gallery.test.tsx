@@ -21,7 +21,7 @@
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
-import { act, fireEvent, render, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
 import {
   CANNOT_INSTALL_HERE,
@@ -63,8 +63,11 @@ const INSTALL = "/api/v1/agents/quote-helper/automations";
 
 const DIGEST = "c".repeat(64);
 
+// Both transformed here, under the hook's budget: the route table was first imported inside the
+// first test, so a stalled runner spent that test's 20 seconds compiling the whole console.
 beforeAll(async () => {
   await import("../src/pages/Agent");
+  await import("../src/App");
 }, 60_000);
 
 // ------------------------------------------------------------------------------- fixtures
@@ -327,7 +330,13 @@ describe("the one confirmed install", () => {
     expect(text).toContain("It starts paused, and somebody other than you starts it.");
     expect(facts?.querySelector("code:not(:first-child), li code")?.textContent).toBe("read:client.name");
     expect(stand.container.textContent).toContain("It reaches what you may reach that this agent also allows.");
-    expect(document.activeElement?.textContent).toBe(KEEP_LABEL);
+    // Waited for rather than read at once: ConfirmAction moves focus in a passive effect, which
+    // React may run in a later task than the commit that drew the question, so on a loaded runner
+    // focus was still on the body when this line ran.
+    const keep = await within(stand.container).findByRole("button", { name: KEEP_LABEL });
+    await waitFor(() => {
+      expect(document.activeElement).toBe(keep);
+    });
   });
 
   test("confirming sends the template and the API's own digest and nothing else, then asks for the gallery again", async () => {
