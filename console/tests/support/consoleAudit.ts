@@ -54,7 +54,14 @@ import {
   REVIEW_DECISION_API_PATH,
   elevationDecisionApiPath,
 } from "../../src/pages/governPeopleQuery";
-import { GRANTS_API_PATH, PACK_ASSIGNMENT_API_PATH, REMOVAL_API_PATH } from "../../src/pages/governQuery";
+import {
+  APPOINTMENT_API_PATH,
+  DEPUTY_API_PATH,
+  GRANTS_API_PATH,
+  PACK_ASSIGNMENT_API_PATH,
+  REMOVAL_API_PATH,
+  ROLE_REMOVAL_API_PATH,
+} from "../../src/pages/governQuery";
 import { actionPath } from "../../src/pages/jobsQuery";
 import { rungApiPath } from "../../src/pages/matrixQuery";
 import { ADD_RUNG_API_PATH, GOLDEN_API_PATH, retireGoldenApiPath } from "../../src/pages/matrixGateQuery";
@@ -196,6 +203,10 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/govern/people/enable",
       "/api/v1/govern/service-accounts*",
       "/api/v1/access-requests",
+      "/api/v1/govern/roles/holders",
+      "/api/v1/govern/roles/appointment",
+      "/api/v1/govern/roles/deputy",
+      "/api/v1/govern/roles/removal",
     ],
     tables: [
       "auth.principal",
@@ -216,6 +227,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "auth.service_account",
       "auth.api_key",
       "gate.access_request",
+      "gate.role_grant",
     ],
     installation: [
       "INSTALL_OIDC_ISSUER",
@@ -813,6 +825,13 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
       automationStopApiPath("quote-helper", "auto_one"),
     ),
   ],
+  "src/pages/RoleControls.tsx path": [
+    at("POST /api/v1/govern/roles/appointment", "APPOINTMENT_API_PATH", APPOINTMENT_API_PATH),
+    at("POST /api/v1/govern/roles/deputy", "DEPUTY_API_PATH", DEPUTY_API_PATH),
+  ],
+  "src/pages/RoleControls.tsx ROLE_REMOVAL_API_PATH": [
+    at("POST /api/v1/govern/roles/removal", "ROLE_REMOVAL_API_PATH", ROLE_REMOVAL_API_PATH),
+  ],
   "src/pages/People.tsx PACK_ASSIGNMENT_API_PATH": [
     at("POST /api/v1/govern/packs/assignment", "PACK_ASSIGNMENT_API_PATH", PACK_ASSIGNMENT_API_PATH),
   ],
@@ -845,6 +864,11 @@ const BRANDING_SAVED = t(
   "test_saving_a_company_name_writes_its_row_and_the_console_header_draws_it_next",
 );
 const INSTRUCTIONS_PRESSED = audited("test_an_instruction_edit_and_its_give_back_reach_the_install_the_ledger_and_the_prompt");
+const ROLES_PRESSED = t(
+  "test_role_grant",
+  "test_an_appointment_through_the_routes_reaches_the_row_and_the_ledger_with_its_reason",
+  true,
+);
 const GRANTS_PRESSED = audited("test_a_grant_written_and_removed_from_the_people_screen_reaches_row_ledger_and_reach");
 const WEBHOOK_LEDGER = audited("test_each_webhook_change_through_the_store_appends_one_entry_naming_its_own_author");
 const HOLDS_SWEPT = audited("test_a_hold_placed_through_the_store_keeps_its_rows_from_the_sweep_and_lifted_releases_them");
@@ -1262,6 +1286,21 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: t("test_automation_run_store", "test_the_console_starts_and_stops_as_the_application_role_and_the_ledger_says_who", true),
     audit: t("test_automation_run_store", "test_the_console_starts_and_stops_as_the_application_role_and_the_ledger_says_who", true),
     behaviour: t("test_automation_schedule_routes", "test_the_owner_stops_their_own_without_approval_and_a_bystander_cannot"),
+  },
+  "POST /api/v1/govern/roles/appointment": {
+    row: ROLES_PRESSED,
+    audit: ROLES_PRESSED,
+    behaviour: t("test_role_grant", "test_the_last_two_super_admins_cannot_be_reduced_to_one"),
+  },
+  "POST /api/v1/govern/roles/deputy": {
+    row: t("test_role_grant", "test_the_guard_keeps_deputies_depth_one_and_the_table_keeps_them_bounded", true),
+    audit: ROLES_PRESSED,
+    behaviour: t("test_role_grant", "test_a_deputy_covers_a_standing_holder_and_never_another_deputy"),
+  },
+  "POST /api/v1/govern/roles/removal": {
+    row: ROLES_PRESSED,
+    audit: ROLES_PRESSED,
+    behaviour: t("test_role_grant", "test_the_guard_refuses_a_removal_below_the_floor_and_allows_one_above_it", true),
   },
   "POST /api/v1/govern/packs/assignment": {
     row: t("test_govern_pack_routes", "test_an_assignment_reaches_the_row_the_ledger_and_the_resolver", true),

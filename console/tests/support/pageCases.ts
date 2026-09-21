@@ -1062,6 +1062,10 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         ],
         holders_are_not_recorded_yet: true,
       },
+      "/api/v1/govern/roles/holders": {
+        items: [{ id: "g-1", principal_id: UNBROKEN, role: "auditor", deputy_of: null, not_after: null }],
+        editable: true,
+      },
       "/api/v1/govern/roles/misconfigurations": {
         items: [{ principal_id: "u_2", kind: "role_without_capability", sentence: UNBROKEN }],
       },

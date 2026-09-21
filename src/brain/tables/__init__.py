@@ -105,6 +105,7 @@ from brain.tables.resolution import (
 )
 from brain.tables.retention import LegalHoldRow, RetentionReleaseRow, RetentionReportRow
 from brain.tables.review import ReviewDecisionRow
+from brain.tables.role_grant import RoleGrantRow
 from brain.tables.routing import ModelAttemptRow, RoutingRungRow, RoutingTierRow
 from brain.tables.schedule import ControlRunRow
 from brain.tables.service_account import ApiKeyRow, ServiceAccountRow
@@ -312,6 +313,8 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0101_access_request. Points at nothing: the asker and the owner are values, so a request
     # outlives a change to either.
     "gate.access_request",
+    # 0102_role_grant_and_team_grants
+    "gate.role_grant",
 )
 
 __all__ = [
@@ -380,6 +383,7 @@ __all__ = [
     "RetentionReleaseRow",
     "RetentionReportRow",
     "ReviewDecisionRow",
+    "RoleGrantRow",
     "RoutingChangeRow",
     "RoutingRungRow",
     "RoutingTierRow",

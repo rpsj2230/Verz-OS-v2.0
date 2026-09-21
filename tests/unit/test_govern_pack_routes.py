@@ -176,6 +176,8 @@ class Recorded:
         self.pack: CapabilityPackRow | None = pack_row()
         self.grants: list[tuple[CapabilityGrantRow, str | None]] = []
         self.holders: list[tuple[str, str | None]] = []
+        #: Approvers by a person's appointment (`gate.role_grant`): who, where, and the lapse.
+        self.appointments: list[tuple[str, str | None, datetime | None]] = []
         self.integrity = False
         self.statements: list[str] = []
         self.committed = 0
@@ -197,6 +199,8 @@ class Recorded:
             return Result([written])
         if "directory_role_grant" in sql_text:
             return Result(self.holders)
+        if "gate.role_grant" in sql_text:
+            return Result(self.appointments)
         if "capability_pack_assignment" in sql_text:
             return Result([])
         if "gate.capability_pack" in sql_text:
@@ -583,3 +587,19 @@ def test_an_assignment_reaches_the_row_the_ledger_and_the_resolver() -> None:
     assert [(one.actor_id, one.details.get("pack")) for one in granted] == [("u_lead", "helpdesk")]
     capabilities = {one["capability"]["value"] for one in held[0][0]["grants"]}
     assert {"read:ticket", "write:ticket"} <= capabilities
+
+
+def test_an_appointed_approver_counts_until_the_appointment_lapses(
+    client: TestClient, recorded: Recorded
+) -> None:
+    """M1.8.4 over `gate.role_grant` (`0102`). Delete this and the flag reads the directory alone,
+    missing every Approver somebody appointed, or keeps flagging a deputy whose days ran out."""
+    recorded.appointments = [
+        ("u_appointed", MAINTENANCE, None),
+        ("u_lapsed", MAINTENANCE, LONG_AGO),
+    ]
+    answered = get(client, MISCONFIG_PATH, "u_admin")
+    assert answered.status_code == 200, answered.text
+    assert [(one["principal_id"], one["kind"]) for one in answered.json()["items"]] == [
+        ("u_appointed", "role_without_capability")
+    ]

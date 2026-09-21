@@ -93,6 +93,15 @@ A_NARROWING_ON_A_TABLE_THIS_MIGRATION_CREATED_IS_NOT_A_NARROWING: Final = (
     "here and one with thirteen of twenty three migrations flagged for building a schema."
 )
 
+#: Why a restriction that binds only rows naming a column this migration added is not a narrowing.
+A_RESTRICTION_ON_A_COLUMN_THE_PREVIOUS_RELEASE_NEVER_WRITES_IS_NOT_A_NARROWING: Final = (
+    "The previous release never names a column this migration added, so every row it writes "
+    "holds a null there. A unique index over that column never compares such rows, because "
+    "nulls are distinct; a check reading `<added> IS NULL OR ...` is true for them; and a check "
+    "reading `<column> IS NOT NULL OR ...` is true for them when this body only widened that "
+    "column from not null, since the previous release could write nothing else."
+)
+
 #: Why a policy dropped and written again is unreadable rather than breaking.
 A_POLICY_REPLACED_IN_THE_SAME_BODY_CANNOT_BE_ORDERED: Final = (
     "A policy dropped and written again in one body changes which rows each command admits, "
@@ -754,11 +763,73 @@ def _from_alter(statement: str, table: str, rest: str, made: frozenset[str]) -> 
     return Change(Verdict.UNREADABLE, "statement this check does not classify", statement)
 
 
+def _columns(calls: tuple[_Call, ...], name: str, flag: str, value: object) -> frozenset[str]:
+    """`schema.table.column` for every `op.<name>` whose column carries `flag=value`."""
+    found: set[str] = set()
+    for call in calls:
+        if call.name != name or len(call.node.args) < 2:
+            continue
+        table = _one(call.node.args[0], call.names)
+        schema = _one(_keyword(call.node, "schema"), call.names)
+        target: ast.Call = call.node
+        if name == "add_column":
+            column = call.node.args[1]
+            if not (isinstance(column, ast.Call) and column.args):
+                continue
+            named = _one(column.args[0], call.names)
+            target = column
+        else:
+            named = _one(call.node.args[1], call.names)
+        if _one(_keyword(target, flag), call.names) is not value:
+            continue
+        if isinstance(table, str) and isinstance(schema, str) and isinstance(named, str):
+            found.add(f"{schema}.{table}.{named}".lower())
+    return frozenset(found)
+
+
+def _never_written(
+    node: ast.Call, names: _Names, added: frozenset[str], widened: frozenset[str]
+) -> bool:
+    """Whether a unique index or check binds only rows the previous release cannot write.
+
+    See `A_RESTRICTION_ON_A_COLUMN_THE_PREVIOUS_RELEASE_NEVER_WRITES_IS_NOT_A_NARROWING`.
+    """
+    schema = _one(_keyword(node, "schema"), names)
+    table = _at(node, 1, names)
+    if not (isinstance(schema, str) and isinstance(table, str)):
+        return False
+    prefix = f"{schema}.{table}.".lower()
+    if isinstance(node.func, ast.Attribute) and node.func.attr == "create_index":
+        columns = node.args[2] if len(node.args) > 2 else None
+        listed = columns.elts if isinstance(columns, ast.List | ast.Tuple) else []
+        return any(f"{prefix}{_one(one, names)}".lower() in added for one in listed)
+    condition = _strings_of(node.args[2], names) if len(node.args) > 2 else None
+    if not condition or len(condition) != 1:
+        return False
+    head = re.match(r"^\s*(\w+) IS (NOT )?NULL OR ", condition[0])
+    if head is None:
+        return False
+    column = f"{prefix}{head.group(1)}".lower()
+    return column in widened if head.group(2) else column in added
+
+
 def _from_call(
-    call: _Call, made: frozenset[str], reversed_by: dict[tuple[str, str, str], str]
+    call: _Call,
+    made: frozenset[str],
+    reversed_by: dict[tuple[str, str, str], str],
+    added: frozenset[str] = frozenset(),
+    widened: frozenset[str] = frozenset(),
 ) -> Change:
     """One `op.<something>` call that is not `execute`."""
     node = call.node
+    if call.name in {"create_index", "create_check_constraint"} and _never_written(
+        node, call.names, added, widened
+    ):
+        return Change(
+            Verdict.SAFE,
+            "restriction on a column the previous release never writes",
+            ast.unparse(node),
+        )
     if call.name in {"drop_column", "drop_table", "rename_table", "drop_schema"}:
         return Change(Verdict.BREAKING, f"op.{call.name}", ast.unparse(node))
     if call.name in {"drop_index", "drop_constraint", "get_bind"}:
@@ -930,6 +1001,8 @@ def changes_in(
         if one.upper().startswith("DROP POLICY") and (table := _table_of(one)) is not None
     )
     reversed_by = _check_predicates(counterpart)
+    added = _columns(calls, "add_column", "nullable", True)
+    widened = _columns(calls, "alter_column", "nullable", True)
     out: list[Change] = []
     if not complete:
         out.append(
@@ -942,7 +1015,7 @@ def changes_in(
         )
     for call in calls:
         if call.name != "execute":
-            out.append(_from_call(call, made, reversed_by))
+            out.append(_from_call(call, made, reversed_by, added, widened))
             continue
         if not call.readable:
             out.append(

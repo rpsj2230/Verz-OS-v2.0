@@ -80,6 +80,8 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
     { pattern: "/people/:subject", index: 2, writes: true },
   ],
   "src/pages/Prompts.tsx": [{ pattern: "/prompts", opener: "Edit instructions", index: 0, writes: true }],
+  // One form in the source, drawn twice (appoint and deputy); the first stands for both.
+  "src/pages/RoleControls.tsx": [{ pattern: "/roles", index: 0, writes: true }],
   "src/pages/Retention.tsx": [
     { pattern: "/retention", index: 0, writes: true },
     { pattern: "/retention", index: 1, writes: true },

@@ -100,15 +100,16 @@ people and none of them changed the answer." An `IntegrityError` carrying a cons
 that disclosure arriving through the driver, so it is caught and answered as the same refusal.
 See `A_CONSTRAINT_VIOLATION_IS_A_FACT_ABOUT_SOMEBODY_ELSE`.
 
-Rejected: a route listing who holds each role. `brain.console.govern.role_holders` is written
-and correct and there is no table behind it: `RoleGrant`'s own docstring says "the table is not
-written here", `migrations/versions/0006` says `role_grant` is M1.3.2 and builds only
-`auth.directory_role_grant`, and that migration's own docstring refuses to let the directory
-table stand in for it. Building the holder listing out of what the directory asserts would put
-a different fact under the same heading, and `RoleGrant` cannot honestly be constructed from a
-directory row at all: there is no `granted_by` and no `reason` on one, and both are required
-precisely so that a role grant is reviewable. So the Roles screen answers the catalogue, which
-is the half that exists, and says nothing about holders rather than saying something else.
+Rejected here, and served by `brain.govern_role_routes` since `0102` built `role_grant`: a route
+listing who holds each role. What follows was the argument while there was no table: `RoleGrant`'s
+own docstring said "the table is not written here", `migrations/versions/0006` says `role_grant` is
+M1.3.2 and builds only `auth.directory_role_grant`, and that migration's own docstring refuses to
+let the directory table stand in for it. Building the holder listing out of what the directory
+asserts would put a different fact under the same heading, and `RoleGrant` cannot honestly be
+constructed from a directory row at all: there is no `granted_by` and no `reason` on one, and both
+are required precisely so that a role grant is reviewable. So the Roles screen answers the
+catalogue, which is the half that exists, and says nothing about holders rather than saying
+something else.
 
 Rejected: a route listing who belongs to each team. `gate.team` exists and
 `brain.identity.teams` builds the membership; what M27.7.4 also asks for is who belongs to
@@ -145,11 +146,11 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import datetime
-from typing import Annotated, Any, Final
+from typing import Annotated, Any, Final, Self
 
 import structlog
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import Insert, Select, Update, func, insert, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -180,9 +181,17 @@ from brain.core.entitlement import CAPABILITY_RE, Capability
 from brain.core.errors import Absent, Failed
 from brain.core.scope import Scope
 from brain.core.scope_sql import PredicateRefusedError
+from brain.identity.organisation_store import one_team
 from brain.identity.packs import CapabilityPack, PackAssignment, SubjectGrant, expand
 from brain.identity.roles import RoleSpec
-from brain.identity.teams import PrincipalSubject
+from brain.identity.teams import (
+    TEAM_PATH_PATTERN,
+    PrincipalSubject,
+    TeamError,
+    TeamSubject,
+    assert_within_department,
+    split_team_path,
+)
 from brain.listing import Column, ListAsked, Listing
 from brain.ops.replica_store import ConsoleReads
 from brain.routing_routes import sessions_of
@@ -416,9 +425,6 @@ class RoleCatalogue(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     roles: tuple[RoleView, ...]
-    #: What this screen says about who holds each role, which is nothing. See the module
-    #: docstring: `role_grant` is M1.3.2 and the table does not exist.
-    holders_are_not_recorded_yet: bool = True
 
 
 class CapabilityView(BaseModel):
@@ -494,7 +500,9 @@ class GrantProposal(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    principal_id: str = Field(min_length=1, max_length=128)
+    #: The person, or null when the grant's subject is a team (M1.5.3). Exactly one of the two.
+    principal_id: str | None = Field(default=None, min_length=1, max_length=128)
+    team_path: str | None = Field(default=None, pattern=TEAM_PATH_PATTERN, max_length=121)
     #: Validated against the grammar here so a malformed one is a 422 naming the field rather
     #: than a `ValidationError` from inside `Capability` arriving as a 500.
     capability: str = Field(pattern=CAPABILITY_RE.pattern)
@@ -503,6 +511,13 @@ class GrantProposal(BaseModel):
     #: When it lapses. Null is an unbounded grant, which `may_grant` permits only from a
     #: granter whose own reach is unbounded: see `scoped_authority._outlives`.
     not_after: datetime | None = None
+
+    @model_validator(mode="after")
+    def _one_subject(self) -> Self:
+        if (self.principal_id is None) == (self.team_path is None):
+            msg = "a grant names a person or a team, exactly one"
+            raise ValueError(msg)
+        return self
 
 
 class GrantView(BaseModel):
@@ -520,7 +535,8 @@ class GrantView(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     id: str
-    principal_id: str
+    principal_id: str | None
+    team_path: str | None = None
     capability: str
     scope: dict[str, Any]
     granted_by: str
@@ -540,8 +556,16 @@ class GrantRemoval(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    principal_id: str = Field(min_length=1, max_length=128)
+    principal_id: str | None = Field(default=None, min_length=1, max_length=128)
+    team_path: str | None = Field(default=None, pattern=TEAM_PATH_PATTERN, max_length=121)
     capability: str = Field(pattern=CAPABILITY_RE.pattern)
+
+    @model_validator(mode="after")
+    def _one_subject(self) -> Self:
+        if (self.principal_id is None) == (self.team_path is None):
+            msg = "a removal names a person or a team, exactly one"
+            raise ValueError(msg)
+        return self
 
 
 class GrantRemoved(BaseModel):
@@ -555,7 +579,8 @@ class GrantRemoved(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    principal_id: str
+    principal_id: str | None
+    team_path: str | None = None
     capability: str
     removed_at: datetime
 
@@ -598,6 +623,7 @@ def grant_view(row: CapabilityGrantRow) -> GrantView:
     return GrantView(
         id=str(row.id),
         principal_id=row.principal_id,
+        team_path=row.team_path,
         capability=row.capability,
         scope=row.scope,
         granted_by=row.granted_by,
@@ -731,8 +757,15 @@ def one_live_scope(slug: str) -> Select[tuple[ScopeRow]]:
     return select(ScopeRow).where(ScopeRow.slug == slug, ScopeRow.deleted_at.is_(None)).limit(1)
 
 
+def subject_is(principal_id: str | None, team_path: str | None) -> Any:
+    """The row's subject column equal to the one named. A team's grant has no principal."""
+    if team_path is not None:
+        return CapabilityGrantRow.team_path == team_path
+    return CapabilityGrantRow.principal_id == principal_id
+
+
 def one_live_grant(
-    principal_id: str, capability: str
+    principal_id: str | None, capability: str, team_path: str | None = None
 ) -> Select[tuple[CapabilityGrantRow, str | None]]:
     """One live grant and the department its subject sits in, for a removal to judge.
 
@@ -764,7 +797,7 @@ def one_live_grant(
             isouter=True,
         )
         .where(
-            CapabilityGrantRow.principal_id == principal_id,
+            subject_is(principal_id, team_path),
             CapabilityGrantRow.capability == capability,
             CapabilityGrantRow.deleted_at.is_(None),
         )
@@ -772,7 +805,7 @@ def one_live_grant(
     )
 
 
-def add_grant(proposed: SubjectGrant, principal_id: str) -> Insert:
+def add_grant(proposed: SubjectGrant, principal_id: str | None = None) -> Insert:
     """The INSERT for one grant, naming only what the row holds.
 
     `granted_at` is not among the values. The column does not exist: `TimestampMixin.created_at`
@@ -787,11 +820,14 @@ def add_grant(proposed: SubjectGrant, principal_id: str) -> Insert:
     `principal_id` is passed separately rather than read off `proposed.subject`, because
     `SubjectGrant.subject` is a `GrantSubject` and may be a team, and `gate.capability_grant`
     has no column for one. The caller is what narrows it to a principal; see `proposal_from`.
+    Since `0102` it has: a team subject writes `team_path` and no principal (M1.5.3).
     """
+    team = proposed.subject.team_path if isinstance(proposed.subject, TeamSubject) else None
     return (
         insert(CapabilityGrantRow)
         .values(
-            principal_id=principal_id,
+            principal_id=None if team is not None else principal_id or principal_of(proposed),
+            team_path=team,
             capability=proposed.capability.value,
             scope=proposed.scope.model_dump(),
             granted_by=proposed.granted_by,
@@ -802,7 +838,7 @@ def add_grant(proposed: SubjectGrant, principal_id: str) -> Insert:
     )
 
 
-def retire_grant(principal_id: str, capability: str) -> Update:
+def retire_grant(principal_id: str | None, capability: str, team_path: str | None = None) -> Update:
     """The UPDATE that removes one grant. `deleted_at`, and nothing else.
 
     The same pair `one_live_grant` selects on and for its reasons, including the exact match on
@@ -828,7 +864,7 @@ def retire_grant(principal_id: str, capability: str) -> Update:
     return (
         update(CapabilityGrantRow)
         .where(
-            CapabilityGrantRow.principal_id == principal_id,
+            subject_is(principal_id, team_path),
             CapabilityGrantRow.capability == capability,
             CapabilityGrantRow.deleted_at.is_(None),
         )
@@ -864,9 +900,16 @@ def placed_grant(row: CapabilityGrantRow, department: str | None) -> Placed[Subj
     `granted_at` comes from `created_at`; see `grant_view`. `where` is the empty mapping when
     the principal row carried no department, which fails closed: see `live_grants`.
     """
+    subject: PrincipalSubject | TeamSubject
+    if row.team_path is not None:
+        # A team's grant sits in the team's department, whoever its members are.
+        subject = TeamSubject(team_path=row.team_path)
+        department = split_team_path(row.team_path)[0]
+    else:
+        subject = PrincipalSubject(principal_id=principal_of_row(row))
     return Placed(
         record=SubjectGrant(
-            subject=PrincipalSubject(principal_id=row.principal_id),
+            subject=subject,
             capability=Capability(value=row.capability),
             scope=Scope.model_validate(row.scope),
             granted_by=row.granted_by,
@@ -913,6 +956,30 @@ def placed_assignment(
     return tuple(Placed(record=one, where=where) for one in expand(bundle, assignment))
 
 
+def principal_named(principal_id: str | None) -> str:
+    """The body's principal, which `GrantProposal` guarantees when it names no team."""
+    if principal_id is None:
+        msg = "a grant names a person or a team"
+        raise ValueError(msg)
+    return principal_id
+
+
+def principal_of(proposed: SubjectGrant) -> str:
+    """A person's grant's principal. A team's grant has none."""
+    if isinstance(proposed.subject, PrincipalSubject):
+        return proposed.subject.principal_id
+    msg = "a team's grant has no principal"
+    raise ValueError(msg)
+
+
+def principal_of_row(row: CapabilityGrantRow) -> str:
+    """A person's grant row's principal; two checks hold it when there is no team."""
+    if row.principal_id is None:
+        msg = "a grant row with neither a principal nor a team"
+        raise ValueError(msg)
+    return row.principal_id
+
+
 def proposal_from(
     body: GrantProposal, record: ScopeRecord, granted_by: str, at: datetime
 ) -> SubjectGrant:
@@ -924,8 +991,20 @@ def proposal_from(
 
     `granted_by` is the caller and never the body; see `GrantProposal`.
     """
+    subject: PrincipalSubject | TeamSubject = (
+        TeamSubject(team_path=body.team_path)
+        if body.team_path is not None
+        else PrincipalSubject(principal_id=principal_named(body.principal_id))
+    )
+    # A team grant bounded to another department reaches nothing or the wrong rows.
+    if isinstance(subject, TeamSubject):
+        department = split_team_path(subject.team_path)[0]
+        try:
+            assert_within_department(subject, record.scope, (department,))
+        except TeamError as refused:
+            raise ValueError(str(refused)) from None
     return SubjectGrant(
-        subject=PrincipalSubject(principal_id=body.principal_id),
+        subject=subject,
         capability=Capability(value=body.capability),
         scope=record.scope,
         granted_by=granted_by,
@@ -1268,6 +1347,13 @@ async def grant(request: Request, body: GrantProposal, asked: Asked) -> GrantVie
             log.info("grant refused", principal=asked.caller.principal.id)
             raise _no_grant_here() from None
 
+        if body.team_path is not None:
+            # A grant to a team nobody created would confer nothing and read as though it did.
+            department, team = split_team_path(body.team_path)
+            if (await session.execute(one_team(department, team))).first() is None:
+                await session.rollback()
+                log.info("grant names no live team", principal=asked.caller.principal.id)
+                raise _no_grant_here()
         await session.execute(actor_is(asked.caller.principal.id))
         try:
             stored = (
@@ -1327,7 +1413,11 @@ async def remove_grant(request: Request, body: GrantRemoval, asked: Asked) -> Gr
 
     factory = _require_sessions(request)
     async with factory() as session:
-        found = (await session.execute(one_live_grant(body.principal_id, body.capability))).all()
+        found = (
+            await session.execute(
+                one_live_grant(body.principal_id, body.capability, body.team_path)
+            )
+        ).all()
         if not found:
             await session.rollback()
             log.info("grant not there", principal=asked.caller.principal.id)
@@ -1349,7 +1439,7 @@ async def remove_grant(request: Request, body: GrantRemoval, asked: Asked) -> Gr
 
         await session.execute(actor_is(asked.caller.principal.id))
         retired = (
-            await session.execute(retire_grant(body.principal_id, body.capability))
+            await session.execute(retire_grant(body.principal_id, body.capability, body.team_path))
         ).one_or_none()
         if retired is None:
             await session.rollback()
@@ -1357,5 +1447,8 @@ async def remove_grant(request: Request, body: GrantRemoval, asked: Asked) -> Gr
             raise _no_grant_here()
         await session.commit()
         return GrantRemoved(
-            principal_id=body.principal_id, capability=body.capability, removed_at=retired[0]
+            principal_id=body.principal_id,
+            team_path=body.team_path,
+            capability=body.capability,
+            removed_at=retired[0],
         )
