@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-09-21T09:21:28.745225+00:00",
-  "commit": "a91b966",
-  "commit_subject": "A sensitive tool always waits for approval, and the reach deciders are proved agent-blind",
+  "generated_at": "2026-09-21T09:47:47.521873+00:00",
+  "commit": "860e7d9",
+  "commit_subject": "The automation gallery test waits for focus on Not now instead of reading it at once",
   "total": 1598,
-  "done": 219,
-  "percent": 13.7,
+  "done": 228,
+  "percent": 14.3,
   "acts": 47,
   "decided": 102,
   "current_wave": 0,
@@ -26,12 +26,12 @@
       "wave": 1,
       "name": "The gate",
       "total": 167,
-      "done": 64,
-      "percent": 38.3,
+      "done": 73,
+      "percent": 43.7,
       "in_progress": 0,
       "ready_for_testing": 0,
       "blocked": 0,
-      "open": 103,
+      "open": 94,
       "acts": 1,
       "decided": 5
     },
@@ -116,7 +116,7 @@
       "name": "Identity, users, roles, permissions",
       "wave": 1,
       "total": 50,
-      "done": 9,
+      "done": 18,
       "acts": 0,
       "decided": 1
     },
@@ -532,8 +532,17 @@
     "M1.3.1",
     "M1.3.5",
     "M1.4.1",
+    "M1.4.2",
+    "M1.4.3",
     "M1.4.4",
+    "M1.4.5",
+    "M1.4.6",
     "M1.4.7",
+    "M1.4.8",
+    "M1.5.1",
+    "M1.5.2",
+    "M1.8.4",
+    "M1.9.1",
     "M12.1.5",
     "M12.1.6",
     "M14.4.5",
@@ -792,7 +801,7 @@
     }
   },
   "wave_records": {},
-  "closed_today": 60,
+  "closed_today": 69,
   "next_up": [
     "M0.2.5",
     "M0.3.4",
@@ -801,6 +810,12 @@
     "M0.4.1"
   ],
   "recent": [
+    {
+      "sha": "1adc977",
+      "at": "2026-09-21T09:29:14+00:00",
+      "subject": "Packs are assigned from People, Roles flags Approver misconfigurations, and a record shows who sees it",
+      "closed": "M1.4.2,M1.4.3,M1.4.5,M1.4.6,M1.4.8,M1.5.1,M1.5.2,M1.8.4,M1.9.1"
+    },
     {
       "sha": "a91b966",
       "at": "2026-09-21T09:11:05+00:00",
@@ -914,12 +929,6 @@
       "at": "2026-09-16T23:51:10+00:00",
       "subject": "A model can be called now, every call is metered onto its request's ledger row, and providers are switched on and off and checked from the Models screen with health measured from real attempts",
       "closed": "M27.7.14"
-    },
-    {
-      "sha": "dbac629",
-      "at": "2026-09-16T23:51:08+00:00",
-      "subject": "The worker delivers webhooks through issue_once and the Webhooks screen shows what it did; the Notifications screen says who is told what, switches a notice off and configures the email relay with a test message",
-      "closed": "M27.7.12,M27.8.11,M27.8.12"
     }
   ]
 }
