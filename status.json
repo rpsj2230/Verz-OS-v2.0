@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-09-21T08:02:49.010546+00:00",
-  "commit": "a4dc7cc",
-  "commit_subject": "The field policy epoch moves when a derivation changes, and every shipped adapter is checked",
+  "generated_at": "2026-09-21T08:20:22.681598+00:00",
+  "commit": "0bd81dc",
+  "commit_subject": "An agent the person names is chosen first, and a test watches the gate's order on /answer",
   "total": 1599,
-  "done": 190,
-  "percent": 11.9,
+  "done": 203,
+  "percent": 12.7,
   "acts": 47,
   "decided": 101,
   "current_wave": 0,
@@ -13,12 +13,12 @@
       "wave": 0,
       "name": "Foundation",
       "total": 135,
-      "done": 94,
-      "percent": 69.6,
+      "done": 96,
+      "percent": 71.1,
       "in_progress": 0,
       "ready_for_testing": 5,
       "blocked": 10,
-      "open": 26,
+      "open": 24,
       "acts": 3,
       "decided": 3
     },
@@ -26,12 +26,12 @@
       "wave": 1,
       "name": "The gate",
       "total": 166,
-      "done": 38,
-      "percent": 22.9,
+      "done": 49,
+      "percent": 29.5,
       "in_progress": 0,
       "ready_for_testing": 0,
       "blocked": 0,
-      "open": 128,
+      "open": 117,
       "acts": 1,
       "decided": 5
     },
@@ -134,7 +134,7 @@
       "name": "The gate",
       "wave": 1,
       "total": 41,
-      "done": 4,
+      "done": 15,
       "acts": 0,
       "decided": 0
     },
@@ -386,7 +386,7 @@
       "name": "Application scaffold and runtime",
       "wave": 0,
       "total": 38,
-      "done": 22,
+      "done": 24,
       "acts": 0,
       "decided": 2
     },
@@ -561,10 +561,21 @@
     "M27.9.7",
     "M28.1.1",
     "M28.1.3",
+    "M3.1.1",
     "M3.1.4",
+    "M3.2.1",
+    "M3.2.3",
+    "M3.2.4",
     "M3.3.1",
     "M3.3.2",
+    "M3.3.3",
     "M3.3.4",
+    "M3.4.3",
+    "M3.4.4",
+    "M3.5.1",
+    "M3.5.4",
+    "M3.6.1",
+    "M3.6.2",
     "M30.1.1",
     "M30.1.2",
     "M30.2.1",
@@ -576,6 +587,7 @@
     "M30.4.1",
     "M30.5.1",
     "M31.1.1.1",
+    "M31.1.1.2",
     "M31.1.1.3",
     "M31.1.1.4",
     "M31.1.2.1",
@@ -597,6 +609,7 @@
     "M31.3.1.2",
     "M31.3.1.3",
     "M31.3.1.4",
+    "M31.3.2.2",
     "M31.4.1",
     "M32.1.1.4",
     "M32.4.2.1",
@@ -773,7 +786,7 @@
     }
   },
   "wave_records": {},
-  "closed_today": 31,
+  "closed_today": 44,
   "next_up": [
     "M0.2.5",
     "M0.3.4",
@@ -782,6 +795,18 @@
     "M0.4.1"
   ],
   "recent": [
+    {
+      "sha": "0bd81dc",
+      "at": "2026-09-21T08:09:32+00:00",
+      "subject": "An agent the person names is chosen first, and a test watches the gate's order on /answer",
+      "closed": "M3.1.1,M3.2.1,M3.2.3,M3.2.4,M3.3.3,M3.4.3,M3.4.4,M3.5.1,M3.5.4,M3.6.1,M3.6.2"
+    },
+    {
+      "sha": "6847895",
+      "at": "2026-09-21T08:06:50+00:00",
+      "subject": "The lifespan attaches the vault client, and the vault screen says which policies its token carries",
+      "closed": "M31.1.1.2,M31.3.2.2"
+    },
     {
       "sha": "a4dc7cc",
       "at": "2026-09-21T07:53:03+00:00",
@@ -889,18 +914,6 @@
       "at": "2026-09-16T23:51:05+00:00",
       "subject": "An administrator undoes a tier-one learning from the Learning screen, the undo is stored, audited and read by recall, and the Memory screen shows each revision's diff and what triggered it",
       "closed": "M27.7.21,M27.7.22"
-    },
-    {
-      "sha": "c244150",
-      "at": "2026-09-16T23:51:02+00:00",
-      "subject": "An administrator files a request to erase somebody's data from the Retention screen and the worker carries it out store by store, the export log reads what left, a restore drill script checks a copy against its manifest, and the authentication guide says what the first administrator is granted",
-      "closed": "M27.7.24,M42.2.7"
-    },
-    {
-      "sha": "72f55c5",
-      "at": "2026-09-16T22:18:58+00:00",
-      "subject": "The application connects to the object store at start, the recovery screen reads last night's copy and the last verified restore out of the backup bucket, the Storage screen counts what each bucket holds, and an artifact is kept as bytes in the store and a row in agent.artifact",
-      "closed": "M27.7.23,M27.7.26"
     }
   ]
 }
