@@ -44,34 +44,14 @@ const PROGRESS = {
     why: "installed on staging 2026-09-21 and the first deploy passed its gate; rollback is proved only by an image that never reports ready",
     updated: "2026-09-21",
   },
-  "M0.3.4": {
-    status: "BLOCKED",
-    why: "server change needs owner permission: add the PgBouncer pools per ops/vps/POOLING.md",
-    updated: "2026-09-21",
-  },
   "M0.3.5": {
     status: "BLOCKED",
-    why: "server change needs owner permission: add the PgBouncer pools per ops/vps/POOLING.md",
-    updated: "2026-09-21",
-  },
-  "M0.3.6": {
-    status: "BLOCKED",
-    why: "repo half done (brain.deployment.postgres_settings); install half needs owner permission, ops/vps/POOLING.md",
+    why: "staging runs no worker; the session pool is added with the worker, which is next (owner allowed server changes)",
     updated: "2026-09-21",
   },
   "M0.7.1": {
     status: "BLOCKED",
     why: "owner decision: 7 licences await the allowlist (postgres/pgvector, ubuntu/squid, three @fontsource fonts, regex); recommended allow all",
-    updated: "2026-09-21",
-  },
-  "M31.2.1.2": {
-    status: "READY FOR TESTING",
-    why: "engine tests pass for session and transaction pooling; closing needs PgBouncer on the install (M0.3.4)",
-    updated: "2026-09-21",
-  },
-  "M31.2.1.3": {
-    status: "READY FOR TESTING",
-    why: "engine tests pass for session and transaction pooling; closing needs PgBouncer on the install (M0.3.4)",
     updated: "2026-09-21",
   },
   "M31.2.1.4": {
