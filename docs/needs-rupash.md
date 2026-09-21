@@ -2,8 +2,8 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**3 items are open: 85, 91 and 93.** Item 85 (your AI provider keys) unblocks the most. Each says in
-plain terms what it is, what I recommend, and every step.
+**4 items are open: 85, 91, 93 and 95.** Item 85 (your AI provider keys) unblocks the most. Each
+says in plain terms what it is, what I recommend, and every step.
 
 # Open
 
@@ -39,6 +39,14 @@ itself would have to be shared. The product's licence gate refuses it until you 
 Everything else for LDAP is built and tested (encrypted connection only, read-only, disabled
 accounts treated as leavers). **Recommendation: allow it,** on the same terms as the database
 driver already allowed. Reply "allow ldap3".
+
+## 95. Move two tasks to the wave that builds what they need
+
+**In plain terms:** two Wave 1 tasks cannot be finished until later waves build what they sit on.
+Ignoring a chat message delivered twice (M3.2.2) needs the inbound chat route, which Wave 2's
+channels work builds; the check itself is already written and waits for it. Sharing the AI
+provider's cache for tools (M3.7.2) needs agents that call tools, which Wave 3 builds.
+**Recommendation: move M3.2.2 to Wave 2 and M3.7.2 to Wave 3.** Reply "move both".
 
 # Answered
 
