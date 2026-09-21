@@ -368,9 +368,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             # As the owner when the install names one, so the application's own login can be
             # `brain_app`. See
             # `brain.session.A_REQUEST_TRANSACTION_CAN_RESET_ITS_ROLE_TO_THE_LOGIN`.
-            applied = await asyncio.to_thread(
-                run_migrations, settings.migration_database_url or settings.database_url
-            )
+            applied = await asyncio.to_thread(run_migrations, settings.owner_database_url())
             app.state.ready["migrations"] = True
             if applied:
                 log.info("schema migrated", revisions=applied)

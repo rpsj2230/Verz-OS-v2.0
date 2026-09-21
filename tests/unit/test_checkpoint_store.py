@@ -33,6 +33,22 @@ from brain.ops.checkpoint_store import (
 )
 from brain.ops.checkpoints import CHECKPOINT_SCHEMA, CheckpointerConfig, CheckpointerError
 from brain.ops.connections import WORKER_CHECKPOINTER_CONNECTIONS
+from brain.ops.queue import SEARCH_PATH_SQL
+
+
+class RecordingConnection:
+    """Records what a pool's `configure` step runs, and whether it left the connection idle."""
+
+    def __init__(self) -> None:
+        self.executed: list[tuple[str, tuple[object, ...]]] = []
+        self.committed = False
+
+    def execute(self, sql: str, params: tuple[object, ...]) -> None:
+        self.executed.append((sql, params))
+
+    def commit(self) -> None:
+        self.committed = True
+
 
 READ = Capability(value="read:ticket.status")
 OWNER = "u_owner"
@@ -288,7 +304,14 @@ def test_the_pool_is_built_from_the_configuration_and_bounded_at_the_budgeted_fi
     assert isinstance(kwargs, dict)
     assert kwargs["prepare_threshold"] is None
     assert kwargs["autocommit"] is True
-    assert kwargs["options"] == f"-c search_path={CHECKPOINT_SCHEMA}"
+    # Placed after connecting, never as a libpq startup option, which PgBouncer refuses.
+    assert "options" not in kwargs
+    conn = RecordingConnection()
+    configure = settings["configure"]
+    assert callable(configure)
+    configure(conn)
+    assert conn.executed == [(SEARCH_PATH_SQL, (CHECKPOINT_SCHEMA,))]
+    assert conn.committed
 
 
 def test_a_pool_is_not_built_on_the_pooler() -> None:

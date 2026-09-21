@@ -103,7 +103,8 @@ WHAT_THE_SOURCE_DOES_NOT_SAY: Final = (
 #: `tests/invariants/test_application_privileges.py`, which fails on an entry nothing matches.
 _RECORDED_BY_THE_WORKER: Final = (
     "record_start and record_finish are called by brain.ops.worker.start_owed and nothing else, "
-    "on sessions from make_session_factory over the login and never make_application_sessions: "
+    "on sessions from make_session_factory over the owner's login (Settings.owner_database_url, "
+    "and the worker refuses to start on brain_app) and never make_application_sessions: "
     "a control's run is written by the worker as the database owner and only read by the console, "
     "which is why 0069 grants SELECT and not the writes 0025's policies describe"
 )

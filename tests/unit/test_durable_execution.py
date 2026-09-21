@@ -16,6 +16,7 @@ Task ids: M32.4.1.1
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Any
 
@@ -42,6 +43,7 @@ from brain.ops.queue import (
     MIB_PER_SLOT,
     NO_DRIVER_IS_INSTALLED,
     POOLER_HOSTNAMES,
+    SEARCH_PATH_SQL,
     WHOLE_CONTAINER_SLOTS,
     DeployStep,
     Job,
@@ -70,6 +72,21 @@ from brain.ops.worker import (
     preflight,
     slot_env_name,
 )
+
+
+class AsyncRecordingConnection:
+    """Records what the driver's `configure` step runs, and whether it left the connection idle."""
+
+    def __init__(self) -> None:
+        self.executed: list[tuple[str, tuple[object, ...]]] = []
+        self.committed = False
+
+    async def execute(self, sql: str, params: tuple[object, ...]) -> None:
+        self.executed.append((sql, params))
+
+    async def commit(self) -> None:
+        self.committed = True
+
 
 REPO = Path(__file__).resolve().parents[2]
 GENERAL_WORKER_COMPOSE = "docker-compose.worker.yml"
@@ -566,9 +583,16 @@ def test_the_driver_is_pointed_at_that_schema_by_the_connection_and_not_by_an_ar
     app = queue_app("postgresql+psycopg://brain:pw@db:5432/brain", pool_max=5)
     built = getattr(app.connector, "_pool_args")  # noqa: B009 - the driver exposes no accessor
 
-    assert settings["kwargs"] == {"options": f"-c search_path={DRIVER_SCHEMA}"}
-    assert "public" not in str(settings["kwargs"])
-    assert built["kwargs"] == settings["kwargs"]
+    # A libpq startup option is what PgBouncer refused on an install, so there is none.
+    assert "kwargs" not in settings
+    assert "kwargs" not in built
+    for configure in (settings["configure"], built["configure"]):
+        conn = AsyncRecordingConnection()
+        assert callable(configure)
+        asyncio.run(configure(conn))
+        assert conn.executed == [(SEARCH_PATH_SQL, (DRIVER_SCHEMA,))]
+        assert "public" not in str(conn.executed)
+        assert conn.committed
 
 
 def test_the_driver_is_given_the_pool_bound_it_is_handed_and_never_a_default() -> None:

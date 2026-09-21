@@ -16,6 +16,7 @@ Task ids: M27.9.7
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 
 import pytest
@@ -28,7 +29,9 @@ from brain.ops.application_privileges import (
     Use,
     migrations_catalogue,
     mismatches,
+    orm_tables,
     reachable,
+    rendered_migrations,
     stale,
     unexplained,
     uses,
@@ -121,3 +124,37 @@ def test_the_reading_sees_the_shapes_the_application_writes_its_statements_in(
         assert seen[expected], expected
     reach = reachable()
     assert {"brain.app", "brain.knowledge.chunk_store", "brain.estate_routes"} <= reach
+
+
+#: Where the worker's scheduled controls start: the runners and the run records.
+SCHEDULE_ROOTS: tuple[str, ...] = ("brain.ops.schedule_runner", "brain.ops.schedule_store")
+
+
+def test_the_workers_login_can_write_every_table_its_scheduled_controls_write(
+    catalogue: Catalogue,
+) -> None:
+    """The worker schedules as `Settings.owner_database_url`, the login the migrations run as
+    (`brain.ops.worker.THE_SCHEDULE_RUNS_AS_THE_OWNER`). That login can write a table when a
+    migration created it, so it owns it, and no migration forced row-level security onto its
+    owner. Found on an install, where the schedule ran as brain_app and failed on control_run.
+
+    Delete this and a control can start writing a table the migrations never made, or one whose
+    owner a FORCE shuts out, and the first sign is every tick failing on the install."""
+    everything = frozenset(orm_tables().values()) | catalogue.tables
+    written = {
+        (one.module, one.table, one.privilege)
+        for one in uses(roots=SCHEDULE_ROOTS, known=everything)
+        if one.privilege != "SELECT"
+    }
+    assert ("brain.ops.schedule_store", "ops.control_run", "INSERT") in written
+    assert len({table for _, table, _ in written}) >= 5, sorted(written)
+
+    assert sorted(one for one in written if one[1] not in catalogue.tables) == []
+    forced = set(
+        re.findall(
+            r"ALTER TABLE\s+(?:ONLY\s+)?([a-z_]+\.[a-z_]+)\s+FORCE ROW LEVEL SECURITY",
+            rendered_migrations(),
+            flags=re.IGNORECASE,
+        )
+    )
+    assert sorted(forced & {table for _, table, _ in written}) == []

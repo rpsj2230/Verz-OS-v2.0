@@ -161,6 +161,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Final
+from urllib.parse import urlsplit
 
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -220,7 +221,12 @@ from brain.ops.schedule_control import chosen_this_tick, paused_controls, run_re
 from brain.ops.schedule_runner import RunnerError, due_now, next_tick, runner_for, start_control
 from brain.ops.schedule_store import clocks, record_finish, record_start, take_the_lock
 from brain.ops.wiring import WiringError, component
-from brain.session import make_app_engine, make_application_sessions, make_session_factory
+from brain.session import (
+    APPLICATION_ROLE,
+    make_app_engine,
+    make_application_sessions,
+    make_session_factory,
+)
 from brain.settings import process_environment, settings_from
 from brain.tables.schedule import DETAIL_CHARS
 
@@ -291,6 +297,19 @@ A_WORKER_THAT_SCHEDULES_NEEDS_THE_APPLICATIONS_DATABASE_URL: Final = (
     "container. QUEUE_URL goes straight to the database for the queue's LISTEN and is the wrong "
     "connection for a transaction-scoped lock. A general worker without DATABASE_URL would "
     "drain its queue and schedule nothing, and nothing would say so, so it refuses to start."
+)
+
+#: Why the schedule runs as the owner's login and never as the application's.
+THE_SCHEDULE_RUNS_AS_THE_OWNER: Final = (
+    "The controls record their runs in ops.control_run, drain ops.erasure_request and sweep "
+    "retention as the database owner: the application's role is granted SELECT on the run "
+    "records and nothing more (0069), and the erasure drain refuses a connection row-level "
+    "security narrows. Granting brain_app those writes would let a request forge or erase the "
+    "record of a control run. So the worker reads Settings.owner_database_url, which is "
+    "BRAIN_MIGRATION_DATABASE_URL when set. Until 2026-09-21 it read database_url, and an "
+    "install whose BRAIN_DATABASE_URL names brain_app, reaching the worker because the platform "
+    "hands every variable to every container, ticked as brain_app and failed every control on "
+    "permission denied for table control_run. A worker left on brain_app is refused at start."
 )
 
 # ------------------------------------------------------------------------ the environment
@@ -1029,6 +1048,10 @@ def run(env: Mapping[str, str], *, worker_component: str, slot_class: SlotClass)
             file=sys.stderr,
         )
         return EXIT_MISCONFIGURED
+    refused = None if database_url is None else schedule_url_refusal(database_url)
+    if refused is not None:
+        print(refused, file=sys.stderr)
+        return EXIT_MISCONFIGURED
     url = (env.get(QUEUE_URL_ENV) or "").strip()
     allocation, _ = declared_slots(env)
     share, _ = queue_pool_max(env, worker_component=worker_component)
@@ -1093,7 +1116,19 @@ def schedule_url(env: Mapping[str, str]) -> str | None:
     `preflight` reads it and how the application reads its own. See
     `A_WORKER_THAT_SCHEDULES_NEEDS_THE_APPLICATIONS_DATABASE_URL`.
     """
-    return settings_from(env).database_url.strip() or None
+    return settings_from(env).owner_database_url() or None
+
+
+def schedule_url_refusal(url: str) -> str | None:
+    """Why `url` is not a login the schedule may run as, or None. See
+    `THE_SCHEDULE_RUNS_AS_THE_OWNER`."""
+    if urlsplit(url).username != APPLICATION_ROLE:
+        return None
+    return (
+        f"this worker ticks the control schedule and its database login is {APPLICATION_ROLE}, "
+        "the application's limited role. Set BRAIN_MIGRATION_DATABASE_URL on this container to "
+        f"the owner's login, as the application has it. {THE_SCHEDULE_RUNS_AS_THE_OWNER}"
+    )
 
 
 class Ticked(enum.StrEnum):
@@ -1502,6 +1537,9 @@ def run_control_text(
             "a control is enqueued from the general worker with the application's database: "
             f"{A_WORKER_THAT_SCHEDULES_NEEDS_THE_APPLICATIONS_DATABASE_URL}"
         )
+    refused = schedule_url_refusal(database_url)
+    if refused is not None:
+        return EXIT_MISCONFIGURED, f"the control was not enqueued: {refused}"
     share, split = queue_pool_max(env, worker_component=worker_component)
     if share is None:
         reason = "; ".join(split) if split else f"{POOL_MAX_ENV} is not set"

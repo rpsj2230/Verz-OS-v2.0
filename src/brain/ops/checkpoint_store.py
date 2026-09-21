@@ -150,8 +150,8 @@ def checkpointer_pool_settings(config: CheckpointerConfig) -> Mapping[str, objec
             "autocommit": True,
             "prepare_threshold": config.prepare_threshold,
             "row_factory": dict_row,
-            "options": config.connect_options,
         },
+        "configure": config.configure,
     }
 
 
@@ -163,6 +163,7 @@ def checkpointer_pool(config: CheckpointerConfig) -> ConnectionPool[Any]:
         min_size=cast(int, settings["min_size"]),
         max_size=cast(int, settings["max_size"]),
         kwargs=cast(dict[str, Any], settings["kwargs"]),
+        configure=cast(Any, settings["configure"]),
         open=False,
     )
 
@@ -314,8 +315,8 @@ def install_checkpointer(config: CheckpointerConfig) -> tuple[str, ...]:
         autocommit=True,
         prepare_threshold=config.prepare_threshold,
         row_factory=dict_row,
-        options=config.connect_options,
     ) as conn:
+        config.configure(cast(Any, conn))
         PostgresSaver(cast(Any, conn)).setup()
     done.append("the library applied its own schema, at the version this image has of it")
 
