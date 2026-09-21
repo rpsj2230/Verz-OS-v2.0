@@ -337,3 +337,86 @@ async def reconcile_member_grants(
                 granted.append(principal_id)
     log.info("member_grants.reconciled", bindings=len(bindings), granted=granted, trace_id=trace_id)
     return tuple(granted)
+
+
+# ------------------------------------------------ the Super Admin role (M1.3.2)
+#: What a first administrator's role grant says it is for.
+SUPER_ADMIN_REASON: Final = "first administrator, recorded as Super Admin when role grants began"
+
+#: The principals first run ever recorded as Super Admin, read off the ledger, so one removed is
+#: not appointed again: `A_CAPABILITY_TAKEN_AWAY_IS_NOT_GIVEN_BACK_AT_THE_NEXT_START` for roles.
+_EVER_APPOINTED_BY_FIRST_RUN: Final = text(
+    "SELECT DISTINCT e.subject FROM obs.audit_entry AS e"
+    " WHERE e.action = 'grant' AND e.actor_id = :first_run"
+    " AND e.details ->> 'source' = 'role_grant' AND e.details ->> 'role' = 'super_admin'"
+)
+
+
+async def reconcile_super_admin_roles(
+    sessions: async_sessionmaker[AsyncSession], *, now: datetime, trace_id: str
+) -> tuple[str, ...]:
+    """Record each live first administrator as Super Admin, once, if nothing records them yet.
+
+    An install appointed before `0102` has administrators and no role grant, so the Roles screen
+    would list nobody and the floor would count nobody. The same holders and the same test as
+    `reconcile_first_administrators`, under the same lock; a principal the ledger shows first run
+    appointing before is never appointed again, so a removal stays removed.
+    """
+    # Imported here: `brain.tables.role_grant` imports `brain.identity.roles`.
+    from brain.identity.roles import Role
+    from brain.tables.role_grant import RoleGrantRow
+
+    appointed: list[str] = []
+    async with sessions() as session, session.begin():
+        await session.execute(_set_config(ACTOR_SETTING, GRANTED_BY))
+        await session.execute(_set_config(TRACE_ID_SETTING, trace_id))
+        await session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": FIRST_RUN_LOCK})
+        holders = (
+            (
+                await session.execute(
+                    _FIRST_RUN_SIGN_IN_HOLDERS,
+                    {"capability": SIGN_IN_AUTHORITY.value, "first_run": GRANTED_BY},
+                )
+            )
+            .scalars()
+            .all()
+        )
+        ever = {
+            str(one)
+            for one in (
+                await session.execute(_EVER_APPOINTED_BY_FIRST_RUN, {"first_run": GRANTED_BY})
+            )
+            .scalars()
+            .all()
+        }
+        standing = set(
+            (
+                await session.execute(
+                    select(RoleGrantRow.principal_id).where(
+                        RoleGrantRow.role == Role.SUPER_ADMIN.value,
+                        RoleGrantRow.deleted_at.is_(None),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for principal_id in holders:
+            if principal_id in standing or f"principal:{principal_id}" in ever:
+                continue
+            reach = entitlements_from(
+                (await session.execute(_REACH, {"principal": principal_id, "at": now})).scalar_one()
+            )
+            if not (await _live(session, principal_id, now) and holds_everywhere(reach, now)):
+                continue
+            await session.execute(
+                insert(RoleGrantRow).values(
+                    principal_id=principal_id,
+                    role=Role.SUPER_ADMIN.value,
+                    granted_by=GRANTED_BY,
+                    reason=SUPER_ADMIN_REASON,
+                )
+            )
+            appointed.append(principal_id)
+    log.info("first_administrator.super_admin_recorded", appointed=appointed, trace_id=trace_id)
+    return tuple(appointed)

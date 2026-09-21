@@ -891,3 +891,24 @@ def mismatches_between(
         for pid in sorted(capability - role)
     ]
     return tuple(out)
+
+
+# ------------------------------------------------ separation of duties (M1.8.7)
+#: The pairs of roles one person may hold only with a recorded reason. A Connector Admin holds
+#: the credentials and a Super Admin appoints everybody, so one person holding both answers to
+#: nobody; the architecture keeps them apart and the owner allows it only when acknowledged.
+SEPARATED: Final[frozenset[frozenset[Role]]] = frozenset(
+    {frozenset({Role.SUPER_ADMIN, Role.CONNECTOR_ADMIN})}
+)
+
+#: What an appointment crossing a separation says, and what it asks for.
+SEPARATION_OF_DUTIES_WARNING: Final = (
+    "This person would hold both Super Admin and Connector Admin. The separation of duties keeps "
+    "those roles apart: the person who holds the credentials should not also appoint everybody. "
+    "To go ahead, give the reason in the acknowledgement; it is recorded in the audit trail."
+)
+
+
+def separation_crossed(held: Iterable[Role], appointed: Role) -> bool:
+    """Whether appointing `appointed` to somebody holding `held` crosses a separated pair."""
+    return any(frozenset({one, appointed}) in SEPARATED for one in held if one is not appointed)

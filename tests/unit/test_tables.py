@@ -123,6 +123,7 @@ MIGRATION_GATE_FRONT_HALF = VERSIONS / "0100_gate_front_half.py"
 MIGRATION_ACCESS_REQUEST = VERSIONS / "0101_access_request.py"
 MIGRATION_SENSITIVE_READ = VERSIONS / "0098_sensitive_reads_and_budget_audit.py"
 MIGRATION_REQUIREMENT_CHECK = VERSIONS / "0099_requirement_check.py"
+MIGRATION_ROLE_GRANT = VERSIONS / "0102_role_grant_and_team_grants.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -335,6 +336,8 @@ MODEL_REGISTRY_TABLES: tuple[str, ...] = (
 CHANNEL_EVENT_TABLES: tuple[str, ...] = ("gate.channel_event",)
 #: And the one 0101 adds: a request for access, addressed to who can decide it.
 ACCESS_REQUEST_TABLES: tuple[str, ...] = ("gate.access_request",)
+#: And the one 0102 adds: who holds a platform role, as a person granted it.
+ROLE_GRANT_TABLES: tuple[str, ...] = ("gate.role_grant",)
 
 SENSITIVE_READ_TABLES: tuple[str, ...] = ("ops.sensitive_read",)
 
@@ -391,6 +394,7 @@ ALL_TABLES = (
     + ACCESS_REQUEST_TABLES
     + SENSITIVE_READ_TABLES
     + REQUIREMENT_CHECK_TABLES
+    + ROLE_GRANT_TABLES
 )
 
 
@@ -479,6 +483,12 @@ def _supersessions() -> tuple[tuple[str, str], ...]:
         replaced = getattr(migration_module(path), "SUPERSEDES", None)
         if replaced:
             found.extend((squash(old), squash(new)) for old, new in replaced.items())
+        # A later migration's column added to or loosened on a table an earlier one created,
+        # as the creating CREATE TABLE would read today. Held to the ALTERs it emits by
+        # that migration's own test.
+        amended = getattr(migration_module(path), "AMENDS_CREATE_TABLE", None)
+        if amended:
+            found.extend((squash(old), squash(new)) for old, new in amended.items())
     return tuple(found)
 
 
@@ -1148,6 +1158,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert sensitive_read.TABLES == SENSITIVE_READ_TABLES
     requirement_check = migration_module(MIGRATION_REQUIREMENT_CHECK)
     assert requirement_check.TABLES == REQUIREMENT_CHECK_TABLES
+    role_grant = migration_module(MIGRATION_ROLE_GRANT)
+    assert role_grant.TABLES == ROLE_GRANT_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1222,6 +1234,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(access_request.TABLES)
         + tuple(sensitive_read.TABLES)
         + tuple(requirement_check.TABLES)
+        + tuple(role_grant.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1277,6 +1290,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(access_request.TABLES),
         set(sensitive_read.TABLES),
         set(requirement_check.TABLES),
+        set(role_grant.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"
@@ -1301,7 +1315,11 @@ def test_the_migration_builds_every_index_the_model_declares(qualified: str) -> 
     """An index that exists only in the model is an index that is never built, and the
     unique ones are constraints: without them the duplicate grant and the forked ledger
     both become possible in the database that actually runs."""
-    emitted = squash(rendered("upgrade"))
+    emitted = squash(rendered("upgrade")) + " ".join(
+        squash(rendered("upgrade", path))
+        for path in sorted(VERSIONS.glob("*.py"))
+        if getattr(migration_module(path), "AMENDS_CREATE_TABLE", None)
+    )
     for index in table(qualified).indexes:
         expected = squash(str(CreateIndex(index).compile(dialect=DIALECT)))
         assert expected in emitted, f"{index.name} is never created"

@@ -51,6 +51,7 @@ from brain.gate.review_store import (
     LastDecision,
     PackHolding,
     StoredReview,
+    held_by,
 )
 from brain.identity.bearer import TokenAuthority
 from brain.identity.organisation_store import OrganisationRecords, Person
@@ -506,7 +507,7 @@ class Review(StoredReview):
                 self.recorded.append((row_id, decision, decided_by))
                 return Decided(
                     row_id=row_id,
-                    principal_id=one.row.principal_id,
+                    principal_id=held_by(one),
                     decision=decision,
                     decided_at=LONG_AGO,
                 )

@@ -8,20 +8,18 @@
  * hold it, and whether a grant of it needs a scope. A table with a capability column beside a
  * role would be read as an implication this system does not have, whatever a caption said.
  *
- * **It says who holds each role, which is nobody, and says so rather than showing an empty
- * column.** `RoleGrant`'s own docstring says the table is not written; `migrations/versions/
- * 0006` says `role_grant` is M1.3.2 and builds only the directory's assertion, which is a
- * different fact under the same word. So the API answers a flag and this renders a sentence,
- * and the day the table lands the sentence goes and a column arrives.
+ * **Who holds each role is its own section.** `gate.role_grant` (`0102`) records it, and
+ * `RoleControls.tsx` lists the holders this reader may see beside the controls that appoint,
+ * deputise and remove.
  *
  * **Nothing here decides who may see it.** The request is identical for every caller; a reader
  * without the grant is refused by the API and the refusal is rendered in the API's own words.
  *
- * Imported statically rather than split. It mounts neither the table library nor the form
- * library and imports no stylesheet of its own, which is `App.tsx`'s rule for `Overview`,
- * `Agents` and `NotFound`: a chunk for it would buy a round trip and save no bytes.
+ * Imported statically rather than split: the catalogue mounts neither the table library nor the
+ * form library, which is `App.tsx`'s rule for `Overview`, `Agents` and `NotFound`, and the
+ * holders' controls are plain labelled inputs for the same reason.
  *
- * Task ids: M27.7.5, M1.8.4
+ * Task ids: M27.7.5, M1.8.4, M1.3.2
  */
 
 import { useResource } from "../api/useResource";
@@ -32,6 +30,7 @@ import {
   readRoles,
 } from "./governQuery";
 import { FailureNotice } from "../ui/FailureNotice";
+import { RoleControls } from "./RoleControls";
 
 export const ROLES_HEADING = "Roles";
 
@@ -39,17 +38,6 @@ export const ROLES_HEADING = "Roles";
 export const ROLES_LEDE =
   "The six platform roles and what each one is for. A role governs the platform; it never " +
   "implies a capability, and nothing here grants one.";
-
-/**
- * What is said instead of a holders column.
- *
- * A sentence rather than an empty column, because an empty column reads as nobody holding the
- * role, and the truth is that nothing records it yet.
- */
-export const HOLDERS_ARE_NOT_RECORDED =
-  "Who holds each role is not recorded yet, so this page does not show it. The grant table for " +
-  "roles has not been built; what the identity provider asserts about a person is a different " +
-  "fact and is on the staff sources screen when that one exists.";
 
 /** An empty catalogue. Only reachable from an API that answered something unexpected. */
 export const NO_ROLES = "There are no roles to show.";
@@ -97,7 +85,6 @@ function RolesAnswerView() {
           </li>
         ))}
       </ul>
-      <p className="note">{HOLDERS_ARE_NOT_RECORDED}</p>
     </>
   );
 }
@@ -151,6 +138,7 @@ export function Roles() {
       <h1>{ROLES_HEADING}</h1>
       <p className="lede">{ROLES_LEDE}</p>
       <RolesAnswerView />
+      <RoleControls />
       <section className="card">
         <h2>{MISCONFIGURED_HEADING}</h2>
         <p className="note">{MISCONFIGURED_LEDE}</p>

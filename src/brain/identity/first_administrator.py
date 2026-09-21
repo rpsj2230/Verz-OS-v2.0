@@ -498,6 +498,7 @@ class FirstAdministrators:
         # Imported here because `brain.identity.data_steward` imports `holds_everywhere` from this
         # module, which is the one test of an administrator and has to stay here.
         from brain.identity.data_steward import appoint_in, steward_lock
+        from brain.tables.role_grant import RoleGrantRow
 
         assert_bought_by_first_run(grant)
         now = grant.granted_at
@@ -580,6 +581,15 @@ class FirstAdministrators:
                 .on_conflict_do_nothing(
                     index_elements=["principal_id", "capability"],
                     index_where=text("deleted_at IS NULL"),
+                )
+            )
+            # Recorded as the Super Admin the grant says they are (M1.3.2), audited by `0102`.
+            await session.execute(
+                insert(RoleGrantRow).values(
+                    principal_id=principal_id,
+                    role=Role.SUPER_ADMIN.value,
+                    granted_by=GRANTED_BY,
+                    reason=GRANT_REASON,
                 )
             )
             if steward is not None:

@@ -234,7 +234,9 @@ def test_the_first_administrator_is_a_live_person_holding_administration_everywh
         (True, GRANTED_BY, GRANT_REASON)
     }
     assert holds_everywhere(reach, INSIDE)
-    assert len(entries) == len(GRANTED_AT_APPOINTMENT)
+    # One entry per capability, and one recording them as Super Admin (M1.3.2, `0102`).
+    assert len(entries) == len(GRANTED_AT_APPOINTMENT) + 1
+    assert [d["role"] for _, _, d in entries if d.get("source") == "role_grant"] == ["super_admin"]
     # Told the actor rather than inferring it from granted_by, and carrying the request's trace.
     assert {(actor, trace, "actor" in details) for actor, trace, details in entries} == {
         (GRANTED_BY, "trace-first-run", False)

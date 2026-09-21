@@ -59,8 +59,8 @@ import {
   removeLabel,
   removeQuestion,
 } from "../src/pages/People";
+import { HOLDERS_LIST_LABEL, SEPARATION_NOTE } from "../src/pages/RoleControls";
 import {
-  HOLDERS_ARE_NOT_RECORDED,
   MISCONFIGURED_LIST_LABEL,
   NONE_MISCONFIGURED,
   NO_ROLES,
@@ -95,6 +95,7 @@ interface Answers {
   readonly roles?: unknown;
   readonly capabilities?: unknown;
   readonly misconfigurations?: unknown;
+  readonly holders?: unknown;
   /** The status and body of whichever write the test makes. */
   readonly written?: { status?: number; body?: unknown };
 }
@@ -163,7 +164,9 @@ async function consoleAt(
       const body =
         url.includes("/api/v1/govern/roles/misconfigurations")
           ? (answers.misconfigurations ?? null)
-          : url.includes("/api/v1/govern/people") && answers.people !== undefined
+          : url.includes("/api/v1/govern/roles/holders")
+            ? (answers.holders ?? null)
+            : url.includes("/api/v1/govern/people") && answers.people !== undefined
           ? answers.people
           : url.includes("/api/v1/govern/scopes") && answers.scopes !== undefined
             ? answers.scopes
@@ -543,7 +546,8 @@ describe("what a grant may carry", () => {
       (declared["properties"] ?? {}) as Record<string, unknown>,
     );
 
-    expect(properties.sort()).toEqual(["capability", "principal_id"]);
+    // `team_path` since `0102`: a team's grant is removed by naming the team (M1.5.3).
+    expect(properties.sort()).toEqual(["capability", "principal_id", "team_path"]);
   });
 });
 
@@ -570,25 +574,48 @@ describe("the roles screen", () => {
     expect(container.textContent).not.toMatch(/\b(read|write|approve|admin):[a-z_]/);
   });
 
-  test("it says that who holds a role is not recorded, rather than showing an empty column", async () => {
-    // What breaks if this is deleted: an empty holders column, which reads as nobody holding
-    // the role when the truth is that nothing records it. `role_grant` is M1.3.2 and the
-    // directory's assertion is a different fact.
+  test("it lists who holds each role, and draws no control for a reader who may not appoint", async () => {
+    // What breaks if this is deleted: the holders `gate.role_grant` records (M1.3.2) are answered
+    // and never shown, or a reader without the authority is offered buttons every press of which
+    // is refused.
     const { container } = await consoleAt("/roles", {
       roles: {
         roles: [
-          {
-            role: "member",
-            exists_to: "Ask questions",
-            typical_count: "everyone",
-            scope_required: false,
-          },
+          { role: "super_admin", exists_to: "Own the platform", typical_count: "two", scope_required: false },
         ],
-        holders_are_not_recorded_yet: true,
+      },
+      holders: {
+        items: [
+          { id: "g-1", principal_id: "u_owner", role: "super_admin", deputy_of: null, not_after: null },
+          { id: "g-2", principal_id: "u_cover", role: "super_admin", deputy_of: "u_owner", not_after: "2999-01-01T00:00:00Z" },
+        ],
+        editable: false,
       },
     });
+    await waitFor(() => {
+      expect(container.querySelector(`[aria-label="${HOLDERS_LIST_LABEL}"]`)).not.toBeNull();
+    });
+    expect(container.textContent).toContain("u_owner");
+    expect(container.textContent).toContain("deputy for u_owner, until 2999-01-01");
+    expect(container.textContent).not.toContain("Remove super_admin");
+  });
 
-    expect(container.textContent).toContain(HOLDERS_ARE_NOT_RECORDED);
+  test("a reader who may appoint is offered removal behind a confirmation and the two forms", async () => {
+    // What breaks if this is deleted: the appointment, deputy and removal controls are served and
+    // unreachable from the console, or the removal is sent without asking.
+    const { container, idp } = await consoleAt("/roles", {
+      roles: { roles: [] },
+      holders: {
+        items: [{ id: "g-1", principal_id: "u_owner", role: "auditor", deputy_of: null, not_after: null }],
+        editable: true,
+      },
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("Remove auditor from u_owner");
+    });
+    expect(container.textContent).toContain(SEPARATION_NOTE);
+    expect(container.querySelectorAll("form").length).toBe(2);
+    expect(writes(idp)).toEqual([]);
   });
 
   test("an answer with no roles in it says so", async () => {

@@ -155,6 +155,11 @@ NAME_SQL_PATTERN = NAME_PATTERN
 #: predicate that widens to the whole company.
 SCOPE_SHAPE = "jsonb_typeof(scope) = 'object' AND jsonb_typeof(scope -> 'clauses') = 'array'"
 
+#: A team's path, `<department>.<team>`: wide enough for two slugs and the dot. The database
+#: checks the shape without `(?:`, which SQLAlchemy reads as a bind; the type checks the rest.
+TEAM_PATH_CHARS = 121
+TEAM_PATH_GRAMMAR = "team_path IS NULL OR team_path ~ '^[a-z][a-z0-9_]*[.][a-z][a-z0-9_]*$'"
+
 #: The mirror image, for `gate.scope.predicate`, which holds the *document* form that
 #: `parse_predicate` reads. There is no positive shape to check - a document is an object
 #: mapping arbitrary field names to matchers, so any object is structurally plausible - so
@@ -333,11 +338,16 @@ class CapabilityGrantRow(TimestampMixin, SoftDeleteMixin, Base):
     id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
     )
-    principal_id: Mapped[str] = mapped_column(
+    #: Null for a grant whose subject is a team (M1.5.3); two checks hold exactly one.
+    principal_id: Mapped[str | None] = mapped_column(
         String(PRINCIPAL_ID_CHARS),
         ForeignKey("auth.principal.id", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
         index=True,
+    )
+    #: `<department>.<team>`, the path `brain.identity.teams.TeamSubject` carries. Migration 0102.
+    team_path: Mapped[str | None] = mapped_column(
+        String(TEAM_PATH_CHARS), nullable=True, index=True
     )
     capability: Mapped[str] = mapped_column(String(CAPABILITY_CHARS), nullable=False)
 
@@ -363,11 +373,26 @@ class CapabilityGrantRow(TimestampMixin, SoftDeleteMixin, Base):
         ),
         CheckConstraint(SCOPE_SHAPE, name="scope_shape"),
         CheckConstraint(_reason_present(), name="reason_present"),
+        # Exactly one subject, written as two checks: see migration 0102.
+        CheckConstraint(
+            "team_path IS NULL OR principal_id IS NULL", name="a_team_grant_names_no_principal"
+        ),
+        CheckConstraint(
+            "principal_id IS NOT NULL OR team_path IS NOT NULL", name="a_grant_names_a_subject"
+        ),
+        CheckConstraint(TEAM_PATH_GRAMMAR, name="team_path_grammar"),
         # See the module docstring: a second grant of the same capability narrows rather
         # than widens, so it is refused rather than accepted and quietly inverted.
         Index(
             "uq_capability_grant_principal_id_capability_live",
             "principal_id",
+            "capability",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
+        Index(
+            "uq_capability_grant_team_path_capability_live",
+            "team_path",
             "capability",
             unique=True,
             postgresql_where=text("deleted_at IS NULL"),

@@ -108,6 +108,7 @@ from brain.gate.rule_store import load_rules, rule_ids
 from brain.gate.suspension_store import StoredSuspensions
 from brain.govern_pack_routes import router as govern_pack_router
 from brain.govern_people_routes import router as govern_people_router
+from brain.govern_role_routes import router as govern_role_router
 from brain.govern_routes import router as govern_router
 from brain.identity.administration_reconciliation import (
     TRACE_PREFIX as RECONCILIATION_TRACE,
@@ -115,6 +116,7 @@ from brain.identity.administration_reconciliation import (
 from brain.identity.administration_reconciliation import (
     reconcile_first_administrators,
     reconcile_member_grants,
+    reconcile_super_admin_roles,
 )
 from brain.identity.bearer import TokenAuthority, log_refusal, refusal_headers
 from brain.identity.first_administrator import FirstAdministrators
@@ -438,6 +440,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             )
         except Exception:
             log.exception("member grants could not be reconciled")
+        # A first administrator appointed before role grants existed is recorded as Super Admin,
+        # once. See `administration_reconciliation.reconcile_super_admin_roles`.
+        try:
+            await reconcile_super_admin_roles(
+                app.state.db_sessions,
+                now=datetime.now(UTC),
+                trace_id=f"{RECONCILIATION_TRACE}{uuid.uuid4().hex[:16]}",
+            )
+        except Exception:
+            log.exception("super admin role could not be reconciled")
     else:
         app.state.db_engine = None
         app.state.db_sessions = None
@@ -1234,6 +1246,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Every grant a pack means goes through the same authority a single grant does. See
     # `brain.govern_pack_routes`.
     app.include_router(govern_pack_router)
+    # Who holds each role, and appointing, deputising and removing one. See
+    # `brain.govern_role_routes`.
+    app.include_router(govern_role_router)
     # The Skills screen, SCREEN 6 of `docs/screens.html`. A router of its own because what it
     # answers about is neither a grant nor an agent: it is the skill library, its review queue and
     # the procedures the agents a reader may see are pinned to. Its three writes add a skill,

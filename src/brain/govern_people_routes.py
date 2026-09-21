@@ -158,6 +158,7 @@ from brain.gate.review_store import (
     LastDecision,
     PackHolding,
     StoredReview,
+    held_by,
 )
 from brain.govern_routes import placed_assignment, placed_grant
 from brain.identity.organisation_store import (
@@ -1106,7 +1107,7 @@ def review_row(
     return ReviewRowView(
         kind=HoldingKind.GRANT if isinstance(holding, GrantHolding) else HoldingKind.PACK,
         row_id=str(holding.row.id),
-        principal_id=holding.row.principal_id,
+        principal_id=held_by(holding),
         display_name=holding.display_name,
         department=holding.department,
         capabilities=[one.record.capability.value for one in grants],
