@@ -12,10 +12,10 @@ route could route around: a profiler records the first time each function's code
 every thread, so a step is seen however it was imported and a step that did not run is absent.
 The model is `brain.models.calls.ModelCalls.complete`, the one call every model request makes.
 
-What the request path does today is identify, entitle and narrow, then call the model. The
-screen, the answer cache, routing and catalogue projection are not on `/answer` yet; the test
-that holds all of them in order arrives with the chain that runs them, because the invariant
-report refuses a skipped or expected-to-fail rule.
+What the request path does today is identify, entitle and narrow, then call the model. The rest
+of the front half, in the order decided on 2026-09-21 (screen, classify and select, cache, route,
+catalogue projection), is `brain.gate.front.run_front_half`, held to that order by
+`tests/invariants/test_front_half.py`; it is not called by `/answer` yet.
 
 Task ids: M3.9.7
 """
@@ -46,6 +46,7 @@ from brain.gate.resolve import resolve
 from brain.gate.select import select_agent
 from brain.identity.bearer import authenticate
 from brain.models.calls import ModelCalls
+from brain.models.routing import classify_tier
 from tests.fixtures.console_http import gate_wiring, headers
 from tests.unit.test_answer_route_model import READER, READER_GRANTS
 from tests.unit.test_answer_route_model import client as client
@@ -61,14 +62,12 @@ STEP_OF: dict[CodeType, str] = {
     admit.__code__: "narrow",
     assess.__code__: "screen",
     lookup.__code__: "cache",
-    classify_lane.__code__: "route",
-    select_agent.__code__: "route",
+    classify_lane.__code__: "select",
+    select_agent.__code__: "select",
+    classify_tier.__code__: "route",
     project.__code__: "project",
     ModelCalls.complete.__code__: "model",
 }
-
-#: The front half the sentence names, in its order. `narrow` is entitlement's second half.
-FRONT_HALF = ("identify", "entitle", "screen", "cache", "route", "project")
 
 NOW = datetime(2026, 9, 21, tzinfo=UTC)
 
@@ -132,10 +131,22 @@ def _before_the_model(order: list[str], steps: tuple[str, ...]) -> None:
 
 # ------------------------------------------------------------------ declared
 
+#: The front half as `GateStep` declares it, in order.
+FRONT_STEPS = [
+    GateStep.IDENTIFY,
+    GateStep.ENTITLE,
+    GateStep.SCREEN,
+    GateStep.CLASSIFY,
+    GateStep.SELECT,
+    GateStep.CACHE,
+    GateStep.ROUTE,
+    GateStep.PROJECT,
+]
+
 
 @pytest.mark.parametrize(
     "front",
-    [GateStep.IDENTIFY, GateStep.ENTITLE, GateStep.CLASSIFY, GateStep.CACHE, GateStep.SELECT],
+    FRONT_STEPS,
 )
 def test_the_declared_order_puts_every_front_step_before_the_model(front: GateStep) -> None:
     """INVOKE is where the model is called, and every front-half step is declared before it."""
@@ -144,7 +155,7 @@ def test_the_declared_order_puts_every_front_step_before_the_model(front: GateSt
 
 @pytest.mark.parametrize(
     "front",
-    [GateStep.IDENTIFY, GateStep.ENTITLE, GateStep.CLASSIFY, GateStep.CACHE, GateStep.SELECT],
+    FRONT_STEPS,
 )
 def test_a_front_step_after_the_model_call_is_refused(front: GateStep) -> None:
     """A model call entered first makes every front step after it an error, not a record."""
@@ -157,15 +168,7 @@ def test_a_front_step_after_the_model_call_is_refused(front: GateStep) -> None:
 def test_the_front_half_in_its_declared_order_reaches_the_model() -> None:
     """The positive sibling: the declared order, entered in order, is accepted end to end."""
     recorder = open_trace("t-order", NOW, Channel.CONSOLE)
-    for step in (
-        GateStep.INGEST,
-        GateStep.IDENTIFY,
-        GateStep.ENTITLE,
-        GateStep.CLASSIFY,
-        GateStep.CACHE,
-        GateStep.SELECT,
-        GateStep.INVOKE,
-    ):
+    for step in (GateStep.INGEST, *FRONT_STEPS, GateStep.INVOKE):
         recorder.enter(step)
     assert recorder.steps[-1] is GateStep.INVOKE
 

@@ -133,15 +133,22 @@ class GateStep(enum.IntEnum):
     tools the caller already holds, rather than being chosen first and then having its tools
     trimmed, which is the mistake that turns an agent into a principal. REDACT after INVOKE
     and before COMPOSE means nothing reaches an answer without passing the walker.
+
+    SELECT before CACHE because the cache key carries the chosen agent's configuration hash,
+    so an answer cannot be looked up before anybody knows which agent would give it. ROUTE and
+    PROJECT follow a miss: a hit calls no model, so it needs no tier and no catalogue.
     """
 
     RECORD = 10
     INGEST = 20
     IDENTIFY = 30
     ENTITLE = 40
+    SCREEN = 45
     CLASSIFY = 50
+    SELECT = 55
     CACHE = 60
-    SELECT = 70
+    ROUTE = 65
+    PROJECT = 75
     INVOKE = 80
     REDACT = 90
     COMPOSE = 100

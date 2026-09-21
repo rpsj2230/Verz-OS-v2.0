@@ -115,6 +115,7 @@ MIGRATION_AUTOMATION_RUN = VERSIONS / "0067_automation_run.py"
 MIGRATION_CONNECTOR_SYNC = VERSIONS / "0068_connector_sync.py"
 MIGRATION_DEPLOYMENT_RECORD = VERSIONS / "0091_deployment_record.py"
 MIGRATION_VAULT_ACCESS = VERSIONS / "0093_vault_leases_and_audit.py"
+MIGRATION_GATE_FRONT_HALF = VERSIONS / "0100_gate_front_half.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -313,6 +314,8 @@ CONNECTOR_SYNC_TABLES: tuple[str, ...] = ("ops.connector_sync",)
 DEPLOYMENT_RECORD_TABLES: tuple[str, ...] = ("ops.deployment_record",)
 #: And the one 0093 adds: every call the secrets vault answered about a slot, from its audit log.
 VAULT_ACCESS_TABLES: tuple[str, ...] = ("ops.vault_access",)
+#: And the one 0100 adds: the dedupe key of every inbound channel message.
+CHANNEL_EVENT_TABLES: tuple[str, ...] = ("gate.channel_event",)
 
 ALL_TABLES = (
     CORE_TABLES
@@ -358,6 +361,7 @@ ALL_TABLES = (
     + CONNECTOR_SYNC_TABLES
     + DEPLOYMENT_RECORD_TABLES
     + VAULT_ACCESS_TABLES
+    + CHANNEL_EVENT_TABLES
 )
 
 
@@ -1101,6 +1105,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert deployment_record.TABLES == DEPLOYMENT_RECORD_TABLES
     vault_access = migration_module(MIGRATION_VAULT_ACCESS)
     assert vault_access.TABLES == VAULT_ACCESS_TABLES
+    channel_event = migration_module(MIGRATION_GATE_FRONT_HALF)
+    assert channel_event.TABLES == CHANNEL_EVENT_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1168,6 +1174,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(connector_sync.TABLES)
         + tuple(deployment_record.TABLES)
         + tuple(vault_access.TABLES)
+        + tuple(channel_event.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1216,6 +1223,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(connector_sync.TABLES),
         set(deployment_record.TABLES),
         set(vault_access.TABLES),
+        set(channel_event.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"
@@ -2057,3 +2065,45 @@ def test_the_downgrade_restores_the_broken_pattern_because_that_is_what_shipped(
     assert "(?NULL" in down, "the downgrade no longer restores what 0003 shipped"
     assert SLUG_PATTERN in up, "the upgrade no longer installs the real pattern"
     assert "(?NULL" not in up, "the upgrade still writes the mangled pattern"
+
+
+# ------------------------------------------------------------------ 0100, the gate's front half
+def test_0100_builds_the_channel_event_table_exactly_as_the_model_declares_it() -> None:
+    """The dedupe table's DDL, from the model, appears in 0100's rendered upgrade, primary key
+    on `(channel, external_id)` included, so the unique index M3.2.2 names is the one built.
+
+    Delete this and the model and the migration can disagree about the key, and redelivered
+    messages are deduped in tests and answered twice in production."""
+    expected = squash(str(CreateTable(table("gate.channel_event")).compile(dialect=DIALECT)))
+    assert expected in squash(rendered("upgrade", MIGRATION_GATE_FRONT_HALF))
+    assert "PRIMARY KEY (channel, external_id)" in expected
+
+
+def test_0100_copies_every_check_and_width_it_shares_with_the_models() -> None:
+    """The migration's copied predicates are the models', which are built from the enums.
+
+    Delete this and a new lane, selection stage or channel reaches the model and not the
+    database, and the first row naming it is refused at write time."""
+    front = migration_module(MIGRATION_GATE_FRONT_HALF)
+    telemetry_checks = checks("obs.request_telemetry")
+    assert telemetry_checks["ck_request_telemetry_risk_score_range"] == front.RISK_SCORE_RANGE
+    assert telemetry_checks["ck_request_telemetry_routed_lane"] == front.ROUTED_LANE
+    assert telemetry_checks["ck_request_telemetry_selection_stage"] == front.SELECTION_STAGE
+    assert checks("gate.channel_event")["ck_channel_event_channel"] == front.CHANNELS
+    columns = table("obs.request_telemetry").columns
+    assert columns["selected_agent"].type.length == front.NAME_CHARS  # type: ignore[attr-defined]
+    assert table("gate.channel_event").columns["external_id"].type.length == (  # type: ignore[attr-defined]
+        front.EXTERNAL_ID_CHARS
+    )
+
+
+def test_0100_adds_the_front_half_columns_nullable_and_drops_them_on_the_way_down() -> None:
+    """Nullable, because every row written before 0100 has none; and the downgrade takes all
+    four away again rather than leaving a column no release reads."""
+    up = squash(rendered("upgrade", MIGRATION_GATE_FRONT_HALF))
+    down = squash(rendered("downgrade", MIGRATION_GATE_FRONT_HALF))
+    for column in ("risk_score", "routed_lane", "selection_stage", "selected_agent"):
+        assert f"ALTER TABLE obs.request_telemetry ADD COLUMN {column}" in up
+        assert table("obs.request_telemetry").columns[column].nullable
+        assert f"ALTER TABLE obs.request_telemetry DROP COLUMN {column}" in down
+    assert "DROP TABLE gate.channel_event" in down

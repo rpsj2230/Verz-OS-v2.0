@@ -56,6 +56,7 @@ from brain.tables.automation import AutomationOwnerRow
 from brain.tables.automation_run import AutomationRunRow, AutomationScheduleRow
 from brain.tables.browsing import BrowserEnvelopeRow
 from brain.tables.budget import BudgetVersionRow
+from brain.tables.channel_event import ChannelEventRow
 from brain.tables.chat import ConversationRow, MessageRole, MessageRow
 from brain.tables.config import SettingRow, SettingType
 from brain.tables.connector_connection import ConnectorConnectionRow
@@ -290,6 +291,8 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0093_vault_leases_and_audit. Points at nothing: a slot is a value, so the record of who read
     # a key outlives the key.
     "ops.vault_access",
+    # 0100_gate_front_half
+    "gate.channel_event",
 )
 
 __all__ = [
@@ -310,6 +313,7 @@ __all__ = [
     "CapabilityPackAssignmentRow",
     "CapabilityPackRow",
     "CapabilityRegistryRow",
+    "ChannelEventRow",
     "ConnectorConnectionRow",
     "ConnectorSyncRow",
     "ControlRunRow",

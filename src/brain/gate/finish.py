@@ -117,6 +117,8 @@ from brain.audit.ledger import TRACE_ID
 from brain.core.lane import Lane
 from brain.core.principal import Principal
 from brain.gate.context import Channel
+from brain.gate.injection import MAX_SCORE
+from brain.gate.select import SelectionStage
 
 if TYPE_CHECKING:
     # Typing only: `brain.gate.answer` imports this module to call `finish`, so importing the
@@ -227,6 +229,27 @@ class Origin:
 
 
 @dataclass(frozen=True)
+class FrontRecord:
+    """What the gate decided before the lane ran, carried to the request row as it was decided.
+
+    M3.4.2 and M3.6.3. Built by `brain.gate.front.FrontHalf.record` from the decisions
+    themselves, so the row holds the score and the route that were chosen, never a value
+    recomputed afterwards by a classifier that may have changed since. Names and a number only:
+    the ledger holds no sentence, so the reasons stay in the trace.
+    """
+
+    risk_score: int
+    routed_lane: Lane
+    selection_stage: SelectionStage
+    selected_agent: str
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.risk_score <= MAX_SCORE:
+            msg = f"a risk score is 0 to {MAX_SCORE}, not {self.risk_score}"
+            raise FinishError(msg)
+
+
+@dataclass(frozen=True)
 class Finished:
     """One admitted request the lane has finished with, however it finished.
 
@@ -255,6 +278,9 @@ class Finished:
     tool_calls: int
     #: What this request's model calls consumed, from its meter, or None when it made none.
     model_usage: ModelUsage | None = None
+    #: The front half's decisions, or None for a request that did not pass through
+    #: `brain.gate.front.run_front_half`, such as an automation's tool call.
+    front: FrontRecord | None = None
 
     def __post_init__(self) -> None:
         if self.at.tzinfo is None:

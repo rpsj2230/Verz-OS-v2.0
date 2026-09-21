@@ -48,6 +48,7 @@ from sqlalchemy import (
     Float,
     Index,
     Integer,
+    SmallInteger,
     String,
     Uuid,
     text,
@@ -57,6 +58,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 from brain.core.lane import Lane
 from brain.db import Base
 from brain.gate.context import TrafficClass
+from brain.gate.injection import MAX_SCORE
+from brain.gate.select import SelectionStage
 from brain.ops.telemetry import RequestStatus
 from brain.tables.adoption import TRACE_ID_CHARS
 from brain.tables.identity import one_of
@@ -87,6 +90,10 @@ OPTIONAL_DURATION_COLUMNS: Final[tuple[str, ...]] = ("time_to_first_token_ms", "
 
 def _not_negative(column: str) -> CheckConstraint:
     return CheckConstraint(f"{column} IS NULL OR {column} >= 0", name=f"{column}_not_negative")
+
+
+#: The injection score's range, from `brain.gate.injection.MAX_SCORE` rather than restated.
+RISK_SCORE_RANGE: Final = f"risk_score IS NULL OR risk_score BETWEEN 0 AND {MAX_SCORE}"
 
 
 class RequestTelemetryRow(Base):
@@ -124,6 +131,12 @@ class RequestTelemetryRow(Base):
     retry_count: Mapped[int | None] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(24), nullable=False)
     duration_ms: Mapped[float] = mapped_column(Float, nullable=False)
+    #: The gate's front half, written as it decided (M3.4.2, M3.6.3; migration 0100). Null on a
+    #: row the front half did not run for, and on every row written before 0100.
+    risk_score: Mapped[int | None] = mapped_column(SmallInteger)
+    routed_lane: Mapped[str | None] = mapped_column(String(8))
+    selection_stage: Mapped[str | None] = mapped_column(String(16))
+    selected_agent: Mapped[str | None] = mapped_column(String(NAME_CHARS))
 
     __table_args__ = (
         CheckConstraint(one_of("traffic_class", TrafficClass), name="traffic_class"),
@@ -133,6 +146,14 @@ class RequestTelemetryRow(Base):
         CheckConstraint("length(btrim(trace_id)) >= 1", name="trace_present"),
         CheckConstraint("length(btrim(principal)) >= 1", name="principal_present"),
         CheckConstraint("duration_ms >= 0", name="duration_not_negative"),
+        CheckConstraint(RISK_SCORE_RANGE, name="risk_score_range"),
+        CheckConstraint(
+            f"routed_lane IS NULL OR {one_of('routed_lane', Lane)}", name="routed_lane"
+        ),
+        CheckConstraint(
+            f"selection_stage IS NULL OR {one_of('selection_stage', SelectionStage)}",
+            name="selection_stage",
+        ),
         *(_not_negative(one) for one in (*COUNT_COLUMNS, *OPTIONAL_DURATION_COLUMNS)),
         Index("ix_request_telemetry_received_at", "received_at"),
         Index("ix_request_telemetry_trace_id", "trace_id"),

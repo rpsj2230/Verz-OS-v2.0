@@ -478,6 +478,9 @@ def database() -> Iterator[str]:
         migrate(DATABASE, "upgrade", "0039")
         migrate(DATABASE, "stamp", "0042")
         migrate(DATABASE, "upgrade", "0043")
+        # 0100 adds the front half's four columns the recorder now writes.
+        migrate(DATABASE, "stamp", "0093")
+        migrate(DATABASE, "upgrade", "0100")
         yield scratch
     finally:
         drop(DATABASE)
