@@ -897,6 +897,59 @@ def test_an_adapter_that_takes_only_a_payload_and_scalars_is_admitted() -> None:
     assert_channel_adapter(send)
 
 
+#: The six surfaces the product ships, named here rather than read from the module under
+#: test, so a discovery that quietly found nothing cannot pass by checking nothing.
+SHIPPED_ADAPTERS = frozenset(
+    {
+        "EmailAdapter",
+        "LarkAdapter",
+        "SlackAdapter",
+        "TeamsAdapter",
+        "TelegramAdapter",
+        "WhatsAppAdapter",
+    }
+)
+
+
+def every_channel_adapter_class() -> dict[str, type]:
+    """Every concrete class under `brain.channels` shaped like a `ChannelAdapter`."""
+    import importlib
+    import pkgutil
+
+    import brain.channels
+
+    found: dict[str, type] = {}
+    for info in pkgutil.iter_modules(brain.channels.__path__):
+        module = importlib.import_module(f"brain.channels.{info.name}")
+        for obj in vars(module).values():
+            if (
+                isinstance(obj, type)
+                and obj.__module__ == module.__name__
+                and not getattr(obj, "_is_protocol", False)
+                and all(
+                    callable(getattr(obj, m, None))
+                    for m in ("capabilities", "normalise", "send", "healthy")
+                )
+            ):
+                found[obj.__name__] = obj
+    return found
+
+
+def test_every_real_channel_adapter_can_be_handed_only_a_payload() -> None:
+    """M4.4.1 over the adapters that ship, not over fixtures. `serialise_for_channel` being
+    the only producer of a `ChannelPayload` proves nothing if one adapter's `send` also
+    accepts the answer or the trace; three adapters had their own check and three did not.
+
+    Discovered rather than listed, so a seventh adapter is checked the day it is written.
+    Delete this and an adapter can grow a `RedactedAnswer` parameter unnoticed."""
+    adapters = every_channel_adapter_class()
+    assert set(adapters) >= SHIPPED_ADAPTERS
+    for cls in adapters.values():
+        # Every shipped adapter takes no constructor argument; see
+        # `brain.agent_routes.CHANNEL_ADAPTERS`. A bound `send` drops `self`.
+        assert_channel_adapter(cls().send)
+
+
 # ======================= no untyped shape from a tool, refused early (M4.4.2)
 def returns_a_dict(department: str) -> dict[str, Any]:
     """No entity to ask a capability question about."""

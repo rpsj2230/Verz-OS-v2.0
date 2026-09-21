@@ -625,15 +625,14 @@ def test_the_only_column_of_a_new_classification_is_reported_as_newly_reachable(
 
 
 def test_a_dropped_derivation_is_a_change_the_epoch_does_not_record() -> None:
-    """**A finding about `brain.core.field_policy`, held here rather than fixed here.**
-    `FieldPolicy.epoch` digests the entity, the field, the capability, the classification and
-    the count declaration, and not `derived_from`. So the edit above changes what every
+    """**A finding held here rather than fixed here.** `FieldPolicy.epoch` digests
+    `derived_from` since 2026-09-21, but `ColumnRule.as_field_rule` drops it, so the policy a
+    classification compiles to carries no derivation. The edit above changes what every
     caller short of the cost capability sees and leaves the epoch identical, which means the
-    answer cache would go on serving rows computed under the old closure. That is the exact
-    failure the epoch's own docstring describes for `counts`, with the sign reversed.
+    answer cache would go on serving rows computed under the old closure.
 
-    Asserted rather than described, so the day somebody adds `derived_from` to the digest
-    this test fails and the person changing it reads the paragraph above.
+    Asserted rather than described, so the day `as_field_rule` carries the derivation this
+    test fails and the person changing it reads the paragraph above.
 
     Delete this and the gap goes back to being invisible, and the review's two epochs start
     reading as proof that a proposal is not a change."""

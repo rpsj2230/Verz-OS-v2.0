@@ -62,20 +62,17 @@ syntactic one compares two rules for one column. The closure one runs
 column and reports which columns such a caller would newly reach, which is the check that
 names `margin` when somebody drops the derivation on `cost`.
 
-**Found while building this, and not fixed here: the policy epoch does not move when a
-derivation changes.** `FieldPolicy.epoch` digests the entity, the field, the capability, the
-classification and the count declaration, and not `FieldRule.derived_from`. So dropping the
-derivation on `cost` changes what `compute_mask` returns for everybody who lacks the cost
-capability and leaves the epoch identical, which is precisely the failure that docstring
-describes for `counts`: "a tightening that did not move the epoch would leave every cached
-answer still emitting the count it was just told to withhold", with the sign reversed. The
-answer cache would keep serving rows computed under the old closure. Two epochs are
-therefore proof that a proposal is a change and never proof that it is not, which is what
-`epoch_after` says about itself below, and it is why `widens` is computed from the rules
-rather than from the digests. `brain.core.field_policy` belongs to another agent this
-afternoon, so this module states the gap rather than reaching into it, and
-`test_a_dropped_derivation_is_a_change_the_epoch_does_not_record` holds it where somebody
-will see it.
+**Found while building this: the policy epoch does not move when a derivation changes.**
+Two causes, and only the first is closed. `FieldPolicy.epoch` did not digest
+`FieldRule.derived_from` until 2026-09-21. `ColumnRule.as_field_rule` still drops
+`derived_from`, so the policy a classification compiles to carries no derivation and its
+epoch cannot see one. Dropping the derivation on `cost` therefore changes what every caller
+short of the cost capability sees and leaves the epoch identical, and the answer cache would
+keep serving rows computed under the old closure. Two epochs are proof that a proposal is a
+change and never proof that it is not, which is what `epoch_after` says about itself below,
+and it is why `widens` is computed from the rules rather than from the digests.
+`test_a_dropped_derivation_is_a_change_the_epoch_does_not_record` holds the gap where
+somebody will see it.
 
 **The closure check is bounded at callers short of one column, and that bound is real.**
 Every subset of the columns is the honest question and it is exponential. One missing column
@@ -358,8 +355,8 @@ class ReviewView(BaseModel):
     #: The epoch of the classification that stands, and of the proposed one.
     #:
     #: Two digests that differ are proof that a proposal is a change. Two that agree are not
-    #: proof that it is not: `FieldPolicy.epoch` does not digest `derived_from`, so dropping
-    #: a derivation moves nothing here while changing what every caller short of a column
+    #: proof that it is not: the compiled policy carries no `derived_from`, so dropping a
+    #: derivation moves nothing here while changing what every caller short of a column
     #: sees. See the module docstring. Nothing in this response is derived from these two,
     #: for that reason.
     epoch_now: str = ""
