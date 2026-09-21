@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-21T06:25:25.216757+00:00",
-  "commit": "b43a79c",
-  "commit_subject": "Settings page shows every installation value and saves branding; a leaving company gets a handover command",
+  "generated_at": "2026-09-21T06:51:39.386284+00:00",
+  "commit": "5254748",
+  "commit_subject": "Every paged route answers items and next_cursor and takes cursor and limit",
   "total": 1601,
   "done": 171,
   "percent": 10.7,
