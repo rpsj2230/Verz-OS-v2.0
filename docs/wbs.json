@@ -107,6 +107,11 @@
    "leaf_decided": {},
    "act_groups": {},
    "leaf_progress": {
+    "M0.1.1": {
+     "status": "BLOCKED",
+     "why": "owner GitHub settings: repository is public and main has no branch protection; CODEOWNERS is being added",
+     "updated": "2026-09-21"
+    },
     "M0.3.4": {
      "status": "BLOCKED",
      "why": "server change needs owner permission: add the PgBouncer pools per ops/vps/POOLING.md",
@@ -125,6 +130,11 @@
     "M0.4.2": {
      "status": "BLOCKED",
      "why": "presidio-analyzer has no service in the repo; image, port and health check undecided",
+     "updated": "2026-09-21"
+    },
+    "M0.7.1": {
+     "status": "BLOCKED",
+     "why": "owner decision: 7 licences await the allowlist (postgres/pgvector, ubuntu/squid, three @fontsource fonts, regex); recommended allow all",
      "updated": "2026-09-21"
     }
    }
@@ -4308,14 +4318,44 @@
     "M38.2.1": "Wave close ritual"
    },
    "leaf_progress": {
+    "M38.1.1.5": {
+     "status": "BLOCKED",
+     "why": "owner GitHub settings: CODEOWNERS only forces review once branch protection requires it",
+     "updated": "2026-09-21"
+    },
+    "M38.1.3.3": {
+     "status": "BLOCKED",
+     "why": "server change needs owner permission: copy ops/deploy/brain-deploy to /usr/local/bin on the server",
+     "updated": "2026-09-21"
+    },
+    "M38.1.3.4": {
+     "status": "BLOCKED",
+     "why": "server change needs owner permission: copy ops/deploy/brain-deploy to /usr/local/bin on the server",
+     "updated": "2026-09-21"
+    },
+    "M38.1.3.5": {
+     "status": "READY FOR TESTING",
+     "why": "table 0091 live on staging at 784d7f2 and the Version screen lists it; new records need the server script, and the screen needs checking signed in",
+     "updated": "2026-09-21"
+    },
+    "M38.1.4.2": {
+     "status": "BLOCKED",
+     "why": "server change needs owner permission",
+     "updated": "2026-09-21"
+    },
+    "M38.1.4.3": {
+     "status": "BLOCKED",
+     "why": "server change needs owner permission",
+     "updated": "2026-09-21"
+    },
     "M38.2.1.1": {
      "status": "READY FOR TESTING",
      "why": "WAVE_RECORDS and /build/waves are live on staging; proved when the first wave is accepted and recorded",
      "updated": "2026-09-21"
     },
-    "M38.4.1.1": {
-     "status": "READY FOR TESTING",
-     "why": "live on staging at 9fb9367; the Connectors card needs checking signed in",
+    "M38.5.1": {
+     "status": "BLOCKED",
+     "why": "server change needs owner permission: install ops/deploy/brain-autodeploy with the 900-second timeout",
      "updated": "2026-09-21"
     }
    }
@@ -4712,7 +4752,23 @@
    "leaf_acts": {},
    "leaf_decided": {},
    "act_groups": {},
-   "leaf_progress": {}
+   "leaf_progress": {
+    "M41.2.7": {
+     "status": "BLOCKED",
+     "why": "needs the signing key slot, which arrives in Wave 3",
+     "updated": "2026-09-21"
+    },
+    "M41.3.1": {
+     "status": "BLOCKED",
+     "why": "a release tag needs the owner's go-ahead",
+     "updated": "2026-09-21"
+    },
+    "M41.3.2": {
+     "status": "BLOCKED",
+     "why": "owner question: is the v1 repository archived",
+     "updated": "2026-09-21"
+    }
+   }
   },
   {
    "id": "M42",
