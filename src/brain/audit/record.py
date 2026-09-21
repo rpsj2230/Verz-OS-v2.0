@@ -175,6 +175,7 @@ ACTION_BY_METHOD: Final[Mapping[str, AuditAction]] = MappingProxyType(
         "vault_access": AuditAction.VAULT_ACCESS,
         "principal_state": AuditAction.PRINCIPAL_STATE,
         "breach": AuditAction.BREACH,
+        "agent_owner": AuditAction.AGENT_OWNER,
     }
 )
 
@@ -890,6 +891,19 @@ class AuditRecorder:
             AuditAction.PRINCIPAL_STATE,
             subject("principal", principal_id),
             {"change": change.value},
+        )
+
+    def agent_owner(self, *, agent_id: str, from_owner: str, to_owner: str) -> AuditEntry:
+        """Record that an agent's owner changed (M1.8.9, M26.3.2).
+
+        Written in a deployed database by `0105`'s trigger on `agent.agent`, one entry per change
+        of `owner_id`, and held to these details by a test. Both owners, for `leash_change`'s
+        reason about both rungs: an entry naming only the new owner cannot say whose agent it was.
+        """
+        return self._write(
+            AuditAction.AGENT_OWNER,
+            subject("agent", agent_id),
+            {"change": "owner_changed", "from_owner": from_owner, "to_owner": to_owner},
         )
 
     def retention(self, *, release_id: str, change: RetentionChange) -> AuditEntry:

@@ -11,7 +11,9 @@ exist, and rows without their record would be changes nobody can trace to a run.
 
 **A leaver's agents are found by one join on two digests**, `auth.staff_member.address_hash` to an
 email binding's `auth.principal_identity.identity_hash`, so the answer to "whose agents need a new
-owner" comes from the mark the sync wrote and a binding somebody proved, never from a display name.
+owner" comes from the mark the sync wrote and a binding somebody proved, never from a display name,
+and the same join is what stops them: `stop_leavers_agents` disables every running agent a leaver
+owns, in the run that marked them.
 
 Task ids: M1.6.12, M1.8.9
 """
@@ -23,7 +25,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Select, and_, func, select, update
+from sqlalchemy import Select, Update, and_, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -36,6 +38,7 @@ from brain.identity.staff_roster import (
     StoredMember,
     Write,
 )
+from brain.tables.agent import AgentRow
 from brain.tables.identity import PrincipalIdentityRow
 from brain.tables.staff import StaffMemberRow, StaffSyncRunRow
 
@@ -98,6 +101,27 @@ def leavers_principals() -> Select[Any]:
         )
         .where(StaffMemberRow.left_at.is_not(None), PrincipalIdentityRow.deleted_at.is_(None))
         .distinct()
+    )
+
+
+def stop_leavers_agents(now: datetime) -> Update:
+    """Disable every running agent owned by somebody the roster marks as having left (M1.8.9).
+
+    One statement over `leavers_principals`, run in the transaction that marked them, so a leaver
+    is never on the record with their agents still running. Disabled and never archived: an
+    archive is terminal, and an agent waiting for a new owner is waiting for a decision. An agent
+    already stopped keeps the instant it was first stopped, which is
+    `brain.agents.lifecycle.disable`'s rule on a retry, and an archived one is left alone. See
+    `brain.ops.staff_sync_run.A_LEAVERS_AGENT_STOPS_UNTIL_A_NEW_OWNER_ACCEPTS_IT`.
+    """
+    return (
+        update(AgentRow)
+        .where(
+            AgentRow.owner_id.in_(leavers_principals()),
+            AgentRow.disabled_at.is_(None),
+            AgentRow.archived_at.is_(None),
+        )
+        .values(disabled_at=now)
     )
 
 

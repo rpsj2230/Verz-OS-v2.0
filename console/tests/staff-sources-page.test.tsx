@@ -57,6 +57,15 @@ import {
   STILL_TO_SET,
   WOULD_ADD_LABEL,
 } from "../src/pages/StaffSources";
+import {
+  APPLY_FIRST_SYNC,
+  CONNECT_HEADING,
+  NOT_CONNECTABLE_HERE,
+  SAVE_AND_CONNECT,
+  SHOW_FIRST_SYNC,
+  STEPS_ONLY,
+  TEST_CONNECTION,
+} from "../src/components/ConnectStaffSource";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { operation } from "./support/openapi";
 
@@ -66,6 +75,7 @@ const TRIAL_OPERATION = "/api/v1/govern/staff_sources/trial";
 const MOUNT_OPERATIONS = [
   PAGE_OPERATION,
   "/api/v1/govern/staff_sources/credential",
+  "/api/v1/govern/staff_sources/guides",
   "/api/v1/govern/staff_sources/runs",
   "/api/v1/govern/staff_sources/transfers",
 ];
@@ -80,6 +90,14 @@ interface Answers {
   readonly credential?: unknown;
   readonly transfers?: unknown;
   readonly written?: { method: string; path: string }[];
+  /** The connect flow (2026-09-21): the guides read, and what each of its four writes answers. */
+  readonly guides?: unknown;
+  readonly tested?: unknown;
+  readonly connected?: unknown;
+  readonly plan?: unknown;
+  readonly applied?: unknown;
+  /** Every body a write sent, as text, so a test can look for a secret in it. */
+  readonly bodies?: string[];
 }
 
 function json(payload: unknown, status = 200): Response {
@@ -114,9 +132,9 @@ function option(
 function page(
   options: unknown[],
   selection: unknown = null,
-  notWrittenHere = "the choice is an installation setting",
+  howToChoose = "choose a source under Connect a staff source",
 ): unknown {
-  return { options, selection, not_written_here: notWrittenHere };
+  return { options, selection, how_to_choose: howToChoose };
 }
 
 /** One selection in the shape `SelectionView` serialises. */
@@ -187,10 +205,23 @@ async function consoleAt(answers: Answers): Promise<{ container: HTMLElement; id
     api(url, init) {
       const method = init?.method ?? "GET";
       if (method !== "GET") {
-        answers.written?.push({ method, path: new URL(url, CONSOLE_ORIGIN).pathname });
+        const path = new URL(url, CONSOLE_ORIGIN).pathname;
+        answers.written?.push({ method, path });
+        answers.bodies?.push(typeof init?.body === "string" ? init.body : "");
+        for (const [suffix, payload] of [
+          ["/test", answers.tested],
+          ["/connect", answers.connected],
+          ["/first-sync/apply", answers.applied],
+          ["/first-sync", answers.plan],
+        ] as const) {
+          if (path.endsWith(`${PAGE_OPERATION}${suffix}`)) {
+            return json(payload);
+          }
+        }
         return json(url.includes("/credential") ? answers.credential : { agent_id: "a_x", owner_id: "u_1" });
       }
       for (const [suffix, payload] of [
+        ["/guides", answers.guides],
         ["/runs", answers.runs],
         ["/credential", answers.credential],
         ["/transfers", answers.transfers],
@@ -588,7 +619,7 @@ describe("what the nightly sync did, its credential and the agents of people who
     const { container } = await consoleAt({
       page: page([], null, ""),
       transfers: {
-        transfers: [{ agent_id: "a_quotes", display_name: "Quotes", owner_id: "u_gone", running: true }],
+        transfers: [{ agent_id: "a_quotes", display_name: "Quotes", owner_id: "u_gone", running: false }],
       },
       written,
     });
@@ -615,5 +646,228 @@ describe("what the nightly sync did, its credential and the agents of people who
     });
 
     expect([...container.querySelectorAll("button")].some((one) => one.textContent === TAKE_ON)).toBe(false);
+  });
+});
+
+// ======================================================== connecting a source (2026-09-21)
+const SECRET = "SENTINEL-app-secret-typed-9d2e";
+
+function lark(): unknown {
+  return {
+    source: "lark",
+    title: "Lark (or Feishu)",
+    where: "open.larksuite.com/app",
+    steps: [
+      "Sign in to open.larksuite.com/app.",
+      'Open "Permissions & Scopes" and add contact:user.base:readonly and contact:department.base:readonly.',
+      'Set the data range to "All members", then release a version.',
+      'Copy the App ID and App Secret from "Credentials & Basic Info".',
+    ],
+    fields: [
+      { key: "location", label: "Platform", help: "larksuite.com or feishu.cn", secret: false, example: "larksuite.com" },
+      { key: "app_id", label: "App ID", help: "It starts with cli_.", secret: false, example: "cli_a" },
+      { key: "app_secret", label: "App Secret", help: "Kept in the vault.", secret: true, example: "" },
+    ],
+    connectable: true,
+    unavailable: "",
+    chosen: false,
+  };
+}
+
+function workspace(): unknown {
+  return {
+    source: "google_workspace",
+    title: "Google Workspace",
+    where: "admin.google.com",
+    steps: ["Enable the Admin SDK API."],
+    fields: [],
+    connectable: false,
+    unavailable: "Google Workspace cannot be connected for the nightly sync on this version.",
+    chosen: false,
+  };
+}
+
+const GUIDES = { guides: [lark(), workspace()], may_connect: true, schedule: "Read again every night." };
+
+const READ_IT = {
+  source: "lark",
+  read: true,
+  told: "Connected. Nothing was saved.",
+  people: 2,
+  complete: true,
+  skipped: 0,
+};
+
+function fill(container: HTMLElement): void {
+  for (const [name, value] of [
+    ["location", "larksuite.com"],
+    ["app_id", "cli_a"],
+    ["app_secret", SECRET],
+  ]) {
+    const field = container.querySelector<HTMLInputElement>(`input[name=${name}]`);
+    fireEvent.change(field as HTMLInputElement, { target: { value } });
+  }
+}
+
+async function drawn(container: HTMLElement, text: string): Promise<void> {
+  await waitFor(() => {
+    if (!container.textContent?.includes(text)) {
+      throw new Error(`nothing reads ${text} yet`);
+    }
+  });
+}
+
+function confirmIt(container: HTMLElement): void {
+  const confirm = container.querySelector(".confirm");
+  expect(confirm).not.toBeNull();
+  fireEvent.click([...(confirm as Element).querySelectorAll("button")].at(-1) as HTMLButtonElement);
+}
+
+describe("connecting a staff source from the console", () => {
+  test("the chosen kind's steps are drawn in order, and another kind's steps replace them", async () => {
+    // What breaks if this is deleted: the owner's "full steps from backend to see how to add",
+    // drawn for no source, or for the wrong one after somebody picks another.
+    const { container } = await consoleAt({ page: page([], null, ""), guides: GUIDES });
+    await drawn(container, CONNECT_HEADING);
+
+    const steps = () => [...container.querySelectorAll("ol li")].map((one) => one.textContent);
+    expect(steps()[0]).toBe("Sign in to open.larksuite.com/app.");
+    expect(steps().join(" ")).toContain("Credentials & Basic Info");
+    pressButton(container, "Google Workspace");
+
+    expect(steps()).toEqual(["Enable the Admin SDK API."]);
+    expect(container.textContent).toContain(NOT_CONNECTABLE_HERE);
+    expect(container.querySelector("input[name=app_secret]")).toBeNull();
+  });
+
+  test("a test is sent once, to its own address, and save is offered only after it read", async () => {
+    // What breaks if this is deleted: a save offered before anything proved the credential, or
+    // a test that also saved.
+    const written: { method: string; path: string }[] = [];
+    const { container } = await consoleAt({ page: page([], null, ""), guides: GUIDES, tested: READ_IT, written });
+    await drawn(container, CONNECT_HEADING);
+    const save = () =>
+      [...container.querySelectorAll<HTMLButtonElement>("button")].find((one) => one.textContent === SAVE_AND_CONNECT);
+    expect(save()?.disabled).toBe(true);
+    fill(container);
+    pressButton(container, TEST_CONNECTION);
+
+    await drawn(container, "Nothing was saved.");
+    expect(written).toEqual([{ method: "POST", path: "/api/v1/govern/staff_sources/test" }]);
+    expect(save()?.disabled).toBe(false);
+    expect(container.textContent).not.toContain(SECRET);
+  });
+
+  test("an empty form says what to fill in and sends nothing", async () => {
+    // What breaks if this is deleted: a blank test sent to a directory with nobody's credential.
+    const written: { method: string; path: string }[] = [];
+    const { container } = await consoleAt({ page: page([], null, ""), guides: GUIDES, written });
+    await drawn(container, CONNECT_HEADING);
+    pressButton(container, TEST_CONNECTION);
+
+    await drawn(container, "Fill in every box");
+    expect(written).toEqual([]);
+  });
+
+  test("saving and applying are each confirmed, the plan is shown first, and the secret is never drawn", async () => {
+    // What breaks if this is deleted: the owner's "choose the source (Lark) and connect it" in one
+    // unconfirmed press, or a first sync applied on the press meant to show it.
+    const written: { method: string; path: string }[] = [];
+    const bodies: string[] = [];
+    const { container } = await consoleAt({
+      page: page([], null, ""),
+      guides: GUIDES,
+      tested: READ_IT,
+      connected: { source: "lark", told: "Connected to Lark (or Feishu).", people: 2 },
+      plan: {
+        applied: false,
+        outcome: "dry_run",
+        told: "This is what the first sync would do.",
+        added: ["Ada Lovelace"],
+        marked_left: [],
+        renamed: [],
+        withheld: [],
+        refusals: [],
+        safe_to_apply: true,
+      },
+      applied: {
+        applied: true,
+        outcome: "applied",
+        told: "Read the staff list from lark and applied it.",
+        added: [],
+        marked_left: [],
+        renamed: [],
+        withheld: [],
+        refusals: [],
+        safe_to_apply: true,
+      },
+      written,
+      bodies,
+    });
+    await drawn(container, CONNECT_HEADING);
+    fill(container);
+    pressButton(container, TEST_CONNECTION);
+    await drawn(container, "Nothing was saved.");
+
+    pressButton(container, SAVE_AND_CONNECT);
+    expect(written.map((one) => one.path)).toEqual(["/api/v1/govern/staff_sources/test"]);
+    confirmIt(container);
+    await drawn(container, "Connected to Lark (or Feishu).");
+
+    pressButton(container, SHOW_FIRST_SYNC);
+    await drawn(container, "Ada Lovelace");
+    pressButton(container, APPLY_FIRST_SYNC);
+    expect(written.map((one) => one.path).at(-1)).toBe("/api/v1/govern/staff_sources/first-sync");
+    confirmIt(container);
+    await drawn(container, "applied it");
+
+    expect(written.map((one) => one.path)).toEqual([
+      "/api/v1/govern/staff_sources/test",
+      "/api/v1/govern/staff_sources/connect",
+      "/api/v1/govern/staff_sources/first-sync",
+      "/api/v1/govern/staff_sources/first-sync/apply",
+    ]);
+    expect(bodies.every((one) => one.includes(SECRET))).toBe(true);
+    expect(container.textContent).not.toContain(SECRET);
+    expect(container.querySelector<HTMLInputElement>("input[name=app_secret]")?.value ?? "").toBe("");
+  });
+
+  test("a reader who may not connect is shown the steps and no form", async () => {
+    // What breaks if this is deleted: a form drawn for a reader every write would refuse.
+    const { container } = await consoleAt({ page: page([], null, ""), guides: { ...GUIDES, may_connect: false } });
+    await drawn(container, CONNECT_HEADING);
+
+    expect(container.querySelectorAll("ol li").length).toBeGreaterThan(0);
+    expect(container.querySelector("input[name=app_secret]")).toBeNull();
+    expect(container.textContent).toContain(STEPS_ONLY);
+  });
+});
+
+describe("connecting with the Lark app the Connectors screen keeps", () => {
+  test("the held app is offered first, asks only where the list is, and sends no credential", async () => {
+    // What breaks if this is deleted: the owner pasting the same Lark App Secret a second time, or
+    // "use the Lark app" sending an empty credential the API would refuse.
+    const written: { method: string; path: string }[] = [];
+    const bodies: string[] = [];
+    const held = { ...(lark() as Record<string, unknown>), held: "Use the Lark app connected on the Connectors screen." };
+    const { container } = await consoleAt({
+      page: page([], null, ""),
+      guides: { ...GUIDES, guides: [held] },
+      connected: { source: "lark", told: "Connected to Lark (or Feishu) with the credential the vault already holds.", people: 0 },
+      written,
+      bodies,
+    });
+    await drawn(container, "Use the Lark app connected on the Connectors screen.");
+
+    expect(container.querySelector("input[name=app_secret]")).toBeNull();
+    const where = container.querySelector<HTMLInputElement>("input[name=location]");
+    fireEvent.change(where as HTMLInputElement, { target: { value: "larksuite.com" } });
+    pressButton(container, SAVE_AND_CONNECT);
+    expect(written).toEqual([]);
+    confirmIt(container);
+    await drawn(container, "already holds");
+
+    expect(written).toEqual([{ method: "POST", path: "/api/v1/govern/staff_sources/connect" }]);
+    expect(JSON.parse(bodies[0] ?? "{}")).toEqual({ source: "lark", values: { location: "larksuite.com" }, use_held: true });
   });
 });

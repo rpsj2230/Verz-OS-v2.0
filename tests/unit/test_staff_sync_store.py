@@ -30,6 +30,8 @@ from tests.fixtures.scratch_postgres import modelled, run, sql
 from tests.unit.test_staff_sync_run import APP_ID, APP_SECRET, LARK_ENV, Directory, Keys, Lease
 
 TABLES: tuple[str, ...] = (
+    # The run stops a leaver's agents in its own transaction, so it writes this table too.
+    "agent.agent",
     "auth.principal",
     "auth.principal_identity",
     "auth.staff_member",
@@ -146,6 +148,51 @@ def test_a_leaver_with_a_proven_email_binding_is_the_principal_whose_agents_are_
     sync(url, at=SECOND_NIGHT, fetch=OnlyKatherine())
 
     assert through(url, lambda s: _leavers(s)) == frozenset({"p_ada"})
+
+
+def an_agent_row(url: str, agent_id: str, owner: str, *, archived: bool = False) -> None:
+    sql(
+        url,
+        "INSERT INTO agent.agent (id, display_name, persona, tier, visibility, owner_id,"
+        " department, scope, capabilities, allowed_tools, required_tools, max_side_effect,"
+        " created_by, archived_at) VALUES (%s, 'Quote helper', 'Answers briefly.', 'main',"
+        " 'company', %s, NULL, '{\"clauses\": []}', '{}', '{}', '{}', 'none', %s,"
+        " CASE WHEN %s THEN now() END)",
+        agent_id,
+        owner,
+        owner,
+        archived,
+    )
+
+
+def test_the_night_that_marks_a_leaver_stops_their_agents_and_nobody_elses(url: str) -> None:
+    """M1.8.9, as the owner decided it: a leaver's agents stop until a new owner accepts them.
+
+    Ada's running agent is disabled by the run that marks her, her archived agent is left as it
+    was, and Katherine's agent keeps running. Delete this and the statement could stop nobody, or
+    everybody, with every stand-in test green."""
+    rows(
+        url,
+        "INSERT INTO auth.principal (id, kind, employment, display_name) "
+        "VALUES ('p_ada', 'human', 'staff', 'Ada')",
+    )
+    rows(
+        url,
+        "INSERT INTO auth.principal_identity (channel, identity_hash, principal_id, bound_at) "
+        "VALUES (%s, %s, 'p_ada', now())",
+        Channel.EMAIL.value,
+        identity_hash(Channel.EMAIL, "ada@example.com"),
+    )
+    an_agent_row(url, "adas_helper", "p_ada")
+    an_agent_row(url, "adas_old_helper", "p_ada", archived=True)
+    an_agent_row(url, "someone_elses", "p_katherine")
+    sync(url, at=FIRST_NIGHT, fetch=Directory())
+    assert rows(url, "SELECT count(*) FROM agent.agent WHERE disabled_at IS NOT NULL") == [(0,)]
+
+    sync(url, at=SECOND_NIGHT, fetch=OnlyKatherine())
+
+    stopped = dict(rows(url, "SELECT id, disabled_at IS NOT NULL FROM agent.agent ORDER BY id"))
+    assert stopped == {"adas_helper": True, "adas_old_helper": False, "someone_elses": False}
 
 
 def test_a_refused_credential_on_the_second_night_changes_nobody_in_the_table(url: str) -> None:

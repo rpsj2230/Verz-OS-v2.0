@@ -44,6 +44,8 @@ interface FormCase {
 /** Every form in a file that also holds a write, by file. The count is checked against the source. */
 const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
   "src/components/ConnectSource.tsx": [{ pattern: "/connectors", index: 0, writes: true }],
+  // The connect form is the first form on the staff sources page; the credential form follows it.
+  "src/components/ConnectStaffSource.tsx": [{ pattern: "/staff_sources", index: 0, writes: true }],
   "src/components/DataStewardCard.tsx": [{ pattern: "/people", index: 1, writes: true }],
   // Index 0 is the ledger's filter bar, which only narrows; index 1 checks a published head.
   "src/pages/Audit.tsx": [
@@ -94,7 +96,7 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
     { pattern: "/retention", index: 2, writes: true },
   ],
   "src/pages/SignInLinks.tsx": [{ pattern: "/sign-in-links", index: 1, writes: true }],
-  "src/pages/StaffSources.tsx": [{ pattern: "/staff_sources", index: 0, writes: true }],
+  "src/pages/StaffSources.tsx": [{ pattern: "/staff_sources", index: 1, writes: true }],
   // The naming form, then the four forms of the one open case, then the form that opens a case.
   "src/pages/Compliance.tsx": [
     { pattern: "/compliance", index: 0, writes: true },

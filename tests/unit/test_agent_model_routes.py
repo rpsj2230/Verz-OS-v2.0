@@ -26,6 +26,7 @@ from tests.unit.test_provider_routes import Estate, Ledger, Questions, _service,
 PIN = "/api/v1/agents/sales_helper/model-pin"
 
 _WRITES: list[dict[str, Any]] = []
+_ATTRIBUTED: list[dict[str, Any]] = []
 _AGENTS: set[str] = {"sales_helper"}
 
 
@@ -42,6 +43,10 @@ class PinSession(AsyncSession):
 
     async def execute(self, statement: Any, *args: Any, **kwargs: Any) -> Any:
         params = dict(statement.compile().params)
+        if "set_config" in str(statement):
+            # The attribution `0105`'s trigger reads, set before the pin; not the pin itself.
+            _ATTRIBUTED.append(params)
+            return _Found(None)
         _WRITES.append(params)
         agent = next((v for k, v in params.items() if k.startswith("id_")), None)
         return _Found(agent if agent in _AGENTS else None)
@@ -59,6 +64,7 @@ class PinSession(AsyncSession):
 @pytest.fixture
 def client() -> Iterator[TestClient]:
     _WRITES.clear()
+    _ATTRIBUTED.clear()
     estate = Estate()
     app: FastAPI = create_app(Settings(env="development", database_url=""))
     with TestClient(app, raise_server_exceptions=False) as c:
@@ -87,6 +93,7 @@ def test_an_administrator_pins_a_model_a_rung_serves_and_it_is_written_to_the_ag
         "model": "moonshot-model",
     }
     (written,) = _WRITES
+    assert {"name": "brain.actor_id", "value": "u_wide"} in _ATTRIBUTED
     assert written["model_pin_provider"] == "moonshot"
     assert written["model_pin_model"] == "moonshot-model"
 

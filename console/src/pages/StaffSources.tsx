@@ -24,13 +24,14 @@
  * own directory and a wider disclosure than the rest of the screen, so nothing is asked until
  * somebody asks for it.
  *
- * **There is no picker and no text box, and the screen says why rather than looking
- * unfinished.** See `staffSourcesQuery.A_CONTROL_THAT_POSTS_TO_NOTHING_IS_WORSE_THAN_NO_CONTROL`.
- * The design's Connectors screen carries an "Add connector" action in its bar; the equivalent
- * here would post to nothing, because the choice is an installation setting no route writes.
+ * **A source is chosen and connected here since 2026-09-21.** `components/ConnectStaffSource.tsx`
+ * draws the API's steps for each kind of source, tests it, saves it and runs its first sync. See
+ * `staffSourcesQuery.A_SOURCE_IS_CONNECTED_FROM_THIS_SCREEN`.
  *
- * **There is no figure anywhere on it**, which is the one convention of the design this screen
- * cannot keep. See `staffSourcesQuery.THE_DESIGN_COUNTS_AND_THIS_SCREEN_CANNOT`.
+ * **No listing on it carries a figure**, which is the one convention of the design this screen
+ * cannot keep. See `staffSourcesQuery.THE_DESIGN_COUNTS_AND_THIS_SCREEN_CANNOT`. The one number a
+ * person can make it draw is how many people a connection test read from their own directory,
+ * which is an answer to the credential they typed and not a listing narrowed by anybody's grant.
  *
  * **No tone is computed from a value.** `ui/Status.tsx` is the only module allowed to turn a
  * payload into a colour and its vocabulary is the four connector health words, none of which a
@@ -46,13 +47,10 @@
  * agents whose owner a run marked as having left are listed with a take-on that is confirmed too.
  * None of the three applies a plan: the worker does.
  *
- * M27.7.2 is this screen and is deliberately not claimed. The leaf asks for a staff source to be
- * chosen, configured and tried, and this page does none of the three: the first two are writes
- * the API does not have and the third answers a sentence on every install today. See
- * `brain.staff_source_routes`, which declines it in the same words, and `pages/Recovery.tsx`,
- * which declines M27.7.26 for the same shape.
+ * M27.7.2 is this screen: a staff source is chosen, configured and tried here before it runs.
+ * A leaver's agents are listed stopped, and taking one on starts it again (M1.8.9, M26.3.2).
  *
- * Task ids: M1.6.12, M1.8.6, M1.8.9
+ * Task ids: M1.6.12, M1.8.6, M1.8.9, M27.7.2
  */
 
 import { useCallback, useState } from "react";
@@ -83,6 +81,7 @@ import {
   type TrialRun,
 } from "./staffSourcesQuery";
 import { ConfirmAction } from "../components/ConfirmAction";
+import { ConnectStaffSource } from "../components/ConnectStaffSource";
 import { FailureNotice } from "../ui/FailureNotice";
 
 export const STAFF_SOURCES_HEADING = "Staff sources";
@@ -352,21 +351,22 @@ export const WAITING_FOR_AN_OWNER = "Agents waiting for a new owner";
 /** Said when there is nothing to take on, whichever of the reasons it is. */
 export const NO_TRANSFERS = "No agent is waiting for a new owner that you may take on.";
 
-/** Said about every agent listed: the listing stops nothing and widens nothing. */
-export const STILL_RUNNING =
-  "Each keeps running at the reach it had until somebody takes it on. Taking one on makes you " +
-  "its owner and changes nothing it can reach.";
+/** Said about every agent listed: stopped until somebody takes it on, and never widened. */
+export const STOPPED_UNTIL_TAKEN =
+  "Each is stopped until somebody takes it on. Taking one on makes you its owner and starts it " +
+  "again, and changes nothing it can reach.";
 
 /** The take-on button and its confirmation. */
 export const TAKE_ON = "Take on";
 export const KEEP_WAITING = "Leave it waiting";
 export const TAKE_ON_CONSEQUENCE =
-  "You become the person who answers for it. Its ceiling does not change, so it reaches nothing " +
-  "it could not reach before.";
+  "You become the person who answers for it and it starts running again. Its ceiling does not " +
+  "change, so it reaches nothing it could not reach before. The change of owner is recorded in " +
+  "the audit ledger.";
 
 /** The scheduled runs, loaded with the page. See `A_RUN_IS_A_RECORD_AND_NOT_A_CALL`. */
-function NightlySync() {
-  const answer = useResource<unknown>(RUNS_API_PATH);
+function NightlySync({ version }: { readonly version: number }) {
+  const answer = useResource<unknown>(RUNS_API_PATH, version);
   const runs = readRuns(answer.data);
   if (answer.failure !== null) {
     return <FailureNotice failure={answer.failure} />;
@@ -537,7 +537,7 @@ function Transfers() {
         <p className="note">{NO_TRANSFERS}</p>
       ) : (
         <>
-          <p className="note">{STILL_RUNNING}</p>
+          <p className="note">{STOPPED_UNTIL_TAKEN}</p>
           <ul className="roster" aria-label={WAITING_FOR_AN_OWNER}>
             {waiting.map((one) => (
               <li key={one.agent_id}>
@@ -578,7 +578,12 @@ function Transfers() {
 }
 
 export function StaffSources() {
-  const answer = useResource<unknown>(STAFF_SOURCES_API_PATH);
+  // Bumped when a source is connected or its first sync applied, so the page reads what changed.
+  const [version, setVersion] = useState(0);
+  const refresh = useCallback(() => {
+    setVersion((one) => one + 1);
+  }, []);
+  const answer = useResource<unknown>(STAFF_SOURCES_API_PATH, version);
   const page = readStaffSources(answer.data);
 
   return (
@@ -597,6 +602,8 @@ export function StaffSources() {
           Loading.
         </p>
       ) : null}
+
+      <ConnectStaffSource onConnected={refresh} />
 
       {/*
        * What the API answered, drawn only once it has answered. Read from a request still in
@@ -652,10 +659,10 @@ export function StaffSources() {
             )}
           </section>
 
-          {page.not_written_here === "" ? null : (
+          {page.how_to_choose === "" ? null : (
             <section className="card">
               <h2>{WHERE_THE_CHOICE_IS_MADE}</h2>
-              <p>{page.not_written_here}</p>
+              <p>{page.how_to_choose}</p>
             </section>
           )}
         </>
@@ -668,7 +675,7 @@ export function StaffSources() {
 
       <section className="card">
         <h2>{NIGHTLY_SYNC}</h2>
-        <NightlySync />
+        <NightlySync version={version} />
       </section>
 
       <SyncCredential />

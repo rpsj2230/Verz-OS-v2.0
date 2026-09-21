@@ -37,7 +37,7 @@ contact the company's directory every time anybody looked.
 Option A names, from the same roster, once the roster's transaction has committed. A failure there
 is logged and changes nothing the roster wrote, for that module's reason (M1.8.3).
 
-Task ids: M1.6.1, M1.6.2, M1.6.4, M1.6.12, M1.8.6, M1.8.3
+Task ids: M1.6.1, M1.6.2, M1.6.4, M1.6.12, M1.8.6, M1.8.3, M1.8.9
 """
 
 from __future__ import annotations
@@ -87,6 +87,7 @@ from brain.identity.staff_source import (
 from brain.install import value_of
 from brain.ops.connectable import key_reference
 from brain.ops.connector_sync_run import (
+    ConnectorKeyAbsentError,
     ConnectorKeys,
     KeyLease,
     key_detail,
@@ -101,8 +102,10 @@ from brain.ops.staff_sync_store import (
     read_last_applied,
     read_members,
     run_row,
+    stop_leavers_agents,
     write_application,
 )
+from brain.settings import process_environment
 
 # ------------------------------------------------------------------ written-down reasons
 log = structlog.get_logger()
@@ -132,8 +135,42 @@ WHAT_EACH_SOURCE_IS_READ_WITH: Final = (
     "directory client this product does not carry, so their runs say so and change nobody."
 )
 
+#: Why the run reads the saved settings as well as the environment.
+A_SOURCE_CHOSEN_ON_THE_SCREEN_IS_THE_SOURCE_THE_WORKER_READS: Final = (
+    "The Staff sources screen chooses the source and its location by saving them in ops.setting, "
+    "the table the Settings screen and the setup wizard already write, so that choosing one needs "
+    "no edit on the server. The application holds those values in its own memory; the worker "
+    "holds none, so a run that read only its environment would go on reading the source the "
+    "installer's file named. Each run therefore loads the saved values first and lays them over "
+    "the environment, which is brain.install.value_of's own order."
+)
+
+#: Why a leaver's agents stop in the run that marks the leaver (M1.8.9, M26.3.2).
+A_LEAVERS_AGENT_STOPS_UNTIL_A_NEW_OWNER_ACCEPTS_IT: Final = (
+    "The owner decided on 2026-09-21 that an agent whose owner has left stops until a new owner "
+    "accepts it, rather than running on. brain.identity.lifecycle.AN_UNADOPTED_AGENT_STOPS is the "
+    "same rule for the offboarding path: nobody answers for an agent whose steward has gone, and "
+    "the person who would notice it going wrong is the one who left. So the run that marks a "
+    "leaver disables every agent they own in the same transaction, disabled and never archived, "
+    "and taking one on from the Staff sources screen is what starts it again."
+)
+
 #: The slot the staff source's credential is kept in, as `connector_key_slot` builds it.
 STAFF_SOURCE_SLOT: Final = "staff_source"
+
+#: The one app credential another screen keeps that a staff source may read with instead, by
+#: source. The Connectors screen's Lark wizard keeps one Lark app for the staff list, knowledge and
+#: chat at `connector_keys/lark`, as `<App ID>:<App Secret>`; a run reads it only when the staff
+#: source's own slot holds nothing. See `ONE_LARK_APP_MAY_SERVE_THE_STAFF_LIST_TOO`.
+SHARED_APP_SLOTS: Final[Mapping[str, str]] = {LARK: "lark"}
+
+#: Why a Lark staff source may read with the Lark app the Connectors screen keeps.
+ONE_LARK_APP_MAY_SERVE_THE_STAFF_LIST_TOO: Final = (
+    "A company connecting Lark creates one custom app and grants it the contact scopes along with "
+    "the rest. Asking for its App ID and App Secret a second time on the Staff sources screen "
+    "would be a second copy of one secret to rotate. So a Lark staff source with no key of its own "
+    "reads with the Lark app's key, and a key kept for the staff source always wins over it."
+)
 
 #: How the application identifier and its secret are kept in one value.
 CLIENT_CREDENTIAL_SEPARATOR: Final = ":"
@@ -200,7 +237,7 @@ class StaffSyncRun:
 
 
 # -------------------------------------------------------------------------- the readers
-def _client_credential(credential: str) -> tuple[str, str]:
+def client_credential(credential: str) -> tuple[str, str]:
     """The identifier and the secret, split at the first separator, or a refusal."""
     ident, separator, secret = credential.strip().partition(CLIENT_CREDENTIAL_SEPARATOR)
     if not separator or not ident.strip() or not secret.strip():
@@ -208,7 +245,7 @@ def _client_credential(credential: str) -> tuple[str, str]:
     return ident.strip(), secret.strip()
 
 
-def _token_or_refusal(answer: Answer, field: str) -> str:
+def token_or_refusal(answer: Answer, field: str) -> str:
     """The token an exchange answered with, or the vendor's refusal of the credential."""
     token = answer.body.get(field)
     refused = answer.status != 200 or answer.body.get("code", 0) not in (0, None)
@@ -224,9 +261,11 @@ def _token_or_refusal(answer: Answer, field: str) -> str:
     return token
 
 
-async def read_lark(fetch: Fetch, credential: str, location: str) -> StaffSource:
+async def read_lark(
+    fetch: Fetch, credential: str, location: str, *, pages: int | None = None
+) -> StaffSource:
     """Exchange the app's identifier and secret for a tenant token, then walk the directory."""
-    app_id, app_secret = _client_credential(credential)
+    app_id, app_secret = client_credential(credential)
     platform = location.strip().lower()
     problem = location_problem(LARK, platform)
     if problem:
@@ -236,13 +275,15 @@ async def read_lark(fetch: Fetch, credential: str, location: str) -> StaffSource
     answer = await fetch(
         Outbound("POST", url, json_body={"app_id": app_id, "app_secret": app_secret})
     )
-    token = _token_or_refusal(answer, "tenant_access_token")
-    return await pull(fetch, LARK, token=token, location=platform)
+    token = token_or_refusal(answer, "tenant_access_token")
+    return await pull(fetch, LARK, token=token, location=platform, pages=pages)
 
 
-async def read_microsoft(fetch: Fetch, credential: str, location: str) -> StaffSource:
+async def read_microsoft(
+    fetch: Fetch, credential: str, location: str, *, pages: int | None = None
+) -> StaffSource:
     """Exchange the application's identifier and secret for a Graph token, then walk the users."""
-    client_id, client_secret = _client_credential(credential)
+    client_id, client_secret = client_credential(credential)
     tenant = location.strip().lower()
     problem = location_problem(MICROSOFT_ENTRA, tenant)
     if problem:
@@ -254,8 +295,8 @@ async def read_microsoft(fetch: Fetch, credential: str, location: str) -> StaffS
         "client_secret": client_secret,
         "scope": MICROSOFT_APPLICATION_SCOPE,
     }
-    token = _token_or_refusal(await fetch(Outbound("POST", url, form=form)), "access_token")
-    return await pull(fetch, MICROSOFT_ENTRA, token=token, location=tenant)
+    token = token_or_refusal(await fetch(Outbound("POST", url, form=form)), "access_token")
+    return await pull(fetch, MICROSOFT_ENTRA, token=token, location=tenant, pages=pages)
 
 
 async def read_google_sheet(fetch: Fetch, credential: str, location: str) -> StaffSource:
@@ -268,7 +309,7 @@ async def read_google_sheet(fetch: Fetch, credential: str, location: str) -> Sta
     url = f"{GOOGLE_SHEETS_URL}/{sheet}/values/{quote(GOOGLE_SHEET_RANGE)}?{query}"
     answer = await fetch(Outbound("GET", url, {"Accept": "application/json"}))
     if answer.status in (401, 403):
-        _token_or_refusal(answer, "values")
+        token_or_refusal(answer, "values")
     if answer.status != 200:
         msg = f"Reading the Google Sheet was refused with status {answer.status}. {NOBODY_CHANGED}"
         raise DirectorySignInError(msg)
@@ -319,13 +360,20 @@ async def sync_staff_on(
     fetch: Fetch,
     clock: Callable[[], datetime],
     readers: Mapping[str, Reader] = READERS,
+    saved: Mapping[str, str] | None = None,
 ) -> StaffSyncRun:
     """One scheduled run: choose, lease, read, check, plan, apply, record, in that order.
 
     `none` records nothing, because an install that reads no staff list has no run to show and
     a row every night saying so would bury the runs of an install that does. Every other path
     appends exactly one run row, and only a plan `dry_run` marks safe writes a member.
+
+    `saved` is what `ops.setting` holds, laid over `env`, because the Staff sources screen
+    chooses the source there and the worker holds no saved values of its own. See
+    `A_SOURCE_CHOSEN_ON_THE_SCREEN_IS_THE_SOURCE_THE_WORKER_READS`.
     """
+    if saved:
+        env = {**(process_environment() if env is None else env), **saved}
     try:
         chosen = selected_source(env)
     except StaffSourceError as refused:
@@ -343,10 +391,19 @@ async def sync_staff_on(
         outcome = RunOutcome.NOT_SCHEDULABLE
         return await _record_failure(sessions, chosen.name, now, clock, outcome, detail)
 
-    lease: KeyLease = keys.lease(key_reference(STAFF_SOURCE_SLOT), now=now)
+    leases: list[KeyLease] = [keys.lease(key_reference(STAFF_SOURCE_SLOT), now=now)]
     try:
         try:
-            credential = lease.key()
+            try:
+                credential = leases[0].key()
+            except ConnectorKeyAbsentError:
+                # Only an absent key falls back, never an unreachable vault: the shared app's
+                # key is the same vault, and a second lease would only say so twice.
+                shared = SHARED_APP_SLOTS.get(chosen.name)
+                if shared is None:
+                    raise
+                leases.append(keys.lease(key_reference(shared), now=now))
+                credential = leases[-1].key()
         except SecretsUnavailableError as unavailable:
             detail = f"{key_detail(unavailable)} {NOBODY_CHANGED}"
             outcome = (
@@ -374,7 +431,8 @@ async def sync_staff_on(
                 sessions, chosen.name, now, clock, RunOutcome.MISCONFIGURED, detail
             )
     finally:
-        lease.close(now)
+        for one in leases:
+            one.close(now)
 
     reading = getattr(source, "reading", None)
     stable_ids: Mapping[str, str] = {}
@@ -422,6 +480,9 @@ async def sync_staff_on(
             withheld=application.withheld,
         )
         await write_application(session, application, record)
+        # In the run's own transaction, so a leaver is never marked with their agents running.
+        # See `A_LEAVERS_AGENT_STOPS_UNTIL_A_NEW_OWNER_ACCEPTS_IT`.
+        await session.execute(stop_leavers_agents(now))
     await _rewrite_heads(sessions, roster, now)
     return StaffSyncRun(outcome=outcome, detail=detail)
 
@@ -493,19 +554,23 @@ def run_staff_sync_now(
 
     The shape `brain.ops.connector_sync_run.run_connector_sync_now` takes, for its reasons.
     """
+    from brain.ops.install_settings import load
     from brain.session import make_app_engine, make_session_factory
-    from brain.settings import process_environment
 
     async def go() -> StaffSyncRun:
         engine = make_app_engine(database_url)
         try:
+            sessions = make_session_factory(engine)
+            async with sessions() as session, session.begin():
+                saved = await load(session)
             return await sync_staff_on(
-                sessions=make_session_factory(engine),
+                sessions=sessions,
                 now=now,
                 env=process_environment(),
                 keys=worker_connector_keys(vault_address, vault_token),
                 fetch=http_fetch,
                 clock=_utc_now,
+                saved=saved,
             )
         finally:
             await engine.dispose()

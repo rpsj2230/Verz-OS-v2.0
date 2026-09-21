@@ -9,9 +9,9 @@ What an administrator would need to manage, read out of the schema, the routes a
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
 - 90 tables, from `brain.db.Base.metadata`.
 - 24 installation values, from `brain.install.INSTALLATION`.
-- 176 routes under `/api/v1` and `/setup`, from the API's internal document.
+- 181 routes under `/api/v1` and `/setup`, from the API's internal document.
 - 72 console addresses, from the route table in `console/src/App.tsx`.
-- 62 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 78 routes.
+- 65 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 82 routes.
 - 36 gaps recorded, and 21 routes no screen calls.
 
 ## Area by area
@@ -41,6 +41,7 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `GET /api/v1/govern/sign-ins` | `/sign-in-links` |
 | `GET /api/v1/govern/staff_sources` | `/staff_sources` |
 | `GET /api/v1/govern/staff_sources/credential` | `/staff_sources` |
+| `GET /api/v1/govern/staff_sources/guides` | `/staff_sources` |
 | `GET /api/v1/govern/staff_sources/runs` | `/staff_sources` |
 | `GET /api/v1/govern/staff_sources/transfers` | `/staff_sources` |
 | `GET /api/v1/govern/staff_sources/trial` | `/staff_sources` |
@@ -66,6 +67,10 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `POST /api/v1/govern/sessions/end` | `/sessions` |
 | `POST /api/v1/govern/sessions/end-several` | `/sessions` |
 | `POST /api/v1/govern/sign-ins/unlink` | `/sign-in-links` |
+| `POST /api/v1/govern/staff_sources/connect` | `/staff_sources` |
+| `POST /api/v1/govern/staff_sources/first-sync` | `/staff_sources` |
+| `POST /api/v1/govern/staff_sources/first-sync/apply` | `/staff_sources` |
+| `POST /api/v1/govern/staff_sources/test` | `/staff_sources` |
 | `POST /api/v1/govern/staff_sources/transfers/{agent_id}` | `/staff_sources` |
 | `POST /api/v1/sign-ins` | `/sign-in-links` |
 | `PUT /api/v1/govern/staff_sources/credential` | `/staff_sources` |
@@ -473,7 +478,7 @@ No gap recorded.
 
 ## Every write the console sends, followed to the system
 
-Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 66 of 78 write routes have all three proved or not applicable, 9 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
+Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 70 of 82 write routes have all three proved or not applicable, 11 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
 
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
@@ -521,7 +526,11 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /api/v1/govern/sessions/end` | `/sessions` | `test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request` in `tests/unit/test_session_store.py` (database, in CI) | `test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request` in `tests/unit/test_session_store.py` (database, in CI) | `test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request` in `tests/unit/test_session_store.py` (database, in CI) |
 | `POST /api/v1/govern/sessions/end-several` | `/sessions` | `test_several_sessions_are_ended_one_at_a_time_each_decided_by_the_single_endings_question` in `tests/unit/test_session_routes.py` | `test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request` in `tests/unit/test_session_store.py` (database, in CI) | `test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request` in `tests/unit/test_session_store.py` (database, in CI) |
 | `POST /api/v1/govern/sign-ins/unlink` | `/sign-in-links` | `test_an_unlink_retires_the_link_names_who_did_it_and_the_account_is_refused_after` in `tests/unit/test_sign_in_links.py` (database, in CI) | `test_an_unlink_retires_the_link_names_who_did_it_and_the_account_is_refused_after` in `tests/unit/test_sign_in_links.py` (database, in CI) | `test_an_unlink_retires_the_link_names_who_did_it_and_the_account_is_refused_after` in `tests/unit/test_sign_in_links.py` (database, in CI) |
-| `POST /api/v1/govern/staff_sources/transfers/{agent_id}` | `/staff_sources` | `test_taking_a_leavers_agent_moves_the_owner_and_never_the_reach` in `tests/unit/test_staff_sync_routes.py` | Not applicable: No ledger entry is written when an agent's owner moves: agent.agent has no audit trigger, so the change is logged by the route and recorded on the row alone. Recorded here as a gap rather than hidden. | `test_taking_a_leavers_agent_moves_the_owner_and_never_the_reach` in `tests/unit/test_staff_sync_routes.py` |
+| `POST /api/v1/govern/staff_sources/connect` | `/staff_sources` | `test_connecting_keeps_the_credential_in_its_slot_saves_two_settings_and_echoes_nothing` in `tests/unit/test_staff_connect.py` | `test_a_credential_write_appends_exactly_the_entry_the_recorder_writes_and_the_chain_holds` in `tests/unit/test_credential_writes.py` (database, in CI) | `test_a_source_saved_on_the_screen_is_the_source_the_worker_reads_with_no_server_edit` in `tests/unit/test_staff_sync_run.py` |
+| `POST /api/v1/govern/staff_sources/first-sync` | `/staff_sources` | Not applicable: The first sync's dry run reads the directory and the roster and writes nothing. | Not applicable: A dry run is not a change to the system, so there is nothing to record. | `test_the_first_sync_shows_who_it_would_add_and_writes_nothing_until_apply_is_pressed` in `tests/unit/test_staff_connect.py` |
+| `POST /api/v1/govern/staff_sources/first-sync/apply` | `/staff_sources` | `test_the_first_sync_shows_who_it_would_add_and_writes_nothing_until_apply_is_pressed` in `tests/unit/test_staff_connect.py` | Not applicable: Applying the first sync is the nightly run started now, and a run is recorded on its own row in auth.staff_sync_run, which the screen lists; no ledger member records a roster run. | `test_the_night_that_marks_a_leaver_stops_their_agents_and_nobody_elses` in `tests/unit/test_staff_sync_store.py` (database, in CI) |
+| `POST /api/v1/govern/staff_sources/test` | `/staff_sources` | Not applicable: A connection test keeps nothing: no setting, no credential and no member is written. | Not applicable: A connection test is not a change to the system, so there is nothing to record. | `test_the_test_route_keeps_nothing_and_never_sends_the_secret_back` in `tests/unit/test_staff_connect.py` |
+| `POST /api/v1/govern/staff_sources/transfers/{agent_id}` | `/staff_sources` | `test_taking_a_leavers_agent_moves_the_owner_starts_it_again_and_never_widens_its_reach` in `tests/unit/test_staff_sync_routes.py` | `test_the_owner_change_trigger_writes_the_details_the_recorder_writes` in `tests/unit/test_staff_connect.py` | `test_taking_a_leavers_agent_moves_the_owner_starts_it_again_and_never_widens_its_reach` in `tests/unit/test_staff_sync_routes.py` |
 | `POST /api/v1/install/features/{name}` | `/features` | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_switching_schedule_control_on_from_the_features_screen_is_what_lets_a_job_be_paused` in `tests/unit/test_console_controls_reach_behaviour.py` |
 | `POST /api/v1/jobs/{name}/pause` | `/jobs` | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_job_paused_from_the_screen_is_left_unstarted_by_the_next_tick_and_resumed_is_started` in `tests/unit/test_console_controls_reach_behaviour.py` |
 | `POST /api/v1/jobs/{name}/resume` | `/jobs` | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_job_paused_from_the_screen_is_left_unstarted_by_the_next_tick_and_resumed_is_started` in `tests/unit/test_console_controls_reach_behaviour.py` |

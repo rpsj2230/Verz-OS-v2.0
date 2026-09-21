@@ -31,6 +31,7 @@ from sqlalchemy import update
 
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked
+from brain.attribution import attribute
 from brain.core.errors import Absent, Failed
 from brain.credential_routes import CredentialProblemsView, CredentialProblemView
 from brain.models.registry import MODEL_NAME_PATTERN, ModelPin, RegistryError
@@ -107,6 +108,8 @@ async def pin_model(
     if factory is None:
         raise Failed("no database on this process")
     async with factory() as session:
+        # Attributed, because `agent.agent` carries a ledgering trigger since `0105`.
+        await attribute(session, asked)
         found = (
             await session.execute(
                 update(AgentRow)

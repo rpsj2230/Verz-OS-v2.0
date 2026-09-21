@@ -341,19 +341,20 @@ def test_the_credential_screen_says_whether_it_is_held_and_what_the_chosen_sourc
 
 
 # ---------------------------------------------------------------- a leaver's agents
-def test_a_leavers_agent_is_listed_for_transfer_and_left_running() -> None:
-    """M1.8.9: listed for a new owner, still enabled, and its ceiling untouched by the listing.
+def test_a_leavers_agent_is_listed_for_transfer_whether_or_not_a_run_has_stopped_it_yet() -> None:
+    """M1.8.9: listed for a new owner, stopped or not, and its ceiling untouched by the listing.
 
-    Delete this and a leaver's agents could be stopped the night the sync marks them, which is
-    the opposite of what the requirement asks, or never listed at all."""
+    Since 2026-09-21 the nightly run stops a leaver's agents (the owner's decision); the listing
+    must still offer one a run has stopped, or a stopped agent could never be taken on again."""
     theirs = an_agent("a_theirs", "u_gone")
+    stopped = theirs.model_copy(update={"disabled_at": LONG_AGO})
     mine = an_agent("a_mine", "u_admin")
     admin = EntitlementSet(principal_id="u_admin", grants=GRANTS["u_admin"])
 
-    listed = transfers_for([theirs, mine], leavers=frozenset({"u_gone"}), reader=admin)
+    listed = transfers_for([stopped, mine], leavers=frozenset({"u_gone"}), reader=admin)
 
-    assert listed == (theirs,)
-    assert listed[0].disabled_at is None
+    assert listed == (stopped,)
+    assert listed[0].authority == theirs.authority
 
 
 def test_an_agent_reaching_further_than_the_reader_is_not_offered_to_them() -> None:
@@ -366,13 +367,15 @@ def test_an_agent_reaching_further_than_the_reader_is_not_offered_to_them() -> N
     assert transfers_for([theirs], leavers=frozenset({"u_gone"}), reader=narrow) == ()
 
 
-def test_taking_a_leavers_agent_moves_the_owner_and_never_the_reach(
+def test_taking_a_leavers_agent_moves_the_owner_starts_it_again_and_never_widens_its_reach(
     client: TestClient, database: Database
 ) -> None:
-    """The steward moves and the ceiling does not, so the agent runs at no wider reach than before.
+    """M1.8.9 and M26.3.2: the new owner accepts it, and only then does it run again.
 
-    Delete this and the transfer could write a different authority with the new owner's name."""
-    theirs = an_agent("a_theirs", "u_gone")
+    The agent waiting is stopped, as the nightly run leaves it; taking it on writes the new owner
+    and clears the stop in one statement, and the ceiling is not on that statement at all. Delete
+    this and the transfer could leave it stopped for ever or write a different authority."""
+    theirs = an_agent("a_theirs", "u_gone").model_copy(update={"disabled_at": LONG_AGO})
     database.leavers = frozenset({"u_gone"})
     database.agents = {"a_theirs": theirs}
 
@@ -380,11 +383,37 @@ def test_taking_a_leavers_agent_moves_the_owner_and_never_the_reach(
     taken = client.post(f"{API_PREFIX}{TRANSFERS_PATH}/a_theirs", headers=headers("u_admin"))
 
     assert [one["agent_id"] for one in listed.json()["transfers"]] == ["a_theirs"]
-    assert listed.json()["transfers"][0]["running"] is True
+    assert listed.json()["transfers"][0]["running"] is False
     assert taken.status_code == 200, taken.text
     assert taken.json() == {"agent_id": "a_theirs", "owner_id": "u_admin"}
-    (update,) = [one for one in database.executed if one.is_dml]
-    assert update.compile().params == {"owner_id": "u_admin", "id_1": "a_theirs"}
+    (update,) = [one for one in database.executed if getattr(one, "is_dml", False)]
+    assert update.compile().params == {
+        "owner_id": "u_admin",
+        "disabled_at": None,
+        "id_1": "a_theirs",
+    }
+
+
+def test_the_owner_change_is_attributed_to_the_reader_before_the_row_is_written(
+    client: TestClient, database: Database
+) -> None:
+    """The ledger entry `0105`'s trigger writes names whoever the transaction is attributed to.
+
+    So the three attribution settings are executed in the same transaction and before the update.
+    Delete this and the owner change reaches the ledger as unattributed, which is the gap the
+    console audit recorded against this route."""
+    database.leavers = frozenset({"u_gone"})
+    database.agents = {"a_theirs": an_agent("a_theirs", "u_gone")}
+
+    taken = client.post(f"{API_PREFIX}{TRANSFERS_PATH}/a_theirs", headers=headers("u_admin"))
+
+    assert taken.status_code == 200, taken.text
+    said = [str(one) for one in database.executed]
+    settings = [one.compile().params for one in database.executed if "set_config" in str(one)]
+    assert {"name": "brain.actor_id", "value": "u_admin"} in settings
+    first_setting = next(i for i, one in enumerate(said) if "set_config" in one)
+    the_update = next(i for i, one in enumerate(said) if one.startswith("UPDATE agent.agent"))
+    assert first_setting < the_update
 
 
 def test_an_agent_whose_owner_has_not_left_cannot_be_taken_and_nothing_is_written(
