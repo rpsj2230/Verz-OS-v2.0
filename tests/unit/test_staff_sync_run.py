@@ -161,6 +161,7 @@ def run(
     keys: Keys,
     fetch: Directory | None = None,
     sessions: Sessions | None = None,
+    saved: Mapping[str, str] | None = None,
 ) -> tuple[staff_sync_run.StaffSyncRun, Sessions]:
     recording = sessions or Sessions()
     clock = iter(NOW + timedelta(seconds=n) for n in range(1000))
@@ -172,6 +173,7 @@ def run(
             keys=keys,
             fetch=fetch or Directory(),
             clock=lambda: next(clock),
+            saved=saved,
         )
     )
     return ran, recording
@@ -336,3 +338,112 @@ def test_a_listed_person_is_added_to_the_roster_and_is_never_given_a_sign_in(sto
 
     ((application, _),) = store.written
     assert {type(one).__name__ for one in application.writes} == {"MemberWrite"}
+
+
+# ------------------------------------------------ chosen on the screen, and a leaver's agents
+def test_a_source_saved_on_the_screen_is_the_source_the_worker_reads_with_no_server_edit(
+    store: Store,
+) -> None:
+    """The worker holds no saved settings of its own, so each run lays `ops.setting` over its
+    environment. Here the environment names no source at all and the saved values name Lark.
+
+    Delete this and connecting a source from the console would change nothing at night until
+    somebody edited the environment file on the server."""
+    ran, _ = run(env={}, keys=Keys(Lease(f"{APP_ID}:{APP_SECRET}")), saved=LARK_ENV)
+
+    assert ran.outcome is RunOutcome.APPLIED
+    ((application, _),) = store.written
+    assert application.source == "lark"
+
+
+def test_a_saved_choice_outranks_the_one_the_environment_file_names(store: Store) -> None:
+    """`brain.install.value_of`'s order, kept by the worker: saved, then the environment.
+
+    Delete this and an install whose template named a spreadsheet would go on reading nothing
+    after the owner connected Lark on the screen."""
+    ran, _ = run(
+        env={STAFF_SOURCE_SETTING: "spreadsheet"},
+        keys=Keys(Lease(f"{APP_ID}:{APP_SECRET}")),
+        saved=LARK_ENV,
+    )
+
+    assert ran.outcome is RunOutcome.APPLIED
+
+
+def is_the_stop(statement: object) -> bool:
+    return str(statement).startswith("UPDATE agent.agent SET disabled_at")
+
+
+def test_the_run_that_applies_a_roster_stops_every_running_agent_a_leaver_owns(
+    store: Store,
+) -> None:
+    """M1.8.9 as the owner decided it on 2026-09-21: stopped until a new owner accepts it.
+
+    The statement is run in the applying transaction and says exactly the rule: set
+    `disabled_at` on agents owned by a marked leaver, still running and never archived. Delete
+    this and a leaver's agents keep running with nobody answering for them."""
+    _, sessions = run(env=LARK_ENV, keys=Keys(Lease(f"{APP_ID}:{APP_SECRET}")))
+
+    (stop,) = [one for one in sessions.executed if is_the_stop(one)]
+    rendered = str(stop)
+    leavers = "(SELECT DISTINCT auth.principal_identity.principal_id"
+    assert f"WHERE agent.agent.owner_id IN {leavers}" in rendered
+    assert "auth.staff_member.left_at IS NOT NULL" in rendered
+    assert "agent.agent.disabled_at IS NULL AND agent.agent.archived_at IS NULL" in rendered
+    assert stop.compile().params["disabled_at"] == NOW
+
+
+def test_a_run_that_could_not_read_stops_nobody_s_agents(store: Store) -> None:
+    """A refused credential says nothing about who left, so it stops no agent either.
+
+    Delete this and a bad night at the directory could stop agents on the strength of silence."""
+    refused = Directory(token_answer=Answer(200, {"code": 10014, "msg": "app secret invalid"}))
+
+    _, sessions = run(env=LARK_ENV, keys=Keys(Lease(f"{APP_ID}:{APP_SECRET}")), fetch=refused)
+
+    assert not [one for one in sessions.executed if is_the_stop(one)]
+
+
+@dataclass
+class ByPath:
+    """Leases by the slot asked for: the staff source's own is empty, the Lark app's holds a key."""
+
+    held: Mapping[str, str]
+    asked: list[SecretRef] = field(default_factory=list)
+
+    def lease(self, ref: SecretRef, *, now: datetime) -> Lease:
+        self.asked.append(ref)
+        if ref.path in self.held:
+            return Lease(self.held[ref.path])
+        return Lease(None, failure=ConnectorKeyAbsentError("no key at this slot"))
+
+
+def test_a_lark_staff_source_with_no_key_of_its_own_reads_with_the_lark_app_s_key(
+    store: Store,
+) -> None:
+    """The Connectors screen keeps one Lark app for several uses, and the staff list is one.
+
+    The staff source's own slot is asked first and wins when it holds a key; only an absent key
+    falls back. Delete this and connecting Lark once on the Connectors screen leaves the nightly
+    staff sync with nothing to read with."""
+    shared = f"connector_keys/{staff_sync_run.SHARED_APP_SLOTS['lark']}"
+    keys = ByPath({shared: f"{APP_ID}:{APP_SECRET}"})
+
+    ran, _ = run(env=LARK_ENV, keys=keys)  # type: ignore[arg-type]
+
+    assert ran.outcome is RunOutcome.APPLIED
+    assert [one.path for one in keys.asked] == [f"connector_keys/{STAFF_SOURCE_SLOT}", shared]
+    own = ByPath({f"connector_keys/{STAFF_SOURCE_SLOT}": f"{APP_ID}:{APP_SECRET}", shared: "x:y"})
+    run(env=LARK_ENV, keys=own)  # type: ignore[arg-type]
+    assert [one.path for one in own.asked] == [f"connector_keys/{STAFF_SOURCE_SLOT}"]
+
+
+def test_a_source_with_no_shared_app_does_not_fall_back_and_changes_nobody(store: Store) -> None:
+    """Delete this and a Microsoft source could read with a Lark secret."""
+    env = {STAFF_SOURCE_SETTING: "microsoft_entra", STAFF_SOURCE_LOCATION_SETTING: "example.com"}
+    keys = ByPath({"connector_keys/lark": f"{APP_ID}:{APP_SECRET}"})
+
+    ran, _ = run(env=env, keys=keys)  # type: ignore[arg-type]
+
+    assert ran.outcome is RunOutcome.NO_CREDENTIAL
+    assert [one.path for one in keys.asked] == [f"connector_keys/{STAFF_SOURCE_SLOT}"]

@@ -110,6 +110,13 @@ NOT_A_REQUEST_WITH_A_REACH: Final[Mapping[str, str]] = MappingProxyType(
             "granter, which the trigger records as the actor, and there is no request and no "
             "person's reach."
         ),
+        "brain.ops.staff_sync_store:stop_leavers_agents": (
+            "The staff sync stops a leaver's agents in the run that marks them, at night in the "
+            "worker with nobody signed in. It sets disabled_at and never owner_id, and 0105's "
+            "trigger on agent.agent records an owner change only, so the statement appends no "
+            "entry for a placeholder to reach; the owner change it waits for is attributed by "
+            "the route that makes it."
+        ),
         "brain.ops.vault_audit_ship:StoredVaultAccess.ship": (
             "The worker copies the vault's own audit log into the ledger; the actor is the vault, "
             "and no person's request or reach is involved."

@@ -426,10 +426,10 @@ def on_graph(link: str) -> bool:
     return parts.scheme == graph.scheme and parts.netloc == graph.netloc
 
 
-async def _google(fetch: Fetch, token: str, domain: str) -> StaffSource:
+async def _google(fetch: Fetch, token: str, domain: str, budget: int) -> StaffSource:
     pages: list[Mapping[str, Any]] = []
     after = ""
-    for _ in range(MAX_PAGES):
+    for _ in range(budget):
         query = {"domain": domain, "maxResults": "500", "projection": "basic"}
         if after:
             query["pageToken"] = after
@@ -442,11 +442,11 @@ async def _google(fetch: Fetch, token: str, domain: str) -> StaffSource:
     return GoogleWorkspaceSource(pages=pages)
 
 
-async def _microsoft(fetch: Fetch, token: str) -> StaffSource:
+async def _microsoft(fetch: Fetch, token: str, budget: int) -> StaffSource:
     fields = "id,userPrincipalName,displayName,department,accountEnabled,proxyAddresses"
     link = f"{MICROSOFT_GRAPH_URL}/v1.0/users?{urlencode({'$select': fields, '$top': '999'})}"
     pages: list[Mapping[str, Any]] = []
-    for _ in range(MAX_PAGES):
+    for _ in range(budget):
         page = _page(await fetch(Outbound("GET", link, _bearer(token))), "the Entra directory")
         pages.append(page)
         link = str(page.get("@odata.nextLink") or "")
@@ -471,10 +471,19 @@ def _lark_page(answer: Answer, what: str) -> Mapping[str, Any]:
     return data if isinstance(data, Mapping) else {}
 
 
-async def _lark(fetch: Fetch, token: str, platform: str) -> StaffSource:
+def _unfinished(pages: list[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    """The pages read, with the last one saying there is more. See `_lark`'s early stop."""
+    if not pages:
+        return pages
+    last = pages[-1]
+    data = last.get("data")
+    held = data if isinstance(data, Mapping) else {}
+    return [*pages[:-1], {**last, "data": {**held, "has_more": True}}]
+
+
+async def _lark(fetch: Fetch, token: str, platform: str, budget: int) -> StaffSource:
     _, open_host = LARK_PLATFORMS[platform]
     base = f"https://{open_host}/open-apis/contact/v3"
-    budget = MAX_PAGES
     names: dict[str, str] = {}
     after = ""
     while budget:
@@ -501,9 +510,10 @@ async def _lark(fetch: Fetch, token: str, platform: str) -> StaffSource:
         after = ""
         while True:
             if not budget:
-                # Stopped with this department's walk unfinished, so the last page handed over
-                # still says there is more and the adapter reads the roster as incomplete.
-                return LarkSource(pages=pages, department_names=names)
+                # Stopped before every department was walked. The last page handed over is
+                # marked as having more, so the adapter reads the roster as incomplete: a walk
+                # that stopped between two departments ends on a page that says it is the last.
+                return LarkSource(pages=_unfinished(pages), department_names=names)
             budget -= 1
             query = {
                 "department_id": department,
@@ -531,17 +541,30 @@ async def _lark(fetch: Fetch, token: str, platform: str) -> StaffSource:
     return LarkSource(pages=pages, department_names=names)
 
 
-async def pull(fetch: Fetch, source: str, *, token: str, location: str) -> StaffSource:
-    """Read the directory with the token, and hand back the adapter holding every page read."""
+async def pull(
+    fetch: Fetch, source: str, *, token: str, location: str, pages: int | None = None
+) -> StaffSource:
+    """Read the directory with the token, and hand back the adapter holding every page read.
+
+    `pages` is how many pages the walk may read, `MAX_PAGES` when not given (read at the call, so
+    the limit is one figure). A walk that runs out hands back what it read, and the adapter reads
+    that as an incomplete roster, which nothing may remove anybody from: the console's connection
+    test asks for a few pages and says how many people they held.
+    """
+    if pages is None:
+        pages = MAX_PAGES
+    if pages < 1:
+        msg = "a walk of no pages reads nobody, which is not a test of anything"
+        raise ValueError(msg)
     where = location.strip().lower()
     problem = location_problem(source, where)
     if problem:
         raise DirectorySignInError(problem)
     if source == GOOGLE_WORKSPACE:
-        return await _google(fetch, token, where)
+        return await _google(fetch, token, where, pages)
     if source == MICROSOFT_ENTRA:
-        return await _microsoft(fetch, token)
-    return await _lark(fetch, token, where)
+        return await _microsoft(fetch, token, pages)
+    return await _lark(fetch, token, where, pages)
 
 
 def signed_in_sources() -> Sequence[str]:

@@ -91,6 +91,10 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
   "src/pages/RoleControls.tsx path":
     "Appoints somebody to a role, or a deputy for at most thirty days. A role grant replaces " +
     "nothing, and taking one away is the removal beside it, which is confirmed.",
+  "src/components/ConnectStaffSource.tsx path":
+    "Sends the connection test and the first sync's dry run, which keep nothing: no setting, no " +
+    "credential and no member is written, which tests/unit/test_staff_connect.py holds for both. " +
+    "Saving the connection and applying the first sync have their own requests and are confirmed.",
   "src/pages/People.tsx PACK_ASSIGNMENT_API_PATH":
     "Assigns a capability pack. Entitlements are additive only, an assignment replaces nothing, and " +
     "taking one back is the Access review's removal, which is confirmed.",

@@ -307,6 +307,7 @@ export const ACTION_PHRASES: Readonly<Record<string, string>> = Object.freeze({
   vault_access: "answered a call about",
   principal_state: "disabled or enabled",
   breach: "opened, assessed, notified or closed",
+  agent_owner: "became the owner of",
 });
 
 /** The phrase for an action, or its code when the vocabulary has outgrown this console. */
