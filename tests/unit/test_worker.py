@@ -25,6 +25,7 @@ import pytest
 import yaml
 
 from brain.db import SCHEMAS
+from brain.deployment.requirements import profiles_composing
 from brain.gate.context import TrafficClass
 from brain.ops.checkpoints import connection_refusals
 from brain.ops.connections import (
@@ -973,15 +974,12 @@ def test_the_worker_is_not_pointed_at_the_pooler_by_its_own_compose_file() -> No
 
 
 def test_the_worker_runs_only_in_the_profiles_that_budget_it() -> None:
-    """`brain.ops.wiring` puts `brain-worker` in `standard` and `full`, and lite is what is
-    deployed today. Compose profiles are how that becomes true of the deployment rather than
-    of a document. Delete this and the service can acquire a third profile, or lose the key
-    entirely, which starts a worker on every install that composes this file."""
-    service = _compose_service()
-    profiles = service["profiles"]
-
-    assert isinstance(profiles, list)
-    assert set(profiles) == set(component("brain-worker").profiles)
+    """`brain.ops.wiring` puts `brain-worker` in `standard` and `full`, and the profiles whose
+    file list names this file are how that becomes true of the deployment. A `profiles:` key
+    is refused: the installer's plain `up -d` skipped a keyed worker on every install.
+    Delete this and the worker can join lite, or vanish from standard and full again."""
+    assert "profiles" not in _compose_service()
+    assert profiles_composing(COMPOSE) == component("brain-worker").profiles
 
 
 def test_the_container_runs_the_module_that_refuses_rather_than_a_shell() -> None:

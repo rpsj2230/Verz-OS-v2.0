@@ -113,9 +113,8 @@ services:
     # these three models together, so this names one that has to be built.
     image: ${INFERENCE_IMAGE:?set INFERENCE_IMAGE; no image is published for this service yet}
     restart: unless-stopped
-    # The profiles `brain.ops.wiring` gives the `inference-server` component. Held equal by
-    # test, in both directions.
-    profiles: ["standard", "full"]
+    # No `profiles:` key: the profile's file list (`brain.deployment.requirements`) is what
+    # places this service, and a key would hide it from the installer's plain `up -d`.
     networks:
       # One network, internal, no default entry. A second entry here is a route off the host
       # for the text of every document this company has uploaded.

@@ -28,6 +28,7 @@ from typing import Any
 import pytest
 import yaml
 
+from brain.deployment.requirements import profiles_composing
 from brain.knowledge.embed_queue import MIB
 from brain.ops.inference import (
     INFERENCE_COMPONENT,
@@ -235,8 +236,9 @@ def test_the_profiles_in_the_file_match_the_profiles_the_component_is_budgeted_i
     """Both directions. A compose profile the component does not have deploys a container no
     profile's arithmetic includes; a component profile the file does not have budgets memory
     for a container that never starts, which makes every other profile look tighter than it
-    is."""
-    from_file = set(_service()["profiles"])
+    is. The file list decides, so a `profiles:` key (which a plain `up -d` obeys) is refused."""
+    assert "profiles" not in _service()
+    from_file = set(profiles_composing(COMPOSE.name))
     from_module = {
         profile
         for profile in ("lite", "standard", "full")

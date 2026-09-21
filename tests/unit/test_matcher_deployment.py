@@ -23,6 +23,7 @@ from typing import Any
 
 import yaml
 
+from brain.deployment.requirements import profiles_composing
 from brain.ops.wiring import Wiring, component, components_for
 from brain.resolution import matcher
 
@@ -59,8 +60,10 @@ def test_the_profiles_in_the_file_match_the_profiles_the_component_is_budgeted_i
     """Both directions. A compose profile the component lacks starts a job no arithmetic
     includes; a component profile the file lacks costs memory for a job that never runs.
 
-    Delete this and `full`'s figure and `full`'s deployment can describe two different hosts."""
-    from_file = set(_service()["profiles"])
+    Delete this and `full`'s figure and `full`'s deployment can describe two different hosts.
+    The file list decides, so a `profiles:` key (which a plain `up -d` obeys) is refused."""
+    assert "profiles" not in _service()
+    from_file = set(profiles_composing(COMPOSE.name))
     from_module = {
         profile
         for profile in ("lite", "standard", "full")

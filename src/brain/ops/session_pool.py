@@ -58,6 +58,7 @@ from collections.abc import Mapping
 from typing import Any, Final
 from urllib.parse import urlsplit
 
+from brain.deployment.requirements import profiles_composing
 from brain.ops.compose import ComposeFiles
 from brain.ops.connections import client_named, database
 from brain.ops.queue import POOLER_HOSTNAMES
@@ -233,12 +234,14 @@ def session_pool_gaps(files: ComposeFiles) -> tuple[str, ...]:
             "budget fails where somebody reads it rather than idling as if the queue were empty"
         )
 
+    # The file list places the pooler; a `profiles:` key would hide it from a plain `up -d`
+    # and leave the workers waiting on a pooler that never started.
     wanted = sorted(component(SESSION_POOLER).profiles)
-    profiles = sorted(str(one) for one in pooler.get("profiles") or ())
-    if profiles != wanted:
+    composed = sorted(profiles_composing(SESSION_POOLER_FILE))
+    if pooler.get("profiles") or composed != wanted:
         findings.append(
-            f"{SESSION_POOLER!r} runs on profiles {profiles} and brain.ops.wiring budgets it on "
-            f"{wanted}"
+            f"{SESSION_POOLER!r} runs on profiles {composed} with a `profiles:` key of "
+            f"{pooler.get('profiles')}, and brain.ops.wiring budgets it on {wanted} with no key"
         )
 
     for worker in workers:

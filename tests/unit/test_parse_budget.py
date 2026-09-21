@@ -28,6 +28,7 @@ from typing import Any
 import pytest
 import yaml
 
+from brain.deployment.requirements import profiles_composing
 from brain.gate.context import TrafficClass
 from brain.knowledge.ingest import (
     CAUSE_TEXT,
@@ -543,7 +544,8 @@ def test_the_parse_worker_runs_the_same_command_as_the_worker_it_is_a_variant_of
 
     Delete this and the parse worker can acquire an entry point that skips the checks."""
     assert _compose_service()["command"] == _compose_service(GENERAL_WORKER_COMPOSE)["command"]
-    assert set(_compose_service()["profiles"]) == component(PARSE_WORKER_COMPONENT).profiles
+    assert "profiles" not in _compose_service()
+    assert profiles_composing(COMPOSE) == component(PARSE_WORKER_COMPONENT).profiles
 
 
 def test_the_parse_worker_reaches_the_database_the_way_the_worker_it_copies_does() -> None:

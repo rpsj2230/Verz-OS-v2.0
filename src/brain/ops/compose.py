@@ -244,6 +244,45 @@ def described_services(files: ComposeFiles) -> dict[str, tuple[str, ...]]:
     return {service: tuple(where) for service, where in found.items()}
 
 
+def services_started(files: ComposeFiles, active_profiles: Sequence[str] = ()) -> tuple[str, ...]:
+    """The services `docker compose -f ... up -d` starts over these files, sorted.
+
+    What `docker compose config --services` lists: a service carrying a `profiles:` key is
+    left out unless one of its profiles is active, and every other declared service is in.
+    The key is read from every file describing the service, as compose merges it.
+    """
+    gated: dict[str, set[str]] = {}
+    for name in files:
+        for service, body in _services_in(files[name]).items():
+            if isinstance(body, Mapping) and body.get("profiles"):
+                gated.setdefault(service, set()).update(str(p) for p in body["profiles"])
+    active = set(active_profiles)
+    return tuple(
+        sorted(
+            service
+            for service in declared_services(files)
+            if service not in gated or gated[service] & active
+        )
+    )
+
+
+def profile_gated_services(files: ComposeFiles) -> tuple[str, ...]:
+    """Services in this set that a plain `up -d` skips because they carry `profiles:`.
+
+    The file list is what places a service in an install profile, and every consumer of it
+    (installer, update, rollback, a Coolify paste) runs `up -d` with no `--profile`. A key
+    here is a second selection those consumers never make, which is how every standard and
+    full install came up with no worker until 2026-09-22.
+    """
+    started = set(services_started(files))
+    return tuple(
+        f"{service!r} carries a `profiles:` key, so the install's `docker compose up -d` never "
+        "starts it; the profile's file list already decides where it runs"
+        for service in sorted(declared_services(files))
+        if service not in started
+    )
+
+
 def services_declared_differently(files: ComposeFiles) -> tuple[str, ...]:
     """Services described in more than one file whose descriptions disagree.
 

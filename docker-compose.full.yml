@@ -183,9 +183,6 @@ services:
   brain-worker:
     image: ${APP_IMAGE:?set APP_IMAGE to the image and release tag this install runs}
     restart: unless-stopped
-    profiles:
-    - standard
-    - full
     depends_on:
       pgbouncer-session:
         condition: service_healthy
@@ -223,9 +220,6 @@ services:
   pgbouncer-session:
     image: edoburu/pgbouncer:v1.24.1-p1
     restart: unless-stopped
-    profiles:
-    - standard
-    - full
     depends_on:
       db:
         condition: service_healthy
@@ -259,9 +253,6 @@ services:
   brain-parse-worker:
     image: ${APP_IMAGE:?set APP_IMAGE to the image and release tag this install runs}
     restart: unless-stopped
-    profiles:
-    - standard
-    - full
     depends_on:
       pgbouncer-session:
         condition: service_healthy
@@ -584,9 +575,6 @@ services:
   inference-server:
     image: ${INFERENCE_IMAGE:?set INFERENCE_IMAGE; no image is published for this service yet}
     restart: unless-stopped
-    profiles:
-    - standard
-    - full
     networks:
     - inference
     environment:
@@ -709,8 +697,6 @@ services:
   record-matcher:
     image: ${MATCHER_IMAGE:?set MATCHER_IMAGE; build matcher/Dockerfile, no image is published}
     restart: 'no'
-    profiles:
-    - full
     command:
     - python
     - -m

@@ -8,10 +8,12 @@
 #
 # **Composed on purpose, like the automation canvas.** It is a separate file rather than a
 # service in `docker-compose.yml` because `brain.ops.wiring` puts `brain-worker` in the
-# `standard` and `full` profiles and not in `lite`, and lite is what is deployed today. The
-# `profiles:` key below carries the same two names, so `docker compose up` without one of
-# them starts nothing from this file. Not composing it is unambiguous; a service that is
-# present and disabled by a variable is a service somebody enables by editing the wrong line.
+# `standard` and `full` profiles and not in `lite`. Only those two profiles' file lists name
+# this file, and that is the whole of the selection: there is no `profiles:` key, because the
+# installer, the update and rollback scripts and a Coolify paste all run a plain `up -d`, and
+# a key there left every standard and full install with no worker (found on staging,
+# 2026-09-22). Not composing it is unambiguous; a service that is present and disabled by a
+# variable is a service somebody enables by editing the wrong line.
 #
 # **Capped twice, and the second cap is a different shape here than in the trace ledger.**
 # `deploy.resources.limits.memory` is a cgroup ceiling: it protects the neighbour on this
@@ -106,9 +108,8 @@ services:
     # jobs it is running - which presents as a task that fails only in production.
     image: ${APP_IMAGE:?set APP_IMAGE to the image and release tag this install runs}
     restart: unless-stopped
-    # The profiles `brain.ops.wiring` gives the `brain-worker` component, spelled the way
-    # compose selects them. Held equal by test, in both directions.
-    profiles: ["standard", "full"]
+    # No `profiles:` key: the profile's file list (`brain.deployment.requirements`) is what
+    # places this service, and a key would hide it from the installer's plain `up -d`.
     depends_on:
       pgbouncer-session:
         condition: service_healthy
@@ -208,8 +209,8 @@ services:
   pgbouncer-session:
     image: edoburu/pgbouncer:v1.24.1-p1
     restart: unless-stopped
-    # Where the workers are, and nowhere else. Held equal to `brain.ops.wiring` by test.
-    profiles: ["standard", "full"]
+    # No `profiles:` key: the profile's file list (`brain.deployment.requirements`) is what
+    # places this service, and a key would hide it from the installer's plain `up -d`.
     depends_on:
       db:
         condition: service_healthy

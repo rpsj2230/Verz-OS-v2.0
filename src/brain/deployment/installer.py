@@ -102,6 +102,7 @@ from brain.ops.compose import (
     declared_services,
     described_services,
     mounted_paths,
+    profile_gated_services,
     services_declared_differently,
 )
 from brain.ops.wiring import assert_known_profile, components_for
@@ -1054,6 +1055,7 @@ def one_command_blockers(profile: str, files: ComposeFiles) -> tuple[str, ...]:
         *services_declared_differently(files),
         *databases_nothing_creates(files, created_by_the_install=CREATED_DATABASES),
         *settings_not_created(files),
+        *profile_gated_services(files),
     ]
     if not published_ports(files):
         blockers.append(
