@@ -44,9 +44,18 @@ python -m brain.ops.handover_run plan /srv/handover
 
 ## 3. Remove what the command removes
 
+Stop every service that runs the application image first (`brain-worker` only where the install
+runs one), then run the command in a one-off container. The database and its pool stay up: an idle
+pool holds no lock, and the command reaches the database through it.
+
 ```
-python -m brain.ops.handover_run remove /srv/handover --confirm <id>
+docker compose stop app brain-worker
+docker compose run --rm --no-deps app python -m brain.ops.handover_run remove /srv/handover --confirm <id>
 ```
+
+A schema cannot be dropped while any session holds a lock on one of its tables. Each drop waits
+at most 30 seconds and then refuses, naming the sessions still connected by role, application and
+state; stop them and run `remove` again. What was already removed is recorded and stays removed.
 
 Drops every schema, deletes this install's objects from every bucket (the backup bucket at its
 root, which belongs to this install), and checks the scheduled work, the index and the object store
@@ -61,10 +70,12 @@ are gone. Each step is marked done only when a second look finds it gone.
 | `connector_authorisations` | revoke the grant in each source's admin console; the export's `connectors` lists them | `record ... connector_authorisations` |
 | `chat_app` | delete the chat app in the Lark, Slack or Teams developer console | `record ... chat_app` |
 | `network_route` | delete the proxy route, its certificate and the DNS record | `record ... network_route` |
-| `runtime` | `docker compose down --volumes --rmi all`; delete a bucket made for this install only | `record ... runtime` and `record ... cache` |
+| `runtime` | `docker compose down --volumes --rmi all`; delete a bucket made for this install only; on a database server that outlives the install, `DROP OWNED BY brain_app, brain_fastlane`, `DROP ROLE brain_app, brain_fastlane` and `DROP TABLE public.alembic_version` | `record ... runtime` and `record ... cache` |
 | `install_configuration` | delete the install directory and its `.env` | `record ... install_configuration` |
 
-`record` is `python -m brain.ops.handover_run record /srv/handover <part>`. It refuses a step the
+`record` is `python -m brain.ops.handover_run record /srv/handover <part> --note "<how>"`. The note
+is copied onto the certificate; write how the part was removed, or that it never existed on this
+install, so a part that was absent is not certified as if it had been removed. It refuses a step the
 command removes, because those are done by being checked, not by being said. `record` and
 `certify` read only the handover directory, so once the containers are gone run them from a copy
 of it on any machine with the release image:

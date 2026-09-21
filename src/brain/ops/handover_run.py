@@ -31,13 +31,16 @@ import enum
 import hashlib
 import json
 import sys
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any, BinaryIO, Final, Protocol
 
+import psycopg
+
 from brain.db import SCHEMAS
+from brain.ops.application_privileges import APPLICATION_ROLE
 from brain.ops.handover import (
     Certificate,
     Handover,
@@ -51,8 +54,10 @@ from brain.ops.handover import (
     plan_teardown,
     teardown_order,
 )
+from brain.ops.migration_policy import FAST_LANE_ROLE
 from brain.ops.retention import STORES, Store, facts_for
 from brain.ops.storage import BUCKETS
+from brain.settings import Settings
 
 MANIFEST: Final = "manifest.json"
 SUMS: Final = "SHA256SUMS"
@@ -94,6 +99,27 @@ def claimants(*, schema: str = "", bucket: str = "") -> list[str]:
         for facts in STORES
         if (schema and schema in facts.schemas) or (bucket and bucket in facts.buckets)
     ]
+
+
+#: The login and lane roles the first migration creates. Cluster-wide, so no schema drop takes
+#: them, and on a database server the company keeps they would go on logging in.
+ROLES: Final = f"{APPLICATION_ROLE}, {FAST_LANE_ROLE}"
+
+
+#: How long one drop waits for a lock before refusing, and how long it may run once it has it.
+LOCK_TIMEOUT_SECONDS: Final = 30
+STATEMENT_TIMEOUT_SECONDS: Final = 900
+#: What this command's own connections call themselves, so a list of holders shows them.
+APPLICATION_NAME: Final = "brain-handover"
+
+A_REMOVE_THAT_WAITS_FOR_A_LOCK_NEVER_RETURNS: Final = (
+    "DROP SCHEMA waits for an exclusive lock, and PostgreSQL's default is to wait without limit. "
+    "A running application, a pool's idle transaction, or this command's own open read holds "
+    "a share lock, and the drop then waits with nothing printed: on 2026-09-21 the first run "
+    "on a scratch install sat for an hour on its own read of the saved settings. So every drop "
+    "has a lock timeout, a refusal names the sessions still connected, the procedure stops the "
+    "application first, and progress already made is written before the refusal."
+)
 
 
 #: Stores with no schema and no bucket, and why they carry nothing to export.
@@ -349,7 +375,10 @@ def residue_step(residue: Residue, *, realm: str, connectors: Sequence[str]) -> 
                 residue,
                 By.OPERATOR,
                 "docker compose down --volumes --rmi all in the install directory; delete a "
-                "bucket that was created for this install only",
+                "bucket that was created for this install only; on a database server that "
+                f"outlives the install, DROP OWNED BY {ROLES} then DROP ROLE {ROLES} (each "
+                "role still logs in once the schemas are gone) and DROP TABLE "
+                "public.alembic_version",
             )
         case Residue.INSTALL_CONFIGURATION:
             return Step(residue, By.OPERATOR, "delete the install directory and its .env file")
@@ -464,6 +493,23 @@ def remove(
     document = read_teardown(out)
     counts = {Store(one["store"]): int(one["items"]) for one in manifest["stores"]}
     # Until nothing moves: a check that runs before the drop it checks for passes next round.
+    try:
+        _carry_out_all(document, counts, database=database, objects=objects, prefix=prefix, now=now)
+    finally:
+        # A drop refused half way is progress kept: the next run resumes from what is written.
+        _write_teardown(out, document)
+    return [one["what"] for one in document["steps"] if not one["done"]]
+
+
+def _carry_out_all(
+    document: dict[str, Any],
+    counts: Mapping[Store, int],
+    *,
+    database: Database,
+    objects: Objects | None,
+    prefix: str,
+    now: datetime,
+) -> None:
     progressed = True
     while progressed:
         progressed = False
@@ -475,8 +521,6 @@ def remove(
                 step.update(done=True, at=now.isoformat())
                 step["items"] = counts.get(what, 0) if isinstance(what, Store) else 0
                 progressed = True
-    _write_teardown(out, document)
-    return [one["what"] for one in document["steps"] if not one["done"]]
 
 
 def _carry_out(
@@ -512,15 +556,19 @@ def _any(keys: Iterator[str]) -> bool:
     return next(keys, None) is not None
 
 
-def record(out: Path, *, what: str, now: datetime) -> None:
-    """Mark an operator's step done. A command step is refused: it is done by being checked."""
+def record(out: Path, *, what: str, now: datetime, note: str = "") -> None:
+    """Mark an operator's step done. A command step is refused: it is done by being checked.
+
+    `note` says how, or why the part was never there (a scratch install with no chat app), and is
+    carried onto the certificate: a bare "done" for a part that did not exist reads as a removal.
+    """
     document = read_teardown(out)
     for step in document["steps"]:
         if step["what"] == what:
             if step["by"] != By.OPERATOR.value:
                 msg = f"{what} is removed and checked by the command; run remove instead"
                 raise HandoverError(msg)
-            step.update(done=True, at=now.isoformat())
+            step.update(done=True, at=now.isoformat(), note=note)
             _write_teardown(out, document)
             return
     msg = f"{what} is not a step of this teardown"
@@ -538,12 +586,16 @@ def issue(out: Path) -> Certificate:
     finished = [datetime.fromisoformat(one["at"]) for one in steps if one["done"]]
     completed_at = max(finished) if finished else returned.at
     certificate = certify(returned, removed=removed, completed_at=completed_at)
+    notes = {one["what"]: str(one.get("note", "")) for one in steps}
     document = {
         "handover": instruction_document(certificate.handover),
         "returned_at": certificate.returned_at.isoformat(),
         "completed_at": certificate.completed_at.isoformat(),
         "returned_items": certificate.returned_items,
-        "removed": [{"what": str(one.what), "items": one.items} for one in certificate.removed],
+        "removed": [
+            {"what": str(one.what), "items": one.items, "note": notes.get(str(one.what), "")}
+            for one in certificate.removed
+        ],
         "recoverable_from_backup_until": certificate.recoverable_from_backup_until.isoformat(),
         "manifest_sha256": sha256_of(out / MANIFEST),
     }
@@ -569,20 +621,36 @@ def told(certificate: Certificate) -> str:
 
 # ------------------------------------------------------------------ the install's own connections
 class PsycopgDatabase:
-    """The install's database. Reads in one repeatable-read transaction; drops in autocommit."""
+    """The install's database. Reads in one repeatable-read transaction; drops in autocommit.
 
-    def __init__(self, url: str) -> None:
-        import psycopg
+    **The export's transaction is opened only by the export.** It holds a share lock on every
+    table it has read until it closes, and `DROP SCHEMA` needs an exclusive one, so a snapshot
+    left open by anything `remove` runs first makes the drop wait on this same process for ever.
+    See `A_REMOVE_THAT_WAITS_FOR_A_LOCK_NEVER_RETURNS`.
+    """
 
+    def __init__(self, url: str, *, lock_timeout_seconds: int = LOCK_TIMEOUT_SECONDS) -> None:
         from brain.db import libpq_url
 
         self._url = libpq_url(url)
-        self._read = psycopg.connect(self._url)
-        self._read.isolation_level = psycopg.IsolationLevel.REPEATABLE_READ
-        self._read.read_only = True
+        self._lock_timeout = lock_timeout_seconds
+        self._snapshot: psycopg.Connection[tuple[Any, ...]] | None = None
+
+    @property
+    def _read(self) -> psycopg.Connection[tuple[Any, ...]]:
+        if self._snapshot is None:
+            self._snapshot = psycopg.connect(self._url, application_name=APPLICATION_NAME)
+            self._snapshot.isolation_level = psycopg.IsolationLevel.REPEATABLE_READ
+            self._snapshot.read_only = True
+        return self._snapshot
+
+    def _connection(self) -> psycopg.Connection[tuple[Any, ...]]:
+        """A short autocommit connection, named so a list of holders shows this process."""
+        return psycopg.connect(self._url, autocommit=True, application_name=APPLICATION_NAME)
 
     def close(self) -> None:
-        self._read.close()
+        if self._snapshot is not None:
+            self._snapshot.close()
 
     def tables(self, schema: str) -> list[str]:
         # Ordinary and partitioned parents only: a partition's rows are read through its parent.
@@ -614,35 +682,106 @@ class PsycopgDatabase:
         ).fetchall()
         return [str(row[0]) for row in rows]
 
-    def schema_exists(self, schema: str) -> bool:
-        import psycopg
+    def saved_settings(self) -> dict[str, str]:
+        """The installation values saved from the console, read as the app reads them at start.
 
-        with psycopg.connect(self._url, autocommit=True) as conn:
+        They outrank the environment in `brain.install.value_of`, and this process is not the app,
+        so nothing had loaded them: an object store prefix saved in the wizard was ignored, and the
+        export and the teardown both worked under the default prefix, finding nothing of this
+        install's and deleting a neighbour's. Found on the scratch install run in CI.
+        """
+        from sqlalchemy import create_engine
+
+        from brain.ops.install_settings import saved_query, values_from
+
+        if not self.schema_exists("ops"):
+            return {}
+        # Compiled for psycopg's named placeholders, so the parameters travel as parameters. An
+        # engine is created only for its dialect and never connects.
+        statement = saved_query().compile(dialect=create_engine("postgresql+psycopg://").dialect)
+        # Its own autocommit connection and never the export's snapshot: `remove` reads these
+        # too, and a read left open in a transaction is the lock its own drop then waits on.
+        with self._connection() as conn:
+            rows = conn.execute(str(statement), statement.params).fetchall()
+        return values_from(rows)
+
+    def schema_exists(self, schema: str) -> bool:
+        with self._connection() as conn:
             row = conn.execute("SELECT to_regnamespace(%s) IS NOT NULL", (schema,)).fetchone()
         return bool(row and row[0])
 
     def drop_schema(self, schema: str) -> None:
-        import psycopg
-        from psycopg import sql
+        """Drop one schema, or refuse within the lock timeout naming who holds the database."""
+        from psycopg import errors, sql
 
-        with psycopg.connect(self._url, autocommit=True) as conn:
-            conn.execute(sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(schema)))
+        with self._connection() as conn:
+            conn.execute(
+                sql.SQL("SET lock_timeout = {}").format(sql.Literal(f"{self._lock_timeout}s"))
+            )
+            conn.execute(
+                sql.SQL("SET statement_timeout = {}").format(
+                    sql.Literal(f"{STATEMENT_TIMEOUT_SECONDS}s")
+                )
+            )
+            try:
+                conn.execute(sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(schema)))
+            except (errors.LockNotAvailable, errors.QueryCanceled) as waited:
+                msg = (
+                    f"schema {schema} was not dropped: the database is still in use by "
+                    f"{holders(conn) or 'a session that has since closed'}. Stop the application "
+                    "(docker compose stop app brain-worker) and run remove again; what "
+                    "was already removed stays removed"
+                )
+                raise HandoverError(msg) from waited
 
 
-def _connect() -> tuple[PsycopgDatabase, Objects | None, str, str]:
-    from brain.install import value_of
+def holders(conn: psycopg.Connection[tuple[Any, ...]]) -> str:
+    """Every other session on this database, grouped by role, application and state.
+
+    Names who is connected and never what they ran: a query's text can quote a person's data.
+    """
+    rows = conn.execute(
+        "SELECT usename, application_name, state, count(*) FROM pg_stat_activity "
+        "WHERE datname = current_database() AND pid <> pg_backend_pid() "
+        "AND backend_type = 'client backend' GROUP BY 1, 2, 3 ORDER BY 1, 2, 3"
+    ).fetchall()
+    return "; ".join(
+        f"{count} session(s) as {user} from {app or 'an unnamed client'} ({state or 'unknown'})"
+        for user, app, state, count in rows
+    )
+
+
+class InstallDatabase(Database, Protocol):
+    """`Database` plus what connecting needs: the saved settings, and a close."""
+
+    def saved_settings(self) -> dict[str, str]: ...
+
+    def close(self) -> None: ...
+
+
+def _connect(
+    settings: Settings | None = None,
+    open_database: Callable[[str], InstallDatabase] = PsycopgDatabase,
+) -> tuple[InstallDatabase, Objects | None, str, str]:
+    """The database, the object store, this install's prefix and its realm.
+
+    The saved settings are held before anything reads one, as the app's lifespan does; see
+    `PsycopgDatabase.saved_settings` for what reading only the environment did.
+    """
+    from brain.install import hold_saved, value_of
     from brain.ops.object_store import object_store_at_start
-    from brain.settings import Settings
 
-    settings = Settings()
+    settings = settings if settings is not None else Settings()
     if not settings.database_url:
         msg = "DATABASE_URL is not set, so there is no install to hand over"
         raise HandoverError(msg)
+    database = open_database(settings.database_url)
+    hold_saved(database.saved_settings())
     store = object_store_at_start(settings.vault_address, settings.vault_token)
     if store.backend is None:
         print(f"object store not connected: {store.unconnected}", file=sys.stderr)
     return (
-        PsycopgDatabase(settings.database_url),
+        database,
         store.backend,
         store.prefix or value_of("INSTALL_OBJECT_STORE_PREFIX"),
         value_of("INSTALL_OIDC_REALM"),
@@ -667,6 +806,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     recording = sub.add_parser("record", help="mark an operator step done")
     recording.add_argument("directory", type=Path)
     recording.add_argument("what", choices=[one.value for one in (*Store, *Residue)])
+    recording.add_argument("--note", default="", help="how it was removed, or why it was absent")
     asked = parser.parse_args(argv)
     now = datetime.now(UTC)
     out: Path = asked.directory
@@ -678,7 +818,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             print("intact" if not problems else f"{len(problems)} problem(s)")
             return 1 if problems else 0
         if asked.step == "record":
-            record(out, what=asked.what, now=now)
+            record(out, what=asked.what, now=now, note=asked.note)
             print(f"{asked.what} recorded as removed")
             return 0
         if asked.step == "certify":

@@ -75,7 +75,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from typing import Any, Final
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import Select, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -247,14 +247,20 @@ async def load(session: AsyncSession) -> dict[str, str]:
     written here as well rather than left to it: this also runs in a migration's own connection
     and in a test connected as the owner, where no policy applies.
     """
-    rows = (
-        await session.execute(
-            select(SettingRow.key, SettingRow.value_type, SettingRow.value)
-            .where(SettingRow.deleted_at.is_(None))
-            .where(SettingRow.key.startswith(f"{SETTING_NAMESPACE}."))
-        )
-    ).all()
+    rows = (await session.execute(saved_query())).all()
     return values_from(rows)
+
+
+def saved_query() -> Select[tuple[str, str, Any]]:
+    """The live installation rows as `(key, value_type, value)`: `load`'s query, and the one
+    `brain.ops.handover_run` runs over its own connection, which has no async session. One
+    statement, so the command cannot read a different set of rows from the one the app holds.
+    """
+    return (
+        select(SettingRow.key, SettingRow.value_type, SettingRow.value)
+        .where(SettingRow.deleted_at.is_(None))
+        .where(SettingRow.key.startswith(f"{SETTING_NAMESPACE}."))
+    )
 
 
 async def refresh(sessions: async_sessionmaker[AsyncSession]) -> Mapping[str, str]:

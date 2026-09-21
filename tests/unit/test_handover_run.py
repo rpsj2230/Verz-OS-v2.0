@@ -9,22 +9,30 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import time
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import BinaryIO
 
+import psycopg
 import pytest
 
-from brain.db import SCHEMAS
+from brain.db import SCHEMAS, libpq_url
+from brain.install import hold_saved, value_of
+from brain.ops.application_privileges import APPLICATION_ROLE
 from brain.ops.handover import Handover, HandoverError, Reason, Residue
 from brain.ops.handover_run import (
+    APPLICATION_NAME,
     CERTIFICATE,
     CERTIFICATE_TEXT,
     MANIFEST,
     SUMS,
     TEARDOWN,
     By,
+    PsycopgDatabase,
+    _connect,
     export,
     issue,
     plan,
@@ -32,9 +40,13 @@ from brain.ops.handover_run import (
     read_teardown,
     record,
     remove,
+    residue_step,
     verify,
 )
+from brain.ops.migration_policy import FAST_LANE_ROLE
 from brain.ops.retention import BACKUP_RETENTION_DAYS, Store
+from brain.session import APPLICATION_ROLE as SESSION_ROLE
+from brain.settings import Settings
 
 # Far from any wall clock, so no fixture here expires.
 AT = datetime(2031, 3, 4, 10, 0, tzinfo=UTC)
@@ -276,3 +288,152 @@ def test_the_procedure_names_every_subcommand_and_every_part_the_operator_remove
     operator = {one.what.value for one in preview_steps(realm="r") if one.by is By.OPERATOR}
     for part in operator:
         assert f"record ... {part}`" in page or f"record /srv/handover {part}`" in page, part
+
+
+def test_an_operator_note_is_carried_onto_the_certificate(tmp_path: Path) -> None:
+    """Delete this and a part that never existed on the install (a chat app nobody made) is
+    certified as removed with nothing saying it was absent, which is the certificate lying."""
+    database, objects = _exported(tmp_path)
+    steps = plan(tmp_path, realm="acme")
+    remove(tmp_path, confirm="hand-7", database=database, objects=objects, prefix=PREFIX, now=AT)
+    operator = sorted(one.what.value for one in steps if one.by is By.OPERATOR)
+    for what in operator:
+        note = "absent: no chat app was made" if what == Residue.CHAT_APP.value else ""
+        record(tmp_path, what=what, now=AT, note=note)
+    issue(tmp_path)
+    removed = json.loads((tmp_path / CERTIFICATE).read_text(encoding="utf-8"))["removed"]
+    notes = {one["what"]: one["note"] for one in removed}
+    assert notes[Residue.CHAT_APP.value] == "absent: no chat app was made"
+    assert notes[Residue.RUNTIME.value] == ""
+    assert notes[Store.KNOWLEDGE.value] == ""
+
+
+def test_the_runtime_step_removes_the_roles_and_version_table_no_schema_drop_takes() -> None:
+    """Delete this and a database server that outlives the install keeps `brain_app` able to
+    log in, and an alembic version saying head over an empty database, after the certificate."""
+    step = residue_step(Residue.RUNTIME, realm="acme", connectors=())
+    # The role the sessions log in as, named from a second module so a renamed role is caught.
+    assert SESSION_ROLE == APPLICATION_ROLE
+    assert f"DROP OWNED BY {SESSION_ROLE}, {FAST_LANE_ROLE} then" in step.how
+    assert f"DROP ROLE {SESSION_ROLE}, {FAST_LANE_ROLE}" in step.how
+    assert "DROP TABLE public.alembic_version" in step.how
+    assert step.by is By.OPERATOR
+
+
+class SavedDatabase(FakeDatabase):
+    def __init__(self, saved: dict[str, str]) -> None:
+        super().__init__()
+        self.saved = saved
+        self.closed = False
+
+    def saved_settings(self) -> dict[str, str]:
+        return dict(self.saved)
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def test_the_command_reads_the_settings_saved_in_the_console_before_the_environment() -> None:
+    """Delete this and the command goes back to reading only the environment: a prefix saved in
+    the wizard is ignored, the export finds none of this install's objects and the teardown
+    deletes the objects under the default prefix, which are another install's."""
+    saved = {"INSTALL_OBJECT_STORE_PREFIX": "acme-files", "INSTALL_OIDC_REALM": "acme-realm"}
+    before = hold_saved({})
+    try:
+        _database, _objects, prefix, realm = _connect(
+            Settings(database_url="postgresql://install/brain", vault_address="", vault_token=""),
+            lambda _url: SavedDatabase(saved),
+        )
+    finally:
+        hold_saved(before)
+    assert (prefix, realm) == ("acme-files", "acme-realm")
+    assert value_of("INSTALL_OBJECT_STORE_PREFIX", env={}) != "acme-files"
+
+
+class RefusingDatabase(FakeDatabase):
+    def drop_schema(self, schema: str) -> None:
+        if schema == "obs":
+            msg = "schema obs was not dropped: the database is still in use by 1 session(s)"
+            raise HandoverError(msg)
+        super().drop_schema(schema)
+
+
+def test_a_drop_refused_half_way_keeps_the_progress_already_made(tmp_path: Path) -> None:
+    """Delete this and a remove refused by a lock holder forgets the stores it had already
+    dropped, so the teardown file says nothing was removed while half the install is gone."""
+    database = RefusingDatabase()
+    export(
+        tmp_path,
+        handover=_handover(),
+        database=database,
+        objects=FakeObjects(),
+        prefix=PREFIX,
+        now=AT,
+    )
+    plan(tmp_path, realm="acme")
+    with pytest.raises(HandoverError, match="still in use"):
+        remove(
+            tmp_path,
+            confirm="hand-7",
+            database=database,
+            objects=FakeObjects(),
+            prefix=PREFIX,
+            now=AT,
+        )
+    done = {one["what"] for one in read_teardown(tmp_path)["steps"] if one["done"]}
+    assert Store.AGENTS.value in done
+    assert Store.LEDGER.value not in done
+    assert "obs" in database.schemas
+
+
+def _database_url() -> str:
+    url = os.environ.get("DATABASE_URL") or os.environ.get("BRAIN_DATABASE_URL")
+    if not url:
+        pytest.skip("DATABASE_URL is unset, so there is no server to drop in; CI always sets it")
+    return url
+
+
+def test_reading_the_saved_settings_leaves_no_transaction_open_for_a_drop_to_wait_on() -> None:
+    """The first run on a scratch install hung for an hour: the saved settings were read on the
+    export's snapshot, which stayed open holding a lock on ops.setting, and the drop of ops
+    waited on it. Delete this and a read that stays in a transaction can come back."""
+    url = _database_url()
+    database = PsycopgDatabase(url)
+    if not database.schema_exists("ops"):
+        pytest.skip("this database has no ops schema to read the saved settings from")
+    try:
+        database.saved_settings()
+        with psycopg.connect(libpq_url(url), autocommit=True) as conn:
+            open_here = conn.execute(
+                "SELECT count(*) FROM pg_stat_activity WHERE application_name = %s "
+                "AND state LIKE 'idle in transaction%%'",
+                (APPLICATION_NAME,),
+            ).fetchone()
+    finally:
+        database.close()
+    assert open_here is not None and open_here[0] == 0
+
+
+def test_a_drop_held_up_by_another_session_refuses_in_time_naming_it_then_drops() -> None:
+    """Delete this and a drop can wait for ever on a running application, printing nothing,
+    or refuse without saying who holds the database. The second half is the positive case: once
+    the holder has gone the same call drops the schema."""
+    url = _database_url()
+    schema = "handover_lock_probe"
+    with psycopg.connect(libpq_url(url), autocommit=True) as setup:
+        setup.execute(f"DROP SCHEMA IF EXISTS {schema} CASCADE")
+        setup.execute(f"CREATE SCHEMA {schema}")
+        setup.execute(f"CREATE TABLE {schema}.thing (id int)")
+    database = PsycopgDatabase(url, lock_timeout_seconds=1)
+    holder = psycopg.connect(libpq_url(url), application_name="probe-holder")
+    try:
+        holder.execute("SELECT count(*) FROM handover_lock_probe.thing")
+        started = time.monotonic()
+        with pytest.raises(HandoverError, match="probe-holder"):
+            database.drop_schema(schema)
+        assert time.monotonic() - started < 20, "the drop waited far past its one second timeout"
+        assert database.schema_exists(schema)
+    finally:
+        holder.close()
+    database.drop_schema(schema)
+    assert not database.schema_exists(schema)

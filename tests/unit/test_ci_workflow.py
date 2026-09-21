@@ -727,10 +727,68 @@ def test_only_a_change_to_the_task_list_skips_the_product_suites() -> None:
         )
 
     gated = "${{ needs.changes.outputs.tasks_only != 'true' }}"
-    for name in ("static", "tests", "console", "stack", "supply_chain"):
+    for name in ("static", "tests", "console", "stack", "supply_chain", "handover"):
         assert jobs[name].get("if") == gated, f"the {name} job is not gated on the kind of change"
     docs_runs = "\n".join(str(step.get("run", "")) for step in jobs["docs"]["steps"])
     assert "python -m brain.requirements" in docs_runs
+
+
+# ------------------------------------------ a handover on a scratch install (M41.2.6, M41.4.1)
+HANDOVER_JOB = "handover"
+
+
+def _first_line_at(lines: list[tuple[int, str]], starts: str) -> int:
+    """Where the first live line beginning with `starts` sits, as (step, line) flattened."""
+    for at, (_step, line) in enumerate(lines):
+        if line.startswith(starts):
+            return at
+    raise AssertionError(f"the handover job never runs {starts!r}")
+
+
+def test_the_handover_job_runs_the_procedure_in_order_on_an_install_it_built() -> None:
+    """The order is the promise: nothing is removed before the company has checked the export,
+    the wrong id is refused before the right one is typed, the certificate comes after every
+    step, and the check that the schemas and objects are gone comes last, looking for itself.
+
+    Delete this and the job can be reordered or thinned (the check that nothing survived
+    dropped, or the export check moved after the removal) with CI still green."""
+    job = _job(HANDOVER_JOB)
+    lines = [(index, line) for index, step in enumerate(job["steps"]) for line in _live_lines(step)]
+    run = "uv run python -m brain.ops.handover_run"
+    ordered = [
+        "uv run alembic upgrade head",
+        "uv run python -m brain.seed",
+        "await save(",
+        "store.backend.put_object(",
+        f'{run} export "$HANDOVER"',
+        "sha256sum --strict -c SHA256SUMS",
+        f'{run} verify "$HANDOVER"',
+        f'{run} plan "$HANDOVER"',
+        f'if {run} remove "$HANDOVER" --confirm not-this-one; then',
+        f'{run} remove "$HANDOVER" --confirm "$HANDOVER_ID"',
+        f'{run} record "$HANDOVER" "$part" --note "$note"',
+        f'{run} certify "$HANDOVER"',
+        "left=$(psql",
+        "left = list(store.list_objects(",
+    ]
+    positions = [_first_line_at(lines, one) for one in ordered]
+    assert positions == sorted(positions), dict(zip(ordered, positions, strict=True))
+    assert len(set(positions)) == len(positions)
+    assert job.get("if") == "${{ needs.changes.outputs.tasks_only != 'true' }}"
+    assert "pgvector" in str(job["services"]["postgres"]["image"])
+
+
+def test_the_handover_job_saves_its_prefix_in_the_console_and_not_in_the_environment() -> None:
+    """The defect this job found: the command read only the environment, so a prefix saved in
+    the wizard was ignored and the export and teardown worked under the default prefix, where a
+    neighbour's object sits. Delete this and the prefix can move into the job's env, where the
+    command would pass with the defect back."""
+    job = _job(HANDOVER_JOB)
+    assert "INSTALL_OBJECT_STORE_PREFIX" not in job["env"]
+    body = "\n".join(_steps(HANDOVER_JOB))
+    assert '{"INSTALL_OBJECT_STORE_PREFIX": os.environ["SAVED_PREFIX"]}' in body
+    assert 'put_object("assets", "brain/logo.txt"' in body
+    assert 'get_object("assets", "brain/logo.txt") == b"a neighbour\'s logo"' in body
 
 
 # ------------------------------------------ the suite against staging (M38.2.1.2)
@@ -804,3 +862,14 @@ def test_the_previous_release_is_what_main_ran_before_this_change() -> None:
     assert job["steps"][0]["with"]["fetch-depth"] == 0
     assert job.get("if") == "${{ needs.changes.outputs.tasks_only != 'true' }}"
     assert "pgvector" in job["services"]["postgres"]["image"]
+
+
+def test_the_handover_job_and_its_remove_step_cannot_hang_for_an_hour() -> None:
+    """The first run sat an hour on a drop waiting for a lock and was cancelled by hand. Delete
+    this and the ceilings can go, so the next hang costs the runner's six-hour default."""
+    job = _job(HANDOVER_JOB)
+    assert 0 < int(job["timeout-minutes"]) <= 30
+    remove = next(step for step in job["steps"] if "--confirm" in str(step.get("run", "")))
+    assert 0 < int(remove["timeout-minutes"]) <= 5
+    first = _live_lines(remove)[0]
+    assert first.startswith("others=$(psql") and "pg_stat_activity" in first
