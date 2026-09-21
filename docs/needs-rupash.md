@@ -2,89 +2,10 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**5 items are open: 72, 73, 74, 77 and 81.** Each says in plain terms what it is, what I recommend,
-and every step.
+**2 items are open: 77 and 81.** Each says in plain terms what it is, what I recommend, and
+every step.
 
 # Open
-
-## 72. Two words to type into GitHub, to switch the post-deploy checks on
-
-**In plain terms:** after every deploy, your server now checks that nobody can see data they should
-not. This switch tells GitHub to wait for that check and show a red mark if it fails.
-**Recommendation: do it now.** It takes one minute and changes nothing on the site.
-
-1. Open the repository on GitHub and click **Settings** (top right of the repository page).
-2. In the left menu click **Secrets and variables**, then **Actions**.
-3. Click the **Variables** tab (next to **Secrets**), then the green **New repository variable**.
-4. In **Name** type exactly `POST_DEPLOY_CHECKS`. In **Value** type exactly `on`.
-5. Click **Add variable**. Tell me, and I watch the next deploy to confirm it reads the verdict.
-
-## 73. Let me change the stored settings in Coolify: create an API key for me
-
-**DONE 2026-09-21.** The key (with read:sensitive) is saved. PgBouncer and the database memory
-setting are live on staging: every application connection now comes through the pooler. The
-secrets vault (item 75) and the worker are next.
-
-**In plain terms:** Coolify is the control panel that runs the Brain on your server, and it keeps
-its own master copy of the settings. Three jobs need that master copy changed: a connection
-manager in front of the database (PgBouncer, which shares a few database connections between
-many requests so the database never runs out), one memory setting for the database's clean-up
-job, and the secrets vault you approved (item 75). Changing the file on disk directly would be
-undone the next time anyone presses Deploy in Coolify, so I need Coolify's own API. The key you
-create stays on your server; I never see it, my commands only read it there.
-**Recommendation: do it.** About five minutes for you. I then take a database backup first,
-make the three changes, redeploy, and check each one. The database restarts once, for seconds.
-
-1. On your laptop, open PowerShell and run `ssh -L 8000:127.0.0.1:8000 verz-vps`. Leave that
-   window open: it is the private tunnel to Coolify.
-2. In your browser open `http://localhost:8000` and sign in to Coolify.
-3. In Coolify's left menu click **Keys & Tokens**, then the **API Tokens** tab.
-4. In **Description** type `brain-server`. Tick **read**, **write** and **deploy** (not root).
-   Click **Create**. Coolify shows the key once: click the copy icon beside it.
-   If Coolify says the API is disabled: left menu **Settings**, find **API Access**, switch it
-   on, **Save**, and repeat this step.
-5. Open a second PowerShell window and run `ssh verz-vps`.
-6. Run `nano /root/.coolify-api-token`. Paste the key (right-click pastes in PowerShell). Press
-   **Ctrl+O**, then **Enter** to save, then **Ctrl+X** to close.
-7. Run `chmod 600 /root/.coolify-api-token` so only the server's administrator can read it.
-8. Type `exit` in both windows, and tell me "token saved".
-
-## 74. Give the application its own limited database login
-
-**In plain terms:** today the application opens the database with the master key. The master key
-ignores the company's access rules, so if a bug in the application ever asked for rows a person
-must not see, the database would hand them over. With its own limited login, the database itself
-refuses, even if the application gets it wrong. Migrations (the schema updates on each release)
-keep using the master key. The console Overview already shows this as "database login: not ready".
-**Recommendation: do it right after item 73.** Ten minutes. You type one password twice and
-paste one line; I do the rest (the compose change and the check).
-
-1. Make a password in your password manager: **32 characters, letters and digits only** (no symbols,
-   because it goes inside a web-style address where symbols break it). Keep it open.
-2. In PowerShell run `ssh verz-vps`.
-3. Run `docker exec -it $(docker ps -qf name=^db-) psql -U brain -d brain`. You are now inside the
-   database, at a prompt ending in `=#`.
-4. Type `\password brain_app` and press Enter. Paste the password when it asks, press Enter, paste it
-   again, press Enter. Nothing is shown as you paste; that is normal.
-5. Type `SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = 'brain_app';` and press
-   Enter. It must show `brain_app | f | f` (f means false: not a master key). Type `\q` to leave.
-6. In Coolify (tunnel as in item 73): open the Brain resource, then **Environment Variables**. Click
-   **+ Add**, name `BRAIN_DATABASE_URL`, value
-   `postgresql+psycopg://brain_app:PASSWORD@pgbouncer:5432/brain`, with PASSWORD replaced by your
-   password. Tick nothing else, **Save**. Do not press Deploy.
-7. Tell me "login set". I add the two lines that pass it to the application (and keep migrations on
-   the master key), deploy, and check that the Overview shows "database login: ready".
-
-## 77. Archive the v1 repository
-
-**In plain terms:** v1 and v2 must not both look alive, or a fix lands in one and not the other.
-v1 lives in your other GitHub account, which I cannot see. **Recommendation: archive it** (it
-becomes read-only and can be un-archived any time).
-
-1. Sign in to GitHub with the account that owns v1 and open the v1 repository.
-2. **Settings**, scroll to the bottom (**Danger Zone**), **Archive this repository**, type the
-   name to confirm, **I understand, archive this repository**.
-3. Tell me "v1 archived". The first release tag waits until Wave 0 is accepted, as you agreed.
 
 ## 81. One read-only permission for your Lark app, so the Brain can check who may read a wiki page
 
@@ -107,7 +28,34 @@ index and live read, never a bulk copy.
    if Lark asks.
 5. Tell me "Lark permission added".
 
+## 77. The old copies of the Brain in your other GitHub account
+
+**In plain terms:** the product is `rpsj2230/Verz-OS-v2.0`, and it stays. Your `rupashverz` account
+holds two older copies of the Brain: `verz-company-brain` (v1) and `verz-company-brain-v2` (the
+August copy). A fix made in the product never reaches them, which is what M41.3.2 is about.
+**Recommendation:** do nothing now, and archive both at go-live, once nobody depends on them. It is
+recorded as your go-live step.
+**One question:** does `verz-company-brain-v2` run anything live today, or is it only an old copy?
+Reply "v2 copy is not live" or "v2 copy is live".
+
 # Answered
+
+## 74. The application's own limited database login - DONE 2026-09-21
+
+You set the password and the variable. The application now answers as `brain_app` through the
+pooler, and the console Overview shows "database login: ready". A `$` in the password was removed
+on its way into the container until you ticked **Is Literal?**; the install guide now warns about it.
+
+## 73. A Coolify API key for me - DONE 2026-09-21
+
+The key (with read:sensitive) is saved on your server. PgBouncer and the database memory setting
+are live, and every application connection comes through the pooler. The worker and the secrets
+vault (item 75) are being added next.
+
+## 72. The GitHub switch for the post-deploy checks - DONE 2026-09-21
+
+`POST_DEPLOY_CHECKS` is `on`. Each Deploy run now waits for the server's verdict on the security
+checks and goes red if one fails.
 
 ## 82. Wave 0's last three questions - DECIDED
 
