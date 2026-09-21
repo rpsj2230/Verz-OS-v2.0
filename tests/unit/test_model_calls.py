@@ -3,7 +3,7 @@
 Driven with a ladder, an attempt log and drivers held in memory, so the walk is inspected as the
 policy layer describes it and nothing opens a socket or a connection.
 
-Task ids: M27.7.14, M27.8.8, M5.3.4
+Task ids: M27.7.14, M27.8.8, M5.3.4, M5.4.6, M5.5.4
 """
 
 from __future__ import annotations
@@ -43,9 +43,11 @@ from brain.models.driver import (
 from brain.models.evidence import Attempt
 from brain.models.metering import Meter
 from brain.models.routing import (
+    BREAKER_BASE_COOLDOWN_SECONDS,
     BREAKER_CONSECUTIVE_FAILURES,
     FallbackTrigger,
     NoCompliantRoute,
+    ResidencyRequirement,
     Tier,
 )
 
@@ -516,3 +518,103 @@ def test_concurrent_calls_on_one_rung_never_exceed_its_ceiling() -> None:
 
     assert len(asyncio.run(many())) == 6
     assert most == 2
+
+
+def test_a_half_open_deployment_is_sent_one_request_at_a_time_by_claim_and_return() -> None:
+    """M5.4.6. Replayed from the attempts, the breaker is half open for every walk at once.
+
+    Delete this and every request arriving after a cooldown is sent to the provider that has
+    just failed, which is the storm the single half-open admission exists to prevent."""
+    opened = T0 - timedelta(seconds=BREAKER_BASE_COOLDOWN_SECONDS + 5)
+    failures = tuple(
+        Attempt(
+            deployment_id="anthropic-main-0",
+            finished_at=opened - timedelta(seconds=BREAKER_CONSECUTIVE_FAILURES - 1 - i),
+            outcome=FallbackTrigger.TIMEOUT.value,
+        )
+        for i in range(BREAKER_CONSECUTIVE_FAILURES)
+    )
+    release = threading.Event()
+    recovering: list[DriverRequest] = []
+
+    def slow(request: DriverRequest) -> Completion:
+        recovering.append(request)
+        release.wait(timeout=5)
+        return ok()
+
+    backup = Scripted(ok())
+    calls = ModelCalls(
+        ladder=Ladder((rung("anthropic"), rung("moonshot", position=1)), attempts=failures),
+        attempts=Log(),
+        drivers={
+            "anthropic": SdkDriver(provider="anthropic", transport=slow),
+            "moonshot": SdkDriver(provider="moonshot", transport=backup),
+        },
+        profile=lambda: HOSTED_PROFILE,
+        held=lambda: frozenset({"anthropic", "moonshot"}),
+        clock=lambda: T0,
+    )
+
+    async def two() -> Sequence[DriverResponse]:
+        first = asyncio.ensure_future(
+            calls.complete(ASK, tier=Tier.MAIN, lane=Lane.ANSWER, meter=Meter(), trace_id=TRACE)
+        )
+        while not recovering:
+            await asyncio.sleep(0.01)
+        second = await calls.complete(
+            ASK, tier=Tier.MAIN, lane=Lane.ANSWER, meter=Meter(), trace_id="c" * 32
+        )
+        release.set()
+        return (await first, second)
+
+    first, second = asyncio.run(two())
+
+    assert first.deployment_id == "anthropic-main-0"
+    assert second.deployment_id == "moonshot-main-1"
+    assert len(recovering) == 1
+    assert len(backup.sent) == 1
+
+
+def test_a_returned_claim_lets_the_next_request_through_the_recovered_deployment() -> None:
+    """The positive half of claim and return: once the probe comes back, the claim is released.
+
+    Delete this and a claim that is never returned keeps a recovered provider out of rotation
+    for this process until the claim lifetime runs out."""
+    opened = T0 - timedelta(seconds=BREAKER_BASE_COOLDOWN_SECONDS + 5)
+    failures = tuple(
+        Attempt(
+            deployment_id="anthropic-main-0",
+            finished_at=opened - timedelta(seconds=BREAKER_CONSECUTIVE_FAILURES - 1 - i),
+            outcome=FallbackTrigger.TIMEOUT.value,
+        )
+        for i in range(BREAKER_CONSECUTIVE_FAILURES)
+    )
+    recovered = Scripted(ok())
+    calls, _ = executor(
+        Ladder((rung("anthropic"), rung("moonshot", position=1)), attempts=failures),
+        {"anthropic": recovered, "moonshot": Scripted(ok())},
+    )
+
+    assert complete(calls, Meter()).deployment_id == "anthropic-main-0"
+    assert complete(calls, Meter()).deployment_id == "anthropic-main-0"
+    assert len(recovered.sent) == 2
+
+
+def test_a_residency_constrained_call_with_no_compliant_rung_is_refused_and_calls_nothing() -> None:
+    """M5.5.4 at the executor. Every rung assembled from a row promises no region, so a request
+    pinned to one finds no compliant rung, and the refusal comes before any provider is called.
+
+    Delete this and a regulated question can be sent to a provider in an undocumented location
+    the moment the executor stops passing its residency through to the chain."""
+    anywhere = Scripted(ok())
+    calls, log = executor(Ladder((rung("anthropic"),)), {"anthropic": anywhere})
+
+    with pytest.raises(NoCompliantRoute):
+        complete(
+            calls,
+            Meter(),
+            residency=ResidencyRequirement(allowed_regions=frozenset({"eu-west-1"})),
+        )
+
+    assert anywhere.sent == []
+    assert log.rows == {}
