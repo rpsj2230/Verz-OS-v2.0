@@ -1,39 +1,39 @@
 {
-  "generated_at": "2026-09-21T13:53:27.360570+00:00",
-  "commit": "e142bf6",
-  "commit_subject": "Every console write tells the ledger its writer's reach and trace, and a sweep refuses one that does not",
-  "total": 1598,
-  "done": 277,
-  "percent": 17.3,
+  "generated_at": "2026-09-21T14:43:47.801519+00:00",
+  "commit": "9968e13",
+  "commit_subject": "Needs you asks for everything Wave 1 waits on from the owner: provider keys, the anchor repository, three decisions and the Lark contact read",
+  "total": 1596,
+  "done": 279,
+  "percent": 17.5,
   "acts": 47,
-  "decided": 104,
+  "decided": 106,
   "current_wave": 0,
   "waves": [
     {
       "wave": 0,
       "name": "Foundation",
-      "total": 129,
-      "done": 103,
-      "percent": 79.8,
+      "total": 128,
+      "done": 105,
+      "percent": 82.0,
       "in_progress": 0,
-      "ready_for_testing": 2,
-      "blocked": 3,
-      "open": 21,
+      "ready_for_testing": 3,
+      "blocked": 2,
+      "open": 18,
       "acts": 3,
-      "decided": 6
+      "decided": 7
     },
     {
       "wave": 1,
       "name": "The gate",
-      "total": 167,
+      "total": 166,
       "done": 116,
-      "percent": 69.5,
+      "percent": 69.9,
       "in_progress": 0,
       "ready_for_testing": 0,
       "blocked": 0,
-      "open": 51,
+      "open": 50,
       "acts": 1,
-      "decided": 5
+      "decided": 6
     },
     {
       "wave": 2,
@@ -322,10 +322,10 @@
       "module": "M24",
       "name": "Audit, compliance, legal hold",
       "wave": 1,
-      "total": 17,
+      "total": 16,
       "done": 10,
       "acts": 0,
-      "decided": 0
+      "decided": 1
     },
     {
       "module": "M25",
@@ -386,7 +386,7 @@
       "name": "Application scaffold and runtime",
       "wave": 0,
       "total": 38,
-      "done": 27,
+      "done": 28,
       "acts": 0,
       "decided": 2
     },
@@ -449,7 +449,7 @@
       "name": "Continuous delivery and live status",
       "wave": 0,
       "total": 48,
-      "done": 27,
+      "done": 28,
       "acts": 4,
       "decided": 3
     },
@@ -475,10 +475,10 @@
       "module": "M41",
       "name": "Client independence, built in rather than stripped out",
       "wave": 0,
-      "total": 21,
+      "total": 20,
       "done": 13,
       "acts": 0,
-      "decided": 1
+      "decided": 2
     },
     {
       "module": "M42",
@@ -644,6 +644,7 @@
     "M31.1.1.2",
     "M31.1.1.3",
     "M31.1.1.4",
+    "M31.1.1.5",
     "M31.1.2.1",
     "M31.1.2.3",
     "M31.1.2.4",
@@ -714,6 +715,7 @@
     "M38.3.2.4",
     "M38.3.2.5",
     "M38.4.1.1",
+    "M38.4.1.3",
     "M38.5.2",
     "M4.1.1",
     "M4.1.2",
@@ -788,6 +790,11 @@
       "why": "engine tests pass for session and transaction pooling; closing needs PgBouncer on the install (M0.3.4)",
       "updated": "2026-09-21"
     },
+    "M31.3.2.1": {
+      "status": "READY FOR TESTING",
+      "why": "the vault was installed, opened and configured on the owner's install on 2026-09-21; three defects in the shipped procedure (mlock, audit devices, health check) are being fixed in the product before this closes",
+      "updated": "2026-09-21"
+    },
     "M38.2.1.1": {
       "status": "READY FOR TESTING",
       "why": "WAVE_RECORDS and /build/waves are live on staging; proved when the first wave is accepted and recorded",
@@ -802,23 +809,24 @@
       "status": "BLOCKED",
       "why": "a release tag needs the owner's go-ahead",
       "updated": "2026-09-21"
-    },
-    "M41.3.2": {
-      "status": "BLOCKED",
-      "why": "owner archives the unused verz-company-brain-v2 copy now (item 77) and the v1 repository at go-live",
-      "updated": "2026-09-21"
     }
   },
   "wave_records": {},
-  "closed_today": 118,
+  "closed_today": 120,
   "next_up": [
     "M0.2.5",
     "M0.3.5",
     "M0.4.1",
-    "M31.1.1.5",
-    "M31.1.2.2"
+    "M31.1.2.2",
+    "M31.1.3.4"
   ],
   "recent": [
+    {
+      "sha": "565290e",
+      "at": "2026-09-21T14:42:50+00:00",
+      "subject": "The secrets vault runs on the owner's install and gates readiness, with its key slots defined",
+      "closed": "M31.1.1.5,M38.4.1.3"
+    },
     {
       "sha": "e142bf6",
       "at": "2026-09-21T13:40:34+00:00",
@@ -932,12 +940,6 @@
       "at": "2026-09-21T06:10:50+00:00",
       "subject": "Seven foundation tasks close on CI proof, and landed Wave 0 work gets honest statuses",
       "closed": "M0.5.3,M0.5.7,M0.5.8,M0.6.5,M38.1.4.4,M38.4.1.1,M38.5.2"
-    },
-    {
-      "sha": "1b0b742",
-      "at": "2026-09-21T04:40:08+00:00",
-      "subject": "Five foundation tasks close with proof, and the rest of Wave 0's statuses are set by hand",
-      "closed": "M0.1.3,M0.1.5,M0.4.5,M38.2.1.6,M38.3.1.2"
     }
   ]
 }
