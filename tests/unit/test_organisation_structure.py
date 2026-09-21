@@ -931,14 +931,14 @@ def test_the_page_offers_each_structure_control_only_where_its_authority_is_held
         none = client.get(f"{API_PREFIX}/govern/departments", headers=headers("u_none")).json()
 
     assert (admin["may_found"], admin["may_draw_scopes"]) == (True, True)
-    assert [(one["slug"], one["shapeable"]) for one in admin["departments"]] == [
+    assert [(one["slug"], one["shapeable"]) for one in admin["items"]] == [
         ("finance", True),
         ("web", True),
     ]
     assert (web["may_found"], web["may_draw_scopes"]) == (False, True)
-    assert [(one["slug"], one["shapeable"]) for one in web["departments"]] == [("web", True)]
+    assert [(one["slug"], one["shapeable"]) for one in web["items"]] == [("web", True)]
     assert (none["may_found"], none["may_draw_scopes"]) == (False, False)
-    assert {one["shapeable"] for one in none["departments"]} == {False}
+    assert {one["shapeable"] for one in none["items"]} == {False}
     assert admin["retiring_department"].endswith(
         A_RETIRED_DEPARTMENT_LEAVES_EVERY_GRANT_ALREADY_WRITTEN_IN_FORCE
     )

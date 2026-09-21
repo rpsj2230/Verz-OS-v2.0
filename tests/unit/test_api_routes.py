@@ -1306,6 +1306,31 @@ def test_a_malformed_term_is_refused_identically_whatever_entity_was_asked_for(
     assert rows.asked == 0
 
 
+def test_a_cursor_is_refused_identically_whatever_entity_was_asked_for(
+    client: TestClient, rows: UnfilteredRows
+) -> None:
+    """The route takes `cursor` so it has the one page shape, and no cursor was ever issued, so
+    every value is malformed. Delete this and the refusal can move below the entity lookup,
+    where a cursor answers 422 for an entity that exists and 404 for one that does not.
+
+    Task ids: M31.1.4.4"""
+
+    def with_cursor(entity: str) -> Response:
+        response: Response = client.get(
+            f"{API_PREFIX}/records/{entity}",
+            headers={"authorization": f"Bearer {token_for('u_wide')}"},
+            params={"cursor": "eyJ4IjogMX0="},
+        )
+        return response
+
+    known, unknown = with_cursor("price_list"), with_cursor("finance_ledger")
+
+    assert known.status_code == unknown.status_code == 422
+    assert {**known.json(), "trace_id": ""} == {**unknown.json(), "trace_id": ""}
+    assert rows.asked == 0
+    assert "cursor" in declared_query_parameters()
+
+
 def test_more_terms_than_the_route_declares_are_refused_and_the_declared_number_is_accepted(
     client: TestClient,
 ) -> None:

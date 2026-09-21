@@ -155,7 +155,7 @@ function sentQuery(idp: FakeIdp, operation: string): string[] {
 
 function organisation(departments: DepartmentRow[], truncated = false, mayOrganise = false): unknown {
   return {
-    departments,
+    items: departments,
     unplaced: [{ principal_id: "u_9", display_name: "Nowhere Person", disabled: false, department: null }],
     truncated,
     may_organise: mayOrganise,
@@ -375,7 +375,7 @@ describe("the departments and teams screen", () => {
       return null;
     });
     expect(unreachable.container.textContent).toContain(THE_BRAIN_COULD_NOT_BE_REACHED);
-    expect(Object.keys(readOrganisation({ departments: [], total: 4 })).sort()).toEqual([
+    expect(Object.keys(readOrganisation({ items: [], total: 4 })).sort()).toEqual([
       "counted",
       "departments",
       "leads",
@@ -416,7 +416,7 @@ const LANDING = {
   may_authorise: true,
   reasons: ["install", "incident_response"],
   longest_hours: 4,
-  requests: [] as ElevationRequestRow[],
+  items: [] as ElevationRequestRow[],
   truncated: false,
   what: "An elevation is one capability, at a named scope, for one person.",
   recorded: "Every request is kept with who asked, for what and why.",
@@ -501,7 +501,7 @@ describe("the elevation screen", () => {
     ];
     const { container } = await mount("/elevation", (url, init) => {
       if (url.pathname === ELEVATION_OPERATION) {
-        return json({ ...LANDING, requests: rows });
+        return json({ ...LANDING, items: rows });
       }
       if (init?.method === "POST" && url.pathname.startsWith(REQUESTS_OPERATION)) {
         decisions.push({ path: url.pathname, body: JSON.parse(String(init.body)) });

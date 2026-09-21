@@ -176,7 +176,6 @@ function Organisation({
   readonly onChanged: (sentence: string) => void;
 }) {
   const listing = useListing<DepartmentRow>(DEPARTMENTS_API_PATH, {
-    listKey: "departments",
     choices: DEPARTMENT_FILTERS,
     version,
   });

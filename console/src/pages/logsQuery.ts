@@ -203,11 +203,11 @@ export function readLogPage(payload: unknown): LogPage | null {
     return null;
   }
   const body = payload as Partial<LogPageBody>;
-  if (!Array.isArray(body.entries)) {
+  if (!Array.isArray(body.items)) {
     return null;
   }
   return {
-    entries: body.entries,
+    entries: body.items,
     nextCursor: typeof body.next_cursor === "string" ? body.next_cursor : null,
     keptForDays: typeof body.kept_for_days === "number" ? body.kept_for_days : 0,
     debugIsNotKept: body.debug_is_not_kept !== false,

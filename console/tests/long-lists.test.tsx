@@ -265,9 +265,9 @@ function narrowingSelects(root: Element): HTMLSelectElement[] {
 /**
  * What a mounted page offers, read from its controls and from the routes it asked.
  *
- * A pager counts only over a route that takes a cursor. The grid draws Previous and Next over every
- * answer it is given, and over a route that never sends a cursor those two buttons can never be
- * pressed: `brain.api_routes.RecordPage` says why the records route's is always null.
+ * A pager counts only over a route that takes a cursor. The records route takes one for the one page
+ * shape and refuses every value, since `brain.api_routes.RecordPage` never issues one, so its grid
+ * draws no pager and the row plane's excuse still stands.
  */
 function offered(root: Element, paths: readonly string[]): Set<Capability> {
   const found = new Set<Capability>();
