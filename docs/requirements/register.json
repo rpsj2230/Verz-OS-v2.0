@@ -6311,7 +6311,7 @@
    "proof": [
     "M5.6.3"
    ],
-   "decision": null
+   "decision": "needs-rupash 86: the product calls each provider directly with its own retries, timeouts and fallbacks; no LiteLLM"
   },
   {
    "id": "ARC-B-085",
@@ -10905,7 +10905,7 @@
    "proof": [
     "M5.6.3"
    ],
-   "decision": null
+   "decision": "needs-rupash 86: the product calls each provider directly with its own retries, timeouts and fallbacks; no LiteLLM"
   },
   {
    "id": "REQ-27",
