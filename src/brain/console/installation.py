@@ -396,11 +396,14 @@ def features_of(profile: str) -> tuple[Feature, ...]:
 #: identity and to nothing else: a locale has a neutral default, `value_of` answers for an
 #: install that has not chosen one, and a client reading the wrong currency on a screen that
 #: does not mention currency is the failure this leaf exists to prevent.
+#: Connectors joined on 2026-09-21 for the same reason: which uses a company's Lark app is
+#: switched on for has a neutral default and is part of what this deployment is made of.
 NAMEABLE_SURFACES: Final[tuple[Belongs, ...]] = (
     Belongs.BRANDING,
     Belongs.LOCALE,
     Belongs.MODELS,
     Belongs.STORAGE,
+    Belongs.CONNECTORS,
 )
 
 

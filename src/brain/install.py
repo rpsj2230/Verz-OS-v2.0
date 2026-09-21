@@ -112,6 +112,10 @@ class Belongs(enum.StrEnum):
     #: and what they read, and asking one of them for the other's answer is how an install
     #: ends up rendering every date in the zone the implementer happened to be in.
     LOCALE = "locale"
+    #: Which outside applications this install is connected to and what each is used for.
+    #: Its own surface because the person who creates the company's Lark app is neither the
+    #: brand owner nor whoever runs the directory, and the Connect Lark screen writes it.
+    CONNECTORS = "connectors"
 
 
 @dataclass(frozen=True)
@@ -411,6 +415,36 @@ INSTALLATION: Final[tuple[Setting, ...]] = (
             "visibly wrong rather than out by an hour on some days of the year."
         ),
         default="UTC",
+    ),
+    # --- connectors, written by the Connect Lark screen (brain.lark_connect_routes)
+    Setting(
+        name="INSTALL_LARK_USES",
+        belongs=Belongs.CONNECTORS,
+        meaning=(
+            "What this company's Lark app is switched on for, comma-separated: staff_list, "
+            "knowledge_wiki, knowledge_base, chat_channel, or none. Written by the Connect Lark "
+            "screen after the app's credential is kept in the vault, never before."
+        ),
+        default="none",
+    ),
+    Setting(
+        name="INSTALL_LARK_PLATFORM",
+        belongs=Belongs.CONNECTORS,
+        meaning=(
+            "Which Lark platform the company's tenant lives on: larksuite.com for Lark, or "
+            "feishu.cn for Feishu. It decides which host the app's secret is sent to, so "
+            "`unset` sends it nowhere."
+        ),
+        default="unset",
+    ),
+    Setting(
+        name="INSTALL_LARK_BASE",
+        belongs=Belongs.CONNECTORS,
+        meaning=(
+            "The token of the one Lark Base the knowledge_base use reads live, as it appears "
+            "in the Base's link after /base/. `unset` means no Base is named, and nothing is read."
+        ),
+        default="unset",
     ),
 )
 

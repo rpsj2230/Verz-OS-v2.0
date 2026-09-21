@@ -131,6 +131,7 @@ from brain.install import InstallError, installed_name, value_of
 from brain.install_routes import router as install_router
 from brain.jobs_routes import router as jobs_router
 from brain.knowledge.row_store import SessionRowSource
+from brain.lark_connect_routes import router as lark_connect_router
 from brain.log_routes import router as log_router
 from brain.migrate import run_migrations
 from brain.mine_routes import router as mine_router
@@ -1262,6 +1263,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # are its two writes, under `admin:connector` over that source, and what connecting does not do
     # yet is served beside the list. See `brain.connector_routes`.
     app.include_router(connector_router)
+    # Connect Lark: the steps, a read-only test and switching its uses on. See
+    # `brain.lark_connect_routes`.
+    app.include_router(lark_connect_router)
     # The Staff sources screen and the trial run behind it. A router of its own because it
     # refuses nobody on its listing: a source sits at `brain.console.govern.NOWHERE`, so the
     # answer for a reader who reaches none of them is the empty page rather than the refusal

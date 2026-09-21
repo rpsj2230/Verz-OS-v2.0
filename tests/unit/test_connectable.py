@@ -121,7 +121,9 @@ def test_every_source_the_console_cannot_connect_says_why_in_words() -> None:
     saying what connecting it would need."""
     for one in NOT_FROM_THE_CONSOLE.values():
         assert one.name and one.label
-        assert "connected at the server" in one.why
+        # Lark's two are connected by Connect Lark on the same screen; the rest at the server.
+        where = "Connect Lark" if one.name.startswith("lark_") else "connected at the server"
+        assert where in one.why
     with pytest.raises(NotConnectableError):
         connectable("freshdesk")
     assert connectable("xero") is CONNECTABLE["xero"]

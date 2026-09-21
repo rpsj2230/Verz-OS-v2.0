@@ -151,6 +151,7 @@ def test_the_screen_shows_every_setting_grouped_with_its_source_and_the_starter_
         "models",
         "storage",
         "locale",
+        "connectors",
     ]
     assert {group["group"] for group in body["groups"] if group["editable"]} == {"branding"}
     assert all(group["changed_elsewhere"] for group in body["groups"] if not group["editable"])
