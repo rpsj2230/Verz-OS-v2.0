@@ -709,6 +709,8 @@ def test_only_a_change_to_the_task_list_skips_the_product_suites() -> None:
         "docs/tracker.html",
         "docs/requirements/register.json",
         "docs/delivery-checklist.md",
+        "docs/needs-rupash.md",
+        "docs/architecture.html",
     ):
         assert pattern.fullmatch(path), f"{path} is a task-list file and should take the quick path"
     for path in (
@@ -717,7 +719,6 @@ def test_only_a_change_to_the_task_list_skips_the_product_suites() -> None:
         "docs/wbs/render.js",
         "docs/wbs/export.js",
         ".github/workflows/ci.yml",
-        "docs/needs-rupash.md",
         "console/src/App.tsx",
         "migrations/versions/0083_x.py",
     ):
