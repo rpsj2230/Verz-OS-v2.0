@@ -216,3 +216,46 @@ def test_there_is_always_an_agent() -> None:
     """A selector that can return nothing pushes the empty case onto every caller, and the
     caller that forgets it produces a request with no agent and no error."""
     assert _select("anything at all").agent_id
+
+
+# ------------------------------------------------------------ addressed by name
+def test_an_agent_the_person_addresses_and_may_use_beats_every_configured_stage() -> None:
+    """M3.6.2, first clause. The person naming an agent is a decision about this one question,
+    so it outranks the binding somebody set for the conversation and every rule."""
+    chosen = _select(
+        "an invoice question",
+        addressed="special",
+        bindings=[AgentBinding(channel=Channel.LARK, agent_id="support")],
+        rules=[SelectionRule(pattern=re.compile("invoice"), agent_id="finance")],
+    )
+    assert chosen.agent_id == "special"
+    assert chosen.stage is SelectionStage.ADDRESSED
+
+
+def test_an_agent_the_person_may_not_use_answers_as_one_that_does_not_exist() -> None:
+    """M3.6.2, second clause. Addressing an agent outside the person's reach produces exactly
+    the selection an unknown name produces, stage and reason included, so whether it exists
+    cannot be read off the answer, and the reason never repeats the name."""
+    configured = {
+        "bindings": [AgentBinding(channel=Channel.LARK, agent_id="support")],
+        "visible_agents": frozenset({"support", "general"}),
+    }
+    hidden = _select("an invoice question", addressed="special", **configured)
+    unknown = _select("an invoice question", addressed="no-such-agent", **configured)
+    unaddressed = _select("an invoice question", **configured)
+
+    assert hidden == unknown == unaddressed
+    assert hidden.agent_id == "support"
+    assert hidden.stage is SelectionStage.BINDING
+    assert "special" not in hidden.reason
+
+
+def test_with_nothing_addressed_the_order_is_binding_then_rule_then_classifier() -> None:
+    """M3.6.2, the rest of the sentence, as one chain: each stage applies only when every stage
+    above it had nothing to say."""
+    rule = SelectionRule(pattern=re.compile("invoice"), agent_id="delivery")
+    binding = AgentBinding(channel=Channel.LARK, agent_id="support")
+    assert _select("an invoice", bindings=[binding], rules=[rule]).stage is SelectionStage.BINDING
+    assert _select("an invoice", rules=[rule]).stage is SelectionStage.RULE
+    assert _select("an invoice").stage is SelectionStage.CLASSIFIER
+    assert _select("the weather").stage is SelectionStage.DEFAULT
