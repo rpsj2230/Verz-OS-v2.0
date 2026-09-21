@@ -157,6 +157,19 @@ def test_the_deploy_workflow_waits_for_the_live_deploy_and_reads_the_verdict_pag
     assert "/api/deploy-checks.json" in job["steps"][0]["run"]
 
 
+def test_the_checks_wait_for_the_owner_to_switch_them_on_and_release_still_needs_a_pass() -> None:
+    """Delete this and the job either runs before the server writes a verdict, failing every
+    deploy, or a skipped job could be read as a pass. Release asks for `success`, not skipped."""
+    job = _workflow("deploy.yml")["jobs"]["staging_checks"]
+    assert job["if"] == "${{ vars.POST_DEPLOY_CHECKS == 'on' }}"
+    gate = next(
+        step
+        for step in _workflow("release.yml")["jobs"]["image"]["steps"]
+        if "CHECKS_JOB" in step.get("env", {})
+    )
+    assert '.conclusion == \\"success\\"' in gate["run"]
+
+
 def test_a_release_is_refused_for_a_commit_whose_deploy_did_not_pass_the_checks() -> None:
     """The promotion M38.5.1 stops. Delete this and the gate step can be removed from Release, or
     moved after the tag is created, and a refused commit is released anyway."""
