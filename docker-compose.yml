@@ -32,6 +32,9 @@ services:
       # the deployment happens to know - which, in Coolify's case, is the literal
       # string "unknown" resolved once at save time and never updated again.
       APP_ROLE_PASSWORD: ${APP_ROLE_PASSWORD:-}
+      # Empty, DATABASE_URL above applies. Set to the brain_app login through pgbouncer and it
+      # wins (brain.settings), so requests stop running as the owner. M31.4.2.
+      BRAIN_DATABASE_URL: ${BRAIN_DATABASE_URL:-}
       # The image reference this container was selected by, so the application can name the
       # release it is running. Unlike BRAIN_COMMIT_SHA above there is no baked value for it
       # to override: a release tag is put on an image after it is built, so the image cannot
@@ -148,6 +151,10 @@ services:
       MAX_CLIENT_CONN: "200"
       DEFAULT_POOL_SIZE: "20"
       AUTH_TYPE: scram-sha-256
+      # A login not in the userlist (the owner is) is looked up as the owner, which is how
+      # brain_app gets in; a role that is a superuser or bypasses row security never does.
+      # Pinned rather than left to the default. See tests/unit/test_pooler_logins.py.
+      AUTH_QUERY: "SELECT rolname, CASE WHEN rolvaliduntil < now() THEN NULL ELSE rolpassword END FROM pg_authid WHERE rolname = $$1 AND rolcanlogin AND NOT rolsuper AND NOT rolbypassrls"
     expose:
       - "5432"
     deploy:
