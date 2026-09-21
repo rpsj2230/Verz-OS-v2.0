@@ -77,6 +77,12 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
     { pattern: "/models", index: 0, writes: true },
     { pattern: "/models", opener: "Record terms", index: 0, writes: true },
   ],
+  // After the register's add form: the residency constraint form, then a tier's numbers once opened,
+  // which draws above the residency form.
+  "src/components/RoutingSettings.tsx": [
+    { pattern: "/models", index: 1, writes: true },
+    { pattern: "/models", opener: "Edit numbers", index: 1, writes: true },
+  ],
   "src/components/AgentModelPin.tsx": [{ pattern: "/agents/:agentId", opener: "Profile", index: 0, writes: true }],
   "src/pages/Notifications.tsx": [
     { pattern: "/notifications", index: 0, writes: true },

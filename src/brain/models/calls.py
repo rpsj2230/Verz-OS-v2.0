@@ -61,23 +61,49 @@ stops a pinned one too: a refusal from the pinned model is not tried on the tier
 **Each try records what categories of data it sent** (M5.6.4), as the caller named them, on the
 attempt row. See `brain.models.disclosure`.
 
-**Not built, and said.** The probe loop `health.next_probes` describes has no scheduler, so an
-idle provider's health is whatever its last real attempts say. The callers are the Models
-screen's provider check, the matrix gate (`brain.ops.matrix_gate_run`) and
-`brain.gate.model_lane`, the answer lane's step for a question no fast-path rule answers.
+**The tier is classified here, against the table, when the caller hands the request** (M5.2.2).
+A caller passing `routing` rather than `tier` has its tier decided by `routing.classify_tier` with
+the windows and headroom `ops.routing_tier` holds, read in the same read as the ladder
+(`brain.models.tier_rules`), so a tier row changed on the Models screen decides the next question's
+tier in every process. `tier` stays for the callers that choose one outright: the provider check
+and the matrix gate's trials.
+
+**A request carries the residency of every constraint its reach touches** (M5.5.1). `reach` is the
+caller's grant scopes, and `brain.models.residency.requirement_for` intersects the requirement of
+each `ops.residency_constraint` row they may overlap into the one the chain selects with, so a
+non-compliant rung is skipped and a request with nowhere compliant is refused by
+`ChainSelection.require`, never degraded.
+
+**Every attempt feeds `ops.provider_health`'s live ring, and probes feed the breaker by replay**
+(M5.4.3, M5.4.7). An attempt that answered or failed on the provider's side is appended to its
+deployment's live ring through `HealthLog`, and the plan replays the probe ring beside the attempts
+(`brain.models.evidence.replayed`), so the worker's prober opens an idle dead rung and settles a
+half-open one for every process's next call.
+
+**The chain's depth is judged on every call, answered or not** (M5.4.8). Each tier the walk went
+through becomes a `health.ChainOutcome`, `health.assess_chain_depth` decides, and an alert goes to
+`DepthAlerts`, which keeps it for the Models screen. A pinned model's rung is left out of the depth,
+because its position in some tier is not a place in the chain this request walked; a trial on the
+matrix gate raises none, because its depth describes a change that is not taking traffic.
+
+The callers are the Models screen's provider check, the matrix gate
+(`brain.ops.matrix_gate_run`) and `brain.gate.model_lane`, the answer lane's step for a question no
+fast-path rule answers.
 
 Task ids: M27.7.14, M27.8.8, M5.3.4, M5.4.6, M5.1.3, M5.7.3, M5.6.4, M5.7.2
+Task ids: M5.2.2, M5.4.3, M5.4.7, M5.4.8, M5.5.1
 """
 
 from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Final, Protocol
 
 from brain.core.lane import Lane
+from brain.core.scope import Scope
 from brain.models.assembly import Assembly, LadderRung, assemble
 from brain.models.disclosure import DataCategory
 from brain.models.driver import (
@@ -89,10 +115,25 @@ from brain.models.driver import (
     ModelDriver,
     ProviderUnavailable,
 )
-from brain.models.evidence import Attempt, outcome_of, replayed
-from brain.models.health import ProviderHealth
+from brain.models.evidence import (
+    EVIDENCE_WINDOW,
+    ILL_HEALTH,
+    OK,
+    Attempt,
+    StoredRings,
+    outcome_of,
+    replayed,
+)
+from brain.models.health import (
+    ChainAttempt,
+    ChainOutcome,
+    DepthAlert,
+    ProviderHealth,
+    assess_chain_depth,
+)
 from brain.models.metering import Meter
 from brain.models.registry import ModelPin, ProviderRecord
+from brain.models.residency import ScopedResidency, requirement_for
 from brain.models.routing import (
     BREAKER_PROBE_CLAIM_TTL_SECONDS,
     TIER_LADDER,
@@ -103,10 +144,14 @@ from brain.models.routing import (
     NoCompliantRoute,
     ResidencyRequirement,
     RoutingChain,
+    RoutingRequest,
     RoutingRung,
+    SkippedRung,
     Tier,
+    classify_tier,
     permits_tier_escalation,
 )
+from brain.models.tier_rules import TierRule, TierTable, table_of
 
 # ------------------------------------------------------------------- written-down reasons
 
@@ -146,6 +191,12 @@ class LadderState:
     #: The provider registry's live rows: terms, lane overrides, and the providers an
     #: administrator added from the console.
     providers: tuple[ProviderRecord, ...] = ()
+    #: `ops.routing_tier`'s live rows, checked. A tier with none runs at the compiled numbers.
+    tiers: tuple[TierRule, ...] = ()
+    #: `ops.residency_constraint`'s live rows: each constraint and the scope it is attached to.
+    residency: tuple[ScopedResidency, ...] = ()
+    #: `ops.provider_health`'s rows: each deployment's stored live and probe rings.
+    rings: tuple[StoredRings, ...] = ()
 
 
 class AddedProviders(Protocol):
@@ -200,6 +251,38 @@ class AttemptLog(Protocol):
         ...
 
 
+class HealthLog(Protocol):
+    """Where a live outcome is appended to its deployment's stored ring. Never raises."""
+
+    async def observed(self, *, deployment_id: str, provider: str, ok: bool, at: datetime) -> None:
+        """Append one live outcome: True answered, False failed on the provider's side."""
+        ...
+
+
+class NoHealthLog:
+    """A process with nowhere to keep the rings."""
+
+    async def observed(self, *, deployment_id: str, provider: str, ok: bool, at: datetime) -> None:
+        """Nothing to append to."""
+        return None
+
+
+class DepthAlerts(Protocol):
+    """Where a chain-depth alert is kept and told. Never raises: the answer is not held for it."""
+
+    async def raised(self, alert: DepthAlert, *, trace_id: str, at: datetime) -> None:
+        """Keep one alert for the Models screen and say it in the log."""
+        ...
+
+
+class NoDepthAlerts:
+    """A process, or a trial, that keeps no alert."""
+
+    async def raised(self, alert: DepthAlert, *, trace_id: str, at: datetime) -> None:
+        """Nothing kept."""
+        return None
+
+
 # ---------------------------------------------------------------------------- the executor
 
 
@@ -214,6 +297,8 @@ class Planned:
     profile: str
     #: The providers whose key this process held when this plan was made. Names, never values.
     held: frozenset[str]
+    #: The windows and headroom a request's tier is classified against, from `ops.routing_tier`.
+    tiers: TierTable = field(default_factory=TierTable)
 
 
 class ModelCalls:
@@ -229,8 +314,12 @@ class ModelCalls:
         held: Callable[[], frozenset[str]],
         clock: Callable[[], datetime],
         added: AddedProviders | None = None,
+        health: HealthLog | None = None,
+        alerts: DepthAlerts | None = None,
     ) -> None:
         self._ladder = ladder
+        self._health: HealthLog = NoHealthLog() if health is None else health
+        self._alerts: DepthAlerts = NoDepthAlerts() if alerts is None else alerts
         self._added: AddedProviders = NoAddedProviders() if added is None else added
         self._attempts = attempts
         self._drivers = drivers
@@ -248,7 +337,8 @@ class ModelCalls:
 
         The drivers, the attempt log, the keys and the clock are this executor's own; only the
         rungs a plan reads differ, so a trial is the call a person's question would make after
-        the change, and nothing about the live ladder moves.
+        the change, and nothing about the live ladder moves. Its outcomes feed the rings like any
+        call's; its depth raises no alert, because it describes a change not yet taking traffic.
         """
         return ModelCalls(
             ladder=_TrialLadder(self._ladder, change),
@@ -258,6 +348,7 @@ class ModelCalls:
             held=self._held,
             clock=self._clock,
             added=self._added,
+            health=self._health,
         )
 
     async def planned(self) -> Planned:
@@ -266,7 +357,8 @@ class ModelCalls:
         The same answer a call plans from, so a screen drawing this draws what the next call
         will do.
         """
-        state = await self._ladder.current(self._clock())
+        now = self._clock()
+        state = await self._ladder.current(now)
         profile = self._profile()
         held = self._held() | self._added.held(state.providers)
         # The product's own drivers last, so an added provider can never replace one.
@@ -279,22 +371,28 @@ class ModelCalls:
             drivers=drivers,
             registry={one.slug: one for one in state.providers},
         )
+        since = now - EVIDENCE_WINDOW
         return Planned(
             assembly=assembly,
-            health=replayed(state.attempts),
+            health=replayed(
+                state.attempts, [probe for one in state.rings for probe in one.probes(since)]
+            ),
             state=state,
             profile=profile,
             held=held,
+            tiers=table_of(state.tiers),
         )
 
     async def complete(
         self,
         messages: Sequence[DriverMessage],
         *,
-        tier: Tier,
         lane: Lane,
         meter: Meter,
         trace_id: str,
+        tier: Tier | None = None,
+        routing: RoutingRequest | None = None,
+        reach: Sequence[Scope] = (),
         agent_version: str | None = None,
         max_output_tokens: int | None = None,
         residency: ResidencyRequirement = UNCONSTRAINED,
@@ -304,16 +402,34 @@ class ModelCalls:
     ) -> DriverResponse:
         """One model call for one request, through the chain, or `Degraded` saying why not.
 
-        `provider` narrows the chain to one provider's rungs, for a check an administrator asked
-        for; nothing else sets it. `pin` is an agent's pinned provider and model, tried first.
-        `categories` is what the messages carry, recorded on every attempt. Raises
-        `NoCompliantRoute` when no rung can be tried and `ProviderUnavailable` carrying the last
-        failure when every rung tried failed.
+        `tier` is a tier chosen outright; `routing` is the request the tier is classified from,
+        against the table's numbers, and wins when both are given. `reach` is the caller's grant
+        scopes, and every residency constraint they touch narrows `residency`. `provider` narrows
+        the chain to one provider's rungs, for a check an administrator asked for; nothing else
+        sets it. `pin` is an agent's pinned provider and model, tried first. `categories` is what
+        the messages carry, recorded on every attempt. Raises `NoCompliantRoute` when no rung can
+        be tried and `ProviderUnavailable` carrying the last failure when every rung tried failed.
         """
         if lane is Lane.FAST:
             msg = "the fast lane takes no model, so a model call on it is a bug, not a route"
             raise ValueError(msg)
+        if routing is not None and routing.lane is not lane:
+            msg = f"a request routed as {routing.lane} cannot be sent on the {lane} lane"
+            raise ValueError(msg)
         plan = await self.planned()
+        # Every constraint the reach touches, on top of whatever the caller already demanded.
+        # Composed by `intersect`, so nothing here can widen what the caller passed.
+        residency = residency.intersect(requirement_for(plan.state.residency, reach))
+        if routing is not None:
+            decision = classify_tier(
+                replace(routing, residency=routing.residency.intersect(residency)),
+                windows=plan.tiers.windows,
+                headroom=plan.tiers.headroom,
+            )
+            tier, residency = decision.tier, decision.residency
+        if tier is None:
+            msg = "a call names its tier or the request its tier is classified from"
+            raise ValueError(msg)
         chain = plan.assembly.chain if provider is None else plan.assembly.for_provider(provider)
         walk = _Walk(
             assembly=plan.assembly,
@@ -329,10 +445,25 @@ class ModelCalls:
             claims=self._claims,
             lane=lane,
             categories=tuple(sorted({one.value for one in categories})),
+            health=self._health,
         )
+        try:
+            return await self._walked(walk, chain, tier, residency, pin)
+        finally:
+            await self._judged(walk, trace_id)
+
+    async def _walked(
+        self,
+        walk: _Walk,
+        chain: RoutingChain,
+        tier: Tier,
+        residency: ResidencyRequirement,
+        pin: ModelPin | None,
+    ) -> DriverResponse:
+        """The pin, then the tier's chain and any escalation, until an answer or a raise."""
         pinned = None if pin is None else self._pinned(chain, pin, residency, walk)
         if pinned is not None:
-            answered = await walk.through(pinned.tier, (pinned,))
+            answered = await walk.through(pinned.tier, (pinned,), counted=False)
             if answered is not None:
                 return answered
             # An overflow on the pinned model leaves the decision to the tier's own chain, which
@@ -344,6 +475,7 @@ class ModelCalls:
             selection = chain.select(
                 current, residency=residency, breakers=walk.breakers, now=self._clock()
             )
+            walk.fenced(current, selection.skipped)
             rungs = tuple(one for one in selection.rungs if one.deployment.id not in skip)
             if not rungs and walk.last is not None:
                 # An escalation, or a pin that failed, reached a tier with nothing left to try.
@@ -359,6 +491,13 @@ class ModelCalls:
             msg = "a walk ended with no answer and no failure"
             raise NoCompliantRoute(msg)
         raise ProviderUnavailable(walk.last)
+
+    async def _judged(self, walk: _Walk, trace_id: str) -> None:
+        """Every tier the walk went through, judged for depth, and each alert kept (M5.4.8)."""
+        for outcome in walk.outcomes():
+            alert = assess_chain_depth(outcome)
+            if alert is not None:
+                await self._alerts.raised(alert, trace_id=trace_id, at=self._clock())
 
     def _pinned(
         self,
@@ -430,8 +569,12 @@ class _Walk:
         claims: dict[str, datetime] | None = None,
         lane: Lane = Lane.ANSWER,
         categories: tuple[str, ...] = (),
+        health: HealthLog | None = None,
     ) -> None:
         self.assembly = assembly
+        self.health: HealthLog = NoHealthLog() if health is None else health
+        #: Each tier walked, in order, with the rungs tried and the rungs its selection fenced off.
+        self.tiers: dict[Tier, tuple[list[ChainAttempt], tuple[SkippedRung, ...]]] = {}
         self.breakers: dict[str, CircuitBreaker] = dict(breakers)
         self.meter = meter
         self.trace_id = trace_id
@@ -449,8 +592,33 @@ class _Walk:
         self.last_deployment: str | None = None
         self.overflowed = False
 
-    async def through(self, tier: Tier, rungs: tuple[RoutingRung, ...]) -> DriverResponse | None:
-        """Try this tier's rungs in order. The answer, or None to go on, or a raise to stop."""
+    def fenced(self, tier: Tier, skipped: tuple[SkippedRung, ...]) -> None:
+        """Note that the walk reached this tier, and what its selection left out."""
+        tried = self.tiers.get(tier, ([], ()))[0]
+        self.tiers[tier] = (tried, skipped)
+
+    def outcomes(self) -> tuple[ChainOutcome, ...]:
+        """What each tier's chain did, in the shape `health.assess_chain_depth` judges.
+
+        A tier the request left by overflowing its window is not judged: escalating upward is
+        the chain working as designed, and a depth alert for it would page somebody over a long
+        question rather than a failing provider.
+        """
+        return tuple(
+            ChainOutcome(tier=tier, attempts=tuple(tried), skipped=skipped)
+            for tier, (tried, skipped) in self.tiers.items()
+            if not any(
+                one.trigger is not None and permits_tier_escalation(one.trigger) for one in tried
+            )
+        )
+
+    async def through(
+        self, tier: Tier, rungs: tuple[RoutingRung, ...], *, counted: bool = True
+    ) -> DriverResponse | None:
+        """Try this tier's rungs in order. The answer, or None to go on, or a raise to stop.
+
+        `counted` is False for a pinned rung, whose tries are not a depth in any chain.
+        """
         for rung in rungs:
             for _ in range(self.policy(rung).attempts):
                 claimed = self._admit(rung.deployment.id)
@@ -459,7 +627,7 @@ class _Walk:
                     # earlier in this same walk: the provider is not asked again here.
                     break
                 try:
-                    answered = await self._attempt(tier, rung)
+                    answered = await self._attempt(tier, rung, counted=counted)
                 finally:
                     if claimed:
                         self.claims.pop(rung.deployment.id, None)
@@ -503,7 +671,28 @@ class _Walk:
             )
         return record.client.policy_for(rung, self.lane)
 
-    async def _attempt(self, tier: Tier, rung: RoutingRung) -> DriverResponse | None:
+    def _tried(self, tier: Tier, attempt: ChainAttempt) -> None:
+        tried, skipped = self.tiers.get(tier, ([], ()))
+        tried.append(attempt)
+        self.tiers[tier] = (tried, skipped)
+
+    async def _observed(self, rung: RoutingRung, outcome: str, at: datetime) -> None:
+        """Append the outcome to the deployment's live ring when it says anything about health.
+
+        Only an answer and the provider's own failure are health, as the replay reads them:
+        `brain.models.evidence.ONLY_THE_PROVIDERS_OWN_FAILURE_IS_ILL_HEALTH`.
+        """
+        if outcome == OK or outcome in ILL_HEALTH:
+            await self.health.observed(
+                deployment_id=rung.deployment.id,
+                provider=rung.deployment.provider,
+                ok=outcome == OK,
+                at=at,
+            )
+
+    async def _attempt(
+        self, tier: Tier, rung: RoutingRung, *, counted: bool = True
+    ) -> DriverResponse | None:
         """One try: counted, recorded, sent, recorded again, and learned from."""
         ladder_rung = self.assembly.rung(rung.deployment.id, tier)
         if self.last is not None:
@@ -534,9 +723,19 @@ class _Walk:
         except ProviderUnavailable as failed:
             failure = failed.failure
             at = self.clock()
-            await self.attempts.finished(
-                token, at=at, outcome=outcome_of(failure), status=failure.status
-            )
+            outcome = outcome_of(failure)
+            await self.attempts.finished(token, at=at, outcome=outcome, status=failure.status)
+            await self._observed(rung, outcome, at)
+            if counted:
+                self._tried(
+                    tier,
+                    ChainAttempt(
+                        deployment_id=rung.deployment.id,
+                        position=rung.position,
+                        succeeded=False,
+                        trigger=failure.trigger,
+                    ),
+                )
             self._learn(rung, at, failure)
             trigger = failure.trigger
             if trigger is None:
@@ -544,7 +743,16 @@ class _Walk:
             if permits_tier_escalation(trigger):
                 self.overflowed = True
             return None
-        await self.attempts.finished(token, at=self.clock(), outcome=outcome_of(None), status=None)
+        at = self.clock()
+        await self.attempts.finished(token, at=at, outcome=outcome_of(None), status=None)
+        await self._observed(rung, OK, at)
+        if counted:
+            self._tried(
+                tier,
+                ChainAttempt(
+                    deployment_id=rung.deployment.id, position=rung.position, succeeded=True
+                ),
+            )
         self.meter.answered(
             response, provider=rung.deployment.provider, agent_version=self.agent_version
         )

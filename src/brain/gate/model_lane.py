@@ -48,8 +48,11 @@ estimate, because an estimate is a number somebody tunes. See
 
 **The call is `brain.models.calls.ModelCalls.complete` on the answer lane, with the request's own
 meter.** The executor walks the ladder, writes the attempt rows and meters every attempt; this
-module adds none of that and hands it the lane, the tier `classify_tier` chose, the output cap
-`brain.gate.effort` pins for the lane and the request's trace. A provider that cannot be reached
+module adds none of that and hands it the lane, the request its tier is classified from, the
+caller's reach, the output cap `brain.gate.effort` pins for the lane and the request's trace. The
+tier is classified by the executor against `ops.routing_tier`'s numbers (M5.2.2), and the reach is
+how a residency constraint attached to a scope the caller can read travels with the question to
+the chain that must honour it (M5.5.1). A provider that cannot be reached
 raises `Degraded` through the lane, which is `brain.models.driver.ProviderUnavailable`'s promise:
 say so, and never substitute an answer. A question the passage search cannot embed does the same,
 before any model is asked.
@@ -93,7 +96,7 @@ which walks the rung serving it before the agent's tier. **The call names what i
 the question, the passages and any skill descriptions, as `brain.models.disclosure` categories on
 every attempt row; a golden question asked by the matrix gate is recorded as that instead.
 
-Task ids: M3.9.3, M8.1.4, M9.2.1, M6.4.2, M5.4.1, M5.7.3, M5.6.4
+Task ids: M3.9.3, M8.1.4, M9.2.1, M6.4.2, M5.4.1, M5.7.3, M5.6.4, M5.2.2, M5.5.1
 """
 
 from __future__ import annotations
@@ -110,6 +113,7 @@ from brain.core.envelope import TypedResult
 from brain.core.field_policy import Classification, FieldPolicy, FieldRule
 from brain.core.lane import Lane
 from brain.core.redaction import ID_KEYS, ChannelPayload, RedactedAnswer, redact
+from brain.core.scope import Scope
 from brain.gate.abstain import (
     Abstention,
     SearchScope,
@@ -134,6 +138,7 @@ from brain.models.disclosure import DataCategory
 from brain.models.driver import DriverMessage, DriverResponse, ProviderUnavailable, Role
 from brain.models.metering import Meter
 from brain.models.registry import ModelPin
+from brain.models.residency import reach_scopes
 from brain.models.routing import RoutingRequest, Tier, classify_tier
 from brain.tools.registry import ToolRegistry
 from brain.tools.skills import (
@@ -276,10 +281,12 @@ class AnswerModel(Protocol):
         self,
         messages: Sequence[DriverMessage],
         *,
-        tier: Tier,
         lane: Lane,
         meter: Meter,
         trace_id: str,
+        tier: Tier | None = None,
+        routing: RoutingRequest | None = None,
+        reach: Sequence[Scope] = (),
         agent_version: str | None = None,
         max_output_tokens: int | None = None,
         pin: ModelPin | None = None,
@@ -487,15 +494,22 @@ def prompt_bytes(messages: Sequence[DriverMessage]) -> int:
     return sum(len(one.content.encode("utf-8")) for one in messages)
 
 
+def routing_for(messages: Sequence[DriverMessage], requested: Tier | None = None) -> RoutingRequest:
+    """What the answer lane's tier is classified from: an agent's own tier, and the prompt's bytes.
+
+    The executor classifies it against the tier table it reads (`brain.models.tier_rules`), so a
+    window or headroom changed on the Models screen decides this question's tier.
+    """
+    return RoutingRequest(
+        lane=Lane.ANSWER,
+        estimated_context_tokens=prompt_bytes(messages),
+        requested_tier=requested,
+    )
+
+
 def tier_for(messages: Sequence[DriverMessage], requested: Tier | None = None) -> Tier:
-    """The answer lane's tier: an agent's own tier when one runs, else the prompt's bytes."""
-    return classify_tier(
-        RoutingRequest(
-            lane=Lane.ANSWER,
-            estimated_context_tokens=prompt_bytes(messages),
-            requested_tier=requested,
-        )
-    ).tier
+    """The tier `routing_for` lands in at the compiled numbers, for a caller with no table."""
+    return classify_tier(routing_for(messages, requested)).tier
 
 
 # ------------------------------------------------------------------------------ the step
@@ -557,7 +571,8 @@ async def draft(
     try:
         response = await lane.model.complete(
             messages,
-            tier=tier_for(messages, None if agent is None else agent.record.tier),
+            routing=routing_for(messages, None if agent is None else agent.record.tier),
+            reach=reach_scopes(entitlement),
             lane=Lane.ANSWER,
             meter=meter,
             trace_id=trace_id,

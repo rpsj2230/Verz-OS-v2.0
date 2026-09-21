@@ -7,11 +7,11 @@ What an administrator would need to manage, read out of the schema, the routes a
 ## What was measured
 
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
-- 92 tables, from `brain.db.Base.metadata`.
+- 95 tables, from `brain.db.Base.metadata`.
 - 27 installation values, from `brain.install.INSTALLATION`.
-- 188 routes under `/api/v1` and `/setup`, from the API's internal document.
+- 192 routes under `/api/v1` and `/setup`, from the API's internal document.
 - 72 console addresses, from the route table in `console/src/App.tsx`.
-- 69 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 86 routes.
+- 73 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 90 routes.
 - 38 gaps recorded, and 23 routes no screen calls.
 
 ## Area by area
@@ -134,7 +134,7 @@ What an administrator would need to manage, read out of the schema, the routes a
 ### AI providers, models and the routing between them
 
 - **Screens:** `/models`, `/routing`, `/routing/:rungId`
-- **Tables:** `ops.routing_rung`, `ops.routing_tier`, `ops.model_attempt`, `ops.model_provider`, `ops.golden_question`, `ops.routing_change`
+- **Tables:** `ops.routing_rung`, `ops.routing_tier`, `ops.model_attempt`, `ops.model_provider`, `ops.golden_question`, `ops.routing_change`, `ops.provider_health`, `ops.chain_depth_alert`, `ops.residency_constraint`
 - **Installation values:** `INSTALL_MODEL_PROFILE`, `INSTALL_MODEL_ENDPOINT`, `INSTALL_EMBEDDING_DIMENSIONS`
 
 | Route | Called by |
@@ -149,11 +149,15 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `POST /api/v1/models/providers` | `/models` |
 | `POST /api/v1/models/providers/{provider}/check` | `/models` |
 | `POST /api/v1/models/providers/{provider}/retire` | `/models` |
+| `POST /api/v1/models/residency` | `/models` |
+| `POST /api/v1/models/residency/{constraint_id}/retire` | `/models` |
+| `POST /api/v1/models/tiers/{tier}/reset` | `/models` |
 | `POST /api/v1/routing/golden-questions` | `/routing`, `/routing/:rungId` |
 | `POST /api/v1/routing/golden-questions/{question_id}/retire` | `/routing`, `/routing/:rungId` |
 | `POST /api/v1/routing/rungs` | `/routing`, `/routing/:rungId` |
 | `PUT /api/v1/models/providers/{provider}` | `/models` |
 | `PUT /api/v1/models/providers/{provider}/terms` | `/models` |
+| `PUT /api/v1/models/tiers/{tier}` | `/models` |
 
 - **Gap.** A provider's terms and an added provider's retirement are logged and not on the audit ledger: the ledger's action list gains no provider entry in this release. Open leaf `M5.6.4`.
 - **Gap.** A provider key cannot be written or replaced from a screen after setup. Open leaf `M27.8.8`.
@@ -487,7 +491,7 @@ No gap recorded.
 
 ## Every write the console sends, followed to the system
 
-Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 73 of 86 write routes have all three proved or not applicable, 12 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
+Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 73 of 90 write routes have all three proved or not applicable, 12 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
 
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
@@ -552,6 +556,9 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /api/v1/models/providers` | `/models` | `test_an_added_provider_has_its_key_kept_in_its_own_slot_before_its_row_is_written` in `tests/unit/test_provider_registry_routes.py` | `test_a_key_set_from_the_console_is_recorded_as_its_setter_with_their_reach_and_trace` in `tests/unit/test_credential_routes.py` | `test_a_provider_added_from_the_console_answers_through_the_ladder_with_no_release` in `tests/unit/test_model_calls.py` |
 | `POST /api/v1/models/providers/{provider}/check` | `/models` | `test_a_check_is_one_metered_call_recorded_on_the_ledger_and_never_as_a_question` in `tests/unit/test_provider_routes.py` | Not applicable: A check changes no setting and no record an administrator manages; it is a metered call on the request ledger, not a change to audit. | `test_a_check_is_one_metered_call_recorded_on_the_ledger_and_never_as_a_question` in `tests/unit/test_provider_routes.py` |
 | `POST /api/v1/models/providers/{provider}/retire` | `/models` | `test_an_added_provider_is_retired_and_a_built_in_one_cannot_be` in `tests/unit/test_provider_registry_routes.py` | **None.** Retiring an added provider is logged and not written to the audit ledger in this release. Leaf `M5.6.4`. | `test_a_provider_with_no_driver_is_told_which_of_the_two_things_is_missing` in `tests/unit/test_model_assembly.py` |
+| `POST /api/v1/models/residency` | `/models` | `test_a_residency_constraint_is_written_with_its_scope_and_regions` in `tests/unit/test_model_health_routes.py` | **None.** A residency constraint is logged and not written to the audit ledger in this release. Leaf `M5.5.1`. | `test_a_reach_touching_a_constrained_scope_skips_the_rung_outside_its_regions` in `tests/unit/test_model_calls.py` |
+| `POST /api/v1/models/residency/{constraint_id}/retire` | `/models` | `test_retiring_a_constraint_marks_it_retired_and_deletes_nothing` in `tests/unit/test_model_health_routes.py` | **None.** Retiring a residency constraint is logged and not written to the audit ledger in this release. Leaf `M5.5.1`. | `test_a_reach_with_nowhere_compliant_is_refused_and_one_elsewhere_is_answered` in `tests/unit/test_model_calls.py` |
+| `POST /api/v1/models/tiers/{tier}/reset` | `/models` | `test_a_reset_retires_the_row_so_the_tier_runs_at_the_product_default` in `tests/unit/test_model_health_routes.py` | **None.** Resetting a tier is logged and not written to the audit ledger in this release. Leaf `M5.2.2`. | `test_a_tier_with_no_row_runs_at_the_compiled_numbers_and_is_not_marked_configured` in `tests/unit/test_tier_rules.py` |
 | `POST /api/v1/notifications/notices/{kind}` | `/notifications` | `test_switching_a_notice_off_writes_its_row_with_the_writer_and_the_next_read_sees_it` in `tests/unit/test_notification_routes.py` | **None.** The write is an ops.setting row, which migration 0059's trigger records as a setting entry naming the key, the change and the writer, and no test follows this route's write to that entry. | `test_switched_off_a_re_verification_run_records_nothing_and_switched_on_it_does` in `tests/unit/test_notices.py` (database, in CI) |
 | `POST /api/v1/notifications/relay` | `/notifications` | `test_a_relay_is_saved_as_five_rows_with_its_writer_and_read_back_configured` in `tests/unit/test_notification_routes.py` | **None.** The write is an ops.setting row, which migration 0059's trigger records as a setting entry naming the key, the change and the writer, and no test follows this route's write to that entry. | `test_a_test_message_reaches_the_saved_relay_once_with_the_kept_password` in `tests/unit/test_notification_routes.py` |
 | `POST /api/v1/notifications/relay/password` | `/notifications` | `test_a_password_is_kept_at_its_slot_recorded_and_never_answered` in `tests/unit/test_notification_routes.py` | `test_a_password_is_kept_at_its_slot_recorded_and_never_answered` in `tests/unit/test_notification_routes.py` | `test_a_test_message_reaches_the_saved_relay_once_with_the_kept_password` in `tests/unit/test_notification_routes.py` |
@@ -577,6 +584,7 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `PUT /api/v1/install/settings/{name}` | `/settings` | `test_saving_a_company_name_writes_its_row_and_the_console_header_draws_it_next` in `tests/unit/test_settings_routes.py` | **None.** The route sets the audit attribution 0059's trigger reads, which BRANDING_SAVED asserts over a stub; no scratch-Postgres test yet reads the ledger entry back. | `test_saving_a_company_name_writes_its_row_and_the_console_header_draws_it_next` in `tests/unit/test_settings_routes.py` |
 | `PUT /api/v1/models/providers/{provider}` | `/models` | `test_the_stores_read_the_ladder_write_attempts_by_id_and_keep_a_switch` in `tests/unit/test_model_service.py` (database, in CI) | **None.** The write is an ops.setting row, which migration 0059's trigger records as a setting entry naming the key, the change and the writer, and no test follows this route's write to that entry. | `test_switching_a_provider_off_takes_its_rungs_out_of_the_next_plan_at_once` in `tests/unit/test_provider_routes.py` |
 | `PUT /api/v1/models/providers/{provider}/terms` | `/models` | `test_terms_recorded_for_a_built_in_provider_write_its_first_registry_row` in `tests/unit/test_provider_registry_routes.py` | **None.** A provider's terms are logged and not written to the audit ledger in this release. Leaf `M5.6.4`. | `test_a_constrained_call_skips_an_undocumented_rung_for_the_documented_one_behind_it` in `tests/unit/test_model_calls.py` |
+| `PUT /api/v1/models/tiers/{tier}` | `/models` | `test_a_tier_rule_is_written_as_the_window_and_only_the_keys_the_router_reads` in `tests/unit/test_model_health_routes.py` | **None.** A tier's numbers are logged and not written to the audit ledger in this release. Leaf `M5.2.2`. | `test_a_request_is_classified_against_the_tier_table_the_ladder_read` in `tests/unit/test_model_calls.py` |
 
 ## The rules every screen is held to
 

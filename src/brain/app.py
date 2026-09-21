@@ -141,6 +141,7 @@ from brain.lark_connect_routes import router as lark_connect_router
 from brain.log_routes import router as log_router
 from brain.migrate import run_migrations
 from brain.mine_routes import router as mine_router
+from brain.model_health_routes import router as model_health_router
 from brain.models.default_ladder import reconcile as reconcile_default_ladder
 from brain.navigation_routes import router as navigation_router
 from brain.notification_routes import router as notification_router
@@ -1339,6 +1340,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(provider_registry_router)
     # An agent's pinned provider and model, tried before its tier. See `brain.agent_model_routes`.
     app.include_router(agent_model_router)
+    # A tier's window and headroom, and residency constraints. See `brain.model_health_routes`.
+    app.include_router(model_health_router)
     # Departments and teams, Elevation, Access review and Subscribers, beside People in Govern. A
     # router of its own because one of its four is the only write that records a review decision,
     # and two of its screens say what the install does not store rather than drawing an empty

@@ -284,6 +284,12 @@ THROUGH: Final[Mapping[str, Through]] = MappingProxyType(
 #: Tables in a PostgreSQL store no row of which is a person's own. See `AN_ACTOR_IS_NOT_AN_OWNER`.
 ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
     {
+        # A provider's call and probe outcomes, per deployment: about a provider, not a person.
+        "ops.provider_health",
+        # A question that fell past its tier's primary: a trace id, tier and depth, no person.
+        "ops.chain_depth_alert",
+        # Which regions a scope's questions may go to; its author is an actor, not an owner.
+        "ops.residency_constraint",
         "agent.automation",
         # Why an automation's schedule changed and who changed it: an actor, not an owner.
         "agent.automation_schedule",

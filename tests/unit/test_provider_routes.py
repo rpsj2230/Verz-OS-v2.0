@@ -86,6 +86,10 @@ RUNG_TABLES = (
     "ops.setting",
     "ops.model_provider",
     "ops.routing_change",
+    # Read with the ladder since 0108: the tier rows, the residency constraints, the rings.
+    "ops.routing_tier",
+    "ops.residency_constraint",
+    "ops.provider_health",
 )
 DIALECT = create_engine("postgresql+psycopg://", poolclass=NullPool).dialect
 

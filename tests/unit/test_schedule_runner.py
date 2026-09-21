@@ -256,10 +256,14 @@ def test_every_control_the_schedule_cannot_start_yet_says_what_it_is_waiting_for
     **Eight on 2026-09-21**, when `directory_sync` was given the roster tables, the staff
     source's credential slot and the readers its sentence here said it waited for.
 
+    **Seven on 2026-09-22**, when `model_health_probes` was given `ops.provider_health` to put a
+    result in and the worker's read of the model provider slots to probe with.
+
     Delete this and the gap report can go empty because the list went empty."""
     found = runner_gaps()
 
-    assert len(found) == 8
+    assert len(found) == 7
+    assert not any("model_health_probes" in one for one in found)
     assert not any("directory_sync" in one for one in found)
     assert not any("outbox_dispatch" in one for one in found)
     assert not any("canary_run" in one for one in found)
@@ -434,11 +438,15 @@ def test_the_registry_still_reports_every_orphan_this_runner_has_not_wired() -> 
     **And twenty controls later that day, with six orphans still.** `vault_audit_ship` arrived
     already wired, with the worker overlay's read-only mount of the vault's log.
 
+    **And to five on 2026-09-22.** `start_control` calls the model health prober's runner, so
+    `model_health_probes` left the list.
+
     Delete this and the scheduler can start running mechanisms the handover pack still
     describes as unwired."""
     from brain.ops.controls import orphans
 
-    assert len(orphans()) == 6
+    assert len(orphans()) == 5
+    assert "model_health_probes" not in {one.name for one in orphans()}
     assert "canary_run" not in {one.name for one in orphans()}
     assert "outbox_dispatch" not in {one.name for one in orphans()}
     assert "knowledge_reverification" not in {one.name for one in orphans()}
@@ -478,6 +486,7 @@ def test_the_dispatch_names_exactly_the_runners_that_can_run() -> None:
         "connector_sync",
         "vault_audit_ship",
         "directory_sync",
+        "model_health_probes",
     }
 
 

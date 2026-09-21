@@ -31,10 +31,10 @@ mechanisms behind whichever is slowest, and a retention sweep is the slowest thi
 identifier is derived from the control's name so it cannot be typed wrong and cannot collide
 with `brain.migrate`'s.
 
-**Eleven controls are wired, and the rest are stated rather than implied.** `retention_sweep`,
+**Twelve controls are wired, and the rest are stated rather than implied.** `retention_sweep`,
 `canary_run`, `knowledge_reverification`, `outbox_dispatch`, `spend_report_refresh`,
-`erasure_queue`, `vault_token_renewal`, `automation_run`, `connector_sync`, `vault_audit_ship`
-and, since 2026-09-21, `directory_sync` have a runner that
+`erasure_queue`, `vault_token_renewal`, `automation_run`, `connector_sync`, `vault_audit_ship`,
+since 2026-09-21 `directory_sync`, and since 2026-09-22 `model_health_probes` have a runner that
 gathers what they need, and `brain.ops.worker` starts them on the schedule through
 `start_control`. Every other control entry point is a policy function that takes its inputs:
 `retention.enforcement_report` takes a census "the executor saw", `denial_alerts.digest` takes
@@ -63,7 +63,7 @@ Rejected: recording a run before taking the lock, so that a contended tick leave
 would fill the table with rows for runs that never happened, and "this control has thousands
 of attempts and no successes" would then mean two different things.
 
-Task ids: M37.5.1.3, M34.2.1.3, M27.8.12, M27.7.19, M42.6.2, M38.2.2.5, M42.6.5, M1.6.12
+Task ids: M37.5.1.3, M34.2.1.3, M27.8.12, M27.7.19, M42.6.2, M38.2.2.5, M42.6.5, M1.6.12, M5.4.7
 """
 
 from __future__ import annotations
@@ -84,6 +84,7 @@ from brain.ops.connector_sync_run import run_connector_sync_now
 from brain.ops.controls import Control
 from brain.ops.erasure_store import drain_erasure_queue
 from brain.ops.ledger_partitions import maintain as maintain_ledger_partitions
+from brain.ops.model_probe_run import run_model_probes_now
 from brain.ops.retention_store import run_retention_sweep
 from brain.ops.schedule import TICK, Owed, owed, schedulable
 from brain.ops.spend_store import refresh_spend_daily_now
@@ -499,9 +500,40 @@ def directory_sync(now: datetime, report_only: bool, database_url: str) -> str:
     return ran.summary()
 
 
+#: Why a probe tick does not hold back in report-only mode.
+A_PROBE_IN_REPORT_ONLY_MODE_STILL_PROBES: Final = (
+    "Report-only mode exists for controls that remove data, and a probe removes nothing: it sends "
+    "one fixed sentence and appends whether the provider answered. brain.ops.schedule never asks "
+    "for it, and declining when asked would leave a dead provider in rotation for no safety "
+    "gained, so the mode is honoured by saying so."
+)
+
+
+def model_health_probes(now: datetime, report_only: bool, database_url: str) -> str:
+    """Probe the providers nobody has asked lately, and say what the tick came to.
+
+    `brain.ops.model_probe_run.run_model_probes_now` is the literal call the registry reads, on the
+    worker's own connection, with the worker's vault for the provider keys it reads under its own
+    policy (`ops/openbao/policies/worker.hcl`). With no key held it opens nothing and says so.
+    Probes in report-only mode too, see `A_PROBE_IN_REPORT_ONLY_MODE_STILL_PROBES`, and takes the
+    worker's event loop for the reason `spend_report_refresh` gives.
+    """
+    from brain.ops.worker import _loop_factory
+
+    settings = settings_from(process_environment())
+    said = run_model_probes_now(
+        database_url,
+        now=now,
+        vault_address=settings.vault_address,
+        vault_token=settings.vault_token,
+        loop_factory=_loop_factory(),
+    ).summary()
+    return f"report only, probed anyway: {said}" if report_only else said
+
+
 #: What each schedulable control still needs before it can be started, by name.
 #:
-#: Eleven with a `run` since 2026-09-21, which the worker's schedule starts, and the rest saying
+#: Twelve with a `run` since 2026-09-22, which the worker's schedule starts, and the rest saying
 #: what they wait for, which is the point of the module header. Each sentence is a piece of work
 #: somebody can pick up, written from reading the entry point's own signature rather than from a
 #: guess about it.
@@ -568,14 +600,9 @@ RUNNERS: Final[tuple[Runner, ...]] = (
             "verifying, and no connector's read-back is called by anything"
         ),
     ),
-    Runner(
-        name="model_health_probes",
-        needs=(
-            "an inference endpoint to probe and somewhere to put the result. `next_probes` "
-            "says which deployments are due a probe; issuing one needs the client and the "
-            "inference server, which Needs Rupash items 25 and 31 are about"
-        ),
-    ),
+    # Wired on 2026-09-22 with `ops.provider_health` and the worker's read of the model provider
+    # slots. See `brain.ops.model_probe_run`.
+    Runner(name="model_health_probes", run=model_health_probes),
     Runner(
         name="spend_correction",
         needs=(
@@ -649,6 +676,8 @@ def start_control(name: str, *, now: datetime, report_only: bool, database_url: 
             return vault_audit_ship(now, report_only, database_url)
         case "directory_sync":
             return directory_sync(now, report_only, database_url)
+        case "model_health_probes":
+            return model_health_probes(now, report_only, database_url)
         case _:
             runner = runner_for(name)
             msg = (

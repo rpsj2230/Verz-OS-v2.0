@@ -305,6 +305,19 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # their keys this process's environment holds.
         "brain.models.calls:AddedProviders.drivers": Repeat.DERIVED_STATE,
         "brain.models.calls:AddedProviders.held": Repeat.READS,
+        # Provider health (M5.4.3, M5.4.8): a live outcome appended to its deployment's ring in
+        # `ops.provider_health`, and a depth alert appended to `ops.chain_depth_alert`. Both are
+        # rows here; a second append is a second observation, read as one.
+        "brain.models.calls:HealthLog.observed": Repeat.DERIVED_STATE,
+        "brain.models.calls:DepthAlerts.raised": Repeat.DERIVED_STATE,
+        # The prober (M5.4.7): a claim is a conditional upsert that returns nothing when repeated
+        # inside the interval, a probe is one model call that leaves nothing at the provider, its
+        # outcome is a ring entry, and the keys are read from the vault or the environment.
+        "brain.ops.model_probe_run:ProbeStore.claim": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.ops.model_probe_run:ProbeStore.observed": Repeat.DERIVED_STATE,
+        "brain.ops.model_probe_run:ProbeSender.send": Repeat.NO_EFFECT_AT_THE_FAR_END,
+        "brain.ops.model_probe_run:ProviderKeys.held": Repeat.READS,
+        "brain.ops.model_probe_run:ProviderKeys.lookup": Repeat.READS,
         # The matrix gate asks the golden questions through the lane: model calls that leave
         # nothing at the provider, and attempt rows under a trace of their own per question.
         "brain.ops.matrix_gate_run:MatrixGate.decide": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
