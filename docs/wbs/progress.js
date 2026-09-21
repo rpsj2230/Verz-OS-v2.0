@@ -34,20 +34,50 @@ const STATUSES = ["OPEN", "IN PROGRESS", "READY FOR TESTING", "BLOCKED"];
 
 //: Leaf id to where it stands. Ordered by id.
 const PROGRESS = {
+  "M0.3.4": {
+    status: "BLOCKED",
+    why: "server change needs owner permission: add the PgBouncer pools per ops/vps/POOLING.md",
+    updated: "2026-09-21",
+  },
+  "M0.3.5": {
+    status: "BLOCKED",
+    why: "server change needs owner permission: add the PgBouncer pools per ops/vps/POOLING.md",
+    updated: "2026-09-21",
+  },
+  "M0.3.6": {
+    status: "BLOCKED",
+    why: "repo half done (brain.deployment.postgres_settings); install half needs owner permission, ops/vps/POOLING.md",
+    updated: "2026-09-21",
+  },
+  "M0.4.2": {
+    status: "BLOCKED",
+    why: "presidio-analyzer has no service in the repo; image, port and health check undecided",
+    updated: "2026-09-21",
+  },
+  "M31.2.1.2": {
+    status: "READY FOR TESTING",
+    why: "engine tests pass for session and transaction pooling; closing needs PgBouncer on the install (M0.3.4)",
+    updated: "2026-09-21",
+  },
+  "M31.2.1.3": {
+    status: "READY FOR TESTING",
+    why: "engine tests pass for session and transaction pooling; closing needs PgBouncer on the install (M0.3.4)",
+    updated: "2026-09-21",
+  },
+  "M31.2.1.4": {
+    status: "READY FOR TESTING",
+    why: "engine tests pass for session and transaction pooling; closing needs PgBouncer on the install (M0.3.4)",
+    updated: "2026-09-21",
+  },
   "M38.2.1.1": {
     status: "READY FOR TESTING",
-    why: "WAVE_RECORDS in docs/wbs/progress.js and the /build/waves page that lists it; no wave has closed yet, so the record is empty",
-    updated: "2026-09-17",
+    why: "WAVE_RECORDS and /build/waves are live on staging; proved when the first wave is accepted and recorded",
+    updated: "2026-09-21",
   },
-  "M38.2.1.6": {
+  "M38.4.1.1": {
     status: "READY FOR TESTING",
-    why: "/build/waves: per wave closed, open, in progress, ready for testing and blocked with reasons, from the status baked into the image",
-    updated: "2026-09-17",
-  },
-  "M38.3.1.2": {
-    status: "READY FOR TESTING",
-    why: "the Status file workflow commits status.json to the status branch after each green CI on main; it has not run yet, so the first merge after this lands is the test",
-    updated: "2026-09-17",
+    why: "live on staging at 9fb9367; the Connectors card needs checking signed in",
+    updated: "2026-09-21",
   },
 };
 
