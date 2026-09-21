@@ -19,8 +19,9 @@ place the real answers are asked. Rejected: a cache of those answers committed t
 which is a second record that is right on the day it is written and silently stale after.
 
 **Three outcomes, and only one is a pass.** A refusal fails the run. A component the owner has
-not yet decided about is listed under `AWAITING_THE_OWNER` by name, never by licence, so a new
-dependency under the same licence is still refused rather than quietly admitted. A component
+not yet decided about is listed under `AWAITING_THE_OWNER`, and one he allowed under
+`OWNER_ALLOWED`, both by name and pinned licence, never by licence alone, so a new dependency
+under the same licence is still refused rather than quietly admitted. A component
 with nothing readable is a note, the rule the licence sweep already has.
 
 **The proof is a run, not a test.** `prove` copies the real application lock, adds a real GPL
@@ -125,20 +126,53 @@ IMAGE_TERMS: Final[Mapping[str, ImageTerms]] = {
     "valkey/valkey": ImageTerms("BSD-3-Clause", False, "valkey COPYING"),
 }
 
-#: Components outside the allowlist that wait on a licence decision only the owner can make.
-#: Keyed by component, never by licence, so a new dependency under one of these licences is
-#: still refused. Each is printed on every run, so the list cannot be forgotten.
-AWAITING_THE_OWNER: Final[Mapping[tuple[str, str], str]] = {
-    ("image", "postgres"): "the PostgreSQL licence is permissive and is not on the allowlist",
-    ("image", "pgvector/pgvector"): "the PostgreSQL licence, as above",
-    ("image", "ubuntu/squid"): (
-        "GPL-2.0-or-later, run unmodified in its own container as the automation egress proxy"
+
+@dataclass(frozen=True)
+class OwnerDecision:
+    """One component the owner admitted outside the allowlist, under the licence he read."""
+
+    #: The exact licence decided on. A different licence on a later version is refused again.
+    licence: str
+    reason: str
+
+
+_ITEM_70: Final = "owner decision 2026-09-21, needs-rupash item 70"
+
+#: Components outside the allowlist that the owner allowed. Keyed by component and pinned to
+#: the licence, never by licence alone, so another dependency under one of these licences is
+#: still refused and waits on its own decision.
+OWNER_ALLOWED: Final[Mapping[tuple[str, str], OwnerDecision]] = {
+    ("image", "postgres"): OwnerDecision(
+        "PostgreSQL", f"the PostgreSQL licence is permissive (MIT-like); {_ITEM_70}"
     ),
-    ("npm", "@fontsource/ibm-plex-mono"): "OFL-1.1, a font licence, bundled into the console",
-    ("npm", "@fontsource/ibm-plex-sans"): "OFL-1.1, as above",
-    ("npm", "@fontsource/poppins"): "OFL-1.1, as above",
-    ("pypi", "regex"): "Apache-2.0 AND CNRI-Python; CNRI-Python is permissive and not listed",
+    ("image", "pgvector/pgvector"): OwnerDecision(
+        "PostgreSQL", f"PostgreSQL plus the pgvector extension, both PostgreSQL licence; {_ITEM_70}"
+    ),
+    # GPL for this image ONLY: nothing here links to squid, so its copyleft reaches no code of
+    # ours. Any other GPL component is still refused.
+    ("image", "ubuntu/squid"): OwnerDecision(
+        "GPL-2.0-or-later",
+        "the automation egress proxy runs unmodified in its own container and nothing links "
+        f"to it, so the GPL reaches no code shipped here; {_ITEM_70}",
+    ),
+    ("npm", "@fontsource/ibm-plex-mono"): OwnerDecision(
+        "OFL-1.1", f"a font bundled into the console; OFL permits embedding and use; {_ITEM_70}"
+    ),
+    ("npm", "@fontsource/ibm-plex-sans"): OwnerDecision(
+        "OFL-1.1", f"a font bundled into the console; OFL permits embedding and use; {_ITEM_70}"
+    ),
+    ("npm", "@fontsource/poppins"): OwnerDecision(
+        "OFL-1.1", f"a font bundled into the console; OFL permits embedding and use; {_ITEM_70}"
+    ),
+    ("pypi", "regex"): OwnerDecision(
+        "Apache-2.0 AND CNRI-Python",
+        f"CNRI-Python is a permissive licence on the code regex derives from CPython; {_ITEM_70}",
+    ),
 }
+
+#: Components waiting on a licence decision only the owner can make, printed on every run so
+#: the list cannot be forgotten. Empty since item 70; keyed by component like the table above.
+AWAITING_THE_OWNER: Final[Mapping[tuple[str, str], str]] = {}
 
 
 @dataclass(frozen=True)
@@ -280,8 +314,15 @@ def _judge_licence(component: Component, licence: str | None, into: Findings) ->
     key = (component.ecosystem, component.name)
     if not licence:
         into.notes.append(f"{_label(component)} declares no licence this can read")
-    elif licence_is_allowed(licence):
+    elif licence_is_allowed(licence) or (
+        key in OWNER_ALLOWED and OWNER_ALLOWED[key].licence == licence
+    ):
         return
+    elif key in OWNER_ALLOWED:
+        decided = OWNER_ALLOWED[key].licence
+        into.refused.append(
+            f"{_label(component)} is under {licence!r}; the owner allowed it under {decided!r} only"
+        )
     elif key in AWAITING_THE_OWNER:
         into.awaiting.append(f"{_label(component)} is under {licence!r}: {AWAITING_THE_OWNER[key]}")
     else:
