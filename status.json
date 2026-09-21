@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-09-21T06:02:25.553444+00:00",
-  "commit": "784d7f2",
-  "commit_subject": "Deploys are health-gated, rolled back and recorded, and the Version screen lists them",
+  "generated_at": "2026-09-21T06:11:42.366941+00:00",
+  "commit": "aec967a",
+  "commit_subject": "Seven foundation tasks close on CI proof, and landed Wave 0 work gets honest statuses",
   "total": 1601,
-  "done": 164,
-  "percent": 10.2,
+  "done": 171,
+  "percent": 10.7,
   "acts": 45,
   "decided": 101,
   "current_wave": 0,
@@ -13,12 +13,12 @@
       "wave": 0,
       "name": "Foundation",
       "total": 137,
-      "done": 84,
-      "percent": 61.3,
+      "done": 91,
+      "percent": 66.4,
       "in_progress": 0,
       "ready_for_testing": 4,
-      "blocked": 4,
-      "open": 45,
+      "blocked": 15,
+      "open": 27,
       "acts": 1,
       "decided": 3
     },
@@ -107,7 +107,7 @@
       "name": "Foundation and repository",
       "wave": 0,
       "total": 41,
-      "done": 29,
+      "done": 33,
       "acts": 0,
       "decided": 0
     },
@@ -449,7 +449,7 @@
       "name": "Continuous delivery and live status",
       "wave": 0,
       "total": 51,
-      "done": 21,
+      "done": 24,
       "acts": 3,
       "decided": 1
     },
@@ -511,13 +511,17 @@
     "M0.4.5",
     "M0.5.1",
     "M0.5.2",
+    "M0.5.3",
     "M0.5.4",
     "M0.5.5",
     "M0.5.6",
+    "M0.5.7",
+    "M0.5.8",
     "M0.6.1",
     "M0.6.2",
     "M0.6.3",
     "M0.6.4",
+    "M0.6.5",
     "M0.6.6",
     "M0.6.7",
     "M1.1.2",
@@ -621,6 +625,7 @@
     "M38.1.3.1",
     "M38.1.3.2",
     "M38.1.4.1",
+    "M38.1.4.4",
     "M38.2.1.6",
     "M38.2.2.1",
     "M38.3.1.1",
@@ -632,6 +637,8 @@
     "M38.3.2.3",
     "M38.3.2.4",
     "M38.3.2.5",
+    "M38.4.1.1",
+    "M38.5.2",
     "M4.3.3",
     "M4.4.3",
     "M41.1.1",
@@ -665,6 +672,11 @@
     "M6.2.6"
   ],
   "leaf_status": {
+    "M0.1.1": {
+      "status": "BLOCKED",
+      "why": "owner GitHub settings: repository is public and main has no branch protection; CODEOWNERS is being added",
+      "updated": "2026-09-21"
+    },
     "M0.3.4": {
       "status": "BLOCKED",
       "why": "server change needs owner permission: add the PgBouncer pools per ops/vps/POOLING.md",
@@ -685,6 +697,11 @@
       "why": "presidio-analyzer has no service in the repo; image, port and health check undecided",
       "updated": "2026-09-21"
     },
+    "M0.7.1": {
+      "status": "BLOCKED",
+      "why": "owner decision: 7 licences await the allowlist (postgres/pgvector, ubuntu/squid, three @fontsource fonts, regex); recommended allow all",
+      "updated": "2026-09-21"
+    },
     "M31.2.1.2": {
       "status": "READY FOR TESTING",
       "why": "engine tests pass for session and transaction pooling; closing needs PgBouncer on the install (M0.3.4)",
@@ -700,19 +717,64 @@
       "why": "engine tests pass for session and transaction pooling; closing needs PgBouncer on the install (M0.3.4)",
       "updated": "2026-09-21"
     },
+    "M38.1.1.5": {
+      "status": "BLOCKED",
+      "why": "owner GitHub settings: CODEOWNERS only forces review once branch protection requires it",
+      "updated": "2026-09-21"
+    },
+    "M38.1.3.3": {
+      "status": "BLOCKED",
+      "why": "server change needs owner permission: copy ops/deploy/brain-deploy to /usr/local/bin on the server",
+      "updated": "2026-09-21"
+    },
+    "M38.1.3.4": {
+      "status": "BLOCKED",
+      "why": "server change needs owner permission: copy ops/deploy/brain-deploy to /usr/local/bin on the server",
+      "updated": "2026-09-21"
+    },
+    "M38.1.3.5": {
+      "status": "READY FOR TESTING",
+      "why": "table 0091 live on staging at 784d7f2 and the Version screen lists it; new records need the server script, and the screen needs checking signed in",
+      "updated": "2026-09-21"
+    },
+    "M38.1.4.2": {
+      "status": "BLOCKED",
+      "why": "server change needs owner permission",
+      "updated": "2026-09-21"
+    },
+    "M38.1.4.3": {
+      "status": "BLOCKED",
+      "why": "server change needs owner permission",
+      "updated": "2026-09-21"
+    },
     "M38.2.1.1": {
       "status": "READY FOR TESTING",
       "why": "WAVE_RECORDS and /build/waves are live on staging; proved when the first wave is accepted and recorded",
       "updated": "2026-09-21"
     },
-    "M38.4.1.1": {
-      "status": "READY FOR TESTING",
-      "why": "live on staging at 9fb9367; the Connectors card needs checking signed in",
+    "M38.5.1": {
+      "status": "BLOCKED",
+      "why": "server change needs owner permission: install ops/deploy/brain-autodeploy with the 900-second timeout",
+      "updated": "2026-09-21"
+    },
+    "M41.2.7": {
+      "status": "BLOCKED",
+      "why": "needs the signing key slot, which arrives in Wave 3",
+      "updated": "2026-09-21"
+    },
+    "M41.3.1": {
+      "status": "BLOCKED",
+      "why": "a release tag needs the owner's go-ahead",
+      "updated": "2026-09-21"
+    },
+    "M41.3.2": {
+      "status": "BLOCKED",
+      "why": "owner question: is the v1 repository archived",
       "updated": "2026-09-21"
     }
   },
   "wave_records": {},
-  "closed_today": 5,
+  "closed_today": 12,
   "next_up": [
     "M0.1.1",
     "M0.2.5",
@@ -721,6 +783,12 @@
     "M0.3.6"
   ],
   "recent": [
+    {
+      "sha": "aec967a",
+      "at": "2026-09-21T06:10:50+00:00",
+      "subject": "Seven foundation tasks close on CI proof, and landed Wave 0 work gets honest statuses",
+      "closed": "M0.5.3,M0.5.7,M0.5.8,M0.6.5,M38.1.4.4,M38.4.1.1,M38.5.2"
+    },
     {
       "sha": "1b0b742",
       "at": "2026-09-21T04:40:08+00:00",
@@ -834,12 +902,6 @@
       "at": "2026-09-16T19:49:58+00:00",
       "subject": "A person who does not use a terminal installs by double-clicking a file on Windows, and the wizard's staff list screen chooses a source, signs in to it and reads the list before anything is written",
       "closed": "M42.5.7,M42.6.6"
-    },
-    {
-      "sha": "bb78308",
-      "at": "2026-09-16T19:19:53+00:00",
-      "subject": "An administrator adds a skill from a pasted or uploaded SKILL.md, somebody else approves it, the screen says what it is trusted to reach, and it is assigned to an agent through attach_skill without widening anybody",
-      "closed": "M42.6.4"
     }
   ]
 }
