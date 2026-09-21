@@ -628,6 +628,264 @@ jobs:
         if: always()
         run: docker compose down -v
 
+  # M41.2.6 and M41.4.1 on a real install rather than over fakes. `brain.ops.handover_run` is
+  # tested against a dictionary pretending to be a database and another pretending to be an
+  # object store, and neither can refuse a COPY, sign a request wrongly or keep a schema a drop
+  # missed. So this builds an install from empty with its own object store and vault, loads the
+  # demo, puts objects under this install's prefix and a neighbour's, and runs the procedure in
+  # docs/install/handover.md step by step: export, the company's own check with `sha256sum -c`,
+  # plan, remove with the id typed back, the operator's steps recorded with what was really done,
+  # certify, and then looks for itself at what is left.
+  #
+  # **The prefix is saved in the console's table and deliberately not in the environment.**
+  # That is how the wizard leaves an install, and the command read only the environment until
+  # this job ran it: the export found nothing of this install's and the teardown worked under
+  # the default prefix, which is where the neighbour's object is put below.
+  handover:
+    name: A handover exports every store, removes the install and certifies it
+    runs-on: ubuntu-latest
+    # A drop waiting on a lock hung the first run for an hour; see the remove step.
+    timeout-minutes: 30
+    needs: changes
+    if: ${{ needs.changes.outputs.tasks_only != 'true' }}
+    services:
+      postgres:
+        image: pgvector/pgvector:pg18
+        env:
+          # A credential for a container created and destroyed inside this job, as in `install`.
+          POSTGRES_PASSWORD: handover-scratch
+          POSTGRES_DB: brain_handover
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:handover-scratch@localhost:5432/brain_handover
+      APP_ROLE_PASSWORD: handover-scratch-app
+      # The vault and the store below are this job's own containers; the token is the dev
+      # server's root token and the key pair exists only in them.
+      BRAIN_VAULT_ADDRESS: http://localhost:8200
+      BRAIN_VAULT_TOKEN: handover-scratch-root
+      STORE_ACCESS_KEY: handover-scratch-access
+      STORE_SECRET_KEY: handover-scratch-secret
+      INSTALL_OBJECT_STORE_BACKEND: seaweedfs
+      INSTALL_OBJECT_STORE_URL: http://localhost:8333
+      SAVED_PREFIX: scratch-install
+      HANDOVER_ID: scratch-handover-1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv sync --locked
+      - name: The handover directory and the schemas it must account for
+        run: |
+          echo "HANDOVER=$RUNNER_TEMP/handover" >> "$GITHUB_ENV"
+          echo "SCHEMAS=$(uv run python -c 'from brain.db import SCHEMAS; print(" ".join(SCHEMAS))')" >> "$GITHUB_ENV"
+
+      - name: The object store and the vault this install keeps its files and keys in
+        # The store's buckets are made by the product's own ops/seaweedfs/provision.sh, and its
+        # key goes into the vault slot `brain.ops.storage.credential_path` names, so the command
+        # connects the way an install does rather than being handed a client.
+        run: |
+          docker network create handover
+          mkdir -p "$RUNNER_TEMP/seaweedfs"
+          printf '{"identities":[{"name":"brain-application","credentials":[{"accessKey":"%s","secretKey":"%s"}],"actions":["Read","Write","List"]}]}' \
+            "$STORE_ACCESS_KEY" "$STORE_SECRET_KEY" > "$RUNNER_TEMP/seaweedfs/s3.json"
+          docker run -d --name seaweedfs --network handover -p 8333:8333 \
+            -v "$RUNNER_TEMP/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro" chrislusf/seaweedfs:3.80 \
+            server -dir=/data -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json
+          docker run -d --name openbao --cap-add IPC_LOCK -p 8200:8200 \
+            -e BAO_DEV_ROOT_TOKEN_ID="$BRAIN_VAULT_TOKEN" openbao/openbao:2.4.1 \
+            server -dev -dev-root-token-id="$BRAIN_VAULT_TOKEN" -dev-listen-address=0.0.0.0:8200
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:8333/status >/dev/null && curl -sf http://localhost:8200/v1/sys/health >/dev/null && break
+            sleep 2
+          done
+          curl -sf http://localhost:8333/status >/dev/null || { echo "::error::the object store did not answer"; docker logs --tail 40 seaweedfs; exit 1; }
+          curl -sf http://localhost:8200/v1/sys/health >/dev/null || { echo "::error::the vault did not answer"; docker logs --tail 40 openbao; exit 1; }
+          docker run --rm --network handover -e WEED_MASTER=seaweedfs:9333 \
+            -v "$PWD/ops/seaweedfs/provision.sh:/opt/provision.sh:ro" --entrypoint /bin/sh \
+            chrislusf/seaweedfs:3.80 /opt/provision.sh
+          curl -sf -H "X-Vault-Token: $BRAIN_VAULT_TOKEN" -X POST \
+            -d '{"type":"kv","options":{"version":"2"}}' http://localhost:8200/v1/sys/mounts/providers
+          curl -sf -H "X-Vault-Token: $BRAIN_VAULT_TOKEN" -X POST \
+            -d "{\"data\":{\"access_key_id\":\"$STORE_ACCESS_KEY\",\"secret_access_key\":\"$STORE_SECRET_KEY\"}}" \
+            http://localhost:8200/v1/providers/data/seaweedfs >/dev/null
+
+      - name: An install from empty, with the demo company loaded and asked one question
+        run: |
+          uv run alembic upgrade head
+          uv run python -m brain.seed
+          uv run python -m brain.seed --smoke
+
+      - name: The object store prefix is saved in the console's table, and files are put
+        # This install's objects under the saved prefix and at the backup bucket's root, which is
+        # where the backup job writes; a neighbour's under the default prefix, which must survive.
+        run: |
+          uv run python - <<'PY'
+          import asyncio
+          import os
+
+          from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+          from brain.db import normalise_database_url
+          from brain.ops.install_settings import save
+          from brain.ops.object_store import object_store_at_start
+
+
+          async def keep_prefix() -> None:
+              engine = create_async_engine(normalise_database_url(os.environ["DATABASE_URL"]))
+              async with async_sessionmaker(engine)() as session, session.begin():
+                  await save(
+                      session,
+                      {"INSTALL_OBJECT_STORE_PREFIX": os.environ["SAVED_PREFIX"]},
+                      updated_by="ci",
+                  )
+              await engine.dispose()
+
+
+          asyncio.run(keep_prefix())
+          store = object_store_at_start(os.environ["BRAIN_VAULT_ADDRESS"], os.environ["BRAIN_VAULT_TOKEN"])
+          assert store.backend is not None, store.unconnected
+          ours = os.environ["SAVED_PREFIX"]
+          store.backend.put_object("assets", f"{ours}/demo/logo.txt", b"this install's logo", "text/plain")
+          store.backend.put_object("recordings", f"{ours}/run-1/capture.txt", b"a recording", "text/plain")
+          store.backend.put_object("backups", "demo.manifest.json", b"{}", "application/json")
+          store.backend.put_object("assets", "brain/logo.txt", b"a neighbour's logo", "text/plain")
+          PY
+
+      - name: Export every store and the audit ledger
+        run: |
+          uv run python -m brain.ops.handover_run export "$HANDOVER" \
+            --handover-id "$HANDOVER_ID" --reason contract_ended \
+            --instructed-by "the scratch install's owner" --instruction-reference "ci.yml, handover job"
+
+      - name: The company checks the export with sha256sum and nothing of ours
+        run: |
+          cd "$HANDOVER"
+          sha256sum --strict -c SHA256SUMS
+          # Every table of every schema is a file, counted against the database itself.
+          for s in $SCHEMAS; do
+            tables=$(psql "$DATABASE_URL" -tAc "select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = '$s' and c.relkind in ('r','p') and not c.relispartition")
+            files=$(jq --arg s "data/db/$s/" '[.files[] | select(.path | startswith($s))] | length' manifest.json)
+            [ "$tables" = "$files" ] || { echo "::error::schema $s has $tables table(s) and the export $files file(s)"; exit 1; }
+          done
+          ledger=$(jq '[.files[] | select(.source == "obs.audit_entry")][0].rows' manifest.json)
+          live=$(psql "$DATABASE_URL" -tAc "select count(*) from obs.audit_entry")
+          [ "$ledger" = "$live" ] && [ "$live" -gt 0 ] || { echo "::error::the audit ledger holds $live row(s) and the export $ledger"; exit 1; }
+          [ "$(cat "data/objects/assets/$SAVED_PREFIX/demo/logo.txt")" = "this install's logo" ] || { echo "::error::this install's object was not exported"; exit 1; }
+          [ -f data/objects/backups/demo.manifest.json ] || { echo "::error::the backup bucket was not exported"; exit 1; }
+          [ ! -e data/objects/assets/brain ] || { echo "::error::a neighbour's object was exported"; exit 1; }
+          jq -e '[.stores[] | select(.reached | not)] | length == 0' manifest.json >/dev/null || { echo "::error::a store was not reached"; exit 1; }
+          echo "intact: $(wc -l < SHA256SUMS) file(s), $ledger ledger entries"
+
+      - name: Plan the teardown from the verified export
+        run: |
+          uv run python -m brain.ops.handover_run verify "$HANDOVER"
+          uv run python -m brain.ops.handover_run plan "$HANDOVER"
+
+      - name: Remove, typing the handover id back
+        # The procedure stops the application first; this job runs none, so it asserts nothing
+        # else is connected instead. The first run hung here for an hour because the command's
+        # own read of the saved settings held a lock its drop waited on; each drop now times out
+        # and names the holders, and the step has a ceiling of its own. A wrong id first, proved
+        # harmless by every schema still being there after it. `if`, because the default shell
+        # is `bash -e`.
+        timeout-minutes: 5
+        run: |
+          others=$(psql "$DATABASE_URL" -tAc "select count(*) from pg_stat_activity where datname = current_database() and pid <> pg_backend_pid() and backend_type = 'client backend'")
+          [ "$others" = "0" ] || { echo "::error::$others other session(s) hold the database before remove"; exit 1; }
+          if uv run python -m brain.ops.handover_run remove "$HANDOVER" --confirm not-this-one; then
+            echo "::error::remove ran with the wrong handover id"; exit 1
+          fi
+          kept=$(psql "$DATABASE_URL" -tAc "select count(*) from pg_namespace where nspname = any(string_to_array('$SCHEMAS', ' '))")
+          [ "$kept" = "$(echo $SCHEMAS | wc -w)" ] || { echo "::error::a refused remove dropped a schema"; exit 1; }
+          uv run python -m brain.ops.handover_run remove "$HANDOVER" --confirm "$HANDOVER_ID"
+
+      - name: The operator's steps, each done or recorded as absent from this install
+        # Done for real where this job has the part: the vault slot, and the roles and version
+        # table on a database server that outlives the install. The rest were never created
+        # here, and the note says so on the certificate rather than claiming a removal. A part
+        # added to the teardown fails this step until somebody says what it means here.
+        run: |
+          curl -sf -H "X-Vault-Token: $BRAIN_VAULT_TOKEN" -X DELETE http://localhost:8200/v1/providers/metadata/seaweedfs
+          code=$(curl -s -o /dev/null -w '%{http_code}' -H "X-Vault-Token: $BRAIN_VAULT_TOKEN" http://localhost:8200/v1/providers/data/seaweedfs)
+          [ "$code" = "404" ] || { echo "::error::the store key is still in the vault ($code)"; exit 1; }
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DROP OWNED BY brain_app, brain_fastlane" -c "DROP ROLE brain_app, brain_fastlane" -c "DROP TABLE public.alembic_version"
+          [ "$(jq -r '.connectors | length' "$HANDOVER/manifest.json")" = "0" ] || { echo "::error::a connector is live and this job cannot revoke its grant"; exit 1; }
+          for part in $(jq -r '.steps[] | select(.by == "operator" and (.done | not)) | .what' "$HANDOVER/teardown.json"); do
+            case "$part" in
+              vault_secrets) note="done in CI: the store key's metadata deleted and the slot read back 404; the dev token dies with the job" ;;
+              runtime) note="done in CI: roles and alembic_version dropped on the surviving database; the job's containers end with the runner" ;;
+              cache) note="absent: this scratch install ran no valkey" ;;
+              identity_realm) note="absent: this scratch install ran no Keycloak" ;;
+              network_route) note="absent: this scratch install had no proxy route or DNS record" ;;
+              install_configuration) note="absent: this scratch install had no install directory or .env file" ;;
+              connector_authorisations) note="absent: the export lists no live connector" ;;
+              chat_app) note="absent: this scratch install made no chat app" ;;
+              *) echo "::error::the teardown has an operator part this job does not know: $part"; exit 1 ;;
+            esac
+            uv run python -m brain.ops.handover_run record "$HANDOVER" "$part" --note "$note"
+          done
+
+      - name: Certify
+        run: |
+          uv run python -m brain.ops.handover_run certify "$HANDOVER" | tee "$RUNNER_TEMP/certificate.out"
+          grep -q "The last backup that can contain this data expires on" "$RUNNER_TEMP/certificate.out"
+          jq -e --slurpfile t "$HANDOVER/teardown.json" '(.removed | length) == ($t[0].steps | length)' "$HANDOVER/certificate.json" >/dev/null
+          jq -e '[.removed[] | select(.what == "chat_app")][0].note | startswith("absent")' "$HANDOVER/certificate.json" >/dev/null
+
+      - name: The schemas and this install's objects are really gone, and the neighbour's are not
+        # Looked at directly rather than taken from the command's own second look: the database
+        # through psql, the store through a client built from the key this job holds, since the
+        # vault slot the command used is gone.
+        run: |
+          left=$(psql "$DATABASE_URL" -tAc "select coalesce(string_agg(nspname, ','), '') from pg_namespace where nspname = any(string_to_array('$SCHEMAS', ' '))")
+          [ -z "$left" ] || { echo "::error::schema(s) survived the handover: $left"; exit 1; }
+          roles=$(psql "$DATABASE_URL" -tAc "select count(*) from pg_roles where rolname in ('brain_app', 'brain_fastlane')")
+          [ "$roles" = "0" ] || { echo "::error::$roles install role(s) survived"; exit 1; }
+          [ -z "$(psql "$DATABASE_URL" -tAc "select to_regclass('public.alembic_version')")" ] || { echo "::error::the version table survived"; exit 1; }
+          uv run python - <<'PY'
+          import os
+
+          from brain.ops.object_store import S3Backend, StoreCredential, key_prefix
+          from brain.ops.storage import BUCKETS, Backend, config_for
+
+          store = S3Backend(
+              config_for(Backend.SEAWEEDFS, endpoint_url=os.environ["INSTALL_OBJECT_STORE_URL"]),
+              StoreCredential(
+                  access_key_id=os.environ["STORE_ACCESS_KEY"],
+                  secret_access_key=os.environ["STORE_SECRET_KEY"],
+              ),
+          )
+          ours = os.environ["SAVED_PREFIX"]
+          for bucket in BUCKETS:
+              left = list(store.list_objects(bucket.name, key_prefix(bucket.name, ours)))
+              assert not left, f"{len(left)} object(s) of this install survived in {bucket.name}"
+          assert store.get_object("assets", "brain/logo.txt") == b"a neighbour's logo"
+          print("gone: every schema, both roles, the version table and this install's objects")
+          PY
+
+      - name: Keep the handover's manifest and certificate, named for the commit
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: handover-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/handover/manifest.json
+            ${{ runner.temp }}/handover/teardown.json
+            ${{ runner.temp }}/handover/certificate.json
+            ${{ runner.temp }}/handover/certificate.txt
+          if-no-files-found: ignore
+
+      - name: Tear down
+        if: always()
+        run: docker rm -f seaweedfs openbao || true
+
   supply_chain:
     name: Dependency audit
     runs-on: ubuntu-latest

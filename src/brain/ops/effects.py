@@ -471,6 +471,8 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.ops.handover_run:Objects.get_object": Repeat.READS,
         "brain.ops.handover_run:Objects.delete_object": Repeat.SAME_RESULT_WHEN_REPEATED,
         "brain.ops.handover_run:Objects.list_objects": Repeat.READS,
+        "brain.ops.handover_run:InstallDatabase.saved_settings": Repeat.READS,
+        "brain.ops.handover_run:InstallDatabase.close": Repeat.SAME_RESULT_WHEN_REPEATED,
         "brain.ops.storage:StorageBackend.put_object": Repeat.SAME_RESULT_WHEN_REPEATED,
         "brain.ops.storage:StorageBackend.get_object": Repeat.READS,
         "brain.ops.storage:StorageBackend.delete_object": Repeat.SAME_RESULT_WHEN_REPEATED,
