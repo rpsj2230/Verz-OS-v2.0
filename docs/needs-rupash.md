@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**4 items are open: 85, 91, 93 and 95.** Item 85 (your AI provider keys) unblocks the most. Each
+**5 items are open: 85, 91, 93, 95 and 96.** Item 85 (your AI provider keys) unblocks the most. Each
 says in plain terms what it is, what I recommend, and every step.
 
 # Open
@@ -47,6 +47,15 @@ Ignoring a chat message delivered twice (M3.2.2) needs the inbound chat route, w
 channels work builds; the check itself is already written and waits for it. Sharing the AI
 provider's cache for tools (M3.7.2) needs agents that call tools, which Wave 3 builds.
 **Recommendation: move M3.2.2 to Wave 2 and M3.7.2 to Wave 3.** Reply "move both".
+
+## 96. Can a directory group grant permission packs, or only roles? (M1.1.5)
+
+**In plain terms:** you can now map a group in your sign-in provider (Keycloak, or the company's
+directory behind it) to a role on the Roles screen, and everyone in that group gets the role when
+they sign in. A standing safety rule says the sign-in provider can never grant permissions
+directly, because a group edited in another system would then silently hand out access here.
+**Recommendation: roles only,** which keeps that rule; packs stay granted in this console, where
+every grant is audited. Reply "roles only" or "allow packs".
 
 # Answered
 
