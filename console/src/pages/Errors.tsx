@@ -14,6 +14,7 @@ import { Link } from "react-router-dom";
 import { useResource } from "../api/useResource";
 import { FailureNotice } from "../ui/FailureNotice";
 import {
+  agentWords,
   DEFAULT_HOURS,
   ERRORS_CRUMB,
   ERRORS_LABEL,
@@ -28,6 +29,7 @@ import {
   LOGS_LINK,
   NO_JOB_FAILURES,
   NO_REQUEST_FAILURES,
+  NOT_SCREENED,
   PROCESS_LOG_IS_NOT_KEPT,
   READING_ERRORS,
   readErrors,
@@ -108,6 +110,9 @@ function Failures({ hours }: { readonly hours: number }) {
                   <th scope="col">Lane</th>
                   <th scope="col">Outcome</th>
                   <th scope="col">Took</th>
+                  <th scope="col">Risk score</th>
+                  <th scope="col">Routed to</th>
+                  <th scope="col">Agent</th>
                 </tr>
               </thead>
               <tbody>
@@ -120,6 +125,9 @@ function Failures({ hours }: { readonly hours: number }) {
                     <td>{one.lane}</td>
                     <td>{STATUS_WORDS[one.status] ?? one.status}</td>
                     <td>{`${String(Math.round(one.duration_ms))} ms`}</td>
+                    <td>{one.risk_score == null ? NOT_SCREENED : String(one.risk_score)}</td>
+                    <td>{one.routed_lane ?? NOT_SCREENED}</td>
+                    <td>{agentWords(one.selected_agent, one.selection_stage)}</td>
                   </tr>
                 ))}
               </tbody>

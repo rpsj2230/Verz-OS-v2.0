@@ -113,8 +113,9 @@ Task ids: M31.1.4.1, M31.1.4.3, M31.1.4.4, M32.5.2.1, M1.1.7, M1.8.2
 
 from __future__ import annotations
 
+import hashlib
 import inspect
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Annotated, Any, Final, cast
@@ -123,9 +124,12 @@ import structlog
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, ConfigDict, StringConstraints
+from pydantic import BaseModel, ConfigDict, JsonValue, StringConstraints
 
+from brain.agents.model import AGENT_ID_CHARS
+from brain.agents.template import config_hash
 from brain.api import API_PREFIX, COMMON_RESPONSES, Page
+from brain.core.department import gaps_for_question
 from brain.core.entitlement import EntitlementSet
 from brain.core.envelope import TypedResult
 from brain.core.errors import Absent, BrainError, Failed
@@ -137,13 +141,17 @@ from brain.core.redaction import (
     serialise_for_channel,
 )
 from brain.core.scope import Clause, Op, Scope
+from brain.gate.addressing import from_web
 from brain.gate.admission import admit, second_factor_gives_back, verbs_withheld
 from brain.gate.answer import answer_lane, frames_of
+from brain.gate.answer_cache import AnswerStore
 from brain.gate.caches import MAX_QUESTION_CHARS
-from brain.gate.context import Channel
+from brain.gate.catalogue import AgentCeiling
+from brain.gate.context import Channel, GateStep, open_trace
 from brain.gate.fast_lane import RowReader
 from brain.gate.finish import Origin, RequestRecorder
-from brain.gate.model_lane import DocumentSearchTool, ModelLane
+from brain.gate.front import AgentSetup, Caching, Choosing, run_front_half
+from brain.gate.model_lane import PASSAGE_POLICY, DocumentSearchTool, ModelLane
 from brain.gate.resolve import EntitlementCache, EntitlementStore, VersionSource, resolve
 from brain.identity.bearer import Caller, TokenAuthority, authenticate
 from brain.identity.oidc import TokenRefusal, TokenRefusedError, VerifiedClaims
@@ -151,6 +159,7 @@ from brain.identity.roles import NoStandingEntitlement
 from brain.identity.sessions import reach_for
 from brain.knowledge.document_tools import SEARCH_DOCUMENTS, KnowledgePassage
 from brain.knowledge.rows import DEFAULT_ROW_LIMIT, MAX_ROW_LIMIT, RowRequest, row_scope_for
+from brain.knowledge.search import KNOWLEDGE_READ
 from brain.ops.model_service import ModelService
 from brain.ops.trace_sink import CountingTraceSink
 from brain.tools.registry import ToolRegistry
@@ -743,6 +752,9 @@ class Question(BaseModel):
         str,
         StringConstraints(min_length=1, max_length=MAX_QUESTION_CHARS, strip_whitespace=True),
     ]
+    #: The agent the person picked, by id, or None. Judged by `brain.gate.select.select_agent`
+    #: against the agents this person may use, like any name; see `brain.gate.addressing`.
+    agent: Annotated[str, StringConstraints(max_length=AGENT_ID_CHARS)] | None = None
 
 
 def row_readers(registry: ToolRegistry) -> dict[tuple[str, str], RowReader]:
@@ -848,6 +860,60 @@ def model_lane_of(state: Any) -> ModelLane | None:
     return ModelLane(search=search, model=models.calls)
 
 
+#: The agent `/answer` answers as until an agent roster is read on this route: the person asking,
+#: through every tool the process registered, with no side effect. See `default_agents`.
+DEFAULT_AGENT: Final = "brain"
+
+
+def default_agents(registry: ToolRegistry) -> dict[str, AgentSetup]:
+    """The one agent the front half may select on `/answer`, keyed by its id.
+
+    Its ceiling is every registered tool, so projection narrows by the caller's reach alone,
+    and its side effect is NONE, so an answer can reach no write whatever is registered. The
+    configuration hash covers the id and the tool names, so the answer cache stops matching the
+    moment the registry a process answers with changes.
+    """
+    names = frozenset(one.name for one in registry.definitions())
+    allowed: list[JsonValue] = [*sorted(names)]
+    digest = config_hash({"agent_id": DEFAULT_AGENT, "allowed_tools": allowed})
+    ceiling = AgentCeiling(agent_id=DEFAULT_AGENT, allowed_tools=names)
+    return {DEFAULT_AGENT: AgentSetup(ceiling=ceiling, config_hash=digest)}
+
+
+def policy_epoch_of(policies: Mapping[str, FieldPolicy]) -> int:
+    """One number that moves whenever any field policy an answer is redacted under moves.
+
+    The cache key takes an integer epoch and every `FieldPolicy` has a digest; this folds the
+    entity policies and the passage policy into one, so an answer cached under one policy is
+    never served under another. Sorted, for `FieldPolicy.epoch`'s own reason.
+    """
+    parts = sorted(f"{entity}={policy.epoch()}" for entity, policy in policies.items())
+    blob = "|".join((*parts, f"passages={PASSAGE_POLICY.epoch()}"))
+    return int(hashlib.sha256(blob.encode("utf-8")).hexdigest()[:15], 16)
+
+
+def caching_of(
+    state: Any, policies: Mapping[str, FieldPolicy], sources: Sequence[str]
+) -> Caching | None:
+    """The answer-cache lookup for this request, or None on a process with no answer store.
+
+    `brain.app.lifespan` installs `ValkeyAnswerStore` only when a cache is configured. With
+    none the front half still enters CACHE and misses, so the record says the step ran.
+    `sources` is every source the reader reaches, so a volatile one makes the question
+    uncacheable rather than a cached answer stale.
+    """
+    store: AnswerStore | None = getattr(state, "answer_store", None)
+    if store is None:
+        return None
+    return Caching(
+        store=store,
+        policy_epoch=policy_epoch_of(policies),
+        # No source records an epoch yet, so the key holds none and the TTL bounds staleness.
+        source_epochs={},
+        sources=frozenset(sources),
+    )
+
+
 @router.post("/answer", responses=COMMON_RESPONSES)
 async def answer(request: Request, asked: Asked, ask: Question) -> StreamingResponse:
     """One question, answered as a stream of events, at this caller's reach.
@@ -892,16 +958,44 @@ async def answer(request: Request, asked: Asked, ask: Question) -> StreamingResp
     # audit ledger would not accept, which is a process fault identical for every caller.
     origin = Origin(trace_id=trace_id, principal=asked.caller.principal, channel=asked.channel)
 
+    # IDENTIFY and ENTITLE ran in `asking` before this handler could; they are entered here, in
+    # order, so the front half's refusal to start before ENTITLE is a real check on this path.
+    recorder = open_trace(trace_id, asked.now, asked.channel)
+    recorder.principal_id = asked.caller.principal.id
+    recorder.enter(GateStep.IDENTIFY)
+    recorder.ent_hash = asked.reach.ent_hash()
+    recorder.enter(GateStep.ENTITLE)
+    address = from_web(ask.question, ask.agent)
+    agents = default_agents(registry)
+    policies = field_policies(registry)
+    sources = reachable_sources(registry, asked)
+    knowledge = asked.reach.scope_for(KNOWLEDGE_READ, asked.now)
+
     try:
+        front = run_front_half(
+            address.question,
+            recorder=recorder,
+            reach=asked.reach,
+            channel=asked.channel,
+            agents=agents,
+            choosing=Choosing(
+                visible_agents=frozenset(agents),
+                default_agent=DEFAULT_AGENT,
+                addressed=address.agent_id,
+            ),
+            registry=registry.definitions(),
+            now=asked.now,
+            caching=caching_of(request.app.state, policies, sources),
+        )
         answered = await answer_lane(
-            ask.question,
+            address.question,
             origin=origin,
             recorders=recorders,
             rules=rules,
             readers=row_readers(registry),
             entitlement=asked.reach,
-            policies=field_policies(registry),
-            reachable_sources=reachable_sources(registry, asked),
+            policies=policies,
+            reachable_sources=sources,
             sink=sink,
             now=asked.now,
             # The completion instant, read by the lane once in its `finally`. The wall clock,
@@ -909,12 +1003,12 @@ async def answer(request: Request, asked: Asked, ask: Question) -> StreamingResp
             # authentication, so the ledger's duration covers identifying, entitling and
             # answering, and ends before the frames are written.
             clock=lambda: datetime.now(UTC),
-            # The answer cache is not read here yet. `brain.gate.answer_cache.lookup` needs an
-            # `AnswerStore` and this process installs none, so every question is computed. The
-            # lane's cache path is built and tested; what is missing is the store, and passing
-            # None with this said beside it is better than a None that reads as "no hit".
-            cached=None,
-            model=model_lane_of(request.app.state),
+            cached=front.cached,
+            # Only a request the front half routed to a tier may reach a model, so no model is
+            # called before ROUTE and PROJECT: a fast-lane question answers or abstains.
+            model=model_lane_of(request.app.state) if front.calls_a_model else None,
+            front=front.record(),
+            gaps=gaps_for_question(address.question, knowledge),
         )
     except BrainError:
         # Already in the taxonomy, already has a public message, already maps to a status.

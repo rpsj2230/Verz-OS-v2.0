@@ -20,9 +20,11 @@ never existed both reach `select_agent` as a name, and it gives both the same se
 DENIED and ABSENT stay one answer. A second check here would be a second answer to that
 question, and the day the two disagree the permissive one is whichever runs first.
 
-What this does not do yet, stated: no request path calls `select_agent`. `/answer` answers
-without an agent, so neither surface has anywhere to send the chosen agent until the agent lane
-exists; `test_gate_step_order` holds routing off `/answer` as an expected failure today.
+Where it is called: `/answer` takes the picker's id through `from_web` and hands it to
+`brain.gate.front.run_front_half`, which selects; `brain.channels.inbound.claim` reads a chat's
+leading mention through `from_mention`. What is not there yet, stated: `/answer` knows one agent,
+`brain.api_routes.DEFAULT_AGENT`, until the agent roster is read on that route, so a name other
+than it selects the default, and no inbound chat route is served for the mention to arrive on.
 
 Task ids: M3.9.8
 """

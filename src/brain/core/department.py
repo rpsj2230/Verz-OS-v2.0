@@ -42,7 +42,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Self
+from typing import Any, Final, Self
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -520,3 +520,50 @@ def plan_cross_department(asker: Scope, departments: Sequence[str]) -> CrossDepa
         gaps=tuple(gaps),
         combined=combined,
     )
+
+
+#: A department the question names in words: "the finance department", "department of sales".
+#: Read from the wording alone and never matched against the department registry, so a name
+#: that exists and one that does not are extracted identically. See `departments_named`.
+_NAMED_DEPARTMENT: Final = (
+    re.compile(r"\b([a-z][a-z0-9_]{1,40})\s+(?:department|dept)\b", re.IGNORECASE),
+    re.compile(r"\b(?:department|dept)\s+of\s+([a-z][a-z0-9_]{1,40})\b", re.IGNORECASE),
+)
+
+#: Words that sit before "department" without naming one.
+_NOT_A_NAME: Final = frozenset(
+    {"a", "an", "any", "each", "every", "my", "our", "other", "same", "that", "the", "their"}
+    | {"this", "which", "what", "whose", "your", "his", "her", "its", "one", "another"}
+)
+
+
+def departments_named(question: str) -> tuple[str, ...]:
+    """The departments a question names, as slugs, in the order it names them.
+
+    **From the wording, never from the registry.** `plan_cross_department` warns that the
+    registry would turn the gap list into an inventory; matching the question against it would
+    do the same by the back door, because only a name that exists would produce a gap. So a
+    department is whatever the question calls one, and "the zebra department" is planned
+    exactly as "the finance department" is.
+    """
+    found: list[tuple[int, str]] = []
+    for pattern in _NAMED_DEPARTMENT:
+        for match in pattern.finditer(question):
+            name = match.group(1).lower()
+            if name not in _NOT_A_NAME and SLUG_RE.match(name):
+                found.append((match.start(), name))
+    return tuple(dict.fromkeys(name for _, name in sorted(found)))
+
+
+def gaps_for_question(question: str, asker: Scope | None) -> tuple[Gap, ...]:
+    """The gaps an answer states: named departments this asker's scope cannot reach (M2.2.4).
+
+    `asker` None is a reader who holds no read at all, for whom every named department is a
+    gap. Otherwise the decision is `plan_cross_department`'s, made from the asker's own scope.
+    """
+    named = departments_named(question)
+    if not named:
+        return ()
+    if asker is None:
+        return tuple(Gap(department=name) for name in named)
+    return plan_cross_department(asker, named).gaps

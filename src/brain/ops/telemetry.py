@@ -75,11 +75,11 @@ the row, so a second instant would be a duration every reader subtracts for them
 duration is a kind this record already partitions its fields into.
 
 `redaction_count` is the one worth naming separately, because a plausible value exists and it
-would be wrong. `brain.gate.answer._redacted` builds a `RedactionTrace` with an empty
-redaction list and says so in its own docstring: the lane was never told what was withheld, so
-an empty list is that lane's ignorance and not a measurement. Recording zero would put a
-measured-looking figure in a five-year table, and the figure would be false on exactly the
-requests where something was withheld.
+would be wrong. Since 2026-09-21 the answer lane hands the redactor's own `RedactionTrace` to the
+trace sink, which records its counts and withheld field names (M4.4.4). That trace still misses
+every column `brain.knowledge.rows.compile_projection` never fetched, because a column the caller
+may not read is left out of the query and never reaches the redactor. A count on this row would
+be false on exactly the requests where a column was withheld at the query.
 
 **Traffic class has no default, and there is no value a default could be.** `TrafficClass`
 has four members and none of them means "unknown", so `open_request` cannot be given a
@@ -619,11 +619,10 @@ UNFILLABLE_TODAY: Final[Mapping[str, str]] = MappingProxyType(
             "reached by anybody"
         ),
         "redaction_count": (
-            "zero would be wrong rather than merely unknown. brain.gate.answer._redacted "
-            "builds a RedactionTrace with an empty redaction list because the lane was never "
-            "told what was withheld, and its own docstring says an empty list is not a claim "
-            "that nothing was redacted. Recording zero would be false on exactly the requests "
-            "where something was"
+            "a count would be wrong rather than merely unknown. The redactor's trace reaches the "
+            "trace sink, but a column compile_projection left out of the query never reaches the "
+            "redactor, so its count is zero on exactly the requests where a column was withheld "
+            "at the query"
         ),
     }
 )

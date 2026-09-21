@@ -1779,6 +1779,28 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     drawsValues: true,
     answers: { "/api/v1/govern/access-review": ACCESS_REVIEW },
   },
+  "/access-requests": {
+    address: "/access-requests",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/access-requests": {
+        items: [
+          {
+            request_id: UNBROKEN,
+            asker_id: UNBROKEN,
+            subject: UNBROKEN,
+            question: UNBROKEN,
+            requested_capability: UNBROKEN,
+            requested_at: "2019-03-04T09:00:00Z",
+          },
+        ],
+        next_cursor: null,
+        total: null,
+        truncated: true,
+      },
+    },
+  },
   "/elevation": {
     address: "/elevation",
     signedIn: true,

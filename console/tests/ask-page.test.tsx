@@ -392,10 +392,12 @@ describe("asking a question", () => {
   test("the question can only travel in a body, because the route declares nowhere else to put it", () => {
     // What breaks if this is deleted: a query parameter or a path segment added later and
     // used by a console that already had somewhere to put a question. The route's own
-    // document is read: one body property, no query parameter and no path parameter, and the
-    // bound the field holds is the document's bound rather than a number copied here.
+    // document is read: the question and the optional agent the person picked are the body's
+    // only properties, no query parameter and no path parameter, and the bound the field holds is
+    // the document's bound rather than a number copied here.
     expect(ANSWER_API_PATH).toBe("/answer");
     expect(declaredPropertyNames(declaredRequestBodySchema(ANSWER_ROUTE, "post"))).toEqual([
+      "agent",
       "question",
     ]);
     expect(declaredParameterNames(ANSWER_ROUTE, "post", "query")).toEqual([]);

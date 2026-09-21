@@ -112,7 +112,7 @@ def database() -> Iterator[str]:
     try:
         migrate(DATABASE, "stamp", "0038")
         migrate(DATABASE, "upgrade", "0039")
-        migrate(DATABASE, "stamp", "0093")
+        migrate(DATABASE, "stamp", "0097")
         migrate(DATABASE, "upgrade", "0100")
         yield scratch
     finally:

@@ -213,6 +213,8 @@ SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
         "auth.service_account": "owner_principal_id",
         "auth.session": "principal_id",
         "chat.conversation": "principal_id",
+        # A request for access is the asker's question and goes with them. `0101`.
+        "gate.access_request": "asker_id",
         "gate.automation_owner": "owner_principal_id",
         "gate.capability_grant": "principal_id",
         "gate.capability_pack_assignment": "principal_id",

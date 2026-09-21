@@ -7,23 +7,24 @@ What an administrator would need to manage, read out of the schema, the routes a
 ## What was measured
 
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
-- 83 tables, from `brain.db.Base.metadata`.
+- 85 tables, from `brain.db.Base.metadata`.
 - 24 installation values, from `brain.install.INSTALLATION`.
-- 155 routes under `/api/v1` and `/setup`, from the API's internal document.
-- 68 console addresses, from the route table in `console/src/App.tsx`.
-- 54 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 64 routes.
+- 157 routes under `/api/v1` and `/setup`, from the API's internal document.
+- 69 console addresses, from the route table in `console/src/App.tsx`.
+- 55 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 65 routes.
 - 36 gaps recorded, and 18 routes no screen calls.
 
 ## Area by area
 
 ### People, roles, permissions and access control
 
-- **Screens:** `/`, `/people`, `/people/:subject`, `/roles`, `/capabilities`, `/scopes`, `/access_review`, `/elevation`, `/sessions`, `/sign-in-links`, `/staff_sources`
-- **Tables:** `auth.principal`, `auth.principal_identity`, `auth.session`, `auth.directory_role_grant`, `gate.capability_grant`, `gate.capability_pack`, `gate.capability_pack_assignment`, `gate.capability_registry`, `gate.scope`, `gate.grants_version`, `gate.policy_epoch`, `gate.review_decision`, `gate.elevation_request`, `auth.staff_member`, `auth.staff_sync_run`, `auth.service_account`, `auth.api_key`
+- **Screens:** `/`, `/people`, `/people/:subject`, `/roles`, `/capabilities`, `/scopes`, `/access_review`, `/elevation`, `/sessions`, `/sign-in-links`, `/staff_sources`, `/access-requests`
+- **Tables:** `auth.principal`, `auth.principal_identity`, `auth.session`, `auth.directory_role_grant`, `gate.capability_grant`, `gate.capability_pack`, `gate.capability_pack_assignment`, `gate.capability_registry`, `gate.scope`, `gate.grants_version`, `gate.policy_epoch`, `gate.review_decision`, `gate.elevation_request`, `auth.staff_member`, `auth.staff_sync_run`, `auth.service_account`, `auth.api_key`, `gate.access_request`
 - **Installation values:** `INSTALL_OIDC_ISSUER`, `INSTALL_OIDC_REALM`, `INSTALL_OIDC_CLIENT_ID`, `INSTALL_OIDC_REDIRECT_URIS`, `INSTALL_BROKERED_DIRECTORY`, `INSTALL_STAFF_SOURCE`, `INSTALL_STAFF_SOURCE_LOCATION`, `INSTALL_BROKERED_CLIENT_ID`
 
 | Route | Called by |
 | --- | --- |
+| `GET /api/v1/access-requests` | `/access-requests` |
 | `GET /api/v1/console/navigation` | `/department` |
 | `GET /api/v1/govern/access-review` | `/access_review` |
 | `GET /api/v1/govern/capabilities` | `/capabilities` |
@@ -43,6 +44,7 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `GET /api/v1/govern/staff_sources/transfers` | `/staff_sources` |
 | `GET /api/v1/govern/staff_sources/trial` | `/staff_sources` |
 | `GET /api/v1/me` | `/` |
+| `POST /api/v1/access-requests` | `/access-requests` |
 | `POST /api/v1/govern/access-review/decision` | `/access_review` |
 | `POST /api/v1/govern/access-review/decisions` | `/access_review` |
 | `POST /api/v1/govern/data-steward` | `/people`, `/people/:subject` |
@@ -446,16 +448,18 @@ No gap recorded.
 | `/signed-out` | The page a person lands on after signing out, which asks nothing and manages nothing. |
 | `chat.conversation` | What a person asked and was answered belongs to them; no store queries it yet (brain.chat.threads) and usage is reported without the words. |
 | `chat.message` | The same as chat.conversation: a person's own words, reported on and never managed. |
+| `gate.channel_event` | The dedupe key of each inbound channel message, claimed once by brain.gate.event_store.first_delivery and read by nothing else; there is nothing in it for anybody to manage. |
 | `POST /api/v1/answer` | The answer lane behind Ask, which writes no row an administrator manages. |
 | `POST /api/v1/automation/tool-call` | Called by a running automation with its owner's reach, not by a person at a screen; installing the automation is the console's part. |
 
 ## Every write the console sends, followed to the system
 
-Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 54 of 64 write routes have all three proved or not applicable, 8 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
+Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 55 of 65 write routes have all three proved or not applicable, 8 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
 
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
 | `PATCH /api/v1/routing/rungs/{rung_id}` | `/routing`, `/routing/:rungId` | `test_a_rung_saved_from_the_screen_leaves_its_row_and_an_entry_naming_what_moved` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_rung_saved_from_the_screen_leaves_its_row_and_an_entry_naming_what_moved` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_rung_saved_on_the_routing_screen_is_the_rung_the_next_call_walks` in `tests/unit/test_provider_routes.py` (database, in CI) |
+| `POST /api/v1/access-requests` | `/access-requests` | `test_a_request_is_stored_and_its_owner_reads_it_back_as_the_application_role` in `tests/unit/test_access_request_store.py` (database, in CI) | Not applicable: A request changes nothing anybody holds: it is a row addressed to its owner, and a decision is a grant written on the Roles screen, which is recorded there. | `test_the_owner_reads_the_requests_addressed_to_them_and_nobody_else_does` in `tests/unit/test_access_request_routes.py` |
 | `POST /api/v1/agents/{agent_id}/automations` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_one_confirmed_request_writes_the_automation_its_registry_entry_and_its_audit_context` in `tests/unit/test_automation_gallery_routes.py` | `test_an_install_writes_one_row_one_ledger_entry_and_a_second_install_writes_neither` in `tests/unit/test_agent_automation_store.py` (database, in CI) | `test_one_confirmed_request_writes_the_automation_its_registry_entry_and_its_audit_context` in `tests/unit/test_automation_gallery_routes.py` |
 | `POST /api/v1/agents/{agent_id}/automations/{automation_id}/start` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_the_console_starts_and_stops_as_the_application_role_and_the_ledger_says_who` in `tests/unit/test_automation_run_store.py` (database, in CI) | `test_the_console_starts_and_stops_as_the_application_role_and_the_ledger_says_who` in `tests/unit/test_automation_run_store.py` (database, in CI) | `test_a_confirmed_start_is_written_as_the_approver_and_a_stale_one_writes_nothing` in `tests/unit/test_automation_schedule_routes.py` |
 | `POST /api/v1/agents/{agent_id}/automations/{automation_id}/stop` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_the_console_starts_and_stops_as_the_application_role_and_the_ledger_says_who` in `tests/unit/test_automation_run_store.py` (database, in CI) | `test_the_console_starts_and_stops_as_the_application_role_and_the_ledger_says_who` in `tests/unit/test_automation_run_store.py` (database, in CI) | `test_the_owner_stops_their_own_without_approval_and_a_bystander_cannot` in `tests/unit/test_automation_schedule_routes.py` |

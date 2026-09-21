@@ -183,7 +183,10 @@ NOTICES: Final[tuple[Notice, ...]] = (
         title="Somebody asked to see a field",
         told="The owner of the field.",
         about="That a named person asked for access, never the value they could not see.",
-        how="No channel is chosen for it yet, so nothing sends it.",
+        how=(
+            "Listed on the owner's Access requests screen in the console, which is where it is "
+            "read; no channel sends it yet."
+        ),
         composed_by="brain.core.access_route:route_access_request",
     ),
     Notice(

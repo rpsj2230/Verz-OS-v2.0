@@ -12,10 +12,10 @@ route could route around: a profiler records the first time each function's code
 every thread, so a step is seen however it was imported and a step that did not run is absent.
 The model is `brain.models.calls.ModelCalls.complete`, the one call every model request makes.
 
-What the request path does today is identify, entitle and narrow, then call the model. The rest
-of the front half, in the order decided on 2026-09-21 (screen, classify and select, cache, route,
-catalogue projection), is `brain.gate.front.run_front_half`, held to that order by
-`tests/invariants/test_front_half.py`; it is not called by `/answer` yet.
+The request path identifies, entitles and narrows, then runs `brain.gate.front.run_front_half`
+(screen, classify and select, cache, route, catalogue projection, the order decided on
+2026-09-21), and only then calls the model. `tests/invariants/test_front_half.py` holds the chain
+itself to that order; this holds `/answer` to it end to end.
 
 Task ids: M3.9.7
 """
@@ -38,9 +38,12 @@ from brain.core.scope import Scope
 from brain.gate.admission import admit
 from brain.gate.answer import answer_lane
 from brain.gate.answer_cache import lookup
+from brain.gate.cache_key import CachedAnswer
 from brain.gate.catalogue import project
 from brain.gate.classify import classify_lane
 from brain.gate.context import Channel, GateStep, Recorder, StepOutOfOrderError, open_trace
+from brain.gate.finish import Finished
+from brain.gate.front import _cached
 from brain.gate.injection import assess
 from brain.gate.resolve import resolve
 from brain.gate.select import select_agent
@@ -67,7 +70,41 @@ STEP_OF: dict[CodeType, str] = {
     classify_tier.__code__: "route",
     project.__code__: "project",
     ModelCalls.complete.__code__: "model",
+    # The CACHE step's own function, which runs with or without a store; `lookup` runs only
+    # when there is one to look in.
+    _cached.__code__: "cache step",
 }
+
+#: The whole front half, in the decided order, as the functions that do it are first seen.
+FRONT_HALF = ("identify", "entitle", "narrow", "screen", "select", "cache", "route", "project")
+
+#: A question the classifier puts on the fast lane, which no rule in the fixture answers.
+FAST_LANE_QUESTION = "hours left on Acme"
+
+
+class Store:
+    """An answer store that finds nothing and remembers what it was asked."""
+
+    def __init__(self) -> None:
+        self.asked: list[str] = []
+
+    def get(self, key: str) -> CachedAnswer | None:
+        self.asked.append(key)
+        return None
+
+    def set(self, key: str, value: CachedAnswer, ttl_seconds: int) -> None:
+        del key, value, ttl_seconds
+
+
+class Rows:
+    """A request recorder that keeps what it was handed."""
+
+    def __init__(self) -> None:
+        self.kept: list[Finished] = []
+
+    async def finished(self, request: Finished) -> None:
+        self.kept.append(request)
+
 
 NOW = datetime(2026, 9, 21, tzinfo=UTC)
 
@@ -223,3 +260,86 @@ def test_a_request_that_fails_identification_reaches_no_model(
     assert "entitle" not in observed
     assert "model" not in observed
     assert transport.sent == []
+
+
+def test_the_whole_front_half_runs_in_order_on_answer_before_the_model(
+    client: TestClient,
+    transport: Scripted,
+    observed: Observed,
+) -> None:
+    """M3.9.7 on the real route: identify, entitle, narrow, screen, classify and select, cache,
+    route, project, and only then the model, with an answer store installed so the lookup runs.
+
+    Delete this and `/answer` can call the model before the cache is consulted, or before the
+    catalogue is projected from the narrowed reach, and the chain's own test still passes."""
+    store = Store()
+    client.app.state.answer_store = store  # type: ignore[attr-defined]
+    assert _ask(client, UNANSWERED_BY_RULES) == 200
+    _before_the_model(observed, FRONT_HALF)
+    assert len(store.asked) == 1
+    assert len(transport.sent) == 1
+
+
+def test_with_no_answer_store_the_cache_step_still_runs_before_the_model(
+    client: TestClient,
+    transport: Scripted,
+    observed: Observed,
+) -> None:
+    """No cache configured: the CACHE step is entered and misses, nothing is looked up, and the
+    model is still reached only after route and projection."""
+    assert _ask(client, UNANSWERED_BY_RULES) == 200
+    assert "cache" not in observed
+    _before_the_model(
+        observed,
+        ("identify", "entitle", "narrow", "screen", "select", "cache step", "route", "project"),
+    )
+    assert len(transport.sent) == 1
+
+
+def test_a_fast_lane_question_reaches_no_model_even_when_no_rule_answers_it(
+    client: TestClient,
+    transport: Scripted,
+    observed: Observed,
+) -> None:
+    """The front half routed it to no tier, so the lane is handed no model, and nothing is
+    projected: a model is never called without ROUTE and PROJECT before it.
+
+    Delete this and a question the classifier kept off the model lane reaches a model through
+    the lane's own fallback, with no tier decided and no catalogue built."""
+    assert _ask(client, FAST_LANE_QUESTION) == 200
+    assert "route" in observed
+    assert "project" not in observed
+    assert transport.sent == []
+
+
+def test_the_request_row_carries_what_the_front_half_decided(client: TestClient) -> None:
+    """M3.4.2 and M3.6.3 through the route: the finished request holds the score, the routed
+    lane, the stage and the agent the chain decided, which is what the row is written from."""
+    rows = Rows()
+    client.app.state.request_recorders = (rows,)  # type: ignore[attr-defined]
+    assert _ask(client, UNANSWERED_BY_RULES) == 200
+    (finished,) = rows.kept
+    assert finished.front is not None
+    assert finished.front.selected_agent == "brain"
+    assert finished.front.routed_lane.value == "answer"
+
+
+def test_the_agent_the_person_picked_reaches_selection_and_one_they_may_not_use_does_not(
+    client: TestClient,
+) -> None:
+    """M3.9.8 through the route: the picker's id reaches `select_agent` as the addressed agent, and
+    a name nobody may use falls to the default exactly as an absent one does.
+
+    Delete this and `/answer` can drop the picker's value, and addressing an agent does nothing."""
+    rows = Rows()
+    client.app.state.request_recorders = (rows,)  # type: ignore[attr-defined]
+    for agent in ("brain", "finance", None):
+        body = {"question": UNANSWERED_BY_RULES, **({"agent": agent} if agent else {})}
+        sent = client.post(f"{API_PREFIX}/answer", headers=headers(READER), json=body)
+        assert sent.status_code == 200
+    stages = [
+        (one.front.selection_stage.value, one.front.selected_agent)
+        for one in rows.kept
+        if one.front
+    ]
+    assert stages == [("addressed", "brain"), ("default", "brain"), ("default", "brain")]

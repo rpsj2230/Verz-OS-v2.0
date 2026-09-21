@@ -13,12 +13,13 @@ point of M3.9.2 having exactly one destination is that the destination's permiss
 answer's permissions. There is no store yet whose permissions match, so the payload goes
 nowhere and this says so plainly instead of finding somewhere convenient.
 
-**What is kept is the shape, and the shape is counts.** The reference, the policy epoch, the
-entitlement hash, how many records survived and how many redactions and drops the trace
-recorded. `brain.core.redaction.RedactionTrace` is explicit that counts live in the object an
-auditor reads and never in `ChannelPayload`, which has no field that could hold one, so a
-count in this line is in the half of the system entitled to it. No field names, no values, no
-record ids.
+**What is kept is the shape: counts, and the names of the fields withheld (M4.4.4).** The
+reference, the policy epoch, the entitlement hash, how many records survived, how many redactions
+and drops the trace recorded, and `RedactionTrace.withheld_field_names`, which is `entity.field`
+deduplicated so it cannot be counted into a number of records. `brain.core.redaction.
+RedactionTrace` is explicit that counts live in the object an auditor reads and never in
+`ChannelPayload`, which has no field that could hold one. A field name is the policy's vocabulary,
+the same names the Classification screen shows, and never a value; no record ids are written.
 
 **A reference therefore names a log line and not a readable trace**, and that is the gap.
 `brain.ops.tracing.TraceRecord` describes the retention a real trace store would have and
@@ -26,7 +27,7 @@ record ids.
 Quoting a reference at somebody today gets them a line saying a trace of that shape existed.
 `A_TRACE_NOBODY_CAN_OPEN_IS_A_TRACE_THAT_EXISTS` says which half of the promise is kept.
 
-Task ids: none
+Task ids: M4.4.4
 """
 
 from __future__ import annotations
@@ -69,11 +70,10 @@ class CountingTraceSink:
     """
 
     def emit(self, reference: str, payload: ChannelPayload, trace: RedactionTrace) -> None:
-        """The whole of it. Counts and hashes, never a name and never a value.
+        """The whole of it. Counts, hashes and withheld field names, never a value.
 
-        `len` on three tuples rather than anything walked, so there is no path here that
-        could read a field. A sink that summarised what was redacted would be describing the
-        withheld half of an answer in a stream that is not the answer's.
+        `len` on three tuples and the trace's own name list, so there is no path here that
+        could read a field's content: the trace's validator refuses anything but a name.
         """
         log.info(
             "trace",
@@ -83,5 +83,6 @@ class CountingTraceSink:
             records=len(payload.records),
             redactions=len(trace.redactions),
             dropped=len(trace.dropped),
+            withheld=list(trace.withheld_field_names()),
             stored=False,
         )
