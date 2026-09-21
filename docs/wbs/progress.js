@@ -34,6 +34,11 @@ const STATUSES = ["OPEN", "IN PROGRESS", "READY FOR TESTING", "BLOCKED"];
 
 //: Leaf id to where it stands. Ordered by id.
 const PROGRESS = {
+  "M31.3.2.1": {
+    status: "READY FOR TESTING",
+    why: "the vault was installed, opened and configured on the owner's install on 2026-09-21; three defects in the shipped procedure (mlock, audit devices, health check) are being fixed in the product before this closes",
+    updated: "2026-09-21",
+  },
   "M41.3.2": {
     status: "BLOCKED",
     why: "owner archives the unused verz-company-brain-v2 copy now (item 77) and the v1 repository at go-live",

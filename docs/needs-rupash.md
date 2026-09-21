@@ -40,7 +40,25 @@ go-live and is recorded as your go-live step. **Recommendation: archive the v2 c
 3. Type the repository name to confirm, then **I understand, archive this repository**.
 4. Tell me "v2 copy archived".
 
+## 84. Your server's swap file and the secrets vault
+
+**In plain terms:** the vault keeps decrypted keys in memory. When a server runs low on memory it
+can move some of it to a swap file on disk, and your server has a 2 GB swap file, not encrypted,
+with 1.2 GB in use. The newest vault version no longer stops that itself; it asks that swap be off
+or encrypted. The server is shared with your other project, so I have not touched it.
+**Recommendation: accept this for now** and turn swap off or encrypt it when you next change the
+server; with 7 GB free there is room. If you want it done now, reply "turn swap off" and I will
+check your other project's memory first and do it.
+
 # Answered
+
+## 75. A secrets vault on your install - DONE 2026-09-21
+
+The vault runs beside the Brain in its own project, so a redeploy never locks it. It is opened,
+its audit logs are on, the three role policies and the seven connector key slots are defined, and
+the application and worker each have a token that carries only their own policy. Every readiness
+part now reports ready, the vault included. Move the five unseal pieces into your password manager
+and delete the file, as I described in chat.
 
 ## 83. The Maintenance agent in Lark (M38.5.3) - DECIDED: end of Wave 3
 
