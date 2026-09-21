@@ -1,9 +1,9 @@
 {
-  "generated_at": "2026-09-21T16:21:08.947218+00:00",
-  "commit": "bddebcf",
-  "commit_subject": "No log line or verdict carries the database password, and any password reaches psycopg intact",
+  "generated_at": "2026-09-21T17:16:52.914886+00:00",
+  "commit": "8f6a553",
+  "commit_subject": "Every capability the product checks is in the furnished registry, and a sweep fails the build otherwise",
   "total": 1595,
-  "done": 306,
+  "done": 307,
   "percent": 19.2,
   "acts": 47,
   "decided": 107,
@@ -26,12 +26,12 @@
       "wave": 1,
       "name": "The gate",
       "total": 165,
-      "done": 125,
-      "percent": 75.8,
+      "done": 126,
+      "percent": 76.4,
       "in_progress": 0,
       "ready_for_testing": 0,
       "blocked": 0,
-      "open": 40,
+      "open": 39,
       "acts": 1,
       "decided": 7
     },
@@ -116,7 +116,7 @@
       "name": "Identity, users, roles, permissions",
       "wave": 1,
       "total": 50,
-      "done": 41,
+      "done": 42,
       "acts": 0,
       "decided": 1
     },
@@ -565,6 +565,7 @@
     "M1.6.7",
     "M1.6.8",
     "M1.6.9",
+    "M1.7.1",
     "M1.8.1",
     "M1.8.2",
     "M1.8.4",
@@ -824,7 +825,7 @@
     }
   },
   "wave_records": {},
-  "closed_today": 147,
+  "closed_today": 148,
   "next_up": [
     "M31.3.2.3",
     "M31.3.2.4",
@@ -833,6 +834,12 @@
     "M41.3.1"
   ],
   "recent": [
+    {
+      "sha": "8f6a553",
+      "at": "2026-09-21T17:05:59+00:00",
+      "subject": "Every capability the product checks is in the furnished registry, and a sweep fails the build otherwise",
+      "closed": "M1.7.1"
+    },
     {
       "sha": "731662a",
       "at": "2026-09-21T16:04:33+00:00",
@@ -946,12 +953,6 @@
       "at": "2026-09-21T09:11:05+00:00",
       "subject": "A sensitive tool always waits for approval, and the reach deciders are proved agent-blind",
       "closed": "M3.7.1,M3.7.3,M3.7.4,M3.8.1,M3.8.2,M3.8.3,M3.8.4,M3.8.5,M3.8.6,M3.9.1,M3.9.2,M3.9.3,M3.9.4,M3.9.5,M3.9.6"
-    },
-    {
-      "sha": "e6f2901",
-      "at": "2026-09-21T08:52:56+00:00",
-      "subject": "Allow the owner's seven licences and run database invariants after deploy",
-      "closed": "M0.7.1"
     }
   ]
 }
