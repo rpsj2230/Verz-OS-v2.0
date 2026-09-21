@@ -104,6 +104,9 @@ IMAGE_TERMS: Final[Mapping[str, ImageTerms]] = {
     "python": ImageTerms("PSF-2.0", False, "docker-library/python, the CPython licence"),
     "node": ImageTerms("MIT", False, "nodejs/node LICENSE"),
     "ghcr.io/astral-sh/uv": ImageTerms("MIT OR Apache-2.0", False, "astral-sh/uv LICENSE-*"),
+    "mcr.microsoft.com/presidio-analyzer": ImageTerms(
+        "MIT", False, "microsoft/presidio LICENSE; the image is the project's own, unmodified"
+    ),
     "mcr.microsoft.com/playwright/python": ImageTerms(
         "Apache-2.0", False, "microsoft/playwright-python LICENSE"
     ),

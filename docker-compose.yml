@@ -72,6 +72,10 @@ services:
       BRAIN_LANGFUSE_PUBLIC_KEY: ${BRAIN_LANGFUSE_PUBLIC_KEY:-}
       BRAIN_LANGFUSE_SECRET_KEY: ${BRAIN_LANGFUSE_SECRET_KEY:-}
       BRAIN_INFERENCE_URL: ${BRAIN_INFERENCE_URL:-}
+      # Where the personal data analyser answers. Empty takes the product's own service on a
+      # profile that deploys it (`brain.ops.pii.analyzer_address`); startup refuses a value on
+      # `lite`, which deploys none. See `docker-compose.presidio.yml`.
+      BRAIN_PRESIDIO_URL: ${BRAIN_PRESIDIO_URL:-}
       # This installation's own values, every one `brain.install.INSTALLATION` declares.
       INSTALL_COMPANY_NAME: ${INSTALL_COMPANY_NAME:-}
       INSTALL_PRODUCT_NAME: ${INSTALL_PRODUCT_NAME:-}
@@ -120,6 +124,10 @@ services:
       # the two. Here there is no hostname to resolve, because those services are not on
       # it.
       - tool-api
+      # The personal data analyser's network, internal and shared with that one service.
+      # Declared here as well as in `docker-compose.presidio.yml` so this file starts on
+      # its own; on `lite` nothing else joins it and it carries nothing.
+      - pii
     healthcheck:
       # Readiness, not liveness. A container that is up but cannot reach its database
       # still answers questions, from whatever it can still reach.
@@ -255,6 +263,11 @@ networks:
   # one case of.
   tool-api:
     name: brain-tool-api
+    internal: true
+  # The analyser's network. Internal for the reason `tool-api` is: the text on it is the
+  # text about to be scrubbed, and an internal network has no gateway to send it out of.
+  # Declared identically in `docker-compose.presidio.yml`.
+  pii:
     internal: true
 
 volumes:

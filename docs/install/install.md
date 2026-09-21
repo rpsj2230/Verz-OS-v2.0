@@ -130,12 +130,14 @@ Three profiles, and the one to pick is the smallest that has what you need.
 | Profile | What it runs | Memory | Cores | Disk | Containers |
 | --- | --- | --- | --- | --- | --- |
 | `lite` | the application, the connection pooler, the database, the cache | 3968 MiB | 2 | 28 GiB | 4 |
-| `standard` | the above plus two workers, the file store, the identity provider and the inference server | 9984 MiB | 5 | 36 GiB | 13 |
-| `full` | the above plus the trace ledger, the automation canvas and the record matcher | 13952 MiB | 7 | 50 GiB | 21 |
+| `standard` | the above plus two workers, the file store, the identity provider, the inference server and the personal data analyser | 11008 MiB | 6 | 38 GiB | 14 |
+| `full` | the above plus the trace ledger, the automation canvas and the record matcher | 14976 MiB | 8 | 52 GiB | 22 |
 
 The memory figures are measured: they are the sum of every memory ceiling in the profile's
-compose files, plus what the profile budgets for a component that has no service yet, plus what
-the host keeps for itself. The cores and the disk are ratios rather than measurements, and they
+compose files, plus what the profile budgets for a component that has no service yet (none,
+since 2026-09-21), plus what the host keeps for itself. `full` can also be started from one
+file, `docker-compose.full.yml`, which is the generated merge of the files the installer names
+and is held equal to them by test; the installer itself keeps naming the files. The cores and the disk are ratios rather than measurements, and they
 say so in `brain.deployment.requirements.ServerSpec.notes`, because nothing here has been run
 under load and a figure invented to look precise is worse than one that admits what it is.
 

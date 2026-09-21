@@ -1,8 +1,9 @@
-"""What stops the `full` profile being one compose file, held to the files themselves.
+"""The `full` profile as one compose file, and the four checks it had to pass, held to the files.
 
-M0.4.2 asks for `docker-compose.full.yml`, and it is not written. Every test here is one of
-the four reasons, asserted against the parsed compose files rather than against a paragraph,
-so the day a reason stops being true a test fails and says which one.
+M0.4.2 asks for `docker-compose.full.yml`. It is the generated merge of the profile's source
+files since 2026-09-21, and the tests here hold it equal to that merge and hold the four
+reasons it could not be written before, asserted against the parsed compose files rather than
+against a paragraph, so the day one comes back a test fails and says which one.
 
 The pinned sets are deliberate and they are the shape `test_connections.py` uses for the
 clients that go round the pooler: a check that tolerates four findings tolerates five, and the
@@ -16,7 +17,7 @@ notification.
 Read with `yaml.safe_load` rather than grepped, in both directions: a bind mount inside a
 comment is not a mount, and a service whose limit is written in a comment has no limit.
 
-Task ids: none
+Task ids: M0.4.2
 """
 
 from __future__ import annotations
@@ -31,8 +32,10 @@ from brain.ops.compose import (
     A_NAME_WITH_NO_BODY_IS_A_REFERENCE_AND_NOT_A_SECOND_DECLARATION,
     A_RELATIVE_BIND_MOUNT_IS_EMPTY_IN_A_STORED_COMPOSE,
     BASELINE_FILE,
+    FULL_PROFILE_FILE,
     FULL_PROFILE_FILES,
-    THE_FULL_PROFILE_IS_NOT_ONE_FILE_YET,
+    FULL_PROFILE_HEADER,
+    THE_FULL_PROFILE_IS_ONE_FILE,
     TWO_DECLARATIONS_OF_ONE_SERVICE_ARE_SETTLED_BY_ARGUMENT_ORDER,
     ComposeError,
     components_with_no_service,
@@ -41,6 +44,8 @@ from brain.ops.compose import (
     declared_services,
     deployment_mib,
     described_services,
+    full_profile_document,
+    full_profile_text,
     host_mib_for,
     mounted_paths,
     relative_bind_mounts,
@@ -61,7 +66,7 @@ REPO = Path(__file__).resolve().parents[2]
 
 
 def profile_files() -> dict[str, Any]:
-    """The eight files a `full` install composes, parsed.
+    """The ten files a `full` install composes, parsed.
 
     Named by the module rather than globbed, because two of the compose files in this
     repository are deliberately not members: `docker-compose.lite.yml` is the same four
@@ -88,33 +93,28 @@ def test_every_file_the_full_profile_names_exists_and_parses() -> None:
 
     files = profile_files()
     assert BASELINE_FILE in files
-    assert len(declared_services(files)) == 21
+    assert len(declared_services(files)) == 22
 
 
-def test_one_component_of_the_full_profile_has_no_service_anywhere() -> None:
-    """**The reason `docker-compose.full.yml` cannot be written today.** An aggregate file is
-    the profile in one place, and a component that is budgeted with nothing to copy leaves a
-    hole that can only be filled by choosing an image, a port and a readiness probe for a
-    container nobody here has run.
+def test_every_component_of_the_full_profile_has_a_service() -> None:
+    """**The fourth reason, and the last to close (2026-09-21).** `presidio-analyzer` was
+    budgeted in `standard` and `full` and no compose file declared it, so the profile spent
+    memory on a container nobody could start. `docker-compose.presidio.yml` declares it now.
 
-    Pinned as an exact set rather than as "not empty", so that writing the missing service
-    fails this test and says the leaf is now available.
+    The negative half is asserted on the real files with that one removed, because a check
+    that reports nothing on the tree could be one that reports nothing at all: taken out, the
+    analyser comes back as a finding, named, with what the hole costs.
 
-    Delete this and the gap becomes invisible: the profile's arithmetic keeps spending 512
-    MiB on a container no deployment can start."""
+    Delete this and a component can be budgeted again with no service, and the profile's
+    arithmetic spends memory on a container no deployment can start."""
     files = profile_files()
-    found = components_with_no_service("full", files)
+    assert components_with_no_service("full", files) == ()
+    assert set(declared_services(files)) >= {one.name for one in components_for("full")}
 
+    without = {name: doc for name, doc in files.items() if name != "docker-compose.presidio.yml"}
+    found = components_with_no_service("full", without)
     assert {line.split("'")[1] for line in found} == {"presidio-analyzer"}, found
-    assert "512 MiB" in found[0], "the finding exists to say what the hole costs"
-
-    # The positive half, and it is what makes the assertion above mean something: every other
-    # component of the profile does have a service, so the check is reading the files rather
-    # than reporting whatever it cannot find.
-    declared = set(declared_services(files))
-    missing = {one.name for one in components_for("full")} - declared
-    assert len(missing) == 1
-    assert declared >= {one.name for one in components_for("full")} - missing
+    assert "1536 MiB" in found[0], "the finding exists to say what the hole costs"
 
 
 def test_the_object_store_is_described_once_and_named_twice() -> None:
@@ -412,21 +412,21 @@ def test_the_deployment_and_the_budget_describe_the_same_host_once_both_gaps_are
     """**The arithmetic a `docker-compose.full.yml` would have to state, and it does not
     balance until both gaps are on the table.**
 
-    `brain.ops.wiring` sums components; the compose files reserve containers. The two disagree
-    in both directions at once: 512 MiB is budgeted for a component with no service, and 576
-    MiB is deployed by four containers no component budgets. Add each gap to the side that is
-    missing it and the totals are equal, which is the only way to see that the budget and the
-    deployment are describing one machine rather than two.
+    `brain.ops.wiring` sums components; the compose files reserve containers. They disagreed in
+    both directions until 2026-09-21, when the one component with no service got one; what is
+    left is 576 MiB deployed by four containers no component budgets. Add each gap to the side
+    that is missing it and the totals are equal, which is the only way to see that the budget
+    and the deployment are describing one machine rather than two.
 
     Written as an identity rather than as two numbers, so that resizing any container fails
     here unless the other side moves with it.
 
     Delete this and the profile's memory figure can be quoted from either side, and the two
-    answers differ by 1088 MiB with nothing saying which is right."""
+    answers differ by 576 MiB with nothing saying which is right."""
     files = profile_files()
 
-    assert deployment_mib(files) == 13184
-    assert undeployed_mib("full", files) == 512
+    assert deployment_mib(files) == 14720
+    assert undeployed_mib("full", files) == 0
     assert unbudgeted_mib("full", files) == 576
 
     assert deployment_mib(files) + undeployed_mib("full", files) == (
@@ -463,7 +463,7 @@ def test_the_host_this_profile_needs_is_larger_than_the_whole_of_the_measured_ma
     """**The honest answer to "why is there no full profile deployed", and it is not the same
     answer as the budget's.** `budget_breaches("full")` compares wave 2 against a cap measured
     on one machine, which is a fact about that machine and not about the product. This is the
-    fact about the product: the profile needs 13952 MiB of reservations, and the machine the
+    fact about the product: the profile needs 14976 MiB of reservations, and the machine the
     measurements were taken on has 11960 MiB in total, so it does not fit there with every
     neighbour removed and nothing left for the kernel.
 
@@ -475,7 +475,7 @@ def test_the_host_this_profile_needs_is_larger_than_the_whole_of_the_measured_ma
     head, which is how "it does not fit our server" became "it cannot be built"."""
     files = profile_files()
 
-    assert host_mib_for("full", files) == 13952
+    assert host_mib_for("full", files) == 14976
     assert host_mib_for("full", files) == (
         deployment_mib(files) + undeployed_mib("full", files) + HOST_RESERVE_MIB
     )
@@ -527,13 +527,14 @@ def test_the_written_reason_carries_the_figures_the_files_actually_produce() -> 
     being. The next person to ask why there is no full compose file will read the sentence
     rather than run the functions, so every number in it is compared against them.
 
-    Delete this and the four reasons can each be fixed while the paragraph explaining them
-    goes on describing the repository as it was."""
+    Delete this and a reason can come back while the paragraph goes on saying none is left."""
     files = profile_files()
-    reason = THE_FULL_PROFILE_IS_NOT_ONE_FILE_YET
+    reason = THE_FULL_PROFILE_IS_ONE_FILE
 
     assert f"{len(declared_services(files))} containers" in reason
     assert f"across {len(FULL_PROFILE_FILES)} compose files" in reason
+    assert FULL_PROFILE_FILE in reason
+    assert f"{len(components_with_no_service('full', files))} components are budgeted" in reason
     assert f"reserving {deployment_mib(files)} MiB" in reason
     assert f"{host_mib_for('full', files)} MiB to spare" in reason
     assert f"{len(relative_bind_mounts(files))} services take something" in reason
@@ -567,3 +568,107 @@ def test_a_services_block_that_is_not_a_mapping_is_refused_rather_than_skipped()
     Delete this and a malformed file makes the deployment look smaller than it is."""
     with pytest.raises(ComposeError, match="not a mapping"):
         declared_services({"a.yml": {"services": ["app", "db"]}})
+
+
+# --- the one file ----------------------------------------------------------------------
+
+
+def full_file() -> dict[str, Any]:
+    """`docker-compose.full.yml`, parsed."""
+    parsed: dict[str, Any] = yaml.safe_load((REPO / FULL_PROFILE_FILE).read_text(encoding="utf-8"))
+    return parsed
+
+
+def test_the_full_compose_file_is_exactly_the_merge_of_its_sources() -> None:
+    """**M0.4.2's file, held to what it claims to be.** Compared as parsed YAML, so a comment
+    may differ and a port may not. A source edited without regenerating fails here, and the
+    message says the one command that fixes it.
+
+    Delete this and the one-file profile drifts from the ten files the installer composes, and
+    the two ways of starting `full` start different systems."""
+    assert full_file() == full_profile_document(profile_files()), (
+        "docker-compose.full.yml differs from the merge of its sources; run "
+        "`uv run python -m brain.ops.compose` and commit the result"
+    )
+
+
+def test_the_full_compose_file_is_costed_and_checked_the_same_as_its_sources() -> None:
+    """The file is what an operator points at, so the figures a reader is given have to be
+    true of the file and not only of the ten it came from. Every check that gates the profile
+    is asked of the one file too.
+
+    Delete this and a merge that dropped a service would still match a merge that dropped the
+    same service, and nobody would be told the host figure had changed."""
+    one = {FULL_PROFILE_FILE: full_file()}
+    files = profile_files()
+
+    assert declared_services(one).keys() == declared_services(files).keys()
+    assert deployment_mib(one) == deployment_mib(files)
+    assert host_mib_for("full", one) == host_mib_for("full", files)
+    assert components_with_no_service("full", one) == ()
+    assert relative_bind_mounts(one) == ()
+    # The trace ledger's database is the one finding that stays true of documents, and it is
+    # excused only by the install, exactly as for the sources.
+    assert databases_needed(one) == databases_needed(files)
+
+
+def test_the_generated_text_starts_with_the_header_and_names_every_source() -> None:
+    """The merge keeps no comments, so the header is where a reader is told the file is
+    generated, how to regenerate it and where the argued versions are.
+
+    Delete this and the header can be dropped, and the next person edits the generated file."""
+    text = full_profile_text(profile_files())
+    on_disk = (REPO / FULL_PROFILE_FILE).read_text(encoding="utf-8")
+
+    assert text.startswith(FULL_PROFILE_HEADER)
+    assert "GENERATED: do not edit" in FULL_PROFILE_HEADER
+    for name in FULL_PROFILE_FILES:
+        assert f"#   {name}\n" in text
+    assert on_disk == text, "the file on disk is not what the generator writes today"
+    assert "\r" not in on_disk
+
+
+def test_a_name_with_no_body_takes_the_body_another_file_gives_it() -> None:
+    """The reference shape the trace ledger uses for the object store. In either order, the
+    merge carries the one body, so no file order can drop it.
+
+    Delete this and the merge can keep the empty name, and `seaweedfs` starts with no
+    configuration from the one-file profile only."""
+    body = {"image": "x"}
+    orders: tuple[dict[str, Any], ...] = (
+        {"a.yml": {"services": {"s": body}}, "b.yml": {"services": {"s": None}}},
+        {"a.yml": {"services": {"s": None}}, "b.yml": {"services": {"s": body}}},
+    )
+    for files in orders:
+        assert full_profile_document(files) == {"services": {"s": body}}
+
+
+def test_two_different_bodies_or_an_unknown_section_are_refused_rather_than_settled() -> None:
+    """Compose would settle two bodies by flag order, and a generated file would fossilise
+    whichever order the loop used; an unknown top-level key would simply be dropped. Both are
+    refused. The positive sibling is the test above and the real merge.
+
+    Delete this and the merge can pick a winner silently, which is the defect
+    `TWO_DECLARATIONS_OF_ONE_SERVICE_ARE_SETTLED_BY_ARGUMENT_ORDER` names."""
+    with pytest.raises(ComposeError, match="described differently"):
+        full_profile_document(
+            {
+                "a.yml": {"services": {"s": {"image": "x"}}},
+                "b.yml": {"services": {"s": {"image": "y"}}},
+            }
+        )
+    with pytest.raises(ComposeError, match="differently"):
+        full_profile_document(
+            {
+                "a.yml": {"networks": {"n": {"internal": True}}},
+                "b.yml": {"networks": {"n": {"x": 1}}},
+            }
+        )
+    with pytest.raises(ComposeError, match="would drop"):
+        full_profile_document({"a.yml": {"services": {}, "secrets": {"k": {}}}})
+    with pytest.raises(ComposeError, match="not a mapping"):
+        full_profile_document({"a.yml": {"volumes": ["v"]}})
+    same = {"internal": True}
+    assert full_profile_document(
+        {"a.yml": {"networks": {"n": same}}, "b.yml": {"networks": {"n": dict(same)}}}
+    ) == {"networks": {"n": same}}

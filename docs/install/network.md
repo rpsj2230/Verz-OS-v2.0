@@ -125,6 +125,7 @@ for is a port nobody decided about. The third column is prose.
 | `langfuse-web` | `3000` | Whoever operates this install, through your proxy, on the trace ledger's own address. Not your staff. `full` only. |
 | `pgbouncer` | `5432` | The application alone. Everything the application does to the database goes through here. |
 | `pgbouncer-session` | `5432` | The two workers alone. It is in session mode, so a worker's `LISTEN` keeps its connection, and it caps what both workers together may hold against the database. `standard` and `full`. |
+| `presidio-analyzer` | `3000` | The application alone, on the internal `pii` network, which has no route off the server. It is handed text before that text is scrubbed, so never put it behind your proxy. `standard` and `full`. |
 | `seaweedfs` | `8333` | The application, the workers and, on `full`, the trace ledger. `standard` and `full`. |
 
 The application itself is deliberately not in that table, because it opens no declared port at

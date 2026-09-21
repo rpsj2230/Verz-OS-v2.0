@@ -23,6 +23,7 @@ from dataclasses import dataclass
 
 from brain.channels.widget import WILDCARD, normalise_origin
 from brain.ops.inference import inference_config_conflicts
+from brain.ops.pii import presidio_config_conflicts
 from brain.ops.wiring import DEFAULT_PROFILE, assert_known_profile, trace_config_conflicts
 
 #: Settings that must be non-empty, by environment. Cumulative: staging inherits
@@ -166,6 +167,16 @@ def check(env: str, values: dict[str, str]) -> list[ConfigProblem]:
                 setting="profile",
                 problem=conflict,
                 fix="unset the inference address, or deploy a profile that runs one",
+            )
+        )
+
+    # The same refusal for the analyser, which is handed the text before it is scrubbed.
+    for conflict in presidio_config_conflicts(profile, values):
+        problems.append(
+            ConfigProblem(
+                setting="profile",
+                problem=conflict,
+                fix="unset the analyser address, or deploy standard or full",
             )
         )
 

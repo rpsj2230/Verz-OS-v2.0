@@ -58,8 +58,8 @@ REPO = Path(__file__).resolve().parents[2]
 EXPECTED: dict[str, tuple[int, int, int, int]] = {
     # profile: (memory MiB, containers, cores, disk GiB)
     "lite": (3968, 4, 2, 28),
-    "standard": (9984, 13, 5, 36),
-    "full": (13952, 21, 7, 50),
+    "standard": (11008, 14, 6, 38),
+    "full": (14976, 22, 8, 52),
 }
 
 
@@ -111,20 +111,21 @@ def test_a_profile_nobody_declared_is_refused_rather_than_composing_nothing() ->
         files_for("lte")
 
 
-def test_the_standard_and_full_profiles_still_budget_a_component_with_no_service() -> None:
-    """The first of the four reasons there is no aggregate compose file, asserted here as
-    well because it is also the reason a one-command install of these two profiles cannot
-    complete: the memory is spent and the container cannot be started.
+def test_every_profile_has_a_service_for_every_component_it_budgets() -> None:
+    """The first of the four reasons there was no aggregate compose file, and the reason a
+    one-command install of `standard` and `full` could not complete: `presidio-analyzer` was
+    budgeted with nothing to start. Closed on 2026-09-21 by `docker-compose.presidio.yml`.
 
-    This test is expected to fail when somebody writes the missing service, and that failure
-    is the notification. Delete it and the specification claims a profile is installable
-    while one of its components has nothing to start."""
-    for profile in ("standard", "full"):
-        findings = components_with_no_service(profile, files_of(profile))
-        assert len(findings) == 1, findings
-        assert "presidio-analyzer" in findings[0]
+    The negative half is the real file set with that file taken out, so this is not satisfied
+    by a check that reports nothing. Delete it and the specification can claim a profile is
+    installable while one of its components has nothing to start."""
+    for profile in ("lite", "standard", "full"):
+        assert components_with_no_service(profile, files_of(profile)) == (), profile
 
-    assert components_with_no_service("lite", files_of("lite")) == ()
+    names = tuple(one for one in files_for("standard") if one != "docker-compose.presidio.yml")
+    findings = components_with_no_service("standard", parsed(names))
+    assert len(findings) == 1, findings
+    assert "presidio-analyzer" in findings[0]
 
 
 def test_the_sizing_table_a_client_reads_says_what_the_compose_files_say() -> None:

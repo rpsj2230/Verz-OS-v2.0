@@ -19,40 +19,21 @@
 # cache. It is not a cut-down or development configuration; it is what a client without
 # background automation runs, and it is what is running in production today.
 #
-# **There is no `docker-compose.full.yml`, and the reason has changed since this last said
-# so.** It used to say that `full` was this stack plus a worker and a session-mode pooler,
-# and that there was no worker process for the pooler to serve. There is one now:
-# `docker-compose.worker.yml` runs `python -m brain.ops.worker`, and since 2026-09-16 it
-# reaches Postgres through a session-mode pooler declared in that same file, which is what
-# LISTEN needs. Meanwhile `full` has come to mean something larger: fourteen components in
-# `brain.ops.wiring`, deployed by nine compose files, twenty-one containers between them.
+# **`docker-compose.full.yml` is the `full` profile as one file, since 2026-09-21.** It is not
+# a hand copy like this one: it is the generated merge of the ten files the full profile
+# composes (`brain.ops.compose.FULL_PROFILE_FILES`), written by `uv run python -m
+# brain.ops.compose`, and `tests/unit/test_compose.py` fails while it and that merge differ.
+# `full` means fourteen components in `brain.ops.wiring`, twenty-two containers, and a host
+# with 14976 MiB to spare, which `brain.ops.compose.host_mib_for` computes; more than the
+# one machine this repository was measured on, and that is a sizing requirement rather than
+# a reason not to describe the profile.
 #
-# **It is not the memory arithmetic, and that is worth saying because it was the previous
-# answer to this question.** `budget_breaches("full")` compares wave 2 against a cap measured
-# on one machine, and this repository is the product rather than that machine: a client with
-# a larger server runs `full`, which is what the profile is for. What the file would owe its
-# reader is the size of host it needs, and `brain.ops.compose.host_mib_for` computes that at
-# 13952 MiB, which is more than the measured machine holds in total.
-#
-# Four things stopped the file being written, every one of them a fact about the product
-# rather than about anybody's server, every one computed by `brain.ops.compose` and pinned by
-# `tests/unit/test_compose.py` so that fixing one fails a test rather than going unnoticed.
-# Three were closed on 2026-09-10 by `docs/needs-rupash.md` item 43 and one is open.
-#
-# Open: `presidio-analyzer` is budgeted at 512 MiB and no compose file declares a service by
-# that name. It is the one a decision about deployment files cannot close, because closing it
-# means choosing an image, a port and a readiness probe for a container nobody here has run.
-#
-# Closed: `seaweedfs` is described once, in the object store's own file, and named with no
-# body in the trace ledger's, so there is no order in which the wrong body could win.
+# Four things stopped that file being written, every one computed by `brain.ops.compose`.
+# Three were closed on 2026-09-10 by `docs/needs-rupash.md` item 43:
 # 0 services take something they need at startup from a bind mount that a stored compose
-# resolves to nothing, because all four now name an absolute path under the install's
-# settings directory. And the trace ledger still connects to a database that nothing in
-# those eight files creates, which is now created by a step of the install before anything
-# that needs it is started.
-#
-# M0.4.2 stays unclaimed until the first one is closed, and
-# `THE_FULL_PROFILE_IS_NOT_ONE_FILE_YET` is this paragraph with the figures in it.
+# resolves to nothing, `seaweedfs` is described once, and the trace ledger's database is
+# created by a step of the install. The fourth closed on 2026-09-21: `presidio-analyzer`
+# was budgeted and had no service, and `docker-compose.presidio.yml` is that service now.
 
 # The stack Coolify deploys.
 #
@@ -128,6 +109,10 @@ services:
       BRAIN_LANGFUSE_PUBLIC_KEY: ${BRAIN_LANGFUSE_PUBLIC_KEY:-}
       BRAIN_LANGFUSE_SECRET_KEY: ${BRAIN_LANGFUSE_SECRET_KEY:-}
       BRAIN_INFERENCE_URL: ${BRAIN_INFERENCE_URL:-}
+      # Where the personal data analyser answers. Empty takes the product's own service on a
+      # profile that deploys it (`brain.ops.pii.analyzer_address`); startup refuses a value on
+      # `lite`, which deploys none. See `docker-compose.presidio.yml`.
+      BRAIN_PRESIDIO_URL: ${BRAIN_PRESIDIO_URL:-}
       # This installation's own values, every one `brain.install.INSTALLATION` declares.
       INSTALL_COMPANY_NAME: ${INSTALL_COMPANY_NAME:-}
       INSTALL_PRODUCT_NAME: ${INSTALL_PRODUCT_NAME:-}
@@ -176,6 +161,10 @@ services:
       # the two. Here there is no hostname to resolve, because those services are not on
       # it.
       - tool-api
+      # The personal data analyser's network, internal and shared with that one service.
+      # Declared here as well as in `docker-compose.presidio.yml` so this file starts on
+      # its own; on `lite` nothing else joins it and it carries nothing.
+      - pii
     healthcheck:
       # Readiness, not liveness. A container that is up but cannot reach its database
       # still answers questions, from whatever it can still reach.
@@ -311,6 +300,11 @@ networks:
   # one case of.
   tool-api:
     name: brain-tool-api
+    internal: true
+  # The analyser's network. Internal for the reason `tool-api` is: the text on it is the
+  # text about to be scrubbed, and an internal network has no gateway to send it out of.
+  # Declared identically in `docker-compose.presidio.yml`.
+  pii:
     internal: true
 
 volumes:

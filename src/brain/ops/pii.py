@@ -145,7 +145,7 @@ client for this leg is deliberately not written here rather than being a fourth 
 post-and-classify loop in `brain.ops.inference_client` pointed at a service that does not
 exist. `budget_gaps` is called by tests only.
 
-Task ids: M32.2.1.1, M32.2.1.2, M32.2.1.3, M32.2.1.4, M32.2.2.1, M32.2.2.2, M32.2.2.3
+Task ids: M32.2.1.1, M32.2.1.2, M32.2.1.3, M32.2.1.4, M32.2.2.1, M32.2.2.2, M32.2.2.3, M0.4.2
 
 Not claimed: M32.2.2.4. The budget is declared, the harness exists and one measurement has
 been taken, and the leaf asks for a measurement on the client's CPU, which has not happened
@@ -164,6 +164,8 @@ from dataclasses import dataclass
 from datetime import date
 from types import MappingProxyType
 from typing import Final
+
+from brain.ops.wiring import assert_known_profile, components_for
 
 #: Written down where a reader of the code meets it, not only in the docstring. This
 #: string is asserted by the test suite, so deleting the rule deletes a test.
@@ -424,6 +426,56 @@ PRESIDIO_DECLINED: Final[dict[str, str]] = {
     "NRP": "nationality and religion appear in ordinary business text and identify nobody here",
     "LOCATION": "a client's address is governed by the field policy, not by a text scrubber",
 }
+
+#: The analyser's service name and port in `docker-compose.presidio.yml`. Product values, the
+#: same on every install, and held to that file by test rather than trusted.
+PRESIDIO_SERVICE: Final = "presidio-analyzer"
+PRESIDIO_PORT: Final = 3000
+
+#: The `brain.settings.Settings` field an install sets to send analyses somewhere else.
+PRESIDIO_ADDRESS_SETTING: Final = "presidio_url"
+
+#: Why an address set on a profile with no analyser is refused rather than used.
+AN_ANALYSER_ADDRESS_ON_LITE_IS_SOMEBODY_ELSES_HOST: Final = (
+    "The analyser is handed the text about to leave the building, before it is scrubbed. A "
+    "profile that deploys no analyser has no host of its own for that text, so an address set "
+    "there came from somewhere else, usually an environment file copied from another install, "
+    "and following it would send unscrubbed text to a host nobody here chose."
+)
+
+
+def deploys_presidio(profile: str) -> bool:
+    """Whether this profile budgets, and so deploys, the analyser."""
+    return any(one.name == PRESIDIO_SERVICE for one in components_for(profile))
+
+
+def analyzer_address(profile: str, configured: str = "") -> str | None:
+    """Where this install sends text to be analysed, or None when it deploys no analyser.
+
+    The configured value wins when there is one; otherwise the product's own service by name,
+    which resolves inside the compose project and nowhere else. None rather than a default on
+    `lite`, so a caller has to handle an absent analyser instead of dialling a name that does
+    not resolve. A value set on `lite` is refused at startup by `presidio_config_conflicts`.
+    """
+    if not deploys_presidio(profile):
+        return None
+    return configured.strip() or f"http://{PRESIDIO_SERVICE}:{PRESIDIO_PORT}"
+
+
+def presidio_config_conflicts(profile: str, values: Mapping[str, str]) -> tuple[str, ...]:
+    """An analyser address configured on a profile that deploys no analyser.
+
+    The shape `brain.ops.inference.inference_config_conflicts` has, for the reason
+    `AN_ANALYSER_ADDRESS_ON_LITE_IS_SOMEBODY_ELSES_HOST` gives. A blank value is unset.
+    """
+    assert_known_profile(profile)
+    if deploys_presidio(profile) or not (values.get(PRESIDIO_ADDRESS_SETTING) or "").strip():
+        return ()
+    return (
+        f"{PRESIDIO_ADDRESS_SETTING} is set and profile {profile!r} deploys no personal data "
+        "analyser, so text would be sent unscrubbed to a host nobody here chose. Unset it, or "
+        "deploy standard or full.",
+    )
 
 
 # ----------------------------------------------------------------- GLiNER configuration

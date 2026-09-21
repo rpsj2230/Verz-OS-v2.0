@@ -114,31 +114,26 @@ def test_one_command_installs_the_lite_profile_today_with_nothing_in_the_way() -
     assert "publishes a port" in blockers[0]
 
 
-def test_the_larger_profiles_are_blocked_by_one_thing_and_it_is_not_the_packaging() -> None:
+def test_the_larger_profiles_are_blocked_only_by_the_port_the_reverse_proxy_supplies() -> None:
     """The other half of the answer, and the half that stops it being an optimistic one.
 
-    **This test measured five findings for `full` until 2026-09-10 and now measures two**,
-    because three of them were the three parts of `docs/needs-rupash.md` item 43 and all three
-    were fixed rather than excused: the object store is described once, the trace ledger's
-    database is created by the plan, and the settings four containers read are created by it
-    too. What is left for `standard` and `full` is a component with no service anywhere, which
-    no packaging decision can close, and the port, which is a requirement on the server.
+    **This test measured five findings for `full` until 2026-09-10, two until 2026-09-21, and
+    one now.** Three were the parts of `docs/needs-rupash.md` item 43, fixed rather than
+    excused; the fourth was `presidio-analyzer` budgeted with no service, closed by
+    `docker-compose.presidio.yml`. What is left is the port, which is a requirement on the
+    server (a reverse proxy) and not on the stack.
 
-    This test is expected to fail as each is fixed, and that failure is the notification.
-    Delete it and "one command" is claimed for profiles that cannot start."""
-    standard = one_command_blockers("standard", parsed(files_for("standard")))
-    assert len(standard) == 2
-    assert any("presidio-analyzer" in one for one in standard)
-
-    full = one_command_blockers("full", parsed(files_for("full")))
-    assert len(full) == 2
-    assert any("presidio-analyzer" in one for one in full)
-    assert any("publishes a port" in one for one in full)
-    # The three that were closed, each asserted as absent by the words the finding used, so a
-    # reintroduction fails here rather than reading as an unchanged count.
-    assert not any("-f flags" in one for one in full)
-    assert not any("connects to database" in one for one in full)
-    assert not any("no step of the install creates it" in one for one in full)
+    Each closed finding is asserted absent by the words it used, so a reintroduction fails
+    here rather than reading as an unchanged count. Delete this and "one command" is claimed
+    for profiles that cannot start."""
+    for profile in ("standard", "full"):
+        found = one_command_blockers(profile, parsed(files_for(profile)))
+        assert len(found) == 1, found
+        assert "publishes a port" in found[0]
+        assert not any("presidio-analyzer" in one for one in found)
+        assert not any("-f flags" in one for one in found)
+        assert not any("connects to database" in one for one in found)
+        assert not any("no step of the install creates it" in one for one in found)
 
 
 def test_the_relative_bind_mounts_are_not_counted_against_the_installer() -> None:
@@ -683,6 +678,12 @@ def test_the_check_still_sees_every_container_of_this_product_in_the_real_files(
     Delete this and the test above can be satisfied by a check that is blind."""
     assert product_services(every_compose_file()) == (
         "docker-compose.browser.yml: browser-launcher",
+        # The merge of the full profile's sources carries every product container they do.
+        "docker-compose.full.yml: app",
+        "docker-compose.full.yml: brain-parse-worker",
+        "docker-compose.full.yml: brain-worker",
+        "docker-compose.full.yml: keycloak-realm",
+        "docker-compose.full.yml: record-matcher",
         "docker-compose.keycloak.yml: keycloak-realm",
         "docker-compose.lite.yml: app",
         "docker-compose.matcher.yml: record-matcher",

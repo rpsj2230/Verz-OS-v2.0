@@ -504,26 +504,21 @@ def test_the_lite_profile_and_the_deployed_compose_do_not_drift() -> None:
     )
 
 
-def test_the_lite_profile_says_why_there_is_no_full_one_and_says_it_currently() -> None:
-    """A missing file reads as an oversight, so the file that exists explains the one that
-    does not. **The explanation went stale before anybody noticed**, which is why this test is
-    no longer a substring search: it said `full` was this stack plus a worker and a
-    session-mode pooler and that no worker process existed, and by then `brain.ops.worker`
-    was written, `docker-compose.worker.yml` was running it, and `full` had grown to twelve
-    components. Both assertions still passed, because both words were still on the page.
+def test_the_lite_profile_says_where_the_full_one_is_and_says_it_currently() -> None:
+    """The header of `docker-compose.lite.yml` explained for weeks why there was no full
+    compose file, and it went stale once before anybody noticed: it described a worker that
+    did not exist after one did. Since 2026-09-21 the file exists, so the paragraph says where
+    it is and what it costs, and every figure and name in it is compared against
+    `brain.ops.compose`, which computes them from the compose files.
 
-    So every figure and every name in that paragraph is compared against
-    `brain.ops.compose`, which computes them from the compose files. A header that stops
-    matching the repository fails here rather than being read by the next person.
-
-    Delete this and the explanation drifts again, in the one direction that matters: a
-    paragraph saying a leaf is blocked, after it has stopped being."""
+    Delete this and the explanation drifts again, in the direction that matters: a paragraph
+    giving a host size that the profile has since outgrown."""
     import yaml
 
     from brain.ops.compose import (
+        FULL_PROFILE_FILE,
         FULL_PROFILE_FILES,
         components_with_no_service,
-        databases_nothing_creates,
         host_mib_for,
         relative_bind_mounts,
     )
@@ -535,16 +530,11 @@ def test_the_lite_profile_says_why_there_is_no_full_one_and_says_it_currently() 
         for name in FULL_PROFILE_FILES
     }
 
-    assert not (repo / "docker-compose.full.yml").exists(), (
-        "the full profile is a file now, so this paragraph in docker-compose.lite.yml is "
-        "describing a repository that no longer exists and has to be rewritten"
-    )
-    assert "docker-compose.full.yml" in lite
+    assert (repo / FULL_PROFILE_FILE).is_file()
+    assert FULL_PROFILE_FILE in lite
     assert f"{host_mib_for('full', files)} MiB" in lite
     assert f"{len(relative_bind_mounts(files))} services take something" in lite
-    for line in components_with_no_service("full", files):
-        assert line.split("'")[1] in lite, "the header names the component that has no service"
-    assert databases_nothing_creates(files), "the header claims a database nothing creates"
+    assert components_with_no_service("full", files) == (), "the header says none is left"
 
 
 # ------------------------------------------------ staging shares nothing (M38.1.4.2)
