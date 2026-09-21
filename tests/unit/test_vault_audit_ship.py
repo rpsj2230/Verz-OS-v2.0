@@ -175,7 +175,7 @@ def test_a_missing_log_fails_and_an_empty_one_waits(tmp_path: Path) -> None:
     """A worker whose overlay mounts nothing is a failure the Scheduled jobs screen shows; a log
     with no complete entry yet is the ordinary state of a new vault. Delete this and the two read
     alike."""
-    with pytest.raises(VaultAuditShipError, match="enable-audit"):
+    with pytest.raises(VaultAuditShipError, match="declared in ops/openbao/compose"):
         asyncio.run(ship_once(Memory(), tmp_path / "audit.log"))
     said = asyncio.run(ship_once(Memory(), a_log(tmp_path, "")))
     assert said == "the audit log holds no complete entry yet"

@@ -32,7 +32,7 @@ it until somebody looks.
 
 **What this does not see, stated.** Chatter after the last shipped entry is read again by the next
 run, because the offset moves only with a shipped row; a token renewing itself twice a day is all it
-is. The stderr device's copy of the log is not read: it goes to the container's log, which the
+is. The stdout device's copy of the log is not read: it goes to the container's log, which the
 worker cannot reach and should not. Rotating the file is not configured here, and a log that grows
 for years is read from where it was left, never whole.
 
@@ -227,8 +227,8 @@ async def ship_once(store: StoredVaultAccess, path: Path) -> str:
         if not path.exists():
             msg = (
                 f"no audit log is readable at {path}. The worker's vault overlay mounts the "
-                "vault's log volume there, and the file device writes it once enabled: "
-                "ops/openbao/enable-audit.sh"
+                "vault's log volume there, and the file audit device declared in "
+                "ops/openbao/compose.yml writes it"
             )
             raise VaultAuditShipError(msg)
         return "the audit log holds no complete entry yet"
@@ -239,8 +239,9 @@ async def ship_once(store: StoredVaultAccess, path: Path) -> str:
         found = await asyncio.to_thread(lambda: read_since(path, start))
     except PermissionError as refused:
         msg = (
-            f"the audit log at {path} is not readable by the worker. Enable the file device with "
-            "mode=0644: ops/openbao/enable-audit.sh"
+            f"the audit log at {path} is not readable by the worker. The file audit device in "
+            "ops/openbao/compose.yml declares mode 0644; a log written earlier at 0600 needs "
+            "chmod 0644"
         )
         raise VaultAuditShipError(msg) from refused
     await store.ship(identity, found.entries)

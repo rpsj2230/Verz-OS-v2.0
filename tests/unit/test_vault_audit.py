@@ -261,9 +261,8 @@ def test_an_enabled_device_is_recognised() -> None:
 
 
 def test_no_devices_reads_as_not_enabled() -> None:
-    """The failure this guards is quiet and specific: audit devices are a runtime mount in
-    OpenBao, so recreating the container restores the listener and the storage and does not
-    restore the audit device. A vault audited on Monday is unaudited on Tuesday with nothing
-    having failed, and `bao audit list` returning nothing is the only visible sign."""
+    """The failure this guards is quiet: a vault started from a configuration without the
+    declared devices serves every request unaudited, and `bao audit list` returning nothing is
+    the only visible sign."""
     assert not audit_is_enabled("")
     assert not audit_is_enabled("Path      Type    Description\n----      ----    -----------\n")

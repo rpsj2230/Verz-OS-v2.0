@@ -113,8 +113,8 @@ THE_UNSEAL_PIECES_ARE_SHOWN_ONCE_AND_KEPT_BY_PEOPLE: Final = (
 #: Why the root token is revoked inside the step that uses it.
 THE_ROOT_CREDENTIAL_LIVES_FOR_ONE_STEP: Final = (
     "The root token bypasses every policy and the audit log cannot tell its use from an "
-    "administrator's. The installer needs it for one step, to enable the engines and the audit "
-    "devices, load the policies and mint two tokens, and revokes it at the end of that step. If "
+    "administrator's. The installer needs it for one step, to enable the engines, load the "
+    "policies and mint two tokens, and revokes it at the end of that step. If "
     "one is needed again, three holders regenerate it with bao operator generate-root."
 )
 
@@ -135,13 +135,13 @@ NO_PIECE_REACHES_AN_ARGUMENT_LIST_OR_A_FILE: Final = (
     "the environment file the installer already writes credentials to."
 )
 
-#: Why the file audit device is written readable by the worker.
-THE_AUDIT_LOG_IS_READABLE_BY_THE_PROCESS_THAT_SHIPS_IT: Final = (
-    "The worker ships the vault's audit log into the ledger, and reads it from the log volume "
-    "mounted read-only into its container, where it runs as a different user from the vault. The "
-    "file device writes 0600 unless told otherwise, which no other user can read, so it is enabled "
-    "with mode 0644. Every value in the log that could be used is an HMAC, raw logging stays off, "
-    "and only the worker's overlay mounts the volume."
+#: Why the audit devices are declared in the vault's compose file and not enabled by this step.
+THE_AUDIT_DEVICES_ARE_DECLARED_NOT_ENABLED: Final = (
+    "OpenBao 2.4 refuses bao audit enable over the API, so the installer enables no audit device. "
+    "Both are declared in ops/openbao/compose.yml's BAO_LOCAL_CONFIG and come up with the vault: "
+    "a file device on the log volume with mode 0644, so the worker, another user reading that "
+    "volume read-only, can ship it into the ledger, and a stdout device in the docker log. Every "
+    "usable value in the log is an HMAC and raw logging stays off."
 )
 
 #: Why the installer creates the connector-run token role and defines every source's slot.
@@ -339,17 +339,6 @@ def open_run(home: str, env_file: str) -> str:
             f'{exec_} status >/dev/null 2>&1 || fail "the vault is still sealed after {threshold} '
             "of its pieces. Nothing has been written to the environment file. Open it with "
             'ops/openbao/UNSEAL.md, then finish by hand under Finishing what the installer began"',
-            'BRAIN_VAULT_AUDIT="$(as_vault_root audit list 2>/dev/null || true)"',
-            'case "$BRAIN_VAULT_AUDIT" in',
-            '  *"file/"*) ;;',
-            "  *) as_vault_root audit enable -path=file file file_path=/openbao/logs/audit.log "
-            "log_raw=false hmac_accessor=true mode=0644 >/dev/null ;;",
-            "esac",
-            'case "$BRAIN_VAULT_AUDIT" in',
-            '  *"stderr/"*) ;;',
-            "  *) as_vault_root audit enable -path=stderr file file_path=stderr log_raw=false "
-            ">/dev/null ;;",
-            "esac",
             'BRAIN_VAULT_ENGINES="$(as_vault_root secrets list)" || fail "the vault would not '
             "list its engines under the root token. Finish by hand with ops/openbao/UNSEAL.md, "
             'under Finishing what the installer began"',

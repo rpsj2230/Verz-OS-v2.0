@@ -43,7 +43,7 @@ docker exec -e BAO_TOKEN=<that token> brain-vault bao token lookup -accessor <ea
 Expected: no token with policy `root` other than the one just generated; one with policies
 `application, default` and one with `default, worker`, each `period 768h`, `renewable true`,
 `orphan true`. `bao secrets list` shows `providers/`, `webhooks/` and `connector_keys/` as `kv`
-version 2, `bao audit list` shows `file/` and `stderr/`, `bao policy list` shows every file in
+version 2, `bao audit list` shows `file/` and `stdout/`, `bao policy list` shows every file in
 `ops/openbao/policies`. Revoke the generated token.
 
 ## 3. The wizard keeps the key with no hand edit (M42.6.2)

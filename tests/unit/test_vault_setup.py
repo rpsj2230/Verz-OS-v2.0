@@ -25,6 +25,7 @@ import pytest
 import yaml
 
 from brain.deployment.app_environment import (
+    VAULT_AUDIT_LOG,
     VAULT_NETWORK,
     VAULT_OVERLAY,
     VAULT_PROJECT,
@@ -103,8 +104,6 @@ case "$asked" in
     exit 0 ;;
   "write sys/unseal key=-") { cat; printf '\n'; } >> "$state/unsealed"; exit 0 ;;
   "status") exit 0 ;;
-  "audit list") exit 2 ;;
-  "audit enable"*) exit 0 ;;
   "secrets list") printf 'cubbyhole/    cubbyhole    n/a\n'; exit 0 ;;
   "secrets enable"*) exit 0 ;;
   "write auth/token/roles/connector-run "*) exit 0 ;;
@@ -240,11 +239,8 @@ def test_a_fresh_standard_install_opens_the_vault_and_writes_both_tokens_and_the
 
     calls = [one.split("|", 1) for one in lines(state / "calls")]
     as_root = [asked for presented, asked in calls if presented == ROOT]
-    assert [one for one in as_root if one.startswith("audit enable")] == [
-        "audit enable -path=file file file_path=/openbao/logs/audit.log log_raw=false "
-        "hmac_accessor=true mode=0644",
-        "audit enable -path=stderr file file_path=stderr log_raw=false",
-    ]
+    # OpenBao 2.4 refuses an audit device over the API; they are declared in the compose file.
+    assert not [one for one in as_root if one.startswith("audit")]
     assert [one for one in as_root if one.startswith("secrets enable")] == [
         f"secrets enable -path={engine} kv-v2" for engine in ENGINES
     ]
@@ -453,6 +449,122 @@ def test_the_address_written_is_the_service_and_port_the_vaults_own_project_decl
     assert str(VAULT_PORT) in [str(one) for one in body["expose"]]
     assert VAULT_NETWORK in body["networks"]
     assert f'printf "BRAIN_VAULT_ADDRESS=%s\\n" "{VAULT_ADDRESS}"' in committed()
+
+
+def vault_config() -> str:
+    """The vault's BAO_LOCAL_CONFIG as shipped, with HCL comments cut off."""
+    body = load(VAULT_PROJECT)["services"][VAULT_SERVICE]
+    config = str(body["environment"]["BAO_LOCAL_CONFIG"])
+    return "\n".join(line.split("#", 1)[0] for line in config.splitlines())
+
+
+def audit_devices(config: str) -> dict[str, dict[str, str]]:
+    """Every `audit "file" "<path>" { options { k = "v" } }` block, as path to its options."""
+    found: dict[str, dict[str, str]] = {}
+    block = re.compile(r'audit\s+"file"\s+"([\w-]+)"\s*\{\s*options\s*\{([^}]*)\}\s*\}')
+    for path, options in block.findall(config):
+        found[path] = dict(re.findall(r'(\w+)\s*=\s*"([^"]*)"', options))
+    return found
+
+
+def test_the_shipped_vault_config_starts_on_openbao_2_4_and_audits_both_devices() -> None:
+    """Found on the owner's install with openbao 2.4.1: a `disable_mlock` line stops the vault
+    starting, `bao audit enable` is refused so devices must be declared, `stderr` is read as a
+    file name, and without BAO_ADDR `bao` dials https and the healthcheck never passes. Delete
+    this and any of the four comes back with every other test green."""
+    body = load(VAULT_PROJECT)["services"][VAULT_SERVICE]
+    config = vault_config()
+
+    assert "disable_mlock" not in config
+    assert "IPC_LOCK" not in (body.get("cap_add") or [])
+    assert audit_devices(config) == {
+        "file": {
+            "file_path": "/openbao/logs/audit.log",
+            "log_raw": "false",
+            "hmac_accessor": "true",
+            "mode": "0644",
+        },
+        "stdout": {"file_path": "stdout", "log_raw": "false"},
+    }
+    assert body["environment"]["BAO_ADDR"] == f"http://127.0.0.1:{VAULT_PORT}"
+    assert "bao status" in " ".join(body["healthcheck"]["test"])
+    # The file device writes onto the volume the worker's overlay mounts as the audit log.
+    logs = next(one for one in body["volumes"] if one.startswith("brain-vault-logs:"))
+    mounted = logs.split(":", 1)[1]
+    assert audit_devices(config)["file"]["file_path"] == f"{mounted}/audit.log"
+    assert VAULT_AUDIT_LOG.rsplit("/", 1)[1] == "audit.log"
+
+
+def test_the_config_reader_sees_a_mlock_line_and_a_stderr_device() -> None:
+    """The positive control: a reader that found nothing would pass the test above."""
+    old = (
+        'disable_mlock = false\naudit "file" "stderr" {\n  options {\n'
+        '    file_path = "stderr"\n  }\n}\n'
+    )
+    assert "disable_mlock" in old
+    assert audit_devices(old) == {"stderr": {"file_path": "stderr"}}
+
+
+def checking_swap(tmp_path: Path, swaps: str, *settings: str) -> subprocess.CompletedProcess[str]:
+    """The committed script's helpers and its swap check, reading `swaps` as /proc/swaps."""
+    script = committed()
+    opening = 'BRAIN_SWAP_PLAIN=""'
+    check = script[script.index(opening) : script.index('fi\nsay "  note: a reverse proxy')]
+    table = tmp_path / "swaps"
+    table.write_text(swaps, encoding="utf-8", newline="\n")
+    body = "\n".join(
+        (
+            script[: script.index("usage() {")],
+            *settings,
+            check.replace("/proc/swaps", table.as_posix()) + "fi",
+            'printf "refusals=%s\n" "$BRAIN_REFUSALS"',
+        )
+    )
+    runner = tmp_path / "swap.sh"
+    runner.write_text(body, encoding="utf-8", newline="\n")
+    return subprocess.run(
+        [a_shell(), runner.as_posix()],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=60,
+        stdin=subprocess.DEVNULL,
+    )
+
+
+HEADER = "Filename   Type   Size   Used   Priority\n"
+A_SWAP_FILE = HEADER + "/swapfile  file   2097148   0   -2\n"
+
+
+def test_plain_swap_is_said_and_stops_the_install_unless_somebody_accepts_it(
+    tmp_path: Path,
+) -> None:
+    """Most VPS images ship a plain /swapfile, the owner's included. Delete this and the check
+    can go back to turning those machines away, or wave them through with nothing said."""
+    refused = checking_swap(tmp_path, A_SWAP_FILE)
+    assert "refusals=1" in refused.stdout
+    assert "swaps to /swapfile, which is not encrypted" in refused.stdout
+    assert "--accept-unencrypted-swap" in refused.stderr
+    assert "accepted:" not in refused.stdout
+
+    accepted = checking_swap(tmp_path, A_SWAP_FILE, 'BRAIN_ACCEPT_SWAP="yes"')
+    assert "refusals=0" in accepted.stdout
+    assert "swaps to /swapfile, which is not encrypted" in accepted.stdout
+    assert "accepted: unencrypted swap, by --accept-unencrypted-swap" in accepted.stdout
+    assert "Type yes to continue with unencrypted swap:" in committed()
+    assert '--accept-unencrypted-swap) BRAIN_ACCEPT_SWAP="yes"; shift ;;' in committed()
+
+
+def test_no_swap_zram_or_no_vault_asks_nothing(tmp_path: Path) -> None:
+    """The negative controls: a check that always spoke would pass the test above."""
+    for swaps, settings in (
+        (HEADER, ()),
+        (HEADER + "/dev/zram0 partition 1048572 0 100\n", ()),
+        (A_SWAP_FILE, ('BRAIN_VAULT="no"',)),
+    ):
+        done = checking_swap(tmp_path, swaps, *settings)
+        assert done.stdout == "refusals=0\n", (swaps, settings, done.stdout)
+        assert done.stderr == ""
 
 
 def test_only_the_initialising_step_prints_the_vaults_answer_and_every_other_use_is_a_pipe() -> (

@@ -156,6 +156,7 @@ FLAGS: Final[tuple[tuple[str, str], ...]] = (
         vault_setup.DECLINE_FLAG,
         f"run no secrets vault, accepted only for: {' '.join(vault_setup.DECLINABLE_PROFILES)}",
     ),
+    ("--accept-unencrypted-swap", "go ahead although the vault's memory can reach plain swap"),
     ("--help", "print this and stop"),
 )
 
@@ -434,6 +435,11 @@ _COMPOSE: Final = "Docker Compose v2, as the `docker compose` subcommand"
 _FETCHERS: Final = "curl and tar"
 _OPENSSL: Final = "openssl"
 _PROXY: Final = "a reverse proxy terminating TLS on 443"
+_SWAP: Final = "swap off or encrypted, where the secrets vault runs"
+
+#: The flag accepting unencrypted swap in a run with no terminal to type "yes" at. An acceptance
+#: rather than a refusal, because most VPS and cloud images ship a plain swap file.
+SWAP_FLAG: Final = "--accept-unencrypted-swap"
 
 
 def _linux_check() -> str:
@@ -447,6 +453,50 @@ def _linux_check() -> str:
             "esac",
             'test -e "/sys/fs/cgroup/cgroup.controllers" || '
             + refusal(_LINUX, "this kernel is not on the cgroup v2 unified hierarchy"),
+        )
+    )
+
+
+def _swap_check() -> str:
+    """Unencrypted swap under the vault: said, then accepted by a person or a flag, never silent.
+
+    Many cloud images ship a plain swap file, so this does not turn the machine away: it says
+    what the risk is and asks for "yes" at a terminal, or SWAP_FLAG in a scripted run, and
+    refuses only when neither came. Read from /proc/swaps, since `swapon` is not on every image;
+    a dm device is encrypted when its uuid has cryptsetup's CRYPT- prefix. See SWAP_FLAG.
+    """
+    why = as_shell_text(_requirement(_SWAP).why)
+    plain = 'BRAIN_SWAP_PLAIN="$BRAIN_SWAP_PLAIN $BRAIN_SWAP"'
+    return "\n".join(
+        (
+            'BRAIN_SWAP_PLAIN=""',
+            'if test "$BRAIN_VAULT" != "no" && test -r /proc/swaps; then',
+            "  while read -r BRAIN_SWAP _; do",
+            '    case "$BRAIN_SWAP" in',
+            "      Filename|/dev/zram*) ;;",
+            '      /dev/dm-*) grep -q "^CRYPT-" "/sys/block/${BRAIN_SWAP#/dev/}/dm/uuid" '
+            f"2>/dev/null || {plain} ;;",
+            f"      *) {plain} ;;",
+            "    esac",
+            "  done < /proc/swaps",
+            "fi",
+            'if test -n "$BRAIN_SWAP_PLAIN"; then',
+            '  say "  note: this machine swaps to$BRAIN_SWAP_PLAIN, which is not encrypted. '
+            f'{why}"',
+            '  if test "$BRAIN_ACCEPT_SWAP" = "yes"; then',
+            f'    say "  accepted: unencrypted swap, by {SWAP_FLAG}"',
+            '  elif test -t 0 && test "$(ask "Type yes to continue with unencrypted swap:" '
+            f'"{SWAP_FLAG} was not given")" = "yes"; then',
+            '    say "  accepted: unencrypted swap, by typing yes at this terminal"',
+            "  else",
+            "    "
+            + refusal(
+                _SWAP,
+                "unencrypted swap was not accepted. To go ahead with it, run again and type yes "
+                f"at the prompt, or pass {SWAP_FLAG}",
+            ),
+            "  fi",
+            "fi",
         )
     )
 
@@ -516,6 +566,7 @@ CHECKS: Final[tuple[Check, ...]] = (
         run="command -v openssl >/dev/null 2>&1 || "
         + refusal(_OPENSSL, "openssl is not installed"),
     ),
+    Check(requirement=_SWAP, run=_swap_check()),
     Check(requirement=_ENGINE, run=_engine_check()),
     Check(requirement=_COMPOSE, run=_compose_check()),
     Check(
@@ -819,6 +870,7 @@ def _arguments(profiles: Sequence[str] = PROFILES) -> tuple[str, ...]:
         'address your reverse proxy will serve}"; shift 2 ;;',
         '    --no-install-docker) BRAIN_INSTALL_DOCKER="no"; shift ;;',
         f'    {vault_setup.DECLINE_FLAG}) BRAIN_VAULT="no"; shift ;;',
+        f'    {SWAP_FLAG}) BRAIN_ACCEPT_SWAP="yes"; shift ;;',
         "    --help|-h) usage; exit 0 ;;",
         '    *) usage >&2; fail "unknown option: $1" ;;',
         "  esac",
@@ -915,6 +967,7 @@ def render_install(
         'BRAIN_CONSOLE_ADDRESS=""',
         'BRAIN_INSTALL_DOCKER="yes"',
         'BRAIN_VAULT="yes"',
+        'BRAIN_ACCEPT_SWAP="no"',
         "BRAIN_REFUSALS=0",
         "",
         *_helpers(),

@@ -48,9 +48,11 @@ starts.
 
 ## Server
 
-- [ ] The six requirements in "Before you start" in [install.md](install.md), including Docker
+- [ ] The seven requirements in "Before you start" in [install.md](install.md), including Docker
   Compose v2 as `docker compose`. Check with `docker compose version`, not with
-  `docker-compose --version`.
+  `docker-compose --version`. Swap for the secrets vault: `cat /proc/swaps` lists nothing, or
+  only dm-crypt or zram devices, or you have decided to accept plain swap (the installer asks,
+  or takes `--accept-unencrypted-swap`).
 - [ ] Memory, cores and disk for the profile you picked, from the sizing table in
   [install.md](install.md).
 - [ ] Firewall: 80 and 443 to the proxy, your own administrative access, and nothing else. See

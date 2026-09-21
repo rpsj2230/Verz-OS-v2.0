@@ -292,9 +292,8 @@ def audit_is_enabled(devices: str) -> bool:
     """Whether `bao audit list` output shows a device.
 
     A string rather than a call, so the check can run against output captured over ssh from
-    a machine that has no vault client. Audit devices are a *runtime* mount in OpenBao, so
-    recreating the container restores the listener and the storage and does not restore the
-    audit device. A vault audited on Monday is unaudited on Tuesday with nothing having failed.
+    a machine that has no vault client. The devices are declared in `ops/openbao/compose.yml`,
+    so a vault listing none is running a configuration other than the one shipped.
     """
     return any(
         line.strip() and not line.startswith("Path") and "/" in line.split()[0]
