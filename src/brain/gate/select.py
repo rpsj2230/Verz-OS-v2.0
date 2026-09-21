@@ -1,7 +1,10 @@
 """Choosing which agent answers, in a fixed order, without asking a model.
 
-Three stages, tried in order, and the order encodes who decided.
+Four stages, tried in order, and the order encodes who decided.
 
+0. **The agent the person addressed.** Somebody named an agent they may use, in the web
+   application or by mention in a chat. That is the asker deciding about this one question,
+   and nothing configured for the conversation can overrule it.
 1. **A channel binding.** Somebody configured this chat to talk to this agent. That is an
    explicit human decision about this exact conversation and it outranks everything below.
 2. **A rule.** A pattern an administrator wrote once, covering many conversations.
@@ -15,6 +18,10 @@ team, and the person who set it would have no way to see why it stopped working.
 caller cannot see is skipped, and selection falls through as though the binding or rule were
 not there. Saying "that agent is not available to you" would confirm it exists, which is the
 same mistake as a refusal that explains itself. The real reason goes in the trace.
+
+**An agent the person may not use, addressed by name, answers as one that does not exist.**
+Both fall through to the binding, the rules and the classifier by the same line, so the
+selection is identical whichever it was, and the reason never repeats the name.
 
 **No model is called here.** Same reasoning as lane classification: a round trip on every
 request, and text inside a retrieved document could otherwise choose which agent, and
@@ -36,6 +43,8 @@ from brain.gate.context import Channel
 class SelectionStage(StrEnum):
     """Which stage chose, recorded so a trace can say who decided rather than what ran."""
 
+    #: The person named an agent they may use (M3.6.2, M3.9.8).
+    ADDRESSED = "addressed"
     BINDING = "binding"
     RULE = "rule"
     CLASSIFIER = "classifier"
@@ -111,13 +120,27 @@ def select_agent(
     rules: Iterable[SelectionRule] = (),
     conversation_id: str | None = None,
     keywords: Mapping[str, tuple[str, ...]] = CLASSIFIER_KEYWORDS,
+    addressed: str | None = None,
 ) -> AgentSelection:
     """Pick an agent. Deterministic, and never a model call.
 
     `default_agent` is required rather than defaulted, because a selector that can return
     "no agent" pushes the empty case onto every caller, and the caller that forgets it
     produces a request with no agent and no error.
+
+    `addressed` is the id of the agent the person named, already resolved from what they
+    typed. Resolving a name to an id is the channel's job; deciding whether they may use it
+    is this function's, and it decides with the same `visible_agents` every stage uses.
     """
+    # 0. The agent the person addressed, when they may use it. One they may not use and one
+    # that does not exist both fall through here, so nothing below can tell the two apart.
+    if addressed is not None and _visible(addressed, visible_agents):
+        return AgentSelection(
+            agent_id=addressed,
+            stage=SelectionStage.ADDRESSED,
+            reason=f"the person addressed {addressed}",
+        )
+
     # 1. Bindings, most specific first. A conversation binding beats a channel binding, and
     # ties break on the agent id so the result cannot depend on iteration order.
     for binding in sorted(
