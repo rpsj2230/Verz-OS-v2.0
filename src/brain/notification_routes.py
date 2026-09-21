@@ -48,6 +48,7 @@ from pydantic import BaseModel, ConfigDict
 
 from brain.api import API_PREFIX, COMMON_RESPONSES, ErrorBody, NoEchoRoute
 from brain.api_routes import Asked
+from brain.attribution import attribute
 from brain.console.govern import NOWHERE, _in_reach
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.errors import Absent, Failed
@@ -514,6 +515,8 @@ async def switch_notice(
     if not one.switchable:
         return _refused(409, f"{one.title} has no switch. {one.fixed_because}")
     async with _sessions(request)() as session:
+        # Who, at what reach, in which request, for the ledger entry the setting's trigger writes.
+        await attribute(session, asked)
         await switch(session, one, on=body.on, by=asked.caller.principal.id)
         states = await switch_states(session)
         await session.commit()
@@ -546,6 +549,7 @@ async def save_email(request: Request, body: RelayAsked, asked: Asked) -> JSONRe
         username=body.username,
     )
     async with _sessions(request)() as session:
+        await attribute(session, asked)
         await save_settings(session, settings, by=asked.caller.principal.id)
         rows = await settings_rows(session)
         await session.commit()

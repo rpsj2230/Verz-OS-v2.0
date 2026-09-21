@@ -150,12 +150,13 @@ from typing import Annotated, Any, Final
 import structlog
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import Insert, Select, Update, func, insert, select, text, update
+from sqlalchemy import Insert, Select, TextClause, Update, func, insert, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.api import API_PREFIX, COMMON_RESPONSES, Page
-from brain.api_routes import Asked
+from brain.api_routes import Asked, Asking
+from brain.attribution import of_request
 from brain.console.govern import (
     VOCABULARY_SCREEN,
     Decision,
@@ -186,7 +187,6 @@ from brain.identity.teams import PrincipalSubject
 from brain.listing import Column, ListAsked, Listing
 from brain.ops.replica_store import ConsoleReads
 from brain.routing_routes import sessions_of
-from brain.tables.audit import ACTOR_SETTING
 from brain.tables.gate import (
     CapabilityGrantRow,
     CapabilityPackAssignmentRow,
@@ -837,22 +837,22 @@ def retire_grant(principal_id: str, capability: str) -> Update:
     )
 
 
-def actor_is(principal_id: str) -> Any:
-    """Tell this transaction who is making the entitlement write.
+def attribution(asked: Asking) -> tuple[TextClause, ...]:
+    """Tell this transaction who is making the entitlement write, at what reach, in which request.
+
+    `brain.tables.audit.attributed_to`'s three transaction-local settings. Until 2026-09-21 this
+    set the actor alone, so every grant written or removed from the People screen reached the
+    ledger with `0003`'s placeholders for the reach and the trace: thirty-two zeros and a
+    transaction number, which verify and answer nothing (`brain.ops.write_attribution`).
 
     `set_config(..., true)` is transaction-local, which is the trap
     `brain.gate.suspension_store._set_config` records: a session setting on a pooled connection
-    is inherited by whoever borrows the connection next, and an audit entry attributed to the
-    previous borrower is worse than one attributed to nobody.
-
-    A bind parameter rather than interpolation, for `brain.cache`'s reason: a value going into
-    SQL text for no reason.
+    is inherited by whoever borrows the connection next. `brain.attribution.of_request` takes
+    the three values from the request.
 
     See `THE_TRIGGER_WRITES_THE_ENTRY_AND_THE_ROUTE_SAYS_WHO`.
     """
-    return text("SELECT set_config(:name, :value, true)").bindparams(
-        name=ACTOR_SETTING, value=principal_id
-    )
+    return of_request(asked)
 
 
 # ------------------------------------------------------------------ the loading
@@ -1268,7 +1268,8 @@ async def grant(request: Request, body: GrantProposal, asked: Asked) -> GrantVie
             log.info("grant refused", principal=asked.caller.principal.id)
             raise _no_grant_here() from None
 
-        await session.execute(actor_is(asked.caller.principal.id))
+        for statement in attribution(asked):
+            await session.execute(statement)
         try:
             stored = (
                 await session.execute(add_grant(written, body.principal_id))
@@ -1347,7 +1348,8 @@ async def remove_grant(request: Request, body: GrantRemoval, asked: Asked) -> Gr
             log.info("grant removal refused", principal=asked.caller.principal.id)
             raise _no_grant_here() from None
 
-        await session.execute(actor_is(asked.caller.principal.id))
+        for statement in attribution(asked):
+            await session.execute(statement)
         retired = (
             await session.execute(retire_grant(body.principal_id, body.capability))
         ).one_or_none()

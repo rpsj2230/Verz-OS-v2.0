@@ -1071,6 +1071,20 @@ def sweep_house_style() -> None:
     print(f"ok: no em dash in {', '.join(HOUSE_STYLE_AREAS)}")
 
 
+def sweep_write_attribution() -> None:
+    """Every console write's ledger entry carries the writer's reach digest and the trace (M24.3.1).
+
+    `brain.ops.write_attribution` holds the rule and the argument; this is the entry point that
+    makes it a gate. It reads only the repository, so it runs on a laptop exactly as in CI.
+    """
+    from brain.ops.write_attribution import findings
+
+    found = findings()
+    if found:
+        raise SweepFailure(found)
+    print("ok: every console write sets the reach digest and the trace its ledger entry carries")
+
+
 SWEEPS = {
     "rls": sweep_rls,
     "grant_isolation": sweep_grant_isolation,
@@ -1082,6 +1096,7 @@ SWEEPS = {
     "client_independence": sweep_client_independence,
     "house_style": sweep_house_style,
     "install_from_empty": sweep_install_from_empty,
+    "write_attribution": sweep_write_attribution,
 }
 
 

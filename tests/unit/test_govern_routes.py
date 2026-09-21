@@ -40,6 +40,7 @@ Task ids: M27.7.3, M27.7.4, M27.7.5, M27.7.6, M27.7.7
 
 from __future__ import annotations
 
+import re
 import uuid
 from collections.abc import Iterator, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
@@ -77,7 +78,12 @@ from brain.govern_routes import (
 from brain.identity.packs import SubjectGrant
 from brain.identity.roles import ROLE_COUNT, ROLE_SPECS
 from brain.identity.teams import PrincipalSubject
-from brain.tables.audit import ACTOR_SETTING
+from brain.tables.audit import (
+    ACTOR_SETTING,
+    ENT_HASH_SETTING,
+    TRACE_ID_SETTING,
+    UNSUPPLIED_ENT_HASH,
+)
 from brain.tables.gate import (
     CapabilityGrantRow,
     CapabilityPackAssignmentRow,
@@ -1493,6 +1499,32 @@ def test_the_actor_is_the_caller_and_never_the_body(client: TestClient, executed
     assert named
     assert all("u_admin" in sql for sql in named)
     assert not any("u_1" in sql for sql in named)
+
+
+def test_both_writes_carry_the_callers_reach_digest_and_the_requests_trace(
+    client: TestClient, executed: Executed
+) -> None:
+    """**M24.3.1 on the People screen.** Until 2026-09-21 only the actor was set, so every grant
+    and removal reached the ledger with `0003`'s placeholders: thirty-two zeros for the reach and a
+    transaction number for the trace. Delete this and `attribution` can go back to setting the
+    actor alone, with the two tests above still green."""
+    executed.scopes = [
+        scope_row(slug=MAINTENANCE, predicate={"department": MAINTENANCE}, is_department=True)
+    ]
+    executed.written = grant_row(principal_id="u_2", scope=IN_MAINTENANCE, granted_by="u_admin")
+    for write in ("grant", "removal"):
+        executed.statements.clear()
+        if write == "grant":
+            propose(client, "u_admin")
+        else:
+            executed.retired = (FAR_OFF,)
+            remove(client, "u_admin", principal_id="u_1", capability=GRANTED)
+        reach = [sql for sql in executed.statements if ENT_HASH_SETTING in sql]
+        trace = [sql for sql in executed.statements if TRACE_ID_SETTING in sql]
+        assert reach and trace, write
+        assert re.search(r"'[0-9a-f]{32}'", reach[0]), write
+        assert UNSUPPLIED_ENT_HASH not in reach[0], write
+        assert re.search(r"'[A-Za-z0-9_.-]{1,64}'", trace[0]), write
 
 
 # ------------------------------------------------------------------ the statements

@@ -50,6 +50,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked
+from brain.attribution import attribute
 from brain.audit.ledger import FIELD_NAME, IDENTIFIER, LegalHold
 from brain.console.govern import NOWHERE, _in_reach
 from brain.console.govern_surfaces import RETENTION_SCREEN, retention_view
@@ -357,6 +358,8 @@ async def release(request: Request, body: ReleaseBody, asked: Asked) -> Released
         raise _not_writable()
 
     async with _require_sessions(request)() as session:
+        # Who, at what reach, in which request, for the entry the release's trigger writes.
+        await attribute(session, asked)
         stored = await latest_report(session)
         if stored is None or retention_view(stored.report, asked.reach, asked.now) is None:
             await session.rollback()
@@ -386,6 +389,7 @@ async def withdraw(request: Request, asked: Asked) -> Withdrawn:
         raise _not_writable()
 
     async with _require_sessions(request)() as session:
+        await attribute(session, asked)
         withdrawn = await withdraw_release(session, by=asked.caller.principal.id, at=asked.now)
         if not withdrawn:
             await session.rollback()
@@ -413,6 +417,7 @@ async def hold(request: Request, body: HoldBody, asked: Asked) -> HoldPlaced:
         raise _refused_because("names_nothing") from None
 
     async with _require_sessions(request)() as session:
+        await attribute(session, asked)
         try:
             await place_hold(session, placed, by=asked.caller.principal.id)
         except (IntegrityError, RetentionStoreError):
@@ -430,6 +435,7 @@ async def lift(request: Request, body: LiftBody, asked: Asked) -> HoldLifted:
         raise _not_writable()
 
     async with _require_sessions(request)() as session:
+        await attribute(session, asked)
         lifted = await lift_hold(session, body.hold_id, by=asked.caller.principal.id, at=asked.now)
         if not lifted:
             await session.rollback()

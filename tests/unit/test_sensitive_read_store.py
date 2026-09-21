@@ -279,6 +279,8 @@ def test_a_budget_version_appends_a_setting_entry_filed_under_whose_money_it_cou
                             author="u_admin",
                             effective_from=LONG_AGO,
                         ),
+                        ent_hash=ENT,
+                        trace_id="trace9",
                     )
             finally:
                 await engine.dispose()
@@ -289,6 +291,8 @@ def test_a_budget_version_appends_a_setting_entry_filed_under_whose_money_it_cou
     [entry] = [one for one in chain if one.action.value == "setting"]
     assert (entry.subject, entry.actor_id) == ("principal:u_priya", "u_admin")
     assert entry.details == {"budget_level": "user", "budget_period": "month"}
+    # The writer's reach and the request's trace, which `append` sets (M24.3.1).
+    assert (entry.ent_hash, entry.trace_id) == (ENT, "trace9")
     assert "424242" not in str(entry.details)
     assert AuditChain(chain).verify() is None
 

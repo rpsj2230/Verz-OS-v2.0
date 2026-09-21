@@ -34,6 +34,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked
+from brain.attribution import attribute
 from brain.console.govern import (
     VOCABULARY_SCREEN,
     Placed,
@@ -52,7 +53,6 @@ from brain.govern_routes import (
     PEOPLE_SCREEN,
     REASON_CHARS,
     ROLES_SCREEN,
-    actor_is,
     live_assignments,
     live_grants,
     one_live_scope,
@@ -324,8 +324,9 @@ async def _write(
     pack: CapabilityPackRow,
     asked: Asked,
 ) -> CapabilityPackAssignmentRow:
-    """The insert, attributed to the caller so `0003`'s trigger records who assigned it."""
-    await session.execute(actor_is(asked.caller.principal.id))
+    """The insert, attributed to the caller so `0003`'s trigger records who assigned it, at what
+    reach and in which request: `brain.attribution.attribute` (M24.3.1)."""
+    await attribute(session, asked)
     try:
         stored: CapabilityPackAssignmentRow | None = (
             await session.execute(add_assignment(assignment, principal_id, pack))

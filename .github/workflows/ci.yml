@@ -301,6 +301,11 @@ jobs:
         # and every table created with row-level security enabled in the same migration. The
         # other half runs in the `install` job below, against a database this built.
         run: uv run python -m brain.ops.sweeps install_from_empty
+      - name: Every console write carries the writer's reach and the request's trace to the ledger
+        # M24.3.1. A write to a table whose trigger reads the attribution, followed back to the
+        # route that reaches it, has to pass through something setting it; otherwise its ledger
+        # entry carries thirty-two zeros and a transaction number, and verifies anyway.
+        run: uv run python -m brain.ops.sweeps write_attribution
       - name: Migration policy
         # Autogenerate is very often nearly right, and nearly right passes review. These
         # are the three ways it is wrong that a diff does not show: a rename written as a
