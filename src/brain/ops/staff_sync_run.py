@@ -32,7 +32,12 @@ Rejected: reading the directory from the application process when somebody opens
 application holds no read on a connector key by policy, and a roster read on page load would
 contact the company's directory every time anybody looked.
 
-Task ids: M1.6.1, M1.6.2, M1.6.4, M1.6.12, M1.8.6
+**After the roster, each department head's audit reach, in a transaction of its own.**
+`brain.ops.head_audit_store.rewrite_head_audit_reach` writes the grants Needs Rupash item 48's
+Option A names, from the same roster, once the roster's transaction has committed. A failure there
+is logged and changes nothing the roster wrote, for that module's reason (M1.8.3).
+
+Task ids: M1.6.1, M1.6.2, M1.6.4, M1.6.12, M1.8.6, M1.8.3
 """
 
 from __future__ import annotations
@@ -46,6 +51,7 @@ from typing import Final, Protocol
 from urllib.parse import quote, urlencode
 
 import httpx
+import structlog
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.connectors.staff_directories import (
@@ -72,6 +78,7 @@ from brain.identity.staff_adapters import (
 from brain.identity.staff_roster import RunOutcome, application_for
 from brain.identity.staff_source import (
     STAFF_SOURCE_LOCATION_SETTING,
+    Roster,
     StaffSource,
     StaffSourceError,
     roster_from,
@@ -85,6 +92,7 @@ from brain.ops.connector_sync_run import (
     key_detail,
     worker_connector_keys,
 )
+from brain.ops.head_audit_store import rewrite_head_audit_reach
 from brain.ops.openbao import VaultUnreachableError
 from brain.ops.secrets import SecretsUnavailableError
 from brain.ops.staff_sync_store import (
@@ -96,6 +104,8 @@ from brain.ops.staff_sync_store import (
 )
 
 # ------------------------------------------------------------------ written-down reasons
+log = structlog.get_logger()
+
 #: Why the staff source's secret sits beside the connected sources' keys.
 THE_STAFF_SOURCE_CREDENTIAL_IS_A_CONNECTOR_KEY: Final = (
     "A staff list is read the way a connected source is read: by the worker, on a schedule, with "
@@ -411,7 +421,30 @@ async def sync_staff_on(
             withheld=application.withheld,
         )
         await write_application(session, application, record)
+    await _rewrite_heads(sessions, roster, now)
     return StaffSyncRun(outcome=outcome, detail=detail)
+
+
+#: Why a head's reach that cannot be written does not fail the run.
+A_HEADS_REACH_NEVER_UNDOES_THE_ROSTER: Final = (
+    "The roster is committed before the heads' reach is computed, so a reach that cannot be "
+    "written leaves every joiner and leaver applied and the reach one run stale, which is the "
+    "staleness a head's audit reach already has between runs. One transaction for both would let "
+    "a race on one head's grant roll back the whole staff list."
+)
+
+
+async def _rewrite_heads(
+    sessions: async_sessionmaker[AsyncSession], roster: Roster, now: datetime
+) -> None:
+    """Each department head's audit reach, after the roster. See
+    `A_HEADS_REACH_NEVER_UNDOES_THE_ROSTER`."""
+    try:
+        async with sessions() as session, session.begin():
+            await rewrite_head_audit_reach(session, roster, read_at=now)
+    except Exception as exc:
+        # Broad on purpose, and named in the constant above.
+        log.warning("staff_sync.head_audit_reach_unwritten", error=type(exc).__name__)
 
 
 def _sentence(said: str) -> str:
