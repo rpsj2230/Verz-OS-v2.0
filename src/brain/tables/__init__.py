@@ -106,6 +106,7 @@ from brain.tables.resolution import (
 )
 from brain.tables.retention import LegalHoldRow, RetentionReleaseRow, RetentionReportRow
 from brain.tables.review import ReviewDecisionRow
+from brain.tables.role_grant import RoleGrantRow
 from brain.tables.routing import ModelAttemptRow, RoutingRungRow, RoutingTierRow
 from brain.tables.schedule import ControlRunRow
 from brain.tables.sensitive_read import SensitiveReadRow
@@ -320,6 +321,8 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0099_requirement_check. Points at nothing: a requirement is a register id and the person a
     # value, so the record of what was checked outlives both.
     "ops.requirement_check",
+    # 0102_role_grant_and_team_grants
+    "gate.role_grant",
 )
 
 __all__ = [
@@ -389,6 +392,7 @@ __all__ = [
     "RetentionReleaseRow",
     "RetentionReportRow",
     "ReviewDecisionRow",
+    "RoleGrantRow",
     "RoutingChangeRow",
     "RoutingRungRow",
     "RoutingTierRow",

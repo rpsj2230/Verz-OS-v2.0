@@ -140,7 +140,10 @@ def renew_roster_grant(grant: SubjectGrant, principal_id: str) -> Update:
 
 
 def held_grant(row: CapabilityGrantRow) -> SubjectGrant:
-    """One stored grant as the reach calculation reads it."""
+    """One stored grant as the reach reads it. Loaded by principal, so never a team's."""
+    if row.principal_id is None:
+        msg = "a team's grant is not a person's reach"
+        raise ValueError(msg)
     return SubjectGrant(
         subject=PrincipalSubject(principal_id=row.principal_id),
         capability=Capability(value=row.capability),

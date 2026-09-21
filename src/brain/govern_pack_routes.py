@@ -13,9 +13,9 @@ decision (`POST /govern/access-review/decision`), which already retires an assig
 `revoke` entry the same trigger writes. The flag is
 `brain.console.govern.approver_misconfigurations`.
 
-**Role holders come from the directory today.** `auth.directory_role_grant` is the only record of a
-held role: the hand-made `role_grant` table (M1.3.2) needs a migration and is not built. The flag
-therefore judges directory-asserted Approvers; the day the other table lands it is one more load.
+**Role holders are the directory's and the appointments'.** `auth.directory_role_grant` records
+what a directory asserts and `gate.role_grant` (`0102`) what a person granted; an Approver in
+either counts, and an appointment that has lapsed does not.
 
 Task ids: M1.4.3, M1.4.8, M1.8.4
 """
@@ -65,6 +65,7 @@ from brain.identity.teams import PrincipalSubject
 from brain.routing_routes import sessions_of
 from brain.tables.gate import CapabilityPackAssignmentRow, CapabilityPackRow
 from brain.tables.identity import DirectoryRoleGrantRow, PrincipalRow
+from brain.tables.role_grant import RoleGrantRow
 
 log = structlog.get_logger()
 
@@ -200,6 +201,20 @@ def approver_holders(limit: int) -> Select[tuple[str, str | None]]:
         .where(DirectoryRoleGrantRow.role == Role.APPROVER.value)
         .distinct()
         .order_by(DirectoryRoleGrantRow.principal_id)
+        .limit(limit)
+    )
+
+
+def approver_appointments(limit: int) -> Select[tuple[str, str | None, datetime | None]]:
+    """Who holds the Approver role by a person's grant (`0102`), their department and lapse."""
+    return (
+        select(RoleGrantRow.principal_id, PrincipalRow.primary_department, RoleGrantRow.not_after)
+        .join(
+            PrincipalRow,
+            (PrincipalRow.id == RoleGrantRow.principal_id) & (PrincipalRow.deleted_at.is_(None)),
+        )
+        .where(RoleGrantRow.role == Role.APPROVER.value, RoleGrantRow.deleted_at.is_(None))
+        .order_by(RoleGrantRow.principal_id)
         .limit(limit)
     )
 
@@ -366,7 +381,20 @@ async def misconfigurations(request: Request, asked: Asked) -> Misconfigurations
     async with factory() as session:
         grants = (await session.execute(live_grants(MAX_PEOPLE_PER_PAGE + 1))).all()
         assignments = (await session.execute(live_assignments(MAX_PEOPLE_PER_PAGE + 1))).all()
-        holders = (await session.execute(approver_holders(MAX_PEOPLE_PER_PAGE))).all()
+        holders = [
+            (pid, department)
+            for pid, department in (
+                await session.execute(approver_holders(MAX_PEOPLE_PER_PAGE))
+            ).all()
+        ]
+        # A person's appointment counts while it has not lapsed, beside the directory's.
+        holders += [
+            (pid, department)
+            for pid, department, lapses in (
+                await session.execute(approver_appointments(MAX_PEOPLE_PER_PAGE))
+            ).all()
+            if lapses is None or lapses > asked.now
+        ]
 
     if len(grants) > MAX_PEOPLE_PER_PAGE or len(assignments) > MAX_PEOPLE_PER_PAGE:
         # Judged whole or not at all: a flag over part of the grants reads as "nobody else".

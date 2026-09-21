@@ -985,3 +985,31 @@ def test_continuous_integration_runs_this_check_on_a_live_step() -> None:
     assert any("brain.deployment.compatibility" in line for line in live), (
         "CI no longer runs the migration compatibility check"
     )
+
+
+def test_a_restriction_on_a_column_this_migration_added_binds_nothing_the_last_release_wrote() -> (
+    None
+):
+    """`A_RESTRICTION_ON_A_COLUMN_THE_PREVIOUS_RELEASE_NEVER_WRITES_IS_NOT_A_NARROWING`, both ways.
+    Delete this and the rule can pass a unique index or a check over columns the previous release
+    does write, which is exactly the narrowing the gate exists to refuse."""
+    added = (
+        '    op.add_column("t", sa.Column("team", sa.String(9), nullable=True), schema="s")\n'
+        '    op.alter_column("t", "owner", nullable=True, schema="s")\n'
+    )
+    safe = _migration(
+        added
+        + '    op.create_index("uq", "t", ["team", "name"], unique=True, schema="s")\n'
+        + '    op.create_check_constraint("a", "t", "team IS NULL OR owner IS NULL", schema="s")\n'
+        + '    op.create_check_constraint("b", "t", "owner IS NOT NULL OR team IS NOT NULL",'
+        + ' schema="s")\n'
+    )
+    assert _verdicts(safe) == [Verdict.SAFE] * 5
+    narrowing = _migration(
+        added
+        + '    op.create_index("uq", "t", ["name"], unique=True, schema="s")\n'
+        + '    op.create_check_constraint("a", "t", "name IS NULL OR owner IS NULL", schema="s")\n'
+        + '    op.create_check_constraint("b", "t", "team IS NOT NULL OR owner IS NULL",'
+        + ' schema="s")\n'
+    )
+    assert _verdicts(narrowing)[2:] == [Verdict.BREAKING] * 3

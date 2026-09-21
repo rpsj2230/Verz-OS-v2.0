@@ -492,3 +492,112 @@ export function readMisconfigurations(payload: unknown): readonly Misconfigurati
   const found = (payload as { items?: unknown }).items;
   return Array.isArray(found) ? (found as MisconfigurationRow[]) : [];
 }
+
+// ------------------------------------------------- role holders (M1.3.2, M1.3.3, M1.8.7)
+
+export const HOLDERS_API_PATH = "/govern/roles/holders";
+export const APPOINTMENT_API_PATH = "/govern/roles/appointment";
+export const DEPUTY_API_PATH = "/govern/roles/deputy";
+export const ROLE_REMOVAL_API_PATH = "/govern/roles/removal";
+
+/** One role grant as `GET /api/v1/govern/roles/holders` answers it. */
+export interface HolderRow {
+  readonly id: string;
+  readonly principal_id: string;
+  readonly role: string;
+  readonly deputy_of: string | null;
+  readonly not_after: string | null;
+}
+
+export interface HoldersPage {
+  readonly items: readonly HolderRow[];
+  readonly editable: boolean;
+}
+
+export function readHolders(payload: unknown): HoldersPage {
+  if (typeof payload !== "object" || payload === null) {
+    return { items: [], editable: false };
+  }
+  const found = payload as { items?: unknown; editable?: unknown };
+  return {
+    items: Array.isArray(found.items) ? (found.items as HolderRow[]) : [],
+    editable: found.editable === true,
+  };
+}
+
+/** The six roles, as the route's `Role` enum spells them. */
+export const ROLE_VALUES = [
+  "super_admin",
+  "department_admin",
+  "member",
+  "auditor",
+  "connector_admin",
+  "approver",
+] as const;
+
+/** The longest a deputy may run, `brain.identity.roles.DEPUTY_MAX`. */
+export const DEPUTY_DAYS = 30;
+
+export interface AppointmentBody {
+  readonly principal_id: string;
+  readonly role: string;
+  readonly reason: string;
+  readonly scope_slug?: string;
+  readonly acknowledgement?: string;
+}
+
+/** What the appointment form submitted, from named keys only, or null. */
+export function submittedAppointment(data: unknown): AppointmentBody | null {
+  if (typeof data !== "object" || data === null) {
+    return null;
+  }
+  const fields = data as Record<string, unknown>;
+  const principal = fields["principal_id"];
+  const role = fields["role"];
+  const reason = fields["reason"];
+  if (typeof principal !== "string" || typeof role !== "string" || typeof reason !== "string") {
+    return null;
+  }
+  if (principal === "" || role === "" || reason === "") {
+    return null;
+  }
+  const slug = fields["scope_slug"];
+  const acknowledgement = fields["acknowledgement"];
+  return {
+    principal_id: principal,
+    role,
+    reason,
+    ...(typeof slug === "string" && slug !== "" ? { scope_slug: slug } : {}),
+    ...(typeof acknowledgement === "string" && acknowledgement !== "" ? { acknowledgement } : {}),
+  };
+}
+
+export interface DeputyBody {
+  readonly grant_id: string;
+  readonly principal_id: string;
+  readonly days: number;
+  readonly reason: string;
+}
+
+export function submittedDeputy(data: unknown): DeputyBody | null {
+  if (typeof data !== "object" || data === null) {
+    return null;
+  }
+  const fields = data as Record<string, unknown>;
+  const grantId = fields["grant_id"];
+  const principal = fields["principal_id"];
+  const days = fields["days"];
+  const reason = fields["reason"];
+  if (
+    typeof grantId !== "string" ||
+    typeof principal !== "string" ||
+    typeof days !== "number" ||
+    typeof reason !== "string" ||
+    grantId === "" ||
+    principal === "" ||
+    reason === ""
+  ) {
+    return null;
+  }
+  return { grant_id: grantId, principal_id: principal, days, reason };
+}

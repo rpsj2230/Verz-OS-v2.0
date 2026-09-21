@@ -488,6 +488,23 @@ def appoint(
     )
 
 
+def may_appoint_role(
+    grant: RoleGrant,
+    admin: EntitlementSet,
+    by: str,
+    now: datetime | None = None,
+) -> bool:
+    """Whether `by` may write or retire this role grant (M1.3.2). The deputy rule, widened.
+
+    `REACH_AUTHORITY` over the scope the grant carries, read as the unrestricted scope for a
+    company-wide role, as `may_appoint_deputy` reads it; and never about oneself, because a role
+    one appoints oneself to is the appointment nobody else made.
+    """
+    if grant.principal_id == by:
+        return False
+    return within_reach(admin, REACH_AUTHORITY, grant.scope or Scope.unrestricted(), now)
+
+
 def deputy_runs_at_most() -> timedelta:
     """The longest a deputy appointment may run, read from the one place it is decided.
 
