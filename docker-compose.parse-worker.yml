@@ -83,9 +83,8 @@ services:
     # be one commit behind the one whose jobs it runs.
     image: ${APP_IMAGE:?set APP_IMAGE to the image and release tag this install runs}
     restart: unless-stopped
-    # The profiles `brain.ops.wiring` gives the `brain-parse-worker` component. Held equal by
-    # test, in both directions.
-    profiles: ["standard", "full"]
+    # No `profiles:` key: the profile's file list (`brain.deployment.requirements`) is what
+    # places this service, and a key would hide it from the installer's plain `up -d`.
     depends_on:
       # Declared in `docker-compose.worker.yml`, which every profile composing this file also
       # composes. Named here with no body, so there is one description of it.

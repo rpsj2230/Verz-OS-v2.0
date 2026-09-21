@@ -106,11 +106,11 @@ The workers have never been started on a server, and neither has the pooler they
 database through. These steps start them on their own, beside a running stack, and each check
 says what it proves. Run them on a server running `docker-compose.yml`, from `/opt/brain`.
 
-Set this once in the shell you run them from. It names the three files, and `--profile standard`
-is what switches the workers on:
+Set this once in the shell you run them from. It names the three files; naming the worker files
+is what switches the workers on, and no `--profile` is needed:
 
 ```
-F="-f docker-compose.yml -f docker-compose.worker.yml -f docker-compose.parse-worker.yml --profile standard"
+F="-f docker-compose.yml -f docker-compose.worker.yml -f docker-compose.parse-worker.yml"
 ```
 
 1. **Start the workers' pooler.** `docker compose $F up -d pgbouncer-session`, then

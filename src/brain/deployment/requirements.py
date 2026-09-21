@@ -296,6 +296,15 @@ def files_for(profile: str) -> tuple[str, ...]:
     return COMPOSE_FILES_FOR[profile]
 
 
+def profiles_composing(name: str) -> frozenset[str]:
+    """The install profiles whose file list names this compose file.
+
+    With no `profiles:` key in any product compose file, this is the whole answer to which
+    profiles run a service declared there, and tests hold it equal to `brain.ops.wiring`.
+    """
+    return frozenset(profile for profile, files in COMPOSE_FILES_FOR.items() if name in files)
+
+
 def images_in(files: ComposeFiles) -> tuple[str, ...]:
     """Every distinct image reference in this set, in sorted order.
 

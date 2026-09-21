@@ -42,7 +42,7 @@ computed from the compose files by that module and compared against this page on
      `ops/update/update.sh` lists:
 
      ```
-     docker compose -f docker-compose.yml -f docker-compose.worker.yml -f docker-compose.parse-worker.yml -f docker-compose.objectstore.yml -f docker-compose.keycloak.yml -f docker-compose.inference.yml --profile standard config --no-interpolate
+     docker compose -f docker-compose.yml -f docker-compose.worker.yml -f docker-compose.parse-worker.yml -f docker-compose.objectstore.yml -f docker-compose.keycloak.yml -f docker-compose.inference.yml config --no-interpolate
      ```
 
 4. Save. Coolify now lists every variable the file names.

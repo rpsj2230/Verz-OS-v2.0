@@ -246,12 +246,14 @@ def test_workers_with_no_session_pooler_in_the_set_are_refused() -> None:
 
 
 def test_a_pooler_on_profiles_the_budget_does_not_give_it_is_refused() -> None:
-    """Held to the wiring, so the host requirement and the deployment describe one set. Delete
-    this and the pooler can start on a profile nothing costs it on."""
+    """Held to the wiring, so the host requirement and the deployment describe one set, and a
+    `profiles:` key is refused because the installer's plain `up -d` would never start it.
+    Delete this and the workers can wait on a pooler that is not running."""
+    assert session_pool_gaps(profile("standard")) == ()
     files = profile("standard")
-    files[SESSION_POOLER_FILE]["services"][SESSION_POOLER]["profiles"] = ["full"]
+    files[SESSION_POOLER_FILE]["services"][SESSION_POOLER]["profiles"] = ["standard", "full"]
 
-    assert any("runs on profiles ['full']" in one for one in session_pool_gaps(files))
+    assert any("`profiles:` key of ['standard', 'full']" in one for one in session_pool_gaps(files))
 
 
 def test_a_pooler_pointed_at_a_database_the_budget_does_not_declare_is_refused() -> None:

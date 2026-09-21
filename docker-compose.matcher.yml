@@ -60,9 +60,8 @@ services:
     # A job, so it is not restarted. A matcher restarted on failure re-reads the same export
     # and is refused by its own output file, which is a loop with a log line in it.
     restart: "no"
-    # The profiles `brain.ops.wiring` gives the `record-matcher` component. Held equal by test,
-    # in both directions.
-    profiles: ["full"]
+    # No `profiles:` key: the profile's file list (`brain.deployment.requirements`) is what
+    # places this service, and a key would hide it from the installer's plain `up -d`.
     command:
       - python
       - -m
