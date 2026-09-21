@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-21T11:56:28.421086+00:00",
-  "commit": "750eb35",
-  "commit_subject": "The secrets vault starts on OpenBao 2.4.1, declares its audit devices and answers its healthcheck",
+  "generated_at": "2026-09-21T13:29:53.837415+00:00",
+  "commit": "565e12d",
+  "commit_subject": "The deploy health gate sees every network the app is on, and the history is written as the owner",
   "total": 1598,
   "done": 270,
   "percent": 16.9,
