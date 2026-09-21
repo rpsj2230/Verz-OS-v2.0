@@ -56,6 +56,7 @@ from brain.tables.automation import AutomationOwnerRow
 from brain.tables.automation_run import AutomationRunRow, AutomationScheduleRow
 from brain.tables.browsing import BrowserEnvelopeRow
 from brain.tables.budget import BudgetVersionRow
+from brain.tables.channel_event import ChannelEventRow
 from brain.tables.chat import ConversationRow, MessageRole, MessageRow
 from brain.tables.config import SettingRow, SettingType
 from brain.tables.connector_connection import ConnectorConnectionRow
@@ -305,6 +306,8 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     "ops.model_provider",
     "ops.golden_question",
     "ops.routing_change",
+    # 0100_gate_front_half
+    "gate.channel_event",
 )
 
 __all__ = [
@@ -326,6 +329,7 @@ __all__ = [
     "CapabilityPackAssignmentRow",
     "CapabilityPackRow",
     "CapabilityRegistryRow",
+    "ChannelEventRow",
     "ConnectorConnectionRow",
     "ConnectorSyncRow",
     "ControlRunRow",

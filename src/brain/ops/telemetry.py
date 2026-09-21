@@ -195,6 +195,7 @@ from brain.gate.context import TrafficClass, traffic_class_for
 # At run time, unlike `Finished` below: `status_of_finished` branches on this type, and a branch
 # is behaviour rather than an annotation.
 from brain.gate.finish import ModelCallOutcome, ToolCallOutcome
+from brain.gate.select import SelectionStage
 from brain.ops.retention import DataClass, Lifetime, horizon_for
 from brain.ops.tracing import (
     SAFE_ATTRIBUTES,
@@ -530,8 +531,21 @@ REQUEST_FIELDS: Final[tuple[str, ...]] = (
 #: is what `measurement_gaps` looks for, and a test holds this slice inside it.
 COMPLETION_FIELDS: Final[tuple[str, ...]] = ("duration_ms",)
 
+#: The fields the gate's front half decides before the lane runs (M3.4.2, M3.6.3).
+#:
+#: Their own slice for `COMPLETION_FIELDS`'s reason: M27.1.5 names none of them, and the
+#: comparison with that leaf's sentence reads `REQUEST_FIELDS` alone. Written from
+#: `brain.gate.finish.FrontRecord`, which `brain.gate.front.FrontHalf.record` builds from the
+#: decisions themselves, so the row holds the route that was taken and never one re-derived.
+FRONT_HALF_FIELDS: Final[tuple[str, ...]] = (
+    "risk_score",
+    "routed_lane",
+    "selection_stage",
+    "selected_agent",
+)
+
 #: Every field a request record declares, in the order the record declares them.
-TELEMETRY_FIELDS: Final[tuple[str, ...]] = (*REQUEST_FIELDS, *COMPLETION_FIELDS)
+TELEMETRY_FIELDS: Final[tuple[str, ...]] = (*REQUEST_FIELDS, *COMPLETION_FIELDS, *FRONT_HALF_FIELDS)
 
 #: The fields holding a name, an identifier or a hash. Checked against `tracing.mask` before
 #: a record exists, so none of them can hold a sentence.
@@ -546,13 +560,26 @@ _NAME_FIELDS: Final[frozenset[str]] = frozenset(
         "provider",
         "connector",
         "status",
+        "routed_lane",
+        "selection_stage",
+        "selected_agent",
     }
 )
 
 #: The fields holding a count. Never negative, and never a total of anything withheld: every
 #: one of these counts something this request did rather than something it was refused.
 _COUNT_FIELDS: Final[frozenset[str]] = frozenset(
-    {"tokens_in", "tokens_out", "tool_count", "redaction_count", "fallback_count", "retry_count"}
+    {
+        "tokens_in",
+        "tokens_out",
+        "tool_count",
+        "redaction_count",
+        "fallback_count",
+        "retry_count",
+        # A score rather than a count, kept here because it shares the rule that matters: a
+        # whole number that is never negative. It scores the question, never anything withheld.
+        "risk_score",
+    }
 )
 
 #: The fields holding a duration in milliseconds.
@@ -630,6 +657,18 @@ FILLED_BY_A_MODEL_CALL: Final[Mapping[str, str]] = MappingProxyType(
 )
 
 
+#: The fields only a request that passed through the gate's front half fills, and why each is
+#: None otherwise. A third mapping for `FILLED_BY_A_MODEL_CALL`'s reason: None here means the
+#: front half did not run for this request, which is neither unmeasurable nor a model's absence.
+FILLED_BY_THE_FRONT_HALF: Final[Mapping[str, str]] = MappingProxyType(
+    dict.fromkeys(
+        FRONT_HALF_FIELDS,
+        "this request did not pass through brain.gate.front.run_front_half, such as an "
+        "automation's tool call or a provider check, so nothing screened or routed it",
+    )
+)
+
+
 @dataclass(frozen=True, kw_only=True)
 class RequestTelemetry:
     """One request, as the metadata ledger holds it. Names and counts, and no content.
@@ -675,6 +714,15 @@ class RequestTelemetry:
     #: finished with it (M30.5.2). Required, because every request that reaches the lane has
     #: both instants and a record without one is a latency objective with a gap in it.
     duration_ms: float
+    #: The injection score of the question, 0 to 100 (M3.4.2). Never a verdict; see
+    #: `brain.gate.injection`.
+    risk_score: int | None = None
+    #: The lane `brain.gate.classify.classify_lane` chose, as it chose it (M3.6.3). Distinct
+    #: from `lane`, which is the budget the request spent and is read off its meter.
+    routed_lane: Lane | None = None
+    #: Which stage of `brain.gate.select.select_agent` chose the agent, and which agent.
+    selection_stage: SelectionStage | None = None
+    selected_agent: str | None = None
 
     def __post_init__(self) -> None:
         for name in sorted(_NAME_FIELDS):
@@ -815,6 +863,7 @@ def request_telemetry_of(finished: Finished) -> RequestTelemetry:
     origin = finished.origin
     outcome = finished.outcome
     usage = finished.model_usage
+    front = finished.front
     elapsed = finished.completed_at - finished.at
     micros = (elapsed.days * 86_400 + elapsed.seconds) * 1_000_000 + elapsed.microseconds
     return RequestTelemetry(
@@ -842,6 +891,10 @@ def request_telemetry_of(finished: Finished) -> RequestTelemetry:
         retry_count=None if usage is None else usage.retry_count,
         status=status_of_finished(finished),
         duration_ms=micros / _MICROSECONDS_PER_MS,
+        risk_score=None if front is None else front.risk_score,
+        routed_lane=None if front is None else front.routed_lane,
+        selection_stage=None if front is None else front.selection_stage,
+        selected_agent=None if front is None else front.selected_agent,
     )
 
 

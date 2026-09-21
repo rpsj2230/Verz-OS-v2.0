@@ -38,6 +38,8 @@ from brain.ops.telemetry import (
     _NAME_FIELDS,
     COMPLETION_FIELDS,
     FILLED_BY_A_MODEL_CALL,
+    FILLED_BY_THE_FRONT_HALF,
+    FRONT_HALF_FIELDS,
     LEDGER_DATA_CLASS,
     LEDGER_RETENTION_DAYS,
     REQUEST_FIELDS,
@@ -364,8 +366,9 @@ def test_the_record_carries_exactly_the_fields_the_leaf_names() -> None:
     without_units = tuple(one.removesuffix("_ms") for one in REQUEST_FIELDS)
     assert without_units == LEAF_FIELDS
 
-    assert (*REQUEST_FIELDS, *COMPLETION_FIELDS) == TELEMETRY_FIELDS
+    assert (*REQUEST_FIELDS, *COMPLETION_FIELDS, *FRONT_HALF_FIELDS) == TELEMETRY_FIELDS
     assert not {one.removesuffix("_ms") for one in COMPLETION_FIELDS} & set(LEAF_FIELDS)
+    assert not set(FRONT_HALF_FIELDS) & set(LEAF_FIELDS)
 
     on_record = tuple(declared.name for declared in fields(RequestTelemetry))
     assert on_record == ("ingress", *TELEMETRY_FIELDS)
@@ -421,7 +424,12 @@ def test_the_fields_nothing_can_fill_today_are_exactly_the_optional_ones() -> No
         if declared.name != "ingress" and declared.default is None
     }
     assert not set(UNFILLABLE_TODAY) & set(FILLED_BY_A_MODEL_CALL)
-    assert set(UNFILLABLE_TODAY) | set(FILLED_BY_A_MODEL_CALL) == optional
+    assert not (set(UNFILLABLE_TODAY) | set(FILLED_BY_A_MODEL_CALL)) & set(FILLED_BY_THE_FRONT_HALF)
+    assert (
+        set(UNFILLABLE_TODAY) | set(FILLED_BY_A_MODEL_CALL) | set(FILLED_BY_THE_FRONT_HALF)
+        == optional
+    )
+    assert set(FILLED_BY_THE_FRONT_HALF) == set(FRONT_HALF_FIELDS)
     assert set(FILLED_BY_A_MODEL_CALL) == {
         "agent_version",
         "model",
@@ -565,7 +573,11 @@ def test_a_fillable_field_has_no_default_at_all() -> None:
     against `default is None` and passes with a `False` sitting there, which is how this got
     through the first time. Delete this and a required field can quietly acquire one."""
     for declared in fields(RequestTelemetry):
-        if declared.name in UNFILLABLE_TODAY or declared.name in FILLED_BY_A_MODEL_CALL:
+        if (
+            declared.name in UNFILLABLE_TODAY
+            or declared.name in FILLED_BY_A_MODEL_CALL
+            or declared.name in FILLED_BY_THE_FRONT_HALF
+        ):
             assert declared.default is None, declared.name
         else:
             assert declared.default is MISSING, declared.name
