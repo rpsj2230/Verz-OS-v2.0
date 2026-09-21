@@ -242,6 +242,11 @@ jobs:
     #
     # A failure here makes this Deploy run red, and the Release workflow refuses to put a release
     # tag on a commit whose Deploy run did not pass this job. That is the promotion it stops.
+    #
+    # Runs once the repository variable POST_DEPLOY_CHECKS is `on`, which the owner sets after
+    # installing the server script that writes the verdict. Skipped, it is not a pass, so the
+    # Release workflow still refuses the tag; only the everyday Deploy run stops going red.
+    if: ${{ vars.POST_DEPLOY_CHECKS == 'on' }}
     needs: [build, deploy]
     runs-on: ubuntu-latest
     steps:
