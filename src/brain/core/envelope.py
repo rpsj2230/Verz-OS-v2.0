@@ -11,7 +11,7 @@ This is also why Surface (browser, desktop) is a separate governed noun in the
 architecture rather than a kind of Tool: a screenshot has no fields, so this mechanism is
 mathematically inapplicable to it and it needs a weaker, differently-shaped guarantee.
 
-Task ids: M0.2.5, M0.2.6
+Task ids: M0.2.5, M0.2.6, M3.8.5
 """
 
 from __future__ import annotations
@@ -150,9 +150,27 @@ class ToolDefinition(BaseModel):
     side_effect: SideEffect = SideEffect.NONE
     identity_mode: IdentityMode = IdentityMode.DELEGATED
     source: str = ""
+    #: This tool's effect is one a person must approve every time, whatever the leash says
+    #: (M3.8.5): deleting a record, changing DNS, changing a production system. A write
+    #: cannot say so through `side_effect`, which is why it is declared rather than inferred.
+    sensitive: bool = False
 
     def is_read_only(self) -> bool:
         return self.side_effect is SideEffect.NONE
 
     def crosses_money_boundary(self) -> bool:
         return self.side_effect is SideEffect.MONEY
+
+    def declares_sensitive_effect(self) -> bool:
+        """Declared sensitive, or an effect that is sensitive by its kind (M3.8.5).
+
+        A message that has left the building and money that has moved cannot be taken back,
+        so a send or money tool is sensitive without saying so: a manifest that forgot the
+        flag must not be the thing that lets a client email go unapproved.
+        """
+        return self.sensitive or self.side_effect in SENSITIVE_BY_EFFECT
+
+
+#: The effects that are sensitive by their kind, declared or not. The owner's named sensitive
+#: actions include sending a client email and recording a financial change.
+SENSITIVE_BY_EFFECT: frozenset[SideEffect] = frozenset({SideEffect.SEND, SideEffect.MONEY})

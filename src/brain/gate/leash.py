@@ -34,7 +34,8 @@ entry only ever subtracts.
 **The effective tier is the leash intersected with the risk ceiling**, and that intersection
 is `brain.gate.injection.autonomy_ceiling`, reused rather than restated. Two rules that must
 agree eventually disagree, and the one that disagrees in the permissive direction is the one
-nobody notices.
+nobody notices. A tool that declares a sensitive effect is then capped at Assisted, so
+Autonomous never reaches it (M3.8.5, `A_SENSITIVE_EFFECT_ALWAYS_WAITS_FOR_A_PERSON`).
 
 **Shadow is indistinguishable to the agent and obvious to the person.** An agent that can
 tell it is being simulated is an agent whose simulated behaviour proves nothing, so what
@@ -68,7 +69,7 @@ Scope: this is policy, not a runtime. M3.8.1, the agent loop itself, does not ex
 simulation and execution arrive as callables and the operation ledger as a protocol. Nothing
 here opens a connection, reads a table or calls a model.
 
-Task ids: M3.8.2, M3.8.3, M3.8.4, M3.8.5, M3.8.6, M17.3.1
+Task ids: M3.8.2, M3.8.3, M3.8.4, M3.8.5, M3.8.6, M3.9.6, M17.3.1
 """
 
 from __future__ import annotations
@@ -130,6 +131,14 @@ DIGEST_SCHEMA: Final = "brain.leash.v1"
 #: constant that a test can pin rather than a literal repeated at each return.
 MISSING_ENTRY_RUNG: Final = AutonomyTier.SHADOW
 
+#: Why overlapping entries compose to the strictest rung (M3.9.6).
+THE_STRICTEST_OF_OVERLAPPING_RULES_WINS: Final = (
+    "When more than one leash entry applies to an action, the lowest rung among them is the "
+    "rung. Not the most specific entry and not the last one loaded, because either lets a "
+    "narrower rule loosen a broader one: a department-wide Shadow pin would be cancelled by "
+    "adding an Autonomous row for one scope inside it. Every entry only ever subtracts."
+)
+
 
 class LeashEntry(BaseModel):
     """One rung, for one agent, on one target, within one scope.
@@ -182,11 +191,12 @@ class Leash(BaseModel):
         )
 
     def rung_for(self, agent_id: str, target: str, row: Mapping[str, str]) -> AutonomyTier:
-        """The rung configured here, or SHADOW when nothing is.
+        """The rung configured here, or SHADOW when nothing is (M3.9.6).
 
-        `min` rather than "the most specific one" or "the last one loaded". Both of those
-        make the answer depend on something other than the entries themselves: the first on
-        a specificity metric nobody agrees on, the second on a table's `ORDER BY`.
+        See `THE_STRICTEST_OF_OVERLAPPING_RULES_WINS`. `min` rather than "the most specific
+        one" or "the last one loaded". Both of those make the answer depend on something other
+        than the entries themselves: the first on a specificity metric nobody agrees on, the
+        second on a table's `ORDER BY`.
         """
         found = self.matching(agent_id, target, row)
         if not found:
@@ -376,14 +386,33 @@ class Decision:
         return None
 
 
+#: The rung a sensitive effect is held at, at most, whatever the leash says (M3.8.5).
+SENSITIVE_EFFECT_RUNG: Final = AutonomyTier.ASSISTED
+
+#: Why an Autonomous rung does not reach a tool that declares a sensitive effect.
+A_SENSITIVE_EFFECT_ALWAYS_WAITS_FOR_A_PERSON: Final = (
+    "Autonomous means proceed, except for a tool that declares a sensitive effect: deleting a "
+    "record, changing DNS, a production system, a client email, money. Such an action is "
+    "prepared, suspended and run only after a person approves that exact prepared action, "
+    "which the digest binds. It is a cap on the tier rather than a leash entry, so no "
+    "promotion, breaker reset or overlapping rule can lift it, and a Shadow rung still "
+    "simulates, because the cap only ever lowers."
+)
+
+
 def effective_tier(leash: Leash, action: Action, assessment: RiskAssessment) -> AutonomyTier:
-    """The rung, intersected with the risk ceiling. One rule, deliberately not two.
+    """The rung, intersected with the risk ceiling and the sensitive-effect cap.
 
     `autonomy_ceiling` is imported rather than reimplemented. A second copy of "the score
     can only tighten" would have to be kept in step with the first forever, and the day they
     diverge, the divergence is discovered by an action happening that should not have.
+    The cap is `min`, like every other ceiling here: see
+    `A_SENSITIVE_EFFECT_ALWAYS_WAITS_FOR_A_PERSON`.
     """
-    return autonomy_ceiling(leash.rung_for(action.agent_id, action.target, action.row), assessment)
+    tier = autonomy_ceiling(leash.rung_for(action.agent_id, action.target, action.row), assessment)
+    if action.tool.declares_sensitive_effect():
+        return min(tier, SENSITIVE_EFFECT_RUNG)
+    return tier
 
 
 def _capability_check(

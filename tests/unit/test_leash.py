@@ -5,7 +5,7 @@ behaviour: that a lookup narrows on all three of agent, target and scope, that s
 simulates without touching anything, that assisted really does stop and really does resume,
 and that autonomous proceeds, once per key however many times it is asked.
 
-Task ids: M3.8.2, M3.8.3, M3.8.4, M3.8.5, M3.8.6, M17.3.1
+Task ids: M3.8.2, M3.8.3, M3.8.4, M3.8.5, M3.8.6, M3.9.6, M17.3.1
 """
 
 from __future__ import annotations
@@ -522,6 +522,108 @@ def test_autonomous_proceeds_without_a_person() -> None:
     assert governed.route is Route.EXECUTE
     assert calls == ["executed"]
     assert governed.suspension is None
+
+
+#: A write the owner named sensitive (deleting a record), declared so on the tool, because
+#: its `side_effect` alone says only WRITE.
+DELETE_TICKET = UPDATE_STATUS.model_copy(update={"sensitive": True})
+
+
+@pytest.mark.parametrize(
+    "tool",
+    [
+        DELETE_TICKET,
+        UPDATE_STATUS.model_copy(update={"side_effect": SideEffect.SEND}),
+        UPDATE_STATUS.model_copy(update={"side_effect": SideEffect.MONEY}),
+    ],
+    ids=["declared", "send", "money"],
+)
+def test_an_autonomous_rung_still_waits_for_approval_of_a_sensitive_effect(
+    tool: ToolDefinition,
+) -> None:
+    """M3.8.5's exception. Deleting this lets a leash promoted to Autonomous send a client
+    email, move money or delete a record with nobody having seen the prepared action."""
+    calls: list[str] = []
+
+    def recording_execute(_: Action) -> TypedResult[Ticket]:
+        calls.append("executed")
+        return executed(_)
+
+    governed = run(
+        action(tool=tool), leash=leash_at(AutonomyTier.AUTONOMOUS), execute=recording_execute
+    )
+    assert governed.route is Route.SUSPEND
+    assert governed.decision.tier is AutonomyTier.ASSISTED
+    assert calls == []
+    assert governed.suspension is not None
+    # The approval is of the exact prepared action: the digest the person was shown.
+    assert governed.suspension.action_digest == action(tool=tool).digest()
+
+
+def test_an_approved_sensitive_action_runs_once_at_an_autonomous_rung() -> None:
+    """The positive half of M3.8.5. Deleting this is satisfied by a cap that suspends a
+    sensitive action for ever, which is a refusal wearing an approval queue."""
+    subject = action(tool=DELETE_TICKET)
+    governed = run(subject, leash=leash_at(AutonomyTier.AUTONOMOUS))
+    assert governed.suspension is not None
+    approved = governed.suspension.approved_by("u_director", NOW + timedelta(minutes=5))
+    calls: list[str] = []
+
+    def recording_execute(_: Action) -> TypedResult[Ticket]:
+        calls.append("executed")
+        return executed(_)
+
+    outcome = resume(
+        approved,
+        caller=CALLER,
+        agent_ceiling=CEILING,
+        policy=POLICY,
+        leash=leash_at(AutonomyTier.AUTONOMOUS),
+        assessment=CLEAN,
+        trace_id="tr_2",
+        now=NOW + timedelta(minutes=6),
+        execute=recording_execute,
+        ledger=MemoryLedger(),
+    )
+    assert outcome.resumed
+    assert calls == ["executed"]
+
+
+def test_a_sensitive_effect_cap_never_raises_a_shadow_rung() -> None:
+    """The cap only lowers. Deleting this lets the cap be written as "sensitive means
+    Assisted", which would turn a Shadow agent's simulation into a real approval request."""
+    governed = run(action(tool=DELETE_TICKET), leash=leash_at(AutonomyTier.SHADOW))
+    assert governed.route is Route.SIMULATE
+
+
+def test_a_tool_declaring_no_sensitive_effect_still_proceeds_at_autonomous() -> None:
+    """The sibling of the cap. Deleting this is satisfied by capping every write, which
+    would make Autonomous mean nothing for any tool with a side effect."""
+    assert not UPDATE_STATUS.declares_sensitive_effect()
+    assert run(leash=leash_at(AutonomyTier.AUTONOMOUS)).route is Route.EXECUTE
+
+
+# ------------------------------------------ M3.9.6 the strictest rung wins
+@pytest.mark.parametrize("broad", list(AutonomyTier))
+@pytest.mark.parametrize("narrow", list(AutonomyTier))
+def test_a_narrower_rule_can_never_loosen_a_broader_one(
+    broad: AutonomyTier, narrow: AutonomyTier
+) -> None:
+    """M3.9.6, over every pair of rungs and both load orders. Deleting this lets
+    most-specific-wins or last-loaded-wins back in, and a department-wide Shadow pin is then
+    cancelled by one Autonomous row for a scope inside it."""
+    wide = LeashEntry(agent_id=AGENT, target=TARGET, scope=Scope.unrestricted(), rung=broad)
+    tight = LeashEntry(
+        agent_id=AGENT, target=TARGET, scope=Scope.department("maintenance"), rung=narrow
+    )
+    inside = {"department": "maintenance"}
+    for entries in ((wide, tight), (tight, wide)):
+        leash = Leash(entries=entries)
+        assert leash.rung_for(AGENT, TARGET, inside) is min(broad, narrow)
+        # Through the whole decision, not only the lookup: the route is what happens.
+        assert run(leash=leash).decision.tier is min(broad, narrow)
+    # Outside the narrow rule's scope only the broad one applies.
+    assert Leash(entries=(wide, tight)).rung_for(AGENT, TARGET, {"department": "x"}) is broad
 
 
 def test_a_refused_call_returns_no_result_at_all() -> None:
