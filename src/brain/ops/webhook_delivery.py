@@ -55,7 +55,7 @@ from urllib.parse import urlsplit
 
 import psycopg
 
-from brain.db import libpq_url
+from brain.db import libpq_conninfo
 from brain.ops.object_store import StaticKvReader
 from brain.ops.openbao import SIGNING_PREFIX, OpenBaoVault, VaultRefusedError
 from brain.ops.operation_store import PostgresOperationLedger
@@ -333,7 +333,7 @@ async def dispatch_on(
     engine = make_app_engine(database_url)
     try:
         with psycopg.connect(
-            libpq_url(database_url), autocommit=True, prepare_threshold=None
+            libpq_conninfo(database_url), autocommit=True, prepare_threshold=None
         ) as conn:
             ledger = PostgresOperationLedger(conn)
             async with make_session_factory(engine)() as session, session.begin():

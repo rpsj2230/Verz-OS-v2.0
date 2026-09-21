@@ -48,6 +48,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Final
 
+from brain.ops.safe_error import describe
+
 #: Where the verdict is written, inside the container the checks ran in.
 RESULT: Final = Path(tempfile.gettempdir()) / "brain-post-deploy.json"
 
@@ -97,7 +99,7 @@ def _outcome(check: Callable[[], object], name: str) -> str:
         return FAILED
     except Exception as exc:
         findings = getattr(exc, "findings", None)
-        for line in findings or (f"{type(exc).__name__}: {exc}",):
+        for line in findings or (describe(exc),):
             print(f"! post_deploy {name} {line}", file=sys.stderr)
         return FAILED
     return PASSED

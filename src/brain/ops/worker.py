@@ -216,6 +216,7 @@ from brain.ops.queue import (
     worker_shards,
 )
 from brain.ops.retention_store import released_controls
+from brain.ops.safe_error import describe
 from brain.ops.schedule import report_only_now
 from brain.ops.schedule_control import chosen_this_tick, paused_controls, run_requests
 from brain.ops.schedule_runner import RunnerError, due_now, next_tick, runner_for, start_control
@@ -1262,7 +1263,7 @@ async def start_owed(
         try:
             detail = await asyncio.to_thread(_start, name, report_only, now, database_url)
         except Exception as exc:
-            reason = f"{type(exc).__name__}: {exc}"
+            reason = describe(exc)
             await record_finish(
                 session, run_id, at=clock(), outcome="failed", detail=reason[:DETAIL_CHARS]
             )
@@ -1420,8 +1421,7 @@ async def run_schedule(
             ticked = await tick_controls(sessions, now=now, database_url=database_url, clock=clock)
         except Exception as exc:
             print(
-                f"  ! the control schedule could not tick at {now.isoformat()}: "
-                f"{type(exc).__name__}: {exc}",
+                f"  ! the control schedule could not tick at {now.isoformat()}: {describe(exc)}",
                 file=sys.stderr,
             )
         else:

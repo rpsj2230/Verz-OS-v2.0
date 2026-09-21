@@ -93,6 +93,7 @@ from brain.gate.finish import Origin
 from brain.gate.rule_store import load_rules
 from brain.knowledge.row_store import SessionRowSource
 from brain.ops.canaries import CanaryFinding, alert_lines, compare_askers, projection_findings
+from brain.ops.safe_error import describe
 from brain.ops.trace_sink import CountingTraceSink
 from brain.session import make_app_engine, make_session_factory
 from brain.tables.identity import PrincipalRow
@@ -476,7 +477,7 @@ def run_canaries_now(
     try:
         run = asyncio.run(once(), loop_factory=loop_factory)
     except Exception as exc:
-        raise_the_alert((f"could not finish: {type(exc).__name__}: {exc}",), stream)
+        raise_the_alert((f"could not finish: {describe(exc)}",), stream)
         raise CanaryRunError(UNFINISHED_RUN_DETAIL) from exc
     try:
         return verdict(run)

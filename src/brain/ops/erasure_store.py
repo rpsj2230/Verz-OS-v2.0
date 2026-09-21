@@ -105,6 +105,7 @@ from brain.ops.retention_store import (
     active_holds,
     store_tables,
 )
+from brain.ops.safe_error import describe
 from brain.session import APPLICATION_ROLE
 from brain.tables.audit import ACTOR_SETTING, ENT_HASH_SETTING, TRACE_ID_SETTING
 from brain.tables.erasure import ErasureOutcome, ErasureRequestRow
@@ -470,7 +471,10 @@ class PostgresEraser:
                             if rule.kept_because not in because:
                                 because.append(rule.kept_because)
         except psycopg.Error as failed:
-            msg = f"the database refused the erasure part-way, so nothing in it was kept: {failed}"
+            msg = (
+                "the database refused the erasure part-way, so nothing in it was kept: "
+                f"{describe(failed)}"
+            )
             raise ErasureError(msg[:500]) from failed
         return StoreRemoval(
             removed=removed, retired=retired, kept=kept, kept_because="; ".join(because)

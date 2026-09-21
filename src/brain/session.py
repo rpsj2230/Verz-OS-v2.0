@@ -46,6 +46,7 @@ from sqlalchemy.orm import Session, SessionTransaction
 from sqlalchemy.pool import NullPool
 
 from brain.db import normalise_database_url
+from brain.ops.safe_error import describe
 
 log = structlog.get_logger()
 
@@ -258,7 +259,7 @@ async def check_reachable(engine: AsyncEngine) -> bool:
         async with engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
     except Exception as exc:
-        log.warning("database unreachable", error=str(exc)[:200])
+        log.warning("database unreachable", error=describe(exc)[:200])
         return False
     return True
 

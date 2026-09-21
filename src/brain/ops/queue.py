@@ -190,7 +190,7 @@ from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Final, Protocol
 from urllib.parse import urlsplit
 
-from brain.db import SCHEMAS, libpq_url
+from brain.db import SCHEMAS, libpq_conninfo
 from brain.gate.context import TrafficClass
 from brain.ops.wiring import component
 
@@ -1448,7 +1448,7 @@ def driver_pool_settings(
     """
     _refuse_bad_connection(url, pool_max, schema)
     return {
-        "conninfo": libpq_url(url),
+        "conninfo": libpq_conninfo(url),
         "min_size": 1,
         "max_size": pool_max,
         # Not a libpq `options` string: see `A_SEARCH_PATH_IS_SET_AFTER_CONNECTING`. The driver
@@ -1625,7 +1625,7 @@ def install_queue(url: str, *, pool_max: int, schema: str = DRIVER_SCHEMA) -> tu
     from procrastinate import App, SyncPsycopgConnector
 
     _refuse_bad_connection(url, pool_max, schema)
-    dsn = libpq_url(url)
+    dsn = libpq_conninfo(url)
     configure = search_path_configurer(schema)
     done: list[str] = []
 

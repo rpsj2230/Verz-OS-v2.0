@@ -52,7 +52,7 @@ from brain.attribution import attribute
 from brain.console.govern import NOWHERE, _in_reach
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.errors import Absent, Failed
-from brain.db import libpq_url
+from brain.db import libpq_conninfo
 from brain.install import value_of
 from brain.install_routes import settings_of
 from brain.ops.credential_write_store import credential_writes_for
@@ -457,7 +457,7 @@ def trial_in_a_thread(
     if found is not None:
         return work(found)
     url = settings_of(request).database_url
-    with psycopg.connect(libpq_url(url), autocommit=True, prepare_threshold=None) as conn:
+    with psycopg.connect(libpq_conninfo(url), autocommit=True, prepare_threshold=None) as conn:
         return work(PostgresOperationLedger(conn))
 
 
