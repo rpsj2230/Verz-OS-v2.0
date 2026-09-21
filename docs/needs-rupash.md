@@ -2,29 +2,12 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**12 items are open.** Items 64 to 74 were raised on 2026-09-21 while finishing Wave 0: each is a
+**12 items are open.** Items 70 to 80 were raised on 2026-09-21 while finishing Wave 0: each is a
 Wave 0 task that cannot be finished without you, with the task ids it unblocks and what I recommend.
 
 # Open
 
-## 64. Make the repository private and protect main
-
-**Unblocks:** M0.1.1, M38.1.1.5, and makes M38.1.1.1's branch-name check binding.
-**Why:** the repository `rpsj2230/Verz-OS-v2.0` is public, and main has no protection, so anyone
-can read the code and any push to main deploys.
-**Recommendation:** private, and protect main with required checks but **without** code-owner
-review. You are the only code owner, and GitHub does not let you approve your own pull request, so
-that rule would block every merge until there is a second reviewer.
-
-1. On GitHub open the repository, then **Settings** > **General**, scroll to **Danger Zone**, press
-   **Change repository visibility**, choose **Make private** and confirm.
-2. **Settings** > **Branches** > **Add branch protection rule**. Branch name pattern: `main`.
-3. Tick **Require a pull request before merging** (leave **Require review from Code Owners** unticked).
-4. Tick **Require status checks to pass before merging** and add **Every shard passed**, **Lint,
-   types, invariants** and **Branch named for its module**.
-5. Leave **Allow force pushes** and **Allow deletions** unticked, then **Create**.
-
-## 65. Allow seven licences in the dependency policy
+## 70. Allow seven licences in the dependency policy
 
 **Unblocks:** M0.7.1. **What happens now:** the dependency audit lists them as awaiting you.
 **Recommendation: allow all seven.** The postgres and pgvector images (PostgreSQL licence, permissive
@@ -33,7 +16,7 @@ own container and nothing links to it); the three bundled fonts IBM Plex Mono, I
 Poppins (OFL-1.1, a font licence that allows bundling with the notice kept); regex (CNRI-Python,
 the same family as PSF-2.0, already allowed). **What you do:** reply "allow the seven licences".
 
-## 66. Four unfixed Debian vulnerabilities in the base image, accepted until 2026-10-21
+## 71. Four unfixed Debian vulnerabilities in the base image, accepted until 2026-10-21
 
 **Unblocks:** nothing further; this is for you to confirm or overrule. The new vulnerability scan
 found four critical findings in the base image (CVE-2025-7458 in sqlite, CVE-2026-13221,
@@ -43,64 +26,73 @@ recorded each as a 30-day exception in `ops/security/vulnerability-exceptions.js
 the scan fails again and forces a re-check. They were already in every image before; the scan only
 now reports them. **Recommendation: accept.** The alternative is moving to a different base image.
 
-## 67. Install the two new deploy scripts on the server, then switch the post-deploy checks on
+## 72. One GitHub variable to switch the post-deploy checks on
 
-**Unblocks:** M38.1.3.3 (health gate), M38.1.3.4 (rollback), M38.5.1 (post-deploy checks), and new
-entries in the deployment history (M38.1.3.5). The server still runs the 6 September script.
-From PowerShell, in the brain folder:
+**Server half DONE on 2026-09-21** (you allowed server changes): the new `brain-deploy` and
+`brain-autodeploy` are installed (checksums match the repository, old copies kept in
+`/root/brain-deploy-backup-20260921`), and the timer allows 15 minutes. The first deploy through
+them, commit 5254748, passed the health gate, replaced the app, wrote 26 deploys into the
+deployment history, and passed the row-level security sweep and the permission canaries.
+`/api/deploy-checks.json` shows the verdict.
 
-1. `scp ops/deploy/brain-deploy ops/deploy/brain-autodeploy ops/deploy/brain-install-autodeploy verz-vps:/tmp/`
-2. `ssh verz-vps "sudo install -m 700 -o root -g root /tmp/brain-deploy /usr/local/bin/brain-deploy && sudo install -m 0755 /tmp/brain-autodeploy /usr/local/bin/brain-autodeploy && sudo bash /tmp/brain-install-autodeploy"`
-3. Check: `ssh verz-vps "systemctl show brain-autodeploy.service -p TimeoutStartUSec"` prints `15min`.
-4. On GitHub: **Settings** > **Secrets and variables** > **Actions** > **Variables** tab > **New
-   repository variable**. Name `POST_DEPLOY_CHECKS`, value `on`. Until this is set the Deploy run
-   skips the checks (it went red on every deploy while it waited for a verdict nothing wrote), and
-   a release tag stays refused.
+**Left, yours because it is a GitHub setting:** on GitHub open the repository, then **Settings** >
+**Secrets and variables** > **Actions** > **Variables** tab > **New repository variable**. Name
+`POST_DEPLOY_CHECKS`, value `on`, **Add variable**. From then on each Deploy run waits for the
+verdict and goes red if a check fails.
 
-## 68. PgBouncer pools and explicit Postgres memory on the server
+## 73. PgBouncer pools and explicit Postgres memory: a Coolify API token, then I do it
 
-**Unblocks:** M0.3.4, M0.3.5, M0.3.6, and closing M31.2.1.2 to M31.2.1.4 (their tests pass).
-**What you do:** follow `ops/vps/POOLING.md` step by step; its last section says how to confirm it.
+**Unblocks:** M0.3.4, M0.3.5, M0.3.6, and closing M31.2.1.2 to M31.2.1.4. The change is to
+Coolify's stored copy of the compose file (`ops/vps/POOLING.md`). Editing the file on disk would be
+silently undone the next time anyone presses Deploy in Coolify, so I stopped rather than do that.
+There is no Coolify API token on the server, and no backup job for the Brain database that I could
+find, and the database restarts once during this change.
 
-## 69. The application logs in to the database as the superuser
+1. In Coolify (through your SSH tunnel): **Keys & Tokens** > **API tokens** > **Create**, name
+   `brain-server`, tick **write** and **deploy**, and copy the token.
+2. `ssh verz-vps`, then `nano /root/.coolify-api-token`, paste it, save, then `chmod 600 /root/.coolify-api-token`.
+3. Tell me. I then take a database dump, change the stored compose through Coolify's API, deploy,
+   and check it as POOLING.md says.
+
+## 74. The application logs in to the database as the superuser
 
 **Unblocks:** M31.4.2. On staging every request runs as a login that can bypass row-level security,
-so the database would not stop a bug in the gate. The repository half lands with pull request #28:
+so the database would not stop a bug in the gate. The repository half lands with pull request #28 (merged):
 the bundled pooler then admits the application's own login `brain_app` and refuses superusers.
 After #28 is deployed I give you the exact commands for your Coolify setup: a password for
 `brain_app` typed at a psql prompt, two environment values in Coolify
 (`BRAIN_DATABASE_URL` for the application, `BRAIN_MIGRATION_DATABASE_URL` for migrations), and a
 redeploy. The console Overview then shows the database login as ready.
 
-## 70. A secrets vault on staging
+## 75. A secrets vault on staging
 
 **Unblocks:** M31.3.2.1, M31.3.2.3 to M31.3.2.6, M31.1.1.5, M38.4.1.3. Staging runs no vault, so
 leases, rotation and audit shipping cannot be seen working there. **Recommendation:** yes; it is the
 same vault a client install gets. **What you do:** say yes, and I give you the commands from
 `ops/openbao/UNSEAL.md` for your server.
 
-## 71. How GitHub may reach the staging database for the invariant run
+## 76. How GitHub may reach the staging database for the invariant run
 
 **Unblocks:** M38.2.1.2. The workflow **Staging invariants** exists, but staging's database is only
 reachable inside Docker and the firewall is on. **Recommendation:** a self-hosted GitHub runner on
 the server, which reaches the database without opening a port. The other options are publishing
 the port to GitHub's address ranges (very wide) or an SSH key stored in GitHub. Tell me which.
 
-## 72. Release tags, v1, and the full profile
+## 77. Release tags, v1, and the full profile
 
 **Unblocks:** M41.3.1, M41.3.2, M0.4.2. (a) **May I cut the first release tag** once Wave 0 is
 accepted? (b) **Is the v1 repository archived?** If yes, M41.3.2 closes. (c) The full profile needs
 a presidio service nobody here has run. **Recommendation:** move M0.4.2 to Wave 1 beside the redactor
 (M4), which is what uses presidio.
 
-## 73. The Lark wiki connector stores no page
+## 78. The Lark wiki connector stores no page
 
 Lark's documented node listing has no `has_member_setting` field, and the connector withholds any
 page whose permissions it cannot read, so it stores nothing. **Recommendation:** let me capture one
 real response from your wiki, read-only, to see whether the field exists in practice; if not, the
 connector needs a read-only Drive permission scope to read page permissions another way.
 
-## 74. Sign in to staging in Claude's browser pane
+## 79. Sign in to staging in Claude's browser pane
 
 **Unblocks** closing M38.1.3.5, M41.2.6, M31.4.1, M31.1.4.4 and the Settings, Version, Connectors
 and Secrets vault screens. Those pages are behind sign-in and I never type your password. **What you
@@ -133,7 +125,19 @@ own account settings, and add an authenticator app.
 
 Tell me when they are on and I close this item.
 
+## 80. A local model for the local-only profile
+
+**Unblocks:** M41.1.6. The local-only profile blocks every hosted provider, as designed, but the
+inference server serves no model that can answer a question, so a local-only install cannot answer
+anything. **Recommendation:** decide this in Wave 1 with the model routing work (M5); nothing in
+Wave 0 depends on it. **What you do:** reply "move M41.1.6 to Wave 1", or name the model you want.
+
 # Answered
+
+## 69. Make the repository private and protect main - DEFERRED by you, on purpose
+
+You keep the repository public for now and will make it private and protect main yourself later.
+Recorded as your own step (M0.1.1, M38.1.1.5), off Wave 0's build count. Not raised again.
 
 ## 68. The owner's architecture review - DECIDED
 
