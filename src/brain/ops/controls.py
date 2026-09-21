@@ -674,7 +674,13 @@ CONTROLS: Final[tuple[Control, ...]] = (
     ),
     Control(
         name="model_health_probes",
-        symbols=("brain.models.health:next_probes",),
+        # The run joined on 2026-09-22: the worker's schedule starts it every minute, it reads the
+        # ladder and the stored rings, asks `next_probes` which deployments are due, and appends
+        # each probe to `ops.provider_health`, which every process's next plan replays.
+        symbols=(
+            "brain.ops.model_probe_run:run_model_probes_now",
+            "brain.models.health:next_probes",
+        ),
         guards=(
             "that a provider which has stopped answering is found by asking it rather than "
             "by a person's question being the probe"
@@ -687,7 +693,7 @@ CONTROLS: Final[tuple[Control, ...]] = (
         every=timedelta(seconds=PROBE_INTERVAL_SECONDS),
         cadence_from="brain.models.health:PROBE_INTERVAL_SECONDS",
         severity=Severity.RAISED,
-        invoked_by=Invocation.NOTHING,
+        invoked_by=Invocation.IN_PROCESS,
     ),
     Control(
         name="spend_correction",

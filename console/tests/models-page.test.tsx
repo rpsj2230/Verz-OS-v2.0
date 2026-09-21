@@ -16,10 +16,24 @@
  * **The page is mounted on its own**, for `tests/live-runs-page.test.tsx`' reason: the route table
  * is a shared file, and `.scratch/wire_live_runs_models.md` holds what goes into it.
  *
- * Task ids: M27.2.3, M27.8.8
+ * Task ids: M27.2.3, M27.8.8, M5.2.2, M5.4.3, M5.4.8, M5.5.1
  */
 
 import { DOWNLOAD_REGISTER } from "../src/pages/providerRegisterQuery";
+import {
+  ADD_RESIDENCY,
+  ALERTS_CAPTION,
+  EDIT_NUMBERS,
+  PRODUCT_DEFAULT,
+  RESET_TIER,
+  RESIDENCY_CAPTION,
+  RETIRE_RESIDENCY,
+  SAVE_NUMBERS,
+  SET_HERE,
+  TIERS_CAPTION,
+  residencyConsequence,
+  tierConsequence,
+} from "../src/pages/routingSettingsQuery";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
@@ -191,6 +205,10 @@ function liveRung(tier: string, position: number, model: string, extra: Record<s
     unhealthy_because: null,
     live_seen: 5,
     live_failed: 1,
+    probes_seen: 3,
+    probes_failed: 1,
+    last_probe_at: "2019-03-06T08:59:00Z",
+    last_live_at: "2019-03-06T08:00:00Z",
     ...extra,
   } as RungStateRow;
 }
@@ -234,6 +252,33 @@ function providers(overrides: Record<string, unknown> = {}): Record<string, unkn
     editable: true,
     vault: null,
     vault_told: null,
+    tiers: [
+      { tier: "small", context_window: 128000, escalation_headroom: 0.8, configured: false },
+      { tier: "main", context_window: 50000, escalation_headroom: 0.5, configured: true },
+      { tier: "heavy", context_window: 200000, escalation_headroom: 0.8, configured: false },
+    ],
+    residency: [
+      {
+        id: "44444444-4444-4444-8444-444444444444",
+        scope: { clauses: [{ field: "department", op: "eq", value: "finance" }] },
+        allowed_regions: ["eu-west-1"],
+        on_prem_only: false,
+        note: "NOTE-SENTINEL",
+        created_by: "u_admin",
+        created_at: "2019-03-04T09:00:00Z",
+      },
+    ],
+    depth_alerts: [
+      {
+        raised_at: "2019-03-06T08:30:00Z",
+        level: "warning",
+        tier: "main",
+        depth: 2,
+        served_by: "gpt-5-deployment",
+        reason: "REASON-SENTINEL",
+        trace_id: "TRACE-SENTINEL",
+      },
+    ],
     ...overrides,
   };
 }
@@ -789,6 +834,124 @@ describe("the provider controls", () => {
   });
 });
 
+describe("routing settings", () => {
+  test("each tier's numbers say whether a row sets them, each rung its probes, and each alert its depth", async () => {
+    // What breaks if this is deleted: a product default drawn as a setting somebody made, the
+    // prober's findings reaching no screen, or a chain that went deep leaving nothing to read.
+    const { container } = await modelsPage(EVERY_ANSWER);
+
+    expect(tableRows(container, TIERS_CAPTION).map((row) => row.slice(0, 4))).toEqual([
+      ["small", "128000 tokens", "80%", PRODUCT_DEFAULT],
+      ["main", "50000 tokens", "50%", SET_HERE],
+      ["heavy", "200000 tokens", "80%", PRODUCT_DEFAULT],
+    ]);
+    expect(tableRows(container, RUNGS_CAPTION)[0]?.[7]).toBe("3 probes, 1 failed");
+    expect(tableRows(container, RESIDENCY_CAPTION)[0]?.slice(0, 3)).toEqual([
+      "department eq finance",
+      "eu-west-1",
+      "NOTE-SENTINEL",
+    ]);
+    const alert = tableRows(container, ALERTS_CAPTION)[0] ?? [];
+    expect(alert.slice(1, 5)).toEqual(["warning", "main", "2", "REASON-SENTINEL"]);
+    expect(container.querySelector(`button[aria-label="${RESET_TIER}: main"]`)).not.toBeNull();
+    expect(container.querySelector(`button[aria-label="${RESET_TIER}: small"]`)).toBeNull();
+  });
+
+  test("a tier's numbers are sent only from their confirmation, as PUT, and the card is the plan it answers with", async () => {
+    // What breaks if this is deleted: one press re-routing every department's questions, or a
+    // body the route does not read.
+    const after = providers({
+      tiers: [{ tier: "small", context_window: 64000, escalation_headroom: 0.6, configured: true }],
+    });
+    const { container, sent } = await modelsPage({
+      ...EVERY_ANSWER,
+      ["PUT /api/v1/models/tiers/small"]: () => json(after),
+    });
+    const puts = () => sent.filter((one) => one.method === "PUT");
+
+    fireEvent.click(button(container, `${EDIT_NUMBERS}: small`));
+    const form = container.querySelector<HTMLFormElement>('form[aria-label="Numbers for the small tier"]');
+    expect(form).not.toBeNull();
+    fireEvent.change(form?.querySelector('input[name="context_window"]') as HTMLInputElement, {
+      target: { value: "64000" },
+    });
+    fireEvent.change(form?.querySelector('input[name="escalation_headroom"]') as HTMLInputElement, {
+      target: { value: "0.6" },
+    });
+    fireEvent.submit(form as HTMLFormElement);
+    expect(container.querySelector(".confirm")?.textContent).toContain(
+      tierConsequence("small", { context_window: 64000, escalation_headroom: 0.6 }),
+    );
+    expect(puts()).toEqual([]);
+
+    fireEvent.click(confirmButton(container, SAVE_NUMBERS));
+
+    await waitFor(() => {
+      expect(puts()).toEqual([
+        {
+          method: "PUT",
+          path: "/api/v1/models/tiers/small",
+          body: { context_window: 64000, escalation_headroom: 0.6 },
+        },
+      ]);
+    });
+    await waitFor(() => {
+      expect(tableRows(container, TIERS_CAPTION)).toHaveLength(1);
+    });
+  });
+
+  test("a residency constraint is sent only from its confirmation with its scope, and one is retired the same way", async () => {
+    // What breaks if this is deleted: a constraint attached to the wrong scope, sent unasked, or a
+    // retirement that widens where questions go with nothing confirmed.
+    const retire = "/api/v1/models/residency/44444444-4444-4444-8444-444444444444/retire";
+    const { container, sent } = await modelsPage({
+      ...EVERY_ANSWER,
+      ["POST /api/v1/models/residency"]: () => json(providers()),
+      [`POST ${retire}`]: () => json(providers({ residency: [] })),
+    });
+    const posts = () => sent.filter((one) => one.method === "POST");
+
+    const form = container.querySelector<HTMLFormElement>('form[aria-label="Add a residency constraint"]');
+    fireEvent.change(form?.querySelector('input[name="department"]') as HTMLInputElement, {
+      target: { value: "legal" },
+    });
+    fireEvent.change(form?.querySelector('input[name="allowed_regions"]') as HTMLInputElement, {
+      target: { value: "eu-west-1, eu-central-1" },
+    });
+    fireEvent.submit(form as HTMLFormElement);
+    const asked = {
+      scope: { clauses: [{ field: "department", op: "eq", value: "legal" }] },
+      allowed_regions: ["eu-west-1", "eu-central-1"],
+      on_prem_only: false,
+      note: "",
+    };
+    expect(container.querySelector(".confirm")?.textContent).toContain(residencyConsequence(asked));
+    expect(posts()).toEqual([]);
+    fireEvent.click(confirmButton(container, ADD_RESIDENCY));
+    await waitFor(() => {
+      expect(posts()).toEqual([{ method: "POST", path: "/api/v1/models/residency", body: asked }]);
+    });
+
+    fireEvent.click(button(container, `${RETIRE_RESIDENCY}: department eq finance`));
+    fireEvent.click(confirmButton(container, RETIRE_RESIDENCY));
+    await waitFor(() => {
+      expect(posts()).toHaveLength(2);
+    });
+    expect(posts()[1]?.path).toBe(retire);
+  });
+
+  test("the settings' writes are reached only through a confirmation in the source", () => {
+    // What breaks if this is deleted: a later edit wiring one of the four writes to a plain button.
+    const writes = everyWrite().filter((one) => one.file === "src/components/RoutingSettings.tsx");
+    expect(writes.map((one) => [one.method, one.address, one.confirmed])).toEqual([
+      ["PUT", "tierApiPath(asked.tier)", true],
+      ["POST", "tierResetApiPath(asked.tier)", true],
+      ["POST", "RESIDENCY_API_PATH", true],
+      ["POST", "residencyRetireApiPath(asked.row.id)", true],
+    ]);
+  });
+});
+
 describe("spend by department", () => {
   test("each department is a bar of its share of the API's total and its cost, and an empty report says so", async () => {
     // What breaks if this is deleted: a bar drawn against a total this page summed itself, or an
@@ -900,6 +1063,13 @@ describe("what the page asks for", () => {
     expect(Object.keys(plan).sort()).toEqual(backendModelFields(PROVIDER_ROUTES, "ProvidersView").sort());
     expect(first(plan, "providers")).toEqual(backendModelFields(PROVIDER_ROUTES, "ProviderStateView").sort());
     expect(first(plan, "rungs")).toEqual(backendModelFields(PROVIDER_ROUTES, "RungStateView").sort());
+    expect(first(plan, "tiers")).toEqual(backendModelFields(PROVIDER_ROUTES, "RoutingTierView").sort());
+    expect(first(plan, "residency")).toEqual(
+      backendModelFields(PROVIDER_ROUTES, "ResidencyConstraintView").sort(),
+    );
+    expect(first(plan, "depth_alerts")).toEqual(
+      backendModelFields(PROVIDER_ROUTES, "ChainDepthAlertView").sort(),
+    );
     expect(Object.keys(check()).sort()).toEqual(backendModelFields(PROVIDER_ROUTES, "CheckView").sort());
     expect(backendModelFields(PROVIDER_ROUTES, "ProviderSwitchAsked")).toEqual(["on"]);
   });

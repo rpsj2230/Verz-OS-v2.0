@@ -4,7 +4,7 @@ Driven with a ladder, an attempt log and drivers held in memory, so the walk is 
 policy layer describes it and nothing opens a socket or a connection.
 
 Task ids: M27.7.14, M27.8.8, M5.3.4, M5.4.6, M5.5.4, M5.5.2, M5.1.3, M5.7.3, M5.6.4, M5.4.1,
-M5.7.2
+M5.7.2, M5.2.2, M5.4.3, M5.4.7, M5.4.8, M5.5.1
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from brain.core.lane import Lane
+from brain.core.scope import Scope
 from brain.models.adapter import (
     Completion,
     ContentPolicyRefusedError,
@@ -44,9 +45,11 @@ from brain.models.driver import (
     ProviderUnavailable,
     Role,
 )
-from brain.models.evidence import Attempt
+from brain.models.evidence import Attempt, RingEntry, StoredRings
+from brain.models.health import AlertLevel, DepthAlert
 from brain.models.metering import Meter
 from brain.models.registry import ModelPin, ProviderKind, ProviderRecord
+from brain.models.residency import ScopedResidency
 from brain.models.routing import (
     BREAKER_BASE_COOLDOWN_SECONDS,
     BREAKER_CONSECUTIVE_FAILURES,
@@ -54,8 +57,10 @@ from brain.models.routing import (
     NoCompliantRoute,
     ResidencyClass,
     ResidencyRequirement,
+    RoutingRequest,
     Tier,
 )
+from brain.models.tier_rules import TierRule
 
 #: Far outside any plausible wall clock, because nothing here is about the present.
 T0 = datetime(2999, 1, 1, 12, 0, tzinfo=UTC)
@@ -92,6 +97,9 @@ class Ladder:
     switched_off: frozenset[str] = frozenset()
     attempts: tuple[Attempt, ...] = ()
     providers: tuple[ProviderRecord, ...] = ()
+    tiers: tuple[TierRule, ...] = ()
+    residency: tuple[ScopedResidency, ...] = ()
+    rings: tuple[StoredRings, ...] = ()
 
     async def current(self, now: datetime) -> LadderState:
         return LadderState(
@@ -99,7 +107,40 @@ class Ladder:
             switched_off=self.switched_off,
             attempts=self.attempts,
             providers=self.providers,
+            tiers=self.tiers,
+            residency=self.residency,
+            rings=self.rings,
         )
+
+
+@dataclass
+class Rings:
+    """Every live outcome the executor appended, as `(deployment, provider, ok)`."""
+
+    seen: list[tuple[str, str, bool]] = field(default_factory=list)
+
+    async def observed(self, *, deployment_id: str, provider: str, ok: bool, at: datetime) -> None:
+        self.seen.append((deployment_id, provider, ok))
+
+
+@dataclass
+class Alerts:
+    """Every depth alert the executor raised, with its trace."""
+
+    raised: list[tuple[DepthAlert, str]] = field(default_factory=list)
+
+    async def raised_(self, alert: DepthAlert, *, trace_id: str, at: datetime) -> None:
+        self.raised.append((alert, trace_id))
+
+
+class AlertSink:
+    """`DepthAlerts` over an `Alerts` list."""
+
+    def __init__(self, into: Alerts) -> None:
+        self.into = into
+
+    async def raised(self, alert: DepthAlert, *, trace_id: str, at: datetime) -> None:
+        await self.into.raised_(alert, trace_id=trace_id, at=at)
 
 
 @dataclass
@@ -163,6 +204,8 @@ def executor(
     held: frozenset[str] | None = None,
     log: Log | None = None,
     clock: Callable[[], datetime] = lambda: T0,
+    rings: Rings | None = None,
+    alerts: Alerts | None = None,
 ) -> tuple[ModelCalls, Log]:
     kept = log or Log()
     drivers: dict[str, ModelDriver] = {
@@ -176,6 +219,8 @@ def executor(
             profile=lambda: profile,
             held=lambda: frozenset(transports) if held is None else held,
             clock=clock,
+            health=rings,
+            alerts=None if alerts is None else AlertSink(alerts),
         ),
         kept,
     )
@@ -927,3 +972,247 @@ def test_a_trial_plans_from_the_changed_ladder_and_leaves_the_live_one_alone() -
 
     assert asyncio.run(trial.planned()).state.rungs == ()
     assert len(asyncio.run(calls.planned()).state.rungs) == 1
+
+
+# ------------------------------------------------------------ the tier table (M5.2.2)
+def test_a_request_is_classified_against_the_tier_table_the_ladder_read() -> None:
+    """**M5.2.2 on the live path.** The same request lands on main with no tier row and on heavy
+    when `ops.routing_tier` says main holds fewer tokens than it carries, and the heavy rung is
+    the one called.
+
+    Delete this and the router goes back to the compiled windows, and a tier row saved on the
+    Models screen changes nothing a person's question does."""
+    asked = RoutingRequest(lane=Lane.ANSWER, estimated_context_tokens=60_000)
+    rungs = (rung("anthropic"), rung("moonshot", tier=Tier.HEAVY))
+
+    compiled, _ = executor(Ladder(rungs), {"anthropic": Scripted(ok()), "moonshot": Scripted(ok())})
+    table, _ = executor(
+        Ladder(rungs, tiers=(TierRule(Tier.MAIN, 50_000),)),
+        {"anthropic": Scripted(ok()), "moonshot": Scripted(ok())},
+    )
+
+    assert complete(compiled, Meter(), tier=None, routing=asked).deployment_id == (
+        "anthropic-main-0"
+    )
+    assert complete(table, Meter(), tier=None, routing=asked).deployment_id == "moonshot-heavy-0"
+
+
+def test_a_call_naming_neither_a_tier_nor_a_request_is_refused_before_anything_is_read() -> None:
+    """Delete this and a caller forgetting both would route somewhere by default."""
+    calls, log = executor(Ladder((rung("anthropic"),)), {"anthropic": Scripted(ok())})
+
+    with pytest.raises(ValueError, match="names its tier"):
+        complete(calls, Meter(), tier=None)
+    with pytest.raises(ValueError, match="cannot be sent"):
+        complete(calls, Meter(), routing=RoutingRequest(lane=Lane.TASK))
+    assert log.rows == {}
+
+
+# ------------------------------------------------------ residency from a scope (M5.5.1)
+FINANCE = Scope.department("finance")
+EU = ScopedResidency(
+    scope=FINANCE, requirement=ResidencyRequirement(allowed_regions=frozenset({"eu-west-1"}))
+)
+
+
+def test_a_reach_touching_a_constrained_scope_skips_the_rung_outside_its_regions() -> None:
+    """**M5.5.1.** The constraint is attached to finance's scope, the request carries a reach over
+    finance, and the executor skips the undocumented rung for the one in the allowed region.
+
+    Delete this and a constraint written on the Models screen is stored and never reaches the
+    chain, which is the state every call was in before the request carried it."""
+    anywhere = Scripted(ok())
+    in_region = Scripted(ok())
+    calls, _ = executor(
+        Ladder(
+            (rung("anthropic"), rung("moonshot", position=1)),
+            providers=(
+                record("moonshot", region="eu-west-1", residency=ResidencyClass.REGION_PINNED),
+            ),
+            residency=(EU,),
+        ),
+        {"anthropic": anywhere, "moonshot": in_region},
+    )
+
+    assert complete(calls, Meter(), reach=(FINANCE,)).deployment_id == "moonshot-main-1"
+    assert anywhere.sent == []
+
+
+def test_a_reach_with_nowhere_compliant_is_refused_and_one_elsewhere_is_answered() -> None:
+    """The refusal and its sibling: the same ladder refuses a finance reader, because no rung is
+    in the allowed region, and answers a sales reader, whose reach provably misses the scope.
+
+    Delete this and a constrained request could degrade to a non-compliant rung, or every request
+    could be held to a constraint on one department."""
+    anywhere = Scripted(ok())
+    calls, _ = executor(Ladder((rung("anthropic"),), residency=(EU,)), {"anthropic": anywhere})
+
+    with pytest.raises(NoCompliantRoute):
+        complete(calls, Meter(), reach=(FINANCE,))
+    assert anywhere.sent == []
+
+    assert complete(calls, Meter(), reach=(Scope.department("sales"),)).deployment_id == (
+        "anthropic-main-0"
+    )
+
+
+# ------------------------------------------------------------- the stored rings (M5.4.3)
+def test_every_answer_and_every_provider_failure_is_appended_to_its_live_ring() -> None:
+    """**M5.4.3, fed by live calls.** A 503 on the primary and an answer from the second each reach
+    the ring; a 429 does not, because a rate limit is the provider working.
+
+    Delete this and the stored ring is a table nothing writes, and the console's live figures for
+    a rung nothing has called in the window go blank."""
+    rings = Rings()
+    calls, _ = executor(
+        Ladder((rung("anthropic"), rung("moonshot", position=1), rung("deepseek", position=2))),
+        {
+            "anthropic": Scripted(TransportStatusError(503)),
+            "moonshot": Scripted(TransportStatusError(429)),
+            "deepseek": Scripted(ok()),
+        },
+        rings=rings,
+    )
+
+    complete(calls, Meter())
+
+    assert rings.seen == [
+        ("anthropic-main-0", "anthropic", False),
+        ("deepseek-main-2", "deepseek", True),
+    ]
+
+
+def test_two_failed_probes_on_a_rung_with_no_live_traffic_take_it_out_of_the_next_plan() -> None:
+    """**M5.4.7 reaching the live path.** The prober's ring holds two failures a minute apart and
+    no attempt has touched the rung, so the replay opens its breaker and the call goes to the
+    second rung without asking the first.
+
+    Delete this and the prober writes a ring nothing reads, and the first person to need the
+    rung is its probe after all."""
+    dead = Scripted(ok())
+    calls, _ = executor(
+        Ladder(
+            (rung("anthropic"), rung("moonshot", position=1)),
+            rings=(
+                StoredRings(
+                    deployment_id="anthropic-main-0",
+                    provider="anthropic",
+                    probe=(
+                        RingEntry(ok=False, at=T0 - timedelta(seconds=70)),
+                        # Ten seconds ago, so the breaker it opens is still inside its thirty-second
+                        # cooldown at T0 rather than half open again.
+                        RingEntry(ok=False, at=T0 - timedelta(seconds=10)),
+                    ),
+                ),
+            ),
+        ),
+        {"anthropic": dead, "moonshot": Scripted(ok())},
+    )
+
+    assert complete(calls, Meter()).deployment_id == "moonshot-main-1"
+    assert dead.sent == []
+
+
+def test_one_failed_probe_leaves_the_rung_in_the_chain() -> None:
+    """The sibling: one synthetic failure is as likely our network as the provider's. Delete this
+    and a single DNS hiccup on the prober takes a provider out of rotation."""
+    primary = Scripted(ok())
+    calls, _ = executor(
+        Ladder(
+            (rung("anthropic"), rung("moonshot", position=1)),
+            rings=(
+                StoredRings(
+                    deployment_id="anthropic-main-0",
+                    provider="anthropic",
+                    probe=(RingEntry(ok=False, at=T0 - timedelta(seconds=30)),),
+                ),
+            ),
+        ),
+        {"anthropic": primary, "moonshot": Scripted(ok())},
+    )
+
+    assert complete(calls, Meter()).deployment_id == "anthropic-main-0"
+
+
+# ------------------------------------------------------------- depth alerting (M5.4.8)
+def test_an_answer_from_the_second_rung_raises_a_warning_naming_the_tier_and_depth() -> None:
+    """**M5.4.8, produced by the live path.** The primary failed, the second answered, the person
+    got their answer, and the alert says the chain went to rung two.
+
+    Delete this and `assess_chain_depth` stays a function no call ever asks, which is the state it
+    was in: a dead primary reads as healthy for as long as the fallback holds."""
+    alerts = Alerts()
+    calls, _ = executor(
+        Ladder((rung("anthropic"), rung("moonshot", position=1))),
+        {"anthropic": Scripted(TransportStatusError(503)), "moonshot": Scripted(ok())},
+        alerts=alerts,
+    )
+
+    complete(calls, Meter())
+
+    ((alert, trace),) = alerts.raised
+    assert (alert.level, alert.tier, alert.depth, alert.served_by) == (
+        AlertLevel.WARNING,
+        Tier.MAIN,
+        2,
+        "moonshot-main-1",
+    )
+    assert trace == TRACE
+
+
+def test_a_chain_that_runs_out_raises_a_critical_alert_as_well_as_the_failure() -> None:
+    """Delete this and an exhausted chain would raise to the caller and leave no alert, because
+    the judging would be skipped by the exception."""
+    alerts = Alerts()
+    calls, _ = executor(
+        Ladder((rung("anthropic"),)),
+        {"anthropic": Scripted(TransportStatusError(503))},
+        alerts=alerts,
+    )
+
+    with pytest.raises(ProviderUnavailable):
+        complete(calls, Meter())
+
+    ((alert, _),) = alerts.raised
+    assert alert.level is AlertLevel.CRITICAL
+
+
+def test_an_answer_from_the_primary_and_an_overflow_upward_raise_nothing() -> None:
+    """The siblings: the chain working as designed is not an alert. Delete this and every
+    question would page somebody, or a long question escalating to heavy would."""
+    alerts = Alerts()
+    healthy, _ = executor(
+        Ladder((rung("anthropic"),)), {"anthropic": Scripted(ok())}, alerts=alerts
+    )
+    complete(healthy, Meter())
+
+    overflowing, _ = executor(
+        Ladder((rung("anthropic"), rung("moonshot", tier=Tier.HEAVY))),
+        {
+            "anthropic": Scripted(ContextWindowExceededError()),
+            "moonshot": Scripted(ok()),
+        },
+        alerts=alerts,
+    )
+    assert complete(overflowing, Meter()).deployment_id == "moonshot-heavy-0"
+
+    assert alerts.raised == []
+
+
+def test_a_trial_on_the_matrix_gate_raises_no_alert() -> None:
+    """Delete this and a proposed ladder the gate is still judging could page somebody about a
+    chain that is not taking traffic."""
+    alerts = Alerts()
+    calls, _ = executor(
+        Ladder((rung("anthropic"), rung("moonshot", position=1))),
+        {"anthropic": Scripted(TransportStatusError(503)), "moonshot": Scripted(ok())},
+        alerts=alerts,
+    )
+
+    asyncio.run(
+        calls.trying(lambda rungs: rungs).complete(
+            ASK, tier=Tier.MAIN, lane=Lane.ANSWER, meter=Meter(), trace_id=TRACE
+        )
+    )
+
+    assert alerts.raised == []

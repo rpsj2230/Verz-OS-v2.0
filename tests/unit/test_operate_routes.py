@@ -677,6 +677,11 @@ def test_a_providers_health_is_replayed_from_attempts_and_stored_by_nothing() ->
     """`ProviderHealth` is named by the module defining it, the matrix that joins it, the replay
     that builds it from attempts and the executor walking with it, and by no store or table.
 
+    The prober (`ops/model_probe_run.py`, 2026-09-22) names it too, and stores no breaker either:
+    it replays the same attempts and probe ring the executor does, lays the stored instants over
+    them to ask `next_probes` what is due, and writes only a probe's outcome to its ring, which the
+    next replay reads. `ops.provider_health` holds rings, never a breaker state.
+
     Delete this and a second, stored copy of a breaker can be added beside the replayed one, and
     the screen and the executor can disagree about whether a provider is open."""
     assert modules_using("ProviderHealth") == [
@@ -684,6 +689,7 @@ def test_a_providers_health_is_replayed_from_attempts_and_stored_by_nothing() ->
         "models/calls.py",
         "models/evidence.py",
         "models/health.py",
+        "ops/model_probe_run.py",
     ]
 
 

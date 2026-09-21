@@ -200,6 +200,11 @@ def test_the_reach_is_computed_where_this_file_says_and_nowhere_else() -> None:
         "knowledge/verification.py": ("may_name_verifier",),
         "memory/formation.py": ("may_recall",),
         "memory/review.py": ("agent_memory",),
+        # `ResidencyRequirement.intersect`, not a reach: the executor narrows a request's regions
+        # by the constraints its caller's scopes touch, and `requirement_for` composes them
+        # (M5.5.1, 2026-09-22). Neither computes what anybody may read.
+        "models/calls.py": ("complete",),
+        "models/residency.py": ("requirement_for",),
         "ops/automation.py": ("flow_reach",),
         "ops/denial_alerts.py": ("reach",),
         "ops/feedback.py": ("may_flag",),

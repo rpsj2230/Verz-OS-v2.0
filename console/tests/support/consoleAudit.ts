@@ -76,6 +76,12 @@ import {
 } from "../../src/pages/providerRegisterQuery";
 import { modelPinApiPath } from "../../src/pages/agentModelPinQuery";
 import { providerCheckApiPath, providerSwitchApiPath } from "../../src/pages/modelsQuery";
+import {
+  RESIDENCY_API_PATH,
+  residencyRetireApiPath,
+  tierApiPath,
+  tierResetApiPath,
+} from "../../src/pages/routingSettingsQuery";
 import { editPath, giveBackPath } from "../../src/pages/promptsQuery";
 import {
   ERASURES_API_PATH,
@@ -319,6 +325,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/routing/rungs*",
       "/api/v1/routing/changes",
       "/api/v1/routing/golden-questions*",
+      "/api/v1/models/tiers*",
+      "/api/v1/models/residency*",
     ],
     tables: [
       "ops.routing_rung",
@@ -327,6 +335,9 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "ops.model_provider",
       "ops.golden_question",
       "ops.routing_change",
+      "ops.provider_health",
+      "ops.chain_depth_alert",
+      "ops.residency_constraint",
     ],
     installation: ["INSTALL_MODEL_PROFILE", "INSTALL_MODEL_ENDPOINT", "INSTALL_EMBEDDING_DIMENSIONS"],
     gaps: [
@@ -804,6 +815,22 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   ],
   "src/components/ProviderRegister.tsx ADD_PROVIDER_API_PATH": [
     at("POST /api/v1/models/providers", "ADD_PROVIDER_API_PATH", ADD_PROVIDER_API_PATH),
+  ],
+  "src/components/RoutingSettings.tsx tierApiPath(asked.tier)": [
+    at("PUT /api/v1/models/tiers/{tier}", "tierApiPath", tierApiPath("main")),
+  ],
+  "src/components/RoutingSettings.tsx tierResetApiPath(asked.tier)": [
+    at("POST /api/v1/models/tiers/{tier}/reset", "tierResetApiPath", tierResetApiPath("main")),
+  ],
+  "src/components/RoutingSettings.tsx RESIDENCY_API_PATH": [
+    at("POST /api/v1/models/residency", "RESIDENCY_API_PATH", RESIDENCY_API_PATH),
+  ],
+  "src/components/RoutingSettings.tsx residencyRetireApiPath(asked.row.id)": [
+    at(
+      "POST /api/v1/models/residency/{constraint_id}/retire",
+      "residencyRetireApiPath",
+      residencyRetireApiPath("44444444-4444-4444-8444-444444444444"),
+    ),
   ],
   "src/components/AgentModelPin.tsx modelPinApiPath(agentId)": [
     at("PUT /api/v1/agents/{agent_id}/model-pin", "modelPinApiPath", modelPinApiPath("quote-helper")),
@@ -1305,6 +1332,38 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: t("test_provider_registry_routes", "test_an_added_provider_has_its_key_kept_in_its_own_slot_before_its_row_is_written"),
     audit: t("test_credential_routes", "test_a_key_set_from_the_console_is_recorded_as_its_setter_with_their_reach_and_trace"),
     behaviour: t("test_model_calls", "test_a_provider_added_from_the_console_answers_through_the_ladder_with_no_release"),
+  },
+  "PUT /api/v1/models/tiers/{tier}": {
+    row: t("test_model_health_routes", "test_a_tier_rule_is_written_as_the_window_and_only_the_keys_the_router_reads"),
+    audit: {
+      none: "A tier's numbers are logged and not written to the audit ledger in this release.",
+      leaf: "M5.2.2",
+    },
+    behaviour: t("test_model_calls", "test_a_request_is_classified_against_the_tier_table_the_ladder_read"),
+  },
+  "POST /api/v1/models/tiers/{tier}/reset": {
+    row: t("test_model_health_routes", "test_a_reset_retires_the_row_so_the_tier_runs_at_the_product_default"),
+    audit: {
+      none: "Resetting a tier is logged and not written to the audit ledger in this release.",
+      leaf: "M5.2.2",
+    },
+    behaviour: t("test_tier_rules", "test_a_tier_with_no_row_runs_at_the_compiled_numbers_and_is_not_marked_configured"),
+  },
+  "POST /api/v1/models/residency": {
+    row: t("test_model_health_routes", "test_a_residency_constraint_is_written_with_its_scope_and_regions"),
+    audit: {
+      none: "A residency constraint is logged and not written to the audit ledger in this release.",
+      leaf: "M5.5.1",
+    },
+    behaviour: t("test_model_calls", "test_a_reach_touching_a_constrained_scope_skips_the_rung_outside_its_regions"),
+  },
+  "POST /api/v1/models/residency/{constraint_id}/retire": {
+    row: t("test_model_health_routes", "test_retiring_a_constraint_marks_it_retired_and_deletes_nothing"),
+    audit: {
+      none: "Retiring a residency constraint is logged and not written to the audit ledger in this release.",
+      leaf: "M5.5.1",
+    },
+    behaviour: t("test_model_calls", "test_a_reach_with_nowhere_compliant_is_refused_and_one_elsewhere_is_answered"),
   },
   "PUT /api/v1/agents/{agent_id}/model-pin": {
     row: t("test_agent_model_routes", "test_an_administrator_pins_a_model_a_rung_serves_and_it_is_written_to_the_agent"),

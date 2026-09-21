@@ -274,13 +274,36 @@ def test_the_application_may_create_update_and_read_provider_keys_and_nothing_mo
 
 
 def test_no_other_role_reaches_the_provider_engine() -> None:
-    """The worker runs with nobody watching and the browser runner executes pages it did not write.
-    Neither uses a provider key through the vault, and either holding write would be a way to swap
-    the key every question is sent with. Delete this and a copy of the application's rule into
-    another policy reads as consistency."""
-    for role in (VaultRole.WORKER, VaultRole.BROWSER_RUNNER):
-        granted = _granted_paths(_policy_file(role).read_text(encoding="utf-8"))
-        assert not [path for path in granted if path.startswith("providers")], role
+    """The browser runner executes pages it did not write and uses no provider key at all, and
+    holding write would be a way to swap the key every question is sent with. The worker's narrow
+    read is `test_the_worker_reads_each_model_provider_key_by_name_and_nothing_else`'s. Delete this
+    and a copy of the application's rule into another policy reads as consistency."""
+    granted = _granted_paths(_policy_file(VaultRole.BROWSER_RUNNER).read_text(encoding="utf-8"))
+    assert not [path for path in granted if path.startswith("providers")]
+
+
+def test_the_worker_reads_each_model_provider_key_by_name_and_nothing_else() -> None:
+    """M5.4.7: the worker probes providers, and a probe needs the provider's key, so it reads the
+    four model slots, each named, with read alone. Never `providers/data/+`, which would also read
+    the mail relay's password and every provider added from the console; never write, which would
+    let a process nobody watches replace the key every question uses; never metadata or delete.
+    The names are held to `PROVIDER_SLOTS`, so a slot added there and not here is a provider the
+    prober silently never probes, and one here and not there is a read nothing needs.
+
+    Delete this and the grant widens to the wildcard in a debugging session, and nothing else in
+    the repository reads the policy."""
+    from brain.ops.provider_keys import PROVIDER_SLOTS
+
+    granted = _granted_paths(_policy_file(VaultRole.WORKER).read_text(encoding="utf-8"))
+    providers = {
+        path: sorted(caps) for path, caps in granted.items() if path.startswith("providers")
+    }
+    assert providers == {f"providers/data/{one.slug}": ["read"] for one in PROVIDER_SLOTS}
+    assert "providers/data/mail_relay" not in providers
+    for slot in PROVIDER_SLOTS:
+        mount, _, rest = slot.path.partition("/")
+        called = f"{mount}/data/{rest}"
+        assert any(_matches(rule, called) for rule in providers), called
 
 
 def test_every_slot_the_code_writes_is_a_path_the_application_policy_grants() -> None:

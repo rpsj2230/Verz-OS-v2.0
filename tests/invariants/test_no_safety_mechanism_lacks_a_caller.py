@@ -69,7 +69,8 @@ KNOWN_ORPHANS = frozenset(
         "resolution_calibration",
         "queue_redrive",
         "side_effect_resume",
-        "model_health_probes",
+        # `model_health_probes` left on 2026-09-22: the worker's schedule starts it. See
+        # `SCHEDULED_BY_THE_WORKER`.
         # `outbox_dispatch` joined on 2026-09-15, the day it was written, and left on
         # 2026-09-17: the worker's schedule starts it. See `SCHEDULED_BY_THE_WORKER`.
     }
@@ -127,6 +128,9 @@ WIRED_BUT_NOT_SCHEDULED = frozenset({"spend_correction", "restore_drill"})
 #:
 #: `directory_sync` joined on 2026-09-21 from `WIRED_BUT_NOT_SCHEDULED`: `brain.ops.staff_sync_run`
 #: reads the chosen staff list with the kept credential, applies the dry run and records the run.
+#:
+#: `model_health_probes` joined on 2026-09-22 from `KNOWN_ORPHANS`: `brain.ops.model_probe_run`
+#: probes each deployment `next_probes` finds due and appends the outcome to its probe ring.
 SCHEDULED_BY_THE_WORKER = frozenset(
     {
         "retention_sweep",
@@ -140,6 +144,7 @@ SCHEDULED_BY_THE_WORKER = frozenset(
         "connector_sync",
         "vault_audit_ship",
         "directory_sync",
+        "model_health_probes",
     }
 )
 

@@ -291,7 +291,7 @@ labelled "last verified restore" beside a backup timestamp is the field somebody
 deciding not to worry, and the rule exists so that the day somebody builds a restore is the day
 that screen gets written.
 
-## Six of the sixteen mechanisms are started by nothing
+## Five of the sixteen mechanisms are started by nothing
 
 Named individually, because "monitoring is not wired" is a sentence somebody skims. The last
 column is the registry's own word for what starts each one, and this table is checked against
@@ -307,7 +307,7 @@ test it before it runs became the first caller of the roster dry run. Nine becam
 sweep was the first of these it started. Eight became true the same day, when the schedule began
 starting the re-verification nag. Seven became true on 2026-09-17, when the schedule began
 starting the webhook dispatch, and six later that day, when it began starting the permission
-canaries.
+canaries. Five became true on 2026-09-22, when the schedule began probing model providers.
 
 <!-- checked: every scheduled mechanism and whether anything starts it -->
 
@@ -324,7 +324,7 @@ canaries.
 | `queue_redrive` | that a job whose worker died underneath it is reclaimed rather than left | `nothing` |
 | `side_effect_resume` | that a side effect issued by a process which then died is read back from the source before anything is retried | `nothing` |
 | `audit_anchor` | that entries removed from the end of the audit ledger are detectable rather than silent | `on_a_route` |
-| `model_health_probes` | that a provider which has stopped answering is found by asking it rather than by a person's question failing | `nothing` |
+| `model_health_probes` | that a provider which has stopped answering is found by asking it rather than by a person's question failing | `in_process` |
 | `spend_correction` | that the cost estimator every budget decision is taken against stays anchored to what actually ran | `in_process` |
 | `outbox_dispatch` | that a webhook subscriber is told about the events it asked for, retried while it is down | `in_process` |
 | `spend_report_refresh` | that the spend report a reader is shown is rebuilt daily from what runs actually cost | `in_process` |
@@ -338,8 +338,8 @@ Three words appear in that last column and they are not degrees of the same thin
 means no call site of any kind. `in_process` means another module calls it, and the word alone
 says nothing about whether *that* module is ever reached. For `retention_sweep`, `canary_run`,
 `knowledge_reverification`, `outbox_dispatch`, `spend_report_refresh`, `erasure_queue`,
-`vault_token_renewal`, `automation_run`, `connector_sync` and `vault_audit_ship` it is: the
-general worker ticks the control schedule and starts all ten.
+`vault_token_renewal`, `automation_run`, `connector_sync`, `vault_audit_ship` and
+`model_health_probes` it is: the general worker ticks the control schedule and starts all eleven.
 The token renewal renews the worker's own vault token twice a day once less than half its period
 is left, and the application renews its own from inside its own process on the same rule, because
 a vault token is renewed only by whoever holds it; a `lite` install has no worker and no worker
@@ -378,6 +378,14 @@ is kept in the projection and is not yet answered from. The vault audit shipper 
 minutes and copies each call the vault answered about a slot from the vault's audit log, which the
 worker's vault overlay mounts read-only, into the audit ledger under the action `vault_access`; the
 console's Secrets vault screen counts what was shipped and how each connector run's lease ended.
+The model health prober runs every minute and sends one fixed sentence to each deployment nobody
+has asked lately, at most five a tick, with the key the worker reads from the vault under its own
+policy, which names the four model provider slots one at a time and grants read and nothing else.
+A provider switched off on the Models screen is not probed, an install whose profile keeps text on
+its own hardware probes no hosted provider, and with no key held a tick probes nothing and says
+so. Each outcome is kept in `ops.provider_health`, and the Models and health screen shows each
+rung's probes beside its live calls. A vault that loaded its policies before this release has to
+load them again (`ops/openbao/load-policies.sh`) before the worker can read a key.
 For `spend_correction` it means a console screen nobody opens on a schedule, for
 `directory_sync` a console page somebody presses, and for `restore_drill` a recovery panel that
 can only show an alarm, because nothing performs a drill. `on_a_route` is started from outside:

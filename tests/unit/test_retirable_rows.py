@@ -130,6 +130,12 @@ RECIPES: Final[dict[str, Recipe]] = {
         " VALUES ('rr_group_{n}', 'auditor', 'u_admin', 'measured')",
         "idp_group = 'rr_group_{n}'",
     ),
+    "ops.residency_constraint": Recipe(
+        "INSERT INTO ops.residency_constraint"
+        " (scope, allowed_regions, on_prem_only, note, created_by)"
+        " VALUES ('{{\"clauses\": []}}', '[\"eu-west-1\"]', false, 'rr_residency_{n}', 'u_admin')",
+        "note = 'rr_residency_{n}'",
+    ),
     "gate.capability_pack": Recipe(
         "INSERT INTO gate.capability_pack (name, description, capabilities)"
         " VALUES ('rr_pack_{n}', 'described', ARRAY['read:price_list'])",

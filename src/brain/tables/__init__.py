@@ -93,6 +93,11 @@ from brain.tables.identity import (
 from brain.tables.knowledge import KnowledgeItemRow
 from brain.tables.learning import CorrectionRow, LearningRow
 from brain.tables.memory import AdaptiveMemoryRow, PersistentMemoryRow
+from brain.tables.model_health import (
+    ChainDepthAlertRow,
+    ProviderHealthRow,
+    ResidencyConstraintRow,
+)
 from brain.tables.model_registry import GoldenQuestionRow, ModelProviderRow, RoutingChangeRow
 from brain.tables.operation import OperationRow
 from brain.tables.organisation import DepartmentLeadRow, TeamMembershipRow
@@ -332,6 +337,11 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0109_group_role_rule
     "auth.group_role_rule",
     "gate.break_glass_notice",
+    # 0108_provider_health_and_residency. Point at nothing: a deployment id is a string on a
+    # rung, and an alert outlives the rung it names.
+    "ops.provider_health",
+    "ops.chain_depth_alert",
+    "ops.residency_constraint",
 )
 
 __all__ = [
@@ -356,6 +366,7 @@ __all__ = [
     "CapabilityPackAssignmentRow",
     "CapabilityPackRow",
     "CapabilityRegistryRow",
+    "ChainDepthAlertRow",
     "ChannelEventRow",
     "ConnectorConnectionRow",
     "ConnectorSyncRow",
@@ -396,11 +407,13 @@ __all__ = [
     "PrincipalIdentityRow",
     "PrincipalRow",
     "ProjectedRecordRow",
+    "ProviderHealthRow",
     "QuestionAskedRow",
     "QuestionGapRow",
     "ReportRefreshRow",
     "RequestTelemetryRow",
     "RequirementCheckRow",
+    "ResidencyConstraintRow",
     "RetentionReleaseRow",
     "RetentionReportRow",
     "ReviewDecisionRow",

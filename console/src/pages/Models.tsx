@@ -46,7 +46,12 @@
  * processing region, retention and training terms, agreement and lane overrides, what it has been
  * sent by category with counts, a provider added with its key, and the register downloaded.
  *
- * Task ids: M27.2.3, M27.8.8, M5.6.4, M5.7.2
+ * **Routing settings sit under the register** (`components/RoutingSettings.tsx`): each tier's window
+ * and headroom as the router reads them, the residency constraints attached to scopes, and the
+ * chain-depth alerts of the last day, from the same providers answer. Each rung's probes, from the
+ * worker's prober, are drawn beside its recent calls.
+ *
+ * Task ids: M27.2.3, M27.8.8, M5.6.4, M5.7.2, M5.2.2, M5.4.3, M5.4.8, M5.5.1
  */
 
 import { useCallback, useMemo, useState, type ReactNode } from "react";
@@ -59,6 +64,8 @@ import { Chip } from "../ui/Chip";
 import { FailureNotice } from "../ui/FailureNotice";
 import { chainApiPath, MATRIX_PATH, readMatrixPage, type RungRow } from "./matrixQuery";
 import { ProviderRegister } from "../components/ProviderRegister";
+import { RoutingSettings } from "../components/RoutingSettings";
+import { probeWords } from "./routingSettingsQuery";
 import {
   answerLatencyApiPath,
   answerReading,
@@ -498,6 +505,7 @@ function RungsTable({ body }: { readonly body: ProvidersBody }) {
             <th scope="col">Answers now</th>
             <th scope="col">Health</th>
             <th scope="col">Recent calls</th>
+            <th scope="col">Probes</th>
           </tr>
         </thead>
         <tbody>
@@ -516,6 +524,7 @@ function RungsTable({ body }: { readonly body: ProvidersBody }) {
               <td>{answersWords(rung)}</td>
               <td>{healthWords(rung)}</td>
               <td>{recentCalls(rung)}</td>
+              <td>{probeWords(rung.probes_seen, rung.probes_failed)}</td>
             </tr>
           ))}
         </tbody>
@@ -647,6 +656,13 @@ function ProviderHealth({ models }: { readonly models: ModelsBody }) {
             />
             <RungsTable body={body} />
             <ProviderRegister
+              data={written !== null ? written : answer.data}
+              onWritten={(plan) => {
+                setFailure(null);
+                setWritten(plan);
+              }}
+            />
+            <RoutingSettings
               data={written !== null ? written : answer.data}
               onWritten={(plan) => {
                 setFailure(null);
