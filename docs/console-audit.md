@@ -7,11 +7,11 @@ What an administrator would need to manage, read out of the schema, the routes a
 ## What was measured
 
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
-- 85 tables, from `brain.db.Base.metadata`.
+- 87 tables, from `brain.db.Base.metadata`.
 - 24 installation values, from `brain.install.INSTALLATION`.
-- 157 routes under `/api/v1` and `/setup`, from the API's internal document.
-- 69 console addresses, from the route table in `console/src/App.tsx`.
-- 55 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 65 routes.
+- 160 routes under `/api/v1` and `/setup`, from the API's internal document.
+- 70 console addresses, from the route table in `console/src/App.tsx`.
+- 57 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 67 routes.
 - 36 gaps recorded, and 18 routes no screen calls.
 
 ## Area by area
@@ -373,14 +373,17 @@ No gap recorded.
 
 ### The audit trail: who changed what, and when
 
-- **Screens:** `/audit`
-- **Tables:** `obs.audit_entry`
+- **Screens:** `/audit`, `/requirement-checks`
+- **Tables:** `obs.audit_entry`, `ops.sensitive_read`, `ops.requirement_check`
 - **Installation values:** none
 
 | Route | Called by |
 | --- | --- |
 | `GET /api/v1/audit` | `/audit` |
 | `GET /api/v1/audit/history` | `/audit` |
+| `GET /api/v1/requirements/checks` | `/requirement-checks` |
+| `POST /api/v1/audit/verification` | `/audit` |
+| `POST /api/v1/requirements/checks` | `/requirement-checks` |
 
 No gap recorded.
 
@@ -454,7 +457,7 @@ No gap recorded.
 
 ## Every write the console sends, followed to the system
 
-Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 55 of 65 write routes have all three proved or not applicable, 8 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
+Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 56 of 67 write routes have all three proved or not applicable, 9 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
 
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
@@ -465,6 +468,7 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /api/v1/agents/{agent_id}/automations/{automation_id}/stop` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_the_console_starts_and_stops_as_the_application_role_and_the_ledger_says_who` in `tests/unit/test_automation_run_store.py` (database, in CI) | `test_the_console_starts_and_stops_as_the_application_role_and_the_ledger_says_who` in `tests/unit/test_automation_run_store.py` (database, in CI) | `test_the_owner_stops_their_own_without_approval_and_a_bystander_cannot` in `tests/unit/test_automation_schedule_routes.py` |
 | `POST /api/v1/answer` | `/ask` | Not applicable: Asking a question writes no row an administrator manages. | Not applicable: Asking a question is not a change to the system. | Not applicable: The answer is the behaviour, and tests/invariants hold it. |
 | `POST /api/v1/approvals/{suspension_id}/decision` | `/approvals`, `/approvals/:suspensionId` | `test_a_decided_approval_leaves_one_ledger_entry_that_survives_a_restart` in `tests/unit/test_suspension_store.py` (database, in CI) | `test_a_decided_approval_leaves_one_ledger_entry_that_survives_a_restart` in `tests/unit/test_suspension_store.py` (database, in CI) | `test_an_approved_suspension_is_what_resume_reads_and_a_rejected_one_is_not_run` in `tests/unit/test_suspension_store.py` (database, in CI) |
+| `POST /api/v1/audit/verification` | `/audit` | Not applicable: Walking the ledger reads it and writes nothing. | Not applicable: A verification changes nothing, so there is nothing to record. | `test_a_truncated_ledger_is_reported_through_the_route` in `tests/unit/test_chain_check.py` |
 | `POST /api/v1/classifications/{entity}/columns/{column}/review` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` | Not applicable: A review is a dry run and writes nothing. | Not applicable: A review changes nothing, so there is nothing to record. | `test_nothing_mounted_here_can_change_a_classification` in `tests/unit/test_classification_routes.py` |
 | `POST /api/v1/connectors` | `/connectors` | `test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_record` in `tests/unit/test_connector_store.py` (database, in CI) | `test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_record` in `tests/unit/test_connector_store.py` (database, in CI) | `test_a_connected_source_is_read_and_once_disconnected_it_is_never_read_again` in `tests/unit/test_connector_sync_run.py` (database, in CI) |
 | `POST /api/v1/connectors/{connector}/disconnect` | `/connectors` | `test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_record` in `tests/unit/test_connector_store.py` (database, in CI) | `test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_record` in `tests/unit/test_connector_store.py` (database, in CI) | `test_a_connected_source_is_read_and_once_disconnected_it_is_never_read_again` in `tests/unit/test_connector_sync_run.py` (database, in CI) |
@@ -504,6 +508,7 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /api/v1/notifications/relay` | `/notifications` | `test_a_relay_is_saved_as_five_rows_with_its_writer_and_read_back_configured` in `tests/unit/test_notification_routes.py` | **None.** The write is an ops.setting row, which migration 0059's trigger records as a setting entry naming the key, the change and the writer, and no test follows this route's write to that entry. | `test_a_test_message_reaches_the_saved_relay_once_with_the_kept_password` in `tests/unit/test_notification_routes.py` |
 | `POST /api/v1/notifications/relay/password` | `/notifications` | `test_a_password_is_kept_at_its_slot_recorded_and_never_answered` in `tests/unit/test_notification_routes.py` | `test_a_password_is_kept_at_its_slot_recorded_and_never_answered` in `tests/unit/test_notification_routes.py` | `test_a_test_message_reaches_the_saved_relay_once_with_the_kept_password` in `tests/unit/test_notification_routes.py` |
 | `POST /api/v1/notifications/relay/test` | `/notifications` | `test_pressing_the_test_button_twice_sends_one_message` in `tests/unit/test_mail.py` | **None.** A test message is recorded in ops.operation under its key, and the audit ledger has no action for a message sent: brain.ops.mail.A_TEST_IS_ONE_MESSAGE_PER_CONFIGURATION. | `test_a_test_message_reaches_the_saved_relay_once_with_the_kept_password` in `tests/unit/test_notification_routes.py` |
+| `POST /api/v1/requirements/checks` | `/requirement-checks` | `test_the_store_keeps_every_check_and_reads_back_the_newest_per_requirement` in `tests/unit/test_requirement_check_routes.py` (database, in CI) | **None.** A check is an append-only row attributed to the person who recorded it, and is not written to the ledger: brain.tables.requirement_check argues why. | `test_a_check_is_recorded_as_the_person_asking_on_the_running_release_and_read_back` in `tests/unit/test_requirement_check_routes.py` |
 | `POST /api/v1/routing/golden-questions` | `/routing`, `/routing/:rungId` | `test_a_golden_question_is_recorded_only_as_a_principal_the_directory_holds` in `tests/unit/test_routing_routes.py` | **None.** A golden question is a check the matrix gate asks and is logged, not written to the audit ledger; the changes it holds are recorded in ops.routing_change. Leaf `M5.6.2`. | `test_a_change_that_stops_the_ladder_answering_is_held_with_the_failing_question_shown` in `tests/unit/test_matrix_gate.py` |
 | `POST /api/v1/routing/golden-questions/{question_id}/retire` | `/routing`, `/routing/:rungId` | `test_a_retired_golden_question_is_marked_retired_and_asked_no_more` in `tests/unit/test_routing_routes.py` | **None.** Retiring a golden question is logged, not written to the audit ledger. Leaf `M5.6.2`. | `test_a_gate_with_no_golden_questions_holds_the_change_and_says_to_record_some` in `tests/unit/test_matrix_gate.py` |
 | `POST /api/v1/routing/rungs` | `/routing`, `/routing/:rungId` | `test_a_rung_is_added_at_the_end_of_its_tier_only_through_the_gate` in `tests/unit/test_routing_routes.py` | `test_a_rung_saved_from_the_screen_leaves_its_row_and_an_entry_naming_what_moved` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_provider_added_from_the_console_answers_through_the_ladder_with_no_release` in `tests/unit/test_model_calls.py` |

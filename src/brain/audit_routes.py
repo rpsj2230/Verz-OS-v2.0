@@ -64,7 +64,11 @@ a row this reader may already see, asked by `AuditView.page` after the visibilit
 therefore cannot match a withheld entry or a field a row does not show, and a short page with a
 cursor means what it meant before: the reading stopped at its ceiling.
 
-Task ids: M27.7.13, M27.8.6
+**The verification job answers here too (M24.1.2, M24.3.3).** `POST /audit/verification` walks
+the stored ledger from entry nought through `brain.audit.chain_check.check_ledger`, optionally
+against the head the outside anchor store last published, for anybody the screen opens for.
+
+Task ids: M27.7.13, M27.8.6, M24.1.2, M24.3.3
 """
 
 from __future__ import annotations
@@ -77,13 +81,27 @@ from typing import Annotated, Any, Final, Protocol, runtime_checkable
 import structlog
 from fastapi import APIRouter, Query, Request
 from fastapi.exceptions import RequestValidationError
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import Select, literal, or_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked
-from brain.audit.ledger import IDENTIFIER, SUBJECT_KINDS, AuditAction, AuditEntry
+from brain.audit.chain_check import (
+    LedgerSequence,
+    StoredLedgerSequence,
+    check_ledger,
+    published_anchor,
+)
+from brain.audit.ledger import (
+    DIGEST,
+    IDENTIFIER,
+    SUBJECT_KINDS,
+    AuditAction,
+    AuditEntry,
+    BreakReason,
+)
+from brain.audit.verify import Completeness
 from brain.audit.view import (
     DEFAULT_PAGE_SIZE,
     MAX_PAGE_SIZE,
@@ -557,4 +575,119 @@ async def audit_history(
             for one in events
         ],
         full=len(events) >= MAX_PAGE_SIZE,
+    )
+
+
+# ------------------------------------------------------------- the verification job
+
+
+class PublishedHeadAsked(BaseModel):
+    """The head the outside store last published, copied from it by the person verifying.
+
+    Both or neither: a sequence number without its digest cannot tell a rewritten entry from a
+    held one, and a digest without its position cannot be looked up.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    seq: int = Field(ge=0)
+    head: str = Field(pattern=DIGEST)
+    #: When the store recorded it, as the anchor file says. Required, for `Anchor`'s reason.
+    taken_at: datetime
+
+
+class VerificationAsked(BaseModel):
+    """What a verification run is asked to check beyond the chain itself."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    published: PublishedHeadAsked | None = None
+
+
+class ChainBreakView(BaseModel):
+    """Where the walk stopped, as `ChainBreak` records it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    seq: int
+    reason: BreakReason
+    expected: str
+    actual: str
+
+
+class VerificationView(BaseModel):
+    """One walk of the whole ledger, and in words what it did not prove.
+
+    No field called `verified`: see `brain.audit.verify` on why `continuous` and `completeness`
+    are two answers and a green tick over either alone misleads.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    checked_at: datetime
+    entries_walked: int
+    first_seq: int | None
+    last_seq: int | None
+    head: str
+    continuous: bool
+    break_found: ChainBreakView | None
+    completeness: Completeness
+    published: PublishedHeadAsked | None
+    caveats: list[str]
+
+
+def sequence_of(request: Request) -> LedgerSequence:
+    """The ledger in sequence order, from `app.state.audit_sequence` or the database."""
+    found = getattr(request.app.state, "audit_sequence", None)
+    if isinstance(found, LedgerSequence):
+        return found
+    factory = sessions_of(request)
+    if factory is None:
+        raise Failed("no database on this process")
+    return StoredLedgerSequence(factory)
+
+
+@router.post("/audit/verification", response_model=VerificationView, responses=COMMON_RESPONSES)
+async def verify_ledger(
+    request: Request, asked: Asked, verification: VerificationAsked
+) -> VerificationView:
+    """Walk the whole ledger from its first entry, and check the last published head if given.
+
+    The job M24.1.2 names and the check M24.3.3 names, run when somebody on the Audit screen asks.
+    **Anybody the Audit screen opens for may run it**, and the report says no more than the public
+    anchor route already publishes to everybody: how long the ledger is and a digest, plus where
+    the chain stopped holding if it did. It names no entry, no actor, no action and no subject, so
+    a reader narrower than the ledger learns nothing about an entry they may not see except that
+    the chain containing it is intact, which is the whole point of showing them. Refused as the
+    screen refuses, one sentence naming the screen, before the ledger is read.
+
+    A POST because it is a job with an input, not because it writes: nothing is stored.
+    """
+    if not permitted(screen(AUDIT_SCREEN).read, asked.reach, asked.now):
+        log.info("audit verification not answerable", principal=asked.caller.principal.id)
+        raise _not_answerable()
+
+    published = verification.published
+    anchor = (
+        published_anchor(seq=published.seq, head=published.head, recorded_at=published.taken_at)
+        if published is not None
+        else None
+    )
+    checked = await check_ledger(sequence_of(request), at=asked.now, anchor=anchor)
+    broken = checked.break_found
+    return VerificationView(
+        checked_at=checked.checked_at,
+        entries_walked=checked.entries_walked,
+        first_seq=checked.first_seq,
+        last_seq=checked.last_seq,
+        head=checked.head,
+        continuous=checked.continuous,
+        break_found=None
+        if broken is None
+        else ChainBreakView(
+            seq=broken.seq, reason=broken.reason, expected=broken.expected, actual=broken.actual
+        ),
+        completeness=checked.completeness,
+        published=published,
+        caveats=list(checked.caveats),
     )

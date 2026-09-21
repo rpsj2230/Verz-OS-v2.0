@@ -195,6 +195,15 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # own row with a conflict clause; ending and unlinking are guarded writes to its own
         # tables, where a second call finds the row already ended or already gone.
         "brain.audit_routes:LedgerWindows.window": Repeat.READS,
+        "brain.audit.chain_check:LedgerSequence.after": Repeat.READS,
+        "brain.audit.chain_check:LedgerSequence.at_seq": Repeat.READS,
+        "brain.audit.chain_check:LedgerSequence.newest": Repeat.READS,
+        # A requirement check (0099) is an append with no key: a second press is a second check,
+        # which is what it is, since a later check supersedes and never edits an earlier one.
+        "brain.requirement_check_routes:RequirementChecks.latest": Repeat.READS,
+        "brain.requirement_check_routes:RequirementChecks.record": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
         "brain.console.govern:LiveSession.is_live": Repeat.READS,
         "brain.identity.bearer:SessionLedger.standing": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.session_routes:SessionStore.open_sessions": Repeat.READS,

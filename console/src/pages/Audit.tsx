@@ -23,10 +23,16 @@
  * with a cursor when the server stopped reading, and the button is still offered, because the
  * cursor is the only statement about whether there is more.
  *
- * Task ids: M27.7.13, M27.8.6
+ * **Verifying the ledger is a card below the entries (M24.1.2, M24.3.3).** "Walk the ledger" asks
+ * the API to check every entry from the first, and the second form checks the head the outside
+ * anchor store last published as well, copied from its newest anchor file. The result is two
+ * answers in words and the API's caveats, never a tick: a chain that holds is not a ledger that is
+ * complete, and the card says which of the two was checked.
+ *
+ * Task ids: M27.7.13, M27.8.6, M24.1.2, M24.3.3
  */
 
-import { useCallback, useMemo, useState, type ChangeEvent } from "react";
+import { useCallback, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
@@ -34,6 +40,16 @@ import { useResource } from "../api/useResource";
 import { FailureNotice } from "../ui/FailureNotice";
 import {
   ADDRESS_PARAMETERS,
+  COMPLETENESS_WORDS,
+  EMPTY_HEAD,
+  HEAD_PROBLEMS,
+  VERIFICATION_API_PATH,
+  continuityInWords,
+  headProblems,
+  readVerification,
+  verificationBody,
+  type PublishedHead,
+  type Verification,
   ORDER_LABELS,
   ORDERS,
   PERIOD_LABELS,
@@ -396,6 +412,129 @@ function History({
   );
 }
 
+/** The verification card's words. */
+export const VERIFY_HEADING = "Verify the ledger";
+export const VERIFY_LEDE =
+  "Walk every entry from the first and check that none was edited, removed or reordered. To check " +
+  "that nothing was removed from the end, copy the newest head the anchor store published.";
+export const WALK_LABEL = "Walk the ledger";
+export const CHECK_HEAD_LABEL = "Walk and check the published head";
+export const WALKING = "Walking the ledger.";
+export const PUBLISHED_HEAD_LABEL = "The last published head";
+
+function VerificationResult({ found }: { readonly found: Verification }) {
+  return (
+    <div role="status">
+      <dl className="fields">
+        <div className="fields__row">
+          <dt>Chain</dt>
+          <dd>{continuityInWords(found)}</dd>
+        </div>
+        <div className="fields__row">
+          <dt>Published head</dt>
+          <dd>{COMPLETENESS_WORDS[found.completeness] ?? found.completeness}</dd>
+        </div>
+        <div className="fields__row">
+          <dt>Walked</dt>
+          <dd>{`Entries ${String(found.first_seq ?? 0)} to ${String(found.last_seq ?? 0)}, at ${when(found.checked_at)}`}</dd>
+        </div>
+      </dl>
+      <ul className="roster">
+        {found.caveats.map((one) => (
+          <li key={one}>{one}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function Verify() {
+  const [head, setHead] = useState<PublishedHead>(EMPTY_HEAD);
+  const [problems, setProblems] = useState<readonly (keyof typeof HEAD_PROBLEMS)[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [found, setFound] = useState<Verification | null>(null);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
+
+  const walk = useCallback((published: PublishedHead | null) => {
+    setBusy(true);
+    void (async () => {
+      const result = await request<unknown>(VERIFICATION_API_PATH, {
+        method: "POST",
+        body: verificationBody(published),
+      });
+      setBusy(false);
+      if (!result.ok) {
+        setFailure(result.failure);
+        setFound(null);
+        return;
+      }
+      setFailure(null);
+      setFound(readVerification(result.data));
+    })();
+  }, []);
+
+  const onCheck = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const missing = headProblems(head);
+    setProblems(missing);
+    if (missing.length > 0) {
+      return;
+    }
+    walk(head);
+  };
+
+  return (
+    <section className="card">
+      <h2>{VERIFY_HEADING}</h2>
+      <p className="note">{VERIFY_LEDE}</p>
+      <button type="button" className="button" onClick={() => walk(null)} disabled={busy}>
+        {WALK_LABEL}
+      </button>
+      <form className="form" aria-label={PUBLISHED_HEAD_LABEL} onSubmit={onCheck} noValidate>
+        <label className="control-label">
+          Sequence number{" "}
+          <input
+            className="form-control"
+            inputMode="numeric"
+            value={head.seq}
+            onChange={(event) => setHead({ ...head, seq: event.target.value })}
+          />
+        </label>
+        {problems.includes("seq") ? <p className="note">{HEAD_PROBLEMS.seq}</p> : null}
+        <label className="control-label">
+          Head digest{" "}
+          <input
+            className="form-control"
+            maxLength={64}
+            value={head.head}
+            onChange={(event) => setHead({ ...head, head: event.target.value })}
+          />
+        </label>
+        {problems.includes("head") ? <p className="note">{HEAD_PROBLEMS.head}</p> : null}
+        <label className="control-label">
+          Taken at{" "}
+          <input
+            className="form-control"
+            value={head.takenAt}
+            onChange={(event) => setHead({ ...head, takenAt: event.target.value })}
+          />
+        </label>
+        {problems.includes("takenAt") ? <p className="note">{HEAD_PROBLEMS.takenAt}</p> : null}
+        <button type="submit" className="button" disabled={busy}>
+          {CHECK_HEAD_LABEL}
+        </button>
+      </form>
+      {busy ? (
+        <p className="note" role="status">
+          {WALKING}
+        </p>
+      ) : null}
+      {failure === null ? null : <FailureNotice failure={failure} />}
+      {found === null ? null : <VerificationResult found={found} />}
+    </section>
+  );
+}
+
 export function Audit() {
   const [search] = useSearchParams();
   const filters = filtersFrom(search);
@@ -414,6 +553,7 @@ export function Audit() {
       <p className="note">{WITHHELD_ENTRIES_ARE_NOT_LISTED}</p>
       {subject === null ? null : <History kind={subject.kind} id={subject.id} search={search} />}
       <Ledger key={ledgerKey} filters={filters} search={search} />
+      <Verify />
     </article>
   );
 }

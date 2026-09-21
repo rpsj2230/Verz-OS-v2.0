@@ -704,13 +704,13 @@ a{{color:var(--brand);font-weight:600}}
 
 
 @router.get("/api/audit/anchor", response_class=JSONResponse)
-async def audit_anchor() -> JSONResponse:
-    """The audit ledger's head, for an external anchor to record (M24.1.2).
+async def audit_anchor(request: Request) -> JSONResponse:
+    """The audit ledger's head, for an external anchor to record (M24.1.2, M24.3.3).
 
-    Read on a schedule by `.github/workflows/anchor.yml`, which commits it to the
-    repository. The direction matters: this endpoint is read, never a push. Having the
-    server write its own anchor to an external store would need a write credential on the
-    one machine the anchor exists to be independent of, and then whoever could delete audit
+    Read on a schedule by `.github/workflows/anchor.yml`, which commits it to a repository the
+    server holds no credential for. The direction matters: this endpoint is read, never a push.
+    Having the server write its own anchor to an external store would need a write credential on
+    the one machine the anchor exists to be independent of, and then whoever could delete audit
     entries could also write an anchor agreeing with the deletion.
 
     **It returns a digest and a length and nothing else.** Not an entry, not an actor, not
@@ -718,18 +718,64 @@ async def audit_anchor() -> JSONResponse:
     minimum that makes an anchor work, and is why this can sit beside the other unauthenticated
     build routes rather than behind the gate.
 
-    The ledger table exists and nothing writes to it yet, so today this reports an empty
-    chain. That is deliberately not an error: an anchor taken before the first entry proves
-    the ledger started empty on that date, which is what makes "there were no entries before
-    Tuesday" checkable rather than assertable.
+    **Until 2026-09-21 this answered the head of an empty in-memory chain whatever the ledger
+    held**, so every anchor the workflow committed said "empty" and contradicted nothing. It reads
+    `obs.audit_entry` now through `brain.audit.chain_check.published_head`. A process with no
+    database answers 503 rather than an empty head, because an empty head from a process that
+    simply cannot see its ledger is exactly the false anchor this route used to publish.
     """
     from datetime import UTC, datetime
 
-    from brain.audit.anchor import take_anchor
-    from brain.audit.ledger import AuditChain
+    from brain.audit.anchor import Anchor
+    from brain.audit.chain_check import published_head
 
-    anchor = take_anchor(AuditChain(), name="main", now=datetime.now(UTC))
+    ledger = _ledger_sequence(request)
+    if ledger is None:
+        return JSONResponse(
+            {"detail": "no ledger on this process"},
+            status_code=503,
+            headers={"cache-control": "no-store"},
+        )
+    head = await published_head(ledger)
+    anchor = Anchor(chain="main", seq=head.seq, head=head.head, taken_at=datetime.now(UTC))
     return JSONResponse(anchor.to_public(), headers={"cache-control": "no-store"})
+
+
+@router.get("/api/audit/anchor/{seq}", response_class=JSONResponse)
+async def audit_anchor_at(request: Request, seq: int) -> JSONResponse:
+    """The digest stored at one sequence number, so the anchor store can check its last head.
+
+    The workflow reads the head it published last time and asks for that sequence number here:
+    no digest, or a digest that differs, is an entry removed or rewritten after the head was
+    published, which is the check M24.3.3 asks for and the one only the outside store can make.
+    An absent entry answers `head: null`.
+    Same disclosure as the head route: a digest at a position, no entry, no actor, no action.
+    """
+    from brain.audit.chain_check import digest_at
+
+    ledger = _ledger_sequence(request)
+    if ledger is None:
+        return JSONResponse(
+            {"detail": "no ledger on this process"},
+            status_code=503,
+            headers={"cache-control": "no-store"},
+        )
+    # An absent entry is a 200 with no digest rather than a 404, so the workflow can tell "this
+    # ledger lost entry N" from "this release has no such route", which is also a 404.
+    digest = await digest_at(ledger, seq) if seq >= 0 else None
+    return JSONResponse({"seq": seq, "head": digest}, headers={"cache-control": "no-store"})
+
+
+def _ledger_sequence(request: Request) -> Any:
+    """`app.state.audit_sequence` when a test put one there, the database otherwise, else None."""
+    from brain.audit.chain_check import LedgerSequence, StoredLedgerSequence
+    from brain.routing_routes import sessions_of
+
+    found = getattr(request.app.state, "audit_sequence", None)
+    if isinstance(found, LedgerSequence):
+        return found
+    sessions = sessions_of(request)
+    return None if sessions is None else StoredLedgerSequence(sessions)
 
 
 @router.get("/openapi.json", response_class=JSONResponse, include_in_schema=False)

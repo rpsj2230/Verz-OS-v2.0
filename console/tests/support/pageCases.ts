@@ -737,6 +737,32 @@ const VAULT = {
   token_told: UNBROKEN,
 };
 
+const REQUIREMENT_CHECKS = {
+  areas: [
+    { area: "Permissions", proves: "M1.8.8", requirements: 2, passed: 1, failed: 0, unchecked: 1 },
+    { area: "Models", proves: "M5.6.5", requirements: 1, passed: 0, failed: 0, unchecked: 1 },
+  ],
+  area: "Permissions",
+  requirements: [
+    {
+      id: "ARC-A-001",
+      requirement: UNBROKEN,
+      source: UNBROKEN,
+      latest: {
+        requirement_id: "ARC-A-001",
+        outcome: "passed",
+        checked_by: "u_admin",
+        checked_at: "2019-03-04T09:00:00Z",
+        release_commit: "a".repeat(40),
+        note: UNBROKEN,
+      },
+    },
+    { id: "DEC-30", requirement: UNBROKEN, source: UNBROKEN, latest: null },
+  ],
+  release_commit: "a".repeat(40),
+  told: UNBROKEN,
+};
+
 const DATA_TRANSFER = {
   catalogue: [
     { key: "audit_trail", label: UNBROKEN, direction: "export", carries: UNBROKEN, runs: true, told: UNBROKEN },
@@ -2016,6 +2042,14 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     signedIn: true,
     drawsValues: true,
     answers: { "/api/v1/vault": VAULT },
+  },
+  // Requirement checks. The requirements table scrolls; the areas, the served sentence and the form
+  // sit outside it.
+  "/requirement-checks": {
+    address: "/requirement-checks",
+    signedIn: true,
+    drawsValues: true,
+    answers: { "/api/v1/requirements/checks": REQUIREMENT_CHECKS },
   },
   // Import and export. The catalogue and the exports tables scroll; the served sentences and the
   // export form sit outside them. The confirmation is held in `tests/data-transfer-page.test.tsx`.

@@ -621,7 +621,8 @@ async def call_piece(
         except (InvocationRefusedError, PieceRefusedError):
             outcome = ToolCallOutcome(refused=True)
             raise
-        outcome = ToolCallOutcome(refused=False)
+        # What the caller was shown, for the sensitive read recorder (M24.3.2).
+        outcome = ToolCallOutcome(refused=False, disclosed=payload)
         return payload
     finally:
         completed_at = clock()

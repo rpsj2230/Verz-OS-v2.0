@@ -102,7 +102,14 @@ screen's provider check ends: it answered or it did not, and nothing about why. 
 question, so it is handed to the ledger's recorder and not to the question count; see
 `brain.provider_routes`.
 
-Task ids: M37.3.2.4, M30.5.2, M21.3.4, M27.7.14
+**What was disclosed, and through which agent, is the fifth fact (M24.3.2).** A read of a personnel
+record or of a salary is written down by `brain.ops.sensitive_read_store.SensitiveReadRecorder`,
+which needs the records the caller was actually shown and the agent they were shown through. An
+answer already carries its records on `Answered.composed`; a tool call now carries them on
+`ToolCallOutcome.disclosed`, and `Finished.agent_id` names the agent when a lane ran one. A
+refused call still carries nothing, which is the absence `ToolCallOutcome` argues.
+
+Task ids: M37.3.2.4, M30.5.2, M21.3.4, M27.7.14, M24.3.2
 """
 
 from __future__ import annotations
@@ -116,6 +123,7 @@ from typing import TYPE_CHECKING, Final, Protocol
 from brain.audit.ledger import TRACE_ID
 from brain.core.lane import Lane
 from brain.core.principal import Principal
+from brain.core.redaction import ChannelPayload
 from brain.gate.context import Channel
 from brain.gate.injection import MAX_SCORE
 from brain.gate.select import SelectionStage
@@ -184,13 +192,26 @@ class FinishError(ValueError):
 class ToolCallOutcome:
     """How one automation tool call ended, when it ended without a fault.
 
-    **One field, and read the absences.** There is no tool name, no entity, no automation id
-    and no reason, and each is a field somebody would reasonably add. See
+    **Read the absences.** There is no tool name, no entity, no automation id and no reason, and
+    each is a field somebody would reasonably add. See
     `A_REFUSED_TOOL_CALL_IS_RECORDED_WITHOUT_WHAT_WAS_REFUSED`. A fault is not one of these: it
     is `Finished.outcome` being None, as it is for a question.
+
+    `disclosed` is the post-redaction payload a call that went through handed its caller, and
+    None for a refusal, so a refused call still says nothing about what was refused. It is read by
+    the sensitive read recorder and by nothing that measures (M24.3.2).
     """
 
     refused: bool
+    disclosed: ChannelPayload | None = None
+
+    def __post_init__(self) -> None:
+        if self.refused and self.disclosed is not None:
+            msg = (
+                "a refused call disclosed nothing, and an outcome saying otherwise would hand "
+                "every recorder what the refusal withheld"
+            )
+            raise FinishError(msg)
 
 
 @dataclass(frozen=True)
@@ -281,6 +302,8 @@ class Finished:
     #: The front half's decisions, or None for a request that did not pass through
     #: `brain.gate.front.run_front_half`, such as an automation's tool call.
     front: FrontRecord | None = None
+    #: The agent the lane ran, or None for a person asking directly or an automation step.
+    agent_id: str | None = None
 
     def __post_init__(self) -> None:
         if self.at.tzinfo is None:

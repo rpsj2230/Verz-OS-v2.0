@@ -549,7 +549,10 @@ def test_a_step_that_went_through_is_recorded_once_as_answered_as_its_owner_unde
 
     assert response.status_code == 200, response.text
     (finished,) = world.kept.seen
-    assert finished.outcome == ToolCallOutcome(refused=False)
+    assert isinstance(finished.outcome, ToolCallOutcome)
+    assert finished.outcome.refused is False
+    # The records the step was handed, for the sensitive read recorder (M24.3.2).
+    assert finished.outcome.disclosed is not None
     assert status_of_finished(finished) is RequestStatus.ANSWERED
     assert finished.origin.principal.id == "u_owner"
     assert finished.origin.channel is Channel.API
@@ -663,13 +666,17 @@ def test_a_step_whose_source_faulted_is_recorded_as_failed_and_not_as_refused(
     assert finished.tool_calls == 1
 
 
-def test_a_tool_call_outcome_holds_whether_it_was_refused_and_nothing_else() -> None:
+def test_a_tool_call_outcome_holds_whether_it_was_refused_and_what_it_disclosed_and_no_more() -> (
+    None
+):
     """The structural half of the refusal test above. The field list is written here rather than
     read from the class, so the two cannot agree by being the same list.
 
     Delete this and a `tool` or `reason` field can be added to the outcome and every record
     carries it."""
-    assert {one.name for one in fields(ToolCallOutcome)} == {"refused"}
+    assert {one.name for one in fields(ToolCallOutcome)} == {"refused", "disclosed"}
+    # A refusal carries nothing: what was disclosed is None exactly when nothing was (M24.3.2).
+    assert ToolCallOutcome(refused=True).disclosed is None
     assert A_REFUSED_TOOL_CALL_IS_RECORDED_WITHOUT_WHAT_WAS_REFUSED
 
 

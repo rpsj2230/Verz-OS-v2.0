@@ -291,6 +291,7 @@ everything, written by first run and recorded in the ledger. They come in three 
 | `admin:operations_alert` | running the system |
 | `admin:operations_incident` | running the system |
 | `admin:plugin` | running the system |
+| `admin:requirement_check` | running the system |
 | `admin:retention` | running the system |
 | `admin:routing_matrix` | running the system |
 | `admin:schedule` | running the system |

@@ -93,6 +93,7 @@ import { DataTransfer } from "./pages/DataTransfer";
 import { Settings } from "./pages/Settings";
 import { Storage } from "./pages/Storage";
 import { Vault } from "./pages/Vault";
+import { RequirementChecks } from "./pages/RequirementChecks";
 import { Webhooks } from "./pages/Webhooks";
 import { Notifications } from "./pages/Notifications";
 import { RETURN_PATH as STAFF_LIST_RETURN_PATH } from "./setup/staffList";
@@ -306,6 +307,8 @@ export const routes: RouteObject[] = [
       // Secrets vault, under Install beside Storage: the seal, every slot, each connected source's
       // run-token leases and the vault's audit log shipping. One path, no parameter, no control.
       { path: "vault", element: <Vault /> },
+      // Requirement checks, under Install: the register by area and what a person saw on this install.
+      { path: "requirement-checks", element: <RequirementChecks /> },
       // Import and export, under Govern after Audit: what can move and the audit trail export,
       // taken as a confirmed write. One path and no parameter. Eager for the same reason.
       { path: "import-export", element: <DataTransfer /> },

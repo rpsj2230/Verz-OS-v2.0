@@ -154,6 +154,7 @@ from brain.ops.question_gap_store import GapRecorder
 from brain.ops.question_store import QuestionRecorder
 from brain.ops.replica_store import console_reads_for
 from brain.ops.secrets import VaultRole
+from brain.ops.sensitive_read_store import SensitiveReadRecorder
 from brain.ops.starter_store import furnish as furnish_install
 from brain.ops.telemetry_store import TelemetryRecorder
 from brain.ops.trace_sink import CountingTraceSink
@@ -178,6 +179,7 @@ from brain.readiness import (
 )
 from brain.record_access_routes import router as record_access_router
 from brain.report_routes import router as report_router
+from brain.requirement_check_routes import router as requirement_check_router
 from brain.retention_routes import router as retention_router
 from brain.routing_routes import router as routing_router
 from brain.service_account_routes import router as service_account_router
@@ -841,7 +843,14 @@ def request_recorders_for(
     """
     if sessions is None:
         return ()
-    return (QuestionRecorder(sessions), TelemetryRecorder(sessions), GapRecorder(sessions))
+    # The sensitive read recorder last: it raises on a failed write, and the measurements before
+    # it catch their own. See `brain.ops.sensitive_read_store`.
+    return (
+        QuestionRecorder(sessions),
+        TelemetryRecorder(sessions),
+        GapRecorder(sessions),
+        SensitiveReadRecorder(sessions),
+    )
 
 
 def suspension_store_for(
@@ -1186,6 +1195,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # The Secrets vault screen: the seal, every slot, each source's leases and the audit log's
     # shipping. Read only, under the credentials route's capability. See `brain.vault_routes`.
     app.include_router(vault_router)
+    # The Requirement checks screen: the register's rows by area and what a person saw each do on
+    # this install, recorded. See `brain.requirement_check_routes`.
+    app.include_router(requirement_check_router)
     # The five install screens. A ninth router because what it answers about is the deployment
     # rather than the company's data: no name to guess, no row belonging to anybody, and no
     # session on four of the five. The same `asking` dependency, imported. See

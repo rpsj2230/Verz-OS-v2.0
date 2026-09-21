@@ -141,7 +141,9 @@ def test_both_workflows_take_the_address_from_the_repository_variable_and_nowher
         if "SITE" in (step.get("env") or {})
     ]
 
-    assert read == [expected], read
+    # Three anchor steps read it: the refusal without a store, the head, and the check that the
+    # last published head is still held.
+    assert read == [expected, expected, expected], read
     # Two steps read it: the wait for the deploy and the post-deploy checks (M38.5.1).
     assert waited == [expected, expected], waited
 
@@ -355,3 +357,23 @@ def test_a_path_deleted_in_a_revision_is_skipped_and_a_real_git_failure_is_not(
     outside.mkdir()
     with pytest.raises(AuditError, match="git show"):
         _show(outside, "HEAD", "one.env")
+
+
+def test_the_anchor_store_is_read_from_settings_and_a_missing_one_fails_the_run() -> None:
+    """M24.3.3's store is the install's: the anchor repository comes from the `ANCHOR_REPOSITORY`
+    variable and the checkout uses the `ANCHOR_DEPLOY_KEY` secret, both written exactly with nothing
+    beside them, and a run with an address and no store exits 1. Delete this and the workflow can
+    name one company's repository, or quietly anchor nothing when the key is missing."""
+    anchor = yaml.safe_load((REPO / ".github/workflows/anchor.yml").read_text(encoding="utf-8"))
+    steps = [step for job in anchor["jobs"].values() for step in job["steps"]]
+    checkout = next(
+        step for step in steps if str(step.get("uses", "")).startswith("actions/checkout")
+    )
+    assert checkout["with"] == {
+        "repository": "${{ vars.ANCHOR_REPOSITORY }}",
+        "ssh-key": "${{ secrets.ANCHOR_DEPLOY_KEY }}",
+    }
+    store = next(step for step in steps if step.get("id") == "store")
+    assert store["env"]["ANCHOR_DEPLOY_KEY"] == "${{ secrets.ANCHOR_DEPLOY_KEY }}"
+    assert "exit 1" in store["run"]
+    assert anchor["permissions"] == {"contents": "read"}

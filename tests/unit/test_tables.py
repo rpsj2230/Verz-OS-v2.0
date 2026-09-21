@@ -121,6 +121,8 @@ MIGRATION_SERVICE_ACCOUNTS = VERSIONS / "0095_service_accounts_and_partner_reach
 MIGRATION_MODEL_REGISTRY = VERSIONS / "0097_model_registry_and_matrix_gate.py"
 MIGRATION_GATE_FRONT_HALF = VERSIONS / "0100_gate_front_half.py"
 MIGRATION_ACCESS_REQUEST = VERSIONS / "0101_access_request.py"
+MIGRATION_SENSITIVE_READ = VERSIONS / "0098_sensitive_reads_and_budget_audit.py"
+MIGRATION_REQUIREMENT_CHECK = VERSIONS / "0099_requirement_check.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -334,6 +336,10 @@ CHANNEL_EVENT_TABLES: tuple[str, ...] = ("gate.channel_event",)
 #: And the one 0101 adds: a request for access, addressed to who can decide it.
 ACCESS_REQUEST_TABLES: tuple[str, ...] = ("gate.access_request",)
 
+SENSITIVE_READ_TABLES: tuple[str, ...] = ("ops.sensitive_read",)
+
+REQUIREMENT_CHECK_TABLES: tuple[str, ...] = ("ops.requirement_check",)
+
 ALL_TABLES = (
     CORE_TABLES
     + RESOLVER_TABLES
@@ -383,6 +389,8 @@ ALL_TABLES = (
     + MODEL_REGISTRY_TABLES
     + CHANNEL_EVENT_TABLES
     + ACCESS_REQUEST_TABLES
+    + SENSITIVE_READ_TABLES
+    + REQUIREMENT_CHECK_TABLES
 )
 
 
@@ -1136,6 +1144,10 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert channel_event.TABLES == CHANNEL_EVENT_TABLES
     access_request = migration_module(MIGRATION_ACCESS_REQUEST)
     assert access_request.TABLES == ACCESS_REQUEST_TABLES
+    sensitive_read = migration_module(MIGRATION_SENSITIVE_READ)
+    assert sensitive_read.TABLES == SENSITIVE_READ_TABLES
+    requirement_check = migration_module(MIGRATION_REQUIREMENT_CHECK)
+    assert requirement_check.TABLES == REQUIREMENT_CHECK_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1208,6 +1220,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(model_registry.TABLES)
         + tuple(channel_event.TABLES)
         + tuple(access_request.TABLES)
+        + tuple(sensitive_read.TABLES)
+        + tuple(requirement_check.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1261,6 +1275,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(model_registry.TABLES),
         set(channel_event.TABLES),
         set(access_request.TABLES),
+        set(sensitive_read.TABLES),
+        set(requirement_check.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"
