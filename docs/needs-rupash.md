@@ -2,8 +2,9 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**9 items are open: 81, 84 and 85 to 91.** Item 85 (your AI provider keys) unblocks the most. Each
-says in plain terms what it is, what I recommend, and every step.
+**10 items are open: 81, 85 to 91, 93 and 94.** Item 94 (a password to replace) is the most
+urgent; item 85 (your AI provider keys) unblocks the most. Each says in plain terms what it is,
+what I recommend, and every step.
 
 # Open
 
@@ -27,16 +28,6 @@ index and live read, never a bulk copy.
    such as "read page permissions", and **Submit for release**. Approve it as the workspace admin
    if Lark asks.
 5. Tell me "Lark permission added".
-
-## 84. Your server's swap file and the secrets vault
-
-**In plain terms:** the vault keeps decrypted keys in memory. When a server runs low on memory it
-can move some of it to a swap file on disk, and your server has a 2 GB swap file, not encrypted,
-with 1.2 GB in use. The newest vault version no longer stops that itself; it asks that swap be off
-or encrypted. The server is shared with your other project, so I have not touched it.
-**Recommendation: accept this for now** and turn swap off or encrypt it when you next change the
-server; with 7 GB free there is room. If you want it done now, reply "turn swap off" and I will
-check your other project's memory first and do it.
 
 ## 85. Your four AI provider keys (the most useful thing you can do today)
 
@@ -110,7 +101,33 @@ proof is you trying them and recording what you saw on the new **Requirement che
 When Wave 1 is deployed I will send you a short list, about 30 minutes in one sitting (department
 isolation, a staff member's first day, the model checks). Nothing to do yet.
 
+## 93. Allow the LDAP library, so Active Directory can be a staff source (M1.6.6)
+
+**In plain terms:** the only maintained library for reading Active Directory from Python is
+`ldap3`. Its licence (LGPL) lets the product use it unmodified; only changes to the library
+itself would have to be shared. The product's licence gate refuses it until you allow it.
+Everything else for LDAP is built and tested (encrypted connection only, read-only, disabled
+accounts treated as leavers). **Recommendation: allow it,** on the same terms as the database
+driver already allowed. Reply "allow ldap3".
+
+## 94. Replace the application's database password (letters and digits only)
+
+**In plain terms:** the post-deploy checks could not read a password containing `%` and `$`, and
+their error message printed part of it into the server's log. The product is being fixed so no
+message can ever show a database address again, but the part that was printed should be retired.
+
+1. Make a new password in your password manager: 32 characters, letters and digits only.
+2. `ssh verz-vps`, then `docker exec -it $(docker ps -qf name=^db-c74) psql -U brain -d brain`
+3. Type `\password brain_app`, paste the new password twice, then `\q`.
+4. In Coolify: project, Brain resource, **Environment Variables**, edit `BRAIN_DATABASE_URL`,
+   replace only the password part, keep **Is Literal?** ticked, **Save**. Do not press Redeploy.
+5. Tell me "password changed"; I redeploy through the normal path and check everything.
+
 # Answered
+
+## 84. The server's swap file and the vault - DECIDED: accepted for now
+
+You accepted the unencrypted swap file for now; turn it off or encrypt it at the next server change.
 
 ## 92. The department audit task that contradicted your decision (M24.3.5) - DECIDED by item 48
 

@@ -117,11 +117,6 @@
     "M0.1": "Repository and tooling"
    },
    "leaf_progress": {
-    "M0.3.5": {
-     "status": "BLOCKED",
-     "why": "staging runs no worker; the session pool is added with the worker, which is next (owner allowed server changes)",
-     "updated": "2026-09-21"
-    },
     "M0.7.1": {
      "status": "BLOCKED",
      "why": "owner decision: 7 licences await the allowlist (postgres/pgvector, ubuntu/squid, three @fontsource fonts, regex); recommended allow all",
@@ -3246,11 +3241,6 @@
     "M31.2.1.4": {
      "status": "READY FOR TESTING",
      "why": "engine tests pass for session and transaction pooling; closing needs PgBouncer on the install (M0.3.4)",
-     "updated": "2026-09-21"
-    },
-    "M31.3.2.1": {
-     "status": "READY FOR TESTING",
-     "why": "the vault was installed, opened and configured on the owner's install on 2026-09-21; three defects in the shipped procedure (mlock, audit devices, health check) are being fixed in the product before this closes",
      "updated": "2026-09-21"
     }
    }
