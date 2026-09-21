@@ -5,7 +5,7 @@ vault can be in, and `GET /api/v1/vault` through the real application, with the 
 imported from `tests/unit/test_api_routes.py` and the connections from `test_connector_routes.py`,
 for the reason `test_credential_routes` gives about a second copy of a token builder.
 
-Task ids: M31.3.2.1, M31.3.2.3, M31.3.2.4, M31.3.2.5, M31.3.2.6, M38.4.1.3
+Task ids: M31.3.2.1, M31.3.2.2, M31.3.2.3, M31.3.2.4, M31.3.2.5, M31.3.2.6, M38.4.1.3
 """
 
 from __future__ import annotations
@@ -36,15 +36,25 @@ from brain.ops.connector_slots import (
 )
 from brain.ops.connector_sync_store import LeaseTally
 from brain.ops.credentials import SLOTS
-from brain.ops.openbao import SealStatus, StaticVersion, VaultRefusedError, VaultUnreachableError
+from brain.ops.openbao import (
+    SealStatus,
+    StaticVersion,
+    TokenStanding,
+    VaultRefusedError,
+    VaultUnreachableError,
+)
+from brain.ops.secrets import VaultRole
 from brain.ops.vault_audit_ship import ShippedSince
 from brain.ops.vault_status import (
+    POLICIES_UNKNOWN,
     SEAL_SAYS,
     SLOTS_REFUSED,
     SLOTS_SILENT,
     Seal,
     SlotState,
+    TokenPolicy,
     report,
+    token_says,
 )
 from brain.vault_routes import (
     AUDIT_SAYS,
@@ -115,6 +125,59 @@ class Reader:
 
     def static_kv_defined(self, path: str) -> bool:
         return path in self._defined or path in self._held
+
+
+class TokenReader(Reader):
+    """A reader that can also say which policies its own token carries, or fails to."""
+
+    def __init__(self, policies: tuple[str, ...] | Exception, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self._policies = policies
+        self.looked_up = 0
+
+    def token_standing(self) -> TokenStanding:
+        self.looked_up += 1
+        if isinstance(self._policies, Exception):
+            raise self._policies
+        return TokenStanding(3600, 3600, renewable=True, policies=self._policies)
+
+
+@pytest.mark.parametrize(
+    ("policies", "role", "expected"),
+    [
+        (("application", "default"), VaultRole.APPLICATION, TokenPolicy.OWN),
+        (("application",), VaultRole.APPLICATION, TokenPolicy.OWN),
+        (("default", "worker"), VaultRole.WORKER, TokenPolicy.OWN),
+        (("browser-runner",), VaultRole.BROWSER_RUNNER, TokenPolicy.OWN),
+        (("root",), VaultRole.APPLICATION, TokenPolicy.OTHER),
+        (("application", "worker"), VaultRole.APPLICATION, TokenPolicy.OTHER),
+        (("default",), VaultRole.APPLICATION, TokenPolicy.OTHER),
+        (("worker", "default"), VaultRole.APPLICATION, TokenPolicy.OTHER),
+        ((), VaultRole.APPLICATION, TokenPolicy.UNKNOWN),
+    ],
+)
+def test_a_token_is_its_roles_only_while_it_carries_that_policy_alone(
+    policies: tuple[str, ...], role: VaultRole, expected: TokenPolicy
+) -> None:
+    """M31.3.2.2: a policy per role holds only while each process's token carries its own. The
+    OWN rows are the positive siblings. Delete this and a root token pasted into BRAIN_VAULT_TOKEN
+    during a repair reads as a healthy vault, with every capability and every screen working."""
+    found = report(TokenReader(policies), role)
+    assert found.token.state is expected
+    assert found.token.policies == tuple(sorted(policies))
+    assert found.token.told == token_says(expected, role)
+
+
+def test_what_a_token_carries_is_unknown_when_not_asked_or_not_answered() -> None:
+    """Never OWN on silence. Delete this and a vault that stopped answering, or a reader that
+    cannot look its token up, is reported as carrying exactly its own policy."""
+    silent = report(TokenReader(VaultUnreachableError("timeout")))
+    no_lookup = report(Reader())
+    sealed = TokenReader(("root",), seal=SealStatus(initialized=True, sealed=True))
+    assert (silent.token.state, silent.token.told) == (TokenPolicy.UNKNOWN, POLICIES_UNKNOWN)
+    assert no_lookup.token.state is TokenPolicy.UNKNOWN
+    assert report(sealed).token.state is TokenPolicy.UNKNOWN
+    assert sealed.looked_up == 0
 
 
 def test_the_seal_is_said_first_and_no_slot_is_asked_of_a_vault_that_is_not_open() -> None:
@@ -301,6 +364,20 @@ def test_the_screen_shows_the_seal_slots_leases_rotation_and_shipping(
         "last_shipped_at": "2019-03-04T05:06:07Z",
         "told": AUDIT_SAYS,
     }
+
+
+def test_the_screen_says_which_policies_the_applications_token_carries(
+    app: FastAPI, client: TestClient
+) -> None:
+    """M31.3.2.2 in the console: the policies are named and judged against the application's. Delete
+    this and the route can drop the three fields the Secrets vault page draws them from."""
+    attach(app, TokenReader(("root",)))
+    wider = screen(client, "u_admin").json()
+    attach(app, TokenReader(("default", "application")))
+    own = screen(client, "u_admin").json()
+    assert (wider["token_policy"], wider["token_policies"]) == ("other", ["root"])
+    assert "-policy=application" in wider["token_told"]
+    assert (own["token_policy"], own["token_policies"]) == ("own", ["application", "default"])
 
 
 def test_a_lease_tally_is_shown_only_for_a_source_the_reader_may_be_told_is_connected(

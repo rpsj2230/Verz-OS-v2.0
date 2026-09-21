@@ -3,10 +3,9 @@
 Task ids: M31.1.1.1, M31.1.1.4, M31.1.3.1, M31.1.3.2,
 M31.1.3.3, M31.1.3.4, M31.1.3.5, M31.2.2.1
 
-Deliberately not claimed here: M31.1.1.2 and M31.1.1.5, which ask for the lifespan to
-attach Valkey, OpenBao and the model registry and for readiness to gate on all three.
-The database and, since 2026-09-15, a configured cache are attached and checked; OpenBao and
-the model registry are not. The gate's own construction is `tests/unit/test_app_wiring.py`.
+Deliberately not claimed here: M31.1.1.2 and M31.1.1.5, the lifespan's four handles and
+readiness gating on the database, cache and vault. Both are `tests/unit/test_app_wiring.py`,
+which runs the lifespan with each configured.
 """
 
 from __future__ import annotations

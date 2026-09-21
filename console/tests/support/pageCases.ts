@@ -696,6 +696,9 @@ const VAULT = {
   lease_ttl_minutes: 15,
   rotation: UNBROKEN,
   audit: { entries: 4, refused: 1, last_shipped_at: "2019-03-04T09:00:00Z", told: UNBROKEN },
+  token_policy: "own",
+  token_policies: [UNBROKEN],
+  token_told: UNBROKEN,
 };
 
 const DATA_TRANSFER = {

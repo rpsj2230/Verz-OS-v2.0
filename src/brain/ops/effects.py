@@ -320,6 +320,7 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # slot's fields are reads, and so is the count of what the audit shipper wrote.
         "brain.ops.credentials:CredentialVault.read_static_kv": Repeat.READS,
         "brain.ops.provider_keys:StaticKvReader.read_static_kv": Repeat.READS,
+        "brain.ops.vault_status:TokenLookup.token_standing": Repeat.READS,
         "brain.ops.vault_status:VaultStatusReader.seal_status": Repeat.READS,
         "brain.ops.vault_status:VaultStatusReader.static_kv_defined": Repeat.READS,
         "brain.ops.vault_status:VaultStatusReader.static_kv_version": Repeat.READS,

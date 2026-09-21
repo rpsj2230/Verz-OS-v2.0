@@ -53,6 +53,12 @@ class VaultRole(enum.StrEnum):
     BROWSER_RUNNER = "browser_runner"
 
 
+def policy_of(role: VaultRole) -> str:
+    """The vault policy a role's token carries: `ops/openbao/policies/<name>.hcl`, loaded under
+    that file's name. `browser_runner` is `browser-runner`, as vault policy names are hyphenated."""
+    return role.value.replace("_", "-")
+
+
 class SecretsUnavailableError(Exception):
     """The vault could not issue. Deliberately not a credential-shaped fallback.
 

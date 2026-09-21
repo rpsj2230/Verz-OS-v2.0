@@ -7,7 +7,7 @@
  * one. A count the API could not take is null with a sentence beside it, and is drawn as that
  * sentence rather than as zero.
  *
- * Task ids: M31.3.2.1, M31.3.2.3, M31.3.2.4, M31.3.2.5, M31.3.2.6, M38.4.1.3
+ * Task ids: M31.3.2.1, M31.3.2.2, M31.3.2.3, M31.3.2.4, M31.3.2.5, M31.3.2.6, M38.4.1.3
  */
 
 import type { components } from "../api/schema";
@@ -57,6 +57,17 @@ export const SLOT_WORDS: Readonly<Record<string, string>> = {
   empty: "Empty",
   unknown: "Not known",
 };
+
+/** Whether this process's token carries its own role's policy alone; the API's sentence says why. */
+export const TOKEN_WORDS: Readonly<Record<string, string>> = {
+  own: "Its own policy only",
+  other: "Not its own policy alone",
+  unknown: "Not known",
+};
+
+export function tokenInWords(state: string): string {
+  return TOKEN_WORDS[state] ?? state;
+}
 
 export function sealInWords(seal: string): string {
   return SEAL_WORDS[seal] ?? seal;

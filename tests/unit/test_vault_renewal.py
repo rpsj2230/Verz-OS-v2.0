@@ -135,6 +135,20 @@ def test_the_client_reads_the_standing_from_lookup_self_and_renews_through_renew
     assert "never-read" not in repr(standing)
 
 
+def test_the_standing_names_the_policies_the_vault_says_the_token_carries() -> None:
+    """Written from the vault's raw lookup-self answer. Delete this and the Secrets vault screen
+    judges a token's policies from a field the client never fills, and every token reads unknown;
+    a list holding a non-string is not read as a list of policies."""
+    named = FakeVault(
+        [{"data": {"ttl": 60, "period": 0, "renewable": True, "policies": ["default", "root"]}}]
+    ).token_standing()
+    odd = FakeVault(
+        [{"data": {"ttl": 60, "period": 0, "renewable": True, "policies": ["root", 7]}}]
+    ).token_standing()
+    assert named.policies == ("default", "root")
+    assert odd.policies == ()
+
+
 @pytest.mark.parametrize(
     "answer",
     [

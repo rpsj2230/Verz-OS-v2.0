@@ -164,6 +164,10 @@ class TokenStanding:
     ttl_seconds: int
     period_seconds: int
     renewable: bool
+    #: The policies the vault says the token carries, which is how the Secrets vault screen tells a
+    #: token minted against its role's policy from a root token somebody pasted in. Empty when the
+    #: vault did not say.
+    policies: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -472,7 +476,15 @@ class OpenBaoVault:
         if ttl is None or period is None or not isinstance(renewable, bool):
             msg = "the vault described this token without a readable ttl, period or renewable"
             raise SecretsUnavailableError(msg)
-        return TokenStanding(ttl_seconds=ttl, period_seconds=period, renewable=renewable)
+        named = data.get("policies")
+        policies = (
+            tuple(str(one) for one in named)
+            if isinstance(named, list) and all(isinstance(one, str) for one in named)
+            else ()
+        )
+        return TokenStanding(
+            ttl_seconds=ttl, period_seconds=period, renewable=renewable, policies=policies
+        )
 
     def renew_self(self) -> int:
         """Renew the token this client holds, and return the seconds the vault granted.
