@@ -643,6 +643,18 @@ AUDIT_KIND_DECISIONS: Final[Mapping[str, AuditKindDecision]] = MappingProxyType(
                     "their governing acts drew one."
                 ),
             ),
+            AuditKindDecision(
+                kind="breach",
+                covered=False,
+                because=(
+                    "Not covered, for the reason department is not, since the kind was added on "
+                    "2026-09-21. A breach case is opened, moved and closed only by somebody "
+                    "holding admin:compliance over everything, which this sync never grants a "
+                    "head, and a case is about the whole company: a standing reach over its "
+                    "entries would tell a head that a breach is being handled before anybody "
+                    "decided they should know."
+                ),
+            ),
         )
     }
 )

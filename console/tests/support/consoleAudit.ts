@@ -92,6 +92,8 @@ import {
   TRIAL_PATH as STAFF_LIST_TRIAL_PATH,
 } from "../../src/setup/staffList";
 import { APPOINTMENT_PATH, FINISH_PATH } from "../../src/setup/wizard";
+import { BREACHES_API_PATH, breachStepApiPath, topicApiPath } from "../../src/pages/complianceQuery";
+import { handledApiPath } from "../../src/pages/referralsQuery";
 import { CONSOLE_ROOT, readRepoFile } from "./repo";
 
 // ------------------------------------------------------------------------------------ inputs
@@ -581,14 +583,23 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "Backup and recovery": {
-    screens: ["/recovery", "/retention"],
+    screens: ["/recovery", "/retention", "/compliance", "/referrals"],
     routes: [
       "/api/v1/install/recovery",
       "/api/v1/govern/retention*",
       "/api/v1/govern/legal-holds*",
       "/api/v1/govern/erasures",
+      "/api/v1/govern/compliance*",
+      "/api/v1/me/referrals*",
     ],
-    tables: ["ops.retention_release", "ops.retention_report", "obs.legal_hold", "ops.erasure_request"],
+    tables: [
+      "ops.retention_release",
+      "ops.retention_report",
+      "obs.legal_hold",
+      "ops.erasure_request",
+      "ops.breach_case",
+      "ops.sensitive_referral",
+    ],
     installation: [],
     gaps: [{ what: "A recovery drill cannot be started, and a restore cannot be verified, from the console.", leaf: "M30.3.9" }],
   },
@@ -658,6 +669,9 @@ export interface WriteRoute {
   /** False for the two setup routes, which live at the root rather than under `/api/v1`. */
   readonly versioned: boolean;
 }
+
+/** A case or referral id to build a compliance address with; the routes take a UUID. */
+const COMPLIANCE_CASE = "11111111-2222-4333-8444-555555555555";
 
 function at(route: string, spelled: string, built: string, versioned = true): WriteRoute {
   return { route, spelled, built, versioned };
@@ -822,6 +836,35 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   ],
   "src/pages/RequirementChecks.tsx CHECKS_API_PATH": [
     at("POST /api/v1/requirements/checks", "CHECKS_API_PATH", CHECKS_API_PATH),
+  "src/pages/Compliance.tsx topicApiPath(asked.topic)": [
+    at("PUT /api/v1/govern/compliance/topics/{topic}", "topicApiPath", topicApiPath("grievance")),
+  ],
+  "src/pages/Compliance.tsx path": [
+    at("POST /api/v1/govern/compliance/breaches", "BREACHES_API_PATH", BREACHES_API_PATH),
+    at(
+      "POST /api/v1/govern/compliance/breaches/{case_id}/assessment",
+      "breachStepApiPath",
+      breachStepApiPath(COMPLIANCE_CASE, "assessment"),
+    ),
+    at(
+      "POST /api/v1/govern/compliance/breaches/{case_id}/commission",
+      "breachStepApiPath",
+      breachStepApiPath(COMPLIANCE_CASE, "commission"),
+    ),
+    at(
+      "POST /api/v1/govern/compliance/breaches/{case_id}/individuals",
+      "breachStepApiPath",
+      breachStepApiPath(COMPLIANCE_CASE, "individuals"),
+    ),
+    at(
+      "POST /api/v1/govern/compliance/breaches/{case_id}/exception",
+      "breachStepApiPath",
+      breachStepApiPath(COMPLIANCE_CASE, "exception"),
+    ),
+    at("POST /api/v1/govern/compliance/breaches/{case_id}/close", "breachStepApiPath", breachStepApiPath(COMPLIANCE_CASE, "close")),
+  ],
+  "src/pages/Referrals.tsx handledApiPath(chosen.referral_id)": [
+    at("POST /api/v1/me/referrals/{referral_id}/handled", "handledApiPath", handledApiPath(COMPLIANCE_CASE)),
   ],
 };
 
@@ -898,6 +941,23 @@ const ELEVATION_REACHES_THE_ROW_THE_LEDGER_AND_THE_RESOLVER = t(
   "test_an_approved_elevation_widens_the_requester_and_after_its_lapse_it_does_not",
   true,
 );
+
+const A_PERSON_NAMED_FOR_A_TOPIC = t(
+  "test_compliance_store",
+  "test_naming_a_person_writes_one_route_row_and_a_setting_entry_without_the_value",
+  true,
+);
+const BREACH_STEP_WRITTEN = t(
+  "test_compliance_store",
+  "test_each_breach_step_writes_its_column_and_one_breach_entry_in_the_same_transaction",
+  true,
+);
+/** Every breach write, opening a case and each step after it, is proved by the same three tests. */
+const BREACH_STEP: Proofs = {
+  row: BREACH_STEP_WRITTEN,
+  audit: BREACH_STEP_WRITTEN,
+  behaviour: t("test_compliance_routes", "test_a_case_shows_its_clock_from_the_awareness_and_its_findings"),
+};
 
 /** Every write route a screen sends, followed to the system. */
 export const PROOFS: Readonly<Record<string, Proofs>> = {
@@ -1289,6 +1349,23 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
       "test_requirement_check_routes",
       "test_a_check_is_recorded_as_the_person_asking_on_the_running_release_and_read_back",
     ),
+  "PUT /api/v1/govern/compliance/topics/{topic}": {
+    row: A_PERSON_NAMED_FOR_A_TOPIC,
+    audit: A_PERSON_NAMED_FOR_A_TOPIC,
+    behaviour: t("test_compliance_routes", "test_a_sensitive_question_is_routed_to_the_person_named_for_its_topic"),
+  },
+  "POST /api/v1/govern/compliance/breaches": BREACH_STEP,
+  "POST /api/v1/govern/compliance/breaches/{case_id}/assessment": BREACH_STEP,
+  "POST /api/v1/govern/compliance/breaches/{case_id}/commission": BREACH_STEP,
+  "POST /api/v1/govern/compliance/breaches/{case_id}/individuals": BREACH_STEP,
+  "POST /api/v1/govern/compliance/breaches/{case_id}/exception": BREACH_STEP,
+  "POST /api/v1/govern/compliance/breaches/{case_id}/close": BREACH_STEP,
+  "POST /api/v1/me/referrals/{referral_id}/handled": {
+    row: t("test_compliance_store", "test_a_referral_is_filed_without_content_and_read_only_by_its_person", true),
+    audit: {
+      none: "Marking a referral handled writes handled_at and handled_by on its row and no ledger entry: an entry that only a sensitive question writes is the disclosure brain.audit.compliance.intercept argues against.",
+    },
+    behaviour: t("test_compliance_routes", "test_a_referral_marked_handled_is_shown_handled"),
   },
 };
 

@@ -245,6 +245,10 @@ SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
         "ops.golden_question": "asked_as",
         "ops.operation": "principal_id",
         "ops.question_asked": "principal_id",
+        # A sensitive question referred, for the person who asked it, and never what they asked
+        # (`0104`). `0104` grants no way for a row to leave, so an erasure keeps these and reports
+        # them kept, and a legal hold on the person holds the request anyway.
+        "ops.sensitive_referral": "asked_by",
         "ops.spend_actual": "principal_id",
     }
 )
@@ -299,6 +303,9 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "gate.team",
         # A log row keeps an event name, a place in the code and masked fields, never a person.
         "obs.application_log",
+        # A breach case names the people who ran its clock, actors and not owners, and never whose
+        # data was in the breach (`0104`).
+        "ops.breach_case",
         "ops.connector_connection",
         # An attempt to read a connected source keeps the connection's id, the source's name, two
         # counts, three instants and a constant sentence: `0068` keeps no principal and no value

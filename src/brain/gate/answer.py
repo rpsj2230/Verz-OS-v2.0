@@ -306,6 +306,7 @@ async def answer_lane(
     model: ModelLane | None = None,
     front: FrontRecord | None = None,
     gaps: Sequence[Gap] = (),
+    referral: str | None = None,
 ) -> Answered:
     """Answer one question, and finish the request once whatever the answer was.
 
@@ -334,6 +335,10 @@ async def answer_lane(
 
     `front` is what `brain.gate.front.run_front_half` decided, carried to the request row; `gaps`
     are the departments the question named outside the reader's reach, stated after the text.
+
+    `referral` is the sentence for a question `brain.audit.compliance.intercept` kept off the
+    ordinary path (M24.2.2): nothing is looked up, cached or asked, and the frames carry the same
+    steps an answer does, so only the sentence differs. See `_referred`.
     """
     attributable(origin, entitlement.principal_id)
     calls = ToolCalls()
@@ -355,6 +360,7 @@ async def answer_lane(
             trace_id=origin.trace_id,
             calls=calls,
             gaps=tuple(gaps),
+            referral=referral,
         )
         return outcome
     finally:
@@ -396,6 +402,7 @@ async def _outcome(
     trace_id: str,
     calls: ToolCalls,
     gaps: tuple[Gap, ...] = (),
+    referral: str | None = None,
 ) -> Answered:
     """Answer one question, or decline, and hand back the frames either way.
 
@@ -410,6 +417,11 @@ async def _outcome(
     A cache hit short-circuits everything: see
     `A_CACHED_ANSWER_IS_SERVED_WITHOUT_ASKING_ANYTHING_AGAIN`.
     """
+    if referral is not None:
+        # Before the cache and before anything is read: an intercepted question is served from
+        # no store and written to none. See `brain.audit.compliance.intercept`.
+        return _referred(referral)
+
     scope = scope_of_reach(reachable_sources)
 
     if cached is not None:
@@ -517,6 +529,27 @@ async def _outcome(
     frames.append(stream.done())
 
     return Answered(frames=tuple(frames), composed=composed)
+
+
+def _referred(referral: str) -> Answered:
+    """The referral as frames, with the steps every answer shows and no abstention.
+
+    Not an abstention, because an abstention is recorded as a gap in what the company's data
+    covers, and a gap row would say a question was asked here that the ordinary path could not
+    answer. Not a composed answer either, because nothing was retrieved to compose it from. The
+    steps are the fast path's, so the stream's shape does not say which kind of reply it carries.
+    """
+    stream = AnswerStream()
+    return Answered(
+        frames=(
+            stream.step(Progress.UNDERSTANDING),
+            stream.step(Progress.CHECKING),
+            stream.step(at_tool_input_start()),
+            stream.step(Progress.READING),
+            stream.text(referral),
+            stream.done(),
+        )
+    )
 
 
 def no_rule_matches(question: str, rules: Sequence[FastPathRule]) -> bool:

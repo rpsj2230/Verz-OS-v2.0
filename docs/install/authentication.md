@@ -275,6 +275,7 @@ everything, written by first run and recorded in the ledger. They come in three 
 | `admin:application_log` | running the system |
 | `admin:automation` | running the system |
 | `admin:budget` | running the system |
+| `admin:compliance` | running the system |
 | `admin:connector` | running the system |
 | `admin:credential` | running the system |
 | `admin:data_steward` | running the system |
@@ -307,6 +308,7 @@ everything, written by first run and recorded in the ledger. They come in three 
 | `read:artifact` | reading how the system is run |
 | `read:audit` | reading how the system is run |
 | `read:audit.agent` | reading how the system is run |
+| `read:audit.breach` | reading how the system is run |
 | `read:audit.connector` | reading how the system is run |
 | `read:audit.credential` | reading how the system is run |
 | `read:audit.department` | reading how the system is run |

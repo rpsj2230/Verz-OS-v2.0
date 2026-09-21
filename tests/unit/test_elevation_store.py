@@ -327,14 +327,25 @@ def test_an_approved_elevation_widens_the_requester_and_after_its_lapse_it_does_
         ("revoke", tail[1][1], "u_approver"),
         ("grant", tail[2][1], "u_approver"),
         ("elevation", "principal:u_requester", "u_approver"),
+        # `0104`: the approval opens a break-glass session, recorded after the decision.
+        ("break_glass", f"session:{decided.request_id}", "u_approver"),
     ]
     assert chain[before].details == {
         "change": "requested",
         "capability": CAPABILITY,
         "reason": "incident_response",
     }
-    assert chain[-1].details["change"] == "approved"
-    assert [one.trace_id for one in (chain[before], chain[-1])] == ["trace-file", "trace-approve"]
+    assert chain[-2].details["change"] == "approved"
+    assert chain[-1].details == {
+        "reason": "incident_response",
+        "principal": "u_requester",
+        "authorised_by": "u_approver",
+    }
+    assert [one.trace_id for one in (chain[before], chain[-2], chain[-1])] == [
+        "trace-file",
+        "trace-approve",
+        "trace-approve",
+    ]
     assert AuditChain(chain).verify() is None
 
 

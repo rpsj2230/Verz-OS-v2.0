@@ -96,6 +96,8 @@ import { Vault } from "./pages/Vault";
 import { RequirementChecks } from "./pages/RequirementChecks";
 import { Webhooks } from "./pages/Webhooks";
 import { Notifications } from "./pages/Notifications";
+import { Compliance } from "./pages/Compliance";
+import { Referrals } from "./pages/Referrals";
 import { RETURN_PATH as STAFF_LIST_RETURN_PATH } from "./setup/staffList";
 import { FIRST_RUN_PATH } from "./setup/wizard";
 import { Notice } from "./ui/Notice";
@@ -441,6 +443,11 @@ export const routes: RouteObject[] = [
       { path: "capabilities", element: <Capabilities /> },
       { path: "scopes", element: <Scopes /> },
       { path: "access-requests", element: <AccessRequests /> },
+      // Compliance: sensitive-topic routing, the processing register and breach cases, one page
+      // because one authority (admin:compliance) answers all three. See `pages/Compliance.tsx`.
+      { path: "compliance", element: <Compliance /> },
+      // Referred to me: the caller's own referrals, read by the person named and needing no grant.
+      { path: "referrals", element: <Referrals /> },
       { path: "*", element: <NotFound /> },
     ],
   },

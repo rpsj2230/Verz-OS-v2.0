@@ -37,7 +37,7 @@ typing are imported under `TYPE_CHECKING` only, so the audit package stays under
 layers that record into it and a future import of this module from `brain.gate` cannot
 produce a cycle.
 
-Task ids: M24.1.3, M24.1.4, M42.6.5, M27.7.21, M27.7.4, M27.7.8, M27.11.1
+Task ids: M24.1.3, M24.1.4, M42.6.5, M27.7.21, M27.7.4, M27.7.8, M27.11.1, M24.2.4
 """
 
 from __future__ import annotations
@@ -174,6 +174,7 @@ ACTION_BY_METHOD: Final[Mapping[str, AuditAction]] = MappingProxyType(
         "elevation": AuditAction.ELEVATION,
         "vault_access": AuditAction.VAULT_ACCESS,
         "principal_state": AuditAction.PRINCIPAL_STATE,
+        "breach": AuditAction.BREACH,
     }
 )
 
@@ -378,6 +379,19 @@ STRUCTURE_CHANGES: Final[frozenset[OrganisationChange]] = frozenset(
         OrganisationChange.RETIRED,
     }
 )
+
+
+class BreachChange(enum.StrEnum):
+    """What happened to a breach case. The six values `0104`'s trigger writes, in the order a case
+    moves: opened, the assessment recorded, the Commission told, the individuals told or excused,
+    and closed. Each is one column of `ops.breach_case` going from empty to set."""
+
+    OPENED = "opened"
+    ASSESSED = "assessed"
+    COMMISSION_NOTIFIED = "commission_notified"
+    INDIVIDUALS_NOTIFIED = "individuals_notified"
+    INDIVIDUALS_EXCUSED = "individuals_excused"
+    CLOSED = "closed"
 
 
 class ElevationChange(enum.StrEnum):
@@ -1146,6 +1160,17 @@ class AuditRecorder:
             details["actor"] = INFERRED_ACTOR
         kind, slug = ("department", department) if department else ("scope", scope)
         return self._write(AuditAction.ORGANISATION, subject(kind, slug), details)
+
+    def breach(self, *, case_id: str, change: BreachChange) -> AuditEntry:
+        """Record that a breach case moved: opened, assessed, notified, excused or closed (M24.2.4).
+
+        Written in a deployed database by `0104`'s trigger on `ops.breach_case`, one entry per
+        column that goes from empty to set, and held to this method's details by a test. **Never
+        what happened, whose data, how many or the harm judgement**: the case row keeps those under
+        the policy of the people handling it, and the ledger is read far more widely. The subject is
+        the case, so its whole clock is one subject.
+        """
+        return self._write(AuditAction.BREACH, subject("breach", case_id), {"change": change.value})
 
     def elevation(
         self,
