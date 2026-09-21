@@ -225,6 +225,10 @@ services:
       MAX_CLIENT_CONN: "24"
       QUERY_WAIT_TIMEOUT: "30"
       AUTH_TYPE: scram-sha-256
+      # A login not in the userlist (the owner is) is looked up as the owner, which is how
+      # brain_app gets in; a role that is a superuser or bypasses row security never does.
+      # Pinned rather than left to the default. See tests/unit/test_pooler_logins.py.
+      AUTH_QUERY: "SELECT rolname, CASE WHEN rolvaliduntil < now() THEN NULL ELSE rolpassword END FROM pg_authid WHERE rolname = $$1 AND rolcanlogin AND NOT rolsuper AND NOT rolbypassrls"
     expose:
       - "5432"
     deploy:

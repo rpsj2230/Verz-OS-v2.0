@@ -451,6 +451,23 @@ def test_every_file_that_can_widen_an_answer_has_an_owner(path: str) -> None:
     assert any(line.split()[0] == path and "@" in line for line in lines)
 
 
+def test_every_path_codeowners_names_exists() -> None:
+    """A renamed file keeps its CODEOWNERS line and loses its reviewer: GitHub matches no path
+    and says nothing. Delete this and moving the gate, the redactor or the projection (M0.1.1,
+    M38.1.1.5) quietly ends the forced review on it."""
+    owners = (REPO / ".github" / "CODEOWNERS").read_text(encoding="utf-8")
+    paths = [
+        line.split()[0]
+        for line in owners.splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+    assert set(MUST_HAVE_AN_OWNER) <= set(paths)
+    missing = [path for path in paths if not (REPO / path.lstrip("/")).exists()]
+    assert missing == [], f"CODEOWNERS names paths that do not exist: {missing}"
+    # Directory entries end in a slash and must be directories, or they match nothing below.
+    assert all((REPO / p.lstrip("/")).is_dir() for p in paths if p.endswith("/"))
+
+
 def test_the_pull_request_template_asks_for_leaf_ids_only() -> None:
     """The status page is generated from what the template collects. A template that
     accepted a parent id would produce a page claiming ten tasks done for one."""

@@ -730,3 +730,38 @@ def test_only_a_change_to_the_task_list_skips_the_product_suites() -> None:
         assert jobs[name].get("if") == gated, f"the {name} job is not gated on the kind of change"
     docs_runs = "\n".join(str(step.get("run", "")) for step in jobs["docs"]["steps"])
     assert "python -m brain.requirements" in docs_runs
+
+
+# ------------------------------------------ the suite against staging (M38.2.1.2)
+def _staging_workflow() -> dict[Any, Any]:
+    parsed: dict[Any, Any] = yaml.safe_load(
+        (REPO / ".github" / "workflows" / "staging-invariants.yml").read_text(encoding="utf-8")
+    )
+    return parsed
+
+
+def test_the_staging_run_is_by_hand_and_never_on_a_push() -> None:
+    """On a push it would need a secret no fork and no pull request has, and CI would go red for
+    a reason unrelated to the change. Delete this and the trigger can drift onto every push."""
+    triggers = _staging_workflow()[True]
+    assert list(triggers) == ["workflow_dispatch"]
+    assert _staging_workflow()["permissions"] == {"contents": "read"}
+
+
+def test_the_staging_run_asks_the_staging_database_and_refuses_to_run_without_one() -> None:
+    """The positive half is that every database step reads the secret; the refusal is that a
+    missing one fails first, because the sweep skips with exit 0 when no database is named and
+    would report green about nothing. Delete this and the run can pass having checked nothing."""
+    job = _staging_workflow()["jobs"]["staging"]
+    assert job["env"]["DATABASE_URL"] == "${{ secrets.STAGING_DATABASE_URL }}"
+    steps = job["steps"]
+    first = str(steps[0].get("run", ""))
+    assert '-z "$DATABASE_URL"' in first and "exit 1" in first
+    runs = [str(step.get("run", "")) for step in steps]
+    ordered = [
+        "uv run pytest tests/invariants -q --junitxml=evidence/staging-invariants.xml",
+        "uv run python -m brain.ops.invariant_evidence evidence/staging-invariants.xml",
+        "uv run python -m brain.ops.sweeps rls",
+        'uv run python -m brain.ops.schema_check "$DATABASE_URL"',
+    ]
+    assert [r for r in runs if r in ordered] == ordered
