@@ -28,12 +28,25 @@ from brain.ops.checkpoints import (
     checkpoint_refusals,
     connection_refusals,
     owner_of,
-    search_path_option,
 )
-from brain.ops.queue import pooler_url_findings
+from brain.ops.queue import SEARCH_PATH_SQL, pooler_url_findings
 
 APP_URL = "postgresql+psycopg://brain:pw@pgbouncer:5432/brain"
 DIRECT_URL = "postgresql+psycopg://brain:pw@db:5432/brain"
+
+
+class RecordingConnection:
+    """Records what a pool's `configure` step runs, and whether it left the connection idle."""
+
+    def __init__(self) -> None:
+        self.executed: list[tuple[str, tuple[object, ...]]] = []
+        self.committed = False
+
+    def execute(self, sql: str, params: tuple[object, ...]) -> None:
+        self.executed.append((sql, params))
+
+    def commit(self) -> None:
+        self.committed = True
 
 
 # --------------------------------------------------- the connection
@@ -115,10 +128,12 @@ def test_the_search_path_names_the_schema_and_leaves_public_off_it() -> None:
 
     Delete this and appending `public` looks like a safe compatibility measure, which is
     exactly the edit that makes the schema move a no-op."""
-    option = search_path_option()
+    conn = RecordingConnection()
+    CheckpointerConfig(url=DIRECT_URL).configure(conn)  # type: ignore[arg-type]
 
-    assert option == f"-c search_path={CHECKPOINT_SCHEMA}"
-    assert "public" not in option
+    assert conn.executed == [(SEARCH_PATH_SQL, (CHECKPOINT_SCHEMA,))]
+    assert "public" not in str(conn.executed)
+    assert conn.committed
 
 
 # --------------------------------------------------- the two unsafe settings
@@ -298,4 +313,6 @@ def test_a_safe_configuration_is_constructible_and_says_where_its_tables_go() ->
     assert config.schema == CHECKPOINT_SCHEMA
     assert config.prepare_threshold is None
     assert config.pipeline is False
-    assert config.connect_options == f"-c search_path={CHECKPOINT_SCHEMA}"
+    conn = RecordingConnection()
+    config.configure(conn)  # type: ignore[arg-type]
+    assert conn.executed == [(SEARCH_PATH_SQL, (CHECKPOINT_SCHEMA,))]

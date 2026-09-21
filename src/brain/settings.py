@@ -231,6 +231,17 @@ class Settings(BaseSettings):
     vault_address: str = ""
     vault_token: str = Field(default="", repr=False)
 
+    def owner_database_url(self) -> str:
+        """The login that owns the schema: `migration_database_url` when set, else `database_url`.
+
+        Once an install names `brain_app` in `database_url` (M31.4.2), the owner survives only
+        in `migration_database_url`, so everything that is the owner's work reads this: the
+        migrations, the database script, the post-deploy checks, and the worker, which records
+        control runs and drains erasures as the owner. One method, because a caller that picked
+        `database_url` is how the worker came to tick its schedule as `brain_app` on an install.
+        """
+        return (self.migration_database_url or self.database_url).strip()
+
     def setup_enrolment(self) -> Enrolment | None:
         """The one enrolment this installation's environment file describes, or none.
 

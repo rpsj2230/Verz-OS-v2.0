@@ -457,7 +457,7 @@ def test_migrations_run_before_the_new_image_takes_traffic() -> None:
     the lifespan it is a line of Python that cannot be got wrong by ordering two YAML steps
     the wrong way round."""
     app = (REPO / "src" / "brain" / "app.py").read_text(encoding="utf-8")
-    migrated = app.index("run_migrations, settings.migration_database_url")
+    migrated = app.index("run_migrations, settings.owner_database_url()")
     served = app.index("app.state.ready[DATABASE_PART] = await database_probe()")
     assert migrated < served
 

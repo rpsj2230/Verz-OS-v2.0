@@ -215,6 +215,48 @@ def test_the_worker_finds_the_applications_database_under_the_name_the_applicati
     assert schedule_url(both) == "postgresql://app@pooler/current"
 
 
+OWNER_URL = "postgresql://brain@pgbouncer:5432/brain"
+LIMITED_URL = "postgresql://brain_app@pgbouncer:5432/brain"
+
+
+def test_the_worker_schedules_as_the_owner_even_where_the_application_runs_as_brain_app() -> None:
+    """Found on an install: the platform handed the worker the application's BRAIN_DATABASE_URL
+    (brain_app), the prefixed name won, and every tick failed on `permission denied for table
+    control_run`. The owner is `BRAIN_MIGRATION_DATABASE_URL` there, which is what the
+    migrations use, so the schedule is the login that owns every table it writes.
+
+    Delete this and the worker can go back to `database_url`, which is brain_app on every
+    install that took M31.4.2."""
+    from brain.settings import settings_from
+
+    install = {
+        "BRAIN_DATABASE_URL": LIMITED_URL,
+        "DATABASE_URL": OWNER_URL,
+        "BRAIN_MIGRATION_DATABASE_URL": OWNER_URL,
+    }
+    assert schedule_url(install) == OWNER_URL
+    assert schedule_url(install) == settings_from(install).owner_database_url()
+    assert worker.schedule_url_refusal(OWNER_URL) is None
+
+
+def test_a_worker_left_on_brain_app_is_refused_before_it_opens_anything(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Rather than started to fail every control on every tick. Delete this and the fault is a
+    line in a loop's log instead of a container that says what to set."""
+    assert (
+        worker.run(
+            {"BRAIN_DATABASE_URL": LIMITED_URL},
+            worker_component=DEFAULT_WORKER_COMPONENT,
+            slot_class=SlotClass.STANDARD,
+        )
+        == EXIT_MISCONFIGURED
+    )
+    err = capsys.readouterr().err
+    assert "the application's limited role" in err
+    assert "BRAIN_MIGRATION_DATABASE_URL" in err
+
+
 def test_a_general_worker_with_no_application_url_refuses_before_it_opens_anything(
     capsys: pytest.CaptureFixture[str],
 ) -> None:

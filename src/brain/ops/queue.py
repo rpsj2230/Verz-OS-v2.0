@@ -198,7 +198,7 @@ if TYPE_CHECKING:  # pragma: no cover - imported for annotations only
     from typing import Any
 
     from procrastinate import App
-    from psycopg import Connection
+    from psycopg import AsyncConnection, Connection
 
 #: The one module a swap changes. Named as a constant so the sweep that enforces it and
 #: the docstring that claims it cannot drift apart.
@@ -1340,22 +1340,72 @@ def queue_pool_gaps(pool_max: int, shards: Sequence[Shard]) -> tuple[str, ...]:
     return tuple(findings)
 
 
-def _connect_options(schema: str) -> str:
-    """The libpq `options` string that lands the driver's unqualified DDL in `schema`.
+#: Why the driver's schema is chosen after connecting rather than in the connection string.
+A_SEARCH_PATH_IS_SET_AFTER_CONNECTING: Final = (
+    "Until 2026-09-21 the path went in libpq's options startup parameter, as -c search_path. "
+    "PgBouncer refuses any parameter in options that it does not track (FATAL: unsupported "
+    "startup parameter in options: search_path), so the worker could not open one connection "
+    "through pgbouncer-session on an install. Telling the pooler to ignore it "
+    "(IGNORE_STARTUP_PARAMETERS) is worse than the refusal: the connection opens on the role's "
+    "default path, the driver's unqualified DDL and queries go to public, and nothing says so. "
+    "Tracking it (track_extra_parameters) works only on a pooler somebody configured that way. "
+    "So each new connection sets its own path with set_config before the pool hands it out, "
+    "which works direct, behind any session pooler, and needs nothing from the pooler at all. "
+    "Session-level on purpose: a queue connection is never a transaction pooler's "
+    "(queue_url_refusals), so the setting stays on the backend it was made on."
+)
 
-    `public` is deliberately not on the path, for the reason
-    `brain.ops.checkpoints.search_path_option` gives at length about the saver's tables: a path
+#: The statement that sets the path. A parameter rather than interpolation: the value is data.
+SEARCH_PATH_SQL: Final = "SELECT pg_catalog.set_config('search_path', %s, false)"
+
+
+def search_path_schema(schema: str) -> str:
+    """`schema`, refused unless it is a bare identifier.
+
+    `public` is deliberately never added to the path, for the reason
+    `brain.ops.checkpoints.CheckpointerConfig` gives at length about the saver's tables: a path
     of `ops,public` creates new tables in `ops` and finds existing ones in `public`, so an
     install that has already run once with the default goes on reading the tables no sweep
     enumerates while the fix appears to have worked.
     """
     if not _IDENTIFIER_RE.match(schema):
         msg = (
-            f"schema {schema!r} is not a bare identifier, and this goes into a connection "
-            "option rather than into a parameter"
+            f"schema {schema!r} is not a bare identifier, and the driver's DDL is placed by it "
+            "and by nothing else"
         )
         raise QueueError(msg)
-    return f"-c search_path={schema}"
+    return schema
+
+
+def set_search_path(conn: Connection[Any], schema: str) -> None:
+    """Put `conn` on `schema` alone, and leave it idle. See `A_SEARCH_PATH_IS_SET_AFTER_CONNECTING`.
+
+    Commits because a pool discards a connection its configure step leaves inside a
+    transaction; on an autocommit connection the commit is a no-op.
+    """
+    conn.execute(SEARCH_PATH_SQL, (search_path_schema(schema),))
+    conn.commit()
+
+
+def search_path_configurer(schema: str) -> Callable[[Connection[Any]], None]:
+    """A synchronous pool's `configure` step that puts every new connection on `schema`."""
+    checked = search_path_schema(schema)
+
+    def configure(conn: Connection[Any]) -> None:
+        set_search_path(conn, checked)
+
+    return configure
+
+
+def async_search_path_configurer(schema: str) -> Callable[[AsyncConnection[Any]], Awaitable[None]]:
+    """`search_path_configurer` for an asynchronous pool, which awaits its `configure` step."""
+    checked = search_path_schema(schema)
+
+    async def configure(conn: AsyncConnection[Any]) -> None:
+        await conn.execute(SEARCH_PATH_SQL, (checked,))
+        await conn.commit()
+
+    return configure
 
 
 def _refuse_bad_connection(url: str, pool_max: int, schema: str) -> None:
@@ -1401,7 +1451,9 @@ def driver_pool_settings(
         "conninfo": libpq_url(url),
         "min_size": 1,
         "max_size": pool_max,
-        "kwargs": {"options": _connect_options(schema)},
+        # Not a libpq `options` string: see `A_SEARCH_PATH_IS_SET_AFTER_CONNECTING`. The driver
+        # runs this on its LISTEN connection too, which opens outside the pool.
+        "configure": async_search_path_configurer(schema),
     }
 
 
@@ -1574,12 +1626,12 @@ def install_queue(url: str, *, pool_max: int, schema: str = DRIVER_SCHEMA) -> tu
 
     _refuse_bad_connection(url, pool_max, schema)
     dsn = libpq_url(url)
-    options = _connect_options(schema)
+    configure = search_path_configurer(schema)
     done: list[str] = []
 
     with psycopg.connect(dsn, autocommit=True) as conn:
-        # Interpolated because DDL takes no parameters, and safe because `_connect_options`
-        # has already refused a schema that is not a bare identifier.
+        # Interpolated because DDL takes no parameters, and safe because
+        # `search_path_configurer` has already refused a schema that is not a bare identifier.
         conn.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
         before = _tables_in(conn, schema)
     done.append(f"schema {schema!r} exists; it held {len(before)} table(s) before this ran")
@@ -1597,14 +1649,15 @@ def install_queue(url: str, *, pool_max: int, schema: str = DRIVER_SCHEMA) -> tu
                 # of.
                 min_size=1,
                 max_size=1,
-                kwargs={"options": options},
+                configure=configure,
             )
         )
         with app.open():
             app.schema_manager.apply_schema()
         done.append("the driver applied its own schema, at the version this image has of it")
 
-    with psycopg.connect(dsn, autocommit=True, options=options) as conn:
+    with psycopg.connect(dsn, autocommit=True) as conn:
+        configure(conn)
         after = _tables_in(conn, schema)
         created = tuple(sorted(after - before))
         strangers = unattributable_tables(created)

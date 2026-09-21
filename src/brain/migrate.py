@@ -65,8 +65,7 @@ def alembic_url(configured: str | None) -> str:
     settings = Settings()
     # The owner's login first, as the lifespan does, so the bare command can migrate an install
     # whose `DATABASE_URL` names `brain_app`.
-    fallback = settings.migration_database_url or settings.database_url
-    url = (configured or "").strip() or fallback.strip()
+    url = (configured or "").strip() or settings.owner_database_url()
     if not url:
         msg = (
             "no database to migrate: the Alembic config names none, and neither "

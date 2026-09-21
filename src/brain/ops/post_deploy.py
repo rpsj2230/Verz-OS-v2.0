@@ -173,9 +173,7 @@ def invariant_checks(settings: Any) -> dict[str, Callable[[], object]]:
     from brain.ops.sweeps import sweep_grant_isolation
 
     return {
-        "migrations at head": lambda: migrations_at_head(
-            settings.migration_database_url or settings.database_url
-        ),
+        "migrations at head": lambda: migrations_at_head(settings.owner_database_url()),
         "grant isolation": sweep_grant_isolation,
     }
 

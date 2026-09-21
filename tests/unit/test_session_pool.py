@@ -17,8 +17,10 @@ import pytest
 import yaml
 
 from brain.deployment.requirements import files_for
+from brain.ops.checkpoint_store import checkpointer_pool_settings
+from brain.ops.checkpoints import CheckpointerConfig
 from brain.ops.connections import client_named
-from brain.ops.queue import POOLER_HOSTNAMES
+from brain.ops.queue import POOLER_HOSTNAMES, driver_pool_settings
 from brain.ops.session_pool import (
     A_SESSION_POOL_SMALLER_THAN_ITS_CLIENTS_IS_A_LISTEN_THAT_WAITS,
     A_WORKER_ROUTED_ROUND_THE_SESSION_POOLER_IS_OUTSIDE_ITS_CEILING,
@@ -106,6 +108,37 @@ def test_the_session_pooler_is_never_one_the_transaction_rule_refuses() -> None:
     """`POOLER_HOSTNAMES` refuses a queue URL by host. Delete this and the session pooler's name
     can be added to that set, after which every worker refuses to start on a correct URL."""
     assert SESSION_POOLER not in POOLER_HOSTNAMES
+
+
+def test_no_worker_pool_sends_a_startup_option_the_session_pooler_refuses() -> None:
+    """PgBouncer refuses a libpq `options` parameter it does not track, so on an install the
+    worker's pool through this pooler failed every connect with "unsupported startup parameter
+    in options: search_path". The path is set after connecting instead
+    (`brain.ops.queue.A_SEARCH_PATH_IS_SET_AFTER_CONNECTING`). Delete this and a pool can go
+    back to the startup option, which passes against a direct database and fails only here."""
+    url = "postgresql+psycopg://brain:pw@pgbouncer-session:5432/brain"
+    queue = driver_pool_settings(url, pool_max=5)
+    saver = checkpointer_pool_settings(CheckpointerConfig(url=url))
+
+    for settings in (queue, saver):
+        assert "options" not in str(settings.get("kwargs", {}))
+        assert callable(settings["configure"])
+
+
+def test_no_bundled_pooler_silently_drops_the_search_path() -> None:
+    """`IGNORE_STARTUP_PARAMETERS` naming `options` or `search_path` would make the old refusal
+    go away by opening the connection on the role's default path, so the driver's unqualified
+    tables land in `public`, which no sweep enumerates. Delete this and that one-line "fix" to a
+    pooler reads as safe."""
+    for path in sorted(REPO.glob("docker-compose*.yml")):
+        services = (yaml.safe_load(path.read_text(encoding="utf-8")) or {}).get("services") or {}
+        for name, body in services.items():
+            if "pgbouncer" not in str((body or {}).get("image", "")):
+                continue
+            environment = body.get("environment") or {}
+            ignored = str(environment.get("IGNORE_STARTUP_PARAMETERS", "")).lower()
+            assert "search_path" not in ignored, (path.name, name)
+            assert "options" not in ignored, (path.name, name)
 
 
 # ========================================================================= the refusals

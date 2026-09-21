@@ -129,12 +129,15 @@ Task ids: none
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
-from typing import Final
+from typing import TYPE_CHECKING, Any, Final
 
 from brain.db import SCHEMAS
-from brain.ops.queue import MAX_ARGUMENT_CHARS, pooler_url_findings
+from brain.ops.queue import MAX_ARGUMENT_CHARS, pooler_url_findings, search_path_configurer
+
+if TYPE_CHECKING:  # pragma: no cover - imported for annotations only
+    from psycopg import Connection
 
 # ------------------------------------------------------------------ written-down reasons
 #: Why the saved state is not filed with traces, and not with memory either.
@@ -166,22 +169,6 @@ THE_CHECKPOINT_TABLES_ARE_NOT_OURS = (
 # ------------------------------------------------------------------------ the placement
 #: The schema the saver's tables must be created in. See the two constants above.
 CHECKPOINT_SCHEMA: Final = "agent"
-
-
-def search_path_option(schema: str = CHECKPOINT_SCHEMA) -> str:
-    """The libpq `options` string that puts the saver's tables in `schema`.
-
-    A `search_path` on the connection rather than a schema argument, because the saver's DDL
-    does not take one: it creates unqualified tables, and an unqualified table lands in the
-    first schema on the path.
-
-    **`public` is left off the path entirely rather than appended to ours.** A path of
-    `agent,public` creates new tables in `agent` and finds existing ones in `public`, so an
-    install that has already run once with the default keeps reading the tables nothing
-    enumerates and the fix silently does nothing. Leaving it off means such an install fails
-    on a missing table, which is a sentence somebody can act on.
-    """
-    return f"-c search_path={schema}"
 
 
 class CheckpointerError(Exception):
@@ -238,9 +225,21 @@ class CheckpointerConfig:
             raise CheckpointerError(msg)
 
     @property
-    def connect_options(self) -> str:
-        """The libpq `options` string this configuration implies."""
-        return search_path_option(self.schema)
+    def configure(self) -> Callable[[Connection[Any]], None]:
+        """The pool's `configure` step: every new connection on `schema`, and on it alone.
+
+        A search path on the connection rather than a schema argument, because the saver's DDL
+        does not take one: it creates unqualified tables, and an unqualified table lands in the
+        first schema on the path. Set after connecting rather than in libpq's `options`, which
+        PgBouncer refuses; see `brain.ops.queue.A_SEARCH_PATH_IS_SET_AFTER_CONNECTING`.
+
+        **`public` is left off the path entirely rather than appended to ours.** A path of
+        `agent,public` creates new tables in `agent` and finds existing ones in `public`, so an
+        install that has already run once with the default keeps reading the tables nothing
+        enumerates and the fix silently does nothing. Leaving it off means such an install fails
+        on a missing table, which is a sentence somebody can act on.
+        """
+        return search_path_configurer(self.schema)
 
 
 def connection_refusals(url: str, *, app_url: str = "") -> tuple[str, ...]:
