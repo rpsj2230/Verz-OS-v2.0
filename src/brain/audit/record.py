@@ -173,8 +173,16 @@ ACTION_BY_METHOD: Final[Mapping[str, AuditAction]] = MappingProxyType(
         "organisation": AuditAction.ORGANISATION,
         "elevation": AuditAction.ELEVATION,
         "vault_access": AuditAction.VAULT_ACCESS,
+        "principal_state": AuditAction.PRINCIPAL_STATE,
     }
 )
+
+
+class PrincipalStateChange(enum.StrEnum):
+    """What happened to a person's sign-in. The two values `0095b`'s trigger writes."""
+
+    DISABLED = "disabled"
+    ENABLED = "enabled"
 
 
 class SignInChange(enum.StrEnum):
@@ -855,6 +863,19 @@ class AuditRecorder:
             details["identity"] = identity
         return self._write(
             AuditAction.VAULT_ACCESS, subject("credential", credential_subject_id(slot)), details
+        )
+
+    def principal_state(self, *, principal_id: str, change: PrincipalStateChange) -> AuditEntry:
+        """Record that a person was disabled, or enabled again (M1.2.3).
+
+        Written in a deployed database by `0095b`'s trigger on `auth.principal`, one entry per
+        change of `disabled_at` between set and unset, and held to these details by a test. The
+        subject is the person, so they read it among the entries about them.
+        """
+        return self._write(
+            AuditAction.PRINCIPAL_STATE,
+            subject("principal", principal_id),
+            {"change": change.value},
         )
 
     def retention(self, *, release_id: str, change: RetentionChange) -> AuditEntry:
