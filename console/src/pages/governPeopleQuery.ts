@@ -57,6 +57,9 @@ export const REVIEW_API_PATH = "/govern/access-review";
 export const REVIEW_DECISION_API_PATH = "/govern/access-review/decision";
 export const REVIEW_DECISIONS_API_PATH = "/govern/access-review/decisions";
 export const SUBSCRIBERS_API_PATH = "/govern/subscribers";
+/** Disabling a person's sign-in and enabling it again. `brain.principal_state_routes`. */
+export const DISABLE_API_PATH = "/govern/people/disable";
+export const ENABLE_API_PATH = "/govern/people/enable";
 
 /**
  * The console addresses. The review's is the registry key `access_review`, so
@@ -92,6 +95,10 @@ export interface Organisation {
   readonly truncated: boolean;
   /** Whether this reader holds the authority to place anybody. Presentation only. */
   readonly mayOrganise: boolean;
+  /** Whether this reader holds the grant decision anywhere, so may disable somebody. Presentation only. */
+  readonly mayDisable: boolean;
+  /** What disabling somebody does and does not do, in the API's words, for its confirmation. */
+  readonly disabling: string;
   /** The sentences about what the page shows and who may change it, in the API's words. */
   readonly teams: string;
   readonly leads: string;
@@ -104,6 +111,8 @@ const NO_ORGANISATION: Organisation = Object.freeze({
   unplaced: [],
   truncated: false,
   mayOrganise: false,
+  mayDisable: false,
+  disabling: "",
   teams: "",
   leads: "",
   counted: "",
@@ -120,6 +129,8 @@ export function readOrganisation(payload: unknown): Organisation {
     unplaced: Array.isArray(payload.unplaced) ? (payload.unplaced as UnplacedRow[]) : [],
     truncated: payload.truncated === true,
     mayOrganise: payload.may_organise === true,
+    mayDisable: payload.may_disable === true,
+    disabling: text(payload.disabling),
     teams: text(payload.teams),
     leads: text(payload.leads),
     counted: text(payload.counted),
@@ -142,6 +153,16 @@ export function membershipBody(
   change: MembershipBody["change"],
 ): MembershipBody {
   return { department, team, principal_id: principalId, change };
+}
+
+/** The body of a disable or an enable, as `StateAsked` declares it. One key and no second. */
+export interface StateBody {
+  readonly principal_id: string;
+}
+
+/** The question a disable's or an enable's confirmation asks, naming the person. */
+export function stateQuestion(person: string, disable: boolean): string {
+  return disable ? `Disable ${person}'s sign-in?` : `Enable ${person}'s sign-in again?`;
 }
 
 /** The body of a lead change, as `LeadChange` declares it: a person to appoint, or nobody. */

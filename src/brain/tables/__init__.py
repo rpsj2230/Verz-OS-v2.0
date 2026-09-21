@@ -104,6 +104,7 @@ from brain.tables.retention import LegalHoldRow, RetentionReleaseRow, RetentionR
 from brain.tables.review import ReviewDecisionRow
 from brain.tables.routing import ModelAttemptRow, RoutingRungRow, RoutingTierRow
 from brain.tables.schedule import ControlRunRow
+from brain.tables.service_account import ApiKeyRow, ServiceAccountRow
 from brain.tables.skill import SkillAssignmentRow, SkillReviewRow, SkillRow
 from brain.tables.spend import ReportRefreshRow, SpendActualRow
 from brain.tables.staff import StaffMemberRow, StaffSyncRunRow
@@ -295,6 +296,10 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # value, so neither hangs from a principal a later offboarding retires.
     "auth.staff_member",
     "auth.staff_sync_run",
+    # 0095_service_accounts_and_partner_reach. An account points at its owning principal, and a
+    # key at its account.
+    "auth.service_account",
+    "auth.api_key",
 )
 
 __all__ = [
@@ -302,6 +307,7 @@ __all__ = [
     "AdaptiveMemoryRow",
     "AgentAutomationRow",
     "AgentRow",
+    "ApiKeyRow",
     "ApplicationLogRow",
     "ArtifactRow",
     "AuditEntryRow",
@@ -361,6 +367,7 @@ __all__ = [
     "RoutingRungRow",
     "RoutingTierRow",
     "ScopeRow",
+    "ServiceAccountRow",
     "SessionRow",
     "SettingRow",
     "SettingType",

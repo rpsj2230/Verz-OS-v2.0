@@ -100,7 +100,15 @@ made would put three fabricated values into the one place the platform's reach i
 The agent term of the invariant enters at `gate.invoke` and `gate.leash.decide`, and it is
 deliberately absent here rather than faked.
 
-Task ids: M31.1.4.1, M31.1.4.3, M31.1.4.4, M32.5.2.1
+**A service account is answered at its owner's live reach narrowed by its ceiling, and at nothing
+it holds itself.** `asking` resolves the owner, never the account, and hands the result to
+`brain.identity.sessions.reach_for`, the one function that intersects the two; the account's own
+id is then what every route and the ledger see. The owner is resolved on this request through the
+same cache every caller's reach goes through, keyed on the owner's grants version, so a grant taken
+from the owner is gone from the account on the next request. See
+`A_SERVICE_ACCOUNT_IS_ANSWERED_AT_ITS_OWNERS_REACH`.
+
+Task ids: M31.1.4.1, M31.1.4.3, M31.1.4.4, M32.5.2.1, M1.1.7, M1.8.2
 """
 
 from __future__ import annotations
@@ -138,7 +146,9 @@ from brain.gate.finish import Origin, RequestRecorder
 from brain.gate.model_lane import DocumentSearchTool, ModelLane
 from brain.gate.resolve import EntitlementCache, EntitlementStore, VersionSource, resolve
 from brain.identity.bearer import Caller, TokenAuthority, authenticate
-from brain.identity.oidc import VerifiedClaims
+from brain.identity.oidc import TokenRefusal, TokenRefusedError, VerifiedClaims
+from brain.identity.roles import NoStandingEntitlement
+from brain.identity.sessions import reach_for
 from brain.knowledge.document_tools import SEARCH_DOCUMENTS, KnowledgePassage
 from brain.knowledge.rows import DEFAULT_ROW_LIMIT, MAX_ROW_LIMIT, RowRequest, row_scope_for
 from brain.ops.model_service import ModelService
@@ -159,6 +169,14 @@ THE_ROUTE_ADDS_NOTHING_TO_WHAT_THE_CALLER_HOLDS: Final = (
     "inconvenient. So the entitlement passed to the reader and the entitlement passed to the "
     "redactor are the same object, computed once from the caller's grants and narrowed by "
     "gate.admission, and there is no other entitlement in scope for it to be confused with."
+)
+
+#: Why a service account's reach is computed from its owner on every request.
+A_SERVICE_ACCOUNT_IS_ANSWERED_AT_ITS_OWNERS_REACH: Final = (
+    "A service account holds no grant. Its reach is its owner's, resolved now, intersected with "
+    "the capabilities it declared, and rebuilt under its own id. Resolving the account's own id "
+    "would answer from grants nobody could write, and caching the pair would keep a revoked "
+    "grant working for the length of the cache."
 )
 
 #: Why an unknown entity answers exactly as a forbidden one does.
@@ -401,26 +419,47 @@ async def asking(request: Request) -> Asking:
         # caller with no reach computed, which would then be an empty set that looks resolved.
         raise Failed("no gate wiring on this process")
 
-    resolved = await resolve(
-        caller.principal_id,
-        versions=wiring.versions,
-        store=wiring.store,
-        cache=wiring.cache,
-        now=now,
-    )
+    entitlements = await reach_of(caller, wiring, now)
     channel = channel_for(caller.claims)
-    restore = second_factor_gives_back(resolved.entitlements, channel, caller.assurance)
+    restore = second_factor_gives_back(entitlements, channel, caller.assurance)
     # Before any route reads anything, so a refusal later in this request is answered from the
     # session and never from what was asked for.
     setattr(request.state, SECOND_FACTOR_STATE, restore)
     return Asking(
         caller=caller,
-        reach=admit(resolved.entitlements, channel, caller.assurance),
+        reach=admit(entitlements, channel, caller.assurance),
         channel=channel,
         now=now,
-        withheld_verbs=verbs_withheld(resolved.entitlements, channel, caller.assurance),
+        withheld_verbs=verbs_withheld(entitlements, channel, caller.assurance),
         second_factor_gives_back=restore,
     )
+
+
+async def reach_of(caller: Caller, wiring: GateWiring, now: datetime) -> EntitlementSet:
+    """What the caller holds before any ceiling: their own grants, or an account's owner's.
+
+    See `A_SERVICE_ACCOUNT_IS_ANSWERED_AT_ITS_OWNERS_REACH`. An account whose owner holds nothing
+    is refused rather than answered at an empty reach, for `NoStandingEntitlement`'s reason.
+    """
+    account, owner = caller.service_account, caller.owner
+    if account is None:
+        own = await resolve(
+            caller.principal_id,
+            versions=wiring.versions,
+            store=wiring.store,
+            cache=wiring.cache,
+            now=now,
+        )
+        return own.entitlements
+    if owner is None:
+        raise TokenRefusedError(TokenRefusal.OWNER_INACTIVE, account.client_id)
+    owners = await resolve(
+        owner.id, versions=wiring.versions, store=wiring.store, cache=wiring.cache, now=now
+    )
+    narrowed = reach_for(account, owner, owners.entitlements, now)
+    if isinstance(narrowed, NoStandingEntitlement):
+        raise TokenRefusedError(TokenRefusal.OWNER_INACTIVE, account.client_id)
+    return narrowed
 
 
 #: The dependency every route under this prefix takes. Spelled once so a new route cannot

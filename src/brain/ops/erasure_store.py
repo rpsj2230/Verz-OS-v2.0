@@ -209,6 +209,8 @@ SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
         "auth.directory_role_grant": "principal_id",
         "auth.principal": "id",
         "auth.principal_identity": "principal_id",
+        # An integration a person registered acts at their reach, so it goes with them. `0095`.
+        "auth.service_account": "owner_principal_id",
         "auth.session": "principal_id",
         "chat.conversation": "principal_id",
         "gate.automation_owner": "owner_principal_id",
@@ -245,7 +247,13 @@ class Through:
 
 #: Tables whose rows belong to a person only through the row they point at.
 THROUGH: Final[Mapping[str, Through]] = MappingProxyType(
-    {"chat.message": Through(parent="chat.conversation", key="conversation_id", parent_key="id")}
+    {
+        "chat.message": Through(parent="chat.conversation", key="conversation_id", parent_key="id"),
+        # A key is a person's through the account it speaks for. `0095`.
+        "auth.api_key": Through(
+            parent="auth.service_account", key="client_id", parent_key="client_id"
+        ),
+    }
 )
 
 #: Tables in a PostgreSQL store no row of which is a person's own. See `AN_ACTOR_IS_NOT_AN_OWNER`.

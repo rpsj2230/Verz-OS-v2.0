@@ -60,10 +60,28 @@ with no authentication, and nothing about it looks different. A dependency is na
 route, so a route without one is visible in the diff that adds it, and
 `tests/unit/test_api_routes.py` asserts over the mounted set rather than over a habit.
 
+**A caller that is not a person is authenticated here too, and holds nothing of its own.** Two
+credentials name a service account: a client-credentials token from the identity provider, which
+carries no `sid` and whose subject a registered account names, and an API key minted on this
+install (`brain.channels.api_keys`). Either way the caller comes back carrying the account and its
+owner, and the owner is read live on every request: disabled, retired or past their end date, and
+the account is refused with the sentence every refusal gets. What the account may then reach is
+`brain.identity.sessions.reach_for`, asked by `brain.api_routes.asking` over the owner's reach as
+the resolver answers it now, so a grant taken from the owner is taken from the account on the next
+request. See `A_SERVICE_ACCOUNT_STOPS_WHEN_ITS_OWNER_DOES`.
+
+**A key's claims say it was a key.** `Caller.claims` is what every route reads the session and the
+verification from, so a key caller carries claims too: issued by `API_KEY_ISSUER`, never a `sid`,
+verified by the key's handle with `API_KEY_METHOD`, from the moment it was issued to the moment it
+lapses. Nothing in them is read off the presented string except the handle, and the handle is
+what the key was looked up and checked by. Rejected: an optional `claims`, which every route that
+reads a `sid` would have to learn to treat as absent, and the one that forgot would fail open on
+the channel ceiling `channel_for` reads from it.
+
 Scope: no network call is made here. The key set arrives through a `KeySource` the caller
 supplies, which is what `oidc.JwksCache` already is.
 
-Task ids: M1.1.2
+Task ids: M1.1.2, M1.1.7, M1.8.2
 """
 
 from __future__ import annotations
@@ -73,11 +91,15 @@ import enum
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from types import MappingProxyType
 from typing import Final, Protocol, runtime_checkable
 
 import structlog
 
-from brain.core.principal import Principal
+from brain.channels.api_keys import PREFIX as API_KEY_PREFIX
+from brain.channels.api_keys import ApiKeyError, ApiKeyRecord, handle_of
+from brain.channels.api_keys import verify as verify_key
+from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.gate.admission import Assurance
 from brain.identity.oidc import (
     DEFAULT_LEEWAY,
@@ -92,6 +114,11 @@ from brain.identity.oidc import (
     parse_unverified,
     principal_for,
     validate_token,
+)
+from brain.identity.sessions import (
+    ServiceAccount,
+    assurance_for_service_account,
+    authenticate_service_account,
 )
 
 log = structlog.get_logger()
@@ -138,6 +165,20 @@ AN_ENDED_SESSION_IS_REFUSED_ON_ITS_NEXT_REQUEST: Final = (
     "session was ended may sign in again, which opens another, and stopping that is the grant "
     "decision or the sign-in link rather than this."
 )
+
+#: Why an integration is refused the moment its owner could not sign in.
+A_SERVICE_ACCOUNT_STOPS_WHEN_ITS_OWNER_DOES: Final = (
+    "A service account borrows its owner's reach and holds nothing of its own. Its owner is read "
+    "on every request, and an owner who is disabled, retired or past their end date leaves the "
+    "account refused with the same sentence a bad token gets, so an integration cannot outlive "
+    "the person who answers for it."
+)
+
+#: The issuer a key caller's claims name. Not a URL, so it can never equal a realm's issuer.
+API_KEY_ISSUER: Final = "brain:api-key"
+
+#: What verified a key caller, in the claims' `algorithm` field. `brain.channels.api_keys`.
+API_KEY_METHOD: Final = "brn-sha256"
 
 #: Why the key source is asked on a worker thread.
 A_KEY_FETCH_NEVER_HOLDS_THE_EVENT_LOOP: Final = (
@@ -242,6 +283,50 @@ class KeySource(Protocol):
     def key_for(self, issuer: str, kid: str, now: datetime) -> SigningKey: ...
 
 
+@runtime_checkable
+class ServiceAccountDirectory(Protocol):
+    """The registered service accounts, their keys and their owners.
+
+    `brain.identity.principal_directory.StoredDirectory` implements it over the database. Asked of
+    the directory rather than held beside it, for the reason `SessionLedger` is.
+    """
+
+    async def service_account_for_subject(self, subject: str) -> ServiceAccount | None: ...
+
+    async def service_account_for_key(
+        self, handle: str
+    ) -> tuple[ApiKeyRecord, ServiceAccount] | None: ...
+
+    async def live_owner(self, principal_id: str) -> Principal | None: ...
+
+
+def principal_of(account: ServiceAccount) -> Principal:
+    """The account as the principal a route and the ledger name: its own id, never its owner's."""
+    return Principal(
+        id=account.client_id,
+        kind=PrincipalKind.SERVICE,
+        employment=Employment.SERVICE,
+        display_name=account.client_id,
+        not_after=account.not_after,
+    )
+
+
+def key_claims(record: ApiKeyRecord, *, audience: str, now: datetime) -> VerifiedClaims:
+    """What a checked key is worth as claims. See the module docstring on why a key has them."""
+    return VerifiedClaims(
+        issuer=API_KEY_ISSUER,
+        subject=record.client_id,
+        audience=(audience,),
+        issued_at=record.issued_at,
+        expires_at=record.not_after,
+        session_id=None,
+        key_id=record.handle,
+        algorithm=API_KEY_METHOD,
+        verified_at=now,
+        claims=MappingProxyType({"azp": record.client_id}),
+    )
+
+
 @dataclass(frozen=True)
 class Caller:
     """A verified person, and how strongly we know it is them, right now.
@@ -259,6 +344,10 @@ class Caller:
     principal: Principal
     claims: VerifiedClaims
     assurance: Assurance
+    #: The integration this caller is, and the live person whose reach it borrows. Both or
+    #: neither: `brain.api_routes.asking` computes the reach from the pair.
+    service_account: ServiceAccount | None = None
+    owner: Principal | None = None
 
     @property
     def principal_id(self) -> str:
@@ -347,7 +436,10 @@ class TokenAuthority:
         and re-checked on the path that matters, and skipping the warm would mean a rotated
         key refusing every sign-in in the company until a TTL expired.
         """
-        raw = parse_unverified(token_from_header(header))
+        presented = token_from_header(header)
+        if presented.startswith(f"{API_KEY_PREFIX}."):
+            return await self._key_caller(presented, now=now)
+        raw = parse_unverified(presented)
 
         # On a worker thread. See A_KEY_FETCH_NEVER_HOLDS_THE_EVENT_LOOP.
         keys = await asyncio.to_thread(self._current_keys, raw.header.get("kid"), now)
@@ -361,6 +453,12 @@ class TokenAuthority:
             now=now,
             leeway=self.leeway,
         )
+
+        if claims.session_id is None and isinstance(self.directory, ServiceAccountDirectory):
+            account = await self.directory.service_account_for_subject(claims.subject)
+            if account is not None:
+                checked = authenticate_service_account(claims, {claims.subject: account}, now)
+                return await self._account_caller(checked, claims, now=now)
 
         found = await principal_for(claims, self.directory, now=now)
         if isinstance(found, UnmappedSubject):
@@ -390,6 +488,46 @@ class TokenAuthority:
             if standing is SessionStanding.SOMEBODY_ELSES:
                 raise TokenRefusedError(TokenRefusal.SESSION_MISMATCH, claims.session_id)
         return Caller(principal=found, claims=claims, assurance=assurance)
+
+    async def _key_caller(self, presented: str, *, now: datetime) -> Caller:
+        """The caller behind an API key, or the one refusal. See the module docstring."""
+        if not isinstance(self.directory, ServiceAccountDirectory):
+            raise TokenRefusedError(TokenRefusal.UNKNOWN_SERVICE_ACCOUNT, "no accounts here")
+        try:
+            handle = handle_of(presented)
+        except ApiKeyError as exc:
+            raise TokenRefusedError(TokenRefusal.MALFORMED, "not an api key") from exc
+        found = await self.directory.service_account_for_key(handle)
+        if found is None:
+            raise TokenRefusedError(TokenRefusal.UNKNOWN_SERVICE_ACCOUNT, handle)
+        record, account = found
+        try:
+            checked = verify_key(presented, record, account, now=now)
+        except ApiKeyError as exc:
+            raise TokenRefusedError(TokenRefusal.SERVICE_ACCOUNT_EXPIRED, record.handle) from exc
+        return await self._account_caller(
+            checked, key_claims(record, audience=self.audience, now=now), now=now
+        )
+
+    async def _account_caller(
+        self, account: ServiceAccount, claims: VerifiedClaims, *, now: datetime
+    ) -> Caller:
+        """The account as a caller, with its owner read now.
+
+        See `A_SERVICE_ACCOUNT_STOPS_WHEN_ITS_OWNER_DOES`.
+        """
+        if not isinstance(self.directory, ServiceAccountDirectory):
+            raise TokenRefusedError(TokenRefusal.UNKNOWN_SERVICE_ACCOUNT, account.client_id)
+        owner = await self.directory.live_owner(account.owner_principal_id)
+        if owner is None or not owner.is_active(now):
+            raise TokenRefusedError(TokenRefusal.OWNER_INACTIVE, account.client_id)
+        return Caller(
+            principal=principal_of(account),
+            claims=claims,
+            assurance=assurance_for_service_account(account, now),
+            service_account=account,
+            owner=owner,
+        )
 
     def _current_keys(self, kid: object, now: datetime) -> KeySet:
         """The key set to validate against, after warming it for the token's `kid`.

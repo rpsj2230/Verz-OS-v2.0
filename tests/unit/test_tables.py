@@ -116,6 +116,7 @@ MIGRATION_CONNECTOR_SYNC = VERSIONS / "0068_connector_sync.py"
 MIGRATION_DEPLOYMENT_RECORD = VERSIONS / "0091_deployment_record.py"
 MIGRATION_VAULT_ACCESS = VERSIONS / "0093_vault_leases_and_audit.py"
 MIGRATION_STAFF_ROSTER = VERSIONS / "0096_staff_roster.py"
+MIGRATION_SERVICE_ACCOUNTS = VERSIONS / "0095_service_accounts_and_partner_reach.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -316,6 +317,8 @@ DEPLOYMENT_RECORD_TABLES: tuple[str, ...] = ("ops.deployment_record",)
 VAULT_ACCESS_TABLES: tuple[str, ...] = ("ops.vault_access",)
 #: And the two 0096 adds: the roster the scheduled staff sync applied, and each of its runs.
 STAFF_ROSTER_TABLES: tuple[str, ...] = ("auth.staff_member", "auth.staff_sync_run")
+#: And the two 0095 adds: the API caller that is not a person, and the keys it signs in with.
+SERVICE_ACCOUNT_TABLES: tuple[str, ...] = ("auth.service_account", "auth.api_key")
 
 ALL_TABLES = (
     CORE_TABLES
@@ -362,6 +365,7 @@ ALL_TABLES = (
     + DEPLOYMENT_RECORD_TABLES
     + VAULT_ACCESS_TABLES
     + STAFF_ROSTER_TABLES
+    + SERVICE_ACCOUNT_TABLES
 )
 
 
@@ -1107,6 +1111,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert vault_access.TABLES == VAULT_ACCESS_TABLES
     staff_roster = migration_module(MIGRATION_STAFF_ROSTER)
     assert staff_roster.TABLES == STAFF_ROSTER_TABLES
+    service_accounts = migration_module(MIGRATION_SERVICE_ACCOUNTS)
+    assert service_accounts.TABLES == SERVICE_ACCOUNT_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1175,6 +1181,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(deployment_record.TABLES)
         + tuple(vault_access.TABLES)
         + tuple(staff_roster.TABLES)
+        + tuple(service_accounts.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1224,6 +1231,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(deployment_record.TABLES),
         set(vault_access.TABLES),
         set(staff_roster.TABLES),
+        set(service_accounts.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

@@ -44,7 +44,9 @@ import { EXPORTS_API_PATH } from "../../src/pages/dataTransferQuery";
 import { switchPath } from "../../src/pages/featuresQuery";
 import { savePath } from "../../src/pages/settingsQuery";
 import {
+  DISABLE_API_PATH,
   ELEVATION_REQUESTS_API_PATH,
+  ENABLE_API_PATH,
   LEAD_API_PATH,
   MEMBERSHIP_API_PATH,
   REVIEW_DECISIONS_API_PATH,
@@ -181,6 +183,9 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/govern/staff_sources*",
       "/api/v1/govern/packs*",
       "/api/v1/govern/roles/misconfigurations",
+      "/api/v1/govern/people/disable",
+      "/api/v1/govern/people/enable",
+      "/api/v1/govern/service-accounts*",
     ],
     tables: [
       "auth.principal",
@@ -198,6 +203,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "gate.elevation_request",
       "auth.staff_member",
       "auth.staff_sync_run",
+      "auth.service_account",
+      "auth.api_key",
     ],
     installation: [
       "INSTALL_OIDC_ISSUER",
@@ -229,6 +236,10 @@ export const AREAS: Readonly<Record<string, Area>> = {
           "The people to tell are the standing Super Admins, and no table records who holds a role (M1.3.2), so brain.console.elevation.client_recipients has nobody to compute; the audit ledger is the record, and the Elevation requests screen says so.",
       },
       { what: "The identity provider and the staff source cannot be changed after setup.", because: ONCE_BY_THE_WIZARD },
+      {
+        what: "A service account and its keys are registered, issued, revoked and retired through /api/v1/govern/service-accounts, and no screen calls it.",
+        leaf: "M27.11.5",
+      },
     ],
   },
   "Departments, teams and client configuration": {
@@ -628,6 +639,8 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/Departments.tsx asked.path": [
     at("POST /api/v1/govern/departments/membership", "MEMBERSHIP_API_PATH", MEMBERSHIP_API_PATH),
     at("POST /api/v1/govern/departments/lead", "LEAD_API_PATH", LEAD_API_PATH),
+    at("POST /api/v1/govern/people/disable", "DISABLE_API_PATH", DISABLE_API_PATH),
+    at("POST /api/v1/govern/people/enable", "ENABLE_API_PATH", ENABLE_API_PATH),
   ],
   "src/pages/Elevation.tsx ELEVATION_REQUESTS_API_PATH": [
     at("POST /api/v1/govern/elevation/requests", "ELEVATION_REQUESTS_API_PATH", ELEVATION_REQUESTS_API_PATH),
@@ -814,6 +827,11 @@ const PLACEMENT_REACHES_THE_ROW_THE_LEDGER_AND_THE_PAGE = t(
   "test_placing_and_appointing_reach_the_rows_the_ledger_and_the_departments_page",
   true,
 );
+const DISABLE_REACHES_THE_ROW_THE_LEDGER_AND_THE_TOKEN = t(
+  "test_principal_state",
+  "test_a_disable_ends_the_session_refuses_the_token_and_an_enable_returns_the_grants",
+  true,
+);
 const ELEVATION_REACHES_THE_ROW_THE_LEDGER_AND_THE_RESOLVER = t(
   "test_elevation_store",
   "test_an_approved_elevation_widens_the_requester_and_after_its_lapse_it_does_not",
@@ -839,6 +857,18 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: PLACEMENT_REACHES_THE_ROW_THE_LEDGER_AND_THE_PAGE,
     audit: PLACEMENT_REACHES_THE_ROW_THE_LEDGER_AND_THE_PAGE,
     behaviour: PLACEMENT_REACHES_THE_ROW_THE_LEDGER_AND_THE_PAGE,
+  },
+  "POST /api/v1/govern/people/disable": {
+    row: DISABLE_REACHES_THE_ROW_THE_LEDGER_AND_THE_TOKEN,
+    audit: DISABLE_REACHES_THE_ROW_THE_LEDGER_AND_THE_TOKEN,
+    behaviour: DISABLE_REACHES_THE_ROW_THE_LEDGER_AND_THE_TOKEN,
+  },
+  "POST /api/v1/govern/people/enable": {
+    row: DISABLE_REACHES_THE_ROW_THE_LEDGER_AND_THE_TOKEN,
+    audit: {
+      none: "Enabling somebody ends no session and no trigger records a change to auth.principal, so the ledger has no entry for it; the disable it reverses is recorded through the session_end entries 0050 appends.",
+    },
+    behaviour: DISABLE_REACHES_THE_ROW_THE_LEDGER_AND_THE_TOKEN,
   },
   "POST /api/v1/govern/elevation/requests": {
     row: ELEVATION_REACHES_THE_ROW_THE_LEDGER_AND_THE_RESOLVER,

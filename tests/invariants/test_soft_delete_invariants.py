@@ -321,7 +321,9 @@ def test_the_rules_find_the_defect_on_the_schema_before_it_was_repaired() -> Non
     before = replay(before="0045")
     hidden = {one.split(":")[0] for one in hidden_from_its_own_retirement(before)}
 
-    assert hidden == soft_deleted_tables() - {"gate.fast_path_rule"}
+    # 0095's two tables did not exist before 0045, and were written with 0045's policies.
+    born_repaired = {"auth.service_account", "auth.api_key"}
+    assert hidden == soft_deleted_tables() - {"gate.fast_path_rule"} - born_repaired
     assert len(hidden) == 16
     assert [one.split(":")[0] for one in brought_back(before)] == ["gate.fast_path_rule"]
     assert {one.split(":")[0] for one in hidden_from_its_own_retirement(replay("0046"))} == {

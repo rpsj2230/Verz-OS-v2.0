@@ -72,7 +72,7 @@ single decision's store call, its lock, its `may` and its trigger, with its own 
 the order asked. Elevations are not decided in bulk. See
 `AN_ELEVATION_IS_DECIDED_ON_ITS_OWN_REASON`.
 
-Task ids: M27.7.4, M27.7.8, M27.7.9, M27.7.12, M27.8.6
+Task ids: M27.7.4, M27.7.8, M27.7.9, M27.7.12, M27.8.6, M1.2.3
 """
 
 from __future__ import annotations
@@ -104,6 +104,7 @@ from brain.console.elevation import (
     state_of,
     would_widen,
 )
+from brain.console.global_surfaces import GOVERNANCE_CONTROL
 from brain.console.govern import Decision, GovernError, Placed, certify, recertifiable
 from brain.console.organisation import (
     A_DEPARTMENTS_OWN_SCOPE_GOES_WITH_ITS_DEPARTMENT,
@@ -171,6 +172,7 @@ from brain.identity.organisation_store import (
     live_memberships,
 )
 from brain.identity.packs import SubjectGrant
+from brain.identity.principal_state_store import A_DISABLE_IS_REVERSIBLE_AND_A_LEAVER_IS_NOT
 from brain.identity.roles import BREAK_GLASS_MAX, BreakGlassReason, IdentityError
 from brain.identity.teams import PrincipalSubject
 from brain.identity.teams import Team as TeamRecord
@@ -384,6 +386,11 @@ class OrganisationPage(BaseModel):
     may_found: bool = False
     #: Whether this reader holds the authority over scopes anywhere. Presentation only.
     may_draw_scopes: bool = False
+    #: Whether this reader holds the grant decision anywhere, so may disable or enable somebody.
+    #: Presentation only: `brain.principal_state_routes` asks `may_disable` about the row.
+    may_disable: bool = False
+    #: What disabling somebody does and does not do, for its confirmation.
+    disabling: str = A_DISABLE_IS_REVERSIBLE_AND_A_LEAVER_IS_NOT
     staleness: StalenessBanner | None = None
     teams: str = A_TEAM_LISTS_WHO_YOU_MAY_SEE_IN_IT
     leads: str = A_LEAD_CONFERS_NOTHING
@@ -1277,6 +1284,7 @@ async def departments_page(
             "unplaced": unplaced,
             "may_found": may_found_or_retire_departments(reach, now),
             "may_draw_scopes": reach.scope_for(SCOPE_AUTHORITY, now) is not None,
+            "may_disable": reach.scope_for(GOVERNANCE_CONTROL, now) is not None,
         }
     )
 

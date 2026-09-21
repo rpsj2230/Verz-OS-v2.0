@@ -485,6 +485,28 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.tools.fetch:Fetcher.get_once": Repeat.READS,
         "brain.tools.run_skill:ScriptRunner.run": Repeat.NO_EFFECT_AT_THE_FAR_END,
         "brain.tools.run_skill:SkillLibrary.pinned_skill": Repeat.READS,
+        # Service accounts and disabling a person (0095). Registering refuses a taken id, a third
+        # live key is refused under the account's lock, and a retirement or a disable that finds
+        # the row already in that state writes nothing, so a second call adds no second act.
+        "brain.identity.bearer:ServiceAccountDirectory.service_account_for_subject": Repeat.READS,
+        "brain.identity.bearer:ServiceAccountDirectory.service_account_for_key": Repeat.READS,
+        "brain.identity.bearer:ServiceAccountDirectory.live_owner": Repeat.READS,
+        "brain.service_account_routes:ServiceAccountStore.owned": Repeat.READS,
+        "brain.service_account_routes:ServiceAccountStore.register": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
+        "brain.service_account_routes:ServiceAccountStore.issue_key": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
+        "brain.service_account_routes:ServiceAccountStore.revoke_key": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
+        "brain.service_account_routes:ServiceAccountStore.retire": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
+        "brain.principal_state_routes:PrincipalStateStore.set_disabled": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
     }
 )
 
