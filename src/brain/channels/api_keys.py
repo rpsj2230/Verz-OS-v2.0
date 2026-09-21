@@ -54,28 +54,17 @@ channel's front door, and because what a caller may then do is the identity laye
 and stays there. It is M10.5.7, and the leaf sits under "Further channels" for the same
 reason.
 
-**HALF OF M10.5.7 DOES NOT EXIST, AND THIS FILE SAID NOTHING ABOUT THAT UNTIL 2026-09-06.**
-The leaf reads "REST API with key management". This is the key management. There is no REST
-API: the application serves `/health/live`, `/health/ready` and the build pages, and nothing
-else. No route invokes a tool, answers a question or accepts a key, so nothing in this module
-has ever been asked to authenticate anybody.
+**Where a key is issued and where it is accepted, since 2026-09-21.** Until then this file said,
+under a heading in capitals, that nothing in it had ever been asked to authenticate anybody, and
+that was true: no route issued, accepted or revoked a key. Now `brain.service_account_routes`
+issues and revokes one, `brain.identity.service_account_store` keeps its record in
+`auth.api_key`, and `brain.identity.bearer.TokenAuthority` accepts a presented key through
+`verify` on every route under `/api/v1`, at the reach `brain.identity.sessions.reach_for`
+computes. `test_service_accounts.py` holds the bearer to calling `verify` rather than a check of
+its own. What is still not here is a console screen for it (M27.11.5): the routes are the whole
+of it today, which is worth saying for the reason this paragraph used to exist.
 
-That matters more than an unfinished feature usually would, because the leaf is marked done
-on a tracker a client reads, and "REST API with key management" reading as delivered when
-there is no API is the one kind of inaccuracy this project cannot afford. The counters that
-would normally catch a gap do not see this one: `sweep_traceability` checks that a claim has
-a test, and this one does; nothing checks that a claim covers the whole of what its leaf
-says.
-
-`test_api_keys.py` therefore asserts the absence directly, over the application's real route
-table. The day somebody adds the API, that test fails and this paragraph has to be rewritten,
-which is the only mechanism available for keeping a claim honest about scope.
-
-Rejected: quietly leaving it, on the grounds that the key machinery is the hard part and the
-route is a morning's work. That is true and it is not the point. A tracker that is right
-about ninety-nine leaves and wrong about one is a tracker somebody stops checking.
-
-Task ids: M10.5.7
+Task ids: M10.5.7, M1.8.2
 """
 
 from __future__ import annotations

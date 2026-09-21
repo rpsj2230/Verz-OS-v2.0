@@ -22,6 +22,11 @@
  * `governPeopleQuery.A_FILTER_OVER_A_PAGE_OFFERS_THE_PAGE`'s reason. The route asks
  * `brain.console.organisation.may_place` and `may_appoint` whatever this page offered.
  *
+ * **A person's sign-in is disabled and enabled from their row, confirmed.** A reader holding the
+ * grant decision sees the control beside each person; the confirmation names them and carries the
+ * API's sentence that disabling ends their sessions and makes their grants inert without deleting
+ * anything. `brain.principal_state_routes` asks `may_disable` about the row whatever this offered.
+ *
  * **Nothing here decides who may see anything.** The API answers from `brain.console.organisation`,
  * and the search, the filters, the order and "Show more" are requests to it (`brain.listing`), so a
  * search for a person finds the department they are shown under and never one they are withheld
@@ -31,7 +36,7 @@
  *
  * Imported statically: it mounts neither heavy library and no stylesheet of its own.
  *
- * Task ids: M27.7.4, M27.8.6
+ * Task ids: M27.7.4, M27.8.6, M1.2.3
  */
 
 import { useCallback, useState } from "react";
@@ -44,6 +49,8 @@ import { useListing } from "../components/useListing";
 import { ConfirmAction } from "../components/ConfirmAction";
 import { FailureNotice } from "../ui/FailureNotice";
 import {
+  DISABLE_API_PATH,
+  ENABLE_API_PATH,
   LEAD_API_PATH,
   MEMBERSHIP_API_PATH,
   appointBody,
@@ -57,12 +64,14 @@ import {
   personAddress,
   readOrganisation,
   standDownBody,
+  stateQuestion,
   teamCandidates,
   when,
   type DepartmentRow,
   type LeadBody,
   type MemberRow,
   type MembershipBody,
+  type StateBody,
   type TeamRow,
 } from "./governPeopleQuery";
 
@@ -94,6 +103,8 @@ export const ADD_LABEL = "Add to team";
 export const REMOVE_LABEL = "Take out";
 export const APPOINT_LABEL = "Appoint as lead";
 export const STAND_DOWN_LABEL = "Stand down";
+export const DISABLE_LABEL = "Disable sign-in";
+export const ENABLE_LABEL = "Enable sign-in";
 export const CANCEL_LABEL = "Leave it as it is";
 export const CHOOSE_PERSON = "Choose a person";
 /** What an add or an appointment sent with nobody chosen says, before anything is sent. */
@@ -115,7 +126,7 @@ function readAt(payload: unknown): string {
 /** One write waiting for its confirmation: where it goes, what it sends, and the words it shows. */
 interface Pending {
   readonly path: string;
-  readonly body: MembershipBody | LeadBody;
+  readonly body: MembershipBody | LeadBody | StateBody;
   readonly question: string;
   readonly consequence: string;
   readonly confirmLabel: string;
@@ -242,6 +253,34 @@ function Organisation({
       confirmLabel: APPOINT_LABEL,
     });
   };
+  const askState = (member: MemberRow) => {
+    const disable = !member.disabled;
+    setFailure(null);
+    setPending({
+      path: disable ? DISABLE_API_PATH : ENABLE_API_PATH,
+      body: { principal_id: member.principal_id },
+      question: stateQuestion(member.display_name, disable),
+      consequence: page.disabling,
+      confirmLabel: disable ? DISABLE_LABEL : ENABLE_LABEL,
+    });
+  };
+  const stateControl = (member: MemberRow) =>
+    page.mayDisable ? (
+      <>
+        {" "}
+        <button
+          type="button"
+          className="button"
+          disabled={busy}
+          aria-label={`${member.disabled ? ENABLE_LABEL : DISABLE_LABEL}: ${member.display_name}`}
+          onClick={() => {
+            askState(member);
+          }}
+        >
+          {member.disabled ? ENABLE_LABEL : DISABLE_LABEL}
+        </button>
+      </>
+    ) : null;
   const askStandDown = (department: DepartmentRow, lead: MemberRow) => {
     setFailure(null);
     setPending({
@@ -428,6 +467,7 @@ function Organisation({
                 {department.members.map((member) => (
                   <li key={member.principal_id}>
                     <Person member={member} />
+                    {stateControl(member)}
                   </li>
                 ))}
               </ul>
@@ -445,6 +485,7 @@ function Organisation({
             {page.unplaced.map((member) => (
               <li key={member.principal_id}>
                 <Person member={member} department={member.department} />
+                {stateControl(member)}
               </li>
             ))}
           </ul>

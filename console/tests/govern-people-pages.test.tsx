@@ -33,7 +33,9 @@ import {
   CANCEL_LABEL as KEEP_ORGANISATION,
   CHOOSE_SOMEBODY_FIRST,
   DISABLED,
+  DISABLE_LABEL,
   Departments,
+  ENABLE_LABEL,
   NOBODY_IN_TEAM,
   NOBODY_LISTED,
   NONE_MATCH as NO_DEPARTMENT_MATCHES,
@@ -92,6 +94,9 @@ const LEADS = "A department's lead is who leads it, recorded with who appointed 
 const ORGANISING = "Placing somebody or appointing a lead takes the authority the Access review screen asks for.";
 const MEMBERSHIP_OPERATION = "/api/v1/govern/departments/membership";
 const LEAD_OPERATION = "/api/v1/govern/departments/lead";
+const DISABLE_OPERATION = "/api/v1/govern/people/disable";
+const ENABLE_OPERATION = "/api/v1/govern/people/enable";
+const DISABLING = "Disabling somebody stops their sign-in, ends every session they have.";
 const REQUESTS_OPERATION = "/api/v1/govern/elevation/requests";
 const COUNTED = "No headcount is shown.";
 const KEEPING = "Keeping a grant records that you reviewed it and it stands.";
@@ -303,6 +308,51 @@ describe("the departments and teams screen", () => {
     expect(sent[3]?.body).toEqual({ department: "web", change: "appoint", principal_id: "u_3" });
   });
 
+  test("a reader holding the grant decision disables and enables a person, confirmed in the API's words", async () => {
+    // What breaks if this is deleted: the control is drawn for a reader who may not use it, a
+    // disable is sent without a confirmation naming the person, the confirmation paraphrases what
+    // disabling does, or a body key the route forbids is sent.
+    const sent: { path: string; body: unknown }[] = [];
+    const { container } = await mount("/departments", (url, init) => {
+      if (url.pathname === DEPARTMENTS_OPERATION) {
+        return json({ ...(organisation([WEB]) as object), may_disable: true, disabling: DISABLING });
+      }
+      if (init?.method === "POST" && (url.pathname === DISABLE_OPERATION || url.pathname === ENABLE_OPERATION)) {
+        sent.push({ path: url.pathname, body: JSON.parse(String(init.body)) });
+        return json({ principal_id: "u_3", disabled: true, disabled_at: null, outcome: "changed", at: "2019-03-04T09:00:00Z" });
+      }
+      return null;
+    });
+    const people = container.querySelector('[aria-label="People in Web"]') as HTMLElement;
+    const named = (label: string) =>
+      [...people.querySelectorAll("button")].find((one) => one.getAttribute("aria-label") === label) as HTMLButtonElement;
+
+    expect(named(`${ENABLE_LABEL}: Aaron Lim`)).toBeDefined();
+    fireEvent.click(named(`${DISABLE_LABEL}: Siti Rahman`));
+    expect(container.textContent).toContain("Disable Siti Rahman's sign-in?");
+    expect(container.textContent).toContain(DISABLING);
+    expect(sent).toEqual([]);
+    fireEvent.click([...container.querySelectorAll(".confirm button")][1] as HTMLButtonElement);
+    await waitFor(() => {
+      expect(sent).toHaveLength(1);
+    });
+    expect(sent[0]).toEqual({ path: DISABLE_OPERATION, body: { principal_id: "u_3" } });
+    expect(Object.keys(sent[0]?.body as object).sort()).toEqual(
+      Object.keys(declaredRequestBodySchema(DISABLE_OPERATION, "post")["properties"] as object).sort(),
+    );
+
+    await waitFor(() => {
+      expect(named(`${ENABLE_LABEL}: Aaron Lim`)).toBeDefined();
+    });
+    fireEvent.click(named(`${ENABLE_LABEL}: Aaron Lim`));
+    expect(container.textContent).toContain("Enable Aaron Lim's sign-in again?");
+    fireEvent.click([...container.querySelectorAll(".confirm button")][1] as HTMLButtonElement);
+    await waitFor(() => {
+      expect(sent).toHaveLength(2);
+    });
+    expect(sent[1]).toEqual({ path: ENABLE_OPERATION, body: { principal_id: "u_2" } });
+  });
+
   test("a refused placement is the API's sentence and the team still reads as the API sent it", async () => {
     // What breaks if this is deleted: a refusal is swallowed and the page says the person was added,
     // or an empty team is drawn as a fact about the team rather than about this reader.
@@ -378,7 +428,9 @@ describe("the departments and teams screen", () => {
     expect(Object.keys(readOrganisation({ items: [], total: 4 })).sort()).toEqual([
       "counted",
       "departments",
+      "disabling",
       "leads",
+      "mayDisable",
       "mayOrganise",
       "organising",
       "teams",

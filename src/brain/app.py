@@ -154,6 +154,7 @@ from brain.ops.telemetry_store import TelemetryRecorder
 from brain.ops.trace_sink import CountingTraceSink
 from brain.ops.vault_renewal import keep_renewing, renewer_at_start
 from brain.ops.webhook_admin import signing_secrets_at_start
+from brain.principal_state_routes import router as principal_state_router
 from brain.prompt_routes import router as prompt_router
 from brain.provider_routes import router as provider_router
 from brain.readiness import (
@@ -173,6 +174,7 @@ from brain.record_access_routes import router as record_access_router
 from brain.report_routes import router as report_router
 from brain.retention_routes import router as retention_router
 from brain.routing_routes import router as routing_router
+from brain.service_account_routes import router as service_account_router
 from brain.session import (
     check_login_row_security,
     check_reachable,
@@ -1295,6 +1297,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # install whose setup named nobody, behind `admin:data_steward` over everything. See
     # `brain.data_steward_routes` and `brain.identity.data_steward`.
     app.include_router(data_steward_router)
+    # Service accounts: an integration registered at its owner's reach, a key shown once, and both
+    # taken away, behind `admin:credential`. See `brain.service_account_routes`.
+    app.include_router(service_account_router)
+    # Disabling a person and enabling them again, from the Departments and teams screen, behind the
+    # grant decision in a scope admitting their row. See `brain.principal_state_routes`.
+    app.include_router(principal_state_router)
 
     @app.get("/health/live", response_model=Health, tags=["health"])
     async def live() -> Health:

@@ -47,6 +47,7 @@ from brain.audit.ledger import DIGEST_CHARS, GENESIS_HASH, HASH_SCHEMA, AuditCha
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.db import normalise_database_url
 from brain.gate.resolve import CACHE_TTL_SECONDS, cache_key
+from brain.identity.roles import NoStandingEntitlement, standing_entitlement
 from brain.tables.audit import (
     ACTOR_SETTING,
     ENT_HASH_SETTING,
@@ -542,9 +543,10 @@ def test_the_sql_resolver_agrees_with_scope_for_on_every_fixture_persona(loaded:
     covers what each person holds *and* what they do not: a resolver that returned one row too
     many would fail on somebody else's capability rather than on their own.
 
-    Note which rule is deliberately not under test here. A partner holds nothing whatever the
-    grant table says, and that is `standing_entitlement`'s job one layer above the store;
-    `Person.entitlement()` builds the set the same way, so the two agree on the rows.
+    A partner holds nothing whatever the grant table says. That was `standing_entitlement`'s job
+    alone until `0095` put it in the resolver too, so the expectation is read from
+    `standing_entitlement` itself: a partner's standing grant, which the fixture loads, must
+    resolve to nothing.
     """
     people = build_company()
     probes = sorted({g.capability.value for p in people.values() for g in p.grants})
@@ -552,12 +554,18 @@ def test_the_sql_resolver_agrees_with_scope_for_on_every_fixture_persona(loaded:
 
     for principal_id, person in people.items():
         expected = person.entitlement()
+        standing = standing_entitlement(person.principal, person.grants)
         actual = _resolve(loaded, principal_id)
         assert actual.principal_id == principal_id
         assert actual.not_after == expected.not_after
         for value in probes:
             capability = Capability(value=value)
-            assert actual.scope_for(capability, NOW) == expected.scope_for(capability, NOW), (
+            wanted = (
+                None
+                if isinstance(standing, NoStandingEntitlement)
+                else expected.scope_for(capability, NOW)
+            )
+            assert actual.scope_for(capability, NOW) == wanted, (
                 f"{principal_id} disagrees about {value}"
             )
 

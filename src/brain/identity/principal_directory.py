@@ -49,11 +49,16 @@ reached through it rather than threaded beside it into every construction of the
 SQL is that module's and the refusal is `brain.identity.bearer`'s; this only forwards. See
 `bearer.AN_ENDED_SESSION_IS_REFUSED_ON_ITS_NEXT_REQUEST`.
 
+**It is also asked for the service accounts a sessionless token or an API key names, and for
+their owner.** Forwarded to `brain.identity.service_account_store` and
+`brain.identity.principal_store`, for the reason the ledger of sessions is: the authority holds
+this directory and nothing else. See `bearer.A_SERVICE_ACCOUNT_STOPS_WHEN_ITS_OWNER_DOES`.
+
 Not built here: writing a binding. That is `brain.identity.sign_in_binding`, which binds a
 subject at the configured issuer to one live principal on an administrator's act and never
 moves an existing binding.
 
-Task ids: M1.2.2
+Task ids: M1.2.2, M1.1.7
 """
 
 from __future__ import annotations
@@ -66,12 +71,15 @@ from typing import Final
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from brain.channels.api_keys import ApiKeyRecord
 from brain.core.principal import Principal
 from brain.gate.admission import Assurance
 from brain.gate.context import Channel
 from brain.identity.bearer import SessionStanding
-from brain.identity.principal_store import COLUMNS, readable
+from brain.identity.principal_store import COLUMNS, StoredPrincipals, readable
+from brain.identity.service_account_store import StoredServiceAccounts
 from brain.identity.session_store import StoredSessions
+from brain.identity.sessions import ServiceAccount
 from brain.tables.identity import PrincipalIdentityRow, PrincipalRow
 
 # ------------------------------------------------------------ written-down reasons
@@ -152,3 +160,17 @@ class StoredDirectory:
             started_at=started_at,
             now=now,
         )
+
+    async def service_account_for_subject(self, subject: str) -> ServiceAccount | None:
+        """Implements `brain.identity.bearer.ServiceAccountDirectory`."""
+        return await StoredServiceAccounts(self.sessions).by_subject(subject)
+
+    async def service_account_for_key(
+        self, handle: str
+    ) -> tuple[ApiKeyRecord, ServiceAccount] | None:
+        """Implements `brain.identity.bearer.ServiceAccountDirectory`."""
+        return await StoredServiceAccounts(self.sessions).by_key(handle)
+
+    async def live_owner(self, principal_id: str) -> Principal | None:
+        """Implements `brain.identity.bearer.ServiceAccountDirectory`: not disabled or retired."""
+        return await StoredPrincipals(self.sessions).live_principal(principal_id)

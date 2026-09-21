@@ -90,8 +90,23 @@ class Recipe:
     settings: tuple[tuple[str, str], ...] = ()
 
 
+SERVICE_ACCOUNT = (
+    "INSERT INTO auth.service_account"
+    " (client_id, owner_principal_id, ceiling, not_after, created_by)"
+    " VALUES ('svc_rr_{n}', 'u_rr_{n}', ARRAY['read:price_list'], now() + interval '1 day',"
+    " 'u_admin')"
+)
+
 RECIPES: Final[dict[str, Recipe]] = {
     "auth.principal": Recipe(PERSON, "id = 'u_rr_{n}'"),
+    "auth.service_account": Recipe(SERVICE_ACCOUNT, "client_id = 'svc_rr_{n}'", parents=(PERSON,)),
+    "auth.api_key": Recipe(
+        "INSERT INTO auth.api_key (handle, client_id, digest, issued_at, not_after, created_by)"
+        " VALUES ('rrkey_{n}', 'svc_rr_{n}', lpad(to_hex({n}), 64, '0'), now(),"
+        " now() + interval '1 day', 'u_admin')",
+        "handle = 'rrkey_{n}'",
+        parents=(PERSON, SERVICE_ACCOUNT),
+    ),
     "auth.principal_identity": Recipe(
         "INSERT INTO auth.principal_identity (channel, identity_hash, principal_id, bound_at)"
         " VALUES ('api', lpad(to_hex({n}), 64, '0'), 'u_rr_{n}', now())",

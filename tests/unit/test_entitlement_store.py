@@ -103,6 +103,10 @@ def resolver(database: str) -> Iterator[str]:
         migrate(database, "upgrade", "0003")
         migrate(database, "stamp", predecessor(LAPSE_MIGRATION))
         migrate(database, "upgrade", revision_of(LAPSE_MIGRATION))
+        # `0095` replaces the function `0048` wrote, and a sessionless token is now asked of
+        # `auth.service_account`, which it builds; it reads only `0002`'s and `0003`'s tables.
+        migrate(database, "stamp", "0093")
+        migrate(database, "upgrade", "0095")
         yield scratch
     finally:
         drop(database)
