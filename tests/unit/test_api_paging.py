@@ -19,16 +19,6 @@ from pydantic import BaseModel
 from brain.app import create_app
 from brain.settings import Settings
 
-#: Paged answers that do not follow the convention yet, each with why. The test fails when one of
-#: these starts to conform (take it off) or a new one appears (conform, or argue it here).
-NOT_YET_UNIFORM: dict[str, str] = {
-    "GET /api/v1/records/{entity}": "no cursor parameter: the row plane cannot express a keyset "
-    "position, so next_cursor is always null (see brain.api_routes.RecordPage)",
-    "GET /api/v1/govern/departments": "departments and teams in one answer, no single items list",
-    "GET /api/v1/govern/elevation": "its list is named requests, not items",
-    "GET /api/v1/logs": "its list is named entries, not items",
-}
-
 
 class Invented(BaseModel):
     """A page shaped by a route for itself, for the sibling test."""
@@ -71,19 +61,19 @@ def paged_operations(document: dict[str, Any]) -> dict[str, list[str]]:
     return found
 
 
-def test_every_paged_answer_follows_the_one_convention_or_is_named_with_a_reason() -> None:
+def test_every_paged_answer_follows_the_one_convention() -> None:
     """Delete this and a paged route can return `rows` and `after`, and the console's one pager
     (`console/src/components/useServerPage.ts`) silently shows the first page for ever."""
     found = paged_operations(the_document())
 
     assert len(found) >= 10, f"only {len(found)} paged routes found, so the walk is not reading"
-    breaking = {name for name, broken in found.items() if broken}
-    assert breaking == set(NOT_YET_UNIFORM), {name: found.get(name) for name in breaking}
+    breaking = {name: broken for name, broken in found.items() if broken}
+    assert breaking == {}, breaking
 
 
 def test_the_walk_notices_a_route_that_invents_its_own_page() -> None:
-    """The sibling: a walk that found nothing wrong anywhere would satisfy the test above only
-    while the exemption list happened to be empty."""
+    """The sibling: a walk that found nothing wrong anywhere would satisfy the test above
+    whatever the routes answered."""
     app = FastAPI()
 
     @app.get("/api/v1/invented")

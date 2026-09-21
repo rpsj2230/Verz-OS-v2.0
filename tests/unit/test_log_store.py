@@ -248,7 +248,7 @@ def test_an_administrator_reads_the_warnings_and_nothing_sensitive_is_in_them() 
     assert refused.status_code == 500
     assert written >= 4
     assert read.status_code == 200, read.text
-    entries = {(one["level"], one["event"]): one for one in read.json()["entries"]}
+    entries = {(one["level"], one["event"]): one for one in read.json()["items"]}
 
     warning = entries[("warning", "leaky.warning")]
     assert warning["fields"]["reason"] == "not_permitted"

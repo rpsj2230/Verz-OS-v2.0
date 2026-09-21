@@ -138,7 +138,7 @@ class LogPage(BaseModel):
 
     start: datetime
     end: datetime
-    entries: list[LogEntryView]
+    items: list[LogEntryView]
     #: Where the next page starts, or null when this page holds the last row.
     next_cursor: str | None
     #: How long a row is kept once the retention sweep is released.
@@ -242,7 +242,7 @@ async def logs(
     return LogPage(
         start=since,
         end=until,
-        entries=[
+        items=[
             LogEntryView(
                 at=at,
                 last_at=last_at,

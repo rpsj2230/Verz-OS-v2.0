@@ -125,7 +125,6 @@ function Requests({
   readonly onChanged: (sentence: string) => void;
 }) {
   const listing = useListing<ElevationRequestRow>(ELEVATION_API_PATH, {
-    listKey: "requests",
     choices: ELEVATION_FILTERS,
     version,
   });
@@ -182,7 +181,7 @@ function Requests({
   if (page === null) {
     return <p className="note">{NOT_A_LANDING}</p>;
   }
-  const rows = page.requests ?? [];
+  const rows = page.items ?? [];
 
   const onAsk = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();

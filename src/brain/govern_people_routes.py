@@ -370,7 +370,7 @@ class OrganisationPage(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    departments: list[DepartmentView]
+    items: list[DepartmentView]
     #: Present exactly when a further department this reader may see matches.
     next_cursor: str | None = None
     #: Empty on every page but the first. See `THE_UNPLACED_ARRIVE_WITH_THE_FIRST_PAGE`.
@@ -636,7 +636,7 @@ class ElevationPage(BaseModel):
     reasons: list[str]
     #: The longest an elevation may run, in hours.
     longest_hours: int
-    requests: list[ElevationRequestView] = Field(default_factory=list)
+    items: list[ElevationRequestView] = Field(default_factory=list)
     #: Present exactly when a further request this reader may see matches.
     next_cursor: str | None = None
     #: A load came back full. Never how much more there is.
@@ -1023,7 +1023,7 @@ def organisation_page(
     shapeable: Callable[[str], bool] = _shapes_nothing,
 ) -> OrganisationPage:
     return OrganisationPage(
-        departments=[
+        items=[
             DepartmentView(
                 slug=line.slug,
                 name=line.name,
@@ -1266,11 +1266,11 @@ async def departments_page(
         may_organise=reach.scope_for(ORGANISING_AUTHORITY, now) is not None,
         shapeable=shapeable,
     )
-    page = plan.page(whole.departments)
+    page = plan.page(whole.items)
     unplaced = [] if listed.cursor is not None else remainder.matching(whole.unplaced)
     return whole.model_copy(
         update={
-            "departments": list(page.items),
+            "items": list(page.items),
             "next_cursor": page.next_cursor,
             "unplaced": unplaced,
             "may_found": may_found_or_retire_departments(reach, now),
@@ -1762,7 +1762,7 @@ async def elevation_page(request: Request, asked: Asked, listed: ElevationsQuery
         may_authorise=asked.reach.scope_for(ELEVATION_CONTROL, asked.now) is not None,
         reasons=[one.value for one in BreakGlassReason],
         longest_hours=int(BREAK_GLASS_MAX.total_seconds() // 3600),
-        requests=list(page.items),
+        items=list(page.items),
         next_cursor=page.next_cursor,
         truncated=full,
     )

@@ -410,7 +410,7 @@ const MODELS_AND_HEALTH = {
 };
 
 const DEPARTMENTS = {
-  departments: [
+  items: [
     {
       slug: UNBROKEN,
       name: UNBROKEN,
@@ -445,7 +445,7 @@ const ELEVATION = {
   may_authorise: true,
   reasons: [UNBROKEN],
   longest_hours: 4,
-  requests: [
+  items: [
     {
       request_id: UNBROKEN,
       principal_id: UNBROKEN,
@@ -1279,7 +1279,7 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
       "/api/v1/logs": {
         start: "2019-03-05T09:00:00Z",
         end: "2019-03-06T09:00:00Z",
-        entries: [
+        items: [
           {
             at: "2019-03-06T08:30:00Z",
             last_at: "2019-03-06T08:31:00Z",

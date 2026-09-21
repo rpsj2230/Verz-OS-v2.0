@@ -118,10 +118,10 @@ def test_the_holder_of_the_log_reads_rows_newest_first_with_a_cursor_when_there_
     for pid in ("u_admin", "u_prefix"):
         body = get(client, pid, f"{LOGS}?limit=2").json()
 
-        assert [one["repeats"] for one in body["entries"]] == [4, 4]
-        assert body["entries"][0] == {
-            "at": body["entries"][0]["at"],
-            "last_at": body["entries"][0]["last_at"],
+        assert [one["repeats"] for one in body["items"]] == [4, 4]
+        assert body["items"][0] == {
+            "at": body["items"][0]["at"],
+            "last_at": body["items"][0]["last_at"],
             "level": "warning",
             "event": "request failed",
             "origin": "brain.app:747",
@@ -138,7 +138,7 @@ def test_the_holder_of_the_log_reads_rows_newest_first_with_a_cursor_when_there_
         assert body["worker_output_is_not_kept"] is True
 
     last = get(client, "u_admin", f"{LOGS}?limit=3").json()
-    assert len(last["entries"]) == 3
+    assert len(last["items"]) == 3
     assert last["next_cursor"] is None
 
 

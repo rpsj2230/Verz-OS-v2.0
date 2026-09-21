@@ -113,6 +113,7 @@ from typing import Annotated, Any, Final, cast
 
 import structlog
 from fastapi import APIRouter, Depends, Query, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, StringConstraints
 
@@ -477,7 +478,8 @@ class RecordPage(Page[dict[str, Any]]):
     comparison, so a keyset position cannot be expressed as a filter the query compiler will
     accept, and an offset would re-read and re-filter under a permission predicate, which is
     the failure `brain.api.Page` was written to avoid. `truncated` carries the only fact a
-    caller needs in the meantime.
+    caller needs in the meantime. The route takes `cursor` all the same, so it has the one page
+    shape (`tests/unit/test_api_paging.py`), and refuses every value, since none was issued.
 
     `total` is inherited and never populated. See `A_TOTAL_IS_A_HIDDEN_ITEM_COUNT`.
     """
@@ -547,6 +549,7 @@ async def records(
     filters: Annotated[
         tuple[FilterTerm, ...], Query(alias=FILTER_PARAM, max_length=MAX_FILTERS)
     ] = (),
+    cursor: Annotated[str | None, Query(max_length=64)] = None,
 ) -> RecordPage:
     """Rows of one entity, at this caller's reach, narrowed by their own filter, redacted.
 
@@ -573,6 +576,18 @@ async def records(
     entity classifies rather than the ones this caller reaches. See
     `A_FILTER_IS_A_QUESTION_ABOUT_A_COLUMNS_VALUES`.
     """
+    if cursor is not None:
+        # Refused before the entity is looked at, so the 422 is the same for every entity.
+        raise RequestValidationError(
+            [
+                {
+                    "type": "value_error",
+                    "loc": ("query", "cursor"),
+                    "msg": "malformed cursor",
+                    "input": None,
+                }
+            ]
+        )
     narrowing = filter_scope(filters)
     registry = getattr(request.app.state, "tools", None)
     if not isinstance(registry, ToolRegistry):

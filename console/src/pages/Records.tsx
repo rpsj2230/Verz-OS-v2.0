@@ -105,10 +105,9 @@ function RecordRows({ entity, limit }: { readonly entity: string; readonly limit
       lockedCells={page.lockedCells}
       failure={page.failure}
       busy={page.busy}
-      hasNext={page.hasNext}
-      canGoBack={page.canGoBack}
-      onNext={page.showNext}
-      onPrevious={page.showPrevious}
+      // The route takes `cursor` for the one page shape and refuses every value, because the row
+      // plane has no position to issue (`brain.api_routes.RecordPage`), so no pager is drawn.
+      pages={false}
       filters={page.filters}
       onFilterChange={page.setFilter}
     />
@@ -160,7 +159,7 @@ export function Records() {
         // paging into the middle of a result set that does not exist, which the API would
         // answer with something plausible. It is the same reset `useServerPage` performs on
         // a filter change and for the same reason. Nothing can observe it today, because
-        // the route sends no cursor and the pager therefore never leaves the first page.
+        // the route issues no cursor and the grid draws no pager for it.
         <RecordRows key={entity} entity={entity} limit={limit} />
       )}
     </article>

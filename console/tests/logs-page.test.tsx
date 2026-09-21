@@ -52,7 +52,7 @@ function page(overrides: Record<string, unknown> = {}): Record<string, unknown> 
   return {
     start: "2019-03-05T09:00:00Z",
     end: "2019-03-06T09:00:00Z",
-    entries: [entry(), entry({ level: "error", event: null, origin: "brain.cache:374", error_type: "TimeoutError", repeats: 1, fields: {} })],
+    items: [entry(), entry({ level: "error", event: null, origin: "brain.cache:374", error_type: "TimeoutError", repeats: 1, fields: {} })],
     next_cursor: null,
     kept_for_days: 30,
     debug_is_not_kept: true,
@@ -98,7 +98,7 @@ describe("what the Logs screen draws", () => {
     // What breaks if this is deleted: an empty table that reads as not loaded, or a page that goes
     // on saying the worker's output is not kept after it is.
     const { container } = await logsPage({
-      [LIST]: () => json(page({ entries: [], worker_output_is_not_kept: false })),
+      [LIST]: () => json(page({ items: [], worker_output_is_not_kept: false })),
     });
 
     expect(container.querySelectorAll("table")).toHaveLength(0);
@@ -124,7 +124,7 @@ describe("what the Logs screen draws", () => {
     const { container, sent } = await logsPage({
       [LIST]: (_body, url) =>
         url.searchParams.get("cursor") === "c1"
-          ? json(page({ entries: [entry({ event: "older.row" })] }))
+          ? json(page({ items: [entry({ event: "older.row" })] }))
           : json(page({ next_cursor: "c1" })),
     });
     fireEvent.change(container.querySelectorAll("select")[0] as HTMLSelectElement, { target: { value: "error" } });
@@ -163,7 +163,7 @@ describe("what the Logs screen draws", () => {
     const { container, sent } = await logsPage({
       [LIST]: (_body, url) =>
         url.searchParams.get("cursor") === "c1"
-          ? json(page({ entries: [entry({ event: "newer.row" })] }))
+          ? json(page({ items: [entry({ event: "newer.row" })] }))
           : json(page({ next_cursor: "c1" })),
     });
     const order = [...container.querySelectorAll("select")].find((one) =>
@@ -198,7 +198,7 @@ describe("what the Logs screen draws", () => {
 
     const body = page();
     expect(Object.keys(body).sort()).toEqual(backendModelFields(ROUTES, "LogPage").sort());
-    const row = (body.entries as Record<string, unknown>[])[0] ?? {};
+    const row = (body.items as Record<string, unknown>[])[0] ?? {};
     expect(Object.keys(row).sort()).toEqual(backendModelFields(ROUTES, "LogEntryView").sort());
   });
 });

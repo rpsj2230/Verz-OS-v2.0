@@ -609,15 +609,15 @@ def test_an_administrator_sees_departments_teams_and_people_and_the_three_senten
 
     assert answer.status_code == 200, answer.text
     body = answer.json()
-    assert [one["slug"] for one in body["departments"]] == ["finance", "web"]
+    assert [one["slug"] for one in body["items"]] == ["finance", "web"]
     wei = {"principal_id": "u_2", "display_name": "Wei", "disabled": False}
     grace = {"principal_id": "u_3", "display_name": "Grace", "disabled": True}
-    assert body["departments"][1]["teams"] == [
+    assert body["items"][1]["teams"] == [
         {"slug": "design", "name": "Design", "members": [grace, wei]}
     ]
-    assert body["departments"][1]["members"] == [wei]
-    assert body["departments"][1]["lead"] == wei
-    assert body["departments"][0]["lead"] == grace
+    assert body["items"][1]["members"] == [wei]
+    assert body["items"][1]["lead"] == wei
+    assert body["items"][0]["lead"] == grace
     assert body["unplaced"][0]["principal_id"] == "u_4"
     assert body["may_organise"] is True
     assert body["teams"] == routes.A_TEAM_LISTS_WHO_YOU_MAY_SEE_IN_IT
@@ -631,11 +631,11 @@ def test_a_department_reader_is_answered_their_department_and_nobody_elses(wired
     web admin reads finance's heading, its teams and its people."""
     body = get(wired, DEPARTMENTS, "u_elsewhere").json()
 
-    assert [one["slug"] for one in body["departments"]] == ["web"]
+    assert [one["slug"] for one in body["items"]] == ["web"]
     assert body["unplaced"] == []
     # Grace is in web's design team and sits in finance: the team lists nobody this reader may not
     # name, and says nothing about the difference.
-    assert [one["principal_id"] for one in body["departments"][0]["teams"][0]["members"]] == ["u_2"]
+    assert [one["principal_id"] for one in body["items"][0]["teams"][0]["members"]] == ["u_2"]
 
 
 @pytest.mark.parametrize("pid", ["u_none", "u_prefix", "u_narrow"])
@@ -780,7 +780,7 @@ def test_every_signed_in_caller_reaches_the_landing_and_nothing_on_it_lists_what
     assert body["reasons"] == [one.value for one in BreakGlassReason]
     assert body["longest_hours"] == 4
     assert body["recorded"] == routes.WHAT_IS_RECORDED_ABOUT_AN_ELEVATION
-    assert body["requests"] == []
+    assert body["items"] == []
     assert not keys_in(body) & {"capabilities", "grants", "available", "offered", "catalogue"}
 
 
@@ -799,9 +799,9 @@ def test_a_requester_sees_their_own_requests_and_an_authoriser_those_they_may_de
         a_request("u_elsewhere", "web", decision=ElevationDecision.APPROVED, lapses_at=LONG_AGO),
     ]
 
-    admin = get(wired, ELEVATION, "u_admin").json()["requests"]
-    web = get(wired, ELEVATION, "u_elsewhere").json()["requests"]
-    nobody = get(wired, ELEVATION, "u_none").json()["requests"]
+    admin = get(wired, ELEVATION, "u_admin").json()["items"]
+    web = get(wired, ELEVATION, "u_elsewhere").json()["items"]
+    nobody = get(wired, ELEVATION, "u_none").json()["items"]
 
     assert [(one["principal_id"], one["state"], one["decidable"]) for one in admin] == [
         ("u_2", ElevationState.PENDING.value, True),
@@ -1131,9 +1131,9 @@ def test_a_search_for_a_person_finds_the_department_they_are_shown_under_and_no_
     admin = listed(wired, DEPARTMENTS, "u_admin", q="grace")
     by_team = listed(wired, DEPARTMENTS, "u_admin", filter="teams:Design")
 
-    assert web_reader["departments"] == []
-    assert [one["slug"] for one in admin["departments"]] == ["finance", "web"]
-    assert [one["slug"] for one in by_team["departments"]] == ["web"]
+    assert web_reader["items"] == []
+    assert [one["slug"] for one in admin["items"]] == ["finance", "web"]
+    assert [one["slug"] for one in by_team["items"]] == ["web"]
 
 
 def test_the_departments_page_one_at_a_time_and_the_unplaced_arrive_only_with_the_first(
@@ -1146,9 +1146,9 @@ def test_the_departments_page_one_at_a_time_and_the_unplaced_arrive_only_with_th
     second = listed(wired, DEPARTMENTS, "u_admin", limit="1", cursor=first["next_cursor"])
     searched = listed(wired, DEPARTMENTS, "u_admin", q="finance")
 
-    assert [one["slug"] for one in first["departments"]] == ["finance"]
+    assert [one["slug"] for one in first["items"]] == ["finance"]
     assert [one["principal_id"] for one in first["unplaced"]] == ["u_4"]
-    assert [one["slug"] for one in second["departments"]] == ["web"]
+    assert [one["slug"] for one in second["items"]] == ["web"]
     assert second["unplaced"] == []
     assert second["next_cursor"] is None
     assert searched["unplaced"] == []
@@ -1178,10 +1178,10 @@ def test_elevation_requests_filter_by_state_and_page_inside_what_the_reader_is_s
         wired, ELEVATION, "u_admin", limit="2", sort="display_name", cursor=first["next_cursor"]
     )
 
-    assert withheld["requests"] == [] and withheld["next_cursor"] is None
-    assert [one["principal_id"] for one in shown["requests"]] == ["u_3"]
-    assert [one["principal_id"] for one in pending["requests"]] == ["u_2"]
-    walked = [one["principal_id"] for one in (*first["requests"], *rest["requests"])]
+    assert withheld["items"] == [] and withheld["next_cursor"] is None
+    assert [one["principal_id"] for one in shown["items"]] == ["u_3"]
+    assert [one["principal_id"] for one in pending["items"]] == ["u_2"]
+    walked = [one["principal_id"] for one in (*first["items"], *rest["items"])]
     assert walked == ["u_2", "u_3", "u_elsewhere"]
     assert rest["next_cursor"] is None
 

@@ -112,11 +112,11 @@ const NO_ORGANISATION: Organisation = Object.freeze({
 
 /** Read `brain.govern_people_routes.OrganisationPage` out of a response body. */
 export function readOrganisation(payload: unknown): Organisation {
-  if (!isObject(payload) || !Array.isArray(payload.departments)) {
+  if (!isObject(payload) || !Array.isArray(payload.items)) {
     return NO_ORGANISATION;
   }
   return {
-    departments: payload.departments as DepartmentRow[],
+    departments: payload.items as DepartmentRow[],
     unplaced: Array.isArray(payload.unplaced) ? (payload.unplaced as UnplacedRow[]) : [],
     truncated: payload.truncated === true,
     mayOrganise: payload.may_organise === true,

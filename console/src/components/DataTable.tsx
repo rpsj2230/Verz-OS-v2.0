@@ -126,6 +126,8 @@ interface DataTableProps<T extends RowData> {
   readonly failure?: ApiFailure | null;
   /** A request is in flight, so an empty page is not yet an answer. */
   readonly busy?: boolean;
+  /** False over a route that never issues a cursor, so no pager is drawn that cannot be pressed. */
+  readonly pages?: boolean;
   readonly hasNext?: boolean;
   readonly canGoBack?: boolean;
   readonly onNext?: () => void;
@@ -147,6 +149,7 @@ export function DataTable<T extends RowData>({
   lockedCells = NO_LOCKS,
   failure = null,
   busy = false,
+  pages = true,
   hasNext = false,
   canGoBack = false,
   onNext,
@@ -254,28 +257,30 @@ export function DataTable<T extends RowData>({
         </p>
       ) : null}
 
-      <div className="grid__pager">
-        <button
-          type="button"
-          className="button"
-          disabled={!canGoBack}
-          onClick={() => {
-            onPrevious?.();
-          }}
-        >
-          Previous
-        </button>
-        <button
-          type="button"
-          className="button"
-          disabled={!hasNext}
-          onClick={() => {
-            onNext?.();
-          }}
-        >
-          Next
-        </button>
-      </div>
+      {pages ? (
+        <div className="grid__pager">
+          <button
+            type="button"
+            className="button"
+            disabled={!canGoBack}
+            onClick={() => {
+              onPrevious?.();
+            }}
+          >
+            Previous
+          </button>
+          <button
+            type="button"
+            className="button"
+            disabled={!hasNext}
+            onClick={() => {
+              onNext?.();
+            }}
+          >
+            Next
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
