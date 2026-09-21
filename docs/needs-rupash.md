@@ -109,6 +109,20 @@ index and live read, never a bulk copy.
 
 # Answered
 
+## 82. Wave 0's last three questions - DECIDED
+
+1. **Your server is your first company's production install,** not a staging copy. Every later
+   company (Company B, C, ...) gets its own server set up with the installer. So M38.1.4.2 and
+   M38.1.4.3 (a separate staging project and a production that deploys after it) are decided as not
+   needed as written. Every release is still gated by CI, the health gate, rollback and the checks
+   after each deploy.
+2. **The starter pack (M41.2.7) moves to Wave 3,** where the signing key it needs is built. Your
+   installer requirement is recorded as OWN3-1: any AWS instance or VPS, a clean simple interface,
+   connectors and channels connected during setup, and the Brain ready when it finishes. Two tasks
+   were added for it: a channels step in the wizard (M42.5.16) and a full run on a fresh AWS
+   instance and a fresh VPS (M42.5.17).
+3. **Automatic rollback (M38.1.3.4)** is proved by the CI test that fails if the rollback is removed.
+
 ## 80. A local model for the local-only profile - DECIDED: hosted providers only
 
 You use Claude (Anthropic), OpenAI, DeepSeek and Moonshot Kimi; no local-only profile is needed.
