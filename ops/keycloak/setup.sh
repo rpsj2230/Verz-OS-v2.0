@@ -6,10 +6,10 @@
 # to this file is the reviewed version; this script is the only supported way to put it
 # somewhere, so "what is configured" and "what is in the repository" cannot drift silently.
 #
-# THIS SCRIPT HAS NEVER BEEN RUN. There is no Keycloak in this repository's compose file
-# and none was contacted while writing it. It is a reviewed procedure, not a tested one:
-# the flags below are from the kcadm documentation for Keycloak 26, and the first real run
-# should be against a throwaway server, not a client's.
+# First run on 2026-09-21, against a throwaway Keycloak 26.0.8 (never a live realm): it
+# created the realm, every read-back below passed, and the realm, clients, required actions
+# and amr mapper read back matched the transformed export field for field. That run found
+# the admin password in kcadm's argv, which the login below no longer does.
 #
 # Usage:
 #   KEYCLOAK_URL=https://id.example.com \
@@ -85,11 +85,13 @@ trap 'rm -f "$TMP"' EXIT INT TERM
   || fail "could not prepare the realm; the message above names what is missing"
 
 echo "==> logging in to $URL as $ADMIN_USER (realm $ADMIN_REALM)"
-"$KCADM" config credentials \
+# Through KC_CLI_PASSWORD, which kcadm 26 reads when the password flag is absent. The flag
+# put the admin password in kcadm's argv, readable in `ps` for the whole login, which is the
+# leak the header above says this script avoids.
+KC_CLI_PASSWORD="$KEYCLOAK_ADMIN_PASSWORD" "$KCADM" config credentials \
   --server "$URL" \
   --realm "$ADMIN_REALM" \
-  --user "$ADMIN_USER" \
-  --password "$KEYCLOAK_ADMIN_PASSWORD"
+  --user "$ADMIN_USER" < /dev/null
 
 if "$KCADM" get "realms/$REALM" >/dev/null 2>&1; then
   echo "==> realm $REALM exists; updating it in place"
