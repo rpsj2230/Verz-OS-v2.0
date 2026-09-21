@@ -1,37 +1,37 @@
 {
-  "generated_at": "2026-09-21T08:20:22.681598+00:00",
-  "commit": "0bd81dc",
-  "commit_subject": "An agent the person names is chosen first, and a test watches the gate's order on /answer",
-  "total": 1599,
+  "generated_at": "2026-09-21T08:51:29.580605+00:00",
+  "commit": "2797a1a",
+  "commit_subject": "The owner's answers on the Needs you page: four decided, two done, and full steps for the rest",
+  "total": 1598,
   "done": 203,
   "percent": 12.7,
   "acts": 47,
-  "decided": 101,
+  "decided": 102,
   "current_wave": 0,
   "waves": [
     {
       "wave": 0,
       "name": "Foundation",
-      "total": 135,
+      "total": 133,
       "done": 96,
-      "percent": 71.1,
+      "percent": 72.2,
       "in_progress": 0,
       "ready_for_testing": 5,
-      "blocked": 10,
-      "open": 24,
+      "blocked": 9,
+      "open": 23,
       "acts": 3,
-      "decided": 3
+      "decided": 4
     },
     {
       "wave": 1,
       "name": "The gate",
-      "total": 166,
+      "total": 167,
       "done": 49,
-      "percent": 29.5,
+      "percent": 29.3,
       "in_progress": 0,
       "ready_for_testing": 0,
       "blocked": 0,
-      "open": 117,
+      "open": 118,
       "acts": 1,
       "decided": 5
     },
@@ -475,10 +475,10 @@
       "module": "M41",
       "name": "Client independence, built in rather than stripped out",
       "wave": 0,
-      "total": 22,
+      "total": 21,
       "done": 13,
       "acts": 0,
-      "decided": 0
+      "decided": 1
     },
     {
       "module": "M42",
@@ -717,11 +717,6 @@
     "M0.3.6": {
       "status": "BLOCKED",
       "why": "repo half done (brain.deployment.postgres_settings); install half needs owner permission, ops/vps/POOLING.md",
-      "updated": "2026-09-21"
-    },
-    "M0.4.2": {
-      "status": "BLOCKED",
-      "why": "presidio-analyzer has no service in the repo; image, port and health check undecided",
       "updated": "2026-09-21"
     },
     "M0.7.1": {
