@@ -403,3 +403,60 @@ def test_no_answer_and_no_log_line_carries_the_client_secret_the_token_or_the_se
     assert SECRET not in everything
     assert "staff list trial" in everything, "nothing was logged, so nothing was searched"
     assert GOOGLE_EXCHANGE_URL not in everything
+
+
+# ============================================================ kept for the schedule (M1.8.6)
+def test_a_trial_that_read_the_directory_keeps_its_credential_for_the_nightly_sync() -> None:
+    """M1.8.6's first clause: the credential given at setup is kept in the vault for the sync.
+
+    Kept as the identifier and the secret the worker exchanges for a tenant token, in the one slot
+    it reads, attributed to first run, and never repeated in the response. Delete this and the
+    nightly sync has nothing to read with on an install whose owner only ever used the wizard."""
+    from brain.ops.credentials import KEY_FIELD, Credentials
+    from brain.setup_staff_routes import CREDENTIAL_KEPT_FOR_THE_SCHEDULE
+    from brain.staff_source_routes import STAFF_CREDENTIAL_SLOT
+    from tests.unit.test_credentials import Recorded, Vault
+
+    vault, writes = Vault(), Recorded()
+    with serving(fetch=Directory()) as c:
+        c.app.state.credentials = Credentials(vault, environ={}, writes=writes)  # type: ignore[attr-defined]
+        pulled = c.post(TRIAL_PATH, json=signed_in_trial())
+
+    assert pulled.status_code == 200, pulled.json()
+    assert vault.written == [(STAFF_CREDENTIAL_SLOT.path, {KEY_FIELD: f"{CLIENT}:{CLIENT_SECRET}"})]
+    assert [(one["slot"], one["written_by"]) for one in writes.records] == [
+        (STAFF_CREDENTIAL_SLOT.path, "first-run")
+    ]
+    assert pulled.json()["credential"] == CREDENTIAL_KEPT_FOR_THE_SCHEDULE
+    assert CLIENT_SECRET not in pulled.text
+
+
+def test_a_credential_the_directory_refused_is_never_kept() -> None:
+    """Kept only after a read succeeded, so a secret the vendor refused never reaches the vault.
+
+    Delete this and the nightly sync reads with a secret the person was just told was wrong."""
+    from brain.ops.credentials import Credentials
+    from tests.unit.test_credentials import Vault
+
+    vault = Vault()
+    with serving(fetch=Directory()) as c:
+        c.app.state.credentials = Credentials(vault, environ={})  # type: ignore[attr-defined]
+        refused = c.post(TRIAL_PATH, json={**signed_in_trial(), "code": "STALE"})
+
+    assert refused.json()["trial"]["plan"] is None
+    assert vault.written == []
+    assert refused.json()["credential"] == ""
+
+
+def test_an_install_with_no_vault_is_told_the_credential_was_not_kept() -> None:
+    """No vault means nothing kept and a sentence saying where to add it later.
+
+    Delete this and the wizard implies a nightly sync that has nothing to read with."""
+    from brain.ops.credentials import Credentials
+    from brain.setup_staff_routes import CREDENTIAL_NOT_KEPT_NO_VAULT
+
+    with serving(fetch=Directory()) as c:
+        c.app.state.credentials = Credentials(None)  # type: ignore[attr-defined]
+        pulled = c.post(TRIAL_PATH, json=signed_in_trial())
+
+    assert pulled.json()["credential"] == CREDENTIAL_NOT_KEPT_NO_VAULT

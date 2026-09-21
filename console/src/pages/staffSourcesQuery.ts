@@ -164,3 +164,64 @@ export function readTrial(payload: TrialAnswer | null): Read<TrialRun> {
   }
   return { panel: run };
 }
+
+// ============================================================ what the nightly sync did
+// Added on 2026-09-21 with `brain.ops.staff_sync_run`. Three reads and two writes, none of which
+// applies a plan: the worker applies, and these show what it did, keep the credential it reads
+// with, and hand a leaver's agent to whoever takes it on.
+
+/** One scheduled run, as `brain.staff_source_routes.RunView` sends it. */
+export type SyncRun = components["schemas"]["StaffSyncRunView"];
+/** Whether the credential the sync reads with is held. Never the value. */
+export type StaffCredential = components["schemas"]["StaffCredentialView"];
+/** One agent whose owner the sync marked as having left. */
+export type Transfer = components["schemas"]["TransferView"];
+
+export const RUNS_API_PATH = "/govern/staff_sources/runs";
+export const CREDENTIAL_API_PATH = "/govern/staff_sources/credential";
+export const TRANSFERS_API_PATH = "/govern/staff_sources/transfers";
+
+/** Where taking on one leaver's agent is posted. */
+export function transferApiPath(agentId: string): string {
+  return `${TRANSFERS_API_PATH}/${encodeURIComponent(agentId)}`;
+}
+
+/**
+ * Written down because the runs are loaded with the page while the trial waits for a button.
+ */
+export const A_RUN_IS_A_RECORD_AND_NOT_A_CALL =
+  "A run is a row the worker already wrote, so reading it contacts nobody outside the install, " +
+  "unlike the trial. It names people, so the API answers it at the trial's plane and a reader " +
+  "below that plane is answered no runs, which this page draws as nothing.";
+
+/** The runs, newest first, or none for an unreadable body. */
+export function readRuns(payload: unknown): readonly SyncRun[] {
+  if (typeof payload !== "object" || payload === null) {
+    return [];
+  }
+  const runs = (payload as { runs?: unknown }).runs;
+  return Array.isArray(runs) ? (runs as SyncRun[]) : [];
+}
+
+/** The agents waiting for a new owner, or none for an unreadable body. */
+export function readTransfers(payload: unknown): readonly Transfer[] {
+  if (typeof payload !== "object" || payload === null) {
+    return [];
+  }
+  const transfers = (payload as { transfers?: unknown }).transfers;
+  return Array.isArray(transfers) ? (transfers as Transfer[]) : [];
+}
+
+/** The credential's standing, or null for an unreadable body. */
+export function readCredential(payload: unknown): StaffCredential | null {
+  if (typeof payload !== "object" || payload === null) {
+    return null;
+  }
+  const body = payload as Partial<StaffCredential>;
+  return typeof body.slot === "string" && typeof body.form === "string"
+    ? (body as StaffCredential)
+    : null;
+}
+
+/** What a blank credential is told, beside the field, before anything is confirmed or sent. */
+export const CREDENTIAL_BLANK = "Paste the credential before replacing the one the sync reads with.";

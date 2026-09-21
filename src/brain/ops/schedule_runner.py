@@ -31,9 +31,10 @@ mechanisms behind whichever is slowest, and a retention sweep is the slowest thi
 identifier is derived from the control's name so it cannot be typed wrong and cannot collide
 with `brain.migrate`'s.
 
-**Nine controls are wired, and the rest are stated rather than implied.** `retention_sweep`,
+**Eleven controls are wired, and the rest are stated rather than implied.** `retention_sweep`,
 `canary_run`, `knowledge_reverification`, `outbox_dispatch`, `spend_report_refresh`,
-`erasure_queue`, `vault_token_renewal`, `automation_run` and `connector_sync` have a runner that
+`erasure_queue`, `vault_token_renewal`, `automation_run`, `connector_sync`, `vault_audit_ship`
+and, since 2026-09-21, `directory_sync` have a runner that
 gathers what they need, and `brain.ops.worker` starts them on the schedule through
 `start_control`. Every other control entry point is a policy function that takes its inputs:
 `retention.enforcement_report` takes a census "the executor saw", `denial_alerts.digest` takes
@@ -62,7 +63,7 @@ Rejected: recording a run before taking the lock, so that a contended tick leave
 would fill the table with rows for runs that never happened, and "this control has thousands
 of attempts and no successes" would then mean two different things.
 
-Task ids: M37.5.1.3, M34.2.1.3, M27.8.12, M27.7.19, M42.6.2, M38.2.2.5, M42.6.5
+Task ids: M37.5.1.3, M34.2.1.3, M27.8.12, M27.7.19, M42.6.2, M38.2.2.5, M42.6.5, M1.6.12
 """
 
 from __future__ import annotations
@@ -86,6 +87,7 @@ from brain.ops.ledger_partitions import maintain as maintain_ledger_partitions
 from brain.ops.retention_store import run_retention_sweep
 from brain.ops.schedule import TICK, Owed, owed, schedulable
 from brain.ops.spend_store import refresh_spend_daily_now
+from brain.ops.staff_sync_run import run_staff_sync_now
 from brain.ops.vault_audit_ship import run_vault_audit_ship_now
 from brain.ops.vault_renewal import run_renewal_now
 from brain.ops.webhook_delivery import run_dispatch_now
@@ -466,10 +468,41 @@ def vault_audit_ship(now: datetime, report_only: bool, database_url: str) -> str
     return f"report only, shipped anyway: {said}" if report_only else said
 
 
+#: Why the staff sync reads nothing in report-only mode.
+A_STAFF_READ_IN_REPORT_ONLY_MODE_READS_NOTHING: Final = (
+    "The staff sync marks leavers and never deletes, so brain.ops.schedule never asks it to "
+    "report only. Asked anyway, it declines rather than reading the directory and then ignoring "
+    "the mode, for A_READ_IN_REPORT_ONLY_MODE_READS_NOTHING's reason."
+)
+
+
+def directory_sync(now: datetime, report_only: bool, database_url: str) -> str:
+    """Read the chosen staff list with the kept credential and apply it, once.
+
+    `brain.ops.staff_sync_run.run_staff_sync_now` reads the source, makes the dry run, writes the
+    roster and appends the run the Staff sources screen shows; this is the literal call the
+    registry reads. The vault is the worker's own, for `connector_sync`'s reason.
+    """
+    if report_only:
+        said = A_STAFF_READ_IN_REPORT_ONLY_MODE_READS_NOTHING
+        return f"report only: no staff list was read. {said}"
+    from brain.ops.worker import _loop_factory
+
+    settings = settings_from(process_environment())
+    ran = run_staff_sync_now(
+        database_url,
+        now=now,
+        vault_address=settings.vault_address,
+        vault_token=settings.vault_token,
+        loop_factory=_loop_factory(),
+    )
+    return ran.summary()
+
+
 #: What each schedulable control still needs before it can be started, by name.
 #:
-#: Nine with a `run` since 2026-09-17, which the worker's schedule starts, and the rest saying what
-#: they wait for, which is the point of the module header. Each sentence is a piece of work
+#: Eleven with a `run` since 2026-09-21, which the worker's schedule starts, and the rest saying
+#: what they wait for, which is the point of the module header. Each sentence is a piece of work
 #: somebody can pick up, written from reading the entry point's own signature rather than from a
 #: guess about it.
 RUNNERS: Final[tuple[Runner, ...]] = (
@@ -502,14 +535,9 @@ RUNNERS: Final[tuple[Runner, ...]] = (
             "digest"
         ),
     ),
-    Runner(
-        name="directory_sync",
-        needs=(
-            "a roster source. `is_due` and `dry_run` are the policy and the source interface "
-            "is M1.6.1, whose implementation is chosen per client: Needs Rupash item 39 "
-            "settles that every source stays selectable at deploy time"
-        ),
-    ),
+    # Wired on 2026-09-21 with `auth.staff_member`, `auth.staff_sync_run` and the staff source's
+    # slot among the connector keys. See `brain.ops.staff_sync_run`.
+    Runner(name="directory_sync", run=directory_sync),
     # Wired on 2026-09-15. `know.item` holds the items, the outbox is the log, and the rule
     # this sentence asked for is `brain.knowledge.item_store.route_for`. What it still does not
     # do is send: `brain.knowledge.item_store.NOTHING_SENDS_A_NAG_YET`.
@@ -619,6 +647,8 @@ def start_control(name: str, *, now: datetime, report_only: bool, database_url: 
             return connector_sync(now, report_only, database_url)
         case "vault_audit_ship":
             return vault_audit_ship(now, report_only, database_url)
+        case "directory_sync":
+            return directory_sync(now, report_only, database_url)
         case _:
             runner = runner_for(name)
             msg = (

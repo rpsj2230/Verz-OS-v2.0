@@ -34,6 +34,7 @@ import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
 import {
+  CREDENTIAL_BLANK,
   readStaffSources,
   readTrial,
   wasRead,
@@ -41,6 +42,12 @@ import {
   TRIAL_API_PATH,
 } from "../src/pages/staffSourcesQuery";
 import {
+  CHANGED_NOBODY,
+  CREDENTIAL_NOT_HELD,
+  NO_TRANSFERS,
+  REPLACE_CREDENTIAL,
+  SYNC_CREDENTIAL,
+  TAKE_ON,
   CHANGES_NOTHING,
   CHOSEN,
   NO_SOURCES,
@@ -55,12 +62,31 @@ import { operation } from "./support/openapi";
 
 const PAGE_OPERATION = "/api/v1/govern/staff_sources";
 const TRIAL_OPERATION = "/api/v1/govern/staff_sources/trial";
+/** What the page reads when it opens: itself, and the nightly sync's three reads (2026-09-21). */
+const MOUNT_OPERATIONS = [
+  PAGE_OPERATION,
+  "/api/v1/govern/staff_sources/credential",
+  "/api/v1/govern/staff_sources/runs",
+  "/api/v1/govern/staff_sources/transfers",
+];
 const CONSOLE_ORIGIN = "https://console.test";
 const ADDRESS = "/staff_sources";
 
 interface Answers {
   readonly page?: unknown;
   readonly trial?: unknown;
+  /** The nightly sync's three reads, and what the two writes answer (2026-09-21). */
+  readonly runs?: unknown;
+  readonly credential?: unknown;
+  readonly transfers?: unknown;
+  readonly written?: { method: string; path: string }[];
+}
+
+function json(payload: unknown, status = 200): Response {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
 }
 
 /** One option in the shape `SourceOptionView` serialises. */
@@ -158,7 +184,21 @@ function trialUnread(sentence: string): unknown {
  */
 async function consoleAt(answers: Answers): Promise<{ container: HTMLElement; idp: FakeIdp }> {
   const idp = fakeIdentityProvider({
-    api(url) {
+    api(url, init) {
+      const method = init?.method ?? "GET";
+      if (method !== "GET") {
+        answers.written?.push({ method, path: new URL(url, CONSOLE_ORIGIN).pathname });
+        return json(url.includes("/credential") ? answers.credential : { agent_id: "a_x", owner_id: "u_1" });
+      }
+      for (const [suffix, payload] of [
+        ["/runs", answers.runs],
+        ["/credential", answers.credential],
+        ["/transfers", answers.transfers],
+      ] as const) {
+        if (url.includes(`${PAGE_OPERATION}${suffix}`)) {
+          return payload === undefined ? json({ message: "not here", trace_id: "t" }, 404) : json(payload);
+        }
+      }
       if (url.includes(TRIAL_OPERATION)) {
         return answers.trial === undefined
           ? null
@@ -314,7 +354,7 @@ describe("when the trial is asked for", () => {
       trial: trialWithPlan(),
     });
 
-    expect(asked(idp).map((url) => url.pathname)).toEqual([PAGE_OPERATION]);
+    expect(asked(idp).map((url) => url.pathname).sort()).toEqual(MOUNT_OPERATIONS);
   });
 
   test("pressing it asks the trial address once, and asks for nothing else", async () => {
@@ -327,12 +367,14 @@ describe("when the trial is asked for", () => {
     });
     fireEvent.click(await findTrialButton(container));
     await waitFor(() => {
-      if (asked(idp).length < 2) {
+      if (!asked(idp).some((url) => url.pathname === TRIAL_OPERATION)) {
         throw new Error("the trial has not been asked for yet");
       }
     });
 
-    expect(asked(idp).map((url) => url.pathname)).toEqual([PAGE_OPERATION, TRIAL_OPERATION]);
+    expect(asked(idp).map((url) => url.pathname).sort()).toEqual(
+      [...MOUNT_OPERATIONS, TRIAL_OPERATION].sort(),
+    );
     expect(asked(idp).flatMap((url) => [...url.searchParams.keys()])).toEqual([]);
   });
 
@@ -441,5 +483,137 @@ describe("what this screen asks the API for", () => {
     expect(`/api/v1${STAFF_SOURCES_API_PATH}`).toBe(PAGE_OPERATION);
     expect(`/api/v1${TRIAL_API_PATH}`).toBe(TRIAL_OPERATION);
     expect(STAFF_SOURCES_HEADING).toBe("Staff sources");
+  });
+});
+
+// ============================================================ the nightly sync (2026-09-21)
+const CREDENTIAL = {
+  slot: "connector_keys/staff_source",
+  held: false,
+  set_at: null,
+  vault: "ready",
+  told: "The secrets vault answered.",
+  form: "The custom app's App ID, a colon, then its App Secret.",
+};
+
+const REFUSED_RUN = {
+  source: "lark",
+  started_at: "2999-03-02T02:00:00Z",
+  finished_at: "2999-03-02T02:00:05Z",
+  outcome: "credential_refused",
+  detail: "The staff source refused the kept credential: app secret invalid. Nobody was changed.",
+  added: [],
+  marked_left: [],
+  renamed: [],
+  withheld: [],
+  changed_nobody: true,
+};
+
+function pressButton(container: HTMLElement, text: string): void {
+  const found = [...container.querySelectorAll("button")].find((one) => one.textContent === text);
+  if (found === undefined) {
+    throw new Error(`no button reading ${text}`);
+  }
+  fireEvent.click(found);
+}
+
+describe("what the nightly sync did, its credential and the agents of people who left", () => {
+  test("a run the source refused is drawn as one that changed nobody, in the API's words", async () => {
+    // What breaks if this is deleted: M1.8.6's last clause, a refused credential said on this
+    // screen, could be recorded by the worker and drawn by nothing.
+    const { container } = await consoleAt({ page: page([], null, ""), runs: { runs: [REFUSED_RUN] } });
+    await waitFor(() => {
+      if (!container.textContent?.includes("app secret invalid")) {
+        throw new Error("the runs have not been drawn yet");
+      }
+    });
+
+    expect(container.textContent).toContain(CHANGED_NOBODY);
+    expect(container.textContent).toContain("credential_refused");
+  });
+
+  test("the credential card is left out for a reader the API does not answer", async () => {
+    // What breaks if this is deleted: a failure notice telling a reader without the credential
+    // authority that a credential screen exists and they may not see it.
+    const { container } = await consoleAt({ page: page([], null, "") });
+
+    expect(container.textContent).not.toContain(SYNC_CREDENTIAL);
+  });
+
+  test("a blank credential is told beside the field and nothing is confirmed or sent", async () => {
+    // What breaks if this is deleted: a replace that confirms an empty paste and sends it.
+    const written: { method: string; path: string }[] = [];
+    const { container } = await consoleAt({ page: page([], null, ""), credential: CREDENTIAL, written });
+    await waitFor(() => {
+      if (!container.textContent?.includes(CREDENTIAL_NOT_HELD)) {
+        throw new Error("the credential card has not been drawn yet");
+      }
+    });
+    pressButton(container, REPLACE_CREDENTIAL);
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(CREDENTIAL_BLANK);
+    });
+    expect(container.querySelector(".confirm")).toBeNull();
+    expect(written).toEqual([]);
+  });
+
+  test("a credential is replaced only after the confirmation, with a PUT to its one address", async () => {
+    // What breaks if this is deleted: M1.8.6's middle clause, the credential replaced from the
+    // console, drawn and never sent, or sent on the first press.
+    const written: { method: string; path: string }[] = [];
+    const { container } = await consoleAt({ page: page([], null, ""), credential: CREDENTIAL, written });
+    await waitFor(() => {
+      if (!container.textContent?.includes(CREDENTIAL_NOT_HELD)) {
+        throw new Error("the credential card has not been drawn yet");
+      }
+    });
+    const field = container.querySelector<HTMLInputElement>("input[name=credential]");
+    fireEvent.change(field as HTMLInputElement, { target: { value: "cli_a:secret" } });
+    pressButton(container, REPLACE_CREDENTIAL);
+    expect(written).toEqual([]);
+    const confirm = container.querySelector(".confirm");
+    expect(confirm).not.toBeNull();
+    fireEvent.click([...(confirm as Element).querySelectorAll("button")].at(-1) as HTMLButtonElement);
+
+    await waitFor(() => {
+      expect(written).toEqual([{ method: "PUT", path: "/api/v1/govern/staff_sources/credential" }]);
+    });
+  });
+
+  test("an agent whose owner left is taken on only after the confirmation, with a POST naming it", async () => {
+    // What breaks if this is deleted: M1.8.9's listing drawn with no way to accept it, or an
+    // agent handed over on one press.
+    const written: { method: string; path: string }[] = [];
+    const { container } = await consoleAt({
+      page: page([], null, ""),
+      transfers: {
+        transfers: [{ agent_id: "a_quotes", display_name: "Quotes", owner_id: "u_gone", running: true }],
+      },
+      written,
+    });
+    await waitFor(() => {
+      if (!container.textContent?.includes("Quotes")) {
+        throw new Error("the transfers have not been drawn yet");
+      }
+    });
+    pressButton(container, TAKE_ON);
+    expect(written).toEqual([]);
+    const confirm = container.querySelector(".confirm");
+    fireEvent.click([...(confirm as Element).querySelectorAll("button")].at(-1) as HTMLButtonElement);
+
+    await waitFor(() => {
+      expect(written).toEqual([{ method: "POST", path: "/api/v1/govern/staff_sources/transfers/a_quotes" }]);
+    });
+  });
+
+  test("with nothing waiting the screen says so and offers nothing to press", async () => {
+    // What breaks if this is deleted: an empty list drawn as a heading over nothing.
+    const { container } = await consoleAt({ page: page([], null, ""), transfers: { transfers: [] } });
+    await waitFor(() => {
+      expect(container.textContent).toContain(NO_TRANSFERS);
+    });
+
+    expect([...container.querySelectorAll("button")].some((one) => one.textContent === TAKE_ON)).toBe(false);
   });
 });

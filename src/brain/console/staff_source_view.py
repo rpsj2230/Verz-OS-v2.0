@@ -88,7 +88,7 @@ Scope: domain logic. Nothing here renders, opens a connection or reads a clock. 
 parameter, the environment arrives as a mapping and is read only through `brain.install.value_of`,
 and the one call that reaches a server is `roster_from`'s call to the source handed in.
 
-Task ids: M1.6.11
+Task ids: M1.6.11, M1.8.9
 """
 
 from __future__ import annotations
@@ -98,8 +98,11 @@ from dataclasses import dataclass, fields
 from datetime import datetime
 from typing import Final
 
+from brain.agents.lifecycle import agents_needing_transfer
+from brain.agents.model import AgentRecord
 from brain.console.govern import NOWHERE, _in_reach
 from brain.console.reads import ConsoleRead, Plane, permitted
+from brain.console.scoped_authority import may_adopt
 from brain.console.screens import screen
 from brain.core.entitlement import EntitlementSet
 from brain.identity.directory import DirectoryAssertion
@@ -677,3 +680,34 @@ def staff_source_gaps(
         )
 
     return tuple(gaps)
+
+
+# ------------------------------------------------------------ a leaver's agents (M1.8.9)
+#: Why a leaver's agent is listed and left running rather than stopped.
+A_LEAVERS_AGENT_RUNS_AT_THE_REACH_IT_HAD_UNTIL_SOMEBODY_TAKES_IT: Final = (
+    "The staff sync marking somebody as having left changes no agent. Every run through an agent "
+    "is its caller's reach intersected with the agent's ceiling, and the ceiling does not move "
+    "when its steward leaves, so the agent can reach nothing it could not reach before. It is "
+    "listed here for a new owner, and a transfer moves the steward and never the ceiling: "
+    "brain.agents.lifecycle.transfer_ownership has no argument that could widen it."
+)
+
+
+def transfers_for(
+    records: Iterable[AgentRecord],
+    *,
+    leavers: frozenset[str],
+    reader: EntitlementSet,
+    now: datetime | None = None,
+) -> tuple[AgentRecord, ...]:
+    """The live agents whose steward the roster marks as having left, that this reader may take.
+
+    `agents_needing_transfer` decides which agents are owned by a leaver, from the ids the roster
+    produced and never from a scan of who owns what, and `may_adopt` decides whether this reader
+    may become the steward of each, which is the question a publication asks: a ceiling entering
+    the world with a new name against it. An agent this reader may not take is left out with no
+    count of it. See `A_LEAVERS_AGENT_RUNS_AT_THE_REACH_IT_HAD_UNTIL_SOMEBODY_TAKES_IT`.
+    """
+    by_id = {one.agent_id: one for one in records}
+    listed = agents_needing_transfer(by_id.values(), departing=leavers)
+    return tuple(by_id[one] for one in listed if may_adopt(by_id[one], reader, now))

@@ -253,10 +253,14 @@ def test_every_control_the_schedule_cannot_start_yet_says_what_it_is_waiting_for
     **Nine later the same day**, when `canary_run` was given the askers its sentence here said it
     waited for, as every reach the install holds, and a runner that asks as them.
 
+    **Eight on 2026-09-21**, when `directory_sync` was given the roster tables, the staff
+    source's credential slot and the readers its sentence here said it waited for.
+
     Delete this and the gap report can go empty because the list went empty."""
     found = runner_gaps()
 
-    assert len(found) == 9
+    assert len(found) == 8
+    assert not any("directory_sync" in one for one in found)
     assert not any("outbox_dispatch" in one for one in found)
     assert not any("canary_run" in one for one in found)
     assert all("cannot be started yet: it needs" in one for one in found)
@@ -473,6 +477,7 @@ def test_the_dispatch_names_exactly_the_runners_that_can_run() -> None:
         "automation_run",
         "connector_sync",
         "vault_audit_ship",
+        "directory_sync",
     }
 
 
@@ -491,6 +496,24 @@ def test_the_nag_runner_asked_for_a_report_records_nothing_and_reaches_no_databa
 
     assert said.startswith("report only: no re-verification nag was recorded.")
     assert A_NAG_IN_REPORT_ONLY_MODE_RECORDS_NOTHING in said
+
+
+def test_the_staff_sync_asked_for_a_report_reads_no_staff_list_and_reaches_no_database() -> None:
+    """The `directory_sync` arm, started by name, declines report-only mode before anything opens.
+
+    Delete this and the staff sync's arm could read a company's directory in a mode it was told
+    to report in, or be dispatched to a runner that does not exist."""
+    from brain.ops.schedule_runner import A_STAFF_READ_IN_REPORT_ONLY_MODE_READS_NOTHING
+
+    said = start_control(
+        "directory_sync",
+        now=NOW,
+        report_only=True,
+        database_url="postgresql://nobody@127.0.0.1:1/none",
+    )
+
+    assert said.startswith("report only: no staff list was read.")
+    assert A_STAFF_READ_IN_REPORT_ONLY_MODE_READS_NOTHING in said
 
 
 def test_the_dispatch_runner_asked_for_a_report_sends_nothing_and_reaches_no_database() -> None:

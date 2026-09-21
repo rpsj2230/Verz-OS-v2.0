@@ -115,6 +115,10 @@ GOOGLE_EXCHANGE_URL: Final = "https://oauth2.googleapis.com/token"
 GOOGLE_DIRECTORY_URL: Final = "https://admin.googleapis.com/admin/directory/v1/users"
 GOOGLE_READ_USERS_URL: Final = "https://www.googleapis.com/auth/admin.directory.user.readonly"
 
+#: Where the scheduled sync reads a Google Sheet's values, with an API key rather than a person.
+#: Declared here with the other vendors' addresses; `brain.ops.staff_sync_run` is its reader.
+GOOGLE_SHEETS_URL: Final = "https://sheets.googleapis.com/v4/spreadsheets"
+
 #: Microsoft's sign-in host, whose path names the tenant, and Graph.
 MICROSOFT_LOGIN_HOST: Final = "login.microsoftonline.com"
 MICROSOFT_GRAPH_URL: Final = "https://graph.microsoft.com"

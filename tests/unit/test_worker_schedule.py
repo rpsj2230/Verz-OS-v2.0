@@ -75,6 +75,7 @@ WIRED = [one.name for one in RUNNERS if one.run is not None]
 STARTED = [
     ("retention_sweep", True),
     ("canary_run", False),
+    ("directory_sync", False),
     ("knowledge_reverification", False),
     ("outbox_dispatch", False),
     ("spend_report_refresh", False),
@@ -151,18 +152,20 @@ def starts(monkeypatch: pytest.MonkeyPatch) -> Starts:
 
 
 # ------------------------------------------------------------------- without a server
-def test_the_wired_runners_are_the_ten_the_schedule_is_meant_to_start() -> None:
+def test_the_wired_runners_are_the_eleven_the_schedule_is_meant_to_start() -> None:
     """Asserted against the names, so a runner wired or unwired later moves this on purpose.
 
     The webhook dispatch, the erasure queue and the permission canaries joined on 2026-09-17,
     the vault token renewal later that day, with the installer's vault, and the automation
-    runner and the connector sync after it, and the vault audit shipper last.
+    runner and the connector sync after it, and the vault audit shipper last. The staff sync
+    joined on 2026-09-21, in the registry's own order.
 
-    Delete this and every assertion below that names the ten could be satisfied by a table
+    Delete this and every assertion below that names the eleven could be satisfied by a table
     that had quietly lost one of them."""
     assert WIRED == [
         "retention_sweep",
         "canary_run",
+        "directory_sync",
         "knowledge_reverification",
         "outbox_dispatch",
         "spend_report_refresh",
@@ -330,6 +333,7 @@ def test_a_due_control_is_started_once_and_its_run_is_recorded(starts: Starts) -
             ("automation_run", "ok", False, "automation_run ran"),
             ("canary_run", "ok", False, "canary_run ran"),
             ("connector_sync", "ok", False, "connector_sync ran"),
+            ("directory_sync", "ok", False, "directory_sync ran"),
             ("erasure_queue", "ok", False, "erasure_queue ran"),
             ("knowledge_reverification", "ok", False, "knowledge_reverification ran"),
             ("outbox_dispatch", "ok", False, "outbox_dispatch ran"),
@@ -421,11 +425,12 @@ def test_a_control_whose_lock_another_replica_holds_is_not_started_and_the_rest_
             found = tick(url, at=NOW)
             other.rollback()
 
-        assert starts.calls == [*STARTED[:4], *STARTED[5:]]
+        assert starts.calls == [*STARTED[:5], *STARTED[6:]]
         assert [row[0] for row in recorded(url)] == [
             "automation_run",
             "canary_run",
             "connector_sync",
+            "directory_sync",
             "erasure_queue",
             "knowledge_reverification",
             "outbox_dispatch",
@@ -456,6 +461,7 @@ def test_a_runner_that_raises_is_recorded_as_failed_with_its_reason_and_the_next
             ("automation_run", "ok", "automation_run ran"),
             ("canary_run", "ok", "canary_run ran"),
             ("connector_sync", "ok", "connector_sync ran"),
+            ("directory_sync", "ok", "directory_sync ran"),
             ("erasure_queue", "ok", "erasure_queue ran"),
             ("knowledge_reverification", "ok", "knowledge_reverification ran"),
             ("outbox_dispatch", "ok", "outbox_dispatch ran"),
@@ -520,6 +526,7 @@ def test_the_tick_records_the_re_verification_nag_through_the_real_runner(
     assert others.calls == [
         ("retention_sweep", True),
         ("canary_run", False),
+        ("directory_sync", False),
         ("outbox_dispatch", False),
         ("spend_report_refresh", False),
         ("erasure_queue", False),

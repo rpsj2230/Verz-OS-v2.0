@@ -7,11 +7,11 @@ What an administrator would need to manage, read out of the schema, the routes a
 ## What was measured
 
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
-- 76 tables, from `brain.db.Base.metadata`.
+- 78 tables, from `brain.db.Base.metadata`.
 - 24 installation values, from `brain.install.INSTALLATION`.
-- 133 routes under `/api/v1` and `/setup`, from the API's internal document.
+- 138 routes under `/api/v1` and `/setup`, from the API's internal document.
 - 68 console addresses, from the route table in `console/src/App.tsx`.
-- 45 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 53 routes.
+- 47 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 55 routes.
 - 35 gaps recorded, and 13 routes no screen calls.
 
 ## Area by area
@@ -19,7 +19,7 @@ What an administrator would need to manage, read out of the schema, the routes a
 ### People, roles, permissions and access control
 
 - **Screens:** `/`, `/people`, `/people/:subject`, `/roles`, `/capabilities`, `/scopes`, `/access_review`, `/elevation`, `/sessions`, `/sign-in-links`, `/staff_sources`
-- **Tables:** `auth.principal`, `auth.principal_identity`, `auth.session`, `auth.directory_role_grant`, `gate.capability_grant`, `gate.capability_pack`, `gate.capability_pack_assignment`, `gate.capability_registry`, `gate.scope`, `gate.grants_version`, `gate.policy_epoch`, `gate.review_decision`, `gate.elevation_request`
+- **Tables:** `auth.principal`, `auth.principal_identity`, `auth.session`, `auth.directory_role_grant`, `gate.capability_grant`, `gate.capability_pack`, `gate.capability_pack_assignment`, `gate.capability_registry`, `gate.scope`, `gate.grants_version`, `gate.policy_epoch`, `gate.review_decision`, `gate.elevation_request`, `auth.staff_member`, `auth.staff_sync_run`
 - **Installation values:** `INSTALL_OIDC_ISSUER`, `INSTALL_OIDC_REALM`, `INSTALL_OIDC_CLIENT_ID`, `INSTALL_OIDC_REDIRECT_URIS`, `INSTALL_BROKERED_DIRECTORY`, `INSTALL_STAFF_SOURCE`, `INSTALL_STAFF_SOURCE_LOCATION`, `INSTALL_BROKERED_CLIENT_ID`
 
 | Route | Called by |
@@ -37,6 +37,9 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `GET /api/v1/govern/sessions` | `/sessions` |
 | `GET /api/v1/govern/sign-ins` | `/sign-in-links` |
 | `GET /api/v1/govern/staff_sources` | `/staff_sources` |
+| `GET /api/v1/govern/staff_sources/credential` | `/staff_sources` |
+| `GET /api/v1/govern/staff_sources/runs` | `/staff_sources` |
+| `GET /api/v1/govern/staff_sources/transfers` | `/staff_sources` |
 | `GET /api/v1/govern/staff_sources/trial` | `/staff_sources` |
 | `GET /api/v1/me` | `/` |
 | `POST /api/v1/govern/access-review/decision` | `/access_review` |
@@ -50,7 +53,9 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `POST /api/v1/govern/sessions/end` | `/sessions` |
 | `POST /api/v1/govern/sessions/end-several` | `/sessions` |
 | `POST /api/v1/govern/sign-ins/unlink` | `/sign-in-links` |
+| `POST /api/v1/govern/staff_sources/transfers/{agent_id}` | `/staff_sources` |
 | `POST /api/v1/sign-ins` | `/sign-in-links` |
+| `PUT /api/v1/govern/staff_sources/credential` | `/staff_sources` |
 
 - **Gap.** A grant written from People and grants cannot be given an expiry, and the screen says so beside the form. Recorded: Buildable today: POST /api/v1/govern/grants takes not_after and the form's proposal schema has no field for it. It is left to the change reworking member grants, which is in progress beside this one and owns that form.
 - **Gap.** A pack cannot be assigned or withdrawn, and a capability that arrived through a pack cannot be removed. Recorded: No route writes gate.capability_pack_assignment. brain.govern_routes.remove_grant refuses a pack's capability in the ordinary words, because withdrawing it removes every other capability in the pack.
@@ -79,7 +84,7 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `POST /api/v1/govern/departments/team/retirement` | **no screen** |
 
 - **Gap.** A department, a team or a scope cannot yet be created, renamed or retired from this screen. Recorded: brain.govern_people_routes serves the eight writes, audited by 0086's triggers, and Departments.tsx does not call them yet; the screen places people in the teams that are there and leads the departments that are there.
-- **Gap.** Nothing applies the staff list's teams and leads on a schedule. Recorded: brain.identity.organisation_sync plans them and brain.identity.organisation_store applies a plan, and no job runs either, which is true of the whole staff sync: dry_run is read by the Staff sources screen and nothing applies a roster.
+- **Gap.** Nothing applies the staff list's teams and leads on a schedule. Recorded: brain.identity.organisation_sync plans them and brain.identity.organisation_store applies a plan, and no job runs either. The nightly staff sync (brain.ops.staff_sync_run, since 2026-09-21) applies the roster's people and marks leavers, and not its teams or leads.
 
 ### System settings and application configuration
 
@@ -428,7 +433,7 @@ No gap recorded.
 
 ## Every write the console sends, followed to the system
 
-Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 48 of 53 write routes have all three proved or not applicable, 6 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
+Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 50 of 55 write routes have all three proved or not applicable, 7 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
 
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
@@ -463,6 +468,7 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /api/v1/govern/sessions/end` | `/sessions` | `test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request` in `tests/unit/test_session_store.py` (database, in CI) | `test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request` in `tests/unit/test_session_store.py` (database, in CI) | `test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request` in `tests/unit/test_session_store.py` (database, in CI) |
 | `POST /api/v1/govern/sessions/end-several` | `/sessions` | `test_several_sessions_are_ended_one_at_a_time_each_decided_by_the_single_endings_question` in `tests/unit/test_session_routes.py` | `test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request` in `tests/unit/test_session_store.py` (database, in CI) | `test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request` in `tests/unit/test_session_store.py` (database, in CI) |
 | `POST /api/v1/govern/sign-ins/unlink` | `/sign-in-links` | `test_an_unlink_retires_the_link_names_who_did_it_and_the_account_is_refused_after` in `tests/unit/test_sign_in_links.py` (database, in CI) | `test_an_unlink_retires_the_link_names_who_did_it_and_the_account_is_refused_after` in `tests/unit/test_sign_in_links.py` (database, in CI) | `test_an_unlink_retires_the_link_names_who_did_it_and_the_account_is_refused_after` in `tests/unit/test_sign_in_links.py` (database, in CI) |
+| `POST /api/v1/govern/staff_sources/transfers/{agent_id}` | `/staff_sources` | `test_taking_a_leavers_agent_moves_the_owner_and_never_the_reach` in `tests/unit/test_staff_sync_routes.py` | Not applicable: No ledger entry is written when an agent's owner moves: agent.agent has no audit trigger, so the change is logged by the route and recorded on the row alone. Recorded here as a gap rather than hidden. | `test_taking_a_leavers_agent_moves_the_owner_and_never_the_reach` in `tests/unit/test_staff_sync_routes.py` |
 | `POST /api/v1/install/features/{name}` | `/features` | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_switching_schedule_control_on_from_the_features_screen_is_what_lets_a_job_be_paused` in `tests/unit/test_console_controls_reach_behaviour.py` |
 | `POST /api/v1/jobs/{name}/pause` | `/jobs` | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_job_paused_from_the_screen_is_left_unstarted_by_the_next_tick_and_resumed_is_started` in `tests/unit/test_console_controls_reach_behaviour.py` |
 | `POST /api/v1/jobs/{name}/resume` | `/jobs` | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_job_paused_from_the_screen_is_left_unstarted_by_the_next_tick_and_resumed_is_started` in `tests/unit/test_console_controls_reach_behaviour.py` |
@@ -482,7 +488,8 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /setup/appointment` | `/first-run` | `test_the_setup_code_holder_appoints_the_first_administrator_and_is_sent_to_finish` in `tests/unit/test_setup_routes.py` | `test_the_first_administrator_is_a_live_person_holding_administration_everywhere` in `tests/unit/test_first_administrator.py` (database, in CI) | `test_a_fresh_install_reaches_a_signed_in_administrator_through_the_routes_alone` in `tests/unit/test_setup_routes.py` (database, in CI) |
 | `POST /setup/sign-in` | `/first-run` | `test_the_finishing_screen_binds_the_installers_sign_in_to_the_first_administrator` in `tests/unit/test_sign_in_routes.py` | `test_the_finishing_screen_binds_the_first_administrator_once_against_the_database` in `tests/unit/test_sign_in_routes.py` (database, in CI) | `test_a_fresh_install_reaches_a_signed_in_administrator_through_the_routes_alone` in `tests/unit/test_setup_routes.py` (database, in CI) |
 | `POST /setup/staff-source/sign-in` | `/first-run` | Not applicable: It answers the directory's own sign-in page for the setup code's holder and writes nothing. | Not applicable: Nothing changes when a sign-in page is asked for, so there is nothing to record. | `test_a_directory_is_chosen_signed_in_to_and_its_list_pulled` in `tests/unit/test_setup_staff_routes.py` |
-| `POST /setup/staff-source/trial` | `/first-run` | Not applicable: A read of a staff list writes nothing: nobody is added, and the client secret it signs in with is not kept. | Not applicable: A read changes nothing an administrator manages, so there is nothing to record. | `test_a_directory_is_chosen_signed_in_to_and_its_list_pulled` in `tests/unit/test_setup_staff_routes.py` |
+| `POST /setup/staff-source/trial` | `/first-run` | `test_a_trial_that_read_the_directory_keeps_its_credential_for_the_nightly_sync` in `tests/unit/test_setup_staff_routes.py` | `test_a_trial_that_read_the_directory_keeps_its_credential_for_the_nightly_sync` in `tests/unit/test_setup_staff_routes.py` | `test_a_directory_is_chosen_signed_in_to_and_its_list_pulled` in `tests/unit/test_setup_staff_routes.py` |
+| `PUT /api/v1/govern/staff_sources/credential` | `/staff_sources` | `test_the_credential_is_replaced_into_its_slot_recorded_and_never_sent_back` in `tests/unit/test_staff_sync_routes.py` | `test_a_credential_write_appends_exactly_the_entry_the_recorder_writes_and_the_chain_holds` in `tests/unit/test_credential_writes.py` (database, in CI) | `test_a_scheduled_run_reads_lark_with_the_kept_credential_and_applies_the_plan` in `tests/unit/test_staff_sync_run.py` |
 | `PUT /api/v1/install/settings/{name}` | `/settings` | `test_saving_a_company_name_writes_its_row_and_the_console_header_draws_it_next` in `tests/unit/test_settings_routes.py` | **None.** The route sets the audit attribution 0059's trigger reads, which BRANDING_SAVED asserts over a stub; no scratch-Postgres test yet reads the ledger entry back. | `test_saving_a_company_name_writes_its_row_and_the_console_header_draws_it_next` in `tests/unit/test_settings_routes.py` |
 | `PUT /api/v1/models/providers/{provider}` | `/models` | `test_the_stores_read_the_ladder_write_attempts_by_id_and_keep_a_switch` in `tests/unit/test_model_service.py` (database, in CI) | **None.** The write is an ops.setting row, which migration 0059's trigger records as a setting entry naming the key, the change and the writer, and no test follows this route's write to that entry. | `test_switching_a_provider_off_takes_its_rungs_out_of_the_next_plan_at_once` in `tests/unit/test_provider_routes.py` |
 

@@ -40,19 +40,22 @@ The tab then posts the code, its PKCE verifier and the application's client id a
 the secret is judged by `brain.ops.credentials.problems_with`, sent once in the token exchange,
 and kept nowhere. See `A_CLIENT_CREDENTIAL_USED_FOR_ONE_READ_IS_NOT_KEPT`.
 
-**Keeping that secret for the scheduled sync is not built, and the reason is a reader rather
-than a writer.** `brain.ops.credentials` writes provider slots only, the application's vault
-policy grants no path a directory credential could live at, and nothing in this repository
-reads a directory on a schedule. A secret written for a sync nobody runs is a standing
-credential with no reader, which is the shape this repository refuses elsewhere. The second
-slot kind that module's own docstring anticipates for connector credentials is the place it
-belongs, once a sync exists to read it.
+**Since 2026-09-21 that secret is kept for the scheduled sync, once the trial has read with
+it (M1.8.6).** `brain.ops.staff_sync_run` now reads Lark and Microsoft Entra on a schedule with
+the same application's identifier and secret, exchanged for a tenant token, so a trial that
+read the list keeps `<client id>:<secret>` at `connector_keys/staff_source` through
+`Credentials.keep`, attributed to first run and recorded in the ledger as every credential write
+is. It is kept only after a read succeeded, so what is kept is a credential the directory has
+just accepted, and only for the two sources a schedule reads with it: Google Workspace is signed
+in to as a person and is not read on a schedule. The application's policy writes that path and
+never reads it; the worker reads it through a run lease. See
+`A_CREDENTIAL_THE_TRIAL_READ_WITH_IS_KEPT_FOR_THE_SCHEDULE`.
 
 **Nothing a refusal says was sent by the person.** Every body is carried by `NoEchoRoute`, and a
 refusal from a directory is the vendor's words, shortened, from
 `brain.connectors.staff_directories.A_REFUSAL_REPEATS_THE_VENDOR_AND_NEVER_THE_REQUEST`.
 
-Task ids: M42.5.7
+Task ids: M42.5.7, M1.8.6
 """
 
 from __future__ import annotations
@@ -83,14 +86,29 @@ from brain.connectors.staff_directories import (
 )
 from brain.console.staff_source_view import Trial, rehearse
 from brain.core.errors import Absent, Failed
-from brain.identity.staff_adapters import SPREADSHEET, RosterUnavailableError, SpreadsheetSource
+from brain.firstrun import GRANTED_BY
+from brain.identity.staff_adapters import (
+    LARK,
+    MICROSOFT_ENTRA,
+    SPREADSHEET,
+    RosterUnavailableError,
+    SpreadsheetSource,
+)
 from brain.identity.staff_source import (
     STAFF_SOURCE_LOCATION_SETTING,
     STAFF_SOURCE_SETTING,
     StaffSource,
 )
-from brain.ops.credentials import MAX_CREDENTIAL_CHARS, problems_with
-from brain.setup_routes import appointer_of
+from brain.ops.credentials import (
+    MAX_CREDENTIAL_CHARS,
+    TOLD,
+    CredentialProblemError,
+    Credentials,
+    CredentialsUnavailableError,
+    problems_with,
+)
+from brain.ops.staff_sync_run import CLIENT_CREDENTIAL_SEPARATOR
+from brain.setup_routes import appointer_of, credentials_of
 from brain.setup_wizard import (
     MAX_ANSWER_CHARS,
     WizardClosedError,
@@ -99,7 +117,7 @@ from brain.setup_wizard import (
     assert_unlocked,
 )
 from brain.sign_in_routes import enrolment_of
-from brain.staff_source_routes import TrialView, run_view
+from brain.staff_source_routes import STAFF_CREDENTIAL_SLOT, TrialView, run_view
 
 log = structlog.get_logger()
 
@@ -112,12 +130,27 @@ NOTHING_LEAVES_THIS_SERVER_BEFORE_THE_CODE: Final = (
     "refused in the appointment's one way, and nothing is built or sent until it is accepted."
 )
 
-#: Why the secret a trial signs in with is not kept.
-A_CLIENT_CREDENTIAL_USED_FOR_ONE_READ_IS_NOT_KEPT: Final = (
-    "The client secret reaches this server to read the list once, while the person watches. "
-    "No sync reads a directory on a schedule yet and no vault path is granted for a directory "
-    "credential, so keeping it would be a standing secret with no reader. It is judged, sent "
-    "once in the token exchange, and dropped with the request."
+#: Why the secret a trial signed in with is kept, and only after it read.
+A_CREDENTIAL_THE_TRIAL_READ_WITH_IS_KEPT_FOR_THE_SCHEDULE: Final = (
+    "The scheduled sync reads Lark and Microsoft Entra with the application's own identifier and "
+    "secret, and the person has just pasted both into this screen. Asking for them again on the "
+    "console would be a second paste of the same secret, so a trial that read the list keeps "
+    "them in the vault for the schedule. Only after the read, so a secret the directory refused "
+    "is never kept, and never read back by this process."
+)
+
+#: The sources whose sign-in application is also what the scheduled sync reads with.
+KEPT_FOR_THE_SCHEDULE: Final[frozenset[str]] = frozenset({LARK, MICROSOFT_ENTRA})
+
+#: What the person is told about the credential, by what happened to it.
+CREDENTIAL_KEPT_FOR_THE_SCHEDULE: Final = (
+    "Your application's ID and secret are kept in the vault for the nightly staff sync. You can "
+    "replace them later on the Staff sources screen."
+)
+CREDENTIAL_NOT_KEPT_NO_VAULT: Final = (
+    "This install runs no secrets vault, so your application's secret was not kept and the "
+    "nightly staff sync cannot read your directory until one is set up and the secret is added "
+    "on the Staff sources screen."
 )
 
 # --------------------------------------------------------------------- the figures
@@ -290,6 +323,33 @@ async def trial_for(asked: StaffTrialAsked, fetch: Fetch) -> Trial:
         return Trial(source=named, plan=None, refusals=(str(why),))
 
 
+async def keep_for_the_schedule(
+    asked: StaffTrialAsked, credentials: Credentials | None, *, trace_id: str
+) -> str:
+    """Keep the application's identifier and secret for the scheduled sync, and say what happened.
+
+    Called only after a trial read the list, so the directory has just accepted what is kept. See
+    `A_CREDENTIAL_THE_TRIAL_READ_WITH_IS_KEPT_FOR_THE_SCHEDULE`. The empty string for a source the
+    schedule does not read with a sign-in application, which is nothing to say.
+    """
+    if asked.staff_source not in KEPT_FOR_THE_SCHEDULE:
+        return ""
+    if credentials is None or not credentials.configured:
+        return CREDENTIAL_NOT_KEPT_NO_VAULT
+    value = f"{asked.client_id.strip()}{CLIENT_CREDENTIAL_SEPARATOR}{asked.client_secret.strip()}"
+    try:
+        # No reach to digest: first run has none, as `brain.setup_routes.keep_provider_key` says.
+        await credentials.keep(STAFF_CREDENTIAL_SLOT, value, actor=GRANTED_BY, trace_id=trace_id)
+    except CredentialProblemError:
+        return (
+            "Your application's secret could not be kept as it is. Add it on the Staff sources "
+            "screen."
+        )
+    except CredentialsUnavailableError as unavailable:
+        return TOLD[unavailable.state]
+    return CREDENTIAL_KEPT_FOR_THE_SCHEDULE
+
+
 # ------------------------------------------------------------------------- the wiring
 async def http_fetch(outbound: Outbound) -> Answer:
     """Send one request to a directory. The one socket in the staff list screen.
@@ -373,9 +433,14 @@ async def staff_source_trial(request: Request, body: StaffTrialAsked) -> TrialVi
     """Read the chosen list once and say who a first run would add. Writes nothing."""
     await assert_setup_open(request, body.setup_code, datetime.now(UTC))
     found = await trial_for(body, fetch_of(request))
+    kept = ""
+    if found.plan is not None:
+        trace_id = str(structlog.contextvars.get_contextvars().get("trace_id", ""))
+        kept = await keep_for_the_schedule(body, credentials_of(request), trace_id=trace_id)
     log.info(
         "staff list trial",
         source=found.source,
         read=found.plan is not None,
+        credential_kept=kept == CREDENTIAL_KEPT_FOR_THE_SCHEDULE,
     )
-    return TrialView(trial=run_view(found))
+    return TrialView(trial=run_view(found), credential=kept)

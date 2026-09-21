@@ -40,13 +40,19 @@
  * Imported statically rather than split, for `Scopes`' reason: neither heavy library and no
  * stylesheet of its own.
  *
+ * **Since 2026-09-21 it also shows what the nightly sync did, keeps its credential and hands on a
+ * leaver's agents.** The runs are rows the worker wrote, read with the page; the credential card
+ * is drawn only for a reader the API answers, with a replace that is confirmed first; and the
+ * agents whose owner a run marked as having left are listed with a take-on that is confirmed too.
+ * None of the three applies a plan: the worker does.
+ *
  * M27.7.2 is this screen and is deliberately not claimed. The leaf asks for a staff source to be
  * chosen, configured and tried, and this page does none of the three: the first two are writes
  * the API does not have and the third answers a sentence on every install today. See
  * `brain.staff_source_routes`, which declines it in the same words, and `pages/Recovery.tsx`,
  * which declines M27.7.26 for the same shape.
  *
- * Task ids: none
+ * Task ids: M1.6.12, M1.8.6, M1.8.9
  */
 
 import { useCallback, useState } from "react";
@@ -57,16 +63,26 @@ import { Badge } from "../ui/Badge";
 import { Chip } from "../ui/Chip";
 import { Notice } from "../ui/Notice";
 import {
+  readCredential,
+  readRuns,
   readStaffSources,
+  readTransfers,
   readTrial,
+  transferApiPath,
   wasRead,
+  CREDENTIAL_API_PATH,
+  CREDENTIAL_BLANK,
+  RUNS_API_PATH,
   STAFF_SOURCES_API_PATH,
+  TRANSFERS_API_PATH,
   TRIAL_API_PATH,
   type Read,
   type SourceOption,
+  type Transfer,
   type TrialAnswer,
   type TrialRun,
 } from "./staffSourcesQuery";
+import { ConfirmAction } from "../components/ConfirmAction";
 import { FailureNotice } from "../ui/FailureNotice";
 
 export const STAFF_SOURCES_HEADING = "Staff sources";
@@ -299,6 +315,268 @@ function Trial() {
   );
 }
 
+// ============================================================ what the nightly sync did
+/** The heading over the scheduled runs. */
+export const NIGHTLY_SYNC = "What the nightly sync did";
+
+/** Said when there is no run to show, whichever of the reasons it is. */
+export const NO_RUNS = "No nightly run has been recorded.";
+
+/** Said beside a run that wrote no member. The API sets the flag; this only words it. */
+export const CHANGED_NOBODY = "Nobody was changed by this run.";
+
+/** The accessible names of a run's lists. */
+export const RUN_ADDED_LABEL = "People this run added";
+export const RUN_MARKED_LEFT_LABEL = "People this run marked as having left";
+export const RUN_RENAMED_LABEL = "People whose address moved";
+export const RUN_WITHHELD_LABEL = "What this run held back";
+
+/** The heading over the credential the sync reads with. */
+export const SYNC_CREDENTIAL = "The credential the nightly sync reads with";
+
+/** Said when the vault holds one, and when it does not. */
+export const CREDENTIAL_HELD = "A credential is held in the vault.";
+export const CREDENTIAL_NOT_HELD = "No credential is held, so the nightly sync cannot read the staff list.";
+
+/** What the replace button and its confirmation say. */
+export const REPLACE_CREDENTIAL = "Replace credential";
+export const KEEP_CREDENTIAL = "Keep the current one";
+export const REPLACE_QUESTION = "Replace the credential the nightly sync reads the staff list with?";
+export const REPLACE_CONSEQUENCE =
+  "The next nightly run reads with the new one. If the source refuses it, that run changes " +
+  "nobody and says so here. The value is never shown again.";
+
+/** The heading over a leaver's agents. */
+export const WAITING_FOR_AN_OWNER = "Agents waiting for a new owner";
+
+/** Said when there is nothing to take on, whichever of the reasons it is. */
+export const NO_TRANSFERS = "No agent is waiting for a new owner that you may take on.";
+
+/** Said about every agent listed: the listing stops nothing and widens nothing. */
+export const STILL_RUNNING =
+  "Each keeps running at the reach it had until somebody takes it on. Taking one on makes you " +
+  "its owner and changes nothing it can reach.";
+
+/** The take-on button and its confirmation. */
+export const TAKE_ON = "Take on";
+export const KEEP_WAITING = "Leave it waiting";
+export const TAKE_ON_CONSEQUENCE =
+  "You become the person who answers for it. Its ceiling does not change, so it reaches nothing " +
+  "it could not reach before.";
+
+/** The scheduled runs, loaded with the page. See `A_RUN_IS_A_RECORD_AND_NOT_A_CALL`. */
+function NightlySync() {
+  const answer = useResource<unknown>(RUNS_API_PATH);
+  const runs = readRuns(answer.data);
+  if (answer.failure !== null) {
+    return <FailureNotice failure={answer.failure} />;
+  }
+  if (answer.busy) {
+    return null;
+  }
+  if (runs.length === 0) {
+    return <p className="note">{NO_RUNS}</p>;
+  }
+  return (
+    <ul className="roster" aria-label={NIGHTLY_SYNC}>
+      {runs.map((run) => (
+        <li key={`${run.source}-${run.finished_at}`}>
+          <p>
+            <Chip label={run.source} /> <Chip label={run.outcome} /> <time>{run.finished_at}</time>
+          </p>
+          <p>{run.detail}</p>
+          {run.changed_nobody ? <p className="note">{CHANGED_NOBODY}</p> : null}
+          <Lines label={RUN_ADDED_LABEL} lines={run.added} />
+          <Lines label={RUN_MARKED_LEFT_LABEL} lines={run.marked_left} />
+          <Lines label={RUN_RENAMED_LABEL} lines={run.renamed} />
+          <Lines label={RUN_WITHHELD_LABEL} lines={run.withheld} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * The credential card, drawn only for a reader the API answers.
+ *
+ * A reader without the credential authority over everything is answered a 404, which is also
+ * every other absence, so the card is left out rather than drawn as a failure: a failure notice
+ * here would tell a reader that a credential screen exists and they may not see it.
+ */
+function SyncCredential() {
+  const [version, setVersion] = useState(0);
+  const answer = useResource<unknown>(CREDENTIAL_API_PATH, version);
+  const held = readCredential(answer.data);
+  const [value, setValue] = useState("");
+  const [blank, setBlank] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [told, setTold] = useState("");
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
+
+  const send = useCallback(() => {
+    setBusy(true);
+    void (async () => {
+      const result = await request<unknown>(CREDENTIAL_API_PATH, { method: "PUT", body: { value } });
+      setBusy(false);
+      setPending(false);
+      if (!result.ok) {
+        setFailure(result.failure);
+        return;
+      }
+      setFailure(null);
+      setValue("");
+      setTold(readCredential(result.data)?.told ?? "");
+      setVersion((one) => one + 1);
+    })();
+  }, [value]);
+
+  if (held === null) {
+    return null;
+  }
+  return (
+    <section className="card">
+      <h2>{SYNC_CREDENTIAL}</h2>
+      <p>{held.held === true ? CREDENTIAL_HELD : held.held === false ? CREDENTIAL_NOT_HELD : held.told}</p>
+      {held.set_at === null || held.set_at === undefined ? null : (
+        <p className="note">
+          Written <time>{held.set_at}</time>
+        </p>
+      )}
+      <p className="field-description">{held.form}</p>
+      {told === "" ? null : <p className="note">{told}</p>}
+      {failure === null ? null : <FailureNotice failure={failure} />}
+      <form
+        className="form"
+        aria-label={REPLACE_CREDENTIAL}
+        onSubmit={(event) => {
+          event.preventDefault();
+          setFailure(null);
+          // A blank value is said beside the field before anything is confirmed or sent.
+          const empty = value.trim() === "";
+          setBlank(empty);
+          if (!empty) {
+            setPending(true);
+          }
+        }}
+      >
+        <label className="control-label">
+          New credential{" "}
+          <input
+            className="form-control"
+            type="text"
+            name="credential"
+            autoComplete="off"
+            spellCheck={false}
+            value={value}
+            onChange={(event) => {
+              setValue(event.target.value);
+            }}
+          />
+        </label>
+        {blank ? <p className="field-problem">{CREDENTIAL_BLANK}</p> : null}
+        <div className="form-actions">
+          <button type="submit" className="button" disabled={busy}>
+            {REPLACE_CREDENTIAL}
+          </button>
+        </div>
+      </form>
+      {pending ? (
+        <ConfirmAction
+          question={REPLACE_QUESTION}
+          consequence={REPLACE_CONSEQUENCE}
+          confirmLabel={REPLACE_CREDENTIAL}
+          cancelLabel={KEEP_CREDENTIAL}
+          busy={busy}
+          onConfirm={() => {
+            send();
+          }}
+          onCancel={() => {
+            setPending(false);
+          }}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+/** A leaver's agents, and the one act a reader may take on each. */
+function Transfers() {
+  const [version, setVersion] = useState(0);
+  const answer = useResource<unknown>(TRANSFERS_API_PATH, version);
+  const waiting = readTransfers(answer.data);
+  const [chosen, setChosen] = useState<Transfer | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
+
+  const take = useCallback((agentId: string) => {
+    setBusy(true);
+    void (async () => {
+      const result = await request<unknown>(transferApiPath(agentId), { method: "POST" });
+      setBusy(false);
+      setChosen(null);
+      if (!result.ok) {
+        setFailure(result.failure);
+        return;
+      }
+      setFailure(null);
+      setVersion((one) => one + 1);
+    })();
+  }, []);
+
+  if (answer.failure !== null) {
+    return <FailureNotice failure={answer.failure} />;
+  }
+  if (answer.busy) {
+    return null;
+  }
+  return (
+    <>
+      {failure === null ? null : <FailureNotice failure={failure} />}
+      {waiting.length === 0 ? (
+        <p className="note">{NO_TRANSFERS}</p>
+      ) : (
+        <>
+          <p className="note">{STILL_RUNNING}</p>
+          <ul className="roster" aria-label={WAITING_FOR_AN_OWNER}>
+            {waiting.map((one) => (
+              <li key={one.agent_id}>
+                {one.display_name} <code>{one.agent_id}</code> <Chip label={one.owner_id} />{" "}
+                <button
+                  type="button"
+                  className="button"
+                  disabled={busy}
+                  aria-label={`${TAKE_ON}: ${one.agent_id}`}
+                  onClick={() => {
+                    setChosen(one);
+                  }}
+                >
+                  {TAKE_ON}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {chosen === null ? null : (
+        <ConfirmAction
+          question={`Become the owner of ${chosen.display_name}?`}
+          consequence={TAKE_ON_CONSEQUENCE}
+          confirmLabel={TAKE_ON}
+          cancelLabel={KEEP_WAITING}
+          busy={busy}
+          onConfirm={() => {
+            take(chosen.agent_id);
+          }}
+          onCancel={() => {
+            setChosen(null);
+          }}
+        />
+      )}
+    </>
+  );
+}
+
 export function StaffSources() {
   const answer = useResource<unknown>(STAFF_SOURCES_API_PATH);
   const page = readStaffSources(answer.data);
@@ -386,6 +664,18 @@ export function StaffSources() {
       <section className="card">
         <h2>{TRY_IT_BEFORE_IT_RUNS}</h2>
         <Trial />
+      </section>
+
+      <section className="card">
+        <h2>{NIGHTLY_SYNC}</h2>
+        <NightlySync />
+      </section>
+
+      <SyncCredential />
+
+      <section className="card">
+        <h2>{WAITING_FOR_AN_OWNER}</h2>
+        <Transfers />
       </section>
     </article>
   );
