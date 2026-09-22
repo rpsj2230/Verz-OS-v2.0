@@ -104,6 +104,16 @@ import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./suppo
 import { declaredParameterNames, declaredParameterSchema, declaredQueryParameters } from "./support/openapi";
 import { backendEnumMembers, backendModelFields } from "./support/python";
 import { everyWrite } from "./support/writes";
+import {
+  credentialPath,
+  KEEP_THE_OLD_KEY,
+  keySavedSentence,
+  NOTHING_TYPED,
+  SAVE_THE_KEY,
+  saveKeyConsequence,
+  saveKeyQuestion,
+  SET_A_KEY,
+} from "../src/components/ProviderKeyForm";
 
 const CONSOLE_ORIGIN = "https://console.test";
 const ROUTES = "src/brain/operate_routes.py";
@@ -1072,5 +1082,71 @@ describe("what the page asks for", () => {
     );
     expect(Object.keys(check()).sort()).toEqual(backendModelFields(PROVIDER_ROUTES, "CheckView").sort());
     expect(backendModelFields(PROVIDER_ROUTES, "ProviderSwitchAsked")).toEqual(["on"]);
+  });
+});
+
+describe("setting a provider's key", () => {
+  const KEY_SENTINEL = "sk-TEST-KEY-SENTINEL-0001";
+  const slot = { slot: "providers/anthropic", description: "D", held: false, set_at: null };
+
+  function keyInput(container: HTMLElement): HTMLInputElement {
+    const input = container.querySelector<HTMLInputElement>('[data-slot="secret-field"] input');
+    if (input === null) {
+      throw new Error("No key field.");
+    }
+    return input;
+  }
+
+  test("the key field is drawn only for a reader the API sent the vault's column to", async () => {
+    // What breaks if this is deleted: a key field drawn for somebody the credentials route refuses,
+    // or, the defect this form was written for, no field at all for the owner told to add a key.
+    const plain = await modelsPage(EVERY_ANSWER);
+    expect(plain.container.textContent).not.toContain(SET_A_KEY);
+
+    const managing = providers({ providers: [provider("anthropic", { credential: slot }), provider("local")] });
+    const { container } = await modelsPage({ ...EVERY_ANSWER, [PROVIDERS]: () => json(managing) });
+    expect(container.textContent).toContain(SET_A_KEY);
+    expect([...container.querySelectorAll('select[name="provider"] option')].map((one) => one.textContent)).toEqual([
+      "anthropic",
+    ]);
+  });
+
+  test("a blank key sends nothing, and a typed one is sent once from its confirmation and never drawn back", async () => {
+    // What breaks if this is deleted: a press that stores an empty key, a key replaced with nothing
+    // asked first, a write to a slot the page made up rather than the one the API named, or the key
+    // left in the field or drawn anywhere on the page after it was saved.
+    const managing = providers({ providers: [provider("anthropic", { credential: slot }), provider("local")] });
+    const { container, sent } = await modelsPage({
+      ...EVERY_ANSWER,
+      [PROVIDERS]: () => json(managing),
+      [`PUT /api/v1${credentialPath("providers/anthropic")}`]: () =>
+        json({ slot: "providers/anthropic", held: true, set_at: "2019-03-05T09:00:00Z", in_use: true, told: "TOLD-SENTINEL" }),
+    });
+    const puts = () => sent.filter((one) => one.method === "PUT");
+
+    fireEvent.click(button(container, SAVE_THE_KEY));
+    expect(container.textContent).toContain(NOTHING_TYPED);
+    expect(container.querySelector(".confirm")).toBeNull();
+    expect(puts()).toEqual([]);
+
+    fireEvent.input(keyInput(container), { target: { value: KEY_SENTINEL } });
+    fireEvent.click(button(container, SAVE_THE_KEY));
+    expect(container.querySelector(".confirm")?.textContent).toContain(saveKeyQuestion("anthropic"));
+    expect(saveKeyConsequence("anthropic", true)).toContain("replaced");
+    expect(puts()).toEqual([]);
+
+    fireEvent.click(confirmButton(container, KEEP_THE_OLD_KEY));
+    expect(puts()).toEqual([]);
+
+    fireEvent.click(button(container, SAVE_THE_KEY));
+    fireEvent.click(confirmButton(container, SAVE_THE_KEY));
+    await waitFor(() => {
+      expect(container.textContent).toContain(keySavedSentence("anthropic", "TOLD-SENTINEL"));
+    });
+    expect(puts()).toEqual([
+      { method: "PUT", path: `/api/v1${credentialPath("providers/anthropic")}`, body: { value: KEY_SENTINEL } },
+    ]);
+    expect(keyInput(container).value).toBe("");
+    expect(container.innerHTML).not.toContain(KEY_SENTINEL);
   });
 });

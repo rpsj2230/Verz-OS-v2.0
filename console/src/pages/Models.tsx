@@ -63,6 +63,7 @@ import { ConfirmAction } from "../components/ConfirmAction";
 import { Chip } from "../ui/Chip";
 import { FailureNotice } from "../ui/FailureNotice";
 import { chainApiPath, MATRIX_PATH, readMatrixPage, type RungRow } from "./matrixQuery";
+import { ProviderKeyForm } from "../components/ProviderKeyForm";
 import { ProviderRegister } from "../components/ProviderRegister";
 import { RoutingSettings } from "../components/RoutingSettings";
 import { probeWords } from "./routingSettingsQuery";
@@ -652,6 +653,17 @@ function ProviderHealth({ models }: { readonly models: ModelsBody }) {
                 setFailure(null);
                 setSwitched(null);
                 setAsked(one);
+              }}
+            />
+            <ProviderKeyForm
+              body={body}
+              onSaved={() => {
+                void (async () => {
+                  const again = await request<unknown>(PROVIDERS_API_PATH);
+                  if (again.ok) {
+                    setWritten(again.data);
+                  }
+                })();
               }}
             />
             <RungsTable body={body} />

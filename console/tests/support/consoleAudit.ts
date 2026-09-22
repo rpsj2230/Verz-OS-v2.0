@@ -103,6 +103,7 @@ import {
 } from "../../src/pages/staffSourcesQuery";
 import { CONNECTORS_API_PATH, disconnectApiPath } from "../../src/pages/connectorsQuery";
 import { LARK_API_PATH, LARK_TEST_API_PATH } from "../../src/pages/larkConnectQuery";
+import { credentialPath } from "../../src/components/ProviderKeyForm";
 import { REGISTER_API_PATH, secretApiPath, switchOffApiPath } from "../../src/pages/webhooksQuery";
 import {
   PASSWORD_API_PATH as RELAY_PASSWORD_API_PATH,
@@ -463,16 +464,11 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "API keys, credentials and secrets, held in the vault and never displayed": {
-    screens: ["/webhooks", "/vault"],
+    screens: ["/webhooks", "/vault", "/models"],
     routes: ["/api/v1/credentials*", "/api/v1/vault"],
     tables: ["ops.credential_write", "ops.vault_access"],
     installation: [],
-    gaps: [
-      {
-        what: "GET /api/v1/credentials and PUT /api/v1/credentials/{family}/{name} are served, and no screen calls either.",
-        leaf: "M27.8.8",
-      },
-    ],
+    gaps: [],
   },
   "Knowledge bases, documents and data sources": {
     screens: [
@@ -815,6 +811,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   ],
   "src/components/ProviderRegister.tsx ADD_PROVIDER_API_PATH": [
     at("POST /api/v1/models/providers", "ADD_PROVIDER_API_PATH", ADD_PROVIDER_API_PATH),
+  ],
+  "src/components/ProviderKeyForm.tsx credentialPath(slot)": [
+    at("PUT /api/v1/credentials/{family}/{name}", "credentialPath", credentialPath("providers/anthropic")),
   ],
   "src/components/RoutingSettings.tsx tierApiPath(asked.tier)": [
     at("PUT /api/v1/models/tiers/{tier}", "tierApiPath", tierApiPath("main")),
@@ -1467,6 +1466,11 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: t("test_webhook_routes", "test_a_registration_is_written_with_the_reader_as_its_creator_and_its_secret_kept"),
     audit: WEBHOOK_LEDGER,
     behaviour: A_WEBHOOK_IS_DELIVERED,
+  },
+  "PUT /api/v1/credentials/{family}/{name}": {
+    row: t("test_credential_routes", "test_setting_a_key_writes_the_slot_and_answers_that_it_is_held_and_when"),
+    audit: t("test_credential_routes", "test_a_key_set_from_the_console_is_recorded_as_its_setter_with_their_reach_and_trace"),
+    behaviour: t("test_credentials", "test_a_key_kept_here_is_handed_to_this_process_unless_the_environment_outranks_it"),
   },
   "POST /api/v1/webhooks/subscribers/{subscriber_id}/secret": {
     row: t("test_webhook_routes", "test_replacing_a_secret_writes_the_new_one_and_a_switched_off_subscriber_is_refused"),
