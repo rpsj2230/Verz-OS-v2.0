@@ -23,3 +23,9 @@ with their evidence so the commit is kept.
 | M5.6.2 | tests/unit/test_matrix_gate.py: a routing change that stops the ladder answering a golden question is held, with the failing question shown |
 | M5.6.4 | tests/unit/test_provider_registry_routes.py: the register exports every provider's region, retention, training terms and agreement link with call counts |
 | M5.7.2 | tests/unit/test_model_calls.py: a provider added from the console answers through the ladder with no release; its key goes to its own vault slot |
+
+## Wave 1, identity (closed 2026-09-22)
+
+| Task | Evidence |
+| --- | --- |
+| M1.1.5 | tests/unit/test_group_sync.py and tests/unit/test_directory_role_grant.py: a directory group mapped on the Roles screen grants its role at sign-in, and is removed when the group is; groups grant roles only (owner 2026-09-22, needs-rupash 96) |
