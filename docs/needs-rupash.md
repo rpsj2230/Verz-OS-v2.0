@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**5 items are open: 85, 91, 93, 95 and 96.** Item 85 (your AI provider keys) unblocks the most. Each
+**2 items are open: 85 and 91.** Item 85 (your AI provider keys) unblocks the most. Each
 says in plain terms what it is, what I recommend, and every step.
 
 # Open
@@ -19,8 +19,10 @@ M5.6.1 and M5.6.3.
 1. Get a key from each provider's website: Anthropic console (API keys), OpenAI platform (API
    keys), DeepSeek platform (API keys), Moonshot platform (API keys). Keep each one open.
 2. Open the console (signed in) and go to **Models and health** in the left menu.
-3. On each provider's row use its key control, paste that provider's key and save. The row should
-   then say a key is held.
+3. Scroll to **Provider health**. Under the providers table is **Set a provider's key**. Choose
+   the provider, paste its key into **Key**, press **Save the key**, then **Save the key** again
+   in the box that asks you to confirm. The table's "In the vault" column then says a key is held.
+   Repeat for each provider.
 4. Press **Check** on each provider.
 5. Tell me "keys added". I then confirm each one answers and record the checks.
 
@@ -31,33 +33,23 @@ proof is you trying them and recording what you saw on the new **Requirement che
 When Wave 1 is deployed I will send you a short list, about 30 minutes in one sitting (department
 isolation, a staff member's first day, the model checks). Nothing to do yet.
 
-## 93. Allow the LDAP library, so Active Directory can be a staff source (M1.6.6)
-
-**In plain terms:** the only maintained library for reading Active Directory from Python is
-`ldap3`. Its licence (LGPL) lets the product use it unmodified; only changes to the library
-itself would have to be shared. The product's licence gate refuses it until you allow it.
-Everything else for LDAP is built and tested (encrypted connection only, read-only, disabled
-accounts treated as leavers). **Recommendation: allow it,** on the same terms as the database
-driver already allowed. Reply "allow ldap3".
-
-## 95. Move two tasks to the wave that builds what they need
-
-**In plain terms:** two Wave 1 tasks cannot be finished until later waves build what they sit on.
-Ignoring a chat message delivered twice (M3.2.2) needs the inbound chat route, which Wave 2's
-channels work builds; the check itself is already written and waits for it. Sharing the AI
-provider's cache for tools (M3.7.2) needs agents that call tools, which Wave 3 builds.
-**Recommendation: move M3.2.2 to Wave 2 and M3.7.2 to Wave 3.** Reply "move both".
-
-## 96. Can a directory group grant permission packs, or only roles? (M1.1.5)
-
-**In plain terms:** you can now map a group in your sign-in provider (Keycloak, or the company's
-directory behind it) to a role on the Roles screen, and everyone in that group gets the role when
-they sign in. A standing safety rule says the sign-in provider can never grant permissions
-directly, because a group edited in another system would then silently hand out access here.
-**Recommendation: roles only,** which keeps that rule; packs stay granted in this console, where
-every grant is audited. Reply "roles only" or "allow packs".
-
 # Answered
+
+## 96. Directory groups grant roles only - DECIDED 2026-09-22
+
+Roles and permissions are managed in the admin console. Staff are synced from the source into the
+console, and roles are assigned to them there. A directory group can be mapped to a role, never to
+a permission pack, so nothing edited in another system hands out access here.
+
+## 95. Two tasks moved to the wave that builds what they need - DECIDED 2026-09-22
+
+M3.2.2 (ignoring a chat message delivered twice) moved to Wave 2; M3.7.2 (sharing the provider's
+tool cache) moved to Wave 3.
+
+## 93. The LDAP library is allowed - DECIDED 2026-09-22
+
+`ldap3` is allowed on the same terms as the database driver, so Active Directory can be chosen as
+a staff source (M1.6.6).
 
 ## 89. LDAP / Active Directory - DECIDED: build it ready to use
 

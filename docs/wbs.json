@@ -388,7 +388,10 @@
     "A request passes identify, entitle, screen, lane classification and agent selection, cache, route and catalogue projection, in that order, before any model is called, and a test fails if a model call happens earlier in the chain or a step runs out of order",
     "A person can address by name any agent they are allowed to use, in the web application and by mention in a chat channel, and the request goes to that agent instead of the router's choice, while an agent they may not use answers as one that does not exist"
    ],
-   "leaf_waves": {},
+   "leaf_waves": {
+    "M3.2.2": 2,
+    "M3.7.2": 3
+   },
    "leaf_acts": {},
    "leaf_decided": {},
    "act_groups": {},
