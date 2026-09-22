@@ -1,9 +1,9 @@
 {
-  "generated_at": "2026-09-21T19:36:25.765097+00:00",
-  "commit": "d377f83",
-  "commit_subject": "The router reads the tier table, a scope's residency travels with the question, providers are probed every minute",
+  "generated_at": "2026-09-22T02:06:07.752848+00:00",
+  "commit": "44562ec",
+  "commit_subject": "Needs you records items 93, 95 and 96 as decided, two tasks move waves, and item 85's steps name the real key field",
   "total": 1595,
-  "done": 325,
+  "done": 326,
   "percent": 20.4,
   "acts": 47,
   "decided": 107,
@@ -25,39 +25,39 @@
     {
       "wave": 1,
       "name": "The gate",
-      "total": 165,
-      "done": 144,
-      "percent": 87.3,
+      "total": 163,
+      "done": 145,
+      "percent": 89.0,
       "in_progress": 0,
       "ready_for_testing": 0,
       "blocked": 0,
-      "open": 21,
+      "open": 18,
       "acts": 1,
       "decided": 7
     },
     {
       "wave": 2,
       "name": "Data, channels, retrieval",
-      "total": 297,
+      "total": 298,
       "done": 10,
       "percent": 3.4,
       "in_progress": 0,
       "ready_for_testing": 0,
       "blocked": 0,
-      "open": 287,
+      "open": 288,
       "acts": 0,
       "decided": 8
     },
     {
       "wave": 3,
       "name": "Agents, knowledge, console",
-      "total": 552,
+      "total": 553,
       "done": 20,
       "percent": 3.6,
       "in_progress": 0,
       "ready_for_testing": 0,
       "blocked": 0,
-      "open": 532,
+      "open": 533,
       "acts": 1,
       "decided": 49
     },
@@ -116,7 +116,7 @@
       "name": "Identity, users, roles, permissions",
       "wave": 1,
       "total": 50,
-      "done": 44,
+      "done": 45,
       "acts": 0,
       "decided": 1
     },
@@ -535,6 +535,7 @@
     "M1.1.2",
     "M1.1.3",
     "M1.1.4",
+    "M1.1.5",
     "M1.1.6",
     "M1.1.7",
     "M1.2.1",
@@ -843,7 +844,7 @@
     }
   },
   "wave_records": {},
-  "closed_today": 166,
+  "closed_today": 1,
   "next_up": [
     "M31.3.2.3",
     "M31.3.2.4",
@@ -852,6 +853,12 @@
     "M41.3.1"
   ],
   "recent": [
+    {
+      "sha": "44562ec",
+      "at": "2026-09-22T02:05:16+00:00",
+      "subject": "Needs you records items 93, 95 and 96 as decided, two tasks move waves, and item 85's steps name the real key field",
+      "closed": "M1.1.5"
+    },
     {
       "sha": "d377f83",
       "at": "2026-09-21T19:24:06+00:00",
@@ -965,12 +972,6 @@
       "at": "2026-09-21T10:05:42+00:00",
       "subject": "The owner's server is his first company's production install, the starter pack waits for Wave 3, and the installer requirement is his own row",
       "closed": "M38.1.3.4"
-    },
-    {
-      "sha": "7b6da17",
-      "at": "2026-09-21T10:04:34+00:00",
-      "subject": "Enabling a person is on the audit record, and so is disabling one with no session open",
-      "closed": "M1.2.3"
     }
   ]
 }
