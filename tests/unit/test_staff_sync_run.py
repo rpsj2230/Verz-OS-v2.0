@@ -21,6 +21,7 @@ from typing import Any
 
 import pytest
 
+from brain.connectors import ldap_directory
 from brain.connectors.staff_directories import Answer, Outbound
 from brain.identity.staff_roster import Application, RunOutcome, StoredMember, digest_of
 from brain.identity.staff_source import STAFF_SOURCE_LOCATION_SETTING, STAFF_SOURCE_SETTING
@@ -447,3 +448,66 @@ def test_a_source_with_no_shared_app_does_not_fall_back_and_changes_nobody(store
 
     assert ran.outcome is RunOutcome.NO_CREDENTIAL
     assert [one.path for one in keys.asked] == [f"connector_keys/{STAFF_SOURCE_SLOT}"]
+
+
+# ------------------------------------------------------------------------ LDAP, M1.6.6
+LDAP_ENV = {
+    STAFF_SOURCE_SETTING: "ldap",
+    STAFF_SOURCE_LOCATION_SETTING: "ldaps://dc1.example.com/DC=example,DC=com",
+}
+
+
+def ldap_through(monkeypatch: pytest.MonkeyPatch, directory: Any) -> list[str]:
+    """Route the LDAP reader through a stand-in directory, recording the credential it saw."""
+    seen: list[str] = []
+    real = ldap_directory.read_directory
+
+    def reading(location: str, credential: str) -> Any:
+        seen.append(credential)
+        return real(location, credential, opener=directory)
+
+    monkeypatch.setattr(staff_sync_run, "read_directory", reading)
+    return seen
+
+
+def test_an_ldap_directory_is_read_on_a_schedule_with_the_kept_service_account(
+    store: Store, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """LDAP has a scheduled reader now, leasing the same slot as every staff source and binding
+    with the credential held there. Delete this and choosing LDAP is a nightly NOT_SCHEDULABLE."""
+    from tests.unit.test_ldap_directory import CREDENTIAL, STAFF, opened, paged
+
+    directory = opened({ldap_directory.DEFAULT_USER_FILTER: paged(STAFF, 2)})
+    seen = ldap_through(monkeypatch, directory)
+    keys = Keys(Lease(CREDENTIAL))
+
+    ran, _ = run(env=LDAP_ENV, keys=keys)
+
+    assert ran.outcome is RunOutcome.APPLIED
+    assert keys.asked == [SecretRef(path=f"connector_keys/{STAFF_SOURCE_SLOT}", role=READING_ROLE)]
+    assert seen == [CREDENTIAL]
+    assert directory.directory.closed
+    ((application, _),) = store.written
+    assert "Ada" in application.added
+    assert keys.lease_given.closed == [NOW]
+
+
+def test_a_refused_ldap_bind_is_a_refused_credential_that_names_no_password(
+    store: Store, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A wrong password is filed as a refused credential, not an outage, and the row does not
+    carry it. Delete this and a rotated service account password reads as the directory down."""
+    from tests.unit.test_ldap_directory import PASSWORD
+
+    def refusing(location: Any, account: Any) -> Any:
+        raise ldap_directory.LdapBindRefusedError("dc1.example.com:636 refused the account")
+
+    ldap_through(monkeypatch, refusing)
+
+    ran, sessions = run(env=LDAP_ENV, keys=Keys(Lease(f"svc@example.com:{PASSWORD}")))
+
+    assert ran.outcome is RunOutcome.CREDENTIAL_REFUSED
+    (record,) = records_of(sessions)
+    assert record.detail.startswith(CREDENTIAL_REFUSED_PREFIX)
+    assert PASSWORD not in record.detail
+    assert store.written == []

@@ -195,6 +195,30 @@ nothing else; reading each directory's groups is the scheduled sync's work.
 documentation and tested against a stand-in; none of them has been run against a real Google,
 Microsoft or Lark tenant. The first company to register an application is the first real run.
 
+## Reading the staff list from LDAP or Active Directory
+
+An LDAP directory has no sign-in screen: it is read by the scheduled staff sync with a service
+account, over TLS, and never written to. What a company with a directory does:
+
+1. **Create a read-only service account**, for example `svc-brain-read`: an ordinary domain user,
+   in no administrative group, with no delegated right to reset passwords or change groups.
+2. **Choose the base DN** the search starts from: the domain (`DC=example,DC=com`) or the
+   organisational unit your staff are in.
+3. **Make the directory answer LDAPS on port 636** with a certificate this server trusts. A
+   certificate signed by your own authority needs that authority's certificate on this server,
+   named with `x-ca-file`. StartTLS on port 389 also works; plain LDAP is refused.
+4. **Set the location** to one LDAP URL, for example
+   `ldaps://dc1.example.com/DC=example,DC=com??sub?(&(objectClass=person)(!(objectClass=computer)))`,
+   and keep the credential in the vault slot `connector_keys/staff_source` as
+   `<service account>:<password>`. The password never goes in the location, which is refused if
+   it carries one.
+
+It reads `objectGUID` or `entryUUID` as the stable identity, `mail` (or `userPrincipalName`) as
+the work address, `displayName`, `department`, `manager`, `memberOf`, and `userAccountControl`,
+whose disable bit marks an account as having left. `brain.connectors.ldap_directory` holds these
+steps as the metadata the Staff sources screen shows. Its client library, ldap3, is LGPL and was
+allowed by name on 2026-09-22; an image built without it says so on a run and changes nobody.
+
 ## What each source is trusted to say, and why it matters
 
 A roster source can assert three things, and no more. It can say **that somebody exists**, with
@@ -931,4 +955,4 @@ than thirty. A slow start beats a container that never becomes ready.
 
 ## Task ids
 
-M42.2.7, M42.5.7
+M42.2.7, M42.5.7, M1.6.6
