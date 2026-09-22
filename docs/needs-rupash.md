@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**2 items are open: 85 and 91.** Item 85 (your AI provider keys) unblocks the most. Each
+**3 items are open: 85, 91 and 97.** Item 85 (your AI provider keys) unblocks the most. Each
 says in plain terms what it is, what I recommend, and every step.
 
 # Open
@@ -26,12 +26,57 @@ M5.6.1 and M5.6.3.
 4. Press **Check** on each provider.
 5. Tell me "keys added". I then confirm each one answers and record the checks.
 
-## 91. Checks only you can do on your install (after Wave 1 lands)
+## 91. Checks only you can do on your install (about 45 minutes, one sitting)
 
-**In plain terms:** a few requirements are about how the Brain behaves for real people, so the
-proof is you trying them and recording what you saw on the new **Requirement checks** screen.
-When Wave 1 is deployed I will send you a short list, about 30 minutes in one sitting (department
-isolation, a staff member's first day, the model checks). Nothing to do yet.
+**In plain terms:** some requirements are about how the Brain behaves for real people, so the proof
+is you trying each one and recording what you saw on **Install > Requirement checks** (open the
+area, choose the requirement, press **Record a check**, write what you did and saw, press **Record
+the check**). **Recommendation: do this after item 85 (at least the Claude key) and after
+connecting Lark,** because the department checks need your real departments and checks 5 and 6
+need a model to answer. Tell me "checks done" and I close the tasks from your records.
+
+**Before you start (once):**
+
+1. Connect Lark as your staff source: **Govern > Staff sources**, choose **Lark**, and follow the
+   steps on that screen from creating the Lark app onwards. When the first sync finishes, your
+   departments appear on **Govern > Departments and teams**. This also proves M1.6.5.
+2. Pick two colleagues in two different Lark departments (or create two test accounts in Lark, one
+   in each). In Keycloak, open your realm, **Users > Add user**, and create each with the same work
+   email as in Lark. On **Credentials**, set a password with **Temporary** off.
+
+**The checks:**
+
+1. **Sign-in (M1.8.5, web part).** Sign out and in again through Keycloak: you land in the console.
+   As a test person with a password only, open **Govern > Roles**: you are refused. Leave a session
+   idle past its limit and see it end. Use "Forgot password" on the sign-in page and see the email.
+2. **Department isolation (M2.3.1, web part).** As yourself, on **Knowledge**, add a small document
+   at the first department's reach. As the person in that department, ask about it on **Ask**: the
+   answer uses it. As the person in the other department, ask the same: you are told there is
+   nothing, exactly as if it did not exist.
+3. **Department admin limits (M2.3.1).** On **Govern > Roles**, make the first person department
+   admin for their department. As them, try to grant something in the other department: refused.
+   Try to publish an agent company-wide: it waits for your approval on **Approvals**.
+4. **Audit (M24.3.4).** On **Govern > Audit**, find the grant from check 3 and the document from
+   check 2. Press **Verify the ledger**: it verifies.
+5. **A real answer (M38.2.2.2).** As the first person, ask a question the document answers. The
+   answer cites it; the other person gets nothing for the same question.
+6. **Models (M5.6.5).** On **Models and health**, press **Check** on each provider with a key: each
+   says it answered. Download the provider register and see each provider's region and terms.
+7. **The remaining rows (M1.8.8, M2.3.2, M24.3.6).** On **Requirement checks**, open the
+   Permissions, Departments and Observability areas. Each row still "Not checked yet" says what it
+   needs; try it and record it.
+
+The chat parts of checks 1 and 2 (binding a Lark identity with a code, the same reach in chat)
+cannot be done until Wave 2 builds the Lark chat channel; item 97 asks where they go.
+
+## 97. The chat parts of two install checks wait for Wave 2 (M1.8.5, M2.3.1)
+
+**In plain terms:** the sign-in check (M1.8.5) and the department check (M2.3.1) each include a
+chat step: binding a Lark chat identity with a one-time code, and getting the same answers in chat
+as on the web. The Lark chat channel is built in Wave 2, so those steps cannot be tried yet, and
+the two tasks can never be finished in Wave 1. **Recommendation: move both tasks to Wave 2,** do
+their web steps in item 91 now, and finish the chat steps when the channel lands. Reply "move
+both chat checks".
 
 # Answered
 
