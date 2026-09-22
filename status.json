@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-09-22T02:09:32.135932+00:00",
-  "commit": "8092317",
-  "commit_subject": "Needs you gives the full list of install checks for item 91, and asks where the two chat checks go",
+  "generated_at": "2026-09-22T02:25:04.600192+00:00",
+  "commit": "f3e6696",
+  "commit_subject": "Models and health has a field to paste a provider's key, sent once from a confirmation and never drawn back",
   "total": 1595,
-  "done": 326,
-  "percent": 20.4,
+  "done": 327,
+  "percent": 20.5,
   "acts": 47,
   "decided": 107,
   "current_wave": 0,
@@ -52,12 +52,12 @@
       "wave": 3,
       "name": "Agents, knowledge, console",
       "total": 553,
-      "done": 20,
-      "percent": 3.6,
+      "done": 21,
+      "percent": 3.8,
       "in_progress": 0,
       "ready_for_testing": 0,
       "blocked": 0,
-      "open": 533,
+      "open": 532,
       "acts": 1,
       "decided": 49
     },
@@ -350,7 +350,7 @@
       "name": "Console, reports, observability",
       "wave": 3,
       "total": 214,
-      "done": 13,
+      "done": 14,
       "acts": 0,
       "decided": 19
     },
@@ -612,6 +612,7 @@
     "M27.8.1",
     "M27.8.2",
     "M27.8.3",
+    "M27.8.8",
     "M27.9.6",
     "M27.9.7",
     "M28.1.1",
@@ -844,7 +845,7 @@
     }
   },
   "wave_records": {},
-  "closed_today": 1,
+  "closed_today": 2,
   "next_up": [
     "M31.3.2.3",
     "M31.3.2.4",
@@ -853,6 +854,12 @@
     "M41.3.1"
   ],
   "recent": [
+    {
+      "sha": "f3e6696",
+      "at": "2026-09-22T02:13:24+00:00",
+      "subject": "Models and health has a field to paste a provider's key, sent once from a confirmation and never drawn back",
+      "closed": "M27.8.8"
+    },
     {
       "sha": "44562ec",
       "at": "2026-09-22T02:05:16+00:00",
@@ -966,12 +973,6 @@
       "at": "2026-09-21T10:32:19+00:00",
       "subject": "The application answers as its own limited database login on the owner's install, and the guide warns about a dollar sign in its password",
       "closed": "M31.4.2"
-    },
-    {
-      "sha": "cc7a087",
-      "at": "2026-09-21T10:05:42+00:00",
-      "subject": "The owner's server is his first company's production install, the starter pack waits for Wave 3, and the installer requirement is his own row",
-      "closed": "M38.1.3.4"
     }
   ]
 }
