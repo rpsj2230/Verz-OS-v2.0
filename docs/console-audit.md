@@ -11,8 +11,8 @@ What an administrator would need to manage, read out of the schema, the routes a
 - 27 installation values, from `brain.install.INSTALLATION`.
 - 192 routes under `/api/v1` and `/setup`, from the API's internal document.
 - 72 console addresses, from the route table in `console/src/App.tsx`.
-- 73 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 90 routes.
-- 38 gaps recorded, and 23 routes no screen calls.
+- 74 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 91 routes.
+- 37 gaps recorded, and 22 routes no screen calls.
 
 ## Area by area
 
@@ -240,7 +240,7 @@ What an administrator would need to manage, read out of the schema, the routes a
 
 ### API keys, credentials and secrets, held in the vault and never displayed
 
-- **Screens:** `/webhooks`, `/vault`
+- **Screens:** `/webhooks`, `/vault`, `/models`
 - **Tables:** `ops.credential_write`, `ops.vault_access`
 - **Installation values:** none
 
@@ -248,9 +248,9 @@ What an administrator would need to manage, read out of the schema, the routes a
 | --- | --- |
 | `GET /api/v1/credentials` | **no screen** |
 | `GET /api/v1/vault` | `/vault` |
-| `PUT /api/v1/credentials/{family}/{name}` | **no screen** |
+| `PUT /api/v1/credentials/{family}/{name}` | `/models` |
 
-- **Gap.** GET /api/v1/credentials and PUT /api/v1/credentials/{family}/{name} are served, and no screen calls either. Open leaf `M27.8.8`.
+No gap recorded.
 
 ### Knowledge bases, documents and data sources
 
@@ -491,7 +491,7 @@ No gap recorded.
 
 ## Every write the console sends, followed to the system
 
-Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 73 of 90 write routes have all three proved or not applicable, 12 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
+Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 74 of 91 write routes have all three proved or not applicable, 13 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
 
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
@@ -579,6 +579,7 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /setup/staff-source/sign-in` | `/first-run` | Not applicable: It answers the directory's own sign-in page for the setup code's holder and writes nothing. | Not applicable: Nothing changes when a sign-in page is asked for, so there is nothing to record. | `test_a_directory_is_chosen_signed_in_to_and_its_list_pulled` in `tests/unit/test_setup_staff_routes.py` |
 | `POST /setup/staff-source/trial` | `/first-run` | `test_a_trial_that_read_the_directory_keeps_its_credential_for_the_nightly_sync` in `tests/unit/test_setup_staff_routes.py` | `test_a_trial_that_read_the_directory_keeps_its_credential_for_the_nightly_sync` in `tests/unit/test_setup_staff_routes.py` | `test_a_directory_is_chosen_signed_in_to_and_its_list_pulled` in `tests/unit/test_setup_staff_routes.py` |
 | `PUT /api/v1/agents/{agent_id}/model-pin` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_an_administrator_pins_a_model_a_rung_serves_and_it_is_written_to_the_agent` in `tests/unit/test_agent_model_routes.py` | **None.** An agent's pin is logged and not written to the audit ledger in this release. Leaf `M5.7.3`. | `test_a_pinned_model_is_tried_first_even_from_another_tier` in `tests/unit/test_model_calls.py` |
+| `PUT /api/v1/credentials/{family}/{name}` | `/models` | `test_setting_a_key_writes_the_slot_and_answers_that_it_is_held_and_when` in `tests/unit/test_credential_routes.py` | `test_a_key_set_from_the_console_is_recorded_as_its_setter_with_their_reach_and_trace` in `tests/unit/test_credential_routes.py` | `test_a_key_kept_here_is_handed_to_this_process_unless_the_environment_outranks_it` in `tests/unit/test_credentials.py` |
 | `PUT /api/v1/govern/compliance/topics/{topic}` | `/compliance` | `test_naming_a_person_writes_one_route_row_and_a_setting_entry_without_the_value` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_naming_a_person_writes_one_route_row_and_a_setting_entry_without_the_value` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_a_sensitive_question_is_routed_to_the_person_named_for_its_topic` in `tests/unit/test_compliance_routes.py` |
 | `PUT /api/v1/govern/staff_sources/credential` | `/staff_sources` | `test_the_credential_is_replaced_into_its_slot_recorded_and_never_sent_back` in `tests/unit/test_staff_sync_routes.py` | `test_a_credential_write_appends_exactly_the_entry_the_recorder_writes_and_the_chain_holds` in `tests/unit/test_credential_writes.py` (database, in CI) | `test_a_scheduled_run_reads_lark_with_the_kept_credential_and_applies_the_plan` in `tests/unit/test_staff_sync_run.py` |
 | `PUT /api/v1/install/settings/{name}` | `/settings` | `test_saving_a_company_name_writes_its_row_and_the_console_header_draws_it_next` in `tests/unit/test_settings_routes.py` | **None.** The route sets the audit attribution 0059's trigger reads, which BRANDING_SAVED asserts over a stub; no scratch-Postgres test yet reads the ledger entry back. | `test_saving_a_company_name_writes_its_row_and_the_console_header_draws_it_next` in `tests/unit/test_settings_routes.py` |
