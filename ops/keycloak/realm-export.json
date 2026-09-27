@@ -85,7 +85,32 @@
     "leave a second, unreferenced browser flow one binding away from being used. And an",
     "install imported before this change is repaired by adding the same two references to the",
     "'browser' flow it already has, so a fresh install and a repaired one end up the same",
-    "shape. docs/install/authentication.md has those steps."
+    "shape. docs/install/authentication.md has those steps.",
+    "",
+    "THE ACCOUNT CONSOLE REFUSED EVERYBODY WITH 403, AND UNTIL 2026-09-17 NOTHING HERE SAID WHY.",
+    "Keycloak 26.0.0's RealmManager.importRealm builds its own client scopes (roles, profile,",
+    "email, web-origins, acr, basic) and attaches them to its own clients only when the file",
+    "declares no clientScopes. This file declares brain-identity, so the import built",
+    "account-console with no scope at all. Its tokens carry the account audience, from a mapper",
+    "Keycloak puts on the client itself, and no resource_access, which only the roles scope",
+    "writes. The Account REST API reads the account client's roles out of the token and answers",
+    "403 without them, which is why staging saw a 403 and not the 401 a missing audience gets.",
+    "So nobody could set up a one-time code there. Found on the owner's staging install.",
+    "",
+    "So account and account-console are declared below as RealmManager.setupAccountManagement",
+    "builds them, and account-console carries the one mapper from the roles scope that the API",
+    "needs, narrowed to the account client. The two are declared together because the import",
+    "builds both itself unless this file names account: naming account-console alone makes it",
+    "twice, and the client table refuses the second. defaultRole is named because, without it,",
+    "declaring the default role's composites under its usual name makes the import give the",
+    "default role another name, and the composites land on a role nobody holds. Nothing",
+    "brain-console, brain-api or brain-sync can reach has changed: the mapper is on",
+    "account-console itself, and a client's own mappers run for its tokens alone.",
+    "",
+    "Rejected: declaring no clientScopes, so that Keycloak builds and attaches its own. It would",
+    "work, and it moves brain-identity's mappers onto brain-console, needs every product client",
+    "pinned against the realm default scopes that would then exist, and leaves every install",
+    "repaired by hand a different shape from a fresh one."
   ],
 
   "realm": "brain",
@@ -173,6 +198,62 @@
       ]
     }
   ],
+
+  "defaultRole": {
+    "name": "default-roles-brain",
+    "description": "${role_default-roles}"
+  },
+
+  "roles": {
+    "_comment": [
+      "Only what the account client needs, because this file now declares that client and so",
+      "the import no longer builds it. Every value is RealmManager.setupAccountManagement's in",
+      "Keycloak 26.0.0: the seven roles, manage-account containing manage-account-links,",
+      "manage-consent containing view-consent, and view-profile and manage-account given to",
+      "everybody through the default role. delete-account is not here because the import adds",
+      "it to the account client itself (KeycloakModelUtils.setupDeleteAccount). offline_access",
+      "and uma_authorization are not here because the import creates both and adds both to the",
+      "default role on its own, and a composite naming uma_authorization would stop the import:",
+      "the roles are read before that one exists.",
+      "",
+      "default-roles-brain is named twice, here and in defaultRole above, and both are needed.",
+      "With no defaultRole the import calls the default role default-roles-brain-1 if a realm",
+      "role named default-roles-brain is declared (RealmManager.determineDefaultRoleName), and",
+      "the composites below would land on a role nobody holds.",
+      "",
+      "None of these is a capability. They decide what a person may do to their own account in",
+      "Keycloak's Account Console and nothing in this system reads them."
+    ],
+    "realm": [
+      {
+        "name": "default-roles-brain",
+        "description": "${role_default-roles}",
+        "composite": true,
+        "composites": { "client": { "account": ["view-profile", "manage-account"] } }
+      }
+    ],
+    "client": {
+      "account": [
+        { "name": "view-profile", "description": "${role_view-profile}" },
+        {
+          "name": "manage-account",
+          "description": "${role_manage-account}",
+          "composite": true,
+          "composites": { "client": { "account": ["manage-account-links"] } }
+        },
+        { "name": "manage-account-links", "description": "${role_manage-account-links}" },
+        { "name": "view-applications", "description": "${role_view-applications}" },
+        { "name": "view-consent", "description": "${role_view-consent}" },
+        {
+          "name": "manage-consent",
+          "description": "${role_manage-consent}",
+          "composite": true,
+          "composites": { "client": { "account": ["view-consent"] } }
+        },
+        { "name": "view-groups", "description": "${role_view-groups}" }
+      ]
+    }
+  },
 
   "clientScopes": [
     {
@@ -373,8 +454,114 @@
         "own ServiceAccount record, not here: Keycloak knows the robot exists, and this",
         "system decides what it may borrow."
       ]
+    },
+    {
+      "clientId": "account",
+      "name": "${client_account}",
+      "enabled": true,
+      "alwaysDisplayInConsole": false,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "rootUrl": "${authBaseUrl}",
+      "baseUrl": "/realms/brain/account/",
+      "redirectUris": ["/realms/brain/account/*"],
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": false,
+      "attributes": {
+        "post.logout.redirect.uris": "+",
+        "pkce.code.challenge.method": "S256",
+        "access.token.signed.response.alg": "RS256"
+      },
+      "_comment": [
+        "Keycloak's own client, declared only because account-console below has to be, and the",
+        "import builds the two together or not at all (RealmManager.importRealm calls",
+        "setupAccountManagement unless the file names account). The Account REST API is this",
+        "client: it refuses a token whose aud does not name account and a token whose",
+        "resource_access.account.roles holds neither manage-account nor view-profile.",
+        "",
+        "Every value is setupAccountManagement's in 26.0.0 except the two attributes this file",
+        "pins on every client, PKCE S256 and RS256. The Account Console signs in as",
+        "account-console and not as this client, so neither changes what it does. The redirect URI is Keycloak's own wildcard, and it is",
+        "relative: it resolves against rootUrl, which is the identity provider's own address,",
+        "so a code can only ever be handed back to Keycloak's account pages."
+      ]
+    },
+    {
+      "clientId": "account-console",
+      "name": "${client_account-console}",
+      "enabled": true,
+      "alwaysDisplayInConsole": false,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "rootUrl": "${authBaseUrl}",
+      "baseUrl": "/realms/brain/account/",
+      "redirectUris": ["/realms/brain/account/*"],
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": false,
+      "attributes": {
+        "post.logout.redirect.uris": "+",
+        "pkce.code.challenge.method": "S256",
+        "access.token.signed.response.alg": "RS256"
+      },
+      "protocolMappers": [
+        {
+          "name": "audience resolve",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-resolve-mapper",
+          "config": {
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "account roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-client-role-mapper",
+          "config": {
+            "usermodel.clientRoleMapping.clientId": "account",
+            "claim.name": "resource_access.${client_id}.roles",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ],
+      "_comment": [
+        "The client Keycloak's Account Console signs in as (AccountConsole names it), and the",
+        "one this file changes. As setupAccountManagement builds it, with RS256 pinned as on every",
+        "client here and one mapper more.",
+        "",
+        "audience resolve is Keycloak's own, on the client itself: it adds account to aud",
+        "because the person holds account roles this client may carry. account roles is the",
+        "client roles mapper from Keycloak's built-in roles scope, the one thing that scope",
+        "gave this client that the Account REST API reads, narrowed to the account client.",
+        "multivalued true is load-bearing: a single value is written as one string rather than",
+        "as roles, and the API reads no roles from it.",
+        "",
+        "fullScopeAllowed false with the scope mappings in clientScopeMappings below, as",
+        "Keycloak has it, so these tokens carry manage-account, the manage-account-links it",
+        "contains and view-groups when the person holds them, and no other role, and aud names",
+        "account and nothing else."
+      ]
     }
   ],
+
+  "clientScopeMappings": {
+    "account": [
+      {
+        "client": "account-console",
+        "roles": ["manage-account", "view-groups"]
+      }
+    ]
+  },
 
   "identityProviders": [
     {

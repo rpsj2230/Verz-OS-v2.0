@@ -528,6 +528,138 @@ command line: step 3 prompts for it.
 password-only session, so the Overview still reads **authenticated** until you sign out and sign in
 again with the code. That is expected, and step 1 above is why it is there.
 
+## When the Account Console says "Something went wrong"
+
+**On a realm imported before this release, the identity provider's Account Console refuses
+everybody.** It opens, and then shows "Something went wrong" and "HTTP 403 Forbidden". So nobody
+can set up a one-time code there, and without a code nobody can open an administration screen.
+
+The cause is in the realm, not in any account. The Account Console signs in as a client of the
+identity provider's own called `account-console`, and the realm this product used to import gave
+that client no way to put a person's account roles into its sign-in token. The Account Console's
+server checks those roles and refuses a token without them. A realm imported from this release
+carries them. An existing realm is changed by hand, once, with the steps below. They add one
+setting to `account-console` and change nothing about the console, the API or any sign-in to them.
+
+### Setting up a person's one-time code without the Account Console
+
+This works on any realm, repaired or not. It asks the person to set up a code the next time they
+sign in.
+
+1. Open the identity provider's administration console: the address of your sign-in page, with
+   the path replaced by `/admin/`. Sign in as an administrator of the `master` realm.
+2. In the realm list at the top of the left-hand menu, choose `brain`.
+3. Choose **Users**, then choose the person's username.
+4. On the **Details** tab, open **Required user actions** and choose **Configure OTP**.
+5. Choose **Save**.
+6. The person signs in. After their password they are shown a code to scan with an authenticator
+   app, and they type the six digits it shows.
+7. The person signs out and signs in again, this time entering the code. As "Setting up a code is
+   not the same as using one" above explains, only that second sign-in counts as a second factor.
+
+### Repairing the Account Console on a realm imported before this release
+
+Run these on the server, as somebody who can use `docker`. Every command is typed exactly as it is
+written: nothing in it needs replacing, and the ids are found by the commands themselves. No
+password is typed on a command line: step 3 asks for it.
+
+1. Check there is exactly one identity provider container on this server:
+
+   ```
+   docker ps --filter "ancestor=quay.io/keycloak/keycloak:26.0" --format "{{.Names}}"
+   ```
+
+   It should print one name. If it prints more than one, do not use step 2: open the Terminal of
+   this install's `keycloak` service in Coolify instead, which puts you in the right container,
+   and carry on at step 3.
+
+2. Open a shell inside it:
+
+   ```
+   docker exec -it "$(docker ps --filter "ancestor=quay.io/keycloak/keycloak:26.0" --format "{{.Names}}")" bash
+   ```
+
+3. Sign the admin tool in. The username is the temporary administrator's, which the container
+   already knows; it asks for that account's password. If you have deleted the temporary
+   administrator, as this page advises, type your own administrator's username in place of
+   `"$KC_BOOTSTRAP_ADMIN_USERNAME"`.
+
+   ```
+   KC=/opt/keycloak/bin/kcadm.sh
+   $KC config credentials --server http://localhost:8080 --realm master --user "$KC_BOOTSTRAP_ADMIN_USERNAME"
+   ```
+
+   `localhost:8080` is the identity provider's own address inside its container, so it is the same
+   on every server.
+
+4. Find the two clients' ids:
+
+   ```
+   CONSOLE=$($KC get clients -r brain --fields id,clientId --format csv --noquotes | grep -E ',account-console$' | cut -d, -f1)
+   ACCOUNT=$($KC get clients -r brain --fields id,clientId --format csv --noquotes | grep -E ',account$' | cut -d, -f1)
+   echo "account-console: $CONSOLE"
+   echo "account: $ACCOUNT"
+   ```
+
+   Each line should end in one id. If either is empty, stop: this realm has no Account Console to
+   repair.
+
+5. Read what `account-console` already has:
+
+   ```
+   $KC get clients/$CONSOLE/protocol-mappers/models -r brain --fields name,protocolMapper --format csv --noquotes
+   $KC get clients/$CONSOLE/scope-mappings/clients/$ACCOUNT -r brain --fields name --format csv --noquotes
+   $KC get roles/default-roles-brain/composites/clients/$ACCOUNT -r brain --fields name --format csv --noquotes
+   ```
+
+   The first should list `audience resolve,oidc-audience-resolve-mapper` and no row ending in
+   `oidc-usermodel-client-role-mapper`. The second should list `manage-account` and `view-groups`.
+   The third should list `manage-account` and `view-profile`. If the second or third lists neither
+   `manage-account` nor `view-profile`, stop: somebody has changed who may use the Account Console,
+   and the step below would not be enough.
+
+6. Add the setting that writes a person's account roles into the Account Console's token. Type
+   the quotes around `EOF` as shown; they keep the shell from changing `${client_id}`, which the
+   identity provider fills in itself.
+
+   ```
+   $KC create clients/$CONSOLE/protocol-mappers/models -r brain -f - <<'EOF'
+   {"name": "account roles", "protocol": "openid-connect", "protocolMapper": "oidc-usermodel-client-role-mapper",
+    "config": {"usermodel.clientRoleMapping.clientId": "account", "claim.name": "resource_access.${client_id}.roles",
+               "jsonType.label": "String", "multivalued": "true", "access.token.claim": "true",
+               "id.token.claim": "false", "introspection.token.claim": "true"}}
+   EOF
+   ```
+
+7. Only if the first list in step 5 had no `audience resolve` row, add it too:
+
+   ```
+   $KC create clients/$CONSOLE/protocol-mappers/models -r brain -f - <<'EOF'
+   {"name": "audience resolve", "protocol": "openid-connect", "protocolMapper": "oidc-audience-resolve-mapper",
+    "config": {"access.token.claim": "true", "introspection.token.claim": "true"}}
+   EOF
+   ```
+
+8. Read it back. It should now list both `audience resolve,oidc-audience-resolve-mapper` and
+   `account roles,oidc-usermodel-client-role-mapper`.
+
+   ```
+   $KC get clients/$CONSOLE/protocol-mappers/models -r brain --fields name,protocolMapper --format csv --noquotes
+   ```
+
+9. Leave the container with `exit`. Nothing needs restarting.
+
+Then open the Account Console again, or reload it if it is still open. It should show the person's
+details rather than "Something went wrong". If it still does not, sign out of it and sign in again,
+so it is given a token minted after the change. From there, "Turning on a one-time code for your
+own account" above works as written.
+
+**What is checked and what is not.** That a realm imported from this release gives the Account
+Console the roles and audience its server checks, that the product's own clients are given no role
+claims by it, and that the realm declares every client and role this needs, are held by
+`test_keycloak_realm.py` against the realm file. The commands above were written from the identity
+provider's 26.0 source and admin documentation, and have not been run against a server.
+
 ## Two things about the realm that have already gone wrong
 
 Both were found by deploying the identity stack for the first time, in logs rather than in a
