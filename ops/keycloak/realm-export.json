@@ -65,7 +65,27 @@
     "roles in brain.identity.roles through GroupRoleRule, and to nothing else. There is",
     "deliberately no group, attribute or client role here that names a capability: putting",
     "one in this file would move the answer to 'who can read the margin on this client'",
-    "into a directory that nobody in this company reviews."
+    "into a directory that nobody in this company reviews.",
+    "",
+    "A SECOND FACTOR IS WRITTEN INTO THE TOKEN, AND UNTIL 2026-09-17 IT WAS NOT.",
+    "brain.identity.bearer.assurance_from gives Assurance.STRONG, the only level that may",
+    "exercise an admin: or approve: capability, to a token whose amr claim names a second",
+    "factor. Keycloak 26.0 mints no amr by default: no built-in client scope carries an amr",
+    "mapper, and oidc-amr-mapper writes only the reference value configured on each step the",
+    "person completed (default.reference.value), and only while that step is younger than",
+    "default.reference.maxAge, which counts as 0 when absent. This realm had none of the",
+    "three, so no install could mint a strong token, and every admin screen refused everybody,",
+    "a person who had set up OTP included. Found on the owner's staging install.",
+    "",
+    "So brain-identity carries the amr mapper, and the browser flow below is Keycloak's own",
+    "built-in browser flow reproduced step for step with a reference on two steps: pwd on the",
+    "password form and otp on the OTP form, each valid for the ten-hour session. It is",
+    "declared under the built-in alias 'browser' rather than copied under a new name. The",
+    "import builds every built-in flow this file does not declare, so a renamed copy would",
+    "leave a second, unreferenced browser flow one binding away from being used. And an",
+    "install imported before this change is repaired by adding the same two references to the",
+    "'browser' flow it already has, so a fresh install and a repaired one end up the same",
+    "shape. docs/install/authentication.md has those steps."
   ],
 
   "realm": "brain",
@@ -199,6 +219,17 @@
             "access.token.claim": "true",
             "userinfo.token.claim": "true"
           }
+        },
+        {
+          "name": "amr",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-amr-mapper",
+          "config": {
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          },
+          "_comment": "The authentication methods the sign-in used, which brain.identity.bearer.assurance_from reads to decide between AUTHENTICATED and STRONG. Here on brain-identity for the reason the audience mapper below is: brain-console carries this scope by default, so every token issued to the console gets it. Access token only, because the access token is what the console sends and what the API validates; the console never reads its ID token. access.token.claim is spelled out because OIDCAttributeMapperHelper.includeInAccessToken is \"true\".equals(value), so an absent key is off. The values come from the authenticatorConfig entries the browser flow names, and a step with no reference contributes nothing."
         },
         {
           "name": "brain-api-audience",
@@ -382,6 +413,123 @@
     }
   ],
 
+  "browserFlow": "browser",
+
+  "authenticatorConfig": [
+    {
+      "alias": "password-method-reference",
+      "config": {
+        "default.reference.value": "pwd",
+        "default.reference.maxAge": "36000"
+      },
+      "_comment": [
+        "pwd is RFC 8176's value for a password, and brain.identity.bearer does not count it as",
+        "a second factor. It is written at all so that a password-only token says so: without",
+        "it that token and one from a realm whose amr mapper never ran both carry an empty amr,",
+        "and decoding a token, the one diagnostic an administrator has, could not tell a missing",
+        "second factor from a missing mapper."
+      ]
+    },
+    {
+      "alias": "otp-method-reference",
+      "config": {
+        "default.reference.value": "otp",
+        "default.reference.maxAge": "36000"
+      },
+      "_comment": [
+        "otp is in brain.identity.bearer.SECOND_FACTOR_METHODS, which is what turns a sign-in",
+        "that passed this step into Assurance.STRONG.",
+        "",
+        "maxAge is the reason this was not one line. AmrUtils.isAmrValid keeps a reference only",
+        "while authTime + maxAge >= now, and an absent maxAge is read as 0, so a reference with",
+        "no maxAge is gone from every token minted a second after the step: the first access",
+        "token already lacks it. 36000 seconds is ssoSessionMaxLifespan, so the second factor",
+        "presented at sign-in counts for every token that session mints, refreshes included, and",
+        "no longer, because the session cannot outlive it. That is the meaning",
+        "A_SECOND_FACTOR_IS_A_CLAIM_ABOUT_THIS_SESSION gives the claim. A shorter value would be a",
+        "step-up policy, which is a decision somebody should argue for rather than a default."
+      ]
+    }
+  ],
+
+  "authenticationFlows": [
+    {
+      "alias": "browser",
+      "description": "Browser based authentication",
+      "providerId": "basic-flow",
+      "topLevel": true,
+      "builtIn": true,
+      "authenticationExecutions": [
+        { "authenticator": "auth-cookie", "authenticatorFlow": false, "requirement": "ALTERNATIVE", "priority": 10 },
+        { "authenticator": "auth-spnego", "authenticatorFlow": false, "requirement": "DISABLED", "priority": 20 },
+        { "authenticator": "identity-provider-redirector", "authenticatorFlow": false, "requirement": "ALTERNATIVE", "priority": 25 },
+        { "flowAlias": "Organization", "authenticatorFlow": true, "requirement": "ALTERNATIVE", "priority": 26 },
+        { "flowAlias": "forms", "authenticatorFlow": true, "requirement": "ALTERNATIVE", "priority": 30 }
+      ],
+      "_comment": [
+        "Keycloak 26.0.0's DefaultAuthenticationFlows.browserFlow, step for step, as a realm",
+        "imported without authenticationFlows was given it: the same aliases, requirements and",
+        "priorities, Kerberos disabled because this realm requires no Kerberos credential, and",
+        "the Organization step because the organization feature is on by default in 26.0 and the",
+        "built-in flow adds it to every realm but master. The only additions are the two",
+        "authenticatorConfig references on the password form and the OTP form.",
+        "",
+        "Declaring it changes nothing else about the import. DefaultExportImportManager imports",
+        "the flows this file declares and then calls DefaultAuthenticationFlows.migrateFlows,",
+        "which builds every built-in flow still missing by alias: direct grant, registration,",
+        "reset credentials, clients, first broker login, saml ecp and docker auth all arrive as",
+        "before. No model migration runs on this import, because they run only for a file that",
+        "names a keycloakVersion, and this one names none.",
+        "",
+        "Every authenticatorConfig and flowAlias named here has to be declared in this file. The",
+        "import looks each one up by alias before migrateFlows has built anything, and a name it",
+        "cannot find stops the import with nothing in the log near the login page."
+      ]
+    },
+    {
+      "alias": "Organization",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": true,
+      "authenticationExecutions": [
+        { "flowAlias": "Browser - Conditional Organization", "authenticatorFlow": true, "requirement": "CONDITIONAL", "priority": 10 }
+      ]
+    },
+    {
+      "alias": "Browser - Conditional Organization",
+      "description": "Flow to determine if the organization identity-first login is to be used",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": true,
+      "authenticationExecutions": [
+        { "authenticator": "conditional-user-configured", "authenticatorFlow": false, "requirement": "REQUIRED", "priority": 10 },
+        { "authenticator": "organization", "authenticatorFlow": false, "requirement": "ALTERNATIVE", "priority": 20 }
+      ]
+    },
+    {
+      "alias": "forms",
+      "description": "Username, password, otp and other auth forms.",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": true,
+      "authenticationExecutions": [
+        { "authenticator": "auth-username-password-form", "authenticatorConfig": "password-method-reference", "authenticatorFlow": false, "requirement": "REQUIRED", "priority": 10 },
+        { "flowAlias": "Browser - Conditional OTP", "authenticatorFlow": true, "requirement": "CONDITIONAL", "priority": 20 }
+      ]
+    },
+    {
+      "alias": "Browser - Conditional OTP",
+      "description": "Flow to determine if the OTP is required for the authentication",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": true,
+      "authenticationExecutions": [
+        { "authenticator": "conditional-user-configured", "authenticatorFlow": false, "requirement": "REQUIRED", "priority": 10 },
+        { "authenticator": "auth-otp-form", "authenticatorConfig": "otp-method-reference", "authenticatorFlow": false, "requirement": "REQUIRED", "priority": 20 }
+      ]
+    }
+  ],
+
   "requiredActions": [
     {
       "alias": "CONFIGURE_TOTP",
@@ -390,7 +538,7 @@
       "enabled": true,
       "defaultAction": true,
       "priority": 10,
-      "_comment": "defaultAction true so a new account is asked to set up a second factor at first login. Assurance.STRONG is what brain.gate.admission requires for approve and admin, so without this nobody can approve anything."
+      "_comment": "defaultAction true so a new account is asked to set up a second factor at first login. Assurance.STRONG is what brain.gate.admission requires for approve and admin, so without this nobody can approve anything. Setting one up is not presenting one: this action runs after the flow, so the OTP form was not a completed step of the session it ran in, and that session's tokens carry pwd alone. The person signs out and signs in again, and that sign-in passes the OTP form and carries otp."
     }
   ]
 }

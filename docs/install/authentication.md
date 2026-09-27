@@ -382,6 +382,148 @@ Two pieces of housekeeping once you have your own account, and they are easy to 
 **Do not delete the variable.** The stack refuses to start without it, and it is the way back
 in if every administrator is ever lost.
 
+## A second factor, which every administration screen needs
+
+**Every `admin:` and `approve:` screen needs a sign-in that used a second factor.** A password
+alone signs you in, and the console's Overview then shows **Assurance: authenticated**. Every
+administration screen answers such a sign-in with "I could not find that", whatever grants you
+hold. A sign-in with a password and a one-time code shows **Assurance: strong**, and those screens
+open.
+
+The system reads the methods from the sign-in token's `amr` claim. The realm this product
+imports writes `pwd` there for the password step and `otp` for the one-time code step. Only
+`otp` counts as a second factor.
+
+**A realm imported before this release writes nothing there, so nobody on it can reach an
+administration screen.** Upgrading does not fix that: the identity provider imports the realm
+file only when no realm of that name exists, and it skips the import on every later start. So
+an existing realm is changed by hand, once, with the steps below. They add exactly what a fresh
+import now contains and change nothing else.
+
+### Turning on a one-time code for your own account
+
+A new account is asked to set one up at its first sign-in. If yours was not, or you skipped it:
+
+1. Open `https://<KEYCLOAK_HOSTNAME>/realms/brain/account`, replacing `<KEYCLOAK_HOSTNAME>`
+   with the value of that setting on your server, and `brain` with `INSTALL_OIDC_REALM` if you
+   changed it.
+2. Sign in with your password.
+3. Choose **Account security**, then **Signing in**.
+4. Under **Two-factor authentication**, choose **Set up Authenticator application**.
+5. Scan the code with an authenticator app on your phone, type the six digits it shows, give the
+   device a name, and choose **Submit**.
+
+### Adding the second factor to a realm imported before this release
+
+Run these on the server, as somebody who can use `docker`. Each command is typed in full, with
+the parts in angle brackets replaced as described in that step. No password is typed on a
+command line: step 3 prompts for it.
+
+1. Find the identity provider's container name:
+
+   ```
+   docker ps --filter "ancestor=quay.io/keycloak/keycloak:26.0" --format "{{.Names}}"
+   ```
+
+   Use the name it prints as `<keycloak-container>` below. If it prints more than one, this
+   server runs more than one identity provider, and the one to use is the one belonging to this
+   install. On Coolify, opening the Terminal of this install's `keycloak` service does the same
+   as step 2.
+
+2. Open a shell inside it:
+
+   ```
+   docker exec -it <keycloak-container> bash
+   ```
+
+3. Sign the admin tool in. `<admin-user>` is an administrator of the identity provider's
+   `master` realm: the `KEYCLOAK_ADMIN` account, or the account you replaced it with. It asks
+   for that account's password.
+
+   ```
+   /opt/keycloak/bin/kcadm.sh config credentials --server http://localhost:8080 --realm master --user <admin-user>
+   ```
+
+4. Check that the realm signs people in through the flow called `browser`:
+
+   ```
+   /opt/keycloak/bin/kcadm.sh get realms/brain --fields browserFlow --format csv --noquotes
+   ```
+
+   It should print `browser`. If it names another flow, stop here: somebody has
+   changed how this realm signs people in, and the steps below would change a flow nobody uses.
+
+5. List the realm's client scopes and copy the id on the `brain-identity` row. Use it as
+   `<scope-id>` below.
+
+   ```
+   /opt/keycloak/bin/kcadm.sh get client-scopes -r brain --fields id,name --format csv --noquotes
+   ```
+
+6. Add the mapper that writes the claim into every token the console receives:
+
+   ```
+   /opt/keycloak/bin/kcadm.sh create client-scopes/<scope-id>/protocol-mappers/models -r brain -f - <<'EOF'
+   {"name": "amr", "protocol": "openid-connect", "protocolMapper": "oidc-amr-mapper",
+    "config": {"id.token.claim": "false", "access.token.claim": "true", "introspection.token.claim": "true"}}
+   EOF
+   ```
+
+7. List the steps of the `browser` flow:
+
+   ```
+   /opt/keycloak/bin/kcadm.sh get authentication/flows/browser/executions -r brain --fields id,providerId,authenticationConfig --format csv --noquotes
+   ```
+
+   Copy the id on the `auth-username-password-form` row as `<password-step-id>`, and the id on the
+   `auth-otp-form` row as `<code-step-id>`. The last column of both rows should be empty. If
+   either already shows a value, stop and read that configuration with
+   `/opt/keycloak/bin/kcadm.sh get authentication/config/<that-value> -r brain` before changing
+   anything, because somebody has configured that step already.
+
+8. Give the password step its reference:
+
+   ```
+   /opt/keycloak/bin/kcadm.sh create authentication/executions/<password-step-id>/config -r brain -f - <<'EOF'
+   {"alias": "password-method-reference", "config": {"default.reference.value": "pwd", "default.reference.maxAge": "36000"}}
+   EOF
+   ```
+
+9. Give the one-time code step its reference:
+
+   ```
+   /opt/keycloak/bin/kcadm.sh create authentication/executions/<code-step-id>/config -r brain -f - <<'EOF'
+   {"alias": "otp-method-reference", "config": {"default.reference.value": "otp", "default.reference.maxAge": "36000"}}
+   EOF
+   ```
+
+   `36000` is ten hours in seconds, the longest a session may live. **Do not leave it out.** Without
+   it the identity provider counts the reference as expiring the second it was earned, so no token
+   carries it and nothing changes.
+
+10. Read back what you changed. The first command should now show a value in the last column of
+    both rows from step 7. The second should list a row reading `amr,oidc-amr-mapper`.
+
+    ```
+    /opt/keycloak/bin/kcadm.sh get authentication/flows/browser/executions -r brain --fields providerId,authenticationConfig --format csv --noquotes
+    /opt/keycloak/bin/kcadm.sh get client-scopes/<scope-id>/protocol-mappers/models -r brain --fields name,protocolMapper --format csv --noquotes
+    ```
+
+11. Leave the container with `exit`. Nothing needs restarting.
+
+### Confirming it worked
+
+1. In the console, choose **Sign out**. Closing the tab is not enough: the identity provider's
+   session has to end, or the next sign-in skips the code.
+2. Sign in again. Enter your password, then the six digits from your authenticator app when asked.
+   If you are not asked for a code, your account has none yet: do the steps under "Turning on a
+   one-time code for your own account" above, then sign out and in again.
+3. Open **Overview**. It should read **Assurance: strong**, and the administration screens now open.
+
+**Setting up a code is not the same as using one.** The session in which you set one up is still a
+password-only session, so the Overview still reads **authenticated** until you sign out and sign in
+again with the code. That is expected, and step 1 above is why it is there.
+
 ## Two things about the realm that have already gone wrong
 
 Both were found by deploying the identity stack for the first time, in logs rather than in a
@@ -420,6 +562,8 @@ than thirty. A slow start beats a container that never becomes ready.
 | That a capability taken away from the first administrator is not given back at a start | `test_administration_reconciliation.py`, against a database, in CI |
 | The grant a binding writes | `test_authentication_guide.py`, against the statement the binding executes; what it opens is `test_plane_scope.py` |
 | The four identity settings and their defaults | `test_install_docs.py`, through the configuration guide |
+| That a sign-in with a one-time code is counted as a second factor, a password alone is not, and both last the session | `test_keycloak_realm.py`, against the realm file and the code that reads the token |
+| The commands for adding the second factor to a realm imported before this release | **nobody. They were written from the identity provider's 26.0 source and admin documentation and have not been run against a server.** |
 | **Everything else on this page** | **nobody. Prose, kept true by hand.** |
 
 ## Task ids
