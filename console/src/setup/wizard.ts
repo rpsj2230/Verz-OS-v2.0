@@ -137,6 +137,21 @@ export const SCREENS: readonly Screen[] = Object.freeze([
     skippable: false,
   },
   {
+    key: "data_steward",
+    title: "The data steward",
+    questions: [
+      question("steward_full_name", "The data steward's full name", { required: false }),
+      question("steward_work_address", "The data steward's work email address", {
+        required: false,
+      }),
+      question("steward_is_administrator", "The first administrator is the data steward as well", {
+        required: false,
+        choices: ["no", "yes"],
+      }),
+    ],
+    skippable: false,
+  },
+  {
     key: "staff_source",
     title: "Your staff list",
     questions: [
@@ -174,6 +189,17 @@ export const SCREENS: readonly Screen[] = Object.freeze([
   },
 ] satisfies Screen[]);
 
+/**
+ * Said under the data steward screen, beside its questions, and not a catalogue sentence: it is
+ * what the choice means rather than a problem with an answer. See
+ * `brain.setup_wizard.THE_STEWARD_IS_ANOTHER_PERSON_UNLESS_SOMEBODY_SAYS_OTHERWISE`.
+ */
+export const DATA_STEWARD_EXPLAINED =
+  "The data steward is the person every read of your company's data begins with. They can grant " +
+  "those reads to other people, and every source you connect is granted to them. The administrator " +
+  "runs the system and reads none of your data. Name somebody else, or answer yes to make the " +
+  "administrator the data steward as well, which puts both in one account.";
+
 /** `setup.step.review.title`. */
 export const REVIEW_TITLE = "Check this before anything is written";
 
@@ -202,6 +228,11 @@ export const MESSAGES: Readonly<Record<string, string>> = Object.freeze({
   "setup.error.location_not_wanted": "A spreadsheet is read from the file itself, so leave this empty",
   "setup.error.key_not_wanted":
     "Nothing would use a key here, because questions stay on your own hardware",
+  "setup.error.steward_needed":
+    "Name the data steward here, or answer yes below if the administrator is the steward",
+  "setup.error.steward_not_wanted": "Leave this empty, because the administrator is the data steward",
+  "setup.error.steward_is_administrator":
+    "That is the administrator's address. Name somebody else, or answer yes below",
   "setup.error.refused": "That code was not accepted. Check the line the installer printed",
   "setup.review.supplied": "Supplied",
   "setup.review.not_given": "Not given",

@@ -9,9 +9,9 @@ What an administrator would need to manage, read out of the schema, the routes a
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
 - 71 tables, from `brain.db.Base.metadata`.
 - 23 installation values, from `brain.install.INSTALLATION`.
-- 110 routes under `/api/v1` and `/setup`, from the API's internal document.
+- 112 routes under `/api/v1` and `/setup`, from the API's internal document.
 - 66 console addresses, from the route table in `console/src/App.tsx`.
-- 39 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 46 routes.
+- 40 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 47 routes.
 - 35 gaps recorded, and 3 routes no screen calls.
 
 ## Area by area
@@ -27,6 +27,7 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `GET /api/v1/console/navigation` | `/department` |
 | `GET /api/v1/govern/access-review` | `/access_review` |
 | `GET /api/v1/govern/capabilities` | `/capabilities` |
+| `GET /api/v1/govern/data-steward` | `/people`, `/people/:subject` |
 | `GET /api/v1/govern/elevation` | `/elevation` |
 | `GET /api/v1/govern/people` | `/people`, `/people/:subject` |
 | `GET /api/v1/govern/roles` | `/roles` |
@@ -37,6 +38,7 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `GET /api/v1/govern/staff_sources/trial` | `/staff_sources` |
 | `GET /api/v1/me` | `/` |
 | `POST /api/v1/govern/access-review/decision` | `/access_review` |
+| `POST /api/v1/govern/data-steward` | `/people`, `/people/:subject` |
 | `POST /api/v1/govern/elevation/requests` | `/elevation` |
 | `POST /api/v1/govern/elevation/requests/{request_id}/decision` | `/elevation` |
 | `POST /api/v1/govern/grants` | `/people`, `/people/:subject` |
@@ -405,7 +407,7 @@ No gap recorded.
 
 ## Every write the console sends, followed to the system
 
-Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 39 of 46 write routes have all three proved or not applicable, 6 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
+Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 40 of 47 write routes have all three proved or not applicable, 6 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
 
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
@@ -418,6 +420,7 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /api/v1/connectors/{connector}/disconnect` | `/connectors` | `test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_record` in `tests/unit/test_connector_store.py` (database, in CI) | `test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_record` in `tests/unit/test_connector_store.py` (database, in CI) | **None.** No worker runs a connector on any install, so connecting or disconnecting a source changes what the Connectors screen lists and nothing that reads data: brain.ops.connector_admin.NOTHING_READS_A_CONNECTED_SOURCE_YET. |
 | `POST /api/v1/data-transfer/exports` | `/import-export` | `test_an_export_leaves_its_record_and_a_publish_entry_naming_what_left_and_who_took_it` in `tests/unit/test_data_export_store.py` (database, in CI) | `test_an_export_leaves_its_record_and_a_publish_entry_naming_what_left_and_who_took_it` in `tests/unit/test_data_export_store.py` (database, in CI) | `test_the_listing_offers_the_export_to_a_reader_who_may_take_it_and_shows_only_their_own` in `tests/unit/test_data_transfer_routes.py` |
 | `POST /api/v1/govern/access-review/decision` | `/access_review` | `test_keeping_and_removing_reach_the_rows_the_ledger_and_what_the_holder_is_resolved_to` in `tests/unit/test_review_store.py` (database, in CI) | `test_keeping_and_removing_reach_the_rows_the_ledger_and_what_the_holder_is_resolved_to` in `tests/unit/test_review_store.py` (database, in CI) | `test_keeping_and_removing_reach_the_rows_the_ledger_and_what_the_holder_is_resolved_to` in `tests/unit/test_review_store.py` (database, in CI) |
+| `POST /api/v1/govern/data-steward` | `/people`, `/people/:subject` | `test_an_administrator_names_themselves_steward_over_http_once_and_is_told_why_not_twice` in `tests/unit/test_data_steward_routes.py` (database, in CI) | `test_every_steward_grant_leaves_a_ledger_entry_naming_who_made_it` in `tests/unit/test_data_steward.py` (database, in CI) | `test_a_steward_named_at_setup_grants_a_source_s_read_on_and_the_administrator_cannot` in `tests/unit/test_data_steward.py` (database, in CI) |
 | `POST /api/v1/govern/departments/lead` | `/departments` | `test_placing_and_appointing_reach_the_rows_the_ledger_and_the_departments_page` in `tests/unit/test_organisation_store.py` (database, in CI) | `test_placing_and_appointing_reach_the_rows_the_ledger_and_the_departments_page` in `tests/unit/test_organisation_store.py` (database, in CI) | `test_placing_and_appointing_reach_the_rows_the_ledger_and_the_departments_page` in `tests/unit/test_organisation_store.py` (database, in CI) |
 | `POST /api/v1/govern/departments/membership` | `/departments` | `test_placing_and_appointing_reach_the_rows_the_ledger_and_the_departments_page` in `tests/unit/test_organisation_store.py` (database, in CI) | `test_placing_and_appointing_reach_the_rows_the_ledger_and_the_departments_page` in `tests/unit/test_organisation_store.py` (database, in CI) | `test_placing_and_appointing_reach_the_rows_the_ledger_and_the_departments_page` in `tests/unit/test_organisation_store.py` (database, in CI) |
 | `POST /api/v1/govern/elevation/requests` | `/elevation` | `test_an_approved_elevation_widens_the_requester_and_after_its_lapse_it_does_not` in `tests/unit/test_elevation_store.py` (database, in CI) | `test_an_approved_elevation_widens_the_requester_and_after_its_lapse_it_does_not` in `tests/unit/test_elevation_store.py` (database, in CI) | `test_an_approved_elevation_widens_the_requester_and_after_its_lapse_it_does_not` in `tests/unit/test_elevation_store.py` (database, in CI) |

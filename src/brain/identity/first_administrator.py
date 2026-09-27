@@ -126,7 +126,14 @@ writing past it would leave the first administrator narrower than they appear. A
 `OVERSIGHT` the principal already holds is the one exception, and is kept at its own scope; see
 `AN_OVERSIGHT_READ_ALREADY_HELD_IS_KEPT`.
 
-Task ids: M42.5.6, M41.2.4
+**The data steward the same wizard named is appointed in this transaction too**, after the
+administrator's grants, so the administrator and the person every data read begins with are
+written together or not at all. `brain.identity.data_steward.appoint_in` is that write and
+decides everything about it; this module takes the steward's lock straight after its own, before
+anything appends to the ledger, for `data_steward.THE_STEWARD_S_LOCK_COMES_BEFORE_THE_LEDGER_S`.
+See `THE_STEWARD_IS_APPOINTED_WITH_THE_ADMINISTRATOR`.
+
+Task ids: M42.5.6, M41.2.4, M27.9.9
 """
 
 from __future__ import annotations
@@ -135,7 +142,7 @@ import enum
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Final
+from typing import TYPE_CHECKING, Any, Final
 
 import structlog
 from sqlalchemy import select, text
@@ -153,6 +160,9 @@ from brain.ops.install_settings import save as save_settings
 from brain.tables.audit import ACTOR_SETTING, TRACE_ID_SETTING
 from brain.tables.gate import CapabilityGrantRow
 from brain.tables.identity import PrincipalRow
+
+if TYPE_CHECKING:
+    from brain.identity.data_steward import NamedSteward
 
 log = structlog.get_logger(__name__)
 
@@ -248,6 +258,15 @@ THE_SETTINGS_AND_THE_DOOR_CLOSE_IN_ONE_TRANSACTION: Final = (
     "commit together or neither does."
 )
 
+#: Why the steward is written in the appointment's transaction.
+THE_STEWARD_IS_APPOINTED_WITH_THE_ADMINISTRATOR: Final = (
+    "The wizard closes when the administrator is appointed, so a steward written in a transaction "
+    "of its own could fail after the door has shut and leave an install whose data nobody can "
+    "ever be granted from setup. Written in the appointment's transaction, the administrator and "
+    "the steward commit together or neither does, and the steward's grants are recorded against "
+    "first run exactly as the administrator's are."
+)
+
 #: Why a refusal names nobody.
 AN_APPOINTMENT_REFUSED_NAMES_NOBODY: Final = (
     "Somebody holding an old setup code learns that the install has an administrator and "
@@ -269,6 +288,7 @@ ADMINISTRATION: Final[tuple[str, ...]] = (
     "admin:budget",
     "admin:connector",
     "admin:credential",
+    "admin:data_steward",
     "admin:erasure",
     "admin:feature",
     "admin:export",
@@ -450,6 +470,7 @@ class FirstAdministrators:
         display_name: str,
         trace_id: str = "",
         settings: Mapping[str, str] | None = None,
+        steward: NamedSteward | None = None,
     ) -> None:
         """Write the first administrator the wizard's grant names, or raise why not.
 
@@ -462,7 +483,16 @@ class FirstAdministrators:
         together. See `THE_SETTINGS_AND_THE_DOOR_CLOSE_IN_ONE_TRANSACTION`. None means write
         none, which is what a caller with nothing to save passes and what every existing caller
         gets: the settings are the wizard's, and nothing else appoints.
+
+        `steward` is the data steward the same wizard named, appointed after the grants and in this
+        transaction, and a refusal of it is raised as `data_steward.StewardRefusedError` with
+        nobody appointed. See `THE_STEWARD_IS_APPOINTED_WITH_THE_ADMINISTRATOR`. None appoints no
+        steward, which leaves one to be named from the console.
         """
+        # Imported here because `brain.identity.data_steward` imports `holds_everywhere` from this
+        # module, which is the one test of an administrator and has to stay here.
+        from brain.identity.data_steward import appoint_in, steward_lock
+
         assert_bought_by_first_run(grant)
         now = grant.granted_at
         principal_id = grant.principal_id
@@ -481,6 +511,8 @@ class FirstAdministrators:
             await session.execute(
                 text("SELECT pg_advisory_xact_lock(:key)"), {"key": FIRST_RUN_LOCK}
             )
+            if steward is not None:
+                await session.execute(steward_lock())
             if await self._count(session, now) != 0:
                 raise FirstAdministratorRefusedError(AppointmentRefusal.ALREADY_ADMINISTERED)
             await session.execute(
@@ -544,4 +576,6 @@ class FirstAdministrators:
                     index_where=text("deleted_at IS NULL"),
                 )
             )
+            if steward is not None:
+                await appoint_in(session, steward, now=now)
         log.info("first_administrator.appointed", principal=principal_id, settings=kept)

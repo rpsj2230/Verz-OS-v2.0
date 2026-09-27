@@ -240,7 +240,8 @@ class _Session:
             self.log.append(f"set {params['name']}")
             return _Result(None)
         if "pg_advisory_xact_lock" in text:
-            self.log.append(f"lock {params['connector']}")
+            # A source's lock names the source; the data steward's names nothing.
+            self.log.append(f"lock {params.get('connector', 'steward')}")
             return _Result(None)
         word = text.split(" ", 1)[0]
         self.log.append(word)
@@ -289,8 +290,11 @@ def test_a_connection_locks_the_source_checks_it_keeps_the_key_then_inserts_and_
     """`THE_KEY_IS_KEPT_WHILE_THE_SOURCE_S_NAME_IS_LOCKED`, as the order of statements. The lock
     comes before the check so a second connection waits; the key comes after the check so a
     connected source's key is never replaced; the reach and trace are set before the insert so the
-    trigger attributes the entry; and the ledger is touched only by the insert, last. Delete this
-    and any of those can move with every route test still green."""
+    trigger attributes the entry; and the ledger is touched only by the insert and the data
+    steward's grants after it. The steward's lock comes after the key and before the insert, for
+    `data_steward.THE_STEWARD_S_LOCK_COMES_BEFORE_THE_LEDGER_S`, and the steward is looked for after
+    the row, inside the same transaction. Delete this and any of those can move with every route
+    test still green."""
     log: list[str] = []
     made = connect(store_over(log, SELECT=None, INSERT=LONG_AGO), log)
 
@@ -299,9 +303,13 @@ def test_a_connection_locks_the_source_checks_it_keeps_the_key_then_inserts_and_
         "lock xero",
         "SELECT",
         "keep key",
+        "lock steward",
         "set brain.trace_id",
         "set brain.ent_hash",
+        "set brain.actor_id",
         "INSERT",
+        "lock steward",
+        "SELECT",
         "COMMIT",
     ]
     assert (made.connector, made.connected_at, made.digest) == ("xero", LONG_AGO, DIGEST)

@@ -173,6 +173,9 @@ async function openAtTheStaffList(idp: ReturnType<typeof fakeIdentityProvider>) 
   give(container, "first-run-administrator-full_name", "NAME-SENTINEL");
   give(container, "first-run-administrator-work_address", "first@example.invalid");
   press(container, "Continue");
+  await arriveAt(container, "The data steward");
+  give(container, "first-run-data_steward-steward_is_administrator", "yes");
+  press(container, "Continue");
   await arriveAt(container, "Your staff list");
   return { container, router };
 }

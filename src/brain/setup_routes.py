@@ -80,8 +80,18 @@ because the ladder is not what closes the door and a routing table that refuses 
 the appointment with it; the refusal is logged, and the next start writes the ladder. See
 `THE_LADDER_IS_WRITTEN_AFTER_THE_APPOINTMENT_AND_NEVER_IN_ITS_WAY`.
 
-**The server chooses the administrator's principal id.** See
-`THE_SERVER_CHOOSES_WHO_IS_APPOINTED`.
+**The server chooses the administrator's principal id, and the data steward's.** See
+`THE_SERVER_CHOOSES_WHO_IS_APPOINTED`. A steward the wizard names as another person is a new
+principal with an id of its own; one it names as the administrator is the administrator's id.
+Either is appointed by `appoint` in the administrator's transaction, and a steward refused there
+is the one refusal before the answers, with nobody appointed. See
+`brain.identity.first_administrator.THE_STEWARD_IS_APPOINTED_WITH_THE_ADMINISTRATOR`.
+
+**The steward screen's cross-screen rule is told with the answers.** The administrator's own
+address named as another person is a problem against the steward's address field, found by
+`brain.setup_wizard.steward_problems` beside every screen's own, so the person is taken back to
+the box rather than refused. See
+`brain.setup_wizard.THE_STEWARD_IS_ANOTHER_PERSON_UNLESS_SOMEBODY_SAYS_OTHERWISE`.
 
 **It is built only where a sign-in could follow it.** See
 `NO_APPOINTMENT_WHERE_NOBODY_COULD_SIGN_IN_AFTER_IT` for why the lifespan builds the store
@@ -104,7 +114,7 @@ that would have to be built.
 Rejected: appointing and discarding the settings. It is what a route reaching for `appoint`
 would do first, and it is the door closed before the settings are written.
 
-Task ids: M42.5.6, M42.5.10, M42.5.14, M27.8.7, M42.6.2
+Task ids: M42.5.6, M42.5.10, M42.5.14, M27.8.7, M42.6.2, M27.9.9
 """
 
 from __future__ import annotations
@@ -125,6 +135,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from brain.api import COMMON_RESPONSES, NoEchoRoute
 from brain.core.errors import Absent, BrainError, Failed
 from brain.firstrun import GRANTED_BY, Enrolment
+from brain.identity.data_steward import NamedSteward, StewardRefusedError
 from brain.identity.first_administrator import FirstAdministratorRefusedError
 from brain.identity.roles import RoleGrant
 from brain.install import hold_saved, saved_values
@@ -156,6 +167,7 @@ from brain.setup_wizard import (
     is_answered,
     new_draft,
     skip,
+    steward_problems,
 )
 from brain.sign_in_routes import FINISH_PATH, enrolment_of
 
@@ -299,6 +311,7 @@ class Appointer(Protocol):
         display_name: str,
         trace_id: str = "",
         settings: Mapping[str, str] | None = None,
+        steward: NamedSteward | None = None,
         # `Protocol` does not carry a default's value into the implementation, so this says
         # what an implementation must accept and never what it must do without one.
     ) -> None:
@@ -435,6 +448,10 @@ def draft_of(
             now=now,
         )
         found.extend(ProblemView(step=step.key, field=one.field, key=one.key) for one in problems)
+    found.extend(
+        ProblemView(step=StepId.DATA_STEWARD, field=one.field, key=one.key)
+        for one in steward_problems(draft)
+    )
     if not found:
         found.extend(
             ProblemView(step=step.key, field="", key=NOT_GIVEN)
@@ -442,6 +459,21 @@ def draft_of(
             if step.stores and not is_answered(step, draft)
         )
     return draft, tuple(found)
+
+
+def steward_of(applied: Applied, *, principal_id: str, steward_id: str) -> NamedSteward | None:
+    """The steward `applied` names, under the administrator's id or one of its own, or None.
+
+    None only for a result the wizard did not produce, which names nobody.
+    """
+    named = applied.steward
+    if named is None:
+        return None
+    if named.same_as_administrator:
+        return NamedSteward(principal_id=principal_id, display_name="", same_as_administrator=True)
+    return NamedSteward(
+        principal_id=steward_id, display_name=named.full_name, same_as_administrator=False
+    )
 
 
 def slot_for(applied: Applied) -> CredentialSlot | None:
@@ -537,6 +569,7 @@ async def appoint_first_administrator(
     env: Mapping[str, str] | None = None,
     ladder: LadderWriter | None = None,
     alone: bool = True,
+    steward_id: str | None = None,
 ) -> Appointment:
     """Run the appointment in its order, or refuse before the answers in one way.
 
@@ -546,6 +579,8 @@ async def appoint_first_administrator(
     rest. `credentials` None is an install with no vault. `ladder` None is a process with no
     database, which writes no routing ladder. `alone` is whether this process serves the
     console by itself; see `A_RESTART_IS_ASKED_FOR_ONLY_WHERE_ANOTHER_PROCESS_SERVES`.
+    `steward_id` is the id a steward named as another person is written under, minted here when
+    None; see `THE_SERVER_CHOOSES_WHO_IS_APPOINTED`.
     """
     store = credentials if credentials is not None else Credentials(None)
     if enrolment is None:
@@ -581,8 +616,13 @@ async def appoint_first_administrator(
             display_name=draft.values_for(StepId.ADMINISTRATOR)["full_name"],
             trace_id=trace_id,
             settings=applied.settings,
+            steward=steward_of(
+                applied,
+                principal_id=principal_id,
+                steward_id=new_principal_id() if steward_id is None else steward_id,
+            ),
         )
-    except FirstAdministratorRefusedError as refused:
+    except (FirstAdministratorRefusedError, StewardRefusedError) as refused:
         log.info("appointment refused", reason=refused.reason.value)
         raise _nothing_to_appoint() from refused
     # Held from what was written rather than read back, so this process answers with the
