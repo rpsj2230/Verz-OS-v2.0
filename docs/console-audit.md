@@ -7,10 +7,10 @@ What an administrator would need to manage, read out of the schema, the routes a
 ## What was measured
 
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
-- 71 tables, from `brain.db.Base.metadata`.
-- 23 installation values, from `brain.install.INSTALLATION`.
-- 110 routes under `/api/v1` and `/setup`, from the API's internal document.
-- 66 console addresses, from the route table in `console/src/App.tsx`.
+- 69 tables, from `brain.db.Base.metadata`.
+- 22 installation values, from `brain.install.INSTALLATION`.
+- 109 routes under `/api/v1` and `/setup`, from the API's internal document.
+- 65 console addresses, from the route table in `console/src/App.tsx`.
 - 39 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 46 routes.
 - 35 gaps recorded, and 3 routes no screen calls.
 
@@ -187,7 +187,7 @@ What an administrator would need to manage, read out of the schema, the routes a
 
 - **Screens:** `/library`, `/learning`, `/memory`, `/memory/:subject`, `/records`, `/records/:entity`, `/classification`, `/classification/:entity`, `/classification/:entity/:column`, `/artifacts`
 - **Tables:** `know.item`, `know.chunk`, `mem.adaptive`, `mem.persistent`, `mem.learning`, `mem.correction`, `gate.fast_path_rule`, `gate.field_policy`, `agent.artifact`
-- **Installation values:** `INSTALL_VECTOR_STORE`, `INSTALL_EMBEDDING_REVISION`
+- **Installation values:** `INSTALL_VECTOR_STORE`
 
 | Route | Called by |
 | --- | --- |
@@ -295,7 +295,7 @@ No gap recorded.
 ### Usage, activity and system statistics
 
 - **Screens:** `/usage`, `/adoption`, `/spend`, `/questions`, `/quality`, `/service-levels`, `/me`
-- **Tables:** `ops.question_asked`, `ops.question_gap`, `ops.report_refresh`, `ops.spend_actual`, `obs.request_telemetry`
+- **Tables:** `ops.question_asked`, `ops.report_refresh`, `ops.spend_actual`, `obs.request_telemetry`
 - **Installation values:** none
 
 | Route | Called by |
@@ -312,16 +312,15 @@ No gap recorded.
 
 ### Logs and errors
 
-- **Screens:** `/errors`, `/logs`
-- **Tables:** `obs.application_log`
+- **Screens:** `/errors`
+- **Tables:** none
 - **Installation values:** none
 
 | Route | Called by |
 | --- | --- |
 | `GET /api/v1/errors` | `/errors` |
-| `GET /api/v1/logs` | `/logs` |
 
-- **Gap.** The background worker's own output and every debug line are not kept, and information lines are a sample. Recorded: The Logs screen says worker_output_is_not_kept, debug_is_not_kept and info_is_a_sample: the worker prints to its container rather than logging through structlog, and brain.ops.log_capture keeps warnings and above and bounds the rest.
+- **Gap.** The process log cannot be read from the console. Open leaf `M27.8.14`.
 
 ### The audit trail: who changed what, and when
 

@@ -277,9 +277,6 @@ describe("the Department page", () => {
       "/api/v1/report/usage": json(USAGE),
       "/api/v1/agents": json({ items: [{ agent_id: "site-health", display_name: sentinel("agent") }] }),
       "/api/v1/report/questions": json({
-        start: "2019-02-26T09:00:00Z",
-        end: "2019-03-05T09:00:00Z",
-        gaps: [],
         nothing_connected: true,
         answered_when_nothing_connected: sentinel("told"),
         answered_when_nothing_found: "not found",
@@ -309,9 +306,6 @@ describe("the Department page", () => {
       "/api/v1/report/usage": json({ message: sentinel("refused"), trace_id: "t-1" }, 503),
       "/api/v1/agents": json({ items: [{ agent_id: "site-health", display_name: sentinel("agent") }] }),
       "/api/v1/report/questions": json({
-        start: "2019-02-26T09:00:00Z",
-        end: "2019-03-05T09:00:00Z",
-        gaps: [],
         nothing_connected: false,
         answered_when_nothing_connected: "unused",
         answered_when_nothing_found: "unused",
@@ -333,9 +327,6 @@ describe("the Department page", () => {
       "/api/v1/report/usage": json({ ...USAGE, departments: null, people: null, questions: null }),
       "/api/v1/agents": json({ items: [] }),
       "/api/v1/report/questions": json({
-        start: "2019-02-26T09:00:00Z",
-        end: "2019-03-05T09:00:00Z",
-        gaps: [],
         nothing_connected: false,
         answered_when_nothing_connected: "unused",
         answered_when_nothing_found: "unused",

@@ -259,8 +259,6 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "gate.policy_epoch",
         "gate.scope",
         "gate.team",
-        # A log row keeps an event name, a place in the code and masked fields, never a person.
-        "obs.application_log",
         "ops.connector_connection",
         "ops.control_run",
         "ops.credential_write",
@@ -270,9 +268,6 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "ops.outbox_event",
         "ops.plugin_install",
         "ops.plugin_version",
-        # A department, a source and an instant under a trace id: `0063` keeps no principal, so a
-        # question no connected source covered is nobody's once the question ledger's row is gone.
-        "ops.question_gap",
         "ops.report_refresh",
         "ops.retention_release",
         "ops.retention_report",

@@ -714,9 +714,6 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         items: [{ agent_id: "quote-helper", display_name: UNBROKEN, owner_id: UNBROKEN }],
       },
       "/api/v1/report/questions": {
-        start: "2019-02-26T09:00:00Z",
-        end: "2019-03-05T09:00:00Z",
-        gaps: [],
         nothing_connected: true,
         answered_when_nothing_connected: UNBROKEN,
         answered_when_nothing_found: UNBROKEN,
@@ -1155,37 +1152,6 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
       },
     },
   },
-  // Logs. The event, the place, the reference, the exception and a field's name and value are all
-  // strings from the API, and none of them has anywhere to break.
-  "/logs": {
-    address: "/logs",
-    signedIn: true,
-    drawsValues: true,
-    answers: {
-      "/api/v1/logs": {
-        start: "2019-03-05T09:00:00Z",
-        end: "2019-03-06T09:00:00Z",
-        entries: [
-          {
-            at: "2019-03-06T08:30:00Z",
-            last_at: "2019-03-06T08:31:00Z",
-            level: "warning",
-            event: UNBROKEN,
-            origin: UNBROKEN,
-            reference: UNBROKEN,
-            error_type: UNBROKEN,
-            repeats: 3,
-            fields: { [UNBROKEN]: UNBROKEN },
-          },
-        ],
-        next_cursor: UNBROKEN,
-        kept_for_days: 30,
-        debug_is_not_kept: true,
-        info_is_a_sample: true,
-        worker_output_is_not_kept: true,
-      },
-    },
-  },
   // Prompts. Instructions are drawn a paragraph per line, outside any table, so an unbroken
   // line is the case that would overflow a phone.
   "/prompts": {
@@ -1463,19 +1429,15 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     drawsValues: true,
     answers: MODELS_AND_HEALTH,
   },
-  // Questions and gaps. Nothing connected, so the one-row table is drawn, and one gap line, so the
-  // second is. The sentence every asker receives arrives unbroken twice: inside the table, whose
-  // parent scrolls, and in the note that quotes the not-found sentence outside it, which has to be
-  // able to break. The gap line's department and source are unbroken inside their own table.
+  // Questions and gaps. Nothing connected, so the one-row table is drawn. The sentence every asker
+  // receives arrives unbroken twice: inside the table, whose parent scrolls, and in the note that
+  // quotes the not-found sentence outside it, which has to be able to break.
   "/questions": {
     address: "/questions",
     signedIn: true,
     drawsValues: true,
     answers: {
       "/api/v1/report/questions": {
-        start: "2019-02-26T09:00:00Z",
-        end: "2019-03-05T09:00:00Z",
-        gaps: [{ department: UNBROKEN, source: UNBROKEN, asked: 3 }],
         nothing_connected: true,
         answered_when_nothing_connected: UNBROKEN,
         answered_when_nothing_found: UNBROKEN,
@@ -1525,7 +1487,6 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
           finished_at: "2019-03-05T06:02:00Z",
           state: UNBROKEN,
         },
-        canaries_owed: false,
         canaries_started: false,
         canary_interval_seconds: 43200,
         findings_are_recorded: false,

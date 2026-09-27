@@ -103,7 +103,6 @@ from brain.install import InstallError, installed_name
 from brain.install_routes import router as install_router
 from brain.jobs_routes import router as jobs_router
 from brain.knowledge.row_store import SessionRowSource
-from brain.log_routes import router as log_router
 from brain.migrate import run_migrations
 from brain.mine_routes import router as mine_router
 from brain.navigation_routes import router as navigation_router
@@ -114,10 +113,8 @@ from brain.ops.automation_owner_store import StoredAutomations
 from brain.ops.credential_write_store import credential_writes_for
 from brain.ops.credentials import credentials_at_start
 from brain.ops.install_settings import refresh as refresh_install_settings
-from brain.ops.log_store import start_log_store, stop_log_store
 from brain.ops.model_service import ModelService, model_service_at_start
 from brain.ops.object_store import backup_objects, object_store_at_start
-from brain.ops.question_gap_store import GapRecorder
 from brain.ops.question_store import QuestionRecorder
 from brain.ops.replica_store import console_reads_for
 from brain.ops.telemetry_store import TelemetryRecorder
@@ -281,9 +278,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # Every transaction as `brain_app`, whatever the URL logged in as. See
         # `brain.session.THE_APPLICATION_ANSWERS_AS_THE_ROLE_ROW_SECURITY_BINDS`.
         app.state.db_sessions = make_application_sessions(app.state.db_engine)
-        # Warnings and errors this process logs from here on are also kept, redacted and bounded,
-        # for the Logs screen; standard output is unchanged. See `brain.ops.log_capture`.
-        app.state.log_store = start_log_store(app.state.db_sessions, settings)
         app.state.ready["database"] = await check_reachable(app.state.db_engine)
         # Before anything reads an installation value, because the setup wizard's answers
         # live in `ops.setting` and `brain.install.value_of` resolves them ahead of the
@@ -489,8 +483,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         close_store = getattr(getattr(store, "backend", None), "close", None)
         if callable(close_store):
             close_store()
-        # Before the engine goes, so what is waiting is written. See `brain.ops.log_store`.
-        await stop_log_store(getattr(app.state, "log_store", None))
         await dispose(getattr(app.state, "db_engine", None))
 
 
@@ -594,9 +586,8 @@ def request_recorders_for(
 ) -> tuple[RequestRecorder, ...]:
     """What a finished request is recorded to on this process. See `brain.gate.finish`.
 
-    The question recorder, the metadata ledger's recorder and the recorder of questions no
-    connected source covers when there is a database, all bound to its sessions, and nothing when
-    there is not. A process
+    The question recorder and the metadata ledger's recorder when there is a database, both
+    bound to its sessions, and nothing when there is not. A process
     with no database has nowhere to keep a record and nowhere an adoption report could read
     one back from, so an in-memory recorder there would be a count that vanishes on restart
     and that no reader can reach. A function rather than two lines in `lifespan`, so which
@@ -604,7 +595,7 @@ def request_recorders_for(
     """
     if sessions is None:
         return ()
-    return (QuestionRecorder(sessions), TelemetryRecorder(sessions), GapRecorder(sessions))
+    return (QuestionRecorder(sessions), TelemetryRecorder(sessions))
 
 
 def suspension_store_for(
@@ -966,9 +957,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # that already says who may see it, and a field saying the process log is kept nowhere the
     # console can read. See `brain.error_routes`.
     app.include_router(error_router)
-    # Logs: the warnings and errors this install kept, redacted on their way in, searchable and
-    # paged, behind `admin:application_log` over everything. See `brain.log_routes`.
-    app.include_router(log_router)
     # Features: which genuinely new features this install has switched on, and the switch, behind
     # `admin:feature` over everything. See `brain.feature_routes` and `brain.ops.features`.
     app.include_router(feature_router)

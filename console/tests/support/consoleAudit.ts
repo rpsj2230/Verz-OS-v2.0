@@ -383,7 +383,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "gate.field_policy",
       "agent.artifact",
     ],
-    installation: ["INSTALL_VECTOR_STORE", "INSTALL_EMBEDDING_REVISION"],
+    installation: ["INSTALL_VECTOR_STORE"],
     gaps: [
       { what: "A document or a data source cannot be added from the console after setup.", leaf: "M42.5.9" },
       {
@@ -468,27 +468,16 @@ export const AREAS: Readonly<Record<string, Area>> = {
   "Usage, activity and system statistics": {
     screens: ["/usage", "/adoption", "/spend", "/questions", "/quality", "/service-levels", "/me"],
     routes: ["/api/v1/report/*", "/api/v1/me/workspace"],
-    tables: [
-      "ops.question_asked",
-      "ops.question_gap",
-      "ops.report_refresh",
-      "ops.spend_actual",
-      "obs.request_telemetry",
-    ],
+    tables: ["ops.question_asked", "ops.report_refresh", "ops.spend_actual", "obs.request_telemetry"],
     installation: [],
     gaps: [],
   },
   "Logs and errors": {
-    screens: ["/errors", "/logs"],
-    routes: ["/api/v1/errors", "/api/v1/logs"],
-    tables: ["obs.application_log"],
+    screens: ["/errors"],
+    routes: ["/api/v1/errors"],
+    tables: [],
     installation: [],
-    gaps: [
-      {
-        what: "The background worker's own output and every debug line are not kept, and information lines are a sample.",
-        because: "The Logs screen says worker_output_is_not_kept, debug_is_not_kept and info_is_a_sample: the worker prints to its container rather than logging through structlog, and brain.ops.log_capture keeps warnings and above and bounds the rest.",
-      },
-    ],
+    gaps: [{ what: "The process log cannot be read from the console.", leaf: "M27.8.14" }],
   },
   "The audit trail: who changed what, and when": {
     screens: ["/audit"],
