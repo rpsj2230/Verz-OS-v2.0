@@ -184,8 +184,11 @@ class SignInChange(enum.StrEnum):
 
 
 #: A reason code, not a sentence. Same grammar as a field name, so it survives
-#: `redact_details` untouched while prose would be reduced to the marker.
-_REASON_CODE_RE = re.compile(r"^[a-z][a-z0-9_]{1,60}$")
+#: `redact_details` untouched while prose would be reduced to the marker. Public since `0083`
+#: copied it into a check constraint on `gate.suspension`, whose trigger writes a reason into
+#: the ledger without `redact_details`, and a test holds the copy to this.
+REASON_CODE: Final = r"^[a-z][a-z0-9_]{1,60}$"
+_REASON_CODE_RE = re.compile(REASON_CODE)
 
 
 def subject(kind: str, ident: str) -> str:
