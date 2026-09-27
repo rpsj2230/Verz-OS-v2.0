@@ -29,13 +29,11 @@ audit chain at all.** `compute_entry_hash` takes the action per entry and `HASH_
 literal, so an unused enum member is invisible to every hash already written, and every chain
 already stored still verifies. The constraint is the only thing that had to move.
 
-**The downgrade is real and it can fail, which is correct.** Narrowing the list rejects the
-migration if any row already carries `compose_change`, because recreating a check constraint
-validates the rows already there. And an audit row cannot be deleted to make room: the ledger
-is append-only by design and `brain.tables.audit` grants no DELETE on it. So a downgrade past
-this point is only available to an installation that has never recorded a composition change,
-which is the correct restriction rather than an oversight: the alternative is a downgrade that
-deletes audit history to succeed.
+**The downgrade narrows the list for what is written next and keeps what was written before**,
+for the reason `0026` gives. The constraint goes back `NOT VALID`, so an entry already carrying
+`compose_change` stays and no new one is accepted. An audit row still cannot be deleted to make
+room, because the ledger is append-only by design and `brain.tables.audit` grants no DELETE on
+it, and a downgrade that deleted audit history to succeed is still the alternative rejected.
 
 Task ids: none
 """
@@ -76,4 +74,6 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_constraint("action", "audit_entry", schema="obs", type_="check")
-    op.create_check_constraint("action", "audit_entry", WITHOUT_COMPOSE, schema="obs")
+    op.create_check_constraint(
+        "action", "audit_entry", WITHOUT_COMPOSE, schema="obs", postgresql_not_valid=True
+    )

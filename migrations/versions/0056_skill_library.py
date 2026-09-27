@@ -43,8 +43,9 @@ replaces another version of the same skill records the detachment first, with `s
 off the row's own column; the reach's digest and the trace come from the settings the store sets
 in the same transaction.
 
-**The downgrade can fail, which is correct**, for the reason `0026` gives: narrowing the action list
-and the subject grammar is refused once an entry carries the new values. The tables go with it, and
+**The downgrade keeps what the ledger already holds**, for the reason `0026` gives: the action list
+and the subject grammar go back `NOT VALID`, so an entry already carrying the new values stays and
+no new one is accepted. The tables go with it, and
 their ledger entries stay, because nothing may delete one.
 
 Task ids: M42.6.4
@@ -415,9 +416,13 @@ def downgrade() -> None:
     op.execute("DROP FUNCTION agent.record_skill_review()")
     op.execute("DROP FUNCTION agent.record_skill_import()")
     op.drop_constraint("subject_grammar", "audit_entry", schema="obs", type_="check")
-    op.create_check_constraint("subject_grammar", "audit_entry", NARROWER_SUBJECTS, schema="obs")
+    op.create_check_constraint(
+        "subject_grammar", "audit_entry", NARROWER_SUBJECTS, schema="obs", postgresql_not_valid=True
+    )
     op.drop_constraint("action", "audit_entry", schema="obs", type_="check")
-    op.create_check_constraint("action", "audit_entry", NARROWER_ACTIONS, schema="obs")
+    op.create_check_constraint(
+        "action", "audit_entry", NARROWER_ACTIONS, schema="obs", postgresql_not_valid=True
+    )
     # The policies and the grants go with the tables, in the order their keys need.
     op.drop_table("skill_assignment", schema="agent")
     op.drop_table("skill_review", schema="agent")

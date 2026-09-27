@@ -10,8 +10,8 @@ The constraint is dropped by whichever name it holds and recreated, for the reas
 `0025` passed a name that was already prefixed, so a database built by it and one built from the
 model name the same constraint differently.
 
-**The downgrade narrows it again and fails if a refresh run was ever recorded**, which is the
-correct restriction: a run record is history, and a downgrade that silently deleted the evidence
+**The downgrade narrows it again for new runs and keeps the runs already recorded**, `NOT VALID`
+for the reason `0026` gives: a run record is history, and a downgrade that deleted the evidence
 that a control ran would be the one migration here that edits the past.
 
 Task ids: M36.1.3.2
@@ -73,5 +73,9 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.execute(DROP_THE_NAME_CONSTRAINT)
     op.create_check_constraint(
-        "control_run_name", "control_run", WITHOUT_SPEND_REPORT_REFRESH, schema="ops"
+        "control_run_name",
+        "control_run",
+        WITHOUT_SPEND_REPORT_REFRESH,
+        schema="ops",
+        postgresql_not_valid=True,
     )

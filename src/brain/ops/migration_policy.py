@@ -36,6 +36,15 @@ install from empty that interval is inside a single `alembic upgrade head`. What
 *declares* is readable here, with no database anywhere, so it is read here. See
 `A_TABLE_IS_UNPROTECTED_FOR_AS_LONG_AS_ITS_POLICY_IS_IN_ANOTHER_MIGRATION`.
 
+**And one rule about the downgrade on a populated database.** A downgrade that re-creates a
+check constraint is almost always narrowing a vocabulary its upgrade widened, and a plain
+`ADD CONSTRAINT ... CHECK` validates every row already in the table, including the rows the
+newer release wrote. On `obs.audit_entry` nothing may delete those, so until 2026-09-17 every
+such downgrade could run only on an install that had never used the release it was rolling
+back. Twenty migrations said in their docstrings that this failure was correct; CI's round
+trip over a database the unit tests had filled is what showed it was a rollback that did not
+exist. See `A_DOWNGRADE_NARROWS_WHAT_IS_WRITTEN_NEXT_AND_NOT_WHAT_WAS_WRITTEN_BEFORE`.
+
 Task ids: M6.1.3, M31.2.2.2, M31.2.2.3, M31.2.2.4, M31.2.2.5, M41.2.1
 """
 
@@ -88,6 +97,23 @@ A_TABLE_IS_UNPROTECTED_FOR_AS_LONG_AS_ITS_POLICY_IS_IN_ANOTHER_MIGRATION = (
     "is watching at all. The declaration is checkable without a database and the produced "
     "schema is not, so the declaration is checked here and the schema is checked in CI."
 )
+
+#: Why a check constraint a downgrade re-creates is added `NOT VALID`.
+A_DOWNGRADE_NARROWS_WHAT_IS_WRITTEN_NEXT_AND_NOT_WHAT_WAS_WRITTEN_BEFORE = (
+    "A downgrade that re-creates a check constraint is narrowing what its upgrade widened, and "
+    "a plain ADD CONSTRAINT validates every row already in the table, including the rows the "
+    "newer release wrote under the wider rule. The audit ledger is append-only, so those rows "
+    "cannot be deleted to make room, and the downgrade then fails on every install that has "
+    "used the release it rolls back, which is every install that would ever roll one back. "
+    "NOT VALID keeps the rows already written as history and holds every write after the "
+    "downgrade to the older rule, and the next upgrade re-creates the wider rule validated, "
+    "which every row satisfies. Found on CI on 2026-09-17, when 0059's downgrade met a ledger "
+    "the unit tests had filled."
+)
+
+#: `ADD CONSTRAINT <name> CHECK` or `ADD CHECK`, the two ways a table constraint is added by hand.
+_ADDS_A_CHECK = re.compile(r'\bADD\s+(?:CONSTRAINT\s+(?:"[^"]+"|\S+)\s+)?CHECK\b', re.IGNORECASE)
+_NOT_VALID = re.compile(r"\bNOT\s+VALID\b", re.IGNORECASE)
 
 #: `ALTER TABLE <schema>.<table> ENABLE ROW LEVEL SECURITY`, as every migration writes it.
 #:
@@ -375,6 +401,115 @@ def _row_level_security_findings(name: str, text: str) -> list[Finding]:
     return findings
 
 
+def _rendered(node: ast.expr, constants: dict[str, str]) -> str | None:
+    """The SQL an expression evaluates to, as far as the parse tree can say, or None.
+
+    A literal is itself and an f-string is rendered with `?` for each value, as `_sql_literals`
+    renders one. A name is the module-level string it was assigned, because the house style
+    names its SQL (`DROP_THE_NAME_CONSTRAINT`), and reading literals alone would miss a narrower
+    check held in a constant and executed by name. A concatenation is its parts, so a statement
+    whose `NOT VALID` sits in the last fragment is read as one statement rather than as a
+    fragment with none. `text(...)` and `"...".format(...)` are the string inside them. Anything
+    else is None, and a part of a concatenation nobody can read is `?`, which can only make a
+    statement look like it lacks `NOT VALID`: the direction to be wrong in.
+    """
+    if isinstance(node, ast.Constant):
+        return node.value if isinstance(node.value, str) else None
+    if isinstance(node, ast.JoinedStr):
+        return "".join(
+            part.value if isinstance(part, ast.Constant) and isinstance(part.value, str) else "?"
+            for part in node.values
+        )
+    if isinstance(node, ast.Name):
+        return constants.get(node.id)
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        left = _rendered(node.left, constants)
+        right = _rendered(node.right, constants)
+        if left is None and right is None:
+            return None
+        return (left if left is not None else "?") + (right if right is not None else "?")
+    if isinstance(node, ast.Call):
+        callee = node.func
+        if isinstance(callee, ast.Attribute) and callee.attr == "format":
+            return _rendered(callee.value, constants)
+        named = callee.attr if isinstance(callee, ast.Attribute) else ""
+        named = callee.id if isinstance(callee, ast.Name) else named
+        if named == "text" and node.args:
+            return _rendered(node.args[0], constants)
+    return None
+
+
+def _downgrade_check_findings(name: str, text: str) -> list[Finding]:
+    """A check constraint a downgrade re-creates without `NOT VALID`.
+
+    See `A_DOWNGRADE_NARROWS_WHAT_IS_WRITTEN_NEXT_AND_NOT_WHAT_WAS_WRITTEN_BEFORE`. Two shapes,
+    both read from the parse tree of `downgrade` alone, so `upgrade` is never held to it and a
+    docstring discussing either shape is never evidence:
+
+    - `create_check_constraint(...)` without `postgresql_not_valid=True`. Measured with alembic
+      1.19.1 and SQLAlchemy 2.0.52, that keyword renders `... CHECK (...) NOT VALID`.
+    - SQL passed to any call that adds a check (`ADD CONSTRAINT <name> CHECK` or `ADD CHECK`)
+      in a statement that does not also say `NOT VALID`.
+
+    **Sound and incomplete, like `_sql_literals`.** A helper function that `downgrade` calls is
+    not followed, because a helper shared with `upgrade` would then hold the upgrade to the rule
+    too, and a statement assembled from values at run time cannot be read at all. Every
+    migration in this repository writes these calls inline in `downgrade`.
+    """
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return []
+    downgrade = next(
+        (n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "downgrade"), None
+    )
+    if downgrade is None:
+        return []
+
+    constants: dict[str, str] = {}
+    for stmt in tree.body:
+        if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
+            target, value = stmt.targets[0], stmt.value
+        elif isinstance(stmt, ast.AnnAssign) and stmt.value is not None:
+            target, value = stmt.target, stmt.value
+        else:
+            continue
+        rendered = _rendered(value, constants)
+        if isinstance(target, ast.Name) and rendered is not None:
+            constants[target.id] = rendered
+
+    rule = "downgrade adds a check constraint without NOT VALID"
+    why = A_DOWNGRADE_NARROWS_WHAT_IS_WRITTEN_NEXT_AND_NOT_WHAT_WAS_WRITTEN_BEFORE
+    findings: list[Finding] = []
+    reported: set[str] = set()
+    for node in ast.walk(downgrade):
+        if not isinstance(node, ast.Call):
+            continue
+        callee = node.func
+        if isinstance(callee, ast.Attribute) and callee.attr == "create_check_constraint":
+            not_valid = any(
+                keyword.arg == "postgresql_not_valid"
+                and isinstance(keyword.value, ast.Constant)
+                and keyword.value.value is True
+                for keyword in node.keywords
+            )
+            if not not_valid:
+                detail = f"`create_check_constraint` on line {node.lineno} has no "
+                detail += f"`postgresql_not_valid=True`. {why}"
+                findings.append(Finding(name, rule, detail))
+        for argument in node.args:
+            sql = _rendered(argument, constants)
+            for statement in (sql or "").split(";"):
+                flat = " ".join(statement.split())
+                if not _ADDS_A_CHECK.search(flat) or _NOT_VALID.search(flat) or flat in reported:
+                    continue
+                reported.add(flat)
+                findings.append(
+                    Finding(name, rule, f"{flat[:120]!r} does not say NOT VALID. {why}")
+                )
+    return findings
+
+
 def check_file(path: Path) -> list[Finding]:
     text = path.read_text(encoding="utf-8")
     name = path.name
@@ -455,6 +590,7 @@ def check_file(path: Path) -> list[Finding]:
 
     findings.extend(_fast_lane_findings(name, text))
     findings.extend(_row_level_security_findings(name, text))
+    findings.extend(_downgrade_check_findings(name, text))
 
     return findings
 

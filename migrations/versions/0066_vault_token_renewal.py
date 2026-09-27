@@ -9,8 +9,8 @@ refresh. The constraint is dropped by whichever name it holds, as `0060` does.
 
 No table, no policy and no grant: the runs go into `ops.control_run`, which already has all three.
 
-**The downgrade can fail, which is correct**, for the reason `0026` gives: narrowing the names is
-refused once a run carries the new one.
+**The downgrade keeps the runs already recorded**, for the reason `0026` gives: the names go back
+`NOT VALID`, so a run already carrying the new one stays and no new one is accepted.
 
 Task ids: M42.6.2
 """
@@ -71,4 +71,6 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.execute(DROP_THE_NAME_CONSTRAINT)
-    op.create_check_constraint("control_run_name", "control_run", NARROWER_NAMES, schema="ops")
+    op.create_check_constraint(
+        "control_run_name", "control_run", NARROWER_NAMES, schema="ops", postgresql_not_valid=True
+    )

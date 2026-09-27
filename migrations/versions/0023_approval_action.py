@@ -27,12 +27,12 @@ second hand-maintained copy that stops matching the moment either changes.
 written, and every chain already stored still verifies. The constraint is the only thing that
 had to move.
 
-**The downgrade is real and it can fail, which is correct.** Narrowing the list rejects the
-migration if any row already carries `approval`, because recreating a check constraint
-validates the rows already there, and an audit row cannot be deleted to make room: the ledger
-is append-only and `brain.tables.audit` grants no DELETE on it. So a downgrade past this point
-is only available to an installation where nobody has ever decided an approval, which is the
-correct restriction rather than an oversight.
+**The downgrade narrows the list for what is written next and keeps what was written before**,
+for the reason `0026` gives. The constraint goes back `NOT VALID`, so an entry already carrying
+`approval` stays and no new one is accepted. An audit row cannot be deleted to make room, because
+the ledger is append-only and `brain.tables.audit` grants no DELETE on it, so validating the
+narrower list would have left this downgrade open only to an installation where nobody had ever
+decided an approval.
 
 Task ids: none
 """
@@ -72,4 +72,6 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_constraint("action", "audit_entry", schema="obs", type_="check")
-    op.create_check_constraint("action", "audit_entry", WITHOUT_APPROVAL, schema="obs")
+    op.create_check_constraint(
+        "action", "audit_entry", WITHOUT_APPROVAL, schema="obs", postgresql_not_valid=True
+    )

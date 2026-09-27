@@ -34,8 +34,8 @@ under `credential` by `0054`'s trigger on `ops.credential_write`.
 every grant in production goes through. Same advisory lock, same sequence and parent read, same
 `obs.audit_entry_hash`, same refusal of a discarded MERGE.
 
-**The downgrade can fail, which is correct**, for `0026`'s reason: narrowing the action list is
-refused once any entry records a connection, and an audit entry cannot be deleted to make room. It
+**The downgrade keeps what the ledger already holds**, for `0026`'s reason: the action list goes
+back `NOT VALID`, so an entry already recording a connection stays and no new one is accepted. It
 drops the table with it, and with the table the record of every source connected, which is the
 state before this migration.
 
@@ -252,7 +252,9 @@ def downgrade() -> None:
     op.execute("DROP TRIGGER connector_connection_is_audited ON ops.connector_connection")
     op.execute("DROP FUNCTION ops.record_connector_connection()")
     op.drop_constraint("action", "audit_entry", schema="obs", type_="check")
-    op.create_check_constraint("action", "audit_entry", NARROWER_ACTIONS, schema="obs")
+    op.create_check_constraint(
+        "action", "audit_entry", NARROWER_ACTIONS, schema="obs", postgresql_not_valid=True
+    )
     # The policies and the grants go with the table.
     op.drop_index("uq_connector_connection_connector_live", "connector_connection", schema="ops")
     op.drop_table("connector_connection", schema="ops")

@@ -38,8 +38,8 @@ that drains the outbox is registered in `brain.ops.controls` as `outbox_dispatch
 control nothing calls yet, and the constraint on `ops.control_run.name` is generated from
 that registry. Without the widening the model and the migration chain disagree, and the
 first recorded run of the dispatcher would be refused by the database. The downgrade
-narrows it again, and fails if a run of `outbox_dispatch` was ever recorded, which is the
-correct restriction: a run record is history.
+narrows it again `NOT VALID`, for the reason `0026` gives: a run record is history, so a run of
+`outbox_dispatch` already recorded stays and no new one is accepted.
 
 Task ids: M17.5.1, M17.5.3
 """
@@ -291,7 +291,11 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.execute(DROP_THE_NAME_CONSTRAINT)
     op.create_check_constraint(
-        "control_run_name", "control_run", WITHOUT_OUTBOX_DISPATCH, schema="ops"
+        "control_run_name",
+        "control_run",
+        WITHOUT_OUTBOX_DISPATCH,
+        schema="ops",
+        postgresql_not_valid=True,
     )
     op.drop_index("ix_outbox_delivery_due", table_name="outbox_delivery", schema="ops")
     op.drop_table("outbox_delivery", schema="ops")

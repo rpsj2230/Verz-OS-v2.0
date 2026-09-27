@@ -23,11 +23,9 @@ forward through 0007 and then through this one. Declaring the pre-widget list in
 be a third hand-maintained copy of the vocabulary and would stop matching the moment 0007
 changed.
 
-**The downgrade is real and it can fail, which is correct.** Narrowing the list rejects the
-migration if any row already carries `slack`, because recreating a check constraint validates
-the existing rows. A downgrade that silently kept rows the schema says are impossible would
-leave a table nothing can subsequently validate. Whoever needs to go back deletes those
-bindings and sessions first, deliberately.
+**The downgrade narrows the list for new rows and keeps the rows already there**, as `0007`'s
+does and for the reason it gives: the constraint goes back `NOT VALID`, so a binding or session
+already carrying `slack` stays and no new one is accepted.
 
 Task ids: M10.5.1
 """
@@ -82,7 +80,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Narrow the list again. Fails if a row already carries `slack`, deliberately."""
+    """Narrow the list again for new rows, and keep any row that already carries `slack`."""
     for schema, table in CONSTRAINED:
         op.drop_constraint("channel", table, schema=schema, type_="check")
-        op.create_check_constraint("channel", table, WITHOUT_SLACK, schema=schema)
+        op.create_check_constraint(
+            "channel", table, WITHOUT_SLACK, schema=schema, postgresql_not_valid=True
+        )

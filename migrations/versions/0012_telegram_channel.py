@@ -26,11 +26,9 @@ Without this migration the model and the migration chain disagree, which is exac
 check it would instead have been a perfectly valid `Binding` that the database refuses on
 the first insert after deploy.
 
-**The downgrade is real and it can fail, which is correct.** Narrowing the list rejects the
-migration if any row already carries `telegram`, because recreating a check constraint
-validates the rows already there. Whoever needs to go back deletes those bindings and
-sessions first, deliberately, rather than discovering later that the schema forbids rows the
-table contains.
+**The downgrade narrows the list for new rows and keeps the rows already there**, as `0007`'s
+does and for the reason it gives: the constraint goes back `NOT VALID`, so a binding or session
+already carrying `telegram` stays and no new one is accepted.
 
 Task ids: M10.5.4
 """
@@ -80,7 +78,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Narrow the list again. Fails if a row already carries `telegram`, deliberately."""
+    """Narrow the list again for new rows, and keep any row that already carries `telegram`."""
     for schema, table in CONSTRAINED:
         op.drop_constraint("channel", table, schema=schema, type_="check")
-        op.create_check_constraint("channel", table, WITHOUT_TELEGRAM, schema=schema)
+        op.create_check_constraint(
+            "channel", table, WITHOUT_TELEGRAM, schema=schema, postgresql_not_valid=True
+        )

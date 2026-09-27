@@ -31,9 +31,10 @@ records is refused by the database. The constraint is dropped by whichever name 
 **The append is `0003`'s, another copy of that block**, beside `0047`'s to `0059`'s, for the reason
 `0047` gives against editing a function every grant in production goes through.
 
-**The downgrade can fail, which is correct**, for the reason `0026` gives: narrowing the action
-list, the subject grammar and the control names is refused once an entry or a run carries the new
-values. The table goes with it, and its ledger entries stay, because nothing may delete one.
+**The downgrade keeps the rows already written**, for the reason `0026` gives: the action list, the
+subject grammar and the control names go back `NOT VALID`, so an entry or a run already carrying
+the new values stays and no new one is accepted. The table goes with it, and its ledger entries
+stay, because nothing may delete one.
 
 Task ids: M27.7.24
 """
@@ -327,13 +328,21 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.execute(DROP_THE_NAME_CONSTRAINT)
     op.create_check_constraint(
-        "control_run_name", "control_run", WITHOUT_ERASURE_QUEUE, schema="ops"
+        "control_run_name",
+        "control_run",
+        WITHOUT_ERASURE_QUEUE,
+        schema="ops",
+        postgresql_not_valid=True,
     )
     op.execute("DROP TRIGGER erasure_request_is_audited ON ops.erasure_request")
     op.execute("DROP FUNCTION ops.record_erasure_request()")
     op.drop_constraint("subject_grammar", "audit_entry", schema="obs", type_="check")
-    op.create_check_constraint("subject_grammar", "audit_entry", NARROWER_SUBJECTS, schema="obs")
+    op.create_check_constraint(
+        "subject_grammar", "audit_entry", NARROWER_SUBJECTS, schema="obs", postgresql_not_valid=True
+    )
     op.drop_constraint("action", "audit_entry", schema="obs", type_="check")
-    op.create_check_constraint("action", "audit_entry", NARROWER_ACTIONS, schema="obs")
+    op.create_check_constraint(
+        "action", "audit_entry", NARROWER_ACTIONS, schema="obs", postgresql_not_valid=True
+    )
     # The policies, the grants and the indexes go with the table.
     op.drop_table("erasure_request", schema="ops")
