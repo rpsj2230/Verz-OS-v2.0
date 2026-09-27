@@ -160,6 +160,13 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.automation_gallery_routes:AutomationInstalls.install": (
             Repeat.WRITES_THIS_SYSTEMS_DATABASE
         ),
+        # Starting and stopping an installed automation: a read of an agent's automations and a
+        # write of its next run and the schedule row beside it, conditional on the next run shown,
+        # so a second press finds the automation already moved and writes nothing.
+        "brain.automation_schedule_routes:AutomationSchedules.listed": Repeat.READS,
+        "brain.automation_schedule_routes:AutomationSchedules.change": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
         # The skill library: reads, and inserts into this system's own tables, where a second
         # import or decision is refused by the key and appends nothing, and an assignment writes
         # only when the install is the one it was decided about.

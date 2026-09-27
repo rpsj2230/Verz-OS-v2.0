@@ -219,6 +219,9 @@ function tabButton(container: HTMLElement, label: string): HTMLButtonElement {
 
 const ANSWERING: Record<string, Handler> = {
   [`GET ${WORKSPACE}`]: () => ({ body: workspaceWire() }),
+  // The installed automations the tab lists above the gallery, asked for with it. None here: what
+  // the list draws is `tests/agent-automations.test.tsx`'s.
+  [`GET ${INSTALL}`]: () => ({ body: { items: [], result_rule: "Only whom it ran as sees it." } }),
   [`GET ${GALLERY}`]: () => ({ body: galleryWire() }),
   [`GET ${PREVIEW}`]: () => ({ body: previewWire() }),
 };
@@ -237,7 +240,9 @@ describe("the gallery on the Automations tab", () => {
     await galleryDrawn(stand.container);
     const cards = [...stand.container.querySelectorAll('[aria-label="Automation templates"] > ul > li')];
 
-    expect(stand.container.querySelector("h3")?.textContent).toBe(GALLERY_HEADING);
+    expect(
+      stand.container.querySelector('[aria-label="Automation templates"] h3')?.textContent,
+    ).toBe(GALLERY_HEADING);
     expect(stand.container.textContent).toContain("Installing writes the automation. Nothing runs it yet.");
     expect(cards.map((one) => one.querySelector("h4")?.textContent)).toEqual([
       "I list the questions I could not answer this week",

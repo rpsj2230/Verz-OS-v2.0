@@ -329,12 +329,13 @@ canaries.
 | `outbox_dispatch` | that a webhook subscriber is told about the events it asked for, retried while it is down | `in_process` |
 | `spend_report_refresh` | that the spend report a reader is shown is rebuilt daily from what runs actually cost | `in_process` |
 | `erasure_queue` | that a request to erase somebody's data, once filed, is carried out and what it did is written down | `in_process` |
+| `automation_run` | that an automation somebody started runs at its cadence as the person it names, at no more than that person may reach through the agent, and stops and says why when it cannot | `in_process` |
 
 Three words appear in that last column and they are not degrees of the same thing. `nothing`
 means no call site of any kind. `in_process` means another module calls it, and the word alone
 says nothing about whether *that* module is ever reached. For `retention_sweep`, `canary_run`,
-`knowledge_reverification`, `outbox_dispatch`, `spend_report_refresh` and `erasure_queue` it is: the general worker
-ticks the control schedule and starts all six. The sweep runs in report-only mode, deleting nothing, until the
+`knowledge_reverification`, `outbox_dispatch`, `spend_report_refresh`, `erasure_queue` and
+`automation_run` it is: the general worker ticks the control schedule and starts all seven. The sweep runs in report-only mode, deleting nothing, until the
 installation releases it: every run writes a report an administrator reads at
 `GET /api/v1/govern/retention`, and somebody holding `admin:retention` over everything releases
 the sweep after the newest report with `POST /api/v1/govern/retention/release`, or puts it back

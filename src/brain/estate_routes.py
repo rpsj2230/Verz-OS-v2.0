@@ -17,10 +17,11 @@ projects what comes back. See
 corrections.** `mem.learning` holds what a learning proposed, which agent ran and what it
 replaced, and `mem.correction` holds every supersession and demotion, both from `0061`. The
 review reads the learnings of the agents a caller may see and the corrections naming them; the
-viewer reads a person's memories, what each replaced and the corrections naming them. Nothing
-yet forms a memory from a conversation on a running install, so on most installs both still
-answer empty, and neither says so with a flag any more: an empty review over a store that exists
-is an install where nothing has been learnt, which is now a fact the tables establish.
+viewer reads a person's memories, what each replaced and the corrections naming them.
+`brain.ops.memory_store.StoredFormations` forms a memory from an answered turn, and nothing on a
+running install calls it until the answer lane does, so on most installs both still answer empty,
+and neither says so with a flag any more: an empty review over a store that exists is an install
+where nothing has been learnt, which is now a fact the tables establish.
 
 **The library shows two facts per item, because the decision admits two.** `LibraryRow` is an
 item's reference and its visibility level, and `brain.console.govern_estate.

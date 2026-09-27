@@ -79,6 +79,7 @@ STARTED = [
     ("outbox_dispatch", False),
     ("spend_report_refresh", False),
     ("erasure_queue", False),
+    ("automation_run", False),
 ]
 
 
@@ -147,12 +148,13 @@ def starts(monkeypatch: pytest.MonkeyPatch) -> Starts:
 
 
 # ------------------------------------------------------------------- without a server
-def test_the_wired_runners_are_the_six_the_schedule_is_meant_to_start() -> None:
+def test_the_wired_runners_are_the_seven_the_schedule_is_meant_to_start() -> None:
     """Asserted against the names, so a runner wired or unwired later moves this on purpose.
 
-    The webhook dispatch, the erasure queue and the permission canaries joined on 2026-09-17.
+    The webhook dispatch, the erasure queue and the permission canaries joined on 2026-09-17, and
+    the automation runner later that day.
 
-    Delete this and every assertion below that names the six could be satisfied by a table
+    Delete this and every assertion below that names the seven could be satisfied by a table
     that had quietly lost one of them."""
     assert WIRED == [
         "retention_sweep",
@@ -161,6 +163,7 @@ def test_the_wired_runners_are_the_six_the_schedule_is_meant_to_start() -> None:
         "outbox_dispatch",
         "spend_report_refresh",
         "erasure_queue",
+        "automation_run",
     ]
 
 
@@ -317,6 +320,7 @@ def test_a_due_control_is_started_once_and_its_run_is_recorded(starts: Starts) -
 
         assert starts.calls == STARTED
         assert [(one.name, one.outcome, one.report_only, one.detail) for one in _rows(url)] == [
+            ("automation_run", "ok", False, "automation_run ran"),
             ("canary_run", "ok", False, "canary_run ran"),
             ("erasure_queue", "ok", False, "erasure_queue ran"),
             ("knowledge_reverification", "ok", False, "knowledge_reverification ran"),
@@ -384,12 +388,12 @@ def test_nothing_that_is_not_due_runs_and_it_runs_again_once_its_cadence_has_pas
         later = tick(url, at=NOW + timedelta(seconds=30))
 
         assert starts.calls == STARTED
-        assert len(recorded(url)) == 6
+        assert len(recorded(url)) == len(STARTED)
         assert not any(one.name in WIRED for one in later)
 
         tick(url, at=NOW + timedelta(days=1, minutes=1))
-        assert len(starts.calls) == 12
-        assert len(recorded(url)) == 12
+        assert len(starts.calls) == 2 * len(STARTED)
+        assert len(recorded(url)) == 2 * len(STARTED)
 
 
 def test_a_control_whose_lock_another_replica_holds_is_not_started_and_the_rest_are(
@@ -406,8 +410,9 @@ def test_a_control_whose_lock_another_replica_holds_is_not_started_and_the_rest_
             found = tick(url, at=NOW)
             other.rollback()
 
-        assert starts.calls == [*STARTED[:4], STARTED[5]]
+        assert starts.calls == [*STARTED[:4], *STARTED[5:]]
         assert [row[0] for row in recorded(url)] == [
+            "automation_run",
             "canary_run",
             "erasure_queue",
             "knowledge_reverification",
@@ -434,6 +439,7 @@ def test_a_runner_that_raises_is_recorded_as_failed_with_its_reason_and_the_next
 
         assert fake.calls == STARTED
         assert [(one.name, one.outcome, one.detail) for one in _rows(url)] == [
+            ("automation_run", "ok", "automation_run ran"),
             ("canary_run", "ok", "canary_run ran"),
             ("erasure_queue", "ok", "erasure_queue ran"),
             ("knowledge_reverification", "ok", "knowledge_reverification ran"),
@@ -500,6 +506,7 @@ def test_the_tick_records_the_re_verification_nag_through_the_real_runner(
         ("outbox_dispatch", False),
         ("spend_report_refresh", False),
         ("erasure_queue", False),
+        ("automation_run", False),
     ]
     # The registry's entry point is what the schedule starts, so the control cannot measure as
     # running through its decision functions while the store they need goes uncalled.
