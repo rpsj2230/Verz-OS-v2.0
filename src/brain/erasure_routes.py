@@ -303,10 +303,13 @@ class ExportLogEntryView(BaseModel):
     reason: str
     reason_reference: str
     produced_at: datetime
+    #: `chain` or `readable`. A readable export has no sequence range and no verdict; see
+    #: `brain.tables.data_export.A_READABLE_EXPORT_NAMES_NO_WINDOW`.
+    form: str
     first_seq: int | None
     last_seq: int | None
     entries: int
-    verified: bool
+    verified: bool | None
     document_digest: str
 
 
@@ -391,6 +394,7 @@ def export_view(taken: TakenExport) -> ExportLogEntryView:
         reason=taken.reason.value,
         reason_reference=taken.reason_reference,
         produced_at=taken.produced_at,
+        form=taken.form.value,
         first_seq=taken.first_seq,
         last_seq=taken.last_seq,
         entries=taken.entries,

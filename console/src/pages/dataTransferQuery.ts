@@ -11,7 +11,13 @@
  * the moment it is saved. A browser with no way to make a file from memory is told so rather than
  * shown the document on the screen.
  *
- * Task ids: M27.8.16
+ * **A readable export is described by what it is, never by numbers it does not have.** An export of
+ * the entries its exporter could read has no window of sequence numbers and no verdict, because the
+ * API records neither (`brain.tables.data_export.A_READABLE_EXPORT_NAMES_NO_WINDOW`). Its row says
+ * so in words rather than drawing an empty window or a verdict of broken, which would read as a
+ * ledger somebody tampered with.
+ *
+ * Task ids: M27.8.16, M27.9.4
  */
 
 import type { components } from "../api/schema";
@@ -135,7 +141,26 @@ export function saveDocument(filename: string, document: string, into: Document)
   return true;
 }
 
-/** The window an export covered, in words. */
+/** What the Window column says about an export of the entries its exporter could read. */
+export const READABLE_WINDOW = "The entries you could read";
+
+/** What the Chain column says: the chain's verdict, or that the export is not a chain. */
+export const CHAIN_VERIFIED = "Verified";
+export const CHAIN_BROKEN = "Broken; the document says where";
+export const NOT_A_CHAIN = "Not a chain";
+
+/** The window an export covered, in words. A readable export names no sequence numbers. */
 export function windowSentence(row: ExportRecordRow): string {
+  if (row.form === "readable") {
+    return READABLE_WINDOW;
+  }
   return row.first_seq === null ? "" : `Entries ${String(row.first_seq)} to ${String(row.last_seq)}`;
+}
+
+/** Whether an export's chain verified, or that it is not a chain and carries no verdict. */
+export function chainSentence(row: ExportRecordRow): string {
+  if (row.verified === null) {
+    return NOT_A_CHAIN;
+  }
+  return row.verified ? CHAIN_VERIFIED : CHAIN_BROKEN;
 }

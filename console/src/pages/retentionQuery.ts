@@ -56,6 +56,28 @@ export const LIFT_API_PATH = "/govern/legal-holds/lift";
 export const ERASURES_API_PATH = "/govern/erasures";
 export const EXPORT_LOG_API_PATH = "/govern/retention/exports";
 
+/**
+ * How many entries an export carried, and its window of sequence numbers when it is a chain. An
+ * export of the entries its exporter could read has no window, and saying "none" would read as an
+ * export of nothing.
+ */
+export function exportEntriesSentence(one: ExportLogEntry): string {
+  if (one.form === "readable") {
+    return `${String(one.entries)}, those its exporter could read`;
+  }
+  return one.first_seq === null
+    ? "none"
+    : `${String(one.entries)}, from ${String(one.first_seq)} to ${String(one.last_seq)}`;
+}
+
+/** Whether an export's chain verified, or that it is not a chain and carries no verdict. */
+export function exportVerdict(one: ExportLogEntry): string {
+  if (one.verified === null) {
+    return "Not a chain";
+  }
+  return one.verified ? "Yes" : "No";
+}
+
 /** A reference: what a hold, a subject and an actor must look like. `IDENTIFIER`. */
 export const IDENTIFIER_PATTERN = "^[A-Za-z0-9_.@-]{1,128}$";
 /** A reason code: a field name, never prose. `FIELD_NAME`. */

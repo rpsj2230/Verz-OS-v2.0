@@ -15,16 +15,25 @@ record of it. See `THE_ROW_AND_THE_DOCUMENT_COMMIT_TOGETHER`.
 `brain.gate.review_store` sets them, so the ledger entry the trigger writes carries the reach the
 export was taken under rather than the zero digest a statement at the server would get.
 
-**Entries are read in sequence order inside a time window, one more than the ceiling.** The extra
-row is how `produce` knows a window is too large without anything counting the whole window, and
-reading the ledger inside the export's own transaction means the entries exported and the append
-recording the export are one consistent view of the chain.
+**Entries are read in sequence order inside a time window, in chunks, until one more than the
+ceiling has been kept or the window ends.** What is kept is the caller's `keep`: every entry for a
+chain, and for a readable export only the entries the exporter may read, so the ceiling and the
+empty-window refusal are judged on what the document would carry and never on the rows the window
+holds (`brain.ops.data_transfer.THE_LIMITS_COUNT_ONLY_WHAT_THE_EXPORTER_MAY_READ`). The extra entry
+is how `produce` knows a window is too large without anything counting the whole of it, and reading
+inside the export's own transaction means the entries exported and the append recording the export
+are one consistent view of the chain. See `READING_STOPS_AT_WHAT_IS_KEPT_AND_NEVER_AT_WHAT_IS_READ`.
+
+**A row that does not construct as an entry refuses a chain and is dropped from a readable export.**
+A chain with a row left out is not the chain, so it is refused in words. The readable form drops it
+as `brain.audit_routes` does, because a refusal there would tell the exporter a row exists that the
+view would never have shown them.
 
 **The log is read back whole and narrowed by the route.** `StoredExports.recent` returns every
 person's newest exports, and `brain.erasure_routes` hands each to
 `brain.console.govern_surfaces.export_log`, which decides who may be told that it happened.
 
-Task ids: M27.8.16, M27.7.24
+Task ids: M27.8.16, M27.7.24, M27.9.4
 """
 
 from __future__ import annotations
@@ -43,7 +52,7 @@ from brain.audit_routes import entry_from
 from brain.ops.data_transfer import AuditExportRefusedError, Produced
 from brain.ops.export import ExportReason
 from brain.tables.audit import ACTOR_SETTING, ENT_HASH_SETTING, TRACE_ID_SETTING, AuditEntryRow
-from brain.tables.data_export import DataExportRow, ExportDataSet
+from brain.tables.data_export import DataExportRow, ExportDataSet, ExportForm
 
 #: Why the document is not handed over before the commit.
 THE_ROW_AND_THE_DOCUMENT_COMMIT_TOGETHER: Final = (
@@ -52,6 +61,17 @@ THE_ROW_AND_THE_DOCUMENT_COMMIT_TOGETHER: Final = (
     "transaction and returned only once it has committed, and a failure at any step returns "
     "nothing and records nothing."
 )
+
+#: Why the store reads until it has kept enough, however many rows that takes.
+READING_STOPS_AT_WHAT_IS_KEPT_AND_NEVER_AT_WHAT_IS_READ: Final = (
+    "A readable export is read in chunks until one more entry than the ceiling has been kept or "
+    "the window has ended, and there is no ceiling on the rows read to get there. A ceiling on "
+    "rows would end a window thick with entries the exporter may not read early, and the export "
+    "would then say, by what it refused or left out, that those entries were there."
+)
+
+#: How many rows one statement reads. A resource bound, not a permission one.
+READ_CHUNK: Final = 2_000
 
 #: What a person is told when an entry in the window cannot be read as a ledger entry.
 AN_ENTRY_THAT_DOES_NOT_READ: Final = (
@@ -71,10 +91,11 @@ class TakenExport:
     reason: ExportReason
     reason_reference: str
     produced_at: datetime
+    form: ExportForm
     first_seq: int | None
     last_seq: int | None
     entries: int
-    verified: bool
+    verified: bool | None
     document_digest: str
 
 
@@ -88,6 +109,8 @@ class ExportRecords(Protocol):
         since: datetime,
         until: datetime,
         limit: int,
+        form: ExportForm,
+        keep: Callable[[Sequence[AuditEntry]], Sequence[AuditEntry]],
         actor: str,
         ent_hash: str,
         trace_id: str,
@@ -96,7 +119,7 @@ class ExportRecords(Protocol):
         at: datetime,
         produce: Callable[[Sequence[AuditEntry]], Produced],
     ) -> tuple[TakenExport, Produced]:
-        """Read the window, produce the export, record it and commit, or do none of it."""
+        """Read the window keeping what `keep` keeps, produce the export, record it, and commit."""
         ...
 
     async def taken_by(self, principal_id: str, *, limit: int) -> tuple[TakenExport, ...]:
@@ -123,6 +146,21 @@ def _set_config(name: str, value: str) -> Any:
     return text("SELECT set_config(:name, :value, true)").bindparams(name=name, value=value)
 
 
+def entries_of(rows: Sequence[AuditEntryRow], form: ExportForm) -> list[AuditEntry]:
+    """The rows as entries: a chain refuses one that does not construct, a readable export drops it.
+
+    See the module docstring on a row that does not construct.
+    """
+    entries: list[AuditEntry] = []
+    for row in rows:
+        entry = entry_from(row)
+        if entry is not None:
+            entries.append(entry)
+        elif form is ExportForm.CHAIN:
+            raise AuditExportRefusedError(AN_ENTRY_THAT_DOES_NOT_READ)
+    return entries
+
+
 def taken_from(row: DataExportRow) -> TakenExport:
     """The record a row holds."""
     return TakenExport(
@@ -132,6 +170,7 @@ def taken_from(row: DataExportRow) -> TakenExport:
         reason=ExportReason(row.reason),
         reason_reference=row.reason_reference,
         produced_at=row.produced_at,
+        form=ExportForm(row.form),
         first_seq=row.first_seq,
         last_seq=row.last_seq,
         entries=row.entries,
@@ -152,6 +191,8 @@ class StoredExports:
         since: datetime,
         until: datetime,
         limit: int,
+        form: ExportForm,
+        keep: Callable[[Sequence[AuditEntry]], Sequence[AuditEntry]],
         actor: str,
         ent_hash: str,
         trace_id: str,
@@ -164,25 +205,24 @@ class StoredExports:
             await session.execute(_set_config(ACTOR_SETTING, actor))
             await session.execute(_set_config(ENT_HASH_SETTING, ent_hash))
             await session.execute(_set_config(TRACE_ID_SETTING, trace_id))
-            rows = (
-                (
-                    await session.execute(
-                        select(AuditEntryRow)
-                        .where(AuditEntryRow.at >= since, AuditEntryRow.at < until)
-                        .order_by(AuditEntryRow.seq)
-                        .limit(limit + 1)
-                    )
+            kept: list[AuditEntry] = []
+            after: int | None = None
+            while len(kept) <= limit:
+                statement = select(AuditEntryRow).where(
+                    AuditEntryRow.at >= since, AuditEntryRow.at < until
                 )
-                .scalars()
-                .all()
-            )
-            entries: list[AuditEntry] = []
-            for row in rows:
-                entry = entry_from(row)
-                if entry is None:
-                    raise AuditExportRefusedError(AN_ENTRY_THAT_DOES_NOT_READ)
-                entries.append(entry)
-            produced = produce(entries)
+                if after is not None:
+                    statement = statement.where(AuditEntryRow.seq > after)
+                rows = (
+                    (await session.execute(statement.order_by(AuditEntryRow.seq).limit(READ_CHUNK)))
+                    .scalars()
+                    .all()
+                )
+                kept.extend(keep(entries_of(rows, form)))
+                if len(rows) < READ_CHUNK:
+                    break
+                after = rows[-1].seq
+            produced = produce(kept[: limit + 1])
             record = DataExportRow(
                 export_id=uuid.uuid4(),
                 data_set=ExportDataSet.AUDIT_TRAIL.value,
@@ -190,6 +230,7 @@ class StoredExports:
                 reason=reason.value,
                 reason_reference=reason_reference,
                 produced_at=at,
+                form=produced.form.value,
                 first_seq=produced.first_seq,
                 last_seq=produced.last_seq,
                 entries=produced.entries,
