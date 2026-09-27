@@ -43,6 +43,20 @@ refused every `admin:` and `approve:` screen. `brain.identity.bearer.assurance_f
 browser flow. The tests at the end of this file walk that join from the realm to the function
 that reads it, the way the audience test walks the join to `validate_token`.
 
+**And an Account Console that answered everybody 403.** Later the same day a person on that
+install opened Keycloak's Account Console to set up a one-time code and was refused. The realm
+declares its own client scope, and Keycloak's import attaches its built-in scopes to its own
+clients only when a file declares none, so `account-console` minted tokens with no roles in them.
+The three tests after the amr ones walk that join from the realm to what the Account REST API
+reads.
+
+**And a realm where nobody was ever asked for a new password.** Staging registered two required
+actions, `CONFIGURE_TOTP` and `delete_account`, because Keycloak registers its own list only for a
+file that declares none. So a temporary password, a password reset and the Account Console's
+Update and Delete buttons were all skipped at sign-in with a warning. The last two tests hold the
+realm to Keycloak's own list and hold that nothing on it but the second factor stands in front of
+everybody.
+
 Task ids: M1.1.1, M3.3.4
 """
 
@@ -676,3 +690,369 @@ def test_every_config_and_subflow_a_declared_flow_names_is_declared_in_this_file
                     dangling.append(f"{flow['alias']} -> config {named!r}")
 
     assert not dangling, f"these names are not declared in this file: {dangling}"
+
+
+# --------------------------------------------------------------- the account console
+#
+# Keycloak 26.0.0 source, read rather than remembered. `AccountLoader.getAccountRestService`
+# refuses a token whose `aud` lacks the `account` client (401), and `AccountRestService.account`
+# then calls `auth.requireOneOf(MANAGE_ACCOUNT, VIEW_PROFILE)`, which `Auth.hasClientRole` answers
+# from the token's `resource_access.account.roles` and nothing else (403).
+# `RealmManager.importRealm` builds the built-in client scopes, `roles` among them, and attaches
+# them to the clients that already exist only `if (rep.getClientScopes() == null)`; this realm
+# declares one, so the `account-console` it builds carries only the audience mapper
+# `setupAccountManagement` puts on the client itself. That is a 403 rather than a 401, which is
+# what staging showed.
+
+#: `Constants.ACCOUNT_MANAGEMENT_CLIENT_ID`: the Account REST API is this client, and it demands
+#: this name in `aud` and in `resource_access`.
+ACCOUNT_CLIENT = "account"
+#: `Constants.ACCOUNT_CONSOLE_CLIENT_ID`: the client `AccountConsole` signs a person in as.
+ACCOUNT_CONSOLE = "account-console"
+#: Keycloak's own clients that this file declares. Every other declared client is the product's.
+KEYCLOAKS_OWN_CLIENTS = frozenset({ACCOUNT_CLIENT, ACCOUNT_CONSOLE})
+#: What `AccountRestService.account`, the first call the console makes, accepts one of.
+ROLES_THE_ACCOUNT_API_ACCEPTS = frozenset({"manage-account", "view-profile"})
+#: `ProtocolMapperUtils.USER_MODEL_CLIENT_ROLE_MAPPING_CLIENT_ID`.
+CLIENT_ROLE_MAPPING_CLIENT_ID = "usermodel.clientRoleMapping.clientId"
+#: Mappers that write a person's roles, or an audience worked out from those roles, into a token:
+#: the three the built-in `roles` scope carries (`OIDCLoginProtocolFactory.addRolesClientScope`).
+ROLE_WRITING_MAPPERS = frozenset(
+    {
+        "oidc-usermodel-client-role-mapper",
+        "oidc-usermodel-realm-role-mapper",
+        "oidc-audience-resolve-mapper",
+    }
+)
+
+
+def _mappers_minting_for(client: dict[str, Any], realm: dict[str, Any]) -> list[dict[str, Any]]:
+    """Every mapper that runs when Keycloak mints an access token for `client`, as imported.
+
+    `TokenManager.getRequestedClientScopes` is the client's default scopes plus the client itself,
+    so a client's own mappers count and run for its tokens alone. Its default scopes are the ones
+    it names when it names any, default or optional (`RepresentationToModel.updateClientScopes`
+    removes the rest). A client that names none is given the realm's default scopes when its
+    protocol is set (`AbstractLoginProtocolFactory.addDefaultClientScopes`), which in this file
+    means `defaultDefaultClientScopes`. Optional scopes are left out: a token carries one only when
+    the sign-in asks for it by name. A mapper whose protocol is not the client's never runs
+    (`DefaultClientSessionContext.loadProtocolMappers`).
+    """
+    scopes = {one["name"]: one for one in realm.get("clientScopes") or []}
+    if (
+        client.get("defaultClientScopes") is not None
+        or client.get("optionalClientScopes") is not None
+    ):
+        named = client.get("defaultClientScopes") or []
+    else:
+        named = realm.get("defaultDefaultClientScopes") or []
+    mappers = list(client.get("protocolMappers") or [])
+    for name in named:
+        mappers.extend(scopes.get(name, {}).get("protocolMappers") or [])
+    protocol = client.get("protocol", "openid-connect")
+    return [one for one in mappers if one.get("protocol") == protocol]
+
+
+def _account_roles(realm: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {
+        one["name"]: one
+        for one in realm.get("roles", {}).get("client", {}).get(ACCOUNT_CLIENT) or []
+    }
+
+
+def _with_contained(names: set[str], realm: dict[str, Any]) -> set[str]:
+    """`names` and every account role they contain, followed to the end, as Keycloak expands."""
+    declared = _account_roles(realm)
+    found: set[str] = set()
+    pending = list(names)
+    while pending:
+        name = pending.pop()
+        if name in found:
+            continue
+        found.add(name)
+        composites = declared.get(name, {}).get("composites", {})
+        pending.extend(composites.get("client", {}).get(ACCOUNT_CLIENT) or [])
+    return found
+
+
+def _account_roles_everybody_holds(realm: dict[str, Any]) -> set[str]:
+    """The account roles the realm's default role contains, as the import names that role.
+
+    `RealmManager.importRealm` takes the name from `defaultRole` when the file has one. Otherwise
+    it is `default-roles-<realm>`, stepped to `-1`, `-2` while a declared realm role already has
+    it (`determineDefaultRoleName`), so the composites declared under the plain name then sit on an
+    ordinary role nobody is given.
+    """
+    declared = {one["name"]: one for one in realm.get("roles", {}).get("realm") or []}
+    name = (realm.get("defaultRole") or {}).get("name")
+    if name is None:
+        base = f"default-roles-{str(realm['realm']).lower()}"
+        name, step = base, 0
+        while name in declared:
+            step += 1
+            name = f"{base}-{step}"
+    composites = declared.get(name, {}).get("composites", {})
+    return _with_contained(set(composites.get("client", {}).get(ACCOUNT_CLIENT) or []), realm)
+
+
+def test_the_account_console_s_tokens_carry_the_roles_and_audience_the_account_api_checks() -> None:
+    """**The staging finding: the Account Console loaded and every call it made answered 403**, so
+    nobody could set up a one-time code there and the admin screens stayed shut to them.
+
+    Three joins, each walked from the realm rather than asserted as present somewhere:
+
+    - a client roles mapper that runs for `account-console` writes `resource_access.account.roles`
+      into the access token, as a list. `includeInAccessToken` is `"true".equals(value)`, and a
+      mapper that is not `multivalued` writes one string, which `AbstractUserRoleMappingMapper`
+      does not turn into roles;
+    - an audience for `account` reaches the same token, from Keycloak's audience resolve mapper
+      (on unless its access token flag is `"false"`) or an audience mapper naming it;
+    - a role the API accepts is both held by everybody through the default role and inside what
+      `account-console` may carry: `TokenManager.getAccess` keeps the expanded intersection of the
+      two when `fullScopeAllowed` is false, and `RoleResolveUtil` feeds both mappers from it.
+
+    Delete this and the mapper, its scope mapping or the default role can go, with the realm
+    importing cleanly and the Account Console refusing everybody again."""
+    realm = _realm()
+    console = {c["clientId"]: c for c in realm["clients"]}.get(ACCOUNT_CONSOLE)
+    if console is None:
+        # Left to the import, which gives Keycloak's own clients Keycloak's own scopes only when
+        # the file declares none (`AbstractLoginProtocolFactory.createDefaultClientScopes`).
+        assert realm.get("clientScopes") is None, (
+            f"{ACCOUNT_CONSOLE} is left to the import, which attaches no scope to it because "
+            "this file declares clientScopes, so its tokens carry no account roles"
+        )
+        return
+    minting = _mappers_minting_for(console, realm)
+
+    claims: set[str] = set()
+    for mapper in minting:
+        config = mapper.get("config") or {}
+        narrowed_to = config.get(CLIENT_ROLE_MAPPING_CLIENT_ID)
+        if (
+            mapper.get("protocolMapper") == "oidc-usermodel-client-role-mapper"
+            and config.get("access.token.claim") == "true"
+            and config.get("multivalued") == "true"
+            and narrowed_to in (None, "", ACCOUNT_CLIENT)
+        ):
+            claims.add(str(config.get("claim.name")).replace("${client_id}", ACCOUNT_CLIENT))
+    assert f"resource_access.{ACCOUNT_CLIENT}.roles" in claims, (
+        f"no mapper running for {ACCOUNT_CONSOLE} writes the account roles as a list: {claims}"
+    )
+
+    audiences = [
+        mapper
+        for mapper in minting
+        if (
+            mapper.get("protocolMapper") == "oidc-audience-resolve-mapper"
+            and (mapper.get("config") or {}).get("access.token.claim", "true") == "true"
+        )
+        or (
+            mapper.get("protocolMapper") == "oidc-audience-mapper"
+            and (mapper.get("config") or {}).get("included.client.audience") == ACCOUNT_CLIENT
+            and (mapper.get("config") or {}).get("access.token.claim") == "true"
+        )
+    ]
+    assert audiences, f"nothing running for {ACCOUNT_CONSOLE} puts {ACCOUNT_CLIENT} in aud"
+
+    held = _account_roles_everybody_holds(realm)
+    if console.get("fullScopeAllowed", not console.get("consentRequired", False)):
+        allowed = set(_account_roles(realm))
+    else:
+        mapped: set[str] = set()
+        for mapping in realm.get("clientScopeMappings", {}).get(ACCOUNT_CLIENT) or []:
+            if mapping.get("client") == ACCOUNT_CONSOLE:
+                mapped |= set(mapping.get("roles") or [])
+        allowed = _with_contained(mapped, realm)
+    carried = held & allowed
+
+    assert carried & ROLES_THE_ACCOUNT_API_ACCEPTS, (
+        f"everybody holds {sorted(held)}, {ACCOUNT_CONSOLE} may carry {sorted(allowed)}, and the "
+        f"API accepts only {sorted(ROLES_THE_ACCOUNT_API_ACCEPTS)}"
+    )
+
+
+def test_no_client_of_the_product_s_own_reaches_a_mapper_that_writes_roles_into_its_tokens() -> (
+    None
+):
+    """**The other half: the repair gave the Account Console roles and gave nobody else anything.**
+    `brain.identity` reads groups and department and never a Keycloak role, so a role claim in a
+    product token is a claim nothing asked for, and an audience worked out from roles is an `aud`
+    this system's `validate_token` was never written to expect.
+
+    Walked with the same function as the test above, realm default scopes included, so the likely
+    wrong fix is covered: declaring a `roles` scope as a realm default so that the Account Console
+    gets it would hand it to every product client that names no scope of its own. And the walk is
+    shown to reach something, so an empty walk cannot pass: `brain-console` reaches its own
+    subject mapper through it.
+
+    Delete this and the account roles mapper can be moved onto `brain-identity`, where it would
+    run for every console token, with every other test here green."""
+    realm = _realm()
+    product = [c for c in realm["clients"] if c["clientId"] not in KEYCLOAKS_OWN_CLIENTS]
+    assert {"brain-console", "brain-api", "brain-sync"} <= {c["clientId"] for c in product}
+
+    widened = {
+        client["clientId"]: sorted(
+            str(m.get("name"))
+            for m in _mappers_minting_for(client, realm)
+            if m.get("protocolMapper") in ROLE_WRITING_MAPPERS
+        )
+        for client in product
+    }
+    assert not any(widened.values()), f"product clients reach role mappers: {widened}"
+
+    console = next(c for c in product if c["clientId"] == "brain-console")
+    assert "oidc-sub-mapper" in {
+        m.get("protocolMapper") for m in _mappers_minting_for(console, realm)
+    }
+
+
+def test_the_account_client_and_its_console_are_declared_together_with_every_role_they_name() -> (
+    None
+):
+    """**A realm that gets any of this wrong does not import, and says so nowhere a person looks.**
+
+    - `RealmManager.importRealm` builds `account` and `account-console` itself unless the file
+      names `account`. Naming `account-console` alone adds it a second time, and the client table
+      is unique on realm and clientId (`ClientEntity`). Naming `account` alone leaves no console.
+    - `RepresentationToModel.addComposites` throws for an account role a composite names that is
+      not declared, and `createClientScopeMappings` quietly creates a bare role for one a scope
+      mapping names, so a misspelling there maps a role nobody holds.
+    - The default role's composites are declared under the name `defaultRole` gives it, because
+      without `defaultRole` the import steps the default role's name past the declared one.
+
+    Delete this and one renamed client or role ships a realm that stops at import, or imports with
+    the Account Console refusing everybody, and the tests that read the file as JSON stay green."""
+    realm = _realm()
+    ids = [c["clientId"] for c in realm["clients"]]
+    assert (ACCOUNT_CLIENT in ids) == (ACCOUNT_CONSOLE in ids), ids
+    assert len(set(ids)) == len(ids), f"a client is declared twice: {ids}"
+    if ACCOUNT_CONSOLE not in ids:
+        return
+
+    declared = set(_account_roles(realm))
+    named: list[str] = []
+    for role in realm.get("roles", {}).get("realm") or []:
+        named.extend(role.get("composites", {}).get("client", {}).get(ACCOUNT_CLIENT) or [])
+    for role in _account_roles(realm).values():
+        named.extend(role.get("composites", {}).get("client", {}).get(ACCOUNT_CLIENT) or [])
+    for mapping in realm.get("clientScopeMappings", {}).get(ACCOUNT_CLIENT) or []:
+        assert mapping.get("client") in ids, mapping
+        named.extend(mapping.get("roles") or [])
+    assert set(named) <= declared, f"account roles named and not declared: {set(named) - declared}"
+
+    default_role = (realm.get("defaultRole") or {}).get("name")
+    carrying = [
+        role["name"]
+        for role in realm.get("roles", {}).get("realm") or []
+        if role.get("composites", {}).get("client", {}).get(ACCOUNT_CLIENT)
+    ]
+    assert carrying == [default_role], (
+        f"the account roles everybody holds are declared on {carrying}, and the default role is "
+        f"{default_role!r}"
+    )
+
+
+# --------------------------------------------------------------- required actions
+#
+# Keycloak 26.0.0 source, read rather than remembered. `DefaultExportImportManager.importRealm`
+# registers a file's `requiredActions` and then `delete_account`, and calls
+# `DefaultRequiredActions.addActions` only when the file declares none (L326-337); the later
+# `RealmManager.setupRequiredActions` adds nothing to a realm that has any (L149-151, L611). At
+# sign-in `AuthenticationManager.getApplicableRequiredAction` skips an alias nobody registered with
+# a warning (L1374-1381), `evaluateRequiredActionTriggers` runs only registered, enabled actions
+# (L1400-1405), and a `kc_action` nobody registered comes back to the application as an error
+# (L1342-1346).
+
+#: `DefaultRequiredActions.addActions` in Keycloak 26.0.0, as it registers them on a new realm:
+#: alias to (enabled, defaultAction, priority), L122-321. `UPDATE_EMAIL` and
+#: `CONFIGURE_RECOVERY_AUTHN_CODES` are not here: their features are preview in `Profile` (L91,
+#: L93), and `addActions` registers neither unless a server turns its feature on (L239-279).
+KEYCLOAK_REGISTERS_ON_A_NEW_REALM: dict[str, tuple[bool, bool, int]] = {
+    "VERIFY_EMAIL": (True, False, 50),
+    "UPDATE_PROFILE": (True, False, 40),
+    "CONFIGURE_TOTP": (True, False, 10),
+    "UPDATE_PASSWORD": (True, False, 30),
+    "TERMS_AND_CONDITIONS": (False, False, 20),
+    "delete_account": (False, False, 60),
+    "delete_credential": (True, False, 100),
+    "update_user_locale": (True, False, 1000),
+    "webauthn-register": (True, False, 70),
+    "webauthn-register-passwordless": (True, False, 80),
+    "VERIFY_PROFILE": (True, False, 90),
+}
+#: The actions this realm adds to every new account, which is the one place it differs from
+#: Keycloak: every admin screen needs a sign-in that used a second factor.
+ASKED_OF_EVERY_NEW_ACCOUNT = frozenset({"CONFIGURE_TOTP"})
+
+
+def test_the_realm_declares_every_required_action_keycloak_registers_with_its_flags() -> None:
+    """**The staging finding: nobody on any install was ever asked for a new password.** This file
+    declared `CONFIGURE_TOTP` alone, so the import registered it and `delete_account` and nothing
+    else. `UPDATE_PASSWORD` is what a temporary password (`UserResource` L722-723), the last step
+    of a password reset (`ResetPassword` L40) and the Account Console's Update on a password
+    (`PasswordCredentialProvider` L249) all ask for, and `delete_credential` is what its Delete on a
+    one-time code asks for (`SigningIn.tsx` L215-219). Each was skipped, and the person came back
+    with nothing changed.
+
+    Held to Keycloak's own list with Keycloak's own flags rather than to a list of the ones that
+    have hurt so far, because every action on it is somebody's button: a missing one is found by
+    the person who presses it. `CONFIGURE_TOTP` is the one flag allowed to differ, and the test
+    below says why. An action outside the list is one Keycloak does not register on a new realm,
+    behind a preview feature or from a provider it does not ship, so declaring one is a decision
+    that changes this test with it.
+
+    Delete this and the list can shrink back to the second factor, with every other test here green
+    and the realm importing cleanly."""
+    declared = _realm()["requiredActions"]
+    aliases = [one["alias"] for one in declared]
+    assert len(set(aliases)) == len(aliases), f"an action is declared twice: {aliases}"
+
+    missing = sorted(set(KEYCLOAK_REGISTERS_ON_A_NEW_REALM) - set(aliases))
+    extra = sorted(set(aliases) - set(KEYCLOAK_REGISTERS_ON_A_NEW_REALM))
+    assert not missing, f"Keycloak registers these on a new realm and this file does not: {missing}"
+    assert not extra, f"Keycloak 26.0 registers none of these on a new realm: {extra}"
+
+    by_alias = {one["alias"]: one for one in declared}
+    differ: dict[str, str] = {}
+    for alias, (enabled, default, priority) in KEYCLOAK_REGISTERS_ON_A_NEW_REALM.items():
+        expected = (enabled, default or alias in ASKED_OF_EVERY_NEW_ACCOUNT, priority)
+        one = by_alias[alias]
+        found = (one.get("enabled"), one.get("defaultAction"), one.get("priority"))
+        if found != expected:
+            differ[alias] = f"(enabled, defaultAction, priority) is {found}, expected {expected}"
+    assert not differ, f"declared with flags Keycloak does not give them: {differ}"
+
+
+def test_nothing_but_the_second_factor_stands_in_front_of_everybody_who_signs_in() -> None:
+    """**The other half: declaring Keycloak's list must not change a sign-in for everybody.**
+
+    - An enabled action marked default is added to every account created from then on
+      (`JpaUserProvider.addUser` L129-135). Only the one-time code is, and it still is: a realm
+      that dropped it would let a new account reach no admin screen and never be told why.
+    - `VERIFY_EMAIL` asks every person whose address is not marked verified to click an emailed
+      link before the sign-in finishes, while the realm's `verifyEmail` is true (`VerifyEmail`
+      L50-54). With no sender address the email fails (`DefaultEmailSenderProvider` L113-115),
+      the page is shown anyway (`VerifyEmail` L153-158), and nobody gets in. So the realm may ask
+      that of everybody only if it declares a mail server to send from.
+
+    Delete this and terms and conditions can be made default, or `verifyEmail` turned back on,
+    with the list above still matching Keycloak's and every person stopped at their next sign-in."""
+    realm = _realm()
+    actions = realm["requiredActions"]
+
+    for_everybody = {
+        one["alias"] for one in actions if one.get("enabled") and one.get("defaultAction")
+    }
+    assert for_everybody == ASKED_OF_EVERY_NEW_ACCOUNT, (
+        f"every new account is asked for {sorted(for_everybody)}"
+    )
+
+    verify: dict[str, Any] = next((one for one in actions if one["alias"] == "VERIFY_EMAIL"), {})
+    if realm.get("verifyEmail") and verify.get("enabled"):
+        sender = (realm.get("smtpServer") or {}).get("from")
+        assert sender, (
+            "verifyEmail asks every unverified person for an emailed link, and the realm names no "
+            "sender, so the email fails and nobody finishes signing in"
+        )
