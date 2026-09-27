@@ -127,6 +127,7 @@ from brain.ops.object_store import backup_objects, object_store_at_start
 from brain.ops.question_gap_store import GapRecorder
 from brain.ops.question_store import QuestionRecorder
 from brain.ops.replica_store import console_reads_for
+from brain.ops.starter_store import furnish as furnish_install
 from brain.ops.telemetry_store import TelemetryRecorder
 from brain.ops.trace_sink import CountingTraceSink
 from brain.ops.vault_renewal import keep_renewing, renewer_at_start
@@ -444,6 +445,28 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             log.info("default ladder reconciled", outcome=written.value)
         except Exception as exc:
             log.warning("default ladder could not be reconciled", error=type(exc).__name__)
+    # The starter set: one company-wide scope, the starter pack and the capability registry,
+    # furnished at every start so an install set up before furnishing existed gets it on its next
+    # deploy with no command. Unlike the ladder it waits on no wizard answer, because nothing it
+    # writes is a company's choice; it writes nothing on a start after the first, and never puts
+    # back a scope or pack somebody retired. Never fatal, for the ladder's reason. See
+    # `brain.ops.starter_store.EVERY_START_FURNISHES_BECAUSE_NOTHING_FURNISHED_IS_AN_ANSWER`.
+    if app.state.db_sessions is not None:
+        try:
+            furnished = await furnish_install(
+                app.state.db_sessions,
+                actor=GRANTED_BY,
+                trace_id=f"{RECONCILIATION_TRACE}{uuid.uuid4().hex[:16]}",
+            )
+            log.info(
+                "install furnished",
+                first=furnished.first,
+                registered=len(furnished.registered),
+                scopes=list(furnished.scopes),
+                packs=list(furnished.packs),
+            )
+        except Exception as exc:
+            log.warning("install could not be furnished", error=type(exc).__name__)
     # No ledger writer survives a restart yet, so no store is built even with a database. See
     # `suspension_store_for`.
     app.state.suspensions = suspension_store_for(app.state.db_sessions, ledger=None)
