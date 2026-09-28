@@ -82,6 +82,7 @@ beforeAll(async () => {
   COMPILED = (await compileLayer()).css;
   await import("../src/pages/Records");
   await import("../src/pages/Agent");
+  await import("../src/pages/Provider");
   await import("../src/pages/Approvals");
 }, 120_000);
 

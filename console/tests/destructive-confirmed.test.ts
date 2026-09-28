@@ -113,54 +113,83 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
   "src/components/StaffListCheck.tsx TRIAL_PATH":
     "Reads the chosen staff list once during first run and shows who it names. Nobody is added " +
     "and nothing is stored, which tests/unit/test_setup_staff_routes.py holds.",
-  "src/pages/People.tsx GRANTS_API_PATH":
+  "src/pages/people/GrantDrawers.tsx GRANTS_API_PATH":
     "Writes a new grant. Entitlements are additive only, a grant replaces nothing, and taking one " +
-    "back is the removal beside it, which is confirmed.",
-  "src/pages/Skills.tsx SKILLS_API_PATH":
+    "back is the removal on the person's Grants view, which is confirmed.",
+  "src/pages/people/GrantDrawers.tsx PACK_ASSIGNMENT_API_PATH":
+    "Assigns a capability pack. Entitlements are additive only, an assignment replaces nothing, and " +
+    "taking one back is the Remove pack control on the Grants view, which is confirmed.",
+  "src/pages/people/GrantDrawers.tsx DIRECTORY_API_PATH":
+    "Adds a person by hand to an install with no staff source. The id is minted by the server, so " +
+    "no existing person is written over, and the person holds nothing until somebody grants it.",
+  "src/pages/people/PersonPlacements.tsx MEMBERSHIP_API_PATH":
+    "Places a person in a team of their department. A placement ends nothing and changes nobody's " +
+    "access; taking them out is the confirmed control beside the team.",
+  "src/pages/people/PersonSessions.tsx LINK_API_PATH":
+    "Links a sign-in account to the person whose page it is. An account already linked elsewhere is " +
+    "refused with a 409 rather than re-pointed, so nothing existing is replaced; unlinking is confirmed.",
+  "src/pages/departments/StructureDrawers.tsx FOUND_API_PATH":
+    "Creates a department and its own scope. A short name a live department or scope already has is " +
+    "refused rather than taken over, so nothing existing is replaced; retiring one is confirmed.",
+  "src/pages/departments/StructureDrawers.tsx ADD_TEAM_API_PATH":
+    "Creates a team with nobody in it. A short name a live team already has is refused, and a team " +
+    "confers nothing; retiring one is confirmed.",
+  "src/pages/departments/StructureDrawers.tsx DRAW_SCOPE_API_PATH":
+    "Creates a named scope. A taken short name is refused rather than reused, a scope grants nothing " +
+    "on its own, and retiring one is confirmed.",
+  "src/pages/departments/StructureDrawers.tsx MEMBERSHIP_API_PATH":
+    "Places somebody in a team. It ends nothing and changes nobody's access; taking them out is the " +
+    "confirmed control beside their name.",
+  "src/pages/roles/RoleDrawers.tsx APPOINTMENT_API_PATH":
+    "Appoints somebody to a role. A role grant replaces nothing and grants no capability, and taking " +
+    "one away is the removal beside it, which is confirmed.",
+  "src/pages/roles/RoleDrawers.tsx DEPUTY_API_PATH":
+    "Appoints a deputy for at most thirty days beside the standing holder, who keeps the role; the " +
+    "deputy lapses on its own, and removing one is confirmed.",
+  "src/pages/roles/RoleDrawers.tsx GROUP_RULES_API_PATH":
+    "Maps a directory group to a role. One live rule per group, so a second is refused rather than " +
+    "written over, groups only ever add a role, and retiring a rule is confirmed.",
+  "src/pages/roles/PacksPage.tsx PACKS_API_PATH":
+    "Creates a pack at version 1 that nobody holds until it is assigned. A taken short name is " +
+    "refused rather than written over; a new version and a retirement are confirmed.",
+  "src/pages/roles/PacksPage.tsx PACK_COPY_API_PATH":
+    "Copies a pack under a new short name at version 1. The pack copied is unchanged and nobody holds " +
+    "the copy until it is assigned.",
+  "src/pages/skills/SkillForms.tsx SKILLS_API_PATH":
     "Adds a skill to the library undecided. A second import of the same bytes is refused by the " +
     "table's key rather than written over, so nothing existing is replaced, and the skill reaches no " +
     "agent until somebody approves it and an administrator assigns it, both of which are confirmed.",
-  "src/pages/Skills.tsx IMPORT_PATH":
+  "src/pages/skills/SkillForms.tsx IMPORT_PATH":
     "Imports a skill from a repository commit or an address into the library undecided, exactly as " +
     "an added package is: the same bytes twice are refused by the key, nothing existing is replaced, " +
     "and it reaches no agent until it is approved and assigned, both of which are confirmed.",
-  "src/pages/Skills.tsx versionsPath(one.digest)":
+  "src/pages/skills/SkillForms.tsx versionsPath(one.digest)":
     "Saves an edit as a new, undecided version beside the one it came from, which is never changed; " +
     "every agent keeps the version it runs, which tests/unit/test_skill_routes.py holds, so nothing " +
     "existing is ended or replaced.",
-  "src/pages/Skills.tsx categoriesPath(one.digest)":
+  "src/pages/skills/SkillForms.tsx categoriesPath(one.digest)":
     "Sets the labels a skill is filed under. The previous labels are shown in the box before the " +
     "press and can be typed back, the change is a new row that edits none, and a label reaches no " +
     "agent and changes no procedure.",
-  "src/pages/SignInLinks.tsx LINK_API_PATH":
+  "src/pages/sessions/SignInLinksPage.tsx LINK_API_PATH":
     "Binds a sign-in to a person. A subject already bound elsewhere is refused with a 409 rather " +
     "than re-pointed, so nothing existing is replaced; unlinking is the destructive act and it is " +
     "confirmed.",
-  "src/pages/RoleControls.tsx path":
-    "Appoints somebody to a role, or a deputy for at most thirty days. A role grant replaces " +
-    "nothing, and taking one away is the removal beside it, which is confirmed.",
-  "src/components/ConnectStaffSource.tsx path":
+  "src/pages/staff-sources/ConnectDrawer.tsx path":
     "Sends the connection test and the first sync's dry run, which keep nothing: no setting, no " +
     "credential and no member is written, which tests/unit/test_staff_connect.py holds for both. " +
     "Saving the connection and applying the first sync have their own requests and are confirmed.",
-  "src/pages/GroupRules.tsx GROUP_RULES_API_PATH":
-    "Maps a directory group to a role. One live rule per group, so a second is refused rather than " +
-    "written over, groups only ever add a role, and retiring a rule is the confirmed control beside it.",
-  "src/pages/People.tsx PACK_ASSIGNMENT_API_PATH":
-    "Assigns a capability pack. Entitlements are additive only, an assignment replaces nothing, and " +
-    "taking one back is the Access review's removal, which is confirmed.",
-  "src/pages/ServiceAccounts.tsx SERVICE_ACCOUNTS_API_PATH":
-    "Registers a new service account owned by the caller. An id or subject already in use is " +
-    "refused with a 409 rather than taken over, so nothing existing is replaced; retiring an account " +
-    "is the destructive act and it is confirmed.",
-  "src/pages/ServiceAccounts.tsx ISSUE_KEY_API_PATH":
-    "Issues a new key beside the ones an account has. A key beyond the limit is refused with a 409 " +
-    "rather than rotating one out, so no key in use is ended; revoking a key is the destructive act " +
-    "and it is confirmed.",
   "src/components/ConnectLark.tsx LARK_TEST_API_PATH":
     "Testing a Lark connection exchanges the pasted credential for a token and makes small reads; " +
     "it writes nothing here or in Lark and keeps nothing it read, which " +
     "tests/unit/test_lark_connect.py holds over the requests a fake Lark server received.",
+  "src/pages/Channels.tsx testApiPath(name)":
+    "A test message is one product sentence to one destination, sent once per channel record and " +
+    "destination, which tests/unit/test_channel_pipeline.py holds; it ends and replaces nothing.",
+  "src/components/MyChannels.tsx myCodeApiPath(row.channel)":
+    "Asking for a code binds nothing: the code is shown to the person who asked and does nothing " +
+    "until they send it from their own chat. It ends only an older code of theirs for that channel " +
+    "that nothing has used, which tests/unit/test_channel_binding.py holds.",
 };
 
 /** How many times a non-GET `method:` or an `openStream(` call is written in the control files. */
@@ -216,17 +245,20 @@ describe("a destructive write is confirmed", () => {
     }
   }, 60_000);
 
-  test("the removal of a grant, the save of a routing rung, and a provider's switch and check are sent only from a confirmation", () => {
+  test("the removal of a grant, the save, move and retirement of a routing step, and a provider's switch, check and retirement are sent only from a confirmation", () => {
     // What breaks if this is deleted: the positive half of the rule above. A reading that reported
     // every write as unconfirmed would satisfy it with a longer allowlist, so the writes this test
     // was written for are named and must be found confirmed. A provider switched off moves every
     // department's questions and a check spends tokens under the presser's name, so both are here.
     const confirmed = everyWrite().filter((write) => write.confirmed).map((write) => write.key);
-    expect(confirmed).toContain("src/pages/People.tsx REMOVAL_API_PATH");
-    expect(confirmed).toContain("src/pages/Matrix.tsx rungApiPath(rung.id)");
-    expect(confirmed).toContain("src/pages/Sessions.tsx END_SESSION_API_PATH");
-    expect(confirmed).toContain("src/pages/Models.tsx providerSwitchApiPath(pending.provider)");
-    expect(confirmed).toContain("src/pages/Models.tsx providerCheckApiPath(pending.provider)");
+    expect(confirmed).toContain("src/pages/people/PersonGrants.tsx REMOVAL_API_PATH");
+    expect(confirmed).toContain("src/pages/models/RungEditor.tsx rungApiPath(rung.id)");
+    expect(confirmed).toContain("src/pages/sessions/SessionsPage.tsx END_SESSION_API_PATH");
+    expect(confirmed).toContain("src/pages/models/ProvidersPage.tsx providerSwitchApiPath(pending.provider)");
+    expect(confirmed).toContain("src/pages/models/ProvidersPage.tsx providerCheckApiPath(pending.provider)");
+    expect(confirmed).toContain("src/pages/models/RoutingPage.tsx retireStepApiPath(asked.rungId)");
+    expect(confirmed).toContain("src/pages/models/RoutingPage.tsx moveStepApiPath(asked.rungId)");
+    expect(confirmed).toContain("src/pages/models/ProviderDetailPage.tsx retireProviderApiPath(pending.provider)");
   }, 60_000);
 
   test("every confirmation names what it asks about, says what will happen, and offers a way out", () => {

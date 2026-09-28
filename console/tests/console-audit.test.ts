@@ -93,7 +93,9 @@ function reachedFrom(page: string): readonly string[] {
   if (known !== undefined) {
     return known;
   }
-  const local = /^import [^;]*from "\.{1,2}\//m.test(readConsoleFile(page));
+  // A thin route module that only re-exports its page (`export { X } from "./x/XPage"`) reaches
+  // the page's directory as surely as one that imports it.
+  const local = /^(?:import|export) [^;]*from "\.{1,2}\//m.test(readConsoleFile(page));
   const found = local ? staticImportGraph(page).files : [page];
   reached.set(page, found);
   return found;

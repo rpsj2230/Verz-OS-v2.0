@@ -13,9 +13,9 @@
  * that is not connected has no figures and none is asked for. A figure the route did not send reads
  * "Not recorded yet", and a row whose figures failed reads "Not available", never nought.
  *
- * **Connecting, Connect Lark and disconnecting work from here**; editing, replacing a key and the
- * export are on a source's own page, where its settings are. Testing a connection is drawn and
- * inert, with the sentence `connectorActions.ts` gives.
+ * **Connecting, Connect Lark and disconnecting work from here**; editing, replacing a key, the
+ * export and testing a connection are on a source's own page, where its settings are and where what
+ * a test found is shown.
  *
  * **What was removed from the old screen, and why.** The table's wiring, key, ceiling and projected
  * columns (each is on a source's page now); the principal id beside who connected a source; the
@@ -25,7 +25,7 @@
  * sources and are now one row each and a line on the source's About view; and the trust paragraphs
  * repeated under the table for every connection, which are the source's Profile.
  *
- * Task ids: M27.11.9, M11.7.7, M27.16.1, M27.10.2
+ * Task ids: M27.11.9, M11.7.7, M27.16.1, M27.10.2, M27.15.8
  */
 
 import { Cable, MoreHorizontal, Plus } from "lucide-react";
@@ -40,13 +40,11 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../../components/ui/dropdown-menu";
 import { Skeleton } from "../../components/ui/skeleton";
 import { CONNECTORS_API_PATH, CONNECTORS_LABEL, type Connectors as ConnectorsBody } from "../connectorsQuery";
-import { ACT_LABELS, UNAVAILABLE } from "./connectorActions";
+import { ACT_LABELS } from "./connectorActions";
 import {
   CONNECT_FROM_WORDS,
   SOURCES_API_PATH,
@@ -181,16 +179,6 @@ function RowMenu({
           >
             {ACT_LABELS.disconnect}
           </DropdownMenuItem>
-        ) : null}
-        {hasFigures(row) ? (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-[11px] font-normal text-dim">Coming soon</DropdownMenuLabel>
-            <DropdownMenuItem disabled className="flex-col items-start gap-0.5">
-              <span>{ACT_LABELS.test}</span>
-              <span className="text-[11px] leading-snug text-dim">{UNAVAILABLE.test.reason}</span>
-            </DropdownMenuItem>
-          </>
         ) : null}
       </DropdownMenuContent>
     </DropdownMenu>

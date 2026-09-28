@@ -65,11 +65,20 @@ never deliver one, which is indistinguishable from a person who is being ignored
 channel named in a preference, in the primary and in the approval route is checked against
 the bindings handed in.
 
+**A person's chat channels are the ones they may bind and the ones they are bound on, together
+(M10.3.4).** `my_channels` lists every channel switched on for receiving and every channel this
+person holds a binding on, whether or not it is still switched on: a binding left on a channel
+an administrator has since switched off is still a way that chat account would be answered as
+them the day it is switched back on, so it is theirs to see and to remove. A code is offered only
+on a channel that can receive one. See
+`A_BINDING_ON_A_CHANNEL_SWITCHED_OFF_IS_STILL_THEIRS_TO_REMOVE`.
+
 Scope: domain logic. Nothing here opens a connection, revokes a token or reads a clock; the
 revoker is a protocol and `at` is a parameter.
 
 Task ids: M40.5.1.1, M40.5.1.2, M40.5.1.3, M40.5.1.4
 Task ids: M40.5.2.1, M40.5.2.2, M40.5.2.3, M40.5.2.4
+Task ids: M10.3.4
 """
 
 from __future__ import annotations
@@ -148,6 +157,15 @@ A_CONSENT_NOBODY_COMPARES_IS_A_RECEIPT: Final = (
     "record written at the moment somebody clicks and never read again is a receipt: it "
     "proves a screen was shown and stops nothing. connect compares the source and the "
     "principal, and refuses rather than recording a mismatch for somebody to find later."
+)
+
+
+#: Why a binding on a switched-off channel is still listed.
+A_BINDING_ON_A_CHANNEL_SWITCHED_OFF_IS_STILL_THEIRS_TO_REMOVE: Final = (
+    "Switching a channel off stops it receiving, and it leaves every binding on it in place, so "
+    "the day it is switched back on each bound account is answered as its person again. A list "
+    "of your channels that left those out would hide the one binding you might want gone before "
+    "that day, so it is listed with the control to remove it, and no code is offered for it."
 )
 
 
@@ -745,3 +763,47 @@ def connection_gaps(
         )
 
     return tuple(gaps)
+
+
+# ------------------------------------------------------------------------ chat bindings
+@dataclass(frozen=True)
+class MyChannel:
+    """One chat channel on a person's own page (M10.3.4)."""
+
+    channel: Channel
+    #: When this person's account on it was bound, or None when it is not.
+    bound_at: datetime | None
+    #: Whether a code may be minted for it now: switched on, and received by this release.
+    may_bind: bool
+
+
+def my_channels(
+    principal_id: str,
+    bindings: Iterable[Binding],
+    offered: Iterable[Channel],
+) -> tuple[MyChannel, ...]:
+    """Every chat channel this person may bind or is bound on, in channel order (M10.3.4).
+
+    `offered` is the channels switched on and received; `bindings` are this person's own. A
+    binding belonging to somebody else is refused rather than dropped, for
+    `reach_after_connecting`'s reason: a page attributing an account to the wrong person is the
+    failure, and filtering it out would hide that something handed it the wrong rows. The console
+    channel is never a chat: its rows are sign-in links. See
+    `A_BINDING_ON_A_CHANNEL_SWITCHED_OFF_IS_STILL_THEIRS_TO_REMOVE`.
+    """
+    mine = tuple(bindings)
+    wrong = sorted({one.principal_id for one in mine if one.principal_id != principal_id})
+    if wrong:
+        msg = (
+            f"bindings belonging to {wrong} were handed to {principal_id!r}'s own page, so a "
+            "chat account would be attributed to the wrong person"
+        )
+        raise MemberConnectionError(msg)
+    bound: dict[Channel, datetime] = {}
+    for one in mine:
+        bound[one.channel] = max(one.bound_at, bound.get(one.channel, one.bound_at))
+    may = frozenset(offered)
+    listed = sorted((may | set(bound)) - {Channel.CONSOLE}, key=lambda one: one.value)
+    return tuple(
+        MyChannel(channel=one, bound_at=bound.get(one), may_bind=one in may) for one in listed
+    )

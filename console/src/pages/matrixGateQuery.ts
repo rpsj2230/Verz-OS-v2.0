@@ -24,7 +24,7 @@
  *
  * **Plain words**: a step and a level (Simple, Medium, Complex), never a rung, a ladder or a tier.
  *
- * Task ids: M5.6.2, M5.7.2
+ * Task ids: M5.6.2, M5.7.2, M5.3.3
  */
 
 import type { FieldProblem } from "../api/errors";
@@ -51,7 +51,7 @@ export interface FailingCase {
 
 export interface ChangeRow {
   readonly id: string;
-  readonly kind: "edit" | "add";
+  readonly kind: "edit" | "add" | "retire" | "move";
   readonly status: "held" | "applied";
   readonly rung_id: string | null;
   readonly failing: readonly FailingCase[];
@@ -89,7 +89,7 @@ export function readChange(value: unknown): ChangeRow | null {
   const { id, kind, status, rung_id, failing, reasons, quality_share, proposed_by, decided_at } = value;
   if (
     typeof id !== "string" ||
-    (kind !== "edit" && kind !== "add") ||
+    (kind !== "edit" && kind !== "add" && kind !== "retire" && kind !== "move") ||
     (status !== "held" && status !== "applied") ||
     !Array.isArray(failing) ||
     !Array.isArray(reasons) ||
@@ -209,9 +209,30 @@ export const DETAILS = "Details";
 
 /** What a held change says, in one sentence, before why. */
 export function heldSentence(change: ChangeRow): string {
-  return change.kind === "add"
-    ? "The new step was held and is not on the failover matrix."
-    : "The change was held and the step keeps its old numbers.";
+  switch (change.kind) {
+    case "add":
+      return "The new step was held and is not on the failover matrix.";
+    case "retire":
+      return "The retirement was held and the step stays on the failover matrix.";
+    case "move":
+      return "The move was held and the step stays where it was.";
+    case "edit":
+      return "The change was held and the step keeps its old numbers.";
+  }
+}
+
+/** What a change did, in a few words, for the list of recent changes. */
+export function changeWords(kind: ChangeRow["kind"]): string {
+  switch (kind) {
+    case "add":
+      return "A new step";
+    case "retire":
+      return "A step retired";
+    case "move":
+      return "A step moved";
+    case "edit":
+      return "A change to a step";
+  }
 }
 
 /** Whether a failing case is a permission check's finding rather than a golden question. */

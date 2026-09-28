@@ -1274,3 +1274,47 @@ def test_the_recovery_screen_accepts_no_write_and_no_route_offers_a_drill() -> N
         and any(word in path for word in ("drill", "rehears", "restore"))
     ]
     assert offered == []
+
+
+def _switch_rows(on: bool | None) -> Any:
+    """Sessions whose `ops.setting` holds the release check's row, or none, and answers the
+    deployment history's read with no rows."""
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    from brain.ops.features import RELEASE_CHECK
+    from tests.fixtures import console_http
+    from tests.fixtures.setting_rows import Result, SettingRows
+
+    rows = SettingRows()
+    if on is not None:
+        rows.hold(RELEASE_CHECK.key, on, value_type="boolean")
+    console_http._STUB = console_http.Stub()
+    console_http._STUB.answerers.extend([rows.answer, lambda _statement: Result([])])
+    return async_sessionmaker(class_=console_http.StubSession)
+
+
+@pytest.mark.parametrize(("on", "asked"), [(True, True), (False, False), (None, False)])
+def test_the_console_switch_turns_the_release_check_on_where_the_environment_did_not(
+    on: bool | None, asked: bool
+) -> None:
+    """M27.15.51: the release check is a console setting as well as an environment value. With
+    the variable unset, a Features row holding true makes the page look; a row holding false,
+    and no row, look nowhere.
+
+    Delete this and the switch on Features renders and writes a row while the page goes on
+    asking nothing, or asks with the switch off."""
+    held = HeldList("v1.5.0")
+    held.gate.set()
+    watch = ReleaseWatch(fetch=held)
+    app = _app_with({"APP_IMAGE": "ghcr.io/example/brain:v1.4.0", FEED_VARIABLE: A_LIST})
+    with TestClient(app, raise_server_exceptions=False) as c:
+        app.state.gate = _wiring()
+        app.state.release_watch = watch
+        app.state.db_sessions = _switch_rows(on)
+        answer = get(c, "u_admin", UPDATES_PATH)
+        time.sleep(0.2)
+
+    assert answer.status_code == 200, answer.text
+    assert (held.asked == [A_LIST]) is asked
+    if not asked:
+        assert answer.json()["standing"] == Standing.SWITCHED_OFF.value

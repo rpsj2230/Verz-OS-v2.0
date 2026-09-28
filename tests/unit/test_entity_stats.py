@@ -7,7 +7,7 @@ counted nothing would fail the positive ones.
 Dates are 2027, far from any wall clock, because nothing here is about the present: `NOW` only
 places rows inside or outside a window.
 
-Task ids: M27.15.27, M27.15.33, M27.2.1, M27.15.17
+Task ids: M27.15.9, M27.15.27, M27.15.33, M27.2.1, M27.15.17
 """
 
 from __future__ import annotations
@@ -22,9 +22,12 @@ from brain.console.entity_stats import (
     PERIODS,
     Attempt,
     Delivery,
+    LiveRead,
     Run,
+    SkillRun,
     attempt_figures,
     bound_people,
+    counted,
     counted_runs,
     delivery_figures,
     last_active,
@@ -32,6 +35,7 @@ from brain.console.entity_stats import (
     periods,
     run_figures,
     skill_figures,
+    skill_runs,
     versions_added,
 )
 from brain.console.needs_you import (
@@ -177,6 +181,93 @@ def test_versions_added_counts_arrivals_of_that_name_inside_the_window() -> None
     assert versions_added("triage", submitted, since=MONTH_AGO, until=NOW) == 2
 
 
+SEEN = "desk"
+UNSEEN = "finance_desk"
+
+
+def use(agent: str, principal: str, days_ago: float) -> SkillRun:
+    return SkillRun(agent_id=agent, principal_id=principal, at=NOW - timedelta(days=days_ago))
+
+
+SKILL_RUNS = (
+    use(SEEN, READER, 1),
+    use(SEEN, COLLEAGUE, 2),
+    use(SEEN, COLLEAGUE, 20),
+    use(UNSEEN, READER, 1),
+    use(UNSEEN, COLLEAGUE, 3),
+    use(SEEN, READER, 45),
+)
+
+
+def test_a_skills_runs_count_every_run_through_a_visible_agent_on_the_wider_basis() -> None:
+    """The positive case for skill runs. Delete this and a function returning nothing passes the
+    narrowing test beside it."""
+    week = skill_runs(
+        SKILL_RUNS,
+        agents=frozenset({SEEN}),
+        caller_id=READER,
+        basis=Basis.EVERYONE,
+        since=WEEK_AGO,
+        until=NOW,
+    )
+    month = skill_runs(
+        SKILL_RUNS,
+        agents=frozenset({SEEN}),
+        caller_id=READER,
+        basis=Basis.EVERYONE,
+        since=MONTH_AGO,
+        until=NOW,
+    )
+
+    assert (len(week), len(month)) == (2, 3)
+    assert {one.agent_id for one in month} == {SEEN}
+
+
+def test_a_skills_runs_drop_an_unseen_agents_run_and_a_colleagues_on_the_narrower_basis() -> None:
+    """Delete this and a skill's figure moves when an agent the reader may not see runs it, or,
+    for a reader of their own usage only, when a colleague does, whatever the statement did."""
+    kept = skill_runs(
+        SKILL_RUNS,
+        agents=frozenset({SEEN}),
+        caller_id=READER,
+        basis=Basis.OWN,
+        since=MONTH_AGO,
+        until=NOW,
+    )
+    no_agents = skill_runs(
+        SKILL_RUNS,
+        agents=frozenset(),
+        caller_id=READER,
+        basis=Basis.EVERYONE,
+        since=MONTH_AGO,
+        until=NOW,
+    )
+
+    assert kept == (SKILL_RUNS[0],)
+    assert no_agents == ()
+
+
+def test_a_live_read_is_counted_at_the_readers_basis_and_dated_by_the_newest() -> None:
+    """Delete this and a source's live reads can count colleagues' questions for a reader of their
+    own usage only, and its last read can be a colleague's."""
+    reads = (
+        LiveRead(principal_id=READER, at=NOW - timedelta(days=2)),
+        LiveRead(principal_id=COLLEAGUE, at=NOW - timedelta(days=1)),
+        LiveRead(principal_id=COLLEAGUE, at=NOW - timedelta(days=40)),
+    )
+
+    def figure(basis: Basis) -> int:
+        return len(counted(reads, caller_id=READER, basis=basis, since=MONTH_AGO, until=NOW))
+
+    assert (figure(Basis.EVERYONE), figure(Basis.OWN)) == (2, 1)
+    assert last_active(
+        reads, caller_id=READER, basis=Basis.OWN, since=MONTH_AGO, until=NOW
+    ) == NOW - timedelta(days=2)
+    assert last_active(
+        reads, caller_id=READER, basis=Basis.EVERYONE, since=MONTH_AGO, until=NOW
+    ) == NOW - timedelta(days=1)
+
+
 def test_attempt_figures_keep_a_quota_wait_apart_from_a_failure() -> None:
     """Delete this and a source that asked to be left alone is reported as failing."""
     attempts = [
@@ -191,6 +282,21 @@ def test_attempt_figures_keep_a_quota_wait_apart_from_a_failure() -> None:
 
     assert (week.attempts, week.read_to_the_end, week.failures, week.quota_waits) == (3, 1, 1, 1)
     assert (month.attempts, month.failures) == (4, 2)
+
+
+def test_attempt_figures_count_no_test_of_the_connection() -> None:
+    """A test a person asked for is not a read: it adds to no attempt, failure or read to the end,
+    even when a caller hands one in. Delete this and pressing Test connection on a failing source
+    raises its failure count on the Dashboard (M27.15.8)."""
+    attempts = [
+        Attempt(at=NOW - timedelta(days=1), outcome=SyncOutcome.SYNCED),
+        Attempt(at=NOW - timedelta(days=1), outcome=SyncOutcome.PROBED),
+        Attempt(at=NOW - timedelta(days=2), outcome=SyncOutcome.PROBED),
+    ]
+
+    week = attempt_figures(attempts, since=WEEK_AGO, until=NOW)
+
+    assert (week.attempts, week.read_to_the_end, week.failures, week.quota_waits) == (1, 1, 0, 0)
 
 
 def test_delivery_figures_separate_what_was_received_sent_refused_and_unknown() -> None:

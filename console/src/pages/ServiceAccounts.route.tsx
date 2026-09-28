@@ -1,9 +1,8 @@
 /**
- * Service accounts and API keys: an integration registered, a key issued and shown once, a key
- * revoked and the account retired, each the caller's own. One path: an account has no page of its
- * own.
+ * Service accounts and API keys: the caller's own integrations. One account's page is
+ * `ServiceAccount.route.tsx`.
  *
- * Task ids: M27.10.1
+ * Task ids: M27.10.1, M27.16.1
  */
 
 import type { PageRoutes } from "../routes/page";

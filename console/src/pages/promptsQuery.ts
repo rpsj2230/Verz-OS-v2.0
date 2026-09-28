@@ -28,10 +28,8 @@ export type AgentInstructions = components["schemas"]["AgentInstructionsView"];
 export const PROMPTS_API_PATH = "/govern/prompts";
 export const PROMPTS_PATH = "/prompts";
 export const PROMPTS_LABEL = "Prompts";
-export const PROMPTS_CRUMB = "Govern › Prompts";
 export const PROMPTS_LEDE =
-  "The instructions every agent is given: the system's own, which no install can change, and each " +
-  "agent's, which an administrator can replace here.";
+  "The instructions every agent is given: the product's own, which no install changes, and each agent's, which can be replaced here.";
 
 export const READING_PROMPTS = "Reading the instructions.";
 export const NO_AGENTS = "There is no agent whose instructions this screen can show you.";
@@ -44,15 +42,12 @@ export const SYSTEM_HEADING = "System instructions";
 export const HOUSE_RULES_HEADING = "Every agent opens with these rules";
 export const LENGTHS_HEADING = "How long an answer may be";
 export const SYSTEM_INSTRUCTIONS_ARE_PRODUCT_TEXT =
-  "These are part of the product and are the same on every install. They cannot be edited here, " +
-  "because one of them is what stops a model saying that something was withheld; they change only " +
-  "with a release.";
+  "Part of the product and the same on every install. They change only with a release.";
 export const NO_MODEL_IS_CALLED_YET =
   "Nothing in the platform sends a prompt to a model yet. An edit changes what an agent would be " +
   "given from the next request, and no answer anybody has received.";
 export const EVERY_CHANGE_IS_IN_THE_AUDIT_TRAIL =
-  "An agent keeps its current instructions and who set them, not the ones before. Every edit and " +
-  "give-back, and who made it, is kept in the audit trail, without the words.";
+  "Every edit and give-back, and who made it, is kept in the audit trail, without the words.";
 export const EDITING_SWITCHED_OFF =
   "Editing instructions is switched off on this install. An administrator switches it on under " +
   "Install, Features. Instructions already changed can still be given back to their template.";
@@ -74,16 +69,24 @@ export function giveBackPath(agentId: string): string {
   return `${PROMPTS_API_PATH}/${encodeURIComponent(agentId)}/give-back`;
 }
 
-/** Who set the instructions in force, in words. */
+/**
+ * Whose instructions are in force, in words: this install's own or the template's, which version,
+ * and since when. No template id and no principal id: those are in the page's Advanced section.
+ */
 export function setWords(row: AgentInstructions, when: (value: string) => string): string {
   if (!row.installed) {
     return NOT_INSTALLED;
   }
-  const at = row.set_at ? ` at ${when(row.set_at)}` : "";
-  const source = row.template_id ? `${row.template_id} version ${String(row.template_version)}` : "";
+  const at = row.set_at ? `, since ${when(row.set_at)}` : "";
+  const version = row.template_version === null || row.template_version === undefined ? "" : ` version ${String(row.template_version)}`;
   return row.overridden
-    ? `This install's own instructions, set by ${row.set_by ?? "somebody"}${at}, in place of ${source}.`
-    : `The template's instructions, from ${source}, signed by ${row.set_by ?? "its publisher"}${at}.`;
+    ? `This install's own instructions${at}, in place of the template's${version}.`
+    : `The template's instructions${version}${at}.`;
+}
+
+/** What the editor accepts, said under it before anything is sent. */
+export function instructionsHint(maxChars: number): string {
+  return `Plain text, at most ${String(maxChars)} characters. Each line is kept as a line.`;
 }
 
 /** Why the text in the editor cannot be sent yet, or null. The API decides everything else. */
@@ -105,8 +108,7 @@ export function editQuestion(row: AgentInstructions): string {
 export function editConsequence(row: AgentInstructions): string {
   return (
     `From the next request, ${row.display_name} is given the new instructions instead of the ones ` +
-    `in force. The change is recorded against ${row.template_id ?? "its template"} as set by you, and ` +
-    "the instructions it replaces are not kept."
+    "in force. The change is recorded as set by you, and the instructions it replaces are not kept."
   );
 }
 
@@ -116,8 +118,8 @@ export function giveBackQuestion(row: AgentInstructions): string {
 
 export function giveBackConsequence(row: AgentInstructions): string {
   return (
-    `From the next request, ${row.display_name} is given the instructions ${row.template_id ?? "its template"} ` +
-    "ships with, and this install's own instructions are not kept."
+    `From the next request, ${row.display_name} is given the instructions its template ships with, ` +
+    "and this install's own instructions are not kept."
   );
 }
 

@@ -14,9 +14,9 @@
  * (the design's Connect repo and Paste URL), save an edit as a new version, set a skill's
  * categories, decide about one, and assign an approved one to an agent.
  *
- * **The category chips are the API's list, drawn from the skills this reader was shown**
- * (M12.4.13). Choosing one narrows the library on the page, which is not paged, and asks the
- * skills-in-use listing for the same filter, which the route applies.
+ * **The library list is `GET /skills/library`, searched and filtered by the route** (M27.11.8), and
+ * one skill's page reads `GET /skills` narrowed to its name. The paths for the lifecycle writes,
+ * retiring, reinstating and detaching (M27.15.55, M27.15.56), are here with the others.
  *
  * **Nothing here decides who may do what.** `may_add`, `reviewable`, `assignable` and the list of
  * agents decide which controls are drawn, and each write asks every question again on the server.
@@ -28,11 +28,11 @@
  * on the page is the review queue's, which `brain.console.govern_estate.skill_queue` computes over
  * exactly the entries listed beneath it.
  *
- * Task ids: M42.6.4, M12.2.2, M12.2.3, M12.2.6, M12.3.2, M12.4.6, M12.4.13
+ * Task ids: M42.6.4, M12.2.2, M12.2.3, M12.2.6, M12.3.2, M12.4.6, M12.4.13, M27.16.1
  */
 
 import type { components } from "../api/schema";
-import { NO_QUESTION, listPath, type FilterChoice, type SortChoice } from "../components/listing";
+import { NO_QUESTION, listPath } from "../components/listing";
 
 /** One skill and the agents pinned to it, as `brain.skill_routes.SkillRow` sends it. */
 export type SkillLibraryRow = components["schemas"]["SkillRow"];
@@ -57,12 +57,33 @@ export type CategoriesBody = components["schemas"]["CategoriesAsked"];
 export type Categorised = components["schemas"]["CategoriesView"];
 /** The words that changed, as `SkillDiffView` sends them. */
 export type SkillDiff = components["schemas"]["SkillDiffView"];
+/** One version on the searchable library list, as `SkillVersionRowView` sends it (M27.11.8). */
+export type LibraryRow = components["schemas"]["SkillVersionRowView"];
+/** What a retirement or a reinstatement answered, as `RetirementView` sends it (M27.15.56). */
+export type Retired = components["schemas"]["RetirementView"];
+/** What a detachment answered, as `DetachedView` sends it (M27.15.55). */
+export type Detached = components["schemas"]["DetachedView"];
 
 /** Where the API keeps this screen, and its writes. */
 export const SKILLS_API_PATH = "/skills";
 
 /** Where a repository or an address import is sent. */
 export const IMPORT_PATH = `${SKILLS_API_PATH}/imports`;
+
+/** The searchable library: one row per version, searched and filtered by the route (M27.11.8). */
+export const LIBRARY_API_PATH = `${SKILLS_API_PATH}/library`;
+
+export function retirementPath(digest: string): string {
+  return `${SKILLS_API_PATH}/${encodeURIComponent(digest)}/retirement`;
+}
+
+export function reinstatementPath(digest: string): string {
+  return `${SKILLS_API_PATH}/${encodeURIComponent(digest)}/reinstatement`;
+}
+
+export function detachPath(digest: string): string {
+  return `${SKILLS_API_PATH}/${encodeURIComponent(digest)}/detachments`;
+}
 
 export function versionsPath(digest: string): string {
   return `${SKILLS_API_PATH}/${encodeURIComponent(digest)}/versions`;
@@ -85,23 +106,6 @@ export function assignPath(digest: string): string {
 
 /** The console addresses. The second is one skill open. */
 export const SKILLS_PATH = "/skills";
-
-/** The filters the skills route declares that this screen offers, over values on rows drawn. */
-export const SKILL_FILTERS: readonly FilterChoice<SkillLibraryRow>[] = [
-  { column: "agents", label: "Agent", everything: "Any agent", read: (row) => row.pinned_by.map((one) => one.agent_id) },
-  {
-    column: "versions_differ",
-    label: "Versions",
-    everything: "Same or different",
-    read: (row) => row.versions_differ,
-    describe: (value) => (value === "true" ? "Agents run different versions" : "Every agent runs one version"),
-  },
-];
-
-export const SKILL_SORTS: readonly SortChoice[] = [
-  { value: "", label: "By name" },
-  { value: "-name", label: "By name, last first" },
-];
 
 /**
  * The largest package the API reads, in bytes. `brain.console.skill_library.MAX_PACKAGE_BYTES`,
@@ -173,7 +177,7 @@ const NOTHING: SkillsPage = Object.freeze({
 /**
  * Read `brain.skill_routes.SkillsPage` out of a response body.
  *
- * **`total` and `next_cursor` stop here**, in the way `readPeoplePage` stops them. An unreadable
+ * **`total` and `next_cursor` stop here**, in the way `people/peopleQuery.readPeople` stops them. An unreadable
  * body yields an empty page offering nothing rather than throwing, which is `readMatrixPage`'s
  * choice and for its reason.
  */
@@ -216,11 +220,6 @@ export function readSkillsPage(payload: unknown): SkillsPage {
   };
 }
 
-/** The library rows carrying a category, or every row when none is chosen. */
-export function inCategory(library: readonly LibrarySkill[], chosen: string): readonly LibrarySkill[] {
-  return chosen === "" ? library : library.filter((one) => one.categories.includes(chosen));
-}
-
 /** The pinned skill with this name among the ones on the page, or null. Never by a prefix. */
 export function skillIn(
   skills: readonly SkillLibraryRow[],
@@ -232,14 +231,6 @@ export function skillIn(
 /** Every version of one skill in the library, newest first as the API ordered them. */
 export function versionsOf(library: readonly LibrarySkill[], name: string): readonly LibrarySkill[] {
   return library.filter((one) => one.name === name);
-}
-
-/**
- * The rows whose agents do not all run the same bytes. The API's marker, never a comparison
- * this console made over rows it may not have all of.
- */
-export function driftingRows(skills: readonly SkillLibraryRow[]): readonly SkillLibraryRow[] {
-  return skills.filter((one) => one.versions_differ);
 }
 
 // ------------------------------------------------------------------------- the words
@@ -382,11 +373,11 @@ export function categorisedSentence(done: Categorised): string {
     : `${done.name} is filed under ${done.categories.join(", ")}.`;
 }
 
-/** Where a skill came from, in words, with the commit and folder when it came from one. */
+/** Where a skill came from, in words. The commit itself is an identifier, kept for Advanced. */
 export function sourceWords(one: LibrarySkill): string {
   if (one.source === "github") {
     const where = one.source_path === null ? "its top folder" : `the folder ${one.source_path}`;
-    return `from the GitHub repository ${one.source_location} at commit ${one.source_commit ?? ""}, ${where}`;
+    return `from the GitHub repository ${one.source_location} at one commit, ${where}`;
   }
   if (one.source === "url") {
     return `from ${one.source_location}`;
@@ -398,13 +389,19 @@ export function decisionQuestion(one: LibrarySkill, approve: boolean): string {
   return `${approve ? "Approve" : "Reject"} ${one.name} ${one.version}?`;
 }
 
+/** A person as the page names them: the directory's name, or a plain word when it has none. */
+export function personWords(name: string | null | undefined, otherwise: string): string {
+  return name === null || name === undefined || name.trim() === "" ? otherwise : name;
+}
+
 export function decisionConsequence(one: LibrarySkill, approve: boolean): string {
-  const own = ` If you are ${one.submitted_by}, the audit trail records the decision as your own.`;
+  const by = personWords(one.submitted_by_name, "the person who added it");
+  const own = " If you added it yourself, the audit trail records the decision as your own.";
   return approve
-    ? `These exact words, added by ${one.submitted_by}, can then be assigned to agents. An edit ` +
+    ? `These exact words, added by ${by}, can then be assigned to agents. An edit ` +
         "to them later is a new version that needs a review of its own. The decision is recorded " +
         `in the audit trail under your name and cannot be changed.${own}`
-    : `This version, added by ${one.submitted_by}, can never be assigned to an agent. The ` +
+    : `This version, added by ${by}, can never be assigned to an agent. The ` +
         `decision is recorded in the audit trail under your name and cannot be changed.${own}`;
 }
 
@@ -413,7 +410,8 @@ export function decisionWords(one: LibrarySkill): string {
   if (one.reviewer === null) {
     return "";
   }
-  return one.self_decided ? `decided by ${one.reviewer}, who added it` : `decided by ${one.reviewer}`;
+  const who = personWords(one.reviewer_name, "a reviewer");
+  return one.self_decided ? `decided by ${who}, who added it` : `decided by ${who}`;
 }
 
 export function decidedSentence(one: LibrarySkill): string {

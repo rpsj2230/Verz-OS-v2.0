@@ -6,7 +6,9 @@
  * page must add nothing in its place: no list of queues filled with zeros. **A figure nothing
  * records is "Not recorded yet" with the API's reason, and never 0.** **A block whose route answers
  * a plain 404 is not this reader's and is left out**, while any other failure is drawn with its
- * reference. **Identifiers are only in Advanced.**
+ * reference. **The week's cost is drawn in the install's currency only when the route sent both,
+ * and otherwise as "Not recorded yet" with the route's reason.** **Identifiers are only in
+ * Advanced.**
  *
  * Mounted through the real route table and shell with the stand-in API from `support/pageCases.ts`,
  * and the readers are held against raw bodies, so a test of what the page draws is not also a test
@@ -34,7 +36,9 @@ import {
 } from "../src/pages/overview/OverviewPage";
 import {
   activeAgents,
+  basisWords,
   connectedSources,
+  costWords,
   HALTS_UNKNOWN,
   NO_HALTS,
   queueLabel,
@@ -53,6 +57,7 @@ if (CASE === undefined) {
 }
 const ANSWERS = CASE.answers;
 const OVERVIEW = "/api/v1/console/overview";
+const FIGURES = "/api/v1/console/overview/figures";
 const AGENTS = "/api/v1/agents";
 const AUDIT = "/api/v1/audit";
 
@@ -136,6 +141,16 @@ function figure(root: Element, label: string): string | null {
   return null;
 }
 
+/** The line beneath a figure card's value, or null when the card is not on the page or has none. */
+function beneath(root: Element, label: string): string | null {
+  for (const card of root.querySelectorAll("[data-slot='stat-card']")) {
+    if (card.querySelector("dt")?.textContent === label) {
+      return card.querySelector("dd > span:nth-of-type(2)")?.textContent ?? null;
+    }
+  }
+  return null;
+}
+
 /** Text outside the Advanced section, which is the only place an identifier may appear. */
 function textOutsideAdvanced(root: Element): string {
   const copy = root.cloneNode(true) as Element;
@@ -199,16 +214,40 @@ describe("what the Overview draws", () => {
     expect(section(page.root, NEEDS_YOU)?.textContent).toContain(NOTHING_WAITING);
   });
 
-  test("the figure row draws the API's counts, and cost as not recorded rather than as nought", async () => {
-    // What breaks if this is deleted: a cost drawn as 0.00, which says the company spent nothing,
-    // or refused and abstained drawn as anything other than the one figure the API sent.
+  test("the figure row draws the API's counts, and the week's cost in the install's currency", async () => {
+    // What breaks if this is deleted: refused and abstained drawn as anything other than the one
+    // figure the API sent, or a cost the route served drawn with no currency, in the wrong unit, or
+    // still as not recorded.
     const page = await overviewWith();
     expect(figure(page.root, ANSWERED_LABEL)).toBe("1,847");
     expect(figure(page.root, NOTHING_RETURNED_LABEL)).toBe("312");
     expect(figure(page.root, AGENTS_LABEL)).toBe("1");
     expect(figure(page.root, SOURCES_LABEL)).toBe("1");
+    expect(figure(page.root, COST_LABEL)).toBe(`${UNBROKEN} 1,284.50`);
+    expect(beneath(page.root, COST_LABEL)).toBe(basisWords("everyone"));
+  });
+
+  test("a cost summed over the reader's own requests says so, even beside everybody's counts", async () => {
+    // What breaks if this is deleted: a reader who may read everybody's usage and only their own
+    // spend shown their own cost under a line that reads as the company's.
+    const body = ANSWERS[FIGURES] as Record<string, unknown>;
+    const page = await overviewWith({ [FIGURES]: { ...body, cost_basis: "own", cost_minor: 0, currency: "SGD" } });
+    expect(beneath(page.root, ANSWERED_LABEL)).toBe(basisWords("everyone"));
+    expect(figure(page.root, COST_LABEL)).toBe("SGD 0.00");
+    expect(beneath(page.root, COST_LABEL)).toBe(basisWords("own"));
+  });
+
+  test("a cost the route says is not recorded reads Not recorded yet with its reason, never nought", async () => {
+    // What breaks if this is deleted: an install with no model priced shown 0.00, which says the
+    // company spent nothing, or the sentence drawn without the reason that says what to do.
+    const why = "no model has a price in this install's currency yet";
+    const body = ANSWERS[FIGURES] as Record<string, unknown>;
+    const page = await overviewWith({
+      [FIGURES]: { ...body, cost_minor: null, currency: null, not_recorded: [{ figure: "cost", why }] },
+    });
     // The reason is read out after the words, so the card starts with them and carries no number.
     expect(figure(page.root, COST_LABEL)?.startsWith(NOT_RECORDED)).toBe(true);
+    expect(figure(page.root, COST_LABEL)).toContain(why);
     expect(figure(page.root, COST_LABEL)).not.toMatch(/\d/);
   });
 
@@ -300,6 +339,28 @@ describe("what the readers keep", () => {
     // What breaks if this is deleted: a figure row drawn from a body that is not one.
     expect(readFigures({ basis: "own", answered: 1, nothing_returned: 0, not_recorded: [] })?.answered).toBe(1);
     expect(readFigures({ basis: "own", answered: null, nothing_returned: 0 })).toBeNull();
+  });
+
+  test("a cost is kept only with its currency and its basis, and never from a sum that is not one", () => {
+    // What breaks if this is deleted: a sum drawn in whichever currency the reader assumes, or a
+    // null, a fraction or a negative drawn as a cost.
+    const counts = { basis: "everyone", answered: 1, nothing_returned: 0, not_recorded: [] };
+    expect(readFigures({ ...counts, cost_minor: 250, currency: "SGD", cost_basis: "own" })?.cost).toEqual({
+      minor: 250,
+      currency: "SGD",
+      basis: "own",
+    });
+    for (const broken of [
+      { cost_minor: 250, currency: null, cost_basis: "own" },
+      { cost_minor: 250, currency: "SGD" },
+      { cost_minor: null, currency: "SGD", cost_basis: "own" },
+      { cost_minor: 2.5, currency: "SGD", cost_basis: "own" },
+      { cost_minor: -1, currency: "SGD", cost_basis: "own" },
+    ]) {
+      expect(readFigures({ ...counts, ...broken })?.cost).toBeUndefined();
+    }
+    expect(costWords({ minor: 128450, currency: "SGD", basis: "own" })).toBe("SGD 1,284.50");
+    expect(costWords({ minor: 7, currency: "EUR", basis: "own" })).toBe("EUR 0.07");
   });
 
   test("sources are counted over the list sent, and a list nobody read is a sentence", () => {

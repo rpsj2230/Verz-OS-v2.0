@@ -224,6 +224,13 @@ SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
         # `0067` grants no way for a row to leave, so an erasure keeps these and reports them kept.
         "agent.automation_run": "principal_id",
         "agent.browser_envelope": "asked_by",
+        # Which skill a run used, for the person it ran for (`0138`). `0138` grants no way for a row
+        # to leave, so an erasure keeps these and reports them kept, as it does a cost.
+        "agent.skill_invocation": "principal_id",
+        # A one-time code a person minted to bind a chat account (`0118`): a digest nobody can
+        # present, and the instants. `0118` grants no way for a row to leave, so an erasure keeps
+        # these and reports them kept; the binding it made is `auth.principal_identity`'s row.
+        "auth.binding_code": "principal_id",
         "auth.directory_role_grant": "principal_id",
         "auth.principal": "id",
         "auth.principal_identity": "principal_id",
@@ -311,10 +318,17 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "agent.automation",
         # Why an automation's schedule changed and who changed it: an actor, not an owner.
         "agent.automation_schedule",
+        # Every pause, resume, schedule change, removal and adoption (`0145`): the person who made
+        # it is an actor, and an adopter is the automation's new owner, never a subject of it.
+        "agent.automation_change",
         "agent.skill",
         "agent.skill_assignment",
         # The categories set on a skill's name: `set_by` is an actor, not an owner (`0121`).
         "agent.skill_category",
+        # A version retired or reinstated, and a skill taken off an agent (`0139`): `set_by` and
+        # `detached_by` are actors, not owners, and each row is about a skill and an agent.
+        "agent.skill_detachment",
+        "agent.skill_retirement",
         "agent.skill_review",
         # A tool the install registers, and a stop on it (`0117`): who threw or lifted a switch is
         # an actor, not an owner, and a stop is about a tool and a department, never a person.

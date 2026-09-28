@@ -5,8 +5,8 @@
  * This is the screen the owner of a fresh install opens to find out what his system has access to,
  * so the failures worth testing are not layout failures. They are: a key reaching the page, a figure
  * drawn where the API sent none, a write sent without a confirmation, an edit that sends a key, a
- * form that says what it accepts only after a refusal, and an act called "coming soon" whose route
- * has arrived.
+ * form that says what it accepts only after a refusal, an act called "coming soon" whose route
+ * has arrived, and a test of a connection that is sent unconfirmed or whose result never arrives.
  *
  * **Reachable means through the application's own route table.** Every page test mounts `routes`
  * from `src/App.tsx` on a memory router, signed in through the real session modules and answered by
@@ -16,7 +16,7 @@
  * themselves**: `tests/support/python.ts` reads field names out of `brain.connector_routes`, and
  * `tests/support/openapi.ts` the request bodies and paths the routes declare.
  *
- * Task ids: M27.11.9, M27.15.39, M27.15.58, M11.7.7, M27.16.1, M42.6.5
+ * Task ids: M27.11.9, M27.15.39, M27.15.58, M11.7.7, M27.16.1, M42.6.5, M27.15.8
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -33,8 +33,10 @@ import {
   type Connectors,
 } from "../src/pages/connectorsQuery";
 import { ACT_LABELS, UNAVAILABLE } from "../src/pages/connectors/connectorActions";
-import { NOT_CONNECTED_TITLE } from "../src/pages/connectors/ConnectorDashboard";
+import { LAST_LIVE_READ_LABEL, LIVE_READS_LABEL, NO_LIVE_READ, NOT_CONNECTED_TITLE } from "../src/pages/connectors/ConnectorDashboard";
 import { NO_AGENT } from "../src/pages/connectors/ConnectorProfile";
+import { TESTING_WORDS, VERDICT_WORDS } from "../src/pages/connectors/connectorProbe";
+import { CHECK_AGAIN, NOT_NOW } from "../src/pages/connectors/TestConnection";
 import { connectorAddress, readSourceRows } from "../src/pages/connectors/connectorSources";
 import { CONNECT_A_SOURCE, CONNECTORS_HEADING, NOT_AVAILABLE } from "../src/pages/connectors/ConnectorsPage";
 import { KEY_SUPPLIED, REVIEW_EDIT, REVIEW_KEY } from "../src/pages/connectors/SourceActs";
@@ -175,6 +177,8 @@ const XERO_STATS = {
   last_read_to_the_end: "2019-03-04T09:30:00Z",
   consecutive_failures: 0,
   index_ids: 1234,
+  live_read_basis: "own",
+  last_live_read: null,
   at_least: false,
   periods: ["7d", "30d"].map((range) => ({
     range,
@@ -184,8 +188,9 @@ const XERO_STATS = {
     read_to_the_end: 22,
     failures: 2,
     quota_waits: 0,
+    live_reads: range === "30d" ? 317 : 0,
   })),
-  unrecorded: [{ figure: "live_reads", why: sentinel("live-reads-why") }],
+  unrecorded: [],
 };
 
 const XERO_DETAIL = {
@@ -221,6 +226,21 @@ const XERO_DETAIL = {
   confirm_key: sentinel("confirm-key"),
 };
 
+/** A connection test's answer, as `brain.connector_routes.ConnectorProbeView` sends it. */
+function aProbe(over: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    connector: "xero",
+    requested_at: null,
+    pending: false,
+    verdict: null,
+    tested_at: null,
+    health: null,
+    said: sentinel("never-tested"),
+    confirm: sentinel("confirm-test"),
+    ...over,
+  };
+}
+
 interface Answer {
   readonly status?: number;
   readonly body: unknown;
@@ -236,6 +256,7 @@ const ANSWERS: Readonly<Record<string, Answer>> = {
     body: { ...XERO_DETAIL, source: LIST.items[2], settings: [], keeps: [], reads_live: [], history: [], agents: [], skills: [] },
   },
   "/api/v1/console/connectors/xero/export": { body: { connector: "xero", credential: sentinel("no-key"), history: [] } },
+  "/api/v1/console/connectors/xero/probe": { body: aProbe() },
 };
 
 interface Mounted {
@@ -320,9 +341,10 @@ describe("what this module agrees with the API about", () => {
     for (const [one, { retiredBy }] of Object.entries(UNAVAILABLE)) {
       expect(paths.filter((path) => retiredBy.test(path)), one).toEqual([]);
     }
-    // The positive sibling: the pattern matches the path it is written for, and not Connect Lark's.
-    expect(UNAVAILABLE.test.retiredBy.test("/api/v1/connectors/{connector}/test")).toBe(true);
-    expect(UNAVAILABLE.test.retiredBy.test("/api/v1/connectors/lark-app/test")).toBe(false);
+    // The positive sibling: every act on a source has its route now, testing a connection included.
+    expect(Object.keys(UNAVAILABLE)).toEqual([]);
+    expect(paths).toContain("/api/v1/connectors/{connector}/probe");
+    expect(paths).toContain("/api/v1/console/connectors/{connector}/probe");
   });
 
   test("the edit and the key replacement send exactly the fields their routes declare, and an edit no key", () => {
@@ -347,6 +369,7 @@ describe("what this module agrees with the API about", () => {
       "ConnectorExportedConnectionView",
       "ConnectorEditedView",
       "ConnectorKeyReplacedView",
+      "ConnectorProbeView",
     ]) {
       const fields = backendModelFields(ROUTES, model);
       expect(fields.length, model).toBeGreaterThan(0);
@@ -493,8 +516,14 @@ describe("one source's page", () => {
     const strip = container.querySelector('[data-slot="kpi-strip"][aria-label="This source\'s figures"]');
     expect(strip?.textContent).toContain("1,234 ids");
     expect(strip?.textContent).toContain("24");
+    const card = (label: string) =>
+      [...(strip?.querySelectorAll('[data-slot="stat-card"]') ?? [])].find((one) => one.querySelector("dt")?.textContent === label);
+    expect(card(LIVE_READS_LABEL)?.querySelector("dd")?.textContent).toContain("317");
+    expect(card(LIVE_READS_LABEL)?.textContent).toContain("your questions");
+    expect(card(LAST_LIVE_READ_LABEL)?.textContent).toContain(NO_LIVE_READ);
     expect(container.textContent).toContain(sentinel("reading"));
-    expect(container.querySelectorAll(`[${UNAVAILABLE_MARK}]`).length).toBeGreaterThan(0);
+    expect(container.querySelectorAll(`[${UNAVAILABLE_MARK}]`).length).toBe(0);
+    expect(screen.getByRole("button", { name: ACT_LABELS.test })).toBeTruthy();
 
     const hubspot = await consoleAt(connectorAddress("hubspot"));
     expect(hubspot.container.textContent).toContain(NOT_CONNECTED_TITLE);
@@ -614,5 +643,111 @@ describe("one source's page", () => {
       expect(asked(idp, "/api/v1/console/connectors/xero/export")).toBe(1);
     });
     expect(posts(idp)).toEqual([]);
+  });
+});
+
+// --------------------------------------------------------------------- testing a connection
+
+describe("testing a connection", () => {
+  test("a test is confirmed in the API's words, asked once, waits for the worker and then says what it found", async () => {
+    // What breaks if this is deleted: a test sent by one press, a confirmation in the console's words
+    // rather than the ones that say one call is made and nothing kept, a page that never shows the
+    // result the worker recorded, or one that shows the previous test as the answer to this press.
+    const answers: Record<string, Answer> = { ...ANSWERS };
+    const { container, idp } = await consoleAt(connectorAddress("xero"), answers);
+    // The button waits for the test's own answer, because its confirmation is in the API's words.
+    await waitFor(
+      () => {
+        expect((screen.getByRole("button", { name: ACT_LABELS.test }) as HTMLButtonElement).disabled).toBe(false);
+      },
+      { timeout: 5_000 },
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: ACT_LABELS.test }));
+    });
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog.textContent).toContain(sentinel("confirm-test"));
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: NOT_NOW }));
+    });
+    expect(posts(idp)).toEqual([]);
+
+    answers["/api/v1/console/connectors/xero/probe"] = {
+      body: aProbe({ pending: true, requested_at: "2019-03-04T10:00:00Z", said: sentinel("waiting") }),
+    };
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: ACT_LABELS.test }));
+    });
+    const again = await screen.findByRole("alertdialog");
+    await act(async () => {
+      fireEvent.click(within(again).getByRole("button", { name: ACT_LABELS.test }));
+    });
+    await waitFor(() => {
+      expect(posts(idp)).toEqual([{ path: "/api/v1/connectors/xero/probe", body: undefined }]);
+    });
+    await waitFor(
+      () => {
+        expect(container.querySelector('[data-slot="connection-test"]')?.textContent).toContain(sentinel("waiting"));
+      },
+      { timeout: 5_000 },
+    );
+    const waiting = container.querySelector('[data-slot="connection-test"]');
+    expect(waiting?.textContent).toContain(TESTING_WORDS);
+    expect((screen.getByRole("button", { name: ACT_LABELS.test }) as HTMLButtonElement).disabled).toBe(true);
+    const pageAsks = asked(idp, "/api/v1/console/connectors/xero");
+
+    answers["/api/v1/console/connectors/xero/probe"] = {
+      body: aProbe({
+        requested_at: "2019-03-04T10:00:00Z",
+        verdict: "failed",
+        tested_at: "2019-03-04T10:00:40Z",
+        health: "down",
+        said: sentinel("key-declined"),
+      }),
+    };
+    await act(async () => {
+      fireEvent.click(within(waiting as HTMLElement).getByRole("button", { name: CHECK_AGAIN }));
+    });
+    // The page is asked again, so the health the test left is drawn, and the result stays.
+    await waitFor(
+      () => {
+        expect(asked(idp, "/api/v1/console/connectors/xero")).toBeGreaterThan(pageAsks);
+      },
+      { timeout: 5_000 },
+    );
+    await waitFor(
+      () => {
+        const note = container.querySelector('[data-slot="connection-test"]')?.textContent ?? "";
+        expect(note).toContain(sentinel("key-declined"));
+        expect(note).toContain(VERDICT_WORDS.failed);
+      },
+      { timeout: 5_000 },
+    );
+    expect(document.body.innerHTML).not.toContain(KEY);
+  });
+
+  test("a reader who may not manage the source sees the newest test and no button", async () => {
+    // What breaks if this is deleted: a test offered to somebody the API will refuse, or the result
+    // of a test hidden from the people the page is for.
+    const answers: Record<string, Answer> = {
+      ...ANSWERS,
+      "/api/v1/console/connectors/xero": { body: { ...XERO_DETAIL, source: { ...LIST.items[0], may_manage: false } } },
+      "/api/v1/console/connectors/xero/probe": {
+        body: aProbe({ verdict: "answered", tested_at: "2019-03-04T10:00:40Z", health: "ok", said: sentinel("works") }),
+      },
+    };
+    const { container } = await consoleAt(connectorAddress("xero"), answers);
+    await waitFor(() => {
+      expect(container.querySelector('[data-slot="connection-test"]')?.textContent).toContain(sentinel("works"));
+    });
+    expect(container.querySelector('[data-slot="connection-test"]')?.textContent).toContain(VERDICT_WORDS.answered);
+    expect(screen.queryByRole("button", { name: ACT_LABELS.test })).toBeNull();
+  });
+
+  test("a source never tested draws no result line", async () => {
+    // What breaks if this is deleted: a "not tested yet" line on every connected source's page,
+    // which is clutter the owner asked to be rid of.
+    const { container } = await consoleAt(connectorAddress("xero"));
+    expect(container.querySelector('[data-slot="connection-test"]')).toBeNull();
   });
 });

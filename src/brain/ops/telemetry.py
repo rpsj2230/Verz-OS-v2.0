@@ -52,11 +52,13 @@ to a trace store cannot reconstruct a person's movements. That difference is not
 written here. It falls out of running the row through `tracing.mask`, which is the only way
 anything in this module produces a span.
 
-**Every optional field says why it may be None.** Five are
+**Every optional field says why it may be None.** Four are
 `UNFILLABLE_TODAY`, which names what is missing: nothing times a first token or a tool call,
-the epoch never reaches a route, no connector is reached and the lane is never told what was
-withheld. `tool_count` left that mapping on 2026-09-15, when the lane started counting the
-calls it makes (M21.3.4). The other seven are `FILLED_BY_A_MODEL_CALL`, and they left it on
+the epoch never reaches a route and the lane is never told what was withheld. `connector` left
+that mapping on 2026-09-28 for `FILLED_BY_A_SOURCE_READ`: the lane notes the source its readers
+read (M27.1.5), and a connector's page counts the questions that read it from this column.
+`tool_count` left it on 2026-09-15, when the lane started counting the calls it makes
+(M21.3.4). The other seven are `FILLED_BY_A_MODEL_CALL`, and they left it on
 2026-09-17 when `brain.models.calls.ModelCalls` started calling a model: the model, the
 provider, the tokens, the agent and the fallback and retry counts come from the request's
 `brain.models.metering.Meter` through `Finished.model_usage`, and they are None exactly when the
@@ -640,11 +642,6 @@ UNFILLABLE_TODAY: Final[Mapping[str, str]] = MappingProxyType(
             "nothing times the row read. brain.gate.answer takes now as a parameter and reads "
             "no clock, deliberately, so the lane cannot time itself"
         ),
-        "connector": (
-            "the answer path reaches a row reader rather than a connector, and on a deployed "
-            "instance brain.tools.startup registers no row tool at all, so no connector is "
-            "reached by anybody"
-        ),
         "redaction_count": (
             "a count would be wrong rather than merely unknown. The redactor's trace reaches the "
             "trace sink, but a column compile_projection left out of the query never reaches the "
@@ -679,6 +676,20 @@ FILLED_BY_A_MODEL_CALL: Final[Mapping[str, str]] = MappingProxyType(
         "tokens_out": "this request called no model, so no provider counted any tokens for it",
         "fallback_count": "this request called no model, so no chain was walked",
         "retry_count": "this request called no model, so no rung was tried twice",
+    }
+)
+
+
+#: The field a request fills only when its readers read one source, and why it is None otherwise.
+#: Its own mapping for `FILLED_BY_A_MODEL_CALL`'s reason: None here is neither unmeasured nor a
+#: model's absence, it is a request that read no source, or several (M27.1.5).
+FILLED_BY_A_SOURCE_READ: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        "connector": (
+            "this request's readers read no source, such as a question a model answered from "
+            "documents or a cache hit, or read more than one, which names none for "
+            "brain.gate.answer.ONE_SOURCE_OR_NONE"
+        ),
     }
 )
 
@@ -720,8 +731,9 @@ class RequestTelemetry:
     and the route's, and `TELEMETRY_FIELDS` is that order written once. The seven with no
     default are the seven a caller can fill on every request; every field defaulting to None is
     named by exactly one of `UNFILLABLE_TODAY`, `FILLED_BY_A_MODEL_CALL`,
-    `FILLED_BY_THE_FRONT_HALF` and `FILLED_BY_A_ROUTED_CALL`, and a test pins the optional fields
-    against the four so none can describe a record that no longer matches it.
+    `FILLED_BY_THE_FRONT_HALF`, `FILLED_BY_A_ROUTED_CALL` and `FILLED_BY_A_SOURCE_READ`, and a test
+    pins the optional fields against the five so none can describe a record that no longer
+    matches it.
 
     Every string field is checked against `tracing.mask` at construction, so a record
     carrying a person's name rather than their identifier does not exist to be written. See
@@ -953,6 +965,8 @@ def request_telemetry_of(finished: Finished) -> RequestTelemetry:
         lane_basis=None if front is None else front.lane_basis,
         routed_tier=None if route is None else route.tier,
         tier_basis=None if route is None else route.basis,
+        # The one source the lane's readers read (M27.1.5), folded as a vendor's name is.
+        connector=ledger_name(finished.connector),
     )
 
 

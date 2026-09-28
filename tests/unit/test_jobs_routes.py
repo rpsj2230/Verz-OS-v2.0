@@ -6,11 +6,12 @@ control is followed to the row the tick reads (`tests/unit/test_schedule_control
 row into the tick), and every refusal has a sibling proving the same control works for somebody
 who may use it.
 
-Task ids: M27.8.13
+Task ids: M27.8.13, M27.15.47
 """
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from typing import Any, NamedTuple
@@ -24,7 +25,13 @@ from brain.console.reads import Plane, plane_capability
 from brain.console.screens import screen
 from brain.core.entitlement import Grant
 from brain.core.scope import Scope
-from brain.jobs_routes import SCHEDULE_AUTHORITY, SWITCHED_OFF, failure_kind
+from brain.jobs_routes import (
+    JOB_PERIODS,
+    RUN_HISTORY_LOAD,
+    SCHEDULE_AUTHORITY,
+    SWITCHED_OFF,
+    failure_kind,
+)
 from brain.ops.controls import control
 from brain.ops.schedule import schedulable
 from brain.ops.schedule_runner import RUNNERS
@@ -66,12 +73,41 @@ class Success(NamedTuple):
     finished_at: datetime
 
 
+class Figures(Result):
+    """The one counting row `figures_of` selects, read by its labels."""
+
+    def __init__(self, counted: dict[str, int]) -> None:
+        super().__init__([])
+        self.counted = counted
+
+    def mappings(self) -> Figures:
+        return self
+
+    def one(self) -> dict[str, int]:
+        return self.counted
+
+
+class Person(NamedTuple):
+    id: str
+    display_name: str
+
+
 class Runs:
-    """The run records the stub answers with: each control's newest run, and its last success."""
+    """The run records the stub answers with: each control's newest run, its last success, one
+    job's past runs and its figures, and the display names of the people rows name."""
 
     def __init__(self) -> None:
         self.newest: list[tuple[str, datetime, datetime | None, str | None, str | None]] = []
         self.successes: dict[str, datetime] = {}
+        self.past: list[
+            tuple[uuid.UUID, datetime, datetime | None, str | None, bool, str | None]
+        ] = []
+        self.figures: dict[str, int] = {
+            f"{figure}_{range_}": 0
+            for figure in ("started", "succeeded", "failed", "reported_only")
+            for range_, _ in JOB_PERIODS
+        }
+        self.names = {"u_admin": "Ada Admin"}
 
     def answer(self, statement: Any) -> Result | None:
         if not isinstance(statement, Select):
@@ -83,6 +119,13 @@ class Runs:
             return Result(Success(n, at) for n, at in self.successes.items())
         if columns == ["id"]:
             return Result([])
+        if columns == ["id", "started_at", "finished_at", "outcome", "report_only", "detail"]:
+            return Result(Row(one) for one in self.past)
+        if columns and columns[0].startswith("started_"):
+            return Figures(self.figures)
+        if columns == ["PrincipalRow"]:
+            asked = statement.compile().params["id_1"]
+            return Result(Person(one, self.names[one]) for one in asked if one in self.names)
         return None
 
 
@@ -305,3 +348,163 @@ def test_a_password_only_sign_in_cannot_pause_a_job(
 
     assert answer.status_code == 404
     assert settings.writes == []
+
+
+# ------------------------------------------------------------------ one job and its runs
+
+
+def test_a_jobs_page_shows_its_row_what_stops_without_it_and_its_run_figures(
+    served: tuple[TestClient, Stub], runs: Runs, settings: SettingRows
+) -> None:
+    """The positive case for one job: the list's row read the same way, the registry's sentence
+    for what is lost, the counts the database made, and the person who paused it by name.
+
+    Delete this and every refusal below is satisfied by a route that answers nobody."""
+    client, _ = served
+    runs.figures["started_30d"] = 12
+    runs.figures["failed_30d"] = 2
+    settings.hold(f"schedule.paused.{REFRESH}", True, value_type="boolean", by="u_admin")
+
+    answer = get(client, "u_wide", f"{JOBS}/{REFRESH}")
+
+    assert answer.status_code == 200, answer.text
+    body = answer.json()
+    assert body["job"]["control"] == REFRESH
+    assert body["lost_silently"] == control(REFRESH).lost_silently
+    thirty = next(one for one in body["periods"] if one["range"] == "30d")
+    assert (thirty["started"], thirty["failed"], thirty["succeeded"]) == (12, 2, 0)
+    assert [one["range"] for one in body["periods"]] == [one for one, _ in JOB_PERIODS]
+    assert body["job"]["paused"] is True
+    assert body["job"]["pause_changed_by"] == "u_admin"
+    assert body["people"] == {"u_admin": "Ada Admin"}
+
+
+def test_a_job_the_reader_may_not_see_is_the_same_404_as_a_name_nothing_registers(
+    served: tuple[TestClient, Stub],
+) -> None:
+    """Both are decided before any statement, so neither the answer nor the database says which.
+
+    Delete this and a caller without the queue's read learns which job names exist by asking."""
+    client, stub = served
+    hidden = get(client, "u_none", f"{JOBS}/{REFRESH}")
+    missing = get(client, "u_wide", f"{JOBS}/no_such_job")
+    hidden_runs = get(client, "u_none", f"{JOBS}/{REFRESH}/runs")
+
+    assert hidden.status_code == missing.status_code == hidden_runs.status_code == 404
+    assert hidden.json()["message"] == missing.json()["message"] == hidden_runs.json()["message"]
+    assert stub.statements == []
+
+
+def test_a_jobs_history_is_its_runs_newest_first_by_kind_and_report_with_a_cursor(
+    served: tuple[TestClient, Stub], runs: Runs
+) -> None:
+    """A run is shown as the list shows a last run: a failure by its kind and never its message,
+    a report whole, a run with no finish as unfinished. Paged by cursor with no count.
+
+    Delete this and the history either leaks a failure's message or cannot be walked."""
+    client, _ = served
+    start = datetime(2019, 3, 6, 8, tzinfo=UTC)
+    runs.past = [
+        (uuid.UUID(int=3), start + timedelta(hours=2), None, None, False, None),
+        (
+            uuid.UUID(int=2),
+            start + timedelta(hours=1),
+            start + timedelta(hours=1, seconds=2),
+            "failed",
+            False,
+            "IntegrityError: Key (email)=(a@b.c)",
+        ),
+        (uuid.UUID(int=1), start, start, "ok", False, "Refreshed three reports."),
+    ]
+
+    first = get(client, "u_wide", f"{JOBS}/{REFRESH}/runs?limit=2").json()
+
+    assert [one["outcome"] for one in first["items"]] == ["unfinished", "failed"]
+    assert first["items"][1]["failure_kind"] == "IntegrityError"
+    assert "a@b.c" not in str(first)
+    assert first["truncated"] is False
+    assert "total" not in first
+    rest = get(
+        client, "u_wide", f"{JOBS}/{REFRESH}/runs?limit=2&cursor={first['next_cursor']}"
+    ).json()
+    assert [one["report"] for one in rest["items"]] == ["Refreshed three reports."]
+    assert rest["next_cursor"] is None
+    failed = get(client, "u_wide", f"{JOBS}/{REFRESH}/runs?filter=outcome:failed").json()
+    assert [one["run_id"] for one in failed["items"]] == [str(uuid.UUID(int=2))]
+
+
+def test_a_history_says_when_its_load_came_back_full(
+    served: tuple[TestClient, Stub], runs: Runs
+) -> None:
+    """Delete this and a job with years of runs reads as one whose history is complete."""
+    client, _ = served
+    start = datetime(2019, 3, 6, 8, tzinfo=UTC)
+    runs.past = [
+        (uuid.UUID(int=n + 1), start - timedelta(minutes=n), start, "ok", False, "done")
+        for n in range(RUN_HISTORY_LOAD + 1)
+    ]
+    body = get(client, "u_wide", f"{JOBS}/{REFRESH}/runs").json()
+    assert body["truncated"] is True
+
+
+# ------------------------------------------------------------------ against PostgreSQL
+
+
+def test_a_jobs_figures_and_history_are_counted_and_read_by_the_database_itself() -> None:
+    """`figures_of` counts one job's runs in each window with a filter per figure, and `runs_of`
+    reads that job's newest runs and no other job's, run against a real table.
+
+    Delete this and the stub above answers two statements PostgreSQL might refuse or count
+    differently: a filtered count is dialect SQL, and a window boundary is the case that is
+    always wrong. Dates are 2999 so the windows never cross a real clock."""
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from brain.jobs_routes import figures_of, run_view, runs_of
+    from tests.fixtures.scratch_postgres import engine, modelled, run, sql
+
+    now = datetime(2999, 6, 30, 12, tzinfo=UTC)
+    with modelled("brain_jobs_figures", ["ops.control_run"]) as url:
+        for days_ago, outcome in ((1, "ok"), (2, "failed"), (10, "refused"), (40, "ok")):
+            at = now - timedelta(days=days_ago)
+            sql(
+                url,
+                "INSERT INTO ops.control_run (name, started_at, finished_at, outcome, detail, "
+                "report_only) VALUES (%s, %s, %s, %s, %s, false)",
+                REFRESH,
+                at,
+                at + timedelta(seconds=2),
+                outcome,
+                "IntegrityError: Key (email)=(a@b.c)" if outcome == "failed" else "done",
+            )
+        sql(
+            url,
+            "INSERT INTO ops.control_run (name, started_at, report_only) VALUES (%s, %s, false)",
+            REFRESH,
+            now,
+        )
+        sql(
+            url,
+            "INSERT INTO ops.control_run (name, started_at, finished_at, outcome, report_only) "
+            "VALUES ('canary_run', %s, %s, 'ok', false)",
+            now,
+            now,
+        )
+
+        async def read() -> tuple[dict[str, int], list[Any]]:
+            db = engine(url)
+            try:
+                async with AsyncSession(db) as session:
+                    counted = (await session.execute(figures_of(REFRESH, now))).mappings().one()
+                    rows = (await session.execute(runs_of(REFRESH))).all()
+                return {str(k): int(v) for k, v in counted.items()}, [one._tuple() for one in rows]
+            finally:
+                await db.dispose()
+
+        counted, rows = run(read)
+
+    assert (counted["started_7d"], counted["succeeded_7d"], counted["failed_7d"]) == (3, 1, 1)
+    assert (counted["started_30d"], counted["reported_only_30d"]) == (4, 1)
+    history = [run_view(one) for one in rows]
+    assert [one.outcome for one in history] == ["unfinished", "ok", "failed", "refused", "ok"]
+    assert history[2].failure_kind == "IntegrityError"
+    assert "a@b.c" not in str([one.model_dump() for one in history])

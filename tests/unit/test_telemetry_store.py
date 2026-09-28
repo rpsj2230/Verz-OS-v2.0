@@ -211,11 +211,12 @@ def test_every_abstention_is_nothing_returned_whatever_it_abstained_for(
 def test_a_withheld_record_and_an_absent_one_are_one_row_and_no_rule_means_no_call() -> None:
     """**DENIED and ABSENT in the ledger, through the real lane.** One person, one reach, one
     trace: a question about a record whose answer field they may not read and a question about a
-    record that does not exist produce two rows equal in every field. A question no rule matches
-    is equal to them in every field but `tool_count`, which is zero because no read started, and
-    that says whether the installation has a rule for the question's form, which is the same for
-    every asker and every record. See `A_TOOL_CALL_IS_COUNTED_WHEN_IT_STARTS`. The answered
-    request beside them is the positive sibling, and it differs.
+    record that does not exist produce two rows equal in every field, the source they read
+    included. A question no rule matches is equal to them in every field but `tool_count` and
+    `connector`, which are zero and None because no read started, and that says whether the
+    installation has a rule for the question's form, which is the same for every asker and every
+    record. See `A_TOOL_CALL_IS_COUNTED_WHEN_IT_STARTS`. The answered request beside them is the
+    positive sibling, and it differs.
 
     Compared as whole ledger rows, so any field that differed would fail it whatever its name.
 
@@ -231,8 +232,10 @@ def test_a_withheld_record_and_an_absent_one_are_one_row_and_no_rule_means_no_ca
     assert isinstance(withheld.outcome, Answered) and withheld.outcome.abstention is not None
     rows = [dict(request_telemetry_of(one).ledger_row()) for one in (withheld, absent, unmatched)]
     assert rows[0] == rows[1]
-    assert {**rows[2], "tool_count": rows[0]["tool_count"]} == rows[0]
+    read = {"tool_count": rows[0]["tool_count"], "connector": rows[0]["connector"]}
+    assert {**rows[2], **read} == rows[0]
     assert (rows[0]["tool_count"], rows[2]["tool_count"]) == (1, 0)
+    assert (rows[0]["connector"], rows[2]["connector"]) == ("laravel", None)
     assert request_telemetry_of(answered).status is not rows[0]["status"]
 
 
@@ -399,6 +402,30 @@ def test_a_question_asked_over_http_becomes_a_row_of_the_asker_and_a_real_durati
     assert telemetry.lane is Lane.FAST
     assert telemetry.status is RequestStatus.ANSWERED
     assert telemetry.duration_ms > 0
+
+
+def test_a_question_that_read_a_source_names_it_on_its_row_and_one_that_read_none_names_none(
+    routed: tuple[TestClient, Kept],
+) -> None:
+    """**M27.1.5's connector, through the route.** A question a rule answers from the registered
+    source names that source; a question no rule matches read nothing and names none.
+
+    What breaks if this is deleted: the column stays empty on every row, and a connector's page
+    counts no question that read it however many did."""
+    client, kept = routed
+
+    for question in ("what is the price of WEB-1001", "what colour is the sky"):
+        answered = client.post(
+            f"{API_PREFIX}/answer",
+            headers={"authorization": f"Bearer {token_for('u_wide')}"},
+            json={"question": question},
+        )
+        assert answered.status_code == 200
+
+    read, unread = (request_telemetry_of(one) for one in kept.seen)
+    assert (read.connector, read.tool_count) == (SOURCE, 1)
+    # Its one call, if the route had a model step to hand it, is a passage search: no source.
+    assert unread.connector is None
 
 
 # --- the table ------------------------------------------------------------------------------
@@ -778,6 +805,28 @@ def test_requests_through_the_route_are_rows_and_a_service_level_reading_is_read
     )
     assert (answer.requests, task.requests) == (0, 0)
     assert not fast.met and not answer.met and not task.met
+
+
+def test_the_source_a_question_read_is_on_its_ledger_row_in_the_database(empty: str) -> None:
+    """**A question that read a connector names it on its row**, end to end: the real route, the
+    real lane and the recorder, into this database. The withheld and the absent question read the
+    same source and name it alike; the question no rule matches names none.
+
+    What breaks if this is deleted: the recorder's insert drops the column, and every route test
+    above stays green over a ledger that never holds it."""
+    for client in client_on(empty):
+        for pid, question in (
+            ("u_wide", "what is the price of WEB-1001"),
+            ("u_narrow", "what is the cost of WEB-1001"),
+            ("u_narrow", "what colour is the sky"),
+        ):
+            assert ask(client, pid, question).status_code == 200
+
+    assert sql(empty, "SELECT connector FROM obs.request_telemetry ORDER BY received_at") == [
+        (SOURCE,),
+        (SOURCE,),
+        (None,),
+    ]
 
 
 def test_a_process_started_with_a_database_installs_the_ledger_recorder(database: str) -> None:

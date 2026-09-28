@@ -24,13 +24,21 @@ request and a request about nothing are one status in `brain.ops.telemetry.Reque
 `nothing_returned` is one figure and is never split: splitting it is the count of what people
 were refused. See `A_REFUSAL_AND_AN_ABSENCE_ARE_ONE_FIGURE`.
 
-**A figure nothing records is named, and never served as nought.** A skill's invocations have
-no writer (`brain.console.agent_tabs.SkillInvocation` is a shape nothing fills), a connector's
-live reads are `brain.ops.telemetry.UNFILLABLE_TODAY["connector"]`, and a run's cost has no
-writer on the request path while `brain.console.agent_profile.RUN_SPEND_IS_RECORDED` is false.
-Each is an `Unrecorded` row with its sentence, which is
-`brain.agent_routes.A_FIGURE_NOTHING_STORES_IS_ABSENT_AND_NEVER_NOUGHT` applied to a page of
-figures rather than to one headline.
+**A skill's runs and a source's live reads are uses, and a use belongs to the person who asked.**
+A skill's runs are `agent.skill_invocation` rows, one per skill per finished request, written by
+`brain.ops.usage_store`; a source's live reads are `obs.request_telemetry` rows whose `connector`
+names it (`brain.ops.telemetry.FILLED_BY_A_SOURCE_READ`). Both carry the person, so both are
+counted at the basis an agent's requests are, `brain.console.agent_tabs.usage_basis`, with the
+predicate in the statement and applied again here by `counted`, the one function all three
+figures ask. A skill's runs are narrowed once more, to the agents the reader may see: a run by an
+agent outside their audience is a fact about that agent, and counting it would be the count the
+audience withholds. See `A_USE_IS_COUNTED_AT_THE_READERS_BASIS_AND_ONLY_THROUGH_AGENTS_THEY_SEE`.
+
+**A figure this page does not count is named, and never served as nought.** A run's cost has no
+writer on the request path while `brain.console.agent_profile.RUN_SPEND_IS_RECORDED` is false,
+and a channel's answers are not told apart from its other messages. Each is an `Unrecorded` row
+with its sentence, which is `brain.agent_routes.A_FIGURE_NOTHING_STORES_IS_ABSENT_AND_NEVER_NOUGHT`
+applied to a page of figures rather than to one headline.
 
 **Two periods, the last seven and the last thirty days, from `brain.console.workspace.window`.**
 The same function the agent headline asks, so a thirty-day figure here and the headline's
@@ -46,7 +54,7 @@ the reader may not see.
 Scope: domain logic. Nothing here opens a connection or reads a clock; `now` and the rows are
 parameters.
 
-Task ids: M27.15.27, M27.15.33
+Task ids: M27.15.8, M27.15.9, M27.15.27, M27.15.33
 """
 
 from __future__ import annotations
@@ -55,11 +63,11 @@ import statistics
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Final
+from typing import Final, Protocol
 
 from brain.console.workspace import Basis, Range, window
 from brain.ops.connector_sync import SyncOutcome
-from brain.ops.telemetry import UNFILLABLE_TODAY, RequestStatus
+from brain.ops.telemetry import RequestStatus
 from brain.tables.channel import DeliveryOutcome, Direction
 
 # ------------------------------------------------------------------ written-down reasons
@@ -77,6 +85,15 @@ A_REFUSAL_AND_AN_ABSENCE_ARE_ONE_FIGURE: Final = (
     "The request ledger records a refused request and a request about nothing under one status, "
     "nothing_returned, because a status separating them is a count of what people were refused. "
     "So an agent's page shows how many requests returned nothing and never how many were denied."
+)
+
+#: Why a skill's runs and a source's live reads are counted as an agent's requests are.
+A_USE_IS_COUNTED_AT_THE_READERS_BASIS_AND_ONLY_THROUGH_AGENTS_THEY_SEE: Final = (
+    "A skill run or a live read is somebody's request, so it is counted at the basis the agent's "
+    "requests are: everybody's for a reader of everybody's usage and their own otherwise, with "
+    "the person in the WHERE clause. A skill's runs are also counted only through agents the "
+    "reader may see, because a run by any other agent is a fact about an agent they may not be "
+    "told exists."
 )
 
 #: Why an entity outside a reader's reach and one that does not exist are one answer.
@@ -136,27 +153,6 @@ RUN_COST_IS_NOT_RECORDED: Final = Unrecorded(
     ),
 )
 
-#: Why a skill's invocations are not shown.
-SKILL_RUNS_ARE_NOT_RECORDED: Final = (
-    Unrecorded(
-        figure="runs_that_used_it",
-        why=(
-            "no table records that a run invoked a skill: the invocation shape exists and "
-            "nothing writes one, so a count here would be nought rather than a measurement"
-        ),
-    ),
-    Unrecorded(
-        figure="last_used",
-        why="no table records that a run invoked a skill, so there is no last use to read",
-    ),
-)
-
-#: Why a connector's live reads are not shown. The sentence is the request ledger's own.
-LIVE_READS_ARE_NOT_RECORDED: Final = (
-    Unrecorded(figure="live_reads", why=UNFILLABLE_TODAY["connector"]),
-    Unrecorded(figure="last_live_read", why=UNFILLABLE_TODAY["connector"]),
-)
-
 #: Why a channel's answers are served as messages sent.
 CHANNEL_ANSWERS_ARE_NOT_TOLD_APART: Final = Unrecorded(
     figure="answered",
@@ -199,6 +195,39 @@ class RunFigures:
     p50_latency_ms: float | None
 
 
+class Attributed(Protocol):
+    """A row that belongs to one person at one instant: a request, a skill's run, a live read."""
+
+    @property
+    def principal_id(self) -> str: ...
+
+    @property
+    def at(self) -> datetime: ...
+
+
+def counted[T: Attributed](
+    rows: Iterable[T],
+    *,
+    caller_id: str,
+    basis: Basis,
+    since: datetime,
+    until: datetime,
+) -> tuple[T, ...]:
+    """The rows this reader may be counted over, inside one window, in the order given.
+
+    The basis is applied here whatever the statement already applied. See the module
+    docstring: the statement's predicate keeps other people's rows out of the process, and this
+    keeps them out of the figure. One function for every figure over somebody's rows, so an
+    agent's requests, a skill's runs and a source's reads cannot disagree about whose they are.
+    """
+    return tuple(
+        one
+        for one in rows
+        if _within(one.at, since, until)
+        and (basis is Basis.EVERYONE or one.principal_id == caller_id)
+    )
+
+
 def counted_runs(
     runs: Iterable[Run],
     *,
@@ -207,18 +236,8 @@ def counted_runs(
     since: datetime,
     until: datetime,
 ) -> tuple[Run, ...]:
-    """The requests this reader may be counted over, inside one window, in the order given.
-
-    The basis is applied here whatever the statement already applied. See the module
-    docstring: the statement's predicate keeps other people's rows out of the process, and this
-    keeps them out of the figure.
-    """
-    return tuple(
-        one
-        for one in runs
-        if _within(one.at, since, until)
-        and (basis is Basis.EVERYONE or one.principal_id == caller_id)
-    )
+    """An agent's requests this reader may be counted over: `counted`, for `Run`."""
+    return counted(runs, caller_id=caller_id, basis=basis, since=since, until=until)
 
 
 def run_figures(
@@ -241,10 +260,10 @@ def run_figures(
 
 
 def last_active(
-    runs: Iterable[Run], *, caller_id: str, basis: Basis, since: datetime, until: datetime
+    rows: Iterable[Attributed], *, caller_id: str, basis: Basis, since: datetime, until: datetime
 ) -> datetime | None:
-    """The newest request this reader may be counted over, or None when there is none."""
-    kept = counted_runs(runs, caller_id=caller_id, basis=basis, since=since, until=until)
+    """The newest row this reader may be counted over, or None when there is none in the window."""
+    kept = counted(rows, caller_id=caller_id, basis=basis, since=since, until=until)
     return max((one.at for one in kept), default=None)
 
 
@@ -295,6 +314,42 @@ def versions_added(
     return sum(1 for skill, at in submitted if skill == name and _within(at, since, until))
 
 
+@dataclass(frozen=True)
+class SkillRun:
+    """One finished request that used a skill: which agent ran it, for whom, and when.
+
+    One `agent.skill_invocation` row. The recorder writes one per skill per finished request,
+    so a count of these is a count of runs that used the skill.
+    """
+
+    agent_id: str
+    principal_id: str
+    at: datetime
+
+
+def skill_runs(
+    runs: Iterable[SkillRun],
+    *,
+    agents: frozenset[str],
+    caller_id: str,
+    basis: Basis,
+    since: datetime,
+    until: datetime,
+) -> tuple[SkillRun, ...]:
+    """The runs of one skill this reader may be counted over, inside one window.
+
+    Through an agent the reader may see and at their basis, both applied here whatever the
+    statement applied. See `A_USE_IS_COUNTED_AT_THE_READERS_BASIS_AND_ONLY_THROUGH_AGENTS_THEY_SEE`.
+    """
+    return counted(
+        (one for one in runs if one.agent_id in agents),
+        caller_id=caller_id,
+        basis=basis,
+        since=since,
+        until=until,
+    )
+
+
 # --------------------------------------------------------------------------- a connector
 @dataclass(frozen=True)
 class Attempt:
@@ -302,6 +357,14 @@ class Attempt:
 
     at: datetime
     outcome: SyncOutcome
+
+
+@dataclass(frozen=True)
+class LiveRead:
+    """One request whose readers read this source live: for whom, and when. Never what was read."""
+
+    principal_id: str
+    at: datetime
 
 
 @dataclass(frozen=True)
@@ -321,8 +384,16 @@ class AttemptFigures:
 def attempt_figures(
     attempts: Iterable[Attempt], *, since: datetime, until: datetime
 ) -> AttemptFigures:
-    """What the worker's attempts came to inside one window."""
-    kept = [one for one in attempts if _within(one.at, since, until)]
+    """What the worker's attempts came to inside one window.
+
+    A test a person asked for (`SyncOutcome.PROBED`) is not a read and is not counted, here as in
+    the statement that fetches the attempts, so a caller handing one in cannot inflate the figures.
+    """
+    kept = [
+        one
+        for one in attempts
+        if one.outcome is not SyncOutcome.PROBED and _within(one.at, since, until)
+    ]
     return AttemptFigures(
         attempts=len(kept),
         read_to_the_end=sum(1 for one in kept if one.outcome is SyncOutcome.SYNCED),

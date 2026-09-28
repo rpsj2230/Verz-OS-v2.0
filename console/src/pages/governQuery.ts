@@ -1,46 +1,25 @@
 /**
- * What the four govern screens ask the API for, and what may be sent back. No React.
+ * What the Roles and permissions screens ask the API for, and the rules about what may be sent back.
+ * No React.
  *
- * The split is `recordsQuery.ts`'s and `matrixQuery.ts`'s, and the same one `paging.ts` makes:
- * this decides what may be asked and what a column is, the pages render it. The reason is the
- * case that is always wrong. What a form does about a field it must not send cannot be tested
- * through a component that mounts a form library and a table.
- *
- * **One query module for four screens, and the reason is that they are one API surface.**
- * `brain.govern_routes` serves all four and the two writes, with one refusal shape and one set
- * of rules about counts; four modules would be four places to keep that in step, and the first
- * one to drift would be whichever screen somebody edited last.
+ * Until 2026-09-29 this module also carried the old People screen's grant-holder listing and its
+ * schema-form grants. The People pages were rebuilt on the page kit over the directory of every
+ * person (`people/peopleQuery.ts`), and the grant forms became plain fields there, so that half is
+ * gone; the three sentences below are kept because the new pages keep their rules.
  *
  * **Nothing here decides who may see what.** The request is identical for every caller, the API
- * answers from grants this browser never receives, and a refusal comes back as a value rendered
- * in the API's own words. `editable` on the people page decides whether a control is drawn and
- * decides nothing else. See `A_HIDDEN_CONTROL_IS_NOT_A_REFUSAL`.
+ * answers from grants this browser never receives, and a refusal comes back as a value rendered in
+ * the API's own words. See `A_HIDDEN_CONTROL_IS_NOT_A_REFUSAL`.
  *
- * **No screen here renders a number about its own rows.** Not a total, not a page number, not
- * the count of what arrived, and these are the screens where that rule earns its keep: every
- * listing behind them is filtered per caller, so "showing 3" is the subtraction `CLAUDE.md`
- * forbids rather than a footer. `truncated` is a flag and says a page came back full.
+ * **No screen here renders a number about its own rows.** Every listing behind them is filtered
+ * per caller, so "showing 3" is the subtraction `CLAUDE.md` forbids rather than a footer.
  *
- * **A grant is proposed at a named scope, and the names offered are the ones the Scopes screen
- * showed.** There is no control here for typing a predicate, because
- * `brain.govern_routes.GrantProposal` has no field one could travel in: the body carries a
- * slug. See `A_SCOPE_IS_CHOSEN_BY_NAME_AND_NEVER_TYPED`.
- *
- * **A grant may carry an expiry, and a grant to several people is all or nothing.** The expiry is
- * `not_after`, an instant the API judges against the grantor's own reach; the form refuses one
- * already past before anything is sent, because the API's refusal for it is the ordinary sentence
- * and would not say what to change. The several-people body is the single grant's fields with the
- * person made a list, and the route writes every one or none; see `A_GRANT_TO_SEVERAL_NAMES_NOBODY`.
- *
- * Task ids: M27.7.3, M27.7.4, M27.7.5, M27.7.6, M27.7.7, M27.11.2
+ * Task ids: M27.7.4, M27.7.5, M27.7.6, M27.11.3, M1.3.2, M1.1.5, M1.8.4
  */
 
-import type { RJSFSchema, UiSchema } from "@rjsf/utils";
 import type { components } from "../api/schema";
-import { NO_QUESTION, listPath, type FilterChoice, type SortChoice } from "../components/listing";
+import type { FilterChoice, SortChoice } from "../components/listing";
 
-/** One subject and what this reader may be told they hold, as `PersonView` sends it. */
-export type PersonRow = components["schemas"]["PersonView"];
 /** One of the six roles, as `RoleView` sends it. */
 export type RoleRow = components["schemas"]["RoleView"];
 /** One registered capability and what it reaches, as `CapabilityView` sends it. */
@@ -85,56 +64,24 @@ export const A_SCOPE_IS_CHOSEN_BY_NAME_AND_NEVER_TYPED =
   "whatever this form offered, and a slug from another install is refused there too.";
 
 /** Where the API keeps each screen. */
-export const PEOPLE_API_PATH = "/govern/people";
 export const ROLES_API_PATH = "/govern/roles";
 export const CAPABILITIES_API_PATH = "/govern/capabilities";
 export const SCOPES_API_PATH = "/govern/scopes";
-export const GRANTS_API_PATH = "/govern/grants";
-export const REMOVAL_API_PATH = "/govern/grants/removal";
-/** One grant written for each of several people, or for none. `brain.govern_routes.grant_several`. */
-export const SEVERAL_GRANTS_API_PATH = "/govern/grants/several";
 
-/** The console addresses. The first is also where a subject's own page begins. */
+/** Where a person's page begins, for the addresses built from a literal first segment. */
 export const PEOPLE_PATH = "/people";
-export const ROLES_PATH = "/roles";
-export const CAPABILITIES_PATH = "/capabilities";
-export const SCOPES_PATH = "/scopes";
-
-/** The one query parameter the people and scopes routes declare. */
-export const LIMIT_PARAMETER = "limit";
 
 /**
- * How many scopes the grant form asks for to offer as slugs: the most one page may carry, which is
- * also every scope the route loads. Asserted against the route's declared maximum in
- * `tests/govern-pages.test.tsx`, because a size the route refuses is a form that never loads.
- */
-export const SCOPE_CHOICES_PAGE_SIZE = 200;
-
-/** The request the grant form makes for the scopes it may offer. No search, no filter. */
-export function scopeChoicesApiPath(): string {
-  return listPath(SCOPES_API_PATH, NO_QUESTION, null, SCOPE_CHOICES_PAGE_SIZE);
-}
-
-/**
- * The request for one subject's row, when a subject is open.
+ * A console address under People, from a constant prefix and an encoded key.
  *
- * A filter on the subject the address names, so the open subject is found whichever page of the
- * list it would sit on. The route answers it over the subjects this reader may see, so a key that
- * matches nothing is the same answer as a key nobody holds.
+ * GHSA-wrjc-x8rr-h8h6 is an open redirect through a backslash reaching `useNavigate`, it covers
+ * every react-router this project can install, and the defence is that the address starts with a
+ * literal path segment and the rest is encoded. `skillsQuery` and `memoryQuery` build theirs the
+ * same way for the same reason.
  */
-export function subjectApiPath(subject: string): string {
-  return listPath(PEOPLE_API_PATH, { ...NO_QUESTION, filters: { subject } }, null, 1);
+export function subjectAddress(subject: string): string {
+  return `${PEOPLE_PATH}/${encodeURIComponent(subject)}`;
 }
-
-/** The filters the people route declares that this screen offers, over values on rows drawn. */
-export const PEOPLE_FILTERS: readonly FilterChoice<PersonRow>[] = [
-  { column: "capabilities", label: "Capability", everything: "Any capability", read: (row) => row.capabilities },
-];
-
-export const PEOPLE_SORTS: readonly SortChoice[] = [
-  { value: "", label: "By subject" },
-  { value: "-subject", label: "By subject, last first" },
-];
 
 /** The filters the scopes route declares that this screen offers, over values on rows drawn. */
 export const SCOPE_FILTERS: readonly FilterChoice<ScopeRowView>[] = [
@@ -143,125 +90,14 @@ export const SCOPE_FILTERS: readonly FilterChoice<ScopeRowView>[] = [
     label: "Kind",
     everything: "Every scope",
     read: (row) => row.is_department,
-    describe: (value) => (value === "true" ? "A department" : "Named"),
+    describe: (value) => (value === "true" ? "A department's own" : "Named"),
   },
 ];
 
 export const SCOPE_SORTS: readonly SortChoice[] = [
-  { value: "", label: "By slug" },
-  { value: "label", label: "By label" },
+  { value: "", label: "By short name" },
+  { value: "label", label: "By name" },
 ];
-
-/**
- * The console address for one subject's page.
- *
- * Built from a constant prefix and an encoded key, for the reason `rungAddress` gives:
- * GHSA-wrjc-x8rr-h8h6 is an open redirect through a backslash reaching `useNavigate`, it
- * covers every react-router this project can install, and the defence is that the address
- * starts with a literal path segment. The key is `principal:u_1`, so the encoding is not
- * decoration either: a bare colon in a path segment is legal and a bare one in some of the
- * shapes a subject key can take is not.
- */
-export function subjectAddress(subject: string): string {
-  return `${PEOPLE_PATH}/${encodeURIComponent(subject)}`;
-}
-
-/**
- * The principal id inside a subject key, or null when the key is not a principal's.
- *
- * `brain.identity.teams.PrincipalSubject.key` is `principal:<id>` and `TeamSubject`'s is
- * `team:<path>`. A removal names a principal, because `gate.capability_grant` has a
- * `principal_id` column and no column for a team, so a team's row is one this console can show
- * and cannot offer a control on. Returning null rather than guessing is what makes that a
- * decision here instead of a request the API refuses for a reason nobody can see.
- */
-export const PRINCIPAL_PREFIX = "principal:";
-
-export function principalIn(subject: string): string | null {
-  return subject.startsWith(PRINCIPAL_PREFIX) ? subject.slice(PRINCIPAL_PREFIX.length) : null;
-}
-
-/** One page of people, as this console holds it. No total, deliberately. */
-export interface PeoplePage {
-  readonly people: readonly PersonRow[];
-  /** Whether this caller may write a grant. Presentation only. */
-  readonly editable: boolean;
-  /** The page came back full. Never how much more there is. */
-  readonly truncated: boolean;
-  /** Whether this caller may disable or reinstate somebody's sign-in. Presentation only. */
-  readonly mayDisable: boolean;
-  /** What disabling somebody does and does not do, in the API's words, for its confirmation. */
-  readonly disabling: string;
-}
-
-const NO_PEOPLE: PeoplePage = Object.freeze({
-  people: [],
-  editable: false,
-  truncated: false,
-  mayDisable: false,
-  disabling: "",
-});
-
-/**
- * Read `brain.govern_routes.PeoplePage` out of a response body.
- *
- * **`total` and `next_cursor` stop here**, in the same way and for the same reason
- * `readMatrixPage` drops the total: not "we agree not to render it" but no path from the
- * payload to a renderer. `PeoplePage` inherits `total` from `brain.api.Page` and never
- * populates it, and a screen holding the field is a screen one line away from showing it.
- *
- * An unreadable body yields an empty page rather than throwing, which is `readMatrixPage`'s
- * choice and for its reason: the shape is fixed by a response model in this repository, so a
- * body that is not a page is a console built against a different API and there is no sentence
- * worth composing about it.
- */
-export function readPeoplePage(payload: unknown): PeoplePage {
-  if (typeof payload !== "object" || payload === null) {
-    return NO_PEOPLE;
-  }
-  const body = payload as {
-    items?: unknown;
-    editable?: unknown;
-    truncated?: unknown;
-    may_disable?: unknown;
-    disabling?: unknown;
-  };
-  if (!Array.isArray(body.items)) {
-    return NO_PEOPLE;
-  }
-  return {
-    people: body.items as PersonRow[],
-    editable: body.editable === true,
-    truncated: body.truncated === true,
-    mayDisable: body.may_disable === true,
-    disabling: typeof body.disabling === "string" ? body.disabling : "",
-  };
-}
-
-/** One page of scopes, and the department names a filter may offer. */
-export interface ScopesPage {
-  readonly scopes: readonly ScopeRowView[];
-  readonly departments: readonly string[];
-  readonly truncated: boolean;
-}
-
-const NO_SCOPES: ScopesPage = Object.freeze({ scopes: [], departments: [], truncated: false });
-
-/** Read `brain.govern_routes.ScopePage` out of a response body. See `readPeoplePage`. */
-export function readScopesPage(payload: unknown): ScopesPage {
-  if (typeof payload !== "object" || payload === null) {
-    return NO_SCOPES;
-  }
-  const body = payload as { items?: unknown; departments?: unknown; truncated?: unknown };
-  if (!Array.isArray(body.items)) {
-    return NO_SCOPES;
-  }
-  return {
-    scopes: body.items as ScopeRowView[],
-    departments: Array.isArray(body.departments) ? (body.departments as string[]) : [],
-    truncated: body.truncated === true,
-  };
-}
 
 /** Read `brain.govern_routes.RoleCatalogue` out of a response body. */
 export function readRoles(payload: unknown): readonly RoleRow[] {
@@ -279,345 +115,6 @@ export function readCapabilities(payload: unknown): readonly CapabilityRow[] {
   }
   const found = (payload as { capabilities?: unknown }).capabilities;
   return Array.isArray(found) ? (found as CapabilityRow[]) : [];
-}
-
-/** The subject with this key among the ones on the page, or null. */
-export function personIn(people: readonly PersonRow[], subject: string): PersonRow | null {
-  return people.find((one) => one.subject === subject) ?? null;
-}
-
-/**
- * The bounds and the grammar `POST /api/v1/govern/grants` declares, copied here so the form can
- * refuse a value without spending a request.
- *
- * A copy, and therefore checked against the original rather than against itself: the test reads
- * the request body schema out of the generated OpenAPI document, which is produced from
- * `brain.app.create_app` and carries the bounds pydantic derived from the route's own model.
- */
-export const MAX_PRINCIPAL_CHARS = 128;
-export const MAX_REASON_CHARS = 500;
-export const MIN_SLUG_CHARS = 2;
-export const MAX_SLUG_CHARS = 60;
-
-/** The fields a grant proposal may send, in the order the form shows them. */
-export const PROPOSAL_FIELDS = [
-  "principal_id",
-  "capability",
-  "scope_slug",
-  "reason",
-  "not_after",
-] as const;
-
-/** The ones it must send. An expiry is optional: none is a grant that stands until removed. */
-export const REQUIRED_PROPOSAL_FIELDS = ["principal_id", "capability", "scope_slug", "reason"] as const;
-
-/**
- * The expiry field, as every grant form here draws it. An instant rather than a date, because
- * `not_after` is one and a date would have to pick a time of day and a zone on the person's behalf;
- * the library's date-time widget sends the moment the person chose, in UTC.
- */
-const EXPIRY_PROPERTY: RJSFSchema = Object.freeze<RJSFSchema>({
-  type: "string",
-  title: "not_after",
-  format: "date-time",
-  description: "When it lapses. Leave it empty for a grant that stands until somebody removes it.",
-});
-
-/** What is said when an expiry already past is chosen. Before anything is sent. */
-export const EXPIRY_ALREADY_PAST =
-  "Choose an expiry that is still to come, or leave it empty; nothing has been sent.";
-
-/**
- * Whether an expiry is one the API would refuse for being past, judged against the browser's clock.
- *
- * A courtesy and never the rule: the API judges `not_after` against its own instant and against the
- * grantor's reach whatever this said. What it buys is a sentence saying what to change, where the
- * API's refusal is the ordinary one that names nothing.
- */
-export function expiryAlreadyPast(notAfter: string | undefined, now: Date): boolean {
-  if (notAfter === undefined) {
-    return false;
-  }
-  const at = Date.parse(notAfter);
-  return !Number.isNaN(at) && at <= now.getTime();
-}
-
-/** An expiry as the form holds it, as the instant the API is sent: null for none or unreadable. */
-function expiryIn(value: unknown): string | null | undefined {
-  if (value === undefined || value === null || value === "") {
-    return undefined;
-  }
-  if (typeof value !== "string") {
-    return null;
-  }
-  const at = Date.parse(value);
-  return Number.isNaN(at) ? null : new Date(at).toISOString();
-}
-
-/**
- * The form a grant is written through.
- *
- * **A schema written here, from the route's own request model, and not one the API sent.** The
- * same honesty `RECORDS_QUERY_SCHEMA` states about itself: no route returns a JSON Schema, so
- * the form is exercised over a document this console assembled. What makes it more than a
- * hand-written form is that every bound in it is the route's bound and is checked against the
- * route's own description.
- *
- * There is no `granted_by` and no `scope`. The first is the caller, taken from the token by the
- * route, and a box for it would be a grant attributable to whoever the browser named; the
- * second is the predicate, and see `A_SCOPE_IS_CHOSEN_BY_NAME_AND_NEVER_TYPED`. `not_after` is
- * optional (M27.11.2): empty is a grant that stands until removed, which `may_grant` permits only
- * from a grantor whose own reach does not lapse.
- *
- * Frozen and built once per scope list, because `SchemaForm` memoises on the schema's identity
- * and the ajv validator recompiles whenever it changes.
- */
-export function proposalSchema(slugs: readonly string[]): RJSFSchema {
-  return Object.freeze<RJSFSchema>({
-    type: "object",
-    required: [...REQUIRED_PROPOSAL_FIELDS],
-    properties: {
-      principal_id: {
-        type: "string",
-        title: "principal_id",
-        minLength: 1,
-        maxLength: MAX_PRINCIPAL_CHARS,
-      },
-      capability: { type: "string", title: "capability", minLength: 1 },
-      // An enumeration rather than a text box, and the members are what the Scopes screen
-      // answered this reader. A slug they were not offered is refused by the route, so this is
-      // presentation; what it buys is that the ordinary case needs no typing and no guessing.
-      scope_slug: {
-        type: "string",
-        title: "scope_slug",
-        minLength: MIN_SLUG_CHARS,
-        maxLength: MAX_SLUG_CHARS,
-        ...(slugs.length > 0 ? { enum: [...slugs] } : {}),
-      },
-      reason: { type: "string", title: "reason", minLength: 1, maxLength: MAX_REASON_CHARS },
-      not_after: EXPIRY_PROPERTY,
-    },
-  });
-}
-
-/** Presentation only. The submit text is the sentence, so the button says what it does. */
-export const PROPOSAL_UI: UiSchema = Object.freeze<UiSchema>({
-  "ui:submitButtonOptions": { submitText: "Write this grant" },
-});
-
-/** The body of one grant, as the route's `GrantProposal` model declares it. */
-export interface GrantProposal {
-  readonly principal_id: string;
-  readonly capability: string;
-  readonly scope_slug: string;
-  readonly reason: string;
-  /** When it lapses, as an instant. Absent for a grant that stands until removed. */
-  readonly not_after?: string;
-}
-
-/**
- * What the form submitted, or null if it was not a proposal.
- *
- * **Assembled from four named keys rather than passed through.** That is the difference between
- * a body this console composed and a body the form library handed over: a `granted_by` or a
- * `scope` in the form's state, from a schema change, a merge or a browser extension, has
- * nowhere here to travel. The route forbids both keys as well, and both are wanted: the route
- * stops them arriving and this stops them being sent, so a person never sees a 422 about a
- * field they did not fill in.
- *
- * Null means the shape was not what this screen asked for, and the caller does nothing. A write
- * assembled out of values nobody recognised is a write nobody meant to make, and a grant is the
- * most expensive wrong write in this console.
- */
-export function submittedProposal(data: unknown): GrantProposal | null {
-  if (typeof data !== "object" || data === null) {
-    return null;
-  }
-  const fields = data as Record<string, unknown>;
-  const principal = fields["principal_id"];
-  const capability = fields["capability"];
-  const slug = fields["scope_slug"];
-  const reason = fields["reason"];
-  if (
-    typeof principal !== "string" ||
-    typeof capability !== "string" ||
-    typeof slug !== "string" ||
-    typeof reason !== "string"
-  ) {
-    return null;
-  }
-  if (principal === "" || capability === "" || slug === "" || reason === "") {
-    return null;
-  }
-  const notAfter = expiryIn(fields["not_after"]);
-  if (notAfter === null) {
-    return null;
-  }
-  return {
-    principal_id: principal,
-    capability,
-    scope_slug: slug,
-    reason,
-    ...(notAfter === undefined ? {} : { not_after: notAfter }),
-  };
-}
-
-// ------------------------------------------------- a grant to several people (M27.11.2)
-
-/** Written down because the helpful version of a partial failure names the person it failed on. */
-export const A_GRANT_TO_SEVERAL_NAMES_NOBODY =
-  "A grant to several people is written for every one of them or for none, and when it is " +
-  "refused the refusal is the one a single grant gets. It never says which person was refused, " +
-  "because that would say who does not exist or already holds the grant, which is a fact about " +
-  "somebody else. This console lists the people chosen before it sends, and after a refusal it " +
-  "says nothing about any one of them.";
-
-/** The most people one grant to several may name: the route's bound, checked against its document. */
-export const MOST_GRANTED_AT_ONCE = 50;
-
-/** The fields the several-people form draws, in order. The people are chosen on the list. */
-export const SEVERAL_FIELDS = ["capability", "scope_slug", "reason", "not_after"] as const;
-
-/** The form a grant to several is written through: the single grant's form without the person. */
-export function severalSchema(slugs: readonly string[]): RJSFSchema {
-  const single = proposalSchema(slugs).properties as Record<string, RJSFSchema>;
-  return Object.freeze<RJSFSchema>({
-    type: "object",
-    required: ["capability", "scope_slug", "reason"],
-    properties: Object.fromEntries(SEVERAL_FIELDS.map((field) => [field, single[field] ?? {}])),
-  });
-}
-
-export const SEVERAL_UI: UiSchema = Object.freeze<UiSchema>({
-  "ui:submitButtonOptions": { submitText: "Review the grant to each person chosen" },
-});
-
-/** The body of a grant to several, as `SeveralGrantProposal` declares it. */
-export interface SeveralProposal {
-  readonly principal_ids: readonly string[];
-  readonly capability: string;
-  readonly scope_slug: string;
-  readonly reason: string;
-  readonly not_after?: string;
-}
-
-/**
- * What the several-people form submitted, for these people, or null if it was not a proposal.
- *
- * Built from the single grant's reader, one person at a time, so the two bodies cannot disagree
- * about what a field means; the people come from the list and never from the form.
- */
-export function submittedSeveral(data: unknown, principalIds: readonly string[]): SeveralProposal | null {
-  if (principalIds.length === 0) {
-    return null;
-  }
-  const fields = typeof data === "object" && data !== null ? (data as Record<string, unknown>) : null;
-  if (fields === null) {
-    return null;
-  }
-  const one = submittedProposal({ ...fields, principal_id: principalIds[0] });
-  if (one === null) {
-    return null;
-  }
-  const { principal_id: _first, ...rest } = one;
-  return { principal_ids: [...principalIds], ...rest };
-}
-
-/** The body of one removal, as the route's `GrantRemoval` model declares it. */
-export interface GrantRemoval {
-  readonly principal_id: string;
-  readonly capability: string;
-}
-
-// ------------------------------------------------------------ packs (M1.4.3)
-
-export const PACKS_API_PATH = "/govern/packs";
-export const PACK_ASSIGNMENT_API_PATH = "/govern/packs/assignment";
-
-/** One pack as `GET /api/v1/govern/packs` answers it. */
-export interface PackRow {
-  readonly slug: string;
-  readonly label: string;
-  readonly capabilities: readonly string[];
-}
-
-/** The packs a reader may choose from; empty for a reader who may not name capabilities. */
-export function readPacks(payload: unknown): readonly PackRow[] {
-  if (typeof payload !== "object" || payload === null) {
-    return [];
-  }
-  const found = (payload as { packs?: unknown }).packs;
-  return Array.isArray(found) ? (found as PackRow[]) : [];
-}
-
-/** The fields a pack assignment sends, in the order the form shows them. */
-export const PACK_FIELDS = ["principal_id", "pack_slug", "scope_slug", "reason"] as const;
-
-/**
- * The form a pack is assigned through, with the bounds `PackProposal` declares. The pack and the
- * scope are chosen from what this reader was answered; a scope that restricts nothing is refused
- * by the route, because a pack assignment must be bound to a scope.
- */
-export function packSchema(packs: readonly string[], slugs: readonly string[]): RJSFSchema {
-  return Object.freeze<RJSFSchema>({
-    type: "object",
-    required: [...PACK_FIELDS],
-    properties: {
-      principal_id: { type: "string", title: "principal_id", minLength: 1, maxLength: MAX_PRINCIPAL_CHARS },
-      pack_slug: {
-        type: "string",
-        title: "pack_slug",
-        minLength: MIN_SLUG_CHARS,
-        maxLength: MAX_SLUG_CHARS,
-        ...(packs.length > 0 ? { enum: [...packs] } : {}),
-      },
-      scope_slug: {
-        type: "string",
-        title: "scope_slug",
-        minLength: MIN_SLUG_CHARS,
-        maxLength: MAX_SLUG_CHARS,
-        ...(slugs.length > 0 ? { enum: [...slugs] } : {}),
-      },
-      reason: { type: "string", title: "reason", minLength: 1, maxLength: MAX_REASON_CHARS },
-    },
-  });
-}
-
-export const PACK_UI: UiSchema = Object.freeze<UiSchema>({
-  "ui:submitButtonOptions": { submitText: "Assign this pack" },
-});
-
-/** The body of one pack assignment. */
-export interface PackProposal {
-  readonly principal_id: string;
-  readonly pack_slug: string;
-  readonly scope_slug: string;
-  readonly reason: string;
-}
-
-/** What the pack form submitted, assembled from four named keys, or null. */
-export function submittedPack(data: unknown): PackProposal | null {
-  if (typeof data !== "object" || data === null) {
-    return null;
-  }
-  const fields = data as Record<string, unknown>;
-  const principal_id = fields["principal_id"];
-  const pack_slug = fields["pack_slug"];
-  const scope_slug = fields["scope_slug"];
-  const reason = fields["reason"];
-  if (
-    typeof principal_id !== "string" ||
-    typeof pack_slug !== "string" ||
-    typeof scope_slug !== "string" ||
-    typeof reason !== "string" ||
-    principal_id === "" ||
-    pack_slug === "" ||
-    scope_slug === "" ||
-    reason === ""
-  ) {
-    return null;
-  }
-  return { principal_id, pack_slug, scope_slug, reason };
 }
 
 // ------------------------------------------------- the Approver flag (M1.8.4)
@@ -646,31 +143,6 @@ export const APPOINTMENT_API_PATH = "/govern/roles/appointment";
 export const DEPUTY_API_PATH = "/govern/roles/deputy";
 export const ROLE_REMOVAL_API_PATH = "/govern/roles/removal";
 
-/** One role grant as `GET /api/v1/govern/roles/holders` answers it. */
-export interface HolderRow {
-  readonly id: string;
-  readonly principal_id: string;
-  readonly role: string;
-  readonly deputy_of: string | null;
-  readonly not_after: string | null;
-}
-
-export interface HoldersPage {
-  readonly items: readonly HolderRow[];
-  readonly editable: boolean;
-}
-
-export function readHolders(payload: unknown): HoldersPage {
-  if (typeof payload !== "object" || payload === null) {
-    return { items: [], editable: false };
-  }
-  const found = payload as { items?: unknown; editable?: unknown };
-  return {
-    items: Array.isArray(found.items) ? (found.items as HolderRow[]) : [],
-    editable: found.editable === true,
-  };
-}
-
 /** The six roles, as the route's `Role` enum spells them. */
 export const ROLE_VALUES = [
   "super_admin",
@@ -683,70 +155,6 @@ export const ROLE_VALUES = [
 
 /** The longest a deputy may run, `brain.identity.roles.DEPUTY_MAX`. */
 export const DEPUTY_DAYS = 30;
-
-export interface AppointmentBody {
-  readonly principal_id: string;
-  readonly role: string;
-  readonly reason: string;
-  readonly scope_slug?: string;
-  readonly acknowledgement?: string;
-}
-
-/** What the appointment form submitted, from named keys only, or null. */
-export function submittedAppointment(data: unknown): AppointmentBody | null {
-  if (typeof data !== "object" || data === null) {
-    return null;
-  }
-  const fields = data as Record<string, unknown>;
-  const principal = fields["principal_id"];
-  const role = fields["role"];
-  const reason = fields["reason"];
-  if (typeof principal !== "string" || typeof role !== "string" || typeof reason !== "string") {
-    return null;
-  }
-  if (principal === "" || role === "" || reason === "") {
-    return null;
-  }
-  const slug = fields["scope_slug"];
-  const acknowledgement = fields["acknowledgement"];
-  return {
-    principal_id: principal,
-    role,
-    reason,
-    ...(typeof slug === "string" && slug !== "" ? { scope_slug: slug } : {}),
-    ...(typeof acknowledgement === "string" && acknowledgement !== "" ? { acknowledgement } : {}),
-  };
-}
-
-export interface DeputyBody {
-  readonly grant_id: string;
-  readonly principal_id: string;
-  readonly days: number;
-  readonly reason: string;
-}
-
-export function submittedDeputy(data: unknown): DeputyBody | null {
-  if (typeof data !== "object" || data === null) {
-    return null;
-  }
-  const fields = data as Record<string, unknown>;
-  const grantId = fields["grant_id"];
-  const principal = fields["principal_id"];
-  const days = fields["days"];
-  const reason = fields["reason"];
-  if (
-    typeof grantId !== "string" ||
-    typeof principal !== "string" ||
-    typeof days !== "number" ||
-    typeof reason !== "string" ||
-    grantId === "" ||
-    principal === "" ||
-    reason === ""
-  ) {
-    return null;
-  }
-  return { grant_id: grantId, principal_id: principal, days, reason };
-}
 
 // ------------------------------------------------- directory group mapping (M1.1.5)
 
@@ -786,36 +194,5 @@ export function readGroupRules(payload: unknown): GroupRulesPage {
     rules: Array.isArray(found.rules) ? (found.rules as GroupRuleRow[]) : [],
     synced: Array.isArray(found.synced) ? (found.synced as SyncedRow[]) : [],
     editable: found.editable === true,
-  };
-}
-
-export interface GroupRuleBody {
-  readonly idp_group: string;
-  readonly role: string;
-  readonly reason: string;
-  readonly scope_slug?: string;
-}
-
-/** What the mapping form submitted, from named keys only, or null. */
-export function submittedGroupRule(data: unknown): GroupRuleBody | null {
-  if (typeof data !== "object" || data === null) {
-    return null;
-  }
-  const fields = data as Record<string, unknown>;
-  const group = fields["idp_group"];
-  const role = fields["role"];
-  const reason = fields["reason"];
-  if (typeof group !== "string" || typeof role !== "string" || typeof reason !== "string") {
-    return null;
-  }
-  if (group.trim() === "" || role === "" || reason === "") {
-    return null;
-  }
-  const slug = fields["scope_slug"];
-  return {
-    idp_group: group.trim(),
-    role,
-    reason,
-    ...(typeof slug === "string" && slug !== "" ? { scope_slug: slug } : {}),
   };
 }

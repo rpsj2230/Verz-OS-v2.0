@@ -374,7 +374,7 @@ export function profileConsequence(profile: string): string {
   return profile === HOSTED_PROFILE
     ? "From the next question, the text of a question and the passages found for it may be sent " +
         "to the online providers below that are turned on and hold a key. Each provider's region, " +
-        "retention and training terms are under Advanced."
+        "retention and training terms are on its own page."
     : "From the next question, no text leaves this server. The online providers below stop being " +
         "used, and a question that needs a model goes unanswered unless one runs on this server.";
 }

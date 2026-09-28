@@ -69,6 +69,9 @@ ignore = [
 "src/brain/ops/sweeps.py" = ["N818"]  # SweepFailure reads as a result, not an error type
 # docs_routes embeds a complete HTML page; CSS declarations are not wrapped at 100 columns.
 "src/brain/docs_routes.py" = ["E501"]
+# brain.routers mounts every router it imports, read off its own names: each import is the
+# registration, so an import no statement reads is the point rather than dead code.
+"src/brain/routers.py" = ["F401"]
 
 # ---------------------------------------------------------------- mypy
 [tool.mypy]

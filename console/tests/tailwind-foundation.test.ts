@@ -56,19 +56,36 @@ function declaredLayerOrder(): string[] {
   return (statements[0]?.[1] ?? "").split(",").map((one) => one.trim());
 }
 
+/**
+ * Every module page rebuilt on the kit: each directory directly under `src/pages`, read from the
+ * disk rather than listed, so a module that moves edits no line in this file. The old pages are the
+ * files in `src/pages` itself, never a directory, which is what lets one glob in `tailwind.css`
+ * read the one set and not the other.
+ */
+function kitModuleDirectories(): string[] {
+  return readdirSync(join(CONSOLE_ROOT, "src", "pages"))
+    .filter((name) => statSync(join(CONSOLE_ROOT, "src", "pages", name)).isDirectory())
+    .sort()
+    .map((name) => `src/pages/${name}`);
+}
+
 /** The directories the component layer added, whose class names are meant to be utilities. */
 const COMPONENT_LAYER_DIRECTORIES = [
   "src/components/ui",
   "src/components/kit",
-  "src/pages/agents",
-  "src/pages/connectors",
-  "src/pages/overview",
-  "src/pages/knowledge",
-  "src/pages/credentials",
+  ...kitModuleDirectories(),
   "src/hooks",
   "src/lib",
   "src/layout",
 ];
+
+/** Every file under a directory, relative to the console. */
+function filesUnder(directory: string): string[] {
+  return readdirSync(join(CONSOLE_ROOT, directory)).flatMap((name) => {
+    const path = `${directory}/${name}`;
+    return statSync(join(CONSOLE_ROOT, path)).isDirectory() ? filesUnder(path) : [path];
+  });
+}
 
 /**
  * Every class name an old page can carry: the old sheets' class selectors, and every word of every
@@ -219,13 +236,26 @@ describe("what Tailwind generates", () => {
       "../components/ui",
       "../layout",
       "../components/kit",
-      "../pages/agents",
-      "../pages/connectors",
-      "../pages/overview",
-      "../pages/knowledge",
-      "../pages/credentials",
+      "../pages/*/**",
     ]);
     expect(layer.candidates).toContain("bg-primary");
+  });
+
+  test("the one glob reads every file of every kit module and not one old page", async () => {
+    // What breaks if this is deleted: the glob is what replaced a line per module, so a glob that
+    // stopped one level down, or one widened to `pages` itself, would pass the test above. Widened,
+    // it reads every old page file and generates a utility for every word in them; narrowed, a
+    // kit module's classes compile to nothing and its page draws unstyled. So the files the scanner
+    // actually read are compared with the files on disk.
+    const read = new Set((await compileLayer()).files.map((one) => relative(CONSOLE_ROOT, one).split("\\").join("/")));
+    const modules = kitModuleDirectories();
+    expect(modules).toContain("src/pages/agents");
+
+    const moduleFiles = modules.flatMap(filesUnder).filter((one) => /\.(tsx?|css)$/.test(one));
+    expect(moduleFiles.filter((one) => !read.has(one))).toEqual([]);
+    const oldPages = readdirSync(join(CONSOLE_ROOT, "src", "pages")).filter((name) => /\.tsx?$/.test(name));
+    expect(oldPages.length).toBeGreaterThan(50);
+    expect(oldPages.map((name) => `src/pages/${name}`).filter((one) => read.has(one))).toEqual([]);
   });
 
   test("no class name an old page uses comes out as a utility, whatever Tailwind reads", async () => {

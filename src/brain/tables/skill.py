@@ -317,3 +317,71 @@ class SkillCategoryRow(Base):
         CheckConstraint(f"set_by ~ '{IDENTIFIER}'", name="set_by_is_an_identifier"),
         {"schema": "agent"},
     )
+
+
+class SkillRetirementRow(Base):
+    """`agent.skill_retirement`. A version retired, or reinstated, once per row. `0139`.
+
+    The newest row for a digest is its state and the rows before it are what it was, the shape
+    `SkillCategoryRow` has; a digest with no row was never retired. Keyed to `agent.skill` by the
+    digest, because retiring bytes nobody added would be a statement about nothing. A retired
+    version stays in the library and on every agent already running it: only a new assignment is
+    refused (M27.15.56).
+    """
+
+    __tablename__ = "skill_retirement"
+
+    #: The order rows were written in, which is what "newest" means here.
+    seq: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
+    digest: Mapped[str] = mapped_column(
+        String(DIGEST_CHARS), ForeignKey("agent.skill.digest"), nullable=False
+    )
+    #: True from this row on the version is retired; false, it is reinstated.
+    retired: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    #: Who retired or reinstated it. The ledger entry's actor, read off this column by the trigger.
+    set_by: Mapped[str] = mapped_column(String(PRINCIPAL_ID_CHARS), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(f"set_by ~ '{IDENTIFIER}'", name="set_by_is_an_identifier"),
+        {"schema": "agent"},
+    )
+
+
+class SkillDetachmentRow(Base):
+    """`agent.skill_detachment`. One skill taken off one agent, by one person. `0139`.
+
+    Names the assignment it ends when the skill got there by one, held by a key and unique, so an
+    assignment is ended at most once; a skill the template pinned has no assignment and the column
+    is empty. The current assignments are those no detachment names and no later assignment of the
+    same skill to the same agent replaced, so nothing is ever updated to say one ended (M27.15.55).
+    """
+
+    __tablename__ = "skill_detachment"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    assignment_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("agent.skill_assignment.id"), nullable=True
+    )
+    agent_id: Mapped[str] = mapped_column(String(AGENT_ID_CHARS), nullable=False)
+    skill_name: Mapped[str] = mapped_column(String(NAME_CHARS), nullable=False)
+    #: The bytes the agent ran when it was detached.
+    digest: Mapped[str] = mapped_column(String(DIGEST_CHARS), nullable=False)
+    #: Who detached it. The ledger entry's actor, read off this column by the trigger.
+    detached_by: Mapped[str] = mapped_column(String(PRINCIPAL_ID_CHARS), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(f"agent_id ~ '{IDENTIFIER}'", name="agent_id_is_an_identifier"),
+        CheckConstraint(f"skill_name ~ '{SKILL_NAME_PATTERN}'", name="skill_name_shape"),
+        CheckConstraint(f"digest ~ '{DIGEST}'", name="digest_shape"),
+        CheckConstraint(f"detached_by ~ '{IDENTIFIER}'", name="detached_by_is_an_identifier"),
+        UniqueConstraint("assignment_id", name="uq_skill_detachment_assignment_id"),
+        {"schema": "agent"},
+    )

@@ -30,7 +30,7 @@ from brain.models.evidence import (
     outcome_of,
     replayed,
 )
-from brain.models.metering import Meter, MeteringError, ModelRoute, ModelUsage
+from brain.models.metering import AnsweredCall, Meter, MeteringError, ModelRoute, ModelUsage
 from brain.models.routing import (
     BREAKER_CONSECUTIVE_FAILURES,
     BREAKER_MAX_COOLDOWN_SECONDS,
@@ -105,6 +105,12 @@ def test_tokens_are_summed_over_answers_and_a_failed_attempt_counts_as_a_call_an
         agent_version=None,
         fallback_count=1,
         retry_count=0,
+        # The one call that came back, by itself, for the price book (M27.12.5).
+        answered=(
+            AnsweredCall(
+                provider="anthropic", model="claude-sonnet-5", tokens_in=100, tokens_out=20
+            ),
+        ),
     )
 
 

@@ -64,7 +64,9 @@ each week's timesheets on Friday" can. See
 Rejected: a global automations list with an agent filter. It is one query instead of many and
 it is the arrangement M39.6.1.1 exists to refuse: the filter is the part that gets omitted,
 and the page that results is every scheduled thing in the company under one heading. Every
-listing here takes an agent id with no value meaning all of them.
+listing here takes an agent id with no value meaning all of them. The Automations module's list
+(`brain.automations_routes`) keeps to that: it is the union, over the agents a reader may see,
+of each agent's own `automations_for`, so it is never asked for the estate.
 
 Rejected: a second stop mechanism scoped to one automation. `Halt` has no automation scope and
 adding one would mean a switch `brain.ops.admission` does not consult, which is the value class
@@ -81,7 +83,10 @@ its registry entry together and refuses one without the other.
 `brain.console.automation_gallery` serves, and since 2026-09-17 the installed automations too:
 `brain.automation_schedule_routes` lists them through `automations_for` and `history`, and starts
 and stops them through `resume` and `pause`, with who may do which decided in
-`brain.console.automation_schedule`. Removing one still has no route.
+`brain.console.automation_schedule`. Since 2026-09-29 the Automations module pauses, resumes,
+reschedules, removes and adopts them as rows in `agent.automation_change`, decided in
+`brain.console.automations`; a removal is such a row and never a deletion, so `remove` below is
+the shape of the value and nothing writes it as a delete.
 
 **The ninth leaf in this group, M39.6.1.3, is claimed elsewhere, and this paragraph used to
 decline it.** It said a set of common automations was a set of outcomes somebody at a particular

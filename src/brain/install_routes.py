@@ -131,7 +131,7 @@ would be this module deciding that, from the side that renders.
 Scope: five read-only routes. Nothing here writes, and the only session anything here would need
 is the one it deliberately does not open.
 
-Task ids: M27.7.25, M27.7.27, M42.3.9, M38.1.3.5, M23.1.1, M23.2.1
+Task ids: M27.7.25, M27.7.27, M42.3.9, M38.1.3.5, M23.1.1, M23.2.1, M27.15.51
 """
 
 from __future__ import annotations
@@ -175,6 +175,7 @@ from brain.deployment.release_feed import ReleaseWatch, feed_address
 from brain.ops.admission import Ceiling
 from brain.ops.backup_manifest import DRILL_SUFFIX, MANIFEST_SUFFIX, read_drills, read_manifests
 from brain.ops.deployment_history import History, history_from, recorded
+from brain.ops.features import RELEASE_CHECK, is_on
 from brain.ops.install_from_empty import read_plan
 from brain.ops.limit_store import UNREACHABLE_POLICY, Availability, WindowsUnreadableError
 from brain.ops.limits import DeclaredWindow, Limit, LimiterState, ceilings, declared_windows
@@ -1184,8 +1185,20 @@ async def updates(request: Request, asked: Asked) -> UpdatesView:
     _permitted(asked.reach, "updates", asked.now)
     settings = settings_of(request)
     manifest = read_manifest()
+    found = getattr(request.app.state, "db_sessions", None)
+    factory = found if isinstance(found, async_sessionmaker) else None
+    # The environment's switch or the console's (M27.15.51), read after the capability so a
+    # refused caller cannot make this server look. A switch that cannot be read is off, for
+    # `read_history`'s reason: the version panel is still true and is what the reader came for.
+    switched_on = settings.release_check
+    if not switched_on and factory is not None:
+        try:
+            async with factory() as session:
+                switched_on = await is_on(session, RELEASE_CHECK)
+        except SQLAlchemyError as error:
+            log.warning("release check switch not read", error=type(error).__name__)
     told = release_watch_of(request).answer(
-        feed_address(switched_on=settings.release_check, url=settings.release_feed_url),
+        feed_address(switched_on=switched_on, url=settings.release_feed_url),
         now=asked.now,
     )
     panel = updates_view(
@@ -1198,8 +1211,6 @@ async def updates(request: Request, asked: Asked) -> UpdatesView:
             now=asked.now,
         )
     )
-    found = getattr(request.app.state, "db_sessions", None)
-    factory = found if isinstance(found, async_sessionmaker) else None
     return panel.model_copy(update={"history": await read_history(factory)})
 
 

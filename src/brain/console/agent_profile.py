@@ -43,11 +43,14 @@ lower a rung, so the page states the most the agent could do, which is the direc
 description of supervision may err in. See
 `THE_LEASH_SHOWN_IS_THE_CONFIGURED_ONE_AND_A_RUN_MAY_ONLY_BE_HELD_LOWER`.
 
-**Nothing writes a run's cost, and the page is told so rather than shown nought.**
-`brain.ops.spend_store.record` has no caller, so every headline is 0.00 over no rows.
-`RUN_SPEND_IS_RECORDED` is served beside the figure, and `spend_writers` reads the source for a
-caller of that function, so the day something starts writing cost the constant is a failing
-test rather than a page still saying nothing is recorded. See
+**Whether anything writes a run's cost is read off the source, and served beside the figure.**
+Until 2026-09-28 `brain.ops.spend_store.record` had no caller, every headline was 0.00 over no
+rows, and `RUN_SPEND_IS_RECORDED` told the page so rather than let it draw nought.
+`brain.ops.usage_store.UsageRecorder` now writes each request's cost when the lane finishes it
+(M27.12.5), so the constant is True, and `spend_writers` still reads the source for a caller of
+that function, so the day the writer goes the constant is a failing test rather than a page
+drawing nought as a measurement. A call to a model with no price is not costed, and the Models
+screen names every such model. See
 `A_FIGURE_NOTHING_WRITES_IS_SERVED_WITH_THE_STATEMENT_THAT_NOTHING_WRITES_IT`.
 
 Scope: domain logic. Nothing here opens a connection, reads a clock or renders markup.
@@ -105,20 +108,20 @@ THE_LEASH_SHOWN_IS_THE_CONFIGURED_ONE_AND_A_RUN_MAY_ONLY_BE_HELD_LOWER: Final = 
     "page states the most the agent could do and never less."
 )
 
-#: Why a figure nothing writes travels with a statement saying so.
+#: Why a figure travels with the statement of whether anything writes it.
 A_FIGURE_NOTHING_WRITES_IS_SERVED_WITH_THE_STATEMENT_THAT_NOTHING_WRITES_IT: Final = (
-    "Nothing in this product calls brain.ops.spend_store.record, so every agent's spend is "
+    "When nothing in this product calls brain.ops.spend_store.record, every agent's spend is "
     "0.00 over no rows and every run count is nought. Nought is a measurement, and a page "
     "drawing it says the agent cost nothing. The figure is sent with RUN_SPEND_IS_RECORDED so "
-    "the page can say it is not recorded yet, and spend_writers reads the source so the "
-    "statement fails a test the day something starts writing cost."
+    "the page can say it is not recorded, and spend_writers reads the source so the statement "
+    "fails a test the day the writer arrives or goes."
 )
 
 # ------------------------------------------------------------------------ the vocabulary
 
-#: Whether anything records what a run of an agent cost. Nothing does: see
-#: `A_FIGURE_NOTHING_WRITES_IS_SERVED_WITH_THE_STATEMENT_THAT_NOTHING_WRITES_IT`.
-RUN_SPEND_IS_RECORDED: Final = False
+#: Whether anything records what a run of an agent cost. `brain.ops.usage_store` does, since
+#: 2026-09-28: see `A_FIGURE_NOTHING_WRITES_IS_SERVED_WITH_THE_STATEMENT_THAT_NOTHING_WRITES_IT`.
+RUN_SPEND_IS_RECORDED: Final = True
 
 #: The module and the function whose callers are the writers of a run's cost.
 SPEND_STORE_MODULE: Final = "brain.ops.spend_store"
