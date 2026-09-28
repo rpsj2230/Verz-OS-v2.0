@@ -88,6 +88,11 @@ from brain.tables.gate import (
 )
 from brain.tables.group_role_rule import GroupRoleRuleRow
 from brain.tables.halt import HaltRow
+from brain.tables.manifest_draft import (
+    ManifestActRow,
+    ManifestDraftRow,
+    ManifestRevisionRow,
+)
 from brain.tables.identity import (
     DirectoryRoleGrantRow,
     PrincipalIdentityRow,
@@ -387,6 +392,11 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # detachment at the assignment it ends, so both follow them; the people are values.
     "agent.skill_retirement",
     "agent.skill_detachment",
+    # 0149_agent_manifest_draft. A revision points at its draft and an act at its revision; the
+    # agent is named by value, because a new agent's row exists only once it is published.
+    "agent.manifest_draft",
+    "agent.manifest_revision",
+    "agent.manifest_act",
 )
 
 __all__ = [
@@ -445,6 +455,9 @@ __all__ = [
     "KnowledgeItemRow",
     "LearningRow",
     "LegalHoldRow",
+    "ManifestActRow",
+    "ManifestDraftRow",
+    "ManifestRevisionRow",
     "MessageRole",
     "MessageRow",
     "ModelAttemptRow",

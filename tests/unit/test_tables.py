@@ -139,6 +139,7 @@ MIGRATION_ACCEPTANCE = VERSIONS / "0133_acceptance_result.py"
 MIGRATION_HALT = VERSIONS / "0136_ops_halt.py"
 MIGRATION_BINDING_CODE = VERSIONS / "0118_channel_binding_codes.py"
 MIGRATION_SKILL_LIFECYCLE = VERSIONS / "0139_skill_retirement_and_detachment.py"
+MIGRATION_MANIFEST_DRAFT = VERSIONS / "0149_agent_manifest_draft.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -375,6 +376,12 @@ BINDING_CODE_TABLES: tuple[str, ...] = ("auth.binding_code",)
 SKILL_INVOCATION_TABLES: tuple[str, ...] = ("agent.skill_invocation",)
 #: And the two 0139 adds: a version retired or reinstated, and a skill detached from an agent.
 SKILL_LIFECYCLE_TABLES: tuple[str, ...] = ("agent.skill_retirement", "agent.skill_detachment")
+#: And the three 0149 adds: an agent's drafts, their revisions and what was done to each.
+MANIFEST_DRAFT_TABLES: tuple[str, ...] = (
+    "agent.manifest_draft",
+    "agent.manifest_revision",
+    "agent.manifest_act",
+)
 
 SENSITIVE_READ_TABLES: tuple[str, ...] = ("ops.sensitive_read",)
 
@@ -454,6 +461,7 @@ ALL_TABLES = (
     + BINDING_CODE_TABLES
     + SKILL_INVOCATION_TABLES
     + SKILL_LIFECYCLE_TABLES
+    + MANIFEST_DRAFT_TABLES
 )
 
 
@@ -1270,6 +1278,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert binding_code.TABLES == BINDING_CODE_TABLES
     skill_lifecycle = migration_module(MIGRATION_SKILL_LIFECYCLE)
     assert skill_lifecycle.TABLES == SKILL_LIFECYCLE_TABLES
+    manifest_draft = migration_module(MIGRATION_MANIFEST_DRAFT)
+    assert manifest_draft.TABLES == MANIFEST_DRAFT_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1358,6 +1368,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(binding_code.TABLES)
         + tuple(skill_invocation.TABLES)
         + tuple(skill_lifecycle.TABLES)
+        + tuple(manifest_draft.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1427,6 +1438,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(binding_code.TABLES),
         set(skill_invocation.TABLES),
         set(skill_lifecycle.TABLES),
+        set(manifest_draft.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

@@ -83,13 +83,12 @@ a new version of a template id somebody else first published; `approval_refusals
 second person on every publish, which is the existing control, and lineage ownership is not
 modelled anywhere in this repository to be reused.
 
-**Persistence is the next step and it is not here.** `DraftStore` is the protocol a table has
-to satisfy and `MemoryDraftStore` is the implementation the tests use, which is the arrangement
-`brain.agents.upgrade.Declines` and `brain.ops.budgets` are both in. The table is two
-append-only relations, revisions keyed by draft and number and publications keyed by draft and
-revision, granted SELECT and INSERT and never UPDATE or DELETE, which is how
-`agent.template_version` makes the same promise. No migration is written here. A draft does not
-yet survive a restart.
+**Persistence is `0149`'s, for a draft of one agent.** `DraftStore` is the protocol for a
+template's draft and `MemoryDraftStore` the implementation its tests use. The console's drafts are
+drafts of one agent, which `brain.builder.agent_drafts` composes from the functions here, and
+`brain.builder.draft_store` keeps them in `agent.manifest_draft`, `agent.manifest_revision` and
+`agent.manifest_act`: append-only, granted SELECT and INSERT and never UPDATE or DELETE, which is
+how `agent.template_version` makes the same promise.
 
 Scope: domain logic. Nothing here opens a connection, renders anything or reads a clock; every
 instant is a parameter.
@@ -515,6 +514,20 @@ def _checked(
             for one in error.errors(include_url=False, include_input=False, include_context=False)
         )
     return manifest, ()
+
+
+def whole_manifest(
+    document: Mapping[str, Any], *, version: int, publisher: str
+) -> tuple[TemplateManifest | None, tuple[Problem, ...]]:
+    """The manifest this document is once publishing has set its version and publisher, or every
+    reason it is not one. `_checked`, named for a caller outside this module."""
+    return _checked(document, version=version, publisher=publisher)
+
+
+def body_text(document: object) -> str:
+    """The canonical text a save keeps, or a refusal for a body that is not a JSON object.
+    `_body`, named for a caller outside this module."""
+    return _body(document)
 
 
 def validity(revision: Revision) -> Validity:
