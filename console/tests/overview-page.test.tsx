@@ -1,284 +1,297 @@
 /**
- * The overview, which is the console's only claim about who is signed in.
+ * The Overview, the first screen an administrator sees: a health strip, the last week's figures,
+ * Needs you, recent activity and quick actions, each from the route that owns it.
  *
- * **Every fact on it came from `GET /api/v1/me`.** The console holds an opaque token it
- * never decodes, so the alternative to asking is reading a claim, which is the one thing
- * `scripts/check-boundaries.mjs` refuses by name. The first test here is therefore about the
- * list of fields being the API's list and not a list somebody here remembered: it reads the
- * names off `brain.api_routes.CallerView` in the Python source, so a field added there and
- * not here fails rather than arriving and being dropped.
+ * **A queue the reader may not act on is absent, never nought.** The route leaves it out, and the
+ * page must add nothing in its place: no list of queues filled with zeros. **A figure nothing
+ * records is "Not recorded yet" with the API's reason, and never 0.** **A block whose route answers
+ * a plain 404 is not this reader's and is left out**, while any other failure is drawn with its
+ * reference. **Identifiers are only in Advanced.**
  *
- * **The page must add nothing.** Not a sentence about assurance, not a lock over a null, not
- * an explanation of a 404. The route's 404 means the token authenticated and its subject maps
- * to no principal this company wrote down, and saying so is the console explaining a refusal
- * it did not observe.
+ * Mounted through the real route table and shell with the stand-in API from `support/pageCases.ts`,
+ * and the readers are held against raw bodies, so a test of what the page draws is not also a test
+ * of what the reader built.
  *
- * Task ids: M32.5.1.1, M32.5.1.2
+ * Task ids: M27.15.17, M27.16.1
  */
 
-import { render, waitFor } from "@testing-library/react";
-import { describe, expect, test } from "vitest";
-import { CALLER_FIELDS, ME_PATH, READY_PATH } from "../src/pages/Overview";
+import { createMemoryRouter, RouterProvider } from "react-router-dom";
+import { cleanup, render, waitFor } from "@testing-library/react";
+import { beforeAll, describe, expect, test } from "vitest";
+import { NOT_RECORDED } from "../src/components/kit";
+import {
+  ACTIVITY,
+  AGENTS_LABEL,
+  ANSWERED_LABEL,
+  COST_LABEL,
+  NEEDS_YOU,
+  NOT_COUNTED,
+  NOTHING_RETURNED_LABEL,
+  NOTHING_WAITING,
+  QUICK_ACTIONS,
+  SOURCES_LABEL,
+} from "../src/pages/overview/OverviewPage";
+import {
+  activeAgents,
+  connectedSources,
+  queueLabel,
+  readFigures,
+  readOverview,
+  recentActivity,
+} from "../src/pages/overview/overviewQuery";
 import { fakeIdentityProvider, loadConsole, signIn } from "./support/auth";
-import { backendCallerViewFields, backendPublicMessages } from "./support/python";
+import { COMPANY_CONSOLE, NAVIGATION_ADDRESS, addressesOf, departmentConsole } from "./support/navigation";
+import { PAGES, UNBROKEN } from "./support/pageCases";
+import { installRadixStubs } from "./support/radix";
 
-/** A caller whose every field is its own sentinel, so a dropped one cannot hide. */
-const A_CALLER = {
-  principal_id: "PRINCIPAL-SENTINEL",
-  display_name: "DISPLAY-SENTINEL",
-  primary_department: "DEPARTMENT-SENTINEL",
-  employment: "EMPLOYMENT-SENTINEL",
-  assurance: "ASSURANCE-SENTINEL",
-  channel: "CHANNEL-SENTINEL",
-  ent_hash: "ENTHASH-SENTINEL",
-};
+const CASE = PAGES["/"];
+if (CASE === undefined) {
+  throw new Error("The Overview has no page case.");
+}
+const ANSWERS = CASE.answers;
+const OVERVIEW = "/api/v1/console/overview";
+const AGENTS = "/api/v1/agents";
+const AUDIT = "/api/v1/audit";
 
-interface Answer {
-  readonly status?: number;
-  readonly body: unknown;
-  readonly traceId?: string;
+beforeAll(() => {
+  installRadixStubs();
+});
+
+/** The reference a refused or failed answer carries, which the page must show for a failure. */
+const TRACE = "trace-overview";
+
+interface Page {
+  readonly root: Element;
 }
 
-/** Mount the overview against a stand-in `/api/v1/me`, and wait for it to settle. */
-async function overviewAnswering(answer: Answer): Promise<HTMLElement> {
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json", "x-trace-id": TRACE },
+  });
+}
+
+/**
+ * The console at `/`, signed in, with the page case's answers changed by `changes`, and each path in
+ * `statuses` answered with that status instead. Read once nothing on the page is still loading.
+ */
+async function overviewWith(
+  changes: Readonly<Record<string, unknown>> = {},
+  statuses: Readonly<Record<string, number>> = {},
+): Promise<Page> {
+  cleanup();
+  localStorage.clear();
+  sessionStorage.clear();
+  const answers: Readonly<Record<string, unknown>> = { ...ANSWERS, ...changes };
   const idp = fakeIdentityProvider({
     api(url) {
-      if (!url.endsWith(`/api/v1${ME_PATH}`)) {
-        return null;
+      const path = new URL(url, "https://console.test").pathname;
+      const status = statuses[path];
+      if (status !== undefined) {
+        return json({ message: "The API explained itself.", trace_id: TRACE }, status);
       }
-      return new Response(JSON.stringify(answer.body), {
-        status: answer.status ?? 200,
-        headers: {
-          "content-type": "application/json",
-          ...(answer.traceId ? { "x-trace-id": answer.traceId } : {}),
-        },
-      });
+      if (path === NAVIGATION_ADDRESS) {
+        return json(answers[NAVIGATION_ADDRESS] ?? COMPANY_CONSOLE);
+      }
+      return path in answers ? json(answers[path]) : null;
     },
   });
   const loaded = await loadConsole({ idp });
   await signIn(loaded);
-  const { Overview } = await import("../src/pages/Overview");
-  const { container } = render(<Overview />);
-  await waitFor(() => {
-    if (container.querySelector(".note[role='status']")) {
-      throw new Error("still loading");
-    }
-  });
-  return container;
+  const { routes } = await import("../src/App");
+  const router = createMemoryRouter(routes, { initialEntries: ["/"] });
+  const { container } = render(<RouterProvider router={router} />);
+  const root = (): Element => container.querySelector("main#main") ?? container;
+  await waitFor(
+    () => {
+      expect(root().querySelector("[data-slot='overview-page']")).not.toBeNull();
+      expect(root().textContent).not.toMatch(/Loading/);
+    },
+    { timeout: 10_000 },
+  );
+  return { root: root() };
 }
 
-/** The value shown beside one label, or null when the row is not on the page. */
-function valueBeside(container: HTMLElement, label: string): string | null {
-  for (const row of container.querySelectorAll(".fields__row")) {
-    if (row.querySelector("dt")?.textContent === label) {
-      return row.querySelector("dd")?.textContent ?? "";
+function section(root: Element, name: string): Element | null {
+  for (const one of root.querySelectorAll("section")) {
+    const labelled = one.getAttribute("aria-labelledby");
+    const heading = labelled === null ? null : one.ownerDocument.getElementById(labelled);
+    if (one.getAttribute("aria-label") === name || heading?.textContent === name) {
+      return one;
     }
   }
   return null;
 }
 
-describe("what the overview shows", () => {
-  test("the fields it renders are the fields the API declares", async () => {
-    // What breaks if this is deleted: a fact the API sends about the caller arrives and is
-    // silently dropped. The names are read out of the Python model rather than listed here,
-    // so this is not the console's list compared with itself: adding a field to CallerView
-    // fails this test, which is the only moment anybody will decide what to do with it.
-    expect(CALLER_FIELDS.map((field) => field.name).sort()).toEqual(
-      backendCallerViewFields().sort(),
-    );
-  });
+/** The value a figure card drew beside its label, or null when the card is not on the page. */
+function figure(root: Element, label: string): string | null {
+  for (const card of root.querySelectorAll("[data-slot='stat-card']")) {
+    if (card.querySelector("dt")?.textContent === label) {
+      return card.querySelector("dd > span")?.textContent ?? "";
+    }
+  }
+  return null;
+}
 
-  test("every fact the API sent about the caller reaches the screen", async () => {
-    // What breaks if this is deleted: the list above becomes decoration. A page could
-    // declare seven fields and render three, and the structural test would still pass. Each
-    // value is its own sentinel so that a dropped one cannot be covered by another.
-    const container = await overviewAnswering({ body: A_CALLER });
-    for (const value of Object.values(A_CALLER)) {
-      expect(container.textContent, `${value} is not on the page`).toContain(value);
+/** Text outside the Advanced section, which is the only place an identifier may appear. */
+function textOutsideAdvanced(root: Element): string {
+  const copy = root.cloneNode(true) as Element;
+  copy.querySelectorAll("[data-slot='advanced']").forEach((one) => one.remove());
+  return copy.textContent ?? "";
+}
+
+describe("what the Overview draws", () => {
+  test("Needs you draws each queue the API sent with its count and link, and no queue it did not send", async () => {
+    // What breaks if this is deleted: a Needs you that fills in the queues the reader may not act on
+    // with zeros, which says those queues exist and are being kept from them, or one that drops the
+    // count or the way to the list it counted.
+    const page = await overviewWith();
+    const needs = section(page.root, NEEDS_YOU);
+    expect(needs).not.toBeNull();
+    const lines = [...(needs?.querySelectorAll("li") ?? [])].map((one) => one.textContent ?? "");
+    expect(lines).toHaveLength(3);
+    expect(lines[0]).toContain(queueLabel("approvals"));
+    expect(lines[0]).toContain("3");
+    expect(lines[1]).toContain(`${UNBROKEN}`);
+    expect(lines[1]).toContain("at least 1");
+    expect(needs?.querySelector("a[href='/approvals']")).not.toBeNull();
+    for (const absent of ["access_review", "elevation", "skill_reviews", "knowledge_past_review"]) {
+      expect(needs?.textContent).not.toContain(queueLabel(absent));
     }
   });
 
-  test("a value is rendered as the API spelled it and gains no sentence", async () => {
-    // What breaks if this is deleted: the console starts interpreting. `assurance` is on the
-    // response because it is the one fact a person can act on, which makes it exactly the
-    // value somebody will wrap in "sign in again with your second factor". That sentence is
-    // a mapping from a value to a meaning, written in a browser, out of step with the API
-    // within a release. The cell is compared as a whole, so an addition beside the word
-    // fails as loudly as a replacement of it.
-    const container = await overviewAnswering({ body: A_CALLER });
-    expect(valueBeside(container, "Assurance")).toBe(A_CALLER.assurance);
-    expect(valueBeside(container, "Channel")).toBe(A_CALLER.channel);
+  test("a queue the API could not count says so with its reason, and draws no number", async () => {
+    // What breaks if this is deleted: a queue that could not be read shown as nought, which is the
+    // reassuring answer nobody measured.
+    const page = await overviewWith();
+    const needs = section(page.root, NEEDS_YOU);
+    const line = [...(needs?.querySelectorAll("li") ?? [])].find((one) => one.textContent?.includes(queueLabel("publish_approvals")));
+    expect(line?.textContent).toContain(NOT_COUNTED);
+    expect(line?.textContent).not.toMatch(/\d/);
+    const described = line?.querySelector("[aria-describedby]")?.getAttribute("aria-describedby");
+    expect(described === null || described === undefined ? null : page.root.ownerDocument.getElementById(described)?.textContent).toBe(UNBROKEN);
   });
 
-  test("the verbs a weak sign-in withholds and the flag arrive as the API spelled them", async () => {
-    // What breaks if this is deleted: the two fields the list above now declares can be dropped
-    // at render, because the sentinel test sends strings only. An empty list contributes no row,
-    // for the reason a missing department does, and the flag is the word the API sent.
-    const weak = await overviewAnswering({
-      body: { ...A_CALLER, withheld_verbs: ["admin", "approve"], second_factor_needed: true },
-    });
-    expect(valueBeside(weak, "Verbs withheld at this sign-in")).toBe("adminapprove");
-    expect(valueBeside(weak, "Second factor needed")).toBe("true");
-
-    const strong = await overviewAnswering({
-      body: { ...A_CALLER, withheld_verbs: [], second_factor_needed: false },
-    });
-    expect(valueBeside(strong, "Verbs withheld at this sign-in")).toBeNull();
-    expect(valueBeside(strong, "Second factor needed")).toBe("false");
+  test("a reader with nothing waiting is told so, and not shown a list of noughts", async () => {
+    // What breaks if this is deleted: an empty Needs you drawn as a blank card that reads as loading.
+    const body = ANSWERS[OVERVIEW] as Record<string, unknown>;
+    const page = await overviewWith({ [OVERVIEW]: { ...body, needs_you: [], uncounted: [] } });
+    expect(section(page.root, NEEDS_YOU)?.textContent).toContain(NOTHING_WAITING);
   });
 
-  test("a caller with no department has no row where one would be", async () => {
-    // What breaks if this is deleted: an empty row, which is a shape where a fact would be.
-    // `primary_department` is nullable and a caller can legitimately have none, so absence
-    // has to contribute nothing at all: no label, no gap, no dash. Two people comparing
-    // screens can read a shape as easily as they can read a value.
-    const container = await overviewAnswering({
-      body: { ...A_CALLER, primary_department: null },
-    });
-    expect(valueBeside(container, "Department")).toBeNull();
-    expect(valueBeside(container, "Employment")).toBe(A_CALLER.employment);
+  test("the figure row draws the API's counts, and cost as not recorded rather than as nought", async () => {
+    // What breaks if this is deleted: a cost drawn as 0.00, which says the company spent nothing,
+    // or refused and abstained drawn as anything other than the one figure the API sent.
+    const page = await overviewWith();
+    expect(figure(page.root, ANSWERED_LABEL)).toBe("1,847");
+    expect(figure(page.root, NOTHING_RETURNED_LABEL)).toBe("312");
+    expect(figure(page.root, AGENTS_LABEL)).toBe("1");
+    expect(figure(page.root, SOURCES_LABEL)).toBe("1");
+    // The reason is read out after the words, so the card starts with them and carries no number.
+    expect(figure(page.root, COST_LABEL)?.startsWith(NOT_RECORDED)).toBe(true);
+    expect(figure(page.root, COST_LABEL)).not.toMatch(/\d/);
   });
 
-  test("nothing on this page renders a lock", async () => {
-    // What breaks if this is deleted: an invented refusal. A lock says the API told us a
-    // field exists and withheld it, and `/me` sends no `locked` at all, so a lock here could
-    // only have been derived from a null. That would be the console asserting a refusal
-    // nobody made, in the one appearance that is supposed to mean something exact.
-    const container = await overviewAnswering({
-      body: { ...A_CALLER, primary_department: null },
+  test("a block whose route answers 404 is left out, and any other failure is drawn with its reference", async () => {
+    // What breaks if this is deleted: a reader who may not open the overview shown "I could not find
+    // that" on the first screen they see, or a fault on the audit log hidden as if there were none.
+    const refusedOverview = await overviewWith({}, { [OVERVIEW]: 404 });
+    expect(section(refusedOverview.root, NEEDS_YOU)).toBeNull();
+    expect(section(refusedOverview.root, "This install")).toBeNull();
+    expect(refusedOverview.root.textContent).not.toContain(TRACE);
+    expect(figure(refusedOverview.root, ANSWERED_LABEL)).toBe("1,847");
+
+    const brokenAudit = await overviewWith({}, { [AUDIT]: 500 });
+    expect(section(brokenAudit.root, ACTIVITY)?.textContent).toContain(TRACE);
+    expect(section(brokenAudit.root, NEEDS_YOU)).not.toBeNull();
+  });
+
+  test("the agent card counts switched-on agents, and is left out when the roster does not say which are", async () => {
+    // What breaks if this is deleted: every agent counted as active, or agents whose state the
+    // reader was not told counted as switched off.
+    const page = await overviewWith({
+      [AGENTS]: {
+        items: [
+          { agent_id: "a", display_name: "A", state: "enabled" },
+          { agent_id: "b", display_name: "B", state: "disabled" },
+        ],
+        next_cursor: "more",
+        truncated: true,
+      },
     });
-    expect(container.querySelector(".lock")).toBeNull();
+    expect(figure(page.root, AGENTS_LABEL)).toBe("1+");
+
+    const untold = await overviewWith({ [AGENTS]: { items: [{ agent_id: "a", display_name: "A" }], truncated: false } });
+    expect(figure(untold.root, AGENTS_LABEL)).toBeNull();
+  });
+
+  test("activity says what was done and to what, with no identifier outside Advanced", async () => {
+    // What breaks if this is deleted: principal ids and slugs back in the page text, which the owner
+    // found cluttered, or an activity row that cannot be followed to its entry.
+    const page = await overviewWith();
+    const activity = section(page.root, ACTIVITY);
+    expect(activity?.textContent).toContain("Granted a capability to a person");
+    expect(activity?.querySelector("a[href^='/audit?']")).not.toBeNull();
+    expect(textOutsideAdvanced(page.root)).not.toContain("f".repeat(64));
+    const advanced = page.root.querySelector("[data-slot='advanced']");
+    expect(advanced?.textContent).toContain("f".repeat(64));
+  });
+
+  test("quick actions offer only the pages in this reader's menu, and Ask always", async () => {
+    // What breaks if this is deleted: a department administrator offered "Connect a source", which
+    // opens a page their menu does not list and answers them with a refusal.
+    const company = await overviewWith();
+    const everything = [...(section(company.root, QUICK_ACTIONS)?.querySelectorAll("a") ?? [])].map((one) => one.getAttribute("href"));
+    expect(everything).toEqual(["/library", "/connectors", "/people", "/ask"]);
+
+    const department = departmentConsole("maintenance");
+    const listed = new Set(addressesOf(department as { sections: unknown }));
+    const narrower = await overviewWith({ [NAVIGATION_ADDRESS]: department });
+    const offered = [...(section(narrower.root, QUICK_ACTIONS)?.querySelectorAll("a") ?? [])].map((one) => one.getAttribute("href"));
+    expect(offered).toEqual(["/library", "/connectors", "/people", "/ask"].filter((one) => one === "/ask" || listed.has(one)));
+
+    const bare = await overviewWith({ [NAVIGATION_ADDRESS]: { console: "department", departments: ["maintenance"], sections: [] } });
+    const only = [...(section(bare.root, QUICK_ACTIONS)?.querySelectorAll("a") ?? [])].map((one) => one.getAttribute("href"));
+    expect(only).toEqual(["/ask"]);
   });
 });
 
-describe("when the API does not answer", () => {
-  test("a failure is shown in the API's own words with nothing added", async () => {
-    // What breaks if this is deleted: the console starts speaking for the API about a 404,
-    // which on this route means the token was accepted and its subject maps to no principal
-    // this company wrote down. The sentence is read out of the Python source, so this is not
-    // the console's copy compared with itself, and the assertion is that exactly that
-    // sentence and nothing else reaches the screen.
-    const sentence = backendPublicMessages()["DENIED"];
-    expect(sentence).toBeTruthy();
-
-    const container = await overviewAnswering({
-      status: 404,
-      body: { message: sentence, trace_id: "" },
-      traceId: "trace-overview",
+describe("what the readers keep", () => {
+  test("an overview line that is not a count is dropped, never drawn as nought", () => {
+    // What breaks if this is deleted: a malformed line arriving as "0 waiting".
+    const read = readOverview({
+      health: { status: "ok", parts: [], worker_last_seen: null, unrecorded: [] },
+      needs_you: [
+        { queue: "approvals", waiting: 2, at_least: false, opens: "/approvals" },
+        { queue: "elevation", waiting: -1, at_least: false, opens: "/elevation" },
+        { queue: "skill_reviews", waiting: "3", at_least: false, opens: "/skills" },
+        { queue: "access_review", waiting: 1, at_least: false, opens: "https://elsewhere.example/x" },
+      ],
+      uncounted: [],
     });
-
-    expect(container.querySelector(".notice__body")?.textContent).toBe(sentence);
-    expect(container.querySelector(".notice__trace")?.textContent).toContain("trace-overview");
-    // And no half-page of fields beside it: two answers to one question is the beginning of
-    // a reader working out which one is the real one.
-    expect(container.querySelector(".fields")).toBeNull();
+    expect(read?.needsYou.map((one) => [one.queue, one.waiting, one.opens])).toEqual([
+      ["approvals", 2, "/approvals"],
+      ["access_review", 1, undefined],
+    ]);
+    expect(readOverview({ needs_you: [] })).toBeNull();
   });
 
-  test("a page still waiting is not reported as a caller with no facts", async () => {
-    // What breaks if this is deleted: the overview flashes an empty field list before its
-    // first answer arrives. That is a statement about somebody's identity made before
-    // anybody asked, and on a slow connection it is the screen they remember.
-    const idp = fakeIdentityProvider({
-      api() {
-        return new Response(JSON.stringify(A_CALLER), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        });
-      },
-    });
-    const loaded = await loadConsole({ idp });
-    await signIn(loaded);
-    const { Overview } = await import("../src/pages/Overview");
-    const { container } = render(<Overview />);
-
-    expect(container.querySelector(".fields")).toBeNull();
-    expect(container.querySelector(".notice")).toBeNull();
-    expect(container.querySelector(".note[role='status']")).not.toBeNull();
-
-    await waitFor(() => {
-      expect(container.querySelector(".fields")).not.toBeNull();
-    });
-  });
-});
-
-describe("the install card", () => {
-  /** The parts `/health/ready` sends on a degraded install: sign-in down, no vault named. */
-  const DEGRADED = {
-    status: "degraded",
-    commit: "COMMIT-SENTINEL",
-    checks: { database: false, cache: true },
-    reported: { sign_in: false },
-    parts: [
-      { name: "database", state: "not_ready", gates: true },
-      { name: "cache", state: "ready", gates: true },
-      { name: "vault", state: "not_configured", gates: false },
-      { name: "sign_in", state: "not_ready", gates: false },
-    ],
-  };
-
-  async function overviewWithReadiness(status: number, body: unknown) {
-    const idp = fakeIdentityProvider({
-      api(url) {
-        const answer = url.endsWith(READY_PATH) ? { status, body } : { status: 200, body: A_CALLER };
-        return new Response(JSON.stringify(answer.body), {
-          status: answer.status,
-          headers: { "content-type": "application/json" },
-        });
-      },
-    });
-    const loaded = await loadConsole({ idp });
-    await signIn(loaded);
-    const { Overview } = await import("../src/pages/Overview");
-    const { container } = render(<Overview />);
-    await waitFor(() => {
-      if (!container.querySelector("section[aria-label='This install']")) {
-        throw new Error("the install card has not answered");
-      }
-    });
-    return { container, idp };
-  }
-
-  test("a degraded install shows each part's state from the 503's own body", async () => {
-    // What breaks if this is deleted: the card can read `/health/ready` through `useResource`,
-    // which turns a 503 into a failure and drops its body, so the one time an owner opens this
-    // card to see what is down it says only that something did not work.
-    const { container } = await overviewWithReadiness(503, DEGRADED);
-    const card = container.querySelector("section[aria-label='This install']");
-    expect(card?.querySelector("[data-part='database'] dd")?.textContent).toBe(
-      "not_readydecides readiness",
-    );
-    expect(card?.querySelector("[data-part='vault'] dd")?.textContent).toBe(
-      "not_configuredreported only",
-    );
-    expect(card?.querySelector("[data-part='sign_in'] dd")?.textContent).toBe(
-      "not_readyreported only",
-    );
-    expect(card?.textContent).toContain("degraded");
-    expect(card?.textContent).toContain("COMMIT-SENTINEL");
-    expect(card?.querySelector(".notice")).toBeNull();
+  test("figures that are not counts are no figures at all", () => {
+    // What breaks if this is deleted: a figure row drawn from a body that is not one.
+    expect(readFigures({ basis: "own", answered: 1, nothing_returned: 0, not_recorded: [] })?.answered).toBe(1);
+    expect(readFigures({ basis: "own", answered: null, nothing_returned: 0 })).toBeNull();
   });
 
-  test("the parts are drawn in the order the API sent them, at the API's root", async () => {
-    // What breaks if this is deleted: the card could ask `/api/v1/health/ready`, which is not a
-    // route, and the positive half of the test above would never run against the real address.
-    const ready = {
-      ...DEGRADED,
-      status: "ok",
-      parts: DEGRADED.parts.map((part) => ({ ...part, state: "ready" })),
-    };
-    const { container, idp } = await overviewWithReadiness(200, ready);
-    const names = [...container.querySelectorAll("[data-part]")].map((row) =>
-      row.getAttribute("data-part"),
-    );
-    expect(names).toEqual(["database", "cache", "vault", "sign_in"]);
-    expect(idp.urls.some((url) => url.endsWith(READY_PATH) && !url.includes("/api/v1"))).toBe(true);
+  test("sources are counted over the list sent, and a list nobody read is a sentence", () => {
+    // What breaks if this is deleted: an unread list drawn as nought sources.
+    expect(connectedSources({ connectors: [{ name: "a" }, { name: "b" }], unread: "" })).toEqual({ value: 2, atLeast: false });
+    expect(connectedSources({ connectors: null, unread: "nothing looked" })).toEqual({ unread: "nothing looked" });
+    expect(activeAgents({ items: [] })).toEqual({ value: 0, atLeast: false });
   });
 
-  test("an answer that is not a readiness document is a failure notice, not an empty list", async () => {
-    // What breaks if this is deleted: a proxy's error page reads as an install with no parts.
-    const { container } = await overviewWithReadiness(502, { message: "Bad gateway", trace_id: "" });
-    const card = container.querySelector("section[aria-label='This install']");
-    expect(card?.querySelector(".notice")).not.toBeNull();
-    expect(card?.querySelector("[data-part]")).toBeNull();
+  test("activity keeps at most the newest six entries the ledger sent", () => {
+    // What breaks if this is deleted: the landing screen growing into a second audit log.
+    const row = { at: "2019-03-04T09:00:00Z", action: "grant", actor_id: "u", subject_kind: "principal", subject_id: "p", details: {} };
+    expect(recentActivity({ items: Array.from({ length: 9 }, () => row) })).toHaveLength(6);
   });
 });

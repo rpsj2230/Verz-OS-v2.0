@@ -9,7 +9,7 @@
 | --- | --- |
 | `GET /api/v1/channels` | **no screen** |
 | `GET /api/v1/channels/{name}/deliveries` | **no screen** |
-| `GET /api/v1/connectors` | `/connectors`, `/connectors/:connector`, `/connectors/:connector/:view` |
+| `GET /api/v1/connectors` | `/`, `/connectors`, `/connectors/:connector`, `/connectors/:connector/:view` |
 | `GET /api/v1/connectors/lark-app` | `/connectors` |
 | `GET /api/v1/console/connectors` | `/connectors` |
 | `GET /api/v1/console/connectors/{connector}` | `/connectors/:connector`, `/connectors/:connector/:view` |

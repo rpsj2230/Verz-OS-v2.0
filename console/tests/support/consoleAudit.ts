@@ -244,7 +244,7 @@ const ONCE_BY_THE_WIZARD =
 /** Every area of the standard, keyed by the standard's own words. */
 export const AREAS: Readonly<Record<string, Area>> = {
   "People, roles, permissions and access control": {
-    screens: ["/", "/people", "/people/:subject", "/roles", "/capabilities", "/scopes", "/access_review", "/elevation", "/sessions", "/sign-in-links", "/staff_sources", "/access-requests", "/service-accounts"],
+    screens: ["/people", "/people/:subject", "/roles", "/capabilities", "/scopes", "/access_review", "/elevation", "/sessions", "/sign-in-links", "/staff_sources", "/access-requests", "/service-accounts"],
     routes: [
       "/api/v1/me",
       "/api/v1/console/navigation",
@@ -718,8 +718,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
     gaps: [],
   },
   "System health and the state of every service": {
-    screens: ["/models", "/runs"],
-    routes: [],
+    screens: ["/", "/models", "/runs"],
+    routes: ["/api/v1/console/overview/figures"],
     tables: ["ops.halt"],
     installation: [],
     gaps: [
@@ -729,7 +729,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       },
       {
         what: "The state of each service the install runs on is not shown.",
-        because: "/health/ready answers the orchestrator outside /api/v1 with no screen reading it. Each rung's circuit breaker is shown, on the Models and health screen from GET /api/v1/models/providers, replayed from the attempts the executor recorded.",
+        because: "/health/ready answers the orchestrator outside /api/v1. The Overview draws the same parts beside Needs you from GET /api/v1/console/overview, which the stats package serves (PR #165) and this install does not answer until it lands. Each rung's circuit breaker is shown, on the Models and health screen from GET /api/v1/models/providers, replayed from the attempts the executor recorded.",
       },
     ],
   },

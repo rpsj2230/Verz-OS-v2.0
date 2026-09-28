@@ -43,6 +43,10 @@ export const AWAITED_ROUTES: Readonly<Record<string, string>> = {
   "/api/v1/console/connectors/{connector}/stats":
     "The same stats package serves a source's figures; the Connectors list and a source's Dashboard " +
     "code against ConnectorStatsView and draw the failed state until it answers.",
+  "/api/v1/console/overview":
+    "The landing screen's health strip and Needs you are served by the stats package " +
+    "(brain.console_overview_routes, PR #165); the Overview codes against OverviewView and leaves both " +
+    "blocks out, as for any 404, until it answers.",
 };
 
 /** One source's figures as `brain.console_stats_routes.ConnectorStatsView` sends them. */
@@ -1039,6 +1043,10 @@ const CONNECTORS_SCREEN = {
 };
 
 export const PAGES: Readonly<Record<string, PageCase>> = {
+  // The Overview, SCREEN 1: the health strip and Needs you from the overview route, the figure row
+  // from the figures route, the roster and the Connectors list, and the audit log's newest page.
+  // Every drawn value the API sent is the unbroken token: a part's name, a queue's name, and the
+  // signed-in person's name and identifiers in Advanced.
   "/": {
     address: "/",
     signedIn: true,
@@ -1053,19 +1061,40 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         channel: "web",
         ent_hash: "f".repeat(64),
       },
-      // The install card: the four parts `brain.readiness` always names, at the API's root.
-      "/health/ready": {
-        status: "ok",
-        commit: UNBROKEN,
-        checks: { database: true },
-        reported: { sign_in: true },
-        parts: [
-          { name: "database", state: "ready", gates: true },
-          { name: "cache", state: "not_configured", gates: false },
-          { name: "vault", state: "not_configured", gates: false },
-          { name: "sign_in", state: "ready", gates: false },
+      "/api/v1/console/overview": {
+        as_of: "2019-03-04T12:00:00Z",
+        health: {
+          status: "ok",
+          parts: [
+            { name: "database", state: "ready", gates: true },
+            { name: "cache", state: "not_configured", gates: false },
+            { name: UNBROKEN, state: "ready", gates: false },
+          ],
+          worker_last_seen: "2019-03-04T11:58:00Z",
+          unrecorded: [{ figure: "halts", why: UNBROKEN }],
+        },
+        needs_you: [
+          { queue: "approvals", waiting: 3, at_least: false, opens: "/approvals" },
+          { queue: UNBROKEN, waiting: 1, at_least: true, opens: "/access_review" },
         ],
+        uncounted: [{ figure: "publish_approvals", why: UNBROKEN }],
       },
+      "/api/v1/console/overview/figures": {
+        range: "7d",
+        since: "2019-02-25T12:00:00Z",
+        until: "2019-03-04T12:00:00Z",
+        basis: "everyone",
+        answered: 1847,
+        nothing_returned: 312,
+        not_recorded: [{ figure: "cost", why: UNBROKEN }],
+      },
+      "/api/v1/agents": {
+        items: [{ agent_id: "quote-helper", display_name: UNBROKEN, owner_id: UNBROKEN, state: "enabled" }],
+        next_cursor: null,
+        truncated: false,
+      },
+      "/api/v1/connectors": { connectors: [{ name: UNBROKEN }], unread: "" },
+      "/api/v1/audit": AUDIT,
     },
   },
   // Department, SCREEN 2's overview, mounted as a department admin would open it: the stand-in API

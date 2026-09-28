@@ -105,6 +105,7 @@ const A_LOG_ROW_IS_READ_AND_NEVER_WRITTEN =
  * which must itself page, search and filter the same route.
  */
 const OVERVIEW_CARDS: Readonly<Record<string, string>> = {
+  "/": "/audit",
   "/department": "/agents",
   "/agents/:agentId/:tab": "/routing",
 };
@@ -162,6 +163,13 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
     filter: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
     sort: CHAIN_IN_ORDER,
     bulk: A_PIN_IS_ONE_AGENTS,
+  },
+  "/": {
+    page: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    search: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    filter: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    sort: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    bulk: READ_ONLY,
   },
   "/department": {
     page: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,

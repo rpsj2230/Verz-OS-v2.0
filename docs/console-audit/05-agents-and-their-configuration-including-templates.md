@@ -9,7 +9,7 @@
 | --- | --- |
 | `GET /api/v1/agent-templates` | `/agent-templates` |
 | `GET /api/v1/agent-templates/{template_id}/versions/{version}` | **no screen** |
-| `GET /api/v1/agents` | `/agents`, `/department` |
+| `GET /api/v1/agents` | `/`, `/agents`, `/department` |
 | `GET /api/v1/agents/{agent_id}/about` | **no screen** |
 | `GET /api/v1/agents/{agent_id}/lifecycle` | **no screen** |
 | `GET /api/v1/agents/{agent_id}/workspace` | `/agents/:agentId`, `/agents/:agentId/:tab` |
