@@ -72,13 +72,8 @@ def built(database: str, *, through_0069: bool) -> Iterator[str]:
         migrate(database, "stamp", "0039")
         migrate(database, "upgrade", "0040")
         migrate(database, "stamp", "0064")
-        if through_0069:
-            migrate(database, "stamp", the_migration().down_revision)
-            migrate(database, "upgrade", "0069")
-            # `0115` adds the kind and replaces the library read with one returning it (M7.6.1).
-            kind = kind_migration()
-            migrate(database, "stamp", kind.down_revision)
-            migrate(database, "upgrade", kind.revision)
+        # The rows go in before 0115, whose trigger ledgers every know.item write into
+        # obs.audit_entry, a table this reduced chain never builds; they are fixtures, not writes.
         sql(scratch, "INSERT INTO ops.control_run (name) VALUES ('canary_run')")
         for item_id, owner, visibility, department, state in ITEMS:
             sql(
@@ -92,6 +87,13 @@ def built(database: str, *, through_0069: bool) -> Iterator[str]:
                 department,
                 state,
             )
+        if through_0069:
+            migrate(database, "stamp", the_migration().down_revision)
+            migrate(database, "upgrade", "0069")
+            # `0115` adds the kind and replaces the library read with one returning it (M7.6.1).
+            kind = kind_migration()
+            migrate(database, "stamp", kind.down_revision)
+            migrate(database, "upgrade", kind.revision)
         yield scratch
     finally:
         drop(database)
