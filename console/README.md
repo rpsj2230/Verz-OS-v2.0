@@ -325,9 +325,30 @@ A page is two files and a line of Python, and it edits neither `src/App.tsx` nor
    `COMPANY_NAVIGATION`, and in `DEPARTMENT_NAVIGATION` too if a department admin is offered it.
    The API serves both menus; `brain.ops.console_design` compares them with `docs/screens.html`,
    so a new entry is drawn in SCREEN 1 (and SCREEN 2) first.
-4. Its page case in `tests/support/pageCases.ts` and its area in `tests/support/consoleAudit.ts`,
-   then `WRITE_CONSOLE_AUDIT=1 npx vitest run tests/console-audit.test.ts`, which rewrites only
-   the file of the area the page belongs to under `docs/console-audit/`.
+4. Its page cases in `tests/support/pageCases/<module>.ts`, the file named for the first segment
+   of the page's addresses (`/` is `overview.ts`, `/*` is `not-found.ts`), exporting `PAGES` and,
+   for a route that has not landed yet, `AWAITED_ROUTES`. A fixture two modules both answer with
+   goes in `tests/support/pageFixtures.ts`. `tests/support/pageCases.ts` collects every such file
+   with an eager `import.meta.glob`, as the route registry does, and refuses a case filed under
+   another module's name or held by two files.
+5. Its writes in `tests/support/consoleAudit/<module>.ts`, named for the page's kit directory
+   (`src/pages/<module>/`; for a page not yet on the kit, its address's first segment), exporting
+   `WRITE_ROUTES`, the `PROOFS` of each route they reach and any `READ_AFTER_AN_ACTION`, with the
+   helpers (`at`, `t`) and proofs two modules cite in `tests/support/auditClaims.ts`;
+   `tests/support/consoleAudit.ts` collects them by glob too. Its screens, routes and tables are
+   still claimed in that area's entry in `AREAS` there. Then
+   `WRITE_CONSOLE_AUDIT=1 npx vitest run tests/console-audit.test.ts`, which rewrites only the
+   file of the area the page belongs to under `docs/console-audit/`.
+
+A module rebuilt on the page kit lives in a directory of its own, `src/pages/<module>/`, and that
+directory is all the Tailwind wiring it needs: `theme/tailwind.css` reads every directory under
+`src/pages` through one glob, and `tests/tailwind-foundation.test.ts` finds them on disk and checks
+the glob read every file in them and none of the old pages, which are the files directly in
+`src/pages`. So only a kit page goes in a directory. An API route the page needs is served by a
+`*_routes.py` module whose router is one import line in `src/brain/routers.py`, never a line in
+`src/brain/app.py`; `tests/unit/test_routers.py` refuses a routes module left out of it and two
+routers that could both answer one request, which is what lets them mount in the order of their
+names. None of these files is one that another page's change also edits.
 
 The two sign-in routes sit outside the guard, and both would be bugs inside it: the
 callback is where a session comes from, so guarding it is a loop, and the signed-out page
