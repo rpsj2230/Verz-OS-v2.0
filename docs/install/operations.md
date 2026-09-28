@@ -291,7 +291,7 @@ labelled "last verified restore" beside a backup timestamp is the field somebody
 deciding not to worry, and the rule exists so that the day somebody builds a restore is the day
 that screen gets written.
 
-## Four of the twenty mechanisms are started by nothing
+## Four of the twenty-one mechanisms are started by nothing
 
 Named individually, because "monitoring is not wired" is a sentence somebody skims. The last
 column is the registry's own word for what starts each one, and this table is checked against
@@ -336,13 +336,15 @@ it every hour.
 | `automation_run` | that an automation somebody started runs at its cadence as the person it names, at no more than that person may reach through the agent, and stops and says why when it cannot | `in_process` |
 | `connector_sync` | that every connected source is read on its own interval under its verified call ceiling, with the source's own visibility rule on what is kept | `in_process` |
 | `vault_audit_ship` | that every call the secrets vault answered about a credential slot reaches the tamper-evident audit ledger within minutes | `in_process` |
+| `acceptance_run` | that every task proved on this install goes on being proved after each deploy, by checks whose test data is rolled back | `in_process` |
 
 Three words appear in that last column and they are not degrees of the same thing. `nothing`
 means no call site of any kind. `in_process` means another module calls it, and the word alone
 says nothing about whether *that* module is ever reached. For `retention_sweep`, `canary_run`,
 `knowledge_reverification`, `outbox_dispatch`, `spend_report_refresh`, `erasure_queue`,
-`vault_token_renewal`, `automation_run`, `connector_sync`, `vault_audit_ship` and
-`model_health_probes` it is: the general worker ticks the control schedule and starts all eleven.
+`vault_token_renewal`, `automation_run`, `connector_sync`, `vault_audit_ship`,
+`model_health_probes` and `acceptance_run` it is: the general worker ticks the control schedule and
+starts all twelve.
 The token renewal renews the worker's own vault token twice a day once less than half its period
 is left, and the application renews its own from inside its own process on the same rule, because
 a vault token is renewed only by whoever holds it; a `lite` install has no worker and no worker

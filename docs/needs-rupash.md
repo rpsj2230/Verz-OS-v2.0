@@ -96,6 +96,11 @@ M12.4.1 into M12.3.8; M8.3.3 into M10.7.1; M8.1.3 into M11.4.9; M22.2.4 into M7.
 M22.1.1; M9.1.4 into M25.3.1; M23.2.3 into M21.3.2; M27.13.4 into M12.2.2. M11.2.2 is proved by the
 first connector sync that proves M31.3.2.3 and M31.3.2.4.
 
+Eleven more were merged on 2026-09-28 under the blanket approval for exact duplicates in Waves 3 to 5:
+M27.15.59 into M27.15.8; M13.8.16 into M13.8.19; M36.1.4.2 into M30.4.9; M40.4.2.2 into M33.3.1.3;
+M40.2.1.3 into M33.3.1.5; M14.4.3 into M14.3.5; M16.3.3 into M16.7.3; M39.4.2.5 into M16.7.13;
+M30.5.3 into M27.7.16; M27.4.1 into M27.7.18; M18.1.1 into M18.5.3.
+
 ## 100. The agent halves move to Wave 3 - DECIDED 2026-09-28
 
 M11.9.3 to M11.9.14, M11.8.8, M10.7.3, M12.2.5, M12.2.7, M12.2.8, M12.3.3, M12.4.8, M12.4.10, M8.2.4,
