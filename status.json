@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-28T21:19:52.347748+00:00",
-  "commit": "f97447f4",
-  "commit_subject": "Console PRs stop meeting in shared lists: page cases, audit writes, Tailwind sources and API routers are each a module's own file (#178)",
+  "generated_at": "2026-09-28T21:37:15.388010+00:00",
+  "commit": "46cee2b3",
+  "commit_subject": "Knowledge is a kit module: every document you can open, its own page, and verify, replace or hand over from there (#177)",
   "total": 1576,
   "done": 370,
   "percent": 23.5,
