@@ -37,6 +37,7 @@ from brain.db import metadata, normalise_database_url
 from brain.ops.erasure import ErasureError, StoreRemoval, erasure_targets
 from brain.ops.erasure_store import (
     A_CONNECTION_ROW_SECURITY_NARROWS_CANNOT_COUNT_WHAT_IT_ERASES,
+    A_HALT_ON_A_PERSON_IS_A_PROTECTION_AND_IS_KEPT,
     A_TABLE_NOBODY_DECIDED_ABOUT_STOPS_ITS_STORE,
     ABOUT_NOBODY,
     ALREADY_REQUESTED,
@@ -144,6 +145,21 @@ def test_the_audit_chain_and_anything_outside_the_erasable_stores_is_not_asked_a
         about_nobody=frozenset(),
         retained={},
     ) == (f"chat.message: {A_TABLE_NOBODY_DECIDED_ABOUT_STOPS_ITS_STORE}",)
+
+
+def test_a_halt_naming_a_person_is_kept_because_erasing_it_would_lift_it() -> None:
+    """`ops.halt` names who acted, and for a halt on a person, the person stopped, as its target;
+    the halt in force is the newest row for a scope and a target. So it is kept on purpose rather
+    than filed as about nobody or as the target's own row, and nothing could remove a row anyway:
+    it has no `deleted_at` and `0136` grants the application SELECT and INSERT alone.
+
+    Delete this and `ops.halt` can be moved into `SUBJECT_COLUMNS` under `target`, and erasing a
+    person stopped for a compromise resumes their work."""
+    assert RETAINED["ops.halt"] == A_HALT_ON_A_PERSON_IS_A_PROTECTION_AND_IS_KEPT
+    assert "ops.halt" not in ABOUT_NOBODY and "ops.halt" not in SUBJECT_COLUMNS
+    columns = {one.name for one in metadata.tables["ops.halt"].c}
+    assert {"scope", "target", "actor_id"} <= columns
+    assert "deleted_at" not in columns
 
 
 def test_an_actor_column_does_not_make_a_table_a_persons() -> None:
