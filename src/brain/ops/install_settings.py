@@ -66,7 +66,7 @@ that changes once per install is the cost this repository refuses everywhere els
 Rejected: environment first, database second. It reads as the safer order and it is the one
 that would make this whole change invisible. See the named constant.
 
-Task ids: M42.5.10, M42.5.14, M31.3.1.4
+Task ids: M42.5.10, M42.5.14, M31.3.1.4, M27.12.7
 """
 
 from __future__ import annotations
@@ -75,7 +75,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from typing import Any, Final
 
 import structlog
-from sqlalchemy import Select, select
+from sqlalchemy import Select, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -240,6 +240,29 @@ async def save(session: AsyncSession, values: Mapping[str, str], *, updated_by: 
         )
     )
     return len(prepared)
+
+
+async def retire(session: AsyncSession, name: str, *, updated_by: str) -> bool:
+    """Retire the saved value of one installation setting, in the caller's transaction.
+
+    False when nothing was saved for it, which changes nothing. The row keeps its value and is
+    stamped retired rather than deleted, so `0059`'s trigger records `retired` against the person
+    in `updated_by`, which is set in the same statement for exactly that reason: the trigger reads
+    its actor off the row, and the row's last writer is not who took the value away. The setting
+    then resolves from the environment, or the declared default, which is `brain.tables.config`'s
+    rule that an absent row means the compiled default. See
+    `A_SAVED_ANSWER_OUTRANKS_THE_TEMPLATE_THE_INSTALLER_COPIED` for why that is the way back.
+
+    `statement_timestamp()` rather than `now()`, because `0045`'s policies admit a retirement
+    stamped with the instant of the statement that made it and nothing else.
+    """
+    done = await session.execute(
+        update(SettingRow)
+        .where(SettingRow.key == key_for(name), SettingRow.deleted_at.is_(None))
+        .values(deleted_at=func.statement_timestamp(), updated_by=updated_by)
+        .returning(SettingRow.key)
+    )
+    return done.scalar_one_or_none() is not None
 
 
 async def load(session: AsyncSession) -> dict[str, str]:

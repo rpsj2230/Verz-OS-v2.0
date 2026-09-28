@@ -6,11 +6,14 @@
  * Mounted on its own at its address, because the route table is a shared file this change does not
  * edit. The shapes are read from `brain.prompt_routes` itself.
  *
- * Task ids: M27.8.9
+ * Rebuilt on the page kit: identifiers (the agent's id, its template's and who set it) are in the
+ * Advanced section, and the confirmation is the kit's dialog.
+ *
+ * Task ids: M27.8.9, M27.16.1
  */
 
-import { fireEvent, waitFor } from "@testing-library/react";
-import { describe, expect, test } from "vitest";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { beforeAll, describe, expect, test } from "vitest";
 import {
   EDIT,
   EDITING_SWITCHED_OFF,
@@ -20,10 +23,16 @@ import {
   PROMPTS_API_PATH,
   PROMPTS_PATH,
   SAVE,
+  SYSTEM_HEADING,
   SYSTEM_INSTRUCTIONS_ARE_PRODUCT_TEXT,
 } from "../src/pages/promptsQuery";
 import { button, json, mountPage, settled, type Answer } from "./support/pageHarness";
 import { backendModelFields } from "./support/python";
+import { installRadixStubs } from "./support/radix";
+
+beforeAll(() => {
+  installRadixStubs();
+});
 
 const LIST = `GET /api/v1${PROMPTS_API_PATH}`;
 const EDIT_ROUTE = `POST /api/v1${PROMPTS_API_PATH}/pricing_desk`;
@@ -74,18 +83,28 @@ async function promptsPage(answers: Record<string, Answer>) {
 }
 
 describe("what the Prompts screen draws", () => {
-  test("the system instructions with no control beside them, and an agent's with who set them", async () => {
+  test("the system instructions with no control beside them, and an agent's saying whose they are with ids only in Advanced", async () => {
     // What breaks if this is deleted: the house rules drawn as though an install could change
-    // them, or an agent's instructions drawn with no word on whose they are.
+    // them, an agent's instructions drawn with no word on whose they are, or a principal id in
+    // page text.
     const { container } = await promptsPage({ [LIST]: () => json(page()) });
 
-    const text = container.textContent ?? "";
+    const copy = container.cloneNode(true) as HTMLElement;
+    copy.querySelectorAll('[data-slot="advanced"]').forEach((one) => {
+      one.remove();
+    });
+    const text = copy.textContent ?? "";
     expect(text).toContain("HOUSE-RULE-ONE");
     expect(text).toContain("LENGTH-SENTENCE");
     expect(text).toContain(SYSTEM_INSTRUCTIONS_ARE_PRODUCT_TEXT);
     expect(text).toContain(NO_MODEL_IS_CALLED_YET);
-    expect(text).toContain("set by u_installer");
-    expect(container.querySelector("#prompts-system button")).toBeNull();
+    expect(text).toContain("This install's own instructions");
+    expect(text).not.toContain("u_installer");
+    expect(container.querySelector('[data-slot="advanced"]')?.textContent).toContain("u_installer");
+    const system = [...container.querySelectorAll('[data-slot="section-card"]')].find((one) =>
+      (one.querySelector("h2")?.textContent ?? "") === SYSTEM_HEADING,
+    );
+    expect(system?.querySelector("button")).toBeNull();
     const lines = [...container.querySelectorAll("p")].map((one) => one.textContent);
     expect(lines).toContain("IN-FORCE-LINE-ONE");
     expect(lines).toContain("IN-FORCE-LINE-TWO");
@@ -126,9 +145,12 @@ describe("an edit", () => {
 
     fireEvent.change(field, { target: { value: "NEW-INSTRUCTIONS" } });
     fireEvent.click(button(container, SAVE));
-    expect(container.querySelector(".confirm")?.textContent).toMatch(/from the next request/i);
-    const confirm = [...container.querySelectorAll(".confirm button")].find((one) => one.textContent === SAVE);
-    fireEvent.click(confirm as HTMLButtonElement);
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog.textContent).toMatch(/from the next request/i);
+    expect(sent.filter((one) => one.method === "POST")).toEqual([]);
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: SAVE }));
+    });
 
     await waitFor(() => {
       expect(container.textContent).toContain("instructions were replaced");

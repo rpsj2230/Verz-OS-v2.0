@@ -15,21 +15,23 @@
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
-import { fireEvent, render, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { RJSFSchema } from "@rjsf/utils";
 import { beforeAll, describe, expect, test } from "vitest";
 import type { ApiFailure, FieldProblem } from "../src/api/errors";
 import { problemsFor, unmatchedProblems } from "../src/api/problems";
 import { SchemaForm } from "../src/components/SchemaForm";
-import { ACCOUNT_LABEL, LINK_BUTTON, PERSON_LABEL, READING_LINKS } from "../src/pages/SignInLinks";
+import { ACCOUNT_LABEL, LINK_A_SIGN_IN, LINK_BUTTON, LOADING_LINKS, PERSON_LABEL } from "../src/pages/sessions/SignInLinksPage";
 import { WHAT_WAS_NOT_ACCEPTED } from "../src/ui/FailureNotice";
 import { fakeIdentityProvider, loadConsole, signIn } from "./support/auth";
+import { installRadixStubs } from "./support/radix";
 
 const CONSOLE_ORIGIN = "https://console.test";
 const LINKS_OPERATION = "/api/v1/govern/sign-ins";
 const LINK_OPERATION = "/api/v1/sign-ins";
 
 beforeAll(async () => {
+  installRadixStubs();
   await import("../src/pages/SignInLinks");
 }, 60_000);
 
@@ -60,7 +62,8 @@ describe("which problem belongs to which input", () => {
   });
 });
 
-async function linksScreen(answerTheLink: () => Response): Promise<HTMLElement> {
+/** The Sign-in links page with its link drawer open. The drawer is a dialog outside the page. */
+async function linksScreen(answerTheLink: () => Response): Promise<{ container: HTMLElement; drawer: HTMLElement }> {
   const idp = fakeIdentityProvider({
     api(url, init) {
       const path = new URL(url, CONSOLE_ORIGIN).pathname;
@@ -81,30 +84,26 @@ async function linksScreen(answerTheLink: () => Response): Promise<HTMLElement> 
   });
   const { container } = render(<RouterProvider router={router} />);
   await waitFor(() => {
-    if (container.textContent?.includes(READING_LINKS)) {
-      throw new Error("still reading");
+    if (!container.querySelector("h1") || container.textContent?.includes(LOADING_LINKS)) {
+      throw new Error("still loading");
     }
   });
-  return container;
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: LINK_A_SIGN_IN }));
+  });
+  return { container, drawer: await screen.findByRole("dialog") };
 }
 
-function input(container: HTMLElement, label: string): HTMLInputElement {
-  const found = [...container.querySelectorAll("label")].find((one) => one.textContent?.startsWith(label));
-  const control = found?.querySelector("input");
-  if (!control) {
-    throw new Error(`no input labelled ${label}`);
-  }
-  return control;
+function input(drawer: HTMLElement, label: string): HTMLInputElement {
+  return within(drawer).getByLabelText(label) as HTMLInputElement;
 }
 
-function link(container: HTMLElement): void {
-  fireEvent.change(input(container, ACCOUNT_LABEL), { target: { value: "9a8b7c6d-0000-4000-8000-0000000000aa" } });
-  fireEvent.change(input(container, PERSON_LABEL), { target: { value: "u_one" } });
-  const press = [...container.querySelectorAll("button")].find((one) => one.textContent === LINK_BUTTON);
-  if (press === undefined) {
-    throw new Error("no link button");
-  }
-  fireEvent.click(press);
+async function link(drawer: HTMLElement): Promise<void> {
+  fireEvent.change(input(drawer, ACCOUNT_LABEL), { target: { value: "9a8b7c6d-0000-4000-8000-0000000000aa" } });
+  fireEvent.change(input(drawer, PERSON_LABEL), { target: { value: "u_one" } });
+  await act(async () => {
+    fireEvent.click(within(drawer).getByRole("button", { name: LINK_BUTTON }));
+  });
 }
 
 describe("a hand-built form", () => {
@@ -112,7 +111,7 @@ describe("a hand-built form", () => {
     // What breaks if this is deleted: the refusal the staging install drew as one sentence, with the
     // box it was about unnamed; a problem with no input dropped rather than said; or an input the
     // API never named marked invalid beside one it did.
-    const container = await linksScreen(() =>
+    const { drawer } = await linksScreen(() =>
       json(
         {
           message: "Some of what was sent was not accepted.",
@@ -129,43 +128,46 @@ describe("a hand-built form", () => {
       ),
     );
 
-    link(container);
+    await link(drawer);
 
     await waitFor(() => {
-      expect(container.querySelector("#sign-in-link-principal_id-problem")?.textContent).toBe("PERSON-PROBLEM-SENTINEL");
+      expect(drawer.querySelector("#sign-in-link-principal_id-problem")?.textContent).toBe("PERSON-PROBLEM-SENTINEL");
     });
-    const person = input(container, PERSON_LABEL);
+    const person = input(drawer, PERSON_LABEL);
     expect(person.getAttribute("aria-invalid")).toBe("true");
-    expect(person.getAttribute("aria-describedby")).toBe("sign-in-link-principal_id-problem");
-    const account = input(container, ACCOUNT_LABEL);
+    // Described by what the field takes, said before any refusal, and then by the refusal.
+    expect(person.getAttribute("aria-describedby")?.split(" ")).toEqual(["sign-in-link-principal_id-hint", "sign-in-link-principal_id-problem"]);
+    const account = input(drawer, ACCOUNT_LABEL);
     expect(account.hasAttribute("aria-invalid")).toBe(false);
-    expect(account.hasAttribute("aria-describedby")).toBe(false);
-    expect(container.querySelector("#sign-in-link-subject-problem")).toBeNull();
+    expect(account.getAttribute("aria-describedby")).toBe("sign-in-link-subject-hint");
+    expect(drawer.querySelector("#sign-in-link-subject-problem")).toBeNull();
 
-    const unmatched = container.querySelector(`[aria-label="${WHAT_WAS_NOT_ACCEPTED}"]`);
+    const unmatched = drawer.querySelector(`[aria-label="${WHAT_WAS_NOT_ACCEPTED}"]`);
     expect([...(unmatched?.querySelectorAll("li") ?? [])].map((one) => one.textContent)).toEqual([
       "WHOLE-BODY-SENTINEL",
       "expected_hash NO-INPUT-SENTINEL",
     ]);
-    expect(container.querySelector(".notice__body > p")?.textContent).toBe("Some of what was sent was not accepted.");
-    expect(container.querySelector(".notice__trace code")?.textContent).toBe("trace-422");
-    expect((container.textContent ?? "").split("PERSON-PROBLEM-SENTINEL")).toHaveLength(2);
+    expect(drawer.querySelector(".notice__body > p")?.textContent).toBe("Some of what was sent was not accepted.");
+    expect(drawer.querySelector(".notice__trace code")?.textContent).toBe("trace-422");
+    expect((document.body.textContent ?? "").split("PERSON-PROBLEM-SENTINEL")).toHaveLength(2);
   });
 
   test("a write the API accepts draws no problem, marks no input and lists nothing", async () => {
     // What breaks if this is deleted: the sibling that proves the drawing is the refusal's and not
     // the form's. A form that marked its inputs invalid on every answer would pass the test above.
-    const container = await linksScreen(() => json({ principal_id: "u_one", outcome: "bound" }));
+    const { container, drawer } = await linksScreen(() => json({ principal_id: "u_one", outcome: "bound" }));
+    // Nothing is marked before anything was refused.
+    expect(drawer.querySelector("[aria-invalid]")).toBeNull();
 
-    link(container);
+    await link(drawer);
 
     await waitFor(() => {
       expect(container.textContent).toContain("Linked.");
     });
-    expect(container.querySelector(".field-problems")).toBeNull();
-    expect(container.querySelector("[aria-invalid]")).toBeNull();
-    expect(container.querySelector(`[aria-label="${WHAT_WAS_NOT_ACCEPTED}"]`)).toBeNull();
-    expect(container.querySelector(".notice__trace")).toBeNull();
+    expect(document.body.querySelector(".field-problems")).toBeNull();
+    expect(document.body.querySelector("[aria-invalid]")).toBeNull();
+    expect(document.body.querySelector(`[aria-label="${WHAT_WAS_NOT_ACCEPTED}"]`)).toBeNull();
+    expect(document.body.querySelector(".notice__trace")).toBeNull();
   });
 });
 

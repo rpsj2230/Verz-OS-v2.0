@@ -167,7 +167,7 @@ function LinkAccountDrawer({
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const found = linkProblems(account, principalId);
-    setProblem(found[0] ?? null);
+    setProblem(found[0]?.message ?? null);
     setFailure(null);
     setRefusal(null);
     if (found.length > 0) {

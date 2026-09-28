@@ -77,6 +77,14 @@
 @source "../pages/departments";
 @source "../pages/roles";
 @source "../pages/automations";
+@source "../pages/settings";
+@source "../pages/service-accounts";
+@source "../pages/agent-templates";
+@source "../pages/tools";
+@source "../pages/staff-sources";
+@source "../pages/sessions";
+@source "../pages/install";
+@source "../pages/prompts";
 @source not inline("grid");
 
 /*

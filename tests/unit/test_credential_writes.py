@@ -20,7 +20,7 @@ import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, get_type_hints
 
 import pytest
 from sqlalchemy import create_engine
@@ -33,6 +33,7 @@ from brain.audit.record import (
     CREDENTIAL_SLOT,
     CREDENTIAL_SLOT_CHARS,
     AuditRecorder,
+    CredentialChange,
     credential_subject_id,
 )
 from brain.db import metadata
@@ -163,7 +164,12 @@ def test_nothing_between_a_kept_key_and_the_ledger_has_anywhere_to_put_the_value
         "created_at",
     }
     assert set(protocol) == {"self", "slot", "written_by", "trace_id", "ent_hash"}
-    assert set(method) == {"self", "slot"}
+    # A revocation's two parameters since `0148` are an enumeration and a flag, which no value
+    # can arrive through; any other parameter, or either retyped as a string, fails here.
+    assert set(method) == {"self", "slot", "change", "actor_inferred"}
+    hints = get_type_hints(AuditRecorder.credential)
+    assert hints["change"] == CredentialChange | None
+    assert hints["actor_inferred"] is bool
     assert compiled(statement).startswith("INSERT INTO ops.credential_write (slot, written_by) ")
     assert set(statement.compile().params) == {"slot", "written_by"}
 

@@ -21,7 +21,7 @@
  * its location in `ops.setting`, the table the Settings screen writes, and keeps the credential in
  * the vault slot the nightly sync reads, so nothing on the server is edited. The steps each vendor
  * needs are the API's (`brain.console.staff_source_guide`), fetched from `GUIDES_API_PATH` and
- * drawn by `components/ConnectStaffSource.tsx`; a console that wrote its own would be a second
+ * drawn by `staff-sources/ConnectDrawer.tsx`; a console that wrote its own would be a second
  * account of a vendor's menus. See `A_SOURCE_IS_CONNECTED_FROM_THIS_SCREEN`.
  *
  * **No count of anything, anywhere.** The options are the whole of what an install may choose or
