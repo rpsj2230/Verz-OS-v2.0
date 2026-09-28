@@ -68,7 +68,8 @@ from urllib.parse import quote, urlencode, urlsplit
 
 from brain.connectors.staff_directories import (
     LARK_PLATFORMS,
-    LARK_SCOPES,
+    LARK_SCOPE_PURPOSE,
+    LARK_SYNC_SCOPES,
     Answer,
     DirectorySignInError,
     Fetch,
@@ -190,17 +191,9 @@ class UseSpec:
 
 
 def _contact_scopes() -> tuple[Scope, ...]:
-    # Read out of the staff list's own constant, so the scopes this screen asks for are the ones
+    # Read out of the staff sync's own constants, so the scopes this screen asks for are the ones
     # its reader was written against, and a scope added there is asked for here.
-    words = {
-        "contact:user.base:readonly": "read each person's name and identifiers",
-        "contact:user.email:readonly": "read each person's work email address",
-        "contact:user.department:readonly": "read which departments each person is in",
-        "contact:department.base:readonly": "read department names",
-    }
-    return tuple(
-        Scope(name, words.get(name, "read the company directory")) for name in LARK_SCOPES.split()
-    )
+    return tuple(Scope(name, LARK_SCOPE_PURPOSE[name]) for name in LARK_SYNC_SCOPES.split())
 
 
 #: Every use, with the scopes it needs. See `A_SCOPE_IS_ASKED_FOR_ONLY_BY_A_USE_THAT_NEEDS_IT`.
@@ -210,8 +203,9 @@ USES: Final[Mapping[Use, UseSpec]] = MappingProxyType(
             use=Use.STAFF_LIST,
             label="Staff list",
             what=(
-                "Read who works here, their work email and their departments from Lark's "
-                "directory, on a schedule, so people join and leave the Brain as they do in Lark."
+                "Read who works here, their work email, their departments, managers and user "
+                "groups from Lark's directory, on a schedule, so people join and leave the Brain "
+                "as they do in Lark."
             ),
             scopes=_contact_scopes(),
             slot="staff_source",

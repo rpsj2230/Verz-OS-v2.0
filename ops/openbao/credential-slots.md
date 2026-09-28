@@ -215,7 +215,9 @@ is the catalogue, and a test holds this table to it):
 `connector_keys/staff_source` is not a connected source: it is the staff list's credential, one
 slot whichever kind of staff source the install chose, written from the setup wizard or the Staff
 sources screen and read by the scheduled staff sync (`brain.ops.staff_sync_run`) through the same
-run lease. For Lark and Microsoft Entra it holds `<application id>:<secret>`, for a Google Sheet an
+run lease. For Lark and Microsoft Entra it holds `<application id>:<secret>`, for Google Workspace
+`<administrator>:<service account>:<key>` (the key file's key as its two primes, written by
+`brain.connectors.google_service_account`), for a Google Sheet an
 API key, and for LDAP or Active Directory `<service account>:<password>`, where the service account
 is a distinguished name or `name@domain`. That account is created in the directory for this alone:
 an ordinary user that can bind and search, never an administrator, and never one delegated to

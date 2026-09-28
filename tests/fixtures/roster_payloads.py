@@ -27,6 +27,11 @@ with no distinguished name, and a Lark refusal that reads as a company with no s
 of those produces a roster that is confidently wrong, and on a source trusted with
 completeness a confidently short roster is a mass revocation.
 
+**The three directories' group walks are here as raw pages as well as flattened.** The flattened
+membership is what an adapter takes; the raw pages are what the walk in
+`brain.connectors.staff_directories` turns into it, and a test handing an adapter the flattened
+form has not tested the walk that makes it.
+
 Task ids: M1.6.4, M1.6.5, M1.6.6, M1.6.8
 """
 
@@ -126,6 +131,11 @@ GOOGLE_SHEET_VALUES_AT_THE_RANGE_LIMIT: dict[str, Any] = {
 #: `aliases` matters for the rename question rather than for the roster: when Workspace
 #: renames somebody it keeps the old address as an alias, so the alias list is where the
 #: evidence of a rename survives after the primary address has moved.
+#:
+#: `relations` is where the manager is, as an entry of type `manager` whose value is an address,
+#: and it sits beside other relations that are not a manager: Ada's `assistant` is one.
+#: Katherine, on page two, is managed by somebody on another company's domain, whom this read
+#: does not list.
 GOOGLE_WORKSPACE_USERS_PAGE_ONE: dict[str, Any] = {
     "kind": "admin#directory#users",
     "etag": '"etag-page-one"',
@@ -139,6 +149,7 @@ GOOGLE_WORKSPACE_USERS_PAGE_ONE: dict[str, Any] = {
             "archived": False,
             "orgUnitPath": "/Engineering",
             "aliases": ["a.lovelace@example.com"],
+            "relations": [{"value": "katherine@example.com", "type": "assistant"}],
         },
         {
             "kind": "admin#directory#user",
@@ -148,6 +159,7 @@ GOOGLE_WORKSPACE_USERS_PAGE_ONE: dict[str, Any] = {
             "suspended": False,
             "archived": True,
             "orgUnitPath": "/Engineering",
+            "relations": [{"value": "Ada@Example.com", "type": "manager"}],
         },
     ],
     "nextPageToken": "Q29udGludWVGcm9tSGVyZQ",
@@ -174,6 +186,7 @@ GOOGLE_WORKSPACE_USERS_PAGE_TWO: dict[str, Any] = {
             "suspended": False,
             "archived": False,
             "orgUnitPath": "/Finance",
+            "relations": [{"value": "cfo@elsewhere.example", "type": "manager"}],
         },
         {
             "kind": "admin#directory#user",
@@ -209,6 +222,10 @@ GOOGLE_WORKSPACE_GROUP_MEMBERS: dict[str, tuple[str, ...]] = {
 #:
 #: `@odata.nextLink` is the continuation, and unlike Google's it is a whole URL.
 #:
+#: `manager` is there only because the read asked for `$expand=manager`, and it is an object:
+#: Grace's names Ada by her sign-in name in another capitalisation, and Katherine's, on page
+#: two, is a guest the roster drops.
+#:
 #: `proxyAddresses` carries the old address in lower-case `smtp:` after a rename, with the
 #: current one in upper-case `SMTP:`. That is the same rename evidence as Workspace's alias
 #: list, spelled differently, and the case of the prefix is the whole of it: Ada's upper-case
@@ -236,6 +253,11 @@ ENTRA_USERS_PAGE_ONE: dict[str, Any] = {
             "mail": None,
             "accountEnabled": False,
             "department": "Engineering",
+            "manager": {
+                "@odata.type": "#microsoft.graph.user",
+                "id": "8f1a0e5c-0000-4000-8000-000000000001",
+                "userPrincipalName": "ADA@example.com",
+            },
         },
     ],
     "@odata.nextLink": "https://graph.microsoft.com/v1.0/users?$skiptoken=X1234",
@@ -257,6 +279,11 @@ ENTRA_USERS_PAGE_TWO: dict[str, Any] = {
             "mail": "katherine@example.com",
             "accountEnabled": True,
             "department": "Finance",
+            "manager": {
+                "@odata.type": "#microsoft.graph.user",
+                "id": "8f1a0e5c-0000-4000-8000-000000000009",
+                "userPrincipalName": "kit_supplier.example#EXT#@example.onmicrosoft.com",
+            },
         },
         {
             "id": "8f1a0e5c-0000-4000-8000-000000000009",
@@ -293,6 +320,10 @@ ENTRA_GROUP_MEMBERS: dict[str, tuple[str, ...]] = {
 #: `department_ids` are opaque `od-` identifiers. Passing one through as a department name
 #: creates a department called `od-...` that no scope predicate will ever match, and the
 #: person then sees nothing with nothing anywhere saying why.
+#:
+#: `leader_user_id` is the manager, in the id type the walk asked for, which is the union id.
+#: Grace's names Ada on this page, Katherine's names Ada from page two, and Ada's names somebody
+#: this read does not list.
 LARK_USERS_PAGE_ONE: dict[str, Any] = {
     "code": 0,
     "msg": "success",
@@ -308,6 +339,7 @@ LARK_USERS_PAGE_ONE: dict[str, Any] = {
                 "email": "ada.personal@gmail.example",
                 "enterprise_email": "ada@example.com",
                 "department_ids": ["od-engineering"],
+                "leader_user_id": "on_000000000000000000000000000000f",
                 "status": {
                     "is_frozen": False,
                     "is_resigned": False,
@@ -323,6 +355,7 @@ LARK_USERS_PAGE_ONE: dict[str, Any] = {
                 "email": "grace.personal@gmail.example",
                 "enterprise_email": "grace@example.com",
                 "department_ids": ["od-engineering"],
+                "leader_user_id": "on_0000000000000000000000000000001",
                 "status": {
                     "is_frozen": False,
                     "is_resigned": True,
@@ -350,6 +383,7 @@ LARK_USERS_PAGE_TWO: dict[str, Any] = {
                 "email": "",
                 "enterprise_email": "katherine@example.com",
                 "department_ids": ["od-finance"],
+                "leader_user_id": "on_0000000000000000000000000000001",
                 "status": {
                     "is_frozen": False,
                     "is_resigned": False,
@@ -409,6 +443,143 @@ LARK_USERS_IN_TWO_DEPARTMENTS: dict[str, Any] = {
                 "status": {"is_frozen": False, "is_resigned": False, "is_activated": True},
             }
         ],
+    },
+}
+
+#: A company whose mail is not Lark Mail: `enterprise_email` is empty for everybody, and the
+#: account's `email` is the address its administrator invited each person with.
+#:
+#: Reading `enterprise_email` alone drops every person here, and a roster of nobody is refused
+#: on every run. Tomasz has neither address and is dropped, named.
+LARK_USERS_WITHOUT_LARK_MAIL: dict[str, Any] = {
+    "code": 0,
+    "msg": "success",
+    "data": {
+        "has_more": False,
+        "page_token": "",
+        "items": [
+            {
+                "open_id": "ou_0000000000000000000000000000006",
+                "union_id": "on_0000000000000000000000000000006",
+                "name": "Mary Jackson",
+                "email": "mary@example.com",
+                "enterprise_email": "",
+                "department_ids": ["od-engineering"],
+                "status": {"is_frozen": False, "is_resigned": False, "is_activated": True},
+            },
+            {
+                "open_id": "ou_0000000000000000000000000000007",
+                "union_id": "on_0000000000000000000000000000007",
+                "name": "Dorothy Vaughan",
+                "email": "dorothy@example.com",
+                "department_ids": ["od-finance"],
+                "status": {"is_frozen": False, "is_resigned": False, "is_exited": True},
+            },
+            {
+                "open_id": "ou_0000000000000000000000000000008",
+                "union_id": "on_0000000000000000000000000000008",
+                "name": "Tomasz Nowak",
+                "email": "",
+                "enterprise_email": "",
+                "department_ids": ["od-finance"],
+                "status": {"is_frozen": False, "is_resigned": False, "is_activated": True},
+            },
+        ],
+    },
+}
+
+# ------------------------------------------------------------------ the three group walks
+#: `GET /admin/directory/v1/groups?customer=my_customer`, the account's groups.
+GOOGLE_WORKSPACE_GROUPS_PAGE: dict[str, Any] = {
+    "kind": "admin#directory#groups",
+    "groups": [
+        {"id": "03x8tuzt3gsvn3p", "email": "Approvers@example.com"},
+        {"id": "01ksv4uv1x1a9z3", "email": "auditors@example.com"},
+    ],
+}
+
+#: `GET /admin/directory/v1/groups/{id}/members?includeDerivedMembership=true`.
+#:
+#: A member is a person, a group or the whole customer, told apart by `type`. Only a `USER` is
+#: somebody; the nested group's own people arrive as `USER` rows of their own, which is what
+#: asking for derived membership does.
+GOOGLE_WORKSPACE_APPROVERS_MEMBERS: dict[str, Any] = {
+    "kind": "admin#directory#members",
+    "members": [
+        {"email": "ada@example.com", "type": "USER"},
+        {"email": "leads@example.com", "type": "GROUP"},
+        {"email": "", "type": "CUSTOMER"},
+    ],
+}
+GOOGLE_WORKSPACE_AUDITORS_MEMBERS: dict[str, Any] = {
+    "kind": "admin#directory#members",
+    "members": [{"email": "katherine@example.com", "type": "USER"}],
+}
+
+#: `GET /v1.0/groups?$select=id,displayName`.
+#:
+#: **A display name is not unique in Entra.** Two groups here are called Approvers, one of them
+#: retired, and a rule written against the name would be reading both.
+ENTRA_GROUPS_PAGE: dict[str, Any] = {
+    "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#groups(id,displayName)",
+    "value": [
+        {"id": "a1b2c3d4-0000-4000-8000-000000000001", "displayName": "Approvers"},
+        {"id": "a1b2c3d4-0000-4000-8000-000000000002", "displayName": "Auditors"},
+        {"id": "a1b2c3d4-0000-4000-8000-000000000003", "displayName": "Approvers"},
+    ],
+}
+
+#: `GET /v1.0/groups/{id}/transitiveMembers?$select=id`, members by id alone.
+#:
+#: A device is a member too, and an id the people walk never read is somebody else's.
+ENTRA_APPROVERS_MEMBERS: dict[str, Any] = {
+    "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#directoryObjects(id)",
+    "value": [
+        {"@odata.type": "#microsoft.graph.user", "id": "8f1a0e5c-0000-4000-8000-000000000001"},
+        {"@odata.type": "#microsoft.graph.device", "id": "d0000000-0000-4000-8000-000000000001"},
+    ],
+}
+ENTRA_AUDITORS_MEMBERS: dict[str, Any] = {
+    "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#directoryObjects(id)",
+    "value": [
+        {"@odata.type": "#microsoft.graph.user", "id": "8f1a0e5c-0000-4000-8000-000000000003"},
+    ],
+}
+
+#: `GET /open-apis/contact/v3/group/simplelist?type=1`, the ordinary user groups.
+LARK_GROUPS_PAGE: dict[str, Any] = {
+    "code": 0,
+    "msg": "success",
+    "data": {
+        "grouplist": [
+            {"id": "g193821", "name": "approvers", "member_user_count": 2},
+        ],
+        "has_more": False,
+        "page_token": "",
+    },
+}
+
+#: `GET /open-apis/contact/v3/group/{id}/member/simplelist?member_id_type=union_id`.
+#:
+#: Members by union id, the identifier the people walk keeps, and one the walk never listed.
+LARK_GROUP_MEMBERS_PAGE: dict[str, Any] = {
+    "code": 0,
+    "msg": "success",
+    "data": {
+        "memberlist": [
+            {
+                "member_id": "on_0000000000000000000000000000001",
+                "member_type": "user",
+                "member_id_type": "union_id",
+            },
+            {
+                "member_id": "on_000000000000000000000000000000f",
+                "member_type": "user",
+                "member_id_type": "union_id",
+            },
+        ],
+        "has_more": False,
+        "page_token": "",
     },
 }
 

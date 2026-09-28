@@ -11,14 +11,21 @@ credential), never into this file.
 **A guide says whether its source can be connected on this version, and it asks the registry rather
 than keeping a list.** A source can be connected when `brain.ops.staff_sync_run.READERS` has a
 reader for it, because a connection nothing reads at night is a form that saves a secret for nobody.
-So Lark, Microsoft Entra and a Google Sheet are connectable today, and LDAP becomes connectable on
-the day a reader for it is registered, with nothing here changing. See
-`A_SOURCE_NOTHING_READS_AT_NIGHT_IS_NOT_OFFERED_AS_CONNECTABLE`.
+So every source here is connectable today, and one whose reader is withdrawn stops being offered
+with nothing here changing. See `A_SOURCE_NOTHING_READS_AT_NIGHT_IS_NOT_OFFERED_AS_CONNECTABLE`.
 
 **The credential is assembled from its fields in one place, and the order is the reader's.** Lark
 and Microsoft keep `<identifier>:<secret>`, which is `brain.ops.staff_sync_run.client_credential`'s
 form; a Google Sheet keeps its API key alone. `credential_fields` names which fields make it up, so
-the screen, the test and the save cannot disagree about what is kept.
+the screen, the test and the save cannot disagree about what is kept. Google Workspace is the one
+source whose credential is not its boxes joined: the key file is pasted whole and
+`brain.connectors.google_service_account.kept_value` keeps its key, so the guide names that as its
+`assemble`, and a file that is not a key is refused in words before anything is sent.
+
+**The steps name every permission the reader uses and no other.** Lark's scopes are
+`brain.connectors.staff_directories.LARK_SYNC_SCOPES`, each with what it reads, Microsoft's are its
+two application permissions, and Workspace's are the two read-only scopes its service account asks
+for, so a guide cannot tell somebody to grant less than the nightly read needs.
 
 Rejected: writing the steps in the console. The setup wizard and this screen both show them, and a
 second copy in a browser is the copy that goes stale when a vendor renames a menu.
@@ -26,16 +33,24 @@ second copy in a browser is the copy that goes stale when a vendor renames a men
 Rejected: the wizard's sign-in pop-up for the scheduled sources. A nightly run has nobody signed in,
 so what it reads with is the application's own credential, and that is what these steps produce.
 
-Task ids: M27.7.2, M1.8.6
+Task ids: M27.7.2, M1.8.6, M1.6.5
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Final
 
-from brain.connectors.staff_directories import LARK_PLATFORMS, LARK_SCOPES
+from brain.connectors.google_service_account import SCOPES as GOOGLE_SCOPES
+from brain.connectors.google_service_account import ServiceAccountKeyError, kept_value
+from brain.connectors.staff_directories import (
+    LARK_PLATFORMS,
+    LARK_SCOPE_PURPOSE,
+    LARK_SYNC_SCOPES,
+    MICROSOFT_GROUPS_PERMISSION,
+    MICROSOFT_USERS_PERMISSION,
+)
 from brain.identity.staff_adapters import (
     ADDRESS_COLUMNS,
     DEPARTED_COLUMNS,
@@ -88,6 +103,8 @@ class Guide:
     credential_fields: tuple[str, ...]
     #: Said when this version cannot connect the source, whatever the registry says.
     held_back: str = ""
+    #: Makes the kept credential from the boxes when it is not the boxes joined, or None.
+    assemble: Callable[[Mapping[str, str]], str] | None = None
 
     def __post_init__(self) -> None:
         keys = [one.key for one in self.fields]
@@ -128,10 +145,32 @@ class Guide:
         )
 
     def credential_from(self, values: Mapping[str, str]) -> str:
-        """The value the vault keeps, assembled from the fields in the reader's order."""
+        """The value the vault keeps, assembled from the fields in the reader's order.
+
+        Raises `CredentialFormError` when the boxes cannot make one, in words for the screen.
+        """
+        if self.assemble is not None:
+            return self.assemble(values)
         return CLIENT_CREDENTIAL_SEPARATOR.join(
             values.get(one, "").strip() for one in self.credential_fields
         )
+
+
+class CredentialFormError(Exception):
+    """The boxes could not be made into the credential the reader needs. Never repeats a value."""
+
+
+def _workspace_credential(values: Mapping[str, str]) -> str:
+    """The kept Workspace credential: the administrator and the key file's key."""
+    try:
+        return kept_value(values.get("admin", ""), values.get("key_file", ""))
+    except ServiceAccountKeyError as refused:
+        raise CredentialFormError(str(refused)) from None
+
+
+def _lark_scopes() -> str:
+    """Every scope the Lark sync reads with, each with what it reads, for the steps."""
+    return "; ".join(f"{one} ({LARK_SCOPE_PURPOSE[one]})" for one in LARK_SYNC_SCOPES.split())
 
 
 def _columns(names: tuple[str, ...]) -> str:
@@ -149,10 +188,12 @@ GUIDES: Final[tuple[Guide, ...]] = (
             "company. For Feishu, use open.feishu.cn/app instead.",
             'Click "Create Custom App", give it a name such as "Company Brain staff sync" and '
             "create it. If you already made one for this, open that one instead.",
-            'In the app, open "Permissions & Scopes". Search for and add each of these scopes: '
-            + ", ".join(LARK_SCOPES.split())
-            + ". The first and last read people and departments; the other two are what let "
-            "the sync read each person's work email and which department they are in.",
+            'In the app, open "Permissions & Scopes". Search for each of these scopes by its exact '
+            "name and add it. Each one only reads, and each is needed: without one, Lark leaves "
+            "that field out and the sync cannot see it. "
+            + _lark_scopes()
+            + ". If you already made an app for the Brain on the Connectors screen, use that one "
+            "and add any of these it lacks.",
             'On the same page, set the data range (it may be called "Range of contact data '
             'accessible") to "All members", so the app can see everybody who should be listed.',
             'Open "Version Management & Release", create a version and release it. If your '
@@ -194,9 +235,10 @@ GUIDES: Final[tuple[Guide, ...]] = (
             'something such as "Company Brain staff sync", choose "Accounts in this '
             'organizational directory only", and register it. No redirect address is needed.',
             'Open "API permissions", "Add a permission", "Microsoft Graph", "Application '
-            'permissions", and add User.Read.All. Then press "Grant admin consent for" your '
-            "organisation. Application, not delegated: the nightly sync runs with nobody "
-            "signed in.",
+            f'permissions", and add {MICROSOFT_USERS_PERMISSION} (people, their departments and '
+            f"managers) and {MICROSOFT_GROUPS_PERMISSION} (groups and who is in them). Then "
+            'press "Grant admin consent for" your organisation. Application, not delegated: the '
+            "nightly sync runs with nobody signed in.",
             'Open "Certificates & secrets", "New client secret", choose how long it lasts and '
             'add it. Copy the secret\'s "Value" straight away (not the "Secret ID"): Microsoft '
             "shows it only once.",
@@ -232,24 +274,57 @@ GUIDES: Final[tuple[Guide, ...]] = (
         title="Google Workspace",
         where="console.cloud.google.com and admin.google.com",
         steps=(
-            "In console.cloud.google.com, in a project that belongs to your company, enable the "
-            "Admin SDK API.",
-            "Create a service account in that project and a JSON key for it.",
-            "In admin.google.com, under Security, API controls, Domain-wide delegation, add the "
-            "service account's client ID with the scope "
-            "https://www.googleapis.com/auth/admin.directory.user.readonly.",
-            "Note the address of a Workspace administrator the service account will act as, and "
-            "your primary domain.",
+            "In console.cloud.google.com, choose or create a project that belongs to your "
+            'company. Open "APIs & Services", then "Library", search for "Admin SDK API" and '
+            "enable it.",
+            'Open "IAM & Admin", then "Service accounts", and click "Create service account". '
+            'Name it something such as "company-brain-staff-sync" and create it. Give it no '
+            "role in the project: it needs none.",
+            'Open the service account, go to "Keys", click "Add key", "Create new key", choose '
+            "JSON and create it. A file downloads: it is the key, so keep it private. If Google "
+            "says key creation is disabled, an administrator of your Google Cloud organisation "
+            "has to allow it for this project.",
+            'On the service account\'s "Details" page, copy its "Unique ID", a long number. It is '
+            "the client ID you delegate to in the next step.",
+            'In admin.google.com, open "Security", "Access and data control", "API controls", '
+            'then "Manage Domain Wide Delegation", and click "Add new". Paste the client ID, and '
+            'in "OAuth scopes" paste exactly: '
+            + ",".join(GOOGLE_SCOPES)
+            + ". Click Authorise. Grant nothing else: these two only let it list people and "
+            "groups, and Google refuses it any scope that is not granted here.",
+            "Choose a Workspace administrator for it to act as, because the Directory API "
+            "answers only an administrator. An account with a custom admin role that may only "
+            "read users and groups is enough.",
+            "Enter your primary domain and that administrator's address below, open the JSON "
+            'file in a text editor and paste all of it, then press "Test connection". Nothing '
+            "is saved by a test. Once saved, only the key is kept, in the vault; delete the "
+            "downloaded file.",
         ),
-        fields=(),
-        credential_fields=(),
-        held_back=(
-            "Google Workspace cannot be connected for the nightly sync on this version: reading "
-            "it with nobody signed in needs the service account's key to sign each request on "
-            "this server, which this version does not do yet. Until it does, keep your staff "
-            "list in a Google Sheet (export it from the admin console) and connect that, or read "
-            "it once during setup by signing in."
+        fields=(
+            GuideField(
+                key=LOCATION,
+                label="Primary domain",
+                help="Your company's primary Google Workspace domain.",
+                example="example.com",
+            ),
+            GuideField(
+                key="admin",
+                label="Administrator to act as",
+                help="The address of the Workspace administrator the service account acts as.",
+                example="directory-reader@example.com",
+            ),
+            GuideField(
+                key="key_file",
+                label="Service account key file",
+                help=(
+                    "The whole of the JSON file you downloaded. Only its key is kept, in the "
+                    "vault, and it is never shown again."
+                ),
+                secret=True,
+            ),
         ),
+        credential_fields=("admin", "key_file"),
+        assemble=_workspace_credential,
     ),
     Guide(
         source=GOOGLE_SHEET,

@@ -5,17 +5,21 @@ before this install can read its staff list. These tests hold the text to what t
 each source actually needs, so a guide cannot tell somebody to grant less than the reader uses, and
 hold the guide's shape to the credential the nightly reader splits.
 
-Task ids: M27.7.2, M1.8.6
+Task ids: M27.7.2, M1.8.6, M1.6.5
 """
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
-from brain.connectors.staff_directories import LARK_PLATFORMS, LARK_SCOPES
+from brain.connectors.google_service_account import service_account
+from brain.connectors.staff_directories import LARK_PLATFORMS, LARK_SCOPE_PURPOSE, LARK_SYNC_SCOPES
 from brain.console.staff_source_guide import (
     GUIDES,
     LOCATION,
+    CredentialFormError,
     Guide,
     GuideField,
     field_problems,
@@ -70,10 +74,13 @@ def test_the_lark_steps_name_the_console_the_scopes_the_data_range_the_release_a
     assert found is not None
 
     assert "open.larksuite.com/app" in text
-    for scope in LARK_SCOPES.split():
-        assert scope in text
-    assert "contact:user.base:readonly" in text
-    assert "contact:department.base:readonly" in text
+    for scope in LARK_SYNC_SCOPES.split():
+        assert f"{scope} ({LARK_SCOPE_PURPOSE[scope]})" in text
+    # Written out rather than read from the constant: without the first two, Lark answers every
+    # person with no work address and every call to the contact API is refused.
+    assert "contact:user.employee:readonly" in text
+    assert "contact:department.organize:readonly" in text
+    assert "contact:group:readonly" in text
     assert '"Permissions & Scopes"' in text
     assert '"All members"' in text
     assert "release" in text.lower()
@@ -92,6 +99,7 @@ def test_the_microsoft_steps_ask_for_the_application_permission_with_admin_conse
     text = steps(MICROSOFT_ENTRA)
 
     assert "User.Read.All" in text
+    assert "GroupMember.Read.All" in text
     assert '"Application permissions"' in text
     assert "Grant admin consent" in text
     assert '"Value"' in text
@@ -110,17 +118,70 @@ def test_the_sheet_steps_share_the_sheet_enable_the_api_and_name_the_columns_the
     assert ADDRESS_COLUMNS[0].title() in text
 
 
-def test_google_workspace_is_shown_with_its_steps_and_is_never_offered_as_connectable() -> None:
-    """Google Workspace has no nightly reader on this version, and the screen says so in words.
+def test_the_workspace_steps_delegate_two_read_only_scopes_and_take_the_key_file_whole() -> None:
+    """Google Workspace is read nightly by a service account acting as an administrator, so the
+    steps enable the Admin SDK, make a JSON key, delegate exactly the two read-only directory
+    scopes in the Admin console, and name the administrator; the form takes the key file whole.
 
-    Delete this and a form could save a Workspace secret that nothing will ever read."""
+    The scopes are written out here rather than read from the constant the steps are built from.
+    Delete this and the steps can omit the group scope, and Google refuses every token because the
+    assertion asks for a scope the Admin console never granted."""
     found = guide_for(GOOGLE_WORKSPACE)
     assert found is not None
+    text = steps(GOOGLE_WORKSPACE)
 
-    assert found.steps
-    assert not found.connectable
-    assert "cannot be connected" in found.unavailable
-    assert GOOGLE_WORKSPACE not in READERS
+    assert found.connectable
+    assert found.unavailable == ""
+    assert GOOGLE_WORKSPACE in READERS
+    assert "Admin SDK API" in text
+    assert "JSON" in text
+    assert "Manage Domain Wide Delegation" in text
+    assert (
+        "https://www.googleapis.com/auth/admin.directory.user.readonly,"
+        "https://www.googleapis.com/auth/admin.directory.group.readonly"
+    ) in text
+    assert [box.key for box in found.fields] == [LOCATION, "admin", "key_file"]
+    assert [box.secret for box in found.fields] == [False, False, True]
+
+
+def test_the_workspace_form_keeps_the_key_the_reader_signs_with_and_refuses_what_is_not_one() -> (
+    None
+):
+    """The form's credential is the kept value the nightly reader rebuilds a key from, and a box
+    that holds no key file is refused in words before anything is sent.
+
+    Delete this and the screen can keep the pasted file as it is, which the vault refuses, or keep
+    something the reader cannot sign with."""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    found = guide_for(GOOGLE_WORKSPACE)
+    assert found is not None
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    private = key.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    ).decode("ascii")
+    pasted = json.dumps(
+        {
+            "type": "service_account",
+            "private_key": private,
+            "client_email": "sync@a-project.iam.gserviceaccount.com",
+        },
+        indent=2,
+    )
+    values = {LOCATION: "example.com", "admin": "reader@example.com", "key_file": pasted}
+
+    account = service_account(found.credential_from(values))
+
+    assert account.admin == "reader@example.com"
+    kept, made = account.key.private_numbers(), key.private_numbers()
+    assert {kept.p, kept.q} == {made.p, made.q}
+    assert kept.public_numbers == made.public_numbers
+    with pytest.raises(CredentialFormError) as refused:
+        found.credential_from({**values, "key_file": "SENTINEL-not-a-key"})
+    assert "SENTINEL" not in str(refused.value)
 
 
 def test_a_source_is_connectable_exactly_when_the_nightly_sync_has_a_reader_for_it(
@@ -128,10 +189,13 @@ def test_a_source_is_connectable_exactly_when_the_nightly_sync_has_a_reader_for_
 ) -> None:
     """LDAP lights up the day a reader is registered, with nothing in the guide changing.
 
-    The positive half matters as much: Lark, Microsoft and a sheet are connectable today. Delete
+    The positive half matters as much: Lark, Microsoft, Workspace and a sheet are connectable
+    today. Delete
     this and the guide can offer a form for a source nothing reads, or hide one somebody can."""
     # LDAP is counted by the registry rather than assumed, because its reader is built separately.
-    expected = {LARK, MICROSOFT_ENTRA, GOOGLE_SHEET} | ({LDAP} if LDAP in READERS else set())
+    expected = {LARK, MICROSOFT_ENTRA, GOOGLE_WORKSPACE, GOOGLE_SHEET} | (
+        {LDAP} if LDAP in READERS else set()
+    )
     assert {one.source for one in GUIDES if one.connectable} == expected
     ldap = guide_for(LDAP)
     assert ldap is not None

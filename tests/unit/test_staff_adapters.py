@@ -709,6 +709,62 @@ def test_a_lark_page_that_says_there_is_more_is_not_a_complete_roster() -> None:
     assert lark().roster().complete
 
 
+def test_the_lark_account_address_is_the_join_where_there_is_no_lark_mail() -> None:
+    """`A_LARK_TENANT_WITHOUT_LARK_MAIL_HAS_ONLY_THE_ACCOUNT_ADDRESS`. A company whose mail is not
+    Lark Mail has no enterprise address for anybody; the account's address is the work one there,
+    somebody with neither is dropped and named, and `is_exited` is a person who has gone.
+
+    The sibling above holds the other half: beside a Lark Mail address the account's is not read.
+    Delete this and every person in such a company is dropped, and the sync refuses a roster of
+    nobody on every run, which is the owner's own install if his mail is elsewhere."""
+    reading = LarkSource(
+        pages=[recorded.LARK_USERS_WITHOUT_LARK_MAIL],
+        department_names=recorded.LARK_DEPARTMENT_NAMES,
+    ).reading()
+
+    assert [one.work_address for one in reading.roster.people] == [
+        "mary@example.com",
+        "dorothy@example.com",
+    ]
+    assert person_at(reading.roster, "mary@example.com").active is True
+    assert person_at(reading.roster, "dorothy@example.com").active is False
+    assert any("Tomasz Nowak" in one for one in reading.dropped), reading.dropped
+    assert staff_adapters.lark_work_address(
+        {"enterprise_email": " a@x.example ", "email": "b@y"}
+    ) == ("a@x.example")
+
+
+def test_each_directory_s_manager_is_resolved_inside_the_read_and_nowhere_else() -> None:
+    """Workspace names a manager in a `relations` entry, Graph in an expanded object and Lark by a
+    union id; each becomes the manager's address only when this read listed them. A manager on
+    another company's domain, a guest, a relation that is not a manager and a union id nobody
+    listed are all left out, and Lark's manager on another page is still found.
+
+    Built from the raw payloads, never from a record written here. Delete this and the roster
+    carries no managers at all, or names as somebody's manager an address nobody here has seen."""
+    google = workspace().reading().managers
+    graph = entra().reading().managers
+    lark_read = lark().reading().managers
+
+    assert google == {"grace@example.com": "ada@example.com"}
+    assert graph == {"grace@example.com": "ada@example.com"}
+    assert lark_read == {
+        "grace@example.com": "ada@example.com",
+        "katherine@example.com": "ada@example.com",
+    }
+    assert LdapSource(entries=recorded.ACTIVE_DIRECTORY_ENTRIES).reading().managers == {}
+
+
+@pytest.mark.parametrize("build", [GoogleWorkspaceSource, MicrosoftEntraSource, LarkSource])
+def test_a_group_walk_that_stopped_is_carried_to_the_reading_and_a_finished_one_is_not(
+    build: type[GoogleWorkspaceSource] | type[MicrosoftEntraSource] | type[LarkSource],
+) -> None:
+    """Group membership is a second walk, and whether it finished is its own fact, separate from
+    whether the roster did. Delete this and a stopped group walk reads as every group read."""
+    assert build(pages=[], groups_complete=False).reading().groups_complete is False
+    assert build(pages=[]).reading().groups_complete is True
+
+
 # --- LDAP and Active Directory, M1.6.6 ---------------------------------------------------------
 
 

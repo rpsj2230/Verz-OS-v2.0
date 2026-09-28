@@ -36,7 +36,7 @@ from brain.app import Settings, create_app
 from brain.connector_routes import CONNECTORS_READ
 from brain.connectors import lark_wiki
 from brain.connectors.registry import INSTALL_AUTHORITY
-from brain.connectors.staff_directories import LARK_SCOPES
+from brain.connectors.staff_directories import LARK_SCOPE_PURPOSE, LARK_SYNC_SCOPES
 from brain.console.reads import Plane, plane_capability
 from brain.core.entitlement import EntitlementSet, Grant
 from brain.core.scope import Clause, Op, Scope
@@ -214,7 +214,8 @@ def test_each_use_asks_for_the_scopes_its_reader_was_written_against() -> None:
     permission read, and Base and Wiki cover what their vault slots are defined with. Delete this
     and the screen can ask for a scope set that no reader in the product uses."""
     names = {use: {one.name for one in USES[use].scopes} for use in Use}
-    assert names[Use.STAFF_LIST] == set(LARK_SCOPES.split())
+    assert names[Use.STAFF_LIST] == set(LARK_SYNC_SCOPES.split())
+    assert set(LARK_SCOPE_PURPOSE) == set(LARK_SYNC_SCOPES.split())
     assert "docs:permission.member:retrieve" in names[Use.WIKI]
     assert set(SLOT_SCOPES["lark_wiki"].request) <= names[Use.WIKI]
     assert set(SLOT_SCOPES["lark_base"].request) <= names[Use.BASE]
@@ -234,7 +235,7 @@ def test_the_scope_list_and_the_steps_follow_the_uses_chosen() -> None:
     """Choosing only the staff list asks for no wiki, Base or chat scope; adding the Wiki adds its
     scopes and its sharing step. Delete this and every company is asked to grant everything."""
     staff = {one.name for one in scopes_for([Use.STAFF_LIST])}
-    assert staff == set(LARK_SCOPES.split())
+    assert staff == set(LARK_SYNC_SCOPES.split())
     both = {one.name for one in scopes_for([Use.STAFF_LIST, Use.WIKI])}
     assert both == staff | {one.name for one in USES[Use.WIKI].scopes}
     text = " ".join(one.text for one in steps_for([Use.STAFF_LIST], platform="larksuite.com"))
@@ -450,7 +451,7 @@ def test_the_guide_follows_the_uses_asked_about(client: TestClient) -> None:
     staff = client.get(f"{API_PREFIX}{LARK_PATH}?uses=staff_list", headers=headers("u_narrow"))
     assert staff.status_code == 200
     names = {one["name"] for one in staff.json()["scopes"]}
-    assert names == set(LARK_SCOPES.split())
+    assert names == set(LARK_SYNC_SCOPES.split())
     wiki = client.get(f"{API_PREFIX}{LARK_PATH}?uses=knowledge_wiki", headers=headers("u_narrow"))
     assert "docs:permission.member:retrieve" in {one["name"] for one in wiki.json()["scopes"]}
     mine = {one["name"]: one["may_switch_on"] for one in wiki.json()["uses"]}
