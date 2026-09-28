@@ -43,7 +43,7 @@ export const FETCHING = "Fetching and reading the page.";
 export const QUEUEING = "Sending the files to the queue.";
 
 /** What each field says before a draft is sent: the format it takes. */
-export const ADDRESS_HINT = "The whole address as your browser shows it, beginning with https://. It is read once, now.";
+export const ADDRESS_HINT = "The whole address as your browser shows it, starting with https. It is read once, now.";
 export const REVIEW_HINT = "A day after today. The steward is asked to look again on that day.";
 export const STEWARD_HINT =
   "Their id from Advanced on their People page: letters, digits, dots, @, hyphens and underscores. They must be able to read the document or add to its department.";
