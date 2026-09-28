@@ -1176,10 +1176,11 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
       "test_an_administrators_upload_is_found_by_its_department_by_text_and_by_nobody_else",
       true,
     ),
-    audit: {
-      none: "Adding a document writes no ledger entry yet: know.item has no trigger and the ledger has no subject kind for a knowledge item, so the Audit screen cannot show an upload.",
-      leaf: "M24.3.1",
-    },
+    audit: t(
+      "test_knowledge_upload_db",
+      "test_an_upload_appends_one_ledger_entry_the_audit_screens_reader_finds",
+      true,
+    ),
     behaviour: t("test_knowledge_routes", "test_a_markdown_file_is_added_to_a_department_as_its_uploader"),
   },
   "POST /api/v1/answer": {

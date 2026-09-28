@@ -36,6 +36,12 @@ from brain.knowledge_routes import (
     UPLOADS_PATH,
 )
 from brain.ops.queue import Job
+from brain.tables.audit import (
+    ACTOR_SETTING,
+    ENT_HASH_SETTING,
+    TRACE_ID_SETTING,
+    UNSUPPLIED_ENT_HASH,
+)
 from tests.fixtures.console_http import Stub, console_client, get, headers
 from tests.fixtures.documents import LINE, a_locked_pdf, a_pdf, a_word_document
 from tests.fixtures.setting_rows import Result
@@ -66,19 +72,32 @@ MARKDOWN = LINE.join(["# Site handover", "", "Sign the TEALCHECK list before lea
 
 
 class Kept:
-    """The store step, keeping what it was handed and answering as an install with no vectors."""
+    """`ingest_document`, keeping what the route's store handed it and writing nothing.
+
+    The route's own `store_upload` runs for real, so what it passes on, the item, the blocks and
+    the request's attribution, is what is asserted. Answers as an install with no vector leg.
+    """
 
     def __init__(self) -> None:
         self.stored: list[ReadUpload] = []
+        self.attributed: list[tuple[Any, ...]] = []
         self.fail: Exception | None = None
 
     async def __call__(
-        self, request: Any, read: ReadUpload, *, now: Any
-    ) -> tuple[Job | None, bool]:
+        self,
+        sessions: Any,
+        item: Any,
+        *,
+        enqueue: Any,
+        now: Any,
+        blocks: Any,
+        attributed: Any = (),
+    ) -> Job | None:
         if self.fail is not None:
             raise self.fail
-        self.stored.append(read)
-        return None, False
+        self.stored.append(ReadUpload(item=item, blocks=tuple(blocks)))
+        self.attributed.append(tuple(attributed))
+        return None
 
 
 def registry(statement: Any) -> Result | None:
@@ -93,7 +112,7 @@ def registry(statement: Any) -> Result | None:
 @pytest.fixture
 def kept(monkeypatch: pytest.MonkeyPatch) -> Kept:
     store = Kept()
-    monkeypatch.setattr(knowledge_routes, "store_upload", store)
+    monkeypatch.setattr(knowledge_routes, "ingest_document", store)
     return store
 
 
@@ -206,6 +225,22 @@ def test_a_markdown_file_is_added_to_a_department_as_its_uploader(
     }
     assert read.item.owner_id == "u_admin"
     assert "TEALCHECK" in read.item.content
+
+
+def test_an_upload_is_written_with_its_uploaders_attribution_for_the_ledger(
+    served: tuple[TestClient, Stub], kept: Kept
+) -> None:
+    """Every change is audited, and `0115`'s trigger records whoever the transaction says is
+    writing. Delete this and the store can write without the request's attribution, so the Audit
+    screen names the owner, inferred, at no reach, for an upload a person made."""
+    client, _ = served
+    assert upload(client, "u_admin", MARKDOWN).status_code == 201
+
+    (attribution,) = kept.attributed
+    said = {str(one.compile().params["name"]): one.compile().params["value"] for one in attribution}
+    assert said[ACTOR_SETTING] == "u_admin"
+    assert said[ENT_HASH_SETTING] and said[ENT_HASH_SETTING] != UNSUPPLIED_ENT_HASH
+    assert TRACE_ID_SETTING in said
 
 
 def test_a_word_document_and_a_pdf_are_added(served: tuple[TestClient, Stub], kept: Kept) -> None:
