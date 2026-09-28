@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-28T20:13:16.340266+00:00",
-  "commit": "ed5a1c1f",
-  "commit_subject": "A source's live reads and a skill's runs and last use are counted on their stats pages (#181)",
+  "generated_at": "2026-09-28T21:03:35.270941+00:00",
+  "commit": "4ec1a03f",
+  "commit_subject": "Migration train 2: Models (0140), People (0141), Test connection (0142), Automations (0145), Platform (0148)",
   "total": 1576,
   "done": 362,
   "percent": 23.0,
