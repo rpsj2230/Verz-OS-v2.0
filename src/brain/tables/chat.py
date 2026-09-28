@@ -35,7 +35,19 @@ pulls up another person's conversation in a nearest-neighbour scan, and a vector
 not carry a principal. If conversation search across people is ever wanted, it is a feature
 with its own permission model, not a column added here.
 
-Task ids: M9.1.1, M9.1.2, M9.1.3, M9.1.4
+**An answer records the scope it was computed at and the agent that gave it (`0124`).** The
+scope is `EntitlementSet.ent_hash`, the fingerprint the answer cache and the ledger already key
+on, so it identifies a reach and discloses none of it. It sits on the message and never on the
+conversation, because a scope on the conversation is the shared-transcript column refused
+above. A question carries neither, and the table refuses one that does.
+
+**A correction is a row of its own, `chat.correction`, and never an edit of the answer.** One
+per answer, keyed to the message it corrects and restricted through the conversation like a
+message is. It holds the kind of wrong, the agent and the scope copied off the answer, and the
+identifiers the answer drew on: the shape of the disagreement and never what the right answer
+is. See `brain.chat.turns.Correction`.
+
+Task ids: M9.1.1, M9.1.2, M9.1.3, M9.1.4, M9.2.4
 """
 
 from __future__ import annotations
@@ -44,12 +56,16 @@ import enum
 import uuid
 from typing import Any
 
+from datetime import datetime
+
 from sqlalchemy import (
     CheckConstraint,
+    DateTime,
     ForeignKey,
     Index,
     String,
     Text,
+    UniqueConstraint,
     Uuid,
     func,
     text,
@@ -57,7 +73,11 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
+from brain.agents.model import AGENT_ID_CHARS
+from brain.audit.ledger import ENT_HASH
+from brain.chat.turns import CorrectionKind
 from brain.db import Base, SoftDeleteMixin, TimestampMixin
+from brain.tables.audit import ENT_HASH_CHARS
 from brain.tables.identity import PRINCIPAL_ID_CHARS, one_of
 
 #: Long enough for a real title and short enough that it is a title. Titles are generated
@@ -85,6 +105,15 @@ class MessageRole(enum.StrEnum):
 
 def _present(column: str) -> str:
     return f"length(btrim({column})) > 0"
+
+
+#: An entitlement hash, or nothing. The ledger's grammar, so the two columns hold one kind of value.
+ENT_HASH_OR_NOTHING = f"ent_hash = '' OR ent_hash ~ '{ENT_HASH}'"
+
+#: A question is the person's own words and was computed at no reach and by no agent.
+ONLY_AN_ANSWER_HAS_A_SCOPE = (
+    f"role = '{MessageRole.ASSISTANT.value}' OR (agent_id = '' AND ent_hash = '')"
+)
 
 
 class ConversationRow(TimestampMixin, SoftDeleteMixin, Base):
@@ -146,6 +175,8 @@ class MessageRow(TimestampMixin, Base):
         # asserts the shape it can: an array, so a caller cannot put a record object in it
         # and have it read as a reference list later.
         CheckConstraint("jsonb_typeof(refs) = 'array'", name="refs_is_an_array"),
+        CheckConstraint(ENT_HASH_OR_NOTHING, name="ent_hash_shape"),
+        CheckConstraint(ONLY_AN_ANSWER_HAS_A_SCOPE, name="only_an_answer_has_a_scope"),
         Index("ix_message_conversation", "conversation_id", "created_at"),
         {"schema": "chat"},
     )
@@ -176,3 +207,66 @@ class MessageRow(TimestampMixin, Base):
     #: Entity and record identifiers the answer drew on. Never values. See the module
     #: docstring, and `brain.chat.turns.RecordRef`, which is the same rule in the type.
     refs: Mapped[Any] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+
+    #: Which agent answered, or empty. What a correction copies, so "which agent is corrected
+    #: most" is read off the answer rather than off whatever the person said (`0124`).
+    agent_id: Mapped[str] = mapped_column(
+        String(AGENT_ID_CHARS), nullable=False, server_default=""
+    )
+
+    #: The scope the answer was computed at, as `EntitlementSet.ent_hash`, or empty for a
+    #: question. A fingerprint: it identifies a reach and names nothing in it (`0124`).
+    ent_hash: Mapped[str] = mapped_column(String(ENT_HASH_CHARS), nullable=False, server_default="")
+
+
+class CorrectionRow(Base):
+    """`chat.correction`. A person saying one answer was wrong (M9.2.4, `0124`).
+
+    No owner column, for the reason `MessageRow` has none: the owner is on the conversation,
+    and a second copy of "whose is this" is a second answer the day the two disagree. The
+    policy restricts through the conversation, and the store checks the message is an answer
+    in that same conversation before it writes.
+
+    One per answer. A second press is the same statement again, and the signal counts answers
+    that were wrong rather than how often somebody said so.
+
+    No `updated_at` and no soft delete: SELECT and INSERT only, so a correction is a record of
+    what was said and cannot be edited into a different one.
+    """
+
+    __tablename__ = "correction"
+    __table_args__ = (
+        CheckConstraint(one_of("kind", CorrectionKind), name="kind"),
+        CheckConstraint("jsonb_typeof(refs) = 'array'", name="refs_is_an_array"),
+        CheckConstraint(ENT_HASH_OR_NOTHING, name="ent_hash_shape"),
+        UniqueConstraint("message_id"),
+        Index("ix_correction_conversation", "conversation_id", "created_at"),
+        {"schema": "chat"},
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("chat.conversation.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    #: The answer corrected. Cascades with it, which nothing does, since nothing deletes one.
+    message_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("chat.message.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    #: Copied off the answer by `brain.chat.turns.record_correction`, never supplied.
+    agent_id: Mapped[str] = mapped_column(
+        String(AGENT_ID_CHARS), nullable=False, server_default=""
+    )
+    #: The scope the corrected answer was computed at, copied off it.
+    ent_hash: Mapped[str] = mapped_column(String(ENT_HASH_CHARS), nullable=False, server_default="")
+    #: What the corrected answer drew on, so a reviewer can look at the same records.
+    refs: Mapped[Any] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )

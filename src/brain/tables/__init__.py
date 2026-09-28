@@ -363,6 +363,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # became, so neither points at anything: two writers, neither of which may order the other.
     "know.steward_task",
     "know.solution",
+    # 0124_conversation_scope_and_corrections. A correction points at the conversation and at the
+    # answer it corrects, so it follows both.
+    "chat.correction",
 )
 
 __all__ = [
