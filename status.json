@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-09-28T13:58:47.450579+00:00",
-  "commit": "f4993dd",
-  "commit_subject": "Main runs only the deploy gates, so a merge no longer waits behind a second full CI run",
+  "generated_at": "2026-09-28T14:01:16.081680+00:00",
+  "commit": "47e6f24",
+  "commit_subject": "The skill proof rows name the exact tests that hold the halves one person cannot exercise",
   "total": 1582,
-  "done": 338,
-  "percent": 21.4,
+  "done": 346,
+  "percent": 21.9,
   "acts": 47,
   "decided": 120,
   "current_wave": 0,
@@ -39,9 +39,9 @@
       "wave": 2,
       "name": "Data, channels, retrieval",
       "total": 264,
-      "done": 18,
-      "percent": 6.8,
-      "in_progress": 58,
+      "done": 25,
+      "percent": 9.5,
+      "in_progress": 51,
       "ready_for_testing": 15,
       "blocked": 2,
       "open": 171,
@@ -52,9 +52,9 @@
       "wave": 3,
       "name": "Agents, knowledge, console",
       "total": 577,
-      "done": 21,
-      "percent": 3.6,
-      "in_progress": 2,
+      "done": 22,
+      "percent": 3.8,
+      "in_progress": 1,
       "ready_for_testing": 0,
       "blocked": 0,
       "open": 554,
@@ -215,7 +215,7 @@
       "name": "Tools, skills, capability registry",
       "wave": 2,
       "total": 36,
-      "done": 1,
+      "done": 8,
       "acts": 0,
       "decided": 4
     },
@@ -449,7 +449,7 @@
       "name": "Continuous delivery and live status",
       "wave": 0,
       "total": 48,
-      "done": 31,
+      "done": 32,
       "acts": 4,
       "decided": 3
     },
@@ -581,6 +581,13 @@
     "M10.1.5",
     "M12.1.5",
     "M12.1.6",
+    "M12.2.1",
+    "M12.2.5",
+    "M12.2.6",
+    "M12.3.2",
+    "M12.4.12",
+    "M12.4.13",
+    "M12.4.6",
     "M14.4.5",
     "M15.1.3",
     "M2.1.1",
@@ -753,6 +760,7 @@
     "M38.3.2.4",
     "M38.3.2.5",
     "M38.4.1.1",
+    "M38.4.1.2",
     "M38.4.1.3",
     "M38.5.1",
     "M38.5.2",
@@ -1169,11 +1177,6 @@
       "why": "tool catalogue and switch (T1): lands after PR #107 (migration 0117 follows 0116)",
       "updated": "2026-09-28"
     },
-    "M12.2.1": {
-      "status": "IN PROGRESS",
-      "why": "Wave 2 batch 2, skill import, review and versions (T2)",
-      "updated": "2026-09-28"
-    },
     "M12.2.2": {
       "status": "IN PROGRESS",
       "why": "Wave 2 batch 2, skill import, review and versions (T2)",
@@ -1189,21 +1192,6 @@
       "why": "Wave 2 batch 2, skill import, review and versions (T2)",
       "updated": "2026-09-28"
     },
-    "M12.2.5": {
-      "status": "IN PROGRESS",
-      "why": "Wave 2 batch 2, skill import, review and versions (T2)",
-      "updated": "2026-09-28"
-    },
-    "M12.2.6": {
-      "status": "IN PROGRESS",
-      "why": "Wave 2 batch 2, skill import, review and versions (T2)",
-      "updated": "2026-09-28"
-    },
-    "M12.3.2": {
-      "status": "IN PROGRESS",
-      "why": "Wave 2 batch 2, skill import, review and versions (T2)",
-      "updated": "2026-09-28"
-    },
     "M12.3.8": {
       "status": "IN PROGRESS",
       "why": "tool catalogue and switch (T1): lands after PR #107 (migration 0117 follows 0116)",
@@ -1212,21 +1200,6 @@
     "M12.4.3": {
       "status": "IN PROGRESS",
       "why": "tool catalogue and switch (T1): lands after PR #107 (migration 0117 follows 0116)",
-      "updated": "2026-09-28"
-    },
-    "M12.4.6": {
-      "status": "IN PROGRESS",
-      "why": "Wave 2 batch 2, skill import, review and versions (T2)",
-      "updated": "2026-09-28"
-    },
-    "M12.4.12": {
-      "status": "IN PROGRESS",
-      "why": "Wave 2 batch 2, skill import, review and versions (T2)",
-      "updated": "2026-09-28"
-    },
-    "M12.4.13": {
-      "status": "IN PROGRESS",
-      "why": "Wave 2 batch 2, skill import, review and versions (T2)",
       "updated": "2026-09-28"
     },
     "M23.1.1": {
@@ -1304,11 +1277,6 @@
       "why": "Wave 2 batch 2, the Lark chat channel (L1); proved once the owner creates the Lark app from Connect Lark",
       "updated": "2026-09-28"
     },
-    "M38.4.1.2": {
-      "status": "IN PROGRESS",
-      "why": "Wave 2 batch 2, connector registries and the minimal index (C1), under the owner's rule that connectors never bulk-sync",
-      "updated": "2026-09-28"
-    },
     "M41.3.1": {
       "status": "BLOCKED",
       "why": "the first release tag is cut when Wave 0 is accepted (needs-rupash 77, decided); waits for M31.3.2.3 to M31.3.2.5",
@@ -1316,7 +1284,7 @@
     }
   },
   "wave_records": {},
-  "closed_today": 11,
+  "closed_today": 19,
   "next_up": [
     "M31.3.2.3",
     "M31.3.2.4",
@@ -1325,6 +1293,12 @@
     "M41.3.1"
   ],
   "recent": [
+    {
+      "sha": "afde61e",
+      "at": "2026-09-28T14:00:15+00:00",
+      "subject": "Eight tasks close on their proof: seven skill tasks checked in the console, one in CI",
+      "closed": "M12.2.1,M12.2.5,M12.2.6,M12.3.2,M12.4.12,M12.4.13,M12.4.6,M38.4.1.2"
+    },
     {
       "sha": "1f0389e",
       "at": "2026-09-28T12:28:10+00:00",
@@ -1438,12 +1412,6 @@
       "at": "2026-09-21T14:42:50+00:00",
       "subject": "The secrets vault runs on the owner's install and gates readiness, with its key slots defined",
       "closed": "M31.1.1.5,M38.4.1.3"
-    },
-    {
-      "sha": "e142bf6",
-      "at": "2026-09-21T13:40:34+00:00",
-      "subject": "Every console write tells the ledger its writer's reach and trace, and a sweep refuses one that does not",
-      "closed": "M24.3.1"
     }
   ]
 }
