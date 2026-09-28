@@ -240,7 +240,7 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
     sort: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
     bulk: A_SKILL_IS_DECIDED_FROM_ITS_OWN_BYTES,
   },
-  "/library": { bulk: READ_ONLY },
+  "/library": {},
   "/sessions": {},
   "/sign-in-links": {},
   "/service-accounts": {},
@@ -274,6 +274,11 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
  * rows, by page and label, and why offering them names nothing about what exists.
  */
 const CLOSED_VOCABULARIES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  "/library": {
+    Review:
+      "Due and not due are the product's own two words, the same in every install, and each row " +
+      "carries one of them, so offering the other names nothing about what exists.",
+  },
   "/audit": {
     When:
       "The periods are the console's own four windows, the same in every install, and a window " +

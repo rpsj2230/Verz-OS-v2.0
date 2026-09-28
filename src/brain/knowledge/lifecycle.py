@@ -49,11 +49,16 @@ asked for decided, and a solution they captured decided. The sentence names the 
 date, and nothing says how many others there are, for the reason `ReverificationTask.message`
 gives.
 
+**A history is what happened and when, read from the ledger, and never who.** `event_of` reads one
+`know.item` entry into a closed word; the route leaves every actor out and lists a verification
+only to a reader the badge's own rule would tell that verifier, which is
+`A_HISTORY_SAYS_WHAT_HAPPENED_AND_WHEN_AND_NEVER_WHO`.
+
 Rejected: letting an administrator act on a personal document to hand it over when its owner
 leaves. A personal document reaches its owner and nobody else, so any other person acting on it
 learns it exists, which is the disclosure the level exists to prevent.
 
-Task ids: M7.4.5, M7.4.6, M7.7.2
+Task ids: M7.4.5, M7.4.6, M7.7.2, M27.15.40
 """
 
 from __future__ import annotations
@@ -469,3 +474,62 @@ def task_sentence(task: StewardTask, *, title: str) -> str:
                 msg = f"task {task.task_id!r} reports a decision and says nothing about it"
                 raise KnowledgeError(msg)
             return DECIDED_SENTENCES[(task.kind, task.outcome)].format(named=named)
+
+
+# ------------------------------------------------------------------ a history (M27.15.40)
+#: Why a document's history says what happened and when, and never who.
+A_HISTORY_SAYS_WHAT_HAPPENED_AND_WHEN_AND_NEVER_WHO: Final = (
+    "A document's history is read from the ledger, and every entry names an actor. Most of those "
+    "names are already on the page or are nobody's business, but one is guarded: the actor of a "
+    "verification is its verifier, and who verified a document, and when, is behind its own "
+    "capability (brain.knowledge.verification.A_BADGE_IS_A_DISCLOSURE_LIKE_ANY_OTHER). So the "
+    "history carries no actor at all, and a verification is listed only to a reader who could be "
+    "told that very verifier by the badge's own rule, asked once per entry with the entry's actor."
+)
+
+
+class HistoryEvent(enum.StrEnum):
+    """What one ledger entry about a document did, in the closed words a history is drawn in."""
+
+    ADDED = "added"
+    VERIFIED = "verified"
+    HANDED_OVER = "handed_over"
+    REPLACED = "replaced"
+    COMPANY_WIDE = "company_wide"
+    ARCHIVED = "archived"
+    REVIEW_DATE = "review_date"
+
+
+#: Which changed column says which event, in the order they are asked. A verification also moves
+#: the review date, and a promotion may too, so the columns that name the act come first.
+_CHANGED_MEANS: Final[tuple[tuple[str, HistoryEvent], ...]] = (
+    ("owner_id", HistoryEvent.HANDED_OVER),
+    ("visibility", HistoryEvent.COMPANY_WIDE),
+    ("verified_at", HistoryEvent.VERIFIED),
+    ("review_by", HistoryEvent.REVIEW_DATE),
+)
+
+
+def event_of(details: Mapping[str, object]) -> HistoryEvent | None:
+    """What one `know.item` ledger entry did, read from the details `0120`'s trigger writes.
+
+    `change` is `added` for the insert and `replaced` for every update, `changed` names the columns
+    an update moved, and `state` and `level` are the row as it stood afterwards. An entry that moved
+    nothing a person would call an event, such as the link a newer version keeps to the one it
+    replaced, is None and is left out of the history.
+    """
+    if details.get("change") == "added":
+        return HistoryEvent.ADDED
+    changed = str(details.get("changed") or "").split(",")
+    if "state" in changed:
+        if details.get("state") == KnowledgeState.SUPERSEDED.value:
+            return HistoryEvent.REPLACED
+        if details.get("state") == KnowledgeState.ARCHIVED.value:
+            return HistoryEvent.ARCHIVED
+    for column, event in _CHANGED_MEANS:
+        if column not in changed:
+            continue
+        if event is HistoryEvent.COMPANY_WIDE and details.get("level") != Visibility.COMPANY.value:
+            continue
+        return event
+    return None

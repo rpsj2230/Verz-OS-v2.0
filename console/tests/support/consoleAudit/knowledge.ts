@@ -1,8 +1,9 @@
 /**
- * What the console audit holds about the `library` module: the writes its screens send, each mapped
- * to the routes it reaches, and the tests that follow each route to its row, its ledger entry and
- * what it changes, and the reads it makes only once somebody acts. `support/consoleAudit.ts`
- * collects this file and says why each claim is shaped as it is.
+ * What the console audit holds about the `knowledge` module (`src/pages/knowledge/`, drawn at
+ * `/library` and `/solutions`): the writes its screens send, each mapped to the routes it reaches,
+ * and the tests that follow each route to its row, its ledger entry and what it changes, and the
+ * reads it makes only once somebody acts. `support/consoleAudit.ts` collects this file and says why
+ * each claim is shaped as it is.
  *
  * Task ids: none
  */
@@ -19,6 +20,7 @@ import {
   verificationPath,
 } from "../../../src/pages/knowledgeLifecycleQuery";
 import { LINKS_API_PATH, queuedPath } from "../../../src/pages/knowledgeIntakeQuery";
+import { historyPath, VERIFICATIONS_API_PATH } from "../../../src/pages/knowledge/knowledgeDocuments";
 import { at, type Proof, type Proofs, type ReadAfterAnAction, t, type WriteRoute } from "../auditClaims";
 
 /** `tests/unit/test_knowledge_lifecycle_db.py`, which presses the lifecycle's routes against PostgreSQL. */
@@ -42,50 +44,66 @@ const LIFECYCLE_SOLVED = lifecycle("test_a_captured_solution_becomes_knowledge_o
 
 const LIFECYCLE_HANDED_OVER = lifecycle("test_a_steward_is_handed_over_to_somebody_who_reaches_it_and_is_told");
 
+/** `tests/unit/test_knowledge_documents_db.py`, which verifies several documents against PostgreSQL. */
+const VERIFIED_SEVERAL = t(
+  "test_knowledge_documents_db",
+  "test_several_documents_are_verified_as_several_single_verifications",
+  true,
+);
+
 export const READ_AFTER_AN_ACTION: Readonly<Record<string, ReadAfterAnAction>> = {
-  // A version's text is read when a person presses Read this version on an opened document.
+  // A document's history is read when a person opens its About view.
+  "GET /api/v1/knowledge/items/{item_id}/history": {
+    screen: "/library/:itemId/:view",
+    spelled: "historyPath",
+    built: historyPath("upload.x"),
+  },
+  // A version's text is read when a person presses Show the text on a document's Profile.
   "GET /api/v1/knowledge/items/{item_id}/passages": {
-    screen: "/library",
+    screen: "/library/:itemId/:view",
     spelled: "passagesPath",
     built: passagesPath("upload.x"),
   },
 };
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
-  "src/pages/Knowledge.tsx uploadPath(draft.kind, draft.level, draft.department)": [
+  "src/pages/knowledge/addForms.tsx uploadPath(place.kind, place.level, place.department)": [
     at("POST /api/v1/knowledge/uploads", "uploadPath", uploadPath("sop", "department", "web").split("?")[0] ?? ""),
   ],
-  "src/components/KnowledgeLifecycle.tsx taskDonePath(taskId)": [
+  "src/pages/knowledge/parts.tsx taskDonePath(taskId)": [
     at("POST /api/v1/knowledge/tasks/{task_id}/done", "taskDonePath", taskDonePath("steward.x")),
   ],
-  "src/components/KnowledgeLifecycle.tsx verificationPath(itemId)": [
+  "src/pages/knowledge/actForms.tsx verificationPath(itemId)": [
     at("POST /api/v1/knowledge/items/{item_id}/verification", "verificationPath", verificationPath("upload.x")),
   ],
-  "src/components/KnowledgeLifecycle.tsx newVersionPath(document.item_id, instant)": [
+  "src/pages/knowledge/KnowledgePage.tsx VERIFICATIONS_API_PATH": [
+    at("POST /api/v1/knowledge/verifications", "VERIFICATIONS_API_PATH", VERIFICATIONS_API_PATH),
+  ],
+  "src/pages/knowledge/actForms.tsx newVersionPath(itemId, instant)": [
     at(
       "POST /api/v1/knowledge/items/{item_id}/versions",
       "newVersionPath",
       newVersionPath("upload.x", "2999-01-01T12:00:00+00:00").split("?")[0] ?? "",
     ),
   ],
-  "src/components/KnowledgeLifecycle.tsx promotionPath(itemId)": [
+  "src/pages/knowledge/actForms.tsx promotionPath(itemId)": [
     at("POST /api/v1/knowledge/items/{item_id}/promotion", "promotionPath", promotionPath("upload.x")),
   ],
-  "src/components/KnowledgeLifecycle.tsx stewardPath(document.item_id)": [
+  "src/pages/knowledge/actForms.tsx stewardPath(itemId)": [
     at("POST /api/v1/knowledge/items/{item_id}/steward", "stewardPath", stewardPath("upload.x")),
   ],
-  "src/components/KnowledgeLifecycle.tsx SOLUTIONS_API_PATH": [
+  "src/pages/knowledge/SolutionsPage.tsx SOLUTIONS_API_PATH": [
     at("POST /api/v1/knowledge/solutions", "SOLUTIONS_API_PATH", SOLUTIONS_API_PATH),
   ],
-  "src/components/KnowledgeLifecycle.tsx solutionDecisionPath(one.solution_id)": [
+  "src/pages/knowledge/SolutionsPage.tsx solutionDecisionPath(one.solutionId)": [
     at(
       "POST /api/v1/knowledge/solutions/{solution_id}/decision",
       "solutionDecisionPath",
       solutionDecisionPath("solution.x"),
     ),
   ],
-  "src/pages/KnowledgeIntake.tsx LINKS_API_PATH": [at("POST /api/v1/knowledge/links", "LINKS_API_PATH", LINKS_API_PATH)],
-  "src/pages/KnowledgeIntake.tsx queuedPath(place.kind, place.level, place.department)": [
+  "src/pages/knowledge/addForms.tsx LINKS_API_PATH": [at("POST /api/v1/knowledge/links", "LINKS_API_PATH", LINKS_API_PATH)],
+  "src/pages/knowledge/addForms.tsx queuedPath(place.kind, place.level, place.department)": [
     at(
       "POST /api/v1/knowledge/uploads/queued",
       "queuedPath",
@@ -145,6 +163,11 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: LIFECYCLE_SOLVED,
     audit: LIFECYCLE_SOLVED,
     behaviour: LIFECYCLE_SOLVED,
+  },
+  "POST /api/v1/knowledge/verifications": {
+    row: VERIFIED_SEVERAL,
+    audit: VERIFIED_SEVERAL,
+    behaviour: VERIFIED_SEVERAL,
   },
   "POST /api/v1/knowledge/links": {
     row: t(

@@ -455,6 +455,9 @@ export const AREAS: Readonly<Record<string, Area>> = {
   "Knowledge bases, documents and data sources": {
     screens: [
       "/library",
+      "/library/:itemId",
+      "/library/:itemId/:view",
+      "/solutions",
       "/learning",
       "/memory",
       "/memory/:subject",
@@ -472,6 +475,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/knowledge/tasks*",
       "/api/v1/knowledge/solutions*",
       "/api/v1/knowledge/links",
+      "/api/v1/knowledge/documents",
+      "/api/v1/knowledge/verifications",
       "/api/v1/govern/learning",
       "/api/v1/govern/learning/undo",
       "/api/v1/govern/memory",
@@ -524,6 +529,16 @@ export const AREAS: Readonly<Record<string, Area>> = {
       {
         what: "A price list uploaded as a document on the Knowledge page is not yet offered conversion to classified rows; it is uploaded on the Classification screen.",
         leaf: "M7.7.3",
+      },
+      {
+        what: "A document cannot be archived from the console; Archive is drawn inert with its reason.",
+        because:
+          "know.item's policy admits only live rows, so the update moving one to archived is refused under it as a supersession was before 0120 wrote know.supersede_item; archiving needs its own write past the policy, which is a migration.",
+      },
+      {
+        what: "The knowledge inventory cannot be exported; Export inventory is drawn inert with its reason.",
+        because:
+          "An export is recorded in ops.data_export, whose data sets are a closed list the table checks (brain.tables.data_export.ExportDataSet), so a knowledge inventory is a new member and a migration widening the check; an unrecorded export of titles is not offered meanwhile.",
       },
     ],
   },

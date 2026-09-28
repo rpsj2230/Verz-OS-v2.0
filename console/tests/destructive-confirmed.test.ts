@@ -54,34 +54,34 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "Recording a check appends a row. A later check supersedes an earlier one without editing it and " +
     "nothing is removed, which tests/unit/test_requirement_check_routes.py holds, so nothing existing " +
     "is ended or replaced.",
-  "src/pages/Knowledge.tsx uploadPath(draft.kind, draft.level, draft.department)":
+  "src/pages/knowledge/addForms.tsx uploadPath(place.kind, place.level, place.department)":
     "Adding a document writes a new item. The same file sent again to the same place is the same item " +
     "with the same text, because its reference is a digest of the bytes, the owner and the place, which " +
     "tests/unit/test_knowledge_upload.py holds, so nothing existing is ended or removed.",
-  "src/components/KnowledgeLifecycle.tsx taskDonePath(taskId)":
+  "src/pages/knowledge/parts.tsx taskDonePath(taskId)":
     "Marking a task read closes a notice in the reader's own list: a document handed to them, or a " +
     "promotion or a solution of theirs decided. What it reports is unchanged and in the ledger, and a " +
     "review is never closed this way, which tests/unit/test_knowledge_lifecycle_db.py holds.",
-  "src/components/KnowledgeLifecycle.tsx verificationPath(itemId)":
+  "src/pages/knowledge/actForms.tsx verificationPath(itemId)":
     "Verifying records that a named person vouched for the document today and when it is next due. " +
     "The earlier verification is kept in the ledger, which records the columns that changed, so " +
     "nothing is lost; tests/unit/test_knowledge_lifecycle_db.py holds the entry.",
-  "src/components/KnowledgeLifecycle.tsx promotionPath(itemId)":
+  "src/pages/knowledge/actForms.tsx promotionPath(itemId)":
     "Asking for the whole company changes nothing: it raises a card on the Approvals screen, and the " +
     "document widens only when somebody else approves it there, which " +
     "tests/unit/test_knowledge_lifecycle_db.py holds.",
-  "src/components/KnowledgeLifecycle.tsx SOLUTIONS_API_PATH":
+  "src/pages/knowledge/SolutionsPage.tsx SOLUTIONS_API_PATH":
     "Capturing a solution adds a row that waits for somebody else's decision. It answers nothing and " +
     "ends nothing until it is approved.",
-  "src/components/KnowledgeLifecycle.tsx solutionDecisionPath(one.solution_id)":
+  "src/pages/knowledge/SolutionsPage.tsx solutionDecisionPath(one.solutionId)":
     "Deciding a solution is the answer to the question its card asks, as deciding an approval is: the " +
     "problem and the solution are drawn above the two buttons, approving adds a document and refusing " +
     "adds nothing, and both are recorded in the ledger.",
-  "src/pages/KnowledgeIntake.tsx LINKS_API_PATH":
+  "src/pages/knowledge/addForms.tsx LINKS_API_PATH":
     "Adding a page by its link writes a new item, and the same page added again to the same place is " +
     "the same item, because its reference is a digest of the bytes, the owner and the place, which " +
     "tests/unit/test_link_intake.py holds, so nothing existing is ended or removed.",
-  "src/pages/KnowledgeIntake.tsx queuedPath(place.kind, place.level, place.department)":
+  "src/pages/knowledge/addForms.tsx queuedPath(place.kind, place.level, place.department)":
     "Queueing a file keeps it and a ticket for the worker; the item it becomes is named by a digest " +
     "of the bytes, the owner and the place, as an upload is, which tests/unit/test_ingest_queue.py " +
     "holds, so nothing existing is ended or removed.",
