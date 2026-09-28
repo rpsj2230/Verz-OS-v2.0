@@ -54,8 +54,20 @@ question as any of them, and the list names each question's person. See
 `A_PERSON_IS_CHOSEN_BY_NAME`.
 
 **A rung can be added at the end of a tier**, naming a provider this install can call and one of
-its models, which is how a provider added from the console (M5.7.2) takes traffic. Where a rung
-sits in the chain is otherwise still not editable here, for the reason below.
+its models, which is how a provider added from the console (M5.7.2) takes traffic.
+
+**A rung can be retired, or moved to another step, through the same gate** (M5.3.3, 2026-09-28).
+A retirement sets `deleted_at`, so the rung's attempts keep the row they name. A move is never an
+UPDATE of `position`, for the unique index's reason below: the moved rung, and the rungs after it
+when no free position sits between, are retired and inserted again at fresh positions in one
+transaction (`brain.ops.matrix_gate.placements`), so the ledger records each as retired and added,
+which is what happened to the rows. Either change that would leave a level with no step is held
+before the gate asks anything (`matrix_gate.A_LEVEL_KEEPS_AT_LEAST_ONE_STEP`). **After either, the
+level's live rungs are written once more with their own role**, so `0097`'s trigger derives each
+role again: a trigger derives the row it writes, and the rung that became the level's first after
+its primary left would otherwise still read as a failover. Rejected: deriving the role in the read.
+It is what the Models screen's plan does already, and a second derivation in this route's read would
+be a third copy of `RoutingChain.role_of`.
 
 **Four numbers are editable and eight columns are not.** `attempts`, `timeout_seconds`,
 `max_concurrency` and `enabled` are the operational dials: they change with load and with a
@@ -106,7 +118,7 @@ is switched on. There is one order because the order is the chain: see
 `A_CHAIN_HAS_ONE_ORDER`. And there is no act on several rungs at once: see
 `A_RUNG_IS_SAVED_ONE_AT_A_TIME`.
 
-Task ids: M5.3.3, M27.8.6, M5.3.2, M5.6.2, M5.7.2
+Task ids: M5.3.3, M27.8.6, M5.3.2, M5.6.2, M5.7.2, M27.15.38
 """
 
 from __future__ import annotations
@@ -128,11 +140,22 @@ from brain.console.read_replica import StalenessBanner
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.errors import Absent, Failed
 from brain.core.principal import PrincipalKind
-from brain.listing import Column, ListAsked, Listing
+from brain.listing import Column, ListAsked, Listing, refused
 from brain.models.registry import MODEL_NAME_PATTERN, SLUG_PATTERN
 from brain.models.routing import TIER_LADDER, RungRole, Tier
 from brain.ops.default_ladder_store import UNRESTRICTED_SCOPE
-from brain.ops.matrix_gate import GateVerdict, MatrixChange, RungAddition
+from brain.ops.matrix_gate import (
+    GateError,
+    GateVerdict,
+    MatrixChange,
+    Placed,
+    RungAddition,
+    RungMove,
+    RungRetirement,
+    level_left_empty,
+    levels_left_empty,
+    placements,
+)
 from brain.ops.matrix_gate import RungEdit as GateRungEdit
 from brain.ops.matrix_gate_run import MAX_GOLDEN_QUESTIONS, GateUnavailableError, MatrixGate
 from brain.ops.replica_store import ConsoleReads
@@ -381,6 +404,15 @@ class RungAdd(BaseModel):
     max_concurrency: Annotated[int, Field(ge=MIN_CONCURRENCY, le=SMALLINT_MAX)]
 
 
+class RungMoveAsked(BaseModel):
+    """Where a rung is moved to: a level, and a step counted from 1 as the screen counts it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    tier: Tier
+    step: Annotated[int, Field(ge=1, le=SMALLINT_MAX)]
+
+
 class FailingCaseView(BaseModel):
     """One case the gate failed, by its id and the reason in a sentence. Never an answer."""
 
@@ -597,6 +629,76 @@ def add_rung(new_id: uuid.UUID, addition: RungAddition, position: int, role: Run
     )
 
 
+def retire_rung(rung_id: uuid.UUID) -> Update:
+    """The UPDATE that retires one live rung, returning it. Its attempts keep the row they name."""
+    return (
+        update(RoutingRungRow)
+        .where(RoutingRungRow.id == rung_id, RoutingRungRow.deleted_at.is_(None))
+        .values(deleted_at=func.statement_timestamp())
+        .returning(RoutingRungRow)
+    )
+
+
+def retire_rungs(rung_ids: Collection[uuid.UUID]) -> Update:
+    """The UPDATE that retires the rungs a move rewrites, before their new rows are inserted."""
+    return (
+        update(RoutingRungRow)
+        .where(RoutingRungRow.id.in_(sorted(rung_ids)), RoutingRungRow.deleted_at.is_(None))
+        .values(deleted_at=func.statement_timestamp())
+        .execution_options(synchronize_session=False)
+    )
+
+
+def copy_values(row: RoutingRungRow) -> dict[str, Any]:
+    """What a move carries from a rung to its new row: every column but its place, id and role.
+
+    Read into a plain mapping before the old row is retired, so nothing after the retirement
+    asks the session for a row the table's policy no longer shows.
+    """
+    return {
+        "scope": row.scope,
+        "deployment_id": row.deployment_id,
+        "provider": row.provider,
+        "model": row.model,
+        "attempts": row.attempts,
+        "timeout_seconds": row.timeout_seconds,
+        "max_concurrency": row.max_concurrency,
+        "enabled": row.enabled,
+    }
+
+
+def copy_rung(new_id: uuid.UUID, values: dict[str, Any], tier: Tier, position: int) -> Insert:
+    """The INSERT for a rung a move rewrites, at its new place with a new id.
+
+    The role is written as the primary only because the column is not null; `0097`'s trigger
+    derives it on the insert and `rederive_roles` again once every row of the level is in.
+    """
+    return insert(RoutingRungRow).values(
+        id=new_id, tier=tier.value, position=position, role=RungRole.PRIMARY.value, **values
+    )
+
+
+def rederive_roles(tier: str) -> Update:
+    """Write a level's live rungs with their own role, so `0097`'s trigger derives each again.
+
+    The value set is the one held, so a rung whose role does not move is a write that moves no
+    column, and `0059`'s trigger appends nothing for it.
+    """
+    return (
+        update(RoutingRungRow)
+        .where(RoutingRungRow.tier == tier, RoutingRungRow.deleted_at.is_(None))
+        .values(role=RoutingRungRow.role)
+        .execution_options(synchronize_session=False)
+    )
+
+
+def placed_of(rows: Collection[RoutingRungRow]) -> list[Placed]:
+    """Live rows as a move reads them. A row naming a tier this release has no word for is left
+    out, as the ladder reader leaves it out."""
+    known = {one.value: one for one in Tier}
+    return [(str(one.id), known[one.tier], one.position) for one in rows if one.tier in known]
+
+
 def record_change(
     change: MatrixChange,
     verdict: GateVerdict,
@@ -606,14 +708,21 @@ def record_change(
     at: datetime,
 ) -> Insert:
     """The `ops.routing_change` row for one decided change, returning it."""
+    proposed: dict[str, Any]
     if isinstance(change, GateRungEdit):
         kind = ChangeKind.EDIT
-        proposed: dict[str, Any] = {
+        proposed = {
             "attempts": change.attempts,
             "timeout_seconds": change.timeout_seconds,
             "max_concurrency": change.max_concurrency,
             "enabled": change.enabled,
         }
+    elif isinstance(change, RungRetirement):
+        kind = ChangeKind.RETIRE
+        proposed = {}
+    elif isinstance(change, RungMove):
+        kind = ChangeKind.MOVE
+        proposed = {"tier": change.tier.value, "step": change.step}
     else:
         kind = ChangeKind.ADD
         proposed = {
@@ -782,14 +891,31 @@ async def _through_gate(
     change: MatrixChange,
     factory: async_sessionmaker[AsyncSession],
 ) -> RoutingChangeView:
-    """Run the gate for `change`, then apply and record it, or record it held."""
+    """Run the gate for `change`, then apply and record it, or record it held.
+
+    A retirement or a move that would empty a level is held with that reason and the gate is not
+    run: see `brain.ops.matrix_gate.A_LEVEL_KEEPS_AT_LEAST_ONE_STEP`.
+    """
     new_id = uuid.uuid4()
+    emptied: tuple[Tier, ...] = ()
+    if isinstance(change, RungRetirement | RungMove):
+        async with factory() as session:
+            live = list((await session.execute(live_rungs(MAX_RUNGS_PER_PAGE))).scalars().all())
+        emptied = levels_left_empty(placed_of(live), change)
     gate = gate_of(request)
     verdict: GateVerdict
     try:
-        if gate is None:
+        if emptied:
+            verdict = GateVerdict(
+                may_apply=False,
+                failing=(),
+                reasons=tuple(level_left_empty(one) for one in emptied),
+                quality_share=None,
+            )
+        elif gate is None:
             raise GateUnavailableError
-        verdict = await gate.decide(change, now=asked.now, new_rung_id=str(new_id))
+        else:
+            verdict = await gate.decide(change, now=asked.now, new_rung_id=str(new_id))
     except GateUnavailableError:
         verdict = GateVerdict(
             may_apply=False, failing=(), reasons=(NO_GATE_HERE,), quality_share=None
@@ -797,6 +923,9 @@ async def _through_gate(
     trace_id = str(structlog.contextvars.get_contextvars().get("trace_id", ""))
     async with factory() as session:
         applied: RoutingRungRow | None = None
+        rung_id: uuid.UUID | None = (
+            None if isinstance(change, RungAddition) else uuid.UUID(change.rung_id)
+        )
         if verdict.may_apply:
             # Who is saving, at what reach, for which request, for the entry `0059`'s trigger
             # appends: a rung has no column naming who changed it.
@@ -806,39 +935,7 @@ async def _through_gate(
                 trace_id=trace_id,
             ):
                 await session.execute(statement)
-            if isinstance(change, GateRungEdit):
-                applied = (
-                    await session.execute(
-                        apply_edit(
-                            uuid.UUID(change.rung_id),
-                            RungEdit(
-                                attempts=change.attempts,
-                                timeout_seconds=change.timeout_seconds,
-                                max_concurrency=change.max_concurrency,
-                                enabled=change.enabled,
-                            ),
-                        )
-                    )
-                ).scalar_one_or_none()
-                if applied is None:
-                    await session.rollback()
-                    log.info("routing rung not editable", rung=change.rung_id)
-                    raise _no_matrix_here()
-            else:
-                peers = list((await session.execute(tier_rungs(change.tier))).scalars().all())
-                position = (max(one.position for one in peers) + 1) if peers else 0
-                applied = (
-                    await session.execute(
-                        add_rung(
-                            new_id, change, position, role_for(position, change.provider, peers)
-                        )
-                    )
-                ).scalar_one_or_none()
-        rung_id = (
-            applied.id
-            if applied is not None
-            else (uuid.UUID(change.rung_id) if isinstance(change, GateRungEdit) else None)
-        )
+            applied, rung_id = await _apply(session, change, new_id, rung_id)
         recorded = (
             await session.execute(
                 record_change(
@@ -854,6 +951,89 @@ async def _through_gate(
         principal=asked.caller.principal.id,
     )
     return change_view(recorded, None if applied is None else view_of(applied))
+
+
+async def _apply(
+    session: AsyncSession, change: MatrixChange, new_id: uuid.UUID, rung_id: uuid.UUID | None
+) -> tuple[RoutingRungRow | None, uuid.UUID | None]:
+    """Write a passed change in the caller's transaction: the row it leaves, and the rung the
+    change record names. A rung that left the matrix since the change was asked is the matrix's
+    one refusal, and nothing is written."""
+    if isinstance(change, GateRungEdit):
+        edited = (
+            await session.execute(
+                apply_edit(
+                    uuid.UUID(change.rung_id),
+                    RungEdit(
+                        attempts=change.attempts,
+                        timeout_seconds=change.timeout_seconds,
+                        max_concurrency=change.max_concurrency,
+                        enabled=change.enabled,
+                    ),
+                )
+            )
+        ).scalar_one_or_none()
+        if edited is None:
+            await session.rollback()
+            log.info("routing rung not editable", rung=change.rung_id)
+            raise _no_matrix_here()
+        return edited, edited.id
+    if isinstance(change, RungRetirement):
+        retired = (
+            await session.execute(retire_rung(uuid.UUID(change.rung_id)))
+        ).scalar_one_or_none()
+        if retired is None:
+            await session.rollback()
+            log.info("routing rung not retirable", rung=change.rung_id)
+            raise _no_matrix_here()
+        await session.execute(rederive_roles(retired.tier))
+        return None, rung_id
+    if isinstance(change, RungMove):
+        moved = await _apply_move(session, change, new_id)
+        if moved is None:
+            await session.rollback()
+            log.info("routing rung not movable", rung=change.rung_id)
+            raise _no_matrix_here()
+        return moved, moved.id
+    peers = list((await session.execute(tier_rungs(change.tier))).scalars().all())
+    position = (max(one.position for one in peers) + 1) if peers else 0
+    added = (
+        await session.execute(
+            add_rung(new_id, change, position, role_for(position, change.provider, peers))
+        )
+    ).scalar_one_or_none()
+    return added, None if added is None else added.id
+
+
+async def _apply_move(
+    session: AsyncSession, move: RungMove, new_id: uuid.UUID
+) -> RoutingRungRow | None:
+    """Retire the rungs a move rewrites and insert them again at their new positions.
+
+    The moved rung's new row takes `new_id`, which the change record names; the rungs after it,
+    when they are rewritten at all, take fresh ids. Every level the move touched has its roles
+    derived again. None when the moved rung has left the matrix since the move was asked.
+    """
+    rows = list((await session.execute(live_rungs(MAX_RUNGS_PER_PAGE))).scalars().all())
+    by_id = {str(one.id): one for one in rows}
+    moving = by_id.get(move.rung_id)
+    if moving is None:
+        return None
+    try:
+        placed = placements(placed_of(rows), move)
+    except GateError:
+        return None
+    carried = {one.rung_id: copy_values(by_id[one.rung_id]) for one in placed}
+    touched = sorted({moving.tier, move.tier.value})
+    await session.execute(retire_rungs([uuid.UUID(one.rung_id) for one in placed]))
+    for one in placed:
+        fresh = new_id if one.rung_id == move.rung_id else uuid.uuid4()
+        await session.execute(copy_rung(fresh, carried[one.rung_id], move.tier, one.position))
+    for tier in touched:
+        await session.execute(rederive_roles(tier))
+    return (
+        await session.execute(live_rung(new_id).execution_options(populate_existing=True))
+    ).scalar_one_or_none()
 
 
 def _no_matrix_here() -> Absent:
@@ -1004,6 +1184,61 @@ async def add(request: Request, addition: RungAdd, asked: Asked) -> RoutingChang
         timeout_seconds=addition.timeout_seconds,
         max_concurrency=addition.max_concurrency,
     )
+    return await _through_gate(request, asked, change, factory)
+
+
+@router.post(
+    "/routing/rungs/{rung_id}/retire",
+    response_model=RoutingChangeView,
+    responses=COMMON_RESPONSES,
+)
+async def retire(request: Request, rung_id: uuid.UUID, asked: Asked) -> RoutingChangeView:
+    """Take one rung off the matrix, once the matrix gate passes the ladder without it (M5.3.3).
+
+    The write capability over everything first, then the rung, each refused as `edit_rung` refuses.
+    """
+    if not may_govern(asked.reach, asked.now):
+        log.info("routing matrix not editable", principal=asked.caller.principal.id)
+        raise _no_matrix_here()
+    factory = _require_sessions(request)
+    async with factory() as session:
+        found = (await session.execute(live_rung(rung_id))).scalar_one_or_none()
+    if found is None:
+        log.info("routing rung not retirable", rung=str(rung_id))
+        raise _no_matrix_here()
+    return await _through_gate(request, asked, RungRetirement(rung_id=str(rung_id)), factory)
+
+
+@router.post(
+    "/routing/rungs/{rung_id}/move",
+    response_model=RoutingChangeView,
+    responses=COMMON_RESPONSES,
+)
+async def move(
+    request: Request, rung_id: uuid.UUID, body: RungMoveAsked, asked: Asked
+) -> RoutingChangeView:
+    """Move one rung to another step, in its own level or another, once the gate passes it.
+
+    A move to the step the rung already holds is a 422 naming `step`, before the gate runs: it
+    changes nothing, and running the golden questions over an unchanged ladder would record a
+    change nobody made.
+    """
+    if not may_govern(asked.reach, asked.now):
+        log.info("routing matrix not editable", principal=asked.caller.principal.id)
+        raise _no_matrix_here()
+    if body.tier not in TIER_LADDER:
+        raise _no_matrix_here()
+    factory = _require_sessions(request)
+    async with factory() as session:
+        rows = list((await session.execute(live_rungs(MAX_RUNGS_PER_PAGE))).scalars().all())
+    change = RungMove(rung_id=str(rung_id), tier=body.tier, step=body.step)
+    if not any(str(one.id) == change.rung_id for one in rows):
+        log.info("routing rung not movable", rung=str(rung_id))
+        raise _no_matrix_here()
+    try:
+        placements(placed_of(rows), change)
+    except GateError as refusal:
+        raise refused("step", str(refusal)) from None
     return await _through_gate(request, asked, change, factory)
 
 

@@ -70,6 +70,7 @@
 @source "../pages/overview";
 @source "../pages/skills";
 @source "../pages/credentials";
+@source "../pages/models";
 @source not inline("grid");
 
 /*

@@ -108,7 +108,31 @@ capability, attributed so `0059`'s trigger ledgers who changed which provider's 
 refused while the install has no currency: a figure set in none is the plausibly wrong unit
 `brain.locale` refuses to draw. See `brain.models.pricing` and `brain.ops.price_store`.
 
-Task ids: M27.8.8, M27.2.3, M5.6.4, M5.7.1, M5.7.2, M5.2.2, M5.4.3, M5.4.8, M5.5.1
+**The providers are a list the console pages, searches and filters** (M27.16.1, 2026-09-28): the
+`providers` field of the read follows `brain.listing`'s contract, ordered as the product lists
+them, and every other field is the whole plan, because a step is not a provider and the matrix is
+one answer. **Each provider carries its last test**, kept as the `provider_check.<slug>` setting
+by `check`: how it ended and the model it used, with the row's own writer and instant, so the
+list says "Answered, 3 Sep" without a second table, and `0059`'s trigger puts each test on the
+ledger. See `A_TEST_IS_REMEMBERED_WHERE_ITS_SWITCH_IS`.
+
+**One provider's figures are `GET /models/providers/{provider}/stats`**: calls and failures over
+thirty days, counted from `ops.model_attempt` through the steps that name it. **Cost is named and
+left out, never nought.** While nothing records a call's cost
+(`brain.console.agent_profile.RUN_SPEND_IS_RECORDED`) it says so; once cost is recorded, it is
+recorded per request, whose calls can span providers, and read through the spend grant, which a
+reader of this screen need not hold, so it is not split by provider here and the Spend report shows
+it by model. A step's attempts are counted while the step is on the matrix: the table's row policy
+shows live steps only, so a retired or moved step's calls leave the figure with it, and the figure
+says so.
+
+**The routing configuration exports without keys** (M27.15.38): `GET /routing/export` is the
+plan's steps, the providers' switches and registry rows and the levels' numbers, as one JSON
+document named for saving. It is built from the same read the screen draws and carries no
+credential field at all, not even whether a key is held, so a copy handed to a supplier says how
+the install routes and nothing about how it authenticates. See `AN_EXPORT_CARRIES_NO_KEY`.
+
+Task ids: M27.8.8, M27.2.3, M5.6.4, M5.7.1, M5.7.2, M5.2.2, M5.4.3, M5.4.8, M5.5.1, M27.15.38
 Task ids: M27.12.5
 """
 
@@ -121,14 +145,16 @@ from types import MappingProxyType
 from typing import Annotated, Any, Final, Literal
 
 import structlog
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.api import API_PREFIX, COMMON_RESPONSES, refused_request
 from brain.api_routes import Asked
 from brain.attribution import attribute
+from brain.console.agent_profile import RUN_SPEND_IS_RECORDED
 from brain.console.model_matrix import exhausted_tiers, matrix
 from brain.console.operate import figure_basis, panel
 from brain.console.workspace import Basis
@@ -138,6 +164,7 @@ from brain.core.lane import Lane
 from brain.credential_routes import SlotView, credentials_of, listing, may_manage
 from brain.gate.finish import Finished, ModelCallOutcome, Origin, RequestRecorder, finish
 from brain.install import hold_saved
+from brain.listing import Column, ListAsked, Listing
 from brain.locale import currency as install_currency
 from brain.models.assembly import (
     HOSTED_PROFILE,
@@ -176,10 +203,13 @@ from brain.ops.model_service import (
 from brain.ops.price_store import read_prices, set_price
 from brain.ops.provider_health_store import live_constraints, recent_alerts
 from brain.ops.provider_keys import PROVIDER_SLOTS
+from brain.ops.setting_store import SettingState, put, read_namespace, values_under
 from brain.ops.telemetry_store import TelemetryRecorder
 from brain.ops.usage_store import UsageRecorder
 from brain.routing_routes import MATRIX_WRITE
 from brain.settings_routes import may_configure
+from brain.tables.config import SettingType
+from brain.tables.routing import ModelAttemptRow, RoutingRungRow
 
 log = structlog.get_logger()
 
@@ -229,6 +259,25 @@ A_REFUSED_KEY_IS_NOT_A_HEALTHY_PROVIDER: Final = (
     "marked, whatever its breaker says."
 )
 
+#: Why a provider's last test is an `ops.setting` row.
+A_TEST_IS_REMEMBERED_WHERE_ITS_SWITCH_IS: Final = (
+    "A test is a request, and its attempts and its ledger row say what it did; neither says which "
+    "test was the last one for a provider, and a provider no step names writes no attempt at all. "
+    "So the outcome is kept as the provider_check setting beside the provider's switch: one row, "
+    "overwritten by the next test, carrying who pressed it and when, and appended to the ledger "
+    "by the setting trigger like every other row of that table. It keeps how the test ended and "
+    "the model it used, never the reply."
+)
+
+#: Why the export carries nothing about keys.
+AN_EXPORT_CARRIES_NO_KEY: Final = (
+    "The export is how the install routes: its steps, its providers' switches and terms, and its "
+    "levels' numbers. A key is how it authenticates, and whether one is held is a fact about the "
+    "vault, which the credentials screen serves to the few who may manage it. So the export has "
+    "no credential field, no vault state and no key flag, and a copy handed to anybody says "
+    "nothing about either."
+)
+
 #: Why the profile is saved as an installation setting from this screen rather than switched.
 WHERE_ANSWERS_ARE_MADE_IS_AN_INSTALLATION_SETTING_AND_NOT_A_SWITCH: Final = (
     "The profile decides whether a question's text may leave the server at all, for every "
@@ -266,6 +315,45 @@ CHECK_LEVEL: Final[Tier] = DEFAULT_TIERS[0]
 
 #: The id the check's one added step carries. It names no row, and its attempt row is not written.
 UNLADDERED_RUNG_ID: Final = "provider-check"
+
+#: The `ops.setting` namespace a provider's last test is kept under, as `provider_check.<slug>`.
+#: Its own namespace, so `model_service.switch_states`, which reads `provider.<slug>`, never sees
+#: it. See `A_TEST_IS_REMEMBERED_WHERE_ITS_SWITCH_IS`.
+CHECK_NAMESPACE: Final = "provider_check"
+
+#: How many days a provider's figures cover, as the other console figures read thirty days.
+STATS_DAYS: Final = 30
+
+#: The attempt outcomes a provider's figures count as failures: the provider or the connection
+#: failed. Not `ok`, not `refused`, which is the model declining on content and so an answer, and
+#: not `circuit_open`, which is an attempt the breaker never sent and so not a call at all.
+FAILED_OUTCOMES: Final[frozenset[str]] = frozenset(
+    {"connection_error", "context_exceeded", "provider_error", "rate_limited", "stopped", "timeout"}
+)
+
+#: The outcome of an attempt that was never sent, which is not counted as a call.
+NOT_SENT_OUTCOME: Final = "circuit_open"
+
+#: Why a provider's calls are not recorded, for one no step names.
+NO_STEP_NO_CALLS: Final = (
+    "No step on the failover matrix uses this provider, so no call to it is recorded. A test is "
+    "sent through its default model and is not counted here."
+)
+
+#: Why a provider's cost is not recorded.
+NO_COST_RECORDED: Final = (
+    "Nothing on this install records what a model call costs yet, so no cost is shown rather "
+    "than a cost of nought."
+)
+
+#: Why a provider's cost is not shown once cost is recorded. See the module docstring.
+COST_IS_NOT_SPLIT_BY_PROVIDER: Final = (
+    "Cost is kept per request, and one request's calls can reach more than one provider, so it is "
+    "not split by provider here. The Spend report shows it by model."
+)
+
+#: The name the routing export is saved under.
+EXPORT_FILENAME: Final = "routing-configuration.json"
 
 #: What an administrator is told about a check, by how it ended. Plain words: see the module
 #: docstring. An answer is told with its model by `answered_told`; this entry is its fallback.
@@ -367,11 +455,25 @@ class DisclosedView(BaseModel):
     attempts: int
 
 
+class LastCheckView(BaseModel):
+    """How a provider's last test ended, the model it used, and when. Never the reply."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    answered: bool
+    #: The check's own vocabulary: `answered`, a fallback trigger, `key_refused` and the rest.
+    outcome: str
+    model: str | None
+    at: datetime
+
+
 class ProviderStateView(BaseModel):
     """One provider: what it is, whether it is switched on, and whether a key is held here."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
+    #: Where the product lists it: built in, then added, then this server's own. The list's order.
+    listed: int = 0
     provider: str
     description: str
     #: Outside the client's own hardware. Every provider but the local inference server.
@@ -389,6 +491,8 @@ class ProviderStateView(BaseModel):
     registered: RegisteredView | None = None
     #: What this provider has been sent, by category, with counts. Empty when nothing was.
     disclosed: list[DisclosedView] = []
+    #: Its last test from the console, or null for a provider nobody has tested.
+    last_check: LastCheckView | None = None
 
 
 class RungStateView(BaseModel):
@@ -488,6 +592,73 @@ class ProvidersView(BaseModel):
     depth_alerts: list[ChainDepthAlertView] = []
     #: Whether this reader may change where answers are made. Presentation only.
     profile_editable: bool = False
+    #: Present exactly when a further provider matches the list's question. See `brain.listing`.
+    next_cursor: str | None = None
+
+
+class UnrecordedView(BaseModel):
+    """A figure the page asks for that nothing on this install records, and why."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    figure: str
+    why: str
+
+
+class ProviderStatsView(BaseModel):
+    """One provider's figures over `days`. A figure nothing records is null and named in
+    `unrecorded` with its reason, never nought."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    provider: str
+    days: int
+    calls: int | None
+    failures: int | None
+    cost_minor: int | None
+    unrecorded: list[UnrecordedView]
+
+
+class ExportedStep(BaseModel):
+    """One step of the failover matrix as the export writes it: its level, number and numbers."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    #: The level by the key every request names it with: `small`, `main` or `heavy`.
+    tier: str
+    step: int
+    provider: str
+    model: str
+    attempts: int
+    timeout_seconds: float
+    max_concurrency: int
+    enabled: bool
+
+
+class ExportedProvider(BaseModel):
+    """One provider as the export writes it: switched on or off, and its registry row. No key."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    provider: str
+    switched_on: bool
+    registered: RegisteredView | None
+
+
+class RoutingExportView(BaseModel):
+    """The routing configuration as one document named for saving.
+
+    See `AN_EXPORT_CARRIES_NO_KEY` for what it leaves out.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    filename: str
+    generated_at: datetime
+    profile: str
+    steps: list[ExportedStep]
+    providers: list[ExportedProvider]
+    tiers: list[RoutingTierView]
 
 
 class ProviderSwitchAsked(BaseModel):
@@ -607,24 +778,29 @@ def providers_view(
     alerts: list[ChainDepthAlertView] | None = None,
     profile_editable: bool = False,
     refused: frozenset[str] = frozenset(),
+    checks: Mapping[str, LastCheckView] | None = None,
 ) -> ProvidersView:
     """The plan and the switch rows, as one reader may be shown them.
 
     `vault` is None unless the reader may manage credentials; see the module docstring.
     `disclosed` is the attempts per provider and category of data (M5.6.4). `residency` and
     `alerts` are read beside the plan, because the plan carries constraints without their ids.
-    `refused` is the deployments whose latest attempt the provider refused as a key.
+    `refused` is the deployments whose latest attempt the provider refused as a key. `checks` is
+    each provider's last test, by slug.
     """
     rings = {one.deployment_id: one for one in plan.state.rings}
     described = {one.slug: one.description for one in PROVIDER_SLOTS}
     records = {one.slug: one for one in plan.state.providers}
     sent = disclosed or {}
+    tested = checks or {}
     providers = []
-    for slug in listed_providers(plan):
+    for listed, slug in enumerate(listed_providers(plan)):
         switched = switches.get(slug)
         record = records.get(slug)
         providers.append(
             ProviderStateView(
+                listed=listed,
+                last_check=tested.get(slug),
                 provider=slug,
                 description=(
                     record.label
@@ -691,6 +867,122 @@ def providers_view(
         residency=residency or [],
         depth_alerts=alerts or [],
         profile_editable=profile_editable,
+    )
+
+
+def check_value(view: CheckView) -> dict[str, Any]:
+    """What a test leaves in its setting row: how it ended and the model. Never the reply or the
+    sentence, which is product text a later release may reword."""
+    return {"answered": view.answered, "outcome": view.outcome, "model": view.model}
+
+
+def checks_from(states: Mapping[str, SettingState]) -> dict[str, LastCheckView]:
+    """Each provider's last test, from its `provider_check` row. A row this release cannot read
+    is no test rather than a guessed one."""
+    found: dict[str, LastCheckView] = {}
+    for slug, state in states.items():
+        value = state.value
+        if not isinstance(value, dict):
+            continue
+        answered, outcome, model = value.get("answered"), value.get("outcome"), value.get("model")
+        if not isinstance(answered, bool) or not isinstance(outcome, str):
+            continue
+        found[slug] = LastCheckView(
+            answered=answered,
+            outcome=outcome,
+            model=model if isinstance(model, str) else None,
+            at=state.updated_at,
+        )
+    return found
+
+
+def attempt_figures(provider: str, since: datetime) -> Select[tuple[int, int]]:
+    """Calls to a provider since `since`, and how many failed, through its live steps.
+
+    A call is a finished attempt the breaker sent; a failure is one whose outcome is in
+    `FAILED_OUTCOMES`. `deleted_at` is tested here as well as by the step table's policy, for
+    `brain.routing_routes.live_rungs`' reason.
+    """
+    sent = ModelAttemptRow.outcome != NOT_SENT_OUTCOME
+    failed = ModelAttemptRow.outcome.in_(sorted(FAILED_OUTCOMES))
+    return (
+        select(func.count().filter(sent), func.count().filter(failed))
+        .select_from(ModelAttemptRow)
+        .join(RoutingRungRow, RoutingRungRow.id == ModelAttemptRow.rung_id)
+        .where(
+            RoutingRungRow.provider == provider,
+            RoutingRungRow.deleted_at.is_(None),
+            ModelAttemptRow.started_at >= since,
+            ModelAttemptRow.finished_at.is_not(None),
+        )
+    )
+
+
+def stats_view(
+    provider: str, *, counted: tuple[int, int] | None, cost_recorded: bool
+) -> ProviderStatsView:
+    """One provider's figures. `counted` is None for a provider no step names, whose calls are
+    then not recorded rather than nought; the cost is not recorded while nothing writes it."""
+    unrecorded = []
+    if counted is None:
+        unrecorded.append(UnrecordedView(figure="calls", why=NO_STEP_NO_CALLS))
+        unrecorded.append(UnrecordedView(figure="failures", why=NO_STEP_NO_CALLS))
+    unrecorded.append(
+        UnrecordedView(
+            figure="model_cost",
+            why=COST_IS_NOT_SPLIT_BY_PROVIDER if cost_recorded else NO_COST_RECORDED,
+        )
+    )
+    return ProviderStatsView(
+        provider=provider,
+        days=STATS_DAYS,
+        calls=None if counted is None else counted[0],
+        failures=None if counted is None else counted[1],
+        cost_minor=None,
+        unrecorded=unrecorded,
+    )
+
+
+def _level(rungs: Iterable[LadderRung], tier: Tier) -> list[LadderRung]:
+    """One level's live rungs in the order a question tries them."""
+    return sorted((one for one in rungs if one.tier is tier), key=lambda one: one.position)
+
+
+def routing_export(
+    plan: Planned, switches: Mapping[str, tuple[bool, str, datetime]], *, at: datetime
+) -> RoutingExportView:
+    """The routing configuration as one document: steps numbered from 1 in each level, providers
+    as the product lists them, and the levels' numbers. See `AN_EXPORT_CARRIES_NO_KEY`."""
+    records = {one.slug: one for one in plan.state.providers}
+    steps = [
+        ExportedStep(
+            tier=tier.value,
+            step=number,
+            provider=rung.provider,
+            model=rung.model,
+            attempts=rung.attempts,
+            timeout_seconds=rung.timeout_seconds,
+            max_concurrency=rung.max_concurrency,
+            enabled=rung.enabled,
+        )
+        for tier in TIER_LADDER
+        for number, rung in enumerate(_level(plan.state.rungs, tier), start=1)
+    ]
+    providers = [
+        ExportedProvider(
+            provider=slug,
+            switched_on=True if slug not in switches else switches[slug][0],
+            registered=None if slug not in records else registered_view(records[slug]),
+        )
+        for slug in listed_providers(plan)
+    ]
+    return RoutingExportView(
+        filename=EXPORT_FILENAME,
+        generated_at=at,
+        profile=normalised_profile(plan.profile),
+        steps=steps,
+        providers=providers,
+        tiers=tier_views(plan.tiers),
     )
 
 
@@ -865,6 +1157,46 @@ async def _refused(request: Request, now: datetime) -> frozenset[str]:
     )
 
 
+async def _checks(request: Request) -> dict[str, LastCheckView]:
+    """Each provider's last test. Empty without a database, and empty when unreadable."""
+    factory = _sessions(request)
+    if factory is None:
+        return {}
+    try:
+        async with factory() as session:
+            states = await read_namespace(session, CHECK_NAMESPACE)
+    except Exception as exc:
+        # A test that cannot be read is no test; the list says "not tested" rather than failing.
+        log.warning("models.checks_unreadable", error=type(exc).__name__)
+        return {}
+    return checks_from(values_under(states, CHECK_NAMESPACE))
+
+
+async def _remember(request: Request, asked: Asked, provider: str, view: CheckView) -> None:
+    """Keep this test as the provider's last, attributed for the ledger entry its row writes.
+
+    A test whose row cannot be written is still answered: the person was sent the outcome, and
+    the list goes on showing the test before it. See `A_TEST_IS_REMEMBERED_WHERE_ITS_SWITCH_IS`.
+    """
+    factory = _sessions(request)
+    if factory is None:
+        return
+    try:
+        async with factory() as session:
+            await attribute(session, asked)
+            await put(
+                session,
+                f"{CHECK_NAMESPACE}.{provider}",
+                value_type=SettingType.JSON,
+                value=check_value(view),
+                description=f"The last test of {provider} from the console",
+                updated_by=asked.caller.principal.id,
+            )
+            await session.commit()
+    except Exception as exc:
+        log.warning("models.check_not_remembered", error=type(exc).__name__)
+
+
 async def _vault_for(
     request: Request, reach: EntitlementSet, now: datetime
 ) -> tuple[VaultState, dict[str, SlotView]] | None:
@@ -899,6 +1231,7 @@ async def _view(request: Request, asked: Asked, calls: ModelCalls) -> ProvidersV
         alerts=await _alerts(request, asked.now),
         profile_editable=may_configure(asked.reach, asked.now),
         refused=await _refused(request, asked.now),
+        checks=await _checks(request),
     )
 
 
@@ -907,16 +1240,76 @@ def switchable(plan: Planned) -> tuple[str, ...]:
     return listed_providers(plan)
 
 
+#: What the providers list may be searched, filtered and ordered by: the product's order, or name.
+PROVIDERS: Final[Listing[ProviderStateView]] = Listing(
+    name="model-providers",
+    columns=(
+        Column("listed", lambda row: row.listed, sort=True),
+        Column("provider", lambda row: row.provider, search=True, filter=True, sort=True),
+        Column("description", lambda row: row.description, search=True),
+        Column("switched_on", lambda row: row.switched_on, filter=True),
+        Column("key_held", lambda row: row.key_held, filter=True),
+    ),
+    key=lambda row: row.provider,
+    order="listed",
+)
+ProvidersQuery = Annotated[ListAsked, Depends(PROVIDERS.query())]
+
+
 router = APIRouter(prefix=API_PREFIX, tags=["models"])
 
 
 @router.get("/models/providers", response_model=ProvidersView, responses=COMMON_RESPONSES)
-async def providers(request: Request, asked: Asked) -> ProvidersView:
-    """Every provider and every live rung, as the next call will see them."""
+async def providers(request: Request, asked: Asked, listed: ProvidersQuery) -> ProvidersView:
+    """Every provider matching the list's question, and every live rung, as the next call will
+    see them. The question narrows `providers` alone: the steps are the whole matrix."""
     if not may_read(asked.reach, asked.now):
         log.info("providers not answerable", principal=asked.caller.principal.id)
         raise _not_answerable()
-    return await _view(request, asked, models_of(request).calls)
+    plan = PROVIDERS.plan(listed, reader=asked.caller.principal.id)
+    view = await _view(request, asked, models_of(request).calls)
+    page = plan.page(view.providers)
+    return view.model_copy(update={"providers": list(page.items), "next_cursor": page.next_cursor})
+
+
+@router.get(
+    "/models/providers/{provider}/stats",
+    response_model=ProviderStatsView,
+    responses=COMMON_RESPONSES,
+)
+async def provider_stats(request: Request, provider: str, asked: Asked) -> ProviderStatsView:
+    """One provider's calls, failures and cost over `STATS_DAYS`, each figure a number or named
+    as not recorded. A provider that does not exist is refused as one the reader may not see."""
+    if not may_read(asked.reach, asked.now):
+        log.info("provider stats not answerable", principal=asked.caller.principal.id)
+        raise _not_answerable()
+    plan = await models_of(request).calls.planned()
+    if provider not in listed_providers(plan):
+        raise _not_answerable()
+    counted: tuple[int, int] | None = None
+    if names_the_provider(plan, provider):
+        factory = _sessions(request)
+        if factory is None:
+            raise Failed("no database on this process")
+        since = asked.now - timedelta(days=STATS_DAYS)
+        async with factory() as session:
+            calls, failures = (await session.execute(attempt_figures(provider, since))).one()
+        counted = (int(calls), int(failures))
+    return stats_view(provider, counted=counted, cost_recorded=RUN_SPEND_IS_RECORDED)
+
+
+@router.get("/routing/export", response_model=RoutingExportView, responses=COMMON_RESPONSES)
+async def export_routing(request: Request, asked: Asked) -> RoutingExportView:
+    """The routing configuration as one document, without keys (M27.15.38).
+
+    Answered to a reader of the providers, who is already shown every step and every provider's
+    terms; see `AN_EXPORT_CARRIES_NO_KEY` for what it leaves out.
+    """
+    if not may_read(asked.reach, asked.now):
+        log.info("routing export not answerable", principal=asked.caller.principal.id)
+        raise _not_answerable()
+    plan = await models_of(request).calls.planned()
+    return routing_export(plan, await _switches(request), at=datetime.now(UTC))
 
 
 @router.put(
@@ -1026,6 +1419,7 @@ async def check(request: Request, provider: str, asked: Asked) -> CheckView:
             model_usage=meter.usage(),
         ),
     )
+    await _remember(request, asked, provider, view)
     log.info(
         "provider checked",
         provider=provider,

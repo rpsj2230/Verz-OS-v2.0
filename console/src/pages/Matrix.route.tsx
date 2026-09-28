@@ -1,11 +1,10 @@
 /**
- * The routing matrix, a tab of Models and routing. The rung being edited is a path segment; the
+ * The routing matrix, a tab of Models and routing. The step being edited is a path segment; the
  * bare path is the matrix on its own.
  *
- * Loaded on demand, for the records screen's reason: it mounts the same two libraries, so an
- * eager import here would undo the split whatever the records route did.
+ * Loaded on demand, as it always was, so the entry chunk stays the shell's.
  *
- * Task ids: M27.10.1
+ * Task ids: M5.3.3, M27.10.1, M27.16.1
  */
 
 import { lazy } from "react";
