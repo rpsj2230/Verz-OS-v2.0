@@ -666,9 +666,13 @@ export const AREAS: Readonly<Record<string, Area>> = {
   "System health and the state of every service": {
     screens: ["/models", "/runs"],
     routes: [],
-    tables: [],
+    tables: ["ops.halt"],
     installation: [],
     gaps: [
+      {
+        what: "The install cannot be stopped or resumed from the console: 0136 stores a halt and its resume, and no store, route or Stop control reads or writes the table yet.",
+        leaf: "M27.12.4",
+      },
       {
         what: "The state of each service the install runs on is not shown.",
         because: "/health/ready answers the orchestrator outside /api/v1 with no screen reading it. Each rung's circuit breaker is shown, on the Models and health screen from GET /api/v1/models/providers, replayed from the attempts the executor recorded.",

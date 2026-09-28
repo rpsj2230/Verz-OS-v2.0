@@ -7,12 +7,12 @@ What an administrator would need to manage, read out of the schema, the routes a
 ## What was measured
 
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
-- 102 tables, from `brain.db.Base.metadata`.
+- 103 tables, from `brain.db.Base.metadata`.
 - 27 installation values, from `brain.install.INSTALLATION`.
 - 209 routes under `/api/v1` and `/setup`, from the API's internal document.
 - 73 console addresses, from the route table in `console/src/App.tsx`.
 - 82 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 100 routes.
-- 37 gaps recorded, and 28 routes no screen calls.
+- 38 gaps recorded, and 28 routes no screen calls.
 
 ## Area by area
 
@@ -429,9 +429,10 @@ No gap recorded.
 ### System health and the state of every service
 
 - **Screens:** `/models`, `/runs`
-- **Tables:** none
+- **Tables:** `ops.halt`
 - **Installation values:** none
 
+- **Gap.** The install cannot be stopped or resumed from the console: 0136 stores a halt and its resume, and no store, route or Stop control reads or writes the table yet. Open leaf `M27.12.4`.
 - **Gap.** The state of each service the install runs on is not shown. Recorded: /health/ready answers the orchestrator outside /api/v1 with no screen reading it. Each rung's circuit breaker is shown, on the Models and health screen from GET /api/v1/models/providers, replayed from the attempts the executor recorded.
 
 ### Backup and recovery
