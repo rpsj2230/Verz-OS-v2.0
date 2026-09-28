@@ -1,6 +1,6 @@
 """Payload shapes the staff-source adapters are parsed against, and the traps in each.
 
-`tests/fixtures/cassettes.py` is the same idea for connectors and this is deliberately a
+`tests/fixtures/cassettes/` is the same idea for connectors and this is deliberately a
 second file rather than an addition to it. A cassette is a recorded HTTP exchange for a
 business source: a status, headers, a rate limit and the failure modes a connector must
 survive. None of the five sources here is one of those, none of them has an entry in

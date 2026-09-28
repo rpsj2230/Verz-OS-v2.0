@@ -625,6 +625,31 @@ def test_every_answer_says_what_connecting_does_not_do_and_offers_the_same_sourc
     assert told == {"tenant_id": xero["settings"][0]["blank"], "credential": wired["key_blank"]}
 
 
+def test_the_screen_lists_every_shipped_connector_from_its_own_declaration(
+    app: FastAPI, client: TestClient
+) -> None:
+    """**What the Connectors screen shows is read off each connector's `CONNECTOR`.** Every source
+    this release ships is either offered with its form or explained with its reason, under the
+    label its module declares, and none is both. Delete this and a connector added with a
+    declaration can be missing from the screen, or shown under words no module states, and the
+    only list anybody checks is the one the route builds."""
+    from brain.connectors.declaration import shipped
+
+    attach(app, None, held_vault())
+    body = get(client, "u_admin").json()
+    declared = shipped()
+    offered = {one["name"]: one["label"] for one in body["connectable"]}
+    explained = {one["name"]: (one["label"], one["why"]) for one in body["not_connectable"]}
+
+    assert len(declared) >= 7
+    assert set(offered) | set(explained) == set(declared)
+    assert not set(offered) & set(explained)
+    for name, label in offered.items():
+        assert declared[name].console is not None and label == declared[name].label
+    for name, (label, why) in explained.items():
+        assert (label, why) == (declared[name].label, declared[name].not_from_the_console)
+
+
 def test_the_authority_to_connect_is_a_fact_about_the_reader_and_narrows_nothing(
     app: FastAPI, client: TestClient
 ) -> None:

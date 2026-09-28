@@ -4,25 +4,20 @@ Until this module nothing in the repository declared which sources are connectab
 modules said so as the reason for having no list: `brain.setup_wizard._slug_list` and
 `brain.console.connector_trust.AN_UNINSTALLED_CONNECTOR_AND_AN_UNREACHABLE_ONE_ARE_ONE_ABSENCE`.
 Both were right that a list invented in a rendering layer would disagree with the connectors the
-first time one was added. So the list is written once, calling the manifest builders it names, and
-**it is total over them**: every module in `brain.connectors` that builds a manifest is named here
-exactly once, either as a source that can be connected or with the reason it cannot be yet, and
-`tests/unit/test_connectable.py` reads that package to hold it. A connector added without a
-decision here fails that test rather than being silently absent from the screen.
-
-**It lives in `brain.ops` and not beside the builders in `brain.connectors`, and that is forced.**
-`brain.connectors.write_verification.connectors` and `tests/invariants/test_cassettes.py` both treat
-a module in that package that builds a manifest as a connector to one source, owed a read-back entry
-and a cassette run. This is a list of connectors, not one, and putting it there would either make
-it one or add a third exemption list to keep in step with the other two.
+first time one was added. **Since 2026-09-28 the list is not written here at all: each connector
+declares its own console form, or the sentence saying why it has none, as `CONNECTOR` in its own
+module, and `CONNECTABLE` and `NOT_FROM_THE_CONSOLE` are read off
+`brain.connectors.declaration.shipped` when this module is imported, which is at start-up.** So
+the two lists are total over the shipped connectors by construction, and a connector joins the
+Connectors screen by declaring itself, with no edit here.
 
 **A source is connectable from the console when its manifest is built from identifiers a person
 can type and one key they can paste**, and today that is two of the seven. Xero is pinned to one
 organisation and HubSpot to one account, and each connection class already refuses an identifier
 that narrows nothing. The other five need something this screen has no way to collect: a visibility
 rule written by somebody who has read the source's own permission model, a declaration of which
-department a space or a folder belongs to, or a key file rather than a key. Each says which, in
-`NOT_FROM_THE_CONSOLE`, and the screen shows the sentence rather than leaving the source out.
+department a space or a folder belongs to, or a key file rather than a key. Each says which, and the
+screen shows the sentence rather than leaving the source out.
 
 **Validation is the connector's own refusal, and never a second opinion about it.** The settings
 are checked for being given and for fitting, and then the manifest is built from them: a selector
@@ -39,7 +34,7 @@ Rejected: a `ConnectorRegistry` built from these at start. The registry is a run
 somebody installed; this is the product's list of what could be, and a registry holding every
 connectable source would read on the screen as every source connected.
 
-Task ids: M42.6.5
+Task ids: M42.6.5, M11.1.6
 """
 
 from __future__ import annotations
@@ -50,11 +45,8 @@ from types import MappingProxyType
 from typing import Final
 
 from brain.connectors.contract import ConnectorContractError
-from brain.connectors.hubspot import CONNECTOR_NAME as HUBSPOT
-from brain.connectors.hubspot import HubSpotConnection, hubspot_manifest
+from brain.connectors.declaration import Setting, shipped
 from brain.connectors.manifest import ConnectorManifest
-from brain.connectors.xero import CONNECTOR_NAME as XERO
-from brain.connectors.xero import XeroConnection, xero_manifest
 from brain.ops.credentials import connector_key_slot
 from brain.ops.secrets import SecretRef, VaultRole
 
@@ -76,17 +68,6 @@ MAX_SETTING_CHARS: Final = 200
 
 
 # ------------------------------------------------------------------------ the shapes
-
-
-@dataclass(frozen=True)
-class Setting:
-    """One identifier a source is connected with: its name, its label, and where to find it."""
-
-    name: str
-    label: str
-    hint: str
-    #: What a person is told when the connector refuses what was typed here.
-    refused: str
 
 
 @dataclass(frozen=True)
@@ -128,123 +109,28 @@ class NotConnectableError(Exception):
 
 
 # ------------------------------------------------------------------------ the sources
-
-
-def _xero(settings: Mapping[str, str], ref: SecretRef) -> ConnectorManifest:
-    return xero_manifest(XeroConnection(tenant_id=settings["tenant_id"]), ref=ref)
-
-
-def _hubspot(settings: Mapping[str, str], ref: SecretRef) -> ConnectorManifest:
-    return hubspot_manifest(HubSpotConnection(portal_id=settings["portal_id"]), ref=ref)
-
-
-#: Every source the console can connect, by name. See the module docstring for what earns a place.
+#: Every source the console can connect, by name, read off the shipped declarations at start-up.
 CONNECTABLE: Final[Mapping[str, Connectable]] = MappingProxyType(
     {
-        XERO: Connectable(
-            name=XERO,
-            label="Xero",
-            settings=(
-                Setting(
-                    name="tenant_id",
-                    label="Organisation id",
-                    hint=(
-                        "The id of the one Xero organisation this connection reads, exactly as "
-                        "Xero shows it. A connection reads one organisation and no other."
-                    ),
-                    refused=(
-                        "Xero would not recognise that as one organisation. Paste the "
-                        "organisation's id exactly as Xero shows it, with no spaces, and not a "
-                        "word such as all."
-                    ),
-                ),
-            ),
-            credential_label="The key Xero issued for this connection",
-            credential_hint=(
-                "Ask Xero for accounting.transactions.read and accounting.contacts.read, and for "
-                "no write scope: this system answers questions about invoices and never raises "
-                "one. Paste it as one piece. It is kept in the vault and never shown again."
-            ),
-            build=_xero,
-        ),
-        HUBSPOT: Connectable(
-            name=HUBSPOT,
-            label="HubSpot",
-            settings=(
-                Setting(
-                    name="portal_id",
-                    label="Account id",
-                    hint=(
-                        "The HubSpot account id this connection reads, as HubSpot shows it in the "
-                        "account's settings. A connection reads one account and no other."
-                    ),
-                    refused=(
-                        "HubSpot would not recognise that as one account. Paste the account id "
-                        "exactly as HubSpot shows it, with no spaces, and not a word such as all."
-                    ),
-                ),
-            ),
-            credential_label="The access token of a private app",
-            credential_hint=(
-                "Give the private app crm.objects.contacts.read and crm.objects.deals.read, and "
-                "no write scope or anything touching settings. Paste its token as one piece. It "
-                "is kept in the vault and never shown again."
-            ),
-            build=_hubspot,
-        ),
+        name: Connectable(
+            name=name,
+            label=one.label,
+            settings=one.console.settings,
+            credential_label=one.console.credential_label,
+            credential_hint=one.console.credential_hint,
+            build=one.console.build,
+        )
+        for name, one in shipped().items()
+        if one.console is not None
     }
 )
 
 #: Every source this build has a connector for and the console cannot connect, and why.
 NOT_FROM_THE_CONSOLE: Final[Mapping[str, NotConnectable]] = MappingProxyType(
     {
-        "freshdesk": NotConnectable(
-            name="freshdesk",
-            label="Freshdesk",
-            why=(
-                "Its tickets are kept under a visibility rule saying which people may see which "
-                "helpdesk groups, written by somebody who has read how this company's groups map "
-                "to its departments. This screen has no way to write that rule yet, so it is "
-                "connected at the server."
-            ),
-        ),
-        "google_drive": NotConnectable(
-            name="google_drive",
-            label="Google Drive",
-            why=(
-                "It is connected to one folder, with the department whose knowledge the folder "
-                "is and the person answerable for what it contributes, and its key is a service "
-                "account key file rather than one unbroken key. This screen takes neither yet, so "
-                "it is connected at the server."
-            ),
-        ),
-        "laravel": NotConnectable(
-            name="laravel",
-            label="Laravel database views",
-            why=(
-                "It reads database views, each kept under a visibility rule written by whoever "
-                "read the view's definition. This screen has no way to write those rules yet, so "
-                "it is connected at the server."
-            ),
-        ),
-        "lark_base": NotConnectable(
-            name="lark_base",
-            label="Lark Base",
-            why=(
-                "It is connected through Connect Lark on this screen, which creates the Lark app, "
-                "tests it and switches knowledge from one Base on. It is not listed here because "
-                "its records are read live and never synced into this system."
-            ),
-        ),
-        "lark_wiki": NotConnectable(
-            name="lark_wiki",
-            label="Lark Wiki",
-            why=(
-                "It is connected through Connect Lark on this screen, which creates the Lark app, "
-                "tests it and switches knowledge from the shared wiki spaces on. It is not listed "
-                "here because its pages are read live and never synced into this system."
-            ),
-        ),
+        name: NotConnectable(name=name, label=one.label, why=one.not_from_the_console)
+        for name, one in shipped().items()
+        if one.console is None
     }
 )
 

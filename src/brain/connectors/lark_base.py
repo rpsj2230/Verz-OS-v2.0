@@ -2,7 +2,7 @@
 
 Two facts shape everything in this module, and both are constraints rather than preferences.
 
-**A hundred requests a minute, and Lark does not raise it.** `tests/fixtures/cassettes.py`
+**A hundred requests a minute, and Lark does not raise it.** `tests/fixtures/cassettes/`
 records that as `raisable=False` and `brain.ops.limits` repeats the number with the same
 verdict: it is 1.67 calls a second for the entire tenant, permanently, shared by every
 question every one of 126 people asks. That makes the budget a first-class value here rather
@@ -99,6 +99,12 @@ Scope: domain logic. Nothing here opens a socket, resolves a name or reads a clo
 reader, the fetched-at stamp, every interval and every budget are parameters, for the reason
 `brain.models.routing.CircuitBreaker` gives about `now`.
 
+**This connector keeps a minimal index and reads every value live.** What it keeps of a
+row is the few fields the table's bindings declare as pointers, up to the cap; every other
+cell, a contract value included, is read from the Base when a question asks for it and is
+never stored, which the canary planted in a recorded cell proves on every build. It is
+declared as `CONNECTOR` at the foot of this module (`brain.connectors.declaration`).
+
 Task ids: M11.6.3
 """
 
@@ -126,6 +132,7 @@ from brain.connectors.contract import (
     assert_fetches_only,
     assert_holds_no_credential,
 )
+from brain.connectors.declaration import ConnectorDeclaration, Recorded
 from brain.connectors.federation import FailureReason, PartialAnswer, SourceFailure
 from brain.connectors.manifest import (
     ChangeSignal,
@@ -140,6 +147,7 @@ from brain.connectors.projection import ProjectedRecord, ProjectedValue
 from brain.connectors.rest import OperationSpec, ParameterSpec, RestOperation, assert_maps_only
 from brain.connectors.throttle import CallOutcome, UnmeasuredSourceError, classify
 from brain.connectors.transports import FieldMapping, RestTransport, SourceRecord, normalise
+from brain.connectors.write_verification import ReadBack, Reading, unreadable
 from brain.core.envelope import OBJECT_NAME_PATTERN, IdentityMode, TypedResult
 from brain.core.errors import Degraded
 from brain.core.projection import MAX_LABEL_CHARS
@@ -2186,3 +2194,52 @@ def manifest(
         projections=(table.projection(visibility=visibility),) if projected else (),
         ceiling=LARK_BASE,
     )
+
+
+# ------------------------------------------------------------------ what this connector declares
+#: Why a read-back by record id can never answer ABSENT.
+LARK_BASE_A_MISSING_RECORD_ARRIVES_AS_A_REFUSAL: Final = (
+    "Lark reports a record that does not exist as a non-zero business code, which "
+    "lark_base.read_record reads as a refusal rather than keep a table of the vendor's codes. "
+    "A read-back by record id can therefore never answer ABSENT. Only the list endpoint, "
+    "answered with code 0, no items and has_more false, can, and no such reply is recorded."
+)
+
+
+def read_back_reading(operation: RestOperation, reply: LarkReply) -> Reading:
+    """One Lark Base list page, complete only when the source said `has_more` is false.
+
+    A single-record reply carries no `has_more`, so `envelope_of` refuses it and it reads as
+    unreadable. See `LARK_BASE_A_MISSING_RECORD_ARRIVES_AS_A_REFUSAL`.
+    """
+    try:
+        assert_lark_answered(reply)
+        rows = operation.project(reply.body)
+        envelope = envelope_of(reply.body)
+    except (LarkBaseUnreachableError, LarkBaseRefusedError) as failure:
+        return Reading(outcome=failure.call_outcome, matched=0, complete=False)
+    except ConnectorContractError:
+        return unreadable()
+    return Reading(outcome=CallOutcome.OK, matched=len(rows), complete=not envelope.has_more)
+
+
+CONNECTOR: Final = ConnectorDeclaration(
+    name=LARK_BASE,
+    label="Lark Base",
+    not_from_the_console=(
+        "It is connected through Connect Lark on this screen, which creates the Lark app, "
+        "tests it and switches knowledge from one Base on. It is not listed here because "
+        "its records are read live and never synced into this system."
+    ),
+    read_back=ReadBack(
+        reading=read_back_reading,
+        recorded=(
+            "LARK-200-records",
+            "LARK-200-code-permission",
+            "LARK-200-record",
+            "LARK-429",
+        ),
+        findings=(LARK_BASE_A_MISSING_RECORD_ARRIVES_AS_A_REFUSAL,),
+    ),
+    recorded=Recorded(tested=True),
+)

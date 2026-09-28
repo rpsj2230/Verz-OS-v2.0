@@ -67,7 +67,7 @@ is a plausible answer, and the projection quietly stops being refreshed at the s
 Two things this module does not do, stated rather than implied.
 
 *It declares no verified ceiling.* `brain.ops.limits` records figures for Xero, Freshdesk and
-Lark Base and none for this source, and `tests/fixtures/cassettes.py` records "no ceiling, our
+Lark Base and none for this source, and `tests/fixtures/cassettes/` records "no ceiling, our
 own system". So `ConnectorManifest.ceiling` is empty and `throttle.limits_for` refuses rather
 than inventing a number, which is the correct refusal and is also a real gap: nothing paces
 this connector, so twenty concurrent agent runs are twenty concurrent reads of the client's
@@ -100,6 +100,13 @@ Scope: domain logic. Nothing here opens a connection, imports a driver, holds a 
 a clock. The reader is a protocol, `fetched_at` and `checked_at` are parameters, and
 `assert_holds_no_credential` runs on the connection at construction.
 
+**This connector keeps a minimal index and reads every value live.** What it keeps of a
+client and a staff record is their ids, names, status, department, manager and when they
+changed (`PROJECTED_FIELDS`); a contract value, and every column a view carries beyond its
+declared contract, is read live and never stored, which the canary planted in the recorded
+contract value proves on every build. It is declared as `CONNECTOR` at the foot of this
+module (`brain.connectors.declaration`).
+
 Task ids: M11.6.1, M38.4.1.1
 """
 
@@ -127,6 +134,7 @@ from brain.connectors.contract import (
     assert_fetches_only,
     assert_holds_no_credential,
 )
+from brain.connectors.declaration import ConnectorDeclaration, Recorded
 from brain.connectors.federation import FailureReason, PartialAnswer, SourceFailure
 from brain.connectors.manifest import (
     ChangeSignal,
@@ -147,6 +155,7 @@ from brain.connectors.transports import (
     assert_scope_covers,
     normalise,
 )
+from brain.connectors.write_verification import ReadBack, classified_reading
 from brain.core.envelope import IdentityMode, SideEffect, TypedResult
 from brain.core.errors import Degraded
 from brain.core.field_policy import Classification, FieldPolicy, FieldRule
@@ -1563,3 +1572,39 @@ def assert_views_are_holdable(connection: LaravelConnection) -> None:
             "check here is meant to be the stricter of the two"
         )
         raise LaravelError(msg) from exc
+
+
+# ------------------------------------------------------------------ what this connector declares
+#: Why a reading exists for a connector that can issue no write.
+LARAVEL_THE_CREDENTIAL_IS_READ_ONLY: Final = (
+    "laravel_manifest binds its credential read-only and reads views, so no write can be "
+    "issued through this connector as built. A view the grant no longer covers and a view "
+    "that is gone are both REJECTED there, and so INCONCLUSIVE here: a withdrawn contract is "
+    "not an absent row."
+)
+
+
+CONNECTOR: Final = ConnectorDeclaration(
+    name=CONNECTOR_NAME,
+    label="Laravel database views",
+    not_from_the_console=(
+        "It reads database views, each kept under a visibility rule written by whoever "
+        "read the view's definition. This screen has no way to write those rules yet, so "
+        "it is connected at the server."
+    ),
+    read_back=ReadBack(
+        reading=classified_reading,
+        recorded=(
+            "LARAVEL-500",
+            "LARAVEL-rows-clients",
+            "LARAVEL-rows-users",
+            "LARAVEL-rows-at-cap",
+            "LARAVEL-1142",
+            "LARAVEL-1146",
+            "LARAVEL-3024",
+            "LARAVEL-2006",
+        ),
+        findings=(LARAVEL_THE_CREDENTIAL_IS_READ_ONLY,),
+    ),
+    recorded=Recorded(tested=True),
+)

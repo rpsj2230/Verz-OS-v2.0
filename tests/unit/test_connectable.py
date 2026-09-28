@@ -1,12 +1,12 @@
 """Which sources the console can connect, what each asks for, and the connector's own refusals.
 
-`brain.ops.connectable` is a list of the product's connectors, and the failure worth testing first
-is the list drifting from the connectors: a connector added to `brain.connectors` with no decision
-here would be silently missing from the screen, and a source listed here whose manifest names
-another source would connect one thing under another's name. Then the refusals, each with a
-sibling that builds.
+`brain.ops.connectable` is a list of the product's connectors, read off each connector's own
+`CONNECTOR` declaration, and the failure worth testing first is the list drifting from the
+connectors: a connector added to `brain.connectors` with no decision would be silently missing
+from the screen, and a source listed here whose manifest names another source would connect one
+thing under another's name. Then the refusals, each with a sibling that builds.
 
-Task ids: M42.6.5
+Task ids: M42.6.5, M11.1.6
 """
 
 from __future__ import annotations

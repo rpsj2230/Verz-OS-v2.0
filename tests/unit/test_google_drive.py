@@ -1,6 +1,6 @@
 """The Google Drive connector, driven by Google's documented response shapes.
 
-**Drive's recordings are documented shapes, not live captures.** `tests/fixtures/cassettes.py`
+**Drive's recordings are documented shapes, not live captures.** `tests/fixtures/cassettes/`
 now holds them and `tests/unit/test_cassette_replay.py` replays every one through this
 connector; the tests here were written before they existed and build rows from the same
 documentation. `test_the_recordings_are_documented_shapes_and_read_through_this_connectors_reply`
@@ -1400,7 +1400,7 @@ def test_the_page_cursor_reaches_the_address_and_the_first_page_carries_none() -
 def test_the_recordings_are_documented_shapes_and_read_through_this_connectors_reply() -> None:
     """**The honest statement about what this connector was built from.**
 
-    Drive's recordings in `tests/fixtures/cassettes.py` are the shapes Google's documentation
+    Drive's recordings in `tests/fixtures/cassettes/` are the shapes Google's documentation
     publishes, not captures from a live account, and each names its page. Two of the four
     things `WHAT_A_RECORDING_WOULD_SETTLE` lists are now documented shapes rather than guesses:
     the classic error envelope carries `error.errors[0].reason`, and a throttle arrives as a 403
@@ -1413,7 +1413,7 @@ def test_the_recordings_are_documented_shapes_and_read_through_this_connectors_r
 
     Delete this and the next reader cannot tell that this connector is documented rather than
     recorded live, which is the one thing about it they most need to know."""
-    drive = [c for c in CASSETTES if c.source.value == GOOGLE_DRIVE]
+    drive = [c for c in CASSETTES if c.source == GOOGLE_DRIVE]
     assert drive
     assert all(c.origin is Origin.DOCUMENTED_SHAPE and not c.captured_at for c in drive)
 

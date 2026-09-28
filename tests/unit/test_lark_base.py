@@ -29,7 +29,7 @@ any other source here: it answers `code: 0` inside a 200 for success and a non-z
 a 200 for failure, so a connector reading the HTTP status alone records a permission refusal as
 an empty table, and an empty table reads as a fact about the company.
 
-The fixture that matters is `tests/fixtures/cassettes.py`. `LARK-200-records` carries the real
+The fixture that matters is `tests/fixtures/cassettes/`. `LARK-200-records` carries the real
 page envelope, the millisecond timestamp and a canary in a column no binding names;
 `LARK-200-code-permission` is the 200 carrying 91403, which is the exchange that cannot be
 arranged on demand against a real tenant and is the one this connector is built around.

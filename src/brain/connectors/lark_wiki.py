@@ -67,7 +67,7 @@ question it must read exactly like an absence, because a refusal that named what
 would disclose the page. See `ABSENT_REFUSED_UNREACHABLE_AND_WITHHELD`.
 
 **What there were recordings for, and what there were not.** This module was written when
-`tests/fixtures/cassettes.py` had no `Source.LARK_WIKI`. It has one now: a node read, a node
+`tests/fixtures/cassettes/` had no `Source.LARK_WIKI`. It has one now: a node read, a node
 listing, the wiki's 131006 refusal and the tenant's 429, each written to the shape Lark's
 documentation publishes rather than captured live, and replayed through this module by
 `tests/unit/test_cassette_replay.py`. The documented node carries no `has_member_setting`, so
@@ -118,6 +118,14 @@ Scope: domain logic. Nothing here opens a socket, resolves a name, reads a clock
 credential. The reader, the fetched-at stamp, `now` and every interval are parameters, for
 the reason `brain.models.routing.CircuitBreaker` gives about its own.
 
+**This connector keeps a minimal index and reads every value live.** It projects nothing:
+its manifest declares no projection, so no page's title, id or text is kept by any
+scheduled reading. `WikiDocument.as_knowledge_item` can build a corpus item from a page
+and nothing hands one over: by the owner's rule a page's body is read live and never
+embedded, and titles and ids are what an index may hold (`docs/needs-rupash.md` item 99),
+so whoever wires the wiki's index owes that decision first. It is declared as `CONNECTOR`
+at the foot of this module (`brain.connectors.declaration`).
+
 Task ids: M11.6.4
 """
 
@@ -144,10 +152,12 @@ from brain.connectors.contract import (
     assert_fetches_only,
     assert_holds_no_credential,
 )
+from brain.connectors.declaration import ConnectorDeclaration, Recorded
 from brain.connectors.manifest import ChangeSignal, ConnectorManifest, ToolDeclaration
 from brain.connectors.rest import ID_TARGET, OperationSpec, ParameterSpec, RestOperation
 from brain.connectors.throttle import CallOutcome, classify
 from brain.connectors.transports import FieldMapping, RestTransport, SourceRecord, normalise
+from brain.connectors.write_verification import ReadBack, Reading, unreadable
 from brain.core.envelope import IdentityMode, SideEffect, TypedResult
 from brain.core.errors import Degraded
 from brain.gate.provenance import FRESHNESS_TEXT, Freshness
@@ -1793,3 +1803,65 @@ def assert_read_only(credential: CredentialBinding) -> None:
             "write-capable binding closes a loop from what we can write to what we later read"
         )
         raise LarkWikiError(msg)
+
+
+# ------------------------------------------------------------------ what this connector declares
+#: Why a reading exists for a connector that can issue no write.
+LARK_WIKI_THE_CREDENTIAL_IS_READ_ONLY: Final = (
+    "lark_wiki.assert_read_only refuses a credential bound for writing, so no write can be "
+    "issued through this connector as built. The reading exists so that the day that changes, "
+    "the absence rule is already stated. It is driven by the wiki's own recorded listing and "
+    "refusals and by Lark Base's, which share the envelope; a reply that does not say whether "
+    "there is more, such as a single node read, is not a listing and never reads as absent."
+)
+
+
+def read_back_reading(reply: LarkReply) -> Reading:
+    """One Lark Wiki listing, complete only when `next_cursor` finds no further page.
+
+    A reply whose payload does not state `has_more` is not a listing, and `next_cursor` would
+    read its silence as the end: a node read replayed here came back ABSENT for a page that
+    exists. It is unreadable instead, as `lark_base.envelope_of` treats the same silence.
+    """
+    try:
+        assert_answered(reply)
+        if not isinstance(reply.data.get("has_more"), bool):
+            return unreadable()
+        items = items_of(reply.data)
+        more = next_cursor(reply.data)
+    except (LarkWikiUnreachableError, LarkWikiRefusedError) as failure:
+        return Reading(outcome=failure.call_outcome, matched=0, complete=False)
+    except ConnectorContractError:
+        return unreadable()
+    return Reading(outcome=CallOutcome.OK, matched=len(items), complete=more is None)
+
+
+CONNECTOR: Final = ConnectorDeclaration(
+    name=LARK_WIKI,
+    label="Lark Wiki",
+    not_from_the_console=(
+        "It is connected through Connect Lark on this screen, which creates the Lark app, "
+        "tests it and switches knowledge from the shared wiki spaces on. It is not listed "
+        "here because its pages are read live and never synced into this system."
+    ),
+    read_back=ReadBack(
+        reading=read_back_reading,
+        recorded=(
+            "LARK-200-records",
+            "LARK-200-code-permission",
+            "LARK-WIKI-200-node",
+            "LARK-WIKI-200-nodes-page",
+            "LARK-WIKI-200-code-permission",
+            "LARK-WIKI-429",
+        ),
+        findings=(LARK_WIKI_THE_CREDENTIAL_IS_READ_ONLY,),
+    ),
+    recorded=Recorded(
+        tested=True,
+        finding=(
+            "the documented node listing carries no has_member_setting, so every page "
+            "reads as having undetermined permissions and is withheld; until a live capture "
+            "shows the key, or the connector reads permissions another way, it stores no page"
+        ),
+    ),
+)

@@ -106,7 +106,7 @@ that goes up inside one window is a response that arrived out of order, and beli
 is how a burst spends an allowance that was already gone.
 
 One disagreement is left standing rather than papered over.
-`tests/fixtures/cassettes.py` records Xero's ceiling as raisable and `brain.ops.limits`
+`tests/fixtures/cassettes/` records Xero's ceiling as raisable and `brain.ops.limits`
 records it as not raisable, with the argument that it belongs to the client's tenant. This
 module follows `brain.ops.limits`, which is the module the console and the ladder read, and
 `day_limit` returns its figures so there is one place to correct.
@@ -114,6 +114,14 @@ module follows `brain.ops.limits`, which is the module the console and the ladde
 Scope: domain logic. Nothing here opens a connection, resolves a name, reads a clock or
 holds a credential. The resolver, the fetcher, `now` and the reset instant are all
 parameters, and `assert_holds_no_credential` runs on the connection at construction.
+
+**This connector keeps a minimal index and reads every value live.** What it keeps of an
+invoice is its number, contact, status and due date, and of a contact its name, status and
+when it changed, each beside the tenant its visibility rule names (`PROJECTED_FIELDS`). An
+amount, a line or a tax number is read from Xero when a question asks for it and is never
+stored, which the canary planted in the recorded amount proves on every build. It is
+declared as `CONNECTOR` at the foot of this module, which is how the Connectors screen, the
+worker's reading and the read-back table find it (`brain.connectors.declaration`).
 
 Task ids: M11.6.5
 """
@@ -140,6 +148,13 @@ from brain.connectors.contract import (
     assert_fetches_only,
     assert_holds_no_credential,
 )
+from brain.connectors.declaration import (
+    ConnectorDeclaration,
+    ConsoleForm,
+    PageReply,
+    Recorded,
+    Setting,
+)
 from brain.connectors.federation import FailureReason, PartialAnswer, SourceFailure
 from brain.connectors.manifest import (
     ChangeSignal,
@@ -154,6 +169,7 @@ from brain.connectors.projection import ProjectedRecord, ProjectedValue, Refresh
 from brain.connectors.rest import ID_TARGET, RestOperation, RestSpec, load_spec
 from brain.connectors.throttle import CallOutcome, ceiling_for, classify, retry_delay
 from brain.connectors.transports import FieldMapping, RestTransport, SourceRecord
+from brain.connectors.write_verification import ReadBack, classified_reading
 from brain.core.envelope import IdentityMode, SideEffect, TypedResult
 from brain.core.field_policy import Classification, FieldPolicy, FieldRule
 from brain.core.projection import ProjectionRefusedError
@@ -1374,3 +1390,112 @@ def health(
         checked_at=checked_at,
         detail=reply.detail,
     )
+
+
+# ------------------------------------------------------------------ what this connector declares
+#: Why the ABSENT branch of this connector's read-back is driven by an emptied envelope.
+XERO_NO_ABSENCE_IS_RECORDED: Final = (
+    "The Xero recordings are answered lists and two failures. An empty ledger is not "
+    "recorded, so the ABSENT branch for this connector is driven by the recorded envelope "
+    "with its list emptied."
+)
+
+#: Xero's page size, fixed by the vendor. A page holding fewer is the last.
+PAGE_SIZE: Final = 100
+
+
+class XeroReading:
+    """Xero's invoices and contacts, a page at a time, into the minimal index and nothing else.
+
+    A method named after a module function calls that function: inside a method the bare name is
+    this module's, not the method's, so `interpret` here is `xero.interpret`.
+    """
+
+    def entities(self) -> tuple[str, ...]:
+        return (ENTITY_INVOICE, ENTITY_CONTACT)
+
+    def refresh_interval(self) -> timedelta:
+        return RECONCILIATION_INTERVAL
+
+    def operation(self, entity: str, *, resolver: Resolver) -> RestOperation:
+        return operation_for(entity, resolver=resolver)
+
+    def first_page(self, entity: str) -> Mapping[str, str]:
+        del entity
+        return MappingProxyType({"page": "1"})
+
+    def next_page(
+        self, entity: str, asked: Mapping[str, str], body: Any, returned: int
+    ) -> Mapping[str, str] | None:
+        del entity, body
+        if returned < PAGE_SIZE:
+            return None
+        return MappingProxyType({**asked, "page": str(int(asked["page"]) + 1)})
+
+    def call_headers(self, settings: Mapping[str, str]) -> Mapping[str, str]:
+        return XeroConnection(tenant_id=settings["tenant_id"]).call_headers()
+
+    def interpret(
+        self, operation: RestOperation, *, status: int, body: Any, fetched_at: str
+    ) -> PageReply:
+        reply = interpret(operation, status=status, body=body, fetched_at=fetched_at)
+        return PageReply(call=reply.call, rows=reply.rows)
+
+    def retry_after(self, headers: Mapping[str, str]) -> float | None:
+        return retry_after(headers)
+
+    def allowance_spent(self, headers: Mapping[str, str]) -> bool:
+        return day_remaining(headers) == 0
+
+    def projected(
+        self, entity: str, row: Mapping[str, Any], *, seen_at: datetime
+    ) -> ProjectedRecord | None:
+        return projected_record(entity, row, last_seen_at=seen_at)
+
+
+def built_from_the_console(settings: Mapping[str, str], ref: SecretRef) -> ConnectorManifest:
+    """The manifest a connection made on the Connectors screen declares."""
+    return xero_manifest(XeroConnection(tenant_id=settings["tenant_id"]), ref=ref)
+
+
+CONNECTOR: Final = ConnectorDeclaration(
+    name=CONNECTOR_NAME,
+    label="Xero",
+    console=ConsoleForm(
+        settings=(
+            Setting(
+                name="tenant_id",
+                label="Organisation id",
+                hint=(
+                    "The id of the one Xero organisation this connection reads, exactly as "
+                    "Xero shows it. A connection reads one organisation and no other."
+                ),
+                refused=(
+                    "Xero would not recognise that as one organisation. Paste the "
+                    "organisation's id exactly as Xero shows it, with no spaces, and not a "
+                    "word such as all."
+                ),
+            ),
+        ),
+        credential_label="The key Xero issued for this connection",
+        credential_hint=(
+            "Ask Xero for accounting.transactions.read and accounting.contacts.read, and for "
+            "no write scope: this system answers questions about invoices and never raises "
+            "one. Paste it as one piece. It is kept in the vault and never shown again."
+        ),
+        build=built_from_the_console,
+    ),
+    read_back=ReadBack(
+        reading=classified_reading,
+        recorded=(
+            "XERO-200-invoices",
+            "XERO-429",
+            "XERO-401-expired",
+            "XERO-200-contacts",
+            "XERO-200-invoices-full-page",
+        ),
+        findings=(XERO_NO_ABSENCE_IS_RECORDED,),
+    ),
+    recorded=Recorded(tested=True),
+    reading=XeroReading(),
+)

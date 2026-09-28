@@ -53,6 +53,17 @@ removing the rows is a decision about data with a retention answer attached, and
 with whoever owns the projection store rather than with a registry that only holds
 declarations.
 
+**Which connectors exist at all is not this registry's question, and since 2026-09-28 it has an
+answer.** A shipped connector registers itself by declaring `CONNECTOR` in its own module, and
+`brain.connectors.declaration.shipped` finds every one at start-up; the Connectors screen, the
+worker's readings and the read-back table are read off those declarations. This registry is the
+other half: what one install connected, and the lifecycle of that connection. On an install that
+half is held in `ops.connector_connection`, where connecting and disconnecting are the enable and
+disable, and a release whose declaration moved is refused a scheduled read until somebody connects
+the source again (`brain.ops.connector_sync.DECLARATION_NOT_AGREED`), which is the pin check
+applied to the stored digest. Nothing builds this class from those rows yet, and building one per
+run was rejected in `brain.ops.connector_sync` because its quarantine would last one run.
+
 Scope: domain logic. This holds declarations in memory; the table that survives a restart is
 somebody else's, and this returns a `LifecycleEvent` per transition so that whoever owns the
 ledger can record one without this module importing the audit layer.

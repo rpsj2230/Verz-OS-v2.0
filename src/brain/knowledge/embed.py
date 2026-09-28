@@ -237,14 +237,11 @@ class Piece:
 #: called by nothing, became the fourteen the path actually takes once it runs, and the one
 #: that was still an orphan, the first, gained its door later that day.
 #:
-#: **That door is the connector sync, and what reaches it is narrower than the word suggests.**
-#: `brain.ops.connector_sync_run.corpus_sink` hands every document a reading yields to
-#: `chunk_store:ingest_document`, with the owner and visibility the reading gave it, on the
-#: worker's schedule and with the worker's queue. No reading the console can connect yields a
-#: document today (`brain.ops.connector_sync.NO_CONNECTABLE_SOURCE_YIELDS_A_DOCUMENT`), and
-#: `brain.member_library.upload` and `lark_wiki.WikiDocument.as_knowledge_item` still build an
-#: item nothing hands over, so a corpus on a real install stays empty until one of those is
-#: connected. The step is wired; its inputs are the work.
+#: **That door was the connector sync until 2026-09-28, and it is a person's upload now.** The
+#: sync handed every document a reading yielded to `chunk_store:ingest_document`, which embedded
+#: a copy of every body a source held on a timer: the bulk sync the owner's rule forbids
+#: (`brain.ops.connector_sync.A_SYNC_KEEPS_NO_BODY`), so that leg was removed. The caller is
+#: `brain.knowledge_routes`, where somebody adds a document from the Knowledge page.
 EMBED_PATH: Final[tuple[Piece, ...]] = (
     Piece(
         symbol="brain.knowledge.chunk_store:ingest_document",

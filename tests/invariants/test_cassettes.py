@@ -3,20 +3,31 @@
 A cassette set with only happy paths produces connectors that have never been compiled
 against failure. These assert the corpus keeps its teeth.
 
-Task ids: M0.6.5, M38.4.1.1
+**The contract test replays, it does not look for a word.** Until 2026-09-28 the rule that every
+connector is tested against the recordings was satisfied by its test file containing the word
+"cassettes", and a connector could pass it by saying none existed. Now every shipped connector,
+found by its `CONNECTOR` declaration, must have a cassette file of its own under
+`tests/fixtures/cassettes/`, and every recording in it must replay through the connector's own
+code to the conclusion the recording states. That is the adapter matching the recorded shape
+(M38.4.1.2), held on every push rather than in one unit file.
+
+Task ids: M0.6.5, M38.4.1.1, M38.4.1.2
 """
 
 from __future__ import annotations
 
-import pkgutil
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-import brain.connectors
+from brain.connectors.declaration import shipped
 from tests.fixtures.cassettes import (
     CASSETTES,
-    Source,
+    FILES,
+    CassetteFile,
+    Expect,
+    Replayed,
     failures,
     for_source,
     limit_for,
@@ -25,49 +36,28 @@ from tests.fixtures.cassettes import (
 pytestmark = pytest.mark.invariant
 
 REPO = Path(__file__).resolve().parents[2]
-CONNECTORS_DIR = Path(brain.connectors.__file__).parent
 
-#: Modules in `brain.connectors` that are framework rather than a connector to one source.
-#: Named rather than inferred, so a real connector that stops looking like one is a
-#: discovery failure somebody sees rather than a silent exemption.
-NOT_A_CONNECTOR = frozenset(
-    {
-        "__init__",
-        "contract",
-        "manifest",
-        "projection",
-        "registry",
-        "rest",
-        "transports",
-        "throttle",
-        "federation",
-        "backfill",
-        "change_signal",
-        "write_verification",
-        # Signing in to a staff directory at first run. Its vendors are where a roster comes
-        # from rather than business sources, and `tests/fixtures/roster_payloads.py` opens by
-        # arguing why a roster's shapes are a second file rather than recordings in this corpus.
-        # `tests/unit/test_staff_directories.py` drives it against that file.
-        "staff_directories",
-        # Reading an LDAP directory or Active Directory as a staff source, for the same reason:
-        # `tests/unit/test_ldap_directory.py` drives it against `roster_payloads.py`'s recorded
-        # directory entries and against ldap3's own mock server.
-        "ldap_directory",
-        # Signing a Google Workspace staff read as a service account: a key and one assertion,
-        # no business source. `tests/unit/test_google_service_account.py` drives it.
-        "google_service_account",
+
+def mismatches(recorded: CassetteFile) -> dict[str, tuple[Expect, Expect]]:
+    """Every recording whose replay through its connector concludes something it does not state,
+    as (concluded, recorded)."""
+    concluded = {one.cid: recorded.replay(one).outcome for one in recorded.cassettes}
+    return {
+        one.cid: (concluded[one.cid], one.expect)
+        for one in recorded.cassettes
+        if concluded[one.cid] is not one.expect
     }
-)
 
 
 def _connectors() -> list[tuple[str, Path]]:
-    """Every source connector and the test file that should drive it against the cassettes."""
-    found: list[tuple[str, Path]] = []
-    for info in pkgutil.iter_modules([str(CONNECTORS_DIR)]):
-        if info.name in NOT_A_CONNECTOR:
-            continue
-        found.append((info.name, REPO / "tests" / "unit" / f"test_{info.name}.py"))
-    return found
+    """Every shipped connector and the test file that should drive it against the cassettes.
+
+    Found by declaration rather than by an exclusion list: a module is a connector when it
+    declares `CONNECTOR`, and `brain.connectors.declaration.declaration_gaps` refuses a module
+    that builds a manifest and declares nothing, so a framework module needs no exemption and a
+    real connector cannot become one by accident.
+    """
+    return [(name, REPO / "tests" / "unit" / f"test_{name}.py") for name in shipped()]
 
 
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
@@ -78,8 +68,10 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 
 
 def test_every_source_has_at_least_one_recording() -> None:
-    for s in Source:
-        assert for_source(s), f"{s} has no cassette"
+    """Delete this and a cassette file can be emptied and still count as the source's file."""
+    assert FILES, "no cassette file was found, so this checked nothing"
+    for name in FILES:
+        assert for_source(name), f"{name} has no cassette"
 
 
 def test_failures_outnumber_nothing_and_cover_every_kind() -> None:
@@ -99,7 +91,7 @@ def test_a_two_hundred_can_still_be_a_failure() -> None:
     """Lark returns code 0 inside a 200 for success and non-zero inside a 200 for
     failure. A connector checking only the HTTP status records an error as an empty
     result, and an empty result reads as fact."""
-    lark = [c for c in for_source(Source.LARK_BASE) if c.status == 200]
+    lark = [c for c in for_source("lark_base") if c.status == 200]
     assert any(isinstance(c.body, dict) and c.body.get("code") not in (0, None) for c in lark)
 
 
@@ -117,8 +109,8 @@ def test_the_rate_limits_record_whether_they_can_be_raised() -> None:
     integration they run, so there is no plan we can buy that moves it. `brain.ops.limits`
     had that right and this had it wrong, which is why the assertion below now runs against
     both records rather than only this one."""
-    assert limit_for(Source.LARK_BASE).raisable is False
-    assert limit_for(Source.XERO).raisable is False
+    assert limit_for("lark_base").raisable is False
+    assert limit_for("xero").raisable is False
 
 
 #: Sources whose cassette `RateLimit` records something other than a rate, and are therefore
@@ -132,13 +124,13 @@ def test_the_rate_limits_record_whether_they_can_be_raised() -> None:
 #:
 #: Listed rather than inferred, so that the day a real contradiction appears for Freshdesk it
 #: is a deliberate edit here and not a silent pass.
-NOT_A_RATE: frozenset[Source] = frozenset({Source.FRESHDESK})
+NOT_A_RATE: frozenset[str] = frozenset({"freshdesk"})
 
 
 def test_the_recordings_and_the_operational_ceilings_agree_about_what_can_be_raised() -> None:
     """**Two records of the same fact, and until this test nothing compared them.**
 
-    `tests/fixtures/cassettes.py` is what connectors are built against;
+    `tests/fixtures/cassettes/` is what connectors are built against;
     `brain.ops.limits.SOURCE_CEILINGS` is what the admission controller sizes budgets from.
     They disagreed about Xero for as long as both existed, and it surfaced only because one
     connector was written against both at once and its author noticed.
@@ -158,11 +150,11 @@ def test_the_recordings_and_the_operational_ceilings_agree_about_what_can_be_rai
     operational = {ceiling.name: ceiling.raisable for ceiling in SOURCE_CEILINGS}
 
     disagreements = {
-        source.value: (limit_for(source).raisable, operational[source.value])
-        for source in Source
+        source: (limit_for(source).raisable, operational[source])
+        for source in FILES
         if source not in NOT_A_RATE
-        and source.value in operational
-        and limit_for(source).raisable != operational[source.value]
+        and source in operational
+        and limit_for(source).raisable != operational[source]
     }
 
     assert not disagreements, (
@@ -194,23 +186,42 @@ def test_every_connector_that_exists_is_tested_against_the_recordings(
         f"brain.connectors.{module} has no test file, so nothing checks it against the "
         "recordings it was supposed to be written from"
     )
-    text = test_file.read_text(encoding="utf-8")
+    recorded = FILES.get(module)
+    assert recorded is not None, (
+        f"brain.connectors.{module} has no cassette file, tests/fixtures/cassettes/{module}.py, "
+        "so it was written against nothing recorded"
+    )
+    assert recorded.cassettes, f"brain.connectors.{module} has no recording at all"
+    wrong = mismatches(recorded)
+    assert not wrong, (
+        f"brain.connectors.{module} does not match its recorded shape (concluded, recorded): "
+        f"{wrong}"
+    )
 
-    assert "cassettes" in text, (
-        f"{test_file.name} never mentions the cassettes, so this connector is tested against "
-        "fixtures its own author wrote rather than against the recorded shape"
-    )
-    # The word is the weak half of this rule, and `test_google_drive.py` once passed it by
-    # saying no recording existed. The strong half is a replay: every connector has one in
-    # `tests/unit/test_cassette_replay.py`, which drives every recording through its own code.
-    from tests.unit.test_cassette_replay import REPLAYS
 
-    assert module in REPLAYS, (
-        f"brain.connectors.{module} has no replay, so no recording is ever run through it"
-    )
-    assert any(c.source.value == module for c in CASSETTES), (
-        f"brain.connectors.{module} has no recording at all"
-    )
+def test_every_cassette_file_records_a_connector_that_ships() -> None:
+    """The other direction of the contract. A cassette file whose connector was removed or
+    renamed is a set of recordings replayed through nothing, and it reads as coverage.
+
+    Delete this and a renamed connector keeps its old file and gains no new one."""
+    assert set(FILES) == set(shipped())
+
+
+def test_the_contract_catches_an_adapter_that_reads_every_answer_as_a_success() -> None:
+    """Both halves of the comparison the contract makes. A replay that concludes ANSWERED for
+    everything, which is the adapter that treats a 429 and a 401 as an empty success, is caught
+    on exactly the recordings that say otherwise, and the real replay is caught on none.
+
+    Delete this and `mismatches` could return nothing for any input, and every connector would
+    match its recorded shape by construction."""
+    real = FILES["xero"]
+    naive = replace(real, replay=lambda recorded: Replayed(Expect.ANSWERED))
+
+    assert mismatches(real) == {}
+    assert set(mismatches(naive)) == {
+        one.cid for one in real.cassettes if one.expect is not Expect.ANSWERED
+    }
+    assert mismatches(naive), "no Xero recording expects a failure, so this compared nothing"
 
 
 def test_the_source_excluded_from_that_comparison_really_is_measuring_something_else() -> None:
@@ -223,7 +234,7 @@ def test_the_source_excluded_from_that_comparison_really_is_measuring_something_
     contradiction."""
     from brain.ops.limits import SOURCE_CEILINGS
 
-    recorded = limit_for(Source.FRESHDESK)
+    recorded = limit_for("freshdesk")
     ceiling = next(c for c in SOURCE_CEILINGS if c.name == "freshdesk")
 
     assert "record" in recorded.per, f"the cassette now records {recorded.per!r}, not a result set"
@@ -233,7 +244,7 @@ def test_the_source_excluded_from_that_comparison_really_is_measuring_something_
 def test_the_freshdesk_ceiling_is_recorded_as_a_ceiling() -> None:
     """300 is not a page size. The search API will not return a 301st record however you
     page, so a connector that assumes it can enumerate silently under-reports."""
-    fresh = limit_for(Source.FRESHDESK)
+    fresh = limit_for("freshdesk")
     assert fresh.calls == 300
     assert "page size" in fresh.note.lower()
 
@@ -241,11 +252,11 @@ def test_the_freshdesk_ceiling_is_recorded_as_a_ceiling() -> None:
 #: Sources whose own documentation states the wait somewhere other than `Retry-After`, or not at
 #: all, with where. Listed rather than inferred: a recording that dropped the header to match a
 #: connector would otherwise pass as a vendor that never sends one.
-WAIT_NOT_IN_RETRY_AFTER: dict[Source, str] = {
-    Source.HUBSPOT: "no wait header documented; X-HubSpot-RateLimit-* state the allowance",
-    Source.LARK_BASE: "x-ogw-ratelimit-reset",
-    Source.LARK_WIKI: "x-ogw-ratelimit-reset",
-    Source.GOOGLE_DRIVE: "none documented; Google asks for exponential backoff",
+WAIT_NOT_IN_RETRY_AFTER: dict[str, str] = {
+    "hubspot": "no wait header documented; X-HubSpot-RateLimit-* state the allowance",
+    "lark_base": "x-ogw-ratelimit-reset",
+    "lark_wiki": "x-ogw-ratelimit-reset",
+    "google_drive": "none documented; Google asks for exponential backoff",
 }
 
 
@@ -255,7 +266,7 @@ def test_a_retry_after_is_present_on_every_rate_limit_response() -> None:
     what it does document rather than an invented header, and the exception is named.
 
     Delete this and a 429 recording can lose its wait with nobody noticing."""
-    exempted_and_seen: set[Source] = set()
+    exempted_and_seen: set[str] = set()
     for c in CASSETTES:
         if c.status != 429:
             continue
@@ -283,7 +294,7 @@ def test_absent_is_distinguishable_from_refused_and_unreachable() -> None:
 def test_the_awkward_date_format_is_captured() -> None:
     """Xero returns .NET epoch strings, not ISO. A connector assuming ISO parses garbage
     without erroring, which is worse than failing."""
-    xero = for_source(Source.XERO)
+    xero = for_source("xero")
     assert any("/Date(" in str(c.body) for c in xero)
 
 
