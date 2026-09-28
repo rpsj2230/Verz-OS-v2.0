@@ -877,22 +877,24 @@ describe("what a review says", () => {
 });
 
 describe("reading a classification and a review", () => {
-  test("every epoch the API sends stops at the reader", async () => {
-    // What breaks if this is deleted: a digest reaches a screen, and two of them mislead.
-    // `FieldPolicy.epoch` does not digest a rule's `derived_from`, which the route's own
-    // docstring records, so `epoch_now` and `epoch_after` are identical for the one edit this
-    // screen exists to catch, and showing them beside a widening would hand a person an
-    // authoritative-looking reason to believe nothing had changed. The model is read for the
-    // field names, so this is not the console's reader compared with itself.
+  test("every epoch the API sends reaches the reader, now that it moves with a derivation", async () => {
+    // What breaks if this is deleted: the epochs stop at the reader again, and the one place a
+    // person can see that changing a derivation moved the digest answers are cached under is
+    // gone. They were dropped until 2026-09-28 because `ColumnRule.as_field_rule` left the
+    // derivation out of the epoch, so two identical digests beside a widening would have been
+    // a reason to believe nothing changed; the route now compiles the derivation in. The
+    // model is read for the field names, so this is not the reader compared with itself.
     const fields = backendReviewViewFields();
-    const read = readReview(reviewed({ widens: true }));
-    const page = readClassification(classification(priceList(), { epoch: "EPOCH-SENTINEL-NOW" }));
+    const read = readReview(
+      reviewed({ widens: true, epoch_now: "EPOCH-NOW", epoch_after: "EPOCH-AFTER" }),
+    );
+    const page = readClassification(classification(priceList(), { epoch: "EPOCH-PAGE" }));
 
     expect(fields).toContain("epoch_now");
     expect(fields).toContain("epoch_after");
-    expect(Object.keys(read).sort()).toEqual(["changes", "exposed", "widens", "wouldNotLoad"]);
-    expect(Object.keys(page).sort()).toEqual(["columns", "editable", "entity"]);
-    expect(JSON.stringify([read, page])).not.toContain("EPOCH-SENTINEL");
+    expect(read.epochNow).toBe("EPOCH-NOW");
+    expect(read.epochAfter).toBe("EPOCH-AFTER");
+    expect(page.epoch).toBe("EPOCH-PAGE");
   });
 
   test("a body that is not a classification is an empty one rather than a crash", async () => {

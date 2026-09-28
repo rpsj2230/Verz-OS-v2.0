@@ -65,10 +65,19 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
   "src/pages/Ask.tsx ANSWER_API_PATH":
     "Asking a question changes nothing an administrator manages: the answer is computed for the " +
     "reader and nothing they hold is ended or replaced.",
-  "src/pages/Classification.tsx reviewApiPath(entity, row.column)":
-    "A review is a dry run. brain.classification_routes stores nothing and holds no handle of " +
-    "anything stored, which tests/unit/test_classification_routes.py proves, so there is nothing " +
-    "for the review to destroy.",
+  "src/pages/Classification.tsx mark === null ? reviewApiPath(entity, row.column) : markReviewApiPath(entity, row.column)":
+    "A review of a rule or of a mark is a dry run. brain.classification_routes stores nothing on " +
+    "either, which tests/unit/test_classification_routes.py and tests/unit/test_classified_tables.py " +
+    "prove, so there is nothing for the review to destroy.",
+  "src/pages/Classification.tsx markApiPath(entity, row.column)":
+    "Applying a mark replaces one column's rule, and the press comes after a review of exactly that " +
+    "mark whose verdict, widening included, is on the screen above the button. The rule before is " +
+    "in the ledger entry 0116's trigger writes and can be marked back the same way, so nothing is " +
+    "ended that cannot be restored by the same control.",
+  "src/pages/Classification.tsx tableApiPath(named)":
+    "Uploading a table writes its rows under a new version and keeps every earlier version's rows, " +
+    "so nothing is deleted, and the marks that stand are kept. The upload is ledgered by 0116's " +
+    "trigger under the person who sent it.",
   "src/pages/FirstRun.tsx FINISH_PATH":
     "Binds the installer's own sign-in to the first administrator on an install that has none, " +
     "once; a second use is refused, so nothing existing is replaced.",
