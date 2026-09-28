@@ -6,7 +6,7 @@ visible without a database: the session records every statement it is handed, th
 are replaced with the answers a table would give, and the directory answers from recorded shapes.
 The same run against a real PostgreSQL is `tests/unit/test_staff_sync_store.py`, which CI runs.
 
-Task ids: M1.6.1, M1.6.2, M1.6.12, M1.8.6
+Task ids: M1.6.1, M1.6.2, M1.6.5, M1.6.12, M1.8.6
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from typing import Any
 import pytest
 
 from brain.connectors import ldap_directory
-from brain.connectors.staff_directories import Answer, Outbound
+from brain.connectors.staff_directories import Answer, Fetch, Outbound
 from brain.identity.staff_roster import Application, RunOutcome, StoredMember, digest_of
 from brain.identity.staff_source import STAFF_SOURCE_LOCATION_SETTING, STAFF_SOURCE_SETTING
 from brain.ops import staff_sync_run
@@ -39,7 +39,7 @@ from brain.ops.staff_sync_run import (
     sync_staff_on,
 )
 from brain.ops.staff_sync_store import RunRecord
-from tests.unit.test_staff_directories import lark_pages
+from tests.unit.test_staff_directories import google_directory, graph_directory, lark_pages
 
 #: Far outside any plausible wall clock, on `tests/unit/test_scope_and_capability.py`'s rule.
 NOW = datetime(2999, 3, 1, 2, 0, tzinfo=UTC)
@@ -160,7 +160,7 @@ def run(
     *,
     env: Mapping[str, str],
     keys: Keys,
-    fetch: Directory | None = None,
+    fetch: Fetch | None = None,
     sessions: Sessions | None = None,
     saved: Mapping[str, str] | None = None,
 ) -> tuple[staff_sync_run.StaffSyncRun, Sessions]:
@@ -511,3 +511,153 @@ def test_a_refused_ldap_bind_is_a_refused_credential_that_names_no_password(
     assert record.detail.startswith(CREDENTIAL_REFUSED_PREFIX)
     assert PASSWORD not in record.detail
     assert store.written == []
+
+
+# ------------------------------------------------------- Google Workspace and Entra, M1.6.5
+WORKSPACE_ENV = {
+    STAFF_SOURCE_SETTING: "google_workspace",
+    STAFF_SOURCE_LOCATION_SETTING: "example.com",
+}
+TENANT = "8f1a0e5c-0000-4000-8000-00000000000a"
+ENTRA_ENV = {STAFF_SOURCE_SETTING: "microsoft_entra", STAFF_SOURCE_LOCATION_SETTING: TENANT}
+ACCESS_TOKEN = "ya29.sentinel-access-token"
+
+
+@dataclass
+class Vendor:
+    """A vendor answering its token exchange at one address, then its pages by URL fragment."""
+
+    exchange_at: str
+    pages: Mapping[str, Mapping[str, Any]]
+    token_answer: Answer = field(
+        default_factory=lambda: Answer(200, {"access_token": ACCESS_TOKEN, "token_type": "Bearer"})
+    )
+    sent: list[Outbound] = field(default_factory=list)
+
+    async def __call__(self, outbound: Outbound) -> Answer:
+        self.sent.append(outbound)
+        if outbound.method == "POST":
+            return self.token_answer if outbound.url == self.exchange_at else Answer(404, {})
+        for fragment, page in self.pages.items():
+            if fragment in outbound.url:
+                return Answer(200, page)
+        return Answer(404, {"error": {"message": f"no stand-in for {outbound.url}"}})
+
+
+@pytest.fixture(scope="module")
+def workspace_credential() -> str:
+    """What the Staff sources screen keeps for a service account key made in the test."""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    from brain.connectors.google_service_account import kept_value
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    private = key.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    ).decode("ascii")
+    pasted = json.dumps(
+        {
+            "type": "service_account",
+            "private_key": private,
+            "client_email": "sync@a-project.iam.gserviceaccount.com",
+        }
+    )
+    return kept_value("reader@example.com", pasted)
+
+
+def test_google_workspace_is_read_on_a_schedule_as_its_service_account_with_its_groups(
+    store: Store, workspace_credential: str
+) -> None:
+    """M1.6.5: Workspace has a nightly reader. The kept key signs an assertion, the assertion is
+    exchanged at Google's token endpoint, and the directory, its managers and its groups are read
+    with the token and applied, with the archived user and the meeting room left out.
+
+    Delete this and choosing Google Workspace on the Staff sources screen is a form that keeps a
+    key nothing reads, which is what every run said before this reader existed."""
+    vendor = Vendor("https://oauth2.googleapis.com/token", google_directory())
+    keys = Keys(Lease(workspace_credential))
+
+    ran, _ = run(env=WORKSPACE_ENV, keys=keys, fetch=vendor)
+
+    assert ran.outcome is RunOutcome.APPLIED
+    exchange, *reads = vendor.sent
+    assert exchange.form is not None
+    assert exchange.form["grant_type"] == "urn:ietf:params:oauth:grant-type:jwt-bearer"
+    assert all(one.method == "GET" for one in reads)
+    assert all(one.headers["Authorization"] == f"Bearer {ACCESS_TOKEN}" for one in reads)
+    assert any("/members?" in one.url for one in reads)
+    ((application, _),) = store.written
+    assert sorted(application.added) == ["Ada Lovelace", "Katherine Johnson"]
+    assert keys.lease_given.closed == [NOW]
+
+
+def test_a_workspace_exchange_google_refuses_changes_nobody_and_repeats_no_key(
+    store: Store, workspace_credential: str
+) -> None:
+    """A scope the Admin console never delegated is Google refusing the assertion, which is a
+    refused credential in Google's words, with nothing read and no part of the key in the row.
+
+    Delete this and a missing delegation reads as the directory being down, or as nobody."""
+    refused = Answer(
+        401,
+        {
+            "error": "unauthorized_client",
+            "error_description": "Client is unauthorized to retrieve access tokens using this "
+            "method, or client not authorized for any of the scopes requested.",
+        },
+    )
+    vendor = Vendor("https://oauth2.googleapis.com/token", google_directory(), token_answer=refused)
+
+    ran, sessions = run(env=WORKSPACE_ENV, keys=Keys(Lease(workspace_credential)), fetch=vendor)
+
+    assert ran.outcome is RunOutcome.CREDENTIAL_REFUSED
+    (record,) = records_of(sessions)
+    assert "not authorized for any of the scopes" in record.detail
+    assert workspace_credential.split(":")[-1][:24] not in record.detail
+    assert len(vendor.sent) == 1
+    assert store.written == []
+
+
+def test_a_credential_kept_for_another_source_is_refused_for_workspace_before_anything_is_sent(
+    store: Store,
+) -> None:
+    """A Lark app's `<id>:<secret>` left in the slot after the choice changed is not a key, so the
+    run refuses it in words that repeat none of it and signs nothing.
+
+    Delete this and the reader tries to rebuild a key from somebody else's secret."""
+    vendor = Vendor("https://oauth2.googleapis.com/token", google_directory())
+
+    ran, sessions = run(env=WORKSPACE_ENV, keys=Keys(Lease(f"{APP_ID}:{APP_SECRET}")), fetch=vendor)
+
+    assert ran.outcome is RunOutcome.CREDENTIAL_REFUSED
+    (record,) = records_of(sessions)
+    assert APP_SECRET not in record.detail
+    assert vendor.sent == []
+
+
+def test_microsoft_entra_is_read_on_a_schedule_with_its_managers_and_groups(store: Store) -> None:
+    """The application's identifier and secret exchanged for a Graph token, then the people with
+    their managers expanded and the groups with their members, each on Graph. The disabled
+    account and the guest are left out.
+
+    Delete this and the nightly Entra read can drop its group walk, and a group mapped to a role
+    on the Roles screen has nothing to match."""
+    vendor = Vendor(
+        f"https://login.microsoftonline.com/{TENANT}/oauth2/v2.0/token", graph_directory()
+    )
+    keys = Keys(Lease(f"{APP_ID}:{APP_SECRET}"))
+
+    ran, _ = run(env=ENTRA_ENV, keys=keys, fetch=vendor)
+
+    assert ran.outcome is RunOutcome.APPLIED
+    exchange, *reads = vendor.sent
+    assert exchange.form is not None
+    assert exchange.form["grant_type"] == "client_credentials"
+    assert exchange.form["scope"] == "https://graph.microsoft.com/.default"
+    assert all(one.url.startswith("https://graph.microsoft.com/") for one in reads)
+    assert any("transitiveMembers" in one.url for one in reads)
+    ((application, _),) = store.written
+    assert sorted(application.added) == ["Ada Lovelace", "Katherine Johnson"]

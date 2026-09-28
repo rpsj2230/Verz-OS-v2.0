@@ -139,8 +139,9 @@ from brain.agents.model import AgentError, AgentRecord
 from brain.api import API_PREFIX, COMMON_RESPONSES, ErrorBody, NoEchoRoute
 from brain.api_routes import Asked
 from brain.attribution import attribute
+from brain.connectors.google_service_account import MAX_KEY_FILE_CHARS
 from brain.connectors.staff_directories import Fetch
-from brain.console.staff_source_guide import GUIDES, Guide, guide_for
+from brain.console.staff_source_guide import GUIDES, CredentialFormError, Guide, guide_for
 from brain.console.staff_source_view import (
     THE_SCREEN,
     Selection,
@@ -176,7 +177,6 @@ from brain.identity.staff_source import (
 from brain.identity.staff_sync import SYNC_INTERVAL, DryRun
 from brain.install import hold_saved, value_of
 from brain.ops.credentials import (
-    MAX_CREDENTIAL_CHARS,
     TOLD,
     CredentialProblemError,
     CredentialsUnavailableError,
@@ -1143,7 +1143,9 @@ class StaffConnectAsked(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     source: str = Field(max_length=64)
-    values: dict[str, Annotated[str, Field(max_length=MAX_CREDENTIAL_CHARS)]] = Field(
+    # A box holds at most a service account key file, the longest thing any form here takes.
+    # The credential made from the boxes is still judged against `MAX_CREDENTIAL_CHARS`.
+    values: dict[str, Annotated[str, Field(max_length=MAX_KEY_FILE_CHARS)]] = Field(
         max_length=MAX_FIELDS
     )
     #: Connect with the credential the vault already holds, rather than one typed here.
@@ -1356,7 +1358,7 @@ async def connect_staff_source(
             trace_id=trace_id,
             ent_hash=asked.reach.ent_hash(),
         )
-    except CredentialProblemError:
+    except (CredentialProblemError, CredentialFormError):
         return _refused("The credential could not be kept as it is. Copy it again.")
     except CredentialsUnavailableError as unavailable:
         return _refused(TOLD[unavailable.state], NOT_KEPT_STATUS[unavailable.state])

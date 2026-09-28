@@ -20,15 +20,21 @@ with a sentence and write no member, and the table's own check refuses a failed 
 anybody. So a refused credential is a line on the Staff sources screen rather than a night on
 which everybody appeared to leave. See `A_RUN_THAT_COULD_NOT_READ_CHANGED_NOBODY`.
 
-**What each source is read with, and the two that are not read on a schedule.** Lark and
+**What each source is read with, and the one that is not read on a schedule.** Lark and
 Microsoft Entra take the application's own identifier and secret, kept as one value
 `<id>:<secret>`, and exchange them for a tenant token, which is the shape a schedule needs: no
-person is signed in at two in the morning. A Google Sheet takes an API key. An LDAP directory
-takes a read-only service account kept as `<bind name>:<password>`, bound over TLS by
-`brain.connectors.ldap_directory` on a thread, because its client is blocking. A hand-kept
-spreadsheet is read when somebody uploads it and there is nothing to read on a schedule; Google
-Workspace needs a signed service-account assertion this product cannot make, and says so on its
-run. See `WHAT_EACH_SOURCE_IS_READ_WITH`.
+person is signed in at two in the morning. Google Workspace takes a service account acting as
+one administrator, kept as `<administrator>:<service account>:<key>` and exchanged for a token
+through an assertion `brain.connectors.google_service_account` signs. A Google Sheet takes an API
+key. An LDAP directory takes a read-only service account kept as `<bind name>:<password>`, bound
+over TLS by `brain.connectors.ldap_directory` on a thread, because its client is blocking. A
+hand-kept spreadsheet is read when somebody uploads it and there is nothing to read on a
+schedule. See `WHAT_EACH_SOURCE_IS_READ_WITH`.
+
+**The three directories are read with their groups and their managers.** A directory group may
+be mapped to a role and to nothing else (needs-rupash item 96), so the run reads each person's
+groups beside their department, manager and whether they are still here, and nothing more: every
+walk selects or is scoped to those fields. See `brain.connectors.staff_directories`.
 
 Rejected: reading the directory from the application process when somebody opens the screen. The
 application holds no read on a connector key by policy, and a roster read on page load would
@@ -39,13 +45,14 @@ contact the company's directory every time anybody looked.
 Option A names, from the same roster, once the roster's transaction has committed. A failure there
 is logged and changes nothing the roster wrote, for that module's reason (M1.8.3).
 
-Task ids: M1.6.1, M1.6.2, M1.6.4, M1.6.6, M1.6.12, M1.8.6, M1.8.3, M1.8.9
+Task ids: M1.6.1, M1.6.2, M1.6.4, M1.6.5, M1.6.6, M1.6.12, M1.8.6, M1.8.3, M1.8.9
 """
 
 from __future__ import annotations
 
 import asyncio
 import re
+import time
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -56,6 +63,13 @@ import httpx
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from brain.connectors.google_service_account import (
+    ServiceAccountKeyError,
+    service_account,
+)
+from brain.connectors.google_service_account import (
+    token_request as google_token_request,
+)
 from brain.connectors.ldap_directory import LdapBindRefusedError, read_directory
 from brain.connectors.staff_directories import (
     GOOGLE_SHEETS_URL,
@@ -129,14 +143,14 @@ A_RUN_THAT_COULD_NOT_READ_CHANGED_NOBODY: Final = (
     "that names anybody."
 )
 
-#: Why each source is read the way it is, and why two are not read on a schedule.
+#: Why each source is read the way it is, and why one is not read on a schedule.
 WHAT_EACH_SOURCE_IS_READ_WITH: Final = (
     "A schedule runs with nobody signed in, so a directory is read with the application's own "
     "credential rather than a person's session: Lark and Microsoft exchange an application's "
-    "identifier and secret for a tenant token, a Google Sheet takes an API key, and an LDAP "
-    "directory binds a read-only service account over TLS. A hand-kept spreadsheet is read when "
-    "uploaded, and Google Workspace needs a signer this product does not carry, so its runs say "
-    "so and change nobody."
+    "identifier and secret for a tenant token, Google Workspace exchanges an assertion its "
+    "service account signs, a Google Sheet takes an API key, and an LDAP directory binds a "
+    "read-only service account over TLS. A hand-kept spreadsheet is read when uploaded, so its "
+    "runs say so and change nobody."
 )
 
 #: Why the run reads the saved settings as well as the environment.
@@ -200,10 +214,6 @@ NOT_READ_ON_A_SCHEDULE: Final[Mapping[str, str]] = {
     SPREADSHEET: (
         "A hand-kept spreadsheet is read when somebody uploads it, so there is nothing to read on "
         "a schedule. Nobody was changed."
-    ),
-    GOOGLE_WORKSPACE: (
-        "Google Workspace is not read on a schedule yet: it needs a service account with "
-        "domain-wide delegation, which this product cannot sign for. Nobody was changed."
     ),
 }
 CREDENTIAL_SHAPE: Final = (
@@ -276,7 +286,7 @@ async def read_lark(
         Outbound("POST", url, json_body={"app_id": app_id, "app_secret": app_secret})
     )
     token = token_or_refusal(answer, "tenant_access_token")
-    return await pull(fetch, LARK, token=token, location=platform, pages=pages)
+    return await pull(fetch, LARK, token=token, location=platform, pages=pages, groups=True)
 
 
 async def read_microsoft(
@@ -296,7 +306,38 @@ async def read_microsoft(
         "scope": MICROSOFT_APPLICATION_SCOPE,
     }
     token = token_or_refusal(await fetch(Outbound("POST", url, form=form)), "access_token")
-    return await pull(fetch, MICROSOFT_ENTRA, token=token, location=tenant, pages=pages)
+    return await pull(
+        fetch, MICROSOFT_ENTRA, token=token, location=tenant, pages=pages, groups=True
+    )
+
+
+async def read_google_workspace(
+    fetch: Fetch,
+    credential: str,
+    location: str,
+    *,
+    pages: int | None = None,
+    clock: Callable[[], float] = time.time,
+) -> StaffSource:
+    """Sign an assertion as the kept service account, exchange it, then walk the directory.
+
+    The credential is `brain.connectors.google_service_account.kept_value`'s; a kept value in any
+    other form is a refused credential, in words that repeat none of it. `clock` is the time the
+    assertion is issued at, a parameter so a test is not a clock.
+    """
+    try:
+        account = service_account(credential)
+    except ServiceAccountKeyError as refused:
+        raise CredentialRefusedError(f"{refused} {NOBODY_CHANGED}") from None
+    domain = location.strip().lower()
+    problem = location_problem(GOOGLE_WORKSPACE, domain)
+    if problem:
+        raise StaffSourceError(f"{problem} {NOBODY_CHANGED}")
+    request = google_token_request(account, now=int(clock()))
+    token = token_or_refusal(await fetch(request), "access_token")
+    return await pull(
+        fetch, GOOGLE_WORKSPACE, token=token, location=domain, pages=pages, groups=True
+    )
 
 
 async def read_google_sheet(fetch: Fetch, credential: str, location: str) -> StaffSource:
@@ -335,6 +376,7 @@ async def read_ldap(fetch: Fetch, credential: str, location: str) -> StaffSource
 READERS: Final[Mapping[str, Reader]] = {
     LARK: read_lark,
     MICROSOFT_ENTRA: read_microsoft,
+    GOOGLE_WORKSPACE: read_google_workspace,
     GOOGLE_SHEET: read_google_sheet,
     LDAP: read_ldap,
 }

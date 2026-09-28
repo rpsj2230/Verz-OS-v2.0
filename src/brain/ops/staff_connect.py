@@ -3,9 +3,10 @@
 The Staff sources screen used to say that choosing a source was an installation setting no route
 could write, and that trying one needed a gatherer nothing attached. Both stopped being true: the
 setup wizard and the Settings screen save installation values in `ops.setting` through
-`brain.ops.install_settings`, and `brain.ops.staff_sync_run` reads Lark, Microsoft Entra and a
-Google Sheet with an application's own credential. This module joins them into the three things
-the owner asked to do from the console: test a source, save it, and run its first sync.
+`brain.ops.install_settings`, and `brain.ops.staff_sync_run` reads Lark, Microsoft Entra, Google
+Workspace and a Google Sheet with an application's own credential. This module joins them into
+the three things the owner asked to do from the console: test a source, save it, and run its
+first sync.
 
 **A test reads and keeps nothing, and that is a property of what it is handed.** `check_connection`
 takes the fields, a way to send a request and nothing else: no session, no vault, no settings. So
@@ -30,7 +31,7 @@ Rejected: asking the worker to run it. The worker has no queue for a run somebod
 dry run is a read the person wants to see before anything is applied, which is a request and an
 answer rather than a job.
 
-Task ids: M27.7.2, M1.8.6, M1.6.12
+Task ids: M27.7.2, M1.8.6, M1.6.12, M1.6.5
 """
 
 from __future__ import annotations
@@ -48,8 +49,18 @@ from brain.connectors.staff_directories import (
     Fetch,
     location_problem,
 )
-from brain.console.staff_source_guide import LOCATION, Guide, field_problems
-from brain.identity.staff_adapters import LARK, MICROSOFT_ENTRA, RosterUnavailableError
+from brain.console.staff_source_guide import (
+    LOCATION,
+    CredentialFormError,
+    Guide,
+    field_problems,
+)
+from brain.identity.staff_adapters import (
+    GOOGLE_WORKSPACE,
+    LARK,
+    MICROSOFT_ENTRA,
+    RosterUnavailableError,
+)
 from brain.identity.staff_roster import Application, application_for
 from brain.identity.staff_source import (
     STAFF_SOURCE_LOCATION_SETTING,
@@ -71,6 +82,7 @@ from brain.ops.staff_sync_run import (
     CredentialRefusedError,
     Reader,
     StaffSyncRun,
+    read_google_workspace,
     read_lark,
     read_microsoft,
     sync_staff_on,
@@ -108,7 +120,11 @@ class PagedReader(Protocol):
 
 #: The readers that can stop after a few pages. Any other registered reader reads the whole list,
 #: which is still a read and still keeps nothing.
-PAGED: Final[Mapping[str, PagedReader]] = {LARK: read_lark, MICROSOFT_ENTRA: read_microsoft}
+PAGED: Final[Mapping[str, PagedReader]] = {
+    LARK: read_lark,
+    MICROSOFT_ENTRA: read_microsoft,
+    GOOGLE_WORKSPACE: read_google_workspace,
+}
 
 #: What a test says after the reason, so nobody wonders whether a failed test changed anything.
 NOTHING_SAVED: Final = "Nothing was saved."
@@ -145,7 +161,10 @@ def checked_credential(guide: Guide, values: Mapping[str, str]) -> str:
     problems = field_problems(guide, values)
     if problems:
         raise ConnectRefusedError(" ".join(problems))
-    credential = guide.credential_from(values)
+    try:
+        credential = guide.credential_from(values)
+    except CredentialFormError as refused:
+        raise ConnectRefusedError(f"{refused} {NOTHING_SAVED}") from None
     if problems_with(credential):
         msg = (
             "One of the values has a space, a line break or a character a credential cannot "

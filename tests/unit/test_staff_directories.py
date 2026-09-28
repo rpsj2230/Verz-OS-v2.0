@@ -7,7 +7,7 @@ and what a refusal repeats. The pages the stand-in answers with are
 `tests/fixtures/roster_payloads.py`'s, which are reconstructed from vendor documentation and say
 so; nothing here has called a vendor.
 
-Task ids: M42.5.7
+Task ids: M42.5.7, M1.6.5
 """
 
 from __future__ import annotations
@@ -39,10 +39,18 @@ from brain.connectors.staff_directories import (
 )
 from brain.identity.staff_adapters import GOOGLE_WORKSPACE, LARK, MICROSOFT_ENTRA
 from tests.fixtures.roster_payloads import (
+    ENTRA_APPROVERS_MEMBERS,
+    ENTRA_AUDITORS_MEMBERS,
+    ENTRA_GROUPS_PAGE,
     ENTRA_USERS_PAGE_ONE,
     ENTRA_USERS_PAGE_TWO,
+    GOOGLE_WORKSPACE_APPROVERS_MEMBERS,
+    GOOGLE_WORKSPACE_AUDITORS_MEMBERS,
+    GOOGLE_WORKSPACE_GROUPS_PAGE,
     GOOGLE_WORKSPACE_USERS_PAGE_ONE,
     GOOGLE_WORKSPACE_USERS_PAGE_TWO,
+    LARK_GROUP_MEMBERS_PAGE,
+    LARK_GROUPS_PAGE,
     LARK_USERS_PAGE_ONE,
     LARK_USERS_PAGE_TWO,
     LARK_USERS_REFUSED,
@@ -326,7 +334,9 @@ def test_google_is_walked_page_by_page_with_the_token_until_no_page_is_left() ->
             None,
             GOOGLE_WORKSPACE_USERS_PAGE_ONE["nextPageToken"],
         ]
-        assert {query(one.url)["domain"] for one in stand.sent} == {"example.com"}
+        # The whole account, never one of its domains: see `GOOGLE_OWN_ACCOUNT`.
+        assert {query(one.url)["customer"] for one in stand.sent} == {"my_customer"}
+        assert all("domain" not in query(one.url) for one in stand.sent)
         assert all(one.headers["Authorization"] == f"Bearer {TOKEN}" for one in stand.sent)
         assert roster.complete is True
         assert {one.work_address for one in roster.people} == {
@@ -391,6 +401,8 @@ def lark_pages() -> dict[str, Mapping[str, Any]]:
     }
     return {
         "departments/0/children": departments,
+        "/member/simplelist": LARK_GROUP_MEMBERS_PAGE,
+        "group/simplelist": LARK_GROUPS_PAGE,
         "department_id=0&": LARK_USERS_PAGE_TWO,
         "department_id=od-engineering&": {
             **LARK_USERS_PAGE_ONE,
@@ -485,5 +497,230 @@ def test_a_page_refused_by_the_vendor_is_told_with_its_status_and_reason() -> No
         assert "403" in str(told.value)
         assert "Not Authorized" in str(told.value)
         assert TOKEN not in str(told.value)
+
+    asyncio.run(scenario())
+
+
+# ============================================================ groups, managers, fields
+def google_directory() -> dict[str, Mapping[str, Any]]:
+    """Two pages of people, then two groups and each one's members."""
+    return {
+        "pageToken=": GOOGLE_WORKSPACE_USERS_PAGE_TWO,
+        "users?": GOOGLE_WORKSPACE_USERS_PAGE_ONE,
+        "/03x8tuzt3gsvn3p/members": GOOGLE_WORKSPACE_APPROVERS_MEMBERS,
+        "/01ksv4uv1x1a9z3/members": GOOGLE_WORKSPACE_AUDITORS_MEMBERS,
+        "groups?": GOOGLE_WORKSPACE_GROUPS_PAGE,
+    }
+
+
+def graph_directory() -> dict[str, Mapping[str, Any]]:
+    """Two pages of people, then three groups, two of them sharing a name."""
+    return {
+        "skiptoken": ENTRA_USERS_PAGE_TWO,
+        "/v1.0/users?": ENTRA_USERS_PAGE_ONE,
+        "0001/transitiveMembers": ENTRA_APPROVERS_MEMBERS,
+        "0002/transitiveMembers": ENTRA_AUDITORS_MEMBERS,
+        "0003/transitiveMembers": {"value": []},
+        "/v1.0/groups?": ENTRA_GROUPS_PAGE,
+    }
+
+
+def test_workspace_groups_are_read_when_asked_as_the_addresses_of_their_people() -> None:
+    """M1.6.5: the Directory API's groups, each group's members read through nested groups, and a
+    member that is a group or the whole account left out, because only a `USER` is somebody.
+
+    Delete this and the scheduled sync reads Workspace with no groups, so a group rule on the
+    Roles screen has nothing to match, or reads a nested group's address as a person."""
+
+    async def scenario() -> None:
+        stand = Stand(pages_by_url(google_directory()))
+        source = await pull(
+            stand, GOOGLE_WORKSPACE, token=TOKEN, location="example.com", groups=True
+        )
+        reading = source.reading()  # type: ignore[attr-defined]
+
+        members = [one for one in stand.sent if "/members?" in one.url]
+        assert {query(one.url)["includeDerivedMembership"] for one in members} == {"true"}
+        assert all(one.headers["Authorization"] == f"Bearer {TOKEN}" for one in stand.sent)
+        assert source.group_members == {  # type: ignore[attr-defined]
+            "approvers@example.com": ("ada@example.com",),
+            "auditors@example.com": ("katherine@example.com",),
+        }
+        assert reading.groups_complete is True
+        ada = next(one for one in reading.roster.people if one.work_address == "ada@example.com")
+        assert ada.groups == ("approvers@example.com",)
+
+    asyncio.run(scenario())
+
+
+def test_graph_groups_are_read_by_id_and_a_name_two_groups_share_confers_from_neither() -> None:
+    """Members are selected by id and turned into addresses against the people just read, with the
+    advanced-query header Graph requires for a select on members. Two groups called Approvers keep
+    an entry each, told apart by id, so a rule on the bare name matches neither: that is how a
+    retired group would otherwise go on appointing people.
+
+    Delete this and one retired group sharing a name with a live one confers the live one's role,
+    or the members call is sent without the header and Graph refuses every night."""
+
+    async def scenario() -> None:
+        stand = Stand(pages_by_url(graph_directory()))
+        source = await pull(
+            stand, MICROSOFT_ENTRA, token=TOKEN, location="example.com", groups=True
+        )
+
+        members = [one for one in stand.sent if "transitiveMembers" in one.url]
+        assert len(members) == 3
+        assert all(one.headers["ConsistencyLevel"] == "eventual" for one in members)
+        assert {query(one.url)["$select"] for one in members} == {"id"}
+        assert all(one.url.startswith(MICROSOFT_GRAPH_URL) for one in stand.sent)
+        assert source.group_members == {  # type: ignore[attr-defined]
+            "Approvers (a1b2c3d4-0000-4000-8000-000000000001)": ("ada@example.com",),
+            "Auditors": ("katherine@example.com",),
+            "Approvers (a1b2c3d4-0000-4000-8000-000000000003)": (),
+        }
+        assert "Approvers" not in source.group_members  # type: ignore[attr-defined]
+
+    asyncio.run(scenario())
+
+
+def test_lark_groups_are_read_by_union_id_and_a_member_nobody_listed_is_left_out() -> None:
+    """Lark's user groups, members asked for as union ids and turned into the addresses the people
+    walk read. A union id the walk never listed is somebody this roster cannot name.
+
+    Delete this and the owner's Lark install reads no groups, or a member's union id is read as
+    an address."""
+
+    async def scenario() -> None:
+        stand = Stand(pages_by_url(lark_pages()))
+        source = await pull(stand, LARK, token=TOKEN, location="larksuite.com", groups=True)
+
+        asked = [query(one.url) for one in stand.sent if "/member/simplelist" in one.url]
+        assert asked == [{"page_size": "100", "member_id_type": "union_id", "member_type": "user"}]
+        assert source.group_members == {"approvers": ("ada@example.com",)}  # type: ignore[attr-defined]
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("source", [GOOGLE_WORKSPACE, MICROSOFT_ENTRA, LARK])
+def test_a_walk_not_asked_for_groups_reads_none(source: str) -> None:
+    """The first-run trial proposes who would be added and nothing else, so it reads no group.
+
+    Delete this and the wizard's sign-in asks every directory for groups it has no scope to read,
+    and the trial fails before anybody has been shown their staff list."""
+
+    async def scenario() -> None:
+        pages = {**google_directory(), **graph_directory(), **lark_pages()}
+        stand = Stand(pages_by_url(pages))
+        await pull(stand, source, token=TOKEN, location=LOCATIONS[source])
+
+        assert not [one for one in stand.sent if "group" in one.url.split("?")[0]]
+
+    asyncio.run(scenario())
+
+
+def test_a_group_id_not_shaped_as_an_identifier_is_never_put_in_a_path() -> None:
+    """A group's id is the one part of a group address a response chose, so it is checked against
+    `GROUP_ID` before it becomes a path, and a group that fails is skipped and counted as not read.
+
+    Delete this and a group id of `../users` walks the token to another resource of the API."""
+
+    async def scenario() -> None:
+        crooked = {
+            "groups": [
+                {"id": "../users", "email": "crooked@example.com"},
+                {"id": "01ksv4uv1x1a9z3", "email": "auditors@example.com"},
+            ]
+        }
+        stand = Stand(pages_by_url({**google_directory(), "groups?": crooked}))
+        source = await pull(
+            stand, GOOGLE_WORKSPACE, token=TOKEN, location="example.com", groups=True
+        )
+
+        paths = {urlsplit(one.url).path for one in stand.sent}
+        assert paths == {
+            "/admin/directory/v1/users",
+            "/admin/directory/v1/groups",
+            "/admin/directory/v1/groups/01ksv4uv1x1a9z3/members",
+        }
+        assert source.group_members == {  # type: ignore[attr-defined]
+            "auditors@example.com": ("katherine@example.com",)
+        }
+        assert source.reading().groups_complete is False  # type: ignore[attr-defined]
+
+    asyncio.run(scenario())
+
+
+def test_a_group_walk_that_runs_out_marks_the_groups_incomplete_and_not_the_roster() -> None:
+    """`A_GROUP_WALK_IS_ITS_OWN_BUDGET`. The people's pages decide whether anybody may be removed;
+    the groups have pages of their own, and running out of them says so on the groups.
+
+    Delete this and a company with many groups has its roster read as incomplete every night, so
+    nobody who leaves is ever marked as having left, or a stopped group walk reads as complete."""
+
+    async def scenario() -> None:
+        stand = Stand(pages_by_url(google_directory()))
+        source = await pull(
+            stand, GOOGLE_WORKSPACE, token=TOKEN, location="example.com", pages=2, groups=True
+        )
+        reading = source.reading()  # type: ignore[attr-defined]
+
+        assert reading.roster.complete is True
+        assert reading.groups_complete is False
+        assert len([one for one in stand.sent if "users?" in one.url]) == 2
+        assert len([one for one in stand.sent if "users?" not in one.url]) == 2
+
+    asyncio.run(scenario())
+
+
+def test_a_group_page_linking_off_graph_is_refused_and_the_token_never_goes_there() -> None:
+    """The groups' next links are followed only on Graph, as the people's are.
+
+    Delete this and the second walk is the one place a response can send the token elsewhere."""
+
+    async def scenario() -> None:
+        elsewhere = {**ENTRA_GROUPS_PAGE, "@odata.nextLink": "https://graph.example.invalid/g"}
+        stand = Stand(pages_by_url({**graph_directory(), "/v1.0/groups?": elsewhere}))
+
+        with pytest.raises(DirectorySignInError):
+            await pull(stand, MICROSOFT_ENTRA, token=TOKEN, location="example.com", groups=True)
+        assert {urlsplit(one.url).netloc for one in stand.sent} == {"graph.microsoft.com"}
+
+    asyncio.run(scenario())
+
+
+def test_each_read_asks_only_for_the_fields_the_roster_needs() -> None:
+    """The staff sync reads people, their department, manager, whether they are still here, and
+    groups, and nothing else: Google's `fields` and Graph's `$select` say which, and each Lark
+    people request asks for union ids so the manager is named by the id the roster keeps.
+
+    The expected sets are written here rather than imported, so the test cannot pass by comparing
+    a constant with itself. Delete this and a read can start carrying phone numbers, addresses
+    and custom attributes into a system that keeps none of them."""
+
+    async def scenario() -> None:
+        google = Stand(pages_by_url(google_directory()))
+        await pull(google, GOOGLE_WORKSPACE, token=TOKEN, location="example.com")
+        graph = Stand(pages_by_url(graph_directory()))
+        await pull(graph, MICROSOFT_ENTRA, token=TOKEN, location="example.com")
+        lark = Stand(pages_by_url(lark_pages()))
+        await pull(lark, LARK, token=TOKEN, location="larksuite.com")
+
+        assert query(google.sent[0].url)["fields"] == (
+            "nextPageToken,users(id,primaryEmail,name/fullName,suspended,archived,orgUnitPath,"
+            "aliases,relations)"
+        )
+        first = query(graph.sent[0].url)
+        assert set(first["$select"].split(",")) == {
+            "id",
+            "userPrincipalName",
+            "displayName",
+            "department",
+            "accountEnabled",
+            "proxyAddresses",
+        }
+        assert first["$expand"] == "manager($select=id,userPrincipalName)"
+        people = [query(one.url) for one in lark.sent if "find_by_department" in one.url]
+        assert people
+        assert {one["user_id_type"] for one in people} == {"union_id"}
 
     asyncio.run(scenario())

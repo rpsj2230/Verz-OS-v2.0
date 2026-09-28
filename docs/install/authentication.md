@@ -175,7 +175,7 @@ address to register, which is your web address followed by `/first-run/staff-lis
 | --- | --- | --- |
 | Google Workspace | In Google Cloud console, in a project belonging to your company, an OAuth client of the type Web application, with the return address as an authorised redirect URI. Enable the Admin SDK API in the same project. | Nothing on the client. Sign in with a Workspace administrator's account, which is what lets it read the user directory. |
 | Microsoft Entra | In the Microsoft Entra admin centre, an application registration with a Web platform, the return address as a redirect URI, and a client secret. | The delegated Microsoft Graph permission `User.Read.All`, with admin consent granted for your organisation. |
-| Lark | In the Lark developer console, a custom app with the return address as a redirect URL under Security settings. Copy its App ID and App Secret. | The contact permissions to read users, their email addresses, their departments and department names; a contact range covering everyone who should be listed; and a published version. |
+| Lark | In the Lark developer console, a custom app with the return address as a redirect URL under Security settings. Copy its App ID and App Secret. | The scopes `contact:department.organize:readonly`, `contact:user.base:readonly`, `contact:user.employee:readonly`, `contact:user.department:readonly` and `contact:user.email:readonly`; a contact range covering everyone who should be listed; and a published version. |
 
 Then paste the application's client ID and secret on the screen and press **Sign in and read the
 list**. The directory's own sign-in page opens in a second window, because the setup code lives
@@ -218,6 +218,31 @@ the work address, `displayName`, `department`, `manager`, `memberOf`, and `userA
 whose disable bit marks an account as having left. `brain.connectors.ldap_directory` holds these
 steps as the metadata the Staff sources screen shows. Its client library, ldap3, is LGPL and was
 allowed by name on 2026-09-22; an image built without it says so on a run and changes nobody.
+
+## Reading the staff list from Google Workspace, Microsoft Entra or Lark on a schedule
+
+The nightly staff sync reads each of the three directories with the company's own application,
+never a person's sign-in, and reads people, their department, their manager, whether they are
+still here, and their groups, and nothing else. A group may be mapped to a role on the Roles
+screen and to nothing else. Each is connected from **Govern > Staff sources**, whose steps are
+`brain.console.staff_source_guide`; a test there reads a few pages and keeps nothing.
+
+| Directory | What the vault slot `connector_keys/staff_source` keeps | What to grant |
+| --- | --- | --- |
+| Lark | `<App ID>:<App Secret>`, or the Lark app the Connectors screen keeps | `contact:department.organize:readonly`, `contact:user.base:readonly`, `contact:user.employee:readonly`, `contact:user.department:readonly`, `contact:user.email:readonly`, `contact:group:readonly`; contact range All members; a released version |
+| Microsoft Entra | `<application id>:<client secret>` | the application permissions `User.Read.All` and `GroupMember.Read.All`, with admin consent |
+| Google Workspace | `<administrator>:<service account>:<key>`, made from the pasted JSON key file | domain-wide delegation of `admin.directory.user.readonly` and `admin.directory.group.readonly` to the service account, acting as an administrator |
+
+**Lark checks a scope for each field and leaves out a field it may not show.** Without
+`contact:user.employee:readonly` every person arrives with no work address and no status, and the
+call still succeeds, so the steps ask for every scope above. The work address is the Lark Mail
+address where there is one and the account's email where there is not, which is every person in a
+company whose mail is elsewhere.
+
+**Google Workspace keeps the key and nothing else from the file.** The file is too long for the
+vault's one credential, so `brain.connectors.google_service_account` keeps the key's two primes
+beside the two addresses, and every signed assertion goes to Google's own token endpoint, never
+to the address the file names.
 
 ## What each source is trusted to say, and why it matters
 
@@ -955,4 +980,4 @@ than thirty. A slow start beats a container that never becomes ready.
 
 ## Task ids
 
-M42.2.7, M42.5.7, M1.6.6
+M42.2.7, M42.5.7, M1.6.6, M1.6.5

@@ -53,6 +53,9 @@ NOT_A_CONNECTOR = frozenset(
         # `tests/unit/test_ldap_directory.py` drives it against `roster_payloads.py`'s recorded
         # directory entries and against ldap3's own mock server.
         "ldap_directory",
+        # Signing a Google Workspace staff read as a service account: a key and one assertion,
+        # no business source. `tests/unit/test_google_service_account.py` drives it.
+        "google_service_account",
     }
 )
 

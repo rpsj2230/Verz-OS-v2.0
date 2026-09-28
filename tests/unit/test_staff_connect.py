@@ -252,7 +252,11 @@ def test_a_connection_test_reads_a_few_pages_says_how_many_people_and_sends_noth
     assert first.url.endswith("/auth/v3/tenant_access_token/internal")
     assert rest
     assert all(one.method == "GET" for one in rest)
-    assert len(rest) <= TEST_PAGES
+    # The people and the groups each have the page budget, so the group scope is tested too.
+    groups = [one for one in rest if "/group/" in one.url]
+    assert groups
+    assert len(rest) - len(groups) <= TEST_PAGES
+    assert len(groups) <= TEST_PAGES
 
 
 def test_a_test_that_stops_before_the_last_page_says_there_are_more_rather_than_all() -> None:
@@ -281,8 +285,16 @@ def test_a_refused_credential_is_a_sentence_that_repeats_the_vendor_and_never_th
     assert found.people == 0
 
 
-def test_a_source_this_version_cannot_connect_is_refused_before_any_request_is_sent() -> None:
-    """Delete this and a Google Workspace form could send a secret to be kept for nothing."""
+def test_a_source_this_version_cannot_connect_is_refused_before_any_request_is_sent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A source whose nightly reader is withdrawn is refused before anything is sent.
+
+    Delete this and such a form could send a secret to be kept for nothing."""
+    monkeypatch.setattr(
+        "brain.console.staff_source_guide.READERS",
+        {name: one for name, one in staff_sync_run.READERS.items() if name != GOOGLE_WORKSPACE},
+    )
     workspace = guide_for(GOOGLE_WORKSPACE)
     assert workspace is not None
     directory = Directory()
