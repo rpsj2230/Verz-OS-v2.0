@@ -39,20 +39,120 @@ const PROGRESS = {
     why: "owner decision: 7 licences await the allowlist (postgres/pgvector, ubuntu/squid, three @fontsource fonts, regex); recommended allow all",
     updated: "2026-09-21",
   },
+  "M1.6.5": {
+    status: "IN PROGRESS",
+    why: "Google Workspace, Entra and Lark staff readers being finished and wired into Govern > Staff sources",
+    updated: "2026-09-28",
+  },
+  "M1.8.3": {
+    status: "IN PROGRESS",
+    why: "department head audit reads being finished end to end, console included",
+    updated: "2026-09-28",
+  },
+  "M1.8.5": {
+    status: "BLOCKED",
+    why: "the web part is the owner's sign-in check (needs-rupash 91, check 1); the chat part waits for Wave 2 (needs-rupash 97)",
+    updated: "2026-09-28",
+  },
+  "M1.8.8": {
+    status: "BLOCKED",
+    why: "the owner records the remaining permissions rows on Requirement checks (needs-rupash 91, check 7)",
+    updated: "2026-09-28",
+  },
+  "M2.3.1": {
+    status: "BLOCKED",
+    why: "the owner's department checks on the install (needs-rupash 91, checks 2 and 3); the chat part waits for Wave 2 (needs-rupash 97)",
+    updated: "2026-09-28",
+  },
+  "M2.3.2": {
+    status: "BLOCKED",
+    why: "the owner records the remaining departments rows on Requirement checks (needs-rupash 91, check 7)",
+    updated: "2026-09-28",
+  },
+  "M24.3.4": {
+    status: "BLOCKED",
+    why: "the owner's audit check on the install (needs-rupash 91, check 4)",
+    updated: "2026-09-28",
+  },
+  "M24.3.6": {
+    status: "BLOCKED",
+    why: "the owner records the remaining observability rows on Requirement checks (needs-rupash 91, check 7)",
+    updated: "2026-09-28",
+  },
+  "M3.4.2": {
+    status: "IN PROGRESS",
+    why: "the risk score being written to the request row on /answer and shown in the console",
+    updated: "2026-09-28",
+  },
+  "M3.6.3": {
+    status: "IN PROGRESS",
+    why: "the routing decision being written to the request row when it is made and shown in the console",
+    updated: "2026-09-28",
+  },
   "M31.2.1.4": {
     status: "READY FOR TESTING",
     why: "engine tests pass for session and transaction pooling; closing needs PgBouncer on the install (M0.3.4)",
     updated: "2026-09-21",
+  },
+  "M31.3.2.3": {
+    status: "BLOCKED",
+    why: "live since d6290cb; the proof is one connector sync on the install and none is connected yet: connecting Lark (needs-rupash 91, before you start) proves it",
+    updated: "2026-09-28",
+  },
+  "M31.3.2.4": {
+    status: "BLOCKED",
+    why: "live since d6290cb; the proof is the lease revoked at the end of a connector sync on the install, which waits for the first connection (needs-rupash 91)",
+    updated: "2026-09-28",
+  },
+  "M31.3.2.5": {
+    status: "BLOCKED",
+    why: "live since d6290cb; the proof is a provider key replaced on the install and loaded without a redeploy, which waits for the first key (needs-rupash 85)",
+    updated: "2026-09-28",
   },
   "M38.2.1.1": {
     status: "READY FOR TESTING",
     why: "WAVE_RECORDS and /build/waves are live on staging; proved when the first wave is accepted and recorded",
     updated: "2026-09-21",
   },
+  "M38.2.2.2": {
+    status: "BLOCKED",
+    why: "needs a provider key (needs-rupash 85) and then the owner's real-answer check (needs-rupash 91, check 5)",
+    updated: "2026-09-28",
+  },
   "M41.3.1": {
     status: "BLOCKED",
-    why: "a release tag needs the owner's go-ahead",
-    updated: "2026-09-21",
+    why: "the first release tag is cut when Wave 0 is accepted (needs-rupash 77, decided); waits for M31.3.2.3 to M31.3.2.5",
+    updated: "2026-09-28",
+  },
+  "M5.1.2": {
+    status: "BLOCKED",
+    why: "built (the key field, PR #87); proved when the first provider key is saved into the vault on the install (needs-rupash 85)",
+    updated: "2026-09-28",
+  },
+  "M5.6.1": {
+    status: "BLOCKED",
+    why: "an answer through each provider on the install needs its key (needs-rupash 85)",
+    updated: "2026-09-28",
+  },
+  "M5.6.3": {
+    status: "BLOCKED",
+    why: "a proved fallback needs at least two provider keys on the install (needs-rupash 85)",
+    updated: "2026-09-28",
+  },
+  "M5.6.5": {
+    status: "BLOCKED",
+    why: "the owner's models check on the install (needs-rupash 91, check 6), after the keys (needs-rupash 85)",
+    updated: "2026-09-28",
+  },
+  "M5.7.1": {
+    status: "IN PROGRESS",
+    why: "all four providers shown on Models and health with Add key, Test and Turn off; the answer on the install then waits for keys (needs-rupash 85)",
+    updated: "2026-09-28",
+  },
+  "M5.7.3": {
+    status: "IN PROGRESS",
+    why: "the Models screen rebuilt to the owner's failover matrix screenshot, with the agent pin tried first",
+    updated: "2026-09-28",
   },
 };
 
