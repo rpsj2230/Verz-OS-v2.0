@@ -1070,8 +1070,11 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
             { name: "cache", state: "not_configured", gates: false },
             { name: UNBROKEN, state: "ready", gates: false },
           ],
+          // One halt on an agent the reader may be told of, whose name is the unbroken token.
+          halts: [{ scope: "agent", target: UNBROKEN, since: "2019-03-04T11:40:00Z" }],
+          halts_known: true,
           worker_last_seen: "2019-03-04T11:58:00Z",
-          unrecorded: [{ figure: "halts", why: UNBROKEN }],
+          unrecorded: [{ figure: "budget_stops", why: UNBROKEN }],
         },
         needs_you: [
           { queue: "approvals", waiting: 3, at_least: false, opens: "/approvals" },

@@ -13,6 +13,12 @@
  * sent is not drawn at all. A queue the reader may not act on was never sent, so it is absent and
  * never "0". See `kit/KpiStrip.tsx` and `brain.console.needs_you`.
  *
+ * **What is stopped is said in words, and a stop nobody can read is a stop.** Each halt in force
+ * reads "Stopped: agent X since 14:05"; none reads "Nothing stopped"; and when the API could not read
+ * the halts (`halts_known` false) the strip says "Stop state unknown, treated as stopped", because
+ * admission refuses everything then and "Nothing stopped" would be the reassuring answer nobody
+ * measured. A halt on one person never names them: their id belongs in Advanced.
+ *
  * **Identifiers are in Advanced and nowhere else.** The audit feed says what was done and to what
  * kind of thing, and links to the entry's history, whose address carries the identifier; the
  * signed-in person's principal and entitlement digest are in the Advanced section at the foot.

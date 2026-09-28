@@ -19,9 +19,9 @@
  * line reading "Access review 0" to somebody who may not open access review says the queue exists
  * and is being kept from them.
  *
- * **The overview route is not in the generated schema until PR #157 lands**, so its shape is typed
- * here from `brain.console_overview_routes.OverviewView` and read field by field, keeping only what
- * was sent. The figures route is this package's own and comes from the generated schema.
+ * **The overview is read field by field** against `brain.console_overview_routes.OverviewView`, halts
+ * included, keeping only what was sent, so a body from an older or newer route draws less rather
+ * than drawing wrong. The figures route comes from the generated schema.
  *
  * Task ids: M27.15.17, M27.16.1
  */

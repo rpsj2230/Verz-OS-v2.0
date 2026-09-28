@@ -24,6 +24,7 @@ import {
   AGENTS_LABEL,
   ANSWERED_LABEL,
   COST_LABEL,
+  HALTS_LABEL,
   NEEDS_YOU,
   NOT_COUNTED,
   NOTHING_RETURNED_LABEL,
@@ -32,8 +33,11 @@ import {
   SOURCES_LABEL,
 } from "../src/pages/overview/OverviewPage";
 import {
+  NOTHING_STOPPED,
+  STOP_STATE_UNKNOWN,
   activeAgents,
   connectedSources,
+  haltWords,
   queueLabel,
   readFigures,
   readOverview,
@@ -179,6 +183,36 @@ describe("what the Overview draws", () => {
     expect(section(page.root, NEEDS_YOU)?.textContent).toContain(NOTHING_WAITING);
   });
 
+  test("the health strip says what is stopped in words: each halt, nothing, or that nobody can tell", async () => {
+    // What breaks if this is deleted: a halt in force drawn as a count or not at all, an install
+    // whose halts could not be read shown as running while admission refuses everything, or an
+    // install with nothing stopped shown as "Not recorded yet".
+    const body = ANSWERS[OVERVIEW] as { health: Record<string, unknown> } & Record<string, unknown>;
+    const withHealth = (health: Record<string, unknown>) => ({ [OVERVIEW]: { ...body, health: { ...body.health, ...health } } });
+
+    const stopped = await overviewWith(
+      withHealth({
+        halts: [
+          { scope: "everything", target: "", since: "2019-03-04T11:05:00Z" },
+          { scope: "agent", target: "quote-helper", since: "2019-03-04T11:40:00Z" },
+        ],
+        halts_known: true,
+      }),
+    );
+    const lines = [...stopped.root.querySelectorAll("[data-halts='stopped'] li")].map((one) => one.textContent ?? "");
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toMatch(/^Stopped: everything since /);
+    expect(lines[1]).toMatch(/^Stopped: agent quote-helper since /);
+    expect(figure(stopped.root, HALTS_LABEL)).not.toContain(NOT_RECORDED);
+
+    const none = await overviewWith(withHealth({ halts: [], halts_known: true }));
+    expect(figure(none.root, HALTS_LABEL)).toBe(NOTHING_STOPPED);
+
+    const unknown = await overviewWith(withHealth({ halts: [], halts_known: false }));
+    expect(figure(unknown.root, HALTS_LABEL)).toBe(STOP_STATE_UNKNOWN);
+    expect(unknown.root.textContent).not.toContain(NOTHING_STOPPED);
+  });
+
   test("the figure row draws the API's counts, and cost as not recorded rather than as nought", async () => {
     // What breaks if this is deleted: a cost drawn as 0.00, which says the company spent nothing,
     // or refused and abstained drawn as anything other than the one figure the API sent.
@@ -274,6 +308,29 @@ describe("what the readers keep", () => {
       ["access_review", 1, undefined],
     ]);
     expect(readOverview({ needs_you: [] })).toBeNull();
+  });
+
+  test("a halt reads as what it stops and since when, and a person's id is never in the words", () => {
+    // What breaks if this is deleted: a halt on a person naming their principal id on the landing
+    // screen, or a halt drawn in the API's scope words rather than an administrator's.
+    const today = new Date("2019-03-04T12:00:00Z");
+    const at = "2019-03-04T11:05:00Z";
+    const time = new Date(at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+    expect(haltWords({ scope: "everything", target: "", since: at }, today)).toBe(`Stopped: everything since ${time}`);
+    expect(haltWords({ scope: "connector", target: "xero", since: at }, today)).toBe(`Stopped: source xero since ${time}`);
+    expect(haltWords({ scope: "person", target: "u_7f3a2c", since: at }, today)).not.toContain("u_7f3a2c");
+    expect(haltWords({ scope: "agent", target: "quote", since: at }, new Date("2019-03-09T12:00:00Z"))).toMatch(/since \d+ Mar, /);
+  });
+
+  test("halts the API could not fully describe are an unknown stop state, never nothing stopped", () => {
+    // What breaks if this is deleted: a malformed halt dropped and the strip reading "Nothing
+    // stopped" over an install that is stopped.
+    const health = { status: "ok", parts: [], worker_last_seen: null, unrecorded: [] };
+    const read = (halts: unknown, known: unknown) => readOverview({ health: { ...health, halts, halts_known: known }, needs_you: [], uncounted: [] });
+    expect(read([], true)?.haltsKnown).toBe(true);
+    expect(read([{ scope: "agent", since: "2019-03-04T11:05:00Z" }], true)?.haltsKnown).toBe(false);
+    expect(read([], false)?.haltsKnown).toBe(false);
+    expect(read(undefined, undefined)?.haltsKnown).toBeUndefined();
   });
 
   test("figures that are not counts are no figures at all", () => {
