@@ -124,6 +124,7 @@ from brain.tables.schedule import ControlRunRow
 from brain.tables.sensitive_read import SensitiveReadRow
 from brain.tables.service_account import ApiKeyRow, ServiceAccountRow
 from brain.tables.skill import SkillAssignmentRow, SkillReviewRow, SkillRow
+from brain.tables.skill_invocation import SkillInvocationRow
 from brain.tables.spend import ReportRefreshRow, SpendActualRow
 from brain.tables.staff import StaffMemberRow, StaffSyncRunRow
 from brain.tables.suspension import SuspensionRow
@@ -366,6 +367,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     "know.solution",
     # 0133_acceptance_result. Points at nothing: the commit and the check are values.
     "ops.acceptance_result",
+    # 0138_skill_invocation. Points at nothing: a use names its skill by digest and its agent and
+    # request by value, and outlives all three.
+    "agent.skill_invocation",
 )
 
 __all__ = [
@@ -458,6 +462,7 @@ __all__ = [
     "SettingRow",
     "SettingType",
     "SkillAssignmentRow",
+    "SkillInvocationRow",
     "SkillReviewRow",
     "SkillRow",
     "SolutionRow",

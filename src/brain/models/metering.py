@@ -42,9 +42,17 @@ routed and never attempted, and `ModelUsage` means a call was attempted; folding
 either lose that request's route or file it under the answer lane's budget it never spent. Two
 calls routed differently name no route, for `A_REQUEST_ANSWERED_BY_TWO_MODELS_NAMES_NONE`'s reason.
 
+**Each answered call is also kept on its own, because a price is per model and a sum is not
+(M27.12.5).** The ledger row holds the tokens summed, and one sum cannot be priced when two models
+served a request at two prices. So `ModelUsage.answered` carries each call that came back, naming
+the provider and the model the rung asked for, which is the price book's key: the adapter refuses
+a response for any other model (`brain.models.adapter`), and a provider's echo of a dated alias
+would otherwise miss a price the administrator set against the name the ladder shows them. The
+sums on the row are these calls' sums, and `ModelUsage` refuses a pair that disagree.
+
 Scope: pure. Nothing here performs I/O or reads a clock.
 
-Task ids: M27.7.14, M27.1.5, M3.6.3
+Task ids: M27.7.14, M27.1.5, M3.6.3, M27.12.5
 """
 
 from __future__ import annotations
@@ -79,6 +87,16 @@ class MeteringError(ValueError):
 
 
 @dataclass(frozen=True)
+class AnsweredCall:
+    """One call that came back: who served it, the model asked for, and the provider's counts."""
+
+    provider: str
+    model: str
+    tokens_in: int
+    tokens_out: int
+
+
+@dataclass(frozen=True)
 class ModelUsage:
     """One request's model calls, as its ledger row holds them.
 
@@ -96,6 +114,9 @@ class ModelUsage:
     agent_version: str | None
     fallback_count: int
     retry_count: int
+    #: Each call that came back, in the order it did. Empty on a usage built without them, which
+    #: prices nothing; see the module docstring.
+    answered: tuple[AnsweredCall, ...] = ()
 
     def __post_init__(self) -> None:
         counts = (self.calls, self.tokens_in, self.tokens_out, self.fallback_count)
@@ -109,6 +130,16 @@ class ModelUsage:
             msg = (
                 f"{self.fallback_count} fallbacks and {self.retry_count} retries cannot come out "
                 f"of {self.calls} calls: every one of them is a call after the first"
+            )
+            raise MeteringError(msg)
+        if self.answered and (
+            len(self.answered) > self.calls
+            or sum(one.tokens_in for one in self.answered) != self.tokens_in
+            or sum(one.tokens_out for one in self.answered) != self.tokens_out
+        ):
+            msg = (
+                "the calls that answered do not add up to the usage they are part of, so a cost "
+                "priced from them would disagree with the tokens on the same ledger row"
             )
             raise MeteringError(msg)
 
@@ -142,6 +173,7 @@ class Meter:
         self._providers: list[str | None] = []
         self._agents: list[str | None] = []
         self._routes: list[ModelRoute] = []
+        self._answered: list[AnsweredCall] = []
 
     def routed(self, decision: TierDecision) -> None:
         """The executor classified a call's tier. Noted before anything is attempted."""
@@ -165,9 +197,18 @@ class Meter:
         self._fallbacks += 1
 
     def answered(
-        self, response: DriverResponse, *, provider: str, agent_version: str | None
+        self,
+        response: DriverResponse,
+        *,
+        provider: str,
+        agent_version: str | None,
+        model: str | None = None,
     ) -> None:
-        """A call came back. Its tokens are the provider's count; see the reason constants."""
+        """A call came back. Its tokens are the provider's count; see the reason constants.
+
+        `model` is the one the rung asked for, the price book's key; the response's own name
+        stands in for a caller that has no rung to name.
+        """
         if self._attempts < 1:
             msg = "an answer was recorded before any attempt was, so a call went uncounted"
             raise MeteringError(msg)
@@ -176,6 +217,14 @@ class Meter:
         self._models.append(response.model)
         self._providers.append(provider)
         self._agents.append(agent_version)
+        self._answered.append(
+            AnsweredCall(
+                provider=provider,
+                model=response.model if model is None else model,
+                tokens_in=response.usage.input_tokens,
+                tokens_out=response.usage.output_tokens,
+            )
+        )
 
     def usage(self) -> ModelUsage | None:
         """What the ledger row records, or None when this request called no model."""
@@ -190,4 +239,5 @@ class Meter:
             agent_version=_agreed(self._agents),
             fallback_count=self._fallbacks,
             retry_count=self._retries,
+            answered=tuple(self._answered),
         )

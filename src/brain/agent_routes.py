@@ -102,11 +102,11 @@ narrows it to what the reader holds. The words themselves are `brain.console.age
 and this module decides only who is handed them. See
 `THE_PROFILE_IS_CONFIGURATION_AND_ITS_CAPABILITY_NAMES_ARE_THE_VOCABULARYS`.
 
-**The figure at the top of the page is sent with the statement that nothing records it.**
+**The figure at the top of the page is sent with the statement of whether anything records it.**
 `HeadlineView.recorded` is `brain.console.agent_profile.RUN_SPEND_IS_RECORDED`, which a test
-holds against the source for a writer of a run's cost, so the page can say "not recorded yet"
-instead of drawing nought as a measurement. The figures themselves are unchanged, so the day a
-writer lands nothing about the headline has to move but that constant.
+holds against the source for a writer of a run's cost, so a page on a build with no writer says
+"not recorded yet" instead of drawing nought as a measurement. The writer landed on 2026-09-28
+(`brain.ops.usage_store`), and nothing about the headline moved but that constant.
 
 **The connector strip carries every row it was cut from.** `ConnectorStripView.rows` is the
 list the strip's `shown` is the head of and its `overflow` counts the tail of, so the page's

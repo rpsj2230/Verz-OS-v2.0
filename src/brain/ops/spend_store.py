@@ -30,14 +30,13 @@ trace ids through `brain.ops.telemetry_store.shapes_for`, and hands both to
 The join is in Python rather than SQL for the reason the unmaterialised report already is: the
 filter is `may_read_spend`, which a predicate would be a second implementation of.
 
-What is not here: a caller of `record`. Nothing in this repository completes a run and records
-its cost, so it is written and tested against a real server and called by nothing yet, which is
-stated rather than left to be discovered from an empty table. The refresh does have one: the
-worker's schedule starts `refresh_spend_daily_now` through `brain.ops.schedule_runner`. And the
-answer lane, the one path that finishes a request, spends nothing, so no recorded cost has a
-trace the ledger holds until a lane that calls a model records one.
+**The caller of `record` is `brain.ops.usage_store.UsageRecorder` (M27.12.5)**, which the lane's
+`finally` reaches for every request that called a model and which writes each request's cost once.
+`record` itself stays a plain append, because "once" is a fact about a request and this module is
+handed a row: the recorder decides which request a row is and holds it to one. The refresh's
+caller is the worker's schedule, through `brain.ops.schedule_runner`.
 
-Task ids: M36.1.3.1, M36.1.3.2, M21.3.4
+Task ids: M36.1.3.1, M36.1.3.2, M21.3.4, M27.12.5
 """
 
 from __future__ import annotations

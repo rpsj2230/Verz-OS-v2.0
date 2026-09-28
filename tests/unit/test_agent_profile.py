@@ -458,18 +458,17 @@ def sources_under(root: Path) -> dict[str, str]:
     }
 
 
-def test_the_page_is_told_nothing_records_a_runs_cost_while_nothing_in_the_source_writes_one() -> (
-    None
-):
-    """Read off the source rather than trusted: no module under `src/brain` reaches
-    `brain.ops.spend_store.record`, the flag says nothing is recorded, and the diagnostic agrees.
+def test_the_page_is_told_a_runs_cost_is_recorded_because_the_usage_recorder_writes_it() -> None:
+    """Read off the source rather than trusted: exactly one module under `src/brain` reaches
+    `brain.ops.spend_store.record`, the usage recorder the lane's `finally` reaches, the flag says
+    a cost is recorded, and the diagnostic agrees.
 
-    What breaks if this is deleted: the day a writer lands, the page goes on saying a figure is
-    not recorded, or the flag is flipped and every agent's nought is drawn as a measurement."""
+    What breaks if this is deleted: the day the writer goes, the page goes on saying a figure is
+    recorded and draws every agent's nought as a measurement, or a second writer lands unseen."""
     every = sources_under(SRC)
     assert "brain.ops.spend_store" in every
-    assert spend_writers(every) == ()
-    assert RUN_SPEND_IS_RECORDED is False
+    assert spend_writers(every) == ("brain.ops.usage_store",)
+    assert RUN_SPEND_IS_RECORDED is True
     assert profile_gaps(sources=every) == ()
 
 
@@ -537,5 +536,6 @@ def test_no_type_on_the_profile_carries_a_count_of_what_it_withheld() -> None:
         reads: tuple[str, ...]
         hidden: int
 
-    assert profile_gaps(sources={}, surface=(Counted,))
-    assert profile_gaps(sources={}) == ()
+    # The flag and the source agree in both calls, so the surface is the only thing judged.
+    assert profile_gaps(sources={}, recorded=False, surface=(Counted,))
+    assert profile_gaps(sources={}, recorded=False) == ()

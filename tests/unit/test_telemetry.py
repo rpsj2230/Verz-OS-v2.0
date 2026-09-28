@@ -39,6 +39,7 @@ from brain.ops.telemetry import (
     COMPLETION_FIELDS,
     FILLED_BY_A_MODEL_CALL,
     FILLED_BY_A_ROUTED_CALL,
+    FILLED_BY_A_SOURCE_READ,
     FILLED_BY_THE_FRONT_HALF,
     FRONT_HALF_FIELDS,
     LEDGER_DATA_CLASS,
@@ -433,6 +434,7 @@ def test_the_fields_nothing_can_fill_today_are_exactly_the_optional_ones() -> No
         FILLED_BY_A_MODEL_CALL,
         FILLED_BY_THE_FRONT_HALF,
         FILLED_BY_A_ROUTED_CALL,
+        FILLED_BY_A_SOURCE_READ,
     )
     assert sum(len(one) for one in mappings) == len(set[str]().union(*mappings)), "a field twice"
     assert set[str]().union(*mappings) == optional
@@ -588,6 +590,7 @@ def test_a_fillable_field_has_no_default_at_all() -> None:
             or declared.name in FILLED_BY_A_MODEL_CALL
             or declared.name in FILLED_BY_THE_FRONT_HALF
             or declared.name in FILLED_BY_A_ROUTED_CALL
+            or declared.name in FILLED_BY_A_SOURCE_READ
         ):
             assert declared.default is None, declared.name
         else:
