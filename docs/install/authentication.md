@@ -369,6 +369,7 @@ everything, written by first run and recorded in the ledger. They come in three 
 | `read:audit.department` | reading how the system is run |
 | `read:audit.erasure` | reading how the system is run |
 | `read:audit.grant` | reading how the system is run |
+| `read:audit.halt` | reading how the system is run |
 | `read:audit.leash` | reading how the system is run |
 | `read:audit.legal_hold` | reading how the system is run |
 | `read:audit.principal` | reading how the system is run |
