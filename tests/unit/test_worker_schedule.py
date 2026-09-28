@@ -323,6 +323,92 @@ def test_a_tick_that_raises_is_reported_and_the_next_tick_still_happens(
     assert all(0.0 <= one <= 30.0 for one in sleeps)
 
 
+def test_the_schedule_reloads_the_saved_settings_before_every_tick(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The worker has no lifespan, so this reload is the only way a value saved in the wizard or
+    the console reaches its controls. It happens before each tick, with the schedule's own
+    sessions, and a change is printed by name.
+
+    Delete this and the worker can go back to never loading ops.setting, which is how the owner's
+    install judged itself local and probed no provider for a week (2026-09-28)."""
+    order: list[str] = []
+    handed: list[object] = []
+
+    async def refresh(sessions: object) -> tuple[str, ...]:
+        handed.append(sessions)
+        order.append("refresh")
+        return ("INSTALL_MODEL_PROFILE",) if len(handed) == 1 else ()
+
+    async def tick(*_: object, **__: object) -> tuple[ControlTick, ...]:
+        order.append("tick")
+        return ()
+
+    sleeps: list[float] = []
+
+    async def sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+        if len(sleeps) == 2:
+            raise asyncio.CancelledError
+
+    sessions = object()
+    monkeypatch.setattr(worker, "tick_controls", tick)
+    with pytest.raises(asyncio.CancelledError):
+        run(
+            lambda: run_schedule(
+                sessions,  # type: ignore[arg-type]
+                database_url="unused",
+                clock=lambda: NOW,
+                sleep=sleep,
+                refresh=refresh,
+            )
+        )
+
+    assert order == ["refresh", "tick", "refresh", "tick"]
+    assert handed == [sessions, sessions]
+    printed = capsys.readouterr().err
+    assert printed.count("installation settings now held: INSTALL_MODEL_PROFILE") == 1
+    assert printed.count("installation settings now held") == 1
+
+
+def test_a_settings_reload_that_fails_is_reported_and_the_tick_still_runs(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The sibling: a reload that cannot reach the table leaves what was held and the controls
+    still run, because a missed reload is one stale minute and a missed tick is a missed sweep.
+
+    Delete this and a reload that raises could stop the schedule, or be swallowed silently."""
+    ticks: list[datetime] = []
+
+    async def refresh(_: object) -> tuple[str, ...]:
+        msg = "no route to the pooler"
+        raise OSError(msg)
+
+    async def tick(*_: object, now: datetime, **__: object) -> tuple[ControlTick, ...]:
+        ticks.append(now)
+        return ()
+
+    async def sleep(_: float) -> None:
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(worker, "tick_controls", tick)
+    with pytest.raises(asyncio.CancelledError):
+        run(
+            lambda: run_schedule(
+                None,  # type: ignore[arg-type]
+                database_url="unused",
+                clock=lambda: NOW,
+                sleep=sleep,
+                refresh=refresh,
+            )
+        )
+
+    assert ticks == [NOW]
+    printed = capsys.readouterr().err
+    assert "saved installation settings could not be read" in printed
+    assert "OSError: no route to the pooler" in printed
+
+
 def test_the_schedule_runs_beside_the_shards_and_stops_when_they_do(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

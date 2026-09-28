@@ -79,7 +79,7 @@ from sqlalchemy import Select, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from brain.install import BY_NAME, INSTALL_PREFIX, InstallError, hold_saved
+from brain.install import BY_NAME, INSTALL_PREFIX, InstallError, hold_saved, saved_values
 from brain.tables.config import SettingRow, SettingType
 
 log = structlog.get_logger(__name__)
@@ -101,13 +101,15 @@ A_SAVED_ANSWER_OUTRANKS_THE_TEMPLATE_THE_INSTALLER_COPIED: Final = (
 
 #: What a saved setting reaches, and what it does not.
 A_SAVED_SETTING_IS_NOT_A_MESSAGE_TO_ANOTHER_WORKER: Final = (
-    "The saved values are held per process and loaded in two places: the lifespan, once, for "
-    "every process as it starts, and the appointment route, from what it has just written, for "
-    "the process that wrote it. brain.serve starts brain.runtime.detect_profile's number of "
-    "uvicorn workers, so an install serving more than one carries the environment's answer in "
-    "the siblings until they are restarted. Polling for a value that changes once per install "
-    "is what brain.ops.provider_keys refuses for a key that rotates twice a year, and the same "
-    "argument is made here for the same cost, with the gap written down rather than implied."
+    "The saved values are held per process and loaded in three places: the lifespan, once, "
+    "for every application process as it starts; the appointment route, from what it has just "
+    "written, for the process that wrote it; and the queue worker's schedule, before every "
+    "tick, because the worker has no lifespan (see refresh_changed). brain.serve starts "
+    "brain.runtime.detect_profile's number of uvicorn workers, so an install serving more "
+    "than one carries the environment's answer in the siblings until they are restarted. "
+    "Polling for a value that changes once per install is what brain.ops.provider_keys "
+    "refuses for a key that rotates twice a year, and the same argument is made here for the "
+    "same cost, with the gap written down rather than implied."
 )
 
 #: Why the provider key goes to the vault and never to this table, vault or no vault.
@@ -276,3 +278,19 @@ async def refresh(sessions: async_sessionmaker[AsyncSession]) -> Mapping[str, st
     hold_saved(found)
     log.info("installation settings loaded", settings=sorted(found))
     return found
+
+
+async def refresh_changed(sessions: async_sessionmaker[AsyncSession]) -> tuple[str, ...]:
+    """Load the saved values, hold them for this process, and name the settings that changed.
+
+    For the queue worker, which has no lifespan and until 2026-09-28 never loaded the table: every
+    value saved in the wizard or the console was invisible to its controls, and the model probe
+    reported an install saved as `hosted` as local. It runs before every schedule tick, so a
+    console change reaches the worker within one tick. Quiet when nothing changed, because a
+    line a minute saying so is noise; names only, never values.
+    """
+    async with sessions() as session, session.begin():
+        found = await load(session)
+    before = hold_saved(found)
+    held = saved_values()
+    return tuple(sorted(n for n in set(before) | set(held) if before.get(n) != held.get(n)))
