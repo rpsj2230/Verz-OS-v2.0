@@ -409,8 +409,9 @@ def built(database: str) -> Iterator[str]:
     """A fresh database with `0039` run for real on top of `0038` stamped, then `0100`.
 
     `0039` points at nothing and needs only the `obs` schema and the application role, which
-    `fresh` makes, so nothing before it is run. `0100` is the only later migration that alters
-    this table (the front half's four columns) and needs only the `gate` schema besides.
+    `fresh` makes, so nothing before it is run. `0100` (the front half's four columns) and
+    `0113` (the route's three) are the later migrations that alter this table, and need only the
+    `gate` schema besides.
     """
     scratch = fresh(database)
     try:
@@ -418,6 +419,8 @@ def built(database: str) -> Iterator[str]:
         migrate(database, "upgrade", "0039")
         migrate(database, "stamp", "0097")
         migrate(database, "upgrade", "0100")
+        migrate(database, "stamp", "0108")
+        migrate(database, "upgrade", "0113")
         yield scratch
     finally:
         drop(database)
