@@ -62,6 +62,7 @@ from brain.knowledge.ingest import (
     IngestRefused,
     MediaType,
     ParseCause,
+    ScanCause,
     ScanVerdict,
     sniff,
 )
@@ -155,46 +156,54 @@ _NUL: Final = chr(0)
 
 
 # ------------------------------------------------------------------ the scanner
-def _archive_verdict(content: bytes) -> ScanVerdict:
+#: A verdict and the cause the uploader is told for it; None beside a clean verdict (M7.1.3).
+Judged = tuple[ScanVerdict, ScanCause | None]
+
+_CLEAN: Final[Judged] = (ScanVerdict.CLEAN, None)
+
+
+def _archive_verdict(content: bytes) -> Judged:
     try:
         with zipfile.ZipFile(io.BytesIO(content)) as archive:
             entries = archive.infolist()
             if len(entries) > MAX_ARCHIVE_ENTRIES:
-                return ScanVerdict.INFECTED
+                return ScanVerdict.INFECTED, ScanCause.EXPANDS_WITHOUT_BOUND
             if sum(one.file_size for one in entries) > MAX_EXPANDED_BYTES:
-                return ScanVerdict.INFECTED
+                return ScanVerdict.INFECTED, ScanCause.EXPANDS_WITHOUT_BOUND
             for one in entries:
                 if one.flag_bits & 0x1:
                     # An encrypted part is one nothing can look inside, which is unscannable.
-                    return ScanVerdict.UNSCANNABLE
+                    return ScanVerdict.UNSCANNABLE, ScanCause.ENCRYPTED_PART
                 if one.file_size > MAX_EXPANSION_RATIO * max(one.compress_size, 1):
-                    return ScanVerdict.INFECTED
+                    return ScanVerdict.INFECTED, ScanCause.EXPANDS_WITHOUT_BOUND
                 if one.filename.lower().rsplit("/", 1)[-1] == MACRO_PART:
-                    return ScanVerdict.INFECTED
+                    return ScanVerdict.INFECTED, ScanCause.MACROS
             for one in entries:
                 if one.filename.lower().endswith(XML_PARTS):
                     with archive.open(one) as part:
                         if b"<!DOCTYPE" in part.read(XML_HEAD_BYTES).upper():
-                            return ScanVerdict.INFECTED
+                            return ScanVerdict.INFECTED, ScanCause.XML_ENTITIES
     except (zipfile.BadZipFile, zipfile.LargeZipFile, OSError, EOFError, RuntimeError):
         # A zip the standard library cannot open is one this check cannot judge. The parser is
         # never reached, because unscannable is refused at the gate.
-        return ScanVerdict.UNSCANNABLE
-    return ScanVerdict.CLEAN
+        return ScanVerdict.UNSCANNABLE, ScanCause.UNOPENABLE
+    return _CLEAN
 
 
-def _pdf_verdict(content: bytes) -> ScanVerdict:
+def _pdf_verdict(content: bytes) -> Judged:
     if any(name in content for name in PDF_ACTIVE_NAMES):
-        return ScanVerdict.INFECTED
-    return ScanVerdict.CLEAN
+        return ScanVerdict.INFECTED, ScanCause.ACTIVE_CONTENT
+    return _CLEAN
 
 
-def _text_verdict(content: bytes) -> ScanVerdict:
+def _text_verdict(content: bytes) -> Judged:
     try:
         decoded = content.decode("utf-8")
     except UnicodeDecodeError:
-        return ScanVerdict.UNSCANNABLE
-    return ScanVerdict.UNSCANNABLE if _NUL in decoded else ScanVerdict.CLEAN
+        return ScanVerdict.UNSCANNABLE, ScanCause.NOT_READABLE_TEXT
+    if _NUL in decoded:
+        return ScanVerdict.UNSCANNABLE, ScanCause.NOT_READABLE_TEXT
+    return _CLEAN
 
 
 @dataclass(frozen=True)
@@ -210,14 +219,14 @@ class StructuralCheck:
     def scan(self, content: bytes) -> ScanReport:
         match sniff(content[:SNIFF_BYTES]):
             case Container.ZIP:
-                verdict = _archive_verdict(content)
+                verdict, cause = _archive_verdict(content)
             case Container.PDF:
-                verdict = _pdf_verdict(content)
+                verdict, cause = _pdf_verdict(content)
             case Container.TEXT:
-                verdict = _text_verdict(content)
+                verdict, cause = _text_verdict(content)
             case Container.PNG | Container.JPEG | Container.UNKNOWN:
-                verdict = ScanVerdict.UNSCANNABLE
-        return ScanReport(verdict=verdict, scanner=STRUCTURAL_CHECK)
+                verdict, cause = ScanVerdict.UNSCANNABLE, ScanCause.NOT_CHECKABLE
+        return ScanReport(verdict=verdict, scanner=STRUCTURAL_CHECK, cause=cause)
 
 
 # ------------------------------------------------------------------ laying blocks out

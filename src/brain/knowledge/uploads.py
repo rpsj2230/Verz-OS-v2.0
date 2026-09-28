@@ -62,9 +62,9 @@ from __future__ import annotations
 
 import hashlib
 import string
-from collections.abc import AsyncIterable, Iterable, Mapping, Sequence
+from collections.abc import AsyncIterable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import PurePosixPath
 from types import MappingProxyType
 from typing import Final
@@ -74,7 +74,9 @@ from brain.core.lane import Lane
 from brain.gate.context import TrafficClass
 from brain.knowledge.chunking import Block, BlockKind
 from brain.knowledge.ingest import (
+    SNIFF_BYTES,
     AdmittedUpload,
+    Container,
     IngestRefused,
     MediaType,
     ParseCause,
@@ -83,6 +85,7 @@ from brain.knowledge.ingest import (
     QueueLimits,
     admit_to_queue,
     admit_upload,
+    sniff,
     # Imported rather than defined here. It moved next to the two constants it reads when
     # `brain.knowledge.parse_budget` needed the same answer in order to size the container
     # that parses; see its docstring for why reaching this module from there would close an
@@ -92,6 +95,7 @@ from brain.knowledge.ingest import (
 )
 from brain.knowledge.item import KnowledgeItem, KnowledgeState
 from brain.knowledge.kinds import KnowledgeKind, assert_kind_holds, assert_uploadable
+from brain.knowledge.scanners import configured_scanner
 from brain.knowledge.scanning import (
     Parser,
     ScannedContent,
@@ -103,11 +107,11 @@ from brain.knowledge.search import TITLE_CHARS, Reach
 from brain.knowledge.text_path import (
     TABLES_ARE_VISIBLE,
     TEXT_PATH_TYPES,
-    StructuralCheck,
     TextPathParser,
     joined,
 )
 from brain.knowledge.visibility import KnowledgeVisibility, Visibility, VisibilityError
+from brain.knowledge.web_page import LinkPageParser, looks_like_html, page_title, source_of
 from brain.ops.admission import (
     AdmissionDecision,
     AdmissionRequest,
@@ -127,7 +131,7 @@ from brain.ops.storage import (
     bucket_for,
     lifecycle_gaps,
 )
-from brain.tools.fetch import Fetcher, Resolver, fetch
+from brain.tools.fetch import Fetcher, Resolver, UnsafeAddressError, fetch
 from brain.tools.skills import SkillError
 
 # ------------------------------------------------------------------ written-down reasons
@@ -404,6 +408,93 @@ def receive_link(
     return ReceivedUpload(upload=upload, body=fetched.body)
 
 
+#: The types a link may answer with: the text path's four and a web page.
+LINK_TYPES: Final[frozenset[MediaType]] = TEXT_PATH_TYPES | {MediaType.HTML}
+
+#: The most a link's answer may weigh before its type is known: the largest of those types'
+#: ceilings. The type's own ceiling is then applied by `admit_upload` once the bytes say what it is.
+LINK_CEILING: Final = max(ceiling_for(one) for one in LINK_TYPES)
+
+#: The endings that make a text answer Markdown rather than plain text. Only ever used to choose
+#: between two readings of a body the bytes have already proved is text; never to accept a type.
+MARKDOWN_ENDINGS: Final[tuple[str, ...]] = (".md", ".markdown")
+
+#: Whether a link's tables are visible to the reader that reads it. A page's are; the rest are
+#: the text path's own answer.
+LINK_TABLES_ARE_VISIBLE: Final[Mapping[MediaType, bool]] = MappingProxyType(
+    {**TABLES_ARE_VISIBLE, MediaType.HTML: True}
+)
+
+#: Why a link's type comes from its bytes and never from the answer's `Content-Type`.
+A_LINK_IS_TYPED_BY_WHAT_IT_ANSWERED: Final = (
+    "An administrator adding a link names no type, and the site's Content-Type is a claim the "
+    "far end makes, which this module does not believe from an uploader either. So the answer's "
+    "bytes decide: a PDF signature is a PDF, a zip is a Word document (and the parser refuses one "
+    "that is not), a text body opening with markup is a page, and any other text is Markdown or "
+    "plain text, the address's ending choosing between two readings of the same bytes. Anything "
+    "else is refused before it is scanned."
+)
+
+
+def page_type(body: bytes, url: str) -> MediaType:
+    """What a link answered with, from its bytes. See `A_LINK_IS_TYPED_BY_WHAT_IT_ANSWERED`."""
+    match sniff(body[:SNIFF_BYTES]):
+        case Container.PDF:
+            return MediaType.PDF
+        case Container.ZIP:
+            return MediaType.DOCX
+        case Container.TEXT:
+            if looks_like_html(body):
+                return MediaType.HTML
+            if urlsplit(url).path.lower().endswith(MARKDOWN_ENDINGS):
+                return MediaType.MARKDOWN
+            return MediaType.PLAIN
+        case Container.PNG | Container.JPEG | Container.UNKNOWN as other:
+            msg = (
+                f"that link answered with {other.value}, which is not a page or a document this "
+                "reads; a web page, plain text, Markdown, PDF or Word document is"
+            )
+            raise IngestRefused(msg)
+
+
+@dataclass(frozen=True)
+class FetchedPage:
+    """A link's answer at the door, and the address it is cited by."""
+
+    received: ReceivedUpload
+    #: `brain.knowledge.web_page.source_of` the address it finally answered from.
+    source: str
+
+
+def receive_page(url: str, *, fetcher: Fetcher, resolver: Resolver) -> FetchedPage:
+    """Fetch a link an administrator added and take its answer at the upload door (M7.1.2).
+
+    The same fetch as `receive_link`, redirect chain and address rule on every hop, for
+    `THE_ADDRESS_CHECK_IS_NOT_COPIED`. What differs is that nobody declares a type: the bytes
+    decide, per `A_LINK_IS_TYPED_BY_WHAT_IT_ANSWERED`, and `admit_upload` is then asked with the
+    type they proved, so the type's own ceiling and the sniff apply as they do to a file.
+
+    A refusal by the address rule and a site that would not answer are told apart, because the
+    first is about the link and the second about the site, and the remedies differ.
+    """
+    try:
+        fetched = fetch(url, fetcher=fetcher, resolver=resolver, max_bytes=LINK_CEILING)
+    except UnsafeAddressError as exc:
+        msg = f"that link was refused by the address check: {exc}"
+        raise IngestRefused(msg) from exc
+    except SkillError as exc:
+        msg = f"that link could not be fetched: {exc}"
+        raise IngestRefused(msg) from exc
+    final = fetched.final_url or url
+    media_type = page_type(fetched.body, final)
+    upload = admit_upload(
+        filename=link_filename(final), declared_type=media_type.value, content=fetched.body
+    )
+    return FetchedPage(
+        received=ReceivedUpload(upload=upload, body=fetched.body), source=source_of(final)
+    )
+
+
 # --------------------------------------------------- the original in the store (M7.1.4)
 #: Where an ingested original lives, expressed as what it is rather than as a bucket name, so
 #: `brain.ops.storage.bucket_for` decides and this module does not.
@@ -482,18 +573,24 @@ def original_bucket() -> Bucket:
     return candidate
 
 
-def original_key(upload: AdmittedUpload) -> str:
+def original_key(upload: AdmittedUpload, *, prefix: str = "") -> str:
     """Where these bytes live, addressed by what they are rather than by what they were called.
 
     See `THE_KEY_IS_THE_DIGEST_AND_NOT_THE_NAME`. The two-character fan-out is the convention
     every content-addressed store uses and it is here for the ordinary reason: a single flat
     prefix holding every document a company has ever uploaded is a listing nobody can page.
+
+    `prefix` is the install's own, `brain.ops.object_store.ObjectStore.prefix`, so an original is
+    counted on the Storage screen where it was put; empty for a caller with a store to itself.
     """
     digest = upload.digest
-    return f"{ORIGINAL_PREFIX}/{digest[:2]}/{digest}"
+    key = f"{ORIGINAL_PREFIX}/{digest[:2]}/{digest}"
+    return f"{prefix}/{key}" if prefix else key
 
 
-def store_original(content: ScannedContent, *, backend: StorageBackend) -> StoredOriginal:
+def store_original(
+    content: ScannedContent, *, backend: StorageBackend, prefix: str = ""
+) -> StoredOriginal:
     """Write the original to the object store, after the scan and before the parse (M7.1.4).
 
     The parameter is `ScannedContent`, which is the whole of the ordering: an unscanned upload
@@ -510,7 +607,7 @@ def store_original(content: ScannedContent, *, backend: StorageBackend) -> Store
     one.
     """
     bucket = original_bucket()
-    key = original_key(content.upload)
+    key = original_key(content.upload, prefix=prefix)
     backend.put_object(bucket.name, key, content.body, content.upload.media_type.value)
     return StoredOriginal(
         bucket=bucket.name,
@@ -807,29 +904,90 @@ def read_for_text_path(
     `scan_for_parsing` raises for a file the scan refuses and `parse_scanned` returns a
     `ParseFailure` naming the cause for one that would not read; both are the uploader's to be
     told. The kind is asked again of what the parser found, which is the pricing-note rule.
+
+    The scanner, when none is passed, is the one the install names
+    (`brain.knowledge.scanners.configured_scanner`): the structural check unless ClamAV is chosen.
     """
+    return _read(
+        received,
+        kind=kind,
+        placement=placement,
+        owner_id=owner_id,
+        scanner=scanner,
+        parser=parser or TextPathParser(),
+        budget_bytes=budget_bytes,
+        tables_visible=TABLES_ARE_VISIBLE,
+    )
+
+
+def read_for_link(
+    page: FetchedPage,
+    *,
+    kind: KnowledgeKind,
+    placement: KnowledgeVisibility,
+    owner_id: str,
+    taken_on: date,
+    scanner: Scanner | None = None,
+    budget_bytes: int | None = None,
+) -> ReadUpload | ParseFailure:
+    """Scan, parse and name a link's answer, or say why it could not be read (M7.1.2).
+
+    The same gates as an upload, in the same order, through `_read`: the kind, the scan, the
+    memory bound, the parse and the pricing-note rule. What differs is the reader, which is
+    `brain.knowledge.web_page.LinkPageParser` with the page's address as the first line, and
+    the title, which is the page's own when it names one and the address's last segment when not.
+    """
+    return _read(
+        page.received,
+        kind=kind,
+        placement=placement,
+        owner_id=owner_id,
+        scanner=scanner,
+        parser=LinkPageParser(source=page.source, taken_on=taken_on),
+        budget_bytes=budget_bytes,
+        tables_visible=LINK_TABLES_ARE_VISIBLE,
+        title_of=page_title,
+    )
+
+
+def _read(
+    received: ReceivedUpload,
+    *,
+    kind: KnowledgeKind,
+    placement: KnowledgeVisibility,
+    owner_id: str,
+    scanner: Scanner | None,
+    parser: Parser,
+    budget_bytes: int | None,
+    tables_visible: Mapping[MediaType, bool],
+    title_of: Callable[[ScannedContent], str] | None = None,
+) -> ReadUpload | ParseFailure:
+    """The one read both paths take. A type the reader has no table answer for is unsupported."""
     assert_uploadable(kind)
     media_type = received.upload.media_type
-    if media_type not in TEXT_PATH_TYPES:
+    if media_type not in tables_visible:
         return ParseFailure(
             cause=ParseCause.UNSUPPORTED,
             media_type=media_type,
             filename=received.upload.filename,
             detail="stage:admit",
         )
-    scanned = scan_for_parsing(received.upload, received.body, scanner=scanner or StructuralCheck())
-    parsed = parse_scanned(scanned, parser=parser or TextPathParser(), budget_bytes=budget_bytes)
+    scanned = scan_for_parsing(
+        received.upload, received.body, scanner=scanner or configured_scanner()
+    )
+    parsed = parse_scanned(scanned, parser=parser, budget_bytes=budget_bytes)
     if isinstance(parsed, ParseFailure):
         return parsed
     assert_kind_holds(
         kind,
         holds_a_table=any(block.kind is BlockKind.TABLE for block in parsed.blocks),
-        tables_are_visible=TABLES_ARE_VISIBLE[media_type],
+        tables_are_visible=tables_visible[media_type],
     )
+    titled = title_of(scanned) if title_of is not None else ""
     item = KnowledgeItem(
         item_id=upload_item_id(received.upload, placement, owner_id),
         content=joined(parsed.blocks),
-        title=upload_title(received.upload.filename),
+        title=titled or upload_title(received.upload.filename),
         visibility=placement,
         owner_id=owner_id,
         state=KnowledgeState.PUBLISHED,

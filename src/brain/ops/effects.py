@@ -296,6 +296,8 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.knowledge.parse_ocr:OcrEngine.read": Repeat.NO_EFFECT_AT_THE_FAR_END,
         "brain.knowledge.rows:RowSource.rows": Repeat.READS,
         "brain.knowledge.scanning:Scanner.scan": Repeat.NO_EFFECT_AT_THE_FAR_END,
+        # One ClamAV scan: the daemon reads the bytes and answers a verdict, and keeps nothing.
+        "brain.knowledge.scanners:ClamdLink.exchange": Repeat.NO_EFFECT_AT_THE_FAR_END,
         # Connect Lark's settings: installation rows upserted on their live key, so a second save
         # writes the same values over the first.
         "brain.lark_connect_routes:LarkSettings.save": Repeat.WRITES_THIS_SYSTEMS_DATABASE,

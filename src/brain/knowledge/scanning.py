@@ -57,10 +57,12 @@ for ever. So an exception out of a parser is out of contract and reaches the wor
 bug belongs. The contract is a value, and a value in a union return type cannot be dropped by
 an `except Exception` in a worker loop without the drop being visible in review.
 
-Nothing here spawns a scanner or opens a file. `Scanner` is a protocol because there is no
-scanner on this machine and acquiring a dependency to get one is not this module's decision to
-make; and because the two cases worth testing, an infected verdict and a scanner that reaches
-no conclusion, are not reachable against a real one.
+Nothing here spawns a scanner or opens a file. `Scanner` is a protocol because the two cases
+worth testing, an infected verdict and a scanner that reaches no conclusion, are not reachable
+against a real one. The scanners themselves are `brain.knowledge.text_path.StructuralCheck`,
+which every install runs, and ClamAV, which an install chooses; `brain.knowledge.scanners`
+decides which one a file meets. **A refusal names its cause**, as one word from a closed list
+the uploader is told in `SCAN_CAUSE_TEXT`'s sentences: see `A_REFUSAL_NAMES_ITS_CAUSE`.
 
 Task ids: M7.1.3, M7.2.5, M7.2.6
 """
@@ -79,6 +81,7 @@ from brain.knowledge.ingest import (
     IngestRefused,
     ParseCause,
     ParseFailure,
+    ScanCause,
     ScanResult,
     ScanVerdict,
     assert_clean,
@@ -106,6 +109,16 @@ A_PARSER_HAS_NO_FIELD_FOR_PROSE = (
     "a parse failure is read in a chat client the document's own scope does not reach."
 )
 
+#: Why a scanner's refusal reaches the uploader as a word from a closed list, and why one is optional.
+A_REFUSAL_NAMES_ITS_CAUSE = (
+    "A file refused with only the scanner's name is sent again unchanged, because nothing said "
+    "what to change. So a report carries a cause from ingest.ScanCause and the refusal quotes "
+    "SCAN_CAUSE_TEXT for it. The cause is optional on the report rather than required, because a "
+    "scanner this product did not write, a plugin's or a connector's stand-in, may not know one; "
+    "its refusal is told as UNSTATED, which still says a scanner refused it and which. Both "
+    "scanners this product ships name a cause on every path that refuses."
+)
+
 #: Why a refused file never comes back as a parse failure.
 A_REFUSAL_IS_NOT_A_PARSE_FAILURE = (
     "Refused, corrupt and unsupported have three different remedies, so they must not arrive "
@@ -131,17 +144,25 @@ class ScanReport:
     No detail field either. A scanner's detail is vendor prose naming a signature, and prose
     from an external tool travelling into a user-facing message is the same hole
     `A_PARSER_HAS_NO_FIELD_FOR_PROSE` describes. The verdict and the scanner's name are what
-    anybody acts on.
+    anybody acts on, and `cause`, which is one word from `ingest.ScanCause`'s closed list, is
+    what the uploader is told about a refusal (M7.1.3). See `A_REFUSAL_NAMES_ITS_CAUSE`.
     """
 
     verdict: ScanVerdict
     scanner: str
+    cause: ScanCause | None = None
 
     def __post_init__(self) -> None:
         if not self.scanner.strip():
             msg = (
                 "a scan verdict with no scanner named cannot be argued with later; when the "
                 "question is why this file was let through, the answer is a name"
+            )
+            raise IngestRefused(msg)
+        if self.verdict is ScanVerdict.CLEAN and self.cause is not None:
+            msg = (
+                f"a clean verdict carries no cause, and {self.cause.value!r} is one; a report "
+                "saying clean and giving a reason to refuse is two reports"
             )
             raise IngestRefused(msg)
 
@@ -205,6 +226,16 @@ class ScannedContent:
             raise IngestRefused(msg)
 
 
+def _told_cause(report: ScanReport) -> ScanCause | None:
+    """The cause a refusal names: the scanner's, or `UNSTATED` when it gave none.
+
+    See `A_REFUSAL_NAMES_ITS_CAUSE`. None only for a clean verdict, which is refused nothing.
+    """
+    if report.verdict is ScanVerdict.CLEAN:
+        return None
+    return report.cause or ScanCause.UNSTATED
+
+
 def scan_for_parsing(upload: AdmittedUpload, content: bytes, *, scanner: Scanner) -> ScannedContent:
     """Scan these bytes and, only if they are clean, make them parseable (M7.1.3).
 
@@ -228,7 +259,12 @@ def scan_for_parsing(upload: AdmittedUpload, content: bytes, *, scanner: Scanner
         raise IngestRefused(msg)
 
     report = scanner.scan(content)
-    result = ScanResult(digest=digest, verdict=report.verdict, scanner=report.scanner)
+    result = ScanResult(
+        digest=digest,
+        verdict=report.verdict,
+        scanner=report.scanner,
+        cause=_told_cause(report),
+    )
     assert_clean(upload, result)
     return ScannedContent(issued_by=_ISSUED_BY_THE_GATE, upload=upload, body=content, scan=result)
 
