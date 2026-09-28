@@ -131,6 +131,7 @@ class FrontHalf:
             routed_lane=self.lane.lane,
             selection_stage=self.selection.stage,
             selected_agent=self.selection.agent_id,
+            lane_basis=self.lane.basis,
         )
 
 

@@ -32,7 +32,12 @@ metadata ledger's window. The status is the coarse one,
 so a withheld record and an absent one are the same row but for the trace, the instants and the
 duration.
 
-Task ids: M30.5.2
+**The routing decision's columns are names with checks from their enums (M3.4.2, M3.6.3).**
+`lane_basis` is the rule that chose the lane, and `routed_tier` and `tier_basis` are where the
+executor sent the model call and the step that settled it; migrations 0100 and 0113 add them
+nullable, because a row the front half or the executor did not decide for has none.
+
+Task ids: M30.5.2, M3.4.2, M3.6.3
 """
 
 from __future__ import annotations
@@ -57,9 +62,11 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from brain.core.lane import Lane
 from brain.db import Base
+from brain.gate.classify import LaneBasis
 from brain.gate.context import TrafficClass
 from brain.gate.injection import MAX_SCORE
 from brain.gate.select import SelectionStage
+from brain.models.routing import Tier, TierBasis
 from brain.ops.telemetry import RequestStatus
 from brain.tables.adoption import TRACE_ID_CHARS
 from brain.tables.identity import one_of
@@ -91,6 +98,10 @@ OPTIONAL_DURATION_COLUMNS: Final[tuple[str, ...]] = ("time_to_first_token_ms", "
 def _not_negative(column: str) -> CheckConstraint:
     return CheckConstraint(f"{column} IS NULL OR {column} >= 0", name=f"{column}_not_negative")
 
+
+#: The width of a basis column and of the tier column, each holding its enum's longest member.
+BASIS_CHARS: Final = 16
+TIER_CHARS: Final = 8
 
 #: The injection score's range, from `brain.gate.injection.MAX_SCORE` rather than restated.
 RISK_SCORE_RANGE: Final = f"risk_score IS NULL OR risk_score BETWEEN 0 AND {MAX_SCORE}"
@@ -137,6 +148,10 @@ class RequestTelemetryRow(Base):
     routed_lane: Mapped[str | None] = mapped_column(String(8))
     selection_stage: Mapped[str | None] = mapped_column(String(16))
     selected_agent: Mapped[str | None] = mapped_column(String(NAME_CHARS))
+    #: The rest of the routing decision, as it was decided (M3.6.3; migration 0113).
+    lane_basis: Mapped[str | None] = mapped_column(String(BASIS_CHARS))
+    routed_tier: Mapped[str | None] = mapped_column(String(TIER_CHARS))
+    tier_basis: Mapped[str | None] = mapped_column(String(BASIS_CHARS))
 
     __table_args__ = (
         CheckConstraint(one_of("traffic_class", TrafficClass), name="traffic_class"),
@@ -153,6 +168,15 @@ class RequestTelemetryRow(Base):
         CheckConstraint(
             f"selection_stage IS NULL OR {one_of('selection_stage', SelectionStage)}",
             name="selection_stage",
+        ),
+        CheckConstraint(
+            f"lane_basis IS NULL OR {one_of('lane_basis', LaneBasis)}", name="lane_basis"
+        ),
+        CheckConstraint(
+            f"routed_tier IS NULL OR {one_of('routed_tier', Tier)}", name="routed_tier"
+        ),
+        CheckConstraint(
+            f"tier_basis IS NULL OR {one_of('tier_basis', TierBasis)}", name="tier_basis"
         ),
         *(_not_negative(one) for one in (*COUNT_COLUMNS, *OPTIONAL_DURATION_COLUMNS)),
         Index("ix_request_telemetry_received_at", "received_at"),

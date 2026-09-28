@@ -66,7 +66,9 @@ A caller passing `routing` rather than `tier` has its tier decided by `routing.c
 the windows and headroom `ops.routing_tier` holds, read in the same read as the ladder
 (`brain.models.tier_rules`), so a tier row changed on the Models screen decides the next question's
 tier in every process. `tier` stays for the callers that choose one outright: the provider check
-and the matrix gate's trials.
+and the matrix gate's trials. **The classified decision goes on the request's meter the moment it
+is made** (M3.6.3), before any rung is selected, so a request refused for no compliant rung still
+says where it was sent; a tier chosen outright is not a routing decision and is not noted.
 
 **A request carries the residency of every constraint its reach touches** (M5.5.1). `reach` is the
 caller's grant scopes, and `brain.models.residency.requirement_for` intersects the requirement of
@@ -91,7 +93,7 @@ The callers are the Models screen's provider check, the matrix gate
 fast-path rule answers.
 
 Task ids: M27.7.14, M27.8.8, M5.3.4, M5.4.6, M5.1.3, M5.7.3, M5.6.4, M5.7.2
-Task ids: M5.2.2, M5.4.3, M5.4.7, M5.4.8, M5.5.1
+Task ids: M5.2.2, M5.4.3, M5.4.7, M5.4.8, M5.5.1, M3.6.3
 """
 
 from __future__ import annotations
@@ -426,6 +428,8 @@ class ModelCalls:
                 windows=plan.tiers.windows,
                 headroom=plan.tiers.headroom,
             )
+            # The decision itself, before the walk, so the row is written from it (M3.6.3).
+            meter.routed(decision)
             tier, residency = decision.tier, decision.residency
         if tier is None:
             msg = "a call names its tier or the request its tier is classified from"

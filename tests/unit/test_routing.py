@@ -6,7 +6,7 @@ a provider outside it, and the way that property breaks in real systems is not a
 answer but a quiet one, so it is asserted from several directions here.
 
 Task ids: M5.2.1, M5.2.3, M5.3.1, M5.3.2, M5.4.1, M5.4.2, M5.4.4, M5.4.5, M5.4.6,
-M5.5.1, M5.5.2, M5.5.3, M5.5.4
+M5.5.1, M5.5.2, M5.5.3, M5.5.4, M3.6.3
 """
 
 from __future__ import annotations
@@ -46,6 +46,7 @@ from brain.models.routing import (
     RungRole,
     SkipReason,
     Tier,
+    TierBasis,
     classify_tier,
     may_fall_back,
     permits_tier_escalation,
@@ -264,6 +265,63 @@ def test_the_decision_carries_the_residency_constraint_forward() -> None:
     the two copies drift and one of them stops being applied."""
     decision = classify_tier(RoutingRequest(lane=Lane.ANSWER, residency=EU_ONLY))
     assert decision.residency == EU_ONLY
+
+
+#: Above the main tier's headroom at the compiled numbers, so an unpinned answer escalates.
+OVER_MAIN = int(TIER_CONTEXT_WINDOW[Tier.MAIN] * ESCALATION_HEADROOM) + 1
+
+#: One request per step of `classify_tier`, each built from raw inputs, with the tier it lands in
+#: and the step that settled it. The last two are two steps in a row: the later one names it.
+TIER_BASES: tuple[tuple[RoutingRequest, Tier, TierBasis], ...] = (
+    (RoutingRequest(lane=Lane.FAST, requested_tier=Tier.HEAVY), Tier.NONE, TierBasis.FAST_LANE),
+    (RoutingRequest(lane=Lane.ANSWER, requested_tier=Tier.SMALL), Tier.SMALL, TierBasis.PINNED),
+    (RoutingRequest(lane=Lane.TASK), Tier.HEAVY, TierBasis.TASK_LANE),
+    (RoutingRequest(lane=Lane.ANSWER), Tier.MAIN, TierBasis.DEFAULT),
+    (
+        RoutingRequest(lane=Lane.ANSWER, requested_tier=Tier.SMALL, tool_count=1),
+        Tier.MAIN,
+        TierBasis.TOOL_FLOOR,
+    ),
+    (
+        RoutingRequest(lane=Lane.ANSWER, requested_tier=Tier.SMALL, residency=EU_ONLY),
+        Tier.MAIN,
+        TierBasis.RESIDENCY_FLOOR,
+    ),
+    (
+        RoutingRequest(lane=Lane.ANSWER, estimated_context_tokens=OVER_MAIN),
+        Tier.HEAVY,
+        TierBasis.CONTEXT,
+    ),
+    (
+        RoutingRequest(
+            lane=Lane.ANSWER,
+            requested_tier=Tier.SMALL,
+            tool_count=1,
+            estimated_context_tokens=OVER_MAIN,
+        ),
+        Tier.HEAVY,
+        TierBasis.CONTEXT,
+    ),
+)
+
+
+@pytest.mark.parametrize(("asked", "tier", "basis"), TIER_BASES)
+def test_every_tier_names_the_step_that_settled_it(
+    asked: RoutingRequest, tier: Tier, basis: TierBasis
+) -> None:
+    """M3.6.3. The request row holds the basis as the why of its tier, so each step has to name
+    itself where it runs, and a later step has to replace an earlier one's name.
+
+    Delete this and a floor or an escalation can move the tier and leave the pin's name on it,
+    and the row says a question ran heavy because somebody pinned it small."""
+    decided = classify_tier(asked)
+    assert (decided.tier, decided.basis) == (tier, basis)
+
+
+def test_every_step_that_can_settle_a_tier_is_reached_by_some_request() -> None:
+    """Delete this and a basis can be added with no branch that sets it, and a check on the
+    ledger admits a code no request is ever routed for."""
+    assert {basis for _, _, basis in TIER_BASES} == set(TierBasis)
 
 
 # ------------------------------------------------------------------------- the matrix

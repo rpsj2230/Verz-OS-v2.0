@@ -109,7 +109,12 @@ answer already carries its records on `Answered.composed`; a tool call now carri
 `ToolCallOutcome.disclosed`, and `Finished.agent_id` names the agent when a lane ran one. A
 refused call still carries nothing, which is the absence `ToolCallOutcome` argues.
 
-Task ids: M37.3.2.4, M30.5.2, M21.3.4, M27.7.14, M24.3.2
+**The route a request's model call took rides on `Finished` beside the usage, from the same meter
+(M3.6.3).** `route` is the tier the executor classified and the step that settled it, noted on the
+meter as it was decided; with `FrontRecord`'s lane, its basis and the selected agent it is the
+whole routing decision, and the row is written from these objects rather than re-derived.
+
+Task ids: M37.3.2.4, M30.5.2, M21.3.4, M27.7.14, M24.3.2, M3.4.2, M3.6.3
 """
 
 from __future__ import annotations
@@ -124,6 +129,7 @@ from brain.audit.ledger import TRACE_ID
 from brain.core.lane import Lane
 from brain.core.principal import Principal
 from brain.core.redaction import ChannelPayload
+from brain.gate.classify import LaneBasis
 from brain.gate.context import Channel
 from brain.gate.injection import MAX_SCORE
 from brain.gate.select import SelectionStage
@@ -135,7 +141,7 @@ if TYPE_CHECKING:
 
     # Typing only as well: the gate learns nothing from the model layer at run time, which is
     # `brain.core.lane`'s rule, and a dataclass field's annotation is not run.
-    from brain.models.metering import ModelUsage
+    from brain.models.metering import ModelRoute, ModelUsage
 
 #: Why a finished request carries a principal rather than the facts about one.
 A_RECORD_OF_WHO_ASKED_IS_BUILT_FROM_WHO_THE_GATE_SAID_WAS_ASKING: Final = (
@@ -263,6 +269,8 @@ class FrontRecord:
     routed_lane: Lane
     selection_stage: SelectionStage
     selected_agent: str
+    #: Which rule of `brain.gate.classify.classify_lane` chose `routed_lane`, as a name.
+    lane_basis: LaneBasis
 
     def __post_init__(self) -> None:
         if not 0 <= self.risk_score <= MAX_SCORE:
@@ -304,6 +312,9 @@ class Finished:
     front: FrontRecord | None = None
     #: The agent the lane ran, or None for a person asking directly or an automation step.
     agent_id: str | None = None
+    #: The tier the executor routed this request's model call to and why, from its meter, or
+    #: None when no call was routed (M3.6.3). Present on a call refused before any attempt.
+    route: ModelRoute | None = None
 
     def __post_init__(self) -> None:
         if self.at.tzinfo is None:

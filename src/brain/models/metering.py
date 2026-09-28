@@ -33,9 +33,18 @@ derived here from a list of outcomes: a second attempt on one rung and a first a
 next rung are both "the second call", and only the code that chose between them knows which it
 was.
 
+**The tier a call was routed to is noted here as the executor decides it (M3.6.3).**
+`ModelCalls.complete` classifies the tier against the table it read and walks it; the decision
+was then dropped, and the row said which model answered and not where the request was sent or
+why. `Meter.routed` takes the `TierDecision` itself at that moment and `Meter.route` hands it to
+the row. **It is kept apart from `usage`**, because a request refused for no compliant rung was
+routed and never attempted, and `ModelUsage` means a call was attempted; folding the two would
+either lose that request's route or file it under the answer lane's budget it never spent. Two
+calls routed differently name no route, for `A_REQUEST_ANSWERED_BY_TWO_MODELS_NAMES_NONE`'s reason.
+
 Scope: pure. Nothing here performs I/O or reads a clock.
 
-Task ids: M27.7.14, M27.1.5
+Task ids: M27.7.14, M27.1.5, M3.6.3
 """
 
 from __future__ import annotations
@@ -44,6 +53,7 @@ from dataclasses import dataclass
 from typing import Final
 
 from brain.models.driver import DriverResponse
+from brain.models.routing import Tier, TierBasis, TierDecision
 
 # ------------------------------------------------------------------- written-down reasons
 
@@ -103,6 +113,14 @@ class ModelUsage:
             raise MeteringError(msg)
 
 
+@dataclass(frozen=True)
+class ModelRoute:
+    """Where a request's model call was routed and the step that settled it, as names only."""
+
+    tier: Tier
+    basis: TierBasis
+
+
 def _agreed(values: list[str | None]) -> str | None:
     """The one value every answered call names, or None when they differ or name nothing."""
     distinct = set(values)
@@ -123,6 +141,16 @@ class Meter:
         self._models: list[str | None] = []
         self._providers: list[str | None] = []
         self._agents: list[str | None] = []
+        self._routes: list[ModelRoute] = []
+
+    def routed(self, decision: TierDecision) -> None:
+        """The executor classified a call's tier. Noted before anything is attempted."""
+        self._routes.append(ModelRoute(tier=decision.tier, basis=decision.basis))
+
+    def route(self) -> ModelRoute | None:
+        """The one route every classified call agrees on, or None for none or a disagreement."""
+        distinct = set(self._routes)
+        return next(iter(distinct)) if len(distinct) == 1 else None
 
     def attempted(self) -> None:
         """A call was sent. Counted before it returns, so a call that raised still counts."""
