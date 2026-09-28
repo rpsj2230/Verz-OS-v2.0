@@ -56,6 +56,37 @@ cannot be done until Wave 2 builds the Lark chat channel; both moved there with 
 
 # Answered
 
+## 111. Promoting knowledge company-wide still takes two people - DECIDED 2026-09-29
+
+K2: a Super Admin cannot approve their own promotion of knowledge to company-wide, so an install with
+one Super Admin cannot promote anything until a second is named. The two-person rule stays. Decided by
+default on 2026-09-29 under the owner's standing approval; reversible: say so and it is undone.
+
+## 110. Freshdesk reads into one department in Wave 2 - DECIDED 2026-09-29
+
+M11.9.6: in Wave 2 one department reads a whole Freshdesk helpdesk. Mapping each Freshdesk group to its
+own department waits for the row-plane work. Accepted for Wave 2. Decided by default on 2026-09-29
+under the owner's standing approval; reversible: say so and it is undone.
+
+## 109. A Starter pack an administrator removes stays removed - DECIDED 2026-09-29
+
+A follow-up to item 105: when an administrator removes a Starter pack the staff sync gave someone, the
+removal is recorded, so the next sync does not give it back while the directory still places that
+person in the department. Build it; it needs a migration. Decided by default on 2026-09-29 under the
+owner's standing approval; reversible: say so and it is undone.
+
+## 108. Archiving knowledge and exporting its inventory - DECIDED 2026-09-29
+
+M27.15.40: a migration lets an archive write go past `know.item`'s policy, and a data set on
+`ops.data_export` exports the knowledge inventory. Build it. Decided by default on 2026-09-29 under the
+owner's standing approval; reversible: say so and it is undone.
+
+## 107. Test connection on Connectors records its probe - DECIDED 2026-09-29
+
+M27.15.8: a migration gives the worker's attempt table a "probed" outcome, and the worker runs a probe
+when asked, so one throttled test is recorded on the source's health. Build it. Decided by default on
+2026-09-29 under the owner's standing approval; reversible: say so and it is undone.
+
 ## 98. The Moonshot key - DONE 2026-09-28
 
 All four keys are in the vault: Anthropic, OpenAI and DeepSeek from 16:01 to 16:03 SGT and Moonshot at
