@@ -25,6 +25,7 @@
  */
 
 import { useResource } from "../api/useResource";
+import { MyChannels } from "../components/MyChannels";
 import { FailureNotice } from "../ui/FailureNotice";
 import { when } from "./artifactsQuery";
 import {
@@ -249,6 +250,7 @@ export function MyWorkspace() {
             <h2>What I can ask about</h2>
             <p>{answer.data.can_ask_about}</p>
           </section>
+          <MyChannels />
         </>
       )}
     </article>

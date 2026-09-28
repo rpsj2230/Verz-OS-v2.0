@@ -606,6 +606,18 @@ class AuditAction(enum.StrEnum):
     #: carries: who answers for an agent is neither, and "who took over the agent that did this"
     #: is the question asked after it did something nobody expected (M1.8.9).
     AGENT_OWNER = "agent_owner"
+    #: A chat identity was bound to a person, or a binding was taken away: by the person sending
+    #: the one-time code they minted, by the person or an administrator unbinding it, or by a
+    #: rebind from a new account retiring the old one. Which, and the channel, are in the details,
+    #: never the identity. Written by `0118`'s trigger on `auth.principal_identity` for every
+    #: channel but the console, whose rows are sign-in links and recorded as `sign_in` (M10.3.4).
+    #:
+    #: **A member of its own, because `0047` refused to file a chat binding under `sign_in`**:
+    #: "who gave this account a way in as her" is asked of the identity provider's accounts, and
+    #: filling it with Lark and Slack rows buries the answer. `setting`, which `0114` uses for a
+    #: channel's switch, is a knob and has no person in its subject, and "which chat accounts
+    #: were answered as her, and who allowed it" is asked of the person. Fifteen characters.
+    CHANNEL_BINDING = "channel_binding"
 
 
 # --------------------------------------------------------------------- redaction

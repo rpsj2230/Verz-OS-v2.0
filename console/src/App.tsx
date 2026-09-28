@@ -103,6 +103,7 @@ import { FIRST_RUN_PATH } from "./setup/wizard";
 import { Notice } from "./ui/Notice";
 import { AccessRequests } from "./pages/AccessRequests";
 import { Tools } from "./pages/Tools";
+import { Channels } from "./pages/Channels";
 
 /**
  * The records screen, fetched when somebody asks for it.
@@ -452,6 +453,10 @@ export const routes: RouteObject[] = [
       // Tools: every tool with what it needs and does, and the switch that stops one for the
       // install or a department. One path: a tool is shown whole. See `pages/Tools.tsx`.
       { path: "tools", element: <Tools /> },
+      // Channels: each chat surface's set-up, switch, health from its deliveries and bound people,
+      // behind the channel's own authority on the server. One path: a channel is a card, not a
+      // page. The page cites `brain.console.channel_health`. See `pages/Channels.tsx`.
+      { path: "channels", element: <Channels /> },
       { path: "*", element: <NotFound /> },
     ],
   },

@@ -130,6 +130,13 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "Testing a Lark connection exchanges the pasted credential for a token and makes small reads; " +
     "it writes nothing here or in Lark and keeps nothing it read, which " +
     "tests/unit/test_lark_connect.py holds over the requests a fake Lark server received.",
+  "src/pages/Channels.tsx testApiPath(name)":
+    "A test message is one product sentence to one destination, sent once per channel record and " +
+    "destination, which tests/unit/test_channel_pipeline.py holds; it ends and replaces nothing.",
+  "src/components/MyChannels.tsx myCodeApiPath(row.channel)":
+    "Asking for a code binds nothing: the code is shown to the person who asked and does nothing " +
+    "until they send it from their own chat. It ends only an older code of theirs for that channel " +
+    "that nothing has used, which tests/unit/test_channel_binding.py holds.",
 };
 
 /** How many times a non-GET `method:` or an `openStream(` call is written in the control files. */

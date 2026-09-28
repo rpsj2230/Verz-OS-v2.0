@@ -632,11 +632,23 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # The Lark chat channel (L1). A GET through the transport is the one read a group's
         # floor needs, who is in the conversation, and it changes nothing at the vendor.
         "brain.channels.adapter:ChannelTransport.read": Repeat.READS,
-        # A code is consumed by `NonceLedger.consume`, a unique insert, and the binding is a row.
+        # A code is spent by `brain.ops.binding_store.StoredCodes.claim`, a test-and-set, and the
+        # binding is a row the live identity's unique index refuses a second time.
         "brain.channels.inbound:ChatBinder.redeem": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.chat_answer:People.live": Repeat.READS,
         "brain.chat_answer:RoomReader.members_request": Repeat.READS,
         "brain.chat_answer:RoomReader.members_page": Repeat.READS,
+        # Binding a chat account (`0118`). A code is spent by a test-and-set, so a second claim
+        # finds nothing; a bind is refused a second time by the live identity's unique index; an
+        # unbind retires rows a second call no longer finds. Every one is this system's own rows.
+        "brain.channels.binding:BindingCodes.keep": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.channels.binding:BindingCodes.claim": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.channels.binding:SignIns.still_open": Repeat.READS,
+        "brain.channels.binding:BindingTable.binding_for": Repeat.READS,
+        "brain.channels.binding:BindingTable.for_principal": Repeat.READS,
+        "brain.channels.binding:BindingTable.on_channel": Repeat.READS,
+        "brain.channels.binding:BindingTable.bind": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.channels.binding:BindingTable.unbind": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
     }
 )
 

@@ -122,6 +122,12 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
     { pattern: "/compliance", index: 4, writes: true },
     { pattern: "/compliance", index: 5, writes: true },
   ],
+  // Index 0 is the bound people's search bar, which only narrows; then the webhook channel's set-up
+  // and its test message. The Lark card, not received, draws no form.
+  "src/pages/Channels.tsx": [
+    { pattern: "/channels", index: 1, writes: true },
+    { pattern: "/channels", index: 2, writes: true },
+  ],
   "src/pages/Webhooks.tsx": [
     { pattern: "/webhooks", index: 0, writes: false },
     { pattern: "/webhooks", opener: "Replace secret", index: 1, writes: true },
