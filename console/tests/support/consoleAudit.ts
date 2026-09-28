@@ -388,6 +388,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/agents/{agent_id}/workspace",
       "/api/v1/agents/{agent_id}/about",
       "/api/v1/agents/{agent_id}/model-pin",
+      "/api/v1/console/agents/{agent_id}/stats",
       "/api/v1/agent-templates",
       "/api/v1/approvals*",
     ],
@@ -416,6 +417,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/skills/{digest}/categories",
       "/api/v1/skills/{digest}/review",
       "/api/v1/skills/{digest}/assignments",
+      "/api/v1/console/skills/{skill_name}/stats",
       "/api/v1/tools",
       "/api/v1/tools/{name}/switch",
     ],
@@ -473,6 +475,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/connectors/lark-app",
       "/api/v1/connectors/lark-app/test",
       "/api/v1/channels*",
+      "/api/v1/console/connectors/{connector}/stats",
+      "/api/v1/console/channels/{name}/stats",
     ],
     tables: [
       "ops.channel",
@@ -707,13 +711,13 @@ export const AREAS: Readonly<Record<string, Area>> = {
   },
   "System health and the state of every service": {
     screens: ["/models", "/runs"],
-    routes: [],
+    routes: ["/api/v1/console/overview"],
     tables: [],
     installation: [],
     gaps: [
       {
         what: "The state of each service the install runs on is not shown.",
-        because: "/health/ready answers the orchestrator outside /api/v1 with no screen reading it. Each rung's circuit breaker is shown, on the Models and health screen from GET /api/v1/models/providers, replayed from the attempts the executor recorded.",
+        because: "/health/ready answers the orchestrator outside /api/v1, and GET /api/v1/console/overview serves the same parts beside Needs you with no screen reading it yet. Each rung's circuit breaker is shown, on the Models and health screen from GET /api/v1/models/providers, replayed from the attempts the executor recorded.",
       },
     ],
   },

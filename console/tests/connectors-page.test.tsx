@@ -175,7 +175,7 @@ const XERO_STATS = {
   last_read_to_the_end: "2019-03-04T09:30:00Z",
   consecutive_failures: 0,
   index_ids: 1234,
-  truncated: false,
+  at_least: false,
   periods: ["7d", "30d"].map((range) => ({
     range,
     since: "2019-02-02T00:00:00Z",

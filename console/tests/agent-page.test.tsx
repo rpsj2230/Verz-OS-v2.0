@@ -216,7 +216,7 @@ function statsWire(cost: number | null = 18240, unrecorded: readonly Record<stri
     cost_basis: "own",
     currency: "SGD",
     last_active: "2019-03-04T09:42:00Z",
-    truncated: false,
+    at_least: false,
     periods: [
       { range: "7d", since: "2019-02-25T00:00:00Z", until: "2019-03-04T12:00:00Z", runs: 97, answered: 90, nothing_returned: 7, p50_latency_ms: 950, cost_minor: cost },
       { range: "30d", since: "2019-02-02T00:00:00Z", until: "2019-03-04T12:00:00Z", runs: 391, answered: 360, nothing_returned: 31, p50_latency_ms: 1840, cost_minor: cost },
