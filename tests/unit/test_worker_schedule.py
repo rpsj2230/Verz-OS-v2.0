@@ -466,6 +466,7 @@ def test_a_due_control_is_started_once_and_its_run_is_recorded(starts: Starts) -
             ("automation_run", "ok", False, "automation_run ran"),
             ("canary_run", "ok", False, "canary_run ran"),
             ("connector_sync", "ok", False, "connector_sync ran"),
+            ("denial_digest", "ok", False, "denial_digest ran"),
             ("directory_sync", "ok", False, "directory_sync ran"),
             ("erasure_queue", "ok", False, "erasure_queue ran"),
             ("knowledge_reverification", "ok", False, "knowledge_reverification ran"),
@@ -559,11 +560,12 @@ def test_a_control_whose_lock_another_replica_holds_is_not_started_and_the_rest_
             found = tick(url, at=NOW)
             other.rollback()
 
-        assert starts.calls == [*STARTED[:6], *STARTED[7:]]
+        assert starts.calls == [*STARTED[:7], *STARTED[8:]]
         assert [row[0] for row in recorded(url)] == [
             "automation_run",
             "canary_run",
             "connector_sync",
+            "denial_digest",
             "directory_sync",
             "erasure_queue",
             "knowledge_reverification",
@@ -596,6 +598,7 @@ def test_a_runner_that_raises_is_recorded_as_failed_with_its_reason_and_the_next
             ("automation_run", "ok", "automation_run ran"),
             ("canary_run", "ok", "canary_run ran"),
             ("connector_sync", "ok", "connector_sync ran"),
+            ("denial_digest", "ok", "denial_digest ran"),
             ("directory_sync", "ok", "directory_sync ran"),
             ("erasure_queue", "ok", "erasure_queue ran"),
             ("knowledge_reverification", "ok", "knowledge_reverification ran"),
@@ -662,6 +665,7 @@ def test_the_tick_records_the_re_verification_nag_through_the_real_runner(
     assert others.calls == [
         ("retention_sweep", True),
         ("canary_run", False),
+        ("denial_digest", False),
         ("directory_sync", False),
         ("model_health_probes", False),
         ("outbox_dispatch", False),

@@ -50,6 +50,9 @@ def screen_with(
     app = _app()
     with TestClient(app, raise_server_exceptions=False) as c:
         app.state.gate = _wiring()
+        # The same on every machine: CI sets DATABASE_URL and the Mac does not, so the ledger
+        # is detached here and a test that wants one attaches its own source below.
+        app.state.db_sessions = None
         if valkey is not None:
             app.state.limit_store = ValkeyWindowStore(client=valkey)
         if volumes is not None or volume_error is not None:
