@@ -116,6 +116,7 @@ import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./suppo
 import { declaredParameterNames, declaredParameterSchema, declaredQueryParameters } from "./support/openapi";
 import { backendEnumMembers, backendModelFields } from "./support/python";
 import { readRepoFile } from "./support/repo";
+import { instantWords, moneyWords } from "../src/pages/spendQuery";
 import { everyWrite } from "./support/writes";
 
 const CONSOLE_ORIGIN = "https://console.test";
@@ -334,6 +335,8 @@ const SPENT = {
   total_minor: 28_800,
   as_of: "2019-03-06T08:00:00Z",
   freshness: "live",
+  currency: "SGD",
+  time_zone: "Asia/Singapore",
 };
 
 /** Answers by path for a GET, and by `METHOD path` for anything else, each handed its body. */
@@ -874,12 +877,27 @@ describe("cost this month", () => {
 
     const cost = card(container, "models-cost");
     expect(cost.querySelector("h2")?.textContent).toBe(COST_THIS_MONTH);
-    expect(cost.querySelector(".figure")?.textContent).toBe("288.00");
-    expect(figure(cost, "maintenance")).toBe("186.00");
-    expect(figure(cost, "web")).toBe("102.00");
+    expect(cost.querySelector(".figure")?.textContent).toBe("SGD 288.00");
+    expect(figure(cost, "maintenance")).toBe("SGD 186.00");
+    expect(figure(cost, "web")).toBe("SGD 102.00");
     expect(spendShares({ ...SPENT, lines: [{ key: "web", cost_minor: 0 }], total_minor: 0 })).toEqual([
       { key: "web", costMinor: 0, share: 0 },
     ]);
+  });
+
+  test("the cost is in the install's currency and its instant in the install's zone, whatever the browser's", async () => {
+    // What breaks if this is deleted: "288.00" read in whichever currency the reader assumes, or
+    // "2019-03-06T08:00:00Z" read as the local time it is not, which is what the owner was shown.
+    const { container } = await modelsPage(EVERY_ANSWER);
+    expect(card(container, "models-cost").textContent).toContain("live, as of 6 Mar 2019, 16:00");
+    expect(card(container, "models-cost").textContent).not.toContain("2019-03-06T08:00:00Z");
+
+    const unset = await modelsPage({ ...EVERY_ANSWER, [SPEND]: () => json({ ...SPENT, currency: "XXX", time_zone: "UTC" }) });
+    expect(card(unset.container, "models-cost").querySelector(".figure")?.textContent).toBe("XXX 288.00");
+    expect(card(unset.container, "models-cost").textContent).toContain("live, as of 6 Mar 2019, 08:00");
+    expect(instantWords("2019-03-06T08:00:00Z", "Nowhere/Atlantis")).toBe("2019-03-06T08:00:00Z");
+    expect(instantWords("not a time", "UTC")).toBe("not a time");
+    expect(moneyWords(28_800, "SGD")).toBe("SGD 288.00");
   });
 
   test("a report nobody has built is a sentence and not a zero, and an empty month says so", async () => {
@@ -1120,6 +1138,7 @@ describe("what the page asks for", () => {
     expect(first(plan, "rungs")).toEqual(backendModelFields(PROVIDER_ROUTES, "RungStateView").sort());
     expect(first(plan, "tiers")).toEqual(backendModelFields(PROVIDER_ROUTES, "RoutingTierView").sort());
     expect(Object.keys(check()).sort()).toEqual(backendModelFields(PROVIDER_ROUTES, "CheckView").sort());
+    expect(Object.keys(SPENT).sort()).toEqual(backendModelFields("src/brain/report_routes.py", "SpendReportView").sort());
     expect(backendModelFields(PROVIDER_ROUTES, "ProviderSwitchAsked")).toEqual(["on"]);
     expect(backendModelFields(PROVIDER_ROUTES, "ProfileAsked")).toEqual(["profile"]);
   });

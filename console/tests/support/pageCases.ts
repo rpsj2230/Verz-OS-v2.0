@@ -497,6 +497,8 @@ const MODELS_AND_HEALTH = {
     total_minor: 700,
     as_of: "2019-03-04T09:00:00Z",
     freshness: "live",
+    currency: "XXX",
+    time_zone: "UTC",
   },
 };
 

@@ -88,6 +88,13 @@ store reads are unverified against a server and are the first thing to exercise 
 Of the second three, M27.7.14, M27.7.18 and M27.7.19 are claimed here for what the screens can
 show and are closed by none of them, for the reasons each read module gives.
 
+**A spend report says what currency and clock its figures are in** (`currency`, `time_zone`),
+from `brain.locale.currency` and `brain.locale.time_zone`, which read `INSTALL_CURRENCY` and
+`INSTALL_TIME_ZONE` and until 2026-09-28 had no caller. The ledger holds minor units with no sign,
+so a screen could only print "288.00" and a raw UTC instant. An install whose setting does not
+resolve is sent `XXX` and `UTC`, the settings' own visibly unset defaults, rather than a refusal
+that would take the figures with it. See `A_FIGURE_SAYS_ITS_CURRENCY_AND_ITS_CLOCK`.
+
 **Adoption pages, searches, filters and orders through `brain.listing`**, over the lines
 `adoption_for_reader` produced for this reader, so a search for a department answers a line only
 where the reader's usage grant already admits one.
@@ -130,6 +137,7 @@ from brain.console.spend_report_view import MaterialisedReport, spend_report_fro
 from brain.console.usage_screen import AUTOMATION_IS_COUNTED, UsageScreen, usage_for_reader
 from brain.core.errors import Failed
 from brain.listing import Column, ListAsked, Listing
+from brain.locale import LocaleError, currency, time_zone
 from brain.ops.question_gap_store import gaps_between
 from brain.ops.question_store import asked_between
 from brain.ops.schedule_runner import runner_for
@@ -288,6 +296,37 @@ class SpendLineView(BaseModel):
     cost_minor: int
 
 
+#: Why the spend report carries its currency and its clock.
+A_FIGURE_SAYS_ITS_CURRENCY_AND_ITS_CLOCK: Final = (
+    "A cost with no currency is read in whichever currency the reader assumes, and an instant with "
+    "no zone is read an offset away from when it happened. The install chose both, so the report "
+    "carries them beside the figures and the screen formats with them. A setting that does not "
+    "resolve is sent as XXX and UTC, visibly unset, never as a guess."
+)
+
+#: What a spend report says when the install's currency or zone does not resolve.
+UNSET_CURRENCY: Final = "XXX"
+UNSET_TIME_ZONE: Final = "UTC"
+
+
+def money_and_clock() -> tuple[str, str]:
+    """The install's currency code and zone name, or the visibly unset pair when either fails.
+
+    Each is resolved on its own, so a misspelled zone does not also blank a valid currency.
+    """
+    try:
+        code = currency()
+    except LocaleError as failed:
+        log.warning("report.currency_unresolved", error=str(failed))
+        code = UNSET_CURRENCY
+    try:
+        zone = time_zone().key
+    except LocaleError as failed:
+        log.warning("report.time_zone_unresolved", error=str(failed))
+        zone = UNSET_TIME_ZONE
+    return code, zone
+
+
 class SpendReportView(BaseModel):
     """A spend breakdown in one dimension, with the age of the figures on it.
 
@@ -315,6 +354,10 @@ class SpendReportView(BaseModel):
     as_of: datetime | None
     #: LIVE, AGEING, STALE or UNSTATED, on `brain.gate.provenance`'s scale and no other.
     freshness: str
+    #: The ISO 4217 code the minor units are in, `XXX` when the install chose none.
+    currency: str = UNSET_CURRENCY
+    #: The IANA zone the install renders an instant in, `UTC` when it chose none.
+    time_zone: str = UNSET_TIME_ZONE
 
 
 class AdoptionLineView(BaseModel):
@@ -593,7 +636,12 @@ def reading_view_of(levels: ServiceLevels) -> ServiceLevelsView:
     )
 
 
-def spend_view_of(report: MaterialisedReport, dimension: Dimension) -> SpendReportView:
+def spend_view_of(
+    report: MaterialisedReport,
+    dimension: Dimension,
+    *,
+    money: tuple[str, str] = (UNSET_CURRENCY, UNSET_TIME_ZONE),
+) -> SpendReportView:
     """A materialised report, copied field by field, including the case with no report in it.
 
     The `None` report is carried as `built=False` with no lines and no total rather than as an
@@ -611,6 +659,8 @@ def spend_view_of(report: MaterialisedReport, dimension: Dimension) -> SpendRepo
             total_minor=None,
             as_of=None,
             freshness=report.freshness.state.value,
+            currency=money[0],
+            time_zone=money[1],
         )
     return SpendReportView(
         dimension=dimension.value,
@@ -622,6 +672,8 @@ def spend_view_of(report: MaterialisedReport, dimension: Dimension) -> SpendRepo
         total_minor=report.report.total_minor,
         as_of=report.as_of,
         freshness=report.freshness.state.value,
+        currency=money[0],
+        time_zone=money[1],
     )
 
 
@@ -782,7 +834,7 @@ async def spend(
         until=until,
         include_machine=include_machine,
     )
-    return spend_view_of(report, dimension)
+    return spend_view_of(report, dimension, money=money_and_clock())
 
 
 #: What the Adoption screen may search, filter and order its lines by.
