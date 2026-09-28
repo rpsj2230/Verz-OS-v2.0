@@ -47,7 +47,7 @@ from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any, Final, TextIO
 
-from sqlalchemy import func, insert, select, text, update
+from sqlalchemy import func, insert, select, text
 from sqlalchemy.engine import Result as SqlResult
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncSession, async_sessionmaker
 from sqlalchemy.sql import Executable
@@ -64,7 +64,6 @@ from brain.ops.acceptance import (
     RESERVED_PRINCIPAL_PREFIX,
     Check,
     CheckFailedError,
-    CheckNotRunError,
     Occasion,
     Result,
     owed,
@@ -123,19 +122,6 @@ SET_UP_REACH: Final = "0" * 32
 #: How a line of the run's own is marked on the worker's stream.
 LOG_PREFIX: Final = "  ! acceptance"
 
-#: The owner's two test logins, by the installation setting holding each one's subject: the user
-#: ID the identity provider shows on the user's own page, which is the `sub` its tokens carry.
-TEST_LOGINS: Final = {
-    "member": "INSTALL_ACCEPTANCE_MEMBER_SUBJECT",
-    "head": "INSTALL_ACCEPTANCE_HEAD_SUBJECT",
-}
-
-#: What a setting says when nobody has named the login yet, as `brain.install` declares it.
-UNSET: Final = "unset"
-
-#: Why a check acting as a person is not run, until the owner names his two test logins.
-WAITING_FOR_THE_TWO_TEST_LOGINS: Final = "waiting for the two test logins"
-
 #: The control's name in `brain.ops.controls.CONTROLS`, whose run request the run reads.
 CONTROL: Final = "acceptance_run"
 
@@ -172,8 +158,6 @@ class Harness:
             sync_session_class=ApplicationRoleSession,
         )
         self._undo: list[Callable[[], object]] = []
-        #: Test logins' principals placed in a reserved department for this check.
-        self._placed: set[str] = set()
 
     # ------------------------------------------------------------------ names
     @property
@@ -253,11 +237,8 @@ class Harness:
             await self.grant(principal_id, capability, scope)
 
     async def grant(self, principal_id: str, capability: str, scope: Scope) -> None:
-        """One grant to a reserved principal or a test login's, lapsing with the check."""
-        if (
-            not principal_id.startswith(RESERVED_PRINCIPAL_PREFIX)
-            and principal_id not in self._placed
-        ):
+        """One grant to a reserved principal, lapsing with it."""
+        if not principal_id.startswith(RESERVED_PRINCIPAL_PREFIX):
             msg = f"{principal_id!r} is not a reserved principal"
             raise ValueError(msg)
         await self.execute(
@@ -271,57 +252,6 @@ class Harness:
                 not_after=self.now + RESERVED_REACH_LASTS,
             ),
         )
-
-    async def test_login(
-        self,
-        login: str,
-        *,
-        department: str,
-        grants: Sequence[tuple[str, Scope]] = (),
-    ) -> str:
-        """The person one of the owner's two test logins signs in as, placed in `department`.
-
-        The login's subject is configuration (`TEST_LOGINS`), and without it the check waits:
-        `WAITING_FOR_THE_TWO_TEST_LOGINS`. A subject nothing is bound to yet is bound, through
-        the product's own `SignInBindings.bind`, to a reserved principal made for this check; a
-        subject already bound keeps its principal, placed in `department` for the check. Either
-        way the principal is then resolved through `StoredDirectory.principal_for_subject`,
-        which is the lookup a sign-in makes, and all of it is rolled back with the check.
-        """
-        from brain.identity.principal_directory import StoredDirectory
-        from brain.identity.sign_in_binding import sign_in_bindings
-        from brain.install import value_of
-
-        subject = value_of(TEST_LOGINS[login]).strip()
-        if subject in ("", UNSET):
-            raise CheckNotRunError(WAITING_FOR_THE_TWO_TEST_LOGINS)
-        bindings = sign_in_bindings(self.sessions)
-        directory = StoredDirectory(self.sessions)
-        found = await directory.principal_for_subject(bindings.issuer, subject)
-        if found is None:
-            made = self.principal(department, login)
-            await self.person(made, department=department)
-            await bindings.bind(
-                subject,
-                principal_id=made,
-                bound_by=self.actor,
-                now=self.now,
-                trace_id=self.trace_id,
-            )
-            found = await directory.principal_for_subject(bindings.issuer, subject)
-            if found is None or found.id != made:
-                raise CheckFailedError("a test login did not resolve to the person it was bound to")
-        else:
-            await self.execute(
-                *self.attributed(),
-                update(PrincipalRow)
-                .where(PrincipalRow.id == found.id)
-                .values(primary_department=department),
-            )
-            self._placed.add(found.id)
-        for capability, scope in grants:
-            await self.grant(found.id, capability, scope)
-        return found.id
 
     async def reach(self, principal_id: str) -> EntitlementSet:
         """A principal's reach through the one resolver, inside the check's transaction."""

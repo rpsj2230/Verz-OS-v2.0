@@ -76,14 +76,13 @@ TEST_DATA_LIVES_ONLY_IN_RESERVED_DEPARTMENTS: Final = (
     "question can be about it."
 )
 
-#: Why a reserved principal is not an account, and what the owner's two test logins are.
+#: Why a reserved principal is not an account.
 A_RESERVED_PRINCIPAL_CANNOT_SIGN_IN: Final = (
     "A reserved principal exists only inside a check's transaction: no committed identity binding "
-    "resolves to it, no staff record places it, and its not_after is an hour ahead. Where a check "
-    "acts as a person, it acts as one of the owner's two test logins, named by their subjects in "
-    "configuration, and binds that subject inside the same transaction, so nothing any real "
-    "sign-in resolves to is ever left behind. The run never sets, reads or holds a password or a "
-    "token for either login."
+    "resolves to it, no staff record places it, and its not_after is an hour ahead. Every person a "
+    "check acts as is one of these, made for the check and gone with it, so the owner creates no "
+    "login, names no subject and sets no value, and the run never sets, reads or holds a password "
+    "or a token for anybody."
 )
 
 #: Why the run stops before it writes anything when a reserved department is in use.
@@ -164,7 +163,10 @@ REASON_CHARS: Final = 240
 SENTENCE_CHARS: Final = 400
 
 #: The modules whose `@check` functions make up the suite, imported by `registered`.
-CHECK_MODULES: Final = ("brain.ops.acceptance_checks",)
+CHECK_MODULES: Final = (
+    "brain.ops.acceptance_checks",
+    "brain.ops.acceptance_oversight",
+)
 
 
 class AcceptanceError(Exception):

@@ -290,6 +290,28 @@ def test_the_rewrite_reads_leads_bindings_and_grants_and_writes_each_heads_reach
     assert len(session.written) == 5
 
 
+def test_a_rewrite_told_whom_to_rewrite_writes_nobody_else() -> None:
+    """`ONLY_THE_HEADS_NAMED_ARE_REWRITTEN`: asked about one head, a second head's reach is not
+    written and a former head's grants are not retired, while the named head's five are; asked
+    about nobody in particular, all of it happens. Delete this and the acceptance check's roster
+    of reserved people retires every real head's grants inside its transaction."""
+    both = [(HEAD, "maintenance"), ("u_other_head", "web")]
+    narrowed = HeadsSession(leads=list(both), holders=["u_old_head"])
+    applied = asyncio.run(
+        rewrite_head_audit_reach(
+            narrowed,  # type: ignore[arg-type]
+            MAINTENANCE,
+            read_at=READ_AT,
+            only=frozenset({HEAD}),
+        )
+    )
+    assert [one.head_id for one in applied] == [HEAD]
+    assert len(narrowed.written) == 5
+    everyone = HeadsSession(leads=list(both), holders=["u_old_head"])
+    assert [one.head_id for one in rewrite(everyone)] == [HEAD, "u_other_head"]
+    assert len(everyone.written) > 5
+
+
 def test_a_former_head_has_every_grant_a_sync_gave_them_retired() -> None:
     """Somebody holding sync-written audit grants who is no longer a live head is retired in
     the run that finds them, before anybody's reach is written, and a live head is not. Delete

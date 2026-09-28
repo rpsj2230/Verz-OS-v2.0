@@ -462,7 +462,7 @@ async def _found(h: Harness, reader: str, word: str) -> tuple[Any, list[dict[str
     leaves=("M7.1.1", "M7.2.5", "M7.4.3", "M7.6.3", "M7.7.1"),
     sentence=(
         "A Markdown, a PDF and a Word file uploaded into acceptance_a with no worker are found by "
-        "text search by the test member, each passage carrying its department, level and owner; a "
+        "text search by a member there, each passage carrying its department, level and owner; a "
         "reader in acceptance_b gets what a search for nothing gets; no upload is placed wider "
         "than its uploader may add; a damaged PDF and an unread type are refused by name."
     ),
@@ -491,8 +491,12 @@ async def documents_are_answered_in_their_department_only(h: Harness) -> None:
     )
 
     await h.found_departments()
-    reader_a = await h.test_login("member", department=A, grants=_in(A, *KNOWLEDGE_READS))
-    admin, reader_b = h.principal(A, "library"), h.principal(B, "user")
+    admin, reader_a, reader_b = (
+        h.principal(A, "library"),
+        h.principal(A, "member"),
+        h.principal(B, "user"),
+    )
+    await h.person(reader_a, department=A, grants=_in(A, *KNOWLEDGE_READS))
     await h.person(admin, department=A, grants=_in(A, "admin:knowledge"))
     await h.person(reader_b, department=B, grants=_in(B, *KNOWLEDGE_READS))
     held = await h.reach(admin)

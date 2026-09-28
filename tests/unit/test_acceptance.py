@@ -44,18 +44,14 @@ from brain.ops.acceptance import (
     registered,
     served,
 )
-from brain.ops.acceptance_run import (
-    TEST_LOGINS,
-    UNSET,
-    WAITING_FOR_THE_TWO_TEST_LOGINS,
-    Harness,
-)
+from brain.ops.acceptance_run import Harness
 from brain.settings import settings_from
 from tests.unit.test_limit_store import FakeClient
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCES = (
     ROOT / "src" / "brain" / "ops" / "acceptance_checks.py",
+    ROOT / "src" / "brain" / "ops" / "acceptance_oversight.py",
     ROOT / "src" / "brain" / "ops" / "acceptance_run.py",
 )
 
@@ -93,14 +89,27 @@ def test_every_leaf_a_check_names_is_a_leaf_of_the_work_breakdown() -> None:
         assert set(one.leaves) <= leaves, one.name
 
 
-def test_the_suite_is_the_three_checks_this_release_ships_in_order() -> None:
-    """The coordinator's narrowed scope for this release: limits, channels, knowledge. Delete this
-    and a check can drop out of the suite with the page simply listing one fewer row."""
-    assert [one.name for one in registered()] == [
+def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
+    """Held per module, so a package adding checks in a module of its own changes only its own
+    line here: limits, channels and documents, then volume, refusals and a head's audit. Delete
+    this and a check can drop out of the suite with the page simply listing one fewer row."""
+    by_module: dict[str, list[str]] = {}
+    for one in registered():
+        by_module.setdefault(one.run.__module__, []).append(one.name)
+    assert by_module["brain.ops.acceptance_checks"] == [
         "asking_past_a_window_is_refused_with_a_retry_hint",
         "a_webhook_channel_receives_once_and_stops_both_ways",
         "documents_are_answered_in_their_department_only",
     ]
+    assert by_module["brain.ops.acceptance_oversight"] == [
+        "unusual_volume_is_found_per_person",
+        "repeated_refusals_raise_a_denial_notice",
+        "a_head_reads_their_own_peoples_audit_entries_only",
+    ]
+    oversight = {one.name: one.leaves for one in registered()}
+    assert oversight["unusual_volume_is_found_per_person"] == ("M23.2.1",)
+    assert oversight["repeated_refusals_raise_a_denial_notice"] == ("M23.2.2",)
+    assert oversight["a_head_reads_their_own_peoples_audit_entries_only"] == ("M1.8.3",)
 
 
 def test_every_reason_a_check_raises_is_a_literal_sentence() -> None:
@@ -108,7 +117,7 @@ def test_every_reason_a_check_raises_is_a_literal_sentence() -> None:
     and never built from a value. Every `CheckFailedError` and `CheckNotRunError` is raised with a
     string literal or a module constant. Delete this and a reason can be an f-string quoting the
     row a check read."""
-    constants = {"WAITING_FOR_THE_TWO_TEST_LOGINS"}
+    constants: set[str] = set()
     raised = 0
     for path in SOURCES:
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
@@ -230,20 +239,14 @@ def acceptance_scope() -> Any:
     return Scope.department(RESERVED_DEPARTMENTS[0])
 
 
-def test_the_two_test_logins_are_configuration_and_unset_means_waiting() -> None:
-    """The owner's two test logins are named by installation settings that default to unset, and a
-    check acting as a person waits for them rather than inventing one. Delete this and a check can
-    act as a principal no login of the owner's resolves to."""
-    from brain.console.configuration import READ_BY
+def test_no_check_needs_a_login_or_a_value_from_the_owner() -> None:
+    """Every person a check acts as is a reserved principal made inside its transaction, so the
+    install declares no setting for a test login and the harness has no way to bind one. Delete
+    this and a check can come to depend on a login somebody has to create by hand."""
     from brain.install import BY_NAME
 
-    for setting in TEST_LOGINS.values():
-        assert BY_NAME[setting].default == UNSET
-        assert READ_BY[setting] == ("brain.ops.acceptance_run",)
-    harness = Harness(run="0a1b2c3d", now=LONG_AGO, settings=settings_from({}), connection=None)  # type: ignore[arg-type]
-    with pytest.raises(CheckNotRunError) as waiting:
-        asyncio.run(harness.test_login("member", department=RESERVED_DEPARTMENTS[0]))
-    assert waiting.value.reason == WAITING_FOR_THE_TWO_TEST_LOGINS
+    assert not [name for name in BY_NAME if "ACCEPTANCE" in name]
+    assert not hasattr(Harness, "test_login")
 
 
 class CacheWithDeletes(FakeClient):
@@ -367,11 +370,16 @@ def test_a_run_declines_in_report_only_mode() -> None:
 # --------------------------------------------------------------------------- a real run
 @contextmanager
 def at_head(database: str) -> Iterator[str]:
+    """A scratch database at head, named after this worktree's own test database as well, so two
+    worktrees running this file against one local server never drop each other's."""
+    from urllib.parse import urlsplit
+
     from tests.fixtures.retirable import has_pgvector, retirable
-    from tests.fixtures.scratch_postgres import admin_url
+    from tests.fixtures.scratch_postgres import admin_url, database_url
 
     admin_url()
-    with retirable(database) as url:
+    own = urlsplit(database_url() or "").path.strip("/").removeprefix("brain_test_")
+    with retirable(f"{database}_{own}"[:63] if own else database) as url:
         if not has_pgvector(url):
             pytest.skip("the chain to 0133 needs pgvector, which CI has")
         yield url
@@ -393,6 +401,10 @@ WRITTEN_BY_CHECKS = (
     "gate.channel_event",
     "know.item",
     "know.chunk",
+    "obs.request_telemetry",
+    "gate.team",
+    "gate.team_membership",
+    "gate.department_lead",
 )
 
 
@@ -421,10 +433,10 @@ def run_on(url: str, env: dict[str, str], *, force: bool = True) -> Any:
 def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """**The run as the worker makes it, against PostgreSQL at head.** The webhook check passes with
-    no test login, the documents check passes as a bound test member and waits without one, and
-    after both runs every table a check wrote to holds what it held before, while the result rows
-    are there, one run each, keyed by the commit. Delete this and a check that commits, or one
+    """**The run as the worker makes it, against PostgreSQL at head.** Twice: every check that can
+    be asked without a cache passes both times, the limits check says it was not run, and after
+    both runs every table a check wrote to holds what it held before, while the result rows are
+    there, one run each, keyed by the commit. Delete this and a check that commits, or one
     that cannot pass on a real schema, reaches the owner's server first."""
     from tests.fixtures.scratch_postgres import sql
 
@@ -433,7 +445,6 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         for name, value in ISSUER.items():
             monkeypatch.setenv(name, value)
         waited = run_on(url, {})
-        monkeypatch.setenv("INSTALL_ACCEPTANCE_MEMBER_SUBJECT", "3f2b1c9e-acceptance-member")
         bound = run_on(url, {})
         after = counts(url)
         recorded = sql(
@@ -443,18 +454,14 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         )
         runs = sql(url, "SELECT count(DISTINCT run_id) FROM ops.acceptance_result")
 
+    for first, second in zip(waited[1], bound[1], strict=True):
+        assert (first.name, first.outcome) == (second.name, second.outcome)
     outcomes = {one.name: (one.outcome, one.reason) for one in waited[1]}
-    assert outcomes["a_webhook_channel_receives_once_and_stops_both_ways"] == (PASSED, "")
-    assert outcomes["documents_are_answered_in_their_department_only"] == (
-        NOT_RUN,
-        WAITING_FOR_THE_TWO_TEST_LOGINS,
-    )
-    assert outcomes["asking_past_a_window_is_refused_with_a_retry_hint"][0] == NOT_RUN
-    assert {one.name: one.outcome for one in bound[1]}[
-        "documents_are_answered_in_their_department_only"
-    ] == PASSED
+    assert outcomes.pop("asking_past_a_window_is_refused_with_a_retry_hint")[0] == NOT_RUN
+    assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
+    assert len(outcomes) == 5
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 6
+    assert runs == [(2,)] and len(recorded) == 12
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }

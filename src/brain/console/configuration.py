@@ -210,8 +210,6 @@ READ_BY: Final[Mapping[str, tuple[str, ...]]] = {
     "INSTALL_LARK_USES": ("brain.lark_connect_routes",),
     "INSTALL_LARK_PLATFORM": ("brain.lark_connect_routes",),
     "INSTALL_LARK_BASE": ("brain.lark_connect_routes",),
-    "INSTALL_ACCEPTANCE_MEMBER_SUBJECT": ("brain.ops.acceptance_run",),
-    "INSTALL_ACCEPTANCE_HEAD_SUBJECT": ("brain.ops.acceptance_run",),
 }
 
 #: How a Keycloak issuer ends: the realm's name is its last path segment.
