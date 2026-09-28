@@ -7,8 +7,8 @@ What an administrator would need to manage, read out of the schema, the routes a
 ## What was measured
 
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
-- 104 tables, from `brain.db.Base.metadata`.
-- 27 installation values, from `brain.install.INSTALLATION`.
+- 105 tables, from `brain.db.Base.metadata`.
+- 29 installation values, from `brain.install.INSTALLATION`.
 - 221 routes under `/api/v1` and `/setup`, from the API's internal document.
 - 73 console addresses, from the route table in `console/src/App.tsx`.
 - 89 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 107 routes.
@@ -20,7 +20,7 @@ What an administrator would need to manage, read out of the schema, the routes a
 
 - **Screens:** `/`, `/people`, `/people/:subject`, `/roles`, `/capabilities`, `/scopes`, `/access_review`, `/elevation`, `/sessions`, `/sign-in-links`, `/staff_sources`, `/access-requests`
 - **Tables:** `auth.principal`, `auth.principal_identity`, `auth.session`, `auth.directory_role_grant`, `gate.capability_grant`, `gate.capability_pack`, `gate.capability_pack_assignment`, `gate.capability_registry`, `gate.scope`, `gate.grants_version`, `gate.policy_epoch`, `gate.review_decision`, `gate.elevation_request`, `auth.staff_member`, `auth.staff_sync_run`, `auth.service_account`, `auth.api_key`, `gate.access_request`, `gate.role_grant`, `auth.group_role_rule`, `gate.break_glass_notice`
-- **Installation values:** `INSTALL_OIDC_ISSUER`, `INSTALL_OIDC_REALM`, `INSTALL_OIDC_CLIENT_ID`, `INSTALL_OIDC_REDIRECT_URIS`, `INSTALL_BROKERED_DIRECTORY`, `INSTALL_STAFF_SOURCE`, `INSTALL_STAFF_SOURCE_LOCATION`, `INSTALL_BROKERED_CLIENT_ID`
+- **Installation values:** `INSTALL_OIDC_ISSUER`, `INSTALL_OIDC_REALM`, `INSTALL_OIDC_CLIENT_ID`, `INSTALL_OIDC_REDIRECT_URIS`, `INSTALL_BROKERED_DIRECTORY`, `INSTALL_STAFF_SOURCE`, `INSTALL_STAFF_SOURCE_LOCATION`, `INSTALL_BROKERED_CLIENT_ID`, `INSTALL_ACCEPTANCE_MEMBER_SUBJECT`, `INSTALL_ACCEPTANCE_HEAD_SUBJECT`
 
 | Route | Called by |
 | --- | --- |
@@ -378,7 +378,7 @@ No gap recorded.
 ### Scheduled jobs and background work
 
 - **Screens:** `/jobs`, `/runs`
-- **Tables:** `ops.control_run`, `ops.operation`
+- **Tables:** `ops.control_run`, `ops.operation`, `ops.acceptance_result`
 - **Installation values:** none
 
 | Route | Called by |
