@@ -25,8 +25,9 @@ Task ids: M42.6.4
 from __future__ import annotations
 
 import ast
+import hashlib
 import inspect
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -56,7 +57,6 @@ from brain.console.govern import Placed
 from brain.console.reads import Plane, plane_capability
 from brain.console.screens import screen
 from brain.console.skill_library import (
-    NOBODY_DECIDES_ABOUT_A_SKILL_THEY_ADDED,
     REVIEW_AUTHORITY,
     SKILL_AUTHORITY,
     Assignment,
@@ -78,9 +78,13 @@ from brain.prompt_routes import installed
 from brain.skill_routes import (
     AgentChoiceView,
     AssignedView,
+    CategoriesView,
+    DiffLineView,
+    FieldChangeView,
     FoundAgent,
     LibrarySkillView,
     QueueEntryView,
+    SkillDiffView,
     SkillPinView,
     SkillQueueView,
     SkillRow,
@@ -104,6 +108,19 @@ from brain.tools.skills import (
     SourceKind,
 )
 from tests.fixtures.http_client import Response
+from tests.fixtures.skill_sources import (
+    COMMIT,
+    FOLDER,
+    GITHUB_ADDRESS,
+    OWNER,
+    REPOSITORY,
+    SKILL_TEXT,
+    Resolved,
+    blob_raw_url,
+    github,
+    raw_url,
+    tarball_url,
+)
 from tests.unit.test_agent_routes import (
     Directory,
     agent_row,
@@ -283,6 +300,9 @@ class Stored:
         self.installs: dict[str, tuple[TemplateInstanceRow, TemplateVersionRow]] = {}
         self.statements: list[Any] = []
         self.library = Library(self)
+        #: GitHub, as `tests/fixtures/skill_sources.py` records it. Nothing here reaches a host.
+        self.fetcher = github()
+        self.resolver = Resolved()
 
 
 class Library:
@@ -299,6 +319,22 @@ class Library:
         self.skills: dict[str, LibrarySkill] = {}
         self.calls: list[str] = []
         self.assigned: list[Assignment] = []
+        #: Every categories row written, oldest first, as the table keeps them.
+        self.filed: list[tuple[str, tuple[str, ...], str]] = []
+
+    async def categories(self, names: Sequence[str]) -> Mapping[str, tuple[str, ...]]:
+        self.calls.append("categories")
+        newest: dict[str, tuple[str, ...]] = {}
+        for name, categories, _by in self.filed:
+            if name in names:
+                newest[name] = categories
+        return {name: found for name, found in newest.items() if found}
+
+    async def categorise(
+        self, name: str, categories: Sequence[str], *, by: str, ent_hash: str, trace_id: str
+    ) -> None:
+        self.calls.append("categorise")
+        self.filed.append((name, tuple(categories), by))
 
     async def library(self, limit: int = 500) -> tuple[LibrarySkill, ...]:
         self.calls.append("library")
@@ -422,6 +458,8 @@ def client(stored: Stored) -> Iterator[TestClient]:
         app.state.skill_library = stored.library
         app.state.agent_installs = Installs()
         app.state.tools = a_registry()
+        app.state.skill_fetcher = stored.fetcher
+        app.state.skill_resolver = stored.resolver
         yield c
 
 
@@ -837,7 +875,9 @@ def test_every_undecided_skill_in_the_library_is_submitted_for_review() -> None:
         added(
             read_package(
                 "SKILL.md",
-                text_with(name="quote-format", description="Formats a quote").encode("utf-8"),
+                text_with(name="quote-format", description="Use when a quote is formatted").encode(
+                    "utf-8"
+                ),
             ),
             by="u_admin",
             at=NOW,
@@ -873,19 +913,23 @@ def test_a_queue_entry_carries_no_body_and_no_reviewer() -> None:
 # --------------------------------------------------------------- what it will not say
 
 
-def test_the_writes_are_three_posts_and_no_read_answers_one_skill_by_name(
+def test_the_writes_are_six_posts_and_no_read_answers_one_skill_by_name(
     client: TestClient,
 ) -> None:
-    """Under `/skills` there is one GET, which takes no path parameter, and three POSTs: add a
-    skill, decide about one, and assign one. Read off the application's own document.
+    """Under `/skills` there is one GET, which takes no path parameter, and six POSTs: add a
+    package, import from a repository or an address, save an edit as a version, set categories,
+    decide about one, and assign one. Read off the application's own document.
 
-    Delete this and a fourth write, an approval folded into an import say, or a GET answering one
+    Delete this and a seventh write, an approval folded into an import say, or a GET answering one
     skill by name, can arrive without anybody arguing for it."""
     paths = client.app.openapi()["paths"]  # type: ignore[attr-defined]
     mine = {path: set(operations) for path, operations in paths.items() if path.startswith(SKILLS)}
 
     assert mine == {
         SKILLS: {"get", "post"},
+        f"{SKILLS}/imports": {"post"},
+        f"{SKILLS}/{{digest}}/versions": {"post"},
+        f"{SKILLS}/{{digest}}/categories": {"post"},
         f"{SKILLS}/{{digest}}/review": {"post"},
         f"{SKILLS}/{{digest}}/assignments": {"post"},
     }
@@ -901,7 +945,7 @@ def test_no_row_here_carries_a_state_a_source_or_a_reviewer(client: TestClient) 
 
     assert set(SkillRow.model_fields) & forbidden == set()
     assert set(SkillPinView.model_fields) & forbidden == set()
-    assert set(SkillRow.model_fields) == {"name", "pinned_by", "versions_differ"}
+    assert set(SkillRow.model_fields) == {"name", "pinned_by", "versions_differ", "categories"}
 
 
 def test_no_answer_carries_a_count_of_what_the_reader_was_not_shown(
@@ -930,6 +974,10 @@ def test_no_answer_carries_a_count_of_what_the_reader_was_not_shown(
         ToolReachView,
         AgentChoiceView,
         AssignedView,
+        SkillDiffView,
+        FieldChangeView,
+        DiffLineView,
+        CategoriesView,
     )
     assert hidden_count_fields(views) == ()
     assert body["total"] is None
@@ -1114,11 +1162,10 @@ def test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_ass
 ) -> None:
     """**M42.6.4 end to end, through the application.** An administrator adds a skill from a
     pasted `SKILL.md` and is answered with what it is trusted to reach, read off the registry; the
-    library lists it undecided and the queue lists it waiting; the same administrator is refused
-    the decision in words saying why; a second person approves it; the administrator assigns it to
-    an agent and is answered with what it reaches through that agent for them, which is the one
-    tool the agent is allowed; and the Skills screen then lists the agent pinned to exactly the
-    approved bytes.
+    library lists it undecided and the queue lists it waiting; assigning it before a decision is
+    refused; a second person approves it; the administrator assigns it to an agent and is answered
+    with what it reaches through that agent for them, which is the one tool the agent is allowed;
+    and the Skills screen then lists the agent pinned to exactly the approved bytes.
 
     Delete this and add, reach and assign can each be proved on their own while the three never
     meet: a skill added that the queue does not list, an approval the assignment does not see, or
@@ -1135,7 +1182,9 @@ def test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_ass
         {"name": "desk.read_ticket", "capability": "read:ticket.status"},
     ]
     assert row["capabilities"] == ["read:client.name", "read:ticket.status"]
-    assert row["reviewable"] is False
+    # The administrator holds the review authority, so the skill they added is theirs to decide
+    # too (D4); the self-approval path is its own test below.
+    assert row["reviewable"] is True
 
     page = get(client, "u_admin").json()
     assert [one["name"] for one in page["library"]] == ["hosting-expiry"]
@@ -1143,9 +1192,6 @@ def test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_ass
     assert page["may_add"] is True
     assert page["agents"] == [{"agent_id": "company_desk", "display_name": "Company Desk"}]
 
-    own = post(client, "u_admin", f"{SKILLS}/{digest}/review", {"decision": "approve"})
-    assert own.status_code == 404
-    assert NOBODY_DECIDES_ABOUT_A_SKILL_THEY_ADDED in own.json()["message"]
     early = post(client, "u_admin", f"{SKILLS}/{digest}/assignments", {"agent_id": "company_desk"})
     assert early.status_code == 404
     assert stored.library.assigned == []
@@ -1168,6 +1214,7 @@ def test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_ass
             "name": "hosting-expiry",
             "pinned_by": [{"agent_id": "company_desk", "digest": digest}],
             "versions_differ": False,
+            "categories": [],
         }
     ]
     assert after["queue"]["entries"] == []
@@ -1340,7 +1387,11 @@ def test_a_package_that_does_not_parse_or_repeats_a_skill_is_refused_saying_why(
         client,
         "u_admin",
         SKILLS,
-        a_package(text_with(name="hosting_expiry", description="Checks domains a second way")),
+        a_package(
+            text_with(
+                name="hosting_expiry", description="Use when domains are checked a second way"
+            )
+        ),
     )
     not_base64 = post(
         client,
@@ -1382,3 +1433,349 @@ def test_an_install_changed_since_it_was_read_is_refused_and_the_change_is_kept(
     assert refused.status_code == 404
     assert "changed this agent after you opened it" in refused.json()["message"]
     assert stored.library.assigned == []
+
+
+# ----------------------------------------------- importing from GitHub and a URL (M12.2.2, .3)
+IMPORTS = f"{SKILLS}/imports"
+
+
+def a_repository_import(**fields: str) -> dict[str, str]:
+    return {
+        "kind": "github",
+        "repository": f"{OWNER}/{REPOSITORY}",
+        "commit": COMMIT,
+        "path": FOLDER,
+    } | fields
+
+
+def test_an_administrator_imports_a_skill_from_a_repository_at_a_commit_and_it_waits(
+    client: TestClient, stored: Stored
+) -> None:
+    """**M12.2.2 through the application.** The import fetches the one commit's archive from the
+    tarball host, on the address the resolver answered, reads the `SKILL.md` in the folder asked
+    for, and answers with an undecided row naming the repository, the commit and the folder; the
+    queue lists it.
+
+    Delete this and a repository import can be proved in the library while the route fetches
+    something else, from somewhere else, or lands the skill already decided."""
+    response = post(client, "u_admin", IMPORTS, a_repository_import(path=f"{FOLDER}/"))
+
+    assert response.status_code == 201, response.text
+    row = response.json()
+    assert (row["source"], row["source_location"]) == ("github", f"{OWNER}/{REPOSITORY}")
+    assert (row["source_commit"], row["source_path"]) == (COMMIT, FOLDER)
+    assert (row["name"], row["version"], row["review"]) == ("hosting-expiry", "1.2.0", "pending")
+    assert stored.fetcher.connected == [(tarball_url(), GITHUB_ADDRESS)]
+    page = get(client, "u_admin").json()
+    assert [one["digest"] for one in page["queue"]["entries"]] == [row["digest"]]
+
+
+def test_an_administrator_imports_a_skill_from_an_address_following_github_s_own_redirect(
+    client: TestClient, stored: Stored
+) -> None:
+    """**M12.2.3 through the application.** The repository page's raw link answers 302 to the raw
+    host; both hops are on the list and outside the network, and the skill is pinned to the digest
+    of the bytes the second answered, under the address the administrator gave.
+
+    Delete this and a URL import can follow the redirect without checking the second host, or
+    record the address it ended at, which is not the one a re-fetch starts from."""
+    response = post(client, "u_admin", IMPORTS, {"kind": "url", "url": blob_raw_url()})
+
+    assert response.status_code == 201, response.text
+    row = response.json()
+    assert (row["source"], row["source_location"]) == ("url", blob_raw_url())
+    assert row["source_commit"] is None
+    assert stored.fetcher.connected == [
+        (blob_raw_url(), GITHUB_ADDRESS),
+        (raw_url(), GITHUB_ADDRESS),
+    ]
+    added_skill = stored.library.skills[row["digest"]]
+    assert added_skill.imported.source.content_digest == (
+        hashlib.sha256(SKILL_TEXT.encode("utf-8")).hexdigest()
+    )
+
+
+@pytest.mark.parametrize(
+    ("url", "answers", "refusal"),
+    [
+        ("https://example.com/SKILL.md", {}, "not a host a skill is imported from"),
+        (raw_url(), {"raw.githubusercontent.com": ["10.0.0.5"]}, "reachable only from inside"),
+        ("http://raw.githubusercontent.com/x/SKILL.md", {}, "https address"),
+    ],
+    ids=["off the list", "inside the network", "plain http"],
+)
+def test_an_import_from_off_the_list_inside_the_network_or_over_http_connects_to_nothing(
+    client: TestClient, stored: Stored, url: str, answers: dict[str, list[str]], refusal: str
+) -> None:
+    """The importer is told why, in words, and nothing was connected to. Delete this and the
+    Skills screen is a way to make this server fetch from a host somebody runs, or from its own
+    network, which is the request the address rule exists to refuse."""
+    stored.resolver.answers.update(answers)
+
+    response = post(client, "u_admin", IMPORTS, {"kind": "url", "url": url})
+
+    assert response.status_code == 404
+    assert refusal in response.json()["message"]
+    assert stored.fetcher.connected == []
+    assert "example.com" not in stored.resolver.asked
+    assert stored.library.skills == {}
+
+
+def test_a_redirect_off_the_list_is_refused_at_the_hop_it_names(
+    client: TestClient, stored: Stored
+) -> None:
+    """A permitted address that answers 302 to a host off the list is refused before the second
+    connection. Delete this and the list is applied to the first hop only, which is the same as not
+    applying it."""
+    stored.fetcher.answers[raw_url()] = "https://collector.example.net/steal"
+
+    response = post(client, "u_admin", IMPORTS, {"kind": "url", "url": raw_url()})
+
+    assert response.status_code == 404
+    assert "not a host a skill is imported from" in response.json()["message"]
+    assert stored.fetcher.connected == [(raw_url(), GITHUB_ADDRESS)]
+
+
+def test_an_import_by_a_caller_who_may_not_add_fetches_nothing(
+    client: TestClient, stored: Stored
+) -> None:
+    """The authority is asked before anything is fetched or resolved. Delete this and a reader of
+    the screen can make this server connect to an address of their choosing, whatever the answer
+    says afterwards."""
+    refusals = [
+        post(client, "u_narrow", IMPORTS, a_repository_import()),
+        post(client, "u_wide", IMPORTS, {"kind": "url", "url": raw_url()}),
+    ]
+
+    assert [one.status_code for one in refusals] == [404, 404]
+    assert {one.json()["message"] for one in refusals} == {screen_refusal(client)}
+    assert (stored.fetcher.connected, stored.resolver.asked, stored.library.calls) == ([], [], [])
+
+
+def test_a_repository_import_naming_a_branch_is_refused_without_a_connection(
+    client: TestClient, stored: Stored
+) -> None:
+    """A branch moves, so the source refuses it, and before the fetch. Delete this and a branch is
+    fetched and approved as though it were the commit it pointed at that day."""
+    response = post(client, "u_admin", IMPORTS, a_repository_import(commit="main"))
+
+    assert response.status_code == 404
+    assert "not a full commit sha" in response.json()["message"]
+    assert stored.fetcher.connected == []
+
+
+# -------------------------------------------------------------- self-approval (M12.4.6, D4)
+def test_an_administrator_approves_the_skill_they_imported_and_the_answer_says_it_was_their_own(
+    client: TestClient, stored: Stored
+) -> None:
+    """**M12.4.6 through the application.** The administrator who added a skill approves it, the
+    answer and the library say the decision was their own, and the skill can then be assigned. A
+    second person's approval of another skill says it was not.
+
+    Delete this and either D4 is undone and the administrator is refused, or a self-approval reaches
+    the store looking like any other and the ledger cannot record it as one."""
+    an_assignable_agent(stored)
+    own = post(client, "u_admin", SKILLS, a_package()).json()["digest"]
+    other = post(client, "u_admin", SKILLS, a_package(text_with(name="quote-format"))).json()[
+        "digest"
+    ]
+
+    approved = post(client, "u_admin", f"{SKILLS}/{own}/review", {"decision": "approve"})
+    reviewed = post(client, "u_wide", f"{SKILLS}/{other}/review", {"decision": "approve"})
+
+    assert approved.status_code == 200, approved.text
+    assert (approved.json()["review"], approved.json()["reviewer"]) == ("approved", "u_admin")
+    assert (approved.json()["self_decided"], reviewed.json()["self_decided"]) == (True, False)
+    assert stored.library.skills[own].self_decided is True
+    assigned = post(client, "u_admin", f"{SKILLS}/{own}/assignments", {"agent_id": "company_desk"})
+    assert assigned.status_code == 201, assigned.text
+
+
+def test_somebody_who_may_add_and_may_not_review_still_needs_somebody_else(
+    client: TestClient, stored: Stored
+) -> None:
+    """`u_elsewhere` holds the skill authority in finance and no review authority. Delete this and
+    D4's exception reads as "the importer may decide", which is wider than the owner's decision."""
+    digest = post(client, "u_admin", SKILLS, a_package()).json()["digest"]
+
+    refused = post(client, "u_elsewhere", f"{SKILLS}/{digest}/review", {"decision": "approve"})
+
+    assert refused.status_code == 404
+    assert refused.json()["message"] == screen_refusal(client)
+
+
+# ------------------------------------------------------------ an edit is a version (M12.3.2)
+def an_edit(version: str = "1.1.0") -> str:
+    return text_with(version=version).replace(
+        "Look up the domain, then open a ticket.", "Look up the domain, then call the client."
+    )
+
+
+def test_an_edit_waits_for_review_as_a_new_version_while_the_agent_keeps_its_pin(
+    client: TestClient, stored: Stored
+) -> None:
+    """**M12.3.2 end to end.** A skill is added, approved and assigned; an administrator edits it in
+    the console; the edit is a new, undecided version naming the one it came from, with the words
+    that changed; the agent is still pinned to the approved bytes; the old version is still in the
+    library with its instructions; and only once the edit is approved and assigned does the pin
+    move.
+
+    Delete this and an edit can move a running agent onto words nobody reviewed, or replace the
+    version it was made from so the words the agent was tested with are gone."""
+    an_assignable_agent(stored)
+    first = post(client, "u_admin", SKILLS, a_package()).json()["digest"]
+    post(client, "u_wide", f"{SKILLS}/{first}/review", {"decision": "approve"})
+    post(client, "u_admin", f"{SKILLS}/{first}/assignments", {"agent_id": "company_desk"})
+
+    saved = post(client, "u_admin", f"{SKILLS}/{first}/versions", {"content": an_edit()})
+
+    assert saved.status_code == 201, saved.text
+    second = saved.json()
+    assert (second["review"], second["version"], second["edited_from"]) == (
+        "pending",
+        "1.1.0",
+        first,
+    )
+    assert second["diff"]["against_digest"] == first
+    assert [(one["change"], one["text"]) for one in second["diff"]["body"]] == [
+        ("removed", "Look up the domain, then open a ticket."),
+        ("added", "Look up the domain, then call the client."),
+    ]
+    page = get(client, "u_admin").json()
+    assert page["items"][0]["pinned_by"] == [{"agent_id": "company_desk", "digest": first}]
+    old = next(one for one in page["library"] if one["digest"] == first)
+    assert (old["review"], old["body"]) == ("approved", "Look up the domain, then open a ticket.")
+    assert [(one["digest"], one["changed"]) for one in page["queue"]["entries"]] == [
+        (second["digest"], ["body", "version"])
+    ]
+
+    post(client, "u_wide", f"{SKILLS}/{second['digest']}/review", {"decision": "approve"})
+    moved = post(
+        client, "u_admin", f"{SKILLS}/{second['digest']}/assignments", {"agent_id": "company_desk"}
+    )
+    assert moved.json()["replaced_digest"] == first
+    assert get(client, "u_admin").json()["items"][0]["pinned_by"] == [
+        {"agent_id": "company_desk", "digest": second["digest"]}
+    ]
+
+
+def test_an_edit_is_offered_from_the_text_the_skill_reads_back_as(
+    client: TestClient, stored: Stored
+) -> None:
+    """The console's edit box starts from `markdown`, for a reader who may edit. Delete this and
+    the box starts empty, or starts from text that is not the skill, or is offered to a reviewer who
+    may not add."""
+    post(client, "u_admin", SKILLS, a_package())
+
+    admin_row = get(client, "u_admin").json()["library"][0]
+    reviewer_row = get(client, "u_wide").json()["library"][0]
+
+    assert admin_row["editable"] is True
+    assert admin_row["markdown"] == SKILL_MD
+    assert (reviewer_row["editable"], reviewer_row["markdown"]) == (False, None)
+
+
+def test_an_edit_needs_the_authority_and_a_later_version_and_says_why_it_was_refused(
+    client: TestClient, stored: Stored
+) -> None:
+    """Delete this and a reviewer can write new versions of skills, or an edit reusing a version
+    number is saved beside the words it claims to be."""
+    digest = post(client, "u_admin", SKILLS, a_package()).json()["digest"]
+
+    by_reviewer = post(client, "u_wide", f"{SKILLS}/{digest}/versions", {"content": an_edit()})
+    same_version = post(
+        client, "u_admin", f"{SKILLS}/{digest}/versions", {"content": an_edit("1.0.0")}
+    )
+    unknown = post(client, "u_admin", f"{SKILLS}/{'e' * 64}/versions", {"content": an_edit()})
+
+    assert by_reviewer.status_code == 404
+    assert by_reviewer.json()["message"] == screen_refusal(client)
+    assert same_version.status_code == 404
+    assert "version later than 1.0.0" in same_version.json()["message"]
+    assert unknown.status_code == 404
+    assert "no skill in the library has that digest" in unknown.json()["message"]
+    assert list(stored.library.skills) == [digest]
+
+
+# -------------------------------------------------------------- categories (M12.4.13)
+def test_categories_set_on_a_skill_are_chips_that_filter_the_skills_in_use(
+    client: TestClient, stored: Stored
+) -> None:
+    """**M12.4.13 through the application.** Categories given at import and set later are the
+    skill's, the page offers them as chips, and filtering the skills in use by one returns the rows
+    that carry it and no other.
+
+    Delete this and a category can be saved and never offered, or offered and filter nothing."""
+    stored.agents["company_desk"] = agent_row("company_desk")
+    one = post(client, "u_admin", SKILLS, a_package() | {"categories": ["Hosting", "SEO"]})
+    other = post(client, "u_admin", SKILLS, a_package(text_with(name="quote-format")))
+    stored.installs["company_desk"] = skilled_rows(
+        "company_desk",
+        skills=(
+            SkillRef(name="hosting-expiry", digest=one.json()["digest"]),
+            SkillRef(name="quote-format", digest=other.json()["digest"]),
+        ),
+    )
+    filed = post(
+        client,
+        "u_admin",
+        f"{SKILLS}/{other.json()['digest']}/categories",
+        {"categories": ["Finance", "finance", ""]},
+    )
+
+    assert one.json()["categories"] == ["hosting", "seo"]
+    assert filed.status_code == 200, filed.text
+    assert filed.json() == {"name": "quote-format", "categories": ["finance"]}
+    page = get(client, "u_admin").json()
+    assert page["categories"] == ["finance", "hosting", "seo"]
+    assert {row["name"]: row["categories"] for row in page["library"]} == {
+        "hosting-expiry": ["hosting", "seo"],
+        "quote-format": ["finance"],
+    }
+    assert names(get(client, "u_admin", f"{SKILLS}?filter=categories:seo")) == ["hosting-expiry"]
+    assert names(get(client, "u_admin", f"{SKILLS}?filter=categories:finance")) == ["quote-format"]
+
+
+def names_of(body: Mapping[str, Any]) -> list[str]:
+    return [one["name"] for one in body["items"]]
+
+
+def test_a_category_only_a_skill_the_reader_may_not_see_carries_is_never_a_chip(
+    client: TestClient, stored: Stored
+) -> None:
+    """`u_elsewhere` reads the screen in finance only, so not the library, which belongs to no
+    department, and is shown the skills their agents run. A category on a library skill no agent of
+    theirs runs is not offered to them; `u_admin`, who reads the library, is offered both.
+
+    Delete this and the chips name the filing of skills the reader was never shown, which is a
+    fact about each of them."""
+    stored.agents["company_desk"] = agent_row("company_desk")
+    seen = post(client, "u_admin", SKILLS, a_package() | {"categories": ["hosting"]})
+    post(
+        client, "u_admin", SKILLS, a_package(text_with(name="payroll-run")) | {"categories": ["hr"]}
+    )
+    stored.installs["company_desk"] = skilled_rows(
+        "company_desk", skills=(SkillRef(name="hosting-expiry", digest=seen.json()["digest"]),)
+    )
+
+    narrow = get(client, "u_elsewhere").json()
+    assert (narrow["library"], names_of(narrow)) == ([], ["hosting-expiry"])
+    assert narrow["categories"] == ["hosting"]
+    assert get(client, "u_admin").json()["categories"] == ["hosting", "hr"]
+
+
+def test_setting_categories_needs_the_authority_and_a_category_the_grammar_admits(
+    client: TestClient, stored: Stored
+) -> None:
+    """Delete this and a reviewer can file skills, or a category carrying a path or a sentence
+    becomes a chip."""
+    digest = post(client, "u_admin", SKILLS, a_package()).json()["digest"]
+
+    by_reviewer = post(client, "u_wide", f"{SKILLS}/{digest}/categories", {"categories": ["x"]})
+    bad = post(client, "u_admin", f"{SKILLS}/{digest}/categories", {"categories": ["a/b"]})
+
+    assert by_reviewer.status_code == 404
+    assert by_reviewer.json()["message"] == screen_refusal(client)
+    assert bad.status_code == 404
+    assert "is not one this install keeps" in bad.json()["message"]
+    assert stored.library.filed == []

@@ -18,7 +18,7 @@
  * **The real route table is mounted**, which is `routing.test.tsx`'s rule: the skill name is a
  * path segment, so the route is half of what is under test.
  *
- * Task ids: M42.6.4
+ * Task ids: M42.6.4, M12.2.2, M12.2.3, M12.2.6, M12.3.2, M12.4.6, M12.4.13
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -31,6 +31,14 @@ import {
   ADD_HEADING,
   APPROVE,
   ASSIGN,
+  CHIPS_LABEL,
+  EDIT,
+  EVERY_CATEGORY,
+  FROM_ADDRESS,
+  IMPORT,
+  IMPORT_HEADING,
+  SAVE_VERSION,
+  SET_CATEGORIES,
   DRIFT_IS_PINNED_BY_DESIGN,
   NO_DRIFT,
   NO_LIBRARY,
@@ -43,8 +51,16 @@ import {
   queueCount,
 } from "../src/pages/Skills";
 import {
+  CATEGORY_COLUMN,
+  IMPORT_PATH,
   MAX_PACKAGE_BYTES,
   REVIEW_WORDS,
+  addressImport,
+  categoriesPath,
+  categoriesTyped,
+  importProblem,
+  repositoryImport,
+  versionsPath,
   assignedSentence,
   assignPath,
   base64Of,
@@ -90,7 +106,7 @@ function librarySkill(overrides: Record<string, unknown> = {}): Record<string, u
     digest: DIGEST_ONE,
     name: "hosting-expiry",
     version: "1.0.0",
-    description: "Checks whether a client domain is close to renewal",
+    description: "Use when a client asks whether their domain is close to renewal",
     source: "upload",
     source_location: "SKILL.md",
     submitted_by: "u_importer",
@@ -107,19 +123,33 @@ function librarySkill(overrides: Record<string, unknown> = {}): Record<string, u
     body: "BODY-OF-THE-SKILL",
     reviewable: false,
     assignable: false,
+    source_commit: null,
+    source_path: null,
+    edited_from: null,
+    self_decided: false,
+    categories: [],
+    diff: null,
+    markdown: null,
+    editable: false,
     ...overrides,
   };
 }
 
 /** One page in the shape `brain.skill_routes.SkillsPage` serialises. */
 function skillsPage(
-  items: { name: string; pinned_by: { agent_id: string; digest: string }[]; versions_differ?: boolean }[],
+  items: {
+    name: string;
+    pinned_by: { agent_id: string; digest: string }[];
+    versions_differ?: boolean;
+    categories?: string[];
+  }[],
   extra: {
     queue?: QueueRow[];
     truncated?: boolean;
     library?: Record<string, unknown>[];
     agents?: { agent_id: string; display_name: string }[];
     may_add?: boolean;
+    categories?: string[];
   } = {},
 ): Record<string, unknown> {
   const queue = extra.queue ?? [];
@@ -128,6 +158,7 @@ function skillsPage(
       name: one.name,
       pinned_by: one.pinned_by,
       versions_differ: one.versions_differ ?? false,
+      categories: one.categories ?? [],
     })),
     next_cursor: null,
     total: null,
@@ -143,6 +174,7 @@ function skillsPage(
     agents: extra.agents ?? [],
     may_add: extra.may_add ?? false,
     registry_is_absent: false,
+    categories: extra.categories ?? [],
   };
 }
 
@@ -349,7 +381,7 @@ describe("adding a skill", () => {
     });
     await settled(container);
     expect(sent.filter((one) => one.method === "POST").map((one) => one.body)).toEqual([
-      { file_name: "SKILL.md", content: "---\nname: hosting-expiry\n---\n", encoding: "text" },
+      { file_name: "SKILL.md", content: "---\nname: hosting-expiry\n---\n", encoding: "text", categories: [] },
     ]);
     // Waited for: the library is read again after the sentence is drawn, and under a loaded run
     // the second answer can land a tick after the page has settled on the first.
@@ -397,11 +429,13 @@ describe("adding a skill", () => {
       file_name: "hosting.zip",
       content: base64Of(bytes),
       encoding: "base64",
+      categories: [],
     });
-    expect(chosen("SKILL.md", new TextEncoder().encode("---\n"))).toEqual({
+    expect(chosen("SKILL.md", new TextEncoder().encode("---\n"), ["seo"])).toEqual({
       file_name: "SKILL.md",
       content: "---\n",
       encoding: "text",
+      categories: ["seo"],
     });
     expect(packageProblem(null)).not.toBeNull();
     expect(packageProblem(pasted("---"))).toBeNull();
@@ -719,6 +753,7 @@ describe("what the query module does with a body", () => {
         "stale",
         "truncated",
         "waiting",
+        "categories",
       ].sort(),
     );
   });
@@ -742,5 +777,261 @@ describe("what the query module does with a body", () => {
     ] as unknown as SkillLibraryRow[];
 
     expect(driftingRows(rows).map((one) => one.name)).toEqual(["a-skill"]);
+  });
+});
+
+describe("importing, editing and filing a skill", () => {
+  const COMMIT = "0123456789abcdef0123456789abcdef01234567";
+
+  test("the bodies an import, an edit and a category change send are the ones the routes declare", () => {
+    // What breaks if this is deleted: a renamed field in one of the three new writes, refused with
+    // a 422 that reaches a person as "Something went wrong" every time they press Import or Save.
+    const imported = declaredPropertyNames(declaredRequestBodySchema(`${SKILLS_OPERATION}/imports`, "post"));
+    const edit = declaredPropertyNames(
+      declaredRequestBodySchema(`${SKILLS_OPERATION}/{digest}/versions`, "post"),
+    );
+    const filed = declaredPropertyNames(
+      declaredRequestBodySchema(`${SKILLS_OPERATION}/{digest}/categories`, "post"),
+    );
+
+    expect(Object.keys(repositoryImport("o/r", COMMIT, "")).sort()).toEqual([...imported].sort());
+    expect(Object.keys(addressImport("https://x")).sort()).toEqual([...imported].sort());
+    expect(edit).toEqual(["content"]);
+    expect(filed).toEqual(["categories"]);
+    expect(IMPORT_PATH).toBe("/skills/imports");
+    expect(versionsPath(DIGEST_ONE)).toBe(`/skills/${DIGEST_ONE}/versions`);
+    expect(categoriesPath(DIGEST_ONE)).toBe(`/skills/${DIGEST_ONE}/categories`);
+  });
+
+  test("an import names a repository and a whole commit, or an https address, before it is sent", () => {
+    // What breaks if this is deleted: a branch name sent to be refused after a round trip, or an
+    // import button that stays disabled for a well-formed commit.
+    expect(importProblem(repositoryImport("owner/repo", COMMIT, "skills/x"))).toBeNull();
+    expect(importProblem(repositoryImport("owner/repo", "main", ""))).toContain("forty-character");
+    expect(importProblem(repositoryImport("not a repo", COMMIT, ""))).toContain("owner/repository");
+    expect(importProblem(addressImport("https://raw.githubusercontent.com/o/r/main/SKILL.md"))).toBeNull();
+    expect(importProblem(addressImport("http://example.com/SKILL.md"))).toContain("https");
+    expect(categoriesTyped(" SEO, Web maintenance ,, ")).toEqual(["SEO", "Web maintenance"]);
+  });
+
+  test("an administrator imports from a repository at a commit and the page says it is waiting", async () => {
+    // What breaks if this is deleted: the import form the owner asked for is not on the screen, or
+    // it sends a body the route does not take, or the page goes on drawing the old library.
+    let library: Record<string, unknown>[] = [];
+    const { container, sent } = await consoleAt("/skills", {
+      [`GET ${SKILLS_OPERATION}`]: () => json(skillsPage([], { may_add: true, library })),
+      [`POST ${SKILLS_OPERATION}/imports`]: () => {
+        library = [librarySkill({ source: "github", source_commit: COMMIT })];
+        return json(librarySkill({ source: "github" }), 201);
+      },
+    });
+
+    const form = container.querySelector(`form[aria-label="${IMPORT_HEADING}"]`) as HTMLFormElement;
+    expect(form).not.toBeNull();
+    fireEvent.change(form.querySelector("#skills-repository") as HTMLInputElement, {
+      target: { value: "example-org/agent-skills" },
+    });
+    fireEvent.change(form.querySelector("#skills-commit") as HTMLInputElement, { target: { value: "main" } });
+    expect(button(container, IMPORT).disabled).toBe(true);
+    expect(form.textContent).toContain("forty-character");
+    fireEvent.change(form.querySelector("#skills-commit") as HTMLInputElement, { target: { value: COMMIT } });
+    fireEvent.change(form.querySelector("#skills-folder") as HTMLInputElement, {
+      target: { value: "skills/hosting-expiry" },
+    });
+    fireEvent.change(form.querySelector("#skills-import-categories") as HTMLInputElement, {
+      target: { value: "hosting, seo" },
+    });
+    fireEvent.click(button(container, IMPORT));
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("was added and is waiting for review");
+    });
+    expect(sent.filter((one) => one.method === "POST").map((one) => one.body)).toEqual([
+      {
+        kind: "github",
+        repository: "example-org/agent-skills",
+        commit: COMMIT,
+        path: "skills/hosting-expiry",
+        url: "",
+        categories: ["hosting", "seo"],
+      },
+    ]);
+  });
+
+  test("an import from an address sends the address and says the API's refusal in its own words", async () => {
+    // What breaks if this is deleted: the address import sends a repository body, or a host the API
+    // refused is drawn as though it had worked.
+    const { container, sent } = await consoleAt("/skills", {
+      [`GET ${SKILLS_OPERATION}`]: () => json(skillsPage([], { may_add: true })),
+      [`POST ${SKILLS_OPERATION}/imports`]: () =>
+        json({ message: "this skill was not added: 'example.com' is not a host a skill is imported from", trace_id: "t" }, 404),
+    });
+    const form = container.querySelector(`form[aria-label="${IMPORT_HEADING}"]`) as HTMLFormElement;
+    const address = [...form.querySelectorAll("label")].find((one) => one.textContent?.includes(FROM_ADDRESS));
+
+    fireEvent.click(address?.querySelector("input") as HTMLInputElement);
+    fireEvent.change(form.querySelector("#skills-address") as HTMLInputElement, {
+      target: { value: "https://example.com/SKILL.md" },
+    });
+    fireEvent.click(button(container, IMPORT));
+
+    const card = container.querySelector('[aria-labelledby="skills-import"]') as HTMLElement;
+    await waitFor(() => {
+      expect(card.querySelector(".notice__body > p")?.textContent).toContain("not a host a skill is imported from");
+    });
+    expect(sent.filter((one) => one.method === "POST").map((one) => one.body)).toEqual([
+      { kind: "url", repository: "", commit: "", path: "", url: "https://example.com/SKILL.md", categories: [] },
+    ]);
+  });
+
+  test("an edit starts from the API's text, is saved as a new version, and is offered only where the API says", async () => {
+    // What breaks if this is deleted: an edit box that starts empty or from text that is not the
+    // skill, an edit offered to a reader who may not make one, or an edit sent somewhere other than
+    // a new version.
+    const markdown = "---\nname: hosting-expiry\nversion: 1.0.0\n---\nLook up the domain.\n";
+    const readOnly = await consoleAt(
+      skillAddress("hosting-expiry"),
+      listing(skillsPage([], { library: [librarySkill()] })),
+    );
+    const { container, sent } = await consoleAt(skillAddress("hosting-expiry"), {
+      [`GET ${SKILLS_OPERATION}`]: () =>
+        json(skillsPage([], { library: [librarySkill({ editable: true, markdown })] })),
+      [`POST ${SKILLS_OPERATION}/${DIGEST_ONE}/versions`]: () =>
+        json(librarySkill({ digest: DIGEST_TWO, version: "1.1.0", edited_from: DIGEST_ONE }), 201),
+    });
+
+    expect(() => button(readOnly.container, EDIT)).toThrow();
+    fireEvent.click(button(container, EDIT));
+    const box = container.querySelector(`#edit-${DIGEST_ONE}`) as HTMLTextAreaElement;
+    expect(box.value).toBe(markdown);
+    fireEvent.change(box, { target: { value: markdown.replace("1.0.0", "1.1.0") } });
+    fireEvent.click(button(container, SAVE_VERSION));
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("hosting-expiry 1.1.0 was saved as a new version");
+    });
+    expect(container.textContent).toContain("Every agent keeps the version it runs");
+    expect(sent.filter((one) => one.method === "POST").map((one) => [one.path, one.body])).toEqual([
+      [`${API}/skills/${DIGEST_ONE}/versions`, { content: markdown.replace("1.0.0", "1.1.0") }],
+    ]);
+  });
+
+  test("the words that changed are drawn line by line, each marked in its text as well as its colour", async () => {
+    // What breaks if this is deleted: the review pane shows only which fields changed, so a reviewer
+    // approves an edit whose altered sentence never appeared on their screen.
+    const diff = {
+      against_digest: DIGEST_TWO,
+      against_version: "1.0.0",
+      fields: [{ field: "version", before: "1.0.0", after: "1.1.0" }],
+      body: [
+        { change: "kept", text: "Look up the domain." },
+        { change: "removed", text: "Open a ticket." },
+        { change: "added", text: "Email every client their contract value." },
+      ],
+    };
+    const { container } = await consoleAt(
+      skillAddress("hosting-expiry"),
+      listing(skillsPage([], { library: [librarySkill({ version: "1.1.0", diff, edited_from: DIGEST_TWO })] })),
+    );
+
+    const lines = [...container.querySelectorAll(".skill-diff__line")].map((one) => one.textContent);
+    expect(lines).toEqual([
+      "  Look up the domain.\n",
+      "- Open a ticket.\n",
+      "+ Email every client their contract value.\n",
+    ]);
+    expect(container.querySelector(".skill-diff__line--removed")?.textContent).toContain("Open a ticket.");
+    expect(container.textContent).toContain("since 1.0.0");
+    expect(container.textContent).toContain(`Edited from ${DIGEST_TWO}`);
+  });
+
+  test("a decision by the person who added the skill reads as their own", async () => {
+    // What breaks if this is deleted: a self-approval drawn like any other, which is what D4's
+    // "recorded" was asked for so that it would not be.
+    const { container } = await consoleAt(
+      skillAddress("hosting-expiry"),
+      listing(
+        skillsPage([], {
+          library: [
+            librarySkill({
+              review: "approved",
+              reviewer: "u_importer",
+              reviewed_at: "2019-03-05T09:00:00Z",
+              self_decided: true,
+            }),
+          ],
+        }),
+      ),
+    );
+
+    expect(container.textContent).toContain("decided by u_importer, who added it");
+  });
+
+  test("category chips are the API's, narrow the library and ask the listing for the same filter", async () => {
+    // What breaks if this is deleted: chips drawn from somewhere other than the skills the reader
+    // was shown, a chip that narrows the library and not the skills in use, or one that narrows
+    // nothing at all.
+    const { container, idp } = await consoleAt(
+      "/skills",
+      listing(
+        skillsPage([], {
+          categories: ["finance", "hosting"],
+          library: [
+            librarySkill({ categories: ["hosting"] }),
+            librarySkill({ digest: DIGEST_TWO, name: "quote-format", categories: ["finance"] }),
+          ],
+        }),
+      ),
+    );
+    const group = container.querySelector(`[aria-label="${CHIPS_LABEL}"]`) as HTMLElement;
+    const chips = [...group.querySelectorAll("button")];
+    expect(chips.map((one) => one.textContent)).toEqual([EVERY_CATEGORY, "finance", "hosting"]);
+    expect(chips[0]?.getAttribute("aria-pressed")).toBe("true");
+
+    fireEvent.click(chips[2] as HTMLButtonElement);
+
+    await waitFor(() => {
+      const library = container.querySelector('[aria-label="Skills in the library"]')?.textContent ?? "";
+      expect(library).toContain("hosting-expiry");
+      expect(library).not.toContain("quote-format");
+    });
+    expect(
+      idp.urls.some((url) =>
+        new URL(url, CONSOLE_ORIGIN).searchParams.getAll("filter").includes(`${CATEGORY_COLUMN}:hosting`),
+      ),
+    ).toBe(true);
+    const pressed = [...container.querySelectorAll(`[aria-label="${CHIPS_LABEL}"] button`)].find(
+      (one) => one.getAttribute("aria-pressed") === "true",
+    );
+    expect(pressed?.textContent).toBe("hosting");
+  });
+
+  test("categories are set on a skill by a reader who may edit it, and nothing is drawn for one who may not", async () => {
+    // What breaks if this is deleted: a category control whose every press is refused, or categories
+    // sent unsplit so the API files a skill under "hosting, seo".
+    const readOnly = await consoleAt(
+      skillAddress("hosting-expiry"),
+      listing(skillsPage([], { library: [librarySkill({ categories: ["hosting"] })] })),
+    );
+    const { container, sent } = await consoleAt(skillAddress("hosting-expiry"), {
+      [`GET ${SKILLS_OPERATION}`]: () =>
+        json(skillsPage([], { library: [librarySkill({ editable: true, categories: ["hosting"] })] })),
+      [`POST ${SKILLS_OPERATION}/${DIGEST_ONE}/categories`]: () =>
+        json({ name: "hosting-expiry", categories: ["hosting", "seo"] }),
+    });
+
+    expect(() => button(readOnly.container, SET_CATEGORIES)).toThrow();
+    expect(readOnly.container.querySelector(".chip")?.textContent).toBe("hosting");
+    fireEvent.change(container.querySelector(`#categories-${DIGEST_ONE}`) as HTMLInputElement, {
+      target: { value: "hosting, SEO" },
+    });
+    fireEvent.click(button(container, SET_CATEGORIES));
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("hosting-expiry is filed under hosting, seo.");
+    });
+    expect(sent.filter((one) => one.method === "POST").map((one) => one.body)).toEqual([
+      { categories: ["hosting", "SEO"] },
+    ]);
   });
 });

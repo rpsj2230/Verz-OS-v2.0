@@ -13,10 +13,37 @@ takes a package, a pasted or uploaded `SKILL.md` or a zip holding one, asks
 runs nothing, and writes it undecided. Its ledger entry is `0056`'s trigger. See
 `AN_IMPORT_IS_A_SUBMISSION_AND_NEVER_AN_APPROVAL`.
 
-**Approving is a second person, and the first is refused whatever they hold.**
-`POST /skills/{digest}/review` asks `may_review`, then `decided`, which refuses the importer before
-it asks anything else, and the table refuses the same row again. See
-`brain.console.skill_library.NOBODY_DECIDES_ABOUT_A_SKILL_THEY_ADDED`.
+**A skill is also imported from a repository at a commit, or from an address (M12.2.2,
+M12.2.3).** `POST /skills/imports` asks `may_add` before anything is read or fetched, checks the
+source's shape, and only then fetches, through `brain.tools.fetch`, whose address rule and host
+list are applied to every hop, over `brain.ops.skill_fetch.HttpsFetcher`, which connects to the
+address the rule checked. The fetch runs off the event loop. What arrives is read by
+`brain.console.skill_library.read_github` or `read_url` and lands undecided, exactly as a pasted
+package does. See `AN_IMPORT_IS_A_SUBMISSION_AND_NEVER_AN_APPROVAL`.
+
+**Approving is the review authority's, and an administrator may approve their own import
+(M12.4.6).** `POST /skills/{digest}/review` asks `may_review`, then `decided`. The owner decided
+D4 on 2026-09-18, so the importer is no longer refused; their decision is written with
+`self_decided` set, which the table admits only for the importer's own row and the ledger records
+as `self_approved` or `self_rejected`, the word the audit screen's search finds. See
+`brain.console.skill_library.AN_ADMINISTRATOR_MAY_APPROVE_WHAT_THEY_IMPORTED_AND_THE_LEDGER_SAYS_SO`.
+
+**An edit is saved as a new version that waits for review (M12.3.2).**
+`POST /skills/{digest}/versions` takes the edited `SKILL.md`, asks `may_add`, and `edited` parses
+it as an import is parsed.
+The version it came from is untouched and stays in the library with its body readable, and every
+agent keeps the digest it is pinned to. See
+`brain.console.skill_library.AN_EDIT_IS_A_NEW_VERSION_AND_MOVES_NO_PIN`.
+
+**The review pane shows the words that changed (M12.2.6).** A library row carries
+`brain.tools.review.content_diff` against the version `compared_with` names, frontmatter fields
+before and after and the body line by line, for a reader the body is disclosed to and nobody else.
+
+**Categories are set on a skill's name and offered as filters drawn from what was shown
+(M12.4.13).** `POST /skills/{digest}/categories` asks `may_add`; the page's `categories` are
+`brain.console.skill_library.chips` over the library rows and the catalogue rows this reader was
+given, so a category only a hidden skill carries is never offered. The catalogue filters on them
+through `brain.listing`; the library, which is not paged, is filtered on the screen.
 
 **What a skill is trusted to reach is on the answer, computed from the registry.** Every library
 row carries the tools the `SKILL.md` names, the capability each registered tool requires and the
@@ -62,22 +89,23 @@ and one that matches pins the bytes a named second person approved. That was
 `AN_ASSIGNMENT_BUILT_ON_A_DIGEST_SOMEBODY_TYPED_IS_AN_APPROVAL_THEY_GRANTED_THEMSELVES` before a
 library existed, and it is answered by the library rather than argued away.
 
-**What has never run.** This repository has no PostgreSQL, so the statements have not been executed
-against one here; `tests/unit/test_skill_store.py` runs them against a scratch server where one
-exists and skips otherwise.
+**What runs against a database.** `tests/unit/test_skill_store.py` runs the statements, the
+triggers and the checks against a scratch PostgreSQL, which the development machine has had since
+2026-09-28; without one those tests skip.
 
 **The skills the reader's agents run page, search, filter and order through `brain.listing`**,
 over the rows `catalogue` built from the agents this reader's audience covers, with the agent load
 bounded by `MAX_AGENTS_CONSIDERED` whatever was asked.
 
-Task ids: M42.6.4, M27.8.6
+Task ids: M42.6.4, M27.8.6, M12.2.2, M12.2.3, M12.2.5, M12.2.6, M12.3.2, M12.4.6, M12.4.13
 """
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import binascii
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Annotated, Final, Literal, Protocol, runtime_checkable
@@ -114,36 +142,49 @@ from brain.console.govern_estate import skill_queue
 from brain.console.reads import permitted
 from brain.console.screens import screen
 from brain.console.skill_library import (
+    MAX_CATEGORIES,
     SKILL_AUTHORITY,
     Assignment,
     LibrarySkill,
+    Package,
     SkillLibraryError,
     SkillReach,
     ToolReach,
     added,
     another_spelling,
     assignment,
+    categories_from,
+    chips,
+    compared_with,
     decided,
+    edited,
+    github_source,
     may_add,
     may_assign,
     may_read_library,
     may_review,
     queue_entries,
     reach_through,
+    read_github,
     read_package,
+    read_url,
     trusted_reach,
+    url_source_problem,
 )
 from brain.console.workspace import WorkspaceError
 from brain.core.entitlement import EntitlementSet
 from brain.core.errors import Absent, Failed
 from brain.listing import Column, ListAsked, Listing
+from brain.ops.skill_fetch import HttpsFetcher, SystemResolver
 from brain.ops.skill_store import MAX_LIBRARY, StoredSkills
 from brain.prompt_routes import agent_scope_row, every_agent_with_install, installed
 from brain.routing_routes import sessions_of
 from brain.tables.agent import AgentRow
 from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
-from brain.tools.review import QueueEntry
-from brain.tools.skills import DIGEST_RE, SkillPin
+from brain.tools.fetch import Fetcher, Resolver, fetch_skill_source, fetch_skill_url
+from brain.tools.registry import ToolRegistry
+from brain.tools.review import QueueEntry, SkillDiff, content_diff
+from brain.tools.skills import DIGEST_RE, SkillError, SkillPin, markdown_of
 
 log = structlog.get_logger()
 
@@ -225,6 +266,8 @@ class SkillRow(BaseModel):
     pinned_by: tuple[SkillPinView, ...]
     #: The agents on this row are not all pinned to the same bytes of this skill.
     versions_differ: bool
+    #: The categories set on this name. A filing label, never a review word (M12.4.13).
+    categories: tuple[str, ...] = ()
 
 
 class QueueEntryView(BaseModel):
@@ -258,6 +301,37 @@ class SkillQueueView(BaseModel):
     waiting: int
     edits: int
     stale: int
+
+
+class FieldChangeView(BaseModel):
+    """One frontmatter field an edit changed, before and after. `brain.tools.review.FieldChange`."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    field: str
+    before: str
+    after: str
+
+
+class DiffLineView(BaseModel):
+    """One line of the body: kept, removed or added. `brain.tools.review.DiffLine`."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    change: Literal["kept", "removed", "added"]
+    text: str
+
+
+class SkillDiffView(BaseModel):
+    """The words that changed against the version named beside it (M12.2.6)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    #: The version this one is compared with: its digest and the number its author gave it.
+    against_digest: str
+    against_version: str
+    fields: tuple[FieldChangeView, ...]
+    body: tuple[DiffLineView, ...]
 
 
 class ToolReachView(BaseModel):
@@ -299,6 +373,21 @@ class LibrarySkillView(BaseModel):
     body: str | None
     reviewable: bool
     assignable: bool
+    #: A repository source's commit and folder. Null for any other source (M12.2.2).
+    source_commit: str | None = None
+    source_path: str | None = None
+    #: The version this one was edited from, when it is an edit (M12.3.2).
+    edited_from: str | None = None
+    #: Decided by the person who added it, which the ledger records as such (M12.4.6).
+    self_decided: bool = False
+    #: The categories set on this skill's name (M12.4.13).
+    categories: tuple[str, ...] = ()
+    #: The words that changed, for a reader the body is disclosed to, when there is a version to
+    #: compare with (M12.2.6).
+    diff: SkillDiffView | None = None
+    #: The `SKILL.md` an edit starts from, for a reader who may edit, and whether one may be made.
+    markdown: str | None = None
+    editable: bool = False
 
 
 class AgentChoiceView(BaseModel):
@@ -329,6 +418,15 @@ class SkillsPage(Page[SkillRow]):
     #: No tool registry was built on this process, so no tool a skill names can be resolved and
     #: every tool is listed as unregistered.
     registry_is_absent: bool = False
+    #: The categories to offer as filter chips: those of the skills on this page, and no other.
+    categories: tuple[str, ...] = ()
+
+
+#: One category as typed. Folded and held to the category grammar by `categories_from`.
+CategoryTyped = Annotated[str, Field(max_length=60)]
+
+#: The most categories a request may carry, typed, before folding and deduplication.
+MAX_CATEGORIES_TYPED: Final = 2 * MAX_CATEGORIES
 
 
 class SkillPackageAsked(BaseModel):
@@ -339,6 +437,54 @@ class SkillPackageAsked(BaseModel):
     file_name: str = Field(min_length=1, max_length=200)
     content: str = Field(min_length=1, max_length=MAX_PACKAGE_CHARS)
     encoding: Literal["text", "base64"]
+    categories: tuple[CategoryTyped, ...] = Field(default=(), max_length=MAX_CATEGORIES_TYPED)
+
+
+class SkillImportAsked(BaseModel):
+    """Where to import a skill from: a repository at a commit, or an address (M12.2.2, M12.2.3).
+
+    One shape for both, with the fields that do not apply left empty, because the console sends
+    one form. Nothing here could name the importer, an approval or a host to connect to other than
+    the address itself.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    kind: Literal["github", "url"]
+    #: `owner/repo`.
+    repository: str = Field(default="", max_length=140)
+    #: The full 40-character commit sha.
+    commit: str = Field(default="", max_length=64)
+    #: The folder holding the `SKILL.md`, or empty for the repository's top folder.
+    path: str = Field(default="", max_length=200)
+    #: An https address answering with a `SKILL.md` or a zip holding one.
+    url: str = Field(default="", max_length=2000)
+    categories: tuple[CategoryTyped, ...] = Field(default=(), max_length=MAX_CATEGORIES_TYPED)
+
+
+class SkillEditAsked(BaseModel):
+    """The edited `SKILL.md`. The skill it is a version of is the one in the path (M12.3.2)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    content: str = Field(min_length=1, max_length=MAX_PACKAGE_CHARS)
+
+
+class CategoriesAsked(BaseModel):
+    """The categories a skill's name carries from now on. Empty clears them (M12.4.13)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    categories: tuple[CategoryTyped, ...] = Field(default=(), max_length=MAX_CATEGORIES_TYPED)
+
+
+class CategoriesView(BaseModel):
+    """The categories a skill's name now carries, folded as they were stored."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    categories: tuple[str, ...]
 
 
 class ReviewAsked(BaseModel):
@@ -388,6 +534,12 @@ class SkillLibrary(Protocol):
     async def assign(
         self, made: Assignment, *, expected_hash: str, ent_hash: str, trace_id: str
     ) -> bool: ...
+
+    async def categories(self, names: Sequence[str]) -> Mapping[str, tuple[str, ...]]: ...
+
+    async def categorise(
+        self, name: str, categories: Sequence[str], *, by: str, ent_hash: str, trace_id: str
+    ) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -449,6 +601,22 @@ def library_of(request: Request) -> SkillLibrary:
     if isinstance(found, SkillLibrary):
         return found
     return StoredSkills(_require_sessions(request))
+
+
+def fetcher_of(request: Request) -> Fetcher:
+    """`app.state.skill_fetcher` when something put one there, and the pinned transport else."""
+    found = getattr(request.app.state, "skill_fetcher", None)
+    if isinstance(found, Fetcher):
+        return found
+    return HttpsFetcher()
+
+
+def resolver_of(request: Request) -> Resolver:
+    """`app.state.skill_resolver` when something put one there, and the system's otherwise."""
+    found = getattr(request.app.state, "skill_resolver", None)
+    if isinstance(found, Resolver):
+        return found
+    return SystemResolver()
 
 
 def agent_installs_of(request: Request) -> AgentInstalls:
@@ -530,13 +698,17 @@ def pins_of(
 
 
 # ---------------------------------------------------------------- the projections
-def catalogue(pins: Iterable[SkillPin]) -> tuple[SkillRow, ...]:
+def catalogue(
+    pins: Iterable[SkillPin], categories: Mapping[str, Sequence[str]] | None = None
+) -> tuple[SkillRow, ...]:
     """Every skill these pins name, in name order, with the agents pinned to each.
 
     Grouped by name rather than by name and digest, because a skill whose agents run different
     bytes is one skill with a disagreement on it. See
-    `A_DIFFERENCE_BETWEEN_PINS_IS_ABOUT_THIS_PAGE_AND_NEVER_THE_ESTATE`.
+    `A_DIFFERENCE_BETWEEN_PINS_IS_ABOUT_THIS_PAGE_AND_NEVER_THE_ESTATE`. Each row carries the
+    categories set on its name, which is what the listing filters on (M12.4.13).
     """
+    filed = categories or {}
     held: dict[str, list[SkillPin]] = {}
     for pin in pins:
         held.setdefault(pin.skill_name, []).append(pin)
@@ -548,6 +720,7 @@ def catalogue(pins: Iterable[SkillPin]) -> tuple[SkillRow, ...]:
                 for pin in sorted(held[name], key=lambda one: (one.agent_id, one.digest))
             ),
             versions_differ=len({pin.digest for pin in held[name]}) > 1,
+            categories=tuple(filed.get(name, ())),
         )
         for name in sorted(held)
     )
@@ -590,16 +763,43 @@ def queue_view(
     )
 
 
+def diff_view(diff: SkillDiff, against: LibrarySkill) -> SkillDiffView:
+    """`brain.tools.review.content_diff`'s answer, copied field by field."""
+    return SkillDiffView(
+        against_digest=against.digest,
+        against_version=against.imported.skill.version,
+        fields=tuple(
+            FieldChangeView(field=one.field, before=one.before, after=one.after)
+            for one in diff.fields
+        ),
+        body=tuple(DiffLineView(change=line.change.value, text=line.text) for line in diff.body),
+    )
+
+
+def _markdown(one: LibrarySkill) -> str | None:
+    """The text an edit of this version starts from, or None when it does not read back."""
+    try:
+        return markdown_of(one.imported.skill)
+    except SkillError:
+        return None
+
+
 def library_view(
     one: LibrarySkill,
     reach: SkillReach,
     *,
-    caller_id: str,
     discloses_body: bool,
     reviews: bool,
     assigns: bool,
+    edits: bool = False,
+    categories: Sequence[str] = (),
+    against: LibrarySkill | None = None,
 ) -> LibrarySkillView:
-    """One library row, with the reach the registry gives it and what this reader is offered."""
+    """One library row, with the reach the registry gives it and what this reader is offered.
+
+    `reviewable` no longer asks who added the skill, for D4 (M12.4.6). The diff and the text an
+    edit starts from are words of the skill, so each goes only where the body goes.
+    """
     imported = one.imported
     state = review_state(imported)
     return LibrarySkillView(
@@ -620,10 +820,20 @@ def library_view(
         capabilities=reach.capabilities,
         unregistered_tools=reach.unknown,
         body=imported.skill.body if discloses_body else None,
-        reviewable=(
-            reviews and state is Review.PENDING and one.submitted_by != caller_id and not one.moved
-        ),
+        reviewable=reviews and state is Review.PENDING and not one.moved,
         assignable=assigns and state is Review.APPROVED,
+        source_commit=imported.source.commit or None,
+        source_path=imported.source.path or None,
+        edited_from=one.edited_from,
+        self_decided=one.self_decided,
+        categories=tuple(categories),
+        diff=(
+            diff_view(content_diff(against.imported.skill, imported.skill), against)
+            if discloses_body and against is not None
+            else None
+        ),
+        markdown=_markdown(one) if edits and discloses_body and not one.moved else None,
+        editable=edits and not one.moved,
     )
 
 
@@ -682,6 +892,7 @@ CATALOGUE_LISTING: Final[Listing[SkillRow]] = Listing(
             filter=True,
         ),
         Column("versions_differ", lambda row: row.versions_differ, filter=True),
+        Column("categories", lambda row: row.categories, filter=True),
     ),
     key=lambda row: row.name,
     order="name",
@@ -726,17 +937,22 @@ async def skills(request: Request, asked: Asked, listed: CatalogueQuery) -> Skil
             continue
         pins.extend(pins_of(instance_row, version_row, record))
 
+    store = library_of(request)
     readable = may_read_library(asked.reach, asked.now)
-    library = await library_of(request).library(MAX_LIBRARY) if readable else ()
+    library = await store.library(MAX_LIBRARY) if readable else ()
+    # The names this reader was shown, and nothing else: see `chips`.
+    shown = {pin.skill_name for pin in pins} | {one.name for one in library}
+    filed = await store.categories(sorted(shown))
     registry = _tool_registry(request)
     reviews = may_review(asked.reach, asked.now)
+    adds = may_add(asked.reach, asked.now)
     choices = tuple(
         AgentChoiceView(agent_id=one.agent_id, display_name=one.display_name)
         for one in mine
         if readable and may_assign(asked.reach, agent_scope_row(one), asked.now)
     )
-    discloses = reviews or may_add(asked.reach, asked.now)
-    page = plan.page(list(catalogue(pins)))
+    discloses = reviews or adds
+    page = plan.page(list(catalogue(pins, filed)))
     return SkillsPage(
         items=list(page.items),
         next_cursor=page.next_cursor,
@@ -745,20 +961,21 @@ async def skills(request: Request, asked: Asked, listed: CatalogueQuery) -> Skil
         library=tuple(
             library_view(
                 one,
-                _unresolved(one.imported.skill.tools)
-                if registry is None
-                else trusted_reach(one.imported.skill, registry),
-                caller_id=asked.caller.principal.id,
+                _reach_of(one, registry),
                 discloses_body=discloses,
                 reviews=reviews,
                 assigns=bool(choices),
+                edits=adds,
+                categories=filed.get(one.name, ()),
+                against=compared_with(one, library),
             )
             for one in library
         ),
         library_truncated=len(library) >= MAX_LIBRARY,
         agents=choices,
-        may_add=may_add(asked.reach, asked.now),
+        may_add=adds,
         registry_is_absent=registry is None,
+        categories=chips(filed, shown),
     )
 
 
@@ -773,18 +990,91 @@ def _package_bytes(body: SkillPackageAsked) -> bytes:
         ) from None
 
 
-def _view_for(one: LibrarySkill, request: Request, asked: Asking) -> LibrarySkillView:
-    registry = _tool_registry(request)
+def _reach_of(one: LibrarySkill, registry: ToolRegistry | None) -> SkillReach:
+    """What a library row is trusted to reach, or every tool unresolved with no registry."""
+    if registry is None:
+        return _unresolved(one.imported.skill.tools)
+    return trusted_reach(one.imported.skill, registry)
+
+
+async def _view_for(
+    one: LibrarySkill,
+    request: Request,
+    asked: Asking,
+    library: Sequence[LibrarySkill],
+) -> LibrarySkillView:
+    """The row a write answers with, for the person who made it.
+
+    Every write here is asked of somebody holding the skill or the review authority, so the body
+    is disclosed; the diff is against the library as read for the write.
+    """
+    filed = await library_of(request).categories([one.name])
     return library_view(
         one,
-        _unresolved(one.imported.skill.tools)
-        if registry is None
-        else trusted_reach(one.imported.skill, registry),
-        caller_id=asked.caller.principal.id,
+        _reach_of(one, _tool_registry(request)),
         discloses_body=True,
         reviews=may_review(asked.reach, asked.now),
         assigns=False,
+        edits=may_add(asked.reach, asked.now),
+        categories=filed.get(one.name, ()),
+        against=compared_with(one, [*library, one]),
     )
+
+
+def _categories_or_refused(typed: Sequence[str]) -> tuple[str, ...]:
+    try:
+        return categories_from(typed)
+    except SkillLibraryError as refused:
+        raise _refused_because(str(refused)) from None
+
+
+#: What a write builds its library entry with, from the library as read for the write.
+Making = Callable[[Sequence[LibrarySkill]], LibrarySkill]
+
+
+async def _added(
+    request: Request, asked: Asking, make: Making, categories: tuple[str, ...]
+) -> JSONResponse:
+    """Write one skill undecided, and its categories when some were given, or refuse saying why.
+
+    Shared by a paste, an upload, a repository, an address and an edit, so every way in reaches
+    the library through the same refusals: whatever `make` refuses (`added`'s or `edited`'s),
+    another spelling of a name already held, and bytes already held.
+    """
+    store = library_of(request)
+    held = await store.library(MAX_LIBRARY)
+    try:
+        one = make(held)
+    except SkillLibraryError as refused:
+        raise _refused_because(str(refused)) from None
+    spelt = another_spelling(one.imported.skill, held)
+    if spelt is not None:
+        raise _refused_because(
+            f"this skill was not added: the library already holds {spelt!r}, which is the same "
+            "name spelt differently; name this one the same way if it is a new version of it"
+        )
+    written = await store.add(one, ent_hash=asked.reach.ent_hash(), trace_id=_trace_id())
+    if not written:
+        raise _refused_because(
+            f"this skill was not added: this version of {one.name!r} is already in the library"
+        )
+    if categories:
+        await store.categorise(
+            one.name,
+            categories,
+            by=asked.caller.principal.id,
+            ent_hash=asked.reach.ent_hash(),
+            trace_id=_trace_id(),
+        )
+    log.info(
+        "skill added",
+        skill=one.name,
+        source=one.imported.source.kind.value,
+        edit=one.edited_from is not None,
+        principal=asked.caller.principal.id,
+    )
+    view = await _view_for(one, request, asked, held)
+    return JSONResponse(status_code=201, content=view.model_dump(mode="json"))
 
 
 @router.post(
@@ -799,40 +1089,140 @@ async def add_skill(request: Request, body: SkillPackageAsked, asked: Asked) -> 
     if not may_add(asked.reach, asked.now):
         log.info("skill not addable", principal=asked.caller.principal.id)
         raise _not_answerable()
+    categories = _categories_or_refused(body.categories)
     try:
         package = read_package(body.file_name, _package_bytes(body))
-        one = added(package, by=asked.caller.principal.id, at=asked.now)
     except SkillLibraryError as refused:
         raise _refused_because(str(refused)) from None
-    library = library_of(request)
-    spelt = another_spelling(one.imported.skill, await library.library(MAX_LIBRARY))
-    if spelt is not None:
-        raise _refused_because(
-            f"this skill was not added: the library already holds {spelt!r}, which is the same "
-            "name spelt differently; name this one the same way if it is a new version of it"
-        )
-    written = await library.add(one, ent_hash=asked.reach.ent_hash(), trace_id=_trace_id())
-    if not written:
-        raise _refused_because(
-            f"this skill was not added: this version of {one.name!r} is already in the library"
-        )
-    log.info("skill added", skill=one.name, principal=asked.caller.principal.id)
-    return JSONResponse(
-        status_code=201, content=_view_for(one, request, asked).model_dump(mode="json")
-    )
+    return await _added(request, asked, _adding(package, asked), categories)
+
+
+def _adding(package: Package, asked: Asking) -> Making:
+    """`added`, for this caller at this instant; the library is not asked."""
+    return lambda _held: added(package, by=asked.caller.principal.id, at=asked.now)
+
+
+async def _fetched_package(request: Request, body: SkillImportAsked) -> Package:
+    """Fetch what the import names and read it, off the event loop, or refuse saying why.
+
+    The source's shape is checked before anything is fetched, so a malformed commit or an http
+    address costs no connection. The fetch is `brain.tools.fetch`'s, whose rules apply to every
+    hop, and a refusal from it (an address inside the network, a host off the list, a status that
+    is not an answer) is the importer's to read, since they typed the address.
+    """
+    fetcher, resolver = fetcher_of(request), resolver_of(request)
+    try:
+        if body.kind == "github":
+            source = github_source(body.repository, body.commit, body.path)
+            tarball = await asyncio.to_thread(
+                fetch_skill_source, source, fetcher=fetcher, resolver=resolver
+            )
+            return read_github(source, tarball)
+        url = body.url.strip()
+        problem = url_source_problem(url)
+        if problem is not None:
+            raise SkillLibraryError(f"this skill was not added: {problem}")
+        content = await asyncio.to_thread(fetch_skill_url, url, fetcher=fetcher, resolver=resolver)
+        return read_url(url, content)
+    except SkillLibraryError as refused:
+        raise _refused_because(str(refused)) from None
+    except SkillError as refused:
+        raise _refused_because(f"this skill was not added: {refused}") from None
+
+
+@router.post(
+    "/skills/imports",
+    status_code=201,
+    response_model=LibrarySkillView,
+    responses=COMMON_RESPONSES,
+)
+async def import_skill(request: Request, body: SkillImportAsked, asked: Asked) -> JSONResponse:
+    """Import one skill from a repository at a commit or from an address, undecided (M12.2.2,
+    M12.2.3).
+
+    The authority is asked before anything is fetched, so a caller who may not add cannot use
+    this server to reach an address, and learns nothing about what one answers.
+    """
+    if not may_add(asked.reach, asked.now):
+        log.info("skill not importable", principal=asked.caller.principal.id)
+        raise _not_answerable()
+    categories = _categories_or_refused(body.categories)
+    package = await _fetched_package(request, body)
+    return await _added(request, asked, _adding(package, asked), categories)
 
 
 Digest = Annotated[str, Path(pattern=DIGEST_PATTERN)]
+
+
+@router.post(
+    "/skills/{digest}/versions",
+    status_code=201,
+    response_model=LibrarySkillView,
+    responses=COMMON_RESPONSES,
+)
+async def edit_skill(
+    request: Request, digest: Digest, body: SkillEditAsked, asked: Asked
+) -> JSONResponse:
+    """Save an edit of one skill as a new version, undecided (M12.3.2).
+
+    The authority first, before the digest is looked up. The version edited is never changed; see
+    `brain.console.skill_library.AN_EDIT_IS_A_NEW_VERSION_AND_MOVES_NO_PIN`.
+    """
+    if not may_add(asked.reach, asked.now):
+        log.info("skill not editable", principal=asked.caller.principal.id)
+        raise _not_answerable()
+    one = await library_of(request).skill(digest)
+    if one is None:
+        raise _refused_because("nothing was saved: no skill in the library has that digest")
+    return await _added(
+        request,
+        asked,
+        lambda held: edited(
+            one, body.content, by=asked.caller.principal.id, at=asked.now, library=held
+        ),
+        (),
+    )
+
+
+@router.post(
+    "/skills/{digest}/categories", response_model=CategoriesView, responses=COMMON_RESPONSES
+)
+async def categorise_skill(
+    request: Request, digest: Digest, body: CategoriesAsked, asked: Asked
+) -> CategoriesView:
+    """Set the categories a skill's name carries, every version of it at once (M12.4.13).
+
+    The authority first, before the digest is looked up. The digest names the skill so the route
+    never takes a name from the browser: a name nobody added cannot be given categories.
+    """
+    if not may_add(asked.reach, asked.now):
+        log.info("skill not categorisable", principal=asked.caller.principal.id)
+        raise _not_answerable()
+    categories = _categories_or_refused(body.categories)
+    store = library_of(request)
+    one = await store.skill(digest)
+    if one is None:
+        raise _refused_because("nothing was saved: no skill in the library has that digest")
+    await store.categorise(
+        one.name,
+        categories,
+        by=asked.caller.principal.id,
+        ent_hash=asked.reach.ent_hash(),
+        trace_id=_trace_id(),
+    )
+    log.info("skill categorised", skill=one.name, principal=asked.caller.principal.id)
+    return CategoriesView(name=one.name, categories=categories)
 
 
 @router.post("/skills/{digest}/review", response_model=LibrarySkillView, responses=COMMON_RESPONSES)
 async def review_skill(
     request: Request, digest: Digest, body: ReviewAsked, asked: Asked
 ) -> LibrarySkillView:
-    """Approve or reject one skill, as somebody who did not add it, once.
+    """Approve or reject one skill, once, as the review authority, the importer included (M12.4.6).
 
-    The authority first, before the digest is looked up. Then `decided`, which refuses the importer
-    before anything else about the skill is considered.
+    The authority first, before the digest is looked up. A decision by the person who added the
+    skill is written as their own, and the ledger records it as such; see
+    `brain.console.skill_library.AN_ADMINISTRATOR_MAY_APPROVE_WHAT_THEY_IMPORTED_AND_THE_LEDGER_SAYS_SO`.
     """
     if not may_review(asked.reach, asked.now):
         log.info("skill not reviewable", principal=asked.caller.principal.id)
@@ -855,8 +1245,13 @@ async def review_skill(
         raise _refused_because(
             f"nothing was decided: somebody decided about {one.name!r} first; reload to see it"
         )
-    log.info("skill decided", skill=one.name, principal=asked.caller.principal.id)
-    return _view_for(after, request, asked)
+    log.info(
+        "skill decided",
+        skill=one.name,
+        own=after.self_decided,
+        principal=asked.caller.principal.id,
+    )
+    return await _view_for(after, request, asked, await library.library(MAX_LIBRARY))
 
 
 @router.post(

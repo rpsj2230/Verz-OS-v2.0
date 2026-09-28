@@ -266,11 +266,20 @@ class LegalHoldChange(enum.StrEnum):
 
 
 class SkillChange(enum.StrEnum):
-    """What happened to a skill in the library. The three values `0056`'s triggers write."""
+    """What happened to a skill in the library. The values `0056`'s and `0121`'s triggers write.
+
+    `0121` adds an edit, a decision by the person who added the skill, and a change of categories.
+    A self-decision is its own word rather than a flag beside `approved`, because the audit screen
+    finds an entry by what its details say and a word is what a search matches (M12.4.6).
+    """
 
     IMPORTED = "imported"
     APPROVED = "approved"
     REJECTED = "rejected"
+    EDITED = "edited"
+    SELF_APPROVED = "self_approved"
+    SELF_REJECTED = "self_rejected"
+    CATEGORISED = "categorised"
 
 
 class ConnectorChange(enum.StrEnum):
@@ -934,8 +943,19 @@ class AuditRecorder:
             AuditAction.LEGAL_HOLD, subject("legal_hold", hold_id), {"change": change.value}
         )
 
-    def skill(self, *, name: str, digest: str, change: SkillChange) -> AuditEntry:
+    def skill(
+        self,
+        *,
+        name: str,
+        digest: str,
+        change: SkillChange,
+        source: str | None = None,
+        edited_from: str | None = None,
+    ) -> AuditEntry:
         """Record that a skill was added to the library, or approved or rejected.
+
+        `0121` adds how an import arrived (`source`, one of the three source kinds) and, for an
+        edit, the version it was edited from, which the import trigger writes beside the digest.
 
         Written in a deployed database by `0056`'s triggers, on an insert into `agent.skill` for
         an import and into `agent.skill_review` for a decision, and held to this method's details
@@ -950,11 +970,15 @@ class AuditRecorder:
         if not re.fullmatch(DIGEST, digest):
             msg = f"{digest!r} is not the sha256 of a skill; the entry would not say which bytes"
             raise ValueError(msg)
-        return self._write(
-            AuditAction.SKILL,
-            subject("skill", name),
-            {"change": change.value, "digest": digest},
-        )
+        details: dict[str, str] = {"change": change.value, "digest": digest}
+        if edited_from is not None:
+            if not re.fullmatch(DIGEST, edited_from):
+                msg = f"{edited_from!r} is not the sha256 of a skill; the edit would not say whose"
+                raise ValueError(msg)
+            details["edited_from"] = edited_from
+        if source is not None:
+            details["source"] = source
+        return self._write(AuditAction.SKILL, subject("skill", name), details)
 
     def connector(self, *, connector: str, change: ConnectorChange) -> AuditEntry:
         """Record that a source was connected from the console, or disconnected.

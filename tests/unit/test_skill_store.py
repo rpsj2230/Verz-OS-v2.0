@@ -12,7 +12,7 @@ Task ids: M42.6.4
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from typing import Any
@@ -28,15 +28,19 @@ from brain.audit.ledger import DIGEST, IDENTIFIER, AuditAction, AuditChain, Audi
 from brain.audit.record import AuditRecorder, SkillChange
 from brain.console.skill_library import (
     ASSIGN_REASON,
+    MAX_CATEGORIES,
     REPLACE_REASON,
     SKILL_AUTHORITY,
     SKILLS_PATH,
     LibrarySkill,
+    Package,
     added,
     assignment,
     decided,
+    edited,
     ledger_reference,
     read_package,
+    read_url,
 )
 from brain.console.workspace import Part
 from brain.db import metadata
@@ -54,7 +58,7 @@ from brain.ops.skill_store import (
 from brain.session import make_session_factory
 from brain.tables import skill as table_module
 from brain.tables.skill import SkillReviewRow, SkillRow
-from brain.tools.skills import SKILL_NAME_RE, Skill, SkillSource, SkillState
+from brain.tools.skills import COMMIT_RE, SKILL_NAME_RE, Skill, SkillSource, SkillState, SourceKind
 from tests.fixtures.retirable import has_pgvector, retirable
 from tests.fixtures.scratch_postgres import migrate, run, sql
 from tests.unit.test_automation_owner_store import app_engine, as_app
@@ -68,7 +72,7 @@ from tests.unit.test_skill_library import (
     reach,
     text_with,
 )
-from tests.unit.test_tables import VERSIONS, migration_module, rendered, squash
+from tests.unit.test_tables import VERSIONS, as_amended, migration_module, rendered, squash
 
 DIALECT = create_engine("postgresql+psycopg://", poolclass=NullPool).dialect
 
@@ -137,23 +141,23 @@ def test_the_migration_and_the_model_hold_the_grammars_and_figures_they_copied()
 
 @pytest.mark.parametrize("qualified", TABLES)
 def test_the_migration_builds_each_table_exactly_as_the_model_declares_it(qualified: str) -> None:
-    """Compared as rendered DDL, for the reason `test_tables` compares 0002's. Delete this and the
-    model can gain a column or lose a key with the database built the old way."""
+    """Compared as rendered DDL, for the reason `test_tables` compares 0002's, with `0121`'s
+    declared amendments applied. Delete this and the model can gain a column or lose a key with the
+    database built the old way."""
     expected = squash(str(CreateTable(metadata.tables[qualified]).compile(dialect=DIALECT)))
 
-    assert expected in squash(rendered("upgrade", MIGRATION))
+    assert expected in as_amended(rendered("upgrade", MIGRATION))
 
 
-def test_nobody_decides_their_own_import_and_only_an_approved_skill_is_assigned_in_the_tables() -> (
-    None
-):
-    """The two rules the domain enforces are in the tables' own definitions: a decision refuses a
-    decider who is the importer, whose copy is held to the skill row by a composite key, and an
-    assignment names the decision `approved` through a key.
+def test_a_self_decision_must_say_so_and_only_an_approved_skill_is_assigned_in_the_tables() -> None:
+    """The rules the domain enforces are in the tables' own definitions: a decision by the importer
+    is admitted only as a row saying it is their own, and only the importer's row may say so, whose
+    copy is held to the skill row by a composite key; an assignment names the decision `approved`
+    through a key.
 
     Delete this and either constraint can be dropped from the model and the migration together,
-    every rendered comparison above still passes, and a hand-written statement approves its own
-    import or assigns a rejected skill."""
+    every rendered comparison above still passes, and a hand-written statement records a
+    self-approval as an ordinary one or assigns a rejected skill."""
     review = squash(
         str(CreateTable(metadata.tables["agent.skill_review"]).compile(dialect=DIALECT))
     )
@@ -161,7 +165,9 @@ def test_nobody_decides_their_own_import_and_only_an_approved_skill_is_assigned_
         str(CreateTable(metadata.tables["agent.skill_assignment"]).compile(dialect=DIALECT))
     )
 
-    assert "CHECK (decided_by <> submitted_by)" in review
+    assert "CHECK (self_decided OR submitted_by <> decided_by)" in review
+    assert "CHECK (NOT self_decided OR decided_by = submitted_by)" in review
+    assert "self_decided BOOLEAN DEFAULT false NOT NULL" in review
     assert (
         "FOREIGN KEY(digest, submitted_by) REFERENCES agent.skill (digest, submitted_by)" in review
     )
@@ -344,6 +350,7 @@ def test_the_inserts_do_nothing_on_the_key_and_say_what_they_wrote() -> None:
         "submitted_by": IMPORTER,
         "decision": "approved",
         "decided_by": REVIEWER,
+        "self_decided": False,
     }
     assert compiled(install_hash_locked(AGENT)).endswith("FOR UPDATE")
 
@@ -531,23 +538,31 @@ def test_an_import_and_a_decision_each_write_one_row_and_one_entry_through_the_s
     assert library[0].imported.reviewer == REVIEWER
     skill_entries = [entry for entry in chain if entry.action is AuditAction.SKILL]
     assert [(entry.actor_id, entry.subject, dict(entry.details)) for entry in skill_entries] == [
-        (IMPORTER, "skill:hosting-expiry", {"change": "imported", "digest": one.digest}),
+        (
+            IMPORTER,
+            "skill:hosting-expiry",
+            {"change": "imported", "digest": one.digest, "source": "upload"},
+        ),
         (REVIEWER, "skill:hosting-expiry", {"change": "approved", "digest": one.digest}),
     ]
     assert AuditChain(chain).verify() is None
 
 
-def test_the_database_refuses_a_decision_by_the_importer_and_an_assignment_nobody_approved() -> (
-    None
-):
+def test_the_database_refuses_an_unsaid_self_decision_and_an_assignment_nobody_approved() -> None:
     """Measured as the application role, with the session naming the actor so the policy admits the
-    row: the check refuses the importer as decider, the key refuses an assignment of undecided
-    bytes, and an assignment of approved bytes is recorded under the folded name.
+    row: the check refuses the importer as decider when the row does not say it is their own, the
+    key refuses an assignment of undecided bytes, and an assignment of approved bytes is recorded
+    under the folded name.
 
     Delete this and both rules are claims about a table definition nobody has run. **Skips without
     a server.**"""
     with through_0056("brain_skill_library_refusals") as url:
-        one = a_skill(text_with(name="quote-format", description="Formats a quote for a client"))
+        one = a_skill(
+            text_with(
+                name="quote-format",
+                description="Use when a client asks for a quote to be formatted",
+            )
+        )
         values = skill_values(one)
         columns = ", ".join(values)
         marks = ", ".join(["%s"] * len(values))
@@ -609,3 +624,376 @@ def test_the_database_refuses_a_decision_by_the_importer_and_an_assignment_nobod
         )
     ]
     assert AuditChain(chain).verify() is None
+
+
+# ------------------------------------------------------------------------------------ 0121
+MIGRATION_0121 = VERSIONS / "0121_skill_sources_versions_and_categories.py"
+
+
+def test_0121_copies_the_grammars_and_figures_the_models_and_the_domain_hold() -> None:
+    """`0121` copies a commit grammar, a path grammar, the category bound, the widened source and
+    decider predicates and the source kinds. Delete this and one side can change alone: a source
+    the domain builds and the table refuses after the press, or a category count the table and the
+    library disagree about."""
+    migration = migration_module(MIGRATION_0121)
+
+    assert migration.COMMIT_PATTERN == table_module.COMMIT_PATTERN == COMMIT_RE.pattern
+    assert migration.PATH_PATTERN == table_module.PATH_PATTERN
+    assert migration.MAX_CATEGORIES == table_module.MAX_CATEGORIES == MAX_CATEGORIES
+    assert (migration.IDENTIFIER, migration.DIGEST) == (IDENTIFIER, DIGEST)
+    assert migration.SKILL_NAME_PATTERN == table_module.SKILL_NAME_PATTERN
+    assert migration.SOURCE_AFTER == table_module.SOURCE_KIND_CHECK
+    assert migration.DECIDER_AFTER == table_module.NOBODY_DECIDES_THEIR_OWN_UNLESS_SAID
+    assert set(table_module.SOURCE_KINDS) == {kind.value for kind in SourceKind}
+    assert migration.PATH_CHARS == table_module.PATH_CHARS == longest(SkillSource, "path")
+    assert migration.TABLES == ("agent.skill_category",)
+
+
+def test_0121_emits_the_amendments_the_model_comparison_believes() -> None:
+    """`AMENDS_CREATE_TABLE` and `SUPERSEDES` are claims the DDL comparison above trusts. Each
+    added column is emitted with the checks the model declares on it, the key is emitted, the two
+    widened checks are emitted under `0056`'s names, and the category table is built as its model.
+
+    Delete this and `0121` can say it added a column or widened a check while its upgrade does
+    neither, and every comparison built on the claim stays green."""
+    emitted = squash(rendered("upgrade", MIGRATION_0121))
+    model = {
+        str(one.name): str(one.sqltext)
+        for qualified in ("agent.skill", "agent.skill_review")
+        for one in metadata.tables[qualified].constraints
+        if hasattr(one, "sqltext")
+    }
+
+    statements = [one.strip() for one in emitted.split(";")]
+    for column, width, checks in (
+        (
+            "source_commit",
+            "VARCHAR(40)",
+            ("source_commit_shape", "a_repository_source_names_its_commit"),
+        ),
+        ("source_path", "VARCHAR(200)", ("source_path_on_a_repository_source",)),
+        ("edited_from", "VARCHAR(64)", ("edited_from_another_version",)),
+    ):
+        # A column's constraints are a set to SQLAlchemy, so their order in the statement is not
+        # asserted; each is asserted to be in the one statement that adds the column.
+        (added_column,) = [
+            one
+            for one in statements
+            if one.startswith(f"ALTER TABLE agent.skill ADD COLUMN {column} {width} ")
+        ]
+        for name in checks:
+            assert f"CONSTRAINT ck_skill_{name} CHECK ({model[f'ck_skill_{name}']})" in added_column
+    assert (
+        "ALTER TABLE agent.skill ADD CONSTRAINT fk_skill_edited_from_skill "
+        "FOREIGN KEY(edited_from) REFERENCES agent.skill (digest)"
+    ) in emitted
+    assert (
+        "ALTER TABLE agent.skill_review ADD COLUMN self_decided BOOLEAN DEFAULT false NOT NULL "
+        "CONSTRAINT ck_skill_review_self_decided_only_by_the_importer CHECK "
+        f"({model['ck_skill_review_self_decided_only_by_the_importer']})"
+    ) in emitted
+    assert (
+        "ALTER TABLE agent.skill ADD CONSTRAINT ck_skill_source_is_an_upload CHECK "
+        f"({model['ck_skill_source_is_an_upload']})"
+    ) in emitted
+    assert (
+        "ALTER TABLE agent.skill_review ADD CONSTRAINT "
+        "ck_skill_review_nobody_decides_their_own_import "
+        f"CHECK ({model['ck_skill_review_nobody_decides_their_own_import']})"
+    ) in emitted
+    category = squash(
+        str(CreateTable(metadata.tables["agent.skill_category"]).compile(dialect=DIALECT))
+    )
+    assert category in emitted
+
+
+def test_0121_writes_categories_in_the_session_s_name_only_and_never_edits_them() -> None:
+    """Row-level security on, SELECT and INSERT only, the insert policy in the setter's name, and a
+    trigger after every insert. Delete this and a category change can be written in somebody else's
+    name, edited in place, or made with no ledger entry."""
+    emitted = squash(rendered("upgrade", MIGRATION_0121))
+    principal = "current_setting('app.principal_id', true)"
+
+    assert "ALTER TABLE agent.skill_category ENABLE ROW LEVEL SECURITY" in emitted
+    assert "GRANT SELECT, INSERT ON agent.skill_category TO brain_app" in emitted
+    assert "UPDATE ON agent.skill_category" not in emitted
+    assert "DELETE ON agent.skill_category" not in emitted
+    assert f"FOR INSERT TO brain_app WITH CHECK (set_by = {principal})" in emitted
+    assert (
+        "CREATE TRIGGER skill_category_is_audited AFTER INSERT ON agent.skill_category "
+        "FOR EACH ROW EXECUTE FUNCTION agent.record_skill_category()"
+    ) in emitted
+
+
+def test_0121_s_triggers_write_what_the_recorder_writes_for_an_import_an_edit_and_a_decision() -> (
+    None
+):
+    """An import records its source, an edit the version it came from, and the importer's own
+    decision `self_approved` or `self_rejected`. Delete this and the entry a deployed database keeps
+    and the one `AuditRecorder.skill` writes can come apart, and the audit screen's search for a
+    self-approval finds nothing."""
+    migration = migration_module(MIGRATION_0121)
+    recorder = AuditRecorder(
+        AuditChain(), actor_id=IMPORTER, ent_hash="0" * 32, trace_id="t", clock=lambda: NOW
+    )
+    one = a_skill()
+    imported = recorder.skill(
+        name=one.name, digest=one.digest, change=SkillChange.IMPORTED, source="github"
+    )
+    edited_entry = recorder.skill(
+        name=one.name, digest="e" * 64, change=SkillChange.EDITED, edited_from=one.digest
+    )
+    body = " ".join(migration.SKILL_IMPORT_TRIGGER_FUNCTION.split())
+    review = " ".join(migration.SKILL_REVIEW_TRIGGER_FUNCTION.split())
+    category = " ".join(migration.SKILL_CATEGORY_TRIGGER_FUNCTION.split())
+
+    assert dict(imported.details) == {
+        "change": "imported",
+        "digest": one.digest,
+        "source": "github",
+    }
+    assert dict(edited_entry.details) == {
+        "change": "edited",
+        "digest": "e" * 64,
+        "edited_from": one.digest,
+    }
+    assert (
+        "WHEN NEW.edited_from IS NOT NULL THEN jsonb_build_object( 'change', 'edited', 'digest', "
+        "NEW.digest, 'edited_from', NEW.edited_from )"
+    ) in body
+    assert (
+        "ELSE jsonb_build_object( 'change', 'imported', 'digest', NEW.digest, 'source', "
+        "NEW.source_kind )"
+    ) in body
+    assert (
+        "'change', CASE WHEN NEW.self_decided THEN 'self_' || NEW.decision ELSE NEW.decision END"
+        in review
+    )
+    assert {SkillChange.SELF_APPROVED.value, SkillChange.SELF_REJECTED.value} == {
+        f"self_{SkillState.APPROVED.value}",
+        f"self_{SkillState.REJECTED.value}",
+    }
+    assert f"jsonb_build_object('change', '{SkillChange.CATEGORISED.value}')" in category
+    assert "v_seq, v_at, NEW.set_by, 'skill', v_subject" in category
+
+
+def test_0121_s_downgrade_puts_back_0056_s_trigger_bodies() -> None:
+    """Delete this and a rollback leaves triggers reading columns the rollback dropped, so the next
+    import on the previous release fails inside its own trigger."""
+    old = migration_module(MIGRATION)
+    new = migration_module(MIGRATION_0121)
+
+    def body(text: str) -> str:
+        return " ".join(text.split()).replace("CREATE OR REPLACE FUNCTION", "CREATE FUNCTION")
+
+    assert body(new.PREVIOUS_IMPORT_FUNCTION) == body(old.SKILL_IMPORT_TRIGGER_FUNCTION)
+    assert body(new.PREVIOUS_REVIEW_FUNCTION) == body(old.SKILL_REVIEW_TRIGGER_FUNCTION)
+    down = squash(rendered("downgrade", MIGRATION_0121))
+    assert down.index("CREATE OR REPLACE FUNCTION agent.record_skill_review()") < down.index(
+        "DROP COLUMN self_decided"
+    )
+
+
+def test_a_repository_source_and_an_edit_read_back_as_they_were_added() -> None:
+    """`0121`'s columns written by `skill_values` and read by `library_skill_of`. Delete this and a
+    commit or a folder is read back into the wrong field, or an edit forgets its parent."""
+    source = SkillSource(
+        kind=SourceKind.GITHUB,
+        location="example-org/agent-skills",
+        commit="0" * 40,
+        path="skills/hosting-expiry",
+        content_digest="f" * 64,
+    )
+    package = read_package("SKILL.md", SKILL_MD.encode("utf-8"))
+    one = added(Package(skill=package.skill, source=source), by=IMPORTER, at=NOW)
+    edit = LibrarySkill(
+        imported=one.imported,
+        digest="d" * 64,
+        submitted_by=IMPORTER,
+        submitted_at=NOW,
+        edited_from=one.digest,
+    )
+
+    assert library_skill_of(*rows_for(one)) == one
+    assert skill_values(one)["source_commit"] == "0" * 40
+    assert skill_values(one)["source_path"] == "skills/hosting-expiry"
+    assert skill_values(a_skill())["source_commit"] is None
+    assert skill_values(edit)["edited_from"] == one.digest
+    assert library_skill_of(SkillRow(**skill_values(edit), created_at=NOW), None).edited_from == (  # type: ignore[union-attr]
+        one.digest
+    )
+
+
+@contextmanager
+def through_0121(database: str) -> Iterator[str]:
+    """A database with `0121` applied: the whole chain where the server has pgvector, and
+    otherwise `through_0056`'s chain with the revisions between it and `0121` stamped."""
+    with retirable(database) as url:
+        if not has_pgvector(url):
+            migrate(database, "upgrade", "0049")
+            migrate(database, "stamp", "0053")
+            migrate(database, "upgrade", "0056")
+            migrate(database, "stamp", str(migration_module(MIGRATION_0121).down_revision))
+            migrate(database, "upgrade", "0121")
+        yield url
+
+
+def test_every_way_in_an_edit_a_self_approval_and_categories_reach_the_ledger() -> None:
+    """**M12.2.2, M12.2.3, M12.3.2, M12.4.6 and M12.4.13 through the store and the application
+    role.** A skill from a repository and one from an address, an edit of the first, a
+    self-approval of the edit and categories set twice: every row reads back as written, the
+    newest categories are the ones that apply, and the ledger holds one `skill` entry for each
+    write, saying how each import arrived, which version the edit came from, that the approval was
+    the importer's own, and that categories changed; the chain verifies. **Skips without a
+    server.**"""
+    github = added(read_package("SKILL.md", SKILL_MD.encode("utf-8")), by=IMPORTER, at=NOW)
+    github = LibrarySkill(
+        imported=github.imported.model_copy(
+            update={
+                "source": SkillSource(
+                    kind=SourceKind.GITHUB,
+                    location="example-org/agent-skills",
+                    commit="0" * 40,
+                    path="skills/hosting-expiry",
+                    content_digest=github.imported.source.content_digest,
+                )
+            }
+        ),
+        digest=github.digest,
+        submitted_by=IMPORTER,
+        submitted_at=NOW,
+    )
+    quote = text_with(name="quote-format", description="Use when a client asks for a quote")
+    from_url = added(
+        read_url("https://raw.githubusercontent.com/o/r/main/SKILL.md", quote.encode()),
+        by=IMPORTER,
+        at=NOW,
+    )
+    new_text = text_with(version="1.1.0").replace("open a ticket", "call the client")
+    edit = edited(github, new_text, by=IMPORTER, at=NOW, library=(github,))
+    own = decided(edit, reviewer=IMPORTER, approve=True, at=NOW)
+
+    with through_0121("brain_skill_library_0121") as url:
+
+        async def writes() -> tuple[tuple[LibrarySkill, ...], Mapping[str, tuple[str, ...]]]:
+            engine = app_engine(url)
+            try:
+                store = StoredSkills(make_session_factory(engine))
+                for one in (github, from_url, edit):
+                    assert await store.add(one, ent_hash="a" * 32, trace_id="trace-add")
+                assert await store.decide(own, ent_hash="b" * 32, trace_id="trace-own")
+                for categories in (("hosting",), ("hosting", "seo")):
+                    await store.categorise(
+                        github.name, categories, by=IMPORTER, ent_hash="c" * 32, trace_id="t"
+                    )
+                return await store.library(), await store.categories(
+                    [github.name, from_url.name, "nobody-filed-this"]
+                )
+            finally:
+                await engine.dispose()
+
+        library, filed = run(writes)
+        chain = entries(url)
+
+    by_digest = {one.digest: one for one in library}
+
+    def written(one: LibrarySkill) -> tuple[object, ...]:
+        # The instant is the database's own clock on the way back, not the one the test chose.
+        return (one.imported, one.digest, one.submitted_by, one.edited_from)
+
+    assert written(by_digest[github.digest]) == written(github)
+    assert written(by_digest[from_url.digest]) == written(from_url)
+    assert by_digest[edit.digest].edited_from == github.digest
+    assert by_digest[edit.digest].self_decided is True
+    assert by_digest[edit.digest].imported.is_executable() is True
+    assert filed == {github.name: ("hosting", "seo")}
+    skill_entries = [
+        (entry.actor_id, entry.subject, dict(entry.details))
+        for entry in chain
+        if entry.action is AuditAction.SKILL
+    ]
+    assert skill_entries == [
+        (
+            IMPORTER,
+            "skill:hosting-expiry",
+            {"change": "imported", "digest": github.digest, "source": "github"},
+        ),
+        (
+            IMPORTER,
+            "skill:quote-format",
+            {"change": "imported", "digest": from_url.digest, "source": "url"},
+        ),
+        (
+            IMPORTER,
+            "skill:hosting-expiry",
+            {"change": "edited", "digest": edit.digest, "edited_from": github.digest},
+        ),
+        (IMPORTER, "skill:hosting-expiry", {"change": "self_approved", "digest": edit.digest}),
+        (IMPORTER, "skill:hosting-expiry", {"change": "categorised"}),
+        (IMPORTER, "skill:hosting-expiry", {"change": "categorised"}),
+    ]
+    assert AuditChain(chain).verify() is None
+
+
+def test_the_tables_refuse_a_source_or_a_decision_that_does_not_say_what_it_is() -> None:
+    """Measured as the application role: a repository row naming no commit, an upload naming one,
+    an edit of a version that does not exist, a self-decision flag on somebody else's decision,
+    categories set in another person's name and nine categories are each refused, and a
+    self-decision that says so is admitted. **Skips without a server.**"""
+    one = a_skill()
+    values = skill_values(one)
+
+    def inserting(row: Mapping[str, Any]) -> tuple[str, tuple[Any, ...]]:
+        columns = ", ".join(row)
+        marks = ", ".join(["%s"] * len(row))
+        return (
+            f"INSERT INTO agent.skill ({columns}) VALUES ({marks})",  # noqa: S608
+            tuple(psycopg.types.json.Jsonb(v) if k == "tools" else v for k, v in row.items()),
+        )
+
+    with through_0121("brain_skill_library_0121_refusals") as url:
+        with as_app(url, ("app.principal_id", IMPORTER)) as conn:
+            for bad in (
+                values | {"source_kind": "github"},
+                values | {"source_commit": "0" * 40},
+                values | {"source_path": "skills/x"},
+                values | {"edited_from": "e" * 64},
+            ):
+                with pytest.raises(psycopg.errors.IntegrityError):
+                    conn.execute(*inserting(bad))
+            conn.execute(*inserting(values))
+            conn.execute(
+                "INSERT INTO agent.skill_review (digest, submitted_by, decision, decided_by,"
+                " self_decided) VALUES (%s, %s, 'approved', %s, true)",
+                (one.digest, IMPORTER, IMPORTER),
+            )
+            with pytest.raises(psycopg.errors.CheckViolation):
+                conn.execute(
+                    "INSERT INTO agent.skill_category (skill_name, categories, set_by)"
+                    " VALUES (%s, %s, %s)",
+                    (one.name, psycopg.types.json.Jsonb([f"c{n}" for n in range(9)]), IMPORTER),
+                )
+        with (
+            as_app(url, ("app.principal_id", REVIEWER)) as conn,
+            pytest.raises(psycopg.errors.InsufficientPrivilege),
+        ):
+            conn.execute(
+                "INSERT INTO agent.skill_category (skill_name, categories, set_by)"
+                " VALUES (%s, %s, %s)",
+                (one.name, psycopg.types.json.Jsonb(["x"]), IMPORTER),
+            )
+        other = a_skill(text_with(name="quote-format", description="Use when a quote is due"))
+        with as_app(url, ("app.principal_id", IMPORTER)) as conn:
+            conn.execute(*inserting(skill_values(other)))
+        with (
+            as_app(url, ("app.principal_id", REVIEWER)) as conn,
+            pytest.raises(psycopg.errors.CheckViolation),
+        ):
+            conn.execute(
+                "INSERT INTO agent.skill_review (digest, submitted_by, decision, decided_by,"
+                " self_decided) VALUES (%s, %s, 'approved', %s, true)",
+                (other.digest, IMPORTER, REVIEWER),
+            )
+        decided_rows = sql(url, "SELECT digest, self_decided FROM agent.skill_review")
+
+    assert decided_rows == [(one.digest, True)]

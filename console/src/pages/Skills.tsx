@@ -11,12 +11,24 @@
  * something to send and that it is not too large, and posts it. The page then says the skill is
  * waiting for review and asks for the library again, where it is listed with what it names.
  *
+ * **Importing is the same submission from somewhere else (M12.2.2, M12.2.3).** A GitHub repository
+ * at a full commit, with the folder holding the `SKILL.md`, or an https address. The page checks
+ * the shape and nothing else; the API fetches, from its own list of hosts, and refuses in words.
+ *
+ * **An edit is saved as a new version (M12.3.2).** The edit box starts from the text the API sent,
+ * and saving it leaves the version it came from where it is, with every agent still pinned to it.
+ * The review pane shows the words that changed against the version the API names (M12.2.6).
+ *
+ * **Categories are chips (M12.4.13).** The API sends the chips, drawn from the skills this reader
+ * was shown; choosing one narrows the library here and asks the skills-in-use listing for the same.
+ *
  * **What a skill is trusted to reach is drawn from the tools it names**, each with the capability
  * the registered tool requires, and a tool this install does not have is named as such. A skill has
  * no reach of its own, and the page says so in one sentence rather than implying one.
  *
- * **Approve and Reject are drawn only where the API says this reader may decide**, which is never
- * on a skill they added, and each is confirmed with what it does. **Assign is drawn only for an
+ * **Approve and Reject are drawn only where the API says this reader may decide**, which since the
+ * owner's D4 includes a skill they added, and each is confirmed with what it does; a decision by
+ * the person who added the skill is shown as their own (M12.4.6). **Assign is drawn only for an
  * approved skill and only with the agents the API listed**, and the confirmation names the agent.
  * The answer to an assignment is what the skill reaches through that agent for this person, which
  * the page says in words.
@@ -35,7 +47,7 @@
  *
  * Imported statically rather than split, which is `Roles.tsx`'s rule.
  *
- * Task ids: M42.6.4, M27.8.5, M27.8.6
+ * Task ids: M42.6.4, M27.8.5, M27.8.6, M12.2.2, M12.2.3, M12.2.6, M12.3.2, M12.4.6, M12.4.13
  */
 
 import { useState, type ChangeEvent, type FormEvent } from "react";
@@ -51,18 +63,29 @@ import { FailureNotice } from "../ui/FailureNotice";
 import { FieldProblems, problemAttributes } from "../ui/FieldProblems";
 import {
   addedSentence,
+  addressImport,
   assignConsequence,
   assignedSentence,
   assignPath,
   assignQuestion,
+  CATEGORY_COLUMN,
+  categoriesPath,
+  categoriesTyped,
+  categorisedSentence,
   chosen,
   decidedSentence,
   decisionConsequence,
   decisionQuestion,
+  decisionWords,
   driftingRows,
+  editedSentence,
+  IMPORT_PATH,
+  importProblem,
+  inCategory,
   packageProblem,
   pasted,
   readSkillsPage,
+  repositoryImport,
   reviewPath,
   reviewWords,
   skillAddress,
@@ -71,11 +94,15 @@ import {
   SKILL_FILTERS,
   SKILL_SORTS,
   skillApiPath,
+  sourceWords,
   versionsOf,
+  versionsPath,
   type AgentChoice,
   type Assigned,
+  type Categorised,
   type LibrarySkill,
   type PackageBody,
+  type SkillDiff,
   type SkillLibraryRow,
 } from "./skillsQuery";
 import { when } from "./sessionsQuery";
@@ -106,11 +133,41 @@ export const MORE_SKILLS =
 export const ADD_HEADING = "Add a skill";
 export const ADD_LEDE =
   "Paste a SKILL.md, or choose a SKILL.md or a .zip holding only one. It is read and never run, " +
-  "and a skill that declares scripts is refused. It is added unreviewed and cannot be assigned " +
-  "to an agent until somebody other than you approves it.";
+  "and a skill that declares scripts is refused. Its description must open by saying when the " +
+  "skill is used, as in \"Use when a client asks\". It is added unreviewed and cannot be " +
+  "assigned to an agent until it is approved.";
 export const PASTE_LABEL = "Paste a SKILL.md";
 export const FILE_LABEL = "Or choose a file";
 export const ADD = "Add to the library";
+export const CATEGORIES_LABEL = "Categories, separated by commas";
+
+/** Importing from GitHub or an address. */
+export const IMPORT_HEADING = "Import a skill";
+export const IMPORT_LEDE =
+  "Import a SKILL.md from a GitHub repository at one commit, or from an https address on GitHub. " +
+  "The server fetches it, only from GitHub's own hosts, reads it and runs nothing. Only the " +
+  "SKILL.md is taken from a repository folder. It is added unreviewed, as a pasted skill is.";
+export const FROM_REPOSITORY = "From a GitHub repository at a commit";
+export const FROM_ADDRESS = "From an address";
+export const REPOSITORY_LABEL = "Repository, as owner/repository";
+export const COMMIT_LABEL = "Commit, all forty characters";
+export const FOLDER_LABEL = "Folder holding the SKILL.md, empty for the top folder";
+export const ADDRESS_LABEL = "Address of a SKILL.md or a .zip holding one";
+export const IMPORT = "Import";
+
+/** Editing, categories and the words that changed. */
+export const EDIT = "Edit";
+export const EDIT_LABEL = "The SKILL.md, edited";
+export const SAVE_VERSION = "Save as a new version";
+export const STOP_EDITING = "Stop editing";
+export const EDIT_LEDE =
+  "Saving makes a new version that waits for review. This version stays as it is, and every " +
+  "agent keeps the version it runs until somebody assigns the new one. Give the edit a later " +
+  "version number.";
+export const SET_CATEGORIES = "Set categories";
+export const CHANGED_HEADING = "What changed";
+export const CHIPS_LABEL = "Show the skills in one category";
+export const EVERY_CATEGORY = "Every category";
 
 /** What reach means, beside every skill's list of tools. */
 export const REACH_HEADING = "What it is trusted to reach";
@@ -163,9 +220,11 @@ export function queueCount(waiting: number, edits: number, stale: number): strin
 }
 
 /** The names a package is sent under, and the prefix of the lists drawn beside its two inputs. */
-const PACKAGE_FIELDS: readonly string[] = ["content", "file_name", "encoding"];
+const PACKAGE_FIELDS: readonly string[] = ["content", "file_name", "encoding", "categories"];
 const PACKAGE_FILE_NAMES: readonly string[] = ["file_name", "encoding"];
 const PACKAGE_FORM = "skills-add";
+const IMPORT_FORM = "skills-import";
+const IMPORT_FIELDS: readonly string[] = ["kind", "repository", "commit", "path", "url", "categories"];
 
 /** What the last write said, kept above the page while it is read again. */
 interface Told {
@@ -205,9 +264,12 @@ function readFile(file: File): Promise<Uint8Array> {
 function AddSkill({ onTold }: { readonly onTold: Tell }) {
   const [text, setText] = useState("");
   const [file, setFile] = useState<PackageBody | null>(null);
+  const [filed, setFiled] = useState("");
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
-  const body = file ?? (text.trim() === "" ? null : pasted(text));
+  const categories = categoriesTyped(filed);
+  const body =
+    file === null ? (text.trim() === "" ? null : pasted(text, categories)) : { ...file, categories };
   const problem = packageProblem(body);
   const problems = failure?.problems ?? [];
 
@@ -237,6 +299,7 @@ function AddSkill({ onTold }: { readonly onTold: Tell }) {
     if (result.ok) {
       setText("");
       setFile(null);
+      setFiled("");
       onTold({ ok: true, sentence: addedSentence(result.data) });
     } else {
       setFailure(result.failure);
@@ -278,6 +341,20 @@ function AddSkill({ onTold }: { readonly onTold: Tell }) {
           onChange={(event) => void onChoose(event)}
         />
         <FieldProblems problems={problems} form={PACKAGE_FORM} names={PACKAGE_FILE_NAMES} />
+        <label className="control-label" htmlFor="skills-categories">
+          {CATEGORIES_LABEL}
+        </label>
+        <input
+          id="skills-categories"
+          className="form-control"
+          name="categories"
+          value={filed}
+          {...problemAttributes(problems, PACKAGE_FORM, "categories")}
+          onChange={(event) => {
+            setFiled(event.target.value);
+          }}
+        />
+        <FieldProblems problems={problems} form={PACKAGE_FORM} names="categories" />
         {body === null ? null : problem === null ? null : (
           <p className="note" role="alert">
             {problem}
@@ -290,6 +367,293 @@ function AddSkill({ onTold }: { readonly onTold: Tell }) {
         </div>
       </form>
     </section>
+  );
+}
+
+type ImportFrom = "github" | "url";
+
+function ImportSkill({ onTold }: { readonly onTold: Tell }) {
+  const [from, setFrom] = useState<ImportFrom>("github");
+  const [repository, setRepository] = useState("");
+  const [commit, setCommit] = useState("");
+  const [folder, setFolder] = useState("");
+  const [address, setAddress] = useState("");
+  const [filed, setFiled] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  const categories = categoriesTyped(filed);
+  const body =
+    from === "github"
+      ? repositoryImport(repository, commit, folder, categories)
+      : addressImport(address, categories);
+  const problem = importProblem(body);
+  const started = from === "github" ? repository !== "" || commit !== "" : address !== "";
+  const problems = failure?.problems ?? [];
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (problem !== null) {
+      return;
+    }
+    setBusy(true);
+    setFailure(null);
+    const result = await request<LibrarySkill>(IMPORT_PATH, { method: "POST", body });
+    setBusy(false);
+    if (result.ok) {
+      setRepository("");
+      setCommit("");
+      setFolder("");
+      setAddress("");
+      setFiled("");
+      onTold({ ok: true, sentence: addedSentence(result.data) });
+    } else {
+      setFailure(result.failure);
+    }
+  }
+
+  function field(id: string, label: string, name: string, value: string, set: (next: string) => void) {
+    return (
+      <>
+        <label className="control-label" htmlFor={id}>
+          {label}
+        </label>
+        <input
+          id={id}
+          className="form-control"
+          name={name}
+          value={value}
+          {...problemAttributes(problems, IMPORT_FORM, name)}
+          onChange={(event) => {
+            set(event.target.value);
+          }}
+        />
+        <FieldProblems problems={problems} form={IMPORT_FORM} names={name} />
+      </>
+    );
+  }
+
+  return (
+    <section className="card" aria-labelledby="skills-import">
+      <h2 id="skills-import">{IMPORT_HEADING}</h2>
+      <p className="note">{IMPORT_LEDE}</p>
+      {failure === null ? null : <FailureNotice failure={failure} fields={IMPORT_FIELDS} />}
+      <form className="form" aria-label={IMPORT_HEADING} onSubmit={(event) => void onSubmit(event)}>
+        <fieldset className="theme-control">
+          {(
+            [
+              ["github", FROM_REPOSITORY],
+              ["url", FROM_ADDRESS],
+            ] as const
+          ).map(([value, label]) => (
+            <label key={value} className="control-label">
+              <input
+                type="radio"
+                name="kind"
+                value={value}
+                checked={from === value}
+                onChange={() => {
+                  setFrom(value);
+                }}
+              />{" "}
+              {label}
+            </label>
+          ))}
+        </fieldset>
+        {from === "github" ? (
+          <>
+            {field("skills-repository", REPOSITORY_LABEL, "repository", repository, setRepository)}
+            {field("skills-commit", COMMIT_LABEL, "commit", commit, setCommit)}
+            {field("skills-folder", FOLDER_LABEL, "path", folder, setFolder)}
+          </>
+        ) : (
+          field("skills-address", ADDRESS_LABEL, "url", address, setAddress)
+        )}
+        {field("skills-import-categories", CATEGORIES_LABEL, "categories", filed, setFiled)}
+        {started && problem !== null ? (
+          <p className="note" role="alert">
+            {problem}
+          </p>
+        ) : null}
+        <div className="form-actions">
+          <button type="submit" className="button" disabled={busy || problem !== null}>
+            {IMPORT}
+          </button>
+        </div>
+      </form>
+    </section>
+  );
+}
+
+function Changed({ one, diff }: { readonly one: LibrarySkill; readonly diff: SkillDiff }) {
+  const marks = { kept: "  ", removed: "- ", added: "+ " } as const;
+  return (
+    <section aria-label={`${CHANGED_HEADING}: ${one.name} ${one.version}`}>
+      <h3>
+        {CHANGED_HEADING} since {diff.against_version}
+      </h3>
+      <p className="note">
+        Compared with <code>{diff.against_digest}</code>.
+      </p>
+      {diff.fields.length === 0 ? null : (
+        <ul className="roster">
+          {diff.fields.map((change) => (
+            <li key={change.field}>
+              <code>{change.field}</code>: <del>{change.before}</del> <ins>{change.after}</ins>
+            </li>
+          ))}
+        </ul>
+      )}
+      {/* Each line says what happened to it in its text, and `del` and `ins` say it to an eye and a
+          screen reader alike, so no colour is needed and none is added. */}
+      <pre className="skill-diff">
+        {diff.body.map((line, index) => {
+          const key = `${String(index)}-${line.change}`;
+          const text = `${marks[line.change]}${line.text}\n`;
+          const className = `skill-diff__line skill-diff__line--${line.change}`;
+          if (line.change === "removed") {
+            return (
+              <del key={key} className={className}>
+                {text}
+              </del>
+            );
+          }
+          if (line.change === "added") {
+            return (
+              <ins key={key} className={className}>
+                {text}
+              </ins>
+            );
+          }
+          return (
+            <span key={key} className={className}>
+              {text}
+            </span>
+          );
+        })}
+      </pre>
+    </section>
+  );
+}
+
+function EditSkill({ one, onTold }: { readonly one: LibrarySkill; readonly onTold: Tell }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState(one.markdown ?? "");
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  const fieldId = `edit-${one.digest}`;
+
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setFailure(null);
+    const result = await request<LibrarySkill>(versionsPath(one.digest), {
+      method: "POST",
+      body: { content: text },
+    });
+    setBusy(false);
+    if (result.ok) {
+      setOpen(false);
+      onTold({ ok: true, sentence: editedSentence(result.data) });
+    } else {
+      setFailure(result.failure);
+    }
+  }
+
+  if (!open) {
+    return (
+      <div className="form-actions">
+        <button
+          type="button"
+          className="button"
+          aria-label={`${EDIT}: ${one.name} ${one.version}`}
+          onClick={() => {
+            setText(one.markdown ?? "");
+            setOpen(true);
+          }}
+        >
+          {EDIT}
+        </button>
+      </div>
+    );
+  }
+  return (
+    <form className="form" aria-label={`${EDIT}: ${one.name} ${one.version}`} onSubmit={(event) => void save(event)}>
+      <p className="note">{EDIT_LEDE}</p>
+      {failure === null ? null : <FailureNotice failure={failure} fields={["content"]} />}
+      <label className="control-label" htmlFor={fieldId}>
+        {EDIT_LABEL}
+      </label>
+      <textarea
+        id={fieldId}
+        className="form-control"
+        name="content"
+        rows={12}
+        value={text}
+        onChange={(event) => {
+          setText(event.target.value);
+        }}
+      />
+      <div className="form-actions">
+        <button type="submit" className="button" disabled={busy || text.trim() === ""}>
+          {SAVE_VERSION}
+        </button>{" "}
+        <button
+          type="button"
+          className="button"
+          onClick={() => {
+            setOpen(false);
+          }}
+        >
+          {STOP_EDITING}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function Categorise({ one, onTold }: { readonly one: LibrarySkill; readonly onTold: Tell }) {
+  const [filed, setFiled] = useState(one.categories.join(", "));
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  const fieldId = `categories-${one.digest}`;
+
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setFailure(null);
+    const result = await request<Categorised>(categoriesPath(one.digest), {
+      method: "POST",
+      body: { categories: categoriesTyped(filed) },
+    });
+    setBusy(false);
+    if (result.ok) {
+      onTold({ ok: true, sentence: categorisedSentence(result.data) });
+    } else {
+      setFailure(result.failure);
+    }
+  }
+
+  return (
+    <form className="form" aria-label={`${SET_CATEGORIES}: ${one.name}`} onSubmit={(event) => void save(event)}>
+      {failure === null ? null : <FailureNotice failure={failure} fields={["categories"]} />}
+      <label className="control-label" htmlFor={fieldId}>
+        {CATEGORIES_LABEL}
+      </label>
+      <input
+        id={fieldId}
+        className="form-control"
+        name="categories"
+        value={filed}
+        onChange={(event) => {
+          setFiled(event.target.value);
+        }}
+      />
+      <div className="form-actions">
+        <button type="submit" className="button" disabled={busy}>
+          {SET_CATEGORIES}
+        </button>
+      </div>
+    </form>
   );
 }
 
@@ -492,15 +856,29 @@ function Version({
       </h3>
       <p>{one.description}</p>
       <p className="note">
-        {reviewWords(one.review)}. Added by {one.submitted_by} from {one.source}{" "}
-        <code>{one.source_location}</code> on {when(one.submitted_at)}
+        {reviewWords(one.review)}. Added by {one.submitted_by} {sourceWords(one)} on{" "}
+        {when(one.submitted_at)}
         {one.reviewer === null || one.reviewed_at === null
           ? "."
-          : `, decided by ${one.reviewer} on ${when(one.reviewed_at)}.`}
+          : `, ${decisionWords(one)} on ${when(one.reviewed_at)}.`}
       </p>
       <p className="note">
         <code>{one.digest}</code>
       </p>
+      {one.edited_from === null ? null : (
+        <p className="note">
+          Edited from <code>{one.edited_from}</code>.
+        </p>
+      )}
+      {one.categories.length === 0 ? null : (
+        <p className="note">
+          {one.categories.map((category) => (
+            <span key={category} className="chip">
+              {category}
+            </span>
+          ))}
+        </p>
+      )}
       <Reach one={one} registryIsAbsent={registryIsAbsent} />
       {one.body === null ? null : (
         <details>
@@ -508,10 +886,13 @@ function Version({
           <pre>{one.body}</pre>
         </details>
       )}
+      {one.diff === null || one.diff === undefined ? null : <Changed one={one} diff={one.diff} />}
       {one.reviewable ? <Decide one={one} onTold={onTold} /> : null}
       {one.assignable && agents.length > 0 ? (
         <Assign one={one} agents={agents} onTold={onTold} />
       ) : null}
+      {one.editable ? <EditSkill one={one} onTold={onTold} /> : null}
+      {one.editable ? <Categorise one={one} onTold={onTold} /> : null}
     </section>
   );
 }
@@ -544,17 +925,51 @@ function SkillsAnswerView({
   const pinned = openName === undefined ? null : skillIn(openPage.skills, openName);
   const versions = openName === undefined ? [] : versionsOf(page.library, openName);
   const drifting = driftingRows(page.skills);
+  const chosen = listing.question.filters[CATEGORY_COLUMN] ?? "";
+  const shown = inCategory(page.library, chosen);
+
+  function choose(category: string) {
+    listing.ask({
+      ...listing.question,
+      filters: { ...listing.question.filters, [CATEGORY_COLUMN]: category },
+    });
+  }
 
   return (
     <>
       {page.mayAdd ? <AddSkill onTold={onTold} /> : null}
+      {page.mayAdd ? <ImportSkill onTold={onTold} /> : null}
 
       <h2>Library</h2>
-      {page.library.length === 0 ? (
+      {page.categories.length === 0 ? null : (
+        <div className="form-actions" role="group" aria-label={CHIPS_LABEL}>
+          {["", ...page.categories].map((category) => (
+            <button
+              key={category === "" ? "every" : category}
+              type="button"
+              className="button"
+              aria-pressed={chosen === category}
+              onClick={() => {
+                choose(category);
+              }}
+            >
+              {/* Pressed is said to a screen reader by aria-pressed and to an eye by the weight. */}
+              {chosen === category ? (
+                <strong>{category === "" ? EVERY_CATEGORY : category}</strong>
+              ) : category === "" ? (
+                EVERY_CATEGORY
+              ) : (
+                category
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+      {shown.length === 0 ? (
         <p className="note">{NO_LIBRARY}</p>
       ) : (
         <ul className="roster" aria-label={LIBRARY_LABEL}>
-          {page.library.map((one) => (
+          {shown.map((one) => (
             <li key={one.digest}>
               <Link to={skillAddress(one.name)}>{one.name}</Link> {one.version}{" "}
               <span className="note">{reviewWords(one.review)}</span>

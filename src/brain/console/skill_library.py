@@ -21,10 +21,46 @@ runs a script yet either (`brain.tools.run_skill` has no runner), so accepting o
 nobody can review by digest and nothing can execute. See
 `A_SCRIPT_THE_DIGEST_DOES_NOT_COVER_IS_A_SCRIPT_NOBODY_APPROVED`.
 
-**Nobody decides about a skill they added.** A review is the second pair of eyes, and a decision by
-the importer is one pair of eyes wearing two hats. `decided` refuses it before `ImportedSkill`'s own
-refusals run, and `agent.skill_review` refuses it again in its table definition, so a statement that
-never came through this module is refused too. See `NOBODY_DECIDES_ABOUT_A_SKILL_THEY_ADDED`.
+**A skill arrives three ways, and each is read, never run (M12.2.2, M12.2.3, M12.2.4).** A package
+pasted or uploaded (`read_package`); a repository at a full commit sha (`read_github`), whose
+tarball is inflated in memory under a ceiling and from which exactly one member is read, the
+`SKILL.md` at the path asked for; and an https address on `brain.tools.fetch.SKILL_SOURCE_HOSTS`
+(`read_url`), whose answer is a `SKILL.md` or a zip holding one. Each comes out as the same
+imported skill with a different `SkillSource`, so the review and everything after it cannot tell
+how it arrived except by reading the source. The fetch is `brain.tools.fetch`'s and happens before
+this module is called; nothing here opens a connection. **Only the `SKILL.md` is taken from a
+repository folder.** A zip holding anything else is refused, for
+`A_SCRIPT_THE_DIGEST_DOES_NOT_COVER_IS_A_SCRIPT_NOBODY_APPROVED`; a repository folder commonly holds
+a licence or a readme beside its `SKILL.md`, and refusing those would refuse most repositories, so
+they are left where they are and never stored, which is the same outcome by a gentler route: no
+byte the digest does not cover is kept. A `SKILL.md` that declares scripts is still refused.
+
+**An administrator may approve a skill they imported, and the ledger says it was their own (D4,
+M12.4.6).** Until 2026-09-28 `decided` refused the importer whatever they held, and the table
+refused the row. The owner decided otherwise on 2026-09-18: the two-person rule stays for
+irreversible actions, and a skill is not one, since an approved skill reaches nothing until it is
+assigned and an assignment can be undone. So whoever holds the review authority may decide about
+any skill, their own included, and `0121`'s trigger records such a decision as `self_approved` or
+`self_rejected`, which is a word the audit screen's search finds. Somebody who may add and may not
+review still needs somebody else to decide. See
+`AN_ADMINISTRATOR_MAY_APPROVE_WHAT_THEY_IMPORTED_AND_THE_LEDGER_SAYS_SO`.
+
+**An edit is a new version, and nothing that was pinned moves (M12.3.2).** `edited` parses the
+edited `SKILL.md` exactly as an import does, refuses a rename, an edit that changes nothing, and a
+version that is not later than the one edited or is already held, and returns a new library entry
+in the imported state carrying `edited_from`. The old row is never touched, because no row here is
+ever updated, so it stays readable; an agent is pinned to a digest, so every agent keeps the bytes
+it was pinned to until somebody assigns the new ones. See
+`AN_EDIT_IS_A_NEW_VERSION_AND_MOVES_NO_PIN`.
+
+**A reviewer is shown the words that changed.** `compared_with` names the version an entry is
+diffed against, the newest approved version of the same name added before it and otherwise the
+version it was edited from, and `brain.tools.review.content_diff` is the diff.
+
+**Categories are labels an administrator sets on a skill's name, and every version shares them
+(M12.4.13).** They are not part of the digest, because a label is not a procedure and changing one
+must not send a skill back to review. `categories_from` folds and refuses them; `chips` draws the
+filter from the skills a reader was already shown and from nothing else.
 
 **What a skill is trusted to reach is its tools' requirements, read off the registry.** A skill
 declares no reach of its own; `trusted_reach` names each tool the `SKILL.md` lists, the capability
@@ -44,15 +80,18 @@ failure it names is the one this platform exists to prevent. See
 Scope: domain logic. Nothing here opens a connection or reads a clock; rows, the registry and the
 instant arrive as arguments.
 
-Task ids: M42.6.4
+Task ids: M42.6.4, M12.2.2, M12.2.3, M12.2.4, M12.2.6, M12.3.2, M12.4.6, M12.4.13
 """
 
 from __future__ import annotations
 
 import hashlib
 import io
+import re
+import tarfile
 import zipfile
-from collections.abc import Iterable, Mapping, Sequence
+import zlib
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Final
@@ -87,6 +126,7 @@ from brain.tools.skills import (
     skill_from_markdown,
     skill_reach,
     unknown_tools,
+    version_key,
 )
 
 # ------------------------------------------------------------------ written-down reasons
@@ -110,13 +150,25 @@ A_SCRIPT_THE_DIGEST_DOES_NOT_COVER_IS_A_SCRIPT_NOBODY_APPROVED: Final = (
     "and a digest would stand for code nobody read."
 )
 
-#: Why the importer may not decide.
-NOBODY_DECIDES_ABOUT_A_SKILL_THEY_ADDED: Final = (
-    "A review is a second person reading what the first person wants every agent that carries it "
-    "to follow. A decision by whoever added the skill is one person with two roles, and an "
-    "approval they granted themselves is exactly the approval the review exists to replace. So "
-    "the importer is refused whatever they hold, and the decision table refuses the same row in "
-    "its own definition for a statement that never came through the console."
+#: Why the importer may decide, and what is recorded when they do (D4).
+AN_ADMINISTRATOR_MAY_APPROVE_WHAT_THEY_IMPORTED_AND_THE_LEDGER_SAYS_SO: Final = (
+    "The owner decided on 2026-09-18 that the two-person rule stays for irreversible actions and "
+    "that an administrator may approve a skill they imported, with that approval recorded. An "
+    "approved skill reaches no agent until somebody assigns it, and an assignment is undone by "
+    "assigning another version, so approving is not irreversible. Whoever holds the review "
+    "authority may therefore decide about any skill, their own included, and the ledger records a "
+    "decision by the person who added the skill as self_approved or self_rejected, which the audit "
+    "screen finds by that word. Somebody who may add skills and may not review them still needs "
+    "somebody else to decide."
+)
+
+#: Why an edit is a new row and never a change to the old one.
+AN_EDIT_IS_A_NEW_VERSION_AND_MOVES_NO_PIN: Final = (
+    "An edit is parsed as an import is, and saved as a new version, undecided, beside the one it "
+    "was edited from, which is never changed and stays readable. An agent is pinned to a digest, "
+    "so every agent keeps the version it was pinned to until somebody assigns the new one, and the "
+    "new one cannot be assigned until it is approved. The version number has to be later than the "
+    "one edited and not already held, so two readings of one number are never two procedures."
 )
 
 #: Why an assignment checks the authority it cannot change.
@@ -177,6 +229,32 @@ MAX_PACKAGE_BYTES: Final = 256 * 1024
 MARKDOWN_SUFFIX: Final = ".md"
 ARCHIVE_SUFFIX: Final = ".zip"
 
+#: The first bytes of a zip, which is how a URL's answer is told from a `SKILL.md`: an address
+#: names no file type anybody can trust, and the bytes do.
+ZIP_MAGIC: Final = b"PK\x03\x04"
+
+#: The first bytes of a gzip stream, which a URL answering with a repository tarball sends.
+GZIP_MAGIC: Final = b"\x1f\x8b"
+
+#: The most a repository tarball may inflate to. A skill repository is a few folders of text;
+#: a tarball that inflates past this is a bomb or not a skill repository, and either way it is
+#: refused before a member is listed.
+MAX_UNPACKED_BYTES: Final = 64 * 1024 * 1024
+
+#: The most members a repository tarball may list.
+MAX_TARBALL_MEMBERS: Final = 20_000
+
+#: A category: lower-case letters, digits and hyphens, at most 40. Folded from what was typed.
+CATEGORY_RE: Final = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
+
+#: The longest address a URL import may name: `brain.tools.skills.SkillSource.location`'s bound,
+#: which a test holds this to, so an address the source would refuse is refused before the fetch.
+MAX_ADDRESS_CHARS: Final = 400
+
+#: The most categories one skill carries. Enough to file a skill several ways; a skill in every
+#: category is in none.
+MAX_CATEGORIES: Final = 8
+
 
 def _library_screen_read(reach: EntitlementSet, now: datetime | None) -> bool:
     """The Skills screen's own question: its capability and the configuration plane together."""
@@ -235,10 +313,18 @@ class LibrarySkill:
     digest: str
     submitted_by: str
     submitted_at: datetime
+    #: The digest of the version this one was edited from, when it is an edit (M12.3.2).
+    edited_from: str | None = None
 
     @property
     def name(self) -> str:
         return self.imported.skill.name
+
+    @property
+    def self_decided(self) -> bool:
+        """Decided by the person who added it. See
+        `AN_ADMINISTRATOR_MAY_APPROVE_WHAT_THEY_IMPORTED_AND_THE_LEDGER_SAYS_SO`."""
+        return bool(self.imported.reviewer) and self.imported.reviewer == self.submitted_by
 
     @property
     def moved(self) -> bool:
@@ -286,11 +372,18 @@ def _refused(reason: str) -> SkillLibraryError:
     return SkillLibraryError(f"this skill was not added: {reason}")
 
 
-def _markdown_text(raw: bytes) -> str:
+def _not_saved(reason: str) -> SkillLibraryError:
+    return SkillLibraryError(f"nothing was saved: {reason}")
+
+
+Refusal = Callable[[str], SkillLibraryError]
+
+
+def _markdown_text(raw: bytes, refuse: Refusal = _refused) -> str:
     try:
         text = raw.decode("utf-8")
     except UnicodeDecodeError:
-        raise _refused(
+        raise refuse(
             f"the {SKILL_FILE} is not UTF-8 text; save it as UTF-8 and add it again"
         ) from None
     # One procedure whichever editor saved it. The bytes that arrived are still what the source's
@@ -342,8 +435,29 @@ def _from_archive(content: bytes) -> str:
     return _markdown_text(raw)
 
 
+def _skill_of(text: str, refuse: Refusal = _refused) -> Skill:
+    """The skill a `SKILL.md` declares, held to every rule a package is held to, or a refusal.
+
+    The one parser, `skill_from_markdown`, and then the two refusals the library adds: a skill
+    declaring scripts, for `A_SCRIPT_THE_DIGEST_DOES_NOT_COVER_IS_A_SCRIPT_NOBODY_APPROVED`, and a
+    version in digits other than 0 to 9, which the table's check would refuse after the press.
+    """
+    try:
+        skill = skill_from_markdown(text)
+    except SkillError as refused:
+        raise refuse(str(refused)) from None
+    if skill.scripts:
+        raise refuse(
+            f"it declares scripts {list(skill.scripts)}. "
+            f"{A_SCRIPT_THE_DIGEST_DOES_NOT_COVER_IS_A_SCRIPT_NOBODY_APPROVED}"
+        )
+    if not skill.version.isascii():
+        raise refuse(f"its version {skill.version!r} is not written in the digits 0 to 9")
+    return skill
+
+
 def read_package(file_name: str, content: bytes) -> Package:
-    """Parse a package into a skill and its source, or refuse it in words to act on.
+    """Parse a package into a skill and its source, or refuse it in words to act on (M12.2.4).
 
     See `ADDING_A_SKILL_READS_IT_AND_RUNS_NOTHING` and `A_PACKAGE_REFUSAL_SAYS_WHAT_TO_CHANGE`.
     The source is an upload whatever the browser did, a paste included, because the bytes arrived
@@ -367,24 +481,163 @@ def read_package(file_name: str, content: bytes) -> Package:
         text = _markdown_text(content)
     else:
         raise _refused(f"a package is a {SKILL_FILE} or a .zip holding one, and this is neither")
-
-    try:
-        skill = skill_from_markdown(text)
-    except SkillError as refused:
-        raise _refused(str(refused)) from None
-    if skill.scripts:
-        raise _refused(
-            f"it declares scripts {list(skill.scripts)}. "
-            f"{A_SCRIPT_THE_DIGEST_DOES_NOT_COVER_IS_A_SCRIPT_NOBODY_APPROVED}"
-        )
-    if not skill.version.isascii():
-        raise _refused(f"its version {skill.version!r} is not written in the digits 0 to 9")
     source = SkillSource(
         kind=SourceKind.UPLOAD,
         location=file_name,
         content_digest=hashlib.sha256(content).hexdigest(),
     )
-    return Package(skill=skill, source=source)
+    return Package(skill=_skill_of(text), source=source)
+
+
+# ------------------------------------------------------------------- from a URL (M12.2.3)
+def url_source_problem(url: str) -> str | None:
+    """Why this address cannot be a skill's source, before anything is fetched, or None.
+
+    The shape only: https, and short enough for the column the source is kept in. Where it may be
+    fetched from is `brain.tools.fetch`'s decision, made on every hop when the fetch runs.
+    """
+    if not url.startswith("https://"):
+        return "a skill is imported from an https address"
+    if len(url) > MAX_ADDRESS_CHARS:
+        return (
+            f"the address is {len(url)} characters, over the {MAX_ADDRESS_CHARS} this install keeps"
+        )
+    return None
+
+
+def read_url(url: str, content: bytes) -> Package:
+    """What an address answered, as a package, pinned by the digest of those bytes (M12.2.3).
+
+    A `SKILL.md` or a zip holding one, told apart by the bytes: an address names no file type
+    that can be trusted. A gzip stream is refused with the way to import it, because a repository
+    tarball needs a commit to pin and a folder to read, which an address does not carry.
+    """
+    problem = url_source_problem(url)
+    if problem is not None:
+        raise _refused(problem)
+    if not content:
+        raise _refused("the address answered with nothing")
+    if len(content) > MAX_PACKAGE_BYTES:
+        raise _refused(
+            f"the address answered {len(content)} bytes, over the {MAX_PACKAGE_BYTES} limit"
+        )
+    if content.startswith(GZIP_MAGIC):
+        raise _refused(
+            "the address answered with a compressed archive; import a repository by its name "
+            "and a commit instead"
+        )
+    text = _from_archive(content) if content.startswith(ZIP_MAGIC) else _markdown_text(content)
+    source = SkillSource(
+        kind=SourceKind.URL, location=url, content_digest=hashlib.sha256(content).hexdigest()
+    )
+    return Package(skill=_skill_of(text), source=source)
+
+
+# ------------------------------------------------------ from a repository commit (M12.2.2)
+def github_source(repository: str, commit: str, path: str) -> SkillSource:
+    """The source a repository import names, checked before anything is fetched.
+
+    `SkillSource` refuses a repository that is not `owner/repo`, a commit that is not a full sha,
+    and a path with a segment that names no folder; its words are the refusal. A trailing or
+    leading slash on the path is taken off, because it is how a folder is commonly copied.
+    """
+    try:
+        return SkillSource(
+            kind=SourceKind.GITHUB,
+            location=repository.strip(),
+            commit=commit.strip().lower(),
+            path=path.strip().strip("/"),
+        )
+    except ValueError as refused:
+        raise _refused(_first_error(refused)) from None
+
+
+def _first_error(refused: ValueError) -> str:
+    """The sentence a validator wrote, without pydantic's framing around it."""
+    errors = getattr(refused, "errors", None)
+    if callable(errors):
+        found = errors()
+        if found:
+            return str(found[0].get("msg", refused)).removeprefix("Value error, ")
+    return str(refused)
+
+
+def _inflated(tarball: bytes) -> bytes:
+    """A gzip stream inflated in memory, to one byte past the ceiling and no further."""
+    inflater = zlib.decompressobj(wbits=16 + zlib.MAX_WBITS)
+    try:
+        data = inflater.decompress(tarball, MAX_UNPACKED_BYTES + 1)
+    except zlib.error:
+        raise _refused("the repository archive is not a gzip stream") from None
+    if len(data) > MAX_UNPACKED_BYTES or inflater.unconsumed_tail:
+        raise _refused(
+            f"the repository archive inflates past {MAX_UNPACKED_BYTES} bytes; import a smaller "
+            "repository"
+        )
+    return data
+
+
+def _from_tarball(tarball: bytes, path: str) -> bytes:
+    """The bytes of the one `SKILL.md` at `path` in a repository tarball, or a refusal.
+
+    GitHub's tarball holds one top folder, named for the repository and the commit, and the tree
+    under it. Nothing is extracted: the members are listed from memory, exactly one is read, and
+    it must be a regular file, because a symlink named `SKILL.md` has an ordinary name and points
+    wherever its author chose. Every other member is left unread, which is why its name is held
+    to no rule here: nothing is written anywhere, so no name can be a path to anything.
+    """
+    data = _inflated(tarball)
+    try:
+        with tarfile.open(fileobj=io.BytesIO(data), mode="r:") as archive:
+            return _manifest_in(archive, path)
+    except tarfile.TarError:
+        raise _refused("the repository archive is not a tar archive") from None
+
+
+def _manifest_in(archive: tarfile.TarFile, path: str) -> bytes:
+    """The one `SKILL.md` at `path` under the archive's one top folder. See `_from_tarball`."""
+    members: list[tarfile.TarInfo] = []
+    for member in archive:
+        members.append(member)
+        if len(members) > MAX_TARBALL_MEMBERS:
+            raise _refused(f"the repository archive lists more than {MAX_TARBALL_MEMBERS} files")
+    tops = {member.name.split("/", 1)[0] for member in members}
+    if len(tops) != 1:
+        raise _refused("the repository archive is not one folder, as a commit's archive is")
+    (top,) = tops
+    wanted = "/".join(part for part in (top, path, SKILL_FILE) if part)
+    found = [member for member in members if member.name == wanted]
+    where = f"the folder {path!r}" if path else "the repository's top folder"
+    if not found:
+        raise _refused(f"there is no {SKILL_FILE} in {where} at that commit")
+    if len(found) > 1:
+        raise _refused(f"the archive lists {SKILL_FILE} in {where} more than once")
+    (manifest,) = found
+    if not manifest.isreg():
+        raise _refused(f"the {SKILL_FILE} in {where} is not a regular file")
+    if manifest.size > MAX_PACKAGE_BYTES:
+        raise _refused(
+            f"the {SKILL_FILE} is {manifest.size} bytes, over the {MAX_PACKAGE_BYTES} limit"
+        )
+    handle = archive.extractfile(manifest)
+    if handle is None:
+        raise _refused(f"the {SKILL_FILE} in {where} could not be read")
+    with handle:
+        return handle.read(MAX_PACKAGE_BYTES + 1)
+
+
+def read_github(source: SkillSource, tarball: bytes) -> Package:
+    """The skill at one folder of one commit, from the tarball of that commit (M12.2.2).
+
+    The source keeps the repository, the commit and the folder, which is what fetching it again
+    needs, and a digest over the `SKILL.md` it read, which the commit fixes.
+    """
+    if source.kind is not SourceKind.GITHUB:
+        raise _refused("a repository import is read from a repository source")
+    raw = _from_tarball(tarball, source.path)
+    text = _markdown_text(raw)
+    pinned = source.model_copy(update={"content_digest": hashlib.sha256(raw).hexdigest()})
+    return Package(skill=_skill_of(text), source=pinned)
 
 
 def added(package: Package, *, by: str, at: datetime) -> LibrarySkill:
@@ -403,21 +656,99 @@ def added(package: Package, *, by: str, at: datetime) -> LibrarySkill:
     )
 
 
+# --------------------------------------------------------------------- editing one (M12.3.2)
+def edited(
+    one: LibrarySkill,
+    text: str,
+    *,
+    by: str,
+    at: datetime,
+    library: Iterable[LibrarySkill],
+) -> LibrarySkill:
+    """The edited `SKILL.md` as a new version of `one`, undecided, or a refusal saying why.
+
+    See `AN_EDIT_IS_A_NEW_VERSION_AND_MOVES_NO_PIN`. Parsed by the parser an import uses, so an
+    edit is held to every rule an import is. The rename refusal is `ImportedSkill.with_content`'s.
+    The source is the text as it arrived, which is what `SourceKind` records for anything with no
+    address to fetch again, so an edit of a skill that came from a commit no longer claims that
+    commit.
+    """
+    if not by.strip():
+        raise SkillLibraryError("a skill is edited by a named person, never by an empty string")
+    if at.tzinfo is None:
+        raise SkillLibraryError("the time a skill was edited must be timezone-aware")
+    if one.moved:
+        raise _not_saved(
+            f"the stored text of {one.name!r} no longer matches the version it was added as, so "
+            "an edit would start from words nobody added"
+        )
+    raw = text.replace("\r\n", "\n").encode("utf-8")
+    if len(raw) > MAX_PACKAGE_BYTES:
+        raise _not_saved(f"the edit is {len(raw)} bytes, over the {MAX_PACKAGE_BYTES} limit")
+    skill = _skill_of(raw.decode("utf-8"), _not_saved)
+    try:
+        imported = one.imported.with_content(skill)
+    except SkillError as refused:
+        raise _not_saved(str(refused)) from None
+    if skill.digest() == one.digest:
+        raise _not_saved(f"the edit is the same as {one.name!r} {one.imported.skill.version}")
+    if version_key(skill.version) <= version_key(one.imported.skill.version):
+        raise _not_saved(
+            f"give the edit a version later than {one.imported.skill.version}. "
+            f"{AN_EDIT_IS_A_NEW_VERSION_AND_MOVES_NO_PIN}"
+        )
+    if any(
+        other.name == skill.name and other.imported.skill.version == skill.version
+        for other in library
+    ):
+        raise _not_saved(
+            f"the library already holds {skill.name!r} {skill.version}; give the edit a version "
+            "of its own"
+        )
+    source = SkillSource(
+        kind=SourceKind.UPLOAD, location=SKILL_FILE, content_digest=hashlib.sha256(raw).hexdigest()
+    )
+    return LibrarySkill(
+        imported=ImportedSkill(skill=imported.skill, source=source),
+        digest=skill.digest(),
+        submitted_by=by,
+        submitted_at=at,
+        edited_from=one.digest,
+    )
+
+
+def compared_with(one: LibrarySkill, library: Iterable[LibrarySkill]) -> LibrarySkill | None:
+    """The version a reviewer is shown `one`'s words against, or None for a first version.
+
+    The newest approved version of the same name added before it, because that is what an agent
+    would be moved off; otherwise the version it was edited from. A version is never compared with
+    itself, and a version added later is never the baseline for an earlier one.
+    """
+    same = [
+        other
+        for other in library
+        if other.name == one.name
+        and other.digest != one.digest
+        and other.submitted_at <= one.submitted_at
+    ]
+    approved = [other for other in same if other.imported.is_executable()]
+    if approved:
+        return max(approved, key=lambda other: (other.submitted_at, other.digest))
+    if one.edited_from is not None:
+        return next((other for other in same if other.digest == one.edited_from), None)
+    return None
+
+
 # ------------------------------------------------------------------------- deciding about one
 def decided(one: LibrarySkill, *, reviewer: str, approve: bool, at: datetime) -> LibrarySkill:
-    """The skill with a decision on it, by somebody who did not add it, or a refusal.
+    """The skill with a decision on it, or a refusal (M12.4.6).
 
-    The importer first, whatever else is true, so the answer to a person reviewing their own
-    import never depends on the state the skill is in. See
-    `NOBODY_DECIDES_ABOUT_A_SKILL_THEY_ADDED`. Then bytes that no longer digest to their key,
-    because an approval is recorded against the key and would approve something nobody read. The
-    second-decision refusal and the named-person refusal are `ImportedSkill`'s own.
+    The person who added it may decide too; see
+    `AN_ADMINISTRATOR_MAY_APPROVE_WHAT_THEY_IMPORTED_AND_THE_LEDGER_SAYS_SO`, and `self_decided`
+    on the answer. Bytes that no longer digest to their key are refused first, because an approval
+    is recorded against the key and would approve something nobody read. The second-decision
+    refusal and the named-person refusal are `ImportedSkill`'s own.
     """
-    if reviewer == one.submitted_by:
-        raise SkillLibraryError(
-            f"nothing was decided: {one.name!r} was added by you. "
-            f"{NOBODY_DECIDES_ABOUT_A_SKILL_THEY_ADDED}"
-        )
     if one.moved:
         raise SkillLibraryError(
             f"nothing was decided: the stored text of {one.name!r} no longer matches the version "
@@ -436,7 +767,43 @@ def decided(one: LibrarySkill, *, reviewer: str, approve: bool, at: datetime) ->
         digest=one.digest,
         submitted_by=one.submitted_by,
         submitted_at=one.submitted_at,
+        edited_from=one.edited_from,
     )
+
+
+# ------------------------------------------------------------------ categories (M12.4.13)
+def categories_from(typed: Iterable[str]) -> tuple[str, ...]:
+    """Categories as an administrator typed them, folded, deduplicated and sorted, or a refusal.
+
+    Folded to lower case with runs of spaces as one hyphen, so "Web maintenance" and
+    "web-maintenance" are one chip. An empty entry is dropped rather than refused, because a
+    trailing comma is how a list is commonly typed. An empty answer clears the skill's categories.
+    """
+    folded: set[str] = set()
+    for one in typed:
+        name = "-".join(one.strip().lower().split())
+        if not name:
+            continue
+        if not CATEGORY_RE.match(name):
+            raise SkillLibraryError(
+                f"nothing was saved: the category {one.strip()!r} is not one this install keeps; "
+                "use letters, digits and hyphens, at most 40"
+            )
+        folded.add(name)
+    if len(folded) > MAX_CATEGORIES:
+        raise SkillLibraryError(
+            f"nothing was saved: a skill carries at most {MAX_CATEGORIES} categories"
+        )
+    return tuple(sorted(folded))
+
+
+def chips(categories: Mapping[str, Sequence[str]], shown: Iterable[str]) -> tuple[str, ...]:
+    """The categories to offer as filters: those of the skills this reader was shown, and no other.
+
+    Asked of the names on the page rather than of the table, so a category that only a skill the
+    reader may not see carries is never a chip, which would name that skill's filing to them.
+    """
+    return tuple(sorted({category for name in set(shown) for category in categories.get(name, ())}))
 
 
 def queue_entries(library: Sequence[LibrarySkill], now: datetime) -> tuple[Placed[QueueEntry], ...]:

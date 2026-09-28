@@ -27,12 +27,19 @@ about anybody's reach.
 operator broke by hand should not take the library away from the person who came to find out what
 is wrong with it.
 
-Task ids: M42.6.4
+**`0121`'s columns are written and read back beside `0056`'s** (M12.2.2, M12.2.3, M12.3.2,
+M12.4.6): a repository source's commit and folder, the version an edit came from, and whether a
+decision was the importer's own, which is `LibrarySkill.self_decided` written down so the table's
+check and the ledger's trigger both see it. **Categories are read as the newest row per name** and
+written as a new row, never an update, so the ledger's trigger fires once per change; a name nobody
+categorised is simply absent from the answer.
+
+Task ids: M42.6.4, M12.2.2, M12.2.3, M12.3.2, M12.4.6, M12.4.13
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any, Final
 
 import structlog
@@ -45,7 +52,13 @@ from sqlalchemy.sql.dml import ReturningInsert
 from brain.console.skill_library import Assignment, LibrarySkill
 from brain.ops.automation_owner_store import PRINCIPAL_SETTING
 from brain.tables.audit import ENT_HASH_SETTING, TRACE_ID_SETTING
-from brain.tables.skill import APPROVED, SkillAssignmentRow, SkillReviewRow, SkillRow
+from brain.tables.skill import (
+    APPROVED,
+    SkillAssignmentRow,
+    SkillCategoryRow,
+    SkillReviewRow,
+    SkillRow,
+)
 from brain.tables.template import TemplateInstanceRow
 from brain.tools.skills import ImportedSkill, Skill, SkillSource, SkillState, SourceKind
 
@@ -96,6 +109,9 @@ def skill_values(one: LibrarySkill) -> dict[str, Any]:
         "source_location": source.location,
         "source_content_digest": source.content_digest,
         "submitted_by": one.submitted_by,
+        "source_commit": source.commit or None,
+        "source_path": source.path or None,
+        "edited_from": one.edited_from,
     }
 
 
@@ -116,6 +132,7 @@ def review_values(one: LibrarySkill) -> dict[str, Any]:
         "submitted_by": one.submitted_by,
         "decision": one.imported.state.value,
         "decided_by": one.imported.reviewer,
+        "self_decided": one.self_decided,
     }
 
 
@@ -127,6 +144,28 @@ def deciding(one: LibrarySkill) -> ReturningInsert[tuple[str]]:
         .on_conflict_do_nothing(index_elements=["digest"])
         .returning(SkillReviewRow.digest)
     )
+
+
+def categories_of(names: Sequence[str]) -> Select[tuple[str, list[Any]]]:
+    """The newest categories set on each of these names. `DISTINCT ON` keeps the first per name."""
+    return (
+        select(SkillCategoryRow.skill_name, SkillCategoryRow.categories)
+        .where(SkillCategoryRow.skill_name.in_(sorted(set(names))))
+        .order_by(SkillCategoryRow.skill_name, SkillCategoryRow.seq.desc())
+        .distinct(SkillCategoryRow.skill_name)
+    )
+
+
+def categorising(name: str, categories: Sequence[str], by: str) -> Any:
+    """One change of a name's categories, as a new row."""
+    return insert(SkillCategoryRow).values(skill_name=name, categories=list(categories), set_by=by)
+
+
+def _category_list(value: object) -> tuple[str, ...]:
+    """A stored list of categories, or nothing when the row holds something else."""
+    if not isinstance(value, list):
+        return ()
+    return tuple(one for one in value if isinstance(one, str))
 
 
 def assignment_values(made: Assignment) -> dict[str, Any]:
@@ -193,6 +232,8 @@ def library_skill_of(row: SkillRow, review: SkillReviewRow | None) -> LibrarySki
         source = SkillSource(
             kind=SourceKind(row.source_kind),
             location=row.source_location,
+            commit=row.source_commit or "",
+            path=row.source_path or "",
             content_digest=row.source_content_digest,
         )
         if review is None:
@@ -215,6 +256,7 @@ def library_skill_of(row: SkillRow, review: SkillReviewRow | None) -> LibrarySki
         digest=row.digest,
         submitted_by=row.submitted_by,
         submitted_at=row.created_at,
+        edited_from=row.edited_from,
     )
 
 
@@ -257,6 +299,24 @@ class StoredSkills:
             await session.execute(_set_config(ENT_HASH_SETTING, ent_hash))
             written = (await session.execute(deciding(one))).scalar_one_or_none()
         return written is not None
+
+    async def categories(self, names: Sequence[str]) -> Mapping[str, tuple[str, ...]]:
+        """The categories each of these names carries now. A name with none is absent."""
+        if not names:
+            return {}
+        async with self._sessions() as session:
+            rows = (await session.execute(categories_of(names))).all()
+        return {str(name): found for name, value in rows if (found := _category_list(value))}
+
+    async def categorise(
+        self, name: str, categories: Sequence[str], *, by: str, ent_hash: str, trace_id: str
+    ) -> None:
+        """Record these as the name's categories, in the setter's name, with its ledger entry."""
+        async with self._sessions() as session, session.begin():
+            await session.execute(_set_config(PRINCIPAL_SETTING, by))
+            await session.execute(_set_config(TRACE_ID_SETTING, trace_id))
+            await session.execute(_set_config(ENT_HASH_SETTING, ent_hash))
+            await session.execute(categorising(name, categories, by))
 
     async def assign(
         self, made: Assignment, *, expected_hash: str, ent_hash: str, trace_id: str
