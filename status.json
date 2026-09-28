@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-28T21:04:21.611362+00:00",
-  "commit": "4a5a0ba2",
-  "commit_subject": "Eight tasks close on the install's own acceptance run after the Lark binding reader went live",
+  "generated_at": "2026-09-28T21:19:52.347748+00:00",
+  "commit": "f97447f4",
+  "commit_subject": "Console PRs stop meeting in shared lists: page cases, audit writes, Tailwind sources and API routers are each a module's own file (#178)",
   "total": 1576,
   "done": 370,
   "percent": 23.5,
