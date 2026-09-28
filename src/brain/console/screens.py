@@ -123,7 +123,28 @@ counting a screen nobody can open. Those leaves belong to whoever writes the too
 built here is the console security group's five rules about how a menu is computed, which is
 what the line below claims and what `tests/unit/test_screens.py` holds it to.
 
-Task ids: M27.5.6, M27.5.7, M27.5.8, M27.5.9, M27.5.10
+**Every screen also carries the menu group it is drawn under, which is a second grouping and not
+a replacement for the first.** `Group` is the four questions M27's screen leaves were written
+under, and work breakdown ids, the Operate overview's coverage and the Govern estate are keyed by
+it, so renaming its members would repoint all three. `MenuGroup` is the nine jobs of
+`docs/admin-console-architecture.md` 2.2, which is how the console's menu is drawn since
+2026-09-17, and the registry is where a screen's group is decided so that the two menus built
+from it, the company's and a department's, cannot file one screen in two places.
+`brain.console.department_console` refuses a menu entry whose screens the registry files under
+another group. Rejected: the group as a property of the menu entry alone, which is the shell's old
+constant again with the list moved to Python, and a screen whose entry moved would have no record
+of where it belongs.
+
+**Platform is exactly the Install group, and `screen_gaps` holds that.** Both mean a screen whose
+subject is the installation, so the rule that a department's console offers none
+(`A_DEPARTMENT_ADMINISTERS_THE_WORK_IN_THE_INSTALL_AND_NOT_THE_INSTALL`) is the rule that it is
+never offered Platform, with no second list to keep in step. Budget and spend is therefore filed
+under Reports beside Usage and cost rather than under Platform's Limits, budgets and capacity:
+what a department and a person may spend and have spent is a department's to read, and a budget
+somebody sets as a ceiling will be that module's write and not this read. See
+`PLATFORM_IS_THE_INSTALLATION_AND_NOTHING_ELSE`.
+
+Task ids: M27.5.6, M27.5.7, M27.5.8, M27.5.9, M27.5.10, M27.10.1
 """
 
 from __future__ import annotations
@@ -217,6 +238,60 @@ class Group(enum.StrEnum):
     INSTALL = "install"
 
 
+#: Why the Platform menu group and the Install group are one set of screens.
+PLATFORM_IS_THE_INSTALLATION_AND_NOTHING_ELSE: Final = (
+    "The console's menu draws a screen whose subject is the installation under Platform, and a "
+    "department's console offers no such screen. If Platform held one screen that is not an "
+    "Install screen, a department admin would lose it from their menu for no reason anybody "
+    "wrote down; if an Install screen sat outside Platform, it would be offered to them under "
+    "another heading. So the two are the same set, checked, and one rule covers both."
+)
+
+
+class MenuGroup(enum.StrEnum):
+    """The nine groups the console's menu is drawn in: each is a job an administrator is doing.
+
+    `docs/admin-console-architecture.md` 2.2 and `docs/screens.html` SCREEN 1. Ordered as the menu
+    reads, so iterating the enum is the menu's order. `Group` above stays the grouping M27's
+    leaves are counted in; see the module docstring for why there are two.
+    """
+
+    #: What needs me today.
+    HOME = "home"
+    #: Who can do what.
+    PEOPLE = "people"
+    #: What the AI can do.
+    AGENTS = "agents"
+    #: What it knows.
+    KNOWLEDGE = "knowledge"
+    #: How it talks to the outside.
+    CHANNELS = "channels"
+    #: Is it healthy.
+    OPERATIONS = "operations"
+    #: Is it compliant.
+    GOVERNANCE = "governance"
+    #: How is it used.
+    REPORTS = "reports"
+    #: How is the server set up. Exactly the Install group's screens.
+    PLATFORM = "platform"
+
+
+#: Each menu group's heading, as `docs/screens.html` draws it and the menu serves it.
+MENU_HEADINGS: Final[Mapping[MenuGroup, str]] = MappingProxyType(
+    {
+        MenuGroup.HOME: "Home",
+        MenuGroup.PEOPLE: "People and access",
+        MenuGroup.AGENTS: "Agents and AI",
+        MenuGroup.KNOWLEDGE: "Knowledge and data",
+        MenuGroup.CHANNELS: "Channels and notifications",
+        MenuGroup.OPERATIONS: "Operations",
+        MenuGroup.GOVERNANCE: "Governance",
+        MenuGroup.REPORTS: "Reports",
+        MenuGroup.PLATFORM: "Platform",
+    }
+)
+
+
 class Axis(enum.StrEnum):
     """The ways a screen can be narrowed. One vocabulary, shared by every screen.
 
@@ -287,6 +362,9 @@ class Screen:
     axes: frozenset[Axis]
     #: Who this was designed for. Documentation. Not an authorisation and not consulted.
     intended_for: frozenset[Role]
+    #: The group of the console's menu this screen is drawn under. Decided here, once, so the
+    #: company's menu and a department's cannot file it in two places.
+    menu: MenuGroup
     #: One sentence, for the menu and for whoever has to explain the console to somebody.
     purpose: str = ""
 
@@ -330,6 +408,7 @@ def _screen(
     plane: Plane,
     purpose: str,
     *,
+    menu: MenuGroup,
     axes: Iterable[Axis] = (),
     intended_for: Iterable[Role] = (),
 ) -> Screen:
@@ -350,6 +429,7 @@ def _screen(
         read=_read(key, tool, capability, plane),
         axes=EVERYWHERE | frozenset(axes),
         intended_for=frozenset(intended_for) or frozenset({Role.SUPER_ADMIN}),
+        menu=menu,
         purpose=purpose,
     )
 
@@ -372,6 +452,7 @@ SCREENS: Final[tuple[Screen, ...]] = (
         Plane.EXISTENCE,
         "What the system did today, counted honestly: nothing here is a figure derived from "
         "rows the reader may not see.",
+        menu=MenuGroup.HOME,
         axes=[Axis.PERIOD],
         intended_for=_ADMINS,
     ),
@@ -384,6 +465,7 @@ SCREENS: Final[tuple[Screen, ...]] = (
         Plane.CONFIGURATION,
         "What is executing right now, with its lane, its agent and how long it has been "
         "going. Configuration and not content: the question, not the answer.",
+        menu=MenuGroup.OPERATIONS,
         axes=[Axis.AGENT, Axis.CONNECTOR],
         intended_for=_ADMINS,
     ),
@@ -395,6 +477,7 @@ SCREENS: Final[tuple[Screen, ...]] = (
         "read:queue",
         Plane.CONFIGURATION,
         "What is waiting, what is scheduled, what failed and what is being retried.",
+        menu=MenuGroup.OPERATIONS,
         axes=[Axis.AGENT],
         intended_for=_ADMINS,
     ),
@@ -406,6 +489,7 @@ SCREENS: Final[tuple[Screen, ...]] = (
         "read:connector",
         Plane.CONFIGURATION,
         "Every source this install reads, whether it is answering, and when it last did.",
+        menu=MenuGroup.KNOWLEDGE,
         axes=[Axis.CONNECTOR],
         intended_for=(Role.SUPER_ADMIN, Role.DEPARTMENT_ADMIN, Role.CONNECTOR_ADMIN),
     ),
@@ -417,6 +501,7 @@ SCREENS: Final[tuple[Screen, ...]] = (
         "read:model_route",
         Plane.CONFIGURATION,
         "Which model answers which lane, which provider is degraded, and what fell back.",
+        menu=MenuGroup.AGENTS,
         axes=[Axis.PERIOD],
     ),
     _screen(
@@ -428,6 +513,7 @@ SCREENS: Final[tuple[Screen, ...]] = (
         Plane.EXISTENCE,
         "Where the answers come from and where they cannot: which areas are covered, which "
         "are stale, and which have nothing behind them at all.",
+        menu=MenuGroup.KNOWLEDGE,
         axes=[Axis.CONNECTOR, Axis.PERIOD],
         intended_for=_ADMINS,
     ),
@@ -440,6 +526,7 @@ SCREENS: Final[tuple[Screen, ...]] = (
         Plane.CONFIGURATION,
         "What is currently degraded, what it blocks, and what has been done about it. "
         "Distinct from connector health, which is one component at a time.",
+        menu=MenuGroup.OPERATIONS,
         axes=[Axis.CONNECTOR, Axis.PERIOD],
         intended_for=_ADMINS,
     ),
@@ -452,6 +539,7 @@ SCREENS: Final[tuple[Screen, ...]] = (
         Plane.CONFIGURATION,
         "The stop button, and everything currently stopped. Stopping needs no approval; "
         "resuming needs a stated reason. See brain.ops.halt.",
+        menu=MenuGroup.OPERATIONS,
         axes=[Axis.AGENT, Axis.CONNECTOR],
         intended_for=_ADMINS,
     ),
@@ -465,6 +553,7 @@ SCREENS: Final[tuple[Screen, ...]] = (
         Plane.CONFIGURATION,
         "Everybody the system knows, what each of them may reach, and where that came from. "
         "The page the owner asked for so nobody has to open Keycloak.",
+        menu=MenuGroup.PEOPLE,
         intended_for=_WITH_AUDITOR,
     ),
     _screen(
@@ -476,6 +565,7 @@ SCREENS: Final[tuple[Screen, ...]] = (
         Plane.CONFIGURATION,
         "Where the staff list is linked from: a spreadsheet, Google Workspace, Microsoft, "
         "Lark or a directory. What each source is trusted to assert, and when it last ran.",
+        menu=MenuGroup.PEOPLE,
     ),
     _screen(
         "roles",
@@ -486,6 +576,7 @@ SCREENS: Final[tuple[Screen, ...]] = (
         Plane.CONFIGURATION,
         "The six roles, what each one is for, and who holds it. A role governs the platform "
         "and never implies a capability, which this screen has to make visible.",
+        menu=MenuGroup.PEOPLE,
         intended_for=_WITH_AUDITOR,
     ),
     _screen(
@@ -497,6 +588,7 @@ SCREENS: Final[tuple[Screen, ...]] = (
         Plane.CONFIGURATION,
         "The vocabulary itself: everything that can be granted at all, and what each one "
         "unlocks. Read before writing a grant, not after wondering why one did nothing.",
+        menu=MenuGroup.PEOPLE,
         intended_for=_WITH_AUDITOR,
     ),
     _screen(
@@ -507,6 +599,7 @@ SCREENS: Final[tuple[Screen, ...]] = (
         "read:scope",
         Plane.CONFIGURATION,
         "The row filters a grant can carry, and the departments they are usually written against.",
+        menu=MenuGroup.PEOPLE,
         intended_for=_WITH_AUDITOR,
     ),
     _screen(
@@ -518,6 +611,7 @@ SCREENS: Final[tuple[Screen, ...]] = (
         Plane.CONFIGURATION,
         "The recertification round: each department's admin confirms or removes what their "
         "people hold. The screen an auditor asks for and the one nobody builds until then.",
+        menu=MenuGroup.PEOPLE,
         axes=[Axis.PERIOD],
         intended_for=_ADMINS,
     ),
@@ -529,6 +623,7 @@ SCREENS: Final[tuple[Screen, ...]] = (
         "approve:action",
         Plane.CONFIGURATION,
         "What is waiting on a human: an action above its rung, a grant, a promotion.",
+        menu=MenuGroup.AGENTS,
         axes=[Axis.AGENT],
         intended_for=(Role.SUPER_ADMIN, Role.DEPARTMENT_ADMIN, Role.APPROVER),
     ),
@@ -541,6 +636,7 @@ SCREENS: Final[tuple[Screen, ...]] = (
         Plane.CONFIGURATION,
         "Who is signed in, from when, and the control to end one. A revoked grant does not "
         "end a session that is already open, which is why this is separate from people.",
+        menu=MenuGroup.PEOPLE,
         intended_for=_ADMINS,
     ),
     _screen(
@@ -552,6 +648,7 @@ SCREENS: Final[tuple[Screen, ...]] = (
         Plane.CONFIGURATION,
         "Every agent, its ceiling, its leash state, and the history of every promotion and "
         "demotion. An agent is a lens and its ceiling is the only thing that narrows it.",
+        menu=MenuGroup.AGENTS,
         axes=[Axis.AGENT],
         intended_for=_ADMINS,
     ),
@@ -563,6 +660,7 @@ SCREENS: Final[tuple[Screen, ...]] = (
         "read:skill",
         Plane.CONFIGURATION,
         "What agents can be taught to do, with the review queue for anything proposed.",
+        menu=MenuGroup.AGENTS,
         axes=[Axis.AGENT],
         intended_for=_ADMINS,
     ),
@@ -575,6 +673,7 @@ SCREENS: Final[tuple[Screen, ...]] = (
         Plane.EXISTENCE,
         "Every document the system can draw on, with the visibility scope on each. Existence "
         "plane: this screen says a document is there, never what is in it.",
+        menu=MenuGroup.KNOWLEDGE,
         axes=[Axis.CONNECTOR],
         intended_for=_ADMINS,
     ),
@@ -587,6 +686,7 @@ SCREENS: Final[tuple[Screen, ...]] = (
         Plane.CONTENT,
         "What the system has inferred and would like to keep. Tiers separated, and tier one "
         "undoable, because a wrong inference kept quietly becomes a fact.",
+        menu=MenuGroup.KNOWLEDGE,
         axes=[Axis.PERIOD],
         intended_for=_ADMINS,
     ),
@@ -598,6 +698,7 @@ SCREENS: Final[tuple[Screen, ...]] = (
         "read:memory",
         Plane.CONTENT,
         "What the system remembers about a person or a department, and every change to it.",
+        menu=MenuGroup.KNOWLEDGE,
         axes=[Axis.AGENT],
         intended_for=_ADMINS,
     ),
@@ -610,6 +711,7 @@ SCREENS: Final[tuple[Screen, ...]] = (
         Plane.EXISTENCE,
         "What the system produced: documents, exports, reports, with what each was built "
         "from and when it will be deleted.",
+        menu=MenuGroup.KNOWLEDGE,
         axes=[Axis.AGENT, Axis.PERIOD],
         intended_for=_ADMINS,
     ),
@@ -622,6 +724,7 @@ SCREENS: Final[tuple[Screen, ...]] = (
         Plane.CONFIGURATION,
         "What left the building, who took it and under whose reach. The largest "
         "exfiltration channel any permission system has, and the one least often watched.",
+        menu=MenuGroup.GOVERNANCE,
         axes=[Axis.PERIOD],
         intended_for=_WITH_AUDITOR,
     ),
@@ -634,6 +737,7 @@ SCREENS: Final[tuple[Screen, ...]] = (
         Plane.CONFIGURATION,
         "How long each kind of thing is kept, what is due for deletion, and the queue of "
         "erasure requests.",
+        menu=MenuGroup.GOVERNANCE,
         axes=[Axis.PERIOD],
     ),
     _screen(
@@ -645,6 +749,7 @@ SCREENS: Final[tuple[Screen, ...]] = (
         Plane.EXISTENCE,
         "Where people are repeatedly hitting a boundary, by shape and never by name. Either "
         "somebody is under-granted or somebody is probing, and both look like this.",
+        menu=MenuGroup.PEOPLE,
         axes=[Axis.PERIOD],
         intended_for=_WITH_AUDITOR,
     ),
@@ -657,6 +762,7 @@ SCREENS: Final[tuple[Screen, ...]] = (
         Plane.CONFIGURATION,
         "Everything that happened: every question, every grant, every export, every halt. "
         "Filterable by department and by person like everything else.",
+        menu=MenuGroup.GOVERNANCE,
         axes=[Axis.AGENT, Axis.CONNECTOR, Axis.PERIOD],
         intended_for=_WITH_AUDITOR,
     ),
@@ -670,6 +776,7 @@ SCREENS: Final[tuple[Screen, ...]] = (
         Plane.CONFIGURATION,
         "Questions asked, tokens in and out, by person, by department, by model and by "
         "agent. What was consumed, as against what it is allowed to consume.",
+        menu=MenuGroup.REPORTS,
         axes=[Axis.AGENT, Axis.PERIOD],
         intended_for=_ADMINS,
     ),
@@ -682,6 +789,7 @@ SCREENS: Final[tuple[Screen, ...]] = (
         Plane.CONFIGURATION,
         "What each department and person may spend, what they have spent, and what happens "
         "when they reach it. A limit rather than a report, which is why it is not usage.",
+        menu=MenuGroup.REPORTS,
         axes=[Axis.AGENT, Axis.PERIOD],
         intended_for=_ADMINS,
     ),
@@ -693,6 +801,7 @@ SCREENS: Final[tuple[Screen, ...]] = (
         "read:question",
         Plane.EXISTENCE,
         "What people asked and what the system could not answer. The gaps are the roadmap.",
+        menu=MenuGroup.REPORTS,
         axes=[Axis.PERIOD],
         intended_for=_ADMINS,
     ),
@@ -705,6 +814,7 @@ SCREENS: Final[tuple[Screen, ...]] = (
         Plane.CONFIGURATION,
         "How the golden corpus scored, what the permission canaries found, and what "
         "regressed since the last release.",
+        menu=MenuGroup.REPORTS,
         axes=[Axis.PERIOD],
     ),
     _screen(
@@ -716,6 +826,7 @@ SCREENS: Final[tuple[Screen, ...]] = (
         Plane.CONFIGURATION,
         "Each lane's measured latency and success rate over a window, against the objective "
         "it promises, and which lanes could not be measured at all.",
+        menu=MenuGroup.REPORTS,
         axes=[Axis.PERIOD],
     ),
     # --- Install: what this deployment is ---------------------------------------------------
@@ -728,6 +839,7 @@ SCREENS: Final[tuple[Screen, ...]] = (
         Plane.CONFIGURATION,
         "What is actually running: the release, the migration level, the profile and the "
         "features it turns on. The first question of every support conversation.",
+        menu=MenuGroup.PLATFORM,
     ),
     _screen(
         "updates",
@@ -739,6 +851,7 @@ SCREENS: Final[tuple[Screen, ...]] = (
         "Which release this install is on, whether a newer one has been published, and how "
         "old that answer is. Nothing here asks anywhere outside this network unless the "
         "install switches the check on.",
+        menu=MenuGroup.PLATFORM,
     ),
     _screen(
         "recovery",
@@ -749,6 +862,7 @@ SCREENS: Final[tuple[Screen, ...]] = (
         Plane.CONFIGURATION,
         "The last backup, the last verified restore, the measured recovery time, and the "
         "control to run a drill.",
+        menu=MenuGroup.PLATFORM,
         axes=[Axis.PERIOD],
     ),
     _screen(
@@ -759,6 +873,7 @@ SCREENS: Final[tuple[Screen, ...]] = (
         "read:rate_limit",
         Plane.CONFIGURATION,
         "The ceilings on requests and what is currently being throttled by them.",
+        menu=MenuGroup.PLATFORM,
         axes=[Axis.AGENT, Axis.PERIOD],
     ),
     _screen(
@@ -770,6 +885,7 @@ SCREENS: Final[tuple[Screen, ...]] = (
         Plane.CONFIGURATION,
         "Database connections, memory ceilings and pool sizes against what is deployed. "
         "brain.ops.connections holds the arithmetic; this shows it.",
+        menu=MenuGroup.PLATFORM,
     ),
 )
 
@@ -951,7 +1067,7 @@ def offerable(values: Iterable[str], reachable: Iterable[str]) -> tuple[str, ...
 def screen_gaps(registered_tools: Iterable[str] = ()) -> tuple[str, ...]:
     """Everything about this registry that would let a screen show more than it should.
 
-    Seven checks. The first two hold this module to its own shape and would otherwise be
+    Eight checks. The first two hold this module to its own shape and would otherwise be
     review comments that survive exactly as long as the reviewer remembers them.
     """
     gaps: list[str] = []
@@ -984,6 +1100,13 @@ def screen_gaps(registered_tools: Iterable[str] = ()) -> tuple[str, ...]:
             gaps.append(
                 f"{one.key} cannot be filtered by {missing}, and the requirement is that "
                 "every screen can be narrowed to a department and to a person"
+            )
+        if (one.group is Group.INSTALL) != (one.menu is MenuGroup.PLATFORM):
+            gaps.append(
+                f"{one.key} is in the {one.group.value} group and drawn under "
+                f"{MENU_HEADINGS[one.menu]}, so a department's menu either loses a screen it may "
+                "hold or is offered one about the installation. "
+                f"{PLATFORM_IS_THE_INSTALLATION_AND_NOTHING_ELSE}"
             )
 
     for withheld in NOT_AT_DEPARTMENT_SCOPE:

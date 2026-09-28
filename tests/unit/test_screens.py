@@ -64,6 +64,7 @@ from brain.console.screens import (
     Disclosure,
     Group,
     Lens,
+    MenuGroup,
     Screen,
     for_department,
     grouped,
@@ -125,7 +126,13 @@ def every_capability(not_after: datetime | None = None) -> EntitlementSet:
     return holding(*[one.read.requires.value for one in SCREENS], not_after=not_after)
 
 
-def a_screen(key: str, *, axes: frozenset[Axis]) -> Screen:
+def a_screen(
+    key: str,
+    *,
+    axes: frozenset[Axis],
+    group: Group = Group.OPERATE,
+    menu: MenuGroup = MenuGroup.OPERATIONS,
+) -> Screen:
     """One screen built by a test, for handing to a diagnostic that reads the registry.
 
     The registry cannot produce the shapes two of those checks look for: `_screen` folds the
@@ -135,7 +142,7 @@ def a_screen(key: str, *, axes: frozenset[Axis]) -> Screen:
     return Screen(
         key=key,
         title=key.replace("_", " ").title(),
-        group=Group.OPERATE,
+        group=group,
         read=ConsoleRead(
             screen=key,
             tool=f"console.{key}",
@@ -144,6 +151,7 @@ def a_screen(key: str, *, axes: frozenset[Axis]) -> Screen:
         ),
         axes=axes,
         intended_for=frozenset({Role.SUPER_ADMIN}),
+        menu=menu,
         purpose="a screen a test built so that a diagnostic has something to report on",
     )
 
@@ -524,6 +532,51 @@ def test_screen_gaps_reports_a_screen_registered_under_a_key_another_already_hol
     assert [one for one in gaps if one.startswith("overview is registered twice")], gaps
 
 
+def test_screen_gaps_reports_a_platform_screen_that_is_not_about_the_installation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The menu group check, watched both ways. Platform is where a screen whose subject is the
+    installation is drawn, and a department's console is never offered one, so a Platform screen
+    outside the Install group is a screen a department admin loses for no written reason, and an
+    Install screen drawn elsewhere is one they are offered under another heading. The sibling
+    screen, in both groups at once, is reported by neither.
+
+    Delete this and the two groupings can drift apart, and "never offered Platform" stops being
+    the same rule as "never offered a screen about the install"."""
+    monkeypatch.setattr(
+        screens_module,
+        "SCREENS",
+        (
+            a_screen("platform_only", axes=EVERYWHERE, menu=MenuGroup.PLATFORM),
+            a_screen("install_only", axes=EVERYWHERE, group=Group.INSTALL),
+            a_screen("both", axes=EVERYWHERE, group=Group.INSTALL, menu=MenuGroup.PLATFORM),
+        ),
+    )
+
+    gaps = screens_module.screen_gaps()
+
+    assert [one.split(" ")[0] for one in gaps if "drawn under" in one] == [
+        "platform_only",
+        "install_only",
+    ], gaps
+
+
+def test_every_screen_is_drawn_under_one_menu_group_and_platform_is_the_install_group() -> None:
+    """The registry as it stands: the nine groups of the console's menu each hold a screen but
+    Channels and notifications, whose modules read nothing the registry declares yet, and the
+    Platform group's screens are exactly the Install group's.
+
+    Delete this and a screen can be moved to another menu group, or out of Platform, with the
+    menus built from the registry following it silently."""
+    platform = {one.key for one in SCREENS if one.menu is MenuGroup.PLATFORM}
+    install = {one.key for one in SCREENS if one.group is Group.INSTALL}
+
+    assert platform == install == {"install", "updates", "recovery", "limits", "connections"}
+    assert {one.menu for one in SCREENS} == set(MenuGroup) - {MenuGroup.CHANNELS}
+    assert screen("overview").menu is MenuGroup.HOME
+    assert screen("budget").menu is MenuGroup.REPORTS
+
+
 # --- a screen leaves a department's menu only with an argument (M27.5.10) --------------------
 
 
@@ -865,6 +918,7 @@ def test_a_screen_wired_to_another_screens_read_cannot_be_constructed() -> None:
             ),
             axes=EVERYWHERE,
             intended_for=frozenset({Role.SUPER_ADMIN}),
+            menu=MenuGroup.OPERATIONS,
             purpose="a screen wired to another screen's read",
         )
 
@@ -898,6 +952,7 @@ def test_a_screen_with_no_axes_and_a_screen_with_no_purpose_are_both_refused() -
             read=read,
             axes=axes,
             intended_for=frozenset({Role.SUPER_ADMIN}),
+            menu=MenuGroup.OPERATIONS,
             purpose=purpose,
         )
 
