@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**2 items are open: 91 and 98.** Item 98 (online providers and the Moonshot key) unblocks the
+**2 items are open: 91 and 98.** Item 98 (the Moonshot key and DeepSeek once more) unblocks the
 most. Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
@@ -52,24 +52,22 @@ need a model to answer. Tell me "checks done" and I close the tasks from your re
 The chat parts of checks 1 and 2 (binding a Lark identity with a code, the same reach in chat)
 cannot be done until Wave 2 builds the Lark chat channel; both moved there with item 97.
 
-## 98. Two steps so your keys answer (about five minutes)
+## 98. The Moonshot key, and DeepSeek once more (about five minutes)
 
 **In plain terms:** your Claude (Anthropic), OpenAI and DeepSeek keys reached the vault on 28 Sep.
-Two things still stop any question reaching them. First, the install is set to answer only from
-its own server ("local"), the safe default for a new install; your decision was online providers,
-and after setup the console had no control to change it. The rebuilt Models screen adds one, and I
-will tell you when it is live. Second, no Moonshot (Kimi) key reached the vault, and DeepSeek was
-saved twice 24 seconds apart, so the second paste may have been the Moonshot key saved under
-DeepSeek. **Recommendation: do all of it in one sitting once I say the new screen is live.**
-Unblocks M5.6.1, M5.6.3 and M5.7.1, and proves Wave 0's M31.3.2.5.
+No Moonshot (Kimi) key did, and DeepSeek was saved twice 24 seconds apart, so the second paste may
+have been the Moonshot key saved under DeepSeek. Your install is already set to use online
+providers (you chose it in setup on 16 Sep); a fault stopped the worker seeing that setting, and
+the fix lands today, after which the Brain checks each provider every minute. **Recommendation: do
+both now; the current screen works.** Unblocks M5.6.1, M5.6.3 and M5.7.1, and proves Wave 0's
+M31.3.2.5.
 
 1. Open the console (signed in) and go to **Models and health**.
-2. Under **Where answers are made**, choose **Online providers** and confirm.
-3. On the **Moonshot (Kimi)** row press **Add key**, paste the key from the Moonshot platform, save
-   and confirm.
-4. On the **DeepSeek** row press **Replace key**, paste the key from the DeepSeek platform, save and
+2. Scroll to **Provider health**, then **Set a provider's key**. Choose **Moonshot**, paste the key
+   from the Moonshot platform into **Key**, press **Save the key**, then **Save the key** again to
    confirm.
-5. Press **Test** on each of the four rows, then tell me "providers tested".
+3. Do the same for **DeepSeek**, with the key from the DeepSeek platform.
+4. Tell me "keys fixed". I then check that each provider answers and record it.
 
 # Answered
 

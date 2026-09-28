@@ -106,7 +106,7 @@ const PROGRESS = {
   },
   "M31.3.2.5": {
     status: "BLOCKED",
-    why: "live since d6290cb; a DeepSeek key was replaced on the install on 28 Sep, and the proof is that provider answering with it without a redeploy, which waits for the switch to online providers (needs-rupash 98)",
+    why: "live since d6290cb; a DeepSeek key was replaced on the install on 28 Sep, and the proof is that provider answering with it without a redeploy, once the worker fix of 2026-09-28 deploys (needs-rupash 98)",
     updated: "2026-09-28",
   },
   "M38.2.1.1": {
@@ -126,22 +126,22 @@ const PROGRESS = {
   },
   "M5.6.1": {
     status: "BLOCKED",
-    why: "three keys are in the vault, but the install answers only from its own server until it is switched to online providers, and Moonshot has no key (needs-rupash 98)",
+    why: "Anthropic, OpenAI and DeepSeek keys are in the vault; the worker could not see the install's saved online-providers setting until the fix of 2026-09-28, and Moonshot has no key (needs-rupash 98)",
     updated: "2026-09-28",
   },
   "M5.6.3": {
     status: "BLOCKED",
-    why: "a proved fallback needs two providers answering, which waits for the switch to online providers (needs-rupash 98)",
+    why: "a proved fallback needs two providers answering on the install, which waits for the worker fix of 2026-09-28 to deploy",
     updated: "2026-09-28",
   },
   "M5.6.5": {
     status: "BLOCKED",
-    why: "the owner's models check on the install (needs-rupash 91, check 6), after the switch to online providers (needs-rupash 98)",
+    why: "the owner's models check on the install (needs-rupash 91, check 6), once the providers answer (needs-rupash 98)",
     updated: "2026-09-28",
   },
   "M5.7.1": {
     status: "IN PROGRESS",
-    why: "four providers on Models and health with Add key, Test and Turn off, plus a control to switch the install to online providers, which it has no way to do after setup",
+    why: "four providers on Models and health with Add key, Test and Turn off, and a control to change where answers are made, which nothing in the console could do after setup",
     updated: "2026-09-28",
   },
   "M5.7.3": {
