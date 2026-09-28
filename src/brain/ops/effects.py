@@ -533,6 +533,17 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.ops.connector_sync_run:RunKeyReader.revoke_self": Repeat.SAME_RESULT_WHEN_REPEATED,
         "brain.ops.connector_sync_store:LeaseCounts.tallies": Repeat.READS,
         "brain.ops.connector_sync_run:SourceCaller.get": Repeat.READS,
+        # Reading a connected source while somebody waits (M11.9.2). Which records are read live,
+        # under whose credentials and narrowed how are computed from what they are handed, and the
+        # source handed back is a GET this connection may only read, so a repeat is a second read.
+        "brain.connectors.declaration:LiveLookup.entities": Repeat.READS,
+        "brain.connectors.declaration:LiveLookup.identity_mode": Repeat.READS,
+        "brain.connectors.declaration:LiveLookup.arguments_for": Repeat.READS,
+        "brain.connectors.live_read:LiveSources.reads": Repeat.READS,
+        "brain.connectors.live_read:LiveSources.source_for": Repeat.READS,
+        "brain.gate.live_records:LiveRecords.refresh": Repeat.READS,
+        "brain.gate.live_records:PartialRead.notice": Repeat.READS,
+        "brain.gate.live_records:PartialRead.trace_lines": Repeat.READS,
         "brain.ops.connector_sync_store:ConnectorSyncRecords.states": Repeat.READS,
         # A delivery is a request somebody else's server acts on, so every one is made inside
         # `issue_once` under a key per attempt, and the receiver's duty to drop a repeated event

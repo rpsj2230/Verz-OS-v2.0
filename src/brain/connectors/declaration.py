@@ -31,6 +31,12 @@ module's docstring says it `KEEPS_A_MINIMAL_INDEX`, and `declaration_gaps` refus
 not; the words are the least of it, and `brain.connectors.minimal_index` is what proves them
 against the rows a connector's own code keeps. See `CONNECTORS_NEVER_BULK_SYNC`.
 
+**A connector says how one of its records is read live in the same declaration (M11.9.2).** `live`
+is a `LiveLookup`: the entities read live while somebody waits, whose credentials each read runs
+under (the requester's own unless it declares the service's, M11.2.5), and the arguments that
+narrow the source's list operation to the one record an index row names. A connector adds it in its
+own module, and nothing else in the repository is touched.
+
 Rejected: one declaration per concern, each in the module that consumes it (a `READING` beside a
 `READ_BACK` beside a `CONSOLE`). It moves the four lists into the connector without making them one
 thing, so the rule that ties them (a scheduled reading needs a console form, because the connection
@@ -45,7 +51,7 @@ See `A_READING_NAMES_HOW_ITS_KEY_IS_SENT_AND_NEVER_HOLDS_IT`.
 Scope: domain logic. Nothing here opens a connection or reads a table; `shipped` imports the modules
 of one package, and that is all it does.
 
-Task ids: M11.1.1, M11.1.6, M11.9.1, M11.6.2
+Task ids: M11.1.1, M11.1.6, M11.9.1, M11.6.2, M11.9.2, M11.2.5
 """
 
 from __future__ import annotations
@@ -70,7 +76,7 @@ from brain.connectors.rest import RestOperation
 from brain.connectors.throttle import CallOutcome
 from brain.connectors.transports import SourceRecord
 from brain.connectors.write_verification import ReadBack, builds_a_manifest
-from brain.core.envelope import OBJECT_NAME_PATTERN, TypedResult
+from brain.core.envelope import OBJECT_NAME_PATTERN, IdentityMode, TypedResult
 from brain.ops.secrets import SecretRef
 from brain.tools.fetch import Resolver
 
@@ -271,6 +277,39 @@ class SourceReading(Protocol):
         ...
 
 
+# ------------------------------------------------------------------ reading one record live
+class LiveLookup(Protocol):
+    """How one record an index row names is read from the source while somebody waits (M11.9.2).
+
+    Only the narrowing is the lookup's own. The operation, the headers a connection contributes and
+    the interpretation of the reply are the source's `SourceReading`, which is why a declaration
+    with a lookup must also declare a reading: a record read live and a page read on a schedule
+    are one call to the same endpoint, and two interpretations of one reply would be two answers
+    to what the source said.
+    """
+
+    def entities(self) -> tuple[str, ...]:
+        """Every entity kind whose records are read live."""
+        ...
+
+    def identity_mode(self, entity: str) -> IdentityMode:
+        """Whose credentials a live read of this entity runs under (M11.2.5).
+
+        The requester's own (`contract.identity_mode_default`) unless the connector declares the
+        service's, and a service read is only ever made with the connection's own key.
+        """
+        ...
+
+    def arguments_for(self, entity: str, source_id: str) -> Mapping[str, str]:
+        """The list operation's arguments narrowed to the one record with this id.
+
+        Raises for an id that is not the shape the source issues, because an id is laid into the
+        source's own query language, and a value that could change the query is refused here
+        rather than escaped.
+        """
+        ...
+
+
 # ------------------------------------------------------------------------ the declaration
 @dataclass(frozen=True)
 class ConnectorDeclaration:
@@ -291,6 +330,8 @@ class ConnectorDeclaration:
     not_from_the_console: str = ""
     #: How the worker reads it on a schedule, or None when nothing does.
     reading: SourceReading | None = None
+    #: How one of its records is read live at question time, or None when none is.
+    live: LiveLookup | None = None
 
     def __post_init__(self) -> None:
         if not _NAME_RE.match(self.name):
@@ -309,6 +350,12 @@ class ConnectorDeclaration:
             msg = (
                 f"connector {self.name!r} declares a reading. "
                 f"{A_READING_NEEDS_A_CONNECTION_TO_READ}"
+            )
+            raise DeclarationError(msg)
+        if self.live is not None and self.reading is None:
+            msg = (
+                f"connector {self.name!r} declares a live lookup and no reading; a record read "
+                "live is read through the reading's operation and interpretation"
             )
             raise DeclarationError(msg)
 
