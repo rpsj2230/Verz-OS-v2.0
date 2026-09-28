@@ -135,6 +135,9 @@ RECIPES: Final[dict[str, Recipe]] = {
             " VALUES ('rr.read_tool_{n}', 'rr', 'tool', 'A tool {n}', 'read:tool', 'none', false,"
             " 'typed', 'delegated')",
         ),
+        # Turning a switch back on is attributed or refused (0117's trigger), so the retiring
+        # statement runs as a named administrator, as the route's attribution does.
+        settings=(("brain.actor_id", "u_admin"),),
     ),
     "auth.group_role_rule": Recipe(
         "INSERT INTO auth.group_role_rule (idp_group, role, created_by, reason)"
@@ -304,7 +307,12 @@ def row(request: pytest.FixtureRequest, url: str) -> Iterator[Row]:
     try:
         yield found
     finally:
-        sql(url, found.statement(TIDY))
+        # As the superuser, but with the row's own session settings, so a table whose trigger
+        # needs an attributed writer (0117's tool switch) is tidied as it is written.
+        with psycopg.connect(url) as conn:
+            for name, value in found.settings:
+                conn.execute("SELECT set_config(%s, %s, true)", (name, value))
+            conn.execute(found.statement(TIDY))
 
 
 def is_retired(url: str, row: Row) -> bool:
