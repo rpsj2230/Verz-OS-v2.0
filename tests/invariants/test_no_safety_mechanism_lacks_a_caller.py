@@ -137,6 +137,8 @@ WIRED_BUT_NOT_SCHEDULED = frozenset({"spend_correction", "restore_drill"})
 #:
 #: `denial_digest` joined on 2026-09-28: `brain.ops.denial_digest_run` reads the hour's refusals
 #: from the ledger and keeps what `digest` raises for the Notifications screen.
+#: `acceptance_run` joined on 2026-09-28 the day it was registered, running the install acceptance
+#: checks once per newly deployed commit through `brain.ops.acceptance_run`.
 SCHEDULED_BY_THE_WORKER = frozenset(
     {
         "retention_sweep",
@@ -152,6 +154,7 @@ SCHEDULED_BY_THE_WORKER = frozenset(
         "directory_sync",
         "model_health_probes",
         "denial_digest",
+        "acceptance_run",
     }
 )
 

@@ -53,7 +53,7 @@ Task ids: M1.8.3
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from datetime import datetime
 from typing import Any, Final
 
@@ -87,6 +87,15 @@ A_FORMER_HEAD_KEEPS_NOTHING: Final = (
     "until the lapse two sync intervals later. So every such grant held by somebody who is not "
     "a live head is retired in the run that finds them, and the lapse is only the backstop for "
     "a sync that stops."
+)
+
+
+#: Why the rewrite can be told whom to rewrite.
+ONLY_THE_HEADS_NAMED_ARE_REWRITTEN: Final = (
+    "The install acceptance check proves this rewrite with a roster of reserved people, and asked "
+    "about every head that roster would retire every real head's grants for as long as the "
+    "check's transaction is open, holding their rows locked. Naming the heads keeps the one code "
+    "path and touches nobody else; the scheduled sync passes nothing and rewrites everyone."
 )
 
 
@@ -246,11 +255,22 @@ def writes_for(
 
 
 async def rewrite_head_audit_reach(
-    session: AsyncSession, roster: Roster, *, read_at: datetime
+    session: AsyncSession,
+    roster: Roster,
+    *,
+    read_at: datetime,
+    only: Collection[str] | None = None,
 ) -> tuple[HeadAuditReach, ...]:
-    """Apply every live head's audit reach for this roster, in the session's transaction."""
+    """Apply every live head's audit reach for this roster, in the session's transaction.
+
+    `only` narrows the rewrite to the named principals, as heads and as former heads, for
+    `ONLY_THE_HEADS_NAMED_ARE_REWRITTEN`'s reason. The staff sync names nobody.
+    """
     heads = heads_from((await session.execute(leads())).all())
     holders = (await session.execute(roster_audit_holders())).scalars().all()
+    if only is not None:
+        heads = {head: slugs for head, slugs in heads.items() if head in only}
+        holders = [one for one in holders if str(one) in only]
     for former in sorted({str(one) for one in holders} - heads.keys()):
         await session.execute(retire_a_former_heads_grants(former))
     if not heads:

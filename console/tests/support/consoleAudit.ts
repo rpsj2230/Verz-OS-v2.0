@@ -654,7 +654,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
   "Scheduled jobs and background work": {
     screens: ["/jobs", "/runs"],
     routes: ["/api/v1/jobs*", "/api/v1/operate/runs"],
-    tables: ["ops.control_run", "ops.operation"],
+    tables: ["ops.control_run", "ops.operation", "ops.acceptance_result"],
     installation: [],
     gaps: [
       {
