@@ -259,10 +259,14 @@ def test_every_control_the_schedule_cannot_start_yet_says_what_it_is_waiting_for
     **Seven on 2026-09-22**, when `model_health_probes` was given `ops.provider_health` to put a
     result in and the worker's read of the model provider slots to probe with.
 
+    **Six on 2026-09-28**, when `denial_digest` was given the ledger read, the people to tell and
+    the store its sentence here said nothing implemented.
+
     Delete this and the gap report can go empty because the list went empty."""
     found = runner_gaps()
 
-    assert len(found) == 7
+    assert len(found) == 6
+    assert not any("denial_digest" in one for one in found)
     assert not any("model_health_probes" in one for one in found)
     assert not any("directory_sync" in one for one in found)
     assert not any("outbox_dispatch" in one for one in found)
@@ -492,6 +496,7 @@ def test_the_dispatch_names_exactly_the_runners_that_can_run() -> None:
         "vault_audit_ship",
         "directory_sync",
         "model_health_probes",
+        "denial_digest",
     }
 
 

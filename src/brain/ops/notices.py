@@ -167,8 +167,12 @@ NOTICES: Final[tuple[Notice, ...]] = (
         title="A colleague keeps being refused",
         told="People who can fix a colleague's access, never the colleague.",
         about="The shape of a pattern of refusals, never what was refused.",
-        how="No channel is chosen for it yet, so nothing sends it.",
+        how=(
+            "Kept for each person entitled to hear it, at most once an hour about one colleague, "
+            "and shown to them at the top of this screen."
+        ),
         composed_by="brain.ops.denial_alerts:digest",
+        sent_by="brain.ops.denial_digest_run:run_denial_digest",
     ),
     Notice(
         kind=NoticeKind.BUDGET_STOPPED,

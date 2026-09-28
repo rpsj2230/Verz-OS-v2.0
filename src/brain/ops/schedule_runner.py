@@ -31,14 +31,14 @@ mechanisms behind whichever is slowest, and a retention sweep is the slowest thi
 identifier is derived from the control's name so it cannot be typed wrong and cannot collide
 with `brain.migrate`'s.
 
-**Twelve controls are wired, and the rest are stated rather than implied.** `retention_sweep`,
+**Thirteen controls are wired, and the rest are stated rather than implied.** `retention_sweep`,
 `canary_run`, `knowledge_reverification`, `outbox_dispatch`, `spend_report_refresh`,
 `erasure_queue`, `vault_token_renewal`, `automation_run`, `connector_sync`, `vault_audit_ship`,
-since 2026-09-21 `directory_sync`, and since 2026-09-22 `model_health_probes` have a runner that
-gathers what they need, and `brain.ops.worker` starts them on the schedule through
-`start_control`. Every other control entry point is a policy function that takes its inputs:
-`retention.enforcement_report` takes a census "the executor saw", `denial_alerts.digest` takes
-patterns and recipients, `recovery.alerts` takes backups and verifications. None of them gathers
+since 2026-09-21 `directory_sync`, since 2026-09-22 `model_health_probes`, and since 2026-09-28
+`denial_digest` have a runner that gathers what they need, and `brain.ops.worker` starts them on
+the schedule through `start_control`. Every other control entry point is a policy function that
+takes its inputs: `retention.enforcement_report` takes a census "the executor saw",
+`recovery.alerts` takes backups and verifications. None of them gathers
 anything. So the registry's orphans are not mechanisms waiting for a timer, they are mechanisms
 whose policy is written and whose input gathering does not exist, and a scheduler alone does not
 switch them on. `runner_gaps` reports each one by name, which turns a count of mechanisms nothing
@@ -82,6 +82,7 @@ from brain.ops.automation_run_store import run_automations_now
 from brain.ops.canary_run import run_canaries_now
 from brain.ops.connector_sync_run import run_connector_sync_now
 from brain.ops.controls import Control
+from brain.ops.denial_digest_run import run_denial_digest_now
 from brain.ops.erasure_store import drain_erasure_queue
 from brain.ops.ledger_partitions import maintain as maintain_ledger_partitions
 from brain.ops.model_probe_run import run_model_probes_now
@@ -531,9 +532,41 @@ def model_health_probes(now: datetime, report_only: bool, database_url: str) -> 
     return f"report only, probed anyway: {said}" if report_only else said
 
 
+#: Why the denial digest raises nothing in report-only mode.
+A_DIGEST_IN_REPORT_ONLY_MODE_RAISES_NOTHING: Final = (
+    "Report-only mode exists for controls that remove data, and keeping an alert removes nothing, "
+    "so brain.ops.schedule never asks for it. A runner that raised alerts anyway when told to "
+    "report would be a runner that ignores the mode it was given, which is the property every "
+    "runner keeps for the one control whose safety rests on it."
+)
+
+
+def denial_digest(now: datetime, report_only: bool, database_url: str) -> str:
+    """Read the hour's refusal patterns from the ledger and keep an alert for whoever may hear it.
+
+    `brain.ops.denial_digest_run.run_denial_digest_now` is the literal call the registry reads, with
+    the cache this process's settings name, where the alerts are kept for the Notifications screen.
+    Declines in report-only mode, see `A_DIGEST_IN_REPORT_ONLY_MODE_RAISES_NOTHING`, and takes the
+    worker's event loop for the reason `spend_report_refresh` gives.
+    """
+    if report_only:
+        return (
+            "report only: the denial digest raised nothing. "
+            f"{A_DIGEST_IN_REPORT_ONLY_MODE_RAISES_NOTHING}"
+        )
+    from brain.ops.worker import _loop_factory
+
+    return run_denial_digest_now(
+        database_url,
+        now=now,
+        valkey_url=settings_from(process_environment()).valkey_url,
+        loop_factory=_loop_factory(),
+    )
+
+
 #: What each schedulable control still needs before it can be started, by name.
 #:
-#: Twelve with a `run` since 2026-09-22, which the worker's schedule starts, and the rest saying
+#: Thirteen with a `run` since 2026-09-28, which the worker's schedule starts, and the rest saying
 #: what they wait for, which is the point of the module header. Each sentence is a piece of work
 #: somebody can pick up, written from reading the entry point's own signature rather than from a
 #: guess about it.
@@ -558,15 +591,9 @@ RUNNERS: Final[tuple[Runner, ...]] = (
             "item 44's nightly dump would produce"
         ),
     ),
-    Runner(
-        name="denial_digest",
-        needs=(
-            "the denial patterns of the window and the recipients to send to. The patterns "
-            "come from the audit ledger and nothing queries it for them; the recipients are "
-            "entitlement sets and nothing resolves the set of people who should receive a "
-            "digest"
-        ),
-    ),
+    # Wired on 2026-09-28: `brain.ops.denial_digest_run` reads the hour's refusals from the
+    # ledger, resolves every live person's reach, and keeps what `digest` raises in the cache.
+    Runner(name="denial_digest", run=denial_digest),
     # Wired on 2026-09-21 with `auth.staff_member`, `auth.staff_sync_run` and the staff source's
     # slot among the connector keys. See `brain.ops.staff_sync_run`.
     Runner(name="directory_sync", run=directory_sync),
@@ -678,6 +705,8 @@ def start_control(name: str, *, now: datetime, report_only: bool, database_url: 
             return directory_sync(now, report_only, database_url)
         case "model_health_probes":
             return model_health_probes(now, report_only, database_url)
+        case "denial_digest":
+            return denial_digest(now, report_only, database_url)
         case _:
             runner = runner_for(name)
             msg = (
