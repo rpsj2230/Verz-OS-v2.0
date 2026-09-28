@@ -475,6 +475,9 @@ class Row:
     label: str = ""
     #: Why this screen does not change it, in one line. Empty for a setting it changes.
     read_only_because: str = ""
+    #: What it would read with no saved value, and from where: what "return to default" gives.
+    without_saved: str = ""
+    without_saved_source: Source = Source.DEFAULT
 
 
 def row_for(
@@ -482,6 +485,8 @@ def row_for(
 ) -> Row:
     """One declared setting, resolved and shown."""
     found = resolved(one.name, env, saved)
+    held = saved_values() if saved is None else saved
+    fallback = resolved(one.name, env, {k: v for k, v in held.items() if k != one.name})
     editable = one.name in EDITABLE_SETTINGS
     if found.source is Source.MISSING:
         applies = A_REQUIRED_SETTING_NOBODY_SUPPLIED
@@ -505,6 +510,8 @@ def row_for(
         section=SECTION_OF[one.name],
         label=LABELS[one.name],
         read_only_because="" if editable else READ_ONLY_BECAUSE[one.name],
+        without_saved=shown(fallback.value),
+        without_saved_source=fallback.source,
     )
 
 
@@ -607,7 +614,7 @@ def setting_problem(name: str, value: str) -> str:
         return f"{name} is not changed on this screen."
     written = value.strip()
     if not written:
-        return "Type a value. To go back to the default, type the default."
+        return "Type a value. To go back to the default, use Return to default instead."
     if len(written) > MAX_BRANDING_CHARS:
         return f"Keep it to {MAX_BRANDING_CHARS} characters."
     if _CONTROL.search(written):
@@ -633,6 +640,18 @@ def setting_problem(name: str, value: str) -> str:
             f"Choose {LOCAL_PROFILE}, to keep answers on this server, or {HOSTED_PROFILE}, to "
             "allow online providers."
         )
+    return ""
+
+
+def default_problem(name: str) -> str:
+    """Why a setting's saved value may not be taken away here, or empty when it may.
+
+    The screen returns to default exactly the settings it changes, with `setting_problem`'s
+    sentence for every other name: a saved identity provider value taken away from a browser would
+    be a sign-in pointed somewhere else until the next restart said so.
+    """
+    if name not in BY_NAME or name not in EDITABLE_SETTINGS:
+        return f"{name} is not changed on this screen."
     return ""
 
 

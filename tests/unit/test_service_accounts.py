@@ -496,12 +496,30 @@ class Store:
             return None
         return issue(found.account, now=now, not_after=not_after, label=label)
 
-    async def revoke_key(self, handle: str, *, owner: str) -> bool:
-        self.calls.append({"revoke": handle, "owner": owner})
-        return False
+    async def owned_one(self, client_id: str, owner: str) -> AccountListed | None:
+        self.calls.append({"one": client_id, "owner": owner})
+        found = self.listed.get(client_id)
+        return found if found is not None and found.account.owner_principal_id == owner else None
 
-    async def retire(self, client_id: str, *, owner: str) -> bool:
-        self.calls.append({"retire": client_id, "owner": owner})
+    async def revoke_key(
+        self, handle: str, *, owner: str, ent_hash: str = "", trace_id: str = ""
+    ) -> bool:
+        self.calls.append(
+            {"revoke": handle, "owner": owner, "ent_hash": ent_hash, "trace_id": trace_id}
+        )
+        return any(
+            key.handle == handle
+            for one in self.listed.values()
+            if one.account.owner_principal_id == owner
+            for key in one.keys
+        )
+
+    async def retire(
+        self, client_id: str, *, owner: str, ent_hash: str = "", trace_id: str = ""
+    ) -> bool:
+        self.calls.append(
+            {"retire": client_id, "owner": owner, "ent_hash": ent_hash, "trace_id": trace_id}
+        )
         found = self.listed.get(client_id)
         return found is not None and found.account.owner_principal_id == owner
 
@@ -691,6 +709,86 @@ def test_somebody_elses_account_is_not_found(client: TestClient, store: Store) -
 
     assert key.status_code == 404
     assert gone.status_code == 404
+
+
+def test_one_account_is_answered_for_its_owner_with_its_keys_and_never_the_secret(
+    client: TestClient, store: Store
+) -> None:
+    """The detail page's read. Delete this and the page could be answered from an account the
+    caller does not own, or with a key's secret."""
+    client.post(ACCOUNTS, json=registration(), headers=auth("u_admin"))
+    lapse = (now() + timedelta(days=7)).isoformat()
+    issued = client.post(
+        KEYS, json={"client_id": ACCOUNT, "not_after": lapse}, headers=auth("u_admin")
+    ).json()
+    listed = store.listed[ACCOUNT]
+    store.listed[ACCOUNT] = AccountListed(
+        account=listed.account,
+        label=listed.label,
+        created_at=listed.created_at,
+        keys=(
+            ApiKeyRecord(
+                handle=issued["handle"],
+                client_id=ACCOUNT,
+                digest="0" * 64,
+                issued_at=now(),
+                not_after=now() + timedelta(days=7),
+                label="",
+            ),
+        ),
+    )
+
+    answer = client.get(f"{ACCOUNTS}/{ACCOUNT}", headers=auth("u_admin"))
+
+    assert answer.status_code == 200, answer.text
+    assert answer.json()["client_id"] == ACCOUNT
+    assert [one["handle"] for one in answer.json()["keys"]] == [issued["handle"]]
+    assert issued["key"] not in answer.text
+    assert store.calls[-1] == {"one": ACCOUNT, "owner": "u_admin"}
+
+
+def test_one_account_somebody_else_owns_reads_exactly_as_one_that_does_not_exist(
+    client: TestClient, store: Store
+) -> None:
+    """DENIED and ABSENT are one answer. Delete this and the detail page tells an administrator
+    which account ids other people hold."""
+    store.listed[ACCOUNT] = AccountListed(
+        account=ServiceAccount(
+            client_id=ACCOUNT,
+            subject=ACCOUNT,
+            owner_principal_id="u_wide",
+            ceiling=(READ_HOURS,),
+            not_after=now() + timedelta(days=3),
+        ),
+        label="",
+        created_at=now(),
+        keys=(),
+    )
+
+    theirs = client.get(f"{ACCOUNTS}/{ACCOUNT}", headers=auth("u_admin"))
+    missing = client.get(f"{ACCOUNTS}/svc_nobody", headers=auth("u_admin"))
+    unauthorised = client.get(f"{ACCOUNTS}/{ACCOUNT}", headers=auth("u_narrow"))
+
+    assert theirs.status_code == missing.status_code == unauthorised.status_code == 404
+    assert theirs.json()["message"] == missing.json()["message"]
+
+
+def test_a_revocation_and_a_retirement_hand_the_store_who_pressed_them_and_under_which_reach(
+    client: TestClient, store: Store
+) -> None:
+    """`0148`'s triggers name the actor the store sets from these. Delete this and a route can
+    retire with nothing attributed, which the ledger records as the database role."""
+    client.post(ACCOUNTS, json=registration(), headers=auth("u_admin"))
+
+    client.post(f"{ACCOUNTS}/keys/revoke", json={"handle": "abcdef12"}, headers=auth("u_admin"))
+    client.post(f"{ACCOUNTS}/retire", json={"client_id": ACCOUNT}, headers=auth("u_admin"))
+
+    revoke = next(one for one in store.calls if "revoke" in one)
+    retire = next(one for one in store.calls if "retire" in one)
+    for call in (revoke, retire):
+        assert call["owner"] == "u_admin"
+        assert len(call["ent_hash"]) == 32
+        assert call["ent_hash"] != "0" * 32
 
 
 # ---------------------------------------------------------------------------- the database
