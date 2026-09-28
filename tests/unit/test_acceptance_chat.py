@@ -99,6 +99,37 @@ def test_every_reason_a_chat_check_raises_is_a_literal_sentence() -> None:
     assert raised > 20
 
 
+def test_a_web_citation_read_a_minute_apart_is_the_same_source_a_chat_lists() -> None:
+    """The web streams a citation as fields and a chat lists it as a sentence with its read time,
+    and the two asks of one question read their source at different instants. The check reads the
+    web's frames into the chat's sentence and sets the read time aside on both, and nothing else:
+    another label, freshness or badge still differs. Delete this and the direct-reply check fails
+    on every install once citations carry fields, or passes a chat that cites another row."""
+    from brain.gate.streaming import Event, encode
+    from brain.ops.acceptance_checks_chat import heard, undated
+
+    def cited(read_at: str, *, label: str = "prices 0: band from tables", badge: str = "") -> str:
+        fields = {
+            "label": label,
+            "freshness_text": "current",
+            "kind": "record",
+            "read_at": read_at,
+            "badge": badge,
+        }
+        return encode(Event.CITATION, json.dumps(fields))
+
+    web = heard([encode(Event.TEXT, "Band B"), cited("2999-01-01T10:00:59+00:00")])
+    chat = "Band B\n\nSources:\n- prices 0: band from tables (current, read 01 Jan 2999 10:01 UTC)"
+    assert web.is_what(undated(chat))
+    for other in (
+        heard([encode(Event.TEXT, "Band B"), cited("2999-01-01T10:00:59+00:00", label="x")]),
+        heard([encode(Event.TEXT, "Band B"), cited("2999-01-01T10:00:59+00:00", badge="y")]),
+    ):
+        assert not other.is_what(undated(chat))
+    document = "- a handbook (current, updated 01 Jan 2999)"
+    assert undated(document) == "- a handbook (current)"
+
+
 def test_an_event_the_check_seals_is_opened_by_the_wire_and_refused_under_another_key() -> None:
     """The check's events are sealed from Lark's algorithm, not from the wire's code, so this holds
     the two to each other: the install's `verify_event` opens one to the event it was, and an event

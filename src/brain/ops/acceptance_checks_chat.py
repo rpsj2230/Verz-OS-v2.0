@@ -119,8 +119,10 @@ PLATFORM: Final = "larksuite.com"
 #: What Lark answers a send it accepted, as `chyroc/lark`'s `api_message_send.go` records it.
 SENT_ENVELOPE: Final = {"code": 0, "msg": "success", "data": {"message_id": "om_acceptance"}}
 
-#: A source's read instant, which differs between two asks of one question by design.
-_READ_AT: Final = re.compile(r", as of [^\n]+")
+#: A source's read instant, which differs between two asks of one question by design: a sentence's
+#: ", as of" tail, or the "read" or "updated" words `brain.gate.streaming.citation_text` puts
+#: inside a citation's brackets beside how fresh it is.
+_READ_AT: Final = re.compile(r", as of [^\n]+|, (?:read|updated) [^)\n]*(?=\))")
 
 
 # --------------------------------------------------------------------- Lark in memory
@@ -533,8 +535,10 @@ class _Heard:
 def heard(frames: Sequence[str]) -> _Heard:
     """The web's frames read by the event-stream format's own rules: a line per field, a value's
     lines joined by one newline. Read here rather than by `brain.chat_answer.chat_text`, so a chat
-    that rendered the frames wrongly is not held equal to the same wrong rendering."""
-    from brain.gate.streaming import Event
+    that rendered the frames wrongly is not held equal to the same wrong rendering. A citation's
+    fields become the one sentence a text channel shows for them, `citation_text`'s, which is a
+    function of that frame alone."""
+    from brain.gate.streaming import Event, citation_text
 
     prose: list[str] = []
     sources: list[str] = []
@@ -548,7 +552,7 @@ def heard(frames: Sequence[str]) -> _Heard:
         if name == Event.TEXT.value:
             prose.append(data)
         elif name == Event.CITATION.value:
-            sources.append(undated(data))
+            sources.append(undated(citation_text(data)))
         elif name == Event.ERROR.value:
             failed = data
     return _Heard(prose="".join(prose).strip(), sources=tuple(sources), failed=failed)
