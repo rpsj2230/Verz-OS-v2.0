@@ -1526,10 +1526,11 @@ CONNECTOR: Final = ConnectorDeclaration(
         ),
         credential_label="The API key of the Freshdesk agent this system reads as",
         credential_hint=(
-            "Sign in to Freshdesk as that agent, open Profile settings and copy Your API Key. Use "
-            "an agent key, never an administrator's: the key can do whatever its agent can, and "
-            "this system only reads. Choose an agent who sees the tickets it should answer about "
-            "and no more. Paste it as one piece. It is kept in the vault and never shown again."
+            "Ask for an agent API key with read access, never an admin key: an admin key can "
+            "change SLAs and delete tickets. Sign in to Freshdesk as that agent, open Profile "
+            "settings and copy Your API Key. Choose an agent who sees the tickets this system "
+            "should answer about and no more, because the key can do whatever its agent can. "
+            "Paste it as one piece. It is kept in the vault and never shown again."
         ),
         build=built_from_the_console,
     ),
