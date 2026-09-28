@@ -25,6 +25,51 @@ export const UNBROKEN = `UNBROKEN${"x".repeat(72)}`;
 
 export const RUNG_ID = "11111111-1111-4111-8111-111111111111";
 
+/**
+ * Addresses a page asks that the API document does not declare yet, because another package is
+ * building the route, and why each is answered here anyway.
+ *
+ * A page case must answer every request a page makes, or `screen-states` reports the page as asking
+ * for something nobody answers; and `long-lists` reads every answered address against the API
+ * document. The agent pages ask the shared stats route (`agents/agentStats.ts`) that the stats
+ * package serves, so it is answered here in the shape that package was briefed with, and listed so
+ * the document check knows it is expected rather than a typo. Delete the entry when the route lands.
+ */
+export const AWAITED_ROUTES: Readonly<Record<string, string>> = {
+  "/api/v1/console/agents/{id}/stats":
+    "The per-entity stats route is built in parallel by the stats package (brain.console_stats_routes, " +
+    "on its own branch); the agent pages code against its declared shape and draw the failed state " +
+    "until it answers.",
+};
+
+/** Whether an address is one of `AWAITED_ROUTES`. */
+export function awaited(path: string): boolean {
+  return Object.keys(AWAITED_ROUTES).some((route) =>
+    new RegExp(`^${route.replace(/\{[^}]+\}/g, "[^/]+")}$`).test(path),
+  );
+}
+
+/** One agent's figures as `brain.console_stats_routes.AgentStatsView` sends them. */
+const AGENT_STATS = {
+  agent_id: "quote-helper",
+  basis: "everyone",
+  cost_basis: "everyone",
+  currency: "SGD",
+  last_active: "2019-03-04T09:42:00Z",
+  truncated: false,
+  periods: ["7d", "30d"].map((range) => ({
+    range,
+    since: "2019-02-02T00:00:00Z",
+    until: "2019-03-04T12:00:00Z",
+    runs: 391,
+    answered: 360,
+    nothing_returned: 31,
+    p50_latency_ms: 1840.5,
+    cost_minor: null,
+  })),
+  unrecorded: [{ figure: "model_cost", why: UNBROKEN }],
+};
+
 export interface PageCase {
   /** The address mounted for this pattern. */
   readonly address: string;
@@ -46,7 +91,7 @@ function card(id: string): Record<string, unknown> {
   };
 }
 
-const MATRIX = {
+export const MATRIX = {
   items: [
     {
       id: RUNG_ID,
@@ -127,8 +172,12 @@ const WORKSPACE = {
     display_name: UNBROKEN,
     summary: UNBROKEN,
     owner_id: UNBROKEN,
+    owner_name: UNBROKEN,
     template_id: UNBROKEN,
     template_version: 4,
+    created_at: "2019-03-01T09:00:00Z",
+    state: "enabled",
+    leash_up_to: "assisted",
   },
   tabs: ["conversations", "settings"].map((tab) => ({ tab, label: tab, purpose: UNBROKEN })),
   // The capability block and the figures, whose widest values are a connector name, a skill
@@ -137,7 +186,7 @@ const WORKSPACE = {
   connectors: { shown: [{ source: UNBROKEN, presence: "attached" }], overflow: 0 },
   channels: [{ channel: UNBROKEN, profile: "plain" }],
   divergent: ["persona"],
-  headline: { basis: "own", range: "30d", spend_minor: 1234, runs: 7 },
+  headline: { basis: "own", range: "30d", spend_minor: 1234, runs: 7, recorded: true },
   composition: [
     {
       part: "persona",
@@ -150,22 +199,6 @@ const WORKSPACE = {
   ],
   // The profile's tier and pinned model (M5.7.3), drawn on the Profile pane.
   profile: { tier: "main", model_pin_provider: null, model_pin_model: null },
-};
-
-/** The automation gallery on an agent's Automations tab, whose outcome and schedule cannot break. */
-const AUTOMATION_GALLERY = {
-  items: [
-    {
-      template_id: "weekly_work_summary",
-      version: 1,
-      name: `I ${UNBROKEN}`,
-      summary: UNBROKEN,
-      schedule: UNBROKEN,
-      installed_as: null,
-      installable: true,
-    },
-  ],
-  installing: UNBROKEN,
 };
 
 /** One installed automation whose every drawn value is an unbreakable token, with both controls. */
@@ -1015,13 +1048,18 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
             agent_id: "quote-helper",
             display_name: UNBROKEN,
             owner_id: UNBROKEN,
+            owner_name: UNBROKEN,
             department: UNBROKEN,
+            state: "enabled",
+            leash_up_to: "assisted",
             ceiling: { clauses: [{ field: "department", op: "eq", value: UNBROKEN }] },
           },
         ],
         next_cursor: null,
         truncated: false,
       },
+      // Each row's figures, from the shared stats route. See `AWAITED_ROUTES`.
+      "/api/v1/console/agents/quote-helper/stats": AGENT_STATS,
     },
   },
   // The catalogue. Its widest values are a template slug and the publisher's principal id,
@@ -1048,17 +1086,11 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
       },
     },
   },
+  // The Dashboard, which the bare address opens: the workspace for the header, the figures from the
+  // shared stats route, and, for a reader of the Automations tab, this agent's automations with their
+  // controls, so those are held to a phone too. The Profile's model card is on its own view.
   "/agents/:agentId": {
     address: "/agents/quote-helper",
-    signedIn: true,
-    drawsValues: true,
-    // The matrix too, which the Profile's model card draws the order a question tries from (M5.7.3).
-    answers: { "/api/v1/agents/quote-helper/workspace": WORKSPACE, "/api/v1/routing/rungs": MATRIX },
-  },
-  // The Automations tab, so the gallery and the installed automations it draws are held to a phone
-  // as well as the workspace.
-  "/agents/:agentId/:tab": {
-    address: "/agents/quote-helper/automations",
     signedIn: true,
     drawsValues: true,
     answers: {
@@ -1066,8 +1098,38 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         ...WORKSPACE,
         tabs: ["automations", "settings"].map((tab) => ({ tab, label: tab, purpose: UNBROKEN })),
       },
-      "/api/v1/agents/quote-helper/automation-templates": AUTOMATION_GALLERY,
+      "/api/v1/console/agents/quote-helper/stats": AGENT_STATS,
       "/api/v1/agents/quote-helper/automations": AGENT_AUTOMATIONS,
+    },
+  },
+  // The Profile, the view with the most on it: the capabilities, the permissions, the leash and the
+  // model card, which draws the order a question tries from the matrix (M5.7.3). The Automations
+  // section's gallery and list are the same components they were, held by their own tests.
+  "/agents/:agentId/:tab": {
+    address: "/agents/quote-helper/profile",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/agents/quote-helper/workspace": {
+        ...WORKSPACE,
+        profile: {
+          tier: "main",
+          model_pin_provider: null,
+          model_pin_model: null,
+          audience_level: "department",
+          ceiling: {
+            rows: UNBROKEN,
+            reads: [UNBROKEN],
+            reads_locked: false,
+            tools: UNBROKEN,
+            largest_effect: UNBROKEN,
+            max_side_effect: "draft",
+          },
+          tools: [{ name: UNBROKEN, source: UNBROKEN, side_effect: "draft", description: UNBROKEN, within_ceiling: true }],
+          leash: [{ target: UNBROKEN, rung: "assisted", rungs: ["assisted"], configured: true, acts: true, entries: [] }],
+        },
+      },
+      "/api/v1/routing/rungs": MATRIX,
     },
   },
   "/approvals": {

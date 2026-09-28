@@ -48,7 +48,7 @@ import {
   templateOf,
   type Measured,
 } from "./support/consoleAudit";
-import { consoleSourcePaths } from "./support/typescript";
+import { consoleSourcePaths, staticImportGraph } from "./support/typescript";
 import { everyWrite } from "./support/writes";
 
 /**
@@ -81,15 +81,37 @@ function screens(): Map<string, string> {
   return drawn;
 }
 
-/** The addresses a source file is drawn at: its own, or those of every page that imports it. */
+/**
+ * Every file a page's static imports reach, the page among them. A page that imports nothing is
+ * itself alone, which `staticImportGraph` refuses to answer because for an entry it means the walk
+ * broke; here it only means the page is one file, as the not-found page is.
+ */
+const reached = new Map<string, readonly string[]>();
+
+function reachedFrom(page: string): readonly string[] {
+  const known = reached.get(page);
+  if (known !== undefined) {
+    return known;
+  }
+  const local = /^import [^;]*from "\.{1,2}\//m.test(readConsoleFile(page));
+  const found = local ? staticImportGraph(page).files : [page];
+  reached.set(page, found);
+  return found;
+}
+
+/**
+ * The addresses a source file is drawn at: its own, or those of every page whose static imports
+ * reach it. Followed through the graph rather than one import deep, because a page rebuilt on the
+ * kit is a thin route module over a directory of its own (`pages/agents/`), and the components that
+ * write are imported from there.
+ */
 function addressesOf(file: string, drawn: Map<string, string>): string[] {
   const direct = [...drawn].filter(([, page]) => page === file).map(([address]) => address);
   if (direct.length > 0) {
     return direct;
   }
-  const name = file.split("/").at(-1)?.replace(/\.tsx?$/, "") ?? "";
   return [...drawn]
-    .filter(([, page]) => page.startsWith("src/") && readConsoleFile(page).includes(`/components/${name}"`))
+    .filter(([, page]) => page.startsWith("src/") && reachedFrom(page).includes(file))
     .map(([address]) => address);
 }
 
@@ -236,7 +258,7 @@ describe("the console audit", () => {
       const address = read.versioned === false ? read.built : `/api/v1${read.built}`;
       expect(`GET ${templateOf(document, address) ?? ""}`, route).toBe(route);
       const page = drawn.get(read.screen) ?? "";
-      const uses = [page, ...consoleSourcePaths("src/components").filter((one) => readConsoleFile(page).includes(`/components/${one.split("/").at(-1)?.replace(/\.tsx?$/, "") ?? ""}"`))];
+      const uses = page === "" ? [] : reachedFrom(page);
       const word = new RegExp(`\\b${read.spelled}\\b`);
       expect(uses.some((file) => word.test(readConsoleFile(file).replace(/^import[^;]*;/gm, ""))), route).toBe(true);
     }

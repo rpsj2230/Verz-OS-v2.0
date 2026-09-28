@@ -1,12 +1,13 @@
 /**
- * One agent's workspace, at the address `brain.console.workspace.deep_link` spells: an agent, and
- * one tab of it.
+ * One agent's page, at the address `brain.console.workspace.deep_link` spells: an agent, which
+ * opens its Dashboard, and one view or section of it (`profile`, `about`, `automations`, `settings`).
  *
- * Loaded on demand for a smaller reason: it imports `agent-workspace.css`, and somebody who never
- * opens an agent should not download it. `tests/agent-page.test.tsx` walks the static graph from
- * `main.tsx` and fails when the workspace is reachable from it.
+ * Loaded on demand for a smaller reason: it imports `agent-workspace.css` and the automation and
+ * model components, and somebody who never opens an agent should not download them.
+ * `tests/agent-page.test.tsx` walks the static graph from `main.tsx` and fails when the page is
+ * reachable from it.
  *
- * Task ids: M27.10.1
+ * Task ids: M27.10.1, M27.10.2
  */
 
 import { lazy } from "react";

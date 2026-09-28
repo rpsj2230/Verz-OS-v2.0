@@ -145,7 +145,7 @@ type Handler = (body: unknown) => { readonly status?: number; readonly body: unk
 async function consoleAt(
   address: string,
   handlers: Record<string, Handler>,
-): Promise<Stand & { readonly container: HTMLElement }> {
+): Promise<Stand & { readonly container: HTMLElement; readonly router: ReturnType<typeof createMemoryRouter> }> {
   const sent: Stand["sent"] = [];
   const idp = fakeIdentityProvider({
     api(url, init) {
@@ -170,11 +170,11 @@ async function consoleAt(
   const router = createMemoryRouter(routes, { initialEntries: [address] });
   const { container } = render(<RouterProvider router={router} />);
   await waitFor(() => {
-    if (!container.querySelector(".agent-header h2")) {
+    if (!container.querySelector('[data-slot="detail-header"] h1')) {
       throw new Error("the workspace has not arrived");
     }
   });
-  return { container, idp, sent };
+  return { container, idp, sent, router };
 }
 
 async function galleryDrawn(container: HTMLElement): Promise<void> {
@@ -210,14 +210,11 @@ function choice(container: HTMLElement, label: string): HTMLButtonElement {
   return found;
 }
 
-function tabButton(container: HTMLElement, label: string): HTMLButtonElement {
-  const found = [...container.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(
-    (one) => one.textContent === label,
-  );
-  if (!found) {
-    throw new Error(`No tab labelled ${label}.`);
-  }
-  return found;
+/** Follow a link inside the console, as the view switch and the Sections menu do. */
+async function go(stand: { readonly router: ReturnType<typeof createMemoryRouter> }, address: string): Promise<void> {
+  await act(async () => {
+    await stand.router.navigate(address);
+  });
 }
 
 const ANSWERING: Record<string, Handler> = {
@@ -258,17 +255,17 @@ describe("the gallery on the Automations tab", () => {
     expect(cards[1]?.querySelector("button")).toBeNull();
   });
 
-  test("the gallery is asked for when its tab is first shown and never for moving between tabs", async () => {
-    // What breaks if this is deleted: a gallery fetched inside the panel, which the workspace
-    // rebuilds on every tab change, so holding an arrow key is a request per step; or a gallery
-    // asked for by everybody who opens an agent and never looks at its automations.
+  test("the gallery is asked for when its section is first opened and never for moving between the agent's views", async () => {
+    // What breaks if this is deleted: a gallery fetched inside the section, which is rebuilt every
+    // time somebody moves between an agent's views, so each visit is a request; or a gallery asked
+    // for by everybody who opens an agent and never looks at its automations.
     const stand = await consoleAt("/agents/quote-helper/settings", ANSWERING);
 
     expect(asked(stand, "GET", GALLERY)).toBe(0);
-    fireEvent.click(tabButton(stand.container, "Automations"));
+    await go(stand, "/agents/quote-helper/automations");
     await galleryDrawn(stand.container);
-    fireEvent.click(tabButton(stand.container, "Settings"));
-    fireEvent.click(tabButton(stand.container, "Automations"));
+    await go(stand, "/agents/quote-helper/settings");
+    await go(stand, "/agents/quote-helper/automations");
     await galleryDrawn(stand.container);
 
     expect(asked(stand, "GET", GALLERY)).toBe(1);

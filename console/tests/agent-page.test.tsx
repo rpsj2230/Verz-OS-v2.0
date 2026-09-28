@@ -1,64 +1,36 @@
 /**
- * The agent page: where the workspace is reachable, what it asks for, and how an answer is
- * read.
+ * One agent's page on the shared kit: where it is reachable, what each of its three views draws and
+ * asks for, and how an answer is read.
  *
- * `tests/agent-workspace.test.tsx` holds the four leaves against the components, handed their
- * shapes directly. This holds the half between the API and those shapes, which is where a
- * withheld field most easily turns back into a visible one. A reader that carried a null as a
- * value, kept a template with no version, or kept a diff row with one side filled in would
- * hand a renderer something to draw where the rule says nothing, and every component test
- * would still pass.
+ * **Reachable means through the application's own route table.** The page is mounted at the address
+ * `brain.console.workspace.deep_link` spells, on a memory router over `routes` from `src/App.tsx`,
+ * signed in through the real session modules and answered by a stand-in API. A test that rendered
+ * the page component directly would pass with the route deleted.
  *
- * **Reachable means through the application's own route table.** The page is mounted at the
- * address `brain.console.workspace.deep_link` spells, on a memory router over `routes` from
- * `src/App.tsx`, signed in through the real session modules and answered by a stand-in API. A
- * test that rendered the page component directly would pass with the route deleted.
+ * **Withheld and absent are compared as markup.** Each refusal renders the variants a route could
+ * plausibly send for "not told" and asserts they are one screen, and each has a sibling proving the
+ * field reaches the screen when it is sent.
  *
- * **Withheld and absent are compared as markup.** Each refusal renders the variants a route
- * could plausibly send for "not told" (the key missing, null, empty, the wrong type) and
- * asserts they are one string, and each has a sibling proving the field reaches the screen
- * when it is sent.
+ * **The design of record is SCREEN 14**: one header and its figures, then Dashboard, Profile and
+ * About, each at its own address. It replaced a tab strip beside a two-way pane on 2026-09-28, and
+ * the properties the old page's tests held are restated here over the new one: an address opens
+ * what it names or the first view, a probe for a tab lands where no tab does, a view change asks
+ * nothing again, and another agent never inherits the last one's state.
  *
- * **`brain.agent_routes` serves the address the page asks, and the reader is checked against
- * the route's declared response.** Until 2026-09-14 one test here asserted no route did, and
- * was written to go red on the day that stopped being true. It did, and the test that replaced
- * it reads every wire name off the document the route produces.
- *
- * Task ids: M39.1.2.1, M39.1.2.3, M39.1.2.5, M39.1.1.5
+ * Task ids: M39.1.2.1, M39.1.2.4, M39.1.2.5, M39.1.1.5, M27.10.2
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
-import {
-  AgentHeader,
-  BUILDER_LABEL,
-  LINEAGE_LABEL,
-  OWNER_LABEL,
-  VERSION_WORD,
-} from "../src/components/AgentHeader";
-import {
-  AgentCapabilities,
-  AgentFiguresView,
-  basisWords,
-  CAPABILITIES_HEADING,
-  CHANNELS_LABEL,
-  CONNECTORS_LABEL,
-  DIVERGENCE_LABEL,
-  FIGURES_HEADING,
-  measuredOver,
-  minorUnits,
-  RUNS_LABEL,
-  SKILLS_LABEL,
-  SPEND_LABEL,
-} from "../src/components/AgentAssembly";
-import { PANE_LABELS } from "../src/components/AgentWorkspace";
 import { CompositionDiff } from "../src/components/CompositionDiff";
-import { tabAddress, type Pane } from "../src/components/agentWorkspaceState";
-import {
-  readAgentWorkspace,
-  type AgentWorkspaceAnswer,
-} from "../src/pages/agentQuery";
+import { NOT_RECORDED, UNAVAILABLE_MARK } from "../src/components/kit";
+import { FIGURES_FAILED } from "../src/components/kit/KpiStrip";
+import { readAgentWorkspace, type AgentWorkspaceAnswer } from "../src/pages/agentQuery";
+import { UNAVAILABLE } from "../src/pages/agents/agentActions";
+import { leashRowId, readHeaderFacts, readProfile } from "../src/pages/agents/agentDetailQuery";
+import { VIEWS_LABEL, viewAddress } from "../src/pages/agents/AgentDetailPage";
+import { agentStatsApiPath } from "../src/pages/agents/agentStats";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import {
   asPythonName,
@@ -69,13 +41,9 @@ import {
   backendTabOrder,
   membersOf,
 } from "./support/agentWorkspace";
-import {
-  apiDocument,
-  declaredProperty,
-  declaredPropertyNames,
-  declaredResponseSchema,
-} from "./support/openapi";
+import { apiDocument, declaredProperty, declaredPropertyNames, declaredResponseSchema } from "./support/openapi";
 import { backendEnumMembers, backendModelFields, backendPublicMessages } from "./support/python";
+import { installRadixStubs } from "./support/radix";
 import { readRepoFile } from "./support/repo";
 import { parseConsoleSource, staticImportGraph } from "./support/typescript";
 
@@ -83,15 +51,10 @@ const WORKSPACE_MODULE = "src/brain/console/workspace.py";
 const MODEL_MODULE = "src/brain/agents/model.py";
 const TEMPLATE_MODULE = "src/brain/agents/template.py";
 const CONSOLE_ORIGIN = "https://console.test";
-const AGENTS_API = "/api/v1/agents/";
 const WORKSPACE_ROUTE = "/api/v1/agents/{agent_id}/workspace";
 
-/**
- * Transform the split route once, before anything is timed. The first mount of a code-split
- * page in a file is the first time Vite transforms it, which is not the property under test and
- * reads as a flake when it lands inside a `waitFor`. The records suite does the same.
- */
 beforeAll(async () => {
+  installRadixStubs();
   await import("../src/pages/Agent");
 }, 60_000);
 
@@ -114,15 +77,20 @@ function partOf(path: string): string {
 const SET_HERE = backendFieldSource("INSTANCE");
 const FROM_TEMPLATE = backendFieldSource("TEMPLATE");
 
-/** One agent on the wire, with every fact the header can show. The only digit is the version. */
+/** One agent on the wire, with every fact the header can show. */
 function agentWire(agentId = "quote-helper", displayName = "Quote Helper"): Record<string, unknown> {
   return {
     agent_id: agentId,
     display_name: displayName,
     summary: "Drafts a first answer to a pricing question.",
-    owner_id: "steward-one",
+    owner_id: "p_steward_one",
+    owner_name: "Steward One",
     template_id: "pricing-desk",
     template_version: 4,
+    created_at: "2019-03-01T09:00:00Z",
+    created_by: "p_builder",
+    state: "disabled",
+    leash_up_to: "assisted",
   };
 }
 
@@ -138,7 +106,6 @@ function stripWire(): Record<string, unknown>[] {
   });
 }
 
-/** Three composition rows on the wire, one of them set here with both sides agreeing. */
 function compositionWire(): Record<string, unknown>[] {
   return [
     {
@@ -167,20 +134,40 @@ function compositionWire(): Record<string, unknown>[] {
   ];
 }
 
-/** The capability block and the figures, as the route sends them to a reader who holds both
- * the Settings tab and the Skills screen. */
 function assemblyWire(): Record<string, unknown> {
   return {
     divergent: ["persona"],
     skills: [{ name: "ssl-renewal-runbook", digest: "a".repeat(64) }],
     connectors: { shown: [{ source: "ledger", presence: "attached" }], overflow: 0 },
     channels: [{ channel: "lark", profile: "card" }],
-    headline: { basis: "own", range: "30d", spend_minor: 1234, runs: 7 },
+    headline: { basis: "own", range: "30d", spend_minor: 1234, runs: 7, recorded: true },
+  };
+}
+
+/** The Profile block the Settings read is sent. */
+function profileWire(): Record<string, unknown> {
+  return {
+    tier: "main",
+    model_pin_provider: null,
+    model_pin_model: null,
+    audience_level: "department",
+    ceiling: {
+      rows: "tickets in the Support department",
+      reads: ["ticket subject"],
+      reads_locked: false,
+      tools: "It can search tickets and draft a reply.",
+      largest_effect: "It drafts. It cannot send anything.",
+      max_side_effect: "draft",
+    },
+    tools: [
+      { name: "ticket.draft_reply", source: "helpdesk", side_effect: "draft", description: "Draft a reply", within_ceiling: true },
+    ],
+    leash: [{ target: "ticket.draft_reply", rung: "assisted", rungs: ["assisted"], configured: true, acts: true, entries: [] }],
   };
 }
 
 function body(agent: Record<string, unknown> = agentWire()): Record<string, unknown> {
-  return { agent, tabs: stripWire(), composition: compositionWire(), ...assemblyWire() };
+  return { agent, tabs: stripWire(), composition: compositionWire(), ...assemblyWire(), profile: profileWire() };
 }
 
 function without(record: Record<string, unknown>, ...keys: string[]): Record<string, unknown> {
@@ -199,13 +186,43 @@ function read(payload: unknown): AgentWorkspaceAnswer {
   return answer;
 }
 
-function headerMarkup(agent: Record<string, unknown>): string {
-  return render(<AgentHeader agent={read(body(agent)).agent} />).container.innerHTML;
+function diffMarkup(rows: unknown): string {
+  return render(<CompositionDiff rows={read({ agent: agentWire(), composition: rows }).composition} />).container.innerHTML;
 }
 
-function diffMarkup(rows: unknown): string {
-  return render(<CompositionDiff rows={read({ agent: agentWire(), composition: rows }).composition} />)
-    .container.innerHTML;
+/** The About tab as the route sends it: numbered steps, an action line naming its tool. */
+function aboutWire(): Record<string, unknown> {
+  return {
+    agent_id: "quote-helper",
+    summary: "Drafts a first answer to a pricing question.",
+    steps: [
+      { number: 1, step: "starts", title: "What starts it", lines: [{ kind: "asked", text: "Somebody asks it in Lark." }] },
+      {
+        number: 2,
+        step: "does",
+        title: "What it does",
+        lines: [{ kind: "action", text: "Draft a reply: prepares it, then waits for a person.", tool: "ticket.draft_reply", leash_entry: true }],
+      },
+    ],
+    never: [{ text: "It never sees more than the person it is working for could see.", every_agent: true }],
+  };
+}
+
+/** One agent's figures as `brain.console_stats_routes.AgentStatsView` sends them. */
+function statsWire(cost: number | null = 18240, unrecorded: readonly Record<string, string>[] = []): Record<string, unknown> {
+  return {
+    agent_id: "quote-helper",
+    basis: "own",
+    cost_basis: "own",
+    currency: "SGD",
+    last_active: "2019-03-04T09:42:00Z",
+    truncated: false,
+    periods: [
+      { range: "7d", since: "2019-02-25T00:00:00Z", until: "2019-03-04T12:00:00Z", runs: 97, answered: 90, nothing_returned: 7, p50_latency_ms: 950, cost_minor: cost },
+      { range: "30d", since: "2019-02-02T00:00:00Z", until: "2019-03-04T12:00:00Z", runs: 391, answered: 360, nothing_returned: 31, p50_latency_ms: 1840, cost_minor: cost },
+    ],
+    unrecorded,
+  };
 }
 
 // ------------------------------------------------------------------------------- mounting
@@ -222,28 +239,27 @@ interface Mounted {
   readonly router: ReturnType<typeof createMemoryRouter>;
 }
 
-/**
- * The whole console at one address, signed in, with the stand-in API answering for the agents
- * named in `answers` and for nothing else.
- */
+/** Every answer one agent's page may ask for, by API path. */
+function agentAnswers(agentId: string, workspace: unknown, extra: Readonly<Record<string, Answer>> = {}): Record<string, Answer> {
+  return {
+    [`/api/v1/agents/${agentId}/workspace`]: { body: workspace },
+    [`/api/v1/agents/${agentId}/about`]: { body: aboutWire() },
+    [`/api/v1${agentStatsApiPath(agentId)}`]: { body: statsWire() },
+    "/api/v1/routing/rungs": { body: { items: [], next_cursor: null, truncated: false } },
+    ...extra,
+  };
+}
+
 async function consoleAt(path: string, answers: Readonly<Record<string, Answer>>): Promise<Mounted> {
   const idp = fakeIdentityProvider({
     api(url) {
-      const asked = new URL(url, CONSOLE_ORIGIN).pathname;
-      if (!asked.startsWith(AGENTS_API)) {
-        return null;
-      }
-      const agentId = decodeURIComponent(asked.slice(AGENTS_API.length).split("/")[0] ?? "");
-      const answer = answers[agentId];
+      const answer = answers[new URL(url, CONSOLE_ORIGIN).pathname];
       if (answer === undefined) {
         return null;
       }
       return new Response(JSON.stringify(answer.body), {
         status: answer.status ?? 200,
-        headers: {
-          "content-type": "application/json",
-          ...(answer.traceId ? { "x-trace-id": answer.traceId } : {}),
-        },
+        headers: { "content-type": "application/json", ...(answer.traceId ? { "x-trace-id": answer.traceId } : {}) },
       });
     },
   });
@@ -252,198 +268,107 @@ async function consoleAt(path: string, answers: Readonly<Record<string, Answer>>
   const { routes } = await import("../src/App");
   const router = createMemoryRouter(routes, { initialEntries: [path] });
   const { container } = render(<RouterProvider router={router} />);
+  await settled(container);
+  return { container, idp, router };
+}
+
+async function settled(container: HTMLElement): Promise<void> {
   await waitFor(() => {
-    if (!container.querySelector("h1")) {
+    if (!container.querySelector("h1, .notice")) {
       throw new Error("the page has not arrived");
     }
   });
   await waitFor(() => {
-    if (container.querySelector('p.note[role="status"]')) {
+    if (container.querySelector('[data-slot="loading-state"], [data-slot="stats-strip"] > [role="status"]')) {
       throw new Error("the page is still asking");
     }
   });
-  return { container, idp, router };
 }
 
-/** Every request the console made about an agent, as URLs. */
-function agentRequests(idp: FakeIdp): URL[] {
-  return idp.urls
-    .map((url) => new URL(url, CONSOLE_ORIGIN))
-    .filter((url) => url.pathname.startsWith(AGENTS_API));
+async function go(mounted: Mounted, address: string): Promise<void> {
+  await act(async () => {
+    await mounted.router.navigate(address);
+  });
+  await settled(mounted.container);
 }
 
-function selectedLabel(container: HTMLElement): string {
-  return container.querySelector('[role="tab"][aria-selected="true"]')?.textContent ?? "";
+function currentView(container: HTMLElement): string {
+  return container.querySelector(`nav[aria-label="${VIEWS_LABEL}"] [aria-current="page"]`)?.textContent ?? "";
 }
 
-function paneButton(container: HTMLElement, pane: Pane): HTMLButtonElement {
-  const found = [...container.querySelectorAll<HTMLButtonElement>(".agent-panes button")].find(
-    (button) => button.textContent === PANE_LABELS[pane],
-  );
+function workspaceRequests(idp: FakeIdp): string[] {
+  return idp.urls.map((url) => new URL(url, CONSOLE_ORIGIN).pathname).filter((path) => path.endsWith("/workspace"));
+}
+
+function header(container: HTMLElement): Element {
+  const found = container.querySelector('[data-slot="detail-header"]');
   if (!found) {
-    throw new Error(`No pane button for ${pane}.`);
+    throw new Error("No header was drawn.");
   }
   return found;
 }
 
 // ------------------------------------------------------------------------- reachability
 
-describe("where the workspace is reachable", () => {
-  test("the address of one tab of one agent renders that agent's workspace, on that tab", async () => {
-    // What breaks if this is deleted: the workspace with no way in. The components are held
-    // by their own tests whether or not anything mounts them, so this is the test that fails
-    // when the route is removed. The address is checked against the Python spelling first,
-    // so the route answers the link `deep_link` would put in an alert.
-    expect(readRepoFile(WORKSPACE_MODULE)).toMatch(
-      /^ {4}return f"\{DEEP_LINK_PREFIX\}\{agent_id\}\/\{key\.value\}"$/m,
-    );
-    expect(tabAddress("quote-helper", "memory")).toBe(`${backendDeepLinkPrefix()}quote-helper/memory`);
+describe("where the page is reachable", () => {
+  test("the bare address opens the Dashboard, and each view is a link to its own address", async () => {
+    // What breaks if this is deleted: the page with no way in, or views held in state that a shared
+    // link cannot open. The addresses are checked against the Python spelling first, so the page
+    // answers the link `deep_link` would put in an alert.
+    expect(readRepoFile(WORKSPACE_MODULE)).toMatch(/^ {4}return f"\{DEEP_LINK_PREFIX\}\{agent_id\}\/\{key\.value\}"$/m);
+    expect(viewAddress("quote-helper", "profile")).toBe(`${backendDeepLinkPrefix()}quote-helper/profile`);
+    expect(viewAddress("quote-helper", "dashboard")).toBe(`${backendDeepLinkPrefix()}quote-helper`);
 
-    const { container } = await consoleAt(tabAddress("quote-helper", "memory"), {
-      "quote-helper": { body: body() },
-    });
-    const { AGENT_HEADING } = await import("../src/pages/Agent");
-
-    expect(container.querySelector("h1")?.textContent).toBe(AGENT_HEADING);
-    expect(container.querySelector(".agent-header h2")?.textContent).toBe("Quote Helper");
-    expect(selectedLabel(container)).toBe("Memory");
-  });
-
-  test("the address of an agent with no tab opens the first tab its strip holds", async () => {
-    // What breaks if this is deleted: the bare agent address, which is the one a roster links
-    // to, rendering nothing selected or the not-found page.
-    const { container } = await consoleAt("/agents/quote-helper", {
-      "quote-helper": { body: body() },
-    });
-
-    expect(selectedLabel(container)).toBe(stripWire()[0]?.["label"]);
-  });
-
-  test("the page asks the API about the agent in the address, once, and not about the tab", async () => {
-    // What breaks if this is deleted: a page asking about a different agent from the one
-    // its address names, which sends two people sharing a link to two different questions, or
-    // a request carrying the tab, which is a second question with the same answer.
-    const { idp } = await consoleAt(tabAddress("quote-helper", "memory"), {
-      "quote-helper": { body: body() },
-    });
-    const asked = agentRequests(idp);
-
-    expect(asked.map((url) => `${url.pathname}${url.search}`)).toEqual([
-      "/api/v1/agents/quote-helper/workspace",
+    const mounted = await consoleAt("/agents/quote-helper", agentAnswers("quote-helper", body()));
+    expect(header(mounted.container).querySelector("h1")?.textContent).toBe("Quote Helper");
+    expect(currentView(mounted.container)).toBe("Dashboard");
+    const nav = mounted.container.querySelector(`nav[aria-label="${VIEWS_LABEL}"]`) as Element;
+    expect([...nav.querySelectorAll("a")].map((one) => one.getAttribute("href"))).toEqual([
+      "/agents/quote-helper",
+      "/agents/quote-helper/profile",
+      "/agents/quote-helper/about",
     ]);
+
+    await go(mounted, "/agents/quote-helper/about");
+    expect(currentView(mounted.container)).toBe("About");
+    await go(mounted, "/agents/quote-helper/settings");
+    expect(currentView(mounted.container)).toBe("Profile");
   });
 
-  test("the profile pane on the page is the composition diff the API sent", async () => {
-    // What breaks if this is deleted: a page that mounts the frame and not the diff, which
-    // passes every test above because none of them opens the profile.
-    const { container } = await consoleAt("/agents/quote-helper", {
-      "quote-helper": { body: body() },
-    });
-    fireEvent.click(paneButton(container, "profile"));
-
-    expect(
-      [...container.querySelectorAll("tr.composition-diff__row th code")].map((cell) => cell.textContent),
-    ).toEqual(["persona", "skills", "tier"]);
-  });
-
-  test("the profile pane shows the agent's connectors, skills and channels, each as the API sent it", async () => {
-    // What breaks if this is deleted: SCREEN 13's capability block, which is the whole of what
-    // the owner opened an agent to see, silently missing while every reader test stays green.
-    const { container } = await consoleAt("/agents/quote-helper", {
-      "quote-helper": { body: body() },
-    });
-    fireEvent.click(paneButton(container, "profile"));
-    const block = container.querySelector<HTMLElement>(`section[aria-label="${CAPABILITIES_HEADING}"]`);
-    if (!block) {
-      throw new Error("The profile pane drew no capability block.");
+  test("an address naming a section this reader cannot open lands where the bare address does", async () => {
+    // What breaks if this is deleted: a probe for a tab ("memory", "automations" for a reader without
+    // it) that answers differently from an address with no tab, which tells the prober the tab exists.
+    const strip = stripWire().filter((one) => one["tab"] !== "automations");
+    const answers = agentAnswers("quote-helper", { ...body(), tabs: strip });
+    const bare = await consoleAt("/agents/quote-helper", answers);
+    const bareView = currentView(bare.container);
+    for (const probe of ["memory", "automations", "no-such-tab"]) {
+      const probed = await consoleAt(`/agents/quote-helper/${probe}`, answers);
+      expect(currentView(probed.container), probe).toBe(bareView);
     }
-    const codes = [...block.querySelectorAll("code")].map((one) => one.textContent);
-
-    expect(codes).toEqual(["ledger", "ssl-renewal-runbook", "lark"]);
-    expect(block.textContent).toContain(CONNECTORS_LABEL);
-    expect(block.textContent).toContain(SKILLS_LABEL);
-    expect(block.textContent).toContain(CHANNELS_LABEL);
-    expect(block.textContent).toContain("attached");
-    expect(block.textContent).toContain("a".repeat(64));
   });
 
-  test("a block the API sent nothing for draws no heading, and nothing at all when all three are empty", async () => {
-    // What breaks if this is deleted: "Skills" over an empty list, which tells a reader this
-    // agent has skills they may not be told about. The sibling above is the populated case.
-    const onlyChannels = {
-      ...body(),
-      skills: [],
-      connectors: { shown: [], overflow: 0 },
-    };
-    const { container } = await consoleAt("/agents/quote-helper", {
-      "quote-helper": { body: onlyChannels },
-    });
-    fireEvent.click(paneButton(container, "profile"));
-    const block = container.querySelector(`section[aria-label="${CAPABILITIES_HEADING}"]`);
-    expect(block?.textContent).toContain(CHANNELS_LABEL);
-    expect(block?.textContent).not.toContain(SKILLS_LABEL);
-    expect(block?.textContent).not.toContain(CONNECTORS_LABEL);
-
-    const nothing = render(
-      <AgentCapabilities connectors={{ shown: [], overflow: 0 }} skills={[]} channels={[]} />,
-    );
-    expect(nothing.container.innerHTML).toBe("");
-  });
-
-  test("the dashboard is the figures over their window, whose they are, and the local divergence", async () => {
-    // What breaks if this is deleted: the dashboard pane empty again, which it was until the
-    // route served `headline`, or a figure drawn with no label saying whose runs it counts.
-    const { container } = await consoleAt("/agents/quote-helper", {
-      "quote-helper": { body: body() },
-    });
-    fireEvent.click(paneButton(container, "dashboard"));
-    const figures = container.querySelector<HTMLElement>(`section[aria-label="${FIGURES_HEADING}"]`);
-    if (!figures) {
-      throw new Error("The dashboard drew no figures.");
-    }
-    const labels = [...figures.querySelectorAll("dt")].map((one) => one.textContent);
-
-    expect(labels).toEqual([
-      measuredOver(SPEND_LABEL, "30d"),
-      measuredOver(RUNS_LABEL, "30d"),
-      DIVERGENCE_LABEL,
-    ]);
-    expect(figures.textContent).toContain(minorUnits(1234));
-    expect(figures.textContent).toContain(basisWords("own"));
-    expect(figures.textContent).toContain("persona");
-
-    const withoutFigures = render(<AgentFiguresView divergent={[]} />);
-    expect(withoutFigures.container.innerHTML).toBe("");
-  });
-
-  test("the workspace and its stylesheet are not in the first response, and the page reaches both", () => {
-    // What breaks if this is deleted: the split, silently. A static import of the page in
-    // `App.tsx` puts three components and a stylesheet in front of everybody who never opens
-    // an agent. The sibling half proves the page really reaches them, so the refusal is not
-    // satisfied by a page that stopped importing the workspace at all.
-    const workspaceFiles = [
+  test("the page and its stylesheet are not in the first response, and the page reaches both", () => {
+    // What breaks if this is deleted: the split, silently. A static import of the page in `App.tsx`
+    // puts the agent page, its views and a stylesheet in front of everybody who never opens an agent.
+    const pageFiles = [
       "src/pages/Agent.tsx",
-      "src/components/AgentWorkspace.tsx",
-      "src/components/AgentHeader.tsx",
+      "src/pages/agents/AgentDetailPage.tsx",
+      "src/pages/agents/AgentProfile.tsx",
       "src/components/CompositionDiff.tsx",
       "src/styles/agent-workspace.css",
     ];
     const entry = new Set(staticImportGraph("src/main.tsx").files);
-    expect(workspaceFiles.filter((file) => entry.has(file))).toEqual([]);
-
+    expect(pageFiles.filter((file) => entry.has(file))).toEqual([]);
     const page = new Set(staticImportGraph("src/pages/Agent.tsx").files);
-    expect(workspaceFiles.filter((file) => !page.has(file))).toEqual([]);
+    expect(pageFiles.filter((file) => !page.has(file))).toEqual([]);
   });
 
-  test("the route the page asks is declared, and every name the reader takes is a name it sends", () => {
-    // What breaks if this is deleted: a reader and the route drifting apart on a name, which
-    // renders an agent with a fact silently missing and no test anywhere red. Every name is
-    // read off the declared response of the route this page calls. The sets are exact, so the
-    // two names the route deliberately withholds, the builder and who set a value, are a red
-    // test the day either is sent rather than a header that quietly grew a fact.
+  test("the route the page asks is declared, and every name the header reads is a name it sends", () => {
+    // What breaks if this is deleted: a reader and the route drifting apart on a name, which renders
+    // an agent with a fact silently missing. The sets are exact.
     const paths = Object.keys((apiDocument()["paths"] ?? {}) as Record<string, unknown>);
-    expect(paths.filter((path) => path.startsWith(AGENTS_API))).toContain(WORKSPACE_ROUTE);
-
+    expect(paths).toContain(WORKSPACE_ROUTE);
     const workspace = declaredResponseSchema(WORKSPACE_ROUTE, "get");
     expect(declaredPropertyNames(workspace)).toEqual([
       "agent",
@@ -456,10 +381,6 @@ describe("where the workspace is reachable", () => {
       "skills",
       "tabs",
     ]);
-    // The creation time, the lifecycle word and the highest rung were declared on 2026-09-17 for
-    // the three-tab agent page, and the Profile beside them. The route sends the first to the
-    // audience and the rest where the Settings tab is, which `tests/unit/test_agent_routes.py`
-    // holds; this page reads none of them yet.
     expect(declaredPropertyNames(declaredProperty(workspace, "agent"))).toEqual([
       "agent_id",
       "created_at",
@@ -467,32 +388,198 @@ describe("where the workspace is reachable", () => {
       "display_name",
       "leash_up_to",
       "owner_id",
+      "owner_name",
       "state",
       "summary",
       "template_id",
       "template_version",
     ]);
-    expect(declaredPropertyNames(declaredProperty(workspace, "tabs"))).toEqual(["label", "purpose", "tab"]);
     const rows = declaredPropertyNames(declaredProperty(workspace, "composition"));
     expect(rows).toEqual(["instance", "part", "path", "source", "template"]);
-    expect(rows).not.toContain("set_by");
-    // The builder is declared now and was not until 2026-09-16, and the change is a decision
-    // rather than a drift: the route sends it only where the Settings tab is, which is where
-    // an audit reads, and `tests/unit/test_agent_routes.py` holds that a reader without that
-    // tab gets a header with no builder in it. Who set a composition value stays undeclared,
-    // because nothing decides who may be told that.
-    expect(declaredPropertyNames(declaredProperty(workspace, "skills"))).toEqual([
-      "digest",
-      "name",
-    ]);
-    expect(declaredPropertyNames(declaredProperty(workspace, "channels"))).toEqual([
-      "channel",
-      "profile",
-    ]);
   });
 });
 
-// ------------------------------------------------------------------- what an answer becomes
+// ------------------------------------------------------------------------------ the header
+
+describe("the header", () => {
+  test("it names the steward and states the agent, and its identifiers are only in the Advanced section", async () => {
+    // What breaks if this is deleted: the old header's slug and principal id back on the face of the
+    // page, which is the clutter the owner asked to be removed; or a header with no steward on it.
+    const mounted = await consoleAt("/agents/quote-helper/profile", agentAnswers("quote-helper", body()));
+    const top = header(mounted.container);
+    expect(top.textContent).toContain("Steward One");
+    expect(top.textContent).toContain("Disabled");
+    expect(top.textContent).toContain("Assisted");
+    expect(top.textContent).not.toMatch(/p_steward_one|p_builder|quote-helper|pricing-desk/);
+
+    const outsideAdvanced = [...mounted.container.querySelectorAll("*")]
+      .filter((one) => one.closest('[data-slot="advanced"]') === null && one.children.length === 0)
+      .map((one) => one.textContent ?? "")
+      .join(" ");
+    expect(outsideAdvanced).not.toMatch(/p_steward_one|p_builder|pricing-desk/);
+    const advanced = mounted.container.querySelector('[data-slot="advanced"]');
+    expect(advanced?.textContent).toContain("p_steward_one");
+    expect(advanced?.textContent).toContain("quote-helper");
+  });
+
+  test("a state, a rung or a steward sent as null, empty or the wrong type is the header with none", async () => {
+    // What breaks if this is deleted: a pill reading "null" or an empty steward chip, which says a
+    // value exists and was withheld. The sibling is the header with all three.
+    const bare = readHeaderFacts({ agent: without(agentWire(), "owner_name", "state", "leash_up_to", "created_at") });
+    for (const noise of [null, "", "  ", 7, ["enabled"]]) {
+      expect(readHeaderFacts({ agent: { ...agentWire(), owner_name: noise, state: noise, leash_up_to: noise, created_at: noise } })).toEqual(bare);
+    }
+    expect(bare).toEqual({});
+    expect(readHeaderFacts({ agent: agentWire() })).toEqual({
+      ownerName: "Steward One",
+      createdAt: "2019-03-01T09:00:00Z",
+      state: "disabled",
+      leashUpTo: "assisted",
+    });
+  });
+
+  test("spend nothing records is left out rather than drawn as nought, and a recorded figure is drawn", async () => {
+    // What breaks if this is deleted: "0.00" on every install, where nothing writes what a run
+    // costs, read as an agent that cost nothing.
+    const unrecorded = { ...body(), headline: { basis: "own", range: "30d", spend_minor: 0, runs: 0, recorded: false } };
+    const quiet = await consoleAt("/agents/quote-helper", agentAnswers("quote-helper", unrecorded));
+    expect(header(quiet.container).textContent).toContain(NOT_RECORDED);
+    expect(header(quiet.container).textContent).not.toContain("0.00");
+
+    const loud = await consoleAt("/agents/quote-helper", agentAnswers("quote-helper", body()));
+    expect(header(loud.container).textContent).toContain("12.34");
+  });
+});
+
+// ---------------------------------------------------------------------------- the dashboard
+
+describe("the Dashboard", () => {
+  test("its figures are the stats route's, and a route that fails draws its sentence and no number", async () => {
+    // What breaks if this is deleted: figures made up in the browser while the stats package is not
+    // there yet, or a strip of zeros for a route that answered 404.
+    const answered = await consoleAt("/agents/quote-helper", agentAnswers("quote-helper", body()));
+    const strip = answered.container.querySelector('[data-slot="kpi-strip"][aria-label="This agent\'s figures"]');
+    expect(strip?.textContent).toContain("391");
+    expect(strip?.textContent).toContain("SGD 182.40");
+    expect(strip?.textContent).toContain("1.8 s");
+    expect(strip?.textContent).toContain("your runs");
+
+    // The other period is the route's own second set, chosen from the switch.
+    fireEvent.click([...answered.container.querySelectorAll("button")].find((one) => one.textContent === "7 days") as Element);
+    expect(answered.container.querySelector('[data-slot="kpi-strip"][aria-label="This agent\'s figures"]')?.textContent).toContain("97");
+
+    const failed = await consoleAt(
+      "/agents/quote-helper",
+      agentAnswers("quote-helper", body(), {
+        [`/api/v1${agentStatsApiPath("quote-helper")}`]: { status: 404, body: { message: "Nothing here." }, traceId: "trace-stats" },
+      }),
+    );
+    const block = failed.container.querySelector('[data-slot="stats-strip"]');
+    expect(block?.textContent).toContain(FIGURES_FAILED);
+    expect(block?.textContent).toContain("trace-stats");
+    expect(block?.textContent).not.toMatch(/391|182/);
+  });
+
+  test("a cost nothing records is not recorded yet with the route's reason, and never nought", async () => {
+    // What breaks if this is deleted: "SGD 0.00" on every install, where nothing writes a run's
+    // cost, read as an agent that cost nothing; or the reason the route gave lost on the way.
+    const why = "nothing on the request path writes a run's cost to the spend ledger yet";
+    const mounted = await consoleAt(
+      "/agents/quote-helper",
+      agentAnswers("quote-helper", body(), {
+        [`/api/v1${agentStatsApiPath("quote-helper")}`]: { body: statsWire(null, [{ figure: "model_cost", why }]) },
+      }),
+    );
+    const cards = [...mounted.container.querySelectorAll('[aria-label="This agent\'s figures"] [data-slot="stat-card"]')];
+    const cost = cards.find((one) => one.querySelector("dt")?.textContent === "Cost") as Element;
+    expect(cost.textContent).toContain(NOT_RECORDED);
+    expect(cost.textContent).not.toMatch(/0\.00/);
+    const trigger = cost.querySelector("[aria-describedby]") as Element;
+    expect(document.getElementById(trigger.getAttribute("aria-describedby") ?? "")?.textContent).toBe(why);
+  });
+});
+
+// ------------------------------------------------------------------------------ the profile
+
+describe("the Profile", () => {
+  test("every act with no route is inert with its reason, and pressing one changes nothing", async () => {
+    // What breaks if this is deleted: a control drawn live over a route that does not exist, or one
+    // removed so the page hides that the act is coming. Each carries a sentence from
+    // `agentActions.ts`, and pressing any of them leaves the address and the requests as they were.
+    const mounted = await consoleAt("/agents/quote-helper/profile", agentAnswers("quote-helper", body()));
+    const inert = [...mounted.container.querySelectorAll<HTMLButtonElement>(`[${UNAVAILABLE_MARK}]`)];
+    expect(inert.length).toBeGreaterThanOrEqual(6);
+    const reasons = new Set(Object.values(UNAVAILABLE).map((one) => one.reason));
+    for (const control of inert) {
+      expect(control.getAttribute("aria-disabled")).toBe("true");
+      expect(reasons.has(document.getElementById(control.getAttribute("aria-describedby") ?? "")?.textContent ?? "")).toBe(true);
+    }
+    const before = mounted.idp.urls.length;
+    for (const control of inert) {
+      fireEvent.click(control);
+    }
+    expect(mounted.router.state.location.pathname).toBe("/agents/quote-helper/profile");
+    expect(mounted.idp.urls.length).toBe(before);
+  });
+
+  test("the cards the Settings read is sent are absent for a reader sent no profile, with no heading left over", async () => {
+    // What breaks if this is deleted: a Permissions card reading "unknown" to a member of the
+    // audience, which is a statement that the agent has a ceiling they may not see.
+    const member = await consoleAt("/agents/quote-helper/profile", agentAnswers("quote-helper", without(body(), "profile")));
+    const text = member.container.textContent ?? "";
+    expect(text).not.toContain("Permissions");
+    expect(text).not.toContain("Approval setting");
+    expect(text).not.toContain("tickets in the Support department");
+
+    const admin = await consoleAt("/agents/quote-helper/profile", agentAnswers("quote-helper", body()));
+    expect(admin.container.textContent).toContain("tickets in the Support department");
+    expect(admin.container.querySelector(`#${leashRowId("ticket.draft_reply")}`)?.textContent).toContain("Draft a reply");
+  });
+
+  test("a profile sent malformed is read as no profile, and a sound one is carried whole", () => {
+    // What breaks if this is deleted: a Profile drawn from half a ceiling, which is a permission
+    // described with a clause missing.
+    for (const noise of [null, [], "profile", 7]) {
+      expect(readProfile({ profile: noise })).toBeNull();
+    }
+    expect(readProfile({ profile: { ...profileWire(), ceiling: { rows: "x" } } })?.ceiling).toBeUndefined();
+    expect(readProfile({ profile: profileWire() })).toEqual({
+      tier: "main",
+      audienceLevel: "department",
+      ceiling: {
+        rows: "tickets in the Support department",
+        reads: ["ticket subject"],
+        readsLocked: false,
+        tools: "It can search tickets and draft a reply.",
+        largestEffect: "It drafts. It cannot send anything.",
+        maxSideEffect: "draft",
+      },
+      tools: [{ name: "ticket.draft_reply", description: "Draft a reply", sideEffect: "draft", withinCeiling: true }],
+      leash: [{ target: "ticket.draft_reply", rung: "assisted", configured: true, acts: true }],
+    });
+  });
+});
+
+// ------------------------------------------------------------------------------- the about
+
+describe("the About view", () => {
+  test("it draws the API's steps in their numbers, and an action opens its approval setting on the Profile", async () => {
+    // What breaks if this is deleted: a flow composed in the browser, which can describe something
+    // the agent is not set up to do, or an action whose link lands on a Profile with no row for it.
+    const mounted = await consoleAt("/agents/quote-helper/about", agentAnswers("quote-helper", body()));
+    const about = mounted.container.querySelector('[data-slot="agent-about"]') as Element;
+    expect([...about.querySelectorAll("ol > li")].map((one) => one.querySelector("span")?.textContent)).toEqual(["1", "2"]);
+    const action = [...about.querySelectorAll("a")].find((one) => one.textContent?.startsWith("Draft a reply"));
+    expect(action?.getAttribute("href")).toBe(`/agents/quote-helper/profile#${leashRowId("ticket.draft_reply")}`);
+    expect(about.textContent).toContain("true of every agent");
+
+    fireEvent.click(action as Element);
+    await settled(mounted.container);
+    await waitFor(() => {
+      expect(mounted.container.querySelector(`#${leashRowId("ticket.draft_reply")}`)?.getAttribute("aria-current")).toBe("location");
+    });
+  });
+});
 
 describe("what an answer becomes", () => {
   test("every wire name the reader shares with the Python side is a field that side declares", () => {
@@ -526,7 +613,8 @@ describe("what an answer becomes", () => {
         agentId: "quote-helper",
         displayName: "Quote Helper",
         roleLine: "Drafts a first answer to a pricing question.",
-        ownerId: "steward-one",
+        ownerId: "p_steward_one",
+        createdBy: "p_builder",
         lineage: { templateId: "pricing-desk", version: 4 },
       },
       tabs: stripWire(),
@@ -563,49 +651,6 @@ describe("what an answer becomes", () => {
     });
   });
 
-  test("an owner that was withheld, null, empty or not a string is one header, with no owner in it", () => {
-    // What breaks if this is deleted: a reader that carries `null` or `""` as an owner, which
-    // hands the header something to draw a label over. A route that says "not told" with a
-    // null and a route that leaves the key out must produce the same screen.
-    const variants = [
-      without(agentWire(), "owner_id"),
-      { ...agentWire(), owner_id: null },
-      { ...agentWire(), owner_id: "" },
-      { ...agentWire(), owner_id: "   " },
-      { ...agentWire(), owner_id: 42 },
-    ].map(headerMarkup);
-
-    expect(new Set(variants).size).toBe(1);
-    expect(variants[0]).not.toContain(OWNER_LABEL);
-    expect(headerMarkup(agentWire())).toContain("steward-one");
-  });
-
-  test("a template without its version, or a version without its template, is no lineage at all", () => {
-    // What breaks if this is deleted: half a lineage on the screen, "version 4" under a
-    // template the reader may not be told, which is the count of hidden things in words.
-    const neither = headerMarkup(without(agentWire(), "template_id", "template_version"));
-    const halves = [
-      without(agentWire(), "template_version"),
-      without(agentWire(), "template_id"),
-      { ...agentWire(), template_version: null },
-      { ...agentWire(), template_version: "4" },
-      { ...agentWire(), template_version: 0 },
-      { ...agentWire(), template_version: 4.5 },
-      { ...agentWire(), template_id: "" },
-    ].map(headerMarkup);
-
-    for (const markup of halves) {
-      expect(markup).toBe(neither);
-    }
-    expect(neither).not.toContain(LINEAGE_LABEL);
-    expect(neither).not.toContain(VERSION_WORD);
-    expect(neither).not.toContain("pricing-desk");
-
-    const both = headerMarkup(agentWire());
-    expect(both).toContain(LINEAGE_LABEL);
-    expect(both).toContain("pricing-desk");
-  });
-
   test("a composition row missing either side is not a row, and the diff is the one without it", () => {
     // What breaks if this is deleted: "skills, set here" with this agent's value blank, which
     // tells the reader the path exists, that somebody set it, and that they may not see what
@@ -628,51 +673,6 @@ describe("what an answer becomes", () => {
     expect(diffMarkup(complete)).toContain("quote-draft");
   });
 
-  test("the owner shown is the steward, and the builder is shown under its own label or not at all", () => {
-    // What breaks if this is deleted: a fallback from the steward to whoever built the agent,
-    // which puts a name on exactly the agents whose steward was withheld, and puts the wrong
-    // name there: `brain.agents.model` keeps the two apart because they stop being one person.
-    //
-    // The builder is drawn since 2026-09-16, under `BUILDER_LABEL`, and the route sends it
-    // only to a reader of the Settings tab. So the two halves here are that it never appears
-    // where the steward goes, and that an agent whose steward was withheld draws no owner row
-    // at all however much else the body carries.
-    const both = headerMarkup({ ...agentWire(), created_by: "the-builder" });
-    expect(both).toContain("steward-one");
-    expect(both).toContain(BUILDER_LABEL);
-    expect(both.indexOf("steward-one")).toBeLessThan(both.indexOf("the-builder"));
-
-    const builderOnly = headerMarkup({ ...without(agentWire(), "owner_id"), created_by: "the-builder" });
-    expect(builderOnly).not.toContain(OWNER_LABEL);
-    expect(builderOnly).toContain(BUILDER_LABEL);
-
-    const neither = headerMarkup(without(agentWire(), "owner_id", "created_by"));
-    expect(neither).not.toContain(BUILDER_LABEL);
-    expect(neither).not.toContain("the-builder");
-  });
-
-  test("a count or a capability the API sends reaches nothing on the page", async () => {
-    // What breaks if this is deleted: "showing 5 of 7 tabs", or a tab's required capability
-    // in an attribute. A route serialising `WorkspaceTab` whole would send its `read`, which
-    // names the grant each tab needs, and a total beside a narrowed strip is the subtraction.
-    const leaky = {
-      agent: { ...agentWire(), hidden_count: 4700 },
-      tabs: stripWire().map((tab) => ({
-        ...tab,
-        read: { screen: `agent_workspace.${String(tab["tab"])}`, requires: "read:memory" },
-      })),
-      composition: compositionWire().map((row) => ({ ...row, omitted: 4700 })),
-      total: 4700,
-      hidden: 4700,
-      of_total: "4700",
-    };
-    expect(JSON.stringify(read(leaky))).not.toMatch(/4700|read:memory|agent_workspace/);
-
-    const { container } = await consoleAt("/agents/quote-helper", { "quote-helper": { body: leaky } });
-    fireEvent.click(paneButton(container, "profile"));
-    expect(container.innerHTML).not.toMatch(/4700|read:memory|agent_workspace\./);
-  });
-
   test("the answer the page holds has no field for what was left out", () => {
     // What breaks if this is deleted: `hiddenTabs` added to the answer to make a heading
     // better. The names are `brain.ops.jobs`' own list, read rather than copied.
@@ -692,102 +692,128 @@ describe("what an answer becomes", () => {
     expect(members.filter((member) => forbidden.has(asPythonName(member)))).toEqual([]);
   });
 
-  test("an answer with no readable agent draws no workspace and composes no sentence about it", async () => {
-    // What breaks if this is deleted: a body that is not a workspace rendered as an agent with
-    // no name, or explained in a sentence nobody sent. The sibling shows the least a readable
-    // answer can be.
-    for (const unreadable of [
-      null,
-      [],
-      {},
-      { agent: "quote-helper" },
-      { agent: { agent_id: "quote-helper" } },
-      { agent: { display_name: "Quote Helper" } },
-    ]) {
-      expect(readAgentWorkspace(unreadable)).toBeNull();
-    }
-    expect(readAgentWorkspace({ agent: { agent_id: "quote-helper", display_name: "Quote Helper" } })).toEqual({
-      agent: { agentId: "quote-helper", displayName: "Quote Helper" },
-      tabs: [],
-      composition: [],
-      divergent: [],
-      skills: [],
-      connectors: { shown: [], overflow: 0 },
-      channels: [],
-    });
-
-    const { container } = await consoleAt("/agents/quote-helper", { "quote-helper": { body: {} } });
-    expect(container.querySelector(".agent-workspace")).toBeNull();
-    expect(container.querySelector(".notice")).toBeNull();
+  test("no shape the agent page holds has a field for a count of what was left out", () => {
+    // What breaks if this is deleted: a `hiddenTools` or a `withheldCount` added to a shape to make a
+    // card friendlier, which is the subtraction the list rules forbid arriving by another door. The
+    // forbidden names are `brain.ops.jobs`' own list; the sibling proves the shapes were read at all.
+    const forbidden = new Set(backendHiddenCountNames());
+    const shapes: readonly (readonly [string, string])[] = [
+      ["src/components/agentWorkspaceState.ts", "AgentIdentity"],
+      ["src/components/agentWorkspaceState.ts", "WorkspaceTabView"],
+      ["src/components/agentWorkspaceState.ts", "DiffRow"],
+      ["src/pages/agents/agentDetailQuery.ts", "HeaderFacts"],
+      ["src/pages/agents/agentDetailQuery.ts", "ProfileShown"],
+      ["src/pages/agents/agentDetailQuery.ts", "CeilingShown"],
+      ["src/pages/agents/agentDetailQuery.ts", "AboutShown"],
+      ["src/pages/agents/agentStats.ts", "AgentStats"],
+    ];
+    const every = shapes.flatMap(([file, name]) => membersOf(parseConsoleSource(file), name));
+    expect(every.length).toBeGreaterThan(20);
+    expect(every.filter((member) => forbidden.has(asPythonName(member)))).toEqual([]);
   });
 });
+
 
 // --------------------------------------------------------------------- what a failure is
 
 describe("what a failure looks like", () => {
   test("an agent the API will not describe is the API's own sentence, whichever kind of 404 it was", async () => {
-    // What breaks if this is deleted: a page that tells a refusal from an address nothing
-    // serves. A withheld agent answers with the DENIED body and an unknown agent, or today any
-    // agent, answers with a bare 404; both must reach the screen as the one sentence the
-    // taxonomy gives DENIED and ABSENT, with no workspace and no page of the console's own.
+    // What breaks if this is deleted: a page that tells a refusal from an address nothing serves. A
+    // withheld agent answers with the DENIED body and an unknown agent with a bare 404; both must
+    // reach the screen as the one sentence the taxonomy gives DENIED and ABSENT, with no header.
     const messages = backendPublicMessages();
     const sentence = messages["DENIED"];
     expect(sentence).toBeTruthy();
     expect(messages["ABSENT"]).toBe(sentence);
 
     const refused = await consoleAt("/agents/quote-helper", {
-      "quote-helper": { status: 404, body: { message: sentence }, traceId: "trace-refused" },
+      "/api/v1/agents/quote-helper/workspace": { status: 404, body: { message: sentence }, traceId: "trace-refused" },
     });
     const unserved = await consoleAt("/agents/quote-helper", {
-      "quote-helper": { status: 404, body: { detail: "Not Found" } },
+      "/api/v1/agents/quote-helper/workspace": { status: 404, body: { detail: "Not Found" } },
     });
-
     for (const { container } of [refused, unserved]) {
       expect(container.querySelector(".notice__body")?.textContent).toBe(sentence);
-      expect(container.querySelector(".agent-workspace, .agent-header")).toBeNull();
+      expect(container.querySelector('[data-slot="detail-header"]')).toBeNull();
       expect(container.textContent).not.toContain("No such page");
     }
     expect(refused.container.querySelector(".notice__trace code")?.textContent).toBe("trace-refused");
   });
-});
 
-// ------------------------------------------------------------ moving between agents and tabs
-
-describe("moving between agents and tabs", () => {
-  const answers: Record<string, Answer> = {
-    "quote-helper": { body: body() },
-    "rota-helper": { body: body(agentWire("rota-helper", "Rota Helper")) },
-  };
-
-  test("another agent at the same route starts from its own first tab", async () => {
-    // What breaks if this is deleted: one agent's open tab turning up on the next agent opened
-    // from the same page, which is a workspace saying something about an agent that belongs
-    // to a different one.
-    const { container, router } = await consoleAt(tabAddress("quote-helper", "memory"), answers);
-    expect(selectedLabel(container)).toBe("Memory");
-
-    await act(async () => {
-      await router.navigate("/agents/rota-helper");
+  test("an answer with no readable agent draws no page and composes no sentence about it", async () => {
+    // What breaks if this is deleted: a body that is not a workspace rendered as an agent with no
+    // name, or explained in a sentence nobody sent.
+    for (const unreadable of [null, [], {}, { agent: "quote-helper" }, { agent: { agent_id: "quote-helper" } }]) {
+      expect(readAgentWorkspace(unreadable)).toBeNull();
+    }
+    const idp = fakeIdentityProvider({
+      api(url) {
+        return new URL(url, CONSOLE_ORIGIN).pathname === "/api/v1/agents/quote-helper/workspace"
+          ? new Response("{}", { status: 200, headers: { "content-type": "application/json" } })
+          : null;
+      },
+    });
+    const loaded = await loadConsole({ idp });
+    await signIn(loaded);
+    const { routes } = await import("../src/App");
+    const router = createMemoryRouter(routes, { initialEntries: ["/agents/quote-helper"] });
+    const { container } = render(<RouterProvider router={router} />);
+    await waitFor(() => {
+      expect(idp.urls.some((url) => url.endsWith("/workspace"))).toBe(true);
     });
     await waitFor(() => {
-      expect(container.querySelector(".agent-header h2")?.textContent).toBe("Rota Helper");
+      expect(container.querySelector('[data-slot="loading-state"]')).toBeNull();
     });
-    expect(selectedLabel(container)).toBe(stripWire()[0]?.["label"]);
+    expect(container.querySelector('[data-slot="detail-header"]')).toBeNull();
+    expect(container.querySelector("main .notice")).toBeNull();
   });
 
-  test("following a link to another tab of the open agent lands on that tab without asking again", async () => {
-    // What breaks if this is deleted: the deep link from an alert opening on whatever tab was
-    // already showing, because the workspace was reused rather than told where to land. And
-    // it lands without a second request, because the tab is the console's state, not a
-    // question to the API.
-    const { container, router, idp } = await consoleAt(tabAddress("quote-helper", "memory"), answers);
+  test("a count or a capability the API sends reaches nothing on the page", async () => {
+    // What breaks if this is deleted: "showing 5 of 7 tabs", or a tab's required capability in an
+    // attribute. A route serialising `WorkspaceTab` whole would send its `read`, which names the
+    // grant each tab needs, and a total beside a narrowed strip is the subtraction.
+    const leaky = {
+      ...body({ ...agentWire(), hidden_count: 4700 }),
+      tabs: stripWire().map((tab) => ({ ...tab, read: { screen: `agent_workspace.${String(tab["tab"])}`, requires: "read:memory" } })),
+      total: 4700,
+      hidden: 4700,
+      of_total: "4700",
+    };
+    expect(JSON.stringify(read(leaky))).not.toMatch(/4700|read:memory|agent_workspace/);
+    for (const view of ["", "/profile", "/about"]) {
+      const { container } = await consoleAt(`/agents/quote-helper${view}`, agentAnswers("quote-helper", leaky));
+      expect(container.innerHTML, view).not.toMatch(/4700|read:memory|agent_workspace\./);
+    }
+  });
+});
 
-    await act(async () => {
-      await router.navigate(tabAddress("quote-helper", "people"));
-    });
+// ------------------------------------------------------------ moving between agents and views
+
+describe("moving between agents and views", () => {
+  const answers: Record<string, Answer> = {
+    ...agentAnswers("quote-helper", body()),
+    ...agentAnswers("rota-helper", body(agentWire("rota-helper", "Rota Helper"))),
+  };
+
+  test("another agent at the same route opens on its own Dashboard", async () => {
+    // What breaks if this is deleted: one agent's open view, or a number from its figures, turning up
+    // on the next agent opened from the same page.
+    const mounted = await consoleAt("/agents/quote-helper/about", answers);
+    expect(currentView(mounted.container)).toBe("About");
+    await go(mounted, "/agents/rota-helper");
     await waitFor(() => {
-      expect(selectedLabel(container)).toBe("People");
+      expect(header(mounted.container).querySelector("h1")?.textContent).toBe("Rota Helper");
     });
-    expect(agentRequests(idp)).toHaveLength(1);
+    expect(currentView(mounted.container)).toBe("Dashboard");
+  });
+
+  test("moving between one agent's views asks for the workspace once", async () => {
+    // What breaks if this is deleted: a page that reads the whole workspace again for every view,
+    // because the view was put in the component's key rather than in the address it reads.
+    const mounted = await consoleAt("/agents/quote-helper/profile", answers);
+    await go(mounted, "/agents/quote-helper/about");
+    await go(mounted, "/agents/quote-helper/settings");
+    expect(currentView(mounted.container)).toBe("Profile");
+    expect(workspaceRequests(mounted.idp)).toEqual(["/api/v1/agents/quote-helper/workspace"]);
   });
 });

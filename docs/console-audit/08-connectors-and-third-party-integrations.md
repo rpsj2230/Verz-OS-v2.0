@@ -14,7 +14,7 @@
 | `POST /api/v1/channels/{name}/events` | **no screen** |
 | `POST /api/v1/channels/{name}/switch` | **no screen** |
 | `POST /api/v1/channels/{name}/test` | **no screen** |
-| `POST /api/v1/connectors` | `/connectors` |
+| `POST /api/v1/connectors` | `/connectors`, `/first-run` |
 | `POST /api/v1/connectors/lark-app` | `/connectors` |
 | `POST /api/v1/connectors/lark-app/test` | `/connectors` |
 | `POST /api/v1/connectors/{connector}/disconnect` | `/connectors` |
@@ -31,7 +31,7 @@
 
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
-| `POST /api/v1/connectors` | `/connectors` | `test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_record` in `tests/unit/test_connector_store.py` (database, in CI) | `test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_record` in `tests/unit/test_connector_store.py` (database, in CI) | `test_a_connected_source_is_read_and_once_disconnected_it_is_never_read_again` in `tests/unit/test_connector_sync_run.py` (database, in CI) |
+| `POST /api/v1/connectors` | `/connectors`, `/first-run` | `test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_record` in `tests/unit/test_connector_store.py` (database, in CI) | `test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_record` in `tests/unit/test_connector_store.py` (database, in CI) | `test_a_connected_source_is_read_and_once_disconnected_it_is_never_read_again` in `tests/unit/test_connector_sync_run.py` (database, in CI) |
 | `POST /api/v1/connectors/lark-app` | `/connectors` | `test_a_save_keeps_one_credential_in_each_uses_slot_and_switches_them_on` in `tests/unit/test_lark_connect.py` | **None.** The write is an ops.setting row, which migration 0059's trigger records as a setting entry naming the key, the change and the writer, and no test follows this route's write to that entry. | `test_after_a_save_each_use_says_where_it_stands` in `tests/unit/test_lark_connect.py` |
 | `POST /api/v1/connectors/lark-app/test` | `/connectors` | Not applicable: A Lark test writes no row here or in Lark: every request after the token exchange is a read, which the fake Lark server records. | Not applicable: Nothing is written, so there is nothing for the ledger to record, and the secret is never logged. | `test_the_test_route_reports_each_use_and_writes_nothing` in `tests/unit/test_lark_connect.py` |
 | `POST /api/v1/connectors/{connector}/disconnect` | `/connectors` | `test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_record` in `tests/unit/test_connector_store.py` (database, in CI) | `test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_record` in `tests/unit/test_connector_store.py` (database, in CI) | `test_a_connected_source_is_read_and_once_disconnected_it_is_never_read_again` in `tests/unit/test_connector_sync_run.py` (database, in CI) |

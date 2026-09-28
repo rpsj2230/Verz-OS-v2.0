@@ -13,7 +13,7 @@
  * two-halves argument about the table's scrolling wrapper.
  *
  * **Reachable means through the application's own route table**, signed in through the real
- * session modules and answered by a stand-in API, as `tests/agents-roster.test.tsx` does.
+ * session modules and answered by a stand-in API, as `tests/agents-page.test.tsx` does.
  *
  * **"Nothing else" is compared as markup.** A body carrying a count, a tool call and a state
  * beside the cards renders byte for byte what the same cards render alone.
