@@ -197,6 +197,7 @@ def an_item(
     visibility: str = "department",
     department: str | None = "web",
     state: str = "published",
+    kind: str | None = None,
 ) -> KnowledgeItemRow:
     """One `know.item` row, shaped as that table's constraints admit."""
     return KnowledgeItemRow(
@@ -210,6 +211,7 @@ def an_item(
         verified_at=None,
         review_by=None,
         supersedes=None,
+        kind=kind,
     )
 
 
@@ -368,6 +370,9 @@ def _bound(statement: Any, rows: list[Any]) -> list[Any]:
     return rows if limit is None else rows[:limit]
 
 
+#: The function the library is read through: `0115`'s, which returns the kind (M7.6.1).
+LIBRARY_READ = "library_items_with_kind"
+
 #: The states `know.library_items` returns, which the migration holds to the same constant.
 RETRIEVABLE: frozenset[str] = frozenset(one.value for one in RETRIEVABLE_STATES)
 
@@ -376,7 +381,7 @@ def _library_bound(statement: Any) -> int | None:
     """The bound a statement passes `know.library_items`, or None for any other statement."""
     for one in getattr(statement, "get_final_froms", list)():
         called = getattr(one, "element", None)
-        if isinstance(called, FunctionElement) and getattr(called, "name", "") == "library_items":
+        if isinstance(called, FunctionElement) and getattr(called, "name", "") == LIBRARY_READ:
             (bound,) = [arg.value for arg in called.clauses]
             return int(bound)
     return None
@@ -538,8 +543,8 @@ def test_the_library_lists_every_retrievable_item_with_how_widely_each_reaches(
     Delete this and every refusal here is satisfied by a route that lists nothing at all, which
     is the library of a company that has written nothing down."""
     stored.items = [
-        an_item("doc_company", visibility="company", department="sales"),
-        an_item("doc_web", visibility="department", department="web"),
+        an_item("doc_company", visibility="company", department="sales", kind="policy"),
+        an_item("doc_web", visibility="department", department="web", kind="sop"),
         an_item("doc_mine", visibility="personal", department="web"),
     ]
 
@@ -547,10 +552,11 @@ def test_the_library_lists_every_retrievable_item_with_how_widely_each_reaches(
 
     assert response.status_code == 200, response.text
     body = response.json()
+    # The kind each was added as (M7.6.1), and null for one added before kinds were recorded.
     assert body["items"] == [
-        {"item_id": "doc_company", "level": "company"},
-        {"item_id": "doc_mine", "level": "personal"},
-        {"item_id": "doc_web", "level": "department"},
+        {"item_id": "doc_company", "level": "company", "kind": "policy"},
+        {"item_id": "doc_mine", "level": "personal", "kind": None},
+        {"item_id": "doc_web", "level": "department", "kind": "sop"},
     ]
     assert body["departments"] == ["sales", "web"]
     assert body["truncated"] is False
@@ -562,7 +568,7 @@ def test_the_library_lists_every_retrievable_item_with_how_widely_each_reaches(
 def test_a_library_row_carries_neither_the_title_nor_the_owner_nor_the_department(
     client: TestClient, stored: Stored
 ) -> None:
-    """The row the API sends has the two keys `LibraryRow` has and no third, whatever the
+    """The row the API sends has the three keys `LibraryRow` has and no fourth, whatever the
     stored row holds.
 
     Delete this and a route edit copying the title or the owner on to the response passes every
@@ -573,8 +579,8 @@ def test_a_library_row_carries_neither_the_title_nor_the_owner_nor_the_departmen
 
     row = get(client, "u_admin", LIBRARY).json()["items"][0]
 
-    assert set(row) == {"item_id", "level"}
-    assert set(LibraryRowView.model_fields) == {"item_id", "level"}
+    assert set(row) == {"item_id", "level", "kind"}
+    assert set(LibraryRowView.model_fields) == {"item_id", "level", "kind"}
 
 
 def test_an_item_in_a_department_the_reader_does_not_reach_changes_nothing_on_their_page(
@@ -671,7 +677,11 @@ def test_truncated_is_the_load_coming_back_full_and_not_the_rows_that_survived(
     monkeypatch.setattr(estate_routes, "MAX_ITEMS_CONSIDERED", 3)
     room = get(client, "u_narrow", LIBRARY).json()
 
-    assert full["items"] == room["items"] == [{"item_id": "doc_web", "level": "department"}]
+    assert (
+        full["items"]
+        == room["items"]
+        == [{"item_id": "doc_web", "level": "department", "kind": None}]
+    )
     assert full["truncated"] is True
     assert searched["truncated"] is True
     assert searched["items"] == []
@@ -706,7 +716,7 @@ def test_the_library_searches_filters_and_pages_only_the_rows_the_reader_may_kno
 
 
 def test_the_library_load_reads_the_library_function_with_its_bound_and_not_the_table() -> None:
-    """The statement, compiled against PostgreSQL: `know.library_items` with the page's bound, and
+    """The statement, compiled against PostgreSQL: the library read with the page's bound, and
     no `know.item` in its FROM. The state list, the order and the bound applied by the function are
     held against a server in `tests/unit/test_application_reads_db.py`.
 
@@ -715,9 +725,9 @@ def test_the_library_load_reads_the_library_function_with_its_bound_and_not_the_
     department and personal item it says it lists."""
     sql = str(retrievable_items(7).compile(dialect=DIALECT, compile_kwargs={"literal_binds": True}))
 
-    assert "know.library_items(7)" in sql
+    assert f"know.{LIBRARY_READ}(7)" in sql
     assert "FROM know.item" not in sql
-    assert "item_id" in sql and "visibility" in sql and "department" in sql
+    assert "item_id" in sql and "visibility" in sql and "department" in sql and "kind" in sql
     assert "title" not in sql
 
 

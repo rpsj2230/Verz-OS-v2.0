@@ -54,7 +54,10 @@ turns a level into a `Scope`, and that predicate names a department or an owner 
 row of the Scopes screen with a document's name in front of it. The level is one of three
 words and is a fact about the item, which is what the leaf's "per-item visibility scope"
 means to somebody reading the screen. So `LibraryRow` has no field a predicate could go in and
-`estate_gaps` reports one, which is `brain.console.govern.FrictionRow`'s construction.
+`estate_gaps` reports one, which is `brain.console.govern.FrictionRow`'s construction. **It also
+carries the item's kind** (M7.6.1): one word a person chose from `brain.knowledge.kinds`' closed
+list, which says what sort of document is there and nothing that is in it, so it sits on the
+existence plane beside the level.
 
 **Tier three is the only one of the three learning tiers that names a department**, so it is
 the only one the span decision applies to. `TierOneRow` and `TierTwoRow` carry a memory id, a
@@ -145,6 +148,7 @@ from brain.console.reads import permitted
 from brain.console.screens import screen
 from brain.console.workspace import Basis
 from brain.core.entitlement import Capability, EntitlementSet
+from brain.knowledge.kinds import KnowledgeKind
 from brain.knowledge.visibility import KnowledgeVisibility, Visibility
 from brain.memory.correction import Demotion, Supersession
 from brain.memory.digest import Learning
@@ -447,13 +451,15 @@ class LibraryItem:
 
     item_id: str
     visibility: KnowledgeVisibility
+    #: The kind it was added as, or None for an item added before kinds were recorded.
+    kind: KnowledgeKind | None = None
 
 
 @dataclass(frozen=True)
 class LibraryRow:
-    """One item on the library screen: that it exists, and how wide it reaches (M27.3.14).
+    """One item on the library screen: that it exists, what kind it is, and how wide it reaches.
 
-    Two fields and no third. There is no scope, no predicate, no department and no owner,
+    Three fields (M27.3.14, M7.6.1). There is no scope, no predicate, no department and no owner,
     which is `A_VISIBILITY_PREDICATE_NAMES_A_DEPARTMENT_AND_AN_OWNER` expressed as a shape
     rather than as a rule somebody remembers, and `estate_gaps` reports one if a later edit
     adds it.
@@ -465,6 +471,8 @@ class LibraryRow:
 
     item_id: str
     level: Visibility
+    #: One word from a closed list, chosen by whoever added the item. None when none was.
+    kind: KnowledgeKind | None = None
 
 
 def library_rows(
@@ -490,7 +498,11 @@ def library_rows(
     """
     required = screen("library").read.requires
     return tuple(
-        LibraryRow(item_id=one.record.item_id, level=one.record.visibility.level)
+        LibraryRow(
+            item_id=one.record.item_id,
+            level=one.record.visibility.level,
+            kind=one.record.kind,
+        )
         for one in items
         if _in_reach(entitlement, required, one.where, now)
     )

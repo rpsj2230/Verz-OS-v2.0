@@ -58,6 +58,10 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "Recording a check appends a row. A later check supersedes an earlier one without editing it and " +
     "nothing is removed, which tests/unit/test_requirement_check_routes.py holds, so nothing existing " +
     "is ended or replaced.",
+  "src/pages/Knowledge.tsx uploadPath(draft.kind, draft.level, draft.department)":
+    "Adding a document writes a new item. The same file sent again to the same place is the same item " +
+    "with the same text, because its reference is a digest of the bytes, the owner and the place, which " +
+    "tests/unit/test_knowledge_upload.py holds, so nothing existing is ended or removed.",
   "src/pages/Ask.tsx ANSWER_API_PATH":
     "Asking a question changes nothing an administrator manages: the answer is computed for the " +
     "reader and nothing they hold is ended or replaced.",

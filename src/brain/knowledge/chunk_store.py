@@ -54,9 +54,18 @@ fails loudly and writes nothing; clearing retired rows is a delete nobody holds 
 nothing supersedes a document's chunks, because 0046 records that no statement can move a live
 chunk to `superseded` under the current policy.
 
-No leaf is claimed below, for the reason `brain.knowledge.embed` gives about the one this serves.
+**The owner's reach here is what they read and where they may add, and nowhere else.** An
+administrator adds a document to a department they do not read, and the rows have to be written
+and read back for embedding as that owner. So `store_reach` is the union of the owner's read and
+their `admin:knowledge` reach, both reduced by `reach_for`; the search a person asks through still
+reads with the read alone. See
+`WHAT_THE_OWNER_ADDED_IS_WRITTEN_AND_READ_BACK_UNDER_THEIR_OWN_GRANT`.
 
-Task ids: none
+**A parser's blocks are written as laid out, or the text is cut on blank lines.** A document read
+by `brain.knowledge.text_path` arrives with its pages, its sections and the tables that path could
+see; `write_document` takes them and refuses one that is not the text at its own offset.
+
+Task ids: M7.6.3
 """
 
 from __future__ import annotations
@@ -75,6 +84,7 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.sql import Update
 
+from brain.core.entitlement import EntitlementSet
 from brain.gate.entitlement_store import RESOLVE, entitlements_from
 from brain.knowledge.chunking import Block, BlockKind, Chunk, ChunkBounds, chunk_document
 from brain.knowledge.document_tools import departments_query
@@ -100,9 +110,12 @@ from brain.knowledge.item_store import put_item, reach_from
 from brain.knowledge.search import (
     CHUNK,
     EMBEDDING_DIMENSIONS,
+    KNOWLEDGE_UPLOAD,
     Reach,
+    SearchError,
     Vector,
     chunk_text_fields,
+    reach_for,
     reach_predicate,
     session_settings,
     to_vector_literal,
@@ -130,6 +143,17 @@ A_DOCUMENT_ITS_OWNER_CANNOT_REACH_IS_NOT_INDEXED_ON_THEIR_BEHALF: Final = (
     "passages are found by text search and by no vector with nothing reporting why. So the rows "
     "are put to Reach.admits before they are written, and a document its owner cannot reach is "
     "refused at the door, where the person handing it over can be told."
+)
+
+#: Why the store's reach includes where the owner may add a document as well as what they read.
+WHAT_THE_OWNER_ADDED_IS_WRITTEN_AND_READ_BACK_UNDER_THEIR_OWN_GRANT: Final = (
+    "An administrator adds a document to a department without reading that department: they hold "
+    "admin:knowledge there and no read:knowledge. Judged by the read alone, the document would be "
+    "refused at the door, or written and never readable back by the embedding job that runs as "
+    "its owner. So the store's reach is what the owner reads together with where they may add, "
+    "both reduced from their own grants by reach_for. It is still the owner's reach and nobody "
+    "else's, and it is the store's alone: the search a person asks through reads with the read "
+    "and nothing else, so adding a document to a department never lets its uploader read it."
 )
 
 #: Why the write asks for the row as it was read.
@@ -349,7 +373,34 @@ async def reach_of(session: AsyncSession, principal_id: str, *, now: datetime) -
     ).scalar_one()
     entitlement = entitlements_from(payload)
     registry = (await session.execute(departments_query().statement)).scalars().all()
-    return reach_from(entitlement, departments=[str(slug) for slug in registry], now=now)
+    return store_reach(entitlement, departments=[str(slug) for slug in registry], now=now)
+
+
+def store_reach(
+    entitlement: EntitlementSet, *, departments: Sequence[str], now: datetime
+) -> Reach | None:
+    """What the store writes and reads back under for this owner: their read and where they add.
+
+    See `WHAT_THE_OWNER_ADDED_IS_WRITTEN_AND_READ_BACK_UNDER_THEIR_OWN_GRANT`. The read is
+    `item_store.reach_from`, with its refusal read as no reach; the add is `reach_for` over
+    `KNOWLEDGE_UPLOAD`, refused the same way. The departments are the union, in the registry's
+    order, and None only when the owner holds neither. A union is safe for the reason the
+    invariant gives: grants only add, and both halves are this owner's own.
+    """
+    read = reach_from(entitlement, departments=departments, now=now)
+    try:
+        added = reach_for(
+            entitlement, departments=departments, now=now, capability=KNOWLEDGE_UPLOAD
+        )
+    except SearchError:
+        added = None
+    if read is None and added is None:
+        return None
+    held = {*(read.departments if read else ()), *(added.departments if added else ())}
+    return Reach(
+        principal_id=entitlement.principal_id,
+        departments=tuple(name for name in dict.fromkeys(departments) if name in held),
+    )
 
 
 async def _within(session: AsyncSession, reach: Reach) -> None:
@@ -367,8 +418,14 @@ async def write_document(
     reach: Reach,
     revision: str | None,
     bounds: ChunkBounds | None = None,
+    blocks: Sequence[Block] | None = None,
 ) -> Job | None:
     """Write an item and its chunks in this transaction, and return the job that embeds them.
+
+    `blocks` are the parser's, when a parser laid the item out with pages, sections and tables it
+    could see; without them the item's text is cut by `text_blocks`. Either way every block must
+    be the text at its own offset in the item's content, because that offset is what a citation
+    resolves against, and a block that disagrees is refused before anything is written.
 
     None when this install has declared no embedding revision, which is an install with no
     vector leg; see `embed_policy.AN_UNDECLARED_REVISION_IS_AN_INSTALL_WITH_NO_VECTOR_LEG`. Does
@@ -386,7 +443,15 @@ async def write_document(
             f"{item.owner_id!r} stewards; the store runs as the owner and nobody else"
         )
         raise ChunkStoreError(msg)
-    chunks = chunk_document(item, text_blocks(item.content), bounds=bounds or ChunkBounds())
+    laid = text_blocks(item.content) if blocks is None else tuple(blocks)
+    for block in laid:
+        if item.content[block.start : block.end] != block.text:
+            msg = (
+                f"a block of {item.item_id!r} at {block.start} is not the text at that offset "
+                "in the item, so a citation to it would point at other words"
+            )
+            raise ChunkStoreError(msg)
+    chunks = chunk_document(item, laid, bounds=bounds or ChunkBounds())
     if not chunks:
         msg = f"{item.item_id!r} holds no text between its blank lines, so it has no passage"
         raise ChunkStoreError(msg)
@@ -424,6 +489,7 @@ async def ingest_document(
     now: datetime,
     env: Mapping[str, str] | None = None,
     bounds: ChunkBounds | None = None,
+    blocks: Sequence[Block] | None = None,
 ) -> Job | None:
     """Write an admitted item to the corpus, commit, then hand its embedding job to the queue.
 
@@ -444,7 +510,9 @@ async def ingest_document(
                 f"{A_DOCUMENT_ITS_OWNER_CANNOT_REACH_IS_NOT_INDEXED_ON_THEIR_BEHALF}"
             )
             raise ChunkStoreError(msg)
-        job = await write_document(session, item, reach=reach, revision=revision, bounds=bounds)
+        job = await write_document(
+            session, item, reach=reach, revision=revision, bounds=bounds, blocks=blocks
+        )
     if job is not None:
         await enqueue(job)
     return job

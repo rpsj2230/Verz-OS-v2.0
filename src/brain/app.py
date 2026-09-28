@@ -138,6 +138,7 @@ from brain.install import InstallError, installed_name, value_of
 from brain.install_routes import router as install_router
 from brain.jobs_routes import router as jobs_router
 from brain.knowledge.row_store import SessionRowSource
+from brain.knowledge_routes import router as knowledge_router
 from brain.lark_connect_routes import router as lark_connect_router
 from brain.log_routes import router as log_router
 from brain.migrate import run_migrations
@@ -245,8 +246,10 @@ VAULT_CHECK: Final = VAULT_PART
 
 #: The methods and headers a cross-origin caller may use. PUT and PATCH because two console
 #: writes are one of each (`provider_routes`, `routing_routes`); no DELETE, because no route is one.
+#: `x-upload-name` carries an uploaded file's name, which `brain.knowledge_routes` keeps out of
+#: the URL.
 CORS_METHODS: Final = ("GET", "POST", "PUT", "PATCH")
-CORS_HEADERS: Final = ("authorization", "content-type", "x-trace-id")
+CORS_HEADERS: Final = ("authorization", "content-type", "x-trace-id", "x-upload-name")
 
 #: Why the CORS allow list is two named settings, normalised, and never a wildcard.
 CORS_ADMITS_THE_CONSOLE_AND_THE_WIDGET_AND_NOTHING_ELSE: Final = (
@@ -1413,6 +1416,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # the signature, and each channel's record, switch, test message and deliveries behind the
     # connector authority over `<channel>_channel`. See `brain.channel_routes`.
     app.include_router(channel_router)
+    # Adding a document to the knowledge layer from the Knowledge page, read by the text path and
+    # placed where the uploader holds `admin:knowledge`. See `brain.knowledge_routes`.
+    app.include_router(knowledge_router)
 
     @app.get("/health/live", response_model=Health, tags=["health"])
     async def live() -> Health:

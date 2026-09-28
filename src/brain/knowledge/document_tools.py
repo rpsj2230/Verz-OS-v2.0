@@ -85,7 +85,22 @@ door that already exists.
 `RowSource` and not a session, and the only way to share a transaction with a statement the
 source runs is to be run by the source.
 
-Task ids: M15.2.6, M15.3.2
+**A passage carries the department, visibility and owner its item was stored with** (M7.7.1).
+The redactor tests a field grant's scope against the record, and a passage that carried none of
+the three facts its scopes test was withheld from every grant scoped to a department, which is how
+a pack assignment grants the passage fields: a person in a department read none of that
+department's passages. The three are read from the chunk row, which `chunk_document` copied from
+the item and nothing recomputed, so a grant over one department admits that department's passages
+and no other's. They are never shown to a model; `brain.gate.model_lane.SHOWN_FIELDS` names what
+is. See `A_PASSAGE_CARRIES_THE_PLACE_ITS_SCOPES_TEST`.
+
+**A search may be narrowed to some kinds of item** (M7.6.1). `DocumentSearch.kinds` asks
+`know.item` for the items of those kinds inside each ranking statement, before its limit, and
+`know.item`'s policy reads the same session settings the chunk statement carries, so the
+narrowing sees exactly the items the reach admits. It narrows what the caller asked about and
+decides nothing about what they may see. See `A_KIND_NARROWS_THE_QUESTION_AND_NEVER_THE_REACH`.
+
+Task ids: M15.2.6, M15.3.2, M7.7.1, M7.6.1
 """
 
 from __future__ import annotations
@@ -112,6 +127,7 @@ from brain.knowledge.embed_policy import EmbeddingLeg, outage_response
 from brain.knowledge.embed_queue import EmbeddingService
 from brain.knowledge.embedding import EmbeddedVector, EmbeddingError
 from brain.knowledge.item import ITEM_ID_PATTERN
+from brain.knowledge.kinds import KnowledgeKind
 from brain.knowledge.rows import RowQuery, RowSource
 from brain.knowledge.search import (
     CANDIDATE_DEPTH,
@@ -131,6 +147,7 @@ from brain.knowledge.search import (
     vector_query,
 )
 from brain.tables.gate import DepartmentRow
+from brain.tables.knowledge import KnowledgeItemRow
 
 # ------------------------------------------------------------------ written-down reasons
 
@@ -170,6 +187,25 @@ A_QUESTION_THAT_COULD_NOT_BE_EMBEDDED_IS_DEGRADED_AND_SAYS_SO: Final = (
     "read exactly like a full answer, and nothing repairs an answer somebody has already read. "
     "The result envelope has no field to say it, so the handler raises Degraded, which says a "
     "system could not be reached and names no document, no question and no count."
+)
+
+#: Why a passage carries its department, visibility and owner. See the module docstring.
+A_PASSAGE_CARRIES_THE_PLACE_ITS_SCOPES_TEST: Final = (
+    "The redactor decides each field of a passage by testing the caller's field grant's scope "
+    "against the passage, and a pack assignment scopes those grants to a department. A passage "
+    "carrying no department matched no such grant and was withheld whole. So it carries the "
+    "department, visibility and owner the chunk row copied from its item, a grant over one "
+    "department admits that department's passages and never another's, and a company or "
+    "personal passage, which names no department, is admitted only by a grant that tests none."
+)
+
+#: Why a kind filter sits inside the ranking statement. See the module docstring.
+A_KIND_NARROWS_THE_QUESTION_AND_NEVER_THE_REACH: Final = (
+    "Narrowing to some kinds is the caller asking a narrower question, so it is applied where the "
+    "question is, before the limit, and the candidates are the caller's best matches among those "
+    "kinds. Applied afterwards it would be the post-filter brain.knowledge.search is written "
+    "against. It reads know.item under the same session settings as the chunk statement, so it "
+    "can only remove passages the reach already admitted, never add one."
 )
 
 #: Why the definitions leave `source` empty.
@@ -233,6 +269,10 @@ PASSAGE_COLUMNS: Final[tuple[str, ...]] = (
     "title",
     "section",
     "updated_at",
+    # The item's place, copied onto the chunk and read back for the redactor (M7.7.1).
+    "department",
+    "visibility",
+    "owner_id",
 )
 
 #: The query builder for each lexical leg `lexical_legs` can name. A leg added there and not
@@ -250,6 +290,9 @@ class DocumentSearch(BaseModel):
 
     question: str = Field(min_length=1, max_length=QUESTION_CHARS)
     limit: int = Field(default=DEFAULT_PASSAGES, ge=1, le=MAX_PASSAGES)
+    #: The kinds of item to search, or none to search every kind (M7.6.1). A narrowing of the
+    #: question and never of the reach; see `A_KIND_NARROWS_THE_QUESTION_AND_NEVER_THE_REACH`.
+    kinds: tuple[KnowledgeKind, ...] = Field(default=(), max_length=len(KnowledgeKind))
 
 
 class DocumentRead(BaseModel):
@@ -276,6 +319,11 @@ class KnowledgePassage(Entity):
     section: str = ""
     document: str
     updated_at: str = ""
+    #: The place the item was stored at, which a field grant's scope is tested against (M7.7.1).
+    #: None where the item names no department, so a department-scoped grant never matches one.
+    department: str | None = None
+    visibility: str | None = None
+    owner_id: str | None = None
 
 
 # ------------------------------------------------------------------ the statements
@@ -313,13 +361,30 @@ def departments_query() -> RowQuery:
     return _query("department", ("slug",), statement, empty=False, settings=())
 
 
-def search_queries(question: str, *, reach: Reach) -> tuple[RowQuery, ...]:
+def narrowed(statement: Select[Any], kinds: Sequence[KnowledgeKind]) -> Select[Any]:
+    """A ranking statement narrowed to items of these kinds, or unchanged for none (M7.6.1).
+
+    `Select.where` conjoins into the statement's own WHERE, which its LIMIT applies after, so the
+    candidates are drawn from the narrowed set. See
+    `A_KIND_NARROWS_THE_QUESTION_AND_NEVER_THE_REACH`.
+    """
+    if not kinds:
+        return statement
+    of_kinds = sa.select(KnowledgeItemRow.item_id).where(
+        KnowledgeItemRow.kind.in_(sorted({one.value for one in kinds}))
+    )
+    return statement.where(CHUNK.c.document_id.in_(of_kinds))
+
+
+def search_queries(
+    question: str, *, reach: Reach, kinds: Sequence[KnowledgeKind] = ()
+) -> tuple[RowQuery, ...]:
     """A ranked statement per lexical leg the question needs, in the order `lexical_legs` gives."""
     return tuple(
         _query(
             KNOWLEDGE_ENTITY,
             ("chunk_id", "relevance"),
-            LEXICAL_LEG_QUERIES[leg](question, reach=reach, depth=CANDIDATE_DEPTH),
+            narrowed(LEXICAL_LEG_QUERIES[leg](question, reach=reach, depth=CANDIDATE_DEPTH), kinds),
             empty=False,
             settings=session_settings(reach),
         )
@@ -368,7 +433,9 @@ def document_query(document_id: str, *, reach: Reach, limit: int) -> RowQuery:
     )
 
 
-def vector_search_query(vector: EmbeddedVector, *, reach: Reach) -> RowQuery:
+def vector_search_query(
+    vector: EmbeddedVector, *, reach: Reach, kinds: Sequence[KnowledgeKind] = ()
+) -> RowQuery:
     """The nearest-neighbour leg, under the reach, with the settings its index walk needs.
 
     `vector_query` conjoins `reach_predicate` and the model the vector came from, so a question
@@ -377,8 +444,11 @@ def vector_search_query(vector: EmbeddedVector, *, reach: Reach) -> RowQuery:
     statement's own transaction. See
     `ONLY_THE_VECTOR_LEG_WALKS_THE_INDEX_AND_IT_CARRIES_THE_SCAN_SETTINGS`.
     """
-    statement = vector_query(
-        vector.values, reach=reach, model=vector.model.identity, depth=CANDIDATE_DEPTH
+    statement = narrowed(
+        vector_query(
+            vector.values, reach=reach, model=vector.model.identity, depth=CANDIDATE_DEPTH
+        ),
+        kinds,
     )
     return _query(
         KNOWLEDGE_ENTITY,
@@ -458,10 +528,18 @@ def _passages(
             section=passage.section,
             document=passage.text,
             updated_at=fetched[passage.chunk_id]["updated_at"].isoformat(),
+            department=_named(fetched[passage.chunk_id]["department"]),
+            visibility=_named(fetched[passage.chunk_id]["visibility"]),
+            owner_id=_named(fetched[passage.chunk_id]["owner_id"]),
         )
         for found in by_document(by_chunk(order, chunks))
         for passage in found.passages
     )
+
+
+def _named(value: object) -> str | None:
+    """A column the row may leave empty, as the passage carries it: a name, or None."""
+    return None if value is None or value == "" else str(value)
 
 
 def _result(
@@ -498,14 +576,17 @@ def searcher(
             return _result((), now, truncated=False)
         vector = None if embedder is None else await embedder.vector(request.question)
         legs = [
-            await records.rows(query) for query in search_queries(request.question, reach=reach)
+            await records.rows(query)
+            for query in search_queries(request.question, reach=reach, kinds=request.kinds)
         ]
         # One ranking from the legs in the order they arrived, each passage once: a chunk that
         # matches in two scripts is one passage, and `Ranking` refuses it listed twice.
         lexical = tuple(dict.fromkeys(str(row["chunk_id"]) for rows in legs for row in rows))
         nearest: tuple[str, ...] = ()
         if vector is not None:
-            found = await records.rows(vector_search_query(vector, reach=reach))
+            found = await records.rows(
+                vector_search_query(vector, reach=reach, kinds=request.kinds)
+            )
             nearest = tuple(dict.fromkeys(str(row["chunk_id"]) for row in found))
         page = [one.ref for one in hybrid(lexical=lexical, vector=nearest, limit=request.limit)]
         bodies = passages_query(page, reach=reach)
