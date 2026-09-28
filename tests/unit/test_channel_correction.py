@@ -94,6 +94,11 @@ def _email(line: str) -> object:
     )
 
 
+def _webhook(line: str) -> object:
+    # The company's own system posts the line as the text of a message it signed.
+    return {"id": "m-1", "sender": "person-42", "text": line, "sent_at": 1757160000}
+
+
 #: How a person types a line into each surface, by the module the adapter lives in.
 INBOUND: dict[str, Callable[[str], object]] = {
     "lark": _lark,
@@ -102,6 +107,7 @@ INBOUND: dict[str, Callable[[str], object]] = {
     "telegram": _telegram,
     "whatsapp": _whatsapp,
     "email": _email,
+    "webhook": _webhook,
 }
 
 

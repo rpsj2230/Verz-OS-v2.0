@@ -209,13 +209,7 @@ from brain.agents.template import (
 )
 from brain.api import API_PREFIX, COMMON_RESPONSES, Page
 from brain.api_routes import Asked, Asking, reachable_sources
-from brain.channels.adapter import ChannelAdapter, ChannelCapabilities
-from brain.channels.email import EmailAdapter
-from brain.channels.lark import LarkAdapter
-from brain.channels.slack import SlackAdapter
-from brain.channels.teams import TeamsAdapter
-from brain.channels.telegram import TelegramAdapter
-from brain.channels.whatsapp import WhatsAppAdapter
+from brain.channels.adapter import ChannelAdapter, ChannelCapabilities, channel_adapters
 from brain.console.agent_profile import (
     RUN_SPEND_IS_RECORDED,
     LeashRow,
@@ -417,7 +411,7 @@ AGENT_SCREEN: Final = "agents"
 #: templates". See `A_GALLERY_IS_A_LISTING_AND_A_LISTING_IS_WHERE_A_TOTAL_LEAKS`.
 TEMPLATE_SCREEN: Final = SKILL_SCREEN
 
-#: Every surface this product can deliver on, as the six adapters that own the declaration.
+#: Every surface this product can deliver on, as the adapters that own the declaration.
 #:
 #: Classes rather than a table of capabilities written here, because each adapter argues its
 #: own ceiling in its own docstring and a second table is the copy that says `INTERNAL` where
@@ -425,14 +419,11 @@ TEMPLATE_SCREEN: Final = SKILL_SCREEN
 #: credential: `brain.ops.secrets.borrow` leases one per run, so asking a fresh adapter what
 #: it can carry opens nothing and reads no configuration. It is also not a statement that this
 #: installation has any of them set up. See `A_FIGURE_NOTHING_STORES_IS_ABSENT_AND_NEVER_NOUGHT`.
-CHANNEL_ADAPTERS: Final[tuple[Callable[[], ChannelAdapter], ...]] = (
-    EmailAdapter,
-    LarkAdapter,
-    SlackAdapter,
-    TeamsAdapter,
-    TelegramAdapter,
-    WhatsAppAdapter,
-)
+#:
+#: Discovered by `brain.channels.adapter.channel_adapters` rather than listed here, since M10.1.1:
+#: a channel package adds its module and this tuple has it, for
+#: `brain.channels.adapter.A_CHANNEL_IS_ADDED_BY_ADDING_ITS_FILE`'s reason.
+CHANNEL_ADAPTERS: Final[tuple[Callable[[], ChannelAdapter], ...]] = channel_adapters()
 
 
 # ------------------------------------------------------------------------ the shapes
@@ -1050,7 +1041,7 @@ def declared_channels() -> tuple[ChannelCapabilities, ...]:
     A fresh adapter per call and no configuration read, because `capabilities` is a
     declaration: `brain.channels.adapter.ChannelCapabilities` is frozen and is read at send
     time rather than at registration precisely so that an adapter cannot widen itself, and
-    every one of the six declares it from constants in its own module. Restating the six here
+    every one of them declares it from constants in its own module. Restating them here
     would be a second answer to what a surface can carry, and the permissive copy is the one
     that ends up in front of somebody.
     """

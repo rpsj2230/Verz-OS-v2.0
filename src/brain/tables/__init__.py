@@ -58,6 +58,7 @@ from brain.tables.automation_run import AutomationRunRow, AutomationScheduleRow
 from brain.tables.break_glass_notice import BreakGlassNoticeRow
 from brain.tables.browsing import BrowserEnvelopeRow
 from brain.tables.budget import BudgetVersionRow
+from brain.tables.channel import ChannelDeliveryRow, ChannelRow
 from brain.tables.channel_event import ChannelEventRow
 from brain.tables.chat import ConversationRow, MessageRole, MessageRow
 from brain.tables.compliance import BreachCaseRow, SensitiveReferralRow
@@ -342,6 +343,10 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     "ops.provider_health",
     "ops.chain_depth_alert",
     "ops.residency_constraint",
+    # 0114_channel_record_and_delivery. A delivery names its channel by value, not by key, so a
+    # refusal on a channel with no record is recorded too.
+    "ops.channel",
+    "ops.channel_delivery",
 )
 
 __all__ = [
@@ -367,7 +372,9 @@ __all__ = [
     "CapabilityPackRow",
     "CapabilityRegistryRow",
     "ChainDepthAlertRow",
+    "ChannelDeliveryRow",
     "ChannelEventRow",
+    "ChannelRow",
     "ConnectorConnectionRow",
     "ConnectorSyncRow",
     "ControlRunRow",

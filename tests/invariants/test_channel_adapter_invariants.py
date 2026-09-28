@@ -39,7 +39,9 @@ CHANNELS_DIR = Path(brain.channels.__file__).parent
 
 #: Modules that carry no adapter and are not expected to. Named rather than inferred so a
 #: module that quietly stops exposing `capabilities()` is a discovery failure somebody sees.
-NOT_ADAPTERS = frozenset({"adapter", "api_keys", "binding", "cards", "room", "webhook", "__init__"})
+NOT_ADAPTERS = frozenset(
+    {"adapter", "api_keys", "binding", "cards", "inbound", "outbound", "room", "__init__"}
+)
 
 
 def _adapters() -> list[tuple[str, type[Any]]]:
@@ -79,7 +81,7 @@ def test_the_discovery_actually_found_the_adapters() -> None:
     names = {module for module, _ in ADAPTERS}
 
     assert len(ADAPTERS) >= 5, f"discovery found only {names}"
-    assert {"whatsapp", "email", "slack", "telegram"} <= names
+    assert {"whatsapp", "email", "slack", "telegram", "webhook"} <= names
 
 
 @pytest.mark.parametrize(("module", "cls"), ADAPTERS, ids=lambda v: getattr(v, "__name__", v))
