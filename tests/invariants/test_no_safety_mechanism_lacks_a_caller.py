@@ -97,10 +97,9 @@ KNOWN_ORPHANS = frozenset(
 #: `directory_sync` left it on 2026-09-21 for `SCHEDULED_BY_THE_WORKER`, when
 #: `brain.ops.staff_sync_run` gave the nightly read a runner.
 #:
-#: `denial_digest` joined it on 2026-09-28 from `KNOWN_ORPHANS`. `brain.ops.denial_digest_run`
-#: reads the hour's refusals from the ledger, resolves the people to tell and keeps what
-#: `digest` raises, and its runner in `brain.ops.schedule_runner` is the integrator's to add.
-WIRED_BUT_NOT_SCHEDULED = frozenset({"spend_correction", "restore_drill", "denial_digest"})
+#: `denial_digest` joined it on 2026-09-28 from `KNOWN_ORPHANS` and left it the same day for
+#: `SCHEDULED_BY_THE_WORKER`, when `brain.ops.schedule_runner` gave it a runner.
+WIRED_BUT_NOT_SCHEDULED = frozenset({"spend_correction", "restore_drill"})
 
 #: Controls the worker's schedule starts, which is the state the two sets above are waiting for.
 #:
@@ -135,6 +134,9 @@ WIRED_BUT_NOT_SCHEDULED = frozenset({"spend_correction", "restore_drill", "denia
 #:
 #: `model_health_probes` joined on 2026-09-22 from `KNOWN_ORPHANS`: `brain.ops.model_probe_run`
 #: probes each deployment `next_probes` finds due and appends the outcome to its probe ring.
+#:
+#: `denial_digest` joined on 2026-09-28: `brain.ops.denial_digest_run` reads the hour's refusals
+#: from the ledger and keeps what `digest` raises for the Notifications screen.
 SCHEDULED_BY_THE_WORKER = frozenset(
     {
         "retention_sweep",
@@ -149,6 +151,7 @@ SCHEDULED_BY_THE_WORKER = frozenset(
         "vault_audit_ship",
         "directory_sync",
         "model_health_probes",
+        "denial_digest",
     }
 )
 
@@ -190,11 +193,7 @@ SCHEDULED_BY_THE_WORKER = frozenset(
 #: `run_renewal_now`, is reached through `start_control` and is not reported. Recorded rather
 #: than dropped from the symbols, because dropping it would make the application's token a token
 #: the registry says nothing about.
-#:
-#: `denial_digest` joined it on 2026-09-28, and it is exactly the chain this set exists for:
-#: `brain.ops.denial_digest_run.run_denial_digest_now` calls `digest`, and nothing calls it yet.
-#: It leaves the day `brain.ops.schedule_runner` gives the control a runner and an arm.
-CALLERS_NOTHING_REACHES = frozenset({"directory_sync", "vault_token_renewal", "denial_digest"})
+CALLERS_NOTHING_REACHES = frozenset({"directory_sync", "vault_token_renewal"})
 
 
 def test_every_control_names_functions_that_exist() -> None:

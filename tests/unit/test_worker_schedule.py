@@ -75,6 +75,7 @@ WIRED = [one.name for one in RUNNERS if one.run is not None]
 STARTED = [
     ("retention_sweep", True),
     ("canary_run", False),
+    ("denial_digest", False),
     ("directory_sync", False),
     ("knowledge_reverification", False),
     ("model_health_probes", False),
@@ -153,19 +154,21 @@ def starts(monkeypatch: pytest.MonkeyPatch) -> Starts:
 
 
 # ------------------------------------------------------------------- without a server
-def test_the_wired_runners_are_the_twelve_the_schedule_is_meant_to_start() -> None:
+def test_the_wired_runners_are_the_thirteen_the_schedule_is_meant_to_start() -> None:
     """Asserted against the names, so a runner wired or unwired later moves this on purpose.
 
     The webhook dispatch, the erasure queue and the permission canaries joined on 2026-09-17,
     the vault token renewal later that day, with the installer's vault, and the automation
     runner and the connector sync after it, and the vault audit shipper last. The staff sync
-    joined on 2026-09-21, and the model health prober on 2026-09-22, in the registry's own order.
+    joined on 2026-09-21, the model health prober on 2026-09-22, and the hourly denial digest on
+    2026-09-28, in the registry's own order.
 
-    Delete this and every assertion below that names the twelve could be satisfied by a table
+    Delete this and every assertion below that names the thirteen could be satisfied by a table
     that had quietly lost one of them."""
     assert WIRED == [
         "retention_sweep",
         "canary_run",
+        "denial_digest",
         "directory_sync",
         "knowledge_reverification",
         "model_health_probes",

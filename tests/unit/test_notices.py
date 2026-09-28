@@ -60,7 +60,10 @@ def test_a_notice_said_to_be_sent_names_a_sender_that_asks_the_switch_about_it()
     from brain.ops.controls import Invocation, control
 
     sent = [one for one in NOTICES if one.sent_by]
-    assert [one.kind for one in sent] == [NoticeKind.REVERIFICATION_REQUEST]
+    assert [one.kind for one in sent] == [
+        NoticeKind.REVERIFICATION_REQUEST,
+        NoticeKind.DENIAL_PATTERN,
+    ]
     for one in sent:
         tree = ast.parse(inspect.getsource(_function(one.sent_by)))  # type: ignore[arg-type]
         asks = [
@@ -75,6 +78,7 @@ def test_a_notice_said_to_be_sent_names_a_sender_that_asks_the_switch_about_it()
         ]
         assert asks, f"{one.sent_by} does not ask whether {one.kind.value} is on"
     assert control("knowledge_reverification").invoked_by is Invocation.IN_PROCESS
+    assert control("denial_digest").invoked_by is Invocation.IN_PROCESS
 
 
 def test_a_notice_said_to_be_unsent_has_a_composer_nothing_the_schedule_starts_calls() -> None:

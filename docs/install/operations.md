@@ -309,8 +309,8 @@ starting the re-verification nag. Seven became true on 2026-09-17, when the sche
 starting the webhook dispatch, and six later that day, when it began starting the permission
 canaries. Five became true on 2026-09-22, when the schedule began probing model providers. Four
 became true on 2026-09-28, when the denial digest was given the module that reads the hour's
-refusals from the audit ledger and keeps the alerts it raises; the schedule does not start that
-module yet, which is why its row says `in_process` and not that it runs.
+refusals from the audit ledger and keeps the alerts it raises, and the worker's schedule starts
+it every hour.
 
 <!-- checked: every scheduled mechanism and whether anything starts it -->
 
