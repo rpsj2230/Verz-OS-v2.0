@@ -56,7 +56,11 @@ import {
   AGENTS_API_PATH,
   AUDIT_PATH,
   FIGURES_API_PATH,
+  HALTS_UNKNOWN,
+  HALTS_UNKNOWN_SUB,
   HEALTH_FIGURES,
+  NO_HALTS,
+  haltWords,
   OVERVIEW_API_PATH,
   QUEUE_PAGES,
   SOURCES_API_PATH,
@@ -85,6 +89,7 @@ export const HOME_CRUMB = "Home";
 export const HEALTH_LABEL = "This install";
 export const READINESS_LABEL = "Readiness";
 export const WORKER_LABEL = "Worker last seen";
+export const HALTS_LABEL = "Halts in force";
 export const WORKER_SUB = "newest scheduled run you can see";
 
 export const FIGURES_LABEL = "Last 7 days";
@@ -174,11 +179,19 @@ function HealthStrip({ overview }: { readonly overview: Resource<unknown> }) {
   }
   const read = overview.data === null ? null : readOverview(overview.data);
   const health = Object.entries(HEALTH_FIGURES).filter(([figure]) => read?.healthNotRecorded.some((one) => one.figure === figure));
+  const halts = read?.halts;
   return (
     <section aria-label={HEALTH_LABEL} className="flex min-w-0 flex-col gap-2">
-      <StatsStrip label={HEALTH_LABEL} busy={overview.busy} failure={overview.failure} count={2 + health.length}>
+      <StatsStrip label={HEALTH_LABEL} busy={overview.busy} failure={overview.failure} count={2 + health.length + (halts === undefined ? 0 : 1)}>
         <StatCard label={READINESS_LABEL} value={read === null ? undefined : readinessWords(read.status)} />
         <StatCard label={WORKER_LABEL} value={whenWords(read?.workerLastSeen)} sub={WORKER_SUB} />
+        {read === null || halts === undefined ? null : (
+          <StatCard
+            label={HALTS_LABEL}
+            value={read.haltsKnown ? (halts.length === 0 ? NO_HALTS : String(halts.length)) : HALTS_UNKNOWN}
+            sub={read.haltsKnown ? (halts.length === 0 ? undefined : halts.map(haltWords).join(", ")) : HALTS_UNKNOWN_SUB}
+          />
+        )}
         {health.map(([figure, label]) => (
           <StatCard key={figure} label={label} unrecordedWhy={whyOf(read?.healthNotRecorded ?? [], figure)} />
         ))}
