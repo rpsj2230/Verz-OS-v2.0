@@ -129,8 +129,17 @@ alone, is the fallback for a caller that has no source to give. Two sources proj
 of record are then each redacted as their own, rather than one of them by whichever was classified
 first, which withheld every field only the other one classified.
 
+**Every citation goes out as its evidence (M8.1.1 to M8.1.3, M8.2.4, M11.4.9).** Until
+2026-09-28 the lane wrote `Citation.render()` for each of the composer's citations and nothing
+else, so no answer said how fresh its evidence was, which document a passage came from or who had
+vouched for it, and `brain.gate.provenance.provenance_for` had no caller. Now the fast path builds
+`Provenance` from the composer's citations and the model step from its passages, the stream writes
+`Evidence.view` for each, the text carries `Provenance.notice` when the weakest evidence is not
+current, and an answer nothing stands behind is refused by `abstain_if_uncited` before it is
+written.
+
 Task ids: M30.5.2, M21.3.4, M3.9.3, M4.4.4, M2.2.4, M3.1.2, M3.6.3, M11.9.2, M11.5.1, M11.5.5
-Task ids: M15.4.2
+Task ids: M15.4.2, M8.1.3, M8.2.1, M11.4.9
 """
 
 from __future__ import annotations
@@ -151,6 +160,7 @@ from brain.core.redaction import ChannelPayload, redact
 from brain.gate.abstain import (
     Abstention,
     SearchScope,
+    abstain_if_uncited,
     abstention_for_search,
     not_entitled,
     nothing_connected,
@@ -172,6 +182,13 @@ from brain.gate.fast_lane import (
 from brain.gate.finish import Finished, FrontRecord, Origin, RequestRecorder, attributable, finish
 from brain.gate.live_records import LiveRecords, PartialRead
 from brain.gate.model_lane import ModelLane, draft
+from brain.gate.provenance import (
+    SEED_HORIZONS,
+    UNCITED_TEXT,
+    Horizons,
+    Provenance,
+    provenance_for,
+)
 from brain.gate.streaming import AnswerStream, Progress, at_tool_input_start, cache_hit
 from brain.knowledge.rows import RowRecord, RowRequest
 from brain.models.metering import Meter
@@ -318,6 +335,9 @@ class Answered:
     #: What a live read left out, when it left anything out. With no `composed` beside it, the
     #: request is degraded: the source that holds the answer did not answer in time.
     partial: PartialRead | None = None
+    #: What stands behind the answer, as its citation frames carried it, present only beside
+    #: `composed`. For a channel that draws its own citations rather than writing the frames.
+    provenance: Provenance | None = None
 
     def __post_init__(self) -> None:
         if not self.frames:
@@ -332,6 +352,9 @@ class Answered:
         if self.text is not None and self.composed is None:
             # Text with no answer beside it is a refusal's words, which the cache must not keep.
             msg = "an answer's text is carried only beside the answer it is the text of"
+            raise ValueError(msg)
+        if self.provenance is not None and self.composed is None:
+            msg = "evidence is carried only beside the answer it stands behind"
             raise ValueError(msg)
 
 
@@ -373,6 +396,7 @@ async def answer_lane(
     recorder: Recorder | None = None,
     live: LiveRecords | None = None,
     source_policies: Mapping[tuple[str, str], FieldPolicy] | None = None,
+    horizons: Horizons = SEED_HORIZONS,
 ) -> Answered:
     """Answer one question, and finish the request once whatever the answer was.
 
@@ -409,6 +433,9 @@ async def answer_lane(
     `live` reads a fast-path record's values from its source (M11.9.2), and `source_policies`
     redacts each source's rows by its own classification (M15.4.2); both are absent on a lane that
     reads nothing live and knows no source's classification, which answers exactly as before.
+
+    `horizons` judge how fresh each citation is, a row's and a document's apart; the seeds until
+    an install sets its own. See `brain.gate.provenance.Horizons`.
     """
     attributable(origin, entitlement.principal_id)
     calls = ToolCalls()
@@ -434,6 +461,7 @@ async def answer_lane(
             recorder=recorder,
             live=live,
             source_policies=source_policies,
+            horizons=horizons,
         )
         return outcome
     finally:
@@ -483,6 +511,7 @@ async def _outcome(
     recorder: Recorder | None = None,
     live: LiveRecords | None = None,
     source_policies: Mapping[tuple[str, str], FieldPolicy] | None = None,
+    horizons: Horizons = SEED_HORIZONS,
 ) -> Answered:
     """Answer one question, or decline, and hand back the frames either way.
 
@@ -551,6 +580,7 @@ async def _outcome(
             calls=calls,
             gaps=gaps,
             recorder=recorder,
+            horizons=horizons,
         )
 
     frames.append(stream.step(at_tool_input_start()))
@@ -624,7 +654,14 @@ async def _outcome(
 
     _enter(recorder, GateStep.COMPOSE)
     composed = compose(served_from(found, payload), redacted, sink=sink, now=now)
-    return _answered(stream, frames, gaps, composed, scope, kept=not read_live)
+    # The evidence from the composer's own citations, and the rule that a claim needs one
+    # (M8.2.4). A sentence read out of the payload always has its field behind it, so this
+    # refuses nothing today; it is here so that stops being true loudly rather than quietly.
+    evidence = provenance_for(composed, horizon=horizons.rows, now=now)
+    uncited = abstain_if_uncited(evidence, scope=scope)
+    if uncited is not None:
+        return _abstained(stream, frames, gaps, uncited)
+    return _answered(stream, frames, gaps, composed, scope, evidence, kept=not read_live)
 
 
 def policy_for(
@@ -717,6 +754,7 @@ async def _answered_by_model(
     calls: ToolCalls,
     gaps: tuple[Gap, ...] = (),
     recorder: Recorder | None = None,
+    horizons: Horizons = SEED_HORIZONS,
 ) -> Answered:
     """The model step's frames, after the understanding and checking steps.
 
@@ -742,13 +780,14 @@ async def _answered_by_model(
         trace_id=trace_id,
         searching=calls.start,
         entering=None if recorder is None else recorder.enter,
+        horizons=horizons,
     )
     frames.append(stream.step(Progress.READING))
     if drafted.asked:
         frames.append(stream.step(Progress.COMPOSING))
     if isinstance(drafted.outcome, Abstention):
         return _abstained(stream, frames, gaps, drafted.outcome)
-    return _answered(stream, frames, gaps, drafted.outcome, scope)
+    return _answered(stream, frames, gaps, drafted.outcome, scope, drafted.provenance)
 
 
 def _withheld_or_absent(
@@ -781,7 +820,12 @@ def _withheld_or_absent(
         lock.field == found.field and lock.entity == found.entity for lock in payload.locked
     )
     if withheld:
-        return not_entitled(scope, detail=f"{found.entity}.{found.field} locked")
+        return not_entitled(
+            scope,
+            detail=f"{found.entity}.{found.field} locked",
+            entity=found.entity,
+            field=found.field,
+        )
     return nothing_retrieved(scope, detail=f"{found.entity}.{found.field} absent")
 
 
@@ -797,21 +841,36 @@ def _answered(
     gaps: Sequence[Gap],
     composed: ComposedAnswer,
     scope: SearchScope,
+    provenance: Provenance,
     *,
     kept: bool = True,
 ) -> Answered:
-    """Close the stream with the citations, then the prose, then done.
+    """Close the stream with the evidence, then the prose, then done.
 
     One function for the fast path and the model step, so the text the frame carries and the
     text the cache stores are one value and cannot drift. `kept` is False for an answer read live,
-    which carries no text for the cache: see `A_LIVE_VALUE_IS_NOT_KEPT_FOR_THE_NEXT_ASKER`.
+    which carries no text for the cache: see `A_LIVE_VALUE_IS_NOT_KEPT_FOR_THE_NEXT_ASKER`. Each
+    citation goes out as its evidence, with its freshness and badge (M8.1.1 to M8.1.3, M7.4.7), and
+    the text carries the sentence about the weakest of them (M11.4.9), or says nothing stands
+    behind it (M8.2.4).
     """
-    text = _with_gaps(_with_scope(composed.text, scope), gaps)
-    for citation in composed.citations:
-        frames.append(stream.citation(citation))
+    text = _with_gaps(_with_scope(with_evidence_notice(composed.text, provenance), scope), gaps)
+    for one in provenance.evidence:
+        frames.append(stream.evidence(one))
     frames.append(stream.text(text))
     frames.append(stream.done())
-    return Answered(frames=tuple(frames), composed=composed, text=text if kept else None)
+    return Answered(
+        frames=tuple(frames),
+        composed=composed,
+        text=text if kept else None,
+        provenance=provenance,
+    )
+
+
+def with_evidence_notice(text: str, provenance: Provenance) -> str:
+    """The answer, followed by what it says about its evidence: old, or none at all."""
+    said = UNCITED_TEXT if provenance.is_empty else provenance.notice()
+    return f"{text} {said}" if said else text
 
 
 def _abstained(
@@ -820,8 +879,13 @@ def _abstained(
     """Close the stream with the one sentence the asker is allowed to hear.
 
     `for_asker` rather than anything assembled here, because `AbstentionNotice` has no reason
-    field precisely so that a caller trying to be helpful cannot render one.
+    field precisely so that a caller trying to be helpful cannot render one. A refusal is told to
+    an administrator instead, as a warning under the request's trace reference (M8.2.1): see
+    `brain.gate.abstain.A_REFUSAL_IS_TOLD_TO_AN_ADMINISTRATOR_AND_READS_AS_NOTHING_TO_THE_ASKER`.
     """
+    told = declined.for_administrator()
+    if told is not None:
+        log.warning("answer.withheld", **told)
     notice = declined.for_asker()
     return Answered(
         frames=(*frames, stream.text(_with_gaps(notice.render(), gaps)), stream.done()),

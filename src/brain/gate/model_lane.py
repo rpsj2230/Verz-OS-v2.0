@@ -98,7 +98,29 @@ which walks the rung serving it before the agent's tier. **The call names what i
 the question, the passages and any skill descriptions, as `brain.models.disclosure` categories on
 every attempt row; a golden question asked by the matrix gate is recorded as that instead.
 
-Task ids: M3.9.3, M8.1.4, M9.2.1, M6.4.2, M5.4.1, M5.7.3, M5.6.4, M5.2.2, M5.5.1, M7.7.1
+**A passage is cited as a passage of its document, from the tool's result and never from the
+reply (M8.1.2, M8.1.4).** `trace_of` reads the payload the model was shown and turns each passage
+whose document reference survived redaction into a `DocumentCitation` anchored at its chunk, with
+its title and section only where the reader may read them and its read time the stored copy's
+`updated_at`. Until 2026-09-28 the lane streamed `compose`'s row citations of each passage, one per
+field ("knowledge c_1: section from knowledge"), which named no document, linked nowhere and read
+every passage as a row. A passage whose reference was withheld keeps those row citations, because
+it was still shown to the model and something has to stand behind it. See
+`A_PASSAGE_IS_CITED_AS_A_PASSAGE_OF_ITS_DOCUMENT`.
+
+**The badge is read at the reader's own reach, beside the citation (M7.4.7).** `ItemLookup` reads
+the items the cited documents belong to and nothing else, and `brain.gate.provenance.Badging`
+refuses a reader other than the one retrieval ran for. With no lookup a lane badges nothing rather
+than badging every document unverified, because a badge saying nobody vouched for an item somebody
+did vouch for is a false statement, and no badge on any citation is merely a quiet one.
+
+**An answer nothing stands behind is refused unless the agent allows it (M8.2.4).** The lane runs
+`brain.gate.abstain.abstain_if_uncited` on the evidence it assembled, under `ModelLane.citations`,
+which defaults to requiring one. No agent record carries a citation setting yet, so every lane the
+Ask route builds requires one; an agent's own setting reaches this field when agents are created,
+which the owner's Needs you item 100 moves to Wave 3.
+
+Task ids: M3.9.3, M8.1.4, M9.2.1, M6.4.2, M5.4.1, M5.7.3, M5.6.4, M5.2.2, M5.5.1, M7.7.1, M8.1.2
 """
 
 from __future__ import annotations
@@ -117,8 +139,11 @@ from brain.core.lane import Lane
 from brain.core.redaction import ID_KEYS, ChannelPayload, RedactedAnswer, redact
 from brain.core.scope import Scope
 from brain.gate.abstain import (
+    REQUIRE_CITATION,
     Abstention,
+    CitationPolicy,
     SearchScope,
+    abstain_if_uncited,
     abstention_for_search,
     refused,
     retrieved_but_not_answering,
@@ -129,12 +154,25 @@ from brain.gate.compose import ComposedAnswer, TraceSink, compose
 from brain.gate.context import GateStep
 from brain.gate.effort import settings_for
 from brain.gate.prefix import PromptLayout, build_prefix, lay_out
+from brain.gate.provenance import (
+    NO_EVIDENCE,
+    SEED_HORIZONS,
+    Anchor,
+    Badging,
+    DocumentCitation,
+    Horizons,
+    Provenance,
+    RetrievalTrace,
+    document_evidence,
+    row_evidence,
+)
 from brain.knowledge.document_tools import (
     KNOWLEDGE_ENTITY,
     QUESTION_CHARS,
     DocumentSearch,
     KnowledgePassage,
 )
+from brain.knowledge.item import KnowledgeItem
 from brain.models.adapter import is_refusal
 from brain.models.disclosure import DataCategory
 from brain.models.driver import DriverMessage, DriverResponse, ProviderUnavailable, Role
@@ -192,6 +230,15 @@ A_DEPARTMENT_SCOPED_FIELD_GRANT_READS_ITS_OWN_DEPARTMENTS_PASSAGES: Final = (
     "holding of the capability as enough was rejected, because a caller who reads bodies in one "
     "department and the plane in all of them would then read every department's bodies. A "
     "company or personal passage names no department and is read only by a grant testing none."
+)
+
+#: Why a passage is cited as its document's passage rather than field by field.
+A_PASSAGE_IS_CITED_AS_A_PASSAGE_OF_ITS_DOCUMENT: Final = (
+    "A person checks a claim by opening the document at the place it came from, so a passage is "
+    "cited by its document's reference and its chunk, with the title and section the reader may "
+    "read. The citation is built from the passage the redactor kept and the model was shown, "
+    "never from the reply, so a model cannot add one; and a passage whose document reference "
+    "was withheld is cited as the row it arrived as, because it still stands behind the answer."
 )
 
 #: Why the prompt is bounded by bytes rather than by an estimate of tokens.
@@ -331,6 +378,20 @@ class DocumentSearchTool:
         return await self.handler(request, entitlement=entitlement, now=now)
 
 
+class ItemLookup(Protocol):
+    """Where the items behind cited documents are read, at the reader's own reach (M7.4.7).
+
+    Asked for the cited documents' references and nothing else, so an item that was not cited is
+    never read for an answer. `brain.gate.badge_store.StoredItems` is the one over `know.item`.
+    """
+
+    async def items(
+        self, document_ids: Sequence[str], *, entitlement: EntitlementSet, now: datetime
+    ) -> tuple[KnowledgeItem, ...]:
+        """The items among `document_ids` this reach may read, in no particular order."""
+        ...
+
+
 class LibraryRow(Protocol):
     """What a run reads of a library row. `brain.console.skill_library.LibrarySkill` satisfies it;
     importing that module here would put the console's offline controls on the request path."""
@@ -404,6 +465,11 @@ class ModelLane:
     #: What the question is recorded as having been, on the attempt rows. The matrix gate asks
     #: golden questions and says so; every other caller asks a person's question.
     question_category: DataCategory = DataCategory.QUESTION
+    #: Where cited documents' items are read for their badges, or None to badge nothing.
+    items: ItemLookup | None = None
+    #: Whether an answer nothing stands behind may be given (M8.2.4). Required unless an agent
+    #: says otherwise; see `brain.gate.abstain.CitationPolicy`.
+    citations: CitationPolicy = REQUIRE_CITATION
 
 
 @dataclass(frozen=True)
@@ -411,11 +477,13 @@ class Drafted:
     """What the model step came to: an answer composed from the payload, or an abstention.
 
     `asked` says whether a model was called, which is the one fact the lane needs beyond the
-    outcome, to put the composing step in front of the prose.
+    outcome, to put the composing step in front of the prose. `provenance` is what stands
+    behind an answer, empty beside an abstention.
     """
 
     outcome: ComposedAnswer | Abstention
     asked: bool
+    provenance: Provenance = NO_EVIDENCE
 
 
 # ------------------------------------------------------------------------------ the prompt
@@ -526,6 +594,75 @@ def tier_for(messages: Sequence[DriverMessage], requested: Tier | None = None) -
     return classify_tier(routing_for(messages, requested)).tier
 
 
+# ------------------------------------------------------------------------- the citations
+
+
+def trace_of(payload: ChannelPayload, *, reach: EntitlementSet) -> RetrievalTrace:
+    """The passages the model was shown, as citations of their documents (M8.1.2, M8.1.4).
+
+    Read from the post-redaction payload and nothing else, so a title the reader may not read is
+    not on the citation, and a passage the redactor dropped is not cited. A passage whose document
+    reference was withheld is left out here and keeps its row citations; one whose references do
+    not fit the citation grammar is left out the same way rather than failing the answer, since a
+    chunk id is its item's id with a suffix and can outgrow the bound by five characters. See
+    `A_PASSAGE_IS_CITED_AS_A_PASSAGE_OF_ITS_DOCUMENT`.
+
+    `reach` is recorded as the hash retrieval ran under, which is what lets a badge be computed
+    for this reader and refused for any other.
+    """
+    cited: list[DocumentCitation] = []
+    for record in payload.records:
+        document_id = record.get("document_id")
+        if not isinstance(document_id, str) or not document_id:
+            continue
+        try:
+            cited.append(
+                DocumentCitation(
+                    document_id=document_id,
+                    title=str(record.get("title") or ""),
+                    anchor=Anchor(
+                        chunk_id=str(_first(record, ID_KEYS)),
+                        section=str(record.get("section") or ""),
+                    ),
+                    source=payload.source,
+                    fetched_at=str(record.get("updated_at") or ""),
+                )
+            )
+        except ValueError:
+            continue
+    return RetrievalTrace(passages=tuple(cited), ent_hash=reach.ent_hash())
+
+
+async def evidence_of(
+    composed: ComposedAnswer,
+    *,
+    lane: ModelLane,
+    entitlement: EntitlementSet,
+    horizons: Horizons,
+    now: datetime,
+) -> Provenance:
+    """What stands behind a drafted answer: its passages as documents, the rest as rows.
+
+    A row citation of a passage cited as a document is dropped, because it is the same passage
+    said a second time, field by field. The badges are read for the cited documents only.
+    """
+    trace = trace_of(composed.payload, reach=entitlement)
+    documents = {one.document_id for one in trace.passages}
+    badging = None
+    if lane.items is not None:
+        found = await lane.items.items(sorted(documents), entitlement=entitlement, now=now)
+        badging = Badging(reader=entitlement, items=found)
+    passages = {one.anchor.chunk_id for one in trace.passages}
+    return Provenance(
+        rows=row_evidence(
+            (one for one in composed.citations if one.record_id not in passages),
+            horizon=horizons.rows,
+            now=now,
+        ),
+        documents=document_evidence(trace, horizon=horizons.documents, now=now, badging=badging),
+    )
+
+
 # ------------------------------------------------------------------------------ the step
 
 
@@ -546,6 +683,7 @@ async def draft(
     trace_id: str,
     searching: Callable[[], None],
     entering: Callable[[GateStep], None] | None = None,
+    horizons: Horizons = SEED_HORIZONS,
 ) -> Drafted:
     """Find the passages, redact them, and ask a model only when something survived.
 
@@ -612,4 +750,10 @@ async def draft(
     composed = compose(
         text, RedactedAnswer(payload=payload, trace=redacted.trace), sink=sink, now=now
     )
-    return Drafted(outcome=composed, asked=True)
+    provenance = await evidence_of(
+        composed, lane=lane, entitlement=entitlement, horizons=horizons, now=now
+    )
+    uncited = abstain_if_uncited(provenance, scope=scope, policy=lane.citations)
+    if uncited is not None:
+        return Drafted(outcome=uncited, asked=True)
+    return Drafted(outcome=composed, asked=True, provenance=provenance)

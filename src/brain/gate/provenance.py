@@ -54,17 +54,25 @@ cited document with no item record on file is badged as unverified rather than l
 `AN_UNVERIFIED_ITEM_STILL_CARRIES_A_BADGE`'s reason: a badge that appeared only on checked
 documents would teach a reader that no badge means nothing to report.
 
-**Nothing on the request path cites a document yet, and that is stated rather than implied.**
-`brain.gate.answer.answer_lane` answers from rows and constructs no `RetrievalTrace`, so the
-badge is attached at the one place document evidence meets an answer and is reachable from a
-served answer on the day a document lane builds a trace.
+**The request path cites through here since 2026-09-28.** Until then nothing called
+`provenance_for`: `brain.gate.answer` streamed `Citation.render()` sentences with no freshness,
+no link and no badge, and the model lane cited a passage field by field as though it were a row.
+Now `brain.gate.model_lane.trace_of` builds the `RetrievalTrace` from the passages the redactor
+kept, the lane assembles `Provenance` from the payload and that trace, and every citation frame is
+`Evidence.view`: what to link, how fresh, and the badge. See
+`A_CITATION_IS_SENT_AS_FIELDS_SO_A_CHANNEL_CAN_LINK_IT`.
+
+**An answer says, in a sentence, when what it stands on is old (M11.4.9).** `Provenance.notice`
+is read off the weakest citation, and the lane appends it to the text, so the warning travels with
+the words to every channel, the answer cache included, rather than living only beside a citation a
+reader may not open. A row and a document are judged against different horizons: see `Horizons`.
 
 Scope: domain logic. Nothing here reads a clock, opens a connection, or calls a model.
 `now` is always a parameter, for the reason `brain.models.routing.CircuitBreaker` gives:
 a freshness rule that reads the clock itself cannot be tested at its own boundary, and the
 boundary is the part that goes wrong.
 
-Task ids: M8.1.1, M8.1.2, M8.1.3, M8.1.4, M34.2.1.2
+Task ids: M8.1.1, M8.1.2, M8.1.3, M8.1.4, M34.2.1.2, M11.4.9, M7.4.7
 """
 
 from __future__ import annotations
@@ -173,6 +181,35 @@ class StalenessHorizon:
 DEFAULT_HORIZON: Final = StalenessHorizon(
     live_for=timedelta(minutes=15), stale_after=timedelta(hours=24)
 )
+
+#: The seed for a stored document, whose read time is when its copy was last written. A quarter
+#: is how long a policy or a price note is quoted without anybody asking whether it moved, and a
+#: year unchanged is the point past which a reader should be told to check. Measured against
+#: `DEFAULT_HORIZON` this is not a looser rule: a document is not re-read at question time, so
+#: its age is the age of the words, and words age in months where a ticket count ages in minutes.
+DOCUMENT_HORIZON: Final = StalenessHorizon(
+    live_for=timedelta(days=90), stale_after=timedelta(days=365)
+)
+
+
+@dataclass(frozen=True)
+class Horizons:
+    """One horizon per plane an answer can stand on: a row read from a system, and a document.
+
+    Two rather than one because the planes' read times mean different things. A row's is when a
+    system was read, so a day is old; a document's is when its copy was written, so a day is
+    nothing. One horizon for both would either call every document out of date by tomorrow or
+    call a week-old ticket count current, and the second is the failure this module exists for.
+    """
+
+    rows: StalenessHorizon
+    documents: StalenessHorizon
+
+
+#: The horizons the answer lane is handed until an install sets its own. A value the caller
+#: passes, not one this module applies: `brain.gate.answer.answer_lane` takes it as a parameter,
+#: so a setting read in one place replaces it at one call site. See `StalenessHorizon`.
+SEED_HORIZONS: Final = Horizons(rows=DEFAULT_HORIZON, documents=DOCUMENT_HORIZON)
 
 
 def read_time(fetched_at: str) -> datetime | None:
@@ -349,10 +386,19 @@ class DocumentCitation:
             msg = f"document id {self.document_id!r} is not a reference"
             raise ValueError(msg)
 
-    def render(self) -> str:
+    def describe(self) -> str:
+        """The document and the place in it, without the read time.
+
+        The document's reference stands in for a title the reader may not be told, because a
+        passage that reached them carried its reference under the body's own capability and a
+        citation reading ", page 4" names nothing anybody can follow.
+        """
         where = f" from {self.source}" if self.source else ""
+        return f"{self.title or self.document_id}, {self.anchor.describe()}{where}"
+
+    def render(self) -> str:
         when = f", as of {self.fetched_at}" if self.fetched_at else ""
-        return f"{self.title}, {self.anchor.describe()}{where}{when}"
+        return f"{self.describe()}{when}"
 
 
 @dataclass(frozen=True)
@@ -456,7 +502,32 @@ class Cited(Protocol):
     @property
     def fetched_at(self) -> str: ...
 
+    def describe(self) -> str: ...
+
     def render(self) -> str: ...
+
+
+#: The kinds a citation is followed to, as the wire names them. A record opens its entity's rows
+#: and a document opens the passage; a channel draws the link, because this module does not know
+#: where the console is deployed (see `Anchor.fragment`).
+RECORD_KIND: Final = "record"
+DOCUMENT_KIND: Final = "document"
+
+#: Why a citation reaches a channel as fields rather than as a sentence.
+A_CITATION_IS_SENT_AS_FIELDS_SO_A_CHANNEL_CAN_LINK_IT: Final = (
+    "A sentence can be read and cannot be followed. A citation that is to be checked needs the "
+    "record or the document it names, where in the document, how old the read was and who "
+    "vouched for it, each as a field, so the screen can draw a link, a date in the reader's "
+    "zone and a badge. Every field is one the citation or its evidence already held, derived "
+    "from the payload or the trace and never from the model, so nothing reaches a screen here "
+    "that the rendered sentence did not already say."
+)
+
+#: The badge states that say a steward vouched for the item. Due for review is still vouched for,
+#: and says so in its own words; replaced and unverified name nobody.
+VOUCHED_FOR: Final[frozenset[VerificationState]] = frozenset(
+    {VerificationState.VERIFIED, VerificationState.DUE}
+)
 
 
 @dataclass(frozen=True)
@@ -492,6 +563,48 @@ class Evidence:
         if self.badge is None:
             return shown
         return f"{shown} [{self.badge.render()}]"
+
+    def view(self) -> dict[str, str]:
+        """The citation as a channel receives it: what to link, how fresh, and the badge.
+
+        Every value is a string the citation or this evidence already held, and a string only,
+        so the wire carries no number anybody could read as a count. `read_at` is the recorded
+        read time only when it could be dated, for `FRESHNESS_TEXT`'s reason: echoing a time we
+        cannot date beside "read time not stated" is the inference this module refuses. See
+        `A_CITATION_IS_SENT_AS_FIELDS_SO_A_CHANNEL_CAN_LINK_IT`.
+        """
+        state = self.freshness.state
+        fields: dict[str, str] = {
+            "label": self.citation.describe(),
+            "source": self.citation.source,
+            "freshness": state.value,
+            "freshness_text": FRESHNESS_TEXT[state],
+            "read_at": "" if state is Freshness.UNSTATED else self.freshness.fetched_at,
+            "badge": "" if self.badge is None else self.badge.render(),
+            "badge_state": "" if self.badge is None else self.badge.state.value,
+        }
+        cited = self.citation
+        if isinstance(cited, DocumentCitation):
+            fields.update(
+                kind=DOCUMENT_KIND,
+                document_id=cited.document_id,
+                title=cited.title,
+                where=cited.anchor.describe(),
+                anchor=cited.anchor.fragment(),
+            )
+        elif isinstance(cited, Citation):
+            fields.update(
+                kind=RECORD_KIND,
+                entity=cited.entity,
+                record_id=cited.record_id,
+                field=cited.field,
+            )
+        return fields
+
+    @property
+    def vouched_for(self) -> bool:
+        """Whether a steward's verification stands behind this citation (M7.4.7)."""
+        return self.badge is not None and self.badge.state in VOUCHED_FOR
 
 
 @dataclass(frozen=True)
@@ -544,6 +657,48 @@ class Provenance:
     def render(self) -> tuple[str, ...]:
         return tuple(e.render() for e in (*self.rows, *self.documents))
 
+    @property
+    def evidence(self) -> tuple[Evidence, ...]:
+        """Every citation, rows first, in the order a channel draws them."""
+        return (*self.rows, *self.documents)
+
+    def notice(self) -> str:
+        """The sentence an answer carries about its weakest evidence, or nothing (M11.4.9).
+
+        Read off `stalest`, so one old citation is enough and one fresh one cannot hide it. Empty
+        when everything is current, for `brain.connectors.projection.ProjectedReading.notice`'s
+        reason: a reassurance on every answer trains a reader to skip the line that matters.
+        Empty too when nothing stands behind the answer, which is `UNCITED_TEXT`'s sentence and
+        not this one. It names no source and no count: which citation is old is on the citation.
+        """
+        if self.is_empty:
+            return ""
+        return STALENESS_TEXT[self.stalest()]
+
+
+#: Nothing standing behind an answer: the evidence beside an abstention. A constant rather than a
+#: default_factory because the type is frozen, in the shape `NO_DOCUMENTS` uses.
+NO_EVIDENCE: Final = Provenance()
+
+#: What an answer says about the weakest evidence behind it (M11.4.9). Plain sentences, no source
+#: and no figure, so two answers in different states say nothing about which system is behind.
+STALENESS_TEXT: Mapping[Freshness, str] = MappingProxyType(
+    {
+        Freshness.LIVE: "",
+        Freshness.AGEING: (
+            "Some of what this is based on was read a while ago and may have changed."
+        ),
+        Freshness.STALE: "Some of what this is based on may be out of date.",
+        Freshness.UNSTATED: (
+            "When some of what this is based on was read is not recorded, so it may be out of date."
+        ),
+    }
+)
+
+#: What an answer says when nothing stands behind it and its agent is allowed to answer anyway
+#: (M8.2.4). Said rather than left to the empty citation list, which a reader does not notice.
+UNCITED_TEXT: Final = "Nothing I can cite stands behind this."
+
 
 @dataclass(frozen=True)
 class Badging:
@@ -581,6 +736,47 @@ def badge_for(passage: DocumentCitation, *, badging: Badging, now: datetime) -> 
     return disclose(on_file, reader=badging.reader, now=now)
 
 
+def row_evidence(
+    citations: Iterable[Citation], *, horizon: StalenessHorizon, now: datetime
+) -> tuple[Evidence, ...]:
+    """Each row citation with its freshness (M8.1.1, M8.1.3). No badge: a field has no steward."""
+    return tuple(
+        Evidence(
+            citation=citation,
+            freshness=state_freshness(citation.fetched_at, horizon=horizon, now=now),
+        )
+        for citation in citations
+    )
+
+
+def document_evidence(
+    trace: RetrievalTrace,
+    *,
+    horizon: StalenessHorizon,
+    now: datetime,
+    badging: Badging | None = None,
+) -> tuple[Evidence, ...]:
+    """Each passage the trace holds, with its freshness and, given `badging`, its badge.
+
+    The reach is compared before anything is built, so a badge for the wrong reader is never
+    computed at all. See `A_BADGE_IS_COMPUTED_AT_THE_REACH_ITS_CITATION_WAS_RETRIEVED_AT`.
+    """
+    if badging is not None and trace.ent_hash != badging.reader.ent_hash():
+        msg = (
+            "badges were asked for at a reach other than the one these citations were "
+            "retrieved at, or retrieval did not record its reach"
+        )
+        raise BadgeReachError(msg)
+    return tuple(
+        Evidence(
+            citation=passage,
+            freshness=state_freshness(passage.fetched_at, horizon=horizon, now=now),
+            badge=None if badging is None else badge_for(passage, badging=badging, now=now),
+        )
+        for passage in trace.passages
+    )
+
+
 def provenance_for(
     answer: ComposedAnswer,
     *,
@@ -588,6 +784,7 @@ def provenance_for(
     now: datetime,
     trace: RetrievalTrace = NO_DOCUMENTS,
     badging: Badging | None = None,
+    document_horizon: StalenessHorizon | None = None,
 ) -> Provenance:
     """Assemble the evidence behind a composed answer (M8.1.1, M8.1.3, M8.1.4, M34.2.1.2).
 
@@ -600,28 +797,17 @@ def provenance_for(
     With `badging`, every document citation carries its verification badge, and the reader
     must be the one retrieval ran for. See
     `A_BADGE_IS_COMPUTED_AT_THE_REACH_ITS_CITATION_WAS_RETRIEVED_AT`.
+
+    `document_horizon` is the documents' own, for `Horizons`' reason; without one the passages
+    are judged against `horizon`, which is what every caller before `Horizons` existed passed.
     """
-    if badging is not None and trace.ent_hash != badging.reader.ent_hash():
-        msg = (
-            "badges were asked for at a reach other than the one these citations were "
-            "retrieved at, or retrieval did not record its reach"
-        )
-        raise BadgeReachError(msg)
-    rows = tuple(
-        Evidence(
-            citation=citation,
-            freshness=state_freshness(citation.fetched_at, horizon=horizon, now=now),
-        )
-        for citation in answer.citations
+    documents = document_evidence(
+        trace,
+        horizon=horizon if document_horizon is None else document_horizon,
+        now=now,
+        badging=badging,
     )
-    documents = tuple(
-        Evidence(
-            citation=passage,
-            freshness=state_freshness(passage.fetched_at, horizon=horizon, now=now),
-            badge=None if badging is None else badge_for(passage, badging=badging, now=now),
-        )
-        for passage in trace.passages
-    )
+    rows = row_evidence(answer.citations, horizon=horizon, now=now)
     return Provenance(rows=rows, documents=documents)
 
 

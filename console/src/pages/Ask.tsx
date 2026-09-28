@@ -79,22 +79,35 @@
  * decides whether this person may use it, and an agent they may not use answers exactly as one
  * that does not exist, so the picker cannot be a way to find out which agents are there (M3.9.8).
  *
- * Task ids: M42.6.3, M35.2.1.3, M27.8.5, M3.9.8
+ * **Every citation is a link to what it names, with how fresh it is and who vouched for it** (M8.1.1
+ * to M8.1.3, M7.4.7). A record opens its entity's rows on the Records screen and a document opens
+ * at the passage cited, `pages/CitedDocument.tsx`. Beside each is the API's word for its freshness
+ * and the date, and beside a document its verification badge. When the weakest of them is old the
+ * answer's own text says so, because the lane puts that sentence in the text frame (M11.4.9), and
+ * this page draws it as it draws every text frame. See
+ * `askQuery.A_CITATION_IS_DRAWN_AS_A_LINK_TO_WHAT_IT_NAMES`.
+ *
+ * Task ids: M42.6.3, M35.2.1.3, M27.8.5, M3.9.8, M8.1.1, M8.1.2, M8.1.3, M7.4.7, M11.4.9
  */
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { openStream, request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
+import { Badge } from "../ui/Badge";
 import { FieldProblems, problemAttributes } from "../ui/FieldProblems";
 import { Notice } from "../ui/Notice";
 import { SOMETHING_DID_NOT_WORK } from "./Overview";
 import {
   ANSWER_API_PATH,
   askBody,
+  citationAddress,
+  freshnessWords,
   MAX_QUESTION_CHARS,
   NOTHING_ASKED,
   withEvent,
   type AnswerView,
+  type CitationView,
 } from "./askQuery";
 import { FailureNotice, NO_REFERENCE_CAME_BACK } from "../ui/FailureNotice";
 import { readRoster, ROSTER_API_PATH, type RosterEntryView } from "./agentsQuery";
@@ -164,6 +177,31 @@ const QUESTION_FIELD_ID = "ask-question";
 
 /** The id of the region the skip control puts focus on. One answer on the page, so one id. */
 const ANSWER_REGION_ID = "ask-answer";
+
+/**
+ * One citation: a link to what it names, then how fresh it is and, for a document, its badge.
+ *
+ * The label is the link's text, so a screen reader reads where it goes. A citation that names
+ * neither a record nor a document is its label alone, which is what a frame carrying a sentence
+ * rather than fields draws. The badge is neutral whatever it says: its words carry the state, and
+ * a colour chosen from them would be this console holding an opinion about the item.
+ */
+function Cited({ citation }: { readonly citation: CitationView }) {
+  const address = citationAddress(citation);
+  const fresh = freshnessWords(citation);
+  return (
+    <>
+      {address === null ? citation.label : <Link to={address}>{citation.label}</Link>}
+      {fresh !== "" || citation.badge !== "" ? (
+        <span className="ask__evidence">
+          {fresh}
+          {fresh !== "" && citation.badge !== "" ? " " : null}
+          {citation.badge !== "" ? <Badge label={citation.badge} /> : null}
+        </span>
+      ) : null}
+    </>
+  );
+}
 
 /** What is on the screen apart from the question somebody is typing. */
 interface Asking {
@@ -367,7 +405,9 @@ export function Ask() {
           <h2>{BASED_ON}</h2>
           <ul className="ask__sources">
             {view.citations.map((citation, at) => (
-              <li key={`${at}-${citation}`}>{citation}</li>
+              <li key={`${at}-${citation.label}`}>
+                <Cited citation={citation} />
+              </li>
             ))}
           </ul>
         </section>
