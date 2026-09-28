@@ -268,6 +268,11 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
     trigger on `mem.correction`. It is what an undo on the Learning screen leaves, and it takes no
     access away from anybody, which is why it is not REVOKE.
 
+    `agent` records an agent created, enabled, disabled, archived or published, written by
+    `0137`'s trigger on `agent.agent`; a hand-over is `agent_owner`, `0105`'s. None of those
+    moves what a run may reach, which is why none is GRANT or LEASH_CHANGE, and what the agent is
+    told is INSTRUCTIONS.
+
     Note that the document's "deny" and "revoke" are one item and two members here. A deny
     is a request refused at runtime, a revoke is a grant taken away by an administrator;
     they differ by orders of magnitude in frequency and they answer different questions.
@@ -304,6 +309,7 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
         "breach case opened, assessed, notified or closed": AuditAction.BREACH,
         "agent taken on by a new owner": AuditAction.AGENT_OWNER,
         "install or part of it stopped, or resumed": AuditAction.HALT,
+        "agent created, switched, archived or published": AuditAction.AGENT,
     }
     assert set(required.values()) == set(AuditAction)
     assert {action.value for action in AuditAction} == {
@@ -338,6 +344,7 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
         "breach",
         "agent_owner",
         "halt",
+        "agent",
     }
     # Every value fits the column, which is `VARCHAR(16)`. This is not decoration: the two
     # other names considered for the eighth member were `attachment_change` at seventeen
