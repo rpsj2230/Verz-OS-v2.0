@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-28T13:29:10.416902+00:00",
-  "commit": "d426e3d",
-  "commit_subject": "Lark is received and answered: a bound person gets the web's answer, a group its floor",
+  "generated_at": "2026-09-28T13:51:00.593689+00:00",
+  "commit": "d0424ab",
+  "commit_subject": "Main's CI run finishes instead of being cancelled by the next merge, so deploys keep landing",
   "total": 1582,
   "done": 338,
   "percent": 21.4,
