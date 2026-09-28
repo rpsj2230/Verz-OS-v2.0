@@ -193,6 +193,15 @@ A_ROSTER_ROW_IS_THE_SOURCES_AND_RETURNS_WHILE_THE_SOURCE_LISTS_THEM: Final = (
     "source, and a run's record of who joined and left is kept as the ledger's entries are"
 )
 
+#: Why a halt is kept by the erasure of the person it stopped (added with `0136`, 2026-09-28).
+A_HALT_ON_A_PERSON_IS_A_PROTECTION_AND_IS_KEPT: Final = (
+    "the actor and the resumer are actors, but a halt scoped to a person names them as its target, "
+    "and what is in force is the newest row for a scope and a target, so erasing that row would "
+    "lift the halt: an erasure request cannot be how an account stopped for a compromise starts "
+    "working again; the row is also the source of a halt ledger entry, and the table is "
+    "insert-only, granting nobody a DELETE"
+)
+
 # ---------------------------------------------------------------------------- figures
 #: The name the queue finishes a request under, which `0060`'s trigger writes as the actor.
 ERASURE_QUEUE_ACTOR: Final = "erasure-queue"
@@ -394,6 +403,7 @@ RETAINED: Final[Mapping[str, str]] = MappingProxyType(
         "auth.staff_member": A_ROSTER_ROW_IS_THE_SOURCES_AND_RETURNS_WHILE_THE_SOURCE_LISTS_THEM,
         "auth.staff_sync_run": A_ROSTER_ROW_IS_THE_SOURCES_AND_RETURNS_WHILE_THE_SOURCE_LISTS_THEM,
         "ops.sensitive_read": A_READ_OF_A_RECORD_IS_THE_LEDGERS_AND_IS_KEPT,
+        "ops.halt": A_HALT_ON_A_PERSON_IS_A_PROTECTION_AND_IS_KEPT,
     }
 )
 
