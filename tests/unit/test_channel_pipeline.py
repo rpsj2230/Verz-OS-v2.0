@@ -897,6 +897,33 @@ def test_a_streamed_request_is_read_no_further_than_one_byte_past_a_message(
     assert world.secrets.reads == []
 
 
+def test_the_events_address_takes_no_sign_in_and_refuses_every_unsigned_request(
+    client: TestClient, world: World
+) -> None:
+    """`A_PLATFORM_PROVES_A_SIGNATURE_AND_HAS_NO_SIGN_IN`, the one written exception to the rule
+    that every route under the prefix authenticates its caller. Unsigned, the channel that is on
+    refuses as unaccepted, every other name answers as nothing there, and nothing is answered;
+    every other channel route asks for a sign-in.
+
+    Delete this and the exception in `tests/unit/test_api_routes.py` excuses a route nothing
+    shows refusing a stranger."""
+    world.records.kept[Channel.WEBHOOK] = fresh_record()
+    assert {API_PREFIX + channel_routes.EVENTS_PATH} == channel_routes.SIGNED_NOT_SIGNED_IN
+    for name in [*(one.value for one in Channel), "carrier-pigeon"]:
+        answer = client.post(EVENTS.format(name=name), content=json.dumps(message()).encode())
+        assert answer.status_code == (401 if name == "webhook" else 404), name
+    assert world.transport.sent == [] and world.claims.asked == 0
+    for method, path in (
+        ("GET", "/channels"),
+        ("PUT", "/channels/webhook"),
+        ("POST", "/channels/webhook/switch"),
+        ("GET", "/channels/webhook/deliveries"),
+        ("POST", "/channels/webhook/test"),
+    ):
+        refused = client.request(method, API_PREFIX + path, json=None if method == "GET" else {})
+        assert refused.status_code == 401, path
+
+
 def test_a_name_that_is_no_channel_and_a_switched_off_channel_are_one_answer(
     client: TestClient, world: World
 ) -> None:
