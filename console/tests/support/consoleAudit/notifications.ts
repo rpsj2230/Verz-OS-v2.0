@@ -11,6 +11,7 @@ import {
   noticeApiPath,
   PASSWORD_API_PATH as RELAY_PASSWORD_API_PATH,
   RELAY_API_PATH,
+  REMOVAL_API_PATH as RELAY_REMOVAL_API_PATH,
   TRIAL_API_PATH as RELAY_TRIAL_API_PATH,
 } from "../../../src/pages/notificationsQuery";
 import { A_SETTING_ENTRY_NO_TEST_FOLLOWS, at, type Proof, type Proofs, t, type WriteRoute } from "../auditClaims";
@@ -20,14 +21,17 @@ const NO_TRIAL_LEDGER: Proof = {
 };
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
-  "src/pages/Notifications.tsx noticeApiPath(asked.row.kind)": [
+  "src/pages/notifications/RelayActs.tsx noticeApiPath(row.kind)": [
     at("POST /api/v1/notifications/notices/{kind}", "noticeApiPath", noticeApiPath("evening_digest")),
   ],
-  "src/pages/Notifications.tsx RELAY_API_PATH": [at("POST /api/v1/notifications/relay", "RELAY_API_PATH", RELAY_API_PATH)],
-  "src/pages/Notifications.tsx PASSWORD_API_PATH": [
+  "src/pages/notifications/RelayActs.tsx RELAY_API_PATH": [at("POST /api/v1/notifications/relay", "RELAY_API_PATH", RELAY_API_PATH)],
+  "src/pages/notifications/RelayActs.tsx REMOVAL_API_PATH": [
+    at("POST /api/v1/notifications/relay/removal", "REMOVAL_API_PATH", RELAY_REMOVAL_API_PATH),
+  ],
+  "src/pages/notifications/RelayActs.tsx PASSWORD_API_PATH": [
     at("POST /api/v1/notifications/relay/password", "PASSWORD_API_PATH", RELAY_PASSWORD_API_PATH),
   ],
-  "src/pages/Notifications.tsx TRIAL_API_PATH": [
+  "src/pages/notifications/RelayActs.tsx TRIAL_API_PATH": [
     at("POST /api/v1/notifications/relay/test", "TRIAL_API_PATH", RELAY_TRIAL_API_PATH),
   ],
 };
@@ -42,6 +46,21 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: t("test_notification_routes", "test_a_relay_is_saved_as_five_rows_with_its_writer_and_read_back_configured"),
     audit: A_SETTING_ENTRY_NO_TEST_FOLLOWS,
     behaviour: t("test_notification_routes", "test_a_test_message_reaches_the_saved_relay_once_with_the_kept_password"),
+  },
+  "POST /api/v1/notifications/relay/removal": {
+    row: t(
+      "test_notification_routes",
+      "test_removing_the_relay_retires_its_rows_names_who_did_and_the_next_read_is_unconfigured",
+    ),
+    audit: t(
+      "test_console_control_audit",
+      "test_removing_the_relay_retires_its_rows_as_the_application_and_names_the_remover",
+      true,
+    ),
+    behaviour: t(
+      "test_notification_routes",
+      "test_removing_the_relay_retires_its_rows_names_who_did_and_the_next_read_is_unconfigured",
+    ),
   },
   "POST /api/v1/notifications/relay/password": {
     row: t("test_notification_routes", "test_a_password_is_kept_at_its_slot_recorded_and_never_answered"),

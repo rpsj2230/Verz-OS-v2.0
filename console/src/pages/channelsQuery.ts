@@ -1,17 +1,18 @@
 /**
- * What the Channels screen and a person's own channels card ask the API for, and what they may
+ * What the Channels module and a person's own channels card ask the API for, and what they may
  * send. No React.
  *
  * **Two sides of one fact, on two screens.** An administrator sees each channel's record, its
  * switch, what its adapter declares it can carry, how it is doing and who is bound on it; a person
  * sees, in My workspace, which chats they may connect and which they have, and asks for the code
- * that connects one. `brain.channel_routes` serves the record, the switch, the test message and
- * the deliveries; `brain.binding_routes` serves the rest; `brain.console.channel_health` decides
- * what the deliveries say; `brain.channels.binding` decides everything about a code.
+ * that connects one. `brain.channel_routes` serves the record's writes, the test message and the
+ * deliveries; `brain.binding_routes` serves the module list, one channel's row, its health and
+ * binding; `brain.console.channel_health` decides what the deliveries say; `brain.channels.binding`
+ * decides everything about a code.
  *
  * **Nothing here decides who may see or change a channel.** The API answers a reader without the
  * channel's authority, a channel that is not switched on and a name that is no channel with one
- * absence, and this module draws whatever it was sent.
+ * absence, and the pages draw whatever they were sent.
  *
  * **The secret is never read and never shown.** A channel says whether its secret is held, or that
  * the vault could not be asked, and the set-up form sends a new secret once and empties the field
@@ -20,15 +21,13 @@
  * **A code is shown once, where it was asked for.** The API answers it with `no-store` and keeps
  * only its digest; the card holds it in memory until the page is left and says how long it lasts.
  *
- * Task ids: M10.3.1, M10.3.4, M10.1.2, M10.1.3, M10.1.4
+ * Task ids: M10.3.1, M10.3.4, M10.1.2, M10.1.3, M10.1.4, M27.13.1
  */
 
+import type { FieldProblem } from "../api/errors";
 import type { components } from "../api/schema";
 import type { FilterChoice, SortChoice } from "../components/listing";
 
-export type ChannelsBody = components["schemas"]["ChannelsView"];
-/** Named with its module because `brain.agent_routes` has a `ChannelView` of its own. */
-export type ChannelRow = components["schemas"]["brain__channel_routes__ChannelView"];
 export type HealthBody = components["schemas"]["ChannelHealthView"];
 export type BindingsBody = components["schemas"]["ChannelBindingsView"];
 export type BoundRow = components["schemas"]["BoundPersonView"];
@@ -40,11 +39,9 @@ export type MyChannelsBody = components["schemas"]["MyChannelsView"];
 export type MyChannelRow = components["schemas"]["MyChannelView"];
 export type CodeBody = components["schemas"]["BindingCodeView"];
 
-/** The console address. */
-export const CHANNELS_PATH = "/channels";
+/** The menu group these pages sit in, the first step of their trails. */
+export const GROUP_LABEL = "Channels and notifications";
 
-/** Where the API keeps every channel this reader may manage. */
-export const CHANNELS_API_PATH = "/channels";
 /** Where the API keeps the asker's own chat channels. */
 export const MY_CHANNELS_API_PATH = "/me/channels";
 
@@ -80,15 +77,7 @@ export function myUnbindApiPath(name: string): string {
   return `/me/channels/${encodeURIComponent(name)}/unbind`;
 }
 
-/** Whether a secret is held, in words, never anything of the secret. */
-export function secretWords(held: boolean | null): string {
-  if (held === null) {
-    return "The vault could not be asked, so whether a secret is held is not known.";
-  }
-  return held ? "Held in the vault. It is never shown." : "Not held. Set one below.";
-}
-
-/** A channel's health, in the chip's words. */
+/** A channel's health, in the pill's words. */
 export const HEALTH_WORDS: Readonly<Record<string, string>> = {
   not_set_up: "Not set up",
   switched_off: "Switched off",
@@ -101,34 +90,43 @@ export function healthWord(health: string): string {
   return HEALTH_WORDS[health] ?? health;
 }
 
-/** A delivery's outcome and reason, as one phrase: "outbound, refused: vendor refused". */
+/** A delivery's direction, in words. */
+export const DIRECTION_WORDS: Readonly<Record<string, string>> = { inbound: "Received", outbound: "Sent" };
+
+/** A delivery's outcome, in words. */
+export const OUTCOME_WORDS: Readonly<Record<string, string>> = {
+  accepted: "Accepted",
+  redelivered: "Sent again by the vendor",
+  sent: "Delivered",
+  refused: "Refused",
+  unknown: "Not known",
+};
+
+/** A refusal's reason as a phrase: "vendor refused". */
+export function reasonWords(reason: string | null): string {
+  return reason === null ? "" : reason.replaceAll("_", " ");
+}
+
+/** A delivery's outcome and reason, as one phrase: "Refused: vendor refused (502)". */
 export function deliveryWords(row: DeliveryRow): string {
-  const reason = row.reason === null ? "" : `: ${row.reason.replaceAll("_", " ")}`;
+  const reason = row.reason === null ? "" : `: ${reasonWords(row.reason)}`;
   const status = row.vendor_status === null ? "" : ` (${String(row.vendor_status)})`;
-  return `${row.direction}, ${row.outcome}${reason}${status}`;
+  return `${OUTCOME_WORDS[row.outcome] ?? row.outcome}${reason}${status}`;
 }
 
-/** What a channel's adapter declares, in one sentence. */
-export function declaredWords(health: HealthBody): string {
-  const features = health.features.length === 0 ? "no features" : health.features.join(", ");
-  const label = health.can_carry_label
-    ? "It can show a person the label an unchecked answer carries."
-    : "It cannot show the label an unchecked answer carries, so it is never sent one.";
-  return (
-    `Declares ${features}. Carries at most ${health.max_classification} information. ${label}`
-  );
-}
+/** What each tenant field is, and what it accepts: one unbroken line (`channel_routes.tenant_problems`). */
+export const TENANT_FORMAT = "One line of at most 500 characters, with no spaces.";
 
-/** Every tenant field left blank, as the sentence the form says beside it. */
-export function setupProblems(fields: readonly string[], values: Readonly<Record<string, string>>): string[] {
+/** Every tenant field left blank, as the problem the form says beside it. */
+export function setupProblems(fields: readonly string[], values: Readonly<Record<string, string>>): FieldProblem[] {
   return fields
     .filter((field) => (values[field] ?? "").trim() === "")
-    .map((field) => `Fill in ${field}, which this channel needs before it can reply.`);
+    .map((field) => ({ field, code: "blank", message: `Fill in ${field}, which this channel needs before it can reply.` }));
 }
 
-/** A blank destination, as the sentence the test form says. */
-export function testProblems(to: string): string[] {
-  return to.trim() === "" ? ["Say where the test message goes, in the vendor's terms."] : [];
+/** A blank destination, as the problem the test form says beside it. */
+export function testProblems(to: string): FieldProblem[] {
+  return to.trim() === "" ? [{ field: "to", code: "blank", message: "Say where the test message goes, in the vendor's terms." }] : [];
 }
 
 /** The body of one set-up, as `brain.channel_routes.ChannelAsked` declares it. */

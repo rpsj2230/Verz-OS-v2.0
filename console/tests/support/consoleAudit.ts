@@ -379,7 +379,14 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "Connectors and third-party integrations": {
-    screens: ["/connectors", "/connectors/:connector", "/connectors/:connector/:view", "/channels"],
+    screens: [
+      "/connectors",
+      "/connectors/:connector",
+      "/connectors/:connector/:view",
+      "/channels",
+      "/channels/:name",
+      "/channels/:name/:view",
+    ],
     routes: [
       "/api/v1/connectors",
       "/api/v1/connectors/{connector}/disconnect",
@@ -395,6 +402,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/channels*",
       "/api/v1/me/channels*",
       "/api/v1/console/connectors/{connector}/stats",
+      "/api/v1/console/channels",
+      "/api/v1/console/channels/{name}",
       "/api/v1/console/channels/{name}/stats",
     ],
     tables: [
@@ -430,11 +439,6 @@ export const AREAS: Readonly<Record<string, Area>> = {
         what: "Connect Lark switches knowledge from Wiki and Base on, and no question is answered from Lark yet.",
         because:
           "The Lark knowledge connector that keeps the minimal index and reads pages and records live is still to be built over the settings Connect Lark writes; brain.ops.lark_connect.KNOWLEDGE_IS_SWITCHED_ON_AND_NOTHING_IS_COPIED says so on the screen.",
-      },
-      {
-        what: "A Lark account is linked to a person with a one-time code only once the binding store is wired.",
-        because:
-          "The chat channel receives, verifies and answers Lark's events at /api/v1/channels/lark/events, and offers a code sent in a direct message to brain.channels.inbound.ChatBinder; the store that mints the code in a web session and keeps the binding is the channel binding package's, and until it is wired every sender is answered as unbound, brain.channels.inbound.NOBODY_IS_BOUND_UNTIL_A_BINDING_IS_KEPT.",
       },
     ],
   },
@@ -586,7 +590,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   Webhooks: {
-    screens: ["/webhooks"],
+    screens: ["/webhooks", "/webhooks/:id", "/webhooks/:id/:view"],
     routes: ["/api/v1/webhooks*"],
     tables: ["ops.webhook_subscriber", "ops.webhook_change"],
     installation: [],
@@ -594,7 +598,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       {
         what: "No vendor platform's webhook is received, only the company's own signed webhook.",
         because:
-          "Only brain.channels.webhook has a wire in this release, and the WhatsApp and Lark checks are not written; the Webhooks screen names the channels received from brain.ops.inbound_webhooks.receiving and lists each channel's check.",
+          "Only brain.channels.webhook has a wire in this release, and the WhatsApp and Lark checks are not written; each channel's About view says whether its check is written, from brain.ops.inbound_webhooks.INBOUND as the Webhooks route serves it.",
       },
     ],
   },

@@ -1,7 +1,8 @@
-"""`ops.setting` held in memory, answering the two statements a console switch makes.
+"""`ops.setting` held in memory, answering the statements a console switch makes.
 
-`brain.ops.setting_store` makes one select over a namespace and one upsert, and the routes behind
-the Features, Scheduled jobs and Prompts screens reach the table only through those. A stub that
+`brain.ops.setting_store` makes one select over a namespace, one upsert, and one retirement of a
+namespace, and the routes behind the Features, Scheduled jobs, Prompts and Notifications screens
+reach the table only through those. A stub that
 answers exactly those two, by the columns the select names and the table the insert targets, lets
 a route test watch a switch land in the row and the next read see it, without a database this
 machine cannot start. Any other statement is the caller's to answer.
@@ -19,7 +20,7 @@ from collections.abc import Iterable
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy.sql.dml import Insert
+from sqlalchemy.sql.dml import Insert, Update
 from sqlalchemy.sql.selectable import Select
 
 from brain.ops.setting_store import SettingState
@@ -60,6 +61,8 @@ class SettingRows:
     def __init__(self) -> None:
         self.rows: dict[str, SettingState] = {}
         self.writes: list[dict[str, Any]] = []
+        #: Every row a retirement took out of the live set, with who retired it.
+        self.retired: list[dict[str, Any]] = []
 
     def hold(self, key: str, value: Any, *, value_type: str, by: str = "u_someone") -> None:
         """A row as if somebody had written it before the test began."""
@@ -99,5 +102,12 @@ class SettingRows:
                 updated_by=written["updated_by"],
                 updated_at=datetime.now(UTC),
             )
+            return Result([])
+        if isinstance(statement, Update) and getattr(statement.table, "name", "") == "setting":
+            values = statement.compile().params
+            prefix = str(values["key_1"]).replace("/", "")
+            for key in sorted(one for one in self.rows if one.startswith(prefix)):
+                self.retired.append({"key": key, "updated_by": values["updated_by"]})
+                del self.rows[key]
             return Result([])
         return None

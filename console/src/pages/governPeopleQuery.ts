@@ -655,19 +655,6 @@ export function readSubscribers(payload: unknown): Subscribers {
   };
 }
 
-/** The rows a kind filter and an active filter keep. "" is every kind; "active" or "off". */
-export function narrowedSubscribers(
-  rows: readonly SubscriberRow[],
-  kind: string,
-  state: "" | "active" | "off",
-): readonly SubscriberRow[] {
-  return rows.filter(
-    (row) =>
-      (kind === "" || row.kinds.includes(kind)) &&
-      (state === "" || (state === "active") === row.active),
-  );
-}
-
 /** An instant, as the rows show it. */
 export function when(value: string | null): string {
   if (value === null) {

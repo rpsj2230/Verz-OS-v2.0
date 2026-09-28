@@ -7,8 +7,21 @@
  * Task ids: none
  */
 
-import { channelApiPath, switchApiPath, testApiPath, unbindApiPath } from "../../../src/pages/channelsQuery";
-import { A_BINDING_CHANGE_IS_AUDITED, at, type Proofs, t, type WriteRoute } from "../auditClaims";
+import {
+  channelApiPath,
+  deliveriesApiPath,
+  switchApiPath,
+  testApiPath,
+  unbindApiPath,
+} from "../../../src/pages/channelsQuery";
+import {
+  A_BINDING_CHANGE_IS_AUDITED,
+  at,
+  type Proofs,
+  type ReadAfterAnAction,
+  t,
+  type WriteRoute,
+} from "../auditClaims";
 
 const A_CHANNEL_RECORD_IS_KEPT_AND_SWITCHED = t(
   "test_channel_pipeline",
@@ -23,18 +36,27 @@ const A_CHANNEL_CHANGE_IS_AUDITED = t(
 );
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
-  "src/pages/Channels.tsx channelApiPath(row.channel)": [
+  "src/pages/channels/ChannelProfile.tsx channelApiPath(row.channel)": [
     at("PUT /api/v1/channels/{name}", "channelApiPath", channelApiPath("webhook")),
   ],
-  "src/pages/Channels.tsx switchApiPath(row.channel)": [
+  "src/pages/channels/ChannelDetailPage.tsx switchApiPath(row.channel)": [
     at("POST /api/v1/channels/{name}/switch", "switchApiPath", switchApiPath("webhook")),
   ],
-  "src/pages/Channels.tsx testApiPath(name)": [
+  "src/pages/channels/ChannelProfile.tsx testApiPath(row.channel)": [
     at("POST /api/v1/channels/{name}/test", "testApiPath", testApiPath("webhook")),
   ],
-  "src/pages/Channels.tsx unbindApiPath(name)": [
+  "src/pages/channels/ChannelDashboard.tsx unbindApiPath(row.channel)": [
     at("POST /api/v1/channels/{name}/bindings/unbind", "unbindApiPath", unbindApiPath("webhook")),
   ],
+};
+
+export const READ_AFTER_AN_ACTION: Readonly<Record<string, ReadAfterAnAction>> = {
+  // A channel's newest deliveries are read when a person opens its About view.
+  "GET /api/v1/channels/{name}/deliveries": {
+    screen: "/channels/:name/:view",
+    spelled: "deliveriesApiPath",
+    built: deliveriesApiPath("webhook"),
+  },
 };
 
 export const PROOFS: Readonly<Record<string, Proofs>> = {

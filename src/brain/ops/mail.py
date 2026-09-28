@@ -72,7 +72,13 @@ from brain.ops.idempotency import (
 from brain.ops.object_store import StaticKvReader
 from brain.ops.openbao import VaultRefusedError, VaultUnreachableError
 from brain.ops.secrets import SecretsUnavailableError
-from brain.ops.setting_store import SettingState, put, read_namespace, values_under
+from brain.ops.setting_store import (
+    SettingState,
+    put,
+    read_namespace,
+    retire_statement,
+    values_under,
+)
 from brain.tables.config import SettingType
 
 log = structlog.get_logger()
@@ -304,6 +310,15 @@ async def save_settings(session: AsyncSession, settings: MailSettings, *, by: st
             description=description,
             updated_by=by,
         )
+
+
+async def retire_settings(session: AsyncSession, *, by: str) -> None:
+    """Retire the relay's configuration in the caller's transaction, naming who removed it.
+
+    The password is a vault slot, not a row, and is left where it is: removing the relay stops
+    mail being sent, and a password kept for a relay nobody configured sends nothing.
+    """
+    await session.execute(retire_statement(MAIL_NAMESPACE, updated_by=by))
 
 
 def last_saved(rows: dict[str, SettingState]) -> SettingState | None:

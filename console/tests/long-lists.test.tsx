@@ -266,7 +266,8 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
   "/elevation": { bulk: AN_ELEVATION_IS_DECIDED_ON_ITS_OWN_REASON },
   "/access_review": {},
   "/access-requests": { bulk: READ_ONLY },
-  "/channels": { bulk: AN_UNBINDING_IS_ONE_PERSONS_CHAT },
+  "/channels": {},
+  "/channels/:name": { bulk: AN_UNBINDING_IS_ONE_PERSONS_CHAT },
 };
 
 /**

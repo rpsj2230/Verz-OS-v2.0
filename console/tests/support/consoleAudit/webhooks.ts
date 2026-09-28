@@ -19,11 +19,11 @@ const A_WEBHOOK_IS_DELIVERED = t(
 );
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
-  "src/pages/Webhooks.tsx REGISTER_API_PATH": [at("POST /api/v1/webhooks/subscribers", "REGISTER_API_PATH", REGISTER_API_PATH)],
-  "src/pages/Webhooks.tsx secretApiPath(asked.id)": [
+  "src/pages/webhooks/WebhookActs.tsx REGISTER_API_PATH": [at("POST /api/v1/webhooks/subscribers", "REGISTER_API_PATH", REGISTER_API_PATH)],
+  "src/pages/webhooks/WebhookActs.tsx secretApiPath(subscriberId)": [
     at("POST /api/v1/webhooks/subscribers/{subscriber_id}/secret", "secretApiPath", secretApiPath("billing_bridge")),
   ],
-  "src/pages/Webhooks.tsx switchOffApiPath(asked.id)": [
+  "src/pages/webhooks/WebhookActs.tsx switchOffApiPath(subscriberId)": [
     at("POST /api/v1/webhooks/subscribers/{subscriber_id}/switch-off", "switchOffApiPath", switchOffApiPath("billing_bridge")),
   ],
 };

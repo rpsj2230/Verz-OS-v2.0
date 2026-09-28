@@ -70,14 +70,29 @@ const WEBHOOKS = {
   replacing: UNBROKEN,
   switching_off: UNBROKEN,
   secret_minimum: 32,
+  people: { [UNBROKEN]: UNBROKEN },
 };
 
 export const PAGES: Readonly<Record<string, PageCase>> = {
-  // Webhooks. Identifiers are in the tables, which scroll; the served sentences, the vault's state
-  // and the findings are outside them, where they must wrap. No control is pressed here: the
-  // confirmation panels and the register form are held in `tests/webhooks-page.test.tsx`.
+  // Webhooks, the kit list: identifiers are in the table, which scrolls; the served sentences, the
+  // vault's state and the findings are outside it, where they must wrap. The drawers and dialogs
+  // are held in `tests/webhooks-page.test.tsx`.
   "/webhooks": {
     address: "/webhooks",
+    signedIn: true,
+    drawsValues: true,
+    answers: { "/api/v1/webhooks": WEBHOOKS },
+  },
+  // One subscriber's Dashboard: its figures and recent deliveries, from the list's own answer.
+  "/webhooks/:id": {
+    address: `/webhooks/${UNBROKEN}`,
+    signedIn: true,
+    drawsValues: true,
+    answers: { "/api/v1/webhooks": WEBHOOKS },
+  },
+  // One subscriber's Profile: its address, kinds, signing secret and switch.
+  "/webhooks/:id/:view": {
+    address: `/webhooks/${UNBROKEN}/profile`,
     signedIn: true,
     drawsValues: true,
     answers: { "/api/v1/webhooks": WEBHOOKS },

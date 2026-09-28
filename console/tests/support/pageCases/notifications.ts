@@ -58,12 +58,15 @@ const NOTIFICATIONS = {
   saving_email: UNBROKEN,
   keeping_password: UNBROKEN,
   sending_trial: UNBROKEN,
+  removing_email: UNBROKEN,
   plain_smtp_refused: UNBROKEN,
+  people: { [UNBROKEN]: UNBROKEN },
 };
 
 export const PAGES: Readonly<Record<string, PageCase>> = {
   // Notifications and email. The notice table scrolls; the relay's facts, the password line and
-  // the sentences wrap. No control is pressed here: `tests/notifications-page.test.tsx` holds them.
+  // the sentences wrap. No control is pressed here: `tests/notifications-page.test.tsx` holds the
+  // drawers and dialogs.
   "/notifications": {
     address: "/notifications",
     signedIn: true,

@@ -29,7 +29,14 @@ Core statement, which `TimestampMixin`'s `onupdate` does not reach, so a row tur
 and off in September would otherwise still say March. `brain.ops.install_settings.save` has that
 defect today; it is that module's, and this one does not inherit it.
 
-Task ids: M27.8.13
+**A namespace is removed by retiring its rows, never by deleting them.** `retire_statement` sets
+`deleted_at` at the statement's own instant, which is the one value `0045`'s policy lets the
+application write there, and names who retired them in `updated_by`, which `0059`'s trigger reads
+as the actor of the `retired` entry it appends. The value stays on the row, so the ledger and the
+row together say what was removed and by whom; a save afterwards inserts a fresh live row beside
+it, because the unique index is partial over live rows.
+
+Task ids: M27.8.13, M27.8.11
 """
 
 from __future__ import annotations
@@ -40,7 +47,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Final
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, Update, func, select, update
 from sqlalchemy.dialects.postgresql import Insert, insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -196,3 +203,21 @@ def values_under(states: Mapping[str, SettingState], namespace: str) -> dict[str
         for key, state in states.items()
         if key.startswith(prefix) and "." not in key.removeprefix(prefix)
     }
+
+
+def retire_statement(namespace: str, *, updated_by: str) -> Update:
+    """Retire every live row under `namespace.`, naming who did. See the module docstring."""
+    checked_key(f"{namespace}.name")
+    if not updated_by.strip():
+        msg = "a namespace retired by nobody is a row that says it went and not who removed it"
+        raise SettingStoreError(msg)
+    return (
+        update(SettingRow)
+        .where(SettingRow.deleted_at.is_(None))
+        .where(SettingRow.key.startswith(f"{namespace}.", autoescape=True))
+        .values(
+            deleted_at=func.statement_timestamp(),
+            updated_by=updated_by,
+            updated_at=func.now(),
+        )
+    )
