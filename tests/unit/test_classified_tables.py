@@ -337,6 +337,30 @@ def test_every_mark_reads_back_as_itself_and_a_built_in_rule_as_no_mark() -> Non
     assert access_of(PRICE_LIST.entity, sell) is None
 
 
+def test_a_derivation_whose_every_input_is_open_is_refused_so_no_open_column_is_withheld() -> None:
+    """See `A_DERIVATION_FROM_OPEN_COLUMNS_PROTECTS_NOTHING`. The positive half: with one input
+    restricted the classification loads, and a caller permitted the table keeps the sell price.
+    Delete this and the closure can again withhold an open column from everybody."""
+    rules = {rule.column: rule for rule in table().classification.rules}
+    with pytest.raises(ColumnClassificationError, match="all open"):
+        TableClassification(
+            entity=ENTITY,
+            rules=(
+                *(r for c, r in rules.items() if c != "cost"),
+                marked(ENTITY, "cost", ColumnAccess.OPEN),
+            ),
+        )
+    kept = TableClassification(
+        entity=ENTITY,
+        rules=(
+            *(r for c, r in rules.items() if c != "cost"),
+            marked(ENTITY, "cost", ColumnAccess.RESTRICTED),
+        ),
+    )
+    query = compile_table_query(table(kept), RowRequest(), entitlement=COST_ONLY)
+    assert "sell_price" in query.columns
+
+
 def test_a_new_table_opens_nothing_a_price_list_would_not() -> None:
     """Default-deny at upload. A column the shipped price list does not know starts restricted,
     and the ones it does start as it ships them. Delete this and an upload can be the act that
@@ -481,17 +505,17 @@ def test_every_column_but_the_key_is_asked_about_and_every_shape_is_a_valid_rule
 
 
 def test_a_second_upload_keeps_the_marks_that_stand_and_starts_a_new_column_restricted() -> None:
-    """Delete this and uploading next month's price list resets a column somebody opened, or
+    """Delete this and uploading next month's price list resets a column somebody marked, or
     opens one nobody has looked at."""
-    opened = TableClassification(
+    remarked = TableClassification(
         entity=ENTITY,
         rules=tuple(
-            marked(ENTITY, "cost", ColumnAccess.OPEN) if rule.column == "cost" else rule
+            marked(ENTITY, "cost", ColumnAccess.RESTRICTED) if rule.column == "cost" else rule
             for rule in table().classification.rules
         ),
     )
     again = next_upload(
-        table(opened),
+        table(remarked),
         entity=ENTITY,
         title="Price list",
         key_column=None,
@@ -502,7 +526,7 @@ def test_a_second_upload_keeps_the_marks_that_stand_and_starts_a_new_column_rest
     assert again.key_column == "name"
     cost = again.classification.rule_for("cost")
     discount = again.classification.rule_for("discount")
-    assert cost is not None and access_of(ENTITY, cost) is ColumnAccess.OPEN
+    assert cost is not None and access_of(ENTITY, cost) is ColumnAccess.RESTRICTED
     assert discount is not None and access_of(ENTITY, discount) is ColumnAccess.RESTRICTED
 
 
@@ -820,9 +844,10 @@ def test_a_mark_review_stores_nothing(client: TestClient, memory: MemoryTables) 
     upload(client)
     stored = memory.tables[ENTITY]
 
-    reviewed = mark(client, "cost", "open", apply=False)
+    reviewed = mark(client, "cost", "restricted", apply=False)
 
     assert reviewed.json()["widens"] is True
+    assert reviewed.json()["exposed"] == ["margin"]
     assert memory.tables[ENTITY] is stored
     assert len(memory.writers) == 1
 
@@ -841,6 +866,25 @@ def test_a_mark_that_would_not_load_is_answered_and_not_applied(
     assert missing["applied"] is False
     assert "no column" in missing["review"]["would_not_load"]
     assert len(memory.writers) == 1
+
+
+def test_opening_an_input_of_a_derivation_whose_inputs_would_all_be_open_is_not_applied(
+    client: TestClient, memory: MemoryTables
+) -> None:
+    """**The defect the database test found.** Opening the cost while the margin stays derived
+    from the sell price and the cost left the margin reconstructable by everybody, and the
+    closure withheld the sell price from the whole company to protect it: two open columns tie
+    on sensitivity and the tie is broken by name. The route now answers that the rule would not
+    load. Delete this and one press on the Classification screen takes the price list's price
+    away from everybody while telling the administrator it opened a column."""
+    upload(client)
+
+    answered = mark(client, "cost", "open").json()
+
+    assert answered["applied"] is False
+    assert "all open" in answered["review"]["would_not_load"]
+    cost = memory.tables[ENTITY].classification.rule_for("cost")
+    assert cost is not None and access_of(ENTITY, cost) is ColumnAccess.DERIVED
 
 
 def test_a_built_in_classification_takes_no_mark(client: TestClient) -> None:
@@ -1089,7 +1133,7 @@ def test_the_store_writes_and_reads_a_table_as_the_application_role(database: st
             loosened = TableClassification(
                 entity=ENTITY,
                 rules=tuple(
-                    marked(ENTITY, "cost", ColumnAccess.OPEN) if r.column == "cost" else r
+                    marked(ENTITY, "cost", ColumnAccess.RESTRICTED) if r.column == "cost" else r
                     for r in first.classification.rules
                 ),
             )
@@ -1109,9 +1153,9 @@ def test_the_store_writes_and_reads_a_table_as_the_application_role(database: st
 
     assert stored is not None
     cost = stored.classification.rule_for("cost")
-    assert cost is not None and access_of(ENTITY, cost) is ColumnAccess.OPEN
+    assert cost is not None and access_of(ENTITY, cost) is ColumnAccess.RESTRICTED
     assert live == [ENTITY]
-    assert "margin" not in seen and "sell_price" in seen
+    assert seen == ["entity", "id", "name", "sell_price", "sku"]
     entries = sql(
         database,
         "SELECT actor_id, details ->> 'change' FROM obs.audit_entry"

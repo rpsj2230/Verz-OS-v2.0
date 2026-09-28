@@ -64,7 +64,9 @@ from brain.gate.admission import (
     Assurance,
 )
 from brain.gate.context import Channel
+from brain.knowledge.classified_rows import StoredTable
 from brain.knowledge.columns import PRICE_LIST, ColumnRule, TableClassification, project_row
+from brain.ops.classification_store import ClassifiedTables
 from tests.fixtures.http_client import Response
 from tests.unit.test_api_routes import (
     Directory,
@@ -162,18 +164,36 @@ def _wiring() -> Any:
     )
 
 
+class NoUploadedTables(ClassifiedTables):
+    """A store holding no uploaded table, stated rather than inherited from the environment.
+
+    With `DATABASE_URL` set the lifespan builds a session factory and the routes would read
+    `know.classified_table` from whatever database that names; without it they read nothing.
+    A test that depended on which was true would mean two things, so this file says what its
+    source is: built-in classifications only.
+    """
+
+    async def table(self, entity: str) -> StoredTable | None:
+        return None
+
+    async def live_tables(self) -> tuple[StoredTable, ...]:
+        return ()
+
+
 @pytest.fixture
 def client() -> Iterator[TestClient]:
-    """The real application, with a gate and deliberately without a database.
+    """The real application, with a gate and a stated source holding no uploaded table.
 
     `create_app` produced everything else, the router registration under test included: a
     test that mounted the router itself would prove the routes work and not that they are
-    served. Nothing sets `app.state.db_sessions`, which is what every deployment of this
-    system is today and is also all this router ever needs.
+    served. Whether the lifespan built a session factory depends on `DATABASE_URL`, so the
+    source is installed either way (`NoUploadedTables`) and every test here reads the built-in
+    classifications and nothing else, on a laptop and in CI alike.
     """
     app: FastAPI = create_app(Settings(env="development"))
     with TestClient(app, raise_server_exceptions=False) as c:
         app.state.gate = _wiring()
+        app.state.classified_tables = NoUploadedTables()
         yield c
 
 
@@ -498,10 +518,15 @@ def test_a_review_is_answered_on_a_process_with_no_database(client: TestClient) 
     the surface starts failing on exactly the deployments it was written to serve."""
     state = app_of(client).state
     had = getattr(state, "db_sessions", None)
+    tables = getattr(state, "classified_tables", None)
     if had is not None:
         del state.db_sessions
+    if tables is not None:
+        # The fixture's stated source goes too, so nothing at all is left to read.
+        del state.classified_tables
     try:
         assert getattr(state, "db_sessions", None) is None
+        assert getattr(state, "classified_tables", None) is None
 
         answer = propose(client, "u_admin")
 
@@ -509,6 +534,8 @@ def test_a_review_is_answered_on_a_process_with_no_database(client: TestClient) 
     finally:
         if had is not None:
             state.db_sessions = had
+        if tables is not None:
+            state.classified_tables = tables
 
 
 def test_a_rule_identical_to_the_one_that_stands_is_reported_as_no_change(
