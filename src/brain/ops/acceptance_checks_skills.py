@@ -236,16 +236,22 @@ async def _store(
     raise CheckFailedError("the library refused a skill named for this run")
 
 
-async def _changes(h: Harness, subject: str) -> list[tuple[str, dict[str, Any]]]:
-    """The actor and details of every ledger entry about `subject` in the check's transaction."""
-    rows = (
-        await h.execute(
-            text(
-                "SELECT actor_id, details FROM obs.audit_entry"
-                " WHERE subject = :subject ORDER BY seq"
-            ).bindparams(subject=subject)
-        )
-    ).all()
+async def _changes(
+    h: Harness, subject: str, action: str | None = None
+) -> list[tuple[str, dict[str, Any]]]:
+    """The actor and details of every ledger entry about `subject` in the check's transaction.
+
+    `action` narrows to one ledger action. An agent's subject is shared: since `0137` inserting
+    the agent writes a `created` entry too, so a check about what was attached to it asks for the
+    `compose_change` entries and no others.
+    """
+    statement = "SELECT actor_id, details FROM obs.audit_entry WHERE subject = :subject"
+    if action is not None:
+        statement += " AND action = :action"
+    bound = text(f"{statement} ORDER BY seq").bindparams(subject=subject)
+    if action is not None:
+        bound = bound.bindparams(action=action)
+    rows = (await h.execute(bound)).all()
     return [
         (str(actor), details if isinstance(details, dict) else json.loads(details))
         for actor, details in rows
@@ -634,6 +640,7 @@ async def _pins(h: Harness, agent_id: str) -> dict[str, str]:
 )
 async def an_edit_is_a_new_version_and_moves_no_agent_until_reassigned(h: Harness) -> None:
     from brain.agents.template import TemplateError
+    from brain.audit.ledger import AuditAction
     from brain.console.agent_tabs import AgentTabError
     from brain.console.skill_library import (
         SkillLibraryError,
@@ -773,7 +780,8 @@ async def an_edit_is_a_new_version_and_moves_no_agent_until_reassigned(h: Harnes
         (admin, "approved"),
     ]:
         raise CheckFailedError("the ledger did not record the self-approval, the edit and review")
-    directions = [d.get("direction") for _, d in await _changes(h, f"agent:{agent_id}")]
+    attached = await _changes(h, f"agent:{agent_id}", action=AuditAction.COMPOSE_CHANGE.value)
+    directions = [d.get("direction") for _, d in attached]
     if directions != ["attached", "detached", "attached"]:
         raise CheckFailedError("the ledger did not record the agent's skill attached and replaced")
 
