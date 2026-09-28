@@ -550,3 +550,46 @@ def test_a_worker_style_refresh_reads_what_an_appointment_saved_in_the_real_tabl
     assert first == tuple(sorted(values))
     assert again == ()
     assert value_of("INSTALL_MODEL_PROFILE", {}) == "hosted"
+
+
+def test_a_value_returned_to_default_is_retired_as_the_app_role_and_the_ledger_names_who() -> None:
+    """`retire` as `brain_app`, under `0045`'s policies: the row is stamped retired rather than
+    deleted, `load` stops resolving it, a second retirement finds nothing, and `0059`'s trigger
+    records `retired` against the person the statement named, never the value.
+
+    Delete this and "return to default" can be refused by row-level security on every install, or
+    recorded against whoever saved the value last. **Skips without a server.**"""
+    from brain.audit.record import SettingChange
+    from brain.ops.install_settings import retire
+    from tests.unit.test_credential_writes import entries
+
+    values = wizard_settings()
+
+    async def work(sessions: async_sessionmaker[AsyncSession]) -> tuple[bool, bool]:
+        async with sessions() as session, session.begin():
+            first = await retire(session, "INSTALL_PRODUCT_NAME", updated_by="u_owner")
+        async with sessions() as session, session.begin():
+            second = await retire(session, "INSTALL_PRODUCT_NAME", updated_by="u_owner")
+        return first, second
+
+    with audited("brain_install_settings_default") as url:
+        assert appoint_with(url, values) == "appointed"
+        first, second = with_sessions(url, work)
+        loaded = with_sessions(url, _load_once)
+        kept = sql(
+            url,
+            "SELECT value, updated_by, deleted_at IS NOT NULL FROM ops.setting WHERE key = %s",
+            key_for("INSTALL_PRODUCT_NAME"),
+        )
+        ledger = [
+            one
+            for one in entries(url)
+            if one.subject == f"setting:{key_for('INSTALL_PRODUCT_NAME')}"
+        ]
+
+    assert (first, second) == (True, False)
+    assert "INSTALL_PRODUCT_NAME" not in loaded
+    assert [(str(one[1]), bool(one[2])) for one in kept] == [("u_owner", True)]
+    assert ledger[-1].actor_id == "u_owner"
+    assert dict(ledger[-1].details) == {"change": SettingChange.RETIRED.value}
+    assert values["INSTALL_PRODUCT_NAME"] not in str(ledger[-1].details)

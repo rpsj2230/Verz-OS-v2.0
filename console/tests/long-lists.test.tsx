@@ -358,7 +358,13 @@ function offered(root: Element, paths: readonly string[]): Set<Capability> {
   ) {
     found.add("filter");
   }
-  if (root.querySelector('tbody input[type="checkbox"], .roster input[type="checkbox"]') !== null) {
+  // The kit's row tick is a Radix checkbox, and it is drawn for export alone too, so a kit table
+  // counts only where it carries a bulk act, which it marks with `data-bulk`.
+  if (
+    root.querySelector(
+      'tbody input[type="checkbox"], .roster input[type="checkbox"], [data-slot="entity-table"][data-bulk] tbody [role="checkbox"]',
+    ) !== null
+  ) {
     found.add("bulk");
   }
   return found;

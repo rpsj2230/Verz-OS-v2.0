@@ -1,9 +1,9 @@
 ### People, roles, permissions and access control
 
-- **Screens:** `/people`, `/people/:subject`, `/roles`, `/capabilities`, `/scopes`, `/access_review`, `/elevation`, `/sessions`, `/sign-in-links`, `/staff_sources`, `/access-requests`, `/service-accounts`
+- **Screens:** `/people`, `/people/:subject`, `/roles`, `/capabilities`, `/scopes`, `/access_review`, `/elevation`, `/sessions`, `/sign-in-links`, `/staff_sources`, `/access-requests`, `/service-accounts`, `/service-accounts/:clientId`
 - **Tables:** `auth.principal`, `auth.principal_identity`, `auth.session`, `auth.directory_role_grant`, `gate.capability_grant`, `gate.capability_pack`, `gate.capability_pack_assignment`, `gate.capability_registry`, `gate.scope`, `gate.grants_version`, `gate.policy_epoch`, `gate.review_decision`, `gate.elevation_request`, `auth.staff_member`, `auth.staff_sync_run`, `auth.service_account`, `auth.api_key`, `gate.access_request`, `gate.role_grant`, `auth.group_role_rule`, `gate.break_glass_notice`
 - **Installation values:** `INSTALL_OIDC_ISSUER`, `INSTALL_OIDC_REALM`, `INSTALL_OIDC_CLIENT_ID`, `INSTALL_OIDC_REDIRECT_URIS`, `INSTALL_BROKERED_DIRECTORY`, `INSTALL_STAFF_SOURCE`, `INSTALL_STAFF_SOURCE_LOCATION`, `INSTALL_BROKERED_CLIENT_ID`
-- **Measured here:** 55 routes, 0 called by no screen; 31 write routes, 29 with all three proofs; 5 gaps.
+- **Measured here:** 56 routes, 0 called by no screen; 31 write routes, 31 with all three proofs; 5 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -22,6 +22,7 @@
 | `GET /api/v1/govern/roles/misconfigurations` | `/roles` |
 | `GET /api/v1/govern/scopes` | `/departments`, `/people/:subject`, `/scopes` |
 | `GET /api/v1/govern/service-accounts` | `/service-accounts` |
+| `GET /api/v1/govern/service-accounts/{client_id}` | `/service-accounts/:clientId` |
 | `GET /api/v1/govern/sessions` | `/sessions` |
 | `GET /api/v1/govern/sign-ins` | `/sign-in-links` |
 | `GET /api/v1/govern/staff_sources` | `/staff_sources` |
@@ -48,10 +49,10 @@
 | `POST /api/v1/govern/roles/group-rules` | `/roles` |
 | `POST /api/v1/govern/roles/group-rules/retirement` | `/roles` |
 | `POST /api/v1/govern/roles/removal` | `/roles` |
-| `POST /api/v1/govern/service-accounts` | `/service-accounts` |
-| `POST /api/v1/govern/service-accounts/keys` | `/service-accounts` |
-| `POST /api/v1/govern/service-accounts/keys/revoke` | `/service-accounts` |
-| `POST /api/v1/govern/service-accounts/retire` | `/service-accounts` |
+| `POST /api/v1/govern/service-accounts` | `/service-accounts`, `/service-accounts/:clientId` |
+| `POST /api/v1/govern/service-accounts/keys` | `/service-accounts`, `/service-accounts/:clientId` |
+| `POST /api/v1/govern/service-accounts/keys/revoke` | `/service-accounts`, `/service-accounts/:clientId` |
+| `POST /api/v1/govern/service-accounts/retire` | `/service-accounts`, `/service-accounts/:clientId` |
 | `POST /api/v1/govern/sessions/end` | `/sessions` |
 | `POST /api/v1/govern/sessions/end-several` | `/sessions` |
 | `POST /api/v1/govern/sign-ins/unlink` | `/sign-in-links` |
@@ -90,10 +91,10 @@
 | `POST /api/v1/govern/roles/group-rules` | `/roles` | `test_mapping_and_retiring_through_the_routes_reach_the_rows_and_the_ledger` in `tests/unit/test_group_sync.py` (database, in CI) | `test_mapping_and_retiring_through_the_routes_reach_the_rows_and_the_ledger` in `tests/unit/test_group_sync.py` (database, in CI) | `test_a_sign_in_writes_and_removes_synced_rows_and_the_ledger_records_both` in `tests/unit/test_group_sync.py` (database, in CI) |
 | `POST /api/v1/govern/roles/group-rules/retirement` | `/roles` | `test_mapping_and_retiring_through_the_routes_reach_the_rows_and_the_ledger` in `tests/unit/test_group_sync.py` (database, in CI) | `test_mapping_and_retiring_through_the_routes_reach_the_rows_and_the_ledger` in `tests/unit/test_group_sync.py` (database, in CI) | `test_mapping_and_retiring_through_the_routes_reach_the_rows_and_the_ledger` in `tests/unit/test_group_sync.py` (database, in CI) |
 | `POST /api/v1/govern/roles/removal` | `/roles` | `test_an_appointment_through_the_routes_reaches_the_row_and_the_ledger_with_its_reason` in `tests/unit/test_role_grant.py` (database, in CI) | `test_an_appointment_through_the_routes_reaches_the_row_and_the_ledger_with_its_reason` in `tests/unit/test_role_grant.py` (database, in CI) | `test_the_guard_refuses_a_removal_below_the_floor_and_allows_one_above_it` in `tests/unit/test_role_grant.py` (database, in CI) |
-| `POST /api/v1/govern/service-accounts` | `/service-accounts` | `test_through_0095_a_key_acts_at_its_owners_live_reach_and_stops_with_the_owner` in `tests/unit/test_service_accounts.py` (database, in CI) | `test_through_0095_a_key_acts_at_its_owners_live_reach_and_stops_with_the_owner` in `tests/unit/test_service_accounts.py` (database, in CI) | `test_through_0095_a_key_acts_at_its_owners_live_reach_and_stops_with_the_owner` in `tests/unit/test_service_accounts.py` (database, in CI) |
-| `POST /api/v1/govern/service-accounts/keys` | `/service-accounts` | `test_through_0095_a_key_acts_at_its_owners_live_reach_and_stops_with_the_owner` in `tests/unit/test_service_accounts.py` (database, in CI) | `test_through_0095_a_key_acts_at_its_owners_live_reach_and_stops_with_the_owner` in `tests/unit/test_service_accounts.py` (database, in CI) | `test_through_0095_a_key_acts_at_its_owners_live_reach_and_stops_with_the_owner` in `tests/unit/test_service_accounts.py` (database, in CI) |
-| `POST /api/v1/govern/service-accounts/keys/revoke` | `/service-accounts` | `test_a_retired_key_or_account_is_not_found_by_the_request_path` in `tests/unit/test_service_accounts.py` (database, in CI) | **None.** Revoking a key sets its deleted_at and records no credential write, so brain.identity.service_account_store.revoke_key leaves no ledger entry naming who revoked it. | `test_a_retired_key_or_account_is_not_found_by_the_request_path` in `tests/unit/test_service_accounts.py` (database, in CI) |
-| `POST /api/v1/govern/service-accounts/retire` | `/service-accounts` | `test_a_retired_key_or_account_is_not_found_by_the_request_path` in `tests/unit/test_service_accounts.py` (database, in CI) | **None.** Retiring an account sets deleted_at on it and its keys and records no credential write, so brain.identity.service_account_store.retire leaves no ledger entry naming who retired it. | `test_a_retired_key_or_account_is_not_found_by_the_request_path` in `tests/unit/test_service_accounts.py` (database, in CI) |
+| `POST /api/v1/govern/service-accounts` | `/service-accounts`, `/service-accounts/:clientId` | `test_through_0095_a_key_acts_at_its_owners_live_reach_and_stops_with_the_owner` in `tests/unit/test_service_accounts.py` (database, in CI) | `test_through_0095_a_key_acts_at_its_owners_live_reach_and_stops_with_the_owner` in `tests/unit/test_service_accounts.py` (database, in CI) | `test_through_0095_a_key_acts_at_its_owners_live_reach_and_stops_with_the_owner` in `tests/unit/test_service_accounts.py` (database, in CI) |
+| `POST /api/v1/govern/service-accounts/keys` | `/service-accounts`, `/service-accounts/:clientId` | `test_through_0095_a_key_acts_at_its_owners_live_reach_and_stops_with_the_owner` in `tests/unit/test_service_accounts.py` (database, in CI) | `test_through_0095_a_key_acts_at_its_owners_live_reach_and_stops_with_the_owner` in `tests/unit/test_service_accounts.py` (database, in CI) | `test_through_0095_a_key_acts_at_its_owners_live_reach_and_stops_with_the_owner` in `tests/unit/test_service_accounts.py` (database, in CI) |
+| `POST /api/v1/govern/service-accounts/keys/revoke` | `/service-accounts`, `/service-accounts/:clientId` | `test_a_retired_key_or_account_is_not_found_by_the_request_path` in `tests/unit/test_service_accounts.py` (database, in CI) | `test_a_revoked_key_and_a_retired_account_each_leave_one_entry_naming_the_owner` in `tests/unit/test_service_account_audit.py` (database, in CI) | `test_a_retired_key_or_account_is_not_found_by_the_request_path` in `tests/unit/test_service_accounts.py` (database, in CI) |
+| `POST /api/v1/govern/service-accounts/retire` | `/service-accounts`, `/service-accounts/:clientId` | `test_a_retired_key_or_account_is_not_found_by_the_request_path` in `tests/unit/test_service_accounts.py` (database, in CI) | `test_a_revoked_key_and_a_retired_account_each_leave_one_entry_naming_the_owner` in `tests/unit/test_service_account_audit.py` (database, in CI) | `test_a_retired_key_or_account_is_not_found_by_the_request_path` in `tests/unit/test_service_accounts.py` (database, in CI) |
 | `POST /api/v1/govern/sessions/end` | `/sessions` | `test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request` in `tests/unit/test_session_store.py` (database, in CI) | `test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request` in `tests/unit/test_session_store.py` (database, in CI) | `test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request` in `tests/unit/test_session_store.py` (database, in CI) |
 | `POST /api/v1/govern/sessions/end-several` | `/sessions` | `test_several_sessions_are_ended_one_at_a_time_each_decided_by_the_single_endings_question` in `tests/unit/test_session_routes.py` | `test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request` in `tests/unit/test_session_store.py` (database, in CI) | `test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request` in `tests/unit/test_session_store.py` (database, in CI) |
 | `POST /api/v1/govern/sign-ins/unlink` | `/sign-in-links` | `test_an_unlink_retires_the_link_names_who_did_it_and_the_account_is_refused_after` in `tests/unit/test_sign_in_links.py` (database, in CI) | `test_an_unlink_retires_the_link_names_who_did_it_and_the_account_is_refused_after` in `tests/unit/test_sign_in_links.py` (database, in CI) | `test_an_unlink_retires_the_link_names_who_did_it_and_the_account_is_refused_after` in `tests/unit/test_sign_in_links.py` (database, in CI) |

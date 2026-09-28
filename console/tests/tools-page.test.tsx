@@ -1,33 +1,37 @@
 /**
- * The Tools screen: every tool drawn with what it needs and does, the switches this reader may
- * throw and no others, a confirmed switch posted to the place it names and then re-read, and the
- * facts about what a switch is said only while the API says them.
+ * Tools on the shared page kit: the list of every tool with its status, and a tool's page with what
+ * it needs and does, the switches this reader may throw and no others, and a confirmed switch
+ * posted to the place it names and then re-read. Who switched a tool off stays in Advanced.
  *
- * Mounted on its own at its address. The shapes are read from `brain.tool_routes` itself, so a
+ * Mounted on its own at each address. The shapes are read from `brain.tool_routes` itself, so a
  * renamed field fails here.
  *
- * Task ids: M12.1.3, M12.3.8, M12.4.3
+ * Task ids: M12.1.3, M12.3.8, M12.4.3, M27.16.1
  */
 
-import { fireEvent, waitFor } from "@testing-library/react";
-import { describe, expect, test } from "vitest";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { beforeAll, describe, expect, test } from "vitest";
 import {
   A_SWITCH_ONLY_NARROWS,
   EFFECT_SENTENCES,
   KEEP_IT,
   NO_LONGER_OFFERED,
-  OFF_FOR_THE_INSTALL,
   SENSITIVE_EFFECT_SENTENCES,
   SWITCH_OFF_FOR_THE_INSTALL,
   SWITCH_ON_FOR_THE_INSTALL,
-  THE_ASKER_IS_NEVER_TOLD,
   TOOLS_API_PATH,
   TOOLS_PATH,
   UNREADABLE_ANSWER,
 } from "../src/pages/toolsQuery";
 import { SOMETHING_DID_NOT_WORK } from "../src/pages/Overview";
-import { button, json, mountPage, settled, type Answer } from "./support/pageHarness";
+import { NO_SUCH_TOOL } from "../src/pages/tools/ToolDetailPage";
+import { json, mountPage, type Answer } from "./support/pageHarness";
 import { backendModelFields } from "./support/python";
+import { installRadixStubs } from "./support/radix";
+
+beforeAll(() => {
+  installRadixStubs();
+});
 
 const LIST = `GET /api/v1${TOOLS_API_PATH}`;
 const SWITCH = `POST /api/v1${TOOLS_API_PATH}/drive.delete_file/switch`;
@@ -36,7 +40,7 @@ const ROUTES = "src/brain/tool_routes.py";
 function stop(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     department: null,
-    switched_off_by: "u_admin",
+    switched_off_by: "u_switcher_sentinel",
     switched_off_at: "2019-03-04T09:00:00Z",
     reason: null,
     ...overrides,
@@ -87,104 +91,133 @@ async function toolsPage(answers: Record<string, Answer>) {
   );
 }
 
-describe("what the Tools screen draws", () => {
-  test("a tool with the capability it needs, its effect in words, and the owner's sensitive effect", async () => {
-    // What breaks if this is deleted: a tool listed without saying what a person must hold for it
-    // or whether a call to it can be taken back, which is the owner's Tools screen with its two
-    // facts missing.
-    const { container } = await toolsPage({ [LIST]: () => json(page()) });
+async function toolPage(answers: Record<string, Answer>, name = "drive.delete_file") {
+  return mountPage(
+    `${TOOLS_PATH}/${name}`,
+    async () => {
+      const { ToolDetailPage } = await import("../src/pages/tools/ToolDetailPage");
+      return <ToolDetailPage name={name} />;
+    },
+    answers,
+  );
+}
+
+function outsideAdvanced(container: HTMLElement): string {
+  const copy = container.cloneNode(true) as HTMLElement;
+  copy.querySelectorAll('[data-slot="advanced"]').forEach((one) => {
+    one.remove();
+  });
+  return copy.textContent ?? "";
+}
+
+describe("the list", () => {
+  test("every tool with its source, effect and status, and one sentence about what a switch is", async () => {
+    // What breaks if this is deleted: a tool switched off drawn as on, or the list unreachable.
+    const { container } = await toolsPage({
+      [LIST]: () => json(page({}, { off_for_install: stop(), stopped_for: [stop({ department: "web" })] })),
+    });
     const text = container.textContent ?? "";
     expect(text).toContain("drive.delete_file");
-    expect(text).toContain("write:file.body");
-    expect(text).toContain("Irreversible");
-    expect(text).toContain(EFFECT_SENTENCES["irreversible"]);
-    expect(text).toContain(SENSITIVE_EFFECT_SENTENCES["deletion"]);
-    expect(text).toContain(A_SWITCH_ONLY_NARROWS);
-    expect(text).toContain(THE_ASKER_IS_NEVER_TOLD);
-  });
-
-  test("a stopped tool says where and by whom, and a tool no longer registered cannot be switched", async () => {
-    // What breaks if this is deleted: a switched-off tool drawn as on, or a button on a tool no
-    // process offers, which writes a stop nothing reads.
-    const { container } = await toolsPage({
-      [LIST]: () =>
-        json(page({}, { off_for_install: stop(), stopped_for: [stop({ department: "web" })], registered: false })),
-    });
-    const text = container.textContent ?? "";
-    expect(text).toContain(OFF_FOR_THE_INSTALL);
+    expect(text).toContain("Off for the install");
     expect(text).toContain("Stopped for web");
-    expect(text).toContain("Switched off for the install by u_admin");
-    expect(text).toContain(NO_LONGER_OFFERED);
-    expect(button(container, SWITCH_ON_FOR_THE_INSTALL).disabled).toBe(true);
-  });
-
-  test("a department's reader is offered their own department and not the install", async () => {
-    // What breaks if this is deleted: a department administrator shown a switch for the whole
-    // install, which the API refuses after they have filled in a reason.
-    const { container } = await toolsPage({
-      [LIST]: () => json(page({ may_switch_install: false, departments: ["web"] })),
-    });
-    const labels = [...container.querySelectorAll("button")].map((one) => one.textContent ?? "");
-    expect(labels).toContain("Stop for web");
-    expect(labels).not.toContain(SWITCH_OFF_FOR_THE_INSTALL);
+    expect(text).toContain(A_SWITCH_ONLY_NARROWS);
+    expect(text).not.toContain("u_switcher_sentinel");
+    expect(container.querySelector('a[href="/tools/drive.delete_file"]')).not.toBeNull();
   });
 
   test("a refusal is the API's sentence with its reference, and an unreadable answer says so", async () => {
-    // What breaks if this is deleted: a refused reader shown an empty catalogue, which reads as an
-    // install with no tools rather than a request that was refused.
-    const refused = await toolsPage({
-      [LIST]: () => json({ message: "I could not find that.", trace_id: "TRACE-SENTINEL" }, 404),
-    });
+    // What breaks if this is deleted: a refused reader shown an empty list, which reads as an
+    // install with no tools.
+    const refused = await toolsPage({ [LIST]: () => json({ message: "I could not find that.", trace_id: "TRACE-SENTINEL" }, 404) });
     expect(refused.container.textContent).toContain(SOMETHING_DID_NOT_WORK);
     expect(refused.container.textContent).toContain("TRACE-SENTINEL");
-
     const unreadable = await toolsPage({ [LIST]: () => json({ tools: "no" }) });
     expect(unreadable.container.textContent).toContain(UNREADABLE_ANSWER);
   });
 });
 
+describe("a tool's page", () => {
+  test("what it needs and does in words, with who switched it off only in Advanced", async () => {
+    // What breaks if this is deleted: an effect drawn as a code, or a principal id in page text.
+    const { container } = await toolPage({ [LIST]: () => json(page({}, { off_for_install: stop({ reason: "NOTE-SENTENCE" }) })) });
+    const text = outsideAdvanced(container);
+    expect(text).toContain("write:file.body");
+    expect(text).toContain(EFFECT_SENTENCES.irreversible);
+    expect(text).toContain(SENSITIVE_EFFECT_SENTENCES.deletion);
+    expect(text).toContain("NOTE-SENTENCE");
+    expect(text).not.toContain("u_switcher_sentinel");
+    expect(container.querySelector('[data-slot="advanced"]')?.textContent).toContain("u_switcher_sentinel");
+  });
+
+  test("a department's reader is offered their own department and not the install, and a tool no longer registered none", async () => {
+    // What breaks if this is deleted: a department admin offered the install's switch, which the
+    // route would refuse, or a switch on a tool nothing registers.
+    const narrow = await toolPage({ [LIST]: () => json(page({ may_switch_install: false })) });
+    const labels = [...narrow.container.querySelectorAll("button")].map((one) => one.getAttribute("aria-label") ?? "");
+    expect(labels.some((one) => one.startsWith("Stop for web"))).toBe(true);
+    expect(labels.some((one) => one.startsWith(SWITCH_OFF_FOR_THE_INSTALL))).toBe(false);
+
+    const gone = await toolPage({ [LIST]: () => json(page({}, { registered: false })) });
+    expect(gone.container.textContent).toContain(NO_LONGER_OFFERED);
+    expect([...gone.container.querySelectorAll("button")].filter((one) => (one.getAttribute("aria-label") ?? "").includes("drive.delete_file"))).toEqual([]);
+  });
+
+  test("a name the list does not carry says so and draws nothing else", async () => {
+    // What breaks if this is deleted: a page drawn for a tool that is not there.
+    const { container } = await toolPage({ [LIST]: () => json(page()) }, "nothing.here");
+    expect(container.textContent).toContain(NO_SUCH_TOOL);
+  });
+});
+
 describe("switching a tool", () => {
-  test("is confirmed, posted for the place it names with the note typed, and re-read", async () => {
-    // What breaks if this is deleted: a switch sent without confirmation, sent for the wrong place,
-    // or a page that goes on drawing the old state after the database changed.
+  test("is confirmed, says what a reason must be before it is sent, posts the place and the note, and re-reads", async () => {
+    // What breaks if this is deleted: a switch from one press, a note dropped, or a page that
+    // goes on drawing the old state.
     let off = false;
-    const { container, sent } = await toolsPage({
-      [LIST]: () => json(page({}, { off_for_install: off ? stop() : null })),
-      [SWITCH]: (body) => {
-        off = !(body as { on: boolean }).on;
-        return json({ tool: tool({ off_for_install: off ? stop() : null }), changed: true });
+    const { container, sent } = await toolPage({
+      [LIST]: () => json(page({}, off ? { off_for_install: stop() } : {})),
+      [SWITCH]: () => {
+        off = true;
+        return json({ tool: tool({ off_for_install: stop() }), changed: true });
       },
     });
 
-    fireEvent.click(button(container, SWITCH_OFF_FOR_THE_INSTALL));
-    fireEvent.click(button(container, KEEP_IT));
-    expect(sent.filter((one) => one.method === "POST")).toHaveLength(0);
-
-    fireEvent.click(button(container, SWITCH_OFF_FOR_THE_INSTALL));
-    fireEvent.change(container.querySelector("textarea[name='reason']") as HTMLTextAreaElement, {
-      target: { value: "the vendor reported a fault" },
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: `${SWITCH_OFF_FOR_THE_INSTALL}: drive.delete_file` }));
     });
-    const confirm = [...container.querySelectorAll(".confirm button")].find(
-      (one) => one.textContent === SWITCH_OFF_FOR_THE_INSTALL,
-    );
-    fireEvent.click(confirm as HTMLButtonElement);
+    const dialog = await screen.findByRole("alertdialog");
+    expect(sent.filter((one) => one.method === "POST")).toEqual([]);
+    fireEvent.change(within(dialog).getByRole("textbox"), { target: { value: "  a note  " } });
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: SWITCH_OFF_FOR_THE_INSTALL }));
+    });
 
     await waitFor(() => {
       expect(container.textContent).toContain("is switched off for the install");
     });
-    await settled(container);
-    expect(sent.filter((one) => one.method === "POST").map((one) => one.body)).toEqual([
-      { on: false, department: null, reason: "the vendor reported a fault" },
-    ]);
-    expect(sent.filter((one) => one.method === "GET").length).toBeGreaterThanOrEqual(2);
-    expect(container.textContent).toContain(OFF_FOR_THE_INSTALL);
+    expect(sent.filter((one) => one.method === "POST").map((one) => one.body)).toEqual([{ on: false, department: null, reason: "a note" }]);
+    expect(container.textContent).toContain("Off for the install");
+    expect(sent.filter((one) => one.method === "GET").length).toBeGreaterThan(1);
+  });
+
+  test("starting a tool again says how long its reason must be before anything is sent, and keeping it sends nothing", async () => {
+    // What breaks if this is deleted: a person learning the reason's length only from a refusal.
+    const { sent } = await toolPage({ [LIST]: () => json(page({}, { off_for_install: stop() })) });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: `${SWITCH_ON_FOR_THE_INSTALL}: drive.delete_file` }));
+    });
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog.textContent).toContain("at least 12 characters");
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: KEEP_IT }));
+    });
+    expect(sent.filter((one) => one.method === "POST")).toEqual([]);
   });
 
   test("every field the page reads is a field the route declares", () => {
-    // What breaks if this is deleted: a field renamed in `brain.tool_routes` that the page goes on
-    // reading, which renders as an empty sentence in production.
-    expect(Object.keys(page()).sort()).toEqual(backendModelFields(ROUTES, "ToolsPage").sort());
-    expect(Object.keys(tool()).sort()).toEqual(backendModelFields(ROUTES, "CatalogueToolView").sort());
-    expect(Object.keys(stop()).sort()).toEqual(backendModelFields(ROUTES, "ToolStopView").sort());
+    // What breaks if this is deleted: the API renames a field and the page draws undefined.
+    expect(backendModelFields(ROUTES, "CatalogueToolView")).toEqual(Object.keys(tool()));
+    expect(backendModelFields(ROUTES, "ToolStopView")).toEqual(Object.keys(stop()));
+    expect(backendModelFields(ROUTES, "ToolsPage")).toEqual(Object.keys(page()));
   });
 });

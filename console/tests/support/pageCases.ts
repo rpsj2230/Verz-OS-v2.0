@@ -349,7 +349,7 @@ const STAFF_SOURCES = {
 
 /**
  * One guide for connecting a staff source, whose title, steps and help are unbreakable tokens.
- * The form is drawn, because the reader may connect, so the forms test opens it.
+ * The reader may connect; the form is in a drawer, which `tests/staff-sources-page.test.tsx` opens.
  */
 const STAFF_SOURCE_GUIDES = {
   guides: [
@@ -1304,6 +1304,43 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
       },
     },
   },
+  // One template: its name is the heading, what it asks for are chips that wrap, its instructions
+  // wrap anywhere, and the version route says whether it can be installed here.
+  "/agent-templates/:templateId": {
+    address: "/agent-templates/pricing_desk",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/agent-templates/pricing_desk": {
+        entry: {
+          template_id: "pricing_desk",
+          version: 2,
+          display_name: UNBROKEN,
+          summary: UNBROKEN,
+          published_by: UNBROKEN,
+          origin: "published",
+        },
+        persona: UNBROKEN,
+        tier: "main",
+        skills: [UNBROKEN],
+        connectors: [UNBROKEN],
+        tools: [UNBROKEN],
+        capabilities: [`read:${UNBROKEN}`],
+        leash: [{ target: UNBROKEN, rung: "shadow" }],
+        max_side_effect: "write",
+        golden_cases: 3,
+      },
+      "/api/v1/agent-templates/pricing_desk/versions/2": {
+        template_id: "pricing_desk",
+        version: 2,
+        display_name: UNBROKEN,
+        summary: null,
+        content_digest: "d".repeat(64),
+        starts: UNBROKEN,
+        unavailable: null,
+      },
+    },
+  },
   // The Dashboard, which the bare address opens: the workspace for the header, the figures from the
   // shared stats route, and, for a reader of the Automations tab, this agent's automations with their
   // controls, so those are held to a phone too. The Profile's model card is on its own view.
@@ -1692,6 +1729,8 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
                 read_only_because: UNBROKEN,
                 applies: UNBROKEN,
                 read_by: ["brain.ops.object_store"],
+                without_saved: UNBROKEN,
+                without_saved_source: "environment",
               },
             ],
           },
@@ -1888,6 +1927,47 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
   },
   "/tools": {
     address: "/tools",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/tools": {
+        tools: [
+          {
+            name: "notes.read_note",
+            source: "notes",
+            description: UNBROKEN,
+            entity: "note",
+            capability: UNBROKEN,
+            effect: "irreversible",
+            side_effect: "write",
+            sensitive_effect: "deletion",
+            result_contract: "typed",
+            identity_mode: "delegated",
+            leash_at_most: "assisted",
+            registered: true,
+            off_for_install: {
+              department: null,
+              switched_off_by: UNBROKEN,
+              switched_off_at: "2019-03-04T09:00:00Z",
+              reason: UNBROKEN,
+            },
+            stopped_for: [
+              { department: "web", switched_off_by: UNBROKEN, switched_off_at: "2019-03-04T09:00:00Z", reason: null },
+            ],
+          },
+        ],
+        may_switch_install: true,
+        departments: ["web"],
+        reason_to_switch_on: 12,
+        a_switch_only_narrows: true,
+        the_asker_is_never_told: true,
+        every_change_is_in_the_audit_trail: true,
+      },
+    },
+  },
+  // One tool, answered from the same list: the name is the heading, the note and the capability wrap.
+  "/tools/:name": {
+    address: "/tools/notes.read_note",
     signedIn: true,
     drawsValues: true,
     answers: {
@@ -2226,10 +2306,10 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
       },
     },
   },
-  // Sessions and sign-in links. Every identifier is in the table, which scrolls, and the served
-  // sentences are outside it, where they must wrap. No control is pressed here: the confirmation
-  // panel is held to the same rules in `tests/sessions-page.test.tsx` and
-  // `tests/sign-in-links-page.test.tsx`.
+  // Sessions and sign-in links, on the page kit. Names and departments are in the table, which
+  // scrolls, and the served sentence about the last administrator is under it, where it must wrap.
+  // No control is pressed here: the confirmations and the link drawer are held in
+  // `tests/sessions-page.test.tsx` and `tests/sign-in-links-page.test.tsx`.
   "/sessions": {
     address: "/sessions",
     signedIn: true,
@@ -2273,6 +2353,31 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         truncated: false,
         reach: "A service account acts at your reach, narrowed to the capabilities it lists.",
         ownership: "A service account acts at its owner's reach, so only its owner may change it.",
+      },
+    },
+  },
+  // One service account. The name is the heading and wraps; the capabilities are chips that wrap;
+  // the id and the key's handle are in Advanced.
+  "/service-accounts/:clientId": {
+    address: "/service-accounts/svc_one",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/govern/service-accounts/svc_one": {
+        client_id: "svc_one",
+        label: UNBROKEN,
+        ceiling: [`read:${UNBROKEN}`],
+        lapses_at: "2999-03-04T09:00:00Z",
+        created_at: "2019-03-04T09:00:00Z",
+        keys: [
+          {
+            handle: "hdl_one",
+            label: UNBROKEN,
+            issued_at: "2019-03-04T09:00:00Z",
+            lapses_at: "2999-03-04T09:00:00Z",
+          },
+        ],
+        not_held_now: [],
       },
     },
   },

@@ -624,6 +624,7 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.identity.bearer:ServiceAccountDirectory.service_account_for_key": Repeat.READS,
         "brain.identity.bearer:ServiceAccountDirectory.live_owner": Repeat.READS,
         "brain.service_account_routes:ServiceAccountStore.owned": Repeat.READS,
+        "brain.service_account_routes:ServiceAccountStore.owned_one": Repeat.READS,
         "brain.service_account_routes:ServiceAccountStore.register": (
             Repeat.WRITES_THIS_SYSTEMS_DATABASE
         ),

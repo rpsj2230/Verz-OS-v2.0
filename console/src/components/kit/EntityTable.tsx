@@ -161,7 +161,7 @@ export function EntityTable<Row>({
   };
 
   return (
-    <div data-slot="entity-table" className="flex min-w-0 flex-col gap-2">
+    <div data-slot="entity-table" data-bulk={bulkActions === undefined ? undefined : ""} className="flex min-w-0 flex-col gap-2">
       <div className="flex min-h-9 flex-wrap items-center gap-2">
         {selectedIds.size > 0 ? (
           <div

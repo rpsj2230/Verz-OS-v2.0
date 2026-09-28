@@ -3,7 +3,7 @@
 - **Screens:** `/install`, `/settings`, `/limits`, `/connections`, `/first-run`, `/first-run/staff-list`
 - **Tables:** `ops.setting`, `ops.budget_version`
 - **Installation values:** `INSTALL_LOCALES`, `INSTALL_CURRENCY`, `INSTALL_TIME_ZONE`
-- **Measured here:** 10 routes, 0 called by no screen; 5 write routes, 4 with all three proofs; 1 gaps.
+- **Measured here:** 11 routes, 0 called by no screen; 6 write routes, 5 with all three proofs; 1 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -12,6 +12,7 @@
 | `GET /api/v1/install/limits` | `/limits` |
 | `GET /api/v1/install/settings` | `/settings` |
 | `GET /setup/staff-source/registration` | `/first-run` |
+| `POST /api/v1/install/settings/{name}/default` | `/settings` |
 | `POST /setup/appointment` | `/first-run` |
 | `POST /setup/sign-in` | `/first-run` |
 | `POST /setup/staff-source/sign-in` | `/first-run` |
@@ -24,6 +25,7 @@
 
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
+| `POST /api/v1/install/settings/{name}/default` | `/settings` | `test_returning_to_default_retires_the_saved_row_as_the_person_and_the_default_reads_next` in `tests/unit/test_settings_routes.py` | `test_a_value_returned_to_default_is_retired_as_the_app_role_and_the_ledger_names_who` in `tests/unit/test_install_settings.py` (database, in CI) | `test_returning_to_default_retires_the_saved_row_as_the_person_and_the_default_reads_next` in `tests/unit/test_settings_routes.py` |
 | `POST /setup/appointment` | `/first-run` | `test_the_setup_code_holder_appoints_the_first_administrator_and_is_sent_to_finish` in `tests/unit/test_setup_routes.py` | `test_the_first_administrator_is_a_live_person_holding_administration_everywhere` in `tests/unit/test_first_administrator.py` (database, in CI) | `test_a_fresh_install_reaches_a_signed_in_administrator_through_the_routes_alone` in `tests/unit/test_setup_routes.py` (database, in CI) |
 | `POST /setup/sign-in` | `/first-run` | `test_the_finishing_screen_binds_the_installers_sign_in_to_the_first_administrator` in `tests/unit/test_sign_in_routes.py` | `test_the_finishing_screen_binds_the_first_administrator_once_against_the_database` in `tests/unit/test_sign_in_routes.py` (database, in CI) | `test_a_fresh_install_reaches_a_signed_in_administrator_through_the_routes_alone` in `tests/unit/test_setup_routes.py` (database, in CI) |
 | `POST /setup/staff-source/sign-in` | `/first-run` | Not applicable: It answers the directory's own sign-in page for the setup code's holder and writes nothing. | Not applicable: Nothing changes when a sign-in page is asked for, so there is nothing to record. | `test_a_directory_is_chosen_signed_in_to_and_its_list_pulled` in `tests/unit/test_setup_staff_routes.py` |
