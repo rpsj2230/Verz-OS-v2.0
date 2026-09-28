@@ -21,9 +21,11 @@
  * **The figures come from the stats route, one agent at a time**, and a row whose figures are not
  * there says "Not recorded yet" or "Not available", never nought. See `agentStats.ts`.
  *
- * **Creating, switching on and off, archiving and duplicating are drawn and inert**, each with the
- * sentence `agentActions.ts` gives, because no route on main does any of them. The one bulk act is
- * export, which reads: agents change one at a time.
+ * **Switching on and off, archiving and duplicating are live on each row** for a reader the roster
+ * sends a state to, each confirmed through `LifecycleActs.tsx`, which asks the lifecycle route what
+ * this reader may do before it confirms anything. Creating an agent is drawn and inert with the
+ * sentence `agentActions.ts` gives, because no route on main does it. The one bulk act is export,
+ * which reads: agents change one at a time.
  *
  * Imported statically, as the roster always was, because the kit reaches nothing heavier than the
  * shell already does.
@@ -32,7 +34,7 @@
  */
 
 import { Bot, MoreHorizontal, Plus } from "lucide-react";
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import type { FilterChoice, SortChoice } from "../../components/listing";
 import { useListing } from "../../components/useListing";
@@ -49,15 +51,16 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../../components/ui/dropdown-menu";
 import { Skeleton } from "../../components/ui/skeleton";
 import { scopeLines } from "../scopeText";
 import { ROSTER_API_PATH } from "../agentsQuery";
+import { actsFor, ACT_LABELS, type LifecycleAct } from "../agentLifecycleQuery";
 import { rungWords, stateWords, UNAVAILABLE, WORKS_AT } from "./agentActions";
 import { countWords, FIRST_PERIOD, periodOf, whenWords } from "./agentStats";
+import { useLifecycleActs } from "./LifecycleActs";
 import { LeashPill, StatePill } from "./pills";
 import { useRowStats, type RowStats } from "./useRowStats";
 
@@ -193,8 +196,18 @@ function statsText(stats: RowStats, pick: (stats: RowStats & { kind: "ready" }) 
   return stats.kind === "ready" ? (pick(stats) ?? "") : "";
 }
 
-function RowMenu({ row }: { readonly row: AgentRow }) {
-  const stated = row.state !== undefined;
+function RowMenu({
+  row,
+  onChoose,
+  busy,
+}: {
+  readonly row: AgentRow;
+  readonly onChoose: (agentId: string, act: LifecycleAct) => void;
+  readonly busy: boolean;
+}) {
+  // A lifecycle act is offered only on a row the roster sent a state for, which is a reader of the
+  // agent's Settings tab; the lifecycle route then says whether this reader may press it.
+  const acts: readonly LifecycleAct[] = row.state === undefined ? [] : ["duplicate", ...actsFor(row.state)];
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -206,31 +219,31 @@ function RowMenu({ row }: { readonly row: AgentRow }) {
         <DropdownMenuItem asChild>
           <Link to={agentAddress(row.agentId)}>Open</Link>
         </DropdownMenuItem>
-        {stated ? (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-[11px] font-normal text-dim">Coming soon</DropdownMenuLabel>
-            {[
-              { label: "Duplicate", reason: UNAVAILABLE.duplicate.reason },
-              row.state === "disabled"
-                ? { label: "Switch on", reason: UNAVAILABLE.switchOn.reason }
-                : { label: "Switch off", reason: UNAVAILABLE.switchOff.reason },
-              { label: "Archive", reason: UNAVAILABLE.archive.reason },
-            ].map((one) => (
-              <DropdownMenuItem key={one.label} disabled className="flex-col items-start gap-0.5">
-                <span>{one.label}</span>
-                <span className="text-[11px] leading-snug text-dim">{one.reason}</span>
-              </DropdownMenuItem>
-            ))}
-          </>
-        ) : null}
+        {acts.length === 0 ? null : <DropdownMenuSeparator />}
+        {acts.map((act) => (
+          <DropdownMenuItem
+            key={act}
+            disabled={busy}
+            onSelect={() => {
+              onChoose(row.agentId, act);
+            }}
+          >
+            {ACT_LABELS[act]}
+          </DropdownMenuItem>
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );
 }
 
 export function AgentsPage() {
-  const listing = useListing<AgentRow>(ROSTER_API_PATH, { choices: AGENT_FILTERS });
+  // Asked again under a new version after a lifecycle act, so the row shows what the API now holds.
+  const [version, setVersion] = useState(0);
+  const onChanged = useCallback(() => {
+    setVersion((count) => count + 1);
+  }, []);
+  const lifecycle = useLifecycleActs(onChanged, agentAddress);
+  const listing = useListing<AgentRow>(ROSTER_API_PATH, { choices: AGENT_FILTERS, version });
   const rows = useMemo(() => readAgentRows(listing.body), [listing.body]);
   const statsOf = useRowStats(useMemo(() => rows.map((row) => row.agentId), [rows]));
 
@@ -326,8 +339,14 @@ export function AgentsPage() {
       columns={columns}
       rowId={(row) => row.agentId}
       rowLabel={(row) => row.displayName}
-      rowActions={(row) => <RowMenu row={row} />}
+      rowActions={(row) => <RowMenu row={row} onChoose={lifecycle.choose} busy={lifecycle.busy} />}
       exportName="agents"
+      notice={
+        <>
+          {lifecycle.notice}
+          {lifecycle.dialog}
+        </>
+      }
       loading={LOADING_AGENTS}
       emptyTitle={NO_AGENTS}
       emptyDescription={NO_AGENTS_DESCRIPTION}

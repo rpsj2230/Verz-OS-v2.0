@@ -6,11 +6,12 @@
  * for one agent: the roster, the workspace, the About flow, pinning a model, the automation gallery
  * with install, start and stop, the instruction override (`/govern/prompts/{agent_id}`, drawn on the
  * Prompts page) and skill assignment (`/skills/{digest}/assignments`, drawn on the Skills page). It
- * served no route that creates an agent, saves or publishes a draft, enables, disables, archives,
- * duplicates or transfers one, changes its audience, its ceiling or its leash, or installs it into a
- * chat group: `brain.agents.lifecycle` and `brain.builder` hold the rules and nothing calls them over
- * HTTP. Each of those is an `UNAVAILABLE` sentence below and is drawn as `kit/UnavailableAction`, so
- * the page shows the act exists and is coming rather than hiding it or faking it.
+ * served no route that creates an agent, saves or publishes a draft, changes its audience, its
+ * ceiling or its leash, or installs it into a chat group: `brain.builder` holds the rules and nothing
+ * calls them over HTTP. Each of those is an `UNAVAILABLE` sentence below and is drawn as
+ * `kit/UnavailableAction`, so the page shows the act exists and is coming rather than hiding it or
+ * faking it. Switching on and off, archiving, duplicating and handing on arrived with
+ * `brain.agent_lifecycle_routes` on 2026-09-29 and are live acts (`LifecycleActs.tsx`).
  *
  * **When a route lands, its sentence goes and a live control takes its place, in the same commit.**
  * `tests/agents-page.test.tsx` reads every sentence here against the API document: an act listed as
@@ -32,26 +33,6 @@ export const UNAVAILABLE = Object.freeze({
   editDraft: {
     reason: "Coming soon: editing an agent as a draft and publishing the change.",
     retiredBy: /^\/api\/v1\/agents\/\{[^}]+\}\/drafts?\b/,
-  },
-  switchOff: {
-    reason: "Coming soon: switching an agent off. It would stop answering and keep everything it holds.",
-    retiredBy: /^\/api\/v1\/agents\/\{[^}]+\}\/(disable|switch-off)$/,
-  },
-  switchOn: {
-    reason: "Coming soon: switching an agent back on.",
-    retiredBy: /^\/api\/v1\/agents\/\{[^}]+\}\/(enable|switch-on)$/,
-  },
-  archive: {
-    reason: "Coming soon: archiving an agent. It would stop at once, for good, and keep its history.",
-    retiredBy: /^\/api\/v1\/agents\/\{[^}]+\}\/archive$/,
-  },
-  duplicate: {
-    reason: "Coming soon: copying an agent into a new draft. Who can find it would not be copied.",
-    retiredBy: /^\/api\/v1\/agents\/\{[^}]+\}\/(duplicate|copy)$/,
-  },
-  transfer: {
-    reason: "Coming soon: handing an agent to a new steward.",
-    retiredBy: /^\/api\/v1\/agents\/\{[^}]+\}\/(transfer|steward)$/,
   },
   chatGroup: {
     reason: "Coming soon: adding an agent to a group chat.",

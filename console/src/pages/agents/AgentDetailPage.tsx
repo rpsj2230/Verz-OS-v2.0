@@ -63,12 +63,14 @@ import { readModelChoice } from "../agentModelPinQuery";
 import { agentAutomationsApiPath } from "../agentAutomationsQuery";
 import { agentWorkspaceApiPath, readAgentWorkspace } from "../agentQuery";
 import { AUTOMATIONS_TAB, automationGalleryApiPath } from "../automationGalleryQuery";
+import { actsFor, ACT_LABELS, type LifecycleAct } from "../agentLifecycleQuery";
 import { UNAVAILABLE, WORKS_AT } from "./agentActions";
 import { AgentAbout } from "./AgentAbout";
 import { AgentDashboard } from "./AgentDashboard";
 import { daysSince, readHeaderFacts, readProfile, spendIsRecorded } from "./agentDetailQuery";
 import { AgentProfile, LEASH_ANCHOR } from "./AgentProfile";
 import { ROSTER_HEADING, agentAddress } from "./AgentsPage";
+import { useLifecycleActs } from "./LifecycleActs";
 import { LeashPill, StatePill } from "./pills";
 import "../../styles/agent-workspace.css";
 
@@ -121,16 +123,20 @@ const VIEW_ICONS: Readonly<Record<AgentView, typeof LayoutDashboard>> = {
   about: Info,
 };
 
-function SettingsMenu({ agentId, state }: { readonly agentId: string; readonly state: string | undefined }) {
-  const later = [
-    { label: "Edit as a draft", reason: UNAVAILABLE.editDraft.reason },
-    { label: "Duplicate", reason: UNAVAILABLE.duplicate.reason },
-    { label: "Hand to a new steward", reason: UNAVAILABLE.transfer.reason },
-    state === "disabled"
-      ? { label: "Switch on", reason: UNAVAILABLE.switchOn.reason }
-      : { label: "Switch off", reason: UNAVAILABLE.switchOff.reason },
-    { label: "Archive", reason: UNAVAILABLE.archive.reason },
-  ];
+function SettingsMenu({
+  agentId,
+  state,
+  onChoose,
+  busy,
+}: {
+  readonly agentId: string;
+  readonly state: string | undefined;
+  readonly onChoose: (agentId: string, act: LifecycleAct) => void;
+  readonly busy: boolean;
+}) {
+  // The lifecycle acts are live; which of them this reader may press is the lifecycle route's to
+  // say when one is chosen, and a state change is offered only for a state the API sent.
+  const acts: readonly LifecycleAct[] = ["duplicate", "transfer", ...actsFor(state)];
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -146,13 +152,23 @@ function SettingsMenu({ agentId, state }: { readonly agentId: string; readonly s
           <Link to={`${viewAddress(agentId, "profile")}#${LEASH_ANCHOR}`}>Pin a model or read the leash</Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuLabel className="text-[11px] font-normal text-dim">Coming soon</DropdownMenuLabel>
-        {later.map((one) => (
-          <DropdownMenuItem key={one.label} disabled className="flex-col items-start gap-0.5">
-            <span>{one.label}</span>
-            <span className="text-[11px] leading-snug text-dim">{one.reason}</span>
+        {acts.map((act) => (
+          <DropdownMenuItem
+            key={act}
+            disabled={busy}
+            onSelect={() => {
+              onChoose(agentId, act);
+            }}
+          >
+            {ACT_LABELS[act]}
           </DropdownMenuItem>
         ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="text-[11px] font-normal text-dim">Coming soon</DropdownMenuLabel>
+        <DropdownMenuItem disabled className="flex-col items-start gap-0.5">
+          <span>Edit as a draft</span>
+          <span className="text-[11px] leading-snug text-dim">{UNAVAILABLE.editDraft.reason}</span>
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -185,7 +201,13 @@ function SectionsMenu({ agentId, sections }: { readonly agentId: string; readonl
  * this one's is in flight; kept across this agent's views, so the gallery is asked once.
  */
 function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab: string | undefined }) {
-  const answer = useResource<unknown>(agentWorkspaceApiPath(agentId));
+  // Asked again under a new version after a lifecycle act, so the header shows what the API now holds.
+  const [agentVersion, setAgentVersion] = useState(0);
+  const onMoved = useCallback(() => {
+    setAgentVersion((count) => count + 1);
+  }, []);
+  const lifecycle = useLifecycleActs(onMoved, agentAddress);
+  const answer = useResource<unknown>(agentWorkspaceApiPath(agentId), agentVersion);
   const workspace = useMemo(() => readAgentWorkspace(answer.data), [answer.data]);
   const facts = useMemo(() => readHeaderFacts(answer.data), [answer.data]);
   const profile = useMemo(() => readProfile(answer.data), [answer.data]);
@@ -250,7 +272,9 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
       subline={subline === "" ? undefined : subline}
       actions={
         <>
-          {profile === null ? null : <SettingsMenu agentId={agentId} state={facts.state} />}
+          {profile === null ? null : (
+            <SettingsMenu agentId={agentId} state={facts.state} onChoose={lifecycle.choose} busy={lifecycle.busy} />
+          )}
           <UnavailableAction
             text="Add to a chat group"
             label="Add to a chat group"
@@ -294,6 +318,8 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
       switcher={<ViewSwitch label={VIEWS_LABEL} views={views} current={view === AUTOMATIONS_TAB ? undefined : view} />}
       beside={<SectionsMenu agentId={agentId} sections={menuSections} />}
     >
+      {lifecycle.notice}
+      {lifecycle.dialog}
       {view === "dashboard" ? (
         <AgentDashboard
           agentId={agentId}
@@ -313,6 +339,9 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
           channels={workspace.channels}
           composition={workspace.composition}
           divergent={workspace.divergent}
+          onTransfer={() => {
+            lifecycle.choose(agentId, "transfer");
+          }}
         />
       ) : null}
       {view === "about" ? <AgentAbout agentId={agentId} profileAddress={viewAddress(agentId, "profile")} /> : null}
