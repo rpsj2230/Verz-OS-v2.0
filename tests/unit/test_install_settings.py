@@ -46,6 +46,7 @@ from brain.ops.install_settings import (
     load,
     name_for,
     refresh,
+    refresh_changed,
     rows_for,
     save,
     values_from,
@@ -466,3 +467,86 @@ def test_the_row_the_reader_selects_is_the_tables_own_column_set() -> None:
         "value_type",
         "value",
     ]
+
+
+# ------------------------------------------------ a process with no lifespan (the queue worker)
+def _fake_sessions(monkeypatch: pytest.MonkeyPatch, rows: list[dict[str, str]]) -> Any:
+    """A session factory whose `load` returns each mapping in `rows` in turn, with no database."""
+
+    class _Session:
+        async def __aenter__(self) -> _Session:
+            return self
+
+        async def __aexit__(self, *_: object) -> None:
+            return None
+
+        def begin(self) -> _Session:
+            return self
+
+    queue = list(rows)
+
+    async def fake_load(_: object) -> dict[str, str]:
+        return queue.pop(0)
+
+    monkeypatch.setattr("brain.ops.install_settings.load", fake_load)
+    return lambda: _Session()
+
+
+def test_a_process_with_no_lifespan_resolves_what_was_saved_once_it_refreshes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The defect found on the owner's install on 2026-09-28: the wizard saved the model profile
+    as hosted, the worker never loaded ops.setting, and its probe resolved the default, local.
+    After `refresh_changed` the same process resolves the saved value over an environment that
+    carries nothing, and the name is reported as changed.
+
+    Delete this and the worker can go back to judging a hosted install local, which probes no
+    provider and routes no question to one."""
+    sessions = _fake_sessions(monkeypatch, [{"INSTALL_MODEL_PROFILE": "hosted"}])
+    assert value_of("INSTALL_MODEL_PROFILE", {}) == "local"
+
+    changed = run(lambda: refresh_changed(sessions))
+
+    assert changed == ("INSTALL_MODEL_PROFILE",)
+    assert value_of("INSTALL_MODEL_PROFILE", {}) == "hosted"
+
+
+def test_a_refresh_that_finds_nothing_new_names_nothing_and_one_that_finds_a_change_names_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The worker prints a line only when a setting changed, so the change detection is what keeps
+    its log readable and what makes a console change visible in it. Three reads: first load, the
+    same values again, then one value changed and one removed.
+
+    Delete this and `refresh_changed` could name every setting on every tick, or none ever."""
+    first = {"INSTALL_MODEL_PROFILE": "hosted", "INSTALL_COMPANY_NAME": "Example"}
+    sessions = _fake_sessions(monkeypatch, [first, dict(first), {"INSTALL_MODEL_PROFILE": "local"}])
+
+    assert run(lambda: refresh_changed(sessions)) == (
+        "INSTALL_COMPANY_NAME",
+        "INSTALL_MODEL_PROFILE",
+    )
+    assert run(lambda: refresh_changed(sessions)) == ()
+    assert run(lambda: refresh_changed(sessions)) == (
+        "INSTALL_COMPANY_NAME",
+        "INSTALL_MODEL_PROFILE",
+    )
+    assert dict(saved_values()) == {"INSTALL_MODEL_PROFILE": "local"}
+
+
+def test_a_worker_style_refresh_reads_what_an_appointment_saved_in_the_real_table() -> None:
+    """The same end to end as the appointment test above, through `refresh_changed`: a process
+    that did not write the rows loads them from ops.setting and names what changed, and a
+    second refresh names nothing.
+
+    Delete this and the worker's reload could read a different set of rows from the one the
+    application holds, with every fake-backed test here still green."""
+    values = wizard_settings(hosted=True)
+    with audited("brain_install_settings_worker_refresh") as url:
+        assert appoint_with(url, values) == "appointed"
+        first = with_sessions(url, refresh_changed)
+        again = with_sessions(url, refresh_changed)
+
+    assert first == tuple(sorted(values))
+    assert again == ()
+    assert value_of("INSTALL_MODEL_PROFILE", {}) == "hosted"
