@@ -11,6 +11,9 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { fakeIdentityProvider, ISSUER, stubLocation, stubServedConfig } from "./support/auth";
 
+/** The entry point this test started, whose root is unmounted before the test ends. */
+let started: typeof import("../src/main") | null = null;
+
 /**
  * Start the application the way the browser does: a `#root` element in the document, the
  * environment set, and `src/main.tsx` imported for its side effects.
@@ -20,10 +23,13 @@ async function start(): Promise<void> {
   stubServedConfig({ issuer: ISSUER });
   stubLocation("/");
   vi.stubGlobal("fetch", fakeIdentityProvider().fetch);
-  await import("../src/main");
+  started = await import("../src/main");
 }
 
 afterEach(() => {
+  // The mounted console begins a sign-in; unmounted, nothing it finishes later can draw.
+  started?.root.unmount();
+  started = null;
   document.body.innerHTML = "";
 });
 

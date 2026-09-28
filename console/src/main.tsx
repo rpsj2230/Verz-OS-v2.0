@@ -48,7 +48,11 @@ if (!container) {
   throw new Error('index.html has no element with id "root", so nothing can be rendered.');
 }
 
-createRoot(container).render(
+// Exported so whoever starts the console can stop it. The browser never does; a test that imports
+// this module must, or the sign-in it starts commits after the test's window is gone.
+export const root = createRoot(container);
+
+root.render(
   <StrictMode>
     <App />
   </StrictMode>,

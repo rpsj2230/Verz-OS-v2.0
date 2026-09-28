@@ -20,10 +20,23 @@
  * make a test believe it had measured a rendered graph. What that leaves unchecked is
  * written down in `console/README.md`: this suite reads which nodes and edges reach the
  * DOM, and never where they are on a screen.
+ *
+ * **A root the suite's own code makes has to be unmounted by the test that made it.** The mock
+ * below records each one and the last `afterEach` refuses one left mounted; the argument, and the
+ * two CI failures of 2026-09-28 it answers, are in `tests/support/reactRoots.ts`.
  */
 
-import { afterEach } from "vitest";
+import { afterEach, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
+import { refuseRootsLeftMounted } from "./support/reactRoots";
+
+vi.mock("react-dom/client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-dom/client")>();
+  const { trackRoot } = await import("./support/reactRoots");
+  const createRoot: typeof actual.createRoot = (...args) => trackRoot(actual.createRoot(...args));
+  const hydrateRoot: typeof actual.hydrateRoot = (...args) => trackRoot(actual.hydrateRoot(...args));
+  return { ...actual, createRoot, hydrateRoot, default: { ...actual, createRoot, hydrateRoot } };
+});
 
 if (!("ResizeObserver" in globalThis)) {
   globalThis.ResizeObserver = class {
@@ -43,4 +56,7 @@ afterEach(() => {
     // A store that refuses to be read is a state the console handles; it is not a state a
     // test needs to reproduce here.
   }
+  // Last, so a refusal skips no reset above. It runs after the test file's own afterEach hooks,
+  // so a test that unmounts what it started there passes.
+  refuseRootsLeftMounted();
 });
