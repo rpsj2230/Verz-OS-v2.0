@@ -7,18 +7,18 @@ What an administrator would need to manage, read out of the schema, the routes a
 ## What was measured
 
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
-- 102 tables, from `brain.db.Base.metadata`.
-- 27 installation values, from `brain.install.INSTALLATION`.
-- 209 routes under `/api/v1` and `/setup`, from the API's internal document.
-- 73 console addresses, from the route table in `console/src/App.tsx`.
-- 82 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 108 routes.
-- 36 gaps recorded, and 20 routes no screen calls.
+- 104 tables, from `brain.db.Base.metadata`.
+- 29 installation values, from `brain.install.INSTALLATION`.
+- 226 routes under `/api/v1` and `/setup`, from the API's internal document.
+- 74 console addresses, from the route table in `console/src/App.tsx`.
+- 97 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 122 routes.
+- 35 gaps recorded, and 18 routes no screen calls.
 
 ## Area by area
 
 ### People, roles, permissions and access control
 
-- **Screens:** `/`, `/people`, `/people/:subject`, `/roles`, `/capabilities`, `/scopes`, `/access_review`, `/elevation`, `/sessions`, `/sign-in-links`, `/staff_sources`, `/access-requests`
+- **Screens:** `/`, `/people`, `/people/:subject`, `/roles`, `/capabilities`, `/scopes`, `/access_review`, `/elevation`, `/sessions`, `/sign-in-links`, `/staff_sources`, `/access-requests`, `/service-accounts`
 - **Tables:** `auth.principal`, `auth.principal_identity`, `auth.session`, `auth.directory_role_grant`, `gate.capability_grant`, `gate.capability_pack`, `gate.capability_pack_assignment`, `gate.capability_registry`, `gate.scope`, `gate.grants_version`, `gate.policy_epoch`, `gate.review_decision`, `gate.elevation_request`, `auth.staff_member`, `auth.staff_sync_run`, `auth.service_account`, `auth.api_key`, `gate.access_request`, `gate.role_grant`, `auth.group_role_rule`, `gate.break_glass_notice`
 - **Installation values:** `INSTALL_OIDC_ISSUER`, `INSTALL_OIDC_REALM`, `INSTALL_OIDC_CLIENT_ID`, `INSTALL_OIDC_REDIRECT_URIS`, `INSTALL_BROKERED_DIRECTORY`, `INSTALL_STAFF_SOURCE`, `INSTALL_STAFF_SOURCE_LOCATION`, `INSTALL_BROKERED_CLIENT_ID`
 
@@ -38,7 +38,7 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `GET /api/v1/govern/roles/holders` | `/roles` |
 | `GET /api/v1/govern/roles/misconfigurations` | `/roles` |
 | `GET /api/v1/govern/scopes` | `/departments`, `/people/:subject`, `/scopes` |
-| `GET /api/v1/govern/service-accounts` | **no screen** |
+| `GET /api/v1/govern/service-accounts` | `/service-accounts` |
 | `GET /api/v1/govern/sessions` | `/sessions` |
 | `GET /api/v1/govern/sign-ins` | `/sign-in-links` |
 | `GET /api/v1/govern/staff_sources` | `/staff_sources` |
@@ -56,18 +56,19 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `POST /api/v1/govern/elevation/requests/{request_id}/decision` | `/elevation` |
 | `POST /api/v1/govern/grants` | `/people`, `/people/:subject` |
 | `POST /api/v1/govern/grants/removal` | `/people`, `/people/:subject` |
+| `POST /api/v1/govern/grants/several` | `/people`, `/people/:subject` |
 | `POST /api/v1/govern/packs/assignment` | `/people`, `/people/:subject` |
-| `POST /api/v1/govern/people/disable` | `/departments` |
-| `POST /api/v1/govern/people/enable` | `/departments` |
+| `POST /api/v1/govern/people/disable` | `/departments`, `/people`, `/people/:subject` |
+| `POST /api/v1/govern/people/enable` | `/departments`, `/people`, `/people/:subject` |
 | `POST /api/v1/govern/roles/appointment` | **no screen** |
 | `POST /api/v1/govern/roles/deputy` | **no screen** |
 | `POST /api/v1/govern/roles/group-rules` | **no screen** |
 | `POST /api/v1/govern/roles/group-rules/retirement` | **no screen** |
 | `POST /api/v1/govern/roles/removal` | **no screen** |
-| `POST /api/v1/govern/service-accounts` | **no screen** |
-| `POST /api/v1/govern/service-accounts/keys` | **no screen** |
-| `POST /api/v1/govern/service-accounts/keys/revoke` | **no screen** |
-| `POST /api/v1/govern/service-accounts/retire` | **no screen** |
+| `POST /api/v1/govern/service-accounts` | `/service-accounts` |
+| `POST /api/v1/govern/service-accounts/keys` | `/service-accounts` |
+| `POST /api/v1/govern/service-accounts/keys/revoke` | `/service-accounts` |
+| `POST /api/v1/govern/service-accounts/retire` | `/service-accounts` |
 | `POST /api/v1/govern/sessions/end` | `/sessions` |
 | `POST /api/v1/govern/sessions/end-several` | `/sessions` |
 | `POST /api/v1/govern/sign-ins/unlink` | `/sign-in-links` |
@@ -79,12 +80,11 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `POST /api/v1/sign-ins` | `/sign-in-links` |
 | `PUT /api/v1/govern/staff_sources/credential` | `/staff_sources` |
 
-- **Gap.** A grant written from People and grants cannot be given an expiry, and the screen says so beside the form. Recorded: Buildable today: POST /api/v1/govern/grants takes not_after and the form's proposal schema has no field for it. It is left to the change reworking member grants, which is in progress beside this one and owns that form.
 - **Gap.** A pack cannot be assigned or withdrawn, and a capability that arrived through a pack cannot be removed. Recorded: No route writes gate.capability_pack_assignment. brain.govern_routes.remove_grant refuses a pack's capability in the ordinary words, because withdrawing it removes every other capability in the pack.
 - **Gap.** Roles, capabilities and scopes are read and never changed. Recorded: No route writes gate.scope or the role and capability registries; they are declared by the product and by migrations.
 - **Gap.** A break-glass notice to the standing Super Admins is shown on their Elevation screen and is not sent by email or chat, and nobody is told when somebody only asks. Recorded: Nothing records a Super Admin's email address or chat identity for a notice to be sent to: auth.principal holds no address and principal_identity holds digests. The notice is written in the approval's transaction to gate.break_glass_notice and read by its recipient; a request is not an elevation until it is approved.
 - **Gap.** The identity provider and the staff source cannot be changed after setup. Recorded: Set by the first-run wizard, which saves them to ops.setting, and no route changes one afterwards; changing one today is editing the server's environment file or the row by hand.
-- **Gap.** A service account and its keys are registered, issued, revoked and retired through /api/v1/govern/service-accounts, and no screen calls it. Open leaf `M27.11.5`.
+- **Gap.** A service account's end date and owner cannot be changed from Service accounts: no route writes auth.service_account after registration, so a new account is registered instead. Open leaf `M27.15.26`.
 
 ### Departments, teams and client configuration
 
@@ -127,7 +127,6 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `POST /setup/staff-source/trial` | `/first-run` |
 | `PUT /api/v1/install/settings/{name}` | `/settings` |
 
-- **Gap.** Languages, currency and time zone cannot be changed after setup. Recorded: Set by the first-run wizard, which saves them to ops.setting, and no route changes one afterwards; changing one today is editing the server's environment file or the row by hand.
 - **Gap.** Limits and budgets are read and never changed. Recorded: No route writes ops.budget_version or a ceiling; a limit is a release today.
 
 ### AI providers, models and the routing between them
@@ -143,6 +142,7 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `GET /api/v1/operate/models` | `/models` |
 | `GET /api/v1/routing/changes` | `/routing`, `/routing/:rungId` |
 | `GET /api/v1/routing/golden-questions` | `/routing`, `/routing/:rungId` |
+| `GET /api/v1/routing/golden-questions/askers` | `/routing` |
 | `GET /api/v1/routing/rungs` | `/agents/:agentId`, `/routing`, `/routing/:rungId` |
 | `PATCH /api/v1/routing/rungs/{rung_id}` | `/routing`, `/routing/:rungId` |
 | `POST /api/v1/models/providers` | `/models` |
@@ -265,8 +265,8 @@ No gap recorded.
 ### Knowledge bases, documents and data sources
 
 - **Screens:** `/library`, `/learning`, `/memory`, `/memory/:subject`, `/records`, `/records/:entity`, `/classification`, `/classification/:entity`, `/classification/:entity/:column`, `/artifacts`
-- **Tables:** `know.item`, `know.chunk`, `mem.adaptive`, `mem.persistent`, `mem.learning`, `mem.correction`, `gate.fast_path_rule`, `gate.field_policy`, `agent.artifact`, `know.classified_table`, `know.classified_row`
-- **Installation values:** `INSTALL_VECTOR_STORE`, `INSTALL_EMBEDDING_REVISION`
+- **Tables:** `know.item`, `know.chunk`, `know.steward_task`, `know.solution`, `mem.adaptive`, `mem.persistent`, `mem.learning`, `mem.correction`, `gate.fast_path_rule`, `gate.field_policy`, `agent.artifact`, `know.classified_table`, `know.classified_row`
+- **Installation values:** `INSTALL_VECTOR_STORE`, `INSTALL_EMBEDDING_REVISION`, `INSTALL_KNOWLEDGE_SCANNER`, `INSTALL_CLAMAV_ADDRESS`
 
 | Route | Called by |
 | --- | --- |
@@ -275,16 +275,32 @@ No gap recorded.
 | `GET /api/v1/govern/learning` | `/learning` |
 | `GET /api/v1/govern/library` | `/library` |
 | `GET /api/v1/govern/memory` | `/memory/:subject` |
+| `GET /api/v1/knowledge/items` | `/library` |
+| `GET /api/v1/knowledge/items/{item_id}` | `/library` |
+| `GET /api/v1/knowledge/items/{item_id}/passages` | `/library` |
+| `GET /api/v1/knowledge/solutions` | `/library` |
+| `GET /api/v1/knowledge/tasks` | `/library` |
 | `GET /api/v1/knowledge/uploads/options` | `/library` |
+| `GET /api/v1/knowledge/uploads/queued/{ticket}` | **no screen** |
 | `GET /api/v1/records/{entity}` | `/records/:entity` |
 | `GET /api/v1/records/{entity}/access` | **no screen** |
 | `POST /api/v1/classifications/{entity}/columns/{column}/marks/review` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` |
 | `POST /api/v1/classifications/{entity}/columns/{column}/review` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` |
 | `POST /api/v1/govern/learning/undo` | `/learning` |
+| `POST /api/v1/knowledge/items/{item_id}/promotion` | `/library` |
+| `POST /api/v1/knowledge/items/{item_id}/steward` | `/library` |
+| `POST /api/v1/knowledge/items/{item_id}/verification` | `/library` |
+| `POST /api/v1/knowledge/items/{item_id}/versions` | `/library` |
+| `POST /api/v1/knowledge/links` | **no screen** |
+| `POST /api/v1/knowledge/solutions` | `/library` |
+| `POST /api/v1/knowledge/solutions/{solution_id}/decision` | `/library` |
+| `POST /api/v1/knowledge/tasks/{task_id}/done` | `/library` |
 | `POST /api/v1/knowledge/uploads` | `/library` |
+| `POST /api/v1/knowledge/uploads/queued` | **no screen** |
 | `PUT /api/v1/classifications/{entity}/columns/{column}/marks` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` |
 | `PUT /api/v1/classifications/{entity}/table` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` |
 
+- **Gap.** Which scanner checks an uploaded file, the structural check or ClamAV added to it, is an installation value and not a control; the Knowledge page says which one checks a file. Recorded: Whether a server can hold an antivirus's signature database is the owner's capacity decision, so brain.knowledge.scanners ships the structural check and reads INSTALL_KNOWLEDGE_SCANNER at every scan, which tests/unit/test_scanners.py holds.
 - **Gap.** A data source cannot be added from the console after setup; a document can, on the Knowledge page. Open leaf `M42.5.9`.
 - **Gap.** A memory cannot be edited from a screen, and a tier-two rule cannot be promoted nor a tier-three change decided. Recorded: brain.ops.memory_store writes an edit and no route offers one: the control belongs on a person's own memory tab, and the Memory screen says edit_is_not_writable. Nothing records agreement or a decision, which the Learning screen says in place of Promote and Decide.
 - **Gap.** A built-in classification's column is reviewed and not applied; an uploaded table's column is marked and applied. Recorded: The shipped price list is a constant compiled into the API's process and changes with a release; brain.classification_routes applies a mark only to a table stored in know.classified_table, which tests/unit/test_classification_routes.py holds by the routes it mounts.
@@ -507,7 +523,7 @@ No gap recorded.
 
 ## Every write the console sends, followed to the system
 
-Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 90 of 108 write routes have all three proved or not applicable, 14 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
+Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 102 of 122 write routes have all three proved or not applicable, 14 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
 
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
@@ -550,12 +566,13 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /api/v1/govern/erasures` | `/retention` | `test_a_request_is_filed_in_the_sessions_own_name_once_per_open_person_and_never_finished` in `tests/unit/test_erasure_store.py` (database, in CI) | `test_a_request_is_filed_in_the_sessions_own_name_once_per_open_person_and_never_finished` in `tests/unit/test_erasure_store.py` (database, in CI) | `test_the_queue_carries_a_request_out_and_writes_what_each_store_did_and_what_it_could_not` in `tests/unit/test_erasure_store.py` (database, in CI) |
 | `POST /api/v1/govern/grants` | `/people`, `/people/:subject` | `test_a_grant_written_and_removed_from_the_people_screen_reaches_row_ledger_and_reach` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_grant_written_and_removed_from_the_people_screen_reaches_row_ledger_and_reach` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_grant_written_and_removed_from_the_people_screen_reaches_row_ledger_and_reach` in `tests/unit/test_console_control_audit.py` (database, in CI) |
 | `POST /api/v1/govern/grants/removal` | `/people`, `/people/:subject` | `test_a_grant_written_and_removed_from_the_people_screen_reaches_row_ledger_and_reach` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_grant_written_and_removed_from_the_people_screen_reaches_row_ledger_and_reach` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_grant_written_and_removed_from_the_people_screen_reaches_row_ledger_and_reach` in `tests/unit/test_console_control_audit.py` (database, in CI) |
+| `POST /api/v1/govern/grants/several` | `/people`, `/people/:subject` | `test_a_grant_to_several_is_written_for_everybody_or_for_nobody_against_postgresql` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_grant_written_and_removed_from_the_people_screen_reaches_row_ledger_and_reach` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_grant_to_several_is_written_for_everybody_or_for_nobody_against_postgresql` in `tests/unit/test_console_control_audit.py` (database, in CI) |
 | `POST /api/v1/govern/learning/undo` | `/learning` | `test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next` in `tests/unit/test_memory_store.py` (database, in CI) | `test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next` in `tests/unit/test_memory_store.py` (database, in CI) | `test_an_undo_writes_the_correction_and_the_next_reading_no_longer_recalls_the_learning` in `tests/unit/test_estate_routes.py` |
 | `POST /api/v1/govern/legal-holds` | `/retention` | `test_a_hold_is_placed_lifted_once_and_kept` in `tests/unit/test_retention_store.py` (database, in CI) | `test_each_retention_write_the_console_makes_appends_one_entry_naming_its_own_actor` in `tests/unit/test_retention_audit.py` (database, in CI) | `test_a_hold_placed_through_the_store_keeps_its_rows_from_the_sweep_and_lifted_releases_them` in `tests/unit/test_console_control_audit.py` (database, in CI) |
 | `POST /api/v1/govern/legal-holds/lift` | `/retention` | `test_a_hold_is_placed_lifted_once_and_kept` in `tests/unit/test_retention_store.py` (database, in CI) | `test_each_retention_write_the_console_makes_appends_one_entry_naming_its_own_actor` in `tests/unit/test_retention_audit.py` (database, in CI) | `test_a_hold_placed_through_the_store_keeps_its_rows_from_the_sweep_and_lifted_releases_them` in `tests/unit/test_console_control_audit.py` (database, in CI) |
 | `POST /api/v1/govern/packs/assignment` | `/people`, `/people/:subject` | `test_an_assignment_reaches_the_row_the_ledger_and_the_resolver` in `tests/unit/test_govern_pack_routes.py` (database, in CI) | `test_an_assignment_reaches_the_row_the_ledger_and_the_resolver` in `tests/unit/test_govern_pack_routes.py` (database, in CI) | `test_an_assignment_reaches_the_row_the_ledger_and_the_resolver` in `tests/unit/test_govern_pack_routes.py` (database, in CI) |
-| `POST /api/v1/govern/people/disable` | `/departments` | `test_a_disable_ends_the_session_refuses_the_token_and_an_enable_returns_the_grants` in `tests/unit/test_principal_state.py` (database, in CI) | `test_a_disable_ends_the_session_refuses_the_token_and_an_enable_returns_the_grants` in `tests/unit/test_principal_state.py` (database, in CI) | `test_a_disable_ends_the_session_refuses_the_token_and_an_enable_returns_the_grants` in `tests/unit/test_principal_state.py` (database, in CI) |
-| `POST /api/v1/govern/people/enable` | `/departments` | `test_a_disable_ends_the_session_refuses_the_token_and_an_enable_returns_the_grants` in `tests/unit/test_principal_state.py` (database, in CI) | `test_a_disable_ends_the_session_refuses_the_token_and_an_enable_returns_the_grants` in `tests/unit/test_principal_state.py` (database, in CI) | `test_a_disable_ends_the_session_refuses_the_token_and_an_enable_returns_the_grants` in `tests/unit/test_principal_state.py` (database, in CI) |
+| `POST /api/v1/govern/people/disable` | `/departments`, `/people`, `/people/:subject` | `test_a_disable_ends_the_session_refuses_the_token_and_an_enable_returns_the_grants` in `tests/unit/test_principal_state.py` (database, in CI) | `test_a_disable_ends_the_session_refuses_the_token_and_an_enable_returns_the_grants` in `tests/unit/test_principal_state.py` (database, in CI) | `test_a_disable_ends_the_session_refuses_the_token_and_an_enable_returns_the_grants` in `tests/unit/test_principal_state.py` (database, in CI) |
+| `POST /api/v1/govern/people/enable` | `/departments`, `/people`, `/people/:subject` | `test_a_disable_ends_the_session_refuses_the_token_and_an_enable_returns_the_grants` in `tests/unit/test_principal_state.py` (database, in CI) | `test_a_disable_ends_the_session_refuses_the_token_and_an_enable_returns_the_grants` in `tests/unit/test_principal_state.py` (database, in CI) | `test_a_disable_ends_the_session_refuses_the_token_and_an_enable_returns_the_grants` in `tests/unit/test_principal_state.py` (database, in CI) |
 | `POST /api/v1/govern/prompts/{agent_id}` | `/prompts` | `test_an_instruction_edit_and_its_give_back_reach_the_install_the_ledger_and_the_prompt` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_an_instruction_edit_and_its_give_back_reach_the_install_the_ledger_and_the_prompt` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_an_instruction_edit_and_its_give_back_reach_the_install_the_ledger_and_the_prompt` in `tests/unit/test_console_control_audit.py` (database, in CI) |
 | `POST /api/v1/govern/prompts/{agent_id}/give-back` | `/prompts` | `test_an_instruction_edit_and_its_give_back_reach_the_install_the_ledger_and_the_prompt` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_an_instruction_edit_and_its_give_back_reach_the_install_the_ledger_and_the_prompt` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_an_instruction_edit_and_its_give_back_reach_the_install_the_ledger_and_the_prompt` in `tests/unit/test_console_control_audit.py` (database, in CI) |
 | `POST /api/v1/govern/retention/release` | `/retention` | `test_a_release_names_the_newest_report_and_is_withdrawn_by_being_marked` in `tests/unit/test_retention_store.py` (database, in CI) | `test_each_retention_write_the_console_makes_appends_one_entry_naming_its_own_actor` in `tests/unit/test_retention_audit.py` (database, in CI) | `test_a_released_sweep_is_started_to_act_and_a_withdrawn_one_to_report` in `tests/unit/test_worker_schedule.py` (database, in CI) |
@@ -565,6 +582,10 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /api/v1/govern/roles/group-rules` | **no screen** | `test_mapping_and_retiring_through_the_routes_reach_the_rows_and_the_ledger` in `tests/unit/test_group_sync.py` (database, in CI) | `test_mapping_and_retiring_through_the_routes_reach_the_rows_and_the_ledger` in `tests/unit/test_group_sync.py` (database, in CI) | `test_a_sign_in_writes_and_removes_synced_rows_and_the_ledger_records_both` in `tests/unit/test_group_sync.py` (database, in CI) |
 | `POST /api/v1/govern/roles/group-rules/retirement` | **no screen** | `test_mapping_and_retiring_through_the_routes_reach_the_rows_and_the_ledger` in `tests/unit/test_group_sync.py` (database, in CI) | `test_mapping_and_retiring_through_the_routes_reach_the_rows_and_the_ledger` in `tests/unit/test_group_sync.py` (database, in CI) | `test_mapping_and_retiring_through_the_routes_reach_the_rows_and_the_ledger` in `tests/unit/test_group_sync.py` (database, in CI) |
 | `POST /api/v1/govern/roles/removal` | **no screen** | `test_an_appointment_through_the_routes_reaches_the_row_and_the_ledger_with_its_reason` in `tests/unit/test_role_grant.py` (database, in CI) | `test_an_appointment_through_the_routes_reaches_the_row_and_the_ledger_with_its_reason` in `tests/unit/test_role_grant.py` (database, in CI) | `test_the_guard_refuses_a_removal_below_the_floor_and_allows_one_above_it` in `tests/unit/test_role_grant.py` (database, in CI) |
+| `POST /api/v1/govern/service-accounts` | `/service-accounts` | `test_through_0095_a_key_acts_at_its_owners_live_reach_and_stops_with_the_owner` in `tests/unit/test_service_accounts.py` (database, in CI) | `test_through_0095_a_key_acts_at_its_owners_live_reach_and_stops_with_the_owner` in `tests/unit/test_service_accounts.py` (database, in CI) | `test_through_0095_a_key_acts_at_its_owners_live_reach_and_stops_with_the_owner` in `tests/unit/test_service_accounts.py` (database, in CI) |
+| `POST /api/v1/govern/service-accounts/keys` | `/service-accounts` | `test_through_0095_a_key_acts_at_its_owners_live_reach_and_stops_with_the_owner` in `tests/unit/test_service_accounts.py` (database, in CI) | `test_through_0095_a_key_acts_at_its_owners_live_reach_and_stops_with_the_owner` in `tests/unit/test_service_accounts.py` (database, in CI) | `test_through_0095_a_key_acts_at_its_owners_live_reach_and_stops_with_the_owner` in `tests/unit/test_service_accounts.py` (database, in CI) |
+| `POST /api/v1/govern/service-accounts/keys/revoke` | `/service-accounts` | `test_a_retired_key_or_account_is_not_found_by_the_request_path` in `tests/unit/test_service_accounts.py` (database, in CI) | **None.** Revoking a key sets its deleted_at and records no credential write, so brain.identity.service_account_store.revoke_key leaves no ledger entry naming who revoked it. | `test_a_retired_key_or_account_is_not_found_by_the_request_path` in `tests/unit/test_service_accounts.py` (database, in CI) |
+| `POST /api/v1/govern/service-accounts/retire` | `/service-accounts` | `test_a_retired_key_or_account_is_not_found_by_the_request_path` in `tests/unit/test_service_accounts.py` (database, in CI) | **None.** Retiring an account sets deleted_at on it and its keys and records no credential write, so brain.identity.service_account_store.retire leaves no ledger entry naming who retired it. | `test_a_retired_key_or_account_is_not_found_by_the_request_path` in `tests/unit/test_service_accounts.py` (database, in CI) |
 | `POST /api/v1/govern/sessions/end` | `/sessions` | `test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request` in `tests/unit/test_session_store.py` (database, in CI) | `test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request` in `tests/unit/test_session_store.py` (database, in CI) | `test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request` in `tests/unit/test_session_store.py` (database, in CI) |
 | `POST /api/v1/govern/sessions/end-several` | `/sessions` | `test_several_sessions_are_ended_one_at_a_time_each_decided_by_the_single_endings_question` in `tests/unit/test_session_routes.py` | `test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request` in `tests/unit/test_session_store.py` (database, in CI) | `test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request` in `tests/unit/test_session_store.py` (database, in CI) |
 | `POST /api/v1/govern/sign-ins/unlink` | `/sign-in-links` | `test_an_unlink_retires_the_link_names_who_did_it_and_the_account_is_refused_after` in `tests/unit/test_sign_in_links.py` (database, in CI) | `test_an_unlink_retires_the_link_names_who_did_it_and_the_account_is_refused_after` in `tests/unit/test_sign_in_links.py` (database, in CI) | `test_an_unlink_retires_the_link_names_who_did_it_and_the_account_is_refused_after` in `tests/unit/test_sign_in_links.py` (database, in CI) |
@@ -577,7 +598,16 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /api/v1/jobs/{name}/pause` | `/jobs` | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_job_paused_from_the_screen_is_left_unstarted_by_the_next_tick_and_resumed_is_started` in `tests/unit/test_console_controls_reach_behaviour.py` |
 | `POST /api/v1/jobs/{name}/resume` | `/jobs` | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_job_paused_from_the_screen_is_left_unstarted_by_the_next_tick_and_resumed_is_started` in `tests/unit/test_console_controls_reach_behaviour.py` |
 | `POST /api/v1/jobs/{name}/run` | `/jobs` | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_run_asked_for_from_the_screen_is_started_by_the_next_tick_even_while_paused` in `tests/unit/test_console_controls_reach_behaviour.py` |
+| `POST /api/v1/knowledge/items/{item_id}/promotion` | `/library` | `test_a_promotion_waits_on_the_approvals_screen_and_is_applied_when_a_super_admin_approves` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | `test_a_promotion_waits_on_the_approvals_screen_and_is_applied_when_a_super_admin_approves` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | `test_a_promotion_waits_on_the_approvals_screen_and_is_applied_when_a_super_admin_approves` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) |
+| `POST /api/v1/knowledge/items/{item_id}/steward` | `/library` | `test_a_steward_is_handed_over_to_somebody_who_reaches_it_and_is_told` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | `test_a_steward_is_handed_over_to_somebody_who_reaches_it_and_is_told` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | `test_a_steward_is_handed_over_to_somebody_who_reaches_it_and_is_told` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) |
+| `POST /api/v1/knowledge/items/{item_id}/verification` | `/library` | `test_a_document_due_for_review_opens_a_task_for_its_steward_which_verifying_closes` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | `test_a_newer_version_supersedes_the_older_which_stays_readable_and_answers_use_the_newer` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | `test_a_document_due_for_review_opens_a_task_for_its_steward_which_verifying_closes` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) |
+| `POST /api/v1/knowledge/items/{item_id}/versions` | `/library` | `test_a_newer_version_supersedes_the_older_which_stays_readable_and_answers_use_the_newer` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | `test_a_newer_version_supersedes_the_older_which_stays_readable_and_answers_use_the_newer` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | `test_a_newer_version_supersedes_the_older_which_stays_readable_and_answers_use_the_newer` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) |
+| `POST /api/v1/knowledge/links` | **no screen** | `test_a_page_added_by_link_is_found_by_its_department_by_text_and_by_nobody_else` in `tests/unit/test_knowledge_intake_db.py` (database, in CI) | `test_a_page_added_by_link_appends_the_ledger_entry_an_upload_does` in `tests/unit/test_knowledge_intake_db.py` (database, in CI) | `test_an_administrator_adds_a_page_by_its_link_for_one_department` in `tests/unit/test_knowledge_intake_routes.py` |
+| `POST /api/v1/knowledge/solutions` | `/library` | `test_a_captured_solution_becomes_knowledge_only_when_somebody_else_approves_it` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | `test_a_captured_solution_becomes_knowledge_only_when_somebody_else_approves_it` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | `test_a_captured_solution_becomes_knowledge_only_when_somebody_else_approves_it` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) |
+| `POST /api/v1/knowledge/solutions/{solution_id}/decision` | `/library` | `test_a_captured_solution_becomes_knowledge_only_when_somebody_else_approves_it` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | `test_a_captured_solution_becomes_knowledge_only_when_somebody_else_approves_it` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | `test_a_captured_solution_becomes_knowledge_only_when_somebody_else_approves_it` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) |
+| `POST /api/v1/knowledge/tasks/{task_id}/done` | `/library` | `test_a_steward_is_handed_over_to_somebody_who_reaches_it_and_is_told` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | Not applicable: Marking a task read closes a notice in the reader's own list and changes nothing anybody holds; what it reports was recorded when it happened. | `test_a_steward_is_handed_over_to_somebody_who_reaches_it_and_is_told` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) |
 | `POST /api/v1/knowledge/uploads` | `/library` | `test_an_administrators_upload_is_found_by_its_department_by_text_and_by_nobody_else` in `tests/unit/test_knowledge_upload_db.py` (database, in CI) | `test_an_upload_appends_one_ledger_entry_the_audit_screens_reader_finds` in `tests/unit/test_knowledge_upload_db.py` (database, in CI) | `test_a_markdown_file_is_added_to_a_department_as_its_uploader` in `tests/unit/test_knowledge_routes.py` |
+| `POST /api/v1/knowledge/uploads/queued` | **no screen** | `test_a_queued_file_is_read_by_the_worker_job_and_found_by_its_department` in `tests/unit/test_knowledge_intake_db.py` (database, in CI) | `test_a_queued_files_ledger_entry_names_its_uploader_their_reach_and_its_trace` in `tests/unit/test_knowledge_intake_db.py` (database, in CI) | `test_a_queued_file_is_kept_ticketed_and_queued_and_never_parsed_in_the_request` in `tests/unit/test_knowledge_intake_routes.py` |
 | `POST /api/v1/me/referrals/{referral_id}/handled` | `/referrals` | `test_a_referral_is_filed_without_content_and_read_only_by_its_person` in `tests/unit/test_compliance_store.py` (database, in CI) | **None.** Marking a referral handled writes handled_at and handled_by on its row and no ledger entry: an entry that only a sensitive question writes is the disclosure brain.audit.compliance.intercept argues against. | `test_a_referral_marked_handled_is_shown_handled` in `tests/unit/test_compliance_routes.py` |
 | `POST /api/v1/models/providers` | `/models` | `test_an_added_provider_has_its_key_kept_in_its_own_slot_before_its_row_is_written` in `tests/unit/test_provider_registry_routes.py` | `test_a_key_set_from_the_console_is_recorded_as_its_setter_with_their_reach_and_trace` in `tests/unit/test_credential_routes.py` | `test_a_provider_added_from_the_console_answers_through_the_ladder_with_no_release` in `tests/unit/test_model_calls.py` |
 | `POST /api/v1/models/providers/{provider}/check` | `/models` | `test_a_check_is_one_metered_call_recorded_on_the_ledger_and_never_as_a_question` in `tests/unit/test_provider_routes.py` | Not applicable: A check changes no setting and no record an administrator manages; it is a metered call on the request ledger, not a change to audit. | `test_a_check_is_one_metered_call_recorded_on_the_ledger_and_never_as_a_question` in `tests/unit/test_provider_routes.py` |

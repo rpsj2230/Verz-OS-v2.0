@@ -183,6 +183,7 @@ from brain.knowledge.embed_queue import (
     EmbeddingService,
     embed_batch_gaps,
 )
+from brain.knowledge.ingest_queue import register_ingest_tasks
 from brain.knowledge.parse_budget import (
     PARSE_WORKER_COMPONENT,
     parse_budget_note,
@@ -1324,6 +1325,8 @@ def register_tasks(
 
     register_task(app, CONTROL_TASK, run_control, traffic_class=TrafficClass.SYSTEM)
     register_task(app, EMBED_TASK, run_embed, traffic_class=EMBED_TRAFFIC_CLASS)
+    # Queued uploads (M7.1.5): a standard-slot task and a parse-worker task, each read here.
+    register_ingest_tasks(app, database_url=database_url, env=env)
 
 
 async def enqueue_control(app: Any, name: str) -> int:

@@ -214,6 +214,8 @@ SECTION_OF: Final[Mapping[str, Section]] = MappingProxyType(
         "INSTALL_LARK_USES": Section.LARK,
         "INSTALL_LARK_PLATFORM": Section.LARK,
         "INSTALL_LARK_BASE": Section.LARK,
+        "INSTALL_KNOWLEDGE_SCANNER": Section.FILES,
+        "INSTALL_CLAMAV_ADDRESS": Section.FILES,
     }
 )
 
@@ -247,6 +249,8 @@ LABELS: Final[Mapping[str, str]] = MappingProxyType(
         "INSTALL_LARK_USES": "What Lark is used for",
         "INSTALL_LARK_PLATFORM": "Lark or Feishu",
         "INSTALL_LARK_BASE": "Lark Base that is read",
+        "INSTALL_KNOWLEDGE_SCANNER": "What checks a file before it is read",
+        "INSTALL_CLAMAV_ADDRESS": "Antivirus address",
     }
 )
 
@@ -323,6 +327,14 @@ READ_ONLY_BECAUSE: Final[Mapping[str, str]] = MappingProxyType(
         "INSTALL_LARK_USES": _LARK,
         "INSTALL_LARK_PLATFORM": _LARK,
         "INSTALL_LARK_BASE": _LARK,
+        "INSTALL_KNOWLEDGE_SCANNER": (
+            f"{_ENVIRONMENT_FILE}the antivirus has to be running at its address first, and "
+            "while it does not answer every upload is refused."
+        ),
+        "INSTALL_CLAMAV_ADDRESS": (
+            f"{_ENVIRONMENT_FILE}it names the antivirus service the compose file starts, and a "
+            "wrong one refuses every upload while the antivirus is switched on."
+        ),
     }
 )
 
@@ -360,6 +372,8 @@ READ_BY: Final[Mapping[str, tuple[str, ...]]] = {
     "INSTALL_LARK_USES": ("brain.lark_connect_routes",),
     "INSTALL_LARK_PLATFORM": ("brain.lark_connect_routes",),
     "INSTALL_LARK_BASE": ("brain.lark_connect_routes",),
+    "INSTALL_KNOWLEDGE_SCANNER": ("brain.knowledge.scanners",),
+    "INSTALL_CLAMAV_ADDRESS": ("brain.knowledge.scanners",),
 }
 
 #: How a Keycloak issuer ends: the realm's name is its last path segment.
