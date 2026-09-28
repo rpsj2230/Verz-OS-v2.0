@@ -22,16 +22,21 @@ import pytest
 from brain.tools.fetch import (
     GITHUB_TARBALL_HOST,
     MAX_FETCH_BYTES,
+    SKILL_SOURCE_HOSTS,
     FetchedBytes,
     UnsafeAddressError,
     assert_fetchable,
+    assert_on_the_list,
     fetch,
     fetch_skill_source,
+    fetch_skill_url,
     github_tarball_url,
 )
 from brain.tools.skills import SkillError, SkillSource, SourceKind
 
 COMMIT = "a" * 40
+#: An address on the skill host list, which `fetch_skill_source` holds every URL import to.
+RAW_URL = "https://raw.githubusercontent.com/acme/skills/main/hosting-expiry/SKILL.md"
 BODY = b"skill archive bytes"
 DIGEST = hashlib.sha256(BODY).hexdigest()
 
@@ -262,10 +267,8 @@ def test_a_url_import_whose_bytes_changed_is_refused() -> None:
 
     Refused rather than recorded: recording the new digest makes the import succeed with
     content nobody read, which is the whole failure this module exists to prevent."""
-    source = SkillSource(
-        kind=SourceKind.URL, location="https://example.com/s.tar.gz", content_digest=DIGEST
-    )
-    hops = Hops({"https://example.com/s.tar.gz": b"different bytes entirely"})
+    source = SkillSource(kind=SourceKind.URL, location=RAW_URL, content_digest=DIGEST)
+    hops = Hops({RAW_URL: b"different bytes entirely"})
 
     with pytest.raises(SkillError, match="pinned to"):
         fetch_skill_source(source, fetcher=hops, resolver=Resolver())
@@ -273,9 +276,7 @@ def test_a_url_import_whose_bytes_changed_is_refused() -> None:
 
 def test_a_url_import_whose_bytes_match_is_returned() -> None:
     """So the digest check cannot be satisfied by refusing everything."""
-    source = SkillSource(
-        kind=SourceKind.URL, location="https://example.com/s.tar.gz", content_digest=DIGEST
-    )
+    source = SkillSource(kind=SourceKind.URL, location=RAW_URL, content_digest=DIGEST)
 
     assert fetch_skill_source(source, fetcher=Hops({}), resolver=Resolver()) == BODY
 
@@ -316,3 +317,70 @@ def test_the_default_ceiling_is_small_enough_to_mean_something() -> None:
     """A ceiling set at a gigabyte is a ceiling that has never refused anything. Asserted as
     a bound rather than a value so lowering it stays legal."""
     assert MAX_FETCH_BYTES <= 50 * 1024 * 1024
+
+
+# ------------------------------------------------------------ the host list (M12.2.2, M12.2.3)
+def test_a_skill_is_fetched_from_a_host_on_the_list_and_from_no_other_on_any_hop() -> None:
+    """The list is asked before the range rule and before the resolver, on the first hop and on a
+    redirect alike, and the permitted chain goes through. Delete this and the list is applied to
+    the first address only, which a 302 walks straight past, or a host off the list is looked up,
+    which is itself a request to whoever runs its name servers."""
+    resolver = Resolver()
+    off_the_list = Hops({RAW_URL: "https://collector.example.net/x"})
+
+    with pytest.raises(UnsafeAddressError, match="not a host a skill is imported from"):
+        fetch_skill_url("https://example.com/SKILL.md", fetcher=Hops({}), resolver=resolver)
+    with pytest.raises(UnsafeAddressError, match="not a host a skill is imported from"):
+        fetch_skill_url(RAW_URL, fetcher=off_the_list, resolver=resolver)
+
+    assert "example.com" not in resolver.calls
+    assert "collector.example.net" not in resolver.calls
+    assert off_the_list.connected == [(RAW_URL, "93.184.216.34")]
+    permitted = Hops({"https://github.com/acme/skills/raw/main/SKILL.md": RAW_URL, RAW_URL: BODY})
+    assert (
+        fetch_skill_url(
+            "https://github.com/acme/skills/raw/main/SKILL.md", fetcher=permitted, resolver=resolver
+        )
+        == BODY
+    )
+
+
+def test_a_look_alike_host_is_not_a_host_on_the_list() -> None:
+    """Compared exactly, never by suffix or prefix. Delete this and a name somebody registered to
+    end or begin like a permitted host is fetched from."""
+    for url in (
+        "https://raw.githubusercontent.com.example.net/SKILL.md",
+        "https://evilgithub.com/SKILL.md",
+        "https://example.net/raw.githubusercontent.com/SKILL.md",
+    ):
+        with pytest.raises(UnsafeAddressError, match="not a host a skill is imported from"):
+            assert_on_the_list(url, SKILL_SOURCE_HOSTS)
+    assert_on_the_list("https://RAW.githubusercontent.com/x", SKILL_SOURCE_HOSTS)
+
+
+def test_the_list_is_github_s_own_hosts_and_the_tarball_host_is_on_it() -> None:
+    """Asserted against the hosts this module builds addresses for, not only against itself. Delete
+    this and the tarball host can fall off the list, so every repository import is refused."""
+    assert GITHUB_TARBALL_HOST in SKILL_SOURCE_HOSTS
+    assert all(
+        host == "github.com" or host.endswith((".github.com", ".githubusercontent.com"))
+        for host in SKILL_SOURCE_HOSTS
+    )
+
+
+def test_a_repository_import_is_held_to_the_list_on_its_redirects_too() -> None:
+    """`fetch_skill_source` passes the list for a commit as for an address. Delete this and a
+    tarball host answering 302 somewhere else is followed."""
+    source = SkillSource(kind=SourceKind.GITHUB, location="acme/skills", commit=COMMIT)
+    hops = Hops({github_tarball_url("acme/skills", COMMIT): "https://mirror.example.net/t.tgz"})
+
+    with pytest.raises(UnsafeAddressError, match="not a host a skill is imported from"):
+        fetch_skill_source(source, fetcher=hops, resolver=Resolver())
+
+
+def test_a_fetch_nobody_gave_a_list_keeps_its_old_rule() -> None:
+    """The knowledge links and connector specs share `fetch` and pass no list. Delete this and the
+    skill list quietly narrows every other importer to GitHub."""
+    got = fetch("https://example.com/s.tar.gz", fetcher=Hops({}), resolver=Resolver())
+
+    assert got.body == BODY

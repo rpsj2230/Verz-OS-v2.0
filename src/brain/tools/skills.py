@@ -32,7 +32,15 @@ archive. Importing from GitHub or a URL needs a network and importing an upload 
 filesystem; what is here is everything that has to be true about the thing that arrives,
 including which archive member names may be written at all.
 
-Task ids: M12.2.1, M12.2.4, M12.2.5, M12.2.6, M12.2.7, M12.2.8, M12.2.9
+**A description opens by saying when the skill is used (M12.4.12).** The description is the only
+thing a router reads before choosing a skill, and `brain.console.agent_tabs` names "use when" as
+that convention's opening words. A description that opens on what the skill does ("Checks domain
+expiry") answers a question the router is not asking, so the parser refuses one that does not open
+with one of `WHEN_OPENINGS`. See `A_DESCRIPTION_OPENS_BY_SAYING_WHEN_THE_SKILL_IS_USED`. It is a
+rule about the file and not about the type, so a `Skill` built in code is not held to it; every
+path a file takes into the library goes through `skill_from_markdown`.
+
+Task ids: M12.2.1, M12.2.4, M12.2.5, M12.2.6, M12.2.7, M12.2.8, M12.2.9, M12.4.12
 """
 
 from __future__ import annotations
@@ -100,6 +108,35 @@ FRONTMATTER_KEYS: Final[frozenset[str]] = frozenset(
 REACH_KEYS: Final[frozenset[str]] = frozenset(
     {"capabilities", "capability", "grant", "grants", "scope", "scopes", "leash", "rung"}
 )
+
+#: How a description may open, folded to lower case and single spaces. Each says when the skill is
+#: used; "use for" is not here, because "use for invoices" names a subject and not a moment.
+WHEN_OPENINGS: Final[tuple[str, ...]] = (
+    "use when ",
+    "use whenever ",
+    "use if ",
+    "use only when ",
+    "use it when ",
+    "use this when ",
+    "use this whenever ",
+    "use this skill when ",
+    "use this skill whenever ",
+    "when ",
+    "whenever ",
+)
+
+#: Why a description that does not open with a moment is refused.
+A_DESCRIPTION_OPENS_BY_SAYING_WHEN_THE_SKILL_IS_USED: Final = (
+    "A router reads a skill's name and description and nothing else before it chooses, so the "
+    "description is the whole of the choice. One that opens on what the skill does answers a "
+    "question the router is not asking, and two such skills are chosen between by position. So a "
+    "description begins by saying when the skill is used, as in 'Use when a client asks whether "
+    "their domain is about to expire', and a SKILL.md whose description does not is refused."
+)
+
+#: One folder name on a repository path. A leading dot is admitted, because `.claude/skills` is
+#: where many repositories keep theirs; `.` and `..` are not, because they name no folder.
+REPOSITORY_SEGMENT_RE: Final = re.compile(r"^(?!\.\.?$)[A-Za-z0-9._-]{1,100}$")
 
 
 class SkillError(Exception):
@@ -221,7 +258,10 @@ class SkillSource(BaseModel):
     location: str = Field(min_length=1, max_length=400)
     #: GitHub only. A full 40-character commit sha.
     commit: str = ""
-    #: URL and upload. A sha256 over the bytes that arrived.
+    #: GitHub only. The folder inside the repository holding the `SKILL.md`, or empty for its root.
+    path: str = Field(default="", max_length=MAX_MEMBER_LENGTH)
+    #: A sha256 over the bytes that arrived: the upload, the URL's answer, or, for GitHub, the
+    #: `SKILL.md` read out of the commit. Required for an upload and a URL, whose only pin it is.
     content_digest: str = ""
 
     @model_validator(mode="after")
@@ -243,10 +283,20 @@ class SkillSource(BaseModel):
                     "fetch whatever is there on the day it runs rather than what was reviewed"
                 )
                 raise ValueError(msg)
+            if self.content_digest and not DIGEST_RE.match(self.content_digest):
+                msg = f"github source {self.location!r} carries a content digest that is not one"
+                raise ValueError(msg)
+            for segment in self.path.split("/") if self.path else ():
+                if not REPOSITORY_SEGMENT_RE.match(segment):
+                    msg = (
+                        f"github source path {self.path!r} has a segment that is not a folder "
+                        f"name: {segment!r}"
+                    )
+                    raise ValueError(msg)
             return self
 
-        if self.commit:
-            msg = f"a {self.kind.value} source carries no commit"
+        if self.commit or self.path:
+            msg = f"a {self.kind.value} source carries no commit and no repository path"
             raise ValueError(msg)
         if not DIGEST_RE.match(self.content_digest):
             msg = (
@@ -436,8 +486,76 @@ class Skill(BaseModel):
         return hashlib.sha256(joined.encode("utf-8")).hexdigest()
 
 
+def says_when_it_is_used(description: str) -> bool:
+    """Whether a description opens by saying when the skill is used, and says something after.
+
+    Folded to lower case and single spaces first, so "Use  When" and "use when" are one opening.
+    Every opening ends in a space and the folded text has none at its end, so a match means a
+    word follows it: "Use when" alone says no moment at all. See
+    `A_DESCRIPTION_OPENS_BY_SAYING_WHEN_THE_SKILL_IS_USED`.
+    """
+    folded = " ".join(description.lower().split())
+    return any(folded.startswith(opening) for opening in WHEN_OPENINGS)
+
+
 def skill_from_markdown(text: str) -> Skill:
-    """Build a skill from a `SKILL.md`, or refuse it (M12.2.1)."""
+    """Build a skill from a `SKILL.md`, or refuse it (M12.2.1, M12.4.12).
+
+    The description rule is applied last, to a skill that otherwise constructs, so a file with
+    two faults is told about the structural one first.
+    """
+    skill = _skill_from_text(text)
+    if not says_when_it_is_used(skill.description):
+        msg = (
+            f"the description {skill.description!r} does not open by saying when the skill is "
+            "used; begin it with 'Use when'. "
+            f"{A_DESCRIPTION_OPENS_BY_SAYING_WHEN_THE_SKILL_IS_USED}"
+        )
+        raise SkillError(msg)
+    return skill
+
+
+def markdown_of(skill: Skill) -> str:
+    """The `SKILL.md` this skill was read from, as the parser would write it (M12.3.2).
+
+    What the console offers to edit, so an edit starts from the words a reviewer approved rather
+    than from a form that rebuilds them. Checked by reading it back: a skill whose description
+    opens with a bracket, say, would read back as a list, and an edit offered that text would be
+    an edit of a different skill. The description rule is not applied on the way out, so a skill
+    added before the rule can still be opened, and the edit is where it has to be fixed.
+    """
+    lines = [
+        "---",
+        f"name: {skill.name}",
+        f"description: {skill.description}",
+        f"version: {skill.version}",
+    ]
+    if skill.tools:
+        lines.append(f"tools: [{', '.join(skill.tools)}]")
+    if skill.scripts:
+        lines.append(f"scripts: [{', '.join(skill.scripts)}]")
+    lines.append("---")
+    text = "\n".join(lines) + "\n" + skill.body + "\n"
+    msg = f"skill {skill.name!r} does not read back from the SKILL.md it would be written as"
+    try:
+        read_back = _skill_from_text(text)
+    except SkillError as refused:
+        raise SkillError(f"{msg}: {refused}") from None
+    if read_back != skill:
+        raise SkillError(msg)
+    return text
+
+
+def version_key(version: str) -> tuple[int, ...]:
+    """A `major.minor.patch` version as numbers, so 1.10.0 follows 1.9.0."""
+    if not VERSION_RE.match(version):
+        msg = f"skill version {version!r} is not major.minor.patch"
+        raise SkillError(msg)
+    return tuple(int(part) for part in version.split("."))
+
+
+def _skill_from_text(text: str) -> Skill:
+    """The skill a `SKILL.md` declares, with every rule but the description's."""
     fields, body = parse_frontmatter(text)
     missing = sorted({"name", "description"} - set(fields))
     if missing:
@@ -577,9 +695,9 @@ class ImportedSkill(BaseModel):
 def diff_skills(old: Skill, new: Skill) -> tuple[str, ...]:
     """Which fields differ, for the review queue (M12.2.6).
 
-    Names only. The review screen renders both versions side by side, because a reviewer
-    approving a procedure has to read it; what a queue lists is which of a hundred pending
-    items touched the body and which only bumped a version.
+    Names only. What a queue lists is which of a hundred pending items touched the body and
+    which only bumped a version; the review pane, where a reviewer reads the words, shows
+    `brain.tools.review.content_diff`, line by line.
     """
     return tuple(
         name for name in sorted(Skill.model_fields) if getattr(old, name) != getattr(new, name)

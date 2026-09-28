@@ -7,12 +7,12 @@ What an administrator would need to manage, read out of the schema, the routes a
 ## What was measured
 
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
-- 97 tables, from `brain.db.Base.metadata`.
+- 98 tables, from `brain.db.Base.metadata`.
 - 27 installation values, from `brain.install.INSTALLATION`.
-- 201 routes under `/api/v1` and `/setup`, from the API's internal document.
+- 204 routes under `/api/v1` and `/setup`, from the API's internal document.
 - 72 console addresses, from the route table in `console/src/App.tsx`.
-- 76 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 93 routes.
-- 37 gaps recorded, and 28 routes no screen calls.
+- 79 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 96 routes.
+- 36 gaps recorded, and 28 routes no screen calls.
 
 ## Area by area
 
@@ -185,17 +185,19 @@ What an administrator would need to manage, read out of the schema, the routes a
 ### Skills and tools
 
 - **Screens:** `/skills`, `/skills/:name`
-- **Tables:** `agent.skill`, `agent.skill_review`, `agent.skill_assignment`
+- **Tables:** `agent.skill`, `agent.skill_review`, `agent.skill_assignment`, `agent.skill_category`
 - **Installation values:** none
 
 | Route | Called by |
 | --- | --- |
 | `GET /api/v1/skills` | `/skills`, `/skills/:name` |
 | `POST /api/v1/skills` | `/skills`, `/skills/:name` |
+| `POST /api/v1/skills/imports` | `/skills`, `/skills/:name` |
 | `POST /api/v1/skills/{digest}/assignments` | `/skills`, `/skills/:name` |
+| `POST /api/v1/skills/{digest}/categories` | `/skills`, `/skills/:name` |
 | `POST /api/v1/skills/{digest}/review` | `/skills`, `/skills/:name` |
+| `POST /api/v1/skills/{digest}/versions` | `/skills`, `/skills/:name` |
 
-- **Gap.** A skill cannot be fetched from a repository or a link, only pasted or uploaded. Recorded: brain.tools.fetch can fetch and check a source, and agent.skill admits only an upload; nothing on an install is given the network reach a fetch needs.
 - **Gap.** A skill cannot be removed from an agent from the console, only replaced by another version of it. Recorded: brain.console.agent_tabs.detach decides a removal and no route performs one; brain.skill_routes assigns and replaces.
 - **Gap.** A skill that declares scripts cannot be added. Recorded: brain.tools.skills.Skill.digest covers a script's name and not its bytes, so an approval would not cover the code, and brain.tools.run_skill has no runner; brain.console.skill_library refuses one at the door.
 
@@ -500,7 +502,7 @@ No gap recorded.
 
 ## Every write the console sends, followed to the system
 
-Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 75 of 93 write routes have all three proved or not applicable, 13 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
+Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 78 of 96 write routes have all three proved or not applicable, 13 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
 
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
@@ -579,8 +581,11 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /api/v1/routing/rungs` | `/routing`, `/routing/:rungId` | `test_a_rung_is_added_at_the_end_of_its_tier_only_through_the_gate` in `tests/unit/test_routing_routes.py` | `test_a_rung_saved_from_the_screen_leaves_its_row_and_an_entry_naming_what_moved` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_provider_added_from_the_console_answers_through_the_ladder_with_no_release` in `tests/unit/test_model_calls.py` |
 | `POST /api/v1/sign-ins` | `/sign-in-links` | `test_binding_the_same_subject_twice_writes_one_row` in `tests/unit/test_sign_in_binding.py` (database, in CI) | `test_an_administrators_binding_is_in_the_ledger_naming_them_their_reach_and_the_request` in `tests/unit/test_sign_in_routes.py` (database, in CI) | `test_a_valid_token_is_refused_until_its_subject_is_bound_and_accepted_after` in `tests/unit/test_sign_in_binding.py` (database, in CI) |
 | `POST /api/v1/skills` | `/skills`, `/skills/:name` | `test_an_import_and_a_decision_each_write_one_row_and_one_entry_through_the_store` in `tests/unit/test_skill_store.py` (database, in CI) | `test_an_import_and_a_decision_each_write_one_row_and_one_entry_through_the_store` in `tests/unit/test_skill_store.py` (database, in CI) | `test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_assigned_to_an_agent` in `tests/unit/test_skill_routes.py` |
-| `POST /api/v1/skills/{digest}/assignments` | `/skills`, `/skills/:name` | `test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_assigned_to_an_agent` in `tests/unit/test_skill_routes.py` | `test_the_database_refuses_a_decision_by_the_importer_and_an_assignment_nobody_approved` in `tests/unit/test_skill_store.py` (database, in CI) | `test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_assigned_to_an_agent` in `tests/unit/test_skill_routes.py` |
+| `POST /api/v1/skills/imports` | `/skills`, `/skills/:name` | `test_every_way_in_an_edit_a_self_approval_and_categories_reach_the_ledger` in `tests/unit/test_skill_store.py` (database, in CI) | `test_every_way_in_an_edit_a_self_approval_and_categories_reach_the_ledger` in `tests/unit/test_skill_store.py` (database, in CI) | `test_an_administrator_imports_a_skill_from_a_repository_at_a_commit_and_it_waits` in `tests/unit/test_skill_routes.py` |
+| `POST /api/v1/skills/{digest}/assignments` | `/skills`, `/skills/:name` | `test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_assigned_to_an_agent` in `tests/unit/test_skill_routes.py` | `test_the_database_refuses_an_unsaid_self_decision_and_an_assignment_nobody_approved` in `tests/unit/test_skill_store.py` (database, in CI) | `test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_assigned_to_an_agent` in `tests/unit/test_skill_routes.py` |
+| `POST /api/v1/skills/{digest}/categories` | `/skills`, `/skills/:name` | `test_every_way_in_an_edit_a_self_approval_and_categories_reach_the_ledger` in `tests/unit/test_skill_store.py` (database, in CI) | `test_every_way_in_an_edit_a_self_approval_and_categories_reach_the_ledger` in `tests/unit/test_skill_store.py` (database, in CI) | `test_categories_set_on_a_skill_are_chips_that_filter_the_skills_in_use` in `tests/unit/test_skill_routes.py` |
 | `POST /api/v1/skills/{digest}/review` | `/skills`, `/skills/:name` | `test_an_import_and_a_decision_each_write_one_row_and_one_entry_through_the_store` in `tests/unit/test_skill_store.py` (database, in CI) | `test_an_import_and_a_decision_each_write_one_row_and_one_entry_through_the_store` in `tests/unit/test_skill_store.py` (database, in CI) | `test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_assigned_to_an_agent` in `tests/unit/test_skill_routes.py` |
+| `POST /api/v1/skills/{digest}/versions` | `/skills`, `/skills/:name` | `test_every_way_in_an_edit_a_self_approval_and_categories_reach_the_ledger` in `tests/unit/test_skill_store.py` (database, in CI) | `test_every_way_in_an_edit_a_self_approval_and_categories_reach_the_ledger` in `tests/unit/test_skill_store.py` (database, in CI) | `test_an_edit_waits_for_review_as_a_new_version_while_the_agent_keeps_its_pin` in `tests/unit/test_skill_routes.py` |
 | `POST /api/v1/webhooks/subscribers` | `/webhooks` | `test_a_registration_is_written_with_the_reader_as_its_creator_and_its_secret_kept` in `tests/unit/test_webhook_routes.py` | `test_each_webhook_change_through_the_store_appends_one_entry_naming_its_own_author` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_due_event_is_signed_received_verified_and_recorded_delivered` in `tests/unit/test_webhook_delivery.py` (database, in CI) |
 | `POST /api/v1/webhooks/subscribers/{subscriber_id}/secret` | `/webhooks` | `test_replacing_a_secret_writes_the_new_one_and_a_switched_off_subscriber_is_refused` in `tests/unit/test_webhook_routes.py` | `test_each_webhook_change_through_the_store_appends_one_entry_naming_its_own_author` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_the_worker_reads_the_secret_at_the_path_the_console_writes_it_to` in `tests/unit/test_webhook_delivery.py` |
 | `POST /api/v1/webhooks/subscribers/{subscriber_id}/switch-off` | `/webhooks` | `test_switching_off_records_who_did_it_and_a_second_switch_off_is_refused` in `tests/unit/test_webhook_routes.py` | `test_each_webhook_change_through_the_store_appends_one_entry_naming_its_own_author` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_registering_replacing_and_switching_off_reach_the_rows_and_the_fan_out` in `tests/unit/test_webhook_store.py` (database, in CI) |

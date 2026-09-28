@@ -52,7 +52,10 @@ READ = "crm.read_client"
 RAISE = "billing.create_invoice"
 TOOLS = frozenset({READ, RAISE})
 NAME = "invoice_on_request"
-DESCRIPTION = "Reads a client, checks the tier and asks before raising an invoice."
+DESCRIPTION = (
+    "Use when a client asks for an invoice: reads the client, checks the tier and asks before "
+    "raising one."
+)
 
 #: Two clauses, one of them a list, so a tuple value has to survive the document too.
 PREDICATE = {
@@ -483,7 +486,7 @@ def test_a_tools_line_that_leaves_out_a_drawn_call_is_refused_on_the_way_back_in
         ("Invoice On Request", DESCRIPTION, "importer accepts"),
         (NAME, "[draft] Reads a client.", "importer accepts"),
         (NAME, "Reads a client.\nThen asks.", "importer accepts"),
-        (NAME, "Reads a client. ", "does not survive"),
+        (NAME, "Use when a client asks. ", "does not survive"),
     ],
     ids=[
         "name that is not a slug",

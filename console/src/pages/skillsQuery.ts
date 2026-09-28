@@ -7,11 +7,16 @@
  * that also mounts a form.
  *
  * **This screen is SCREEN 6 of `docs/screens.html`.** A library of skills with their source,
- * version, reviewer and state; a review pane with Approve and Reject; what each skill asks for;
- * and the drift between agents pinned to different bytes of one skill. `brain.skill_routes` serves
- * all of it from the library `0056` stores, and three writes: add a skill, decide about one, and
- * assign an approved one to an agent. The design's Paste URL and Connect repo are not here,
- * because nothing on an install fetches a skill from anywhere; a package is pasted or uploaded.
+ * version, reviewer and state; a review pane with Approve and Reject and the words that changed;
+ * what each skill asks for; and the drift between agents pinned to different bytes of one skill.
+ * `brain.skill_routes` serves all of it from the library `0056` and `0121` store, and six writes:
+ * add a pasted or chosen package, import from a GitHub repository at a commit or from an address
+ * (the design's Connect repo and Paste URL), save an edit as a new version, set a skill's
+ * categories, decide about one, and assign an approved one to an agent.
+ *
+ * **The category chips are the API's list, drawn from the skills this reader was shown**
+ * (M12.4.13). Choosing one narrows the library on the page, which is not paged, and asks the
+ * skills-in-use listing for the same filter, which the route applies.
  *
  * **Nothing here decides who may do what.** `may_add`, `reviewable`, `assignable` and the list of
  * agents decide which controls are drawn, and each write asks every question again on the server.
@@ -23,7 +28,7 @@
  * on the page is the review queue's, which `brain.console.govern_estate.skill_queue` computes over
  * exactly the entries listed beneath it.
  *
- * Task ids: M42.6.4
+ * Task ids: M42.6.4, M12.2.2, M12.2.3, M12.2.6, M12.3.2, M12.4.6, M12.4.13
  */
 
 import type { components } from "../api/schema";
@@ -43,9 +48,32 @@ export type AgentChoice = components["schemas"]["AgentChoiceView"];
 export type Assigned = components["schemas"]["AssignedView"];
 /** The body adding a skill sends, as `SkillPackageAsked` declares it. */
 export type PackageBody = components["schemas"]["SkillPackageAsked"];
+/** The body an import sends, as `SkillImportAsked` declares it. */
+export type ImportBody = components["schemas"]["SkillImportAsked"];
+/** The body an edit sends, as `SkillEditAsked` declares it. */
+export type EditBody = components["schemas"]["SkillEditAsked"];
+/** The body setting categories sends, and what it answers. */
+export type CategoriesBody = components["schemas"]["CategoriesAsked"];
+export type Categorised = components["schemas"]["CategoriesView"];
+/** The words that changed, as `SkillDiffView` sends them. */
+export type SkillDiff = components["schemas"]["SkillDiffView"];
 
-/** Where the API keeps this screen, and its three writes. */
+/** Where the API keeps this screen, and its writes. */
 export const SKILLS_API_PATH = "/skills";
+
+/** Where a repository or an address import is sent. */
+export const IMPORT_PATH = `${SKILLS_API_PATH}/imports`;
+
+export function versionsPath(digest: string): string {
+  return `${SKILLS_API_PATH}/${encodeURIComponent(digest)}/versions`;
+}
+
+export function categoriesPath(digest: string): string {
+  return `${SKILLS_API_PATH}/${encodeURIComponent(digest)}/categories`;
+}
+
+/** The column the skills-in-use listing filters categories on. `brain.skill_routes`' own. */
+export const CATEGORY_COLUMN = "categories";
 
 export function reviewPath(digest: string): string {
   return `${SKILLS_API_PATH}/${encodeURIComponent(digest)}/review`;
@@ -121,6 +149,8 @@ export interface SkillsPage {
   readonly mayAdd: boolean;
   /** No tool registry on the API's process, so no tool a skill names could be resolved. */
   readonly registryIsAbsent: boolean;
+  /** The category chips: those of the skills on this page, and no other. */
+  readonly categories: readonly string[];
 }
 
 const NOTHING: SkillsPage = Object.freeze({
@@ -137,6 +167,7 @@ const NOTHING: SkillsPage = Object.freeze({
   // control whose every press is refused.
   mayAdd: false,
   registryIsAbsent: false,
+  categories: [],
 });
 
 /**
@@ -159,6 +190,7 @@ export function readSkillsPage(payload: unknown): SkillsPage {
     agents?: unknown;
     may_add?: unknown;
     registry_is_absent?: unknown;
+    categories?: unknown;
   };
   if (!Array.isArray(body.items)) {
     return NOTHING;
@@ -178,7 +210,15 @@ export function readSkillsPage(payload: unknown): SkillsPage {
     agents: Array.isArray(body.agents) ? (body.agents as AgentChoice[]) : [],
     mayAdd: body.may_add === true,
     registryIsAbsent: body.registry_is_absent === true,
+    categories: Array.isArray(body.categories)
+      ? body.categories.filter((one): one is string => typeof one === "string")
+      : [],
   };
+}
+
+/** The library rows carrying a category, or every row when none is chosen. */
+export function inCategory(library: readonly LibrarySkill[], chosen: string): readonly LibrarySkill[] {
+  return chosen === "" ? library : library.filter((one) => one.categories.includes(chosen));
 }
 
 /** The pinned skill with this name among the ones on the page, or null. Never by a prefix. */
@@ -231,9 +271,20 @@ export function packageProblem(body: PackageBody | null): string | null {
   return null;
 }
 
+/**
+ * Categories as a person typed them, split on commas. The API folds, deduplicates and refuses
+ * them; this only splits, so what it refuses is what was typed.
+ */
+export function categoriesTyped(text: string): string[] {
+  return text
+    .split(",")
+    .map((one) => one.trim())
+    .filter((one) => one !== "");
+}
+
 /** A pasted `SKILL.md`, as the add route takes it. */
-export function pasted(text: string): PackageBody {
-  return { file_name: "SKILL.md", content: text, encoding: "text" };
+export function pasted(text: string, categories: readonly string[] = []): PackageBody {
+  return { file_name: "SKILL.md", content: text, encoding: "text", categories: [...categories] };
 }
 
 /** Bytes as base64, without a library: a zip is sent this way and a `SKILL.md` as text. */
@@ -246,19 +297,101 @@ export function base64Of(bytes: Uint8Array): string {
 }
 
 /** A chosen file, as the add route takes it: a zip as base64 and anything else as text. */
-export function chosen(fileName: string, bytes: Uint8Array): PackageBody {
+export function chosen(
+  fileName: string,
+  bytes: Uint8Array,
+  categories: readonly string[] = [],
+): PackageBody {
   if (fileName.toLowerCase().endsWith(".zip")) {
-    return { file_name: fileName, content: base64Of(bytes), encoding: "base64" };
+    return { file_name: fileName, content: base64Of(bytes), encoding: "base64", categories: [...categories] };
   }
-  return { file_name: fileName, content: new TextDecoder().decode(bytes), encoding: "text" };
+  return {
+    file_name: fileName,
+    content: new TextDecoder().decode(bytes),
+    encoding: "text",
+    categories: [...categories],
+  };
 }
 
-/** The sentence after a skill was added. */
+/** A repository import at one commit, as the import route takes it. */
+export function repositoryImport(
+  repository: string,
+  commit: string,
+  path: string,
+  categories: readonly string[] = [],
+): ImportBody {
+  return {
+    kind: "github",
+    repository: repository.trim(),
+    commit: commit.trim(),
+    path: path.trim(),
+    url: "",
+    categories: [...categories],
+  };
+}
+
+/** An address import, as the import route takes it. */
+export function addressImport(url: string, categories: readonly string[] = []): ImportBody {
+  return { kind: "url", repository: "", commit: "", path: "", url: url.trim(), categories: [...categories] };
+}
+
+/** `owner/repo`, as GitHub spells it. The API's own check is `brain.tools.skills.GITHUB_REPO_RE`. */
+const REPOSITORY_SHAPE = /^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+/** A full commit sha: forty hexadecimal digits. A branch or a short sha moves, so neither is one. */
+const COMMIT_SHAPE = /^[0-9a-fA-F]{40}$/;
+
+/** Why an import cannot be sent yet, or null. The API decides everything else, fetch included. */
+export function importProblem(body: ImportBody): string | null {
+  if (body.kind === "github") {
+    if (!REPOSITORY_SHAPE.test(body.repository ?? "")) {
+      return "Name the repository as owner/repository.";
+    }
+    if (!COMMIT_SHAPE.test(body.commit ?? "")) {
+      return "Give the full forty-character commit, not a branch or a short commit.";
+    }
+    return null;
+  }
+  if (!(body.url ?? "").startsWith("https://")) {
+    return "Give an https address.";
+  }
+  return null;
+}
+
+/** The sentence after a skill was added or imported. */
 export function addedSentence(one: LibrarySkill): string {
   return (
     `${one.name} ${one.version} was added and is waiting for review. It cannot be assigned to an ` +
-    "agent until somebody other than you approves it."
+    "agent until it is approved; if you may review skills you may approve it yourself, and the " +
+    "audit trail records that it was your own."
   );
+}
+
+/** The sentence after an edit was saved. */
+export function editedSentence(one: LibrarySkill): string {
+  return (
+    `${one.name} ${one.version} was saved as a new version and is waiting for review. Every agent ` +
+    "keeps the version it runs until somebody assigns this one."
+  );
+}
+
+/** The sentence after categories were set. */
+export function categorisedSentence(done: Categorised): string {
+  return done.categories.length === 0
+    ? `${done.name} is in no category.`
+    : `${done.name} is filed under ${done.categories.join(", ")}.`;
+}
+
+/** Where a skill came from, in words, with the commit and folder when it came from one. */
+export function sourceWords(one: LibrarySkill): string {
+  if (one.source === "github") {
+    const where = one.source_path === null ? "its top folder" : `the folder ${one.source_path}`;
+    return `from the GitHub repository ${one.source_location} at commit ${one.source_commit ?? ""}, ${where}`;
+  }
+  if (one.source === "url") {
+    return `from ${one.source_location}`;
+  }
+  return `as ${one.source_location}`;
 }
 
 export function decisionQuestion(one: LibrarySkill, approve: boolean): string {
@@ -266,12 +399,21 @@ export function decisionQuestion(one: LibrarySkill, approve: boolean): string {
 }
 
 export function decisionConsequence(one: LibrarySkill, approve: boolean): string {
+  const own = ` If you are ${one.submitted_by}, the audit trail records the decision as your own.`;
   return approve
     ? `These exact words, added by ${one.submitted_by}, can then be assigned to agents. An edit ` +
         "to them later is a new version that needs a review of its own. The decision is recorded " +
-        "in the audit trail under your name and cannot be changed."
+        `in the audit trail under your name and cannot be changed.${own}`
     : `This version, added by ${one.submitted_by}, can never be assigned to an agent. The ` +
-        "decision is recorded in the audit trail under your name and cannot be changed.";
+        `decision is recorded in the audit trail under your name and cannot be changed.${own}`;
+}
+
+/** How a decision reads beside the skill, saying when it was the importer's own. */
+export function decisionWords(one: LibrarySkill): string {
+  if (one.reviewer === null) {
+    return "";
+  }
+  return one.self_decided ? `decided by ${one.reviewer}, who added it` : `decided by ${one.reviewer}`;
 }
 
 export function decidedSentence(one: LibrarySkill): string {

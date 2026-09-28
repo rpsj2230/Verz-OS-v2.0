@@ -347,6 +347,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # refusal on a channel with no record is recorded too.
     "ops.channel",
     "ops.channel_delivery",
+    # 0121_skill_sources_versions_and_categories. Points at nothing: a name is not unique in
+    # `agent.skill`, and the person who set the categories is a value.
+    "agent.skill_category",
 )
 
 __all__ = [

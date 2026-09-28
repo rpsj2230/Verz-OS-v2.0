@@ -45,15 +45,23 @@ The hop count is bounded as well, because a redirect loop is a request that neve
 **Size is enforced against the bytes, never against the declared length.** `Content-Length`
 is a claim made by the thing being fetched.
 
-Rejected: an allowlist of hosts instead of a denylist of ranges. It is genuinely safer, and
-it is wrong for this feature, because the feature is "import a skill from anywhere on the
-internet" and an allowlist turns it into "import a skill from the three places an
-administrator has already thought of". The denylist is written against what "inside" means
-rather than against known-bad hosts, which is why it is a closed set that does not need
-maintaining.
+**A skill is fetched only from the hosts in `SKILL_SOURCE_HOSTS`, on every hop, as well as
+through the range rule.** This module first rejected an allowlist, arguing that the feature was
+"import a skill from anywhere" and a list narrows it to the places somebody thought of. The
+Wave 2 brief for skill import (M12.2.2, M12.2.3) asks for allowlisted hosts, and the argument
+for it is the one above about the request rather than the skill: the range rule keeps this server
+off its own network, and says nothing about which public servers it may be made to talk to. An
+importer that follows a redirect anywhere public is a way to make an install fetch from a host
+somebody runs and logs, with the install's address and timing in the log. So the ranges are
+still refused on every hop, and so is any host outside the list, redirects included. The list is
+GitHub's own hosts: the repository pages that redirect, the raw-file and gist hosts a skill's URL
+names, and the tarball host a commit is fetched from. Other callers of `fetch` (knowledge links,
+connector specs) pass no list, and their rule is unchanged. See
+`A_SKILL_IS_FETCHED_ONLY_FROM_A_HOST_ON_THE_LIST`.
 
 Nothing here opens a socket. `Fetcher` is the seam, and a module that owned an HTTP client
 could not be tested for the redirect chain, which is the part of this that is ever wrong.
+`brain.ops.skill_fetch` is the transport an install uses.
 
 Task ids: M12.2.2, M12.2.3
 """
@@ -64,7 +72,7 @@ import hashlib
 import ipaddress
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Final, Protocol
+from typing import Final, Protocol, runtime_checkable
 from urllib.parse import urlsplit
 
 from brain.tools.skills import SkillError, SkillSource, SourceKind
@@ -83,6 +91,25 @@ MAX_FETCH_BYTES: Final = 20 * 1024 * 1024
 #: one, and there is no reason for that address to vary.
 GITHUB_TARBALL_HOST: Final = "codeload.github.com"
 
+#: The hosts a skill may be fetched from, on every hop of the chain. GitHub's repository pages
+#: (whose raw and archive links redirect), its raw-file and gist hosts, and the tarball host.
+SKILL_SOURCE_HOSTS: Final[frozenset[str]] = frozenset(
+    {
+        "github.com",
+        "raw.githubusercontent.com",
+        "gist.githubusercontent.com",
+        GITHUB_TARBALL_HOST,
+    }
+)
+
+#: Why the importer carries a list of hosts as well as the range rule.
+A_SKILL_IS_FETCHED_ONLY_FROM_A_HOST_ON_THE_LIST: Final = (
+    "The range rule keeps a skill import off this server's own network and says nothing about "
+    "which public servers it may be sent to. A URL import, or a redirect from one, pointed at a "
+    "host somebody runs to watch is this install announcing itself to them. So a skill is fetched "
+    "from GitHub's own hosts and nowhere else, checked on every hop before it is connected to."
+)
+
 
 class UnsafeAddressError(SkillError):
     """The address would have made this server connect somewhere it should not.
@@ -93,6 +120,7 @@ class UnsafeAddressError(SkillError):
     """
 
 
+@runtime_checkable
 class Resolver(Protocol):
     """Turns a hostname into every address it currently answers with.
 
@@ -112,6 +140,7 @@ class FetchedBytes:
     final_url: str
 
 
+@runtime_checkable
 class Fetcher(Protocol):
     """One hop. Returns either a body or the next address, and never follows a redirect itself.
 
@@ -256,6 +285,22 @@ def assert_fetchable(url: str, resolver: Resolver) -> Fetchable:
     return Fetchable(url=url, host=host, address=addresses[0])
 
 
+def assert_on_the_list(url: str, allowed_hosts: frozenset[str]) -> None:
+    """Refuse an address whose host is not on the list, before anything resolves it.
+
+    Before the resolver, so a host off the list is never looked up either: a lookup is itself a
+    request to a server the name's owner runs. The host is compared as `urlsplit` lowers it, and
+    exactly: `raw.githubusercontent.com.example.net` is not a subdomain of anything here.
+    """
+    host = urlsplit(url).hostname or ""
+    if host not in allowed_hosts:
+        msg = (
+            f"{host or url!r} is not a host a skill is imported from; a skill is fetched from "
+            f"{', '.join(sorted(allowed_hosts))}. {A_SKILL_IS_FETCHED_ONLY_FROM_A_HOST_ON_THE_LIST}"
+        )
+        raise UnsafeAddressError(msg)
+
+
 def fetch(
     url: str,
     *,
@@ -263,16 +308,21 @@ def fetch(
     resolver: Resolver,
     max_bytes: int = MAX_FETCH_BYTES,
     max_redirects: int = MAX_REDIRECTS,
+    allowed_hosts: frozenset[str] | None = None,
 ) -> FetchedBytes:
     """Follow the chain, checking every hop, and return the bytes.
 
     The loop is here rather than in the client because a redirect is a new address chosen by
     the thing being fetched. A client following redirects internally applies the address
-    rules to the first address only, which is the same as not applying them.
+    rules to the first address only, which is the same as not applying them. `allowed_hosts`,
+    when given, is asked of every hop before the range rule; see
+    `A_SKILL_IS_FETCHED_ONLY_FROM_A_HOST_ON_THE_LIST`.
     """
     seen: list[str] = []
     current = url
     for _hop in range(max_redirects + 1):
+        if allowed_hosts is not None:
+            assert_on_the_list(current, allowed_hosts)
         target = assert_fetchable(current, resolver)
         seen.append(target.url)
         result = fetcher.get_once(target.url, address=target.address, max_bytes=max_bytes)
@@ -316,8 +366,9 @@ def fetch_skill_source(
     oversight.** A commit sha is a hash over the tree, so fetching that sha names the content
     exactly; but the *tarball* GitHub builds from it is compressed on their side and its
     bytes are not promised to be stable, so a stored digest over the tarball would fail on a
-    re-fetch that returned the same tree. The sha is the pin, and `content_digest` on a
-    GitHub source stays empty for that reason.
+    re-fetch that returned the same tree. The sha is the pin. A GitHub source's
+    `content_digest`, when it carries one, is over the `SKILL.md` read out of the tarball,
+    which the commit fixes, and is compared by whoever reads that member again.
 
     A URL has no such identifier, so the digest over the bytes is the only pin there is, and
     a mismatch is refused rather than recorded. Recording it would make the import succeed
@@ -329,9 +380,21 @@ def fetch_skill_source(
 
     if source.kind is SourceKind.GITHUB:
         url = github_tarball_url(source.location, source.commit)
-        return fetch(url, fetcher=fetcher, resolver=resolver, max_bytes=max_bytes).body
+        return fetch(
+            url,
+            fetcher=fetcher,
+            resolver=resolver,
+            max_bytes=max_bytes,
+            allowed_hosts=SKILL_SOURCE_HOSTS,
+        ).body
 
-    fetched = fetch(source.location, fetcher=fetcher, resolver=resolver, max_bytes=max_bytes)
+    fetched = fetch(
+        source.location,
+        fetcher=fetcher,
+        resolver=resolver,
+        max_bytes=max_bytes,
+        allowed_hosts=SKILL_SOURCE_HOSTS,
+    )
     digest = hashlib.sha256(fetched.body).hexdigest()
     if digest != source.content_digest:
         msg = (
@@ -341,3 +404,26 @@ def fetch_skill_source(
         )
         raise SkillError(msg)
     return fetched.body
+
+
+def fetch_skill_url(
+    url: str,
+    *,
+    fetcher: Fetcher,
+    resolver: Resolver,
+    max_bytes: int = MAX_FETCH_BYTES,
+) -> bytes:
+    """What a URL answers the first time a skill is imported from it (M12.2.3).
+
+    The first fetch has no pin to compare with: the digest of what comes back becomes the pin,
+    and the reviewer approves exactly those bytes. Every later fetch goes through
+    `fetch_skill_source` and is refused when the address answers with anything else. The chain is
+    held to `SKILL_SOURCE_HOSTS` on every hop, as that function holds it.
+    """
+    return fetch(
+        url,
+        fetcher=fetcher,
+        resolver=resolver,
+        max_bytes=max_bytes,
+        allowed_hosts=SKILL_SOURCE_HOSTS,
+    ).body
