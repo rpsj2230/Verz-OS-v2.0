@@ -155,7 +155,7 @@ import contextlib
 import enum
 import os
 import sys
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Final
@@ -197,6 +197,7 @@ from brain.ops.connections import (
 from brain.ops.heartbeat import beat, heartbeat_path, ready
 from brain.ops.inference import inference_gaps
 from brain.ops.inference_client import make_client
+from brain.ops.install_settings import refresh_changed
 from brain.ops.queue import (
     DEPLOY_PLAN,
     DRIVER_SCHEMA,
@@ -1332,22 +1333,48 @@ async def enqueue_control(app: Any, name: str) -> int:
         return await enqueue_job(app, job)
 
 
+#: Why the schedule reloads `ops.setting` before every tick. See `refresh_changed`.
+THE_WORKER_HOLDS_WHAT_WAS_SAVED_BEFORE_EVERY_TICK: Final = (
+    "The worker has no lifespan, so until 2026-09-28 it never loaded ops.setting: every value "
+    "saved in the wizard or the console was invisible to its controls, and the model probe "
+    "called an install saved as hosted local and probed nothing. The schedule reloads the saved "
+    "values before every tick, one small query a minute, so a change made in the console "
+    "reaches the worker's controls within one tick and needs no restart."
+)
+
+
 async def run_schedule(
     sessions: async_sessionmaker[AsyncSession],
     *,
     database_url: str,
     clock: Callable[[], datetime] = _utc_now,
     sleep: Callable[[float], Any] = asyncio.sleep,
+    refresh: Callable[[async_sessionmaker[AsyncSession]], Awaitable[tuple[str, ...]]] = (
+        refresh_changed
+    ),
 ) -> None:
     """Tick the schedule for ever, on `brain.ops.schedule.TICK` aligned by `next_tick`.
 
-    A failed run is printed with its reason as well as recorded. A tick that raises is printed
-    and the next is tried; see
+    Before each tick the saved installation values are reloaded; see
+    `THE_WORKER_HOLDS_WHAT_WAS_SAVED_BEFORE_EVERY_TICK`. A reload that fails is printed and the
+    tick runs on what was already held. A failed run is printed with its reason as well as
+    recorded. A tick that raises is printed and the next is tried; see
     `A_TICK_THAT_CANNOT_REACH_THE_DATABASE_IS_REPORTED_AND_THE_NEXT_ONE_TRIED`.
     Cancellation is not an `Exception` and is not caught, so stopping the worker stops this.
     """
     while True:
         now = clock()
+        try:
+            changed = await refresh(sessions)
+        except Exception as exc:
+            print(
+                f"  ! the saved installation settings could not be read at {now.isoformat()}, "
+                f"so this tick uses what was held before: {describe(exc)}",
+                file=sys.stderr,
+            )
+        else:
+            if changed:
+                print(f"installation settings now held: {', '.join(changed)}", file=sys.stderr)
         try:
             ticked = await tick_controls(sessions, now=now, database_url=database_url, clock=clock)
         except Exception as exc:
