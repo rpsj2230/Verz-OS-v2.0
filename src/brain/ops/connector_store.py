@@ -36,12 +36,21 @@ policy grants no delete, which is argued in `ops/openbao/policies/application.hc
 sentence the screen shows says to revoke the key in the source's own settings. It retires no
 grant either: `brain.identity.data_steward.DISCONNECTING_A_SOURCE_TAKES_NOTHING_FROM_THE_STEWARD`.
 
+**Editing a connection is a disconnection and a connection in one transaction, and the key is not
+touched.** The settings are what the pinned digest was computed over, so changing them in place
+would change what was agreed to without anybody agreeing; `reconnect` marks the live row
+disconnected and inserts a new one under the same lock a connection takes, so the table keeps two
+rows, one live, and the ledger two entries, and a failure at any point leaves the old row live.
+See `AN_EDIT_IS_A_DISCONNECTION_AND_A_CONNECTION_IN_ONE_TRANSACTION`. Replacing a key is not an
+edit: it is a credential write, which `brain.ops.credentials.Credentials.keep` records, and it
+leaves every row here as it was.
+
 Rejected: checking for a live connection, keeping the key, and inserting, with nothing held between
 the check and the insert. Two administrators connecting one source at once would both pass the
 check and both write the vault, the last write would win the slot, and the insert that lost the
 race to the unique index would leave the live row's settings beside the loser's key.
 
-Task ids: M42.6.5, M27.9.9
+Task ids: M42.6.5, M27.9.9, M27.11.9, M11.2.3
 """
 
 from __future__ import annotations
@@ -71,9 +80,23 @@ THE_KEY_IS_KEPT_WHILE_THE_SOURCE_S_NAME_IS_LOCKED: Final = (
     "everything back, so nothing is recorded as connected."
 )
 
+#: Why an edit is two rows and not an update.
+AN_EDIT_IS_A_DISCONNECTION_AND_A_CONNECTION_IN_ONE_TRANSACTION: Final = (
+    "A connection's settings are what its manifest was built from and its digest pinned over, so "
+    "an update in place would change what the source was agreed to read without a new agreement, "
+    "and the application role may not update them anyway. An edit therefore marks the live row "
+    "disconnected by the person editing and inserts the new settings as a new row, under the "
+    "source's lock and in one transaction: the table keeps both rows and one is live, the ledger "
+    "records a disconnection and a connection, and a failure leaves the old connection live."
+)
+
 #: The first key of the lock a connection takes. Any constant no other two-key lock in this schema
 #: uses; none does today. The second key is the source's name, hashed by the database.
 CONNECT_LOCK_CLASS: Final = 42650
+
+#: The most connections of one source a history reads, newest first. A source connected and
+#: disconnected more often than this is shown its newest and says nothing of how many were left.
+MAX_HISTORY_ROWS: Final = 50
 
 
 class ConnectorTakenError(Exception):
@@ -93,6 +116,52 @@ class Connection:
     digest: str
     connected_by: str
     connected_at: datetime
+
+
+@dataclass(frozen=True)
+class ConnectionRecord:
+    """One connection of a source, live or ended: its settings, digest, and who and when."""
+
+    connector: str
+    settings: Mapping[str, str]
+    digest: str
+    connected_by: str
+    connected_at: datetime
+    disconnected_by: str | None
+    disconnected_at: datetime | None
+
+
+@runtime_checkable
+class ConnectorChanges(Protocol):
+    """An edit and a source's history. Apart from `ConnectorRecords` so a store may offer neither.
+
+    `StoredConnections` is one. Kept as its own protocol rather than two more methods on
+    `ConnectorRecords`, because a runtime-checked protocol that grew would stop recognising every
+    store written against the old one, and the connectors screen would silently fall back to a
+    database a test never meant it to open.
+    """
+
+    async def reconnect(
+        self,
+        *,
+        connector: str,
+        settings: Mapping[str, str],
+        digest: str,
+        actor: str,
+        trace_id: str,
+        ent_hash: str,
+        declared: Sequence[str] = (),
+    ) -> Connection:
+        """Disconnect the live connection and connect these settings, in one transaction.
+
+        Raises `NotConnectedError` when the source has no live connection. The key is not touched.
+        See `AN_EDIT_IS_A_DISCONNECTION_AND_A_CONNECTION_IN_ONE_TRANSACTION`.
+        """
+        ...
+
+    async def history(self, connector: str) -> tuple[ConnectionRecord, ...]:
+        """Every connection of one source, newest first, up to `MAX_HISTORY_ROWS`."""
+        ...
 
 
 @runtime_checkable
@@ -173,6 +242,24 @@ def connected_row(connector: str, settings: Mapping[str, str], digest: str, acto
         insert(ConnectorConnectionRow)
         .values(connector=connector, settings=dict(settings), digest=digest, connected_by=actor)
         .returning(ConnectorConnectionRow.connected_at)
+    )
+
+
+def history_of(connector: str) -> Select[Any]:
+    """Every connection of one source, newest first, bounded. Never a count of the rest."""
+    return (
+        select(
+            ConnectorConnectionRow.connector,
+            ConnectorConnectionRow.settings,
+            ConnectorConnectionRow.digest,
+            ConnectorConnectionRow.connected_by,
+            ConnectorConnectionRow.connected_at,
+            ConnectorConnectionRow.disconnected_by,
+            ConnectorConnectionRow.disconnected_at,
+        )
+        .where(ConnectorConnectionRow.connector == connector)
+        .order_by(ConnectorConnectionRow.connected_at.desc(), ConnectorConnectionRow.id)
+        .limit(MAX_HISTORY_ROWS)
     )
 
 
@@ -264,3 +351,55 @@ class StoredConnections:
             if at is None:
                 raise NotConnectedError(connector)
         return at
+
+    async def reconnect(
+        self,
+        *,
+        connector: str,
+        settings: Mapping[str, str],
+        digest: str,
+        actor: str,
+        trace_id: str,
+        ent_hash: str,
+        declared: Sequence[str] = (),
+    ) -> Connection:
+        async with self._sessions() as session, session.begin():
+            await session.execute(lock_on(connector))
+            # Before either row's ledger entry, for
+            # `data_steward.THE_STEWARD_S_LOCK_COMES_BEFORE_THE_LEDGER_S`.
+            await session.execute(steward_lock())
+            await session.execute(_set_config(TRACE_ID_SETTING, trace_id))
+            await session.execute(_set_config(ENT_HASH_SETTING, ent_hash))
+            await session.execute(_set_config(ACTOR_SETTING, actor))
+            ended: datetime | None = (
+                await session.execute(disconnection(connector, actor))
+            ).scalar_one_or_none()
+            if ended is None:
+                raise NotConnectedError(connector)
+            at = (
+                await session.execute(connected_row(connector, settings, digest, actor))
+            ).scalar_one()
+            await grant_declared_in(session, declared)
+        return Connection(
+            connector=connector,
+            settings=dict(settings),
+            digest=digest,
+            connected_by=actor,
+            connected_at=at,
+        )
+
+    async def history(self, connector: str) -> tuple[ConnectionRecord, ...]:
+        async with self._sessions() as session, session.begin():
+            rows = (await session.execute(history_of(connector))).mappings().all()
+        return tuple(
+            ConnectionRecord(
+                connector=one["connector"],
+                settings={str(key): str(value) for key, value in dict(one["settings"]).items()},
+                digest=one["digest"],
+                connected_by=one["connected_by"],
+                connected_at=one["connected_at"],
+                disconnected_by=one["disconnected_by"],
+                disconnected_at=one["disconnected_at"],
+            )
+            for one in rows
+        )

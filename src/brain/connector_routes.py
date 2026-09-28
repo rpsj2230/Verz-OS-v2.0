@@ -55,64 +55,123 @@ admitted, so an attempt against a source this reader may not be told of reaches 
 install that reads nothing, which is the reassuring answer to "what does this system have access
 to".
 
+**The module's list and one source's page are two more reads, under `/console/connectors`.** The
+list is every source this release ships, as `brain.console.connector_detail.source_rows` narrows
+it, over the list contract (`brain.listing`), so it searches, filters and orders like every other
+module's list. A source's page is its declaration, what its connection keeps and reads live, the
+department it answers to, its history, and the agents and skills that use it; its export is the
+same record as a document, with no key in it. They are under `/console/` rather than beside
+`/connectors/{connector}/disconnect`, because a read at `/connectors/{connector}` would answer
+`GET /connectors/lark-app` before Connect Lark's router is asked, which is registered after this one.
+
+**Two more writes, each asked of the authority a connection asks.** An edit is a disconnection and
+a connection in one transaction (`brain.ops.connector_store.
+AN_EDIT_IS_A_DISCONNECTION_AND_A_CONNECTION_IN_ONE_TRANSACTION`) and leaves the key alone; replacing
+a key is a credential write through `brain.ops.credentials.Credentials.keep`, recorded in the
+ledger by its own trigger, and leaves the connection alone. A source with no live connection is the
+one refusal for both, for a caller who may manage it and so can see the list.
+
 Rejected, and kept from the first version of this module: building a registry out of the manifest
 builders in `brain.connectors` at start. Each takes the identifiers of one company's install, so a
 module calling them with values of its own would be this repository holding a client's
 configuration. The identifiers arrive from the person connecting the source, and are kept in that
 install's database.
 
-Task ids: M42.6.5, M27.9.9, M38.4.1.1
+Task ids: M42.6.5, M27.9.9, M38.4.1.1, M27.11.9, M27.15.39, M27.15.58, M11.7.7, M11.2.6
 """
 
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Sequence
+from collections.abc import Collection, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Final
+from typing import Annotated, Final
 
 import structlog
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from brain.api import API_PREFIX, COMMON_RESPONSES, ErrorBody, NoEchoRoute
-from brain.api_routes import Asked
+from brain.agent_routes import (
+    _tool_registry,
+    every_agent,
+    install_of,
+    installs_for,
+    record_of,
+    steward_names,
+    viewer_of,
+)
+from brain.agents.model import visible_agent_ids
+from brain.api import API_PREFIX, COMMON_RESPONSES, ErrorBody, NoEchoRoute, Page
+from brain.api_routes import Asked, Asking
 from brain.audit.record import ConnectorChange
-from brain.connectors.manifest import manifest_digest
+from brain.connectors.contract import ConnectorContractError
+from brain.connectors.declaration import shipped
+from brain.connectors.manifest import ConnectorManifest, manifest_digest
 from brain.connectors.registry import may_install
+from brain.console.connector_detail import (
+    NO_DEPARTMENT,
+    LARK_SOURCES,
+    ConnectFrom,
+    SourceRow,
+    SourceStatus,
+    agents_naming,
+    ceiling_for,
+    kept_index,
+    may_be_told_of,
+    read_live,
+    reading_in_words,
+    skills_from,
+    source_rows,
+)
 from brain.console.connector_trust import (
+    ACCESS_SAYS,
     COPY_POLICY,
     NOTHING_HERE_CAN_SAY_WHICH_SOURCES_ARE_CONNECTED,
     NOTHING_HERE_COUNTS_TODAYS_CALLS,
+    PERMISSION_SYNC_SAYS,
     ConnectedRow,
     EvidenceRow,
     TrustRow,
     admitted_connections,
     connected_rows,
     evidence_rows,
+    scope_in_words,
 )
 from brain.console.reads import permitted
 from brain.console.screens import screen
+from brain.console.skill_library import may_read_library
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.errors import Absent, BrainError, Failed
 from brain.credential_routes import credentials_of
 from brain.identity.data_steward import declared_capabilities
+from brain.install import InstallError, value_of
+from brain.listing import Column, ListAsked, Listing
 from brain.ops.connectable import (
     CONNECTABLE,
     MAX_SETTING_CHARS,
     NOT_FROM_THE_CONSOLE,
+    NotConnectableError,
     SettingProblem,
     blank_sentence,
     given,
     key_reference,
+    manifest_for,
+    settings_problems,
 )
 from brain.ops.connector_admin import (
     CONNECTED,
     CONNECTING_A_SOURCE,
     DISCONNECTED,
     DISCONNECTING_A_SOURCE,
+    EDITED,
+    EDITING_A_SOURCE,
+    KEY_REPLACED,
     KEY_SENTENCES,
+    NO_KEY_IS_EXPORTED,
+    NOTHING_TO_EDIT,
+    REPLACING_A_KEY,
     SOURCE_FIELD,
     TOLD,
     VAULT_SAYS,
@@ -121,13 +180,17 @@ from brain.ops.connector_admin import (
     key_problems,
     may_connect_source,
 )
+from brain.ops.connector_recordings import recorded_in_words
 from brain.ops.connector_store import (
     Connection,
+    ConnectionRecord,
+    ConnectorChanges,
     ConnectorRecords,
     ConnectorTakenError,
     NotConnectedError,
     StoredConnections,
 )
+from brain.ops.connector_sync import SyncState
 from brain.ops.connector_sync_store import ConnectorSyncRecords, StoredSyncStates
 from brain.ops.credentials import (
     MAX_CREDENTIAL_CHARS,
@@ -138,7 +201,9 @@ from brain.ops.credentials import (
     VaultState,
     connector_key_slot,
 )
+from brain.ops.lark_connect import uses_switched_on
 from brain.routing_routes import sessions_of
+from brain.skill_routes import SkillLibrary
 
 log = structlog.get_logger()
 
@@ -151,6 +216,17 @@ CONNECTORS_READ: Final[Capability] = screen("connectors").read.requires
 #: Where the screen is read and a source connected, and where one is disconnected.
 CONNECTORS_PATH: Final = "/connectors"
 DISCONNECT_PATH: Final = CONNECTORS_PATH + "/{connector}/disconnect"
+#: Where a connected source's settings are edited, and its key replaced.
+EDIT_PATH: Final = CONNECTORS_PATH + "/{connector}/edit"
+KEY_PATH: Final = CONNECTORS_PATH + "/{connector}/key"
+
+#: The module's list, one source's page and its export. See the module docstring for the prefix.
+SOURCES_PATH: Final = "/console/connectors"
+SOURCE_PATH: Final = SOURCES_PATH + "/{connector}"
+EXPORT_PATH: Final = SOURCE_PATH + "/export"
+
+#: The Install setting Connect Lark saves its switched-on uses under.
+LARK_USES_SETTING: Final = "INSTALL_LARK_USES"
 
 #: The status a connect that kept nothing answers, by what the vault's state was.
 NOT_KEPT_STATUS: Final = {
@@ -399,6 +475,206 @@ class ConnectorChangedView(BaseModel):
     changed_at: datetime
     key_written_at: datetime | None
     told: str
+
+
+class EditAsked(BaseModel):
+    """An edit: the settings the source should be connected with. No key: an edit leaves it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    settings: dict[str, str]
+
+
+class KeyAsked(BaseModel):
+    """A replacement key. No length on the field, for `ConnectAsked`'s reason."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    credential: str
+
+
+class EditedView(BaseModel):
+    """What an edit changed: the source connected again with new settings, and when."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    connector: str
+    changed_at: datetime
+    told: str
+
+
+class KeyReplacedView(BaseModel):
+    """When a replaced key was written, and what that means. Never the key."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    connector: str
+    key_written_at: datetime | None
+    told: str
+
+
+class SourceRowView(BaseModel):
+    """One source on the module's list. `brain.console.connector_detail.SourceRow`, by field."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    label: str
+    status: SourceStatus
+    health: str | None
+    department: str | None
+    last_read_at: datetime | None
+    connected_at: datetime | None
+    declaration_changed: bool
+    connect_from: ConnectFrom
+    may_manage: bool
+
+
+class SourcesPage(Page[SourceRowView]):
+    """One page of every source this release ships. No count, of either half."""
+
+
+class SettingValueView(BaseModel):
+    """One identifier a source is connected with: its name, its label, and what was typed.
+
+    An identifier the source gave the company (an organisation id, a helpdesk address), which is
+    what the manifest was built from. Never a key: a key is not a setting and has no field here.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    label: str
+    value: str
+
+
+class KeptEntityView(BaseModel):
+    """One kind of record a connection keeps an index of, by field name. Never a value."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    entity: str
+    fields: list[str]
+
+
+class LiveReadView(BaseModel):
+    """One thing a connection reads live when a question needs it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    tool: str
+    entity: str
+    description: str
+
+
+class HistoryView(BaseModel):
+    """One connection of a source, live or ended, with who and when. Actors are principal ids."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    connected_at: datetime
+    connected_by: str
+    disconnected_at: datetime | None
+    disconnected_by: str | None
+    settings: list[SettingValueView]
+
+
+class NamedAgentView(BaseModel):
+    """An agent whose manifest names this source."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    agent_id: str
+    display_name: str
+
+
+class NamedSkillView(BaseModel):
+    """A skill whose tools come from this source, with its newest version and that version's state."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    version: str
+    state: str
+
+
+class SourceView(BaseModel):
+    """One source whole: its row, its declaration, its connection's index, history and users.
+
+    Everything about the connection is empty for a source this reader may not be told is
+    connected, exactly as for one nobody connected. The confirmations are the words a person
+    agrees to before an edit or a key replacement.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    source: SourceRowView
+    #: Why it is not connected from this screen, or empty when it is.
+    elsewhere: str
+    #: How it is read, from its own declaration.
+    reading: str
+    #: Its verified call ceiling in words, or that nobody has verified one.
+    ceiling: str
+    #: What this release tested it against.
+    recorded: str
+    #: What the department line says when the connection names none; empty when not connected.
+    department_says: str
+    settings: list[SettingValueView]
+    keeps: list[KeptEntityView]
+    reads_live: list[LiveReadView]
+    history: list[HistoryView]
+    #: Display names by principal id, for the actors in `history`. Missing where none is known.
+    people: dict[str, str]
+    agents: list[NamedAgentView]
+    skills: list[NamedSkillView]
+    confirm_edit: str
+    confirm_key: str
+
+
+class ExportedConnectionView(BaseModel):
+    """The live connection in an export: its settings, the digest agreed to, who and when."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    settings: dict[str, str]
+    digest: str
+    connected_at: datetime
+    connected_by: str
+    #: Whether what it declares today is what was agreed to.
+    declaration_agreed: bool
+
+
+class ExportedDeclarationView(BaseModel):
+    """What the live connection's manifest declares today, in the words the screen uses."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    version: str
+    wiring: str
+    access: str
+    reaches: str
+    permission_sync: str
+    department: str | None
+    keeps: list[KeptEntityView]
+    reads_live: list[LiveReadView]
+
+
+class ConnectorExportView(BaseModel):
+    """A connection record as a document: its declaration and history, and no key (M27.15.39)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    connector: str
+    label: str
+    exported_at: datetime
+    #: Why there is no key in it.
+    credential: str
+    connection: ExportedConnectionView | None
+    declaration: ExportedDeclarationView | None
+    reading: str
+    ceiling: str
+    recorded: str
+    history: list[HistoryView]
 
 
 def trust_view(one: TrustRow) -> TrustView:
@@ -748,3 +1024,436 @@ async def disconnect(request: Request, connector: str, asked: Asked) -> Connecto
         key_written_at=None,
         told=DISCONNECTED,
     )
+
+
+# ------------------------------------------------------------------ the module's list
+
+
+#: What the module's list may search, filter and order by: the fields a row shows.
+SOURCES: Final[Listing[SourceRowView]] = Listing(
+    name="connector-sources",
+    columns=(
+        Column("label", lambda row: row.label, search=True, sort=True),
+        Column("name", lambda row: row.name, search=True),
+        Column("status", lambda row: row.status.value, filter=True, sort=True),
+        Column("health", lambda row: row.health, filter=True),
+        Column("department", lambda row: row.department, search=True, filter=True, sort=True),
+        Column("connect_from", lambda row: row.connect_from.value, filter=True),
+        Column("last_read_at", lambda row: row.last_read_at, sort=True),
+    ),
+    key=lambda row: row.name,
+    order="label",
+)
+SourcesQuery = Annotated[ListAsked, Depends(SOURCES.query())]
+
+
+def changes_of(request: Request) -> ConnectorChanges | None:
+    """What `app.state.connector_records` holds when it edits too, or the database, or None."""
+    found = getattr(request.app.state, "connector_records", None)
+    if isinstance(found, ConnectorChanges):
+        return found
+    sessions = sessions_of(request)
+    return None if sessions is None else StoredConnections(sessions)
+
+
+def _library_of(request: Request) -> SkillLibrary | None:
+    """What `app.state.skill_library` holds, or the database's library, or None without one."""
+    found = getattr(request.app.state, "skill_library", None)
+    if isinstance(found, SkillLibrary):
+        return found
+    sessions = sessions_of(request)
+    if sessions is None:
+        return None
+    from brain.ops.skill_store import StoredSkills
+
+    return StoredSkills(sessions)
+
+
+def lark_switched_on() -> frozenset[str]:
+    """The shipped sources Connect Lark has switched on, by name, or none when nothing says so."""
+    try:
+        saved = value_of(LARK_USES_SETTING)
+    except InstallError:
+        return frozenset()
+    on = uses_switched_on(saved)
+    return frozenset(name for name, use in LARK_SOURCES.items() if use in on)
+
+
+def manifest_or_none(one: Connection | None) -> ConnectorManifest | None:
+    """The manifest a connection's settings build today, or None when this build cannot."""
+    if one is None:
+        return None
+    try:
+        return manifest_for(one.connector, one.settings)
+    except (NotConnectableError, ConnectorContractError):
+        return None
+
+
+def row_view(one: SourceRow) -> SourceRowView:
+    """One row, copied field by field, for `TrustView`'s reason."""
+    return SourceRowView(
+        name=one.name,
+        label=one.label,
+        status=one.status,
+        health=one.health,
+        department=one.department,
+        last_read_at=one.last_read_at,
+        connected_at=one.connected_at,
+        declaration_changed=one.declaration_changed,
+        connect_from=one.connect_from,
+        may_manage=one.may_manage,
+    )
+
+
+def settings_view(connector: str, settings: Mapping[str, str]) -> list[SettingValueView]:
+    """A connection's settings under the labels its form asks for them by, in the form's order."""
+    declared = CONNECTABLE[connector].settings if connector in CONNECTABLE else ()
+    labels = {one.name: one.label for one in declared}
+    order = [one.name for one in declared]
+    names = [*(name for name in order if name in settings), *sorted(set(settings) - set(order))]
+    return [
+        SettingValueView(name=name, label=labels.get(name, name), value=settings[name])
+        for name in names
+    ]
+
+
+def history_view(one: ConnectionRecord) -> HistoryView:
+    """One connection of the source's history, copied field by field."""
+    return HistoryView(
+        connected_at=one.connected_at,
+        connected_by=one.connected_by,
+        disconnected_at=one.disconnected_at,
+        disconnected_by=one.disconnected_by,
+        settings=settings_view(one.connector, one.settings),
+    )
+
+
+@dataclass(frozen=True)
+class _Source:
+    """Everything one source's page and its export are built from, already narrowed."""
+
+    row: SourceRow
+    live: Connection | None
+    manifest: ConnectorManifest | None
+    history: tuple[ConnectionRecord, ...]
+    told_of: bool
+
+
+async def _one_source(request: Request, connector: str, asked: Asking) -> _Source:
+    """One shipped source as this reader may be told of it.
+
+    The live connection is looked up only among the admitted ones and the history only for a
+    source `may_be_told_of` admits, so a source the reader may not see is described exactly as one
+    nobody connected. See `brain.console.connector_detail.
+    A_SOURCE_NOBODY_CONNECTED_AND_ONE_YOU_MAY_NOT_SEE_READ_ALIKE`.
+    """
+    records = records_of(request)
+    if records is None:
+        raise Failed("no database on this process")
+    admitted = admitted_connections(await records.connected(), asked.reach, asked.now)
+    live = next((one for one in admitted if one.connector == connector), None)
+    manifest = manifest_or_none(live)
+    sync = sync_records_of(request)
+    synced: Mapping[str, SyncState] = {} if sync is None or live is None else await sync.states()
+    [row] = [
+        one
+        for one in source_rows(
+            connections=() if live is None else (live,),
+            synced=synced,
+            lark_on=lark_switched_on(),
+            manifests={} if manifest is None else {connector: manifest},
+            reader=asked.reach,
+            now=asked.now,
+        )
+        if one.name == connector
+    ]
+    told_of = may_be_told_of(connector, asked.reach, asked.now)
+    changes = changes_of(request)
+    history = await changes.history(connector) if told_of and changes is not None else ()
+    return _Source(row=row, live=live, manifest=manifest, history=history, told_of=told_of)
+
+
+async def _people(request: Request, principal_ids: Collection[str]) -> dict[str, str]:
+    """Display names for the actors a history names, or none without a database."""
+    sessions = sessions_of(request)
+    if sessions is None or not principal_ids:
+        return {}
+    async with sessions() as session:
+        return await steward_names(session, sorted(principal_ids))
+
+
+async def _agents_naming(request: Request, connector: str, asked: Asking) -> list[NamedAgentView]:
+    """The agents this reader may see whose effective manifest names this source (M27.15.58).
+
+    The audience is decided before an install is read, the roster's own order, so nothing about an
+    agent this reader may not see is fetched on their behalf.
+    """
+    sessions = sessions_of(request)
+    if sessions is None:
+        return []
+    async with sessions() as session:
+        rows = (await session.execute(every_agent())).scalars().all()
+        records = [record for record in (record_of(row) for row in rows) if record is not None]
+        visible = visible_agent_ids(records, viewer_of(asked))
+        shown = {one.agent_id: one for one in records if one.agent_id in visible}
+        pairs = (await session.execute(installs_for(list(shown)))).all() if shown else []
+    named: dict[str, tuple[str, ...]] = {}
+    for instance_row, version_row in pairs:
+        record = shown.get(instance_row.id)
+        install = None if record is None else install_of(instance_row, version_row, record)
+        if record is not None and install is not None:
+            named[record.agent_id] = install.connectors
+    found = agents_naming(
+        connector,
+        connectors_by_agent=named,
+        names={agent_id: one.display_name for agent_id, one in shown.items()},
+        visible=frozenset(shown),
+    )
+    return [NamedAgentView(agent_id=one.agent_id, display_name=one.display_name) for one in found]
+
+
+async def _skills_from(request: Request, connector: str, asked: Asking) -> list[NamedSkillView]:
+    """The skills whose tools come from this source, for a reader of the skill library."""
+    registry = _tool_registry(request)
+    library = _library_of(request)
+    if registry is None or library is None or not may_read_library(asked.reach, asked.now):
+        return []
+    found = skills_from(connector, await library.library(), registry)
+    return [NamedSkillView(name=one.name, version=one.version, state=one.state) for one in found]
+
+
+def _kept(manifest: ConnectorManifest | None) -> list[KeptEntityView]:
+    return [KeptEntityView(entity=one.entity, fields=list(one.fields)) for one in kept_index(manifest)]
+
+
+def _live(manifest: ConnectorManifest | None) -> list[LiveReadView]:
+    return [
+        LiveReadView(tool=one.tool, entity=one.entity, description=one.description)
+        for one in read_live(manifest)
+    ]
+
+
+@router.get(SOURCES_PATH, response_model=SourcesPage, responses=COMMON_RESPONSES)
+async def connector_sources(request: Request, asked: Asked, listed: SourcesQuery) -> SourcesPage:
+    """Every source this release ships, each with what this reader may be told of it (M27.11.9).
+
+    The screen's read first, then the connections the reader may be told of, then the worker's
+    attempts only when there is a connection to describe.
+    """
+    _permitted(asked.reach, asked.now)
+    plan = SOURCES.plan(listed, reader=asked.caller.principal.id)
+    records = records_of(request)
+    if records is None:
+        raise Failed("no database on this process")
+    admitted = admitted_connections(await records.connected(), asked.reach, asked.now)
+    sync = sync_records_of(request)
+    synced: Mapping[str, SyncState] = {} if sync is None or not admitted else await sync.states()
+    manifests = {
+        one.connector: built
+        for one in admitted
+        if (built := manifest_or_none(one)) is not None
+    }
+    rows = source_rows(
+        connections=admitted,
+        synced=synced,
+        lark_on=lark_switched_on(),
+        manifests=manifests,
+        reader=asked.reach,
+        now=asked.now,
+    )
+    page = plan.page([row_view(one) for one in rows])
+    return SourcesPage(items=list(page.items), next_cursor=page.next_cursor)
+
+
+@router.get(SOURCE_PATH, response_model=SourceView, responses=COMMON_RESPONSES)
+async def connector_source(request: Request, connector: str, asked: Asked) -> SourceView:
+    """One source whole: its declaration, index, history and the agents and skills that use it.
+
+    A name this release does not ship is the screen's one refusal. A shipped source this reader may
+    not be told is connected is answered as one nobody connected, with no history and no users.
+    """
+    _permitted(asked.reach, asked.now)
+    declared = shipped().get(connector)
+    if declared is None:
+        raise _not_answerable("connector source")
+    one = await _one_source(request, connector, asked)
+    actors = {
+        actor
+        for entry in one.history
+        for actor in (entry.connected_by, entry.disconnected_by)
+        if actor
+    }
+    return SourceView(
+        source=row_view(one.row),
+        elsewhere=declared.not_from_the_console,
+        reading=reading_in_words(connector),
+        ceiling=ceiling_for(connector, one.manifest),
+        recorded=recorded_in_words(connector),
+        department_says=(
+            NO_DEPARTMENT if one.live is not None and one.row.department is None else ""
+        ),
+        settings=[] if one.live is None else settings_view(connector, one.live.settings),
+        keeps=_kept(one.manifest),
+        reads_live=_live(one.manifest),
+        history=[history_view(entry) for entry in one.history],
+        people=await _people(request, actors),
+        agents=await _agents_naming(request, connector, asked) if one.told_of else [],
+        skills=await _skills_from(request, connector, asked) if one.told_of else [],
+        confirm_edit=EDITING_A_SOURCE,
+        confirm_key=REPLACING_A_KEY,
+    )
+
+
+@router.get(EXPORT_PATH, response_model=ConnectorExportView, responses=COMMON_RESPONSES)
+async def export_connector(request: Request, connector: str, asked: Asked) -> ConnectorExportView:
+    """One source's connection record as a document, with its declaration and history (M27.15.39).
+
+    No key, whatever the vault holds: the document is built from the connection rows and the
+    manifest, neither of which has anywhere to hold one, and says so in `credential`.
+    """
+    _permitted(asked.reach, asked.now)
+    declared = shipped().get(connector)
+    if declared is None:
+        raise _not_answerable("connector export")
+    one = await _one_source(request, connector, asked)
+    manifest = one.manifest
+    log.info("connection record exported", connector=connector, principal=asked.reach.principal_id)
+    return ConnectorExportView(
+        connector=connector,
+        label=declared.label,
+        exported_at=asked.now,
+        credential=NO_KEY_IS_EXPORTED,
+        connection=(
+            None
+            if one.live is None
+            else ExportedConnectionView(
+                settings=dict(one.live.settings),
+                digest=one.live.digest,
+                connected_at=one.live.connected_at,
+                connected_by=one.live.connected_by,
+                declaration_agreed=manifest is not None
+                and manifest_digest(manifest) == one.live.digest,
+            )
+        ),
+        declaration=(
+            None
+            if manifest is None
+            else ExportedDeclarationView(
+                version=manifest.version,
+                wiring=manifest.transport.value,
+                access=ACCESS_SAYS[manifest.credential.mode],
+                reaches=scope_in_words(manifest.scope),
+                permission_sync=PERMISSION_SYNC_SAYS[manifest.permission_sync],
+                department=one.row.department,
+                keeps=_kept(manifest),
+                reads_live=_live(manifest),
+            )
+        ),
+        reading=reading_in_words(connector),
+        ceiling=ceiling_for(connector, manifest),
+        recorded=recorded_in_words(connector),
+        history=[history_view(entry) for entry in one.history],
+    )
+
+
+# ------------------------------------------------------------ editing and replacing a key
+
+
+async def _live_connection(request: Request, connector: str) -> Connection | None:
+    records = records_of(request)
+    if records is None:
+        raise Failed("no database on this process")
+    return next((one for one in await records.connected() if one.connector == connector), None)
+
+
+@router.post(EDIT_PATH, response_model=EditedView, responses=_WRITE_RESPONSES)
+async def edit(request: Request, connector: str, body: EditAsked, asked: Asked) -> JSONResponse:
+    """Connect a source again with new settings, as one change, or write nothing and say why.
+
+    Asked of the authority a connection asks, before anything is judged. See
+    `brain.ops.connector_store.AN_EDIT_IS_A_DISCONNECTION_AND_A_CONNECTION_IN_ONE_TRANSACTION`.
+    """
+    if not may_connect_source(asked.reach, connector, asked.now):
+        log.info("editing a source not answerable", principal=asked.caller.principal.id)
+        raise _not_answerable("edit")
+    kind = CONNECTABLE.get(connector)
+    if kind is None:
+        # `connection_problems`' own answer for a source this screen cannot connect, which is the
+        # first problem it finds and the only one it judges.
+        return _problems(connection_problems(connector, body.settings, ""))
+    found = settings_problems(kind, body.settings)
+    if found:
+        return _problems(found)
+    changes = changes_of(request)
+    current = await _live_connection(request, connector)
+    if changes is None:
+        raise Failed("no database on this process")
+    if current is None:
+        raise _not_answerable("edit")
+    settings = given(kind, body.settings)
+    manifest = kind.build(settings, key_reference(kind.name))
+    digest = manifest_digest(manifest)
+    if dict(current.settings) == settings and current.digest == digest:
+        return _problems(
+            (SettingProblem(field=SOURCE_FIELD, code="unchanged", message=NOTHING_TO_EDIT),)
+        )
+    actor = asked.reach.principal_id
+    try:
+        connection = await changes.reconnect(
+            connector=kind.name,
+            settings=settings,
+            digest=digest,
+            actor=actor,
+            trace_id=_trace_id(),
+            ent_hash=asked.reach.ent_hash(),
+            declared=declared_capabilities(manifest),
+        )
+    except NotConnectedError as absent:
+        raise _not_answerable("edit") from absent
+    except BrainError:
+        raise
+    except Exception as exc:
+        # The type name alone, for `connect`'s reason.
+        raise Failed(f"editing a source: {type(exc).__name__}") from exc
+    log.info("source edited", connector=kind.name, principal=actor)
+    answered = EditedView(connector=kind.name, changed_at=connection.connected_at, told=EDITED)
+    return JSONResponse(status_code=200, content=answered.model_dump(mode="json"))
+
+
+@router.post(KEY_PATH, response_model=KeyReplacedView, responses=_WRITE_RESPONSES)
+async def replace_key(
+    request: Request, connector: str, body: KeyAsked, asked: Asked
+) -> JSONResponse:
+    """Write a new key for a connected source, and change nothing about the connection (M11.2.6).
+
+    The key is judged before the vault is asked, the vault before the database, and a source with
+    no live connection is the one refusal: a key for a source nothing reads is a key nobody asked
+    for. The write is recorded by `ops.credential_write`'s own trigger.
+    """
+    if not may_connect_source(asked.reach, connector, asked.now):
+        log.info("replacing a key not answerable", principal=asked.caller.principal.id)
+        raise _not_answerable("replace key")
+    found = key_problems(body.credential)
+    if found:
+        return _problems(found)
+    credentials = credentials_of(request)
+    if not credentials.configured:
+        return _not_kept(VaultState.ABSENT)
+    if await _live_connection(request, connector) is None:
+        raise _not_answerable("replace key")
+    actor = asked.reach.principal_id
+    try:
+        kept = await credentials.keep(
+            connector_key_slot(connector),
+            body.credential,
+            actor=actor,
+            trace_id=_trace_id(),
+            ent_hash=asked.reach.ent_hash(),
+        )
+    except CredentialProblemError:
+        return _problems(key_problems(body.credential))
+    except CredentialsUnavailableError as unavailable:
+        return _not_kept(unavailable.state)
+    log.info("source key replaced", connector=connector, principal=actor)
+    answered = KeyReplacedView(connector=connector, key_written_at=kept.set_at, told=KEY_REPLACED)
+    return JSONResponse(status_code=200, content=answered.model_dump(mode="json"))
