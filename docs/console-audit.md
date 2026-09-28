@@ -9,8 +9,8 @@ What an administrator would need to manage, read out of the schema, the routes a
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
 - 104 tables, from `brain.db.Base.metadata`.
 - 27 installation values, from `brain.install.INSTALLATION`.
-- 221 routes under `/api/v1` and `/setup`, from the API's internal document.
-- 73 console addresses, from the route table in `console/src/App.tsx`.
+- 222 routes under `/api/v1` and `/setup`, from the API's internal document.
+- 74 console addresses, from the route table in `console/src/App.tsx`.
 - 89 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 107 routes.
 - 37 gaps recorded, and 28 routes no screen calls.
 
@@ -510,11 +510,13 @@ No gap recorded.
 | --- | --- |
 | `/*` | The page drawn for an address the console does not have, which manages nothing. |
 | `/ask` | Asking a question is what the console is for a person, not something an administrator manages. |
+| `/ask/documents/:documentId` | The document a citation on Ask opens, read at the asker's own reach; a person checking an answer, not an administrator managing anything. |
 | `/auth/callback` | The end of a sign-in, drawn by the session module rather than by any screen. |
 | `/signed-out` | The page a person lands on after signing out, which asks nothing and manages nothing. |
 | `chat.conversation` | What a person asked and was answered belongs to them; no store queries it yet (brain.chat.threads) and usage is reported without the words. |
 | `chat.message` | The same as chat.conversation: a person's own words, reported on and never managed. |
 | `gate.channel_event` | The dedupe key of each inbound channel message, claimed once by brain.gate.event_store.first_delivery and read by nothing else; there is nothing in it for anybody to manage. |
+| `GET /api/v1/knowledge/documents/{document_id}` | One document's passages for the page a citation opens, read at the caller's reach through the handler and policy the answer used; it writes nothing and manages nothing. |
 | `POST /api/v1/answer` | The answer lane behind Ask, which writes no row an administrator manages. |
 | `POST /api/v1/automation/tool-call` | Called by a running automation with its owner's reach, not by a person at a screen; installing the automation is the console's part. |
 

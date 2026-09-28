@@ -74,6 +74,11 @@ reachable from no route today. `tests/unit/test_streaming.py` asserts that gap r
 leaving it to a docstring, so the day somebody builds the endpoint the test tells them this
 half is already here.
 
+**A citation frame carries fields since 2026-09-28** (M8.1.1 to M8.1.3). `AnswerStream.evidence`
+writes `brain.gate.provenance.Evidence.view` as one line of JSON under the same `citation` event,
+so a screen can link the record or the passage and state how fresh it is and who vouched for it.
+`citation` still writes the rendered sentence for a caller holding a bare `Citation`.
+
 Task ids: M6.3.1, M6.3.2, M6.3.3, M6.3.4, M6.3.5, M6.3.6
 """
 
@@ -81,6 +86,7 @@ from __future__ import annotations
 
 import enum
 import inspect
+import json
 import re
 from collections.abc import Iterable, Mapping
 from types import MappingProxyType
@@ -88,6 +94,7 @@ from typing import Final
 
 from brain.gate.answer_cache import ServedAnswer
 from brain.gate.compose import Citation
+from brain.gate.provenance import Evidence
 
 #: Why there is no reasoning event and no room to add one.
 REASONING_IS_NOT_A_CHANNEL_EVENT: Final = (
@@ -407,6 +414,20 @@ class AnswerStream:
             self._refuse("citation", "once the prose it supports has started")
         self.phase = Phase.CITING
         return encode(Event.CITATION, one.render())
+
+    def evidence(self, one: Evidence) -> str:
+        """One citation with its freshness and badge, as fields a channel can link (M8.1.x).
+
+        The same event and the same window as `citation`: a citation the reader has scrolled past
+        is not read however much it carries. The data is `Evidence.view` as one line of JSON with
+        its keys sorted, so the frame is the same bytes for the same evidence and a blank line in
+        a title cannot end it. See
+        `provenance.A_CITATION_IS_SENT_AS_FIELDS_SO_A_CHANNEL_CAN_LINK_IT`.
+        """
+        if self.phase >= Phase.PROSE:
+            self._refuse("citation", "once the prose it supports has started")
+        self.phase = Phase.CITING
+        return encode(Event.CITATION, json.dumps(one.view(), sort_keys=True, ensure_ascii=False))
 
     def text(self, chunk: str) -> str:
         """A chunk of the answer. The first one closes the citation window."""

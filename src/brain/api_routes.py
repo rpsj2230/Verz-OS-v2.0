@@ -159,6 +159,7 @@ from brain.gate.addressing import from_web
 from brain.gate.admission import admit, second_factor_gives_back, verbs_withheld
 from brain.gate.answer import Answered, answer_lane, frames_of
 from brain.gate.answer_cache import AnswerStore
+from brain.gate.badge_store import item_lookup_of
 from brain.gate.caches import MAX_QUESTION_CHARS
 from brain.gate.catalogue import AgentCeiling
 from brain.gate.context import Channel, GateStep, Recorder, open_trace
@@ -925,12 +926,15 @@ def model_lane_of(state: Any) -> ModelLane | None:
     passage search only on one with a database. A process missing either abstains on a question
     no rule answers, exactly as the lane did before it had a model step, rather than finding
     passages it cannot read to a model or asking a model with nothing to show it.
+
+    The item lookup is how a cited document carries its verification badge (M7.4.7), read at the
+    asker's reach; a process with no database has none and badges nothing.
     """
     models = getattr(state, "models", None)
     search = getattr(state, "passage_search", None)
     if not isinstance(models, ModelService) or search is None:
         return None
-    return ModelLane(search=search, model=models.calls)
+    return ModelLane(search=search, model=models.calls, items=item_lookup_of(state))
 
 
 #: The agent `/answer` answers as when nobody is addressed and nothing else selects: the person

@@ -17,7 +17,11 @@ quiet failure: a stale number that looks live gets acted on.
 allowed into a trace, and it is allowed only there. Not into logs, not into an error
 message, not attached to the answer as a debugging convenience.
 
-Task ids: M3.9.1, M3.9.2, M3.9.3, M3.9.4
+**A citation can be described without its read time** (M8.1.1). `Citation.describe` names the
+record and field and `render` adds "as of"; a channel that states freshness beside the citation,
+which the Ask screen does, would otherwise print the time twice.
+
+Task ids: M3.9.1, M3.9.2, M3.9.3, M3.9.4, M8.1.1
 """
 
 from __future__ import annotations
@@ -66,10 +70,14 @@ class Citation:
     source: str
     fetched_at: str
 
-    def render(self) -> str:
+    def describe(self) -> str:
+        """The record and field, without the read time, for a channel that states it apart."""
         where = f" from {self.source}" if self.source else ""
+        return f"{self.entity} {self.record_id}: {self.field}{where}"
+
+    def render(self) -> str:
         when = f", as of {self.fetched_at}" if self.fetched_at else ""
-        return f"{self.entity} {self.record_id}: {self.field}{where}{when}"
+        return f"{self.describe()}{when}"
 
 
 @dataclass(frozen=True)

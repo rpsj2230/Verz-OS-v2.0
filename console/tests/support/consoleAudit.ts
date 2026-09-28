@@ -740,6 +740,10 @@ export const NOT_ADMINISTERED: Readonly<Record<string, string>> = {
   "chat.message": "The same as chat.conversation: a person's own words, reported on and never managed.",
   "gate.channel_event":
     "The dedupe key of each inbound channel message, claimed once by brain.gate.event_store.first_delivery and read by nothing else; there is nothing in it for anybody to manage.",
+  "/ask/documents/:documentId":
+    "The document a citation on Ask opens, read at the asker's own reach; a person checking an answer, not an administrator managing anything.",
+  "GET /api/v1/knowledge/documents/{document_id}":
+    "One document's passages for the page a citation opens, read at the caller's reach through the handler and policy the answer used; it writes nothing and manages nothing.",
 };
 
 /**
