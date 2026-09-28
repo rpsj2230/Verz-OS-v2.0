@@ -47,25 +47,43 @@ over `LimitScope` and tested to be, so a new scope cannot be added without someb
 for exactly this: an operator told "quota" goes looking for a limit to raise, and no limit
 was reached. The distinction is the whole reason those kinds are separate strings.
 
-Task ids: M23.1.1
+**A caller's run of refusals is counted beside the windows and never in them.**
+`limits.backoff_seconds` needs to know how many times in a row a caller has been refused, and
+the window cannot say: a refusal is never recorded there, which is
+`REFUSED_REQUESTS_DO_NOT_EXTEND_THE_WINDOW`. So one counter per caller, under its own prefix,
+is incremented in the same transaction as a refusal and deleted in the same transaction as an
+admission, and it expires on its own after the longest hint there is. It changes the hint a
+caller is given and nothing about when they are admitted: a caller who comes back when the
+window has room is admitted whatever the counter says. See
+`A_RUN_OF_REFUSALS_LENGTHENS_THE_HINT_AND_NEVER_THE_WINDOW`.
+
+**The Limits screen reads the windows that exist, and judges each by the policy.** `live`
+walks the keys under `KEY_PREFIX` with `SCAN`, parses each back with `parse_key`, and asks
+`limits.limit_for` what that key is allowed, so no limit is stored and a lowered limit is the
+one a live window is judged against. `SCAN` rather than `KEYS`, because `KEYS` blocks the
+server for the length of the walk and this Valkey also answers every question's entitlement
+lookup.
+
+Task ids: M23.1.1, M23.1.5
 """
 
 from __future__ import annotations
 
 import enum
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from types import MappingProxyType
 from typing import Any, Final, Protocol, cast
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 import structlog
 from redis.exceptions import RedisError, WatchError
 
 from brain.ops.admission import RefusalKind, refusal_record
 from brain.ops.limits import (
+    MAX_BACKOFF_SECONDS,
     Limit,
     LimitDecision,
     LimiterState,
@@ -73,6 +91,7 @@ from brain.ops.limits import (
     LimitScope,
     WindowState,
     check,
+    limit_for,
 )
 
 log = structlog.get_logger()
@@ -99,6 +118,31 @@ TTL_SLACK_SECONDS: Final = 5
 #: because there is no window in hand to derive it from; saying "retry immediately" would
 #: turn an outage into a retry storm against the thing that is down.
 OUTAGE_RETRY_SECONDS: Final = 5.0
+
+#: Namespaces a caller's run of refusals. Not under `KEY_PREFIX`: `live` walks that prefix
+#: for windows, and a counter found there would parse as a window nobody declared.
+REFUSALS_PREFIX: Final = "limref"
+
+#: How long a run of refusals is remembered after the last one. The longest hint there is: a
+#: caller who waited that long has stopped looping, and the next refusal starts a new run.
+REFUSALS_FORGOTTEN_AFTER_SECONDS: Final = int(MAX_BACKOFF_SECONDS)
+
+#: Why the counter of refusals lives beside the windows and not in them.
+A_RUN_OF_REFUSALS_LENGTHENS_THE_HINT_AND_NEVER_THE_WINDOW: Final = (
+    "The backoff needs how many times in a row a caller was refused, and the window cannot "
+    "say, because a refusal is never recorded in it. So the run is counted under its own key, "
+    "in the transaction that refused, and deleted in the one that admits. It lengthens the "
+    "hint a looping caller is given and changes nothing about when anybody is admitted: the "
+    "window alone decides that, and a caller who returns when it has room gets in."
+)
+
+
+class WindowsUnreadableError(Exception):
+    """The store could not be walked, so which windows are refusing cannot be said.
+
+    Raised rather than answered with an empty state, because an empty state reads as nobody
+    being throttled, which is the reassuring answer and the wrong one during an outage.
+    """
 
 
 class Availability(enum.StrEnum):
@@ -150,6 +194,29 @@ def render_key(key: LimitKey) -> str:
     return ":".join((KEY_PREFIX, _segment(str(scope)), _segment(subject), _segment(period)))
 
 
+def parse_key(rendered: str) -> LimitKey | None:
+    """`render_key` read backwards, or None for anything it could not have written.
+
+    Exactly four segments, because every segment is percent-encoded and so holds no colon; a
+    key with more or fewer was written by something else and is not a window. A scope this
+    version does not know is None rather than an error, so a key left by a newer release
+    during a rolling deploy is passed over instead of taking the screen down.
+    """
+    parts = rendered.split(":")
+    if len(parts) != 4 or parts[0] != KEY_PREFIX:
+        return None
+    try:
+        scope = LimitScope(unquote(parts[1]))
+    except ValueError:
+        return None
+    return (scope, unquote(parts[2]), unquote(parts[3]))
+
+
+def refusals_key(caller: str) -> str:
+    """The key a caller's run of refusals is counted under. Injective, as `render_key` is."""
+    return f"{REFUSALS_PREFIX}:{_segment(caller)}"
+
+
 def _member() -> str:
     """A unique, meaningless member so two hits at one instant stay two hits.
 
@@ -180,12 +247,20 @@ class WindowPipeline(Protocol):
     def zremrangebyscore(self, name: str, min: Any, max: Any) -> object: ...  # noqa: A002
     def zadd(self, name: str, mapping: Mapping[str, float]) -> object: ...
     def expire(self, name: str, time: int) -> object: ...
+    def incr(self, name: str) -> object: ...
+    def delete(self, *names: str) -> object: ...
 
 
 class WindowClient(Protocol):
-    """Whatever hands out pipelines. `redis.Redis` and `valkey.Valkey` both do."""
+    """Whatever hands out pipelines, and walks and reads keys for the Limits screen.
+
+    `redis.Redis` and `valkey.Valkey` both satisfy it. `scan_iter` and `zrange` are the read
+    half `live` needs and the request path never calls.
+    """
 
     def pipeline(self) -> WindowPipeline: ...
+    def scan_iter(self, match: str | None = None, count: int | None = None) -> Iterator[Any]: ...
+    def zrange(self, name: str, start: int, end: int, *, withscores: bool = False) -> Any: ...
 
 
 @dataclass
@@ -221,6 +296,10 @@ class StoreVerdict:
     #: Which scopes could not be read. Scopes, never subjects: an outage line naming
     #: principals is a list of who was active during the outage.
     unreadable: tuple[LimitScope, ...] = ()
+    #: How many times in a row the caller has now been refused, this refusal included. Zero
+    #: on an admission and wherever no caller was named. See
+    #: `A_RUN_OF_REFUSALS_LENGTHENS_THE_HINT_AND_NEVER_THE_WINDOW`.
+    consecutive_refusals: int = 0
 
     @property
     def allowed(self) -> bool:
@@ -269,14 +348,38 @@ class ValkeyWindowStore:
     client: WindowClient
     health: StoreHealth = field(default_factory=StoreHealth)
 
-    def check_and_record(self, *, now: datetime, limits: Sequence[Limit]) -> StoreVerdict:
+    def check_and_record(
+        self, *, now: datetime, limits: Sequence[Limit], caller: str | None = None
+    ) -> StoreVerdict:
         """Decide, and record the hit if it was admitted. One transaction, or none.
 
         The read and the write are in one watched transaction because they are one decision.
         Reading, deciding and writing without watching is the classic double admit: two
         requests both see a window with room, both write, and the limit admits one more than
         it says exactly when it matters, which is under load.
+
+        `caller`, when named, has their run of refusals counted in the same transaction: one
+        more on a refusal, forgotten on an admission.
         """
+        return self._decide(now=now, limits=limits, caller=caller, record=True)
+
+    def check_only(
+        self, *, now: datetime, limits: Sequence[Limit], caller: str | None = None
+    ) -> StoreVerdict:
+        """Decide without recording a hit, for a refusal that should come before any work.
+
+        The request path asks this first, with the windows it can name before anything is
+        done, so a looping caller is refused before their question is filed or looked up; and
+        asks `check_and_record` afterwards with every window, which is the decision that
+        counts. An admission here records nothing and forgets no refusal, because the request
+        has not been admitted yet: that is the later call's to say. A refusal here is a
+        refusal, and is counted as one.
+        """
+        return self._decide(now=now, limits=limits, caller=caller, record=False)
+
+    def _decide(
+        self, *, now: datetime, limits: Sequence[Limit], caller: str | None, record: bool
+    ) -> StoreVerdict:
         self.health.checks += 1
         if not limits:
             # No limits govern this, so there is nothing to read and nothing to record. Not
@@ -292,13 +395,21 @@ class ValkeyWindowStore:
                     rows = self._read(pipe, now, limits)
                     decision = check(now=now, limits=limits, state=_state_from(rows))
                     pipe.multi()
-                    if decision.allowed:
+                    counted = caller is not None and not decision.allowed
+                    if decision.allowed and record:
                         self._record(pipe, now, limits)
+                        if caller is not None:
+                            pipe.delete(refusals_key(caller))
+                    elif counted and caller is not None:
+                        # First in the queue, so its result is the first `execute` returns.
+                        pipe.incr(refusals_key(caller))
+                        pipe.expire(refusals_key(caller), REFUSALS_FORGOTTEN_AFTER_SECONDS)
                     # Executed even when nothing was queued. An empty transaction still
                     # releases the watch, and leaving keys watched on a pooled connection
                     # leaks the watch into whatever that connection does next.
-                    pipe.execute()
-                    return StoreVerdict(decision)
+                    results = pipe.execute()
+                    run = int(results[0]) if counted and results else 0
+                    return StoreVerdict(decision, consecutive_refusals=run)
             except WatchError:
                 self.health.contention += 1
                 if attempt >= MAX_ATTEMPTS:
@@ -379,6 +490,38 @@ class ValkeyWindowStore:
             degraded=True,
             unreadable=scopes,
         )
+
+    def live(self, now: datetime) -> tuple[tuple[Limit, ...], LimiterState]:
+        """Every window the store holds, with the limit the policy gives it, for the screen.
+
+        Read, never written: nothing is pruned or recorded, because a screen that changed the
+        windows by being opened would be a screen whose reading depends on who looked last.
+        `limits.check` prunes by `now` when it judges each one, so an expired hit counts for
+        nothing here either. A key the policy gives no limit is passed over, for `limit_for`'s
+        reason; a key this module did not write is passed over by `parse_key`.
+
+        Raises `WindowsUnreadableError` when the store does not answer, rather than returning
+        an empty state that would read as nobody being refused.
+        """
+        found: list[Limit] = []
+        rows: dict[LimitKey, list[tuple[Any, float]]] = {}
+        try:
+            for raw in self.client.scan_iter(match=f"{KEY_PREFIX}:*", count=500):
+                name = raw.decode("utf-8") if isinstance(raw, bytes) else str(raw)
+                key = parse_key(name)
+                limit = None if key is None else limit_for(key)
+                if key is None or limit is None or key in rows:
+                    continue
+                found.append(limit)
+                rows[key] = list(self.client.zrange(name, 0, -1, withscores=True))
+        except (RedisError, OSError, UnicodeDecodeError) as exc:
+            self.health.outages += 1
+            log.warning("limit store could not be walked", error=type(exc).__name__)
+            msg = "the sliding windows could not be read"
+            raise WindowsUnreadableError(msg) from exc
+        del now
+        ordered = tuple(sorted(found, key=lambda one: one.key))
+        return ordered, _state_from(rows)
 
 
 def make_store(client: object) -> ValkeyWindowStore:

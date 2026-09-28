@@ -40,10 +40,17 @@ route refuses before it reads, which is `brain.routing_routes`' order and its ar
 The chain is `GET /routing/rungs`, behind its own grant and editable there; the p95 against its
 objective is `GET /report/service-levels`; the cost is `GET /report/spend`. Serving any of those
 again here would be a second door to one set of rows under a different grant, and the two grants
-would drift. What is here is the share of requests the fast lane answered without a model, the
-providers this system holds a key slot for, what each tier is for, and the measurements that do
-not exist, each in the sentence `brain.ops.telemetry.UNFILLABLE_TODAY` already wrote for it. See
-`A_FIGURE_ANOTHER_ROUTE_SERVES_IS_READ_THERE`.
+would drift. What is here is the share of people's requests the fast lane answered without a
+model, the providers this system holds a key slot for, what each tier is for, and the
+measurements that do not exist, each in the sentence `brain.ops.telemetry.UNFILLABLE_TODAY`
+already wrote for it. See `A_FIGURE_ANOTHER_ROUTE_SERVES_IS_READ_THERE`.
+
+**The fast lane's share leaves machine traffic out, since 2026-09-28 (M23.2.3).** An automation
+asks the same few questions on a schedule and reaches the fast lane far more often than a person,
+so a share counted over every request answered "how often did a schedule get an instant answer"
+under a heading about people. `requests_by_lane` counts the traffic classes
+`brain.ops.limits.HUMAN_TRAFFIC` names, which is `counts_towards_metrics` over every class, so the
+figure and the usage and spend screens exclude one population by one rule.
 
 **Provider health, keys and switches are `brain.provider_routes`', and not this route's.** Until
 2026-09-17 this response carried two flags saying no breaker was recorded and no key status was
@@ -61,7 +68,7 @@ would be the tracker counting a read as a control.
 executed. What is tested is the SQL each compiles to, every decision over rows built in memory,
 and the order the checks happen in.
 
-Task ids: M27.2.2, M27.2.3, M27.2.6
+Task ids: M27.2.2, M27.2.3, M27.2.6, M23.2.3
 """
 
 from __future__ import annotations
@@ -92,6 +99,7 @@ from brain.core.errors import Absent, Failed
 from brain.core.lane import Lane
 from brain.models.routing import Tier
 from brain.ops.controls import CONTROLS, Control
+from brain.ops.limits import HUMAN_TRAFFIC
 from brain.ops.provider_keys import PROVIDER_SLOTS, ProviderSlot
 from brain.ops.schedule_runner import STALLED_AFTER, due_now, stalled_runs
 from brain.ops.schedule_store import last_successes
@@ -268,7 +276,12 @@ class TierView(BaseModel):
 
 
 class LaneTrafficView(BaseModel):
-    """How many requests one lane finished in the window, over the whole install."""
+    """How many of people's requests one lane finished in the window, over the whole install.
+
+    People's, because the one figure drawn from these is the fast lane's share of what somebody
+    waiting was answered with, and machine traffic in it measures a schedule. See
+    `requests_by_lane`.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -356,10 +369,18 @@ def requests_by_lane(start: datetime, end: datetime) -> Select[tuple[str, int]]:
     `brain.ops.telemetry_store.observed_between` does for a percentile that needs the rows: this
     needs a number per lane, and seven days of a busy install is not a list to carry into a
     process for that. The lane and the count, and no column that names a person.
+
+    People's requests only: the traffic classes `brain.ops.limits.HUMAN_TRAFFIC` names. Filtered
+    in the statement, so both halves of the share the screen draws come from one population,
+    which is `brain.ops.lane_share.MACHINE_TRAFFIC_LEAVES_BOTH_HALVES_OF_THE_FRACTION`.
     """
     return (
         select(RequestTelemetryRow.lane, func.count())
-        .where(RequestTelemetryRow.received_at >= start, RequestTelemetryRow.received_at < end)
+        .where(
+            RequestTelemetryRow.received_at >= start,
+            RequestTelemetryRow.received_at < end,
+            RequestTelemetryRow.traffic_class.in_(sorted(str(one) for one in HUMAN_TRAFFIC)),
+        )
         .group_by(RequestTelemetryRow.lane)
     )
 

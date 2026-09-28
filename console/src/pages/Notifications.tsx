@@ -15,7 +15,12 @@
  * field is refused by `scripts/check-boundaries.mjs`, so the field is `autoComplete="off"` and
  * `spellCheck={false}`, and the value leaves the page's state as soon as the request does.
  *
- * Task ids: M27.8.11, M27.8.5
+ * **Refusal-pattern alerts addressed to the reader come first.** Each names the colleague it is
+ * about and the sentence for the shape of the pattern, and nothing else: no capability, no
+ * object and no number, because the API keeps none. See
+ * `brain.ops.denial_alerts.THE_ALERT_NAMES_A_SHAPE_AND_NEVER_A_THING`.
+ *
+ * Task ids: M27.8.11, M27.8.5, M23.2.2
  */
 
 import { useCallback, useState, type FormEvent } from "react";
@@ -39,6 +44,7 @@ import {
   passwordBody,
   passwordSentence,
   portNumber,
+  readAlerts,
   readNotifications,
   relayBody,
   sentSentence,
@@ -61,6 +67,15 @@ export const THE_BRAIN_COULD_NOT_BE_REACHED = "The Brain could not be reached";
 export const NO_SWITCH = "No switch";
 export const RELAY_NOT_SAVED = "No relay is saved.";
 export const NO_NOTICES = "No notice is listed.";
+
+/** The heading over the reader's own refusal-pattern alerts. */
+export const ALERTS_HEADING = "A colleague keeps being refused";
+
+/** Said where the alerts would be when none was kept for this reader. */
+export const NO_ALERTS = "You have not been told about a colleague being refused.";
+
+/** The heading over the sentence saying no alert could be read or kept. */
+export const ALERTS_UNREAD = "Alerts about refusals cannot be shown";
 
 export const SWITCH_OFF_LABEL = "Switch off";
 export const SWITCH_ON_LABEL = "Switch on";
@@ -96,6 +111,50 @@ function readTold(payload: unknown): string {
   }
   const told = (payload as { told?: unknown }).told;
   return typeof told === "string" ? told : "";
+}
+
+function AlertList({ page }: { readonly page: NotificationsBody }) {
+  const alerts = readAlerts(page);
+  if ("unread" in alerts) {
+    return alerts.unread ? (
+      <section className="card">
+        <Notice title={ALERTS_UNREAD}>
+          <p>{alerts.unread}</p>
+        </Notice>
+      </section>
+    ) : null;
+  }
+  return (
+    <section className="card">
+      <h2>{ALERTS_HEADING}</h2>
+      {alerts.rows.length === 0 ? (
+        <p className="note">{NO_ALERTS}</p>
+      ) : (
+        <div className="grid__scroll">
+          <table className="grid__table" aria-label="Refusal patterns you were told about">
+            <thead>
+              <tr>
+                <th scope="col">Colleague</th>
+                <th scope="col">What it looks like</th>
+                <th scope="col">When</th>
+              </tr>
+            </thead>
+            <tbody>
+              {alerts.rows.map((row) => (
+                <tr key={`${row.subject}:${row.raised_at}`}>
+                  <td>
+                    <code>{row.subject}</code>
+                  </td>
+                  <td>{row.said}</td>
+                  <td>{when(row.raised_at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
 }
 
 function NoticeTable({
@@ -327,6 +386,8 @@ function NotificationsPageBody({
     <>
       {failure === null ? null : <FailureNotice failure={failure} fields={NOTIFICATION_FIELDS} />}
       {confirmation}
+
+      <AlertList page={page} />
 
       <NoticeTable
         page={page}

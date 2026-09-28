@@ -22,7 +22,7 @@
  * `.grid__scroll`, which is what stops a row of identifiers taking the navigation off the side
  * of a phone.
  *
- * Task ids: M27.7.25, M27.7.27, M42.3.9
+ * Task ids: M27.7.25, M27.7.27, M42.3.9, M23.1.1, M23.2.1
  *
  * M27.7.26 is the recovery screen and is deliberately not claimed here or in the commit:
  * the screen is built and openable, and what it shows on every install today is the
@@ -38,6 +38,8 @@ import {
   CONNECTION_COLUMNS,
   INSTALL_SECTIONS,
   THROTTLE_COLUMNS,
+  UNUSUAL_COLUMNS,
+  WINDOW_COLUMNS,
 } from "../src/pages/installQuery";
 import { NO_RELEASE_NAMED, READ_ITS_NOTES } from "../src/pages/Updates";
 import { STATE_TONES } from "../src/ui/Status";
@@ -141,6 +143,8 @@ describe("what these pages agree with the API about", () => {
     expect([...CONNECTION_COLUMNS].sort()).toEqual(
       backendModelFields(ROUTES, "ConnectionView").sort(),
     );
+    expect([...WINDOW_COLUMNS].sort()).toEqual(backendModelFields(ROUTES, "WindowView").sort());
+    expect([...UNUSUAL_COLUMNS].sort()).toEqual(backendModelFields(ROUTES, "UnusualView").sort());
   });
 
   test("every field of what is running and of the newest release is one the version page draws", () => {
@@ -711,6 +715,77 @@ describe("rate limits", () => {
     for (const table of tables) {
       expect(table.parentElement?.className).toBe("grid__scroll");
     }
+  });
+
+  const WINDOWS = [
+    {
+      scope: "principal",
+      applies_to: sentinel("each-person"),
+      period: "minute",
+      limit: 30,
+      window_seconds: 60,
+      raisable: true,
+      when_unreachable: sentinel("lets-through"),
+    },
+  ];
+
+  test("the windows are listed with what each does when the store is down", async () => {
+    // What breaks if this is deleted: the screen goes back to listing only the source ceilings,
+    // which say nothing about the window a person is refused at, and the one fact that decides
+    // what an outage does to a question is a footnote nobody reads.
+    const container = await pageAnswering("Limits", "Limits", "/install/limits", {
+      ceilings: CEILINGS,
+      windows: WINDOWS,
+      throttled: [],
+      unread: "",
+    });
+
+    const row = [...container.querySelectorAll("tbody tr")].find((one) =>
+      one.textContent?.includes(sentinel("each-person")),
+    );
+    expect(row?.querySelectorAll("td")).toHaveLength(WINDOW_COLUMNS.length);
+    expect(row?.textContent).toContain(sentinel("lets-through"));
+    for (const table of container.querySelectorAll("table")) {
+      expect(table.parentElement?.className).toBe("grid__scroll");
+    }
+  });
+
+  test("somebody asking far more than usual is shown by band and never by a count", async () => {
+    // What breaks if this is deleted: a count column is added beside a person's name, which is a
+    // report about their day. The row's cells are counted against the columns, so a column the
+    // API did not send cannot appear, and the absent and empty lists are told apart as the
+    // throttling list's are.
+    const listed = await pageAnswering("Limits", "Limits", "/install/limits", {
+      ceilings: CEILINGS,
+      throttled: [],
+      unread: "",
+      unusual: [{ subject: sentinel("busy"), band: "extreme", said: sentinel("far-more") }],
+      unusual_unread: "",
+    });
+    const empty = await pageAnswering("Limits", "Limits", "/install/limits", {
+      ceilings: CEILINGS,
+      throttled: [],
+      unread: "",
+      unusual: [],
+      unusual_unread: "",
+    });
+    const absent = await pageAnswering("Limits", "Limits", "/install/limits", {
+      ceilings: CEILINGS,
+      throttled: [],
+      unread: "",
+      unusual: null,
+      unusual_unread: sentinel("nothing-counted"),
+    });
+
+    const { NOBODY_IS_UNUSUAL } = await import("../src/pages/Limits");
+    const row = [...listed.querySelectorAll("tbody tr")].find((one) =>
+      one.textContent?.includes(sentinel("busy")),
+    );
+    expect(row?.querySelectorAll("td")).toHaveLength(UNUSUAL_COLUMNS.length);
+    expect(row?.textContent).toContain(sentinel("far-more"));
+    expect(empty.textContent).toContain(NOBODY_IS_UNUSUAL);
+    expect(absent.textContent).toContain(sentinel("nothing-counted"));
+    expect(absent.textContent).not.toContain(NOBODY_IS_UNUSUAL);
   });
 });
 

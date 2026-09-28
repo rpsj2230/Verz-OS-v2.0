@@ -12,7 +12,11 @@
  * before a confirmation opens in the API's own words, which `tests/notifications-page.test.tsx`
  * holds to the Python.
  *
- * Task ids: M27.8.11, M27.8.5
+ * **The refusal-pattern alerts are the reader's own and are read as a list or a sentence.**
+ * `readAlerts` turns an absent list into the API's sentence, as `installQuery.readThrottled`
+ * does, so no alert kept and nothing able to keep one are drawn differently.
+ *
+ * Task ids: M27.8.11, M27.8.5, M23.2.2
  */
 
 import type { components } from "../api/schema";
@@ -21,6 +25,20 @@ import type { Problem } from "./webhooksQuery";
 export type NotificationsBody = components["schemas"]["NotificationsPage"];
 export type NoticeRow = components["schemas"]["NoticeView"];
 export type EmailBody = components["schemas"]["RelayView"];
+/** One refusal-pattern alert addressed to the reader: about whom, the sentence, and when. */
+export type AlertRow = components["schemas"]["DenialAlertView"];
+
+/** The reader's alerts, or the API's sentence saying why there is no list. */
+export type Alerts = { readonly rows: readonly AlertRow[] } | { readonly unread: string };
+
+/** The alerts half of the page. Null on the payload is no list, whatever its length would be. */
+export function readAlerts(page: NotificationsBody): Alerts {
+  const rows = page.alerts;
+  if (rows === null || rows === undefined) {
+    return { unread: page.alerts_unread ?? "" };
+  }
+  return { rows };
+}
 
 /** Where the API keeps the screen, and the four writes beneath it. */
 export const NOTIFICATIONS_API_PATH = "/notifications";

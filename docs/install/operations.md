@@ -291,7 +291,7 @@ labelled "last verified restore" beside a backup timestamp is the field somebody
 deciding not to worry, and the rule exists so that the day somebody builds a restore is the day
 that screen gets written.
 
-## Five of the sixteen mechanisms are started by nothing
+## Four of the twenty mechanisms are started by nothing
 
 Named individually, because "monitoring is not wired" is a sentence somebody skims. The last
 column is the registry's own word for what starts each one, and this table is checked against
@@ -307,7 +307,10 @@ test it before it runs became the first caller of the roster dry run. Nine becam
 sweep was the first of these it started. Eight became true the same day, when the schedule began
 starting the re-verification nag. Seven became true on 2026-09-17, when the schedule began
 starting the webhook dispatch, and six later that day, when it began starting the permission
-canaries. Five became true on 2026-09-22, when the schedule began probing model providers.
+canaries. Five became true on 2026-09-22, when the schedule began probing model providers. Four
+became true on 2026-09-28, when the denial digest was given the module that reads the hour's
+refusals from the audit ledger and keeps the alerts it raises; the schedule does not start that
+module yet, which is why its row says `in_process` and not that it runs.
 
 <!-- checked: every scheduled mechanism and whether anything starts it -->
 
@@ -317,7 +320,7 @@ canaries. Five became true on 2026-09-22, when the schedule began probing model 
 | `canary_run` | that the gate still refuses today what it refused yesterday | `in_process` |
 | `restore_drill` | that the copies being taken can actually be restored | `in_process` |
 | `backup_exposure` | that a stretch of work with no copy anywhere is noticed while it is still short | `nothing` |
-| `denial_digest` | that a colleague who keeps being told there is nothing there is noticed by somebody who can fix it | `nothing` |
+| `denial_digest` | that a colleague who keeps being told there is nothing there is noticed by somebody who can fix it | `in_process` |
 | `directory_sync` | that the roster follows employment: joiners, movers and leavers | `in_process` |
 | `knowledge_reverification` | that an answer drawn from something somebody once approved is not still being given long afterwards | `in_process` |
 | `resolution_calibration` | that the weights deciding whether two records are the same person stay fitted to the data | `nothing` |

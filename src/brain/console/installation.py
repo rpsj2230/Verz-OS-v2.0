@@ -89,7 +89,7 @@ zero or the last known value. A tuple of `Fact` makes an absent fact a row that 
 
 Scope: domain logic. Nothing here opens a connection, reads a clock or renders anything.
 
-Task ids: M27.6.1, M27.6.3, M27.6.4
+Task ids: M27.6.1, M27.6.3, M27.6.4, M23.2.1
 """
 
 from __future__ import annotations
@@ -108,8 +108,9 @@ from brain.ops.compose import ComposeFiles, deployment_mib, unbudgeted_services
 from brain.ops.connections import DATABASES, demand_on, headroom_on
 from brain.ops.inference import runs_inference_server
 from brain.ops.install_from_empty import Revision
-from brain.ops.limits import Limit, LimiterState, check
+from brain.ops.limits import Limit, LimiterState, VolumeBand, check, principal_limit
 from brain.ops.release_manifest import ReleaseManifest
+from brain.ops.volume_store import PrincipalVolume
 from brain.ops.wiring import (
     HOST_TOTAL_MIB,
     assert_known_profile,
@@ -561,6 +562,54 @@ def throttled_now(
             )
         )
     return tuple(found)
+
+
+@dataclass(frozen=True)
+class UnusualRow:
+    """One person asking far beyond their own week, as this reader may see it (M23.2.1).
+
+    A band and a sentence, and no figure. The counts that decided the band are a report about
+    the person's day; the band is what somebody triaging needs, and the audit view is where a
+    reader entitled to the detail goes for it.
+    """
+
+    subject: str
+    band: str
+    said: str
+
+
+#: What each band that is worth showing says. `VolumeBand.ORDINARY` is absent: an ordinary
+#: day has nothing to say, and a row for it would list every person who asked anything.
+UNUSUAL_WORDS: Final[Mapping[VolumeBand, str]] = {
+    VolumeBand.NOTABLE: "Asking much more than they usually do.",
+    VolumeBand.EXTREME: "Asking far more than they usually do.",
+}
+
+
+def unusual_now(
+    volumes: Iterable[PrincipalVolume], reader: EntitlementSet, *, now: datetime
+) -> tuple[UnusualRow, ...]:
+    """Who is asking far beyond their own week, filtered to what this reader may see (M23.2.1).
+
+    Judged by `brain.ops.limits.assess_volume`, called once per person rather than restated, and
+    narrowed exactly as `throttled_now` narrows: a row is offered to the reader's scope as that
+    person's own window, through the same `_limit_row`, so a reader who may see somebody's
+    throttling may see their volume and nobody else may. The most unusual first.
+    """
+    where: Scope | None = reader.scope_for(screen("limits").read.requires, now)
+    if where is None:
+        return ()
+    found: list[tuple[VolumeBand, UnusualRow]] = []
+    for one in volumes:
+        if not where.matches(_limit_row(principal_limit(one.principal))):
+            continue
+        band = one.assessed().band
+        said = UNUSUAL_WORDS.get(band)
+        if said is None:
+            continue
+        found.append((band, UnusualRow(subject=one.principal, band=band.name.lower(), said=said)))
+    found.sort(key=lambda pair: (-pair[0], pair[1].subject))
+    return tuple(row for _, row in found)
 
 
 # -------------------------------------------------------------------- capacity (M27.6.4)

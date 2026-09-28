@@ -588,7 +588,16 @@ def test_a_department_scoped_reader_is_answered_no_throttling_rows_and_no_count_
     assert theirs.json()["throttled"] == []
     assert len(unrestricted.json()["throttled"]) == 2
     assert theirs.json()["ceilings"] == unrestricted.json()["ceilings"]
-    assert set(theirs.json()) == {"ceilings", "throttled", "unread"}
+    assert theirs.json()["windows"] == unrestricted.json()["windows"]
+    # Every field named, so a total, a count or a truncated flag added later fails here.
+    assert set(theirs.json()) == {
+        "ceilings",
+        "windows",
+        "throttled",
+        "unread",
+        "unusual",
+        "unusual_unread",
+    }
 
 
 def test_no_install_screen_is_offered_to_a_department_admin_and_rate_limits_also_discloses() -> (

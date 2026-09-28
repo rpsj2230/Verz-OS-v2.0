@@ -471,6 +471,26 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.ops.limit_store:WindowPipeline.zadd": Repeat.DERIVED_STATE,
         "brain.ops.limit_store:WindowPipeline.expire": Repeat.DERIVED_STATE,
         "brain.ops.limit_store:WindowClient.pipeline": Repeat.READS,
+        # A caller's run of refusals: a counter, recounted from the next refusal or admission.
+        "brain.ops.limit_store:WindowPipeline.incr": Repeat.DERIVED_STATE,
+        "brain.ops.limit_store:WindowPipeline.delete": Repeat.DERIVED_STATE,
+        # The Limits screen's walk over the windows, which writes nothing.
+        "brain.ops.limit_store:WindowClient.scan_iter": Repeat.READS,
+        "brain.ops.limit_store:WindowClient.zrange": Repeat.READS,
+        # The denial alerts kept for each recipient: every write is a put by content, so a pass
+        # run twice leaves the store as one pass did. See `brain.ops.denial_alert_store`.
+        "brain.ops.denial_alert_store:AlertClient.scan_iter": Repeat.READS,
+        "brain.ops.denial_alert_store:AlertClient.get": Repeat.READS,
+        "brain.ops.denial_alert_store:AlertClient.zrevrange": Repeat.READS,
+        "brain.ops.denial_alert_store:AlertClient.set": Repeat.SAME_RESULT_WHEN_REPEATED,
+        "brain.ops.denial_alert_store:AlertClient.zadd": Repeat.SAME_RESULT_WHEN_REPEATED,
+        "brain.ops.denial_alert_store:AlertClient.zremrangebyscore": (
+            Repeat.SAME_RESULT_WHEN_REPEATED
+        ),
+        "brain.ops.denial_alert_store:AlertClient.zremrangebyrank": (
+            Repeat.SAME_RESULT_WHEN_REPEATED
+        ),
+        "brain.ops.denial_alert_store:AlertClient.expire": Repeat.SAME_RESULT_WHEN_REPEATED,
         "brain.ops.object_store:StaticKvReader.read_static_kv": Repeat.READS,
         # Reading a connected source on a schedule. A reading computes a page's arguments and a
         # row's record from what it is handed, the key is read from the vault, a call is a GET to

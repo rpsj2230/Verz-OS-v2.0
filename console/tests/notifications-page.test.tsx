@@ -7,15 +7,18 @@
  * paraphrases the API, a password left in the page after it was sent, a blank field sent anyway, and
  * a body key the route forbids.
  *
- * Task ids: M27.8.11
+ * Task ids: M27.8.11, M23.2.2
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
 import {
+  ALERTS_HEADING,
+  ALERTS_UNREAD,
   KEEP_LABEL,
   KEEP_PASSWORD_LABEL,
+  NO_ALERTS,
   NO_SWITCH,
   READING_NOTIFICATIONS,
   SAVE_RELAY_LABEL,
@@ -176,6 +179,50 @@ describe("what the notifications screen shows", () => {
     expect(relay).toContain("console@example.test");
     expect(container.textContent).toContain("Not known");
     expect(container.textContent).toContain("The secrets vault did not answer.");
+  });
+});
+
+describe("the refusal-pattern alerts kept for the reader", () => {
+  const SAID = "A colleague is being told there is nothing there across a spread of different places.";
+
+  test("each alert names the colleague and the shape, and nothing the API did not send", async () => {
+    // What breaks if this is deleted: the digest keeps alerts and the one screen that reads them
+    // draws none, or draws a column the API does not send, which is where a count would go.
+    const { container } = await mount((url) =>
+      url.pathname === LISTING
+        ? json(
+            page({
+              alerts: [{ subject: "u_weiling", said: SAID, raised_at: "2019-03-04T09:00:00Z" }],
+              alerts_unread: "",
+            }),
+          )
+        : null,
+    );
+    const table = container.querySelector('[aria-label="Refusal patterns you were told about"]');
+    const [row] = [...(table?.querySelectorAll("tbody tr") ?? [])];
+    expect(container.textContent).toContain(ALERTS_HEADING);
+    expect(row?.querySelectorAll("td")).toHaveLength(3);
+    expect(row?.textContent).toContain("u_weiling");
+    expect(row?.textContent).toContain(SAID);
+  });
+
+  test("no alert kept and nothing able to keep one are drawn differently", async () => {
+    // What breaks if this is deleted: an install with no cache reads as one where nobody was ever
+    // refused, which is the reassuring answer to a question nothing looked at.
+    const empty = await mount((url) =>
+      url.pathname === LISTING ? json(page({ alerts: [], alerts_unread: "" })) : null,
+    );
+    expect(empty.container.textContent).toContain(NO_ALERTS);
+    expect(empty.container.textContent).not.toContain(ALERTS_UNREAD);
+
+    const absent = await mount((url) =>
+      url.pathname === LISTING
+        ? json(page({ alerts: null, alerts_unread: "No cache is configured, so nothing is kept." }))
+        : null,
+    );
+    expect(absent.container.textContent).toContain(ALERTS_UNREAD);
+    expect(absent.container.textContent).toContain("No cache is configured, so nothing is kept.");
+    expect(absent.container.textContent).not.toContain(NO_ALERTS);
   });
 });
 
