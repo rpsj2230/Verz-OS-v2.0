@@ -26,7 +26,13 @@
  * `brain.govern_routes.GrantProposal` has no field one could travel in: the body carries a
  * slug. See `A_SCOPE_IS_CHOSEN_BY_NAME_AND_NEVER_TYPED`.
  *
- * Task ids: M27.7.3, M27.7.4, M27.7.5, M27.7.6, M27.7.7
+ * **A grant may carry an expiry, and a grant to several people is all or nothing.** The expiry is
+ * `not_after`, an instant the API judges against the grantor's own reach; the form refuses one
+ * already past before anything is sent, because the API's refusal for it is the ordinary sentence
+ * and would not say what to change. The several-people body is the single grant's fields with the
+ * person made a list, and the route writes every one or none; see `A_GRANT_TO_SEVERAL_NAMES_NOBODY`.
+ *
+ * Task ids: M27.7.3, M27.7.4, M27.7.5, M27.7.6, M27.7.7, M27.11.2
  */
 
 import type { RJSFSchema, UiSchema } from "@rjsf/utils";
@@ -85,6 +91,8 @@ export const CAPABILITIES_API_PATH = "/govern/capabilities";
 export const SCOPES_API_PATH = "/govern/scopes";
 export const GRANTS_API_PATH = "/govern/grants";
 export const REMOVAL_API_PATH = "/govern/grants/removal";
+/** One grant written for each of several people, or for none. `brain.govern_routes.grant_several`. */
+export const SEVERAL_GRANTS_API_PATH = "/govern/grants/several";
 
 /** The console addresses. The first is also where a subject's own page begins. */
 export const PEOPLE_PATH = "/people";
@@ -173,16 +181,26 @@ export function principalIn(subject: string): string | null {
   return subject.startsWith(PRINCIPAL_PREFIX) ? subject.slice(PRINCIPAL_PREFIX.length) : null;
 }
 
-/** One page of people, as this console holds it. Three fields, deliberately. */
+/** One page of people, as this console holds it. No total, deliberately. */
 export interface PeoplePage {
   readonly people: readonly PersonRow[];
   /** Whether this caller may write a grant. Presentation only. */
   readonly editable: boolean;
   /** The page came back full. Never how much more there is. */
   readonly truncated: boolean;
+  /** Whether this caller may disable or reinstate somebody's sign-in. Presentation only. */
+  readonly mayDisable: boolean;
+  /** What disabling somebody does and does not do, in the API's words, for its confirmation. */
+  readonly disabling: string;
 }
 
-const NO_PEOPLE: PeoplePage = Object.freeze({ people: [], editable: false, truncated: false });
+const NO_PEOPLE: PeoplePage = Object.freeze({
+  people: [],
+  editable: false,
+  truncated: false,
+  mayDisable: false,
+  disabling: "",
+});
 
 /**
  * Read `brain.govern_routes.PeoplePage` out of a response body.
@@ -201,7 +219,13 @@ export function readPeoplePage(payload: unknown): PeoplePage {
   if (typeof payload !== "object" || payload === null) {
     return NO_PEOPLE;
   }
-  const body = payload as { items?: unknown; editable?: unknown; truncated?: unknown };
+  const body = payload as {
+    items?: unknown;
+    editable?: unknown;
+    truncated?: unknown;
+    may_disable?: unknown;
+    disabling?: unknown;
+  };
   if (!Array.isArray(body.items)) {
     return NO_PEOPLE;
   }
@@ -209,6 +233,8 @@ export function readPeoplePage(payload: unknown): PeoplePage {
     people: body.items as PersonRow[],
     editable: body.editable === true,
     truncated: body.truncated === true,
+    mayDisable: body.may_disable === true,
+    disabling: typeof body.disabling === "string" ? body.disabling : "",
   };
 }
 
@@ -279,7 +305,54 @@ export const PROPOSAL_FIELDS = [
   "capability",
   "scope_slug",
   "reason",
+  "not_after",
 ] as const;
+
+/** The ones it must send. An expiry is optional: none is a grant that stands until removed. */
+export const REQUIRED_PROPOSAL_FIELDS = ["principal_id", "capability", "scope_slug", "reason"] as const;
+
+/**
+ * The expiry field, as every grant form here draws it. An instant rather than a date, because
+ * `not_after` is one and a date would have to pick a time of day and a zone on the person's behalf;
+ * the library's date-time widget sends the moment the person chose, in UTC.
+ */
+const EXPIRY_PROPERTY: RJSFSchema = Object.freeze<RJSFSchema>({
+  type: "string",
+  title: "not_after",
+  format: "date-time",
+  description: "When it lapses. Leave it empty for a grant that stands until somebody removes it.",
+});
+
+/** What is said when an expiry already past is chosen. Before anything is sent. */
+export const EXPIRY_ALREADY_PAST =
+  "Choose an expiry that is still to come, or leave it empty; nothing has been sent.";
+
+/**
+ * Whether an expiry is one the API would refuse for being past, judged against the browser's clock.
+ *
+ * A courtesy and never the rule: the API judges `not_after` against its own instant and against the
+ * grantor's reach whatever this said. What it buys is a sentence saying what to change, where the
+ * API's refusal is the ordinary one that names nothing.
+ */
+export function expiryAlreadyPast(notAfter: string | undefined, now: Date): boolean {
+  if (notAfter === undefined) {
+    return false;
+  }
+  const at = Date.parse(notAfter);
+  return !Number.isNaN(at) && at <= now.getTime();
+}
+
+/** An expiry as the form holds it, as the instant the API is sent: null for none or unreadable. */
+function expiryIn(value: unknown): string | null | undefined {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+  if (typeof value !== "string") {
+    return null;
+  }
+  const at = Date.parse(value);
+  return Number.isNaN(at) ? null : new Date(at).toISOString();
+}
 
 /**
  * The form a grant is written through.
@@ -293,9 +366,8 @@ export const PROPOSAL_FIELDS = [
  * There is no `granted_by` and no `scope`. The first is the caller, taken from the token by the
  * route, and a box for it would be a grant attributable to whoever the browser named; the
  * second is the predicate, and see `A_SCOPE_IS_CHOSEN_BY_NAME_AND_NEVER_TYPED`. `not_after` is
- * absent too and that is a gap rather than a rule: an expiry is a datetime and this console has
- * no control for one, so every grant written from this screen is unbounded, which the page says
- * in words rather than leaving a person to discover.
+ * optional (M27.11.2): empty is a grant that stands until removed, which `may_grant` permits only
+ * from a grantor whose own reach does not lapse.
  *
  * Frozen and built once per scope list, because `SchemaForm` memoises on the schema's identity
  * and the ajv validator recompiles whenever it changes.
@@ -303,7 +375,7 @@ export const PROPOSAL_FIELDS = [
 export function proposalSchema(slugs: readonly string[]): RJSFSchema {
   return Object.freeze<RJSFSchema>({
     type: "object",
-    required: [...PROPOSAL_FIELDS],
+    required: [...REQUIRED_PROPOSAL_FIELDS],
     properties: {
       principal_id: {
         type: "string",
@@ -323,6 +395,7 @@ export function proposalSchema(slugs: readonly string[]): RJSFSchema {
         ...(slugs.length > 0 ? { enum: [...slugs] } : {}),
       },
       reason: { type: "string", title: "reason", minLength: 1, maxLength: MAX_REASON_CHARS },
+      not_after: EXPIRY_PROPERTY,
     },
   });
 }
@@ -338,6 +411,8 @@ export interface GrantProposal {
   readonly capability: string;
   readonly scope_slug: string;
   readonly reason: string;
+  /** When it lapses, as an instant. Absent for a grant that stands until removed. */
+  readonly not_after?: string;
 }
 
 /**
@@ -374,7 +449,78 @@ export function submittedProposal(data: unknown): GrantProposal | null {
   if (principal === "" || capability === "" || slug === "" || reason === "") {
     return null;
   }
-  return { principal_id: principal, capability, scope_slug: slug, reason };
+  const notAfter = expiryIn(fields["not_after"]);
+  if (notAfter === null) {
+    return null;
+  }
+  return {
+    principal_id: principal,
+    capability,
+    scope_slug: slug,
+    reason,
+    ...(notAfter === undefined ? {} : { not_after: notAfter }),
+  };
+}
+
+// ------------------------------------------------- a grant to several people (M27.11.2)
+
+/** Written down because the helpful version of a partial failure names the person it failed on. */
+export const A_GRANT_TO_SEVERAL_NAMES_NOBODY =
+  "A grant to several people is written for every one of them or for none, and when it is " +
+  "refused the refusal is the one a single grant gets. It never says which person was refused, " +
+  "because that would say who does not exist or already holds the grant, which is a fact about " +
+  "somebody else. This console lists the people chosen before it sends, and after a refusal it " +
+  "says nothing about any one of them.";
+
+/** The most people one grant to several may name: the route's bound, checked against its document. */
+export const MOST_GRANTED_AT_ONCE = 50;
+
+/** The fields the several-people form draws, in order. The people are chosen on the list. */
+export const SEVERAL_FIELDS = ["capability", "scope_slug", "reason", "not_after"] as const;
+
+/** The form a grant to several is written through: the single grant's form without the person. */
+export function severalSchema(slugs: readonly string[]): RJSFSchema {
+  const single = proposalSchema(slugs).properties as Record<string, RJSFSchema>;
+  return Object.freeze<RJSFSchema>({
+    type: "object",
+    required: ["capability", "scope_slug", "reason"],
+    properties: Object.fromEntries(SEVERAL_FIELDS.map((field) => [field, single[field] ?? {}])),
+  });
+}
+
+export const SEVERAL_UI: UiSchema = Object.freeze<UiSchema>({
+  "ui:submitButtonOptions": { submitText: "Review the grant to each person chosen" },
+});
+
+/** The body of a grant to several, as `SeveralGrantProposal` declares it. */
+export interface SeveralProposal {
+  readonly principal_ids: readonly string[];
+  readonly capability: string;
+  readonly scope_slug: string;
+  readonly reason: string;
+  readonly not_after?: string;
+}
+
+/**
+ * What the several-people form submitted, for these people, or null if it was not a proposal.
+ *
+ * Built from the single grant's reader, one person at a time, so the two bodies cannot disagree
+ * about what a field means; the people come from the list and never from the form.
+ */
+export function submittedSeveral(data: unknown, principalIds: readonly string[]): SeveralProposal | null {
+  if (principalIds.length === 0) {
+    return null;
+  }
+  const fields = typeof data === "object" && data !== null ? (data as Record<string, unknown>) : null;
+  if (fields === null) {
+    return null;
+  }
+  const one = submittedProposal({ ...fields, principal_id: principalIds[0] });
+  if (one === null) {
+    return null;
+  }
+  const { principal_id: _first, ...rest } = one;
+  return { principal_ids: [...principalIds], ...rest };
 }
 
 /** The body of one removal, as the route's `GrantRemoval` model declares it. */

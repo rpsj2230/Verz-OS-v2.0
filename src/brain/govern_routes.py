@@ -139,7 +139,23 @@ first thing to exercise against a real database.
 asked. A search for a capability therefore finds a subject only where this reader was shown that
 capability, and a withheld list of capabilities matches nothing at all.
 
-Task ids: M27.7.3, M27.7.4, M27.7.5, M27.7.6, M27.7.7, M27.8.6
+**A person's own page carries whether their sign-in is disabled, and whether this reader may
+change it.** The write is `brain.principal_state_routes`, the Departments screen's control reused
+rather than a second one: the People page only needs the state to draw the right verb. The flag is
+told only about a subject `govern.people` already showed, which is the same People-screen read
+`brain.console.organisation` asks before listing a member with the same flag on Departments, so it
+adds no fact a reader of either screen was not already given. See
+`A_DISABLED_FLAG_IS_TOLD_ONLY_ABOUT_A_SUBJECT_ALREADY_SHOWN`.
+
+**A grant to several people is all or nothing, and its refusal names nobody.** Every person is
+judged by exactly the single grant's route (`proposal_from`, then `write_grant`), inside one
+transaction, and the first refusal, whether a decision or a constraint, rolls every row back and
+is answered with the single grant's sentence. Rejected: writing the ones that passed and listing
+the ones that did not. A list of who was refused is a list of who does not exist or already holds
+the grant, which is `A_CONSTRAINT_VIOLATION_IS_A_FACT_ABOUT_SOMEBODY_ELSE` handed over by name.
+See `A_GRANT_TO_SEVERAL_IS_ALL_OR_NOTHING_AND_ITS_REFUSAL_NAMES_NOBODY`.
+
+Task ids: M27.7.3, M27.7.4, M27.7.5, M27.7.6, M27.7.7, M27.8.6, M27.11.2
 """
 
 from __future__ import annotations
@@ -158,6 +174,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from brain.api import API_PREFIX, COMMON_RESPONSES, Page
 from brain.api_routes import Asked, Asking
 from brain.attribution import of_request
+from brain.console.global_surfaces import GOVERNANCE_CONTROL
 from brain.console.govern import (
     VOCABULARY_SCREEN,
     Decision,
@@ -184,16 +201,18 @@ from brain.core.scope import Scope
 from brain.core.scope_sql import PredicateRefusedError
 from brain.identity.organisation_store import one_team
 from brain.identity.packs import CapabilityPack, PackAssignment, SubjectGrant, expand
+from brain.identity.principal_state_store import A_DISABLE_IS_REVERSIBLE_AND_A_LEAVER_IS_NOT
 from brain.identity.roles import RoleSpec
 from brain.identity.teams import (
     TEAM_PATH_PATTERN,
     PrincipalSubject,
+    SubjectKind,
     TeamError,
     TeamSubject,
     assert_within_department,
     split_team_path,
 )
-from brain.listing import Column, ListAsked, Listing
+from brain.listing import MAX_SEVERAL, Column, ListAsked, Listing
 from brain.ops.replica_store import ConsoleReads
 from brain.routing_routes import sessions_of
 from brain.tables.gate import (
@@ -290,6 +309,23 @@ ONLY_THE_HALF_OF_A_ROUND_THAT_HAS_A_ROW_TO_WRITE: Final = (
     "database keeps and the audit trigger records. The missing half is a table, and it is M27.3.6."
 )
 
+#: Why a grant to several people writes all of them or none, and says nothing about which.
+A_GRANT_TO_SEVERAL_IS_ALL_OR_NOTHING_AND_ITS_REFUSAL_NAMES_NOBODY: Final = (
+    "Each person in a grant to several is judged by the single grant's own decision and written "
+    "in one transaction, and the first refusal rolls every row back. Writing the ones that passed "
+    "would leave a grantor holding a partial result they did not ask for, and saying which person "
+    "was refused would say which person does not exist or already holds the grant, which is a "
+    "fact about somebody else. So the refusal is the single grant's sentence, whoever caused it."
+)
+
+#: Why a person's row may say their sign-in is disabled.
+A_DISABLED_FLAG_IS_TOLD_ONLY_ABOUT_A_SUBJECT_ALREADY_SHOWN: Final = (
+    "Whether a person's sign-in is disabled is carried only on a row govern.people already "
+    "decided this reader may see, which is the People screen's read against where the person "
+    "sits, the same question the Departments screen asks before listing that person with the "
+    "same flag. A team's row carries none, because a team has no sign-in to disable."
+)
+
 
 # ----------------------------------------------------------------- the screens
 
@@ -353,6 +389,9 @@ class PersonView(BaseModel):
 
     subject: str
     capabilities: tuple[str, ...]
+    #: Whether this person's sign-in is disabled; null on a team's row, which has no sign-in. See
+    #: `A_DISABLED_FLAG_IS_TOLD_ONLY_ABOUT_A_SUBJECT_ALREADY_SHOWN`.
+    disabled: bool | None = None
 
 
 def departments_named(scope: dict[str, Any]) -> tuple[str, ...]:
@@ -384,6 +423,11 @@ class PeoplePage(Page[PersonView]):
     #: Whether this caller may write a grant at all. Presentation only; see
     #: `brain.routing_routes.AN_EDITABLE_FLAG_IS_PRESENTATION`, which this is a second use of.
     editable: bool = False
+    #: Whether this caller holds the grant decision anywhere, so may disable or reinstate somebody.
+    #: Presentation only: `brain.principal_state_routes` asks `may_disable` about the person's row.
+    may_disable: bool = False
+    #: What disabling somebody does and does not do, for its confirmation.
+    disabling: str = A_DISABLE_IS_REVERSIBLE_AND_A_LEAVER_IS_NOT
     #: How far behind the copy this page was read from is. Null when the primary answered.
     staleness: StalenessBanner | None = None
 
@@ -585,12 +629,68 @@ class GrantRemoved(BaseModel):
     removed_at: datetime
 
 
+#: One person a grant to several names, bounded as `GrantProposal.principal_id` is.
+PrincipalId = Annotated[str, Field(min_length=1, max_length=128)]
+
+
+class SeveralGrantProposal(BaseModel):
+    """One grant, written for each of a chosen set of people, or for none of them.
+
+    The single grant's fields with the person made a list, and no team: a team is one subject
+    already. `extra="forbid"` for the reason `GrantProposal` gives. At most `MAX_SEVERAL` people,
+    which is a resource bound shared with every bulk request here and not a permission one.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    principal_ids: tuple[PrincipalId, ...] = Field(min_length=1, max_length=MAX_SEVERAL)
+    capability: str = Field(pattern=CAPABILITY_RE.pattern)
+    scope_slug: str = Field(min_length=2, max_length=60)
+    reason: str = Field(min_length=1, max_length=REASON_CHARS)
+    not_after: datetime | None = None
+
+    @model_validator(mode="after")
+    def _each_once(self) -> Self:
+        # A shape fault, so a 422 is honest; the message names nobody, because the caller typed
+        # the list and a person named back to them in an error is still a person in a log.
+        if len(set(self.principal_ids)) != len(self.principal_ids):
+            msg = "a grant to several names each person once"
+            raise ValueError(msg)
+        return self
+
+    def one(self, principal_id: str) -> GrantProposal:
+        """The single grant this names for one person, so the one route's rules judge it."""
+        return GrantProposal(
+            principal_id=principal_id,
+            capability=self.capability,
+            scope_slug=self.scope_slug,
+            reason=self.reason,
+            not_after=self.not_after,
+        )
+
+
+class SeveralGranted(BaseModel):
+    """Every grant a grant to several wrote, as stored. Present only when all of them were."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    grants: tuple[GrantView, ...]
+
+
 # ---------------------------------------------------------------- the projections
 
 
-def person_view(subject: str, capabilities: Sequence[str]) -> PersonView:
-    """One row of `govern.people`, copied field by field."""
-    return PersonView(subject=subject, capabilities=tuple(capabilities))
+def person_view(
+    subject: str, capabilities: Sequence[str], disabled: frozenset[str] = frozenset()
+) -> PersonView:
+    """One row of `govern.people`, copied field by field, with a person's sign-in state.
+
+    `disabled` is the principal ids the load found disabled. A team's key is not a principal's,
+    so its row carries no state rather than a false one.
+    """
+    prefix = f"{SubjectKind.PRINCIPAL.value}:"
+    state = subject.removeprefix(prefix) in disabled if subject.startswith(prefix) else None
+    return PersonView(subject=subject, capabilities=tuple(capabilities), disabled=state)
 
 
 def role_view(spec: RoleSpec) -> RoleView:
@@ -707,6 +807,19 @@ def live_assignments(
             CapabilityPackAssignmentRow.pack_id,
         )
         .limit(limit)
+    )
+
+
+def disabled_among(principal_ids: Sequence[str]) -> Select[tuple[str]]:
+    """Which of these principals have their sign-in disabled, for the rows the load just read.
+
+    Asked of the principals the grant rows name and nothing wider, so it can only ever mark a row
+    the listing would already carry; `govern.people` still decides which of those are shown.
+    """
+    return select(PrincipalRow.id).where(
+        PrincipalRow.id.in_(principal_ids),
+        PrincipalRow.disabled_at.is_not(None),
+        PrincipalRow.deleted_at.is_(None),
     )
 
 
@@ -1132,7 +1245,9 @@ async def people_page(request: Request, asked: Asked, listed: PeopleQuery) -> Pe
 
     reads = _require_console_reads(request)
 
-    async def load(session: AsyncSession) -> tuple[list[Placed[SubjectGrant]], bool]:
+    async def load(
+        session: AsyncSession,
+    ) -> tuple[list[Placed[SubjectGrant]], bool, frozenset[str]]:
         direct = (await session.execute(live_grants(limit))).all()
         assigned = (await session.execute(live_assignments(limit))).all()
         holdings: list[Placed[SubjectGrant]] = [
@@ -1143,14 +1258,21 @@ async def people_page(request: Request, asked: Asked, listed: PeopleQuery) -> Pe
                 holdings.extend(placed_assignment(row, pack, department))
             except (ValueError, PredicateRefusedError):
                 log.warning("pack assignment does not construct", pack=pack.name)
-        return holdings, len(direct) >= limit or len(assigned) >= limit
+        named = sorted(
+            {row.principal_id for row, _ in direct if row.principal_id is not None}
+            | {row.principal_id for row, _, _ in assigned}
+        )
+        off: frozenset[str] = frozenset()
+        if named:
+            off = frozenset((await session.execute(disabled_among(named))).scalars().all())
+        return holdings, len(direct) >= limit or len(assigned) >= limit, off
 
     served = await reads.read(load, now=asked.now)
-    holdings, full = served.value
+    holdings, full, off = served.value
 
     page = plan.page(
         [
-            person_view(one.subject, one.capabilities)
+            person_view(one.subject, one.capabilities, off)
             for one in people(holdings, asked.reach, asked.now)
         ]
     )
@@ -1159,6 +1281,7 @@ async def people_page(request: Request, asked: Asked, listed: PeopleQuery) -> Pe
         next_cursor=page.next_cursor,
         truncated=full,
         editable=asked.reach.scope_for(REACH_AUTHORITY, asked.now) is not None,
+        may_disable=asked.reach.scope_for(GOVERNANCE_CONTROL, asked.now) is not None,
         staleness=served.banner,
     )
 
@@ -1370,6 +1493,71 @@ async def grant(request: Request, body: GrantProposal, asked: Asked) -> GrantVie
             raise _no_grant_here()
         await session.commit()
         return grant_view(stored)
+
+
+@router.post(
+    "/govern/grants/several",
+    response_model=SeveralGranted,
+    responses=COMMON_RESPONSES,
+    status_code=201,
+)
+async def grant_several(
+    request: Request, body: SeveralGrantProposal, asked: Asked
+) -> SeveralGranted:
+    """Write one grant for each of several people, all of them or none of them.
+
+    `grant`'s four steps in its order, with the decision and the write each run once per person
+    inside one transaction. The first refusal of any kind rolls the whole transaction back and is
+    `_no_grant_here()`, the sentence a single refused grant gets, so the answer says the shape of
+    what happened and never who caused it. See
+    `A_GRANT_TO_SEVERAL_IS_ALL_OR_NOTHING_AND_ITS_REFUSAL_NAMES_NOBODY`.
+    """
+    if asked.reach.scope_for(REACH_AUTHORITY, asked.now) is None:
+        log.info("grant to several not writable", principal=asked.caller.principal.id)
+        raise _no_grant_here()
+
+    factory = _require_sessions(request)
+    async with factory() as session:
+        row = (await session.execute(one_live_scope(body.scope_slug))).scalar_one_or_none()
+        if row is None:
+            await session.rollback()
+            log.info("grant to several names no live scope", slug=body.scope_slug)
+            raise _no_grant_here()
+        try:
+            record = ScopeRecord.from_predicate(
+                row.slug, row.predicate, is_department=row.is_department, label=row.label
+            )
+            written = [
+                write_grant(
+                    proposal_from(body.one(one), record, asked.caller.principal.id, asked.now),
+                    asked.reach,
+                    asked.now,
+                )
+                for one in body.principal_ids
+            ]
+        except (ValueError, PredicateRefusedError, AuthorityError):
+            await session.rollback()
+            log.info("grant to several refused", principal=asked.caller.principal.id)
+            raise _no_grant_here() from None
+
+        for statement in attribution(asked):
+            await session.execute(statement)
+        stored: list[CapabilityGrantRow] = []
+        for proposed in written:
+            try:
+                one_row = (
+                    await session.execute(add_grant(proposed, principal_of(proposed)))
+                ).scalar_one_or_none()
+            except IntegrityError:
+                one_row = None
+            if one_row is None:
+                # One refused, none written: nothing before this row is committed either.
+                await session.rollback()
+                log.info("grant to several refused by a row", principal=asked.caller.principal.id)
+                raise _no_grant_here()
+            stored.append(one_row)
+        await session.commit()
+        return SeveralGranted(grants=tuple(grant_view(one) for one in stored))
 
 
 @router.post(

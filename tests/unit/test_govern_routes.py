@@ -107,6 +107,7 @@ CAPABILITIES_PATH = f"{API_PREFIX}/govern/capabilities"
 SCOPES_PATH = f"{API_PREFIX}/govern/scopes"
 GRANTS_PATH = f"{API_PREFIX}/govern/grants"
 REMOVAL_PATH = f"{GRANTS_PATH}/removal"
+SEVERAL_PATH = f"{GRANTS_PATH}/several"
 
 #: Pinned far outside any plausible wall clock, deliberately, which is
 #: `tests/unit/test_scope_and_capability.py`'s practice and `CLAUDE.md`'s rule about a fixture
@@ -360,6 +361,12 @@ class Executed:
         self.integrity: bool = False
         #: Whether the team a grant names is a live team (`one_team`).
         self.team_live: bool = True
+        #: The principals `disabled_among` finds disabled.
+        self.disabled: list[str] = []
+        #: Which insert, counting from one, a constraint refuses; how a grant to several meets
+        #: a person who does not exist or already holds the grant part way through.
+        self.refuse_insert: int | None = None
+        self.inserts = 0
         self.statements: list[str] = []
         self.committed = 0
         self.rolled_back = 0
@@ -371,6 +378,8 @@ class Executed:
         read and a fixture keyed on order is a fixture that silently answers the wrong table
         the day somebody reorders two lines.
         """
+        if "disabled_at IS NOT NULL" in sql:
+            return StubResult([(one,) for one in self.disabled])
         if "FROM gate.team " in sql:
             return StubResult([(uuid.uuid4(),)] if self.team_live else [])
         if "capability_pack_assignment" in sql:
@@ -420,8 +429,10 @@ class StubSession(AsyncSession):
     async def execute(self, statement: Any, *args: Any, **kwargs: Any) -> Any:
         sql = str(statement)
         _EXECUTED.statements.append(_rendered(statement, sql))
-        if _EXECUTED.integrity and sql.startswith("INSERT INTO gate.capability_grant"):
-            raise IntegrityError("insert", None, Exception("uq_capability_grant_principal_id"))
+        if sql.startswith("INSERT INTO gate.capability_grant"):
+            _EXECUTED.inserts += 1
+            if _EXECUTED.integrity or _EXECUTED.inserts == _EXECUTED.refuse_insert:
+                raise IntegrityError("insert", None, Exception("uq_capability_grant_principal_id"))
         return _EXECUTED.answer(sql)
 
     async def commit(self) -> None:
@@ -677,7 +688,10 @@ def test_a_reader_who_may_not_name_capabilities_is_told_who_holds_something_and_
     assert [one["subject"] for one in withheld] == [one["subject"] for one in named]
     assert all(one["capabilities"] == [] for one in withheld)
     assert named[0]["capabilities"] == [GRANTED]
-    assert set(withheld[0]) == {"subject", "capabilities"}
+    # `disabled` is the person's sign-in state (M27.11.2) and is the same for both readers, so
+    # nothing on the row says which of the two readers this is.
+    assert set(withheld[0]) == set(named[0]) == {"subject", "capabilities", "disabled"}
+    assert [one["disabled"] for one in withheld] == [one["disabled"] for one in named]
 
 
 def test_a_search_or_filter_on_capabilities_finds_nobody_for_a_reader_they_were_withheld_from(
@@ -1741,3 +1755,161 @@ def test_a_team_grant_is_removed_by_the_team_and_the_capability() -> None:
     )
     assert "gate.capability_grant.team_path = 'maintenance.pumps'" in rendered_sql
     assert "principal_id" not in rendered_sql.split("WHERE")[1]
+
+
+# ------------------------------------------------------ a person's sign-in state (M27.11.2)
+def test_a_persons_row_says_whether_their_sign_in_is_disabled_and_a_teams_says_nothing(
+    client: TestClient, executed: Executed
+) -> None:
+    """The People page draws disable or reinstate from this flag, so both values must arrive.
+
+    `u_2` is disabled and `u_1` is not; a team's row carries null because a team has no sign-in.
+
+    Delete this and the flag can be hard-coded false, which draws Disable beside a person already
+    disabled, or read for a team, which draws a control whose every press is refused."""
+    team = grant_row(principal_id="u_1", row_id=uuid.uuid4())
+    team.principal_id = None
+    team.team_path = f"{MAINTENANCE}.pumps"
+    executed.grants = [*executed.grants, (team, MAINTENANCE)]
+    executed.disabled = ["u_2"]
+
+    rows = {
+        one["subject"]: one["disabled"]
+        for one in get(client, PEOPLE_PATH, "u_admin").json()["items"]
+    }
+
+    assert rows == {
+        "principal:u_1": False,
+        "principal:u_2": True,
+        f"team:{MAINTENANCE}.pumps": None,
+    }
+
+
+def test_the_people_page_says_whether_this_caller_may_disable_somebody(client: TestClient) -> None:
+    """`may_disable` is presentation, recomputed per request, and both directions are asserted.
+
+    Delete this and the flag can be hard-coded either way: false hides the control from the
+    person who needs it, and true draws a button `principal_state_routes` refuses every time."""
+    admin = get(client, PEOPLE_PATH, "u_admin").json()
+    reader = get(client, PEOPLE_PATH, "u_wide").json()
+
+    assert admin["may_disable"] is True
+    assert reader["may_disable"] is False
+    assert admin["disabling"] == reader["disabling"] != ""
+
+
+# -------------------------------------------------------- a grant to several (M27.11.2)
+def several(c: TestClient, pid: str, **changed: object) -> Response:
+    token = token_for(pid, claims=SECOND_FACTOR)
+    body: dict[str, object] = {
+        "principal_ids": ["u_1", "u_2"],
+        "capability": GRANTED,
+        "scope_slug": MAINTENANCE,
+        "reason": "the maintenance rota",
+    }
+    body.update(changed)
+    response: Response = c.post(
+        SEVERAL_PATH, headers={"authorization": f"Bearer {token}"}, json=body
+    )
+    return response
+
+
+def _maintenance_scope(executed: Executed) -> None:
+    executed.scopes = [
+        scope_row(slug=MAINTENANCE, predicate={"department": MAINTENANCE}, is_department=True)
+    ]
+    executed.written = grant_row(principal_id="u_2", scope=IN_MAINTENANCE)
+
+
+def _inserts(executed: Executed) -> list[str]:
+    return [
+        one for one in executed.statements if one.startswith("INSERT INTO gate.capability_grant")
+    ]
+
+
+def test_a_grant_to_several_writes_one_row_for_each_person_in_one_transaction(
+    client: TestClient, executed: Executed
+) -> None:
+    """The positive case, which a route refusing every batch would otherwise satisfy.
+
+    Delete this and every refusal below is satisfied by a route that never writes anything."""
+    _maintenance_scope(executed)
+
+    response = several(client, "u_admin")
+
+    assert response.status_code == 201, response.text
+    assert len(response.json()["grants"]) == 2
+    assert len(_inserts(executed)) == 2
+    assert executed.committed == 1
+    assert executed.rolled_back == 0
+
+
+def test_one_person_refused_in_a_grant_to_several_writes_nobody_and_names_nobody(
+    client: TestClient, executed: Executed
+) -> None:
+    """All or nothing: the second person's row is refused, so the first is not committed either.
+
+    The refusal is the single grant's sentence and carries neither person's id, because which
+    one was refused says who does not exist or already holds the grant. See
+    `A_GRANT_TO_SEVERAL_IS_ALL_OR_NOTHING_AND_ITS_REFUSAL_NAMES_NOBODY`.
+
+    Delete this and the route can commit the rows that passed and skip the one that did not,
+    which leaves a grantor with a partial batch and, by subtraction, the name of the refused."""
+    _maintenance_scope(executed)
+    executed.refuse_insert = 2
+
+    response = several(client, "u_admin")
+
+    assert response.status_code == 404
+    assert response.json()["message"] == Absent.public_message
+    assert "u_1" not in response.text and "u_2" not in response.text
+    assert executed.committed == 0
+    assert executed.rolled_back == 1
+
+
+def test_a_grant_to_several_wider_than_the_grantor_writes_nobody(
+    client: TestClient, executed: Executed
+) -> None:
+    """Every person is judged by `may_grant` before any row is written, so nobody gets it.
+
+    Delete this and the decision can move inside the insert loop, where a refusal after the
+    first row relies on the rollback alone to undo a grant that should never have been sent."""
+    executed.scopes = [scope_row(slug="everywhere", predicate={})]
+    executed.written = grant_row(principal_id="u_2")
+
+    response = several(client, "u_elsewhere", scope_slug="everywhere")
+
+    assert response.status_code == 404
+    assert response.json()["message"] == Absent.public_message
+    assert _inserts(executed) == []
+    assert executed.committed == 0
+
+
+def test_a_caller_who_may_not_grant_to_several_never_reaches_the_database(
+    unwired: TestClient, client: TestClient, executed: Executed
+) -> None:
+    """The ordering property on the bulk write: authority first, the database second.
+
+    Delete this and the scope lookup can move above the authority check, which lets anybody with
+    a token ask whether this process has a database."""
+    assert several(unwired, "u_wide").status_code == 404
+    assert several(unwired, "u_admin").status_code == 500
+
+    several(client, "u_wide")
+    assert executed.statements == []
+
+
+def test_a_grant_to_several_names_each_person_once_and_a_bounded_number_of_them(
+    client: TestClient, executed: Executed
+) -> None:
+    """A shape fault is a 422 and writes nothing; the bound is the one every bulk request shares.
+
+    Delete this and a doubled id reaches the unique index, which answers the ordinary refusal and
+    leaves the grantor guessing why a correct-looking batch was refused."""
+    _maintenance_scope(executed)
+
+    assert several(client, "u_admin", principal_ids=["u_1", "u_1"]).status_code == 422
+    assert several(client, "u_admin", principal_ids=[]).status_code == 422
+    too_many = [f"u_{n}" for n in range(51)]
+    assert several(client, "u_admin", principal_ids=too_many).status_code == 422
+    assert _inserts(executed) == []
