@@ -36,6 +36,12 @@ no embedding revision there is nothing to queue, and the document is found by te
 the moment the response is sent, which is the whole of M7.6.3's promise. See
 `A_DOCUMENT_IS_SEARCHABLE_WHEN_THE_RESPONSE_SAYS_IT_WAS_ADDED`.
 
+**Every upload is audited as the person who made it.** `0115`'s trigger on `know.item` appends a
+`setting` entry naming the item, its kind, its level and its department, and the store runs this
+request's attribution first in the transaction it writes in, so the Audit screen shows who added
+what, where, at what reach, and never the title or a word of the text. See
+`AN_UPLOAD_IS_AUDITED_AS_THE_PERSON_WHO_MADE_IT`.
+
 **One parse at a time in this process.** `brain.knowledge.parse_budget` sizes a parse as the only
 one running, so the text path takes a lock around it rather than letting two uploads each spend
 the whole budget. A second upload waits for the first.
@@ -58,7 +64,8 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.api import API_PREFIX, COMMON_RESPONSES, ErrorBody, RequestProblemView
-from brain.api_routes import Asked
+from brain.api_routes import Asked, Asking
+from brain.attribution import of_request
 from brain.core.department import SLUG_RE
 from brain.core.entitlement import EntitlementSet
 from brain.core.errors import Absent, Failed
@@ -122,6 +129,16 @@ A_DOCUMENT_IS_SEARCHABLE_WHEN_THE_RESPONSE_SAYS_IT_WAS_ADDED: Final = (
     "about it at once. The embedding job, where an install has one, is queued after the commit; "
     "a queue that refuses it leaves the document found by text search and not yet by meaning, "
     "which the response says rather than failing an upload that was stored."
+)
+
+#: Why an upload's write carries the request's attribution.
+AN_UPLOAD_IS_AUDITED_AS_THE_PERSON_WHO_MADE_IT: Final = (
+    "Every write of know.item appends a ledger entry through 0115's trigger, and a trigger cannot "
+    "know who is writing: it reads the actor, the reach digest and the trace from the transaction. "
+    "So the store runs brain.attribution.of_request for this request first in the transaction it "
+    "writes in, and the Audit screen shows the upload as the person who made it, at their reach, "
+    "in the request that made it, naming the item, its kind and its department and never a word "
+    "of what it says."
 )
 
 #: The parse lock. See the module docstring on one parse at a time. A thread lock, taken inside
@@ -239,12 +256,14 @@ def _refused(field: str, code: str, message: str) -> JSONResponse:
 
 # ------------------------------------------------------------------ the store
 async def store_upload(
-    request: Request, read: ReadUpload, *, now: datetime
+    request: Request, read: ReadUpload, *, asked: Asking
 ) -> tuple[Job | None, bool]:
     """Write the item and its chunks as the uploader, then queue its embedding if there is one.
 
     Answers the job, or None on an install that embeds nothing, and whether the job reached the
-    queue. See `A_DOCUMENT_IS_SEARCHABLE_WHEN_THE_RESPONSE_SAYS_IT_WAS_ADDED`.
+    queue. See `A_DOCUMENT_IS_SEARCHABLE_WHEN_THE_RESPONSE_SAYS_IT_WAS_ADDED`. The write is
+    attributed to the request, so the ledger entry `0115`'s trigger appends for the item names the
+    uploader, their reach and the trace: `AN_UPLOAD_IS_AUDITED_AS_THE_PERSON_WHO_MADE_IT`.
     """
     queued: list[bool] = []
 
@@ -271,7 +290,12 @@ async def store_upload(
         return found
 
     job = await ingest_document(
-        _sessions(request), read.item, enqueue=enqueue, now=now, blocks=read.blocks
+        _sessions(request),
+        read.item,
+        enqueue=enqueue,
+        now=asked.now,
+        blocks=read.blocks,
+        attributed=of_request(asked),
     )
     return job, all(queued) and bool(queued)
 
@@ -372,7 +396,7 @@ async def upload(
         return _refused("file", read.cause.value, read.message())
 
     try:
-        job, queued = await store_upload(request, read, now=asked.now)
+        job, queued = await store_upload(request, read, asked=asked)
     except ChunkStoreError as exc:
         return _refused("file", "not_stored", str(exc))
     log.info(
