@@ -193,11 +193,13 @@ const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
     "setting_problem before anything is written, answering 422 with a sentence drawn beside the field. " +
     "tests/unit/test_settings_routes.py holds a refused value writing no row; the page case draws " +
     "no editable row, so no form is opened here.",
-  "src/pages/Skills.tsx":
-    "Neither form is drawn with the page's usual answers, which offer no add and no approved skill. " +
-    "The add form's submit is disabled until packageProblem accepts a package, which " +
-    "tests/skills-page.test.tsx holds for an empty paste and an oversized one. The assign form's " +
-    "select holds only agents the API listed and its button is disabled without one.",
+  "src/pages/skills/SkillForms.tsx":
+    "Every form here opens behind a press the page cases do not make: Add a skill's drawer, Edit as a " +
+    "new version, or the Profile's assign and categories cards. Each says what it accepts above its " +
+    "fields, and a blank one cannot be sent: Add stays disabled until packageProblem accepts a package, " +
+    "Import until importProblem accepts the repository and commit or the address, and Save until the " +
+    "edit has text, which tests/skills-page.test.tsx holds for Add. The assign form only opens a " +
+    "confirmation naming an agent the API listed.",
   "src/pages/Ask.tsx":
     "The question form cannot be sent blank by a person: its only submit button is disabled until " +
     "askBody accepts the text, and the field's maxLength stops a question longer than the route " +

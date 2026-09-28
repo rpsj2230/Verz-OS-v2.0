@@ -34,7 +34,17 @@ check and the ledger's trigger both see it. **Categories are read as the newest 
 written as a new row, never an update, so the ledger's trigger fires once per change; a name nobody
 categorised is simply absent from the answer.
 
-Task ids: M42.6.4, M12.2.2, M12.2.3, M12.3.2, M12.4.6, M12.4.13
+**`0139`'s two tables are written the same way (W2.8).** A retirement or a reinstatement is a new
+row and its state is the newest row per digest, read with `DISTINCT ON` as categories are. A
+detachment is written as an assignment is: the install row locked, its hash compared with the one
+the route read, and only then the row and the install written together, so a detachment and an
+assignment of the same agent can never interleave. The assignment a detachment ends is looked up
+under that lock, the newest of that skill on that agent that no detachment names yet, and is
+written into the row; a template's own skill has none and the column is left empty. Assignments
+and detachments are read back as records, from which `brain.console.skill_library.
+current_assignments` derives what is in force; nothing here decides that.
+
+Task ids: M42.6.4, M12.2.2, M12.2.3, M12.3.2, M12.4.6, M12.4.13, M27.15.55, M27.15.56
 """
 
 from __future__ import annotations
@@ -44,18 +54,27 @@ from typing import Any, Final
 
 import structlog
 from pydantic import ValidationError
-from sqlalchemy import Select, select, text, update
+from sqlalchemy import Select, exists, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.sql.dml import ReturningInsert
 
-from brain.console.skill_library import Assignment, LibrarySkill
+from brain.console.skill_library import (
+    Assignment,
+    AssignmentRecord,
+    Detachment,
+    DetachmentRecord,
+    LibrarySkill,
+    Retirement,
+)
 from brain.ops.automation_owner_store import PRINCIPAL_SETTING
 from brain.tables.audit import ENT_HASH_SETTING, TRACE_ID_SETTING
 from brain.tables.skill import (
     APPROVED,
     SkillAssignmentRow,
     SkillCategoryRow,
+    SkillDetachmentRow,
+    SkillRetirementRow,
     SkillReviewRow,
     SkillRow,
 )
@@ -192,7 +211,7 @@ def install_hash_locked(agent_id: str) -> Select[tuple[str]]:
     )
 
 
-def install_values(made: Assignment) -> dict[str, Any]:
+def install_values(made: Assignment | Detachment) -> dict[str, Any]:
     """The install's overlay, owners and cached effective document, written together, as
     `brain.prompt_routes.write_install` writes them."""
     return {
@@ -206,11 +225,71 @@ def install_values(made: Assignment) -> dict[str, Any]:
     }
 
 
-def writing_install(made: Assignment) -> Any:
+def writing_install(made: Assignment | Detachment) -> Any:
     return (
         update(TemplateInstanceRow)
         .where(TemplateInstanceRow.id == made.agent_id)
         .values(**install_values(made))
+    )
+
+
+def retirements_of(digests: Sequence[str]) -> Select[tuple[SkillRetirementRow]]:
+    """The newest retirement row for each of these digests. `DISTINCT ON` keeps the first."""
+    return (
+        select(SkillRetirementRow)
+        .where(SkillRetirementRow.digest.in_(sorted(set(digests))))
+        .order_by(SkillRetirementRow.digest, SkillRetirementRow.seq.desc())
+        .distinct(SkillRetirementRow.digest)
+    )
+
+
+def retiring_row(digest: str, *, retired: bool, by: str) -> Any:
+    """One retirement or reinstatement, as a new row."""
+    return insert(SkillRetirementRow).values(digest=digest, retired=retired, set_by=by)
+
+
+def open_assignment(agent_id: str, skill_name: str, digest: str) -> Select[tuple[Any]]:
+    """The newest assignment of these bytes of this skill to this agent that nothing has ended."""
+    ended = exists().where(SkillDetachmentRow.assignment_id == SkillAssignmentRow.id)
+    return (
+        select(SkillAssignmentRow.id)
+        .where(
+            SkillAssignmentRow.agent_id == agent_id,
+            SkillAssignmentRow.skill_name == skill_name,
+            SkillAssignmentRow.digest == digest,
+            ~ended,
+        )
+        .order_by(SkillAssignmentRow.created_at.desc(), SkillAssignmentRow.id)
+        .limit(1)
+    )
+
+
+def detachment_values(made: Detachment, assignment_id: Any) -> dict[str, Any]:
+    """What a detachment records: the assignment it ended, or none, and the bytes the agent ran."""
+    return {
+        "assignment_id": assignment_id,
+        "agent_id": made.agent_id,
+        "skill_name": made.skill_name,
+        "digest": made.digest,
+        "detached_by": made.detached_by,
+    }
+
+
+def assignments_named(names: Sequence[str]) -> Select[tuple[SkillAssignmentRow]]:
+    """Every assignment of these skills, oldest first."""
+    return (
+        select(SkillAssignmentRow)
+        .where(SkillAssignmentRow.skill_name.in_(sorted(set(names))))
+        .order_by(SkillAssignmentRow.created_at, SkillAssignmentRow.id)
+    )
+
+
+def detachments_named(names: Sequence[str]) -> Select[tuple[SkillDetachmentRow]]:
+    """Every detachment of these skills, oldest first."""
+    return (
+        select(SkillDetachmentRow)
+        .where(SkillDetachmentRow.skill_name.in_(sorted(set(names))))
+        .order_by(SkillDetachmentRow.created_at, SkillDetachmentRow.id)
     )
 
 
@@ -257,6 +336,32 @@ def library_skill_of(row: SkillRow, review: SkillReviewRow | None) -> LibrarySki
         submitted_by=row.submitted_by,
         submitted_at=row.created_at,
         edited_from=row.edited_from,
+    )
+
+
+def retirement_of(row: SkillRetirementRow) -> Retirement:
+    return Retirement(digest=row.digest, retired=row.retired, set_by=row.set_by, at=row.created_at)
+
+
+def assignment_record_of(row: SkillAssignmentRow) -> AssignmentRecord:
+    return AssignmentRecord(
+        assignment_id=str(row.id),
+        agent_id=row.agent_id,
+        skill_name=row.skill_name,
+        digest=row.digest,
+        assigned_by=row.assigned_by,
+        at=row.created_at,
+    )
+
+
+def detachment_record_of(row: SkillDetachmentRow) -> DetachmentRecord:
+    return DetachmentRecord(
+        assignment_id=None if row.assignment_id is None else str(row.assignment_id),
+        agent_id=row.agent_id,
+        skill_name=row.skill_name,
+        digest=row.digest,
+        detached_by=row.detached_by,
+        at=row.created_at,
     )
 
 
@@ -337,3 +442,60 @@ class StoredSkills:
             await session.execute(assigning(made))
             await session.execute(writing_install(made))
         return True
+
+    async def retirements(self, digests: Sequence[str]) -> Mapping[str, Retirement]:
+        """Each of these versions' newest retirement row. A version never retired is absent."""
+        if not digests:
+            return {}
+        async with self._sessions() as session:
+            rows = (await session.execute(retirements_of(digests))).scalars().all()
+        return {row.digest: retirement_of(row) for row in rows}
+
+    async def retire(
+        self, digest: str, *, retired: bool, by: str, ent_hash: str, trace_id: str
+    ) -> None:
+        """Record a version retired or reinstated, in the setter's name, with its ledger entry."""
+        async with self._sessions() as session, session.begin():
+            await session.execute(_set_config(PRINCIPAL_SETTING, by))
+            await session.execute(_set_config(TRACE_ID_SETTING, trace_id))
+            await session.execute(_set_config(ENT_HASH_SETTING, ent_hash))
+            await session.execute(retiring_row(digest, retired=retired, by=by))
+
+    async def detach(
+        self, made: Detachment, *, expected_hash: str, ent_hash: str, trace_id: str
+    ) -> bool:
+        """Record the detachment and write the install, or say the install has changed since.
+
+        The assignment it ends is found under the same lock. See the module docstring.
+        """
+        async with self._sessions() as session, session.begin():
+            await session.execute(_set_config(PRINCIPAL_SETTING, made.detached_by))
+            await session.execute(_set_config(TRACE_ID_SETTING, trace_id))
+            await session.execute(_set_config(ENT_HASH_SETTING, ent_hash))
+            current = (
+                await session.execute(install_hash_locked(made.agent_id))
+            ).scalar_one_or_none()
+            if current != expected_hash:
+                return False
+            ended = (
+                await session.execute(open_assignment(made.agent_id, made.skill_name, made.digest))
+            ).scalar_one_or_none()
+            await session.execute(
+                insert(SkillDetachmentRow).values(**detachment_values(made, ended))
+            )
+            await session.execute(writing_install(made))
+        return True
+
+    async def assignment_history(
+        self, names: Sequence[str]
+    ) -> tuple[tuple[AssignmentRecord, ...], tuple[DetachmentRecord, ...]]:
+        """Every assignment and detachment of these skills, oldest first."""
+        if not names:
+            return (), ()
+        async with self._sessions() as session:
+            assigned = (await session.execute(assignments_named(names))).scalars().all()
+            detached = (await session.execute(detachments_named(names))).scalars().all()
+        return (
+            tuple(assignment_record_of(row) for row in assigned),
+            tuple(detachment_record_of(row) for row in detached),
+        )

@@ -322,6 +322,10 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "agent.skill_assignment",
         # The categories set on a skill's name: `set_by` is an actor, not an owner (`0121`).
         "agent.skill_category",
+        # A version retired or reinstated, and a skill taken off an agent (`0139`): `set_by` and
+        # `detached_by` are actors, not owners, and each row is about a skill and an agent.
+        "agent.skill_detachment",
+        "agent.skill_retirement",
         "agent.skill_review",
         # A tool the install registers, and a stop on it (`0117`): who threw or lifted a switch is
         # an actor, not an owner, and a stop is about a tool and a department, never a person.

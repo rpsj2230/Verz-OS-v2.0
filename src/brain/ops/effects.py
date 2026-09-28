@@ -178,6 +178,12 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.skill_routes:SkillLibrary.categories": Repeat.READS,
         # A second call appends a second row naming the same categories, and the newest applies.
         "brain.skill_routes:SkillLibrary.categorise": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.skill_routes:SkillLibrary.retirements": Repeat.READS,
+        # A second retirement adds a second row; the route refuses one that changes nothing.
+        "brain.skill_routes:SkillLibrary.retire": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # A second detachment finds the install changed and writes nothing.
+        "brain.skill_routes:SkillLibrary.detach": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.skill_routes:SkillLibrary.assignment_history": Repeat.READS,
         "brain.skill_routes:AgentInstalls.agent": Repeat.READS,
         # An agent's lifecycle (0137): reads, a move written by compare-and-set against the state
         # the page drew, so a second press finds the row already moved and writes nothing, and an
