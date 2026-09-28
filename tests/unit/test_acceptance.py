@@ -54,9 +54,11 @@ from brain.settings import settings_from
 from tests.unit.test_limit_store import FakeClient
 
 ROOT = Path(__file__).resolve().parents[2]
+#: Every module a check or the harness raises a verdict from: the harness, and each module named in
+#: `CHECK_MODULES`, so a new check module is held to the literal-reason rule the day it is named.
 SOURCES = (
-    ROOT / "src" / "brain" / "ops" / "acceptance_checks.py",
     ROOT / "src" / "brain" / "ops" / "acceptance_run.py",
+    *(ROOT / "src" / f"{module.replace('.', '/')}.py" for module in acceptance.CHECK_MODULES),
 )
 
 #: Pinned far from any wall clock, for CLAUDE.md's reason about fixtures with dates in them.
@@ -65,6 +67,16 @@ LONG_AGO = datetime(2019, 3, 6, 9, 0, tzinfo=UTC)
 
 async def _nothing(harness: Harness) -> None:
     del harness
+
+
+@pytest.fixture(autouse=True)
+def _no_network(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every run of the suite here imports from a GitHub that does not answer, so no test in this
+    file reaches the network; `tests/unit/test_acceptance_skills.py` fakes one that does."""
+    from brain.ops import acceptance_checks_skills
+    from tests.unit.test_acceptance_skills import unreachable
+
+    monkeypatch.setattr(acceptance_checks_skills, "_transport", unreachable)
 
 
 # ------------------------------------------------------------------------ the registry
@@ -93,13 +105,18 @@ def test_every_leaf_a_check_names_is_a_leaf_of_the_work_breakdown() -> None:
         assert set(one.leaves) <= leaves, one.name
 
 
-def test_the_suite_is_the_three_checks_this_release_ships_in_order() -> None:
-    """The coordinator's narrowed scope for this release: limits, channels, knowledge. Delete this
+def test_the_suite_is_the_checks_this_release_ships_in_order() -> None:
+    """The coordinator's narrowed scope for this release: limits, channels, knowledge and the skill
+    library. Delete this
     and a check can drop out of the suite with the page simply listing one fewer row."""
     assert [one.name for one in registered()] == [
         "asking_past_a_window_is_refused_with_a_retry_hint",
         "a_webhook_channel_receives_once_and_stops_both_ways",
         "documents_are_answered_in_their_department_only",
+        "a_pasted_or_uploaded_skill_waits_undecided_and_unread",
+        "a_skill_is_imported_from_a_github_commit_and_from_an_address",
+        "an_edit_is_a_new_version_and_moves_no_agent_until_reassigned",
+        "categories_are_kept_and_offered_from_what_a_reader_was_shown",
     ]
 
 
@@ -454,7 +471,7 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         "documents_are_answered_in_their_department_only"
     ] == PASSED
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 6
+    assert runs == [(2,)] and len(recorded) == 2 * len(registered())
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }
