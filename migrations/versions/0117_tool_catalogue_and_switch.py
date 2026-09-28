@@ -37,7 +37,7 @@ from alembic import op
 revision = "0117"
 # The newest migration on origin/main when this was written. The coordinator re-points it at
 # landing, since 0110 to 0116 are held by packages landing before this one.
-down_revision = "0108"
+down_revision = "0116"
 branch_labels = None
 depends_on = None
 
