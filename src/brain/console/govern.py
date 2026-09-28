@@ -130,7 +130,11 @@ Twelve of the eighteen leaves are not claimed below. Every one of them is a list
 module named in `GOVERN_SURFACES`, the screen is the only thing missing, and claiming one here
 would have the traceability sweep counting a page nobody can open.
 
-Task ids: M27.3.1, M27.3.3, M27.3.4, M27.3.6, M27.3.8, M27.3.11
+**Whether a person's last sign-in may be put beside their name is the Sessions screen's question
+about their row** (M27.11.2): `may_show_sign_in`, which the People directory asks rather than
+answering itself.
+
+Task ids: M27.3.1, M27.3.3, M27.3.4, M27.3.6, M27.3.8, M27.3.11, M27.11.2
 """
 
 from __future__ import annotations
@@ -1021,6 +1025,24 @@ def open_sessions[S: LiveSession](
         for one in sessions
         if one.record.is_live(now)
         and _in_reach(entitlement, screen("sessions").read.requires, one.where, now)
+    )
+
+
+def may_show_sign_in(
+    where: Mapping[str, str],
+    entitlement: EntitlementSet,
+    now: datetime | None = None,
+) -> bool:
+    """Whether this reader may be told when a person last signed in, and with what (M27.11.2).
+
+    The Sessions screen's own read, opened on the console plane as `permitted` asks it, and held
+    over the row the person sits in, which is the question `open_sessions` asks of each session
+    there. A reader who may open People and not Sessions is told neither, and the fields then read
+    exactly as they do for somebody who has never signed in, so nothing says which it was.
+    """
+    requirement = screen("sessions").read
+    return permitted(requirement, entitlement, now) and _in_reach(
+        entitlement, requirement.requires, where, now
     )
 
 

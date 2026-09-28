@@ -59,19 +59,6 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
     { pattern: "/classification", index: 1, writes: true },
   ],
   "src/pages/DataTransfer.tsx": [{ pattern: "/import-export", index: 0, writes: true }],
-  // Index 0 on every page drawing a long list is `components/ListControls.tsx`' search form, which
-  // is not in the page's file and sends nothing but a read. Then the lead, a team's add, creating a
-  // team, creating a department and drawing a scope. The rename form is one form in the source,
-  // drawn for a department or a team, and opens above the lead's form; the department's stands for
-  // both, and tests/govern-people-pages.test.tsx submits the team's blank.
-  "src/pages/Departments.tsx": [
-    { pattern: "/departments", index: 1, writes: true },
-    { pattern: "/departments", index: 2, writes: true },
-    { pattern: "/departments", index: 3, writes: true },
-    { pattern: "/departments", index: 4, writes: true },
-    { pattern: "/departments", index: 5, writes: true },
-    { pattern: "/departments", opener: "Rename department", index: 1, writes: true },
-  ],
   "src/pages/Elevation.tsx": [{ pattern: "/elevation", index: 0, writes: true }],
   // The Add a document card sits above the library, so its form comes before the list's search.
   "src/pages/Knowledge.tsx": [{ pattern: "/library", index: 0, writes: true }],
@@ -125,17 +112,8 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
   ],
   // The grant and pack forms of an open subject, then the grant to several, which is drawn under
   // the list once it is opened and so sits after the list's search.
-  "src/pages/People.tsx": [
-    { pattern: "/people/:subject", index: 1, writes: true },
-    { pattern: "/people/:subject", index: 2, writes: true },
-    { pattern: "/people", opener: "Grant to several people", index: 1, writes: true },
-  ],
   "src/pages/Prompts.tsx": [{ pattern: "/prompts", opener: "Edit instructions", index: 0, writes: true }],
   "src/pages/RequirementChecks.tsx": [{ pattern: "/requirement-checks", index: 0, writes: true }],
-  // One form in the source, drawn twice (appoint and deputy); the first stands for both.
-  "src/pages/RoleControls.tsx": [{ pattern: "/roles", index: 0, writes: true }],
-  // After the appointment and deputy forms: the directory group mapping.
-  "src/pages/GroupRules.tsx": [{ pattern: "/roles", index: 2, writes: true }],
   "src/pages/Retention.tsx": [
     { pattern: "/retention", index: 0, writes: true },
     { pattern: "/retention", index: 1, writes: true },
@@ -203,6 +181,24 @@ const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
     "Import until importProblem accepts the repository and commit or the address, and Save until the " +
     "edit has text, which tests/skills-page.test.tsx holds for Add. The assign form only opens a " +
     "confirmation naming an agent the API listed.",
+  "src/pages/people/GrantDrawers.tsx": "Every form here opens in a drawer, which the kit renders outside the page's main landmark where " +
+    "this harness looks. Each is submitted blank in tests/people-access-pages.test.tsx, which holds " +
+    "that nothing is sent and that the form says, beside each field, what to fill in and in what form.",
+  "src/pages/people/PersonPlacements.tsx": "Every form here opens in a drawer, which the kit renders outside the page's main landmark where " +
+    "this harness looks. Each is submitted blank in tests/people-access-pages.test.tsx, which holds " +
+    "that nothing is sent and that the form says, beside each field, what to fill in and in what form.",
+  "src/pages/people/PersonSessions.tsx": "Every form here opens in a drawer, which the kit renders outside the page's main landmark where " +
+    "this harness looks. Each is submitted blank in tests/people-access-pages.test.tsx, which holds " +
+    "that nothing is sent and that the form says, beside each field, what to fill in and in what form.",
+  "src/pages/departments/StructureDrawers.tsx": "Every form here opens in a drawer, which the kit renders outside the page's main landmark where " +
+    "this harness looks. Each is submitted blank in tests/people-access-pages.test.tsx, which holds " +
+    "that nothing is sent and that the form says, beside each field, what to fill in and in what form.",
+  "src/pages/roles/RoleDrawers.tsx": "Every form here opens in a drawer, which the kit renders outside the page's main landmark where " +
+    "this harness looks. Each is submitted blank in tests/people-access-pages.test.tsx, which holds " +
+    "that nothing is sent and that the form says, beside each field, what to fill in and in what form.",
+  "src/pages/roles/PacksPage.tsx": "Every form here opens in a drawer, which the kit renders outside the page's main landmark where " +
+    "this harness looks. Each is submitted blank in tests/people-access-pages.test.tsx, which holds " +
+    "that nothing is sent and that the form says, beside each field, what to fill in and in what form.",
   "src/pages/Ask.tsx":
     "The question form cannot be sent blank by a person: its only submit button is disabled until " +
     "askBody accepts the text, and the field's maxLength stops a question longer than the route " +

@@ -90,6 +90,9 @@ from tests.unit.test_tables import VERSIONS, migration_module, rendered, squash
 
 MIGRATION: Final = VERSIONS / "0086_organisation_structure_audit.py"
 
+#: The migration that makes a scope's label moving a rename.
+LABEL_MIGRATION: Final = VERSIONS / "0141_packs_people_and_scope_labels_audited.py"
+
 #: Far from any plausible wall clock, for CLAUDE.md's reason about a fixture that is a clock.
 LONG_AGO: Final = datetime(2019, 3, 4, 9, 0, tzinfo=UTC)
 LATER: Final = datetime(2999, 1, 1, tzinfo=UTC)
@@ -370,14 +373,17 @@ def test_the_triggers_write_the_subjects_and_details_the_recorder_writes() -> No
 
 
 def test_the_recorder_refuses_a_structure_change_no_trigger_writes() -> None:
-    """Delete this and an entry can name a person on a department's creation, rename a scope, put a
-    team under a scope, or list fields on a creation, none of which a trigger writes and every
-    reader would believe."""
+    """Delete this and an entry can name a person on a department's creation, put a team under a
+    scope, or list fields on a creation, none of which a trigger writes and every reader would
+    believe. A scope renamed is written since `0141`, so it is the positive case here and no longer
+    a refusal."""
+    renamed = recorder().organisation(change=OrganisationChange.RENAMED, scope="web_all")
+    assert (renamed.subject, renamed.details) == ("scope:web_all", {"change": "renamed"})
     for where in (
         {"change": OrganisationChange.CREATED, "department": "web", "principal_id": "u_1"},
         {"change": OrganisationChange.CREATED},
         {"change": OrganisationChange.CREATED, "department": "web", "scope": "web"},
-        {"change": OrganisationChange.RENAMED, "scope": "web_all"},
+        {"change": OrganisationChange.RENAMED, "scope": "web_all", "team": "web.design"},
         {"change": OrganisationChange.RETIRED, "scope": "web_all", "team": "web.design"},
         {"change": OrganisationChange.CREATED, "department": "web", "fields": ("name",)},
         {"change": OrganisationChange.CHANGED, "department": "web"},
@@ -421,16 +427,43 @@ def test_the_migration_audits_the_three_tables_widens_the_grammar_and_grants_not
     # grammar is the one `0104` replaced, `0104`'s is the one `0136` replaced, and the model's is
     # `0136`'s. `0137` leaves the subject grammar alone.
     later = migration_module(MIGRATION.with_name("0104_compliance_record_and_decision_entries.py"))
-    latest = migration_module(MIGRATION.with_name("0136_ops_halt.py"))
+    halted = migration_module(MIGRATION.with_name("0136_ops_halt.py"))
+    latest = migration_module(MIGRATION.with_name(LABEL_MIGRATION.name))
     assert squash(f"CHECK ({migration.WIDENED_SUBJECTS})") in upgrade
     assert squash(migration.WIDENED_SUBJECTS) == squash(later.NARROWER_SUBJECTS)
-    assert squash(later.WIDENED_SUBJECTS) == squash(latest.NARROWER_SUBJECTS)
+    assert squash(later.WIDENED_SUBJECTS) == squash(halted.NARROWER_SUBJECTS)
+    # `0141` widened it for `pack`, so the model's is the one that replaced `0136`'s.
+    assert squash(halted.WIDENED_SUBJECTS) == squash(latest.NARROWER_SUBJECTS)
     assert squash(latest.WIDENED_SUBJECTS) == squash(f"subject ~ '{SUBJECT_PATTERN}'")
     lifecycle = MIGRATION.with_name("0137_agent_lifecycle_audit.py")
     assert "subject_grammar" not in squash(rendered("upgrade", lifecycle))
     assert squash(f"CHECK ({migration.NARROWER_SUBJECTS}) NOT VALID") in downgrade
     assert "GRANT" not in upgrade
     assert migration.TABLES == ()
+
+
+def test_since_0141_a_scope_label_moving_is_a_rename_and_never_a_change() -> None:
+    """M27.11.1's rename, in the trigger. Rendered, not read off the file. Delete this and a label
+    renamed from the console is recorded as `changed` with `label` in its fields, which reads as an
+    edit typed by hand, or the function is replaced in a constant nobody executes, or the downgrade
+    puts back something other than `0086`'s body."""
+    upgrade = squash(rendered("upgrade", LABEL_MIGRATION))
+    downgrade = squash(rendered("downgrade", LABEL_MIGRATION))
+    label = migration_module(LABEL_MIGRATION)
+    before = migration_module(MIGRATION)
+    replacing = squash(label.SCOPE_TRIGGER_FUNCTION)
+
+    assert replacing in upgrade
+    assert "IF (to_jsonb(OLD) -> 'label') IS DISTINCT FROM (to_jsonb(NEW) -> 'label') THEN" in (
+        replacing
+    )
+    assert "ARRAY['id', 'created_at', 'updated_at', 'deleted_at', 'label']" in replacing
+    assert "v_subject text := 'scope:' || NEW.slug;" in replacing
+    assert "v_seq, v_at, v_actor, 'organisation', v_subject, v_ent_hash," in replacing
+    assert squash(label.PREVIOUS_SCOPE_TRIGGER_FUNCTION) == squash(
+        before.SCOPE_TRIGGER_FUNCTION
+    ).replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION")
+    assert squash(label.PREVIOUS_SCOPE_TRIGGER_FUNCTION) in downgrade
 
 
 # ------------------------------------------------------------------------- the routes
@@ -558,6 +591,27 @@ class Structure(StructureRecords):
         if team is not None and (departments[0], team) not in self.teams:
             return StructureRefusal.NOT_WRITABLE
         self.scopes[scope.slug] = scope
+        return LONG_AGO
+
+    async def rename_scope(
+        self,
+        *,
+        slug: str,
+        expected_label: str,
+        label: str,
+        may: Callable[[ScopeRecord], bool],
+        by: Attribution,
+    ) -> Structured:
+        if (refused := self._asked("rename_scope", by)) is not None:
+            return refused
+        record = self.scopes.get(slug)
+        if record is None or not may(record):
+            return StructureRefusal.NOT_WRITABLE
+        if record.label != expected_label:
+            return StructureRefusal.CHANGED_SINCE
+        self.scopes[slug] = ScopeRecord(
+            slug=record.slug, scope=record.scope, is_department=record.is_department, label=label
+        )
         return LONG_AGO
 
     async def retire_scope(
@@ -1021,6 +1075,110 @@ def test_the_page_offers_each_structure_control_only_where_its_authority_is_held
     assert (none["may_found"], none["may_draw_scopes"]) == (False, False)
     assert {one["shapeable"] for one in none["items"]} == {False}
     assert admin["retiring_department"].endswith(A_DEPARTMENT_UNDER_LIVE_GRANTS_IS_NOT_RETIRED)
+
+
+RENAME_SCOPE: Final = "/govern/departments/scopes/rename"
+
+
+def renaming(slug: str, expected: str, label: str) -> dict[str, str]:
+    return {"slug": slug, "expected_label": expected, "label": label}
+
+
+def test_a_scope_is_renamed_by_its_label_by_whoever_could_have_drawn_it() -> None:
+    """M27.11.1's missing act, the positive case. An administrator renames a scope over finance and
+    a web administrator renames one over web; each answer is a scope renamed, the label moves, the
+    predicate every grant copied does not, and the actor is the token's.
+
+    Delete this and every refusal below is satisfied by a route that renames nothing, or a rename
+    can move the predicate and repoint every grant written over the scope."""
+    structure = seeded()
+    with client_over(structure) as client:
+        answers = [
+            post(client, "u_admin", RENAME_SCOPE, renaming("finance_all", "All of finance", "Fin")),
+            post(client, "u_elsewhere", RENAME_SCOPE, renaming("web_all", "All of web", "Web")),
+        ]
+
+    assert [one.status_code for one in answers] == [200, 200]
+    assert [(one.json()["kind"], one.json()["change"], one.json()["slug"]) for one in answers] == [
+        ("scope", "renamed", "finance_all"),
+        ("scope", "renamed", "web_all"),
+    ]
+    assert answers[0].json()["department"] is None
+    assert (structure.scopes["finance_all"].label, structure.scopes["web_all"].label) == (
+        "Fin",
+        "Web",
+    )
+    assert structure.scopes["web_all"].scope == WEB
+    assert structure.scopes["finance_all"].scope == Scope.department("finance")
+    assert [one.actor for one in structure.by] == ["u_admin", "u_elsewhere"]
+
+
+def test_a_scope_outside_the_authority_is_renamed_exactly_as_a_missing_one_is() -> None:
+    """DENIED and ABSENT for a rename. A web administrator renaming the scope over finance is
+    answered exactly as an administrator renaming a scope that is not there, and a caller holding
+    no authority over scopes is answered the same without the store being asked at all; a label
+    that moved since the page was read is said, to a caller who governs the scope.
+
+    Delete this and a rename says a scope exists outside somebody's reach, by its status, its
+    sentence or the store being consulted, or the changed-since sentence becomes a way to read a
+    label the caller was never shown."""
+    structure = seeded()
+    with client_over(structure) as client:
+        missing = post(client, "u_admin", RENAME_SCOPE, renaming("gone_all", "Gone", "Still"))
+        outside = post(
+            client, "u_elsewhere", RENAME_SCOPE, renaming("finance_all", "All of finance", "Mine")
+        )
+        before = list(structure.calls)
+        nobody = post(client, "u_none", RENAME_SCOPE, renaming("web_all", "All of web", "Mine"))
+        after = list(structure.calls)
+        changed = post(client, "u_elsewhere", RENAME_SCOPE, renaming("web_all", "Old", "New"))
+
+    assert ordinary(missing) == ordinary(outside) == ordinary(nobody)
+    assert ordinary(missing) == (404, "I could not find that.")
+    assert set(missing.json()) == set(outside.json())
+    assert after == before
+    assert ordinary(changed) == (
+        404,
+        f"Nothing was changed: {routes.IT_CHANGED_SINCE_YOU_OPENED_IT}.",
+    )
+    assert structure.scopes["finance_all"].label == "All of finance"
+    assert structure.scopes["web_all"].label == "All of web"
+
+
+def test_a_scope_rename_to_the_label_it_has_is_a_422_and_an_empty_label_can_be_renamed() -> None:
+    """Delete this and a rename to the same label reaches the store and writes a ledger entry saying
+    nothing happened, or a scope written with no label, as furnishing writes one, can never be
+    renamed because the page's empty label is refused as a body."""
+    structure = seeded()
+    structure.scopes["bare"] = drawn("bare", "", ["web"])
+    with client_over(structure) as client:
+        same = post(
+            client, "u_admin", RENAME_SCOPE, renaming("web_all", "All of web", "All of web")
+        )
+        blank = post(client, "u_admin", RENAME_SCOPE, renaming("web_all", "All of web", "   "))
+        calls = list(structure.calls)
+        bare = post(client, "u_admin", RENAME_SCOPE, renaming("bare", "", "Web, bare"))
+
+    assert (same.status_code, blank.status_code) == (422, 422)
+    assert calls == []
+    assert bare.status_code == 200
+    assert structure.scopes["bare"].label == "Web, bare"
+
+
+def test_one_department_is_opened_by_filtering_the_departments_listing_on_its_slug() -> None:
+    """The console opens a department's page by `filter=slug:<slug>`. Delete this and the filter is
+    refused as a column that does not filter, and the page has no way to ask for one department."""
+    with client_over(Structure()) as client:
+        one = client.get(
+            f"{API_PREFIX}/govern/departments",
+            params={"filter": "slug:web"},
+            headers=headers("u_admin"),
+        )
+        both = client.get(f"{API_PREFIX}/govern/departments", headers=headers("u_admin"))
+
+    assert one.status_code == 200, one.text
+    assert [row["slug"] for row in one.json()["items"]] == ["web"]
+    assert [row["slug"] for row in both.json()["items"]] == ["finance", "web"]
 
 
 def test_the_stored_organisation_is_the_structure_the_routes_ask_for() -> None:
@@ -1651,3 +1809,51 @@ def test_a_grant_over_a_team_scope_resolves_to_that_team() -> None:
         one.body for one in answers
     ]
     assert held == team_scope("web.design")
+
+
+def test_a_scope_renamed_writes_its_label_and_one_ledger_entry_saying_renamed() -> None:
+    """**M27.11.1's rename, followed to the row and the ledger.** A scope drawn over web and sales
+    is renamed through the route: its label moves, its predicate does not, and the ledger gains
+    exactly one `organisation` entry, `renamed` under `scope:<slug>`, naming the person who pressed
+    with the request's reach digest and trace; a label moved by a statement typed by hand is
+    recorded as `renamed` too, with the actor marked inferred, and never as `changed`. The chain
+    verifies.
+
+    Delete this and a rename can reach the row and not the ledger, be recorded as a hand-typed
+    change, or be recorded under the database role rather than the person. **Skips without a
+    server.**"""
+    with through_0086("brain_structure_scope_rename") as url:
+        pressed_first = pressing(
+            url,
+            (
+                ("u_admin", "/govern/departments", {"slug": "web", "name": "Web"}),
+                ("u_admin", "/govern/departments", {"slug": "sales", "name": "Sales"}),
+                (
+                    "u_admin",
+                    "/govern/departments/scopes",
+                    {"slug": "web_and_sales", "label": "Both", "departments": ["web", "sales"]},
+                ),
+            ),
+        )
+        before = len(entries(url))
+        renamed = pressing(
+            url, (("u_admin", RENAME_SCOPE, renaming("web_and_sales", "Both", "Web and sales")),)
+        )
+        row = sql(url, "SELECT label, predicate FROM gate.scope WHERE slug = 'web_and_sales'")
+        added = entries(url)[before:]
+        sql(url, "UPDATE gate.scope SET label = 'Typed by hand' WHERE slug = 'web_and_sales'")
+        typed = entries(url)[before + len(added) :]
+        chain = entries(url)
+
+    assert [one.status for one in pressed_first] == [201, 201, 201]
+    assert [(one.status, one.body["change"]) for one in renamed] == [(200, "renamed")]
+    assert row == [("Web and sales", {"department": ["sales", "web"]})]
+    assert [(one.actor_id, one.action.value, one.subject, dict(one.details)) for one in added] == [
+        ("u_admin", "organisation", "scope:web_and_sales", {"change": "renamed"})
+    ]
+    assert added[0].ent_hash != "0" * 32
+    assert not added[0].trace_id.startswith("tx.")
+    assert [(one.subject, dict(one.details)) for one in typed] == [
+        ("scope:web_and_sales", {"change": "renamed", "actor": "inferred"})
+    ]
+    assert AuditChain(chain).verify() is None
