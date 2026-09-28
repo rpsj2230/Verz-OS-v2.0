@@ -141,6 +141,14 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
   "src/pages/People.tsx PACK_ASSIGNMENT_API_PATH":
     "Assigns a capability pack. Entitlements are additive only, an assignment replaces nothing, and " +
     "taking one back is the Access review's removal, which is confirmed.",
+  "src/pages/ServiceAccounts.tsx SERVICE_ACCOUNTS_API_PATH":
+    "Registers a new service account owned by the caller. An id or subject already in use is " +
+    "refused with a 409 rather than taken over, so nothing existing is replaced; retiring an account " +
+    "is the destructive act and it is confirmed.",
+  "src/pages/ServiceAccounts.tsx ISSUE_KEY_API_PATH":
+    "Issues a new key beside the ones an account has. A key beyond the limit is refused with a 409 " +
+    "rather than rotating one out, so no key in use is ended; revoking a key is the destructive act " +
+    "and it is confirmed.",
   "src/components/ConnectLark.tsx LARK_TEST_API_PATH":
     "Testing a Lark connection exchanges the pasted credential for a token and makes small reads; " +
     "it writes nothing here or in Lark and keeps nothing it read, which " +
