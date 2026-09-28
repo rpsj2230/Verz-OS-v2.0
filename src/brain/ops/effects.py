@@ -564,6 +564,10 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.gate.live_records:PartialRead.notice": Repeat.READS,
         "brain.gate.live_records:PartialRead.trace_lines": Repeat.READS,
         "brain.ops.connector_sync_store:ConnectorSyncRecords.states": Repeat.READS,
+        # Asking for a test of a connection is one row in `ops.setting` a second press moves to a
+        # later instant; the worker makes one test for however many presses it finds.
+        "brain.ops.connector_sync_store:ConnectorProbes.ask": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.ops.connector_sync_store:ConnectorProbes.status": Repeat.READS,
         # A delivery is a request somebody else's server acts on, so every one is made inside
         # `issue_once` under a key per attempt, and the receiver's duty to drop a repeated event
         # id covers the one repeat the ledger cannot: a request that left and was never answered.

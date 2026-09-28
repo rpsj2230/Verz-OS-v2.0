@@ -59,7 +59,7 @@ every run. It would quarantine a connection in memory that the next run rebuilds
 so the quarantine would last one run, and it would add a second in-memory opinion about whether a
 source is connected beside the table that already says so.
 
-Task ids: M42.6.5, M11.9.1, M11.4.1
+Task ids: M42.6.5, M11.9.1, M11.4.1, M27.15.8
 """
 
 from __future__ import annotations
@@ -157,6 +157,16 @@ A_SYNC_KEEPS_NO_BODY: Final = (
     "owner to confirm that for Drive and Wiki bodies, and this is its recommended answer."
 )
 
+#: Why a test's row copies the schedule's figures rather than moving them.
+A_TEST_LEAVES_THE_SCHEDULE_AS_IT_FOUND_IT: Final = (
+    "A test is one call a person asked for, and its row is the source's newest attempt, so the "
+    "screen shows what the test found as the source's health. It does not move the schedule: the "
+    "failures in a row and the next attempt are copied from the attempt before it, so a test that "
+    "fails does not push a failing source further into its backoff and a test that works does not "
+    "clear a backoff the scheduled read earned. The one exception is the source's own word: a test "
+    "the source refused for volume waits as long as the source asked, as a scheduled read would."
+)
+
 # -------------------------------------------------------------------------- the numbers
 
 #: Failures in a row after which a source is down. See
@@ -226,8 +236,8 @@ OWN_SHARE_SPENT: Final = (
 SOURCE_UNREACHABLE: Final = "The source did not answer."
 SOURCE_TIMED_OUT: Final = "The source did not answer in time."
 KEY_DECLINED: Final = (
-    "The source declined the key this install holds for it. Replace the key by disconnecting the "
-    "source and connecting it again."
+    "The source declined the key this install holds for it. Replace the key from this source's "
+    "Manage menu."
 )
 SHAPE_DISAGREED: Final = (
     "The source answered in a shape its declaration does not describe, so nothing from that answer "
@@ -242,7 +252,7 @@ NO_VAULT: Final = (
     "against the worker policy, and restart the worker."
 )
 NO_KEY: Final = (
-    "The vault holds no key for this source. Disconnect it and connect it again with its key."
+    "The vault holds no key for this source. Replace the key from this source's Manage menu."
 )
 VAULT_REFUSED: Final = (
     "The vault refused the worker's read of this source's key, or minted a run token wider than a "
@@ -256,17 +266,41 @@ NOT_READ_YET: Final = "Not read yet. The worker reads it on its next run."
 TRIED_AGAIN: Final = "It is tried again after"
 FAILED_IN_A_ROW: Final = "Attempts that failed in a row:"
 
+#: What a test of the connection came to, when it is not one of the failures above. Constants, for
+#: `A_RUN_RECORD_CARRIES_NO_VALUE_FROM_THE_SOURCE`.
+PROBE_ANSWERED: Final = (
+    "The source accepted this install's key and answered in the shape this release reads. Nothing "
+    "it sent was kept."
+)
+PROBE_REFUSED_FOR_NOW: Final = (
+    "The source said its call allowance is spent for now, so the key could not be tested. Test "
+    "again once the source has room."
+)
+PROBE_NOT_SENT_WHILE_WAITING: Final = (
+    "No call was made: the source asked this install to wait before calling it again. Test again "
+    "once that wait is over."
+)
+PROBE_NOT_SENT_SHARE_SPENT: Final = (
+    "No call was made: tests have used this install's share of the source's call allowance for "
+    "now. Test again later."
+)
+#: What the screen puts before a test's sentence, so it is not read as a scheduled read.
+TESTED_ON_REQUEST: Final = "Tested on request:"
+
 
 class SyncOutcome(enum.StrEnum):
-    """What one attempt came to. Three, and `brain.tables.connector_sync.OUTCOMES` holds them.
+    """What one attempt came to. Four, and `brain.tables.connector_sync.OUTCOMES` holds them.
 
     `QUOTA` is its own outcome rather than a kind of failure, for
-    `A_QUOTA_REFUSAL_WAITS_AS_LONG_AS_THE_SOURCE_ASKED`.
+    `A_QUOTA_REFUSAL_WAITS_AS_LONG_AS_THE_SOURCE_ASKED`. `PROBED` is a test a person asked for,
+    for `A_TEST_LEAVES_THE_SCHEDULE_AS_IT_FOUND_IT`; what the test found is its health and its
+    sentence, read back by `verdict_of`.
     """
 
     SYNCED = "synced"
     QUOTA = "quota"
     FAILED = "failed"
+    PROBED = "probed"
 
 
 class ConnectorSyncError(Exception):
@@ -521,6 +555,107 @@ def after_attempt(
     )
 
 
+class ProbeVerdict(enum.StrEnum):
+    """What a test found, read back from its sentence. `verdict_of` is the only reader."""
+
+    #: The source took the key and answered in a shape this release reads.
+    ANSWERED = "answered"
+    #: The source refused for volume; the key is neither proved nor refused.
+    WAITING = "waiting"
+    #: The call was made, or the key could not be read, and it did not work.
+    FAILED = "failed"
+    #: No call was made, and the sentence says why.
+    NOT_SENT = "not_sent"
+
+
+#: Every sentence a test that made no call can leave: the plan's refusals, and the two waits.
+NOT_SENT_SENTENCES: Final[frozenset[str]] = frozenset(
+    {
+        NO_READING,
+        DECLARATION_CANNOT_BE_REBUILT,
+        DECLARATION_NOT_AGREED,
+        VISIBILITY_NOT_STORABLE,
+        NO_VERIFIED_CEILING,
+        PROBE_NOT_SENT_WHILE_WAITING,
+        PROBE_NOT_SENT_SHARE_SPENT,
+    }
+)
+
+
+def verdict_of(detail: str) -> ProbeVerdict:
+    """What a test's row found, from its sentence, which is always one of this module's constants.
+
+    Anything not named as answered, waiting or not sent is a failure, which is the direction to be
+    wrong in: a sentence this build does not know is shown as not working rather than as working.
+    """
+    if detail == PROBE_ANSWERED:
+        return ProbeVerdict.ANSWERED
+    if detail == PROBE_REFUSED_FOR_NOW:
+        return ProbeVerdict.WAITING
+    if detail in NOT_SENT_SENTENCES:
+        return ProbeVerdict.NOT_SENT
+    return ProbeVerdict.FAILED
+
+
+def after_probe(
+    *,
+    connector: str,
+    started_at: datetime,
+    finished_at: datetime,
+    detail: str,
+    interval: timedelta,
+    previous: SyncState | None,
+    call: CallOutcome | None = None,
+    retry_after_seconds: float | None = None,
+) -> Attempt:
+    """The row one test leaves: what it found, and the schedule as the attempt before left it.
+
+    See `A_TEST_LEAVES_THE_SCHEDULE_AS_IT_FOUND_IT`. The health of a failure and the length of a
+    wait are `after_attempt`'s, asked as though the test were a scheduled read, so there is one rule
+    for when a source is down and one for how long a refusal waits. A test that made no call has
+    learned nothing about the source and keeps the health it had; with no attempt before it, the
+    only way to make no call is a plan that refuses, and a source nothing can read is down.
+    """
+    failures = 0 if previous is None else previous.consecutive_failures
+    carried = finished_at if previous is None else max(previous.next_attempt_at, finished_at)
+
+    def as_read(outcome: SyncOutcome) -> Attempt:
+        return after_attempt(
+            connector=connector,
+            started_at=started_at,
+            finished_at=finished_at,
+            outcome=outcome,
+            detail=detail,
+            interval=interval,
+            previous=previous,
+            call=call,
+            retry_after_seconds=retry_after_seconds,
+        )
+
+    next_at = carried
+    match verdict_of(detail):
+        case ProbeVerdict.ANSWERED:
+            health = HealthState.OK
+        case ProbeVerdict.WAITING:
+            waited = as_read(SyncOutcome.QUOTA)
+            health, next_at = waited.health, max(carried, waited.next_attempt_at)
+        case ProbeVerdict.FAILED:
+            health = as_read(SyncOutcome.FAILED).health
+        case ProbeVerdict.NOT_SENT:
+            health = HealthState.DOWN if previous is None else previous.health
+    return Attempt(
+        connector=connector,
+        started_at=started_at,
+        finished_at=finished_at,
+        outcome=SyncOutcome.PROBED,
+        health=health,
+        records=0,
+        consecutive_failures=failures,
+        next_attempt_at=next_at,
+        detail=detail,
+    )
+
+
 def failure_detail(call: CallOutcome, *, timed_out: bool = False) -> str:
     """The sentence a failed call leaves, by what kind of failure it was and nothing else."""
     if timed_out:
@@ -540,6 +675,8 @@ def sync_in_words(plan: SyncPlan | None, state: SyncState | None) -> str:
         return plan.refused
     if state is None:
         return NOT_READ_YET
+    if state.outcome is SyncOutcome.PROBED:
+        return f"{TESTED_ON_REQUEST} {state.detail}"
     if state.outcome is SyncOutcome.SYNCED:
         return state.detail
     said = f"{state.detail} {TRIED_AGAIN} {state.next_attempt_at.isoformat()}."

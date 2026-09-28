@@ -124,6 +124,7 @@ import {
   transferApiPath,
 } from "../../src/pages/staffSourcesQuery";
 import { CONNECTORS_API_PATH, disconnectApiPath } from "../../src/pages/connectorsQuery";
+import { probeApiPath } from "../../src/pages/connectors/connectorProbe";
 import { editApiPath, exportApiPath, keyApiPath } from "../../src/pages/connectors/connectorSources";
 import { LARK_API_PATH, LARK_TEST_API_PATH } from "../../src/pages/larkConnectQuery";
 import { agentMoveApiPath } from "../../src/pages/agentLifecycleQuery";
@@ -479,9 +480,11 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/connectors/{connector}/disconnect",
       "/api/v1/connectors/{connector}/edit",
       "/api/v1/connectors/{connector}/key",
+      "/api/v1/connectors/{connector}/probe",
       "/api/v1/console/connectors",
       "/api/v1/console/connectors/{connector}",
       "/api/v1/console/connectors/{connector}/export",
+      "/api/v1/console/connectors/{connector}/probe",
       "/api/v1/connectors/lark-app",
       "/api/v1/connectors/lark-app/test",
       "/api/v1/channels*",
@@ -503,10 +506,6 @@ export const AREAS: Readonly<Record<string, Area>> = {
         what: "A connected source is read and kept, and no question is answered from what is kept.",
         because:
           "No row tool is registered for a connected source's records: brain.tools.startup.classification_for is keyed on the entity alone and Xero and HubSpot both project contact, which that module records as the limit to change first. brain.ops.connector_admin.WHAT_CONNECTING_A_SOURCE_STARTS says so in the connect confirmation.",
-      },
-      {
-        what: "A connection cannot be tested from the console yet: only the worker reads a source's key, and a successful probe has no outcome ops.connector_sync can hold without claiming a full read.",
-        leaf: "M27.15.8",
       },
       {
         what: "HubSpot can be connected and is not read.",
@@ -1097,6 +1096,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/connectors/SourceActs.tsx keyApiPath(name)": [
     at("POST /api/v1/connectors/{connector}/key", "keyApiPath", keyApiPath("xero")),
   ],
+  "src/pages/connectors/TestConnection.tsx probeApiPath(name)": [
+    at("POST /api/v1/connectors/{connector}/probe", "probeApiPath", probeApiPath("xero")),
+  ],
   "src/components/ConnectSource.tsx CONNECTORS_API_PATH": [at("POST /api/v1/connectors", "CONNECTORS_API_PATH", CONNECTORS_API_PATH)],
   "src/components/ConnectLark.tsx LARK_TEST_API_PATH": [
     at("POST /api/v1/connectors/lark-app/test", "LARK_TEST_API_PATH", LARK_TEST_API_PATH),
@@ -1460,6 +1462,13 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: CONNECTION_REACHES_THE_ROW_AND_THE_LEDGER,
     audit: CONNECTION_REACHES_THE_ROW_AND_THE_LEDGER,
     behaviour: t("test_connector_routes", "test_a_replaced_key_is_a_credential_write_and_changes_no_connection"),
+  },
+  // A press is a request row the worker answers with an attempt row: both are asserted in the one
+  // database test, and the ledger entry the press appends in the one built through every migration.
+  "POST /api/v1/connectors/{connector}/probe": {
+    row: t("test_connector_probe_run", "test_a_test_asked_for_is_made_once_with_the_workers_key_and_keeps_nothing", true),
+    audit: t("test_connector_probe_run", "test_a_press_is_on_the_ledger_and_a_test_survives_the_downgrade", true),
+    behaviour: t("test_connector_probe_run", "test_a_declined_key_is_recorded_on_the_sources_health_and_the_schedule_is_unmoved", true),
   },
   "POST /api/v1/govern/access-review/decision": {
     row: t("test_review_store", "test_keeping_and_removing_reach_the_rows_the_ledger_and_what_the_holder_is_resolved_to", true),
