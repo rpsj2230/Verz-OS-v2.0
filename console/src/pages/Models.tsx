@@ -41,6 +41,10 @@
  * listing pinned agents here would name agents on a screen whose grant says nothing about which
  * agents a reader may see.
  *
+ * **The cost is written in the install's currency and zone**, which the spend report carries
+ * (`brain.report_routes.A_FIGURE_SAYS_ITS_CURRENCY_AND_ITS_CLOCK`), as "SGD 288.00" and "6 Mar
+ * 2019, 16:00", and never in the browser's zone.
+ *
  * **Each card is loaded, failed or answered on its own.** A reader may hold the models screen and
  * not the usage grant, and the cost card then carries the API's refusal while the providers and
  * the matrix are drawn. Loading, unreachable, refused and unreadable are different sentences in
@@ -133,8 +137,8 @@ import {
 } from "./modelsQuery";
 import { milliseconds, readServiceLevels, SERVICE_LEVELS_API_PATH } from "./serviceLevelsQuery";
 import {
-  freshnessLine,
-  majorUnits,
+  freshnessInZone,
+  moneyWords,
   readSpendReport,
   SPEND_API_PATH,
   SPEND_DIMENSION,
@@ -681,8 +685,8 @@ function CostThisMonth({ spend }: { readonly spend: Resource<unknown> }) {
           const shares = spendShares(report);
           return (
             <>
-              <p className="figure">{majorUnits(report.total_minor)}</p>
-              <p className="note">{freshnessLine(report)}</p>
+              <p className="figure">{moneyWords(report.total_minor, report.currency)}</p>
+              <p className="note">{freshnessInZone(report)}</p>
               {shares.length === 0 ? (
                 <p className="note">{NO_SPEND_THIS_MONTH}</p>
               ) : (
@@ -690,7 +694,7 @@ function CostThisMonth({ spend }: { readonly spend: Resource<unknown> }) {
                   {shares.map((line) => (
                     <div className="fields__row" key={line.key}>
                       <dt>{line.key}</dt>
-                      <dd>{majorUnits(line.costMinor)}</dd>
+                      <dd>{moneyWords(line.costMinor, report.currency)}</dd>
                     </div>
                   ))}
                 </dl>

@@ -109,6 +109,57 @@ export function majorUnits(minor: number): string {
 }
 
 /**
+ * Minor units with the currency the report names, as "SGD 288.00".
+ *
+ * The code comes from the report (`brain.report_routes.A_FIGURE_SAYS_ITS_CURRENCY_AND_ITS_CLOCK`),
+ * which is the install's own setting, so this asserts nothing `majorUnits` refuses to. An install
+ * that chose none is sent `XXX`, and "XXX 288.00" is the visibly unset figure the setting asks for.
+ * The ISO code rather than a symbol: "$" is a dozen currencies.
+ */
+export function moneyWords(minor: number, currency: string): string {
+  return `${currency} ${majorUnits(minor)}`;
+}
+
+/**
+ * The language dates are written in: the console's own, `index.html`'s `lang`. Not the
+ * browser's, so two people reading the same figure read the same words.
+ */
+export const CONSOLE_LANGUAGE = "en-GB";
+
+/**
+ * An instant in the install's zone, as "6 Mar 2019, 16:00", or the API's text when it does not
+ * parse or the zone is one this browser does not know. Never the browser's own zone: a report
+ * read from another country would otherwise say a different hour for the same refresh.
+ */
+export function instantWords(iso: string, timeZone: string): string {
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) {
+    return iso;
+  }
+  try {
+    return new Intl.DateTimeFormat(CONSOLE_LANGUAGE, {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+      timeZone,
+    }).format(parsed);
+  } catch {
+    return iso;
+  }
+}
+
+/** How old the figures are, with the instant in the install's zone. See `freshnessLine`. */
+export function freshnessInZone(report: SpendReportBody): string {
+  if (report.as_of === null) {
+    return report.freshness;
+  }
+  return `${report.freshness}, as of ${instantWords(report.as_of, report.time_zone)}`;
+}
+
+/**
  * How old the figures are, in the API's own word, with the instant it sent beside it.
  *
  * The word is not translated and not coloured. `brain.gate.provenance` grades an answer's

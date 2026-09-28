@@ -43,6 +43,7 @@ from brain.core.lane import Lane
 from brain.core.principal import PrincipalKind
 from brain.core.scope import Clause, Op, Scope
 from brain.gate.context import Channel, TrafficClass
+from brain.install import BY_NAME, hold_saved
 from brain.listing import DEFAULT_PAGE_ROWS, MAX_PAGE_ROWS
 from brain.ops.reliability import LANE_OBJECTIVES
 from brain.ops.spend import Dimension
@@ -50,6 +51,8 @@ from brain.ops.telemetry import RequestStatus
 from brain.report_routes import (
     MAX_ADOPTION_DAYS,
     MAX_READING_HOURS,
+    UNSET_CURRENCY,
+    UNSET_TIME_ZONE,
     live_departments,
 )
 from brain.tables.adoption import QuestionAskedRow
@@ -479,7 +482,40 @@ def test_a_spend_report_carries_no_field_counting_what_it_did_not_show(
         "total_minor",
         "as_of",
         "freshness",
+        "currency",
+        "time_zone",
     }
+
+
+def test_a_spend_report_says_the_installs_currency_and_zone_and_an_unresolved_one_is_visibly_unset(
+    client: TestClient, stored: Stored
+) -> None:
+    """The report carries the currency and zone the install saved, so a screen can write "SGD
+    288.00" and a local time; a setting that does not resolve is sent as XXX and UTC, never as a
+    refusal that takes the figures with it.
+
+    Delete this and a cost is drawn as a bare number in whichever currency the reader assumes, or
+    a mistyped zone blanks every spend figure on the install."""
+    stored.refreshed_at = datetime.now(UTC) - timedelta(hours=1)
+    stored.spend_days = (SpendDailyRow("support", "support", 700),)
+
+    before = hold_saved({"INSTALL_CURRENCY": "sgd", "INSTALL_TIME_ZONE": "Asia/Singapore"})
+    try:
+        chosen = get(client, SPEND_PATH, "u_wide").json()
+        hold_saved({"INSTALL_CURRENCY": "dollars", "INSTALL_TIME_ZONE": "Nowhere/Atlantis"})
+        unresolved = get(client, SPEND_PATH, "u_wide")
+    finally:
+        hold_saved(before)
+
+    assert (chosen["currency"], chosen["time_zone"]) == ("SGD", "Asia/Singapore")
+    assert unresolved.status_code == 200
+    assert (unresolved.json()["currency"], unresolved.json()["time_zone"]) == ("XXX", "UTC")
+    assert unresolved.json()["total_minor"] == chosen["total_minor"]
+    # The unset pair is the declaration's own defaults, not a second opinion kept here.
+    assert (
+        BY_NAME["INSTALL_CURRENCY"].default,
+        BY_NAME["INSTALL_TIME_ZONE"].default,
+    ) == (UNSET_CURRENCY, UNSET_TIME_ZONE)
 
 
 def test_the_report_says_whether_machine_traffic_was_counted(
