@@ -418,8 +418,11 @@ tests for the consumer unless you write the producer's from the raw payload.
 
 ## Environment traps, all of which have cost time here
 
-**The shell is PowerShell 5.1** for anything handed to the user. `&&` is a parser error there.
-Run commands yourself rather than handing them over.
+**The development machine is a Mac, and its shell is zsh** (since 2026-09-28; the Windows
+laptop before it used PowerShell 5.1, where `&&` was a parser error). POSIX syntax is fine in
+anything handed to the user, but run commands yourself rather than handing them over. Homebrew
+tools (`uv`, `node`, `gh`) live in `/opt/homebrew/bin`, which a non-login shell may not have on
+its PATH.
 
 **Heredocs mangle backslashes.** Writing a Python script through `cat <<'PY'` has collapsed
 `\\` to `\` and produced `re.PatternError: unterminated character set` more than once. For
@@ -429,8 +432,9 @@ anything containing a backslash, use the Write tool, or `chr(92)`.
 skips the habit of formatting, and the pre-push hook catches it after the commit. Run
 `uv run python -m ruff format --check` before committing.
 
-**Python writes CRLF.** `Path.write_text` without `newline="\n"` inserts CRLF on this machine,
-which dirties a clean tree and has broken a shell script on the server.
+**Python on Windows writes CRLF.** `Path.write_text` without `newline="\n"` inserted CRLF on the
+Windows laptop, which dirtied a clean tree and broke a shell script on the server. The Mac writes
+LF, but keep passing `newline="\n"` so a script stays right on whichever machine runs it.
 
 **And a green test run is not evidence about what you staged.** On 2026-09-08 an agent's
 module and its test file passed together at 21:08, were staged at 21:10, and the commit was
@@ -466,8 +470,10 @@ the history is a failed deployment rather than an untidy log.
 **mypy type checks the platform it is running on, so a green local run says nothing about the
 container.** It narrows `sys.platform` to a literal and then declines to warn about a block a
 platform check excludes. That courtesy covers the guarded block and **not the statements
-downstream of it**, so a function branching on the platform is checked in halves: Windows
-checks one, the ubuntu runner checks the other, and each is silent about the half it skipped.
+downstream of it**, so a function branching on the platform is checked in halves: the
+development machine (Windows then, macOS now) checks one, the ubuntu runner checks the other,
+and each is silent about the half it skipped. A green run on the Mac is no more evidence about
+the container than a green run on Windows was.
 
 On 2026-09-11 `brain.ops.worker._loop_factory` was written `if sys.platform != "win32": return
 None` with the Windows branch after it. Local mypy said `Success: no issues found in 681 source
@@ -598,10 +604,11 @@ you cannot test a window boundary through a module that opens a socket.
 - `uv run python -m brain.ops.sweeps traceability`
 
 **`uv run python -m <tool>`, not `uv run <tool>`, and the difference is not style.** `uv run
-mypy` spawns the console shim uv writes into the environment, and on this machine Windows
-Application Control intermittently refuses a freshly written unsigned executable in a
-temporary directory: `Failed to spawn: mypy ... (os error 4551)`. It is intermittent, which is
-worse than consistent, because it presents as a gate failing with no gate having an opinion.
+mypy` spawns the console shim uv writes into the environment, and on the Windows laptop used
+until 2026-09-22, Windows Application Control intermittently refused a freshly written unsigned
+executable in a temporary directory: `Failed to spawn: mypy ... (os error 4551)`. It was
+intermittent, which is worse than consistent, because it presented as a gate failing with no
+gate having an opinion.
 Running the interpreter uv already trusts and importing the tool as a module spawns nothing
 new. `brain.ops.mutation` and `ops/hooks/pre-push` both carry the same fix for the same
 reason, and the harness one presented as a flaky test in the module whose whole job is to be
@@ -619,6 +626,11 @@ So the two fixes that work are a signed interpreter (`winget install --id Python
 then rebuild the venv from it) and that zip unpacked to `C:\pgsql` with its `bin` on PATH.
 `winget install --id PostgreSQL.PostgreSQL.17` does **not** work and will not: the installer
 exits 1 because the policy refuses the binaries it runs.
+
+**None of that policy exists on the Mac** (the development machine since 2026-09-28). The
+`python -m` habit and the named interpreter stay, because they are correct on every machine. The
+Mac has no local PostgreSQL yet, so the database tests skip locally (`DATABASE_URL` is unset) and
+run in CI, which always sets it.
 
 **And anything that makes a throwaway worktree has to name its interpreter.** A fresh worktree
 has no environment, so uv goes looking for one and finds the managed copy that is blocked. Both

@@ -63,10 +63,11 @@ npm run dev
 ```
 
 `npm run api:generate` runs two steps. The first is Python and exports the API's internal
-OpenAPI document into `src/api/generated/`; the second turns it into TypeScript types. On
-Windows, `npm run` executes scripts through `cmd.exe`, so the `&&` inside the script works
-even though typing the same thing into PowerShell 5.1 would be a parser error. If you run
-the halves by hand, run them as two commands.
+OpenAPI document into `src/api/generated/`; the second turns it into TypeScript types.
+`npm run` executes scripts through a shell (`sh` on macOS and Linux, `cmd.exe` on Windows), so
+the `&&` inside the script works everywhere, even though typing the same thing into Windows
+PowerShell 5.1 would be a parser error. If you run the halves by hand there, run them as two
+commands.
 
 Other scripts: `npm run build` (typecheck then bundle), `npm run typecheck`,
 `npm run preview`, `npm run check:boundaries`, `npm test` (`npm run test:watch` while
