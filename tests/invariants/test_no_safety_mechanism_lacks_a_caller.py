@@ -63,7 +63,7 @@ KNOWN_ORPHANS = frozenset(
         # `canary_run` left on 2026-09-17: the worker's schedule starts it. See
         # `SCHEDULED_BY_THE_WORKER`.
         "backup_exposure",
-        "denial_digest",
+        # `denial_digest` left on 2026-09-28 for `WIRED_BUT_NOT_SCHEDULED`: see there.
         # `knowledge_reverification` left on 2026-09-15: the worker's schedule starts it. See
         # `SCHEDULED_BY_THE_WORKER`.
         "resolution_calibration",
@@ -96,7 +96,11 @@ KNOWN_ORPHANS = frozenset(
 #:
 #: `directory_sync` left it on 2026-09-21 for `SCHEDULED_BY_THE_WORKER`, when
 #: `brain.ops.staff_sync_run` gave the nightly read a runner.
-WIRED_BUT_NOT_SCHEDULED = frozenset({"spend_correction", "restore_drill"})
+#:
+#: `denial_digest` joined it on 2026-09-28 from `KNOWN_ORPHANS`. `brain.ops.denial_digest_run`
+#: reads the hour's refusals from the ledger, resolves the people to tell and keeps what
+#: `digest` raises, and its runner in `brain.ops.schedule_runner` is the integrator's to add.
+WIRED_BUT_NOT_SCHEDULED = frozenset({"spend_correction", "restore_drill", "denial_digest"})
 
 #: Controls the worker's schedule starts, which is the state the two sets above are waiting for.
 #:
@@ -186,7 +190,11 @@ SCHEDULED_BY_THE_WORKER = frozenset(
 #: `run_renewal_now`, is reached through `start_control` and is not reported. Recorded rather
 #: than dropped from the symbols, because dropping it would make the application's token a token
 #: the registry says nothing about.
-CALLERS_NOTHING_REACHES = frozenset({"directory_sync", "vault_token_renewal"})
+#:
+#: `denial_digest` joined it on 2026-09-28, and it is exactly the chain this set exists for:
+#: `brain.ops.denial_digest_run.run_denial_digest_now` calls `digest`, and nothing calls it yet.
+#: It leaves the day `brain.ops.schedule_runner` gives the control a runner and an arm.
+CALLERS_NOTHING_REACHES = frozenset({"directory_sync", "vault_token_renewal", "denial_digest"})
 
 
 def test_every_control_names_functions_that_exist() -> None:

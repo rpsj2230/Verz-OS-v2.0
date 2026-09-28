@@ -530,7 +530,9 @@ CONTROLS: Final[tuple[Control, ...]] = (
         every=DIGEST_WINDOW,
         cadence_from="brain.ops.denial_alerts:DIGEST_WINDOW",
         severity=Severity.RAISED,
-        invoked_by=Invocation.NOTHING,
+        # Since 2026-09-28 `brain.ops.denial_digest_run` gathers the patterns and the recipients
+        # and calls it; nothing in the worker's schedule starts that yet.
+        invoked_by=Invocation.IN_PROCESS,
     ),
     Control(
         name="directory_sync",

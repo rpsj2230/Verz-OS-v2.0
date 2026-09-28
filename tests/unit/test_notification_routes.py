@@ -6,7 +6,7 @@ write and the next read that sees it. The vault is a stand-in on `app.state.mail
 operation ledger `tests.fixtures.operation_ledger.MemoryLedger` on `app.state.operation_ledger`, and
 the relay `tests.fixtures.fake_relay`, so a test message is followed to a relay that received it.
 
-Task ids: M27.8.11, M27.7.12
+Task ids: M27.8.11, M27.7.12, M23.2.2
 """
 
 from __future__ import annotations
@@ -26,15 +26,20 @@ from brain.core.entitlement import Grant
 from brain.core.scope import Scope
 from brain.notification_routes import (
     EMAIL_PATH,
+    NO_CACHE_KEEPS_ALERTS,
     NO_RELAY_CREDENTIAL_HELD,
     NOT_CONFIGURED,
     NOTIFICATION_AUTHORITY,
     NOTIFICATIONS_PATH,
     PASSWORD_PATH,
+    THE_ALERT_STORE_DID_NOT_ANSWER,
     TRIAL_PATH,
 )
 from brain.ops.credentials import TOLD as VAULT_TOLD
 from brain.ops.credentials import VaultState
+from brain.ops.denial_alert_store import AlertStore
+from brain.ops.denial_alerts import ALERT_TEXT, AlertLog, DenialAlert, Digest
+from brain.ops.limits import DenialShape
 from brain.ops.mail import (
     RELAY_CREDENTIAL_FIELD,
     RELAY_CREDENTIAL_SLOT,
@@ -46,6 +51,7 @@ from brain.ops.notices import NOTICES, NoticeKind
 from brain.ops.openbao import StaticVersion, VaultRefusedError, VaultUnreachableError
 from brain.tables.audit import ACTOR_SETTING, ENT_HASH_SETTING, TRACE_ID_SETTING
 from tests.fixtures.console_http import Stub, console_client, get, post
+from tests.fixtures.fake_alert_valkey import FakeAlertValkey
 from tests.fixtures.fake_relay import LOOPBACK, fake_relay
 from tests.fixtures.operation_ledger import MemoryLedger
 from tests.fixtures.setting_rows import SettingRows
@@ -426,3 +432,79 @@ def test_no_answer_on_this_screen_carries_a_value_a_response_should_not(
     body = get(client, "u_admin", PAGE).text
     assert RELAY_CREDENTIAL_SLOT not in body and SECRET not in body
     assert "providers/" not in json.dumps(body)
+
+
+# ------------------------------------------------------------ refusal-pattern alerts (M23.2.2)
+def _alert(recipient: str, subject: str) -> DenialAlert:
+    shape = DenialShape.ENUMERATION
+    return DenialAlert(
+        recipient_id=recipient,
+        subject_id=subject,
+        shape=shape,
+        raised_at=WRITTEN,
+        text=ALERT_TEXT[shape],
+    )
+
+
+def test_the_readers_own_refusal_pattern_alerts_are_listed_by_shape_and_nobody_elses(
+    served: tuple[TestClient, Stub],
+) -> None:
+    """ "A denial-pattern alert reaches Notifications naming the shape of the pattern." The
+    reader's own alert is listed with who it is about, the sentence for its shape and when; an
+    alert kept for somebody else is not; and nothing on the page names a capability, an object
+    or a number.
+
+    Delete this and the digest can keep alerts that no screen ever shows."""
+    client, _ = served
+    attach(client, Vault())
+    store = AlertStore(client=FakeAlertValkey())
+    store.keep(
+        Digest(
+            alerts=(_alert("u_admin", "u_weiling"), _alert("u_other", "u_jason")), log=AlertLog()
+        )
+    )
+    client.app.state.alert_store = store  # type: ignore[attr-defined]
+
+    body = get(client, "u_admin", PAGE).json()
+
+    assert body["alerts_unread"] == ""
+    [one] = body["alerts"]
+    assert one["subject"] == "u_weiling"
+    assert one["said"] == ALERT_TEXT[DenialShape.ENUMERATION]
+    assert set(one) == {"subject", "said", "raised_at"}
+    assert "u_jason" not in json.dumps(body["alerts"])
+    assert not any(char.isdigit() for char in one["said"])
+
+
+def test_a_process_with_no_cache_says_no_alert_can_be_kept_rather_than_listing_none(
+    served: tuple[TestClient, Stub],
+) -> None:
+    """An empty list says nobody was told anything; no cache says nothing could have been kept.
+    Delete this and the second reads as the first."""
+    client, _ = served
+    attach(client, Vault())
+
+    body = get(client, "u_admin", PAGE).json()
+
+    assert body["alerts"] is None
+    assert body["alerts_unread"] == NO_CACHE_KEEPS_ALERTS
+
+
+def test_a_cache_that_does_not_answer_is_said_rather_than_failing_the_screen(
+    served: tuple[TestClient, Stub],
+) -> None:
+    """The notices and the relay are still worth showing when the alerts cannot be read.
+    Delete this and a cache outage takes the whole screen down with a 500."""
+    from redis.exceptions import ConnectionError as RedisConnectionError
+
+    client, _ = served
+    attach(client, Vault())
+    client.app.state.alert_store = AlertStore(  # type: ignore[attr-defined]
+        client=FakeAlertValkey(raises=RedisConnectionError("down"))
+    )
+
+    body = get(client, "u_admin", PAGE).json()
+
+    assert body["alerts"] is None
+    assert body["alerts_unread"] == THE_ALERT_STORE_DID_NOT_ANSWER
+    assert body["notices"]

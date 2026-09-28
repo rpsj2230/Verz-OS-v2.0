@@ -30,7 +30,14 @@ switch and the relay's configuration are `ops.setting` rows, which `0059`'s trig
 field. The password is a credential write and leaves the `credential` entry every other one
 does.
 
-Task ids: M27.8.11, M27.7.12
+**Refusal-pattern alerts addressed to the reader are listed here, since 2026-09-28.**
+`brain.ops.denial_digest_run` keeps each alert for the person entitled to hear it in
+`brain.ops.denial_alert_store`, and this screen reads the reader's own and nobody else's: who it
+is about, the sentence for its shape, and when it was raised. No capability, object or count is
+stored, so none can be shown. See
+`brain.ops.denial_alerts.THE_ALERT_NAMES_A_SHAPE_AND_NEVER_A_THING`.
+
+Task ids: M27.8.11, M27.7.12, M23.2.2
 """
 
 from __future__ import annotations
@@ -45,6 +52,7 @@ import structlog
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
+from redis.exceptions import RedisError
 
 from brain.api import API_PREFIX, COMMON_RESPONSES, ErrorBody, NoEchoRoute
 from brain.api_routes import Asked
@@ -58,6 +66,8 @@ from brain.install_routes import settings_of
 from brain.ops.credential_write_store import credential_writes_for
 from brain.ops.credentials import TOLD as VAULT_TOLD
 from brain.ops.credentials import VaultState
+from brain.ops.denial_alert_store import alert_store_of
+from brain.ops.denial_alerts import DenialAlert
 from brain.ops.idempotency import OperationLedger
 from brain.ops.mail import (
     MAIL_DOES_NOT_CROSS_A_NETWORK_IN_THE_CLEAR,
@@ -216,10 +226,42 @@ class RelayView(BaseModel):
     branded_sender: str
 
 
+#: What the alerts half says on a process with no cache, where no alert can have been kept.
+NO_CACHE_KEEPS_ALERTS: Final = (
+    "No alert about a colleague's refusals can be kept on this install, because no cache is "
+    "configured. The notice above is composed and nothing holds it for you to read."
+)
+
+#: What the alerts half says when the cache did not answer.
+THE_ALERT_STORE_DID_NOT_ANSWER: Final = (
+    "The alerts kept for you could not be read when this screen was opened, so nothing below is "
+    "a statement about them. Open the screen again, and if it still does not answer, check that "
+    "the cache is running."
+)
+
+
+class DenialAlertView(BaseModel):
+    """One refusal-pattern alert addressed to the reader: about whom, the sentence, and when.
+
+    Nothing else, because nothing else is kept: no capability, object, count or denial time.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    subject: str
+    said: str
+    raised_at: datetime
+
+
 class NotificationsPage(BaseModel):
     """The Notifications screen: every notice, the relay, and what this screen cannot do."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
+
+    #: Refusal-pattern alerts addressed to the reader, newest first, or None with `alerts_unread`
+    #: saying why there is no list. An empty list is nobody having been told anything.
+    alerts: list[DenialAlertView] | None = None
+    alerts_unread: str = ""
 
     notices: list[NoticeView]
     email: RelayView
@@ -479,7 +521,10 @@ async def notifications(request: Request, asked: Asked) -> NotificationsPage:
         states = await switch_states(session)
         rows = await settings_rows(session)
     password, _ = await asyncio.to_thread(password_view, mail_password_of(request))
+    alerts, alerts_unread = await alerts_for_reader(request, asked.reach.principal_id)
     return NotificationsPage(
+        alerts=alerts,
+        alerts_unread=alerts_unread,
         notices=notice_views(states),
         email=email_view(rows, password),
         securities=list(Security),
@@ -494,6 +539,29 @@ async def notifications(request: Request, asked: Asked) -> NotificationsPage:
         sending_trial=SENDING_TRIAL,
         plain_smtp_refused=MAIL_DOES_NOT_CROSS_A_NETWORK_IN_THE_CLEAR,
     )
+
+
+def alert_view(one: DenialAlert) -> DenialAlertView:
+    return DenialAlertView(subject=one.subject_id, said=one.text, raised_at=one.raised_at)
+
+
+async def alerts_for_reader(
+    request: Request, reader: str
+) -> tuple[list[DenialAlertView] | None, str]:
+    """The reader's own refusal-pattern alerts, or why there is no list.
+
+    Read in a worker thread because the client blocks, and by the reader's own id and no other,
+    so there is no parameter a caller could point at somebody else's alerts.
+    """
+    store = alert_store_of(request.app.state)
+    if store is None:
+        return None, NO_CACHE_KEEPS_ALERTS
+    try:
+        found = await asyncio.to_thread(store.alerts_for, reader)
+    except (RedisError, OSError) as exc:
+        log.warning("denial alerts unreadable", error=type(exc).__name__)
+        return None, THE_ALERT_STORE_DID_NOT_ANSWER
+    return [alert_view(one) for one in found], ""
 
 
 @router.post(NOTICE_PATH, response_model=NoticeView, responses=COMMON_RESPONSES)

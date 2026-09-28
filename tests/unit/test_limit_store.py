@@ -10,12 +10,18 @@ it replaces a member on a repeated `zadd` exactly as Valkey does, which is what 
 "two hits at one instant" test able to fail. A fake that appended blindly would prove the
 fake appends.
 
-Task ids: M23.1.1
+It is literal about the transaction too, since 2026-09-28. A command issued after `watch` and
+before `multi` runs at once, as the real pipeline runs it, and a command issued after `multi`
+is queued and applied only by an `execute` that did not lose the race. The first version
+applied every write at once, so a lost race still wrote, and the counter of refusals, which is
+read back from `execute`, could not have been tested against it at all.
+
+Task ids: M23.1.1, M23.1.5
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -27,14 +33,26 @@ from brain.ops.admission import RefusalKind
 from brain.ops.limit_store import (
     KEY_PREFIX,
     MAX_ATTEMPTS,
+    REFUSALS_FORGOTTEN_AFTER_SECONDS,
     TTL_SLACK_SECONDS,
     UNREACHABLE_POLICY,
     Availability,
     StoreVerdict,
     ValkeyWindowStore,
+    WindowsUnreadableError,
+    parse_key,
+    refusals_key,
     render_key,
 )
-from brain.ops.limits import Limit, LimitScope
+from brain.ops.limits import (
+    MAX_BACKOFF_SECONDS,
+    Limit,
+    LimitScope,
+    channel_limit,
+    check,
+    principal_limit,
+    source_limits,
+)
 
 NOW = datetime(2026, 9, 5, 12, 0, tzinfo=UTC)
 
@@ -60,16 +78,27 @@ def per_connector(limit: int = 2, window: float = 60.0) -> Limit:
 
 
 class FakePipeline:
-    """A sorted set per key, with Valkey's replace-on-duplicate-member behaviour."""
+    """A sorted set per key, with Valkey's replace-on-duplicate-member behaviour.
+
+    Immediate between `watch` and `multi`, queued after `multi`, and applied by `execute`
+    only when the race was won, which is what the real transaction does.
+    """
 
     def __init__(self, store: FakeClient) -> None:
         self.store = store
+        self.queued: list[Callable[[], Any]] | None = None
 
     def __enter__(self) -> FakePipeline:
         return self
 
     def __exit__(self, *exc: object) -> None:
         self.store.watched = ()
+
+    def _run(self, action: Callable[[], Any]) -> Any:
+        if self.queued is None:
+            return action()
+        self.queued.append(action)
+        return self
 
     def watch(self, *names: str) -> object:
         self.store.watched = names
@@ -81,39 +110,54 @@ class FakePipeline:
 
     def multi(self) -> None:
         self.store.multi_calls += 1
+        self.queued = []
 
     def execute(self) -> list[Any]:
         self.store.execute_calls += 1
+        queued, self.queued = self.queued or [], None
         if self.store.conflict_for > 0:
             self.store.conflict_for -= 1
             raise WatchError("a watched key moved")
-        return []
+        return [action() for action in queued]
 
     def zrange(self, name: str, start: int, end: int, *, withscores: bool = False) -> Any:
-        del start, end, withscores
-        return sorted(self.store.sets.get(name, {}).items(), key=lambda pair: pair[1])
+        return self._run(lambda: self.store.zrange(name, start, end, withscores=withscores))
 
     def zremrangebyscore(self, name: str, min: Any, max: Any) -> object:  # noqa: A002
         del min
-        members = self.store.sets.get(name, {})
-        for member, score in list(members.items()):
-            if score <= float(max):
-                del members[member]
-        return None
+
+        def prune() -> None:
+            members = self.store.sets.get(name, {})
+            for member, score in list(members.items()):
+                if score <= float(max):
+                    del members[member]
+
+        return self._run(prune)
 
     def zadd(self, name: str, mapping: Mapping[str, float]) -> object:
-        self.store.sets.setdefault(name, {}).update(mapping)
-        return None
+        return self._run(lambda: self.store.sets.setdefault(name, {}).update(mapping))
 
     def expire(self, name: str, time: int) -> object:
-        self.store.ttls[name] = time
-        return None
+        return self._run(lambda: self.store.ttls.__setitem__(name, time))
+
+    def incr(self, name: str) -> object:
+        def bump() -> int:
+            self.store.counters[name] = self.store.counters.get(name, 0) + 1
+            return self.store.counters[name]
+
+        return self._run(bump)
+
+    def delete(self, *names: str) -> object:
+        return self._run(
+            lambda: sum(self.store.counters.pop(one, None) is not None for one in names)
+        )
 
 
 class FakeClient:
     def __init__(self, *, conflict_for: int = 0, raises: Exception | None = None) -> None:
         self.sets: dict[str, dict[str, float]] = {}
         self.ttls: dict[str, int] = {}
+        self.counters: dict[str, int] = {}
         self.watched: tuple[str, ...] = ()
         self.ever_watched: tuple[str, ...] = ()
         self.conflict_for = conflict_for
@@ -126,6 +170,23 @@ class FakeClient:
         if self.raises is not None:
             raise self.raises
         return FakePipeline(self)
+
+    def scan_iter(self, match: str | None = None, count: int | None = None) -> Iterator[Any]:
+        """Every key as bytes, as a client built with `decode_responses=False` returns it."""
+        del count
+        if self.raises is not None:
+            raise self.raises
+        prefix = (match or "*").rstrip("*")
+        for name in [*self.sets, *self.counters]:
+            if name.startswith(prefix):
+                yield name.encode("utf-8")
+
+    def zrange(self, name: str, start: int, end: int, *, withscores: bool = False) -> Any:
+        del start, end, withscores
+        return sorted(self.store_items(name), key=lambda pair: pair[1])
+
+    def store_items(self, name: str) -> list[tuple[str, float]]:
+        return list(self.sets.get(name, {}).items())
 
 
 def store_with(**kwargs: Any) -> tuple[ValkeyWindowStore, FakeClient]:
@@ -408,3 +469,189 @@ def test_a_verdict_reports_the_same_answer_as_the_decision_it_wraps(degraded: bo
     verdict: StoreVerdict = store.check_and_record(now=NOW, limits=(per_principal(),))
 
     assert verdict.allowed is verdict.decision.allowed
+
+
+# ---------------------------------------------------------- a lost race writes nothing
+def test_a_lost_race_records_its_hit_once_and_not_once_per_attempt() -> None:
+    """A transaction that lost the race wrote nothing, so the retry that wins is the only
+    write. A store that applied the losing attempt's writes would record one hit per attempt,
+    and under contention a limit would fill several times faster than requests arrive.
+
+    Delete this and the fake's transaction can go back to applying writes at once, which is
+    the version of it that could not have caught this."""
+    store, client = store_with(conflict_for=2)
+    limits = (per_principal(limit=5),)
+
+    assert store.check_and_record(now=NOW, limits=limits).allowed
+
+    assert len(client.sets[render_key(limits[0].key)]) == 1
+
+
+# -------------------------------------------------------------- the run of refusals
+def test_each_refusal_in_a_row_is_counted_for_the_caller() -> None:
+    """`limits.backoff_seconds` needs how many times in a row a caller was refused, and the
+    window cannot say, because a refusal is never recorded there. The counter is what can.
+
+    Delete this and the verdict can report zero for ever, and every hint stays exact however
+    long a client loops."""
+    store, client = store_with()
+    limits = (per_principal(limit=1),)
+    store.check_and_record(now=NOW, limits=limits, caller="p_alice")
+
+    runs = [
+        store.check_and_record(now=NOW, limits=limits, caller="p_alice").consecutive_refusals
+        for _ in range(3)
+    ]
+
+    assert runs == [1, 2, 3]
+    assert client.ttls[refusals_key("p_alice")] == REFUSALS_FORGOTTEN_AFTER_SECONDS
+
+
+def test_an_admission_forgets_the_run_of_refusals() -> None:
+    """A caller who waited and was admitted has stopped looping, and the next refusal starts
+    a new run with the exact hint. Without the reset a person refused four times in the
+    morning is told to wait five minutes in the afternoon.
+
+    Delete this and the counter only ever grows until it expires."""
+    store, client = store_with()
+    limits = (per_principal(limit=1, window=60.0),)
+    store.check_and_record(now=NOW, limits=limits, caller="p_alice")
+    store.check_and_record(now=NOW, limits=limits, caller="p_alice")
+
+    later = NOW + timedelta(seconds=61)
+    assert store.check_and_record(now=later, limits=limits, caller="p_alice").allowed
+
+    assert refusals_key("p_alice") not in client.counters
+    refused = store.check_and_record(now=later, limits=limits, caller="p_alice")
+    assert refused.consecutive_refusals == 1
+
+
+def test_the_run_is_forgotten_after_the_longest_hint_there_is() -> None:
+    """The counter expires on its own after `MAX_BACKOFF_SECONDS`: a caller who waited that
+    long is not looping. Asserted against the backoff ceiling in `brain.ops.limits`, which is
+    outside this module, so changing one without the other fails here.
+
+    Delete this and the expiry can drift to a day, which remembers a morning's loop until
+    tomorrow."""
+    assert int(MAX_BACKOFF_SECONDS) == REFUSALS_FORGOTTEN_AFTER_SECONDS
+
+
+def test_the_refusal_counter_is_never_read_as_a_window() -> None:
+    """The counter lives under its own prefix, so the walk the Limits screen makes over the
+    windows cannot find it and parse it as a window nobody declared.
+
+    Delete this and moving the counter under the window prefix looks tidy."""
+    assert parse_key(refusals_key("p_alice")) is None
+    assert not refusals_key("p_alice").startswith(f"{KEY_PREFIX}:")
+
+
+def test_an_early_ask_records_nothing_and_forgets_nothing() -> None:
+    """`check_only` is the ask the request path makes before any work. It must not record a
+    hit, because the request has not been admitted yet, and an admission there must not wipe
+    a run of refusals for the same reason; its refusal is a refusal and is counted.
+
+    Delete this and the early ask can record, which counts every admitted question twice."""
+    store, client = store_with()
+    limits = (per_principal(limit=1),)
+    key = render_key(limits[0].key)
+
+    assert store.check_only(now=NOW, limits=limits, caller="p_alice").allowed
+    assert not client.sets.get(key)
+
+    store.check_and_record(now=NOW, limits=limits, caller="p_alice")
+    first = store.check_only(now=NOW, limits=limits, caller="p_alice")
+    second = store.check_only(now=NOW, limits=limits, caller="p_alice")
+
+    assert (first.consecutive_refusals, second.consecutive_refusals) == (1, 2)
+    assert len(client.sets[key]) == 1
+
+
+def test_a_caller_nobody_named_leaves_no_counter() -> None:
+    """The counter is kept only for a caller the request path names. A window checked for a
+    connector sync or a widget mint has nobody to back off, and a counter keyed on nothing
+    would be one counter shared by every such caller.
+
+    Delete this and `caller=None` can be rendered as the string None."""
+    store, client = store_with()
+    limits = (per_principal(limit=1),)
+    store.check_and_record(now=NOW, limits=limits)
+
+    refused = store.check_and_record(now=NOW, limits=limits)
+
+    assert refused.consecutive_refusals == 0
+    assert client.counters == {}
+
+
+# ------------------------------------------------------------ the windows that exist
+def test_a_key_reads_back_as_the_window_it_was_written_for() -> None:
+    """The Limits screen finds keys it did not ask for and has to know which window each is.
+    A subject carrying the separator is the case that matters: a widget origin or a
+    principal's share of a connector.
+
+    Delete this and `parse_key` can split on the colon inside a subject."""
+    for key in (
+        principal_limit("p_alice").key,
+        (LimitScope.PRINCIPAL_CONNECTOR, "p_alice:xero", "minute"),
+        (LimitScope.WIDGET_ORIGIN, "https://app.example.com/embed", "minute"),
+    ):
+        assert parse_key(render_key(key)) == key
+
+
+def test_a_key_this_module_did_not_write_is_not_a_window() -> None:
+    """Another prefix, the wrong number of segments, or a scope this release does not know.
+    The last is a key a newer release wrote during a rolling deploy, and it is passed over
+    rather than taking the screen down.
+
+    Delete this and any key under a colon-joined name parses as something."""
+    assert parse_key("ans:principal:p_alice:minute") is None
+    assert parse_key(f"{KEY_PREFIX}:principal:p_alice") is None
+    assert parse_key(f"{KEY_PREFIX}:department:finance:minute") is None
+
+
+def test_the_windows_that_exist_are_listed_with_the_limit_the_policy_gives_them() -> None:
+    """What the Limits screen reads: every window in the store, the limit `limits.limit_for`
+    gives its key, and the hits, so `limits.check` can say which are refusing now.
+
+    Asserted by judging the result, not by counting keys, because the screen's question is
+    which windows refuse: a full window must come back refusing and an empty one must not.
+
+    Delete this and the screen can go back to saying nothing here can read the windows."""
+    store, _ = store_with()
+    full = principal_limit("p_alice")
+    quiet = channel_limit("console")
+    for n in range(full.limit):
+        store.check_and_record(now=NOW + timedelta(milliseconds=n), limits=(full,))
+    store.check_and_record(now=NOW, limits=(quiet,))
+
+    limits, state = store.live(NOW + timedelta(seconds=1))
+
+    assert {one.key for one in limits} == {full.key, quiet.key}
+    refusing = [one.key for one in limits if not check(now=NOW, limits=(one,), state=state).allowed]
+    assert refusing == [full.key]
+
+
+def test_a_key_the_policy_gives_no_limit_is_passed_over() -> None:
+    """A window the policy cannot judge is not shown with a guessed limit, for
+    `limits.source_limits`' reason about inventing a ceiling. A connector with no verified
+    ceiling is the case.
+
+    Delete this and the walk can hand the screen a window with no limit to judge it by."""
+    store, client = store_with()
+    client.sets[render_key((LimitScope.CONNECTOR, "unmeasured", "minute"))] = {"m": 1.0}
+    xero = next(one for one in source_limits("xero", principal_id="p_alice"))
+    client.sets[render_key(xero.key)] = {"m": NOW.timestamp()}
+
+    limits, _ = store.live(NOW)
+
+    assert [one.key for one in limits] == [xero.key]
+
+
+def test_a_store_that_cannot_be_walked_says_so_rather_than_answering_empty() -> None:
+    """An empty state reads as nobody being refused, which is the reassuring answer and the
+    wrong one during an outage.
+
+    Delete this and an outage renders on the Limits screen as a quiet afternoon."""
+    store, _ = store_with(raises=RedisConnectionError("down"))
+
+    with pytest.raises(WindowsUnreadableError):
+        store.live(NOW)

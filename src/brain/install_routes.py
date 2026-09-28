@@ -45,13 +45,21 @@ See `AN_UNREAD_SOURCE_IS_NOT_AN_EMPTY_ONE`.
 why.** The backup bucket is read through `brain.ops.object_store.backup_objects`, which
 `brain.app` attaches when the process connected to the object store at start; an install with no
 vault or no key in the store's slot has no reader, and the Storage screen says which of those it
-is. The live rate-limit windows have no enumerator on any install: `brain.ops.limit_store.
-ValkeyWindowStore` checks and records the keys it is handed and offers no way to ask which
-windows exist, so there is nothing to build a throttling list from. Both are read off
-`app.state` through a protocol, so the sentence stops being returned the day a reader is
-attached without a line of this module changing. That is `brain.console.installation.
-recovery_gaps`'s construction: a decision recorded as a check rather than as a sentence in a
-commit message nobody re-reads.
+is. The live rate-limit windows are walked by `brain.ops.limit_store.ValkeyWindowStore.live`
+since 2026-09-28, over the same store the answer route counts questions in
+(`brain.api_routes.limit_store_of`), so an install with a cache configured lists which windows
+are refusing now and one without says it has nothing that counts. Both are read off `app.state`
+through a protocol, so a test or a later reader can be attached without a line of this module
+changing. That is `brain.console.installation.recovery_gaps`'s construction: a decision
+recorded as a check rather than as a sentence in a commit message nobody re-reads.
+
+**The Limits screen lists the windows, which are refusing now, and who is asking far beyond
+their own week.** The windows are `brain.ops.limits.declared_windows`, built by the functions
+the request path calls, with what each does when the store is down from
+`brain.ops.limit_store.UNREACHABLE_POLICY`. Who is refusing is `throttled_now` over the live
+windows. Who is unusual is `brain.console.installation.unusual_now` over
+`brain.ops.volume_store`, narrowed by the reader's grant exactly as the throttling list is and
+carrying a band and never a count (M23.2.1).
 
 **A bucket that does not answer is a sentence too, and never a panel of what was read before it
 stopped.** The listing is read once, in a worker thread because the client blocks, and a store
@@ -123,7 +131,7 @@ would be this module deciding that, from the side that renders.
 Scope: five read-only routes. Nothing here writes, and the only session anything here would need
 is the one it deliberately does not open.
 
-Task ids: M27.7.25, M27.7.27, M42.3.9, M38.1.3.5
+Task ids: M27.7.25, M27.7.27, M42.3.9, M38.1.3.5, M23.1.1, M23.2.1
 """
 
 from __future__ import annotations
@@ -140,16 +148,18 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.api import API_PREFIX, COMMON_RESPONSES
-from brain.api_routes import Asked
+from brain.api_routes import Asked, Asking, limit_store_of
 from brain.console.installation import (
     ConnectionCapacity,
     Fact,
     MemoryCapacity,
     ThrottleRow,
+    UnusualRow,
     connection_capacity,
     install_facts,
     memory_capacity,
     throttled_now,
+    unusual_now,
 )
 from brain.console.reads import permitted
 from brain.console.recovery_view import CopyState
@@ -166,12 +176,14 @@ from brain.ops.admission import Ceiling
 from brain.ops.backup_manifest import DRILL_SUFFIX, MANIFEST_SUFFIX, read_drills, read_manifests
 from brain.ops.deployment_history import History, history_from, recorded
 from brain.ops.install_from_empty import read_plan
-from brain.ops.limits import Limit, LimiterState, ceilings
+from brain.ops.limit_store import UNREACHABLE_POLICY, Availability, WindowsUnreadableError
+from brain.ops.limits import DeclaredWindow, Limit, LimiterState, ceilings, declared_windows
 from brain.ops.recovery import DRILL_INTERVAL_DAYS
 from brain.ops.release_manifest import read_manifest
 from brain.ops.reliability import recovery_objective
 from brain.ops.retention import BACKUP_RETENTION_DAYS
 from brain.ops.storage import StoreUnansweredError
+from brain.ops.volume_store import PrincipalVolume, StoredVolumes
 from brain.settings import Settings
 
 log = structlog.get_logger()
@@ -294,13 +306,41 @@ THE_DEPLOYMENT_HISTORY_DID_NOT_ANSWER: Final = (
     "database is running and migrated."
 )
 
-#: What the rate limits surface answers about the throttling half while nothing enumerates it.
+#: What the rate limits surface answers about the throttling half on a process with no store.
 NOTHING_HERE_ENUMERATES_THE_LIVE_WINDOWS: Final = (
-    "The ceilings above are what this install applies. Which of them is refusing somebody "
-    "right now cannot be read here: the store that holds the counting windows answers about a "
-    "window it is handed and offers no way to ask which windows exist. An empty list would "
-    "read as nobody being throttled, so there is none."
+    "The windows above are what this install applies. Which of them is refusing somebody "
+    "right now cannot be read here: this process has no cache configured, so nothing is "
+    "counted in a window and there is nothing to list. An empty list would read as nobody "
+    "being throttled, so there is none."
 )
+
+#: What the throttling half answers when the store that holds the windows did not answer.
+THE_COUNTING_STORE_DID_NOT_ANSWER: Final = (
+    "The store that holds the counting windows did not answer when this screen was opened, so "
+    "which windows are refusing now cannot be said. Open the screen again, and if it still "
+    "does not answer, check that the cache is running. While it is down, a person's own "
+    "window lets questions through and a connector's refuses them."
+)
+
+#: What the unusual-volume half answers on a process with no database.
+NOTHING_HERE_COUNTS_WHAT_PEOPLE_ASK: Final = (
+    "Who is asking far more than usual cannot be read here: this process has no database, so "
+    "there is no record of questions to compare anybody's week against."
+)
+
+#: What the unusual-volume half answers when the request ledger did not answer the read.
+THE_REQUEST_LEDGER_DID_NOT_ANSWER: Final = (
+    "The record of questions could not be read when this screen was opened, so who is asking "
+    "far more than usual cannot be said. Open the screen again, and if it still does not "
+    "answer, check the database is running and migrated."
+)
+
+#: What each outage behaviour is called on the screen. Words, because "fail_open" makes a
+#: person go and read the source to find out whether it is the safe one.
+WHEN_UNREACHABLE: Final = {
+    Availability.FAIL_OPEN: "lets requests through",
+    Availability.FAIL_CLOSED: "refuses requests",
+}
 
 
 #: Why the recovery screen has no control that runs a rehearsal, as the screen says it.
@@ -351,6 +391,16 @@ class ThrottleSource(Protocol):
     def __call__(self, now: datetime) -> tuple[Sequence[Limit], LimiterState]: ...
 
 
+class VolumeSource(Protocol):
+    """Each person's recent and prior question counts, at one instant (M23.2.1).
+
+    `brain.ops.volume_store.StoredVolumes` over the application's pool on an install, or what a
+    test attached. A protocol read off `app.state` for `ThrottleSource`'s reason.
+    """
+
+    async def __call__(self, now: datetime) -> Sequence[PrincipalVolume]: ...
+
+
 def backup_objects_of(request: Request) -> BackupObjects | None:
     """The bucket reader this process was built with, or None.
 
@@ -371,9 +421,26 @@ def backup_objects_of(request: Request) -> BackupObjects | None:
 
 
 def throttle_source_of(request: Request) -> ThrottleSource | None:
-    """The live-window reader this process was built with, or None. Same shape, same reason."""
+    """The live-window reader: what a test attached, the answer route's store, or None.
+
+    The store is the one `brain.api_routes.limit_store_of` counts questions in, so the screen
+    reads the windows the request path writes and no copy of them. None on a process with no
+    cache configured, which is `NOTHING_HERE_ENUMERATES_THE_LIVE_WINDOWS`.
+    """
     found = getattr(request.app.state, "throttle_source", None)
-    return cast(ThrottleSource, found) if callable(found) else None
+    if callable(found):
+        return cast(ThrottleSource, found)
+    store = limit_store_of(request.app.state)
+    return None if store is None else store.live
+
+
+def volume_source_of(request: Request) -> VolumeSource | None:
+    """What a test attached, the request ledger over the application's pool, or None."""
+    found = getattr(request.app.state, "volume_source", None)
+    if callable(found):
+        return cast(VolumeSource, found)
+    sessions = getattr(request.app.state, "db_sessions", None)
+    return StoredVolumes(sessions) if isinstance(sessions, async_sessionmaker) else None
 
 
 def release_watch_of(request: Request) -> ReleaseWatch:
@@ -748,6 +815,34 @@ class ThrottleView(BaseModel):
     retry_after_seconds: float
 
 
+class WindowView(BaseModel):
+    """One kind of window this install counts: whose, how many, over how long, and in an outage.
+
+    A declaration, the same for every reader who may open the screen, built by the functions the
+    request path calls. `applies_to` is words and never a subject.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    scope: str
+    applies_to: str
+    period: str
+    limit: int
+    window_seconds: float
+    raisable: bool
+    when_unreachable: str
+
+
+class UnusualView(BaseModel):
+    """One person asking far beyond their own week, as this reader may see it. No count."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    subject: str
+    band: str
+    said: str
+
+
 class LimitsView(BaseModel):
     """The ceilings this install applies, and who is behind one, when that can be read.
 
@@ -764,9 +859,14 @@ class LimitsView(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     ceilings: list[CeilingView]
+    #: Every kind of window counted, in the order `limits.declared_windows` builds them.
+    windows: list[WindowView] = []
     throttled: list[ThrottleView] | None = None
     #: Why there is no throttling list. Required when there is none, empty when there is one.
     unread: str = ""
+    #: Who is asking far beyond their own week, or None with `unusual_unread` saying why.
+    unusual: list[UnusualView] | None = None
+    unusual_unread: str = ""
 
     @model_validator(mode="after")
     def _exactly_one(self) -> LimitsView:
@@ -781,6 +881,9 @@ class LimitsView(BaseModel):
                 "no throttling list and nothing saying why, which renders as nobody being "
                 f"throttled. {AN_UNREAD_SOURCE_IS_NOT_AN_EMPTY_ONE}"
             )
+            raise ValueError(msg)
+        if self.unusual is not None and self.unusual_unread:
+            msg = "an unusual-volume list is set with a reason for having none beside it"
             raise ValueError(msg)
         return self
 
@@ -943,6 +1046,22 @@ def ceiling_view(one: Ceiling) -> CeilingView:
     return CeilingView(
         name=one.name, per_day=one.per_day, raisable=one.raisable, derived=one.derived
     )
+
+
+def window_view(one: DeclaredWindow) -> WindowView:
+    return WindowView(
+        scope=one.scope.value,
+        applies_to=one.applies_to,
+        period=one.period,
+        limit=one.limit,
+        window_seconds=one.window_seconds,
+        raisable=one.raisable,
+        when_unreachable=WHEN_UNREACHABLE[UNREACHABLE_POLICY[one.scope]],
+    )
+
+
+def unusual_view(one: UnusualRow) -> UnusualView:
+    return UnusualView(subject=one.subject, band=one.band, said=one.said)
 
 
 def throttle_view(one: ThrottleRow) -> ThrottleView:
@@ -1154,22 +1273,58 @@ async def limits(request: Request, asked: Asked) -> LimitsView:
     A department-scoped grant matches nothing, which is the answer rather than a refusal; see
     `AN_INSTALL_SCREEN_IS_THE_SAME_FACT_FOR_EVERYBODY_AND_A_THROTTLING_LIST_IS_NOT`.
 
-    Nothing on this process enumerates the live windows, so the list is absent with its reason
-    on every install today, through the same protocol the recovery route uses and for the same
-    argument.
+    The live windows are walked in a worker thread, because the store's client blocks, and a
+    store that does not answer is `THE_COUNTING_STORE_DID_NOT_ANSWER` rather than an empty list.
+    A process with no cache has nothing that counts, which is
+    `NOTHING_HERE_ENUMERATES_THE_LIVE_WINDOWS`. The unusual-volume half is read the same way
+    from the request ledger, with its own two sentences.
     """
     _permitted(asked.reach, "limits", asked.now)
     declared = [ceiling_view(one) for one in ceilings()]
+    windows = [window_view(one) for one in declared_windows()]
+    unusual, unusual_unread = await _unusual(request, asked)
     source = throttle_source_of(request)
     if source is None:
-        return LimitsView(ceilings=declared, unread=NOTHING_HERE_ENUMERATES_THE_LIVE_WINDOWS)
-    live, state = source(asked.now)
+        return LimitsView(
+            ceilings=declared,
+            windows=windows,
+            unread=NOTHING_HERE_ENUMERATES_THE_LIVE_WINDOWS,
+            unusual=unusual,
+            unusual_unread=unusual_unread,
+        )
+    try:
+        live, state = await asyncio.to_thread(source, asked.now)
+    except WindowsUnreadableError:
+        return LimitsView(
+            ceilings=declared,
+            windows=windows,
+            unread=THE_COUNTING_STORE_DID_NOT_ANSWER,
+            unusual=unusual,
+            unusual_unread=unusual_unread,
+        )
     return LimitsView(
         ceilings=declared,
+        windows=windows,
         throttled=[
             throttle_view(one) for one in throttled_now(live, state, asked.reach, now=asked.now)
         ],
+        unusual=unusual,
+        unusual_unread=unusual_unread,
     )
+
+
+async def _unusual(request: Request, asked: Asking) -> tuple[list[UnusualView] | None, str]:
+    """Who is asking far beyond their own week at this reader's scope, or why it cannot be said."""
+    source = volume_source_of(request)
+    if source is None:
+        return None, NOTHING_HERE_COUNTS_WHAT_PEOPLE_ASK
+    try:
+        volumes = await source(asked.now)
+    except SQLAlchemyError as exc:
+        log.warning("request ledger unreadable for volume", error=type(exc).__name__)
+        return None, THE_REQUEST_LEDGER_DID_NOT_ANSWER
+    rows = unusual_now(volumes, asked.reach, now=asked.now)
+    return [unusual_view(one) for one in rows], ""
 
 
 @router.get("/install/capacity", response_model=CapacityView, responses=COMMON_RESPONSES)

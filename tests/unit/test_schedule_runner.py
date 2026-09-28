@@ -441,11 +441,16 @@ def test_the_registry_still_reports_every_orphan_this_runner_has_not_wired() -> 
     **And to five on 2026-09-22.** `start_control` calls the model health prober's runner, so
     `model_health_probes` left the list.
 
+    **And to four on 2026-09-28.** `brain.ops.denial_digest_run` gathers the denial patterns and
+    the people to tell and calls `digest`, so `denial_digest` left the list; the worker's schedule
+    does not start it until this module gives it a runner.
+
     Delete this and the scheduler can start running mechanisms the handover pack still
     describes as unwired."""
     from brain.ops.controls import orphans
 
-    assert len(orphans()) == 5
+    assert len(orphans()) == 4
+    assert "denial_digest" not in {one.name for one in orphans()}
     assert "model_health_probes" not in {one.name for one in orphans()}
     assert "canary_run" not in {one.name for one in orphans()}
     assert "outbox_dispatch" not in {one.name for one in orphans()}

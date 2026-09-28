@@ -225,6 +225,26 @@ export function readThrottled(payload: Limits | null): Read<readonly Throttled[]
 /** One ceiling that is refusing right now. */
 export type Throttled = components["schemas"]["ThrottleView"];
 
+/** One kind of window the install counts requests in. A declaration, the same for every reader. */
+export type Window = components["schemas"]["WindowView"];
+
+/** One person asking far beyond their own week. A band and a sentence, never a count. */
+export type Unusual = components["schemas"]["UnusualView"];
+
+/**
+ * Who is asking far beyond their own week, or why that cannot be said.
+ *
+ * `readThrottled`'s shape and its reason: an absent list is nothing having counted, an empty one
+ * is nobody unusual, and the page draws the two differently.
+ */
+export function readUnusual(payload: Limits | null): Read<readonly Unusual[]> {
+  const rows = payload?.unusual;
+  if (rows === null || rows === undefined) {
+    return { unread: payload?.unusual_unread ?? "" };
+  }
+  return { panel: rows };
+}
+
 /** One external ceiling requests run into. */
 export type Ceiling = components["schemas"]["CeilingView"];
 
@@ -248,6 +268,26 @@ export const CEILING_COLUMNS: readonly (keyof Ceiling)[] = [
   "raisable",
   "derived",
 ];
+
+/**
+ * How a window's columns are shown: whose, how many, over how long, and what an outage does.
+ *
+ * `when_unreachable` is a column rather than a footnote because it is the one fact about a window
+ * that decides what happens while the cache is down: a person's own window lets questions
+ * through, and a connector's refuses them.
+ */
+export const WINDOW_COLUMNS: readonly (keyof Window)[] = [
+  "scope",
+  "applies_to",
+  "limit",
+  "period",
+  "window_seconds",
+  "raisable",
+  "when_unreachable",
+];
+
+/** How an unusual row's columns are shown. No count, and the API sends none. */
+export const UNUSUAL_COLUMNS: readonly (keyof Unusual)[] = ["subject", "band", "said"];
 
 /** How a throttled row's columns are shown. No count of refused requests, and none available. */
 export const THROTTLE_COLUMNS: readonly (keyof Throttled)[] = [
