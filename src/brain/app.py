@@ -80,6 +80,7 @@ from brain.automation_gallery_routes import router as automation_gallery_router
 from brain.automation_routes import AutomationWiring
 from brain.automation_routes import router as automation_router
 from brain.automation_schedule_routes import router as automation_schedule_router
+from brain.automations_routes import router as automations_router
 from brain.binding_routes import router as binding_router
 from brain.cache import (
     AsyncValkeyClient,
@@ -1257,6 +1258,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # router for the gallery's reason: an authority asked before anything is read, a confirmation
     # recomputed on the server, and a row whose trigger writes the ledger entry.
     app.include_router(automation_schedule_router)
+    # The Automations module: every automation a reader may see, one automation's page and
+    # figures, and the confirmed pause, resume, schedule change, removal and adoption.
+    app.include_router(automations_router)
     # Binding a Keycloak subject to a principal. A seventh router because it has two callers:
     # an administrator over everything under the prefix, through `asking`, and the setup
     # wizard's finishing screen at /setup/sign-in, which takes the setup code and a verified

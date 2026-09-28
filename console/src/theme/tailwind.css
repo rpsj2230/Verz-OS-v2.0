@@ -76,6 +76,7 @@
 @source "../pages/people";
 @source "../pages/departments";
 @source "../pages/roles";
+@source "../pages/automations";
 @source not inline("grid");
 
 /*

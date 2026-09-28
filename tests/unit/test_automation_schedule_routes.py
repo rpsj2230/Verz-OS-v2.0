@@ -40,6 +40,7 @@ from brain.console.automation_schedule import (
     shown_start,
     shown_stop,
 )
+from brain.console.automations import LEAVES_NO_NEXT_RUN, ChangeKind
 from brain.console.reads import Plane, plane_capability
 from brain.console.workspace import Tab, tab
 from brain.core.entitlement import Capability, EntitlementSet, Grant
@@ -526,5 +527,10 @@ def test_a_control_on_an_automation_the_reader_cannot_see_is_the_same_404_as_non
 
 
 def test_a_paused_automation_says_why_in_words_for_every_reason() -> None:
-    """Delete this and a pause reason added to the domain would reach the tab as nothing."""
-    assert set(routes.STOPPED_BECAUSE) == {one.value for one in PausedBecause}
+    """Every runner's reason and every change that leaves no next run has words, and nothing else
+    does. Delete this and a pause reason added to the domain would reach the tab as nothing."""
+    stops = {ChangeKind.PAUSED, ChangeKind.ADOPTED, ChangeKind.REMOVED}
+    assert stops == set(LEAVES_NO_NEXT_RUN)
+    assert set(routes.STOPPED_BECAUSE) == {one.value for one in PausedBecause} | {
+        one.value for one in stops
+    }

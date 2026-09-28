@@ -36,6 +36,7 @@ import { ACCESS_REQUESTS_API_PATH } from "../../src/pages/accessRequestsQuery";
 import { automationStartApiPath, automationStopApiPath } from "../../src/pages/agentAutomationsQuery";
 import { STEWARD_API_PATH } from "../../src/pages/dataStewardQuery";
 import { automationGalleryApiPath, automationInstallApiPath, automationPreviewApiPath } from "../../src/pages/automationGalleryQuery";
+import { changeApiPath } from "../../src/pages/automations/automationsQuery";
 import { approvalDecisionApiPath } from "../../src/pages/approvalsQuery";
 import { historyApiPath, VERIFICATION_API_PATH } from "../../src/pages/auditQuery";
 import { CHECKS_API_PATH } from "../../src/pages/requirementChecksQuery";
@@ -494,19 +495,33 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "Workflows and automations": {
-    screens: ["/agents/:agentId/:tab"],
+    screens: ["/agents/:agentId/:tab", "/automations", "/automations/:automationId", "/automations/:automationId/:view"],
     routes: [
       "/api/v1/agents/{agent_id}/automation-templates*",
       "/api/v1/agents/{agent_id}/automations",
       "/api/v1/agents/{agent_id}/automations/{automation_id}/start",
       "/api/v1/agents/{agent_id}/automations/{automation_id}/stop",
+      "/api/v1/console/automations*",
+      "/api/v1/automations/{automation_id}/*",
     ],
-    tables: ["agent.automation", "agent.automation_run", "agent.automation_schedule", "gate.automation_owner"],
+    tables: [
+      "agent.automation",
+      "agent.automation_run",
+      "agent.automation_schedule",
+      "agent.automation_change",
+      "gate.automation_owner",
+    ],
     installation: [],
     gaps: [
       {
-        what: "An installed automation cannot be changed or removed, only started and stopped.",
-        because: "brain.automation_schedule_routes starts and stops one and brain.console.agent_automations.remove decides a removal that no route performs; 0067 grants an update of the next run alone.",
+        what: "A removed automation cannot be brought back, and installing the same outcome again for the same agent and person is refused.",
+        because:
+          "A removal is a final row in agent.automation_change (brain.console.automations.A_REMOVAL_IS_FINAL_AND_KEEPS_ITS_HISTORY) and 0055's one-install-per-agent-template-and-person constraint still reads the removed install; the page draws Bring back as not available yet.",
+      },
+      {
+        what: "An automation registered to call the tool route with its own credential (gate.automation_owner) is not listed or adoptable on a screen.",
+        because:
+          "Nothing on an install writes that registration yet: brain.ops.automation_owner_store.StoredAutomations.put has no caller, so there is no row to list; its adopt is kept for when one exists.",
       },
       {
         what: "Three of the four automation templates cannot be started on any install.",
@@ -1240,6 +1255,13 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/components/AutomationGallery.tsx automationInstallApiPath(agentId)": [
     at("POST /api/v1/agents/{agent_id}/automations", "automationInstallApiPath", automationInstallApiPath("quote-helper")),
   ],
+  "src/pages/automations/AutomationActs.tsx changeApiPath(detail.row.id, act)": [
+    at("POST /api/v1/automations/{automation_id}/pause", "changeApiPath", changeApiPath("auto_one", "pause")),
+    at("POST /api/v1/automations/{automation_id}/resume", "changeApiPath", changeApiPath("auto_one", "resume")),
+    at("POST /api/v1/automations/{automation_id}/reschedule", "changeApiPath", changeApiPath("auto_one", "reschedule")),
+    at("POST /api/v1/automations/{automation_id}/remove", "changeApiPath", changeApiPath("auto_one", "remove")),
+    at("POST /api/v1/automations/{automation_id}/adopt", "changeApiPath", changeApiPath("auto_one", "adopt")),
+  ],
   "src/components/AgentAutomations.tsx path": [
     at(
       "POST /api/v1/agents/{agent_id}/automations/{automation_id}/start",
@@ -1542,6 +1564,27 @@ const A_BINDING_CHANGE_IS_AUDITED = t(
 );
 
 /** Every write route a screen sends, followed to the system. */
+const AUTOMATION_PAUSED = t(
+  "test_automation_change_store",
+  "test_a_paused_automation_does_not_run_on_the_next_tick_and_the_ledger_says_who",
+  true,
+);
+const AUTOMATION_ADOPTED_AND_RESUMED = t(
+  "test_automation_change_store",
+  "test_an_ownerless_automation_stops_and_waits_and_once_adopted_runs_as_the_adopter",
+  true,
+);
+const AUTOMATION_RESCHEDULED = t(
+  "test_automation_change_store",
+  "test_a_schedule_change_moves_the_next_run_and_the_runner_keeps_to_the_new_cadence",
+  true,
+);
+const AUTOMATION_REMOVED = t(
+  "test_automation_change_store",
+  "test_a_removed_automation_never_runs_again_and_cannot_be_started_from_its_agent",
+  true,
+);
+
 export const PROOFS: Readonly<Record<string, Proofs>> = {
   "POST /api/v1/govern/service-accounts": {
     row: A_KEY_ACTS_AT_ITS_OWNERS_REACH,
@@ -2287,6 +2330,31 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: t("test_automation_gallery_routes", "test_one_confirmed_request_writes_the_automation_its_registry_entry_and_its_audit_context"),
     audit: t("test_agent_automation_store", "test_an_install_writes_one_row_one_ledger_entry_and_a_second_install_writes_neither", true),
     behaviour: t("test_automation_gallery_routes", "test_one_confirmed_request_writes_the_automation_its_registry_entry_and_its_audit_context"),
+  },
+  "POST /api/v1/automations/{automation_id}/pause": {
+    row: AUTOMATION_PAUSED,
+    audit: AUTOMATION_PAUSED,
+    behaviour: AUTOMATION_PAUSED,
+  },
+  "POST /api/v1/automations/{automation_id}/resume": {
+    row: AUTOMATION_ADOPTED_AND_RESUMED,
+    audit: AUTOMATION_ADOPTED_AND_RESUMED,
+    behaviour: AUTOMATION_ADOPTED_AND_RESUMED,
+  },
+  "POST /api/v1/automations/{automation_id}/reschedule": {
+    row: AUTOMATION_RESCHEDULED,
+    audit: AUTOMATION_RESCHEDULED,
+    behaviour: AUTOMATION_RESCHEDULED,
+  },
+  "POST /api/v1/automations/{automation_id}/remove": {
+    row: AUTOMATION_REMOVED,
+    audit: AUTOMATION_REMOVED,
+    behaviour: AUTOMATION_REMOVED,
+  },
+  "POST /api/v1/automations/{automation_id}/adopt": {
+    row: AUTOMATION_ADOPTED_AND_RESUMED,
+    audit: AUTOMATION_ADOPTED_AND_RESUMED,
+    behaviour: t("test_automations_routes", "test_an_ownerless_automation_is_adopted_in_the_adopters_name_and_stays_paused"),
   },
   "POST /api/v1/agents/{agent_id}/automations/{automation_id}/start": {
     row: t("test_automation_run_store", "test_the_console_starts_and_stops_as_the_application_role_and_the_ledger_says_who", true),

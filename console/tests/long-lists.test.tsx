@@ -205,6 +205,7 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
   "/logs": { bulk: A_LOG_ROW_IS_READ_AND_NEVER_WRITTEN },
   "/agents": {},
   "/connectors": {},
+  "/automations": {},
   "/agent-templates": { bulk: READ_ONLY },
   "/approvals": { bulk: AN_APPROVAL_IS_DECIDED_FROM_ITS_OWN_CARD },
   "/adoption": { bulk: READ_ONLY },

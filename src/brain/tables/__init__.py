@@ -55,6 +55,7 @@ from brain.tables.application_log import ApplicationLogRow
 from brain.tables.artifact import ArtifactRow
 from brain.tables.audit import AuditEntryRow
 from brain.tables.automation import AutomationOwnerRow
+from brain.tables.automation_change import AutomationChangeRow
 from brain.tables.automation_run import AutomationRunRow, AutomationScheduleRow
 from brain.tables.binding_code import BindingCodeRow
 from brain.tables.break_glass_notice import BreakGlassNoticeRow
@@ -387,6 +388,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # detachment at the assignment it ends, so both follow them; the people are values.
     "agent.skill_retirement",
     "agent.skill_detachment",
+    # 0145_automation_change. Points at nothing: the automation, the agent and both people are
+    # values, so the record of who paused, removed or adopted an automation outlives all of them.
+    "agent.automation_change",
 )
 
 __all__ = [
@@ -400,6 +404,7 @@ __all__ = [
     "ApplicationLogRow",
     "ArtifactRow",
     "AuditEntryRow",
+    "AutomationChangeRow",
     "AutomationOwnerRow",
     "AutomationRunRow",
     "AutomationScheduleRow",
