@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-28T18:53:09.347177+00:00",
-  "commit": "62390ee1",
-  "commit_subject": "Credentials is a kit module: every vault slot the install declares is listed, has a page, and is set or replaced from it",
+  "generated_at": "2026-09-28T19:29:59.996593+00:00",
+  "commit": "0abe7e1f",
+  "commit_subject": "Migration train: channel binding (0118), usage recording (0138), Skills module (0139)",
   "total": 1576,
   "done": 362,
   "percent": 23.0,
