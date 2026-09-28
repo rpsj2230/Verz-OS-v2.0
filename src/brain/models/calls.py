@@ -764,8 +764,12 @@ class _Walk:
                     deployment_id=rung.deployment.id, position=rung.position, succeeded=True
                 ),
             )
+        # The rung's model, which is the price book's key (M27.12.5); see brain.models.metering.
         self.meter.answered(
-            response, provider=rung.deployment.provider, agent_version=self.agent_version
+            response,
+            provider=rung.deployment.provider,
+            agent_version=self.agent_version,
+            model=rung.model,
         )
         return response
 

@@ -113,6 +113,8 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
   "src/components/ProviderKeyForm.tsx": [{ pattern: "/models", opener: "Replace key", index: 0, writes: true }],
   // The Profile is a view at its own address, so the pin's form is on that page case with no opener.
   "src/components/AgentModelPin.tsx": [{ pattern: "/agents/:agentId/:tab", index: 0, writes: true }],
+  // A model's price opens on its row in the prices card, above the register's forms (M27.12.5).
+  "src/components/ModelPrices.tsx": [{ pattern: "/models", opener: "Set price", index: 0, writes: true }],
   "src/pages/Notifications.tsx": [
     { pattern: "/notifications", index: 0, writes: true },
     { pattern: "/notifications", index: 1, writes: true },

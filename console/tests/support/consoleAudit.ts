@@ -97,6 +97,7 @@ import {
   termsApiPath,
 } from "../../src/pages/providerRegisterQuery";
 import { modelPinApiPath } from "../../src/pages/agentModelPinQuery";
+import { PRICES_API_PATH } from "../../src/pages/modelPricesQuery";
 import { PROFILE_API_PATH, providerCheckApiPath, providerSwitchApiPath } from "../../src/pages/modelsQuery";
 import {
   RESIDENCY_API_PATH,
@@ -364,6 +365,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/operate/models",
       "/api/v1/models/providers*",
       "/api/v1/models/profile",
+      "/api/v1/models/prices",
       "/api/v1/routing/rungs*",
       "/api/v1/routing/changes",
       "/api/v1/routing/golden-questions*",
@@ -446,6 +448,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "agent.tool_definition",
       "agent.tool_switch",
       "agent.skill_category",
+      "agent.skill_invocation",
     ],
     installation: ["INSTALL_ACCEPTANCE_SKILL_SOURCE"],
     gaps: [
@@ -1048,6 +1051,7 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
     at("PUT /api/v1/models/providers/{provider}", "providerSwitchApiPath", providerSwitchApiPath("anthropic")),
   ],
   "src/pages/Models.tsx PROFILE_API_PATH": [at("PUT /api/v1/models/profile", "PROFILE_API_PATH", PROFILE_API_PATH)],
+  "src/components/ModelPrices.tsx PRICES_API_PATH": [at("PUT /api/v1/models/prices", "PRICES_API_PATH", PRICES_API_PATH)],
   "src/pages/Models.tsx providerCheckApiPath(pending.provider)": [
     at("POST /api/v1/models/providers/{provider}/check", "providerCheckApiPath", providerCheckApiPath("anthropic")),
   ],
@@ -1899,6 +1903,11 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: t("test_model_service", "test_the_stores_read_the_ladder_write_attempts_by_id_and_keep_a_switch", true),
     audit: A_SETTING_ENTRY_NO_TEST_FOLLOWS,
     behaviour: t("test_provider_routes", "test_switching_a_provider_off_takes_its_rungs_out_of_the_next_plan_at_once"),
+  },
+  "PUT /api/v1/models/prices": {
+    row: t("test_usage_store", "test_the_price_of_each_model_is_merged_into_its_providers_one_row", true),
+    audit: A_SETTING_ENTRY_NO_TEST_FOLLOWS,
+    behaviour: t("test_usage_store", "test_a_model_call_is_metered_once_however_often_its_request_is_recorded", true),
   },
   "PUT /api/v1/models/profile": {
     row: t("test_provider_routes", "test_where_answers_are_made_is_saved_by_the_super_administrator_ledgered_and_planned_at_once"),

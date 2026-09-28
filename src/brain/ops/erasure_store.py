@@ -224,6 +224,9 @@ SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
         # `0067` grants no way for a row to leave, so an erasure keeps these and reports them kept.
         "agent.automation_run": "principal_id",
         "agent.browser_envelope": "asked_by",
+        # Which skill a run used, for the person it ran for (`0138`). `0138` grants no way for a row
+        # to leave, so an erasure keeps these and reports them kept, as it does a cost.
+        "agent.skill_invocation": "principal_id",
         # A one-time code a person minted to bind a chat account (`0118`): a digest nobody can
         # present, and the instants. `0118` grants no way for a row to leave, so an erasure keeps
         # these and reports them kept; the binding it made is `auth.principal_identity`'s row.
