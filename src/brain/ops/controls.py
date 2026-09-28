@@ -105,7 +105,7 @@ from brain.ops.alerting import runbook_gaps as route_runbook_gaps
 from brain.ops.canaries import CANARY_INTERVAL_SECONDS
 from brain.ops.denial_alerts import DIGEST_WINDOW
 from brain.ops.handover import Residue
-from brain.ops.queue import stale_after
+from brain.ops.heartbeat import stale_after
 from brain.ops.recovery import DRILL_INTERVAL_DAYS
 from brain.ops.vault_renewal import CHECK_EVERY as VAULT_TOKEN_CHECK_EVERY
 from brain.resolution.calibration import CALIBRATION_PERIOD
@@ -627,7 +627,7 @@ CONTROLS: Final[tuple[Control, ...]] = (
             "failed."
         ),
         every=stale_after(),
-        cadence_from="brain.ops.queue:stale_after",
+        cadence_from="brain.ops.heartbeat:stale_after",
         severity=Severity.RAISED,
         invoked_by=Invocation.NOTHING,
     ),
@@ -648,7 +648,7 @@ CONTROLS: Final[tuple[Control, ...]] = (
             "is a second real act against somebody else's system."
         ),
         every=stale_after(),
-        cadence_from="brain.ops.queue:stale_after",
+        cadence_from="brain.ops.heartbeat:stale_after",
         severity=Severity.WOKEN,
         invoked_by=Invocation.NOTHING,
     ),

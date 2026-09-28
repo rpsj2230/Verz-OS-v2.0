@@ -192,6 +192,9 @@ from urllib.parse import urlsplit
 
 from brain.db import SCHEMAS, libpq_conninfo
 from brain.gate.context import TrafficClass
+from brain.ops.heartbeat import HEARTBEAT_SECONDS as HEARTBEAT_SECONDS
+from brain.ops.heartbeat import STALE_AFTER_HEARTBEATS as STALE_AFTER_HEARTBEATS
+from brain.ops.heartbeat import stale_after as stale_after
 from brain.ops.wiring import component
 
 if TYPE_CHECKING:  # pragma: no cover - imported for annotations only
@@ -942,17 +945,8 @@ def worker_shards(
 
 
 # ----------------------------------------------------------------- crash recovery
-#: How often a running worker writes its heartbeat. Written in the worker's own
-#: transaction, because a transaction pooler hands the next statement to a different
-#: backend and anything held in a session does not survive that.
-HEARTBEAT_SECONDS: Final = 15
-
-#: How many missed heartbeats before a job is treated as orphaned. Four rather than one,
-#: and the multiple is the whole point: a worker paused by memory pressure on a shared
-#: host, or waiting on a slow connector, misses heartbeats while being perfectly alive.
-#: Re-driving a job that is still running produces two of it, which for a job with a side
-#: effect is worse than the job never finishing.
-STALE_AFTER_HEARTBEATS: Final = 4
+#: `HEARTBEAT_SECONDS`, `STALE_AFTER_HEARTBEATS` and `stale_after` live in `brain.ops.heartbeat`,
+#: which the worker's healthcheck can import without importing this module. Re-exported here.
 
 #: How many times a job may be re-driven before a person looks at it. A job that kills its
 #: worker will kill the next one too, and an uncapped re-drive turns one poison pill into a
@@ -962,10 +956,6 @@ MAX_REDRIVES: Final = 3
 #: How far ahead of us a heartbeat may be before we call it clock skew rather than a
 #: heartbeat. Two hosts, two clocks, and NTP not yet settled after a reboot.
 CLOCK_SKEW_TOLERANCE_SECONDS: Final = 30
-
-
-def stale_after() -> timedelta:
-    return timedelta(seconds=HEARTBEAT_SECONDS * STALE_AFTER_HEARTBEATS)
 
 
 @dataclass(frozen=True)

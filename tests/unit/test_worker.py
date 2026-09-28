@@ -33,6 +33,13 @@ from brain.ops.connections import (
     WORKER_QUEUE_CONNECTIONS,
     client_named,
 )
+from brain.ops.heartbeat import (
+    EXIT_NOT_READY,
+    beat,
+    default_heartbeat_path,
+    heartbeat_path,
+    is_ready,
+)
 from brain.ops.queue import (
     CONCURRENCY,
     DRIVER_SCHEMA,
@@ -53,15 +60,10 @@ from brain.ops.worker import (
     AN_UNDECLARED_POOL_IS_A_GUESS_AND_A_GUESS_UNDERSTATES,
     EXIT_MISCONFIGURED,
     EXIT_NO_DRIVER,
-    EXIT_NOT_READY,
     POOL_MAX_ENV,
     advisories,
-    beat,
     declared_pool_max,
     declared_slots,
-    default_heartbeat_path,
-    heartbeat_path,
-    is_ready,
     main,
     plan_for,
     pool_declaration_gaps,

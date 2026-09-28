@@ -111,7 +111,7 @@ need" is a command an operator can run rather than a paragraph somebody has to f
 **Readiness is the heartbeat, and something writes it now.** `brain.ops.wiring` says the
 worker is ready when "the queue driver has fetched at least once and the database is
 reachable", so `--ready` reads the heartbeat file a running worker writes and compares its age
-against `brain.ops.queue.stale_after()`, which is the same staleness the re-drive sweep uses
+against `brain.ops.heartbeat.stale_after()`, which is the same staleness the re-drive sweep uses
 rather than a second copy of it. The run mode writes that file every `HEARTBEAT_SECONDS`
 inside the same loop the driver's workers run on, which is what makes it evidence: a loop that
 has stopped scheduling stops touching the file, and a process that is alive but not running
@@ -155,13 +155,21 @@ import contextlib
 import enum
 import os
 import sys
-import tempfile
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any, Final
 from urllib.parse import urlsplit
+
+# The container healthcheck, answered before anything below is imported. It runs every fifteen
+# seconds with five to answer, and the imports below took 4.4 of them on a production host, so
+# every probe timed out and a working worker was marked unhealthy. The command itself cannot
+# change: it is in the compose file each install stored when it was set up. See
+# `brain.ops.heartbeat.THE_HEALTHCHECK_DOES_NOT_IMPORT_THE_WORKER`.
+if __name__ == "__main__" and sys.argv[1:] == ["--ready"]:
+    from brain.ops.heartbeat import main as _answer_the_healthcheck
+
+    raise SystemExit(_answer_the_healthcheck())
 
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -186,6 +194,7 @@ from brain.ops.connections import (
     WORKER_QUEUE_CONNECTIONS,
     client_named,
 )
+from brain.ops.heartbeat import beat, heartbeat_path, ready
 from brain.ops.inference import inference_gaps
 from brain.ops.inference_client import make_client
 from brain.ops.queue import (
@@ -211,7 +220,6 @@ from brain.ops.queue import (
     queue_url_refusals,
     register_task,
     run_shards,
-    stale_after,
     tasks_of_ours,
     worker_shards,
 )
@@ -330,10 +338,6 @@ APP_URL_ENV: Final = "DATABASE_URL"
 #: and a missing checkpointer is not a misconfiguration. A wrong one is.
 CHECKPOINTER_URL_ENV: Final = "BRAIN_CHECKPOINTER_URL"
 
-#: The file a running worker touches. In the container's own filesystem rather than shared,
-#: so it says something about this process rather than about the fleet.
-HEARTBEAT_PATH_ENV: Final = "BRAIN_WORKER_HEARTBEAT"
-
 #: How many connections this container may hold against the database it reaches directly.
 #:
 #: A declaration rather than a knob today, and saying so is the point. Nothing in this
@@ -383,9 +387,6 @@ COMPONENT_SLOT_CLASS: Final[Mapping[str, SlotClass]] = {
     PARSE_WORKER_COMPONENT: SlotClass.WHOLE_CONTAINER,
 }
 
-#: The directory the heartbeat lives in, under whatever the platform calls temporary.
-HEARTBEAT_DIRECTORY: Final = "brain-worker"
-
 #: How the per-class allocation is spelled in an environment. One variable per class rather
 #: than one packed string, so a deployment that gets one of them wrong is wrong in one place
 #: and readable in `docker inspect`.
@@ -413,8 +414,6 @@ NOTHING_REGISTERS_A_TASK: Final = (
 EXIT_MISCONFIGURED: Final = 78
 #: `EX_UNAVAILABLE`. There is nothing to fetch with; see `NO_DRIVER_IS_INSTALLED`.
 EXIT_NO_DRIVER: Final = 69
-#: The healthcheck's failure. Ordinary and expected while the worker is starting.
-EXIT_NOT_READY: Final = 1
 
 
 def slot_env_name(traffic_class: TrafficClass) -> str:
@@ -908,50 +907,6 @@ def advisories(env: Mapping[str, str], *, worker_component: str) -> tuple[str, .
     return (*policy_gaps(), *queue_split_advisory(env, worker_component=worker_component))
 
 
-# ------------------------------------------------------------------------- readiness
-def default_heartbeat_path() -> Path:
-    """Where the heartbeat goes when nothing says otherwise.
-
-    The temporary directory, asked for rather than spelled. Two reasons, and the second is
-    the one that matters. The image runs as a non-root user with no home and no shell, so
-    the temporary directory is the one place in it this process can write. And a heartbeat
-    must not survive a restart: the file says "a worker is working right now", and a durable
-    copy of that sentence left behind by a process that died is exactly the lie the re-drive
-    sweep exists to catch, so it belongs somewhere the container forgets.
-
-    `tempfile.gettempdir()` rather than a literal, so the tests can point it somewhere real
-    on a machine whose temporary directory is not spelled the same way.
-    """
-    return Path(tempfile.gettempdir()) / HEARTBEAT_DIRECTORY / "heartbeat"
-
-
-def heartbeat_age_seconds(path: Path, *, now: datetime) -> float | None:
-    """How long ago the worker last said it was working, or None if it never has.
-
-    None rather than a large number for a missing file. A worker that has not started is not
-    a worker that is behind, and collapsing the two would let a container that never opened
-    a connection report the same condition as one that is merely slow.
-    """
-    try:
-        modified = path.stat().st_mtime
-    except OSError:
-        return None
-    return (now - datetime.fromtimestamp(modified, tz=UTC)).total_seconds()
-
-
-def is_ready(path: Path, *, now: datetime) -> bool:
-    """Whether this container should be in rotation.
-
-    The threshold is `brain.ops.queue.stale_after()` and not a number of its own. The queue
-    decides when a worker has stopped answering, and a readiness check that disagreed with
-    it would produce the two states that are both wrong: a container reporting ready while
-    the recovery sweep re-drives its jobs, or a container taken out of rotation while it is
-    still holding work nothing will reclaim.
-    """
-    age = heartbeat_age_seconds(path, now=now)
-    return age is not None and age <= stale_after().total_seconds()
-
-
 # ----------------------------------------------------------------------------- the process
 def deploy_plan_text() -> str:
     """The queue's install steps, in the form an operator reads before a deploy.
@@ -973,30 +928,6 @@ def deploy_plan_text() -> str:
         lines.append(f"  {step.order}. {step.what}{suffix}")
         lines.append(f"     because {step.why}")
     return "\n".join(lines)
-
-
-def heartbeat_path(env: Mapping[str, str]) -> Path:
-    """Where this container's heartbeat goes, as its environment says or by default.
-
-    One function rather than the two lines it replaces, because `--ready` and the run mode have
-    to agree about the path: a healthcheck reading one file while the loop touches another is a
-    container that is never in rotation and whose logs say it is working.
-    """
-    declared = (env.get(HEARTBEAT_PATH_ENV) or "").strip()
-    return Path(declared) if declared else default_heartbeat_path()
-
-
-def beat(path: Path) -> None:
-    """Say that this process's loop is still going round.
-
-    The directory is created on every beat rather than once at start-up. It costs a stat and it
-    survives the case a start-up-only version does not, which is somebody clearing the
-    container's temporary directory underneath a running worker: the heartbeat would stop being
-    written, the healthcheck would take the container out of rotation, and the loop would be
-    perfectly healthy the whole time.
-    """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.touch()
 
 
 def install_queue_text(env: Mapping[str, str], *, worker_component: str) -> tuple[int, str]:
@@ -1578,12 +1509,7 @@ def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None
         return 0
 
     if "--ready" in arguments:
-        path = heartbeat_path(environment)
-        if is_ready(path, now=datetime.now(tz=UTC)):
-            print(f"ready: heartbeat at {path} is fresh")
-            return 0
-        print(f"not ready: no fresh heartbeat at {path}", file=sys.stderr)
-        return EXIT_NOT_READY
+        return ready(environment)
 
     # Before the preflight, and it is the only refusal that is checked twice. Every mode below
     # describes or starts a driver, and reporting eleven things about a slot allocation to
