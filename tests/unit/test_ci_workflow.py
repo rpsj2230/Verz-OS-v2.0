@@ -489,7 +489,7 @@ def test_the_floor_job_keeps_the_name_the_unit_job_had_and_cannot_pass_by_being_
 
     assert job["name"] == "Unit tests and coverage"
     assert SHARD_JOB in ([job["needs"]] if isinstance(job["needs"], str) else job["needs"])
-    assert job["if"] == "${{ !cancelled() }}"
+    assert job["if"] == "${{ !cancelled() && github.event_name == 'pull_request' }}"
     assert first["env"]["SHARDS"] == "${{ needs.tests.result }}"
     assert '[ "$SHARDS" = "success" ]' in _live_lines(first)[0]
     assert "exit 1" in _live_lines(first)[0]
@@ -727,13 +727,20 @@ def test_only_a_change_to_the_task_list_skips_the_product_suites() -> None:
         )
 
     gated = "${{ needs.changes.outputs.tasks_only != 'true' }}"
-    for name in ("static", "tests", "console", "stack", "supply_chain", "handover"):
+    for name in ("static", "stack"):
         assert jobs[name].get("if") == gated, f"the {name} job is not gated on the kind of change"
+    pull_request_only = PULL_REQUEST_ONLY
+    for name in ("tests", "console", "supply_chain", "handover"):
+        assert jobs[name].get("if") == pull_request_only, f"the {name} job is not gated"
     docs_runs = "\n".join(str(step.get("run", "")) for step in jobs["docs"]["steps"])
     assert "python -m brain.requirements" in docs_runs
 
 
 # ------------------------------------------ a handover on a scratch install (M41.2.6, M41.4.1)
+#: The gate on jobs that run on a pull request's code change and not again on main.
+PULL_REQUEST_ONLY = (
+    "${{ github.event_name == 'pull_request' && needs.changes.outputs.tasks_only != 'true' }}"
+)
 HANDOVER_JOB = "handover"
 
 
@@ -774,7 +781,7 @@ def test_the_handover_job_runs_the_procedure_in_order_on_an_install_it_built() -
     positions = [_first_line_at(lines, one) for one in ordered]
     assert positions == sorted(positions), dict(zip(ordered, positions, strict=True))
     assert len(set(positions)) == len(positions)
-    assert job.get("if") == "${{ needs.changes.outputs.tasks_only != 'true' }}"
+    assert job.get("if") == PULL_REQUEST_ONLY
     assert "pgvector" in str(job["services"]["postgres"]["image"])
 
 
@@ -873,3 +880,30 @@ def test_the_handover_job_and_its_remove_step_cannot_hang_for_an_hour() -> None:
     assert 0 < int(remove["timeout-minutes"]) <= 5
     first = _live_lines(remove)[0]
     assert first.startswith("others=$(psql") and "pg_stat_activity" in first
+
+
+def test_main_runs_the_deploy_gates_and_leaves_the_suite_to_the_pull_request() -> None:
+    """Every push to main deploys, so main keeps the jobs a deploy depends on: lint and types,
+    the sweeps, the install from empty, the migrations over an install-shaped database, the
+    previous release on the new schema, the whole stack and the tracker. The suite the pull
+    request already passed runs on the pull request only, because on the free plan's 20
+    concurrent jobs a second full run on main queued every deploy (2026-09-28).
+
+    Delete this and a deploy gate can be made pull-request-only with CI still green, and main
+    would deploy a merge nothing checked for the running install; or the heavy jobs can drift
+    back onto main and deploys queue again."""
+    jobs = _workflow()["jobs"]
+    pull_request_only = PULL_REQUEST_ONLY
+    for name in ("tests", "console", "presidio", "handover", "supply_chain", "vulnerabilities"):
+        assert jobs[name].get("if") == pull_request_only, name
+    assert jobs["coverage"]["if"] == "${{ !cancelled() && github.event_name == 'pull_request' }}"
+    for name in (
+        "static",
+        "sweeps",
+        "install",
+        "migrations_install_shaped",
+        "previous_release",
+        "stack",
+        "docs",
+    ):
+        assert "event_name" not in str(jobs[name].get("if", "")), name
