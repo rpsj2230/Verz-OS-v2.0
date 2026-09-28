@@ -56,7 +56,12 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
     { pattern: "/classification/:entity/:column", index: 1, writes: true },
     { pattern: "/classification", index: 1, writes: true },
   ],
-  "src/pages/DataTransfer.tsx": [{ pattern: "/import-export", index: 0, writes: true }],
+  "src/pages/operations/DataTransferPage.tsx": [{ pattern: "/import-export", index: 0, writes: true }],
+  // Index 0 on every page drawing a long list is `components/ListControls.tsx`' search form, which
+  // is not in the page's file and sends nothing but a read. Then the lead, a team's add, creating a
+  // team, creating a department and drawing a scope. The rename form is one form in the source,
+  // drawn for a department or a team, and opens above the lead's form; the department's stands for
+  // both, and tests/govern-people-pages.test.tsx submits the team's blank.
   "src/pages/Elevation.tsx": [{ pattern: "/elevation", index: 0, writes: true }],
   // The Add a document card sits above the library, so its form comes before the list's search.
   "src/pages/Knowledge.tsx": [{ pattern: "/library", index: 0, writes: true }],

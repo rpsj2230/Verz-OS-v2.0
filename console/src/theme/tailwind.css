@@ -85,6 +85,7 @@
 @source "../pages/sessions";
 @source "../pages/install";
 @source "../pages/prompts";
+@source "../pages/operations";
 @source not inline("grid");
 
 /*

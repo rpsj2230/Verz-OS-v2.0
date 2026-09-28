@@ -127,6 +127,11 @@ const AN_UNBINDING_IS_ONE_PERSONS_CHAT =
   "them; it is confirmed one person at a time so nobody's chat is taken away as a side effect of " +
   "somebody else's.";
 
+const A_RUN_IS_WRITTEN_BY_THE_WORKER =
+  "A job's past runs are rows the worker writes as it runs the job, and nothing a person presses " +
+  "changes one: pause, resume and run now act on the job, from its own header, so there is no act " +
+  "to do to many runs at once.";
+
 /** What each long list does not offer, and why. Everything it does offer is read off the page. */
 /**
  * The two lists read through a tool a model also calls, whose request has no position to page by:
@@ -199,6 +204,7 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
   "/connectors": {},
   "/automations": {},
   "/agent-templates": {},
+  "/jobs/:name": {},
   "/approvals": { bulk: AN_APPROVAL_IS_DECIDED_FROM_ITS_OWN_CARD },
   "/adoption": { bulk: READ_ONLY },
   "/people": {},
