@@ -266,7 +266,21 @@ def test_the_documented_error_shape_is_the_one_the_application_returns() -> None
     answers a key it could not keep with the credential write's own `CredentialNotKeptView`, for
     that route's reason.
 
+    **An agent's lifecycle moves are the eighth to thirteenth, for their 409s.**
+    `brain.agent_lifecycle_routes` answers enable, disable, archive, transfer, duplicate and a
+    template install with the automations' own `NotChangedView` when the page's confirmation no
+    longer matches the row, or the move is refused in the domain's sentence (an archived agent
+    cannot be enabled), so the confirmation dialog can say why nothing changed.
+
     Delete this and 404 can be documented as any shape at all as long as it is documented."""
+    from brain.agent_lifecycle_routes import (
+        ARCHIVE_PATH,
+        DISABLE_PATH,
+        DUPLICATE_PATH,
+        ENABLE_PATH,
+        INSTALL_PATH,
+        TRANSFER_PATH,
+    )
     from brain.credential_routes import CREDENTIALS_PATH
     from brain.sign_in_routes import SIGN_INS_PATH
 
@@ -294,6 +308,17 @@ def test_the_documented_error_shape_is_the_one_the_application_returns() -> None
             f"{API_PREFIX}/agents/{{agent_id}}/automations/{{automation_id}}/stop",
             "409",
         ): "#/components/schemas/NotChangedView",
+        **{
+            (f"{API_PREFIX}{path}", "409"): "#/components/schemas/NotChangedView"
+            for path in (
+                ENABLE_PATH,
+                DISABLE_PATH,
+                ARCHIVE_PATH,
+                TRANSFER_PATH,
+                DUPLICATE_PATH,
+                INSTALL_PATH,
+            )
+        },
     }
 
     checked = 0

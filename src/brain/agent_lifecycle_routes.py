@@ -115,6 +115,10 @@ from brain.agents.template import SignedManifest, TemplateError, TemplateInstanc
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked, Asking
 from brain.audit.ledger import DIGEST
+
+# The automations' own 409 body, reused rather than copied: two classes of one name are one schema
+# only while every word matches, and the first edit to either would rename both in the document.
+from brain.automation_schedule_routes import NotChangedView
 from brain.connectors.registry import ConnectorRegistry
 from brain.console.govern import _in_reach
 from brain.console.reads import permitted
@@ -289,15 +293,6 @@ class TemplateVersionView(BaseModel):
     starts: str
     #: Why this version cannot be installed here, when it cannot.
     unavailable: str | None = None
-
-
-class NotChangedView(BaseModel):
-    """Why nothing was changed, in a word and a sentence."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    outcome: str
-    sentence: str
 
 
 class LifecycleStateAsked(BaseModel):
