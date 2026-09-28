@@ -22,19 +22,18 @@
  * nowhere to travel. The route refuses one anyway; this is the half that stops the console
  * asking.
  *
- * **Nothing on this screen is saved, and the console says so rather than implying it.** See
- * `A_REVIEW_IS_NOT_A_SAVE`. The API has no route that stores a classification because there
- * is no table behind one, so an editor that looked like it applied a change would be
- * describing a mechanism that does not exist.
+ * **A built-in classification is reviewed and never saved; an uploaded table is marked and
+ * applied.** See `A_REVIEW_IS_NOT_A_SAVE` and `A_MARK_IS_APPLIED_AND_LEDGERED`. The shipped
+ * price list is a constant in the API's process, so its editor says a change is a source edit
+ * and a deploy. A price list somebody uploaded (`PUT /api/v1/classifications/{entity}/table`)
+ * is stored, and a mark on one of its columns is reviewed and then applied, as two requests.
  *
- * **The three epochs stop here.** `ClassificationView.epoch`, `ReviewView.epoch_now` and
- * `ReviewView.epoch_after` are read by nothing below, in the same way and for the same
- * reason `readPage` in `paging.ts` drops a total: not a convention against rendering them
- * but no path from the payload to a renderer. Two of them would be actively misleading. The
- * route's own docstring records that `FieldPolicy.epoch` does not digest `derived_from`, so
- * dropping a derivation leaves the two review epochs identical while changing what everybody
- * short of a column sees, and a screen showing them side by side would be showing a person a
- * reason to believe nothing had changed.
+ * **The epoch reaches the screen, since the API's epoch moves with a derivation.** It did not
+ * until 2026-09-28: `ColumnRule.as_field_rule` dropped `derived_from`, so dropping a
+ * derivation left the epoch identical while changing what everybody short of a column sees,
+ * and this module read no epoch at all rather than show a reason to believe nothing had
+ * changed. The route now compiles the derivation in, so the epoch is the digest the answer
+ * cache is keyed on, and a person applying a mark can see it move.
  *
  * **The columns of the grid are a fixed list and are deliberately sorted by nothing here.**
  * The API answers them in its own sorted order, which is a property of the classification
@@ -43,7 +42,7 @@
  * list against `brain.classification_routes.ColumnView` so a field added there cannot arrive
  * and be dropped in silence.
  *
- * Task ids: M7.5.3
+ * Task ids: M7.5.3, M7.7.3
  */
 
 import type { RJSFSchema, UiSchema } from "@rjsf/utils";
@@ -75,12 +74,20 @@ export const A_WIDENING_IS_NAMED_BY_THE_API_AND_NEVER_WORKED_OUT_HERE =
  * one does not.
  */
 export const A_REVIEW_IS_NOT_A_SAVE =
-  "A review says what a proposed rule would do. It stores nothing, and there is nothing " +
-  "for it to store into: a classification is a constant compiled into the API's own " +
-  "process, there is no table behind one, and no audit row is written because there is no " +
-  "row to write. Applying a change is a source edit and a deploy. The console says that " +
-  "on the screen, because an editor that let somebody believe otherwise would be worse " +
-  "than no editor: they would stop checking.";
+  "A review says what a proposed rule would do and stores nothing. For a built-in " +
+  "classification, a constant compiled into the API's own process, applying a change is a " +
+  "source edit and a deploy, and the console says so on the screen, because an editor that " +
+  "let somebody believe otherwise would be worse than no editor: they would stop checking.";
+
+/**
+ * Written down because an uploaded table's editor does save, and it has to say so as plainly
+ * as the built-in one says it does not.
+ */
+export const A_MARK_IS_APPLIED_AND_LEDGERED =
+  "An uploaded table's column is changed by applying a mark, which is its own request, sent " +
+  "only after the same mark was reviewed. The API stores the whole classification in one " +
+  "statement and writes an audit entry naming the person, and its answer carries the review " +
+  "again, so the widening is named in the response that made it.";
 
 /**
  * Written down because hiding the editor is presentation and looks exactly like enforcement.
@@ -162,22 +169,35 @@ export function columnAddress(entity: string, column: string): string {
   return `${classificationAddress(entity)}/${encodeURIComponent(column)}`;
 }
 
-/** One classification, as this console holds it. Three fields, deliberately. */
+/** One classification, as this console holds it. */
 export interface ClassificationPage {
   readonly entity: string;
   readonly columns: readonly ColumnRow[];
   /** Whether this caller may have a change reviewed. Presentation only. */
   readonly editable: boolean;
+  /** Whether this is an uploaded table's classification, so a mark can be applied. */
+  readonly stored: boolean;
+  readonly title: string;
+  readonly keyColumn: string;
+  /** The digest the answer cache is keyed on, moved by any change to a rule. */
+  readonly epoch: string;
 }
 
-const NOTHING: ClassificationPage = Object.freeze({ entity: "", columns: [], editable: false });
+const NOTHING: ClassificationPage = Object.freeze({
+  entity: "",
+  columns: [],
+  editable: false,
+  stored: false,
+  title: "",
+  keyColumn: "",
+  epoch: "",
+});
 
 /**
  * Read `brain.classification_routes.ClassificationView` out of a response body.
  *
- * **`epoch` stops here.** It is a digest over rules this response already carries in full,
- * so it discloses nothing, and it is also not a fact a person can act on: it is a cache key.
- * A screen holding the field is a screen one line away from printing a hash beside a policy.
+ * The epoch is read, and it discloses nothing: it is a digest over rules this response
+ * already carries in full. See the module docstring for why it now reaches the screen.
  *
  * An unreadable body yields an empty classification rather than throwing, which is
  * `readMatrixPage`'s choice and not `readPage`'s, and for its reason: the shape is fixed by
@@ -188,7 +208,15 @@ export function readClassification(payload: unknown): ClassificationPage {
   if (typeof payload !== "object" || payload === null) {
     return NOTHING;
   }
-  const body = payload as { entity?: unknown; columns?: unknown; editable?: unknown };
+  const body = payload as {
+    entity?: unknown;
+    columns?: unknown;
+    editable?: unknown;
+    stored?: unknown;
+    title?: unknown;
+    key_column?: unknown;
+    epoch?: unknown;
+  };
   if (!Array.isArray(body.columns) || typeof body.entity !== "string") {
     return NOTHING;
   }
@@ -196,6 +224,10 @@ export function readClassification(payload: unknown): ClassificationPage {
     entity: body.entity,
     columns: body.columns as ColumnRow[],
     editable: body.editable === true,
+    stored: body.stored === true,
+    title: typeof body.title === "string" ? body.title : "",
+    keyColumn: typeof body.key_column === "string" ? body.key_column : "",
+    epoch: typeof body.epoch === "string" ? body.epoch : "",
   };
 }
 
@@ -209,6 +241,9 @@ export interface Review {
   readonly widens: boolean;
   /** The columns the API said a caller short of one column would newly reach. */
   readonly exposed: readonly string[];
+  /** The epoch of the classification that stands, and of the proposed one. */
+  readonly epochNow: string;
+  readonly epochAfter: string;
 }
 
 const UNREAD: Review = Object.freeze({
@@ -216,16 +251,16 @@ const UNREAD: Review = Object.freeze({
   changes: [],
   widens: false,
   exposed: [],
+  epochNow: "",
+  epochAfter: "",
 });
 
 /**
  * Read `brain.classification_routes.ReviewView` out of a response body.
  *
- * **`epoch_now` and `epoch_after` stop here, and dropping them is a correctness decision
- * rather than a tidiness one.** `FieldPolicy.epoch` does not digest a rule's `derived_from`,
- * which the route's own docstring records, so the two are identical for the one edit this
- * whole screen exists to catch. Rendering them beside a widening would hand a person a
- * reason to believe nothing had changed, in a number that looks authoritative.
+ * Both epochs are read. They differ for any change to a rule, a dropped derivation included,
+ * and they are shown as the digests they are rather than as a verdict: whether the change
+ * widens is `widens`, which the API decided.
  *
  * `widens` defaults to false only for a body that is not a review at all, and the caller
  * treats an unreadable body as no answer rather than as a safe one: see `Classification.tsx`.
@@ -239,8 +274,12 @@ export function readReview(payload: unknown): Review {
     changes?: unknown;
     widens?: unknown;
     exposed?: unknown;
+    epoch_now?: unknown;
+    epoch_after?: unknown;
   };
   return {
+    epochNow: typeof body.epoch_now === "string" ? body.epoch_now : "",
+    epochAfter: typeof body.epoch_after === "string" ? body.epoch_after : "",
     wouldNotLoad: typeof body.would_not_load === "string" ? body.would_not_load : "",
     changes: Array.isArray(body.changes)
       ? body.changes.filter((word): word is string => typeof word === "string")
@@ -275,6 +314,7 @@ export const CLASSIFICATION_COLUMNS: readonly {
   readonly as: "value" | "chip" | "names";
 }[] = [
   { name: "column", as: "value" },
+  { name: "access", as: "chip" },
   { name: "classification", as: "chip" },
   { name: "required_capability", as: "value" },
   { name: "derived_from", as: "names" },
@@ -545,4 +585,166 @@ export function submittedEntity(data: unknown): string | null {
   }
   const named = (data as Record<string, unknown>)[ENTITY_FIELD];
   return typeof named === "string" && named !== "" ? named : null;
+}
+
+// ------------------------------------------------------------ an uploaded table (M7.5.3)
+
+/** The files the upload reads, as `brain.knowledge.table_file.TABLE_SUFFIXES` names them. */
+export const TABLE_FILE_ACCEPT = ".csv,.xlsx";
+
+/** Where the API holds an uploaded table's rows. The entity is the address. */
+export function tableApiPath(entity: string): string {
+  return `${classificationApiPath(entity)}/table`;
+}
+
+/** Where a mark is reviewed, and where it is applied. */
+export function markReviewApiPath(entity: string, column: string): string {
+  return `${classificationApiPath(entity)}/columns/${encodeURIComponent(column)}/marks/review`;
+}
+
+export function markApiPath(entity: string, column: string): string {
+  return `${classificationApiPath(entity)}/columns/${encodeURIComponent(column)}/marks`;
+}
+
+/** Bytes as base64, without a library, as `brain.classification_routes.TableUpload` takes them. */
+export function base64Of(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary);
+}
+
+/** The body of one upload, as the route's `TableUpload` declares it. The entity is the address. */
+export interface TableUpload {
+  readonly title: string;
+  readonly filename: string;
+  readonly content_base64: string;
+  readonly key_column: string | null;
+}
+
+/**
+ * The upload body, or null when something the route requires is missing.
+ *
+ * Built from named values rather than from a form's state, for `submittedEdit`'s reason.
+ */
+export function uploadBody(
+  title: string,
+  filename: string,
+  bytes: Uint8Array | null,
+  keyColumn: string,
+): TableUpload | null {
+  if (title.trim() === "" || filename === "" || bytes === null || bytes.length === 0) {
+    return null;
+  }
+  return {
+    title: title.trim(),
+    filename,
+    content_base64: base64Of(bytes),
+    key_column: keyColumn.trim() === "" ? null : keyColumn.trim(),
+  };
+}
+
+/** What an upload said: the API's refusal, or the classification it produced. */
+export interface Uploaded {
+  readonly refused: string;
+  readonly page: ClassificationPage | null;
+}
+
+/** Read `brain.classification_routes.TableUploaded`. An unreadable body is neither. */
+export function readUploaded(payload: unknown): Uploaded {
+  if (typeof payload !== "object" || payload === null) {
+    return { refused: "", page: null };
+  }
+  const body = payload as { refused?: unknown; classification?: unknown };
+  const refused = typeof body.refused === "string" ? body.refused : "";
+  const page =
+    body.classification === null || body.classification === undefined
+      ? null
+      : readClassification(body.classification);
+  return { refused, page: page !== null && page.entity !== "" ? page : null };
+}
+
+/** The three marks, as `brain.knowledge.columns.ColumnAccess` names them, in that order. */
+export const MARK_WORDS = ["open", "restricted", "derived"] as const;
+
+/** The body of one mark, as the route's `ColumnMark` declares it. */
+export interface ColumnMark {
+  readonly access: string;
+  readonly derived_from: readonly string[];
+}
+
+/**
+ * The form one column's mark is proposed through.
+ *
+ * Two fields and no capability: the capability follows from the mark, and a form that let a
+ * person type one would let a column marked restricted be governed by the table grant. The
+ * derivation options are the table's other columns, for `derivationOptions`'s reason.
+ */
+export function columnMarkSchema(options: readonly string[]): RJSFSchema {
+  return {
+    type: "object",
+    required: ["access", "derived_from"],
+    properties: {
+      access: { type: "string", title: "access", enum: [...MARK_WORDS] },
+      derived_from: {
+        type: "array",
+        title: "derived_from",
+        maxItems: options.length === 0 ? 0 : MAX_DERIVED_FROM,
+        uniqueItems: true,
+        items: options.length === 0 ? { type: "string" } : { type: "string", enum: [...options] },
+      },
+    },
+  };
+}
+
+export const COLUMN_MARK_UI: UiSchema = Object.freeze<UiSchema>({
+  "ui:submitButtonOptions": { submitText: "Review this mark" },
+});
+
+/** What one column's mark form starts from: the mark it carries, or restricted. */
+export function markDefaults(row: ColumnRow): Record<string, unknown> {
+  return {
+    access: typeof row.access === "string" ? row.access : "restricted",
+    derived_from: [...row.derived_from],
+  };
+}
+
+/** What the mark form submitted, or null if it was not a mark. Two named keys, nothing else. */
+export function submittedMark(data: unknown): ColumnMark | null {
+  if (typeof data !== "object" || data === null) {
+    return null;
+  }
+  const fields = data as Record<string, unknown>;
+  const access = fields["access"];
+  const derived = fields["derived_from"];
+  if (
+    typeof access !== "string" ||
+    !(MARK_WORDS as readonly string[]).includes(access) ||
+    !Array.isArray(derived) ||
+    derived.some((name) => typeof name !== "string")
+  ) {
+    return null;
+  }
+  return { access, derived_from: derived as string[] };
+}
+
+/** What applying a mark said: whether it was applied, the verdict, and the table after. */
+export interface Applied {
+  readonly applied: boolean;
+  readonly review: Review;
+  readonly page: ClassificationPage;
+}
+
+/** Read `brain.classification_routes.MarkApplied`. Unreadable is not applied. */
+export function readApplied(payload: unknown): Applied {
+  if (typeof payload !== "object" || payload === null) {
+    return { applied: false, review: readReview(null), page: readClassification(null) };
+  }
+  const body = payload as { applied?: unknown; review?: unknown; classification?: unknown };
+  return {
+    applied: body.applied === true,
+    review: readReview(body.review),
+    page: readClassification(body.classification),
+  };
 }

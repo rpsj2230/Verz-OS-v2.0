@@ -40,7 +40,12 @@ import { approvalDecisionApiPath } from "../../src/pages/approvalsQuery";
 import { historyApiPath, VERIFICATION_API_PATH } from "../../src/pages/auditQuery";
 import { CHECKS_API_PATH } from "../../src/pages/requirementChecksQuery";
 import { UNDO_API_PATH } from "../../src/pages/learningQuery";
-import { reviewApiPath } from "../../src/pages/classificationQuery";
+import {
+  markApiPath,
+  markReviewApiPath,
+  reviewApiPath,
+  tableApiPath,
+} from "../../src/pages/classificationQuery";
 import { assignPath, reviewPath, SKILLS_API_PATH } from "../../src/pages/skillsQuery";
 import { EXPORTS_API_PATH } from "../../src/pages/dataTransferQuery";
 import { switchPath } from "../../src/pages/featuresQuery";
@@ -513,6 +518,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "gate.fast_path_rule",
       "gate.field_policy",
       "agent.artifact",
+      "know.classified_table",
+      "know.classified_row",
     ],
     installation: ["INSTALL_VECTOR_STORE", "INSTALL_EMBEDDING_REVISION"],
     gaps: [
@@ -526,8 +533,13 @@ export const AREAS: Readonly<Record<string, Area>> = {
           "brain.ops.memory_store writes an edit and no route offers one: the control belongs on a person's own memory tab, and the Memory screen says edit_is_not_writable. Nothing records agreement or a decision, which the Learning screen says in place of Promote and Decide.",
       },
       {
-        what: "A column's classification cannot be changed; a proposed change is reviewed and not applied.",
-        because: "brain.classification_routes mounts only the dry-run review, and tests/unit/test_classification_routes.py holds that nothing mounted there can change a classification.",
+        what: "A built-in classification's column is reviewed and not applied; an uploaded table's column is marked and applied.",
+        because:
+          "The shipped price list is a constant compiled into the API's process and changes with a release; brain.classification_routes applies a mark only to a table stored in know.classified_table, which tests/unit/test_classification_routes.py holds by the routes it mounts.",
+      },
+      {
+        what: "A price list uploaded as a document on the Knowledge page is not yet offered conversion to classified rows; it is uploaded on the Classification screen.",
+        leaf: "M7.7.3",
       },
     ],
   },
@@ -772,8 +784,19 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/AccessRequests.tsx ACCESS_REQUESTS_API_PATH": [
     at("POST /api/v1/access-requests", "ACCESS_REQUESTS_API_PATH", ACCESS_REQUESTS_API_PATH),
   ],
-  "src/pages/Classification.tsx reviewApiPath(entity, row.column)": [
+  "src/pages/Classification.tsx mark === null ? reviewApiPath(entity, row.column) : markReviewApiPath(entity, row.column)": [
     at("POST /api/v1/classifications/{entity}/columns/{column}/review", "reviewApiPath", reviewApiPath("price_list", "cost")),
+    at(
+      "POST /api/v1/classifications/{entity}/columns/{column}/marks/review",
+      "markReviewApiPath",
+      markReviewApiPath("prices", "margin"),
+    ),
+  ],
+  "src/pages/Classification.tsx markApiPath(entity, row.column)": [
+    at("PUT /api/v1/classifications/{entity}/columns/{column}/marks", "markApiPath", markApiPath("prices", "margin")),
+  ],
+  "src/pages/Classification.tsx tableApiPath(named)": [
+    at("PUT /api/v1/classifications/{entity}/table", "tableApiPath", tableApiPath("prices")),
   ],
   "src/pages/DataTransfer.tsx EXPORTS_API_PATH": [at("POST /api/v1/data-transfer/exports", "EXPORTS_API_PATH", EXPORTS_API_PATH)],
   "src/pages/Features.tsx switchPath(row.name)": [at("POST /api/v1/install/features/{name}", "switchPath", switchPath("schedule_control"))],
@@ -1191,7 +1214,28 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
   "POST /api/v1/classifications/{entity}/columns/{column}/review": {
     row: { notApplicable: "A review is a dry run and writes nothing." },
     audit: { notApplicable: "A review changes nothing, so there is nothing to record." },
-    behaviour: t("test_classification_routes", "test_nothing_mounted_here_can_change_a_classification"),
+    behaviour: t("test_classification_routes", "test_the_only_writes_mounted_here_are_the_upload_and_the_mark"),
+  },
+  "POST /api/v1/classifications/{entity}/columns/{column}/marks/review": {
+    row: { notApplicable: "A review of a mark is a dry run and writes nothing." },
+    audit: { notApplicable: "A review changes nothing, so there is nothing to record." },
+    behaviour: t("test_classified_tables", "test_a_mark_review_stores_nothing"),
+  },
+  "PUT /api/v1/classifications/{entity}/columns/{column}/marks": {
+    row: t("test_classified_tables", "test_the_store_writes_and_reads_a_table_as_the_application_role", true),
+    audit: t("test_classified_tables", "test_the_store_writes_and_reads_a_table_as_the_application_role", true),
+    behaviour: t(
+      "test_classified_tables",
+      "test_applying_a_mark_stores_it_and_moves_the_epoch_when_a_derivation_changes",
+    ),
+  },
+  "PUT /api/v1/classifications/{entity}/table": {
+    row: t("test_classified_tables", "test_the_store_writes_and_reads_a_table_as_the_application_role", true),
+    audit: t("test_classified_tables", "test_the_store_writes_and_reads_a_table_as_the_application_role", true),
+    behaviour: t(
+      "test_classified_tables",
+      "test_an_administrator_uploads_a_price_list_and_is_answered_its_classification",
+    ),
   },
   "POST /api/v1/data-transfer/exports": {
     row: t("test_data_export_store", "test_an_export_leaves_its_record_and_a_publish_entry_naming_what_left_and_who_took_it", true),
