@@ -121,12 +121,6 @@ NOT_A_REQUEST_WITH_A_REACH: Final[Mapping[str, str]] = MappingProxyType(
             "The worker copies the vault's own audit log into the ledger; the actor is the vault, "
             "and no person's request or reach is involved."
         ),
-        "brain.ops.connector_sync_run:corpus_sink": (
-            "The scheduled connector sync writes a synced document into know.item at night with "
-            "nobody signed in, so 0115's trigger records the item's owner, marked inferred, with "
-            "no reach and no trace. An upload from the console is attributed to its request by "
-            "brain.knowledge_routes. This path goes when the sync's document leg is removed."
-        ),
     }
 )
 

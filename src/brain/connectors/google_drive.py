@@ -10,7 +10,7 @@ differences touch the *shape* below. What would differ for Microsoft 365 is list
 end of this docstring, and it is a table and an error map rather than a redesign.
 
 **Its recordings are Google's documented shapes, and no live capture exists.**
-`tests/fixtures/cassettes.py` records a listing page, a file read, a throttling 403, a 429, a
+`tests/fixtures/cassettes/` records a listing page, a file read, a throttling 403, a 429, a
 401 and a 404, each written to the shape Google's API reference publishes, and
 `tests/unit/test_cassette_replay.py` replays them through this module. That is the footing
 every connector here stands on: **no vendor fact in this module has been seen from a live
@@ -172,6 +172,14 @@ Scope: domain logic. Nothing here opens a socket, resolves a name, reads a clock
 credential. The page reader, the scanner, the fetched-at stamp and every interval are
 parameters, for the reason `brain.models.routing.CircuitBreaker` gives about `now`.
 
+**This connector keeps a minimal index and reads every value live.** What it keeps of a
+file is its id, name, folder, type, revision, sharing state and dates; a file's content is
+read from Drive when a question needs it. `admit_from_drive` can carry a file's bytes to
+the knowledge layer's scan gate and nothing calls it: by the owner's rule a Drive body is
+read live and never embedded (`docs/needs-rupash.md` item 99), so the connector that wires
+it owes that decision first. It is declared as `CONNECTOR` at the foot of this module
+(`brain.connectors.declaration`).
+
 Task ids: M11.6.7
 """
 
@@ -196,6 +204,7 @@ from brain.connectors.contract import (
     assert_fetches_only,
     assert_holds_no_credential,
 )
+from brain.connectors.declaration import ConnectorDeclaration, Recorded
 from brain.connectors.manifest import (
     PRINCIPAL_FIELD_RE,
     RESOLVED_ACL_RE,
@@ -211,6 +220,7 @@ from brain.connectors.projection import ProjectedValue
 from brain.connectors.rest import ID_TARGET, OperationSpec, ParameterSpec, RestOperation
 from brain.connectors.throttle import CallOutcome, classify
 from brain.connectors.transports import FieldMapping, RestTransport, SourceRecord, normalise
+from brain.connectors.write_verification import ReadBack, Reading, unreadable
 from brain.core.envelope import IdentityMode, SideEffect, TypedResult
 from brain.core.errors import Degraded
 from brain.core.projection import MAX_LABEL_CHARS
@@ -2175,3 +2185,61 @@ def manifest(
         projections=(file_projection(connection),),
         ceiling="",
     )
+
+
+# ------------------------------------------------------------------ what this connector declares
+#: Why a read-back by file id can never answer ABSENT.
+DRIVE_A_NOT_FOUND_CANNOT_PROVE_ABSENCE: Final = (
+    "Drive answers 404 for a file that does not exist and for one this credential may not "
+    "see, and google_drive.A_NOT_FOUND_DOES_NOT_SEPARATE_ABSENT_FROM_REFUSED keeps the two "
+    "together. A read-back by file id can therefore answer FOUND or INCONCLUSIVE and never "
+    "ABSENT; only a complete listing that does not contain the file can."
+)
+
+
+def read_back_reading(operation: RestOperation, reply: Reply) -> Reading:
+    """One Drive listing. A 404 is `REJECTED` there and so never absent here.
+
+    See `DRIVE_A_NOT_FOUND_CANNOT_PROVE_ABSENCE`.
+    """
+    try:
+        assert_answered(reply)
+        rows = operation.project(reply.body)
+    except (DriveUnreachableError, DriveRefusedError, DriveNotFoundError) as failure:
+        return Reading(outcome=failure.call_outcome, matched=0, complete=False)
+    except ConnectorContractError:
+        return unreadable()
+    return Reading(outcome=CallOutcome.OK, matched=len(rows), complete=not next_cursor(reply))
+
+
+CONNECTOR: Final = ConnectorDeclaration(
+    name=GOOGLE_DRIVE,
+    label="Google Drive",
+    not_from_the_console=(
+        "It is connected to one folder, with the department whose knowledge the folder "
+        "is and the person answerable for what it contributes, and its key is a service "
+        "account key file rather than one unbroken key. This screen takes neither yet, so "
+        "it is connected at the server."
+    ),
+    read_back=ReadBack(
+        reading=read_back_reading,
+        recorded=(
+            "DRIVE-200-files-page",
+            "DRIVE-200-file",
+            "DRIVE-403-user-rate-limit",
+            "DRIVE-429",
+            "DRIVE-401",
+            "DRIVE-404",
+        ),
+        findings=(DRIVE_A_NOT_FOUND_CANNOT_PROVE_ABSENCE,),
+    ),
+    recorded=Recorded(
+        tested=True,
+        not_replayed=(
+            "a file is kept only with a sharing state, which is reduced from the permissions "
+            "Drive returns; the connector has no function reading them out of a response, and "
+            "Google's documentation does not say whether a user grant carries the domain that "
+            "reduction needs, so only a live capture can settle it",
+        ),
+    ),
+)

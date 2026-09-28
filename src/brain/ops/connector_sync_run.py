@@ -36,12 +36,19 @@ check and inside to the connection is the ordinary way past the rule.
 own before the next page is asked for, so a run that fails on page four keeps pages one to three,
 with the reading time each was read at.
 
+**What is written is the minimal index and nothing else.** Every record passes
+`brain.ops.connector_sync.kept_fields` before its page is written, and the run hands nothing to the
+knowledge corpus: until 2026-09-28 it opened the corpus and passed each row a reading called a
+document to `brain.knowledge.chunk_store.ingest_document`, which is a bulk sync of bodies by the
+owner's rule and was removed with the leg that fed it. See
+`brain.ops.connector_sync.A_SYNC_KEEPS_NO_BODY`.
+
 Rejected: reading through `brain.tools.fetch.Fetcher`, which the connectors' own `connector_fetch`
 closures take. It carries no headers and no status, so a key cannot be sent through it and a 429
 cannot come back through it as anything but an exception, which is the collapse
 `xero.AN_UNREACHABLE_LEDGER_IS_NOT_AN_EMPTY_ONE` refuses.
 
-Task ids: M42.6.5, M31.3.2.3, M31.3.2.4
+Task ids: M42.6.5, M31.3.2.3, M31.3.2.4, M11.9.1
 """
 
 from __future__ import annotations
@@ -50,8 +57,7 @@ import asyncio
 import http.client
 import json
 import ssl
-from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
-from contextlib import AsyncExitStack, asynccontextmanager
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, Final, Protocol
@@ -62,8 +68,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from brain.connectors.projection import ProjectedRecord
 from brain.connectors.rest import MAX_RESPONSE_BYTES
 from brain.connectors.throttle import CallOutcome, classify
-from brain.knowledge.chunk_store import ChunkStoreError, ingest_document
-from brain.knowledge.item import KnowledgeItem
 from brain.ops.connectable import READING_ROLE
 from brain.ops.connector_lease import (
     RUN_LEASE_TTL,
@@ -73,7 +77,6 @@ from brain.ops.connector_lease import (
 )
 from brain.ops.connector_sync import (
     ADDRESS_REFUSED,
-    DOCUMENTS_WITHHELD,
     MAX_PAGES_PER_ENTITY,
     MAX_SECONDS_WAITING_IN_A_RUN,
     NO_KEY,
@@ -94,8 +97,8 @@ from brain.ops.connector_sync import (
     SyncState,
     after_attempt,
     failure_detail,
+    kept_fields,
     plan_for,
-    stored_fields,
 )
 from brain.ops.connector_sync_store import (
     LiveConnection,
@@ -114,7 +117,6 @@ from brain.ops.openbao import (
     VaultRefusedError,
     VaultUnreachableError,
 )
-from brain.ops.queue import Job
 from brain.ops.secrets import SecretRef, SecretsUnavailableError, VaultRole
 from brain.ops.webhook_delivery import HTTPS_PORT, SystemResolver, _PinnedHTTPSConnection
 from brain.tools.fetch import Resolver, UnsafeAddressError
@@ -438,11 +440,6 @@ class SyncRun:
         )
 
 
-#: What carries a synced document into the corpus. `ingest_document` bound to its sessions and
-#: queue; it raises `ChunkStoreError` for a document its owner cannot reach.
-DocumentSink = Callable[[KnowledgeItem], Awaitable[object]]
-
-
 @dataclass
 class _Reading:
     """One attempt in progress. Private, and never handed to anything that could keep it."""
@@ -450,8 +447,6 @@ class _Reading:
     plan: SyncPlan
     started_at: datetime
     records: int = 0
-    documents: int = 0
-    withheld: bool = False
     cut_short: bool = False
     waited: float = 0.0
 
@@ -479,7 +474,6 @@ def _finish(
         call=call,
         retry_after_seconds=retry_after_seconds,
         records=one.records,
-        documents=one.documents,
         cut_short=one.cut_short,
     )
 
@@ -501,7 +495,6 @@ async def attempt(
     *,
     previous: SyncState | None,
     sessions: async_sessionmaker[AsyncSession],
-    documents: DocumentSink,
     keys: ConnectorKeys,
     caller: SourceCaller,
     resolver: Resolver,
@@ -523,7 +516,6 @@ async def attempt(
             lease,
             previous=previous,
             sessions=sessions,
-            documents=documents,
             caller=caller,
             resolver=resolver,
             clock=clock,
@@ -541,7 +533,6 @@ async def _read_under(
     *,
     previous: SyncState | None,
     sessions: async_sessionmaker[AsyncSession],
-    documents: DocumentSink,
     caller: SourceCaller,
     resolver: Resolver,
     clock: Callable[[], datetime],
@@ -578,7 +569,6 @@ async def _read_under(
         "Accept": "application/json",
         "Authorization": f"Bearer {key}",
     }
-    visibility = {projection.entity: projection.visibility for projection in manifest.projections}
     limiter = LimiterState()
 
     for entity in reading.entities():
@@ -643,14 +633,10 @@ async def _read_under(
                 )
                 rows = [] if reply.rows is None else [r.model_dump() for r in reply.rows.records]
                 kept: list[tuple[ProjectedRecord, Mapping[str, StoredValue]]] = []
-                found: list[KnowledgeItem] = []
                 for row in rows:
                     projected = reading.projected(entity, row, seen_at=read_at)
                     if projected is not None:
-                        kept.append((projected, stored_fields(projected, visibility[entity])))
-                    document = reading.document(entity, row, seen_at=read_at)
-                    if document is not None:
-                        found.append(document)
+                        kept.append((projected, kept_fields(projected, manifest)))
                 returned = len(operation.project(body))
             except Exception:
                 # Broad on purpose, and the type is not kept either: a refusal raised while reading
@@ -658,31 +644,18 @@ async def _read_under(
                 return finish(SyncOutcome.FAILED, SHAPE_DISAGREED)
             await _write_page(sessions, kept)
             one.records += len(kept)
-            for document in found:
-                try:
-                    await documents(document)
-                except ChunkStoreError:
-                    one.withheld = True
-                else:
-                    one.documents += 1
             pages += 1
             arguments = reading.next_page(entity, arguments, body, returned)
             if arguments is not None and reading.allowance_spent(said):
                 return finish(SyncOutcome.QUOTA, SOURCE_ALLOWANCE_REFUSED)
 
-    if one.cut_short:
-        detail = READ_BUT_CUT_SHORT
-    elif one.withheld:
-        detail = DOCUMENTS_WITHHELD
-    else:
-        detail = READ_TO_THE_END
+    detail = READ_BUT_CUT_SHORT if one.cut_short else READ_TO_THE_END
     return finish(SyncOutcome.SYNCED, detail)
 
 
 async def sync_on(
     *,
     sessions: async_sessionmaker[AsyncSession],
-    documents: DocumentSink,
     now: datetime,
     keys: ConnectorKeys,
     caller: SourceCaller,
@@ -710,7 +683,6 @@ async def sync_on(
             plan,
             previous=previous,
             sessions=sessions,
-            documents=documents,
             keys=keys,
             caller=caller,
             resolver=resolver,
@@ -734,41 +706,6 @@ def _utc_now() -> datetime:
     return datetime.now(tz=UTC)
 
 
-@asynccontextmanager
-async def corpus_sink(database_url: str, *, now: datetime) -> AsyncIterator[DocumentSink]:
-    """`ingest_document` over application sessions, with the queue opened only if a document comes.
-
-    The queue is opened on the first document and closed when the run ends, so a run over sources
-    that yield none, which is every run today, spends no connection on it. The sessions are the
-    application role's, because `know.chunk`'s policy binds that role and a document is written as
-    its owner: see `brain.knowledge.chunk_store.THE_STORE_RUNS_AS_THE_OWNER_AND_NEVER_AS_ITSELF`.
-    """
-    from brain.ops.queue import enqueue_job, queue_app
-    from brain.ops.worker import register_tasks
-    from brain.session import make_app_engine, make_application_sessions
-
-    engine = make_app_engine(database_url)
-    async with AsyncExitStack() as stack:
-        opened: list[Any] = []
-
-        async def enqueue(job: Job) -> object:
-            if not opened:
-                app = queue_app(database_url, pool_max=1)
-                register_tasks(app, database_url=database_url)
-                opened.append(await stack.enter_async_context(app.open_async()))
-            return await enqueue_job(opened[0], job)
-
-        async def sink(item: KnowledgeItem) -> object:
-            return await ingest_document(
-                make_application_sessions(engine), item, enqueue=enqueue, now=now
-            )
-
-        try:
-            yield sink
-        finally:
-            await engine.dispose()
-
-
 def run_connector_sync_now(
     database_url: str,
     *,
@@ -788,16 +725,14 @@ def run_connector_sync_now(
     async def go() -> SyncRun:
         engine = make_app_engine(database_url)
         try:
-            async with corpus_sink(database_url, now=now) as documents:
-                return await sync_on(
-                    sessions=make_session_factory(engine),
-                    documents=documents,
-                    now=now,
-                    keys=worker_connector_keys(vault_address, vault_token),
-                    caller=HttpsSourceCaller(),
-                    resolver=SystemResolver(),
-                    clock=_utc_now,
-                )
+            return await sync_on(
+                sessions=make_session_factory(engine),
+                now=now,
+                keys=worker_connector_keys(vault_address, vault_token),
+                caller=HttpsSourceCaller(),
+                resolver=SystemResolver(),
+                clock=_utc_now,
+            )
         finally:
             await engine.dispose()
 

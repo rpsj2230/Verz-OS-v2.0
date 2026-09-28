@@ -8,7 +8,7 @@ so somebody raises the intent again. An `ABSENT` that was really "could not look
 duplicated invoice. This module is where each connector's raw reply is turned into one of
 the three, and it is the only place that is decided.
 
-**One verdict, over the platform's outcome vocabulary, and seven readings that feed it.**
+**One verdict, over the platform's outcome vocabulary, and one reading per connector.**
 Every connector here already keeps a read's answers apart in its own words: Xero, HubSpot
 and Laravel have a four-valued outcome, Freshdesk and both Lark connectors raise a refusal
 and an unreachability as two types, and Drive has a third type for a 404. The obvious design
@@ -16,7 +16,10 @@ is a table per connector from those words to `Verification`, and it was rejected
 tables of one rule are seven places for it to be subtly wrong, and the copy that says a
 refusal is an absence is the one nobody reviews. So each connector contributes a `Reading`,
 built only from its own classifier, and `verdict` alone decides. See
-`A_REFUSAL_IS_NOT_AN_ABSENCE`.
+`A_REFUSAL_IS_NOT_AN_ABSENCE`. Each reading lives in its connector's module, declared on its
+`CONNECTOR` as a `ReadBack` (`brain.connectors.declaration`), because a reading is written in
+the connector's own reply types and a table here importing every connector was a list a new
+connector had to edit.
 
 **Absence needs two facts, not one.** The source answered, and the answer was complete.
 An empty first page of a walk that has more pages has not looked everywhere, and a page cut
@@ -24,16 +27,16 @@ short by a cap is the same. See `AN_UNFINISHED_LOOK_HAS_NOT_LOOKED`.
 
 **A connector is found, not listed, and every one found is stated.** `connectors` walks
 `brain.connectors` and counts as a connector any module that builds a `ConnectorManifest`,
-which is a property of the code rather than of a list somebody typed.
-`tests/invariants/test_cassettes.py` has the typed list, and the test for this module
-requires the two to agree. `read_back_gaps` then refuses a connector with no entry in
-`READ_BACKS`, and refuses one that declares a write with no reading. A connector without a
-read-back is therefore a named finding in this file or a red test, never a silence.
+which is a property of the code rather than of a list somebody typed, and
+`brain.connectors.declaration.shipped` finds the declarations by a different property, the
+`CONNECTOR` each module states. `read_back_gaps` holds the two to each other: it refuses a
+connector with no read-back declared, and one that declares a write with no reading. A
+connector without a read-back is therefore a named finding or a red test, never a silence.
 
 **What is not built, and why it cannot be yet.** No tool on any connector in this repository
 has a side effect. Every `ToolDeclaration` in `brain.connectors` is `SideEffect.NONE`, and
-`declares_a_write` finds none, so `brain.ops.idempotency.issuable_tools` is empty for all
-seven and nothing here is reached by a request. What exists is the half that can be written
+`declares_a_write` finds none, so `brain.ops.idempotency.issuable_tools` is empty for every
+connector and nothing here is reached by a request. What exists is the half that can be written
 and tested before a write exists: raw reply to `Verification`, driven by the recorded
 exchanges. The other half, which request is sent to look, cannot be, for the reason
 `THE_QUERY_HALF_IS_OWED_BY_THE_FIRST_WRITE` gives. The test that finds no connector
@@ -56,10 +59,8 @@ from types import MappingProxyType, ModuleType
 from typing import Final, Protocol, assert_never
 
 import brain.connectors
-from brain.connectors import freshdesk, google_drive, lark_base, lark_wiki
 from brain.connectors.contract import ConnectorContractError
 from brain.connectors.manifest import ConnectorManifest, ToolDeclaration
-from brain.connectors.rest import RestOperation
 from brain.connectors.throttle import CallOutcome
 from brain.connectors.transports import SourceRecord
 from brain.core.envelope import TypedResult
@@ -139,58 +140,9 @@ NO_READ_BACK_PATH: Final = (
 
 #: Stated on an entry whose mapping rests on no recorded exchange.
 NOTHING_IS_RECORDED: Final = (
-    "No exchange with this source is recorded in tests/fixtures/cassettes.py. The mapping is "
+    "No exchange with this source is recorded in tests/fixtures/cassettes/. The mapping is "
     "tested against the vendor's documented reply shape, which is what its author believed "
     "the source returns rather than what it was seen to return."
-)
-
-DRIVE_A_NOT_FOUND_CANNOT_PROVE_ABSENCE: Final = (
-    "Drive answers 404 for a file that does not exist and for one this credential may not "
-    "see, and google_drive.A_NOT_FOUND_DOES_NOT_SEPARATE_ABSENT_FROM_REFUSED keeps the two "
-    "together. A read-back by file id can therefore answer FOUND or INCONCLUSIVE and never "
-    "ABSENT; only a complete listing that does not contain the file can."
-)
-
-LARK_BASE_A_MISSING_RECORD_ARRIVES_AS_A_REFUSAL: Final = (
-    "Lark reports a record that does not exist as a non-zero business code, which "
-    "lark_base.read_record reads as a refusal rather than keep a table of the vendor's codes. "
-    "A read-back by record id can therefore never answer ABSENT. Only the list endpoint, "
-    "answered with code 0, no items and has_more false, can, and no such reply is recorded."
-)
-
-LARK_WIKI_THE_CREDENTIAL_IS_READ_ONLY: Final = (
-    "lark_wiki.assert_read_only refuses a credential bound for writing, so no write can be "
-    "issued through this connector as built. The reading exists so that the day that changes, "
-    "the absence rule is already stated. It is driven by the wiki's own recorded listing and "
-    "refusals and by Lark Base's, which share the envelope; a reply that does not say whether "
-    "there is more, such as a single node read, is not a listing and never reads as absent."
-)
-
-LARAVEL_THE_CREDENTIAL_IS_READ_ONLY: Final = (
-    "laravel_manifest binds its credential read-only and reads views, so no write can be "
-    "issued through this connector as built. A view the grant no longer covers and a view "
-    "that is gone are both REJECTED there, and so INCONCLUSIVE here: a withdrawn contract is "
-    "not an absent row."
-)
-
-FRESHDESK_ABSENCE_IS_A_SHORT_PAGE: Final = (
-    "A Freshdesk page carries no has_more, so the only end signal is a page shorter than "
-    "the size asked for. An answered page with no rows is shorter than any size, which is why "
-    "it is the one complete empty reading this connector can give. Its search endpoint is "
-    "subject to A_SEARCH_THAT_LAGS_A_WRITE_MANUFACTURES_AN_ABSENCE."
-)
-
-HUBSPOT_THE_ONLY_RECORDED_ABSENCE: Final = (
-    "HUBSPOT-200-empty is the only genuine absence in the recorded corpus, and it is a reply "
-    "from the search endpoint, so it is subject to "
-    "A_SEARCH_THAT_LAGS_A_WRITE_MANUFACTURES_AN_ABSENCE. The recorded rate limit and "
-    "authentication failure both read as not having looked."
-)
-
-XERO_NO_ABSENCE_IS_RECORDED: Final = (
-    "The Xero recordings are answered lists and two failures. An empty ledger is not "
-    "recorded, so the ABSENT branch for this connector is driven by the recorded envelope "
-    "with its list emptied."
 )
 
 
@@ -254,7 +206,7 @@ def verdict(reading: Reading) -> Verification:
             assert_never(unreachable)
 
 
-# ------------------------------------------------------------- the seven connectors' readings
+# ------------------------------------------------------------- what a connector's reading uses
 class ClassifiedReply(Protocol):
     """A reply that already carries its call outcome and its rows: Xero, HubSpot, Laravel.
 
@@ -279,82 +231,9 @@ def classified_reading(reply: ClassifiedReply) -> Reading:
     )
 
 
-def _unreadable() -> Reading:
-    """See `AN_UNREADABLE_ANSWER_IS_NOT_AN_ANSWER`."""
+def unreadable() -> Reading:
+    """A reply nothing could read. See `AN_UNREADABLE_ANSWER_IS_NOT_AN_ANSWER`."""
     return Reading(outcome=CallOutcome.UNAVAILABLE, matched=0, complete=False)
-
-
-def freshdesk_reading(operation: RestOperation, reply: freshdesk.Reply) -> Reading:
-    """One Freshdesk page, refused or projected in `freshdesk.read_page`'s order.
-
-    See `FRESHDESK_ABSENCE_IS_A_SHORT_PAGE` for why an answered page is complete.
-    """
-    try:
-        freshdesk.assert_answered(reply)
-        rows = operation.project(reply.body)
-    except (freshdesk.FreshdeskUnreachableError, freshdesk.FreshdeskRefusedError) as failure:
-        return Reading(outcome=failure.call_outcome, matched=0, complete=False)
-    except ConnectorContractError:
-        return _unreadable()
-    return Reading(outcome=CallOutcome.OK, matched=len(rows), complete=True)
-
-
-def lark_base_reading(operation: RestOperation, reply: lark_base.LarkReply) -> Reading:
-    """One Lark Base list page, complete only when the source said `has_more` is false.
-
-    A single-record reply carries no `has_more`, so `envelope_of` refuses it and it reads as
-    unreadable. See `LARK_BASE_A_MISSING_RECORD_ARRIVES_AS_A_REFUSAL`.
-    """
-    try:
-        lark_base.assert_lark_answered(reply)
-        rows = operation.project(reply.body)
-        envelope = lark_base.envelope_of(reply.body)
-    except (lark_base.LarkBaseUnreachableError, lark_base.LarkBaseRefusedError) as failure:
-        return Reading(outcome=failure.call_outcome, matched=0, complete=False)
-    except ConnectorContractError:
-        return _unreadable()
-    return Reading(outcome=CallOutcome.OK, matched=len(rows), complete=not envelope.has_more)
-
-
-def lark_wiki_reading(reply: lark_wiki.LarkReply) -> Reading:
-    """One Lark Wiki listing, complete only when `next_cursor` finds no further page.
-
-    A reply whose payload does not state `has_more` is not a listing, and `next_cursor` would
-    read its silence as the end: a node read replayed here came back ABSENT for a page that
-    exists. It is unreadable instead, as `lark_base.envelope_of` treats the same silence.
-    """
-    try:
-        lark_wiki.assert_answered(reply)
-        if not isinstance(reply.data.get("has_more"), bool):
-            return _unreadable()
-        items = lark_wiki.items_of(reply.data)
-        more = lark_wiki.next_cursor(reply.data)
-    except (lark_wiki.LarkWikiUnreachableError, lark_wiki.LarkWikiRefusedError) as failure:
-        return Reading(outcome=failure.call_outcome, matched=0, complete=False)
-    except ConnectorContractError:
-        return _unreadable()
-    return Reading(outcome=CallOutcome.OK, matched=len(items), complete=more is None)
-
-
-def drive_reading(operation: RestOperation, reply: google_drive.Reply) -> Reading:
-    """One Drive listing. A 404 is `REJECTED` there and so never absent here.
-
-    See `DRIVE_A_NOT_FOUND_CANNOT_PROVE_ABSENCE`.
-    """
-    try:
-        google_drive.assert_answered(reply)
-        rows = operation.project(reply.body)
-    except (
-        google_drive.DriveUnreachableError,
-        google_drive.DriveRefusedError,
-        google_drive.DriveNotFoundError,
-    ) as failure:
-        return Reading(outcome=failure.call_outcome, matched=0, complete=False)
-    except ConnectorContractError:
-        return _unreadable()
-    return Reading(
-        outcome=CallOutcome.OK, matched=len(rows), complete=not google_drive.next_cursor(reply)
-    )
 
 
 # ------------------------------------------------------------------ the table
@@ -384,97 +263,6 @@ class ReadBack:
                 "from documentation reads as one checked against the source"
             )
             raise ReadingError(msg)
-
-
-#: Every connector's read-back, keyed by the module name `connectors` discovers it under.
-READ_BACKS: Final[Mapping[str, ReadBack]] = MappingProxyType(
-    {
-        "freshdesk": ReadBack(
-            reading=freshdesk_reading,
-            recorded=(
-                "FRESH-200-search",
-                "FRESH-429",
-                "FRESH-200-search-full-page",
-                "FRESH-200-ticket",
-                "FRESH-200-contact",
-                "FRESH-401",
-            ),
-            findings=(FRESHDESK_ABSENCE_IS_A_SHORT_PAGE,),
-        ),
-        "google_drive": ReadBack(
-            reading=drive_reading,
-            recorded=(
-                "DRIVE-200-files-page",
-                "DRIVE-200-file",
-                "DRIVE-403-user-rate-limit",
-                "DRIVE-429",
-                "DRIVE-401",
-                "DRIVE-404",
-            ),
-            findings=(DRIVE_A_NOT_FOUND_CANNOT_PROVE_ABSENCE,),
-        ),
-        "hubspot": ReadBack(
-            reading=classified_reading,
-            recorded=(
-                "HUBSPOT-200-empty",
-                "HUBSPOT-200-companies-page",
-                "HUBSPOT-200-contacts",
-                "HUBSPOT-200-deals",
-                "HUBSPOT-200-associations",
-                "HUBSPOT-429",
-                "HUBSPOT-401",
-            ),
-            findings=(HUBSPOT_THE_ONLY_RECORDED_ABSENCE,),
-        ),
-        "laravel": ReadBack(
-            reading=classified_reading,
-            recorded=(
-                "LARAVEL-500",
-                "LARAVEL-rows-clients",
-                "LARAVEL-rows-users",
-                "LARAVEL-rows-at-cap",
-                "LARAVEL-1142",
-                "LARAVEL-1146",
-                "LARAVEL-3024",
-                "LARAVEL-2006",
-            ),
-            findings=(LARAVEL_THE_CREDENTIAL_IS_READ_ONLY,),
-        ),
-        "lark_base": ReadBack(
-            reading=lark_base_reading,
-            recorded=(
-                "LARK-200-records",
-                "LARK-200-code-permission",
-                "LARK-200-record",
-                "LARK-429",
-            ),
-            findings=(LARK_BASE_A_MISSING_RECORD_ARRIVES_AS_A_REFUSAL,),
-        ),
-        "lark_wiki": ReadBack(
-            reading=lark_wiki_reading,
-            recorded=(
-                "LARK-200-records",
-                "LARK-200-code-permission",
-                "LARK-WIKI-200-node",
-                "LARK-WIKI-200-nodes-page",
-                "LARK-WIKI-200-code-permission",
-                "LARK-WIKI-429",
-            ),
-            findings=(LARK_WIKI_THE_CREDENTIAL_IS_READ_ONLY,),
-        ),
-        "xero": ReadBack(
-            reading=classified_reading,
-            recorded=(
-                "XERO-200-invoices",
-                "XERO-429",
-                "XERO-401-expired",
-                "XERO-200-contacts",
-                "XERO-200-invoices-full-page",
-            ),
-            findings=(XERO_NO_ABSENCE_IS_RECORDED,),
-        ),
-    }
-)
 
 
 # ------------------------------------------------------------------ discovery
@@ -547,11 +335,13 @@ def connectors(package: ModuleType = brain.connectors) -> Mapping[str, bool]:
 
 
 def read_back_gaps(
-    discovered: Mapping[str, bool], table: Mapping[str, ReadBack] = READ_BACKS
+    discovered: Mapping[str, bool], table: Mapping[str, ReadBack]
 ) -> tuple[str, ...]:
-    """Every way the table and the connectors that exist disagree. Empty when they agree.
+    """Every way the declared read-backs and the connectors that exist disagree. Empty when none.
 
-    See `A_CONNECTOR_IS_STATED_AND_NEVER_SKIPPED`.
+    `table` is `brain.connectors.declaration.read_backs()`, passed in rather than imported: every
+    connector imports this module for `Reading`, so this module importing the declarations would
+    be a cycle. See `A_CONNECTOR_IS_STATED_AND_NEVER_SKIPPED`.
     """
     gaps: list[str] = []
     for name, writes in discovered.items():
@@ -567,7 +357,7 @@ def read_back_gaps(
                 f"against it could never leave UNKNOWN. {NO_READ_BACK_PATH}"
             )
     gaps.extend(
-        f"READ_BACKS names {name!r}, which is not a connector in this package, so its "
+        f"a read-back is declared for {name!r}, which builds no manifest in this package, so its "
         "entry states a finding about nothing"
         for name in sorted(set(table) - set(discovered))
     )

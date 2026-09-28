@@ -419,8 +419,8 @@ A_READ_IN_REPORT_ONLY_MODE_READS_NOTHING: Final = (
 def connector_sync(now: datetime, report_only: bool, database_url: str) -> str:
     """Read every connected source that is due, and say what the run came to in counts.
 
-    `brain.ops.connector_sync_run.run_connector_sync_now` reads, writes the projection, hands any
-    document to the corpus and records each attempt; this is the literal call the registry reads.
+    `brain.ops.connector_sync_run.run_connector_sync_now` reads, writes each source's minimal index
+    to the projection and records each attempt; this is the literal call the registry reads.
     The vault is the worker's own, read from this process's settings, because the worker is the one
     process that reads a source's key: see `brain.ops.connector_sync_run.
     THE_PROCESS_THAT_RUNS_A_CONNECTOR_READS_ITS_KEY_AND_NO_OTHER_DOES`. Declines in report-only

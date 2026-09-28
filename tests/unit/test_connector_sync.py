@@ -1,7 +1,7 @@
 """Whether a connected source may be read, what is kept from a row, and what an attempt costs.
 
 `brain.ops.connector_sync` holds no connection, so every property here is asserted without one, and
-the rows are built from the recorded Xero and HubSpot answers in `tests/fixtures/cassettes.py`
+the rows are built from the recorded Xero and HubSpot answers in `tests/fixtures/cassettes/`
 rather than from a hand-written value of what a projection should be: a test that built the record
 the function produces would test nothing about the function. What a run writes and who can read it
 is `tests/unit/test_connector_sync_run.py`.

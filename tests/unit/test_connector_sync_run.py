@@ -1,7 +1,7 @@
 """The worker reading a connected source: its key, its call, what it writes, and who can read it.
 
 `tests/unit/test_connector_sync.py` holds the policy without a connection. This drives
-`brain.ops.connector_sync_run` against the recorded Xero answers in `tests/fixtures/cassettes.py`,
+`brain.ops.connector_sync_run` against the recorded Xero answers in `tests/fixtures/cassettes/`,
 a stand-in for the call that replays them, and a PostgreSQL database of the test's own, and then
 reads what the run wrote through the row plane and the redactor as three different people.
 
@@ -11,22 +11,24 @@ compared whole with the answer on the same database before the sync, when the re
 Equal is the property: DENIED and ABSENT are one answer, and nothing about the result says a record
 was there.
 
-**The document leg has no recording to be driven by**, because no source the console can connect
-yields documents and the corpus records no document source. It is driven through the same loop by a
-reading written here over the Xero cassette, whose rows are handed to the corpus as documents with
-an owner and a department, and it is read back through the document search as the owner's department
-and as another. `brain.ops.connector_sync.NO_CONNECTABLE_SOURCE_YIELDS_A_DOCUMENT` says why.
+**What a sync keeps is its source's minimal index, proved with a canary.** A string minted for
+the run is planted in every value of the recorded Xero answers that is not an index field (an
+invoice's amount, a contact's tax number), the worker reads them into a database built through
+every migration, and the string is then looked for in every table the product has and in every
+log line the run wrote. The document leg that used to hand rows to the corpus is gone, by the
+owner's rule: `brain.ops.connector_sync.A_SYNC_KEEPS_NO_BODY`.
 
 No test here calls a live API. The key is a sentinel, the call is a replay, and the address is the
 one a stand-in resolver hands out.
 
-Task ids: M42.6.5, M31.3.2.3, M31.3.2.4
+Task ids: M42.6.5, M31.3.2.3, M31.3.2.4, M11.8.2, M11.9.1
 """
 
 from __future__ import annotations
 
 import http.server
 import json
+import logging
 import ssl
 import threading
 import uuid
@@ -39,21 +41,18 @@ from typing import Any, Final
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from structlog.testing import capture_logs
 
-from brain.connectors import xero
+from brain.connectors import hubspot, xero
 from brain.connectors.manifest import manifest_digest
+from brain.connectors.minimal_index import fresh_canary, planted, sightings
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.field_policy import Classification
 from brain.core.redaction import redact
 from brain.core.scope import Scope
-from brain.knowledge.chunk_store import ingest_document
 from brain.knowledge.columns import ColumnRule, TableClassification
-from brain.knowledge.document_tools import DocumentSearch, searcher
-from brain.knowledge.embed_policy import REVISION_SETTING
-from brain.knowledge.item import KnowledgeItem, KnowledgeState
 from brain.knowledge.row_store import SessionRowSource
 from brain.knowledge.rows import RowRequest, RowTool, read_rows
-from brain.knowledge.visibility import KnowledgeVisibility
 from brain.ops.connectable import manifest_for
 from brain.ops.connector_lease import RUN_LEASE_TTL, RUN_POLICY, RUN_TOKEN_ROLE, LeaseOutcome
 from brain.ops.connector_store import StoredConnections
@@ -67,9 +66,7 @@ from brain.ops.connector_sync import (
     SOURCE_UNREACHABLE,
     VAULT_REFUSED,
     VAULT_UNREACHABLE,
-    HubSpotReading,
     SourceReading,
-    XeroReading,
 )
 from brain.ops.connector_sync_run import (
     THE_PROCESS_THAT_RUNS_A_CONNECTOR_READS_ITS_KEY_AND_NO_OTHER_DOES,
@@ -85,11 +82,11 @@ from brain.ops.connector_sync_run import (
 )
 from brain.ops.connector_sync_store import LeaseTally, StoredLeaseCounts, StoredSyncStates
 from brain.ops.credentials import KEY_FIELD, connector_key_slot
+from brain.ops.index_audit import AuditReport, audit
 from brain.ops.leases import SealedSecret
 from brain.ops.openbao import RoleToken, VaultRefusedError, VaultUnreachableError
-from brain.ops.queue import Job
 from brain.ops.secrets import SecretRef, SecretsUnavailableError, VaultRole
-from brain.session import make_app_engine, make_application_sessions, make_session_factory
+from brain.session import make_app_engine, make_session_factory
 from brain.tools.fetch import UnsafeAddressError
 from tests.fixtures.cassettes import CASSETTES
 from tests.fixtures.scratch_postgres import add_modelled, drop, fresh, run, sql
@@ -206,10 +203,6 @@ class NoKeys:
         return Leased(None, failure=ConnectorKeyAbsentError(NO_KEY), ending=LeaseOutcome.NONE)
 
 
-async def no_documents(item: KnowledgeItem) -> object:
-    raise AssertionError(f"no reading here yields a document, and {item.item_id} arrived")
-
-
 async def no_sleep(seconds: float) -> None:
     del seconds
 
@@ -285,7 +278,6 @@ def sync(
     at: datetime = NOW,
     keys: Any = None,
     readings: Mapping[str, SourceReading] | None = None,
-    documents: Callable[[KnowledgeItem], Awaitable[object]] = no_documents,
 ) -> SyncRun:
     clock = iter(at + timedelta(seconds=n) for n in range(10_000))
 
@@ -293,7 +285,6 @@ def sync(
         extra: dict[str, Any] = {} if readings is None else {"readings": readings}
         return await sync_on(
             sessions=sessions,
-            documents=documents,
             now=at,
             keys=Keys() if keys is None else keys,
             caller=caller,
@@ -602,7 +593,6 @@ def test_a_source_whose_name_resolves_inside_the_network_is_not_called() -> None
         async def work(sessions: async_sessionmaker[AsyncSession]) -> SyncRun:
             return await sync_on(
                 sessions=sessions,
-                documents=no_documents,
                 now=NOW,
                 keys=Keys(),
                 caller=caller,
@@ -706,112 +696,81 @@ def test_the_schedule_starts_the_real_sync_and_a_run_with_nothing_connected_says
     assert runs == []
 
 
-# ------------------------------------------------------------------ documents
+# ------------------------------------------------------------------ the owner's rule
 
 
-class DocumentReading(XeroReading):
-    """Xero's reading, with each invoice row also handed over as a department's document.
+def planted_answer(cid: str, canary: str) -> SourceAnswer:
+    """One recording as the call would have answered with it, its canary replaced by this run's."""
+    one = recorded(cid)
+    return SourceAnswer(
+        status=one.status,
+        headers={key.lower(): value for key, value in one.headers.items()},
+        body=json.dumps(planted(one.body, canary)).encode("utf-8"),
+    )
 
-    Written here because no connectable source yields documents; see the module docstring.
-    """
 
-    def __init__(self, *, owner: str, department: str) -> None:
-        self.owner = owner
-        self.department = department
+def audited(url: str, canary: str) -> AuditReport:
+    async def work(sessions: async_sessionmaker[AsyncSession]) -> AuditReport:
+        async with sessions() as session:
+            return await audit(session, canary=canary)
 
-    def document(
-        self, entity: str, row: Mapping[str, Any], *, seen_at: datetime
-    ) -> KnowledgeItem | None:
-        del seen_at
-        if entity != xero.ENTITY_INVOICE:
-            return None
-        return KnowledgeItem(
-            item_id=f"src.xero.{row['id']}",
-            content=f"Invoice {row['invoice_number']} is {str(row['status']).lower()}.",
-            title=f"Invoice {row['invoice_number']}",
-            visibility=KnowledgeVisibility.of_department(self.department, owner_id=self.owner),
-            owner_id=self.owner,
-            state=KnowledgeState.PUBLISHED,
-        )
+    return through(url, work)
 
 
 @pytest.mark.needs_db
-def test_a_synced_document_is_found_within_its_owners_department_and_is_absent_outside_it() -> None:
-    """**The leaf's second proof.** A reading hands the recorded invoice over as a web department
-    document owned by a person who reads web. The run hands it to `ingest_document`, which writes
-    it under that owner's reach, and the attempt counts one document. A search as a web reader finds
-    it; a search as a finance reader is handed, whole, what it was handed before the sync, when the
-    document did not exist. A document whose owner reaches nothing is withheld and the run says so
-    in one sentence, with no count.
+def test_a_synced_source_keeps_its_minimal_index_and_its_canary_is_in_no_table_or_log(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """**The owner's rule, on a database built through every migration.** Connectors never
+    bulk-sync: a canary minted for this run is planted in the recorded invoice's amount and the
+    recorded contact's tax number, which are values read live and never kept, and the worker
+    reads both pages. Afterwards every `proj.record` row holds only the fields Xero's declaration
+    names, and the canary is in no table this product has, `know.chunk` and `know.item` included,
+    and in no log line the run wrote.
 
-    Delete this and the document leg can write a document everybody finds, or nobody, with the
-    record leg's tests all green."""
-    from tests.unit.test_embedding_path_db import (
-        A_REVISION,
-        FINANCE_OWNER,
-        WEB_OWNER,
-        _database,
-        people,
-        reader_of,
-    )
+    The positive half is in the same database: the tenant and the invoice id, which are index
+    fields, are found in `proj.record` by the same search, so a search that could not read a row
+    would fail here rather than report clean.
 
-    queued: list[Job] = []
+    Delete this and a reading can start keeping a body, or the document leg can come back, with
+    every unit test over single records still green."""
+    import brain.tables  # noqa: F401 - registers every table on the metadata
+    from brain.db import metadata
+    from tests.fixtures.retirable import has_pgvector, retirable
+    from tests.fixtures.scratch_postgres import admin_url
 
-    def ask(url: str, who: EntitlementSet) -> Mapping[str, Any]:
-        async def work(sessions: async_sessionmaker[AsyncSession]) -> Mapping[str, Any]:
-            handler = searcher(SessionRowSource(sessions))
-            found = await handler(DocumentSearch(question="authorised"), entitlement=who, now=NOW)
-            return found.model_dump(mode="json")
-
-        engine_url = url
-
-        async def go() -> Mapping[str, Any]:
-            engine = make_app_engine(engine_url)
-            try:
-                return await work(make_application_sessions(engine))
-            finally:
-                await engine.dispose()
-
-        return run(go)
-
-    def sink_for(url: str) -> Callable[[KnowledgeItem], Awaitable[object]]:
-        async def sink(item: KnowledgeItem) -> object:
-            async def enqueue(job: Job) -> None:
-                queued.append(job)
-
-            engine = make_app_engine(url)
-            try:
-                return await ingest_document(
-                    make_application_sessions(engine),
-                    item,
-                    enqueue=enqueue,
-                    now=NOW,
-                    env={REVISION_SETTING: A_REVISION},
-                )
-            finally:
-                await engine.dispose()
-
-        return sink
-
-    with _database("brain_connector_sync_documents") as url:
-        people(url)
-        add_modelled(url, SYNC_TABLES)
+    if not has_pgvector(admin_url()):
+        pytest.skip("every table needs the full chain, which needs pgvector; CI's image has it")
+    canary = fresh_canary("XERO")
+    caplog.set_level(logging.DEBUG)
+    with retirable("brain_connector_sync_canary") as url, capture_logs() as logged:
         connect(url)
-        web, finance = reader_of(WEB_OWNER, "web"), reader_of(FINANCE_OWNER, "finance")
-        before = {"web": ask(url, web), "finance": ask(url, finance)}
-        sync(
+        ran = sync(
             url,
-            Replay([answer_for("XERO-200-invoices"), NO_CONTACTS]),
-            readings={"xero": DocumentReading(owner=WEB_OWNER, department="web")},
-            documents=sink_for(url),
+            Replay(
+                [
+                    planted_answer("XERO-200-invoices", canary),
+                    planted_answer("XERO-200-contacts", canary),
+                ]
+            ),
         )
-        after = {"web": ask(url, web), "finance": ask(url, finance)}
-        ((_, _, records, documents, _, _, _, detail),) = attempts(url)
+        report = audited(url, canary)
+        tenant = audited(url, TENANT)
+        invoice = audited(url, INVOICE_ID)
+        rows = projected(url)
 
-    assert (records, documents, detail) == (1, 1, READ_TO_THE_END)
-    assert before["web"]["records"] == []
-    assert [one["document_id"] for one in after["web"]["records"]] == [f"src.xero.{INVOICE_ID}"]
-    assert after["finance"] == before["finance"]
+    assert ran.read == 1
+    assert {(source, entity) for source, entity, *_ in rows} == {
+        ("xero", xero.ENTITY_INVOICE),
+        ("xero", xero.ENTITY_CONTACT),
+    }
+    assert report.rows == len(rows)
+    assert report.index == ()
+    assert set(metadata.tables) <= set(report.searched), "a modelled table was not searched"
+    assert report.holding == ()
+    assert "proj.record" in tenant.holding
+    assert "proj.record" in invoice.holding
+    assert sightings(canary, logged, [one.getMessage() for one in caplog.records]) == ()
 
 
 # ------------------------------------------------------------------ the key
@@ -1155,7 +1114,7 @@ def test_hubspots_reading_would_follow_every_page_it_is_told_of_once_its_ceiling
 
     Delete this and HubSpot's reading can be broken in any way at all while its ceiling is
     unverified, and the day the row is added the first run reads one page and stops."""
-    reading = HubSpotReading()
+    reading = hubspot.HubSpotReading()
     pages = [
         {"results": [], "paging": {"next": {"after": "c2"}}},
         {"results": [], "paging": {"next": {"after": "c3"}}},
