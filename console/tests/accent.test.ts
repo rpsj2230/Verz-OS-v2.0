@@ -31,7 +31,13 @@ async function freshConfig(accent: unknown): Promise<typeof import("../src/confi
   return await import("../src/config");
 }
 
+/** The entry point a test started, whose root is unmounted before the test ends. */
+let started: typeof import("../src/main") | null = null;
+
 afterEach(() => {
+  // The mounted console begins a sign-in; unmounted, nothing it finishes later can draw.
+  started?.root.unmount();
+  started = null;
   document.documentElement.removeAttribute("style");
   document.body.innerHTML = "";
 });
@@ -110,7 +116,7 @@ describe("putting the accent where the tokens read it", () => {
     vi.stubGlobal("fetch", fakeIdentityProvider().fetch);
     document.body.innerHTML = '<div id="root"></div>';
 
-    await import("../src/main");
+    started = await import("../src/main");
 
     expect(document.documentElement.style.getPropertyValue("--install-accent-fill")).toBe(SERVED.fill);
   });
