@@ -9,7 +9,7 @@
 | --- | --- |
 | `GET /api/v1/agents/{agent_id}/automation-templates` | `/agents/:agentId/:tab` |
 | `GET /api/v1/agents/{agent_id}/automation-templates/{template_id}/preview` | `/agents/:agentId/:tab` |
-| `GET /api/v1/agents/{agent_id}/automations` | `/agents/:agentId/:tab` |
+| `GET /api/v1/agents/{agent_id}/automations` | `/agents/:agentId` |
 | `POST /api/v1/agents/{agent_id}/automations` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `POST /api/v1/agents/{agent_id}/automations/{automation_id}/start` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `POST /api/v1/agents/{agent_id}/automations/{automation_id}/stop` | `/agents/:agentId`, `/agents/:agentId/:tab` |

@@ -35,7 +35,7 @@ import { ANSWER_API_PATH } from "../../src/pages/askQuery";
 import { ACCESS_REQUESTS_API_PATH } from "../../src/pages/accessRequestsQuery";
 import { automationStartApiPath, automationStopApiPath } from "../../src/pages/agentAutomationsQuery";
 import { STEWARD_API_PATH } from "../../src/pages/dataStewardQuery";
-import { automationInstallApiPath, automationPreviewApiPath } from "../../src/pages/automationGalleryQuery";
+import { automationGalleryApiPath, automationInstallApiPath, automationPreviewApiPath } from "../../src/pages/automationGalleryQuery";
 import { approvalDecisionApiPath } from "../../src/pages/approvalsQuery";
 import { historyApiPath, VERIFICATION_API_PATH } from "../../src/pages/auditQuery";
 import { CHECKS_API_PATH } from "../../src/pages/requirementChecksQuery";
@@ -782,6 +782,12 @@ export const READ_AFTER_AN_ACTION: Readonly<
     versioned: false,
   },
   "GET /api/v1/models/providers-register": { screen: "/models", spelled: "REGISTER_API_PATH", built: PROVIDER_REGISTER_API_PATH },
+  // The gallery is read when a person opens an agent's Automations section, not when its page opens.
+  "GET /api/v1/agents/{agent_id}/automation-templates": {
+    screen: "/agents/:agentId/:tab",
+    spelled: "automationGalleryApiPath",
+    built: automationGalleryApiPath("quote-helper"),
+  },
   "GET /api/v1/agents/{agent_id}/automation-templates/{template_id}/preview": {
     screen: "/agents/:agentId/:tab",
     spelled: "automationPreviewApiPath",

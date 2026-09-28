@@ -13,7 +13,7 @@
 | `GET /api/v1/routing/changes` | `/routing`, `/routing/:rungId` |
 | `GET /api/v1/routing/golden-questions` | `/routing`, `/routing/:rungId` |
 | `GET /api/v1/routing/golden-questions/askers` | `/routing` |
-| `GET /api/v1/routing/rungs` | `/agents/:agentId`, `/routing`, `/routing/:rungId` |
+| `GET /api/v1/routing/rungs` | `/agents/:agentId/:tab`, `/routing`, `/routing/:rungId` |
 | `PATCH /api/v1/routing/rungs/{rung_id}` | `/routing`, `/routing/:rungId` |
 | `POST /api/v1/models/providers` | `/models` |
 | `POST /api/v1/models/providers/{provider}/check` | `/models` |

@@ -36,7 +36,7 @@
 
 import { beforeAll, describe, expect, test } from "vitest";
 import { apiDocument, declaredResponseSchema } from "./support/openapi";
-import { PAGES } from "./support/pageCases";
+import { PAGES, awaited } from "./support/pageCases";
 import { mountIn } from "./support/screenStates";
 
 type Capability = "page" | "search" | "filter" | "sort" | "bulk";
@@ -98,7 +98,7 @@ const A_LOG_ROW_IS_READ_AND_NEVER_WRITTEN =
  */
 const OVERVIEW_CARDS: Readonly<Record<string, string>> = {
   "/department": "/agents",
-  "/agents/:agentId": "/routing",
+  "/agents/:agentId/:tab": "/routing",
 };
 const AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST =
   "This screen is an overview, and the list it borrows is one card on it with a link to the screen " +
@@ -124,7 +124,7 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
   "/routing": { sort: CHAIN_IN_ORDER, bulk: A_RUNG_IS_SAVED_ONE_AT_A_TIME },
   "/routing/:rungId": { sort: CHAIN_IN_ORDER, bulk: A_RUNG_IS_SAVED_ONE_AT_A_TIME },
   // The Profile's model card draws the agent's level from the matrix and links to the Routing screen.
-  "/agents/:agentId": {
+  "/agents/:agentId/:tab": {
     page: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
     search: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
     filter: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
@@ -197,6 +197,11 @@ function routeOf(path: string): string | null {
 /** Whether a response the route declares can be cut off. */
 function bounded(path: string): boolean {
   const route = routeOf(path);
+  if (route === null && awaited(path)) {
+    // A route another package is building, answered by a page case in the shape it was briefed
+    // with. It is read against the document the day it is declared there.
+    return false;
+  }
   if (route === null) {
     throw new Error(`No route in the API document answers ${path}.`);
   }
