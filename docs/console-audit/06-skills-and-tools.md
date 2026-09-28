@@ -1,7 +1,7 @@
 ### Skills and tools
 
 - **Screens:** `/skills`, `/skills/:name`, `/tools`
-- **Tables:** `agent.skill`, `agent.skill_review`, `agent.skill_assignment`, `agent.tool_definition`, `agent.tool_switch`, `agent.skill_category`
+- **Tables:** `agent.skill`, `agent.skill_review`, `agent.skill_assignment`, `agent.tool_definition`, `agent.tool_switch`, `agent.skill_category`, `agent.skill_invocation`
 - **Installation values:** none
 - **Measured here:** 9 routes, 0 called by no screen; 7 write routes, 7 with all three proofs; 2 gaps.
 

@@ -98,7 +98,15 @@ which walks the rung serving it before the agent's tier. **The call names what i
 the question, the passages and any skill descriptions, as `brain.models.disclosure` categories on
 every attempt row; a golden question asked by the matrix gate is recorded as that instead.
 
+**The skills a run used are the cards its prompt carried, told to the lane before the call**
+(M27.15.9). A card is the only way a skill reaches a model on this path, so the skills whose cards
+were sent are the skills the run used, and `skill_uses` is built from the same list, filter and
+order `offered_cards` is. The lane hands them to `Finished`; `brain.ops.usage_store` writes them.
+Counting assignments instead was rejected: an agent holding a skill no run was offered is the
+case the count exists to find.
+
 Task ids: M3.9.3, M8.1.4, M9.2.1, M6.4.2, M5.4.1, M5.7.3, M5.6.4, M5.2.2, M5.5.1, M7.7.1
+Task ids: M27.15.9
 """
 
 from __future__ import annotations
@@ -128,6 +136,7 @@ from brain.gate.catalogue import EmptyCatalogueError
 from brain.gate.compose import ComposedAnswer, TraceSink, compose
 from brain.gate.context import GateStep
 from brain.gate.effort import settings_for
+from brain.gate.finish import SkillUse
 from brain.gate.prefix import PromptLayout, build_prefix, lay_out
 from brain.knowledge.document_tools import (
     KNOWLEDGE_ENTITY,
@@ -359,7 +368,27 @@ class AgentRun:
 
 
 def skill_cards(agent: AgentRun, *, caller: EntitlementSet, now: datetime) -> tuple[SkillCard, ...]:
-    """The cards a run offers: pinned, approved, unmoved, and every tool inside the run reach.
+    """The cards a run offers: pinned, approved, unmoved, and every tool inside the run reach."""
+    return offered_cards(skills_offered(agent, caller=caller, now=now))
+
+
+def skill_uses(skills: Sequence[ImportedSkill]) -> tuple[SkillUse, ...]:
+    """What a run records of the skills it offered: name and digest, for exactly the cards sent.
+
+    The filter and the order are `offered_cards`' own, so a use is recorded for each card the
+    prompt carried and for nothing else (M27.15.9).
+    """
+    return tuple(
+        SkillUse(skill_name=one.skill.name, digest=one.skill.digest())
+        for one in sorted(skills, key=lambda item: item.skill.name)
+        if one.is_executable()
+    )
+
+
+def skills_offered(
+    agent: AgentRun, *, caller: EntitlementSet, now: datetime
+) -> tuple[ImportedSkill, ...]:
+    """The skills whose cards a run offers: pinned, approved, unmoved, every tool in the run reach.
 
     The reach is `skill_reach` at `run_reach`, which intersects there and nowhere else. A row
     whose stored text no longer digests to its key is skipped, so a moved body is never offered.
@@ -386,7 +415,7 @@ def skill_cards(agent: AgentRun, *, caller: EntitlementSet, now: datetime) -> tu
                 reach = ()
             if set(tools) <= set(reach):
                 offered.append(skill)
-    return offered_cards(offered)
+    return tuple(offered)
 
 
 @dataclass(frozen=True)
@@ -546,12 +575,15 @@ async def draft(
     trace_id: str,
     searching: Callable[[], None],
     entering: Callable[[GateStep], None] | None = None,
+    using: Callable[[tuple[SkillUse, ...]], None] | None = None,
 ) -> Drafted:
     """Find the passages, redact them, and ask a model only when something survived.
 
     `entering` enters INVOKE, REDACT and COMPOSE on the request's recorder before the search, the
     redactor and the model call. `searching` is called once, before the search starts, so the
     lane counts the tool call the way it counts a row read: when it starts, whatever comes back.
+    `using` is told the skills whose cards the prompt carries, just before the model is asked, so
+    a call that then fails still used them: the model was sent their descriptions (M27.15.9).
 
     The order is the argument of the module docstring, top to bottom: the search at this reach,
     the redactor at this reach, the abstention from the payload, the prompt from the payload, the
@@ -578,10 +610,13 @@ async def draft(
         return Drafted(outcome=declined, asked=False)
 
     agent = lane.agent
-    cards = () if agent is None else skill_cards(agent, caller=entitlement, now=now)
+    offered = () if agent is None else skills_offered(agent, caller=entitlement, now=now)
+    cards = offered_cards(offered)
     messages = messages_of(prompt_for(question, payload, cards))
     # The model writes the prose, so its call is the composing step and follows the redactor.
     step(GateStep.COMPOSE)
+    if using is not None and cards:
+        using(skill_uses(offered))
     try:
         response = await lane.model.complete(
             messages,

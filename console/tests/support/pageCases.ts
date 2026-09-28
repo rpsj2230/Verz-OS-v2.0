@@ -537,6 +537,30 @@ const MODELS_AND_HEALTH = {
     currency: "XXX",
     time_zone: "UTC",
   },
+  // One model priced and one not, so both the figures and the unpriced sentence are drawn.
+  "/api/v1/models/prices": {
+    currency: "SGD",
+    models: [
+      {
+        provider: UNBROKEN,
+        model: UNBROKEN,
+        on_ladder: true,
+        input_minor_per_million: "300",
+        output_minor_per_million: "1500",
+        currency: "SGD",
+        costed: true,
+      },
+      {
+        provider: "anthropic",
+        model: UNBROKEN,
+        on_ladder: false,
+        input_minor_per_million: null,
+        output_minor_per_million: null,
+        currency: null,
+        costed: false,
+      },
+    ],
+  },
 };
 
 const DEPARTMENTS = {
