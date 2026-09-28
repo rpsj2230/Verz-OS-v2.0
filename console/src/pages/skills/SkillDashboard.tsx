@@ -3,10 +3,11 @@
  *
  * **The figures are the stats route's, and only what it sent** (`skillStats.ts`): the agents pinned
  * to it among those the reader may see, how many versions those agents run between them, how many
- * versions the library holds, and the versions added in the period chosen. Runs that used it and
- * its last use are listed by the route as not recorded, with the reason, and are drawn as "Not
- * recorded yet" with that reason, never as nought. While the figures are on their way the strip says
- * so; if the route fails the strip draws the API's sentence.
+ * versions the library holds, the versions added and the runs that used it in the period chosen, and
+ * when it was last used, labelled with whose runs they are. A figure the route did not send, or
+ * lists as unrecorded, is drawn as "Not recorded yet" with the reason, never as nought, and no run
+ * in the month reads as that. While the figures are on their way the strip says so; if the route
+ * fails the strip draws the API's sentence.
  *
  * **What is waiting is a link to where it is decided**, the Profile, rather than a second copy of
  * the review controls.
@@ -20,7 +21,7 @@ import { Link } from "react-router-dom";
 import { useResource } from "../../api/useResource";
 import { Note, SectionCard, StatCard, StatsStrip } from "../../components/kit";
 import { cn } from "../../lib/utils";
-import { countWords, rangeWords } from "../agents/agentStats";
+import { basisWords, countWords, rangeWords, whenWords } from "../agents/agentStats";
 import { reviewPill } from "./skillActions";
 import { type SkillDetail } from "./skillDetailQuery";
 import {
@@ -40,6 +41,7 @@ export const VERSIONS_LABEL = "Versions in the library";
 export const ADDED_LABEL = "Versions added";
 export const RUNS_LABEL = "Runs that used it";
 export const LAST_USED_LABEL = "Last used";
+export const NOT_USED = "None in 30 days";
 export const WAITING_HEADING = "Waiting for a decision";
 export const NOTHING_WAITING = "No version of this skill is waiting for review.";
 
@@ -73,6 +75,10 @@ export function SkillDashboard({ detail, profileAddress }: { readonly detail: Sk
   const stats = useResource<unknown>(skillStatsApiPath(detail.name));
   const read = stats.data === null ? null : readSkillStats(stats.data);
   const figures = skillPeriod(read, period);
+  const whose = basisWords(read?.runBasis);
+  const atLeast = read?.atLeast === true ? "at least, " : "";
+  const runsSub = whose === undefined ? undefined : `${atLeast}${whose}`;
+  const lastUsed = read?.lastUsedAt === null ? NOT_USED : whenWords(read?.lastUsedAt);
   const waiting = detail.versions.filter((one) => one.review === "pending" || one.review === "changed");
 
   return (
@@ -86,8 +92,18 @@ export function SkillDashboard({ detail, profileAddress }: { readonly detail: Sk
         <StatCard label={PINNED_VERSIONS_LABEL} value={countWords(read?.pinnedVersions)} sub="run by those agents" />
         <StatCard label={VERSIONS_LABEL} value={countWords(read?.versions)} />
         <StatCard label={ADDED_LABEL} value={countWords(figures?.versionsAdded)} sub={rangeWords(figures?.range)} />
-        <StatCard label={RUNS_LABEL} unrecordedWhy={skillUnrecordedWhy(read, RUNS_FIGURE)} />
-        <StatCard label={LAST_USED_LABEL} unrecordedWhy={skillUnrecordedWhy(read, LAST_USED_FIGURE)} />
+        <StatCard
+          label={RUNS_LABEL}
+          value={countWords(figures?.runs)}
+          sub={runsSub}
+          unrecordedWhy={skillUnrecordedWhy(read, RUNS_FIGURE)}
+        />
+        <StatCard
+          label={LAST_USED_LABEL}
+          value={lastUsed}
+          sub={whose}
+          unrecordedWhy={skillUnrecordedWhy(read, LAST_USED_FIGURE)}
+        />
       </StatsStrip>
 
       <SectionCard
