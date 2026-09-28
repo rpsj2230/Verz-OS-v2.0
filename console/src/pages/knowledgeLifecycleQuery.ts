@@ -1,6 +1,6 @@
 /**
- * What the Knowledge page asks the API about a stored document's life, and the words it says. No
- * React.
+ * Where the Knowledge module asks the API about a stored document's life, and how a picked day
+ * becomes the instant the API takes. No React.
  *
  * The routes are `brain.knowledge_lifecycle_routes`: the documents this person looks after, one
  * document's record and history, one version's text, the four acts on a document (verify, a newer
@@ -20,20 +20,8 @@
  * Task ids: M7.4.4, M7.4.5, M7.4.6, M7.6.2, M7.7.2
  */
 
-import type { components } from "../api/schema";
-
-export type LookedAfter = components["schemas"]["LookedAfterView"];
-export type DocumentRow = components["schemas"]["DocumentView"];
-export type DocumentDetail = components["schemas"]["DocumentDetailView"];
-export type VersionRow = components["schemas"]["VersionView"];
-export type Passages = components["schemas"]["PassagesView"];
-export type Tasks = components["schemas"]["TasksView"];
-export type TaskRow = components["schemas"]["TaskView"];
-export type Solutions = components["schemas"]["SolutionsView"];
-export type SolutionRow = components["schemas"]["SolutionView"];
-
 /** Where each read and write lives, under the API's versioned base. */
-export const ITEMS_API_PATH = "/knowledge/items";
+const ITEMS_API_PATH = "/knowledge/items";
 export const TASKS_API_PATH = "/knowledge/tasks";
 export const SOLUTIONS_API_PATH = "/knowledge/solutions";
 
@@ -97,85 +85,6 @@ export function isAfterToday(day: string, today: Date = new Date()): boolean {
 export function defaultReviewDay(today: Date = new Date()): string {
   const ahead = new Date(today.getTime() + 182 * 24 * 60 * 60 * 1000);
   return ahead.toISOString().slice(0, 10);
-}
-
-/** A stored instant as the day it falls on, or the sentence for one that is not set. */
-export function dayOf(instant: string | null | undefined, none = "not set"): string {
-  return typeof instant === "string" && instant.length >= 10 ? instant.slice(0, 10) : none;
-}
-
-/** The level a document reaches, in the words the library uses. */
-export function reachWords(level: string, department: string | null | undefined): string {
-  if (level === "company") {
-    return "the whole company";
-  }
-  if (level === "department") {
-    return department ? `the ${department} department` : "its department";
-  }
-  return "its steward only";
-}
-
-/** What the badge says, with who and when only when the API sent them. */
-export function verificationWords(row: {
-  readonly verification: string;
-  readonly verified_by?: string | null;
-  readonly verified_at?: string | null;
-}): string {
-  const named = row.verified_by ? ` by ${row.verified_by}` : "";
-  const when = row.verified_at ? ` on ${dayOf(row.verified_at)}` : "";
-  switch (row.verification) {
-    case "verified":
-      return `verified${named}${when}`;
-    case "due":
-      return `verified${named}${when}, due for review`;
-    case "superseded":
-      return "replaced by a newer version";
-    default:
-      return "not verified by anyone";
-  }
-}
-
-/** Where a promotion this person asked for has got to, in a sentence. */
-export function promotionWords(promotion: DocumentRow["promotion"]): string {
-  if (promotion === null || promotion === undefined) {
-    return "not asked for";
-  }
-  switch (promotion.status) {
-    case "waiting":
-      return `waiting on the Approvals screen until ${dayOf(promotion.expires_at)}`;
-    case "approved":
-      return "approved for the whole company";
-    case "rejected":
-      return "not approved";
-    default:
-      return "lapsed without a decision; ask again";
-  }
-}
-
-/** What a version's state is called in a history. */
-export function stateWords(state: string): string {
-  switch (state) {
-    case "published":
-      return "current";
-    case "superseded":
-      return "replaced";
-    case "archived":
-      return "withdrawn";
-    default:
-      return "draft";
-  }
-}
-
-/** What a captured solution's state is called. */
-export function solutionWords(state: string): string {
-  switch (state) {
-    case "approved":
-      return "approved, and now company knowledge";
-    case "rejected":
-      return "not approved";
-    default:
-      return "waiting for somebody who may approve it";
-  }
 }
 
 /** The fields a request may name a problem against on this page, so none is listed twice. */

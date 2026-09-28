@@ -166,7 +166,7 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
     bulk: READ_ONLY,
   },
   "/logs": { bulk: A_LOG_ROW_IS_READ_AND_NEVER_WRITTEN },
-  "/agents": { bulk: READ_ONLY },
+  "/agents": {},
   "/agent-templates": { bulk: READ_ONLY },
   "/approvals": { bulk: AN_APPROVAL_IS_DECIDED_FROM_ITS_OWN_CARD },
   "/adoption": { bulk: READ_ONLY },
@@ -175,7 +175,7 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
   "/scopes": { bulk: READ_ONLY },
   "/skills": { bulk: A_SKILL_IS_DECIDED_FROM_ITS_OWN_BYTES },
   "/skills/:name": { bulk: A_SKILL_IS_DECIDED_FROM_ITS_OWN_BYTES },
-  "/library": { bulk: READ_ONLY },
+  "/library": {},
   "/sessions": {},
   "/sign-in-links": { bulk: AN_UNLINK_LOCKS_A_PERSON_OUT },
   "/service-accounts": { bulk: RETIRING_AN_ACCOUNT_STOPS_AN_INTEGRATION },
@@ -191,6 +191,11 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
  * rows, by page and label, and why offering them names nothing about what exists.
  */
 const CLOSED_VOCABULARIES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  "/library": {
+    Review:
+      "Due and not due are the product's own two words, the same in every install, and each row " +
+      "carries one of them, so offering the other names nothing about what exists.",
+  },
   "/audit": {
     When:
       "The periods are the console's own four windows, the same in every install, and a window " +
@@ -340,7 +345,9 @@ function offered(root: Element, paths: readonly string[]): Set<Capability> {
   ) {
     found.add("filter");
   }
-  if (root.querySelector('tbody input[type="checkbox"], .roster input[type="checkbox"]') !== null) {
+  // The kit's table ticks a row with the component layer's checkbox, a button carrying the role,
+  // and an older page with a native input; either is a selection an act is taken over.
+  if (root.querySelector('tbody input[type="checkbox"], tbody [role="checkbox"], .roster input[type="checkbox"]') !== null) {
     found.add("bulk");
   }
   return found;

@@ -349,7 +349,15 @@ COMPANY_NAVIGATION: Final[tuple[Section, ...]] = (
         group=ModuleGroup.KNOWLEDGE,
         entries=(
             _one("Connectors", "/connectors", "connectors"),
-            _one("Knowledge", "/library", "library"),
+            # Documents and the solutions captured into them. Both open under the library screen,
+            # because a solution becomes one of its documents once somebody approves it.
+            Entry(
+                label="Knowledge",
+                pages=(
+                    Page(label="Documents", to="/library", key="library"),
+                    Page(label="Solutions", to="/solutions", key="library"),
+                ),
+            ),
             Entry(
                 label="Learning and memory",
                 pages=(
@@ -452,7 +460,14 @@ DEPARTMENT_NAVIGATION: Final[tuple[Section, ...]] = (
     department_section(
         ModuleGroup.KNOWLEDGE,
         _one("Connectors", "/connectors", "connectors"),
-        _one("Knowledge", "/library", "library"),
+        # A department's own administrators decide its solutions, so they are offered the tab too.
+        Entry(
+            label="Knowledge",
+            pages=(
+                Page(label="Documents", to="/library", key="library"),
+                Page(label="Solutions", to="/solutions", key="library"),
+            ),
+        ),
         _one("Learning and memory", "/learning", "learning"),
     ),
     department_section(ModuleGroup.OPERATIONS, _one("Runs and queue", "/runs", "runs")),
