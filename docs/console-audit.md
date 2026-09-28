@@ -9,10 +9,10 @@ What an administrator would need to manage, read out of the schema, the routes a
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
 - 104 tables, from `brain.db.Base.metadata`.
 - 29 installation values, from `brain.install.INSTALLATION`.
-- 226 routes under `/api/v1` and `/setup`, from the API's internal document.
+- 231 routes under `/api/v1` and `/setup`, from the API's internal document.
 - 74 console addresses, from the route table in `console/src/App.tsx`.
 - 97 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 122 routes.
-- 35 gaps recorded, and 18 routes no screen calls.
+- 35 gaps recorded, and 23 routes no screen calls.
 
 ## Area by area
 
@@ -176,6 +176,7 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `GET /api/v1/agents/{agent_id}/workspace` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `GET /api/v1/approvals` | `/approvals` |
 | `GET /api/v1/approvals/{suspension_id}` | `/approvals/:suspensionId` |
+| `GET /api/v1/console/agents/{agent_id}/stats` | **no screen** |
 | `POST /api/v1/approvals/{suspension_id}/decision` | `/approvals`, `/approvals/:suspensionId` |
 | `PUT /api/v1/agents/{agent_id}/model-pin` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 
@@ -189,6 +190,7 @@ What an administrator would need to manage, read out of the schema, the routes a
 
 | Route | Called by |
 | --- | --- |
+| `GET /api/v1/console/skills/{skill_name}/stats` | **no screen** |
 | `GET /api/v1/skills` | `/skills`, `/skills/:name` |
 | `GET /api/v1/tools` | `/tools` |
 | `POST /api/v1/skills` | `/skills`, `/skills/:name` |
@@ -232,6 +234,8 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `GET /api/v1/channels/{name}/deliveries` | **no screen** |
 | `GET /api/v1/connectors` | `/connectors` |
 | `GET /api/v1/connectors/lark-app` | `/connectors` |
+| `GET /api/v1/console/channels/{name}/stats` | **no screen** |
+| `GET /api/v1/console/connectors/{connector}/stats` | **no screen** |
 | `POST /api/v1/channels/{name}/events` | **no screen** |
 | `POST /api/v1/channels/{name}/switch` | **no screen** |
 | `POST /api/v1/channels/{name}/test` | **no screen** |
@@ -447,7 +451,11 @@ No gap recorded.
 - **Tables:** none
 - **Installation values:** none
 
-- **Gap.** The state of each service the install runs on is not shown. Recorded: /health/ready answers the orchestrator outside /api/v1 with no screen reading it. Each rung's circuit breaker is shown, on the Models and health screen from GET /api/v1/models/providers, replayed from the attempts the executor recorded.
+| Route | Called by |
+| --- | --- |
+| `GET /api/v1/console/overview` | **no screen** |
+
+- **Gap.** The state of each service the install runs on is not shown. Recorded: /health/ready answers the orchestrator outside /api/v1, and GET /api/v1/console/overview serves the same parts beside Needs you with no screen reading it yet. Each rung's circuit breaker is shown, on the Models and health screen from GET /api/v1/models/providers, replayed from the attempts the executor recorded.
 
 ### Backup and recovery
 
