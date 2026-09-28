@@ -2,8 +2,8 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**7 items are open: 91, 98, 99, 100, 101, 102 and 103.** Item 98 (the Moonshot key and DeepSeek
-once more) unblocks the most; 99 to 103 are Wave 2 decisions, each with a one-word reply. Each says in plain terms what it is, what I recommend, and every step.
+**9 items are open: 91 and 98 to 105.** Item 98 (the Moonshot key and DeepSeek once more) unblocks
+the most; 99 to 105 are decisions, each with a recommendation and a one-line reply. Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
 
@@ -36,7 +36,8 @@ need a model to answer. Tell me "checks done" and I close the tasks from your re
    at the first department's reach. As the person in that department, ask about it on **Ask**: the
    answer uses it. As the person in the other department, ask the same: you are told there is
    nothing, exactly as if it did not exist. (Adding a document from **Knowledge** is built early in
-   Wave 2; I will tell you when it is live, so leave checks 2, 4 and 5 until then.)
+   Wave 2 and waits on item 105; I will tell you when it is live, so leave checks 2, 4 and 5 until
+   then.)
 3. **Department admin limits (M2.3.1).** On **Govern > Roles**, make the first person department
    admin for their department. As them, try to grant something in the other department: refused.
    Try to publish an agent company-wide: it waits for your approval on **Approvals**.
@@ -58,17 +59,17 @@ cannot be done until Wave 2 builds the Lark chat channel; both moved there with 
 **In plain terms:** your Claude (Anthropic), OpenAI and DeepSeek keys reached the vault on 28 Sep.
 No Moonshot (Kimi) key did, and DeepSeek was saved twice 24 seconds apart, so the second paste may
 have been the Moonshot key saved under DeepSeek. Your install is already set to use online
-providers (you chose it in setup on 16 Sep); a fault stopped the worker seeing that setting, and
-the fix lands today, after which the Brain checks each provider every minute. **Recommendation: do
-both now; the current screen works.** Unblocks M5.6.1, M5.6.3 and M5.7.1, and proves Wave 0's
-M31.3.2.5.
+providers (you chose it in setup on 16 Sep), and since 28 Sep the worker sees that and checks each
+provider every minute. **Recommendation: do both now,** on the rebuilt Models screen. Unblocks
+M5.6.1, M5.6.3 and M5.7.1, and proves Wave 0's M31.3.2.5.
 
 1. Open the console (signed in) and go to **Models and health**.
-2. Scroll to **Provider health**, then **Set a provider's key**. Choose **Moonshot**, paste the key
-   from the Moonshot platform into **Key**, press **Save the key**, then **Save the key** again to
+2. On the **Moonshot (Kimi)** row press **Add key**, paste the key from the Moonshot platform, press
+   **Save the key**, then confirm.
+3. On the **DeepSeek** row press **Replace key**, paste the key from the DeepSeek platform, save and
    confirm.
-3. Do the same for **DeepSeek**, with the key from the DeepSeek platform.
-4. Tell me "keys fixed". I then check that each provider answers and record it.
+4. Press **Test** on each of the four rows, then tell me "keys fixed". I then check that each
+   provider answers and record it.
 
 ## 99. Wave 2: how connected systems answer questions
 
@@ -90,7 +91,8 @@ which system to ask comes with agents. Reply "connectors as recommended".
 **In plain terms:** agents are created in Wave 3 (M27.11.6), so the parts of these Wave 2 tasks that
 say "an agent does it" cannot be tried in Wave 2: M11.9.2 to M11.9.14, M11.8.8, M10.7.3, M12.2.5,
 M12.2.7, M12.2.8, M12.3.3, M12.4.8, M12.4.10, M8.2.4 and M8.3.5, and "an agent prepares" in M11.8.10
-and M12.4.2. **Recommendation: build and prove their Wave 2 half now and move the agent half to
+and M12.4.2, and Wave 1's M5.7.3 (a model pinned for one agent), built on 28 Sep, whose proof needs
+an agent. **Recommendation: build and prove their Wave 2 half now and move the agent half to
 Wave 3**, as item 97 did for the chat checks. Also: M38.2.2.3 ("what is live after Wave 2") says
 "against connector cassettes", and the plan says real credentials only at go-live; both contradict
 your rule that done means working on your install. Recommendation: reword M38.2.2.3 to "a real
@@ -120,6 +122,29 @@ portal connector (M11.6.1) assumes the portal is a Laravel system on MySQL. Is i
 **In plain terms:** M12.3.1 and M12.4.9 need "a second install" to move a skill between, and M22.3.3
 is a load test. **Recommendation: a scratch install built inside CI for both**, so nothing extra
 runs on your server and no load is put on the install your company uses. Reply "use CI".
+
+## 104. Should an answered question's risk score and route be viewable?
+
+**In plain terms:** for every question the Brain now records its risk score (how likely it is an
+attempt to trick the system), which level and model answered it, and why each was chosen. For a
+question that failed, the **Errors** screen shows all of it. For one that was answered, no screen
+does, because the Questions screen deliberately does not list individual people's outcomes.
+**Recommendation: show a short reference under every answer, and let a Super Admin look that
+reference up** to see its score and route, so a person can report "this answer was odd" and you
+can see why, without any screen listing everybody's questions. Reply "reference under answers", or
+"leave it" to keep it as it is.
+
+## 105. Who can read the documents you upload
+
+**In plain terms:** Knowledge now takes Markdown, PDF and Word uploads for one department. A person
+only reads documents they are granted, and today nobody on your install holds a knowledge grant, so
+an uploaded document would answer nobody, and the Starter pack that grants it cannot be handed out.
+**Recommendation: every person the staff sync brings in gets the Starter pack for their own
+department automatically,** so they read their department's documents from day one; you still add
+or remove anything on **Govern > Roles**. The alternative is to give the data steward the right to
+hand the pack out by hand, person by person. Also, uploads are checked for being a genuine, safe
+file but not by an antivirus; I recommend accepting that for now and adding one with the scanning
+package later in Wave 2. Reply "starter pack by department".
 
 # Answered
 
