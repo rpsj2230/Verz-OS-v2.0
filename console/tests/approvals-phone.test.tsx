@@ -8,7 +8,9 @@
  *
  * - the navigation was a wrapping row of twenty-nine links, 716 pixels tall at 360, so the card
  *   began 1003 pixels down and the first screen of an approval opened from a chat message held
- *   only the menu. After: the navigation is 95 pixels tall and the card begins at 385;
+ *   only the menu. After: the navigation is 95 pixels tall and the card begins at 385. Since
+ *   2026-09-28 the menu is a drawer behind a visible Menu button on a phone, so nothing but the
+ *   header is above the card;
  * - Sign out was 41 pixels tall at 360 and 65 at 320, where its two words folded onto two lines,
  *   and each theme option was 20. After: 44 each;
  * - the reason field on a card was 15 pixels, under the size at which a phone's browser zooms
@@ -23,12 +25,12 @@
  * element, through `support/cascade.ts`, which is the method `tests/phone-width.test.tsx`
  * argues for. The harness that measured is not committed, for the reason that file gives.
  *
- * Task ids: M40.6.1.5, M40.1.2.3
+ * Task ids: M40.6.1.5, M40.1.2.3, M27.10.1
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { fireEvent, render, waitFor } from "@testing-library/react";
-import { beforeAll, describe, expect, test } from "vitest";
+import { beforeAll, describe, expect, test, vi } from "vitest";
 import {
   approvalAddress,
   APPROVALS_ADDRESS,
@@ -46,6 +48,7 @@ import {
   specificity,
   type OrderedRule,
 } from "./support/cascade";
+import { SIDEBAR_MENU_LABEL } from "../src/components/ui/sidebar";
 import { COMPANY_CONSOLE, NAVIGATION_ADDRESS } from "./support/navigation";
 import { backendPublicMessages } from "./support/python";
 import { readConsoleFile } from "./support/repo";
@@ -82,6 +85,12 @@ beforeAll(async () => {
 interface Answer {
   readonly status?: number;
   readonly body: unknown;
+}
+
+/** The window's width, which is what the sidebar reads to decide between a drawer and a column. */
+function setWidth(width: number): void {
+  vi.stubGlobal("innerWidth", width);
+  window.dispatchEvent(new Event("resize"));
 }
 
 /**
@@ -234,51 +243,45 @@ describe("the frame an approval opens in, on a phone", () => {
     expect(content).toEqual({ width: "device-width", "initial-scale": "1" });
   });
 
-  test("on a phone the navigation is one strip that scrolls inside itself, so the page starts on the first screen", async () => {
-    // What breaks if this is deleted: the wrapping row coming back, which measured 716 pixels of
-    // links above a card on a 360 pixel phone. Each property is the one that made the difference:
-    // the groups side by side rather than stacked, each group's links on one line, a group that
-    // does not shrink to fit, and the strip as the thing that scrolls. The last is asserted from
-    // every link outwards, because a strip that did not scroll would push the whole page sideways
-    // instead, which is the defect `tests/phone-width.test.tsx` exists to catch.
+  test("on a phone the menu is a drawer behind a Menu button, so the page starts under the header", async () => {
+    // What breaks if this is deleted: a menu drawn above the page on a phone, which measured 716
+    // pixels of links above a card on a 360 pixel phone as a wrapping row and would be forty
+    // entries now. Below the sidebar's breakpoint no entry is in the page until the Menu button
+    // opens the drawer; the button is the first control after the skip link, in the header, and
+    // the card is in the page with nothing but the header before it.
+    setWidth(PHONE_PX);
     const container = await consoleAt(approvalAddress("sus_1"), {
       [`${QUEUE_API}/sus_1`]: { body: wireCard("sus_1") },
     });
-    const nav = one(container, "nav.shell__nav");
-    const groups = [...nav.querySelectorAll(".shell__nav-group")];
-    const links = [...nav.querySelectorAll("a")];
-    expect(groups.length).toBeGreaterThan(1);
-    expect(links.length).toBeGreaterThan(groups.length);
+    expect(document.querySelector('nav[aria-label="Sections"]')).toBeNull();
 
-    expect(declared(nav, "display", RULES, PHONE_PX)).toBe("flex");
-    expect(declared(nav, "flex-direction", RULES, PHONE_PX) ?? "row").toBe("row");
-    for (const group of groups) {
-      expect(declared(group, "flex", RULES, PHONE_PX)).toBe("0 0 auto");
-      expect(declared(one(group, "ul"), "flex-wrap", RULES, PHONE_PX)).toBe("nowrap");
-    }
-    for (const link of links) {
-      expect(declared(link, "white-space", RULES, PHONE_PX), link.textContent ?? "").toBe("nowrap");
-      expect(sidewaysScroller(link, PHONE_PX), link.textContent ?? "").toBe(nav);
-      expect(sidewaysScroller(link, SMALLEST_PHONE_PX), link.textContent ?? "").toBe(nav);
+    const menu = one(container, 'header button[data-sidebar="trigger"]');
+    expect(menu.textContent).toBe(SIDEBAR_MENU_LABEL);
+    const focusable = [...container.querySelectorAll("a[href], button, input, select, textarea")];
+    expect(focusable[0]?.getAttribute("href")).toBe("#main");
+    expect(focusable[1]).toBe(menu);
+    const main = one(container, "main");
+    expect(menu.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(main.contains(one(container, "article.approval-card"))).toBe(true);
+    for (let at: Element | null = menu; at !== null; at = at.parentElement) {
+      expect(declared(at, "display", RULES, PHONE_PX)).not.toBe("none");
     }
     expect(sidewaysScroller(one(container, "article.approval-card"), PHONE_PX)).toBeNull();
   });
 
-  test("a wider screen keeps the sidebar, whose links wrap inside it and which does not scroll sideways", async () => {
-    // What breaks if this is deleted: the strip applied at every width, so a desktop sidebar
-    // becomes one line of links scrolling sideways inside a 15rem column. The positive half of
-    // the test above, which a sheet with no query at all would pass.
+  test("a wider screen keeps the sidebar beside the page, with every entry in it", async () => {
+    // What breaks if this is deleted: the drawer applied at every width, so a desktop reader has
+    // to open a menu for every move. The positive half of the test above, which a shell that drew
+    // no sidebar at all would pass.
+    setWidth(WIDE_PX);
     const container = await consoleAt(approvalAddress("sus_1"), {
       [`${QUEUE_API}/sus_1`]: { body: wireCard("sus_1") },
     });
-    const nav = one(container, "nav.shell__nav");
-
-    expect(declared(nav, "display", RULES, WIDE_PX)).toBe("block");
-    expect(sidewaysScroller(nav, WIDE_PX)).toBeNull();
-    expect(declared(one(nav, "ul"), "flex-direction", RULES, WIDE_PX)).toBe("column");
-    expect(declared(one(nav, "a"), "white-space", RULES, WIDE_PX)).toBe("normal");
-    const second = nav.querySelectorAll(".shell__nav-group")[1] as Element;
-    expect(pixels(resolved(declared(second, "margin-top", RULES, WIDE_PX)))).toBeGreaterThan(0);
+    const nav = one(container, 'nav[aria-label="Sections"]');
+    const hrefs = [...nav.querySelectorAll("a")].map((link) => link.getAttribute("href"));
+    expect(hrefs).toEqual(expect.arrayContaining(COMPANY_CONSOLE.sections.flatMap((one) => one.entries.map((entry) => entry.to))));
+    expect(nav.compareDocumentPosition(one(container, "main")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(one(container, 'header button[data-sidebar="trigger"]').getAttribute("aria-expanded")).toBe("true");
   });
 
   test("every control in the frame's header is a thumb tall on a phone, and Sign out never folds onto two lines", async () => {

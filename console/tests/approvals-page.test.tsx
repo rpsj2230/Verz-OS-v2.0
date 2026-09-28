@@ -61,6 +61,8 @@ import {
 } from "./support/openapi";
 import { backendEnumMembers, backendModelFields, backendPublicMessages } from "./support/python";
 import { readConsoleFile } from "./support/repo";
+import { compileLayer, compiledPixels, compiledRules } from "./support/tailwind";
+import { ownWork } from "../src/pages/Approvals.route";
 import { parseConsoleSource, staticImportGraph } from "./support/typescript";
 
 const CONSOLE_ORIGIN = "https://console.test";
@@ -393,11 +395,14 @@ describe("an approval card on a phone", () => {
       [QUEUE_API]: { body: { items: [wireCard("sus_1")] } },
     });
     expect(page(container).querySelector("article.approval-card a.approval-card__link")).not.toBeNull();
-    const navLink = container.querySelector("nav a.shell__nav-link");
+    // The menu is the component layer's since 2026-09-28, so its link is read against the rules
+    // Tailwind compiles for its class names rather than against the old sheets.
+    const navLink = container.querySelector('nav[aria-label="Sections"] a[href="/approvals"]');
     expect(navLink).not.toBeNull();
-    const height = declared(navLink as Element, "min-height", consoleRules(), PHONE_WIDTH_PX);
-    expect(pixels(height ?? "")).toBeGreaterThanOrEqual(TAP_TARGET_PX);
-  });
+    const { css } = await compileLayer();
+    const height = declared(navLink as Element, "min-height", compiledRules(css), PHONE_WIDTH_PX);
+    expect(compiledPixels(height, css)).toBeGreaterThanOrEqual(TAP_TARGET_PX);
+  }, 60_000);
 
   test("the approvals sheet arrives with the page and is not in the first response", () => {
     // What breaks if this is deleted: the rules above held against a sheet nothing imports, or
@@ -603,7 +608,9 @@ describe("one approval on its own", () => {
       link.getAttribute("href") ?? "",
     ]);
 
-    expect(nav).toContainEqual([APPROVALS_HEADING, APPROVALS_ADDRESS]);
+    expect(nav).toContainEqual([ownWork?.label, APPROVALS_ADDRESS]);
+    expect(ownWork?.to).toBe(APPROVALS_ADDRESS);
+    expect(ownWork?.label).toBe(`My ${APPROVALS_HEADING.toLowerCase()}`);
     expect(approvalAddress("sus_1").startsWith(`${APPROVALS_ADDRESS}/`)).toBe(true);
   });
 });

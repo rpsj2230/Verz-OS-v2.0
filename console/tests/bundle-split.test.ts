@@ -20,7 +20,7 @@
  * Task ids: M32.5.1.2
  */
 
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 import { packageOf, staticImportGraph } from "./support/typescript";
@@ -53,8 +53,8 @@ const HEAVY = [
 describe("what the entry chunk reaches", () => {
   test("no heavy component library is reachable from the entry without a dynamic import", () => {
     // What breaks if this is deleted: the split, silently. A page is added, somebody writes
-    // `import { Records } from "./pages/Records"` at the top of App.tsx because that is what
-    // every other import there looks like, and the entry chunk triples. Nothing fails, no
+    // `import { Records } from "./Records"` at the top of its route file because that is what
+    // most route files look like, and the entry chunk triples. Nothing fails, no
     // screen changes, and the cost lands on whoever opens the console on a phone. The graph
     // is read from the source because a bundle size is a number in a log and this is a
     // property.
@@ -72,6 +72,20 @@ describe("what the entry chunk reaches", () => {
     expect(files).toContain("src/pages/Overview.tsx");
     expect(files).toContain("src/api/client.ts");
     expect(files).not.toContain("src/pages/Records.tsx");
+  });
+
+  test("the walk follows the route registry's eager glob into every page's route file", () => {
+    // What breaks if this is deleted: the pages reach the entry through `import.meta.glob` in
+    // `src/routes/registry.ts` rather than an import statement, and a walker that stopped at the
+    // registry would report a graph with no page in it, so the refusal above would pass whatever a
+    // route file imported. Every route file must be in the graph, and a lazy page's route file
+    // must be in it without the page it splits off.
+    const files = new Set(staticImportGraph(ENTRY).files);
+    const routeFiles = readdirSync(resolve(process.cwd(), "src/pages")).filter((one) => one.endsWith(".route.tsx"));
+    expect(routeFiles.length).toBeGreaterThan(40);
+    expect(routeFiles.filter((one) => !files.has(`src/pages/${one}`))).toEqual([]);
+    expect(files.has("src/pages/Records.route.tsx")).toBe(true);
+    expect(files.has("src/pages/Records.tsx")).toBe(false);
   });
 
   test("the component layer's heavy libraries are real and reachable from where they belong", () => {

@@ -83,3 +83,24 @@ export async function cssForEachClass(classes: readonly string[]): Promise<(stri
   const system = await __unstable__loadDesignSystem(readFileSync(ENTRY_PATH, "utf8"), { base: dirname(ENTRY_PATH) });
   return system.candidatesToCss([...classes]);
 }
+
+/**
+ * A compiled length in CSS pixels: a plain length, or Tailwind's `calc(var(--spacing) * n)`, which
+ * is how every spacing utility compiles. `undefined` for anything else, so a value this cannot read
+ * fails a comparison rather than passing it.
+ */
+export function compiledPixels(value: string | undefined, css: string): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  const spacing = /--spacing:\s*([\d.]+)rem/.exec(css);
+  const scaled = /^calc\(var\(--spacing\)\s*\*\s*([\d.]+)\)$/.exec(value.trim());
+  if (scaled !== null && spacing !== null) {
+    return Number(scaled[1]) * Number(spacing[1]) * 16;
+  }
+  const plain = /^([\d.]+)(px|rem)$/.exec(value.trim());
+  if (plain === null) {
+    return undefined;
+  }
+  return plain[2] === "px" ? Number(plain[1]) : Number(plain[1]) * 16;
+}

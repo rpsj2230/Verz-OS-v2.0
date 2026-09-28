@@ -387,19 +387,19 @@ describe("the adoption screen", () => {
 describe("getting round the report screens without a mouse", () => {
   test("each screen is reachable from the navigation as a link the tab key stops on", async () => {
     // What breaks if this is deleted: a section is added to the shell as something that is not
-    // an anchor, and a person on a keyboard cannot reach the screen at all. These three are on the
-    // company console's menu, so the stand-in API gives that console.
-    const { container } = await consoleAt(SERVICE_LEVELS_ADDRESS, {
-      [SERVICE_LEVELS_API]: reading([]),
+    // an anchor, and a person on a keyboard cannot reach the screen at all. Service levels is an
+    // entry of the company console's menu; Spend and Adoption are tabs of Usage and cost since
+    // 2026-09-28, drawn above the page when any of the module's pages is open.
+    const { container } = await consoleAt(SPEND_ADDRESS, {
+      [SPEND_API]: spendBody(),
       [NAVIGATION_ADDRESS]: COMPANY_CONSOLE,
     });
-    const addresses = [...container.querySelectorAll("nav.shell__nav a")].map((link) =>
-      link.getAttribute("href"),
-    );
+    const hrefs = (selector: string): (string | null)[] =>
+      [...container.querySelectorAll(selector)].map((link) => (link.tagName === "A" && !link.hasAttribute("tabindex") ? link.getAttribute("href") : null));
 
-    expect(addresses).toContain(SERVICE_LEVELS_ADDRESS);
-    expect(addresses).toContain(SPEND_ADDRESS);
-    expect(addresses).toContain(ADOPTION_ADDRESS);
+    expect(hrefs('nav[aria-label="Sections"] a')).toContain(SERVICE_LEVELS_ADDRESS);
+    expect(hrefs('nav[aria-label="Sections"] a')).toContain("/usage");
+    expect(hrefs('main nav[aria-label="Usage and cost"] a')).toEqual(["/usage", SPEND_ADDRESS, ADOPTION_ADDRESS]);
   });
 
   test("none of the three pages adds anything the keyboard cannot reach", async () => {

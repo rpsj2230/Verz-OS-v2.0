@@ -9,15 +9,14 @@
  * failing direction is asserted as well as the answering one.
  *
  * **The stand-in body is held to the Python.** The field names are read off
- * `brain.navigation_routes.NavigationView`, and the department menu the support file sends is
- * read off `brain.console.department_console.DEPARTMENT_NAVIGATION`, so the menu these tests
- * draw is the one the route serves.
+ * `brain.navigation_routes.NavigationView`, and both menus the support file sends are read off
+ * `brain.console.department_console`, so the menu these tests draw is the one the route serves.
  *
  * **The Department page asks three routes other screens already ask**, and each card is held to
  * drawing that route's answer, to failing on its own, and to saying in words what the design draws
  * that nothing serves.
  *
- * Task ids: M27.7.29
+ * Task ids: M27.7.29, M27.10.1
  */
 
 import { MemoryRouter } from "react-router-dom";
@@ -41,9 +40,12 @@ import { fakeIdentityProvider, loadConsole, signIn } from "./support/auth";
 import {
   COMPANY_CONSOLE,
   NAVIGATION_ADDRESS,
+  addressesOf,
   answerNavigation,
+  declaredNavigation,
   departmentConsole,
 } from "./support/navigation";
+import { OWN_WORK } from "../src/routes/registry";
 import { backendModelFields } from "./support/python";
 import { readRepoFile } from "./support/repo";
 
@@ -53,17 +55,10 @@ function sentinel(name: string): string {
 }
 
 /** The addresses of the screens about this server, none of which a department is offered. */
-const ABOUT_THE_SERVER = [
-  "/install",
-  "/updates",
-  "/recovery",
-  "/limits",
-  "/connections",
-  "/features",
-  "/storage",
-  "/vault",
-  "/requirement-checks",
-];
+const ABOUT_THE_SERVER = ["/updates", "/recovery", "/limits", "/features", "/storage", "/vault", "/settings"];
+
+/** The reader's own work, as every console lists it. */
+const OWN_WORK_ADDRESSES = OWN_WORK.sections.map((one) => one.to);
 
 /** Mount the shell against a stand-in API answering the navigation with `answer`. */
 async function shellAnswering(answer: (url: string) => Response | null): Promise<HTMLElement> {
@@ -103,25 +98,29 @@ describe("the menu a department is given", () => {
     await answered(container);
 
     const drawn = menu(container);
-    expect(drawn.headings).toEqual(["Operate", "Govern", "Report", "Use"]);
+    expect(drawn.headings).toEqual([
+      "Use",
+      "Home",
+      "People and access",
+      "Agents and AI",
+      "Knowledge and data",
+      "Operations",
+      "Governance",
+      "Reports",
+    ]);
     expect(drawn.hrefs).toEqual([
+      ...OWN_WORK_ADDRESSES,
       "/department",
-      "/runs",
-      "/connectors",
       "/people",
       "/agents",
-      "/library",
       "/skills",
+      "/connectors",
+      "/library",
       "/learning",
+      "/runs",
       "/audit",
       "/questions",
       "/usage",
-      "/ask",
-      "/me",
-      "/approvals",
-      "/records",
-      "/access-requests",
-      "/referrals",
     ]);
     for (const address of ABOUT_THE_SERVER) {
       expect(drawn.hrefs).not.toContain(address);
@@ -136,7 +135,8 @@ describe("the menu a department is given", () => {
     await answered(container);
 
     const drawn = menu(container);
-    expect(drawn.headings).toEqual(["Operate", "Govern", "Report", "Use", "Install"]);
+    expect(drawn.headings).toEqual(["Use", ...COMPANY_CONSOLE.sections.map((one) => one.heading)]);
+    expect(drawn.headings).toContain("Platform");
     for (const address of ABOUT_THE_SERVER) {
       expect(drawn.hrefs).toContain(address);
     }
@@ -149,6 +149,7 @@ describe("the menu a department is given", () => {
     // when it fails. `A_MENU_NOBODY_ANSWERED_OFFERS_ONLY_YOUR_OWN_WORK` is the argument.
     expect(A_MENU_NOBODY_ANSWERED_OFFERS_ONLY_YOUR_OWN_WORK).toContain("only the screens");
     const ownWork = ["/ask", "/me", "/approvals", "/records", "/access-requests", "/referrals"];
+    expect(OWN_WORK_ADDRESSES).toEqual(ownWork);
 
     const pending = await shellAnswering((url) => answerNavigation(url, departmentConsole()));
     expect(menu(pending).hrefs).toEqual(ownWork);
@@ -168,7 +169,7 @@ describe("the menu a department is given", () => {
 });
 
 describe("reading the answer", () => {
-  test("the body's fields are the Python model's, and the department menu is the Python declaration", () => {
+  test("the body's fields are the Python model's, and both menus are read whole from the Python declaration", () => {
     // What breaks if this is deleted: the stand-in the shell tests answer with can drift from what
     // the route sends, and every test above passes against a menu the API never serves.
     expect(backendModelFields("src/brain/navigation_routes.py", "NavigationView")).toEqual([
@@ -177,57 +178,69 @@ describe("reading the answer", () => {
       "sections",
     ]);
     expect(backendModelFields("src/brain/navigation_routes.py", "SectionView")).toEqual([
+      "group",
       "heading",
       "entries",
     ]);
-    expect(backendModelFields("src/brain/navigation_routes.py", "EntryView")).toEqual([
-      "key",
-      "label",
-      "to",
-    ]);
+    expect(backendModelFields("src/brain/navigation_routes.py", "EntryView")).toEqual(["key", "label", "to", "tabs"]);
+    expect(backendModelFields("src/brain/navigation_routes.py", "TabView")).toEqual(["key", "label", "to"]);
 
+    // The support file reads the declaration token by token; a page written in a shape it skips
+    // would be a page these tests never draw. Every page the declaration spells is counted here.
     const declared = readRepoFile("src/brain/console/department_console.py");
-    const rows = [...declared.matchAll(/Entry\(label="([^"]+)", key="([^"]+)", to="([^"]+)"\)/g)].map(
-      (one) => ({ key: one[2], label: one[1], to: one[3] }),
+    const body = declared.slice(declared.indexOf("COMPANY_NAVIGATION: Final"), declared.indexOf("class ConsoleNavigation"));
+    const spelled = [...body.matchAll(/\bPage\(|\b_one\(/g)].length;
+    const read = [...declaredNavigation("company"), ...declaredNavigation("department")].flatMap((one) =>
+      one.entries.flatMap((entry) => (entry.tabs.length > 0 ? entry.tabs : [entry])),
     );
-    const sent = (departmentConsole().sections as { entries: unknown[] }[]).flatMap((one) => one.entries);
-    expect(rows.length).toBeGreaterThan(0);
-    expect(sent).toEqual(rows);
+    expect(read.length).toBe(spelled);
+    expect(addressesOf(COMPANY_CONSOLE)).toContain("/capabilities");
+    expect(declaredNavigation("department").map((one) => one.group)).not.toContain("platform");
   });
 
   test("a body is read whole or not at all", () => {
     // What breaks if this is deleted: a menu with one group missing, drawn from a body the reader
     // half understood, which is a menu the API did not send.
     expect(readNavigation(departmentConsole())?.groups.map((one) => one.heading)).toEqual([
-      "Operate",
-      "Govern",
-      "Report",
+      "Home",
+      "People and access",
+      "Agents and AI",
+      "Knowledge and data",
+      "Operations",
+      "Governance",
+      "Reports",
     ]);
-    expect(readNavigation(COMPANY_CONSOLE)).toEqual({ console: "company", departments: [], groups: [] });
+    const company = readNavigation(COMPANY_CONSOLE);
+    expect(company?.console).toBe("company");
+    expect(company?.groups.map((one) => one.key)).toEqual(COMPANY_CONSOLE.sections.map((one) => one.group));
+    const roles = company?.groups.flatMap((one) => one.sections).find((one) => one.label === "Roles and permissions");
+    expect(roles?.tabs.map((one) => one.to)).toEqual(["/roles", "/capabilities", "/scopes"]);
 
     const broken = departmentConsole();
-    (broken.sections as unknown[]).push({ heading: "Install", entries: [{ label: "No address" }] });
+    (broken.sections as unknown[]).push({ group: "platform", heading: "Platform", entries: [{ label: "No address", tabs: [] }] });
     expect(readNavigation(broken)).toBeNull();
+    const untabbed = departmentConsole();
+    (untabbed.sections as { entries: { tabs?: unknown }[] }[])[0]!.entries[0]!.tabs = undefined;
+    expect(readNavigation(untabbed)).toBeNull();
+    const ungrouped = departmentConsole();
+    (ungrouped.sections as { group?: unknown }[])[0]!.group = undefined;
+    expect(readNavigation(ungrouped)).toBeNull();
     expect(readNavigation({ ...departmentConsole(), departments: [7] })).toBeNull();
     expect(readNavigation({ ...departmentConsole(), sections: "all" })).toBeNull();
     expect(readNavigation(null)).toBeNull();
   });
 
-  test("the menu for no answer is the reader's own work, and the company's is its own constant", () => {
-    // What breaks if this is deleted: `menuFor` can hand back the company groups for a null answer,
-    // which is the fallback the shell test above refuses, proved here without a render.
-    const company: NavGroup[] = [{ heading: "Install", sections: [{ to: "/install", label: "This install" }] }];
-    const own: NavGroup = { heading: "Use", sections: [{ to: "/ask", label: "Ask" }] };
+  test("the menu for no answer is the reader's own work, and an answer follows it whichever console it is", () => {
+    // What breaks if this is deleted: `menuFor` can hand back a served menu for a null answer, which
+    // is the fallback the shell test above refuses, proved here without a render.
+    const own: NavGroup = { key: "use", heading: "Use", sections: [{ to: "/ask", label: "Ask", tabs: [] }] };
     const department = readNavigation(departmentConsole());
+    const company = readNavigation(COMPANY_CONSOLE);
 
-    expect(menuFor(null, company, own)).toEqual([own]);
-    expect(menuFor(readNavigation(COMPANY_CONSOLE), company, own)).toBe(company);
-    expect(menuFor(department, company, own).map((one) => one.heading)).toEqual([
-      "Operate",
-      "Govern",
-      "Report",
-      "Use",
-    ]);
+    expect(menuFor(null, own)).toEqual([own]);
+    expect(menuFor(company, own).map((one) => one.heading)).toEqual(["Use", ...COMPANY_CONSOLE.sections.map((one) => one.heading)]);
+    expect(menuFor(department, own).map((one) => one.heading)[0]).toBe("Use");
+    expect(menuFor(department, own).map((one) => one.heading)).not.toContain("Platform");
   });
 });
 

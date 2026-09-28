@@ -43,6 +43,7 @@ import ast
 import inspect
 import json
 from dataclasses import fields as dataclass_fields
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -64,6 +65,7 @@ from brain.console.screens import (
     Disclosure,
     Group,
     Lens,
+    ModuleGroup,
     Screen,
     for_department,
     grouped,
@@ -136,6 +138,7 @@ def a_screen(key: str, *, axes: frozenset[Axis]) -> Screen:
         key=key,
         title=key.replace("_", " ").title(),
         group=Group.OPERATE,
+        module_group=ModuleGroup.OPERATIONS,
         read=ConsoleRead(
             screen=key,
             tool=f"console.{key}",
@@ -861,6 +864,7 @@ def test_a_screen_wired_to_another_screens_read_cannot_be_constructed() -> None:
             key="mine",
             title="Mine",
             group=Group.OPERATE,
+            module_group=ModuleGroup.OPERATIONS,
             read=ConsoleRead(
                 screen="somebody_elses",
                 tool="console.mine",
@@ -899,6 +903,7 @@ def test_a_screen_with_no_axes_and_a_screen_with_no_purpose_are_both_refused() -
             key="mine",
             title="Mine",
             group=Group.OPERATE,
+            module_group=ModuleGroup.OPERATIONS,
             read=read,
             axes=axes,
             intended_for=frozenset({Role.SUPER_ADMIN}),
@@ -1056,3 +1061,57 @@ def test_the_registry_answers_each_thing_the_owner_asked_for() -> None:
 
     assert screen("halt").read.requires == Capability(value="admin:halt")
     assert Axis.PERIOD in screen("budget").axes
+
+
+def test_every_screen_sits_in_a_module_group_and_the_groups_are_the_designs() -> None:
+    """The menu's grouping is a registry field, and its nine groups are the ones SCREEN 1 of
+    `docs/screens.html` draws after the reader's own work, in that order. Read from the page rather
+    than typed here, so the enum cannot be compared with itself.
+
+    Delete this and a group can be renamed or reordered in the registry with the design still
+    drawing the old one, which is the drift `brain.ops.console_design` exists to report and would
+    then report against a menu nobody chose."""
+    from brain.ops.console_design import design_navigation
+
+    drawn = [one for one in design_navigation(REPO) if one != "Use"]
+
+    assert [one.heading for one in ModuleGroup] == drawn
+    assert all(isinstance(one.module_group, ModuleGroup) for one in SCREENS)
+    assert {one.key for one in SCREENS if one.module_group is ModuleGroup.PLATFORM} >= {
+        one.key for one in SCREENS if one.group is Group.INSTALL
+    }
+
+
+def test_screen_gaps_reports_an_install_screen_filed_outside_platform(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A screen about the server has to sit in Platform, the group a department's console never
+    draws. Filed under Home it would sit beside the Dashboard in a menu whose Platform group was
+    the only thing kept off a department's console.
+
+    Delete this and the check can be removed from `screen_gaps` with the registry still correct
+    today, and the next Install screen added under another group is filed there silently."""
+    import brain.console.screens as screens_module
+
+    stray = Screen(
+        key="install",
+        title="This install",
+        group=Group.INSTALL,
+        module_group=ModuleGroup.HOME,
+        read=ConsoleRead(
+            screen="install",
+            tool="console.install",
+            requires=Capability(value="read:release"),
+            plane=Plane.CONFIGURATION,
+        ),
+        axes=EVERYWHERE,
+        intended_for=frozenset({Role.SUPER_ADMIN}),
+        purpose="an install screen a test filed under the wrong group",
+    )
+    monkeypatch.setattr(screens_module, "SCREENS", (stray,))
+
+    assert any("is about the installation" in one for one in screen_gaps())
+
+    filed = replace(stray, module_group=ModuleGroup.PLATFORM)
+    monkeypatch.setattr(screens_module, "SCREENS", (filed,))
+    assert not any("is about the installation" in one for one in screen_gaps())

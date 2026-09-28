@@ -54,6 +54,7 @@ import {
 } from "../src/pages/connectorsQuery";
 import { STATE_TONES } from "../src/ui/Status";
 import { everythingInStorage, fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
+import { declaredNavigation } from "./support/navigation";
 import { declaredPropertyNames, declaredRequestBodySchema } from "./support/openapi";
 import { backendModelFields } from "./support/python";
 import { readConsoleFile, readRepoFile } from "./support/repo";
@@ -296,12 +297,17 @@ describe("what this page agrees with the API about", () => {
     }
   });
 
-  test("the shell offers this screen under the label the design names, in Operate", () => {
+  test("the served menu offers this screen under the label the design names, in Knowledge and data", () => {
     // What breaks if this is deleted: the entry drifts to the registry's title, "Connector health",
-    // and `brain.ops.console_design.navigation_gaps` reports a screen that cannot be found.
-    const shell = readConsoleFile("src/layout/Shell.tsx");
-    expect(shell).toContain(`{ to: "${CONNECTORS_PATH}", label: "${CONNECTORS_LABEL}" }`);
-    expect(shell.indexOf(CONNECTORS_PATH)).toBeLessThan(shell.indexOf('label: "Roles"'));
+    // or to another group, and `brain.ops.console_design.navigation_gaps` reports a screen that
+    // cannot be found. The menu is the API's since 2026-09-28, so it is read from the declaration
+    // the route serves, in both consoles.
+    for (const which of ["company", "department"] as const) {
+      const holding = declaredNavigation(which).filter((one) =>
+        one.entries.some((entry) => entry.to === CONNECTORS_PATH && entry.label === CONNECTORS_LABEL),
+      );
+      expect(holding.map((one) => one.heading), which).toEqual(["Knowledge and data"]);
+    }
   });
 
   test("no row model carries a field that could hold a vault path or a key", () => {

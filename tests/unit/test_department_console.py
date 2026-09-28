@@ -59,11 +59,16 @@ from brain.audit.ledger import AuditAction, AuditChain
 from brain.audit.view import AuditView
 from brain.console.connector_trust import trust_rows
 from brain.console.department_console import (
+    COMPANY_NAVIGATION,
     DEPARTMENT_NAVIGATION,
+    THE_COMPANY_MENU_IS_THE_SAME_FOR_EVERYBODY_GIVEN_IT,
     ConsoleKind,
     ConsoleNavigation,
     Entry,
+    Page,
+    Section,
     console_for,
+    department_section,
     departments_held,
     held_across_the_install,
 )
@@ -73,7 +78,7 @@ from brain.console.operate import unattended_running
 from brain.console.questions_view import questions_for_reader
 from brain.console.reach_view import TierThreeRouting
 from brain.console.reads import Plane, permitted, plane_capability
-from brain.console.screens import SCREENS, Group, for_department, screen
+from brain.console.screens import SCREENS, Group, ModuleGroup, for_department, screen
 from brain.console.usage_screen import usage_for_reader
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.principal import PrincipalKind
@@ -82,7 +87,7 @@ from brain.gate.context import Channel
 from brain.identity.staff_source import DEFAULT_TRUST, Roster, StaffRecord
 from brain.identity.staff_sync import audit_reach_for_head
 from brain.knowledge.visibility import Visibility
-from brain.navigation_routes import NavigationView
+from brain.navigation_routes import NavigationView, navigation_view
 from brain.ops.question_gap_store import Gap
 from tests.fixtures.http_client import Response
 from tests.unit.test_api_routes import Directory, Keys, NoCache, Versions, token_for, verifier
@@ -154,17 +159,29 @@ def test_a_reader_holding_every_screen_in_one_department_is_given_that_departmen
 
     assert decided.kind is ConsoleKind.DEPARTMENT
     assert decided.departments == (MAINTENANCE,)
-    assert [one.heading for one in decided.sections] == ["Operate", "Govern", "Report"]
+    assert [one.heading for one in decided.sections] == [
+        "Home",
+        "People and access",
+        "Agents and AI",
+        "Knowledge and data",
+        "Operations",
+        "Governance",
+        "Reports",
+    ]
     assert [[one.label for one in section.entries] for section in decided.sections] == [
-        ["Department", "Live runs", "Connectors"],
-        ["People and grants", "Agents and leashes", "Knowledge", "Skills", "Learning", "Audit"],
-        ["Gaps", "Usage"],
+        ["Department"],
+        ["People"],
+        ["Agents", "Skills and tools"],
+        ["Connectors", "Knowledge", "Learning and memory"],
+        ["Runs and queue"],
+        ["Audit log"],
+        ["Questions and gaps", "Usage and cost"],
     ]
 
 
 def test_a_reader_holding_one_screen_across_the_install_is_given_the_company_console() -> None:
-    """One unrestricted screen is enough, and the company console carries no menu and names no
-    department, because its menu is the shell's own and identical for everybody given it.
+    """One unrestricted screen is enough, and the company console carries its whole menu and names
+    no department, because its menu is identical for everybody given it.
 
     Built without a second grant of the same capability, because `EntitlementSet.scope_for`
     intersects the scopes of every grant covering one capability: holding `read:release` in
@@ -185,8 +202,9 @@ def test_a_reader_holding_one_screen_across_the_install_is_given_the_company_con
         grants=(*scoped.grants, Grant(capability=Capability(value="read:release"), scope=WHOLE)),
     )
 
-    assert console_for(plus_one, NOW) == ConsoleNavigation(kind=ConsoleKind.COMPANY)
-    assert console_for(every_screen(WHOLE), NOW) == ConsoleNavigation(kind=ConsoleKind.COMPANY)
+    company = ConsoleNavigation(kind=ConsoleKind.COMPANY, sections=COMPANY_NAVIGATION)
+    assert console_for(plus_one, NOW) == company
+    assert console_for(every_screen(WHOLE), NOW) == company
     assert console_for(twice, NOW).kind is ConsoleKind.DEPARTMENT
 
 
@@ -253,7 +271,7 @@ def test_a_section_with_nothing_offered_in_it_is_dropped_rather_than_shown_empty
     screens there they may not open, the count of hidden things written as a word."""
     decided = console_for(holding("read:usage", scope=IN_MAINTENANCE), NOW)
 
-    assert [one.heading for one in decided.sections] == ["Report"]
+    assert [one.heading for one in decided.sections] == ["Reports"]
     assert entry_keys(decided) == ["usage"]
 
 
@@ -302,29 +320,166 @@ def test_no_screen_whose_subject_is_the_installation_is_offered_to_a_department(
     install = {one.key for one in SCREENS if one.group is Group.INSTALL}
     assert install == {"install", "updates", "recovery", "limits", "connections"}
 
-    declared = {one.key for section in DEPARTMENT_NAVIGATION for one in section.entries}
+    declared = {
+        page.key
+        for section in DEPARTMENT_NAVIGATION
+        for one in section.entries
+        for page in one.pages
+    }
     assert not declared & install
+    assert ModuleGroup.PLATFORM not in {one.group for one in DEPARTMENT_NAVIGATION}
 
     with pytest.raises(ValueError, match="subject is the installation"):
-        Entry(label="This install", key="install", to="/install")
+        department_section(
+            ModuleGroup.PEOPLE,
+            Entry(
+                label="This install",
+                pages=(Page(label="This install", to="/install", key="install"),),
+            ),
+        )
 
     reader = every_screen(IN_MAINTENANCE)
     assert not {one.key for one in for_department(reader, NOW)} & install
     assert not set(entry_keys(console_for(reader, NOW))) & install
 
 
-def test_every_entry_opens_an_address_the_console_routes() -> None:
-    """Each entry's address is a path in `console/src/App.tsx`. Read from the route table rather
-    than typed, so an entry cannot point at a page nobody routes.
+def test_every_entry_and_every_tab_opens_an_address_the_console_routes() -> None:
+    """Each page of both menus is a path a page's route file declares. Read from the route files
+    rather than typed, so an entry cannot point at a page nobody routes.
 
-    Delete this and the department's menu can link to the console's own not-found page, which
-    reads to a department admin as a screen that exists and refuses them."""
-    table = (REPO / "console" / "src" / "App.tsx").read_text(encoding="utf-8")
-    routed = set(re.findall(r'path:\s*"([^"]*)"', table))
+    Delete this and a menu can link to the console's own not-found page, which reads to an
+    administrator as a screen that exists and refuses them."""
+    routed: set[str] = set()
+    for table in (REPO / "console" / "src" / "pages").glob("*.route.tsx"):
+        text = table.read_text(encoding="utf-8")
+        routed.update(re.findall(r'path:\s*"([^"]*)"', text))
+        if re.search(r"index:\s*true", text):
+            routed.add("")
 
-    for section in DEPARTMENT_NAVIGATION:
-        for entry in section.entries:
-            assert entry.to.lstrip("/") in routed, entry.to
+    offered = [
+        page.to
+        for menu in (COMPANY_NAVIGATION, DEPARTMENT_NAVIGATION)
+        for section in menu
+        for entry in section.entries
+        for page in entry.pages
+    ]
+    assert len(offered) > 40
+    for address in offered:
+        assert address.lstrip("/") in routed, address
+
+
+# --------------------------------------------------------------------------- the declarations
+
+
+def test_a_department_section_refuses_the_platform_group() -> None:
+    """The second refusal of M27.7.29's last clause, at the declaration: a department's menu has no
+    Platform group, whatever pages it would hold. The positive sibling builds a People section.
+
+    Delete this and a Platform group can be declared on the department console, whose every page
+    is about the server a department admin does not administer."""
+    people = Entry(label="People", pages=(Page(label="People", to="/people", key="people"),))
+
+    with pytest.raises(ValueError, match="offers no Platform group"):
+        department_section(ModuleGroup.PLATFORM, people)
+    assert department_section(ModuleGroup.PEOPLE, people).entries == (people,)
+
+
+def test_a_department_page_must_open_a_registry_screen() -> None:
+    """A department's menu is narrowed by the registry, so a page with no registry screen is one
+    nothing could narrow, and it is refused rather than offered to every department admin.
+
+    Delete this and the company console's pages with no registry screen can be copied into the
+    department's menu, where every department admin is offered them unnarrowed."""
+    settings = Entry(label="Settings", pages=(Page(label="Settings", to="/settings"),))
+
+    with pytest.raises(ValueError, match="opens no registry screen"):
+        department_section(ModuleGroup.PEOPLE, settings)
+
+
+def test_a_section_refuses_a_page_the_registry_files_under_another_group() -> None:
+    """The registry field and the menu give one answer about where a screen lives: People filed
+    under Home is refused, and under People and access is built.
+
+    Delete this and the menu can draw a screen in a group the registry does not, and
+    `brain.ops.console_design` compares the design with a menu the registry disagrees with."""
+    people = Entry(label="People", pages=(Page(label="People", to="/people", key="people"),))
+
+    with pytest.raises(ValueError, match="files under People and access"):
+        Section(group=ModuleGroup.HOME, entries=(people,))
+    assert Section(group=ModuleGroup.PEOPLE, entries=(people,)).heading == "People and access"
+
+
+def test_an_entry_and_its_pages_are_checked_when_they_are_built() -> None:
+    """An entry with no page, a page whose address is not a console address and a page naming a
+    screen nothing registers are each refused, and a well-formed entry opens its first page.
+
+    Delete this and a menu entry can link to nothing, or claim a screen the registry does not
+    hold, and the first person to notice is somebody clicking it."""
+    with pytest.raises(ValueError, match="has no page"):
+        Entry(label="Empty", pages=())
+    with pytest.raises(ValueError, match="not a console address"):
+        Page(label="Loose", to="people")
+    with pytest.raises(KeyError):
+        Page(label="Ghost", to="/ghost", key="ghost")
+
+    roles = next(
+        one
+        for section in COMPANY_NAVIGATION
+        for one in section.entries
+        if one.label == "Roles and permissions"
+    )
+    assert (roles.to, roles.key) == ("/roles", "roles")
+    assert [page.to for page in roles.pages] == ["/roles", "/capabilities", "/scopes"]
+
+
+def test_the_company_menu_is_the_nine_groups_with_one_entry_per_module() -> None:
+    """The company console's menu is every module group, in the order the registry's enum holds
+    them, and no page appears twice across the whole menu, tabs included.
+
+    Delete this and a group can be left out of the menu the API serves, or a page listed under two
+    entries, which marks two entries current and tells nobody where it lives."""
+    assert [one.group for one in COMPANY_NAVIGATION] == list(ModuleGroup)
+    pages = [
+        page.to for section in COMPANY_NAVIGATION for one in section.entries for page in one.pages
+    ]
+    assert len(pages) == len(set(pages))
+    assert "/requirement-checks" not in pages
+    assert "/department" not in pages
+
+
+def test_the_company_menu_is_the_same_for_every_reader_given_it() -> None:
+    """Two company administrators holding different screens are served one menu, whole, including
+    the modules one of them cannot open. See `THE_COMPANY_MENU_IS_THE_SAME_FOR_EVERYBODY_GIVEN_IT`.
+
+    Delete this and the company menu can start narrowing by grants, which hides Learning and
+    memory from the first administrator, who holds no content plane and is the one person the page
+    explaining that is for."""
+    assert "content plane" in THE_COMPANY_MENU_IS_THE_SAME_FOR_EVERYBODY_GIVEN_IT
+    one_screen = holding("read:release", scope=WHOLE)
+    everything = every_screen(WHOLE)
+
+    assert console_for(one_screen, NOW) == console_for(everything, NOW)
+    assert console_for(one_screen, NOW).sections == COMPANY_NAVIGATION
+
+
+def test_an_entry_is_served_with_its_pages_as_tabs_only_when_it_has_several() -> None:
+    """On the wire a module of several pages carries them as tabs, and a module of one page carries
+    none, so the shell draws a tab strip only where there is somewhere to go.
+
+    Delete this and the tabs can be dropped on the way to the browser, and Capabilities and Scopes
+    stop being reachable from anywhere in the console."""
+    served = navigation_view(
+        ConsoleNavigation(kind=ConsoleKind.COMPANY, sections=COMPANY_NAVIGATION)
+    )
+    entries = {one.label: one for section in served.sections for one in section.entries}
+
+    assert [tab.to for tab in entries["Roles and permissions"].tabs] == [
+        "/roles",
+        "/capabilities",
+        "/scopes",
+    ]
+    assert entries["People"].tabs == []
+    assert [section.group for section in served.sections] == [one.value for one in ModuleGroup]
 
 
 # --------------------------------------------------------------------------- over the wire
@@ -393,21 +548,28 @@ def test_the_route_answers_each_reader_the_console_their_grants_give_them(
     served = [one["key"] for section in body["sections"] for one in section["entries"]]
     assert served == [
         "overview",
-        "runs",
-        "connectors",
         "people",
         "agents",
-        "library",
         "skills",
+        "connectors",
+        "library",
         "learning",
+        "runs",
         "audit",
         "questions",
         "usage",
     ]
+    assert "platform" not in [section["group"] for section in body["sections"]]
     for word in ("install", "updates", "recovery", "limits", "connections", "storage", "features"):
         assert f'"/{word}"' not in narrow.text
 
-    assert wide.json() == {"console": "company", "departments": [], "sections": []}
+    company = wide.json()
+    assert company["console"] == "company"
+    assert company["departments"] == []
+    assert [one["group"] for one in company["sections"]] == [one.value for one in ModuleGroup]
+    assert company == navigation_view(
+        ConsoleNavigation(kind=ConsoleKind.COMPANY, sections=COMPANY_NAVIGATION)
+    ).model_dump(mode="json")
     assert none.status_code == 200
     assert none.json() == {"console": "department", "departments": [], "sections": []}
 

@@ -4,21 +4,23 @@
  * **The API decides which console a reader is given, and this file decides nothing.**
  * `GET /api/v1/console/navigation` is `brain.navigation_routes`, which projects
  * `brain.console.department_console.console_for`: the company console for a reader who holds some
- * screen across the whole install, and otherwise a department's console, with the menu
- * `docs/screens.html` SCREEN 2 draws narrowed to what the reader holds. This module reads that
+ * screen across the whole install, with its whole menu, and otherwise a department's console, with
+ * the menu `docs/screens.html` SCREEN 2 draws narrowed to what the reader holds. Both menus are in
+ * the answer since 2026-09-28, in the module groups of the console plan, each group with a stable
+ * key and each entry with its module's pages as tabs when it has several. This module reads that
  * body and turns it into groups the shell renders. It holds no rule about who sees what, and a
  * body it cannot read is no answer rather than a guess.
  *
  * **An unreadable answer is the same as no answer, and no answer offers only the reader's own
- * work.** `menuFor` returns the company console's groups only when the API said `company`. A
- * pending request, a failed one and a body that is not a navigation all give the Use group alone,
- * because the other default is the company console, which offers every screen about this server
- * to somebody the API has not said may see one. See `A_MENU_NOBODY_ANSWERED_OFFERS_ONLY_YOUR_OWN_WORK`.
+ * work.** `menuFor` returns the served groups only when the API answered. A pending request, a
+ * failed one and a body that is not a navigation all give the Use group alone, because the other
+ * default is the company console, which offers every screen about this server to somebody the API
+ * has not said may see one. See `A_MENU_NOBODY_ANSWERED_OFFERS_ONLY_YOUR_OWN_WORK`.
  *
  * **Nothing is counted.** The answer carries no total and this file adds none: an entry is drawn or
  * it is not, and a group with nothing in it was never sent.
  *
- * Task ids: M27.7.29
+ * Task ids: M27.7.29, M27.10.1
  */
 
 import type { components } from "../api/schema";
@@ -36,14 +38,24 @@ export const A_MENU_NOBODY_ANSWERED_OFFERS_ONLY_YOUR_OWN_WORK =
 /** Where the API answers, under the API base. */
 export const NAVIGATION_API_PATH = "/console/navigation";
 
-/** One entry in the menu. */
-export interface NavSection {
+/** One page of a module, drawn as a tab above the page when the module has several. */
+export interface NavTab {
   readonly to: string;
   readonly label: string;
 }
 
-/** A heading in the menu and the entries under it. */
+/** One entry in the menu: a module, the address it opens, and its pages when it has several. */
+export interface NavSection {
+  readonly to: string;
+  readonly label: string;
+  /** Empty for a module of one page. */
+  readonly tabs: readonly NavTab[];
+}
+
+/** A group in the menu, its stable key, its heading and the entries under it. */
 export interface NavGroup {
+  /** The group's key, which chooses its icon; never shown. */
+  readonly key: string;
   readonly heading: string;
   readonly sections: readonly NavSection[];
 }
@@ -53,7 +65,7 @@ export interface ConsoleAnswer {
   readonly console: "company" | "department";
   /** The departments the reader's own grants name. Empty for the company console. */
   readonly departments: readonly string[];
-  /** The department console's groups, in the order sent. Empty for the company console. */
+  /** The console's groups, in the order sent. */
   readonly groups: readonly NavGroup[];
 }
 
@@ -61,7 +73,7 @@ function isText(value: unknown): value is string {
   return typeof value === "string" && value !== "";
 }
 
-function readSection(value: unknown): NavSection | null {
+function readTab(value: unknown): NavTab | null {
   if (typeof value !== "object" || value === null) {
     return null;
   }
@@ -72,19 +84,32 @@ function readSection(value: unknown): NavSection | null {
   return { to: entry.to, label: entry.label };
 }
 
+function readSection(value: unknown): NavSection | null {
+  const read = readTab(value);
+  const tabs = (value as { tabs?: unknown } | null)?.tabs;
+  if (read === null || !Array.isArray(tabs)) {
+    return null;
+  }
+  const pages = tabs.map(readTab);
+  if (pages.some((one) => one === null)) {
+    return null;
+  }
+  return { ...read, tabs: pages as NavTab[] };
+}
+
 function readGroup(value: unknown): NavGroup | null {
   if (typeof value !== "object" || value === null) {
     return null;
   }
-  const section = value as { heading?: unknown; entries?: unknown };
-  if (!isText(section.heading) || !Array.isArray(section.entries)) {
+  const section = value as { group?: unknown; heading?: unknown; entries?: unknown };
+  if (!isText(section.group) || !isText(section.heading) || !Array.isArray(section.entries)) {
     return null;
   }
   const sections = section.entries.map(readSection);
   if (sections.length === 0 || sections.some((one) => one === null)) {
     return null;
   }
-  return { heading: section.heading, sections: sections as NavSection[] };
+  return { key: section.group, heading: section.heading, sections: sections as NavSection[] };
 }
 
 /**
@@ -119,22 +144,36 @@ export function readNavigation(payload: unknown): ConsoleAnswer | null {
 }
 
 /**
- * The groups the shell draws for an answer, given the company console's own groups and the Use
- * group every console ends with.
+ * The groups the shell draws for an answer, given the group of the reader's own work that every
+ * console starts with.
  *
- * The company console is its constant whole. A department's console is the groups the API sent,
- * then Use. No answer is Use alone.
+ * The reader's own work, then the groups the API sent, whichever console it is. No answer is the
+ * reader's own work alone.
  */
-export function menuFor(
-  answer: ConsoleAnswer | null,
-  company: readonly NavGroup[],
-  own: NavGroup,
-): readonly NavGroup[] {
+export function menuFor(answer: ConsoleAnswer | null, own: NavGroup): readonly NavGroup[] {
   if (answer === null) {
     return [own];
   }
-  if (answer.console === "company") {
-    return company;
+  return [own, ...answer.groups];
+}
+
+/** Whether an address is at a menu address or inside it. The root matches only itself. */
+export function isAt(pathname: string, to: string): boolean {
+  if (to === "/") {
+    return pathname === "/";
   }
-  return [...answer.groups, own];
+  return pathname === to || pathname.startsWith(`${to}/`);
+}
+
+/** The entry an address belongs to: its own address or one of its tabs', or `null` for none. */
+export function entryAt(groups: readonly NavGroup[], pathname: string): NavSection | null {
+  for (const group of groups) {
+    for (const section of group.sections) {
+      const addresses = [section.to, ...section.tabs.map((one) => one.to)];
+      if (addresses.some((one) => isAt(pathname, one))) {
+        return section;
+      }
+    }
+  }
+  return null;
 }

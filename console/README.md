@@ -304,6 +304,31 @@ Inside the shell there are three: the overview at `/`, the records screen at `/r
 loaded on demand, because it is the only one that reaches the table and form libraries, and
 what that saves is measured further down.
 
+That paragraph is the first day's console. Since 2026-09-28 every page inside the shell declares
+its own routes, and the menu is the API's.
+
+### Adding a page
+
+A page is two files and a line of Python, and it edits neither `src/App.tsx` nor
+`src/layout/Shell.tsx`:
+
+1. `src/pages/<Page>.tsx`, the page itself.
+2. `src/pages/<Page>.route.tsx`, which exports `routes: PageRoutes` (every address the page
+   answers at, as `{ path: "...", element: <Page /> }`), and `ownWork: OwnWorkEntry` only when the
+   page is the reader's own work and belongs in the Use group. `src/routes/registry.ts` collects
+   every route file with an eager `import.meta.glob`, so nothing else lists it. A page that mounts
+   a heavy library or imports a stylesheet of its own is written there as
+   `lazy(async () => ({ default: (await import("./<Page>")).<Page> }))`;
+   `tests/bundle-split.test.ts` follows the glob and fails when a route file reaches one statically.
+3. Its menu entry, in `src/brain/console/department_console.py`: a `Page` in the `Entry` of the
+   module it belongs to (a tab), or a new `Entry` in its `ModuleGroup`'s `Section` of
+   `COMPANY_NAVIGATION`, and in `DEPARTMENT_NAVIGATION` too if a department admin is offered it.
+   The API serves both menus; `brain.ops.console_design` compares them with `docs/screens.html`,
+   so a new entry is drawn in SCREEN 1 (and SCREEN 2) first.
+4. Its page case in `tests/support/pageCases.ts` and its area in `tests/support/consoleAudit.ts`,
+   then `WRITE_CONSOLE_AUDIT=1 npx vitest run tests/console-audit.test.ts`, which rewrites only
+   the file of the area the page belongs to under `docs/console-audit/`.
+
 The two sign-in routes sit outside the guard, and both would be bugs inside it: the
 callback is where a session comes from, so guarding it is a loop, and the signed-out page
 exists because there is no session, so guarding it would sign the person back in and undo

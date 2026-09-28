@@ -96,36 +96,31 @@ code {
 
 /* ------------------------------------------------------------------ the shell */
 
-.shell {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-
+/*
+ * The header and the page column. The menu beside them is the component layer's sidebar
+ * (`layout/ConsoleSidebar.tsx`), styled by Tailwind rather than here; this sheet keeps the part of
+ * the frame the old pages sit inside. Until 2026-09-28 this section also held the menu, a strip of
+ * every link above the page on a phone and a column beside it on a wider screen, and a strip of
+ * forty entries is no longer a menu anybody can use: the phone's menu is a drawer behind a
+ * visible Menu button now, the first control after the skip link.
+ */
 .shell__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
   flex-wrap: wrap;
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-2) var(--space-4);
   background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
 
-.shell__brand {
-  display: inline-flex;
+/* The Menu button, then the departments this console is bounded to, when it is a department's. */
+.shell__header-start {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2);
-  font-weight: 600;
-  letter-spacing: 0.01em;
-}
-
-/* The install's own logo, held to the header's line height whatever size it was drawn at. */
-.shell__logo {
-  height: 1.5rem;
-  width: auto;
-  max-width: 8rem;
+  gap: var(--space-3);
 }
 
 /*
@@ -149,29 +144,6 @@ code {
 }
 
 /*
- * A phone's frame is the base, because approvals arrive on phones: the navigation sits above
- * the page rather than beside it, and every link is a thumb tall. The sidebar is the
- * enhancement, in the `min-width` query further down. Until 2026-09-15 this was the other way
- * round, with the phone as a `max-width` patch over a desktop layout, which made a mobile-first
- * approvals page sit inside a frame whose phone case was the afterthought.
- *
- * **On a phone the navigation is one strip that scrolls sideways inside itself, and the page
- * does not.** Until 2026-09-16 it was a wrapping row, and a wrapping row of twenty-nine links is
- * a column of them: measured in Chrome with the console's own sheets, a person opening an
- * approval from a chat message on a 360 pixel phone met 716 pixels of navigation, the page
- * began 822 pixels down and the card 1003, so the first screen they saw held nothing but the
- * menu. The strip keeps every link above the page, in the document's order and a thumb tall,
- * and puts the card on the first screen. A menu button that opens the list was the other way
- * to get there; it needs markup and state in `layout/Shell.tsx`, and a closed menu is a
- * navigation that is hidden on a phone until somebody finds what opens it.
- */
-.shell__body {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-}
-
-/*
  * The banner for a sign-in without a second factor. The notice inside it has the one appearance
  * every notice has; this only gives it room under the header, and lets it use the width a phone has.
  */
@@ -181,65 +153,6 @@ code {
 
 .shell__banner .notice {
   max-width: none;
-}
-
-.shell__nav {
-  display: flex;
-  gap: var(--space-4);
-  overflow-x: auto;
-  padding: var(--space-2) var(--space-3);
-  border-bottom: 1px solid var(--border);
-}
-
-.shell__nav-group {
-  flex: 0 0 auto;
-}
-
-.shell__nav ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: nowrap;
-  gap: var(--space-1);
-}
-
-.shell__nav-heading {
-  margin: 0 0 var(--space-1);
-  padding: 0 var(--space-3);
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-/* A thumb is not a cursor. 2.75rem is 44 CSS pixels at the default root size. */
-.shell__nav-link {
-  display: flex;
-  align-items: center;
-  min-height: 2.75rem;
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius);
-  color: var(--text);
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.shell__nav-link:hover {
-  background: var(--surface-sunken);
-}
-
-/*
- * Current section. The underline is here because colour alone is not a signal: about one
- * man in twelve cannot rely on it, and a nav where the only difference is a shade is a nav
- * they have to read twice.
- */
-.shell__nav-link--current {
-  background: var(--surface-sunken);
-  font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 3px;
 }
 
 .shell__main {
@@ -277,46 +190,11 @@ code {
 /* --------------------------------------------------------------- wider screens */
 
 /*
- * The sidebar, for a screen with room for one. Everything else about the shell is the phone's
- * rule above and is not repeated here. The links keep their 44 pixel height on a wide screen
- * too: a touch laptop has a thumb as well, and one height is one fewer rule to keep in step.
+ * More room around the page on a screen with room for it. The sidebar's own width is the
+ * component layer's (`components/ui/sidebar.tsx`), and everything else about the frame is the
+ * phone's rule above and is not repeated here.
  */
 @media (min-width: 48rem) {
-  .shell__body {
-    flex-direction: row;
-    align-items: flex-start;
-  }
-
-  .shell__nav {
-    display: block;
-    width: var(--shell-nav-width);
-    flex: 0 0 auto;
-    overflow-x: visible;
-    padding: var(--space-4) var(--space-3);
-    border-bottom: none;
-    border-right: 1px solid var(--border);
-  }
-
-  .shell__nav ul {
-    flex-direction: column;
-    flex-wrap: nowrap;
-  }
-
-  /*
-   * A group heading names what the entries under it are for. Small and quiet, because it
-   * labels the links rather than competing with them, and spaced from the group above so the
-   * grouping reads without a rule between groups. On a phone the groups sit side by side in
-   * the strip and the gap between them does this.
-   */
-  .shell__nav-group + .shell__nav-group {
-    margin-top: var(--space-3);
-  }
-
-  /* A sidebar has a width, so a long label wraps inside it rather than widening it. */
-  .shell__nav-link {
-    white-space: normal;
-  }
-
   .shell__main {
     padding: var(--space-5) var(--space-4);
   }

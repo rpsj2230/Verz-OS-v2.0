@@ -453,7 +453,7 @@ def test_a_signed_in_head_reads_through_get_audit_exactly_their_peoples_entries(
     statements; the route is the application's own, with the screen's gate and `AuditView`
     inside it. Priya's and Wei's entries about kinds a head reads come back, newest first, and
     nothing by Sam, nothing of a kind a head does not read, and nothing by an administrator.
-    The navigation offers the head their department's console with Audit under Govern.
+    The navigation offers the head their department's console with the Audit log under Governance.
 
     Delete this and the grants can be written, each correct, and open no screen and no menu
     entry, which is where every head stood until the plane was written beside the page."""
@@ -473,7 +473,7 @@ def test_a_signed_in_head_reads_through_get_audit_exactly_their_peoples_entries(
     assert menu.status_code == 200, menu.text
     assert menu.json()["console"] == "department"
     assert menu.json()["departments"] == ["maintenance"]
-    assert menu_of(menu.json()) == [("Govern", ["audit"])]
+    assert menu_of(menu.json()) == [("Governance", ["audit"])]
 
 
 def test_a_reader_the_rewrite_wrote_nothing_for_is_refused_as_anybody_else_is() -> None:
@@ -821,7 +821,7 @@ def test_through_the_database_the_audit_route_answers_a_signed_in_head_their_peo
     }
     assert "total" not in page
     assert menu["departments"] == ["maintenance"]
-    assert ("Govern", ["audit"]) in menu_of(menu)
+    assert ("Governance", ["audit"]) in menu_of(menu)
 
 
 @pytest.mark.needs_db

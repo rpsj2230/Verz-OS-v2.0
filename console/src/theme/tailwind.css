@@ -26,7 +26,8 @@
  * which `app.css` makes a flex column, and Tailwind's `grid` is `display: grid` in a layer that
  * now outranks `app.css`, so the word appearing anywhere Tailwind reads would change the display
  * of every existing table at once. So Tailwind reads only
- * `components/ui/`, a page that moves adds its own directory below, and every class an old page
+ * `components/ui/` and `layout/` (the shell moved on 2026-09-28), a page that moves adds its own
+ * directory below, and every class an old page
  * uses that Tailwind could also generate is refused outright with `@source not inline`.
  * `tests/tailwind-foundation.test.ts` compiles this file the way the build does and asserts that
  * no class name in an old sheet or an old page comes out as a utility.
@@ -59,6 +60,7 @@
 @import "@fontsource/poppins/latin-600.css";
 
 @source "../components/ui";
+@source "../layout";
 @source not inline("grid");
 
 /*
