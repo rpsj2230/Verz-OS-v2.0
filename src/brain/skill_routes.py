@@ -97,7 +97,32 @@ triggers and the checks against a scratch PostgreSQL, which the development mach
 over the rows `catalogue` built from the agents this reader's audience covers, with the agent load
 bounded by `MAX_AGENTS_CONSIDERED` whatever was asked.
 
+**The library is searched and filtered on the server too (W2.8, M27.11.8).** `GET /skills/library`
+is one row per version, the library as this reader may list it, with its review state, whether it
+is retired, its categories and how many of the agents this reader may see run it, through
+`LIBRARY_LISTING`. A reader the library is not listed to is answered an empty page, the same page
+an empty library gives. It takes no path parameter, so the rejected read by name stays rejected.
+
+**A version is retired and reinstated, and a skill detached, as rows (M27.15.55, M27.15.56).**
+`POST /skills/{digest}/retirement` and `/reinstatement` ask for the skill authority over
+everything, as adding does, and write one `agent.skill_retirement` row each; an assignment of a
+retired version is refused in words. A retirement answers with the agents still running the
+version, among the agents the reader may see and never counted beyond them, for somebody to
+detach: see `brain.console.skill_library.A_RETIRED_VERSION_IS_KEPT_AND_ONLY_REFUSED_TO_NEW_AGENTS`.
+A retirement racing an assignment can leave the version on one more agent; that is the state a
+retirement already leaves, a retired version still held, and the page lists it for detaching.
+`POST /skills/{digest}/detachments` is the assignment route's mirror, asked in the same order of
+the same authority, and writes the agent's skills without the skill and a row naming the
+assignment it ended, under the install lock. Every pin on the page carries the agent's name and,
+when an assignment still in force put it there, when and by whom, from
+`brain.console.skill_library.current_assignments`.
+
+**People are named, and their identifiers kept for the Advanced section.** Who added a version,
+who decided it, who retired it and who assigned it are sent as display names beside the ids the
+page used to print, read from the directory for exactly those people.
+
 Task ids: M42.6.4, M27.8.6, M12.2.2, M12.2.3, M12.2.5, M12.2.6, M12.3.2, M12.4.6, M12.4.13
+Task ids: M27.11.8, M27.15.55, M27.15.56, M27.16.1
 """
 
 from __future__ import annotations
@@ -122,6 +147,7 @@ from brain.agent_routes import (
     every_agent,
     manifest_of,
     record_of,
+    steward_names,
     viewer_of,
 )
 from brain.agents.model import AgentRecord, visible_agent_ids
@@ -145,8 +171,12 @@ from brain.console.skill_library import (
     MAX_CATEGORIES,
     SKILL_AUTHORITY,
     Assignment,
+    AssignmentRecord,
+    Detachment,
+    DetachmentRecord,
     LibrarySkill,
     Package,
+    Retirement,
     SkillLibraryError,
     SkillReach,
     ToolReach,
@@ -156,7 +186,9 @@ from brain.console.skill_library import (
     categories_from,
     chips,
     compared_with,
+    current_assignments,
     decided,
+    detachment,
     edited,
     github_source,
     may_add,
@@ -168,9 +200,12 @@ from brain.console.skill_library import (
     read_github,
     read_package,
     read_url,
+    retired_digests,
+    retiring,
     trusted_reach,
     url_source_problem,
 )
+from brain.console.skill_library import holding as agents_holding
 from brain.console.workspace import WorkspaceError
 from brain.core.entitlement import EntitlementSet
 from brain.core.errors import Absent, Failed
@@ -243,12 +278,20 @@ DIGEST_PATTERN: Final = DIGEST_RE.pattern
 
 # ------------------------------------------------------------------- the shapes
 class SkillPinView(BaseModel):
-    """One agent, and the bytes of this skill it is configured to run."""
+    """One agent, and the bytes of this skill it is configured to run.
+
+    The agent's name for the page and its id for the Advanced section and the writes; when an
+    assignment still in force put the skill there, when and by whom (M27.15.55).
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     agent_id: str
     digest: str
+    display_name: str | None = None
+    assigned_at: datetime | None = None
+    #: The display name of whoever assigned it, when the directory holds one.
+    assigned_by: str | None = None
 
 
 class SkillRow(BaseModel):
@@ -388,6 +431,16 @@ class LibrarySkillView(BaseModel):
     #: The `SKILL.md` an edit starts from, for a reader who may edit, and whether one may be made.
     markdown: str | None = None
     editable: bool = False
+    #: Retired: no agent may newly be assigned it, and every agent running it keeps it
+    #: (M27.15.56). When, and the display name of who retired it.
+    retired: bool = False
+    retired_at: datetime | None = None
+    retired_by: str | None = None
+    #: This reader may retire or reinstate it. Decides whether a button is drawn and nothing more.
+    retirable: bool = False
+    #: The display names of whoever added it and whoever decided it, when the directory holds one.
+    submitted_by_name: str | None = None
+    reviewer_name: str | None = None
 
 
 class AgentChoiceView(BaseModel):
@@ -518,6 +571,67 @@ class AssignedView(BaseModel):
     effective_hash: str
 
 
+class DetachedView(BaseModel):
+    """What was detached, from which agent, and the install it left (M27.15.55)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    agent_id: str
+    skill_name: str
+    digest: str
+    effective_hash: str
+
+
+class RetirementView(BaseModel):
+    """A version retired or reinstated, and the agents still running it (M27.15.56).
+
+    `holding` is the agents this reader may see that run these bytes, for detaching one at a time.
+    Nothing is said about agents the reader may not see, not even whether there are any.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    digest: str
+    name: str
+    version: str
+    retired: bool
+    holding: tuple[AgentChoiceView, ...] = ()
+
+
+class LibraryRowView(BaseModel):
+    """One version in the library, as the searchable list draws it (M27.11.8).
+
+    `agents_running` counts the agents this reader may see that run these bytes, which is a count
+    over rows the reader could open and never over the estate.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    digest: str
+    name: str
+    version: str
+    description: str
+    review: str
+    retired: bool
+    categories: tuple[str, ...]
+    agents_running: int
+    source: str
+    submitted_at: datetime
+
+
+class SkillLibraryPage(Page[LibraryRowView]):
+    """The library, one row per version, with the queue's summary and what this reader may do."""
+
+    queue: SkillQueueView
+    #: The library load came back full. Never how many more.
+    library_truncated: bool = False
+    #: The agent load came back full, so `agents_running` is over the agents that were loaded.
+    truncated: bool = False
+    may_add: bool = False
+    #: The category chips: those of the versions this reader may list, and no other.
+    categories: tuple[str, ...] = ()
+
+
 # ------------------------------------------------------------------------ the stores
 @runtime_checkable
 class SkillLibrary(Protocol):
@@ -540,6 +654,20 @@ class SkillLibrary(Protocol):
     async def categorise(
         self, name: str, categories: Sequence[str], *, by: str, ent_hash: str, trace_id: str
     ) -> None: ...
+
+    async def retirements(self, digests: Sequence[str]) -> Mapping[str, Retirement]: ...
+
+    async def retire(
+        self, digest: str, *, retired: bool, by: str, ent_hash: str, trace_id: str
+    ) -> None: ...
+
+    async def detach(
+        self, made: Detachment, *, expected_hash: str, ent_hash: str, trace_id: str
+    ) -> bool: ...
+
+    async def assignment_history(
+        self, names: Sequence[str]
+    ) -> tuple[tuple[AssignmentRecord, ...], tuple[DetachmentRecord, ...]]: ...
 
 
 @dataclass(frozen=True)
@@ -699,14 +827,20 @@ def pins_of(
 
 # ---------------------------------------------------------------- the projections
 def catalogue(
-    pins: Iterable[SkillPin], categories: Mapping[str, Sequence[str]] | None = None
+    pins: Iterable[SkillPin],
+    categories: Mapping[str, Sequence[str]] | None = None,
+    *,
+    agent_names: Mapping[str, str] | None = None,
+    assigned: Mapping[tuple[str, str], AssignmentRecord] | None = None,
+    people: Mapping[str, str] | None = None,
 ) -> tuple[SkillRow, ...]:
     """Every skill these pins name, in name order, with the agents pinned to each.
 
     Grouped by name rather than by name and digest, because a skill whose agents run different
     bytes is one skill with a disagreement on it. See
     `A_DIFFERENCE_BETWEEN_PINS_IS_ABOUT_THIS_PAGE_AND_NEVER_THE_ESTATE`. Each row carries the
-    categories set on its name, which is what the listing filters on (M12.4.13).
+    categories set on its name, which is what the listing filters on (M12.4.13). A pin carries its
+    agent's name, and the assignment in force for that agent and skill when it names these bytes.
     """
     filed = categories or {}
     held: dict[str, list[SkillPin]] = {}
@@ -716,7 +850,7 @@ def catalogue(
         SkillRow(
             name=name,
             pinned_by=tuple(
-                SkillPinView(agent_id=pin.agent_id, digest=pin.digest)
+                pin_view(pin, agent_names or {}, assigned or {}, people or {})
                 for pin in sorted(held[name], key=lambda one: (one.agent_id, one.digest))
             ),
             versions_differ=len({pin.digest for pin in held[name]}) > 1,
@@ -724,6 +858,37 @@ def catalogue(
         )
         for name in sorted(held)
     )
+
+
+def pin_view(
+    pin: SkillPin,
+    agent_names: Mapping[str, str],
+    assigned: Mapping[tuple[str, str], AssignmentRecord],
+    people: Mapping[str, str],
+) -> SkillPinView:
+    """One pin, with its agent's name and the assignment in force that put these bytes there."""
+    record = assigned.get((pin.agent_id, pin.skill_name))
+    if record is not None and record.digest != pin.digest:
+        # An assignment in force of other bytes than the install runs: the install is the fact,
+        # so the pin says nothing about when these bytes arrived rather than the wrong thing.
+        record = None
+    return SkillPinView(
+        agent_id=pin.agent_id,
+        digest=pin.digest,
+        display_name=agent_names.get(pin.agent_id),
+        assigned_at=None if record is None else record.at,
+        assigned_by=None if record is None else people.get(record.assigned_by),
+    )
+
+
+def in_force(
+    history: tuple[tuple[AssignmentRecord, ...], tuple[DetachmentRecord, ...]],
+) -> dict[tuple[str, str], AssignmentRecord]:
+    """The assignments in force, by agent and skill. `current_assignments` decides which."""
+    assignments, detachments = history
+    return {
+        (one.agent_id, one.skill_name): one for one in current_assignments(assignments, detachments)
+    }
 
 
 def submitted(library: Sequence[LibrarySkill], now: datetime) -> tuple[Placed[QueueEntry], ...]:
@@ -794,14 +959,19 @@ def library_view(
     edits: bool = False,
     categories: Sequence[str] = (),
     against: LibrarySkill | None = None,
+    retirement: Retirement | None = None,
+    people: Mapping[str, str] | None = None,
 ) -> LibrarySkillView:
     """One library row, with the reach the registry gives it and what this reader is offered.
 
     `reviewable` no longer asks who added the skill, for D4 (M12.4.6). The diff and the text an
-    edit starts from are words of the skill, so each goes only where the body goes.
+    edit starts from are words of the skill, so each goes only where the body goes. A retired
+    version is never `assignable`, whatever else holds (M27.15.56).
     """
     imported = one.imported
     state = review_state(imported)
+    retired = retirement is not None and retirement.retired
+    named = people or {}
     return LibrarySkillView(
         digest=one.digest,
         name=imported.skill.name,
@@ -821,7 +991,7 @@ def library_view(
         unregistered_tools=reach.unknown,
         body=imported.skill.body if discloses_body else None,
         reviewable=reviews and state is Review.PENDING and not one.moved,
-        assignable=assigns and state is Review.APPROVED,
+        assignable=assigns and state is Review.APPROVED and not retired,
         source_commit=imported.source.commit or None,
         source_path=imported.source.path or None,
         edited_from=one.edited_from,
@@ -834,6 +1004,12 @@ def library_view(
         ),
         markdown=_markdown(one) if edits and discloses_body and not one.moved else None,
         editable=edits and not one.moved,
+        retired=retired,
+        retired_at=retirement.at if retired and retirement is not None else None,
+        retired_by=named.get(retirement.set_by) if retired and retirement is not None else None,
+        retirable=edits,
+        submitted_by_name=named.get(one.submitted_by),
+        reviewer_name=named.get(imported.reviewer) if imported.reviewer else None,
     )
 
 
@@ -903,29 +1079,36 @@ CatalogueQuery = Annotated[ListAsked, Depends(CATALOGUE_LISTING.query())]
 router = APIRouter(prefix=API_PREFIX, tags=["skills"])
 
 
-@router.get("/skills", response_model=SkillsPage, responses=COMMON_RESPONSES)
-async def skills(request: Request, asked: Asked, listed: CatalogueQuery) -> SkillsPage:
-    """The skills the reader's agents run, the library and its queue, and what the reader may do.
+@dataclass(frozen=True)
+class Estate:
+    """What one reader may see of the agents and their pins, and the directory's names for people.
 
-    The screen's question first and the database second, and the order is the property: a caller
-    holding no grant is refused identically on an instance with a database and on one without.
+    Loaded once per request by `_estate`, so the Skills page and the library listing are built
+    from one reading of the agents rather than two that could disagree.
+    """
+
+    mine: tuple[AgentRecord, ...]
+    pins: tuple[SkillPin, ...]
+    #: The agent load came back full.
+    truncated: bool
+    people: Mapping[str, str]
+
+
+async def _estate(request: Request, asked: Asking, people: Iterable[str] = ()) -> Estate:
+    """The agents this reader's audience covers, their pins, and the names of these people.
 
     The agents are loaded bounded and filtered by audience; their installs are read for exactly
-    those agents. The library is read only for a reader it may be listed to, and the queue is
-    narrowed again by `skill_queue`, so the two agree by being one question.
+    those agents. The names are read in the same session, for the people the caller names.
     """
-    if not permitted(screen(SKILLS_SCREEN).read, asked.reach, asked.now):
-        log.info("skills screen not answerable", principal=asked.caller.principal.id)
-        raise _not_answerable()
-    plan = CATALOGUE_LISTING.plan(listed, reader=asked.caller.principal.id)
     limit = MAX_AGENTS_CONSIDERED
-
     factory = _require_sessions(request)
     async with factory() as session:
         rows = (await session.execute(bounded_agents(limit))).scalars().all()
         records = [record for record in (record_of(row) for row in rows) if record is not None]
         mine = visible_records(records, asked)
         pairs = (await session.execute(installs_of([one.agent_id for one in mine]))).all()
+        wanted = sorted({one for one in people if one})
+        names = await steward_names(session, wanted) if wanted else {}
 
     by_id = {one.agent_id: one for one in mine}
     pins: list[SkillPin] = []
@@ -936,10 +1119,48 @@ async def skills(request: Request, asked: Asked, listed: CatalogueQuery) -> Skil
             # above did not ask for. Dropped rather than trusted.
             continue
         pins.extend(pins_of(instance_row, version_row, record))
+    return Estate(mine=mine, pins=tuple(pins), truncated=len(rows) >= limit, people=names)
+
+
+def _people_in(
+    library: Sequence[LibrarySkill],
+    retirements: Mapping[str, Retirement],
+    history: tuple[tuple[AssignmentRecord, ...], tuple[DetachmentRecord, ...]],
+) -> set[str]:
+    """Everybody the page names: who added, decided, retired and assigned what it lists."""
+    return (
+        {one.submitted_by for one in library}
+        | {one.imported.reviewer for one in library if one.imported.reviewer}
+        | {one.set_by for one in retirements.values()}
+        | {one.assigned_by for one in history[0]}
+    )
+
+
+@router.get("/skills", response_model=SkillsPage, responses=COMMON_RESPONSES)
+async def skills(request: Request, asked: Asked, listed: CatalogueQuery) -> SkillsPage:
+    """The skills the reader's agents run, the library and its queue, and what the reader may do.
+
+    The screen's question first and the database second, and the order is the property: a caller
+    holding no grant is refused identically on an instance with a database and on one without.
+
+    The library is read only for a reader it may be listed to, and the queue is narrowed again by
+    `skill_queue`, so the two agree by being one question. The agents and their pins are
+    `_estate`'s.
+    """
+    if not permitted(screen(SKILLS_SCREEN).read, asked.reach, asked.now):
+        log.info("skills screen not answerable", principal=asked.caller.principal.id)
+        raise _not_answerable()
+    plan = CATALOGUE_LISTING.plan(listed, reader=asked.caller.principal.id)
+    _require_sessions(request)
 
     store = library_of(request)
     readable = may_read_library(asked.reach, asked.now)
     library = await store.library(MAX_LIBRARY) if readable else ()
+    retirements = await store.retirements([one.digest for one in library])
+    held_names = sorted({one.name for one in library})
+    history = await store.assignment_history(held_names)
+    estate = await _estate(request, asked, _people_in(library, retirements, history))
+    pins = estate.pins
     # The names this reader was shown, and nothing else: see `chips`.
     shown = {pin.skill_name for pin in pins} | {one.name for one in library}
     filed = await store.categories(sorted(shown))
@@ -948,15 +1169,22 @@ async def skills(request: Request, asked: Asked, listed: CatalogueQuery) -> Skil
     adds = may_add(asked.reach, asked.now)
     choices = tuple(
         AgentChoiceView(agent_id=one.agent_id, display_name=one.display_name)
-        for one in mine
+        for one in estate.mine
         if readable and may_assign(asked.reach, agent_scope_row(one), asked.now)
     )
     discloses = reviews or adds
-    page = plan.page(list(catalogue(pins, filed)))
+    rows = catalogue(
+        pins,
+        filed,
+        agent_names={one.agent_id: one.display_name for one in estate.mine},
+        assigned=in_force(history),
+        people=estate.people,
+    )
+    page = plan.page(list(rows))
     return SkillsPage(
         items=list(page.items),
         next_cursor=page.next_cursor,
-        truncated=len(rows) >= limit,
+        truncated=estate.truncated,
         queue=queue_view(submitted(library, asked.now), asked.reach, asked.now),
         library=tuple(
             library_view(
@@ -968,6 +1196,8 @@ async def skills(request: Request, asked: Asked, listed: CatalogueQuery) -> Skil
                 edits=adds,
                 categories=filed.get(one.name, ()),
                 against=compared_with(one, library),
+                retirement=retirements.get(one.digest),
+                people=estate.people,
             )
             for one in library
         ),
@@ -976,6 +1206,82 @@ async def skills(request: Request, asked: Asked, listed: CatalogueQuery) -> Skil
         may_add=adds,
         registry_is_absent=registry is None,
         categories=chips(filed, shown),
+    )
+
+
+def library_row(
+    one: LibrarySkill,
+    *,
+    retired: frozenset[str],
+    categories: Mapping[str, Sequence[str]],
+    pins: Sequence[SkillPin],
+) -> LibraryRowView:
+    """One version as the searchable list draws it: its state and the agents running it."""
+    return LibraryRowView(
+        digest=one.digest,
+        name=one.name,
+        version=one.imported.skill.version,
+        description=one.imported.skill.description,
+        review=review_state(one.imported).value,
+        retired=one.digest in retired,
+        categories=tuple(categories.get(one.name, ())),
+        agents_running=len(agents_holding(one.digest, pins)),
+        source=one.imported.source.kind.value,
+        submitted_at=one.submitted_at,
+    )
+
+
+#: What the library may be searched, filtered and ordered by (M27.11.8). Every column reads the
+#: row the reader is sent, `brain.listing`'s rule, so a search cannot match a withheld body.
+LIBRARY_LISTING: Final[Listing[LibraryRowView]] = Listing(
+    name="skill_library",
+    columns=(
+        Column("name", lambda row: row.name, search=True, filter=True, sort=True),
+        Column("description", lambda row: row.description, search=True),
+        Column("review", lambda row: row.review, filter=True, sort=True),
+        Column("retired", lambda row: row.retired, filter=True),
+        Column("categories", lambda row: row.categories, search=True, filter=True),
+        Column("source", lambda row: row.source, filter=True),
+        Column("agents_running", lambda row: row.agents_running, sort=True),
+        Column("submitted_at", lambda row: row.submitted_at, sort=True),
+    ),
+    key=lambda row: row.digest,
+    order="name",
+)
+LibraryQuery = Annotated[ListAsked, Depends(LIBRARY_LISTING.query())]
+
+
+@router.get("/skills/library", response_model=SkillLibraryPage, responses=COMMON_RESPONSES)
+async def skill_library(request: Request, asked: Asked, listed: LibraryQuery) -> SkillLibraryPage:
+    """The library, one row per version, searched, filtered and ordered on the server (M27.11.8).
+
+    The screen's question first. A reader the library may not be listed to is answered the page
+    an empty library gives, with no queue, which is what `/skills` sends them too.
+    """
+    if not permitted(screen(SKILLS_SCREEN).read, asked.reach, asked.now):
+        log.info("skill library not answerable", principal=asked.caller.principal.id)
+        raise _not_answerable()
+    plan = LIBRARY_LISTING.plan(listed, reader=asked.caller.principal.id)
+    _require_sessions(request)
+    store = library_of(request)
+    readable = may_read_library(asked.reach, asked.now)
+    library = await store.library(MAX_LIBRARY) if readable else ()
+    retired = retired_digests(await store.retirements([one.digest for one in library]))
+    estate = await _estate(request, asked)
+    names = sorted({one.name for one in library})
+    filed = await store.categories(names)
+    rows = [
+        library_row(one, retired=retired, categories=filed, pins=estate.pins) for one in library
+    ]
+    page = plan.page(rows)
+    return SkillLibraryPage(
+        items=list(page.items),
+        next_cursor=page.next_cursor,
+        queue=queue_view(submitted(library, asked.now), asked.reach, asked.now),
+        library_truncated=len(library) >= MAX_LIBRARY,
+        truncated=estate.truncated,
+        may_add=may_add(asked.reach, asked.now),
+        categories=chips(filed, names),
     )
 
 
@@ -1008,7 +1314,9 @@ async def _view_for(
     Every write here is asked of somebody holding the skill or the review authority, so the body
     is disclosed; the diff is against the library as read for the write.
     """
-    filed = await library_of(request).categories([one.name])
+    store = library_of(request)
+    filed = await store.categories([one.name])
+    retirement = (await store.retirements([one.digest])).get(one.digest)
     return library_view(
         one,
         _reach_of(one, _tool_registry(request)),
@@ -1018,6 +1326,7 @@ async def _view_for(
         edits=may_add(asked.reach, asked.now),
         categories=filed.get(one.name, ()),
         against=compared_with(one, [*library, one]),
+        retirement=retirement,
     )
 
 
@@ -1291,6 +1600,11 @@ async def assign_skill(
     one = await library.skill(digest)
     if one is None:
         raise _refused_because("nothing was assigned: no skill in the library has that digest")
+    if digest in retired_digests(await library.retirements([digest])):
+        raise _refused_because(
+            f"nothing was assigned: {one.name} {one.imported.skill.version} is retired; "
+            "reinstate it or assign a later version"
+        )
     now = asked.now
     recorder = AuditRecorder(
         AuditChain(),
@@ -1343,6 +1657,158 @@ async def assign_skill(
         digest=made.digest,
         replaced_digest=made.replaces_digest,
         reach=reach,
+        effective_hash=made.effective_hash,
+    )
+    return JSONResponse(status_code=201, content=view.model_dump(mode="json"))
+
+
+async def _retirement(
+    request: Request, digest: str, asked: Asking, *, retire: bool
+) -> RetirementView:
+    """Retire or reinstate one version, or refuse saying why (M27.15.56).
+
+    The authority first, before the digest is looked up: the skill authority over everything,
+    as adding asks, because a retirement is a library act. The agents still running the version
+    are the pins of the agents this reader may see, and nothing wider.
+    """
+    word = "retired" if retire else "reinstated"
+    if not may_add(asked.reach, asked.now):
+        log.info("skill retirement not answerable", principal=asked.caller.principal.id)
+        raise _not_answerable()
+    store = library_of(request)
+    one = await store.skill(digest)
+    if one is None:
+        raise _refused_because(f"nothing was {word}: no skill in the library has that digest")
+    current = (await store.retirements([digest])).get(digest)
+    try:
+        retiring(one, retire=retire, current=current)
+    except SkillLibraryError as refused:
+        raise _refused_because(str(refused)) from None
+    await store.retire(
+        digest,
+        retired=retire,
+        by=asked.caller.principal.id,
+        ent_hash=asked.reach.ent_hash(),
+        trace_id=_trace_id(),
+    )
+    log.info(f"skill {word}", skill=one.name, principal=asked.caller.principal.id)
+    holders: tuple[AgentChoiceView, ...] = ()
+    if retire:
+        estate = await _estate(request, asked)
+        named = {one.agent_id: one.display_name for one in estate.mine}
+        holders = tuple(
+            AgentChoiceView(agent_id=agent_id, display_name=named[agent_id])
+            for agent_id in agents_holding(digest, estate.pins)
+        )
+    return RetirementView(
+        digest=digest,
+        name=one.name,
+        version=one.imported.skill.version,
+        retired=retire,
+        holding=holders,
+    )
+
+
+@router.post(
+    "/skills/{digest}/retirement", response_model=RetirementView, responses=COMMON_RESPONSES
+)
+async def retire_skill(request: Request, digest: Digest, asked: Asked) -> RetirementView:
+    """Retire one version: no agent may newly be assigned it, and none running it loses it.
+
+    See `brain.console.skill_library.A_RETIRED_VERSION_IS_KEPT_AND_ONLY_REFUSED_TO_NEW_AGENTS`.
+    """
+    return await _retirement(request, digest, asked, retire=True)
+
+
+@router.post(
+    "/skills/{digest}/reinstatement", response_model=RetirementView, responses=COMMON_RESPONSES
+)
+async def reinstate_skill(request: Request, digest: Digest, asked: Asked) -> RetirementView:
+    """Reinstate one retired version, so it may be assigned again. A later row, never an undo."""
+    return await _retirement(request, digest, asked, retire=False)
+
+
+@router.post(
+    "/skills/{digest}/detachments",
+    status_code=201,
+    response_model=DetachedView,
+    responses=COMMON_RESPONSES,
+)
+async def detach_skill(
+    request: Request, digest: Digest, body: AssignAsked, asked: Asked
+) -> JSONResponse:
+    """Take one skill off one agent, or say why not (M27.15.55).
+
+    `assign_skill`'s questions in its order, because detaching is as assigned: the screen and the
+    skill authority of the reach alone, then the agent in the caller's audience and in their
+    authority, refused alike and identically to an agent that does not exist, and only then the
+    skill. The row naming the assignment it ended and the install without the skill are written
+    together under the install lock, or not at all.
+    """
+    if not permitted(screen(SKILLS_SCREEN).read, asked.reach, asked.now) or (
+        asked.reach.scope_for(SKILL_AUTHORITY, asked.now) is None
+    ):
+        log.info("skill not detachable", principal=asked.caller.principal.id)
+        raise _not_answerable()
+    found = await agent_installs_of(request).agent(body.agent_id)
+    if (
+        found is None
+        or body.agent_id not in visible_agent_ids((found.record,), viewer_of(asked))
+        or not may_assign(asked.reach, agent_scope_row(found.record), asked.now)
+    ):
+        log.info("skill not detachable from this agent", principal=asked.caller.principal.id)
+        raise _not_answerable()
+    if found.install is None or found.effective_hash is None:
+        raise _refused_because(
+            "nothing was detached: this agent has no install record that constructs"
+        )
+    store = library_of(request)
+    one = await store.skill(digest)
+    if one is None:
+        raise _refused_because("nothing was detached: no skill in the library has that digest")
+    now = asked.now
+    recorder = AuditRecorder(
+        AuditChain(),
+        actor_id=asked.caller.principal.id,
+        ent_hash=asked.reach.ent_hash(),
+        trace_id=_trace_id() or "unassigned",
+        clock=lambda: now,
+    )
+    signed, instance = found.install
+    try:
+        made = detachment(
+            one,
+            record=found.record,
+            signed=signed,
+            instance=instance,
+            by=asked.reach,
+            recorder=recorder,
+            now=now,
+        )
+    except (SkillLibraryError, AgentTabError) as refused:
+        raise _refused_because(str(refused)) from None
+    except (TemplateError, WorkspaceError, ValueError):
+        raise _refused_because(
+            "nothing was detached: the agent's install refused the change"
+        ) from None
+    written = await store.detach(
+        made,
+        expected_hash=found.effective_hash,
+        ent_hash=asked.reach.ent_hash(),
+        trace_id=_trace_id(),
+    )
+    if not written:
+        raise _refused_because(
+            "nothing was detached: somebody changed this agent after you opened it; reload and "
+            "try again"
+        )
+    log.info(
+        "skill detached", skill=one.name, agent=made.agent_id, principal=asked.caller.principal.id
+    )
+    view = DetachedView(
+        agent_id=made.agent_id,
+        skill_name=made.skill_name,
+        digest=made.digest,
         effective_hash=made.effective_hash,
     )
     return JSONResponse(status_code=201, content=view.model_dump(mode="json"))
