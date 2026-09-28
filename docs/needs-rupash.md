@@ -2,8 +2,8 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**2 items are open: 91 and 98.** Item 98 (the Moonshot key and DeepSeek once more) unblocks the
-most. Each says in plain terms what it is, what I recommend, and every step.
+**7 items are open: 91, 98, 99, 100, 101, 102 and 103.** Item 98 (the Moonshot key and DeepSeek
+once more) unblocks the most; 99 to 103 are Wave 2 decisions, each with a one-word reply. Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
 
@@ -35,7 +35,8 @@ need a model to answer. Tell me "checks done" and I close the tasks from your re
 2. **Department isolation (M2.3.1, web part).** As yourself, on **Knowledge**, add a small document
    at the first department's reach. As the person in that department, ask about it on **Ask**: the
    answer uses it. As the person in the other department, ask the same: you are told there is
-   nothing, exactly as if it did not exist.
+   nothing, exactly as if it did not exist. (Adding a document from **Knowledge** is built early in
+   Wave 2; I will tell you when it is live, so leave checks 2, 4 and 5 until then.)
 3. **Department admin limits (M2.3.1).** On **Govern > Roles**, make the first person department
    admin for their department. As them, try to grant something in the other department: refused.
    Try to publish an agent company-wide: it waits for your approval on **Approvals**.
@@ -68,6 +69,57 @@ M31.3.2.5.
    confirm.
 3. Do the same for **DeepSeek**, with the key from the DeepSeek platform.
 4. Tell me "keys fixed". I then check that each provider answers and record it.
+
+## 99. Wave 2: how connected systems answer questions
+
+**In plain terms:** your rule is that connectors never copy a company's data: the Brain keeps a
+small index (names, ids, dates) and reads everything else from the source at the moment someone
+asks. Planning Wave 2 found three places that need your yes. (1) Drive files and Lark Wiki pages:
+only their titles and ids are indexed, and their text is read live through the source's own
+search, never copied or embedded; the sync's current step that copies document text is removed.
+(2) A live read needs the source's key at question time, and today only the background worker may
+borrow a key. **Recommendation: let the application borrow a key for one question at a time**, the
+same short lease the worker uses; it needs the vault's rules reloaded once, with three of your five
+unseal pieces (I will send the commands). The alternative, the worker doing every live read, is
+slower and stops answering whenever the worker restarts. (3) Until Wave 3 builds agents, a
+connector question is answered by matching the index and then reading live; a model choosing
+which system to ask comes with agents. Reply "connectors as recommended".
+
+## 100. Wave 2: the agent halves of fifteen tasks move to Wave 3
+
+**In plain terms:** agents are created in Wave 3 (M27.11.6), so the parts of these Wave 2 tasks that
+say "an agent does it" cannot be tried in Wave 2: M11.9.2 to M11.9.14, M11.8.8, M10.7.3, M12.2.5,
+M12.2.7, M12.2.8, M12.3.3, M12.4.8, M12.4.10, M8.2.4 and M8.3.5, and "an agent prepares" in M11.8.10
+and M12.4.2. **Recommendation: build and prove their Wave 2 half now and move the agent half to
+Wave 3**, as item 97 did for the chat checks. Also: M38.2.2.3 ("what is live after Wave 2") says
+"against connector cassettes", and the plan says real credentials only at go-live; both contradict
+your rule that done means working on your install. Recommendation: reword M38.2.2.3 to "a real
+question answered live in Lark from a connected source". Reply "move agent halves".
+
+## 101. Wave 2: duplicate tasks to merge
+
+**In plain terms:** these pairs ask for the same result, so each would be proved twice. On 17 Sep
+you approved merging duplicates; I ask again because these are new. **Recommendation: merge each
+into the first-named, keeping one proof:** M12.4.16 into M12.4.11; M7.7.5 and M10.7.5 into M10.7.2;
+M11.9.1 into M11.8.1; M11.9.2 into M11.5.1; M12.4.1 into M12.3.8; M8.3.3 into M10.7.1; M8.1.3 into
+M11.4.9; M22.2.4 into M7.1.5; M11.5.3 into M22.1.1; M9.1.4 into M25.3.1; M23.2.3 into M21.3.2;
+M27.13.4 into M12.2.2; and M11.2.2 is proved by the same first connector sync that proves Wave 0's
+vault lease tasks (M31.3.2.3 and .4). Reply "merge duplicates".
+
+## 102. Wave 2: which accounts some connectors use
+
+**In plain terms:** four questions, each with my recommendation. (1) Teams and Telegram are on your
+feature list but not in your brief's channel list. Recommendation: build both and prove them on a
+free Microsoft 365 developer tenant and a test Telegram bot, not on company accounts. (2) M11.6.7
+says "Google Drive or Microsoft 365". Recommendation: Drive only for now. (3) The maintenance
+portal connector (M11.6.1) assumes the portal is a Laravel system on MySQL. Is it? (4) M11.4.8
+"backfill" fills the small index only, never values. Reply "accounts as recommended" and answer (3).
+
+## 103. Wave 2: a second install and the load test run in CI
+
+**In plain terms:** M12.3.1 and M12.4.9 need "a second install" to move a skill between, and M22.3.3
+is a load test. **Recommendation: a scratch install built inside CI for both**, so nothing extra
+runs on your server and no load is put on the install your company uses. Reply "use CI".
 
 # Answered
 
