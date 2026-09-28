@@ -449,6 +449,9 @@ def test_the_registry_still_reports_every_orphan_this_runner_has_not_wired() -> 
     the people to tell and calls `digest`, so `denial_digest` left the list; the worker's schedule
     does not start it until this module gives it a runner.
 
+    **And twenty-one controls on 2026-09-28, with four orphans still.** `acceptance_run` arrived
+    already wired, with `ops.acceptance_result`.
+
     Delete this and the scheduler can start running mechanisms the handover pack still
     describes as unwired."""
     from brain.ops.controls import orphans
@@ -461,7 +464,8 @@ def test_the_registry_still_reports_every_orphan_this_runner_has_not_wired() -> 
     assert "knowledge_reverification" not in {one.name for one in orphans()}
     assert "directory_sync" not in {one.name for one in orphans()}
     assert "restore_drill" not in {one.name for one in orphans()}
-    assert len(CONTROLS) == 20
+    assert "acceptance_run" not in {one.name for one in orphans()}
+    assert len(CONTROLS) == 21
 
 
 # --- the dispatch the worker's schedule starts controls through ---------------------------
@@ -497,6 +501,7 @@ def test_the_dispatch_names_exactly_the_runners_that_can_run() -> None:
         "directory_sync",
         "model_health_probes",
         "denial_digest",
+        "acceptance_run",
     }
 
 

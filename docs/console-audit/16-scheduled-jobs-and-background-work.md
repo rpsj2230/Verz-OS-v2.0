@@ -1,7 +1,7 @@
 ### Scheduled jobs and background work
 
 - **Screens:** `/jobs`, `/runs`
-- **Tables:** `ops.control_run`, `ops.operation`
+- **Tables:** `ops.control_run`, `ops.operation`, `ops.acceptance_result`
 - **Installation values:** none
 - **Measured here:** 5 routes, 0 called by no screen; 3 write routes, 3 with all three proofs; 1 gaps.
 

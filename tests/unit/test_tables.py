@@ -134,6 +134,7 @@ MIGRATION_CLASSIFIED_TABLES = VERSIONS / "0116_classified_tables.py"
 MIGRATION_TOOL_CATALOGUE = VERSIONS / "0117_tool_catalogue_and_switch.py"
 MIGRATION_SKILL_CATEGORY = VERSIONS / "0121_skill_sources_versions_and_categories.py"
 MIGRATION_KNOWLEDGE_LIFECYCLE = VERSIONS / "0120_knowledge_lifecycle.py"
+MIGRATION_ACCEPTANCE = VERSIONS / "0133_acceptance_result.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -373,6 +374,8 @@ REQUIREMENT_CHECK_TABLES: tuple[str, ...] = ("ops.requirement_check",)
 CLASSIFIED_TABLES: tuple[str, ...] = ("know.classified_table", "know.classified_row")
 #: And the two 0117 adds: the tool catalogue and the stops on it.
 TOOL_CATALOGUE_TABLES: tuple[str, ...] = ("agent.tool_definition", "agent.tool_switch")
+#: And the one 0133 adds: what each install acceptance check came to, on which commit.
+ACCEPTANCE_TABLES: tuple[str, ...] = ("ops.acceptance_result",)
 
 ALL_TABLES = (
     CORE_TABLES
@@ -434,6 +437,7 @@ ALL_TABLES = (
     + TOOL_CATALOGUE_TABLES
     + SKILL_CATEGORY_TABLES
     + KNOWLEDGE_LIFECYCLE_TABLES
+    + ACCEPTANCE_TABLES
 )
 
 
@@ -1215,6 +1219,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert skill_category.TABLES == SKILL_CATEGORY_TABLES
     knowledge_lifecycle = migration_module(MIGRATION_KNOWLEDGE_LIFECYCLE)
     assert knowledge_lifecycle.TABLES == KNOWLEDGE_LIFECYCLE_TABLES
+    acceptance = migration_module(MIGRATION_ACCEPTANCE)
+    assert acceptance.TABLES == ACCEPTANCE_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1298,6 +1304,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(tool_catalogue.TABLES)
         + tuple(skill_category.TABLES)
         + tuple(knowledge_lifecycle.TABLES)
+        + tuple(acceptance.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1362,6 +1369,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(tool_catalogue.TABLES),
         set(skill_category.TABLES),
         set(knowledge_lifecycle.TABLES),
+        set(acceptance.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

@@ -176,7 +176,7 @@ def test_a_control_another_module_calls_is_still_this_schedulers_to_start() -> N
     assert [one.name for one in schedulable([in_process])] == ["correction"]
 
 
-def test_the_real_registry_gives_this_scheduler_nineteen_of_the_twenty_controls() -> None:
+def test_the_real_registry_gives_this_scheduler_twenty_of_the_twenty_one_controls() -> None:
     """The state of the estate today, asserted so that wiring a control to a timer outside the
     process shows up here rather than in nothing.
 
@@ -185,13 +185,14 @@ def test_the_real_registry_gives_this_scheduler_nineteen_of_the_twenty_controls(
 
     Nineteen since 2026-09-17, when `vault_token_renewal`, `automation_run` and `connector_sync`
     arrived to be started by the worker, and twenty with `vault_audit_ship` that evening.
+    Twenty-one on 2026-09-28, with `acceptance_run`, which the worker starts too.
 
     Delete this and a control moved onto an external schedule silently keeps a second caller
     inside the process."""
     mine = schedulable()
 
-    assert len(CONTROLS) == 20
-    assert len(mine) == 19
+    assert len(CONTROLS) == 21
+    assert len(mine) == 20
     assert "audit_anchor" not in {one.name for one in mine}
 
 

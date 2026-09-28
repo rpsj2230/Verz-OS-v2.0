@@ -346,6 +346,10 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "ops.data_export",
         # A deploy keeps an image, a commit, task ids and digests: `0091` keeps no principal.
         "ops.deployment_record",
+        # An acceptance check's result keeps a commit, a check's name, its leaves, an outcome and a
+        # sentence the check wrote: `0133` keeps no principal, and the people a check acts as are
+        # reserved ones that exist only inside its rolled-back transaction.
+        "ops.acceptance_result",
         "ops.model_attempt",
         # A provider's terms and a matrix change name the administrator who wrote them, an actor
         # and not an owner (`0097`).
