@@ -97,6 +97,7 @@ from brain.cited_document_routes import router as cited_document_router
 from brain.classification_routes import router as classification_router
 from brain.compliance_routes import router as compliance_router
 from brain.connector_routes import router as connector_router
+from brain.console_overview_figures_routes import router as console_overview_figures_router
 from brain.console_static import mount_console_entry, mount_console_fallback
 from brain.core.errors import Absent, BrainError, Outcome, to_public
 from brain.credential_routes import router as credential_router
@@ -1455,6 +1456,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # The document a citation on Ask links to, its passages at the reader's reach through the
     # handler and policy the answer used. See `brain.cited_document_routes`.
     app.include_router(cited_document_router)
+    # The landing screen's figure row: how the last seven days' requests ended, at the reader's
+    # basis. See `brain.console_overview_figures_routes`.
+    app.include_router(console_overview_figures_router)
 
     @app.get("/health/live", response_model=Health, tags=["health"])
     async def live() -> Health:

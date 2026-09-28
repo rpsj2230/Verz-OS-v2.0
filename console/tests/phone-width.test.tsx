@@ -424,9 +424,10 @@ describe("every registered page at a phone's width", () => {
     // desktop layout, or by a reader that ignores media queries. At 1280 pixels the sidebar is in
     // the page beside it, drawn only from the `md` breakpoint up, and the label column is back;
     // at 360 neither is, which also proves the cascade reader applies a query only where it
-    // matches.
+    // matches. The Department overview, because the Overview is on the page kit now and has no row
+    // of the old label column left to measure.
     setWidth(WIDE_PX);
-    const container = await mount("/");
+    const container = await mount("/department");
     const sidebar = container.querySelector('[data-slot="sidebar"]') as Element;
     const nav = container.querySelector('nav[aria-label="Sections"]') as Element;
     const row = container.querySelector(".fields__row") as Element;

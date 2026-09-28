@@ -1,6 +1,6 @@
 ### People, roles, permissions and access control
 
-- **Screens:** `/`, `/people`, `/people/:subject`, `/roles`, `/capabilities`, `/scopes`, `/access_review`, `/elevation`, `/sessions`, `/sign-in-links`, `/staff_sources`, `/access-requests`, `/service-accounts`
+- **Screens:** `/people`, `/people/:subject`, `/roles`, `/capabilities`, `/scopes`, `/access_review`, `/elevation`, `/sessions`, `/sign-in-links`, `/staff_sources`, `/access-requests`, `/service-accounts`
 - **Tables:** `auth.principal`, `auth.principal_identity`, `auth.session`, `auth.directory_role_grant`, `gate.capability_grant`, `gate.capability_pack`, `gate.capability_pack_assignment`, `gate.capability_registry`, `gate.scope`, `gate.grants_version`, `gate.policy_epoch`, `gate.review_decision`, `gate.elevation_request`, `auth.staff_member`, `auth.staff_sync_run`, `auth.service_account`, `auth.api_key`, `gate.access_request`, `gate.role_grant`, `auth.group_role_rule`, `gate.break_glass_notice`
 - **Installation values:** `INSTALL_OIDC_ISSUER`, `INSTALL_OIDC_REALM`, `INSTALL_OIDC_CLIENT_ID`, `INSTALL_OIDC_REDIRECT_URIS`, `INSTALL_BROKERED_DIRECTORY`, `INSTALL_STAFF_SOURCE`, `INSTALL_STAFF_SOURCE_LOCATION`, `INSTALL_BROKERED_CLIENT_ID`
 - **Measured here:** 55 routes, 0 called by no screen; 31 write routes, 29 with all three proofs; 5 gaps.
