@@ -120,8 +120,9 @@ class RungSkip(enum.StrEnum):
 TOLD: Final[Mapping[RungSkip, str]] = MappingProxyType(
     {
         RungSkip.LOCAL_PROFILE: (
-            "This install's model profile is local, so no question is sent to a hosted "
-            "provider. Choose the hosted profile in the setup settings to allow it."
+            "Answers are made on this server only, so no question is sent to an online "
+            "provider. Choose Online providers under Where answers are made, at the top of the "
+            "Models and health screen, to allow it."
         ),
         RungSkip.SWITCHED_OFF: (
             "This provider is switched off on this screen, so nothing is sent to it. Switch it "

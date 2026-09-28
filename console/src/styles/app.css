@@ -550,6 +550,59 @@ code {
   gap: var(--space-2);
 }
 
+/* ------------------------------------------------------------------ models and health */
+
+/*
+ * The Models and health screen as the owner drew it on 2026-09-03: a card title with its Edit
+ * link on the same line, the failover matrix with its level named once per group, a row's
+ * controls side by side, the month's cost as one figure, and everything else under a closed
+ * Advanced. Nothing here colours anything: every pill is a `.badge` with one of the four tones.
+ */
+.card__heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.matrix__first td {
+  border-top: 1px solid var(--border);
+}
+
+.matrix__level {
+  font-weight: 600;
+}
+
+.matrix__step {
+  color: var(--text-muted);
+}
+
+.figure {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: 600;
+}
+
+.advanced > summary {
+  cursor: pointer;
+}
+
+.advanced > summary > h2 {
+  display: inline;
+  margin: 0;
+}
+
+.advanced[open] > summary {
+  margin-bottom: var(--space-4);
+}
+
 /* ------------------------------------------------------------------ forms */
 
 /*
