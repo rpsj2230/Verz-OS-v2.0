@@ -66,6 +66,7 @@
 @source "../components/kit";
 @source "../pages/agents";
 @source "../pages/connectors";
+@source "../pages/models";
 @source not inline("grid");
 
 /*

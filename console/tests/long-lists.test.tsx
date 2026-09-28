@@ -107,6 +107,8 @@ const A_LOG_ROW_IS_READ_AND_NEVER_WRITTEN =
 const OVERVIEW_CARDS: Readonly<Record<string, string>> = {
   "/department": "/agents",
   "/agents/:agentId/:tab": "/routing",
+  "/models/:provider": "/models",
+  "/models/:provider/:view": "/models",
 };
 const AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST =
   "This screen is an overview, and the list it borrows is one card on it with a link to the screen " +
@@ -116,6 +118,13 @@ const A_PIN_IS_ONE_AGENTS =
   "The one write beside this list pins a model for this agent alone, and the steps drawn are the " +
   "level's, which are saved one at a time on the Routing screen, so there is no act to do to many " +
   "of them from here.";
+const A_PROVIDER_IS_SWITCHED_ONE_AT_A_TIME =
+  "Turning a provider off moves every department's questions from the next call, and a test spends " +
+  "tokens under the presser's name, so each is confirmed from its own row with what it changes; " +
+  "several at once is how a mis-ticked row leaves no provider answering. Export reads the rows shown.";
+const A_PROVIDER_PAGE_IS_ONE_PROVIDER =
+  "This page is one provider, and the steps it lists are that provider's, drawn in the chain's " +
+  "order and changed one at a time on the Routing screen, so there is no act to do to several here.";
 const A_SKILL_IS_DECIDED_FROM_ITS_OWN_BYTES =
   "The skills listed are what agents run, and nothing about a listed skill is written from it. The " +
   "writes on this screen are a review, which approves exactly the bytes of one package after " +
@@ -154,6 +163,22 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
     bulk: READ_ONLY,
   },
   "/routing": { sort: CHAIN_IN_ORDER, bulk: A_RUNG_IS_SAVED_ONE_AT_A_TIME },
+  "/models": { bulk: A_PROVIDER_IS_SWITCHED_ONE_AT_A_TIME },
+  // A provider's page draws that provider out of the providers list and links back to it.
+  "/models/:provider": {
+    page: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    search: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    filter: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    sort: CHAIN_IN_ORDER,
+    bulk: A_PROVIDER_PAGE_IS_ONE_PROVIDER,
+  },
+  "/models/:provider/:view": {
+    page: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    search: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    filter: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    sort: CHAIN_IN_ORDER,
+    bulk: A_PROVIDER_PAGE_IS_ONE_PROVIDER,
+  },
   "/routing/:rungId": { sort: CHAIN_IN_ORDER, bulk: A_RUNG_IS_SAVED_ONE_AT_A_TIME },
   // The Profile's model card draws the agent's level from the matrix and links to the Routing screen.
   "/agents/:agentId/:tab": {
@@ -355,6 +380,7 @@ function offered(root: Element, paths: readonly string[]): Set<Capability> {
 beforeAll(async () => {
   await import("../src/pages/Records");
   await import("../src/pages/Matrix");
+  await import("../src/pages/Provider");
   await import("../src/pages/Approvals");
   await import("../src/pages/People");
 }, 120_000);

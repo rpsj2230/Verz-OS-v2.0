@@ -303,6 +303,20 @@ class SettingChange(enum.StrEnum):
     RETIRED = "retired"
 
 
+class ProviderRegistryChange(enum.StrEnum):
+    """What happened to a provider's registry row. The three words `0140`'s trigger writes (M5.6.4).
+
+    Recorded under `setting`, on the provider's own subject `setting:provider.<slug>`, which is
+    where its switch is recorded, so everything that happened to one provider is one subject. Its
+    own words rather than `SettingChange`'s, because a registry row is registered and its terms
+    change, where a setting is switched or set, and `0059`'s trigger is held to that enum exactly.
+    """
+
+    REGISTERED = "registered"
+    CHANGED = "changed"
+    RETIRED = "retired"
+
+
 class RoutingChange(enum.StrEnum):
     """What happened to a rung of the routing matrix. The three words `0059`'s trigger writes."""
 
@@ -994,17 +1008,35 @@ class AuditRecorder:
             AuditAction.CONNECTOR, subject("connector", connector), {"change": change.value}
         )
 
-    def setting(self, *, key: str, change: SettingChange) -> AuditEntry:
-        """Record that a row of `ops.setting` was switched, set or retired (M27.8.17).
+    def setting(
+        self,
+        *,
+        key: str,
+        change: SettingChange | ProviderRegistryChange,
+        fields: Sequence[str] = (),
+    ) -> AuditEntry:
+        """Record that a row of `ops.setting` was switched, set or retired (M27.8.17), or that a
+        provider's registry row was registered, changed or retired (M5.6.4).
 
-        Written in a deployed database by `0059`'s trigger on `ops.setting`, and held to this
-        method's details by a test. The subject is the key, so a feature switch, a job's pause and
-        a wizard's answer each have a subject of their own and everything that happened to one knob
-        is one subject. The actor is the row's `updated_by`, which every writer of the table sets.
-        **There is no parameter for the value**: a boolean is recorded by its direction, which is
-        all a boolean has, and anything else is `SET`, for the reason `SettingChange` gives.
+        Written in a deployed database by `0059`'s trigger on `ops.setting` and `0140`'s on
+        `ops.model_provider`, and held to this method's details by tests. The subject is the key,
+        so a feature switch, a job's pause and a wizard's answer each have a subject of their own
+        and everything that happened to one knob is one subject; a provider's registry row is
+        recorded under `provider.<slug>`, its switch's key. The actor is the row's `updated_by`,
+        which every writer of both tables sets. **There is no parameter for the value**: a boolean
+        is recorded by its direction, which is all a boolean has, and anything else is `SET`, for
+        the reason `SettingChange` gives. `fields` names the registry columns that moved on a
+        change and is refused on every other word, as `routing` refuses it.
         """
-        return self._write(AuditAction.SETTING, subject("setting", key), {"change": change.value})
+        if (change is ProviderRegistryChange.CHANGED) != bool(fields):
+            msg = (
+                "a changed registry row names the columns that moved, and every other change "
+                f"names none; this is {change.value} with fields={list(fields)!r}"
+            )
+            raise ValueError(msg)
+        details: dict[str, object] = {"change": change.value}
+        _with_names(details, "fields", fields)
+        return self._write(AuditAction.SETTING, subject("setting", key), details)
 
     def routing(
         self,

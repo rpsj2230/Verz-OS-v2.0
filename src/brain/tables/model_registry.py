@@ -25,12 +25,16 @@ records them: the question, the principal it is asked as, and whether it must be
 refused. A question that must be refused is a permission case and scored at zero tolerance
 (`brain.ops.evaluation`).
 
-**`ops.routing_change`: a matrix change and what the gate found.** A rung edit or a new rung is
-written here first, run against the golden questions and the permission canaries, and applied
-only when nothing regressed. A held change keeps its failing cases, by question id and reason, so
-the Routing screen shows why it did not take traffic.
+**`ops.routing_change`: a matrix change and what the gate found.** A rung edit, a new rung, a
+retirement or a move is written here first, run against the golden questions and the permission
+canaries, and applied only when nothing regressed. A held change keeps its failing cases, by
+question id and reason, so the Routing screen shows why it did not take traffic.
 
-Task ids: M5.6.2, M5.6.4, M5.7.2, M5.1.3, M5.5.3
+**A registry row's changes are on the audit ledger since `0140`** (M5.6.4): registering a
+provider, changing its terms or models, and retiring it, each under the provider's own setting
+subject beside its switch, so one provider's history is one subject.
+
+Task ids: M5.6.2, M5.6.4, M5.7.2, M5.1.3, M5.5.3, M5.3.3
 """
 
 from __future__ import annotations
@@ -77,10 +81,12 @@ class GoldenExpectation(enum.StrEnum):
 
 
 class ChangeKind(enum.StrEnum):
-    """What a routing change does to the ladder."""
+    """What a routing change does to the ladder. `0140` widened the column for the last two."""
 
     EDIT = "edit"
     ADD = "add"
+    RETIRE = "retire"
+    MOVE = "move"
 
 
 class ChangeStatus(enum.StrEnum):
