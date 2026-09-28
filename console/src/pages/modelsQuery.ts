@@ -1,28 +1,35 @@
 /**
- * What the Models and health screen asks five routes for, how their answers become the design's
- * cards, and the words for a provider's two controls. No React.
+ * What the Models and health screen asks four routes for, how their answers become its three
+ * cards and its Advanced section, and the words for a provider's controls. No React.
  *
- * `docs/screens.html` SCREEN 11 is the design of record: four figures across the top (answered
- * without a model, p95 answer, fallbacks fired, cost over seven days), a Priority and fallback
- * table with a row per lane and a column per rung, and two cards beneath it, Provider health and
- * Spend by department, with an Edit routing action in the bar. This module turns five answers
- * into those cards and decides nothing about who may read any of them.
+ * **The owner's screenshot is the design, and SCREEN 11 is not any more.** On 2026-09-22 he
+ * called the screen "very complicated": about ten tables, and the failover matrix he had drawn on
+ * 2026-09-03 (`.scratch/owner-imgs/0903_1.png`) nowhere on it. The screen is now three cards and a
+ * closed Advanced section: Providers (one row each, a status in words, and the key, test and
+ * switch on the row), the Failover matrix exactly as he drew it (Complexity, Step, Provider,
+ * Model, Role), and Cost this month. Everything else the screen used to draw is under Advanced,
+ * unchanged in behaviour, because nothing an administrator could do here was taken away.
  *
- * **Five requests, each to the route that owns the figure, and each card draws its own answer.**
- * The chain is `GET /routing/rungs` behind the matrix's grant, the p95 against its objective is
- * `GET /report/service-levels` behind the usage grant, the cost is `GET /report/spend` behind the
- * same, the figures only this screen knows are `GET /operate/models` behind the models screen's
- * own grant (`brain.operate_routes`), and the providers with each rung's health are
- * `GET /models/providers` (`brain.provider_routes`) behind that same grant. A reader holding some
- * and not others sees the cards they hold and the API's refusal where they do not, which is
- * `A_FIGURE_ANOTHER_ROUTE_SERVES_IS_READ_THERE` on `brain.operate_routes`: one set of rows behind
- * two grants is the day one screen shows what another refuses.
+ * **Four requests, each to the route that owns the figure, and each card draws its own answer.**
+ * The providers and the matrix are one answer, `GET /models/providers` (`brain.provider_routes`),
+ * which is the plan the next call makes; the cost is `GET /report/spend` behind the usage grant;
+ * the p95 under Advanced is `GET /report/service-levels` behind the same; and the figures only
+ * this screen knows are `GET /operate/models` behind the models screen's own grant
+ * (`brain.operate_routes`). A reader holding some and not others sees the cards they hold and the
+ * API's refusal where they do not, which is `A_FIGURE_ANOTHER_ROUTE_SERVES_IS_READ_THERE` on
+ * `brain.operate_routes`. `GET /routing/rungs` is no longer asked here: the matrix it drew was a
+ * second copy of the steps the providers answer already carries, and the copy without health.
  *
- * **The design draws lanes and the chain is kept by tier, and the table says tier.** Fast, Answer
- * and Task are how a request is admitted (`brain.core.lane`); None, Small, Main and Heavy are the
- * pools a model is chosen from (`brain.models.routing.Tier`), and `ops.routing_rung` is keyed by
- * the second. Relabelling tiers as lanes would put the design's words on rows that mean something
- * else, so the column is headed Tier and each row says what it handles.
+ * **Levels, not tiers, and the words are the architecture note's.** `brain.models.routing.Tier`
+ * says the architecture calls the three pools simple, medium and complex and the table calls them
+ * small, main and heavy. The owner's screenshot uses the first set, so the screen does, through
+ * `LEVEL_NAMES`; the tier stays the key in every request and every row.
+ *
+ * **The role is the API's, never worked out here.** A step's role is `brain.models.routing.
+ * RungRole`, derived from its position and its provider against the level's default, and the
+ * routing screen draws the same field (`matrixQuery.A_DERIVED_LABEL_IS_NEVER_AN_INPUT`). Working
+ * it out again from the previous row would be a second derivation that disagrees with the first
+ * the day a level alternates providers.
  *
  * **A model is called now, and the health drawn is the evidence of those calls.** The executor
  * `brain.models.calls` makes every model call and records each attempt; `brain.provider_routes`
@@ -40,16 +47,15 @@
  * API's sentence is written beside the empty field in `brain.ops.telemetry.UNFILLABLE_TODAY` and
  * leaves with it, so that is the sentence drawn.
  *
- * **No count of rungs, tiers or providers is rendered** beyond the share of requests answered
- * without a model, the fallbacks fired and each rung's recent calls, which are over the whole
+ * **No count of steps, levels or providers is rendered** beyond the share of requests answered
+ * without a model, the fallbacks fired and each step's recent calls, which are over the whole
  * install and served only to a reader who may see all of it.
  *
- * Task ids: M27.2.3, M27.8.8
+ * Task ids: M27.2.3, M27.8.8, M5.7.1, M5.7.3
  */
 
 import type { components } from "../api/schema";
 import { when } from "./sessionsQuery";
-import type { RungRow } from "./matrixQuery";
 import type { LaneReadingRow } from "./serviceLevelsQuery";
 import type { SpendReportBody } from "./spendQuery";
 
@@ -68,10 +74,10 @@ export type CheckBody = components["schemas"]["CheckView"];
 /** Written down because a breaker starts closed, and closed is what healthy looks like. */
 export const AN_UNCALLED_RUNG_IS_NOT_A_HEALTHY_ONE =
   "A breaker starts closed, because a router that started unknown would serve nothing until " +
-  "something had called every rung. That is right for the router and wrong for a screen: a rung " +
-  "nothing has called would be drawn healthy on the strength of nobody having looked. So a rung " +
-  "the API marks unmeasured is drawn as not called yet, and a closed breaker is drawn as healthy " +
-  "only when attempts stand behind it.";
+  "something had called every rung. That is right for the router and wrong for a screen: a step " +
+  "nothing has called would be drawn healthy on the strength of nobody having looked. So a step " +
+  "the API marks unmeasured is drawn as not called yet, a provider none of whose steps has been " +
+  "called is not used yet, and working or healthy is drawn only when attempts stand behind it.";
 
 /** Written down because a check looks like a read and is a call somebody pays for. */
 export const A_CHECK_SPENDS_TOKENS_SO_IT_IS_CONFIRMED =
@@ -85,6 +91,9 @@ export const MODELS_API_PATH = "/operate/models";
 
 /** Where the API keeps the providers, their switches and each rung's health. */
 export const PROVIDERS_API_PATH = "/models/providers";
+
+/** Where the API is told where answers are made, `brain.provider_routes.choose_profile`. */
+export const PROFILE_API_PATH = "/models/profile";
 
 /**
  * The console address, which is the screen's key in `brain.console.screens` so that
@@ -102,9 +111,9 @@ export const HOURS_PARAMETER = "hours";
 export const SINCE_PARAMETER = "since";
 
 /**
- * How long a window this screen reads, in days. Seven, the design's own "Last 7 days", and the
- * one window every card on the page is asked for so no two figures beside each other cover
- * different spans.
+ * How long a window the figures under Advanced read, in days. Seven, the old design's "Last 7
+ * days", and the one window those figures are asked for so no two beside each other cover
+ * different spans. The cost card reads the calendar month instead, which is what its heading says.
  */
 export const WINDOW_DAYS = 7;
 
@@ -122,12 +131,18 @@ export function answerLatencyApiPath(serviceLevelsApiPath: string): string {
 }
 
 /**
- * The request this screen makes of the spend route: by department, from the first day of the
- * window. `since` is a UTC day, which is the spend view's own grain.
+ * The first UTC day of the month `now` falls in, as the spend route reads a day.
+ *
+ * UTC and not the browser's own month, because `since` is a UTC day, the spend view's grain: a
+ * browser east of Greenwich on the first of the month would otherwise ask from the month before.
  */
-export function spendSinceApiPath(spendApiPath: string, dimension: string, now: Date): string {
-  const first = new Date(now.getTime() - WINDOW_DAYS * 86_400_000).toISOString().slice(0, 10);
-  return `${spendApiPath}?dimension=${dimension}&${SINCE_PARAMETER}=${first}`;
+export function monthStart(now: Date): string {
+  return `${now.toISOString().slice(0, 7)}-01`;
+}
+
+/** The request the cost card makes of the spend route: by department, from the first of the month. */
+export function spendThisMonthApiPath(spendApiPath: string, dimension: string, now: Date): string {
+  return `${spendApiPath}?dimension=${dimension}&${SINCE_PARAMETER}=${monthStart(now)}`;
 }
 
 /** Where one provider is switched on or off. */
@@ -256,35 +271,44 @@ export function unmeasuredBecause(models: ModelsBody, measure: string): string |
   return models.unmeasured.find((one) => one.measure === measure)?.because ?? null;
 }
 
-/** One tier's row in the Priority and fallback table. */
-export interface ChainRow {
-  readonly tier: string;
-  readonly handles: string;
-  /** The tier's rungs, in the order the router tries them. */
-  readonly rungs: readonly RungRow[];
+// ------------------------------------------------------------------------ names and levels
+
+/**
+ * The built-in providers by the names a person knows them by. Every other provider is called by
+ * the label its registry row carries, or by its slug when it has none. Held against
+ * `brain.ops.provider_keys.PROVIDER_SLOTS` by a test, so a fifth built-in provider fails there.
+ */
+export const PROVIDER_NAMES: Readonly<Record<string, string>> = Object.freeze({
+  anthropic: "Anthropic (Claude)",
+  openai: "OpenAI",
+  moonshot: "Moonshot (Kimi)",
+  deepseek: "DeepSeek",
+  local: "Local model",
+});
+
+/** One provider's name for a person, from this table, its registry label or its slug. */
+export function providerName(provider: string, providers: readonly ProviderStateRow[] = []): string {
+  return (
+    PROVIDER_NAMES[provider] ?? providers.find((one) => one.provider === provider)?.registered?.label ?? provider
+  );
 }
 
 /**
- * The tiers in the order the API declares them, each with its rungs in position order.
- *
- * Rungs are grouped by the tier they name and sorted by position, which is the order the router
- * follows, so the first is the primary whatever order the page arrived in.
+ * The three ladder tiers by the architecture's names for them, which are the owner's. Held
+ * against `brain.models.routing.TIER_LADDER` by a test.
  */
-export function chainRows(tiers: readonly TierRow[], rungs: readonly RungRow[]): ChainRow[] {
-  return tiers.map((tier) => ({
-    tier: tier.tier,
-    handles: tier.handles,
-    rungs: rungs
-      .filter((one) => one.tier === tier.tier)
-      .slice()
-      .sort((a, b) => a.position - b.position),
-  }));
+export const LEVEL_NAMES: Readonly<Record<string, string>> = Object.freeze({
+  small: "Simple",
+  main: "Medium",
+  heavy: "Complex",
+});
+
+/** A tier's level name, or the tier itself for one this console has not heard of. */
+export function levelName(tier: string): string {
+  return LEVEL_NAMES[tier] ?? tier;
 }
 
-/** The tier that answers with no model, whose empty chain is the design's "no model" pill. */
-export const NO_MODEL_TIER = "none";
-
-// ------------------------------------------------------------------------ provider health
+// ------------------------------------------------------------------------ the providers card
 
 /** The profile that keeps every question on the client's own hardware. */
 export const LOCAL_PROFILE = "local";
@@ -307,6 +331,144 @@ export const HOSTED_PROFILE_SENTENCE =
  */
 export function profileSentence(profile: string): string {
   return profile === HOSTED_PROFILE ? HOSTED_PROFILE_SENTENCE : LOCAL_PROFILE_SENTENCE;
+}
+
+// ------------------------------------------------------------------ where answers are made
+
+/** The heading of the control that chooses the profile, in the owner's words rather than the setting's. */
+export const WHERE_ANSWERS_ARE_MADE = "Where answers are made";
+
+/** Each profile as a person chooses it. */
+export const PROFILE_WORDS: Readonly<Record<string, string>> = Object.freeze({
+  local: "On this server only",
+  hosted: "Online providers",
+});
+
+/** The other profile, which is the one the control offers. */
+export function otherProfile(profile: string): string {
+  return profile === HOSTED_PROFILE ? LOCAL_PROFILE : HOSTED_PROFILE;
+}
+
+/** What the current profile means, in one sentence under the heading. */
+export function profileNowSentence(profile: string): string {
+  return profile === HOSTED_PROFILE
+    ? "Questions may be sent to the online providers below that are turned on and hold a key."
+    : "No question leaves this server, so the online providers below are not used, whatever their keys.";
+}
+
+/** The button that offers the other profile. */
+export function chooseProfileLabel(profile: string): string {
+  return profile === HOSTED_PROFILE ? "Use online providers" : "Keep answers on this server";
+}
+
+/** The confirmation's question for choosing `profile`. */
+export function profileQuestion(profile: string): string {
+  return profile === HOSTED_PROFILE ? "Send questions to online providers?" : "Keep answers on this server only?";
+}
+
+/**
+ * What choosing `profile` does. The online direction says what leaves the server and to whom,
+ * because that is the decision: the text of a question and the passages found for it.
+ */
+export function profileConsequence(profile: string): string {
+  return profile === HOSTED_PROFILE
+    ? "From the next question, the text of a question and the passages found for it may be sent " +
+        "to the online providers below that are turned on and hold a key. Each provider's region, " +
+        "retention and training terms are under Advanced."
+    : "From the next question, no text leaves this server. The online providers below stop being " +
+        "used, and a question that needs a model goes unanswered unless one runs on this server.";
+}
+
+/** Said once the choice is saved, above the card the API's new plan is drawn in. */
+export function profileChosenSentence(profile: string): string {
+  return `Answers are now made by ${(PROFILE_WORDS[profile] ?? profile).toLowerCase()}.`;
+}
+
+/** The one field the write carries, `brain.provider_routes.ProfileAsked`. */
+export function profileBody(profile: string): { readonly profile: string } {
+  return { profile };
+}
+
+// ------------------------------------------------------------------ the providers' statuses
+
+/** How a provider is doing, as one of six words, each with the pill's text. */
+export type ProviderStatusKind = "off" | "no_key" | "server_only" | "resting" | "unused" | "working";
+
+export interface ProviderStatus {
+  readonly kind: ProviderStatusKind;
+  readonly label: string;
+}
+
+export const TURNED_OFF = "Turned off";
+export const NO_KEY = "No key";
+export const KEY_SAVED = "Key saved";
+export const SERVER_ONLY = "Not used: answers stay on this server";
+
+/**
+ * One provider's status pill, from its switch, the key this server holds, where answers are made
+ * and the health of its steps that answer.
+ *
+ * In that order, because each hides the next: a provider switched off is not called whatever its
+ * key, one with no key is not called whatever the profile, and an online provider on an install
+ * keeping answers on its own server is not called whatever its health. A provider none of whose
+ * answering steps has been called is "not used yet" and never "working", which is
+ * `AN_UNCALLED_RUNG_IS_NOT_A_HEALTHY_ONE` said about the provider rather than the step.
+ * The key is `key_held`, the fact that decides whether its steps answer, and not the vault's.
+ */
+export function providerStatus(
+  row: ProviderStateRow,
+  steps: readonly RungStateRow[],
+  profile: string = HOSTED_PROFILE,
+): ProviderStatus {
+  if (!row.switched_on) {
+    return { kind: "off", label: TURNED_OFF };
+  }
+  if (row.key_held === false) {
+    return { kind: "no_key", label: NO_KEY };
+  }
+  if (row.hosted && profile !== HOSTED_PROFILE) {
+    return { kind: "server_only", label: SERVER_ONLY };
+  }
+  const answering = steps.filter((one) => one.provider === row.provider && one.enabled && one.answers);
+  const [kind, words] = answering.some((one) => one.measured && one.state !== "closed")
+    ? (["resting", "resting after errors"] as const)
+    : answering.some((one) => one.measured)
+      ? (["working", "working"] as const)
+      : (["unused", "not used yet"] as const);
+  // A provider needing no key has nothing saved, so its status is the health alone.
+  const label = row.key_held === true ? `${KEY_SAVED}, ${words}` : `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
+  return { kind, label };
+}
+
+export const ADD_KEY = "Add key";
+export const REPLACE_KEY = "Replace key";
+
+/**
+ * Whether a provider's key action replaces a key or adds the first one. Either fact counts: a key
+ * this server holds from its environment and a key the vault holds for the next start are both a
+ * key the new one replaces.
+ */
+export function keyAction(row: ProviderStateRow): string {
+  return row.key_held === true || row.credential?.held === true ? REPLACE_KEY : ADD_KEY;
+}
+
+/**
+ * When the vault took this provider's key, for a reader the API sent the vault's column to, or
+ * null. Said beside the status because "which keys did I save" is answered by the vault, while the
+ * status is what this server holds; after a save the two can differ for a minute, and both are true.
+ */
+export function vaultKeyLine(row: ProviderStateRow): string | null {
+  const vault = row.credential;
+  if (vault === null) {
+    return null;
+  }
+  if (vault.held === null) {
+    return VAULT_NOT_KNOWN;
+  }
+  if (!vault.held) {
+    return "No key in the vault";
+  }
+  return vault.set_at === null ? "Key in the vault" : `Key in the vault since ${when(vault.set_at)}`;
 }
 
 export const SWITCHED_ON = "On";
@@ -332,7 +494,7 @@ export function keyHeldWords(held: boolean | null): string {
 /** Beside the key column, because it is easy to read as the vault's answer and it is not. */
 export const KEY_HELD_IS_THIS_SERVER =
   "Key held is whether the server process that answered this page holds a key for the provider, " +
-  "which is what decides whether its rungs answer here. No key is ever shown.";
+  "which is what decides whether its steps answer here. No key is ever shown.";
 
 export const VAULT_HELD = "Held in the vault";
 export const VAULT_NOT_HELD = "Not in the vault";
@@ -349,24 +511,158 @@ export function credentialWords(credential: components["schemas"]["SlotView"]): 
   return credential.set_at === null ? VAULT_HELD : `${VAULT_HELD}, set ${when(credential.set_at)}`;
 }
 
-export const ANSWERS_NOW = "Answers";
-export const RUNG_OUT_OF_ROTATION = "Out of rotation";
+// ------------------------------------------------------------------------ the failover matrix
 
-/**
- * Whether a rung answers the next call, in words: out of rotation, answering, or the API's own
- * sentence for why it is left out.
- */
-export function answersWords(rung: RungStateRow): string {
-  if (!rung.enabled) {
-    return RUNG_OUT_OF_ROTATION;
-  }
-  if (rung.answers) {
-    return ANSWERS_NOW;
-  }
-  return rung.told ?? NOT_ANSWERING;
+/** The Role column's words for `brain.models.routing.RungRole`, held against it by a test. */
+export const ROLE_WORDS: Readonly<Record<string, string>> = Object.freeze({
+  primary: "default",
+  same_provider_failover: "next model, same provider",
+  cross_provider_failover: "next provider",
+});
+
+/** The role that is drawn as the default pill rather than as words. */
+export const DEFAULT_ROLE = "primary";
+
+/** Why a step does not answer the next call, as one of six words, each with its marker's text. */
+export type StepMarkerKind = "paused" | "turned_off" | "no_key" | "local_only" | "cannot_call" | "resting";
+
+export interface StepMarker {
+  readonly kind: StepMarkerKind;
+  readonly label: string;
 }
 
-/** A rung left out with no sentence from the API, which the route does not send and a release might. */
+/** Each `brain.models.assembly.RungSkip` as the step's marker. Held against the enum by a test. */
+export const SKIPPED_MARKERS: Readonly<Record<string, StepMarker>> = Object.freeze({
+  switched_off: { kind: "turned_off", label: "provider turned off" },
+  no_key: { kind: "no_key", label: "no key" },
+  local_profile: { kind: "local_only", label: "not sent online" },
+  no_transport: { kind: "cannot_call", label: "cannot be called" },
+  no_inference_server: { kind: "cannot_call", label: "no server address" },
+});
+
+export const PAUSED: StepMarker = Object.freeze({ kind: "paused", label: "paused on the routing screen" });
+export const RESTING_MARKER: StepMarker = Object.freeze({ kind: "resting", label: "resting after errors" });
+
+/**
+ * The marker a step carries when it will not answer the next call, or null when it will.
+ *
+ * Quiet by default, as the owner's screenshot is: a step that answers says nothing beyond its
+ * role. A step nothing has called is not marked, because not having been called is not a fault.
+ */
+export function stepMarker(step: RungStateRow): StepMarker | null {
+  if (!step.enabled) {
+    return PAUSED;
+  }
+  if (!step.answers) {
+    return SKIPPED_MARKERS[step.skipped_because ?? ""] ?? { kind: "cannot_call", label: "not answering" };
+  }
+  if (step.measured && step.state === "open") {
+    return RESTING_MARKER;
+  }
+  return null;
+}
+
+/** One row of the failover matrix, as the owner drew it. */
+export interface MatrixRow {
+  readonly key: string;
+  readonly tier: string;
+  /** The level's name on the first row of its group, and null on every row after it. */
+  readonly level: string | null;
+  /** From 1, in the order the level tries its steps. Null on a level with no step. */
+  readonly step: number | null;
+  readonly provider: string;
+  readonly model: string;
+  readonly role: string;
+  readonly marker: StepMarker | null;
+}
+
+export const NO_STEP_FOR_THE_LEVEL = "No model is set up for this level.";
+
+/**
+ * The matrix's rows: each ladder level in the order the API lists them, its steps by position
+ * whatever order they arrived in, and a level with no step as one row saying so.
+ *
+ * The levels are the providers answer's `tiers`, which are `TIER_LADDER`, so a level nobody has
+ * set up is drawn rather than left out: a missing group reads as a level that cannot be asked.
+ */
+export function matrixRows(body: ProvidersBody): MatrixRow[] {
+  const rows: MatrixRow[] = [];
+  const tiers = body.tiers.map((one) => one.tier);
+  // A step naming a tier the API did not list is drawn after the ones it did, never dropped.
+  for (const step of body.rungs) {
+    if (!tiers.includes(step.tier)) {
+      tiers.push(step.tier);
+    }
+  }
+  for (const tier of tiers) {
+    const steps = body.rungs
+      .filter((one) => one.tier === tier)
+      .slice()
+      .sort((a, b) => a.position - b.position);
+    if (steps.length === 0) {
+      rows.push({
+        key: `${tier}-none`,
+        tier,
+        level: levelName(tier),
+        step: null,
+        provider: NO_STEP_FOR_THE_LEVEL,
+        model: "",
+        role: "",
+        marker: null,
+      });
+      continue;
+    }
+    steps.forEach((one, index) => {
+      rows.push({
+        key: one.rung_id,
+        tier,
+        level: index === 0 ? levelName(tier) : null,
+        step: index + 1,
+        provider: providerName(one.provider, body.providers),
+        model: one.model,
+        role: one.role,
+        marker: stepMarker(one),
+      });
+    });
+  }
+  return rows;
+}
+
+/** A role in words; an unknown role keeps the API's own spelling. */
+export function roleWords(role: string): string {
+  return ROLE_WORDS[role] ?? role;
+}
+
+export const LEVELS_CANNOT_ANSWER = "Not every level can answer";
+
+/** One level the API names as exhausted. */
+export function exhaustedSentence(tier: string): string {
+  return (
+    `The ${levelName(tier)} level cannot answer: every step on it is resting after recent failures, ` +
+    "so a question needing it fails until one recovers."
+  );
+}
+
+// ------------------------------------------------------------------------ under Advanced
+
+export const ANSWERS_NOW = "Answers";
+export const STEP_PAUSED = "Paused on the routing screen";
+
+/**
+ * Whether a step answers the next call, in words: paused, answering, or the API's own sentence
+ * for why it is left out.
+ */
+export function answersWords(step: RungStateRow): string {
+  if (!step.enabled) {
+    return STEP_PAUSED;
+  }
+  if (step.answers) {
+    return ANSWERS_NOW;
+  }
+  return step.told ?? NOT_ANSWERING;
+}
+
+/** A step left out with no sentence from the API, which the route does not send and a release might. */
 export const NOT_ANSWERING = "Does not answer the next call.";
 
 export const NOT_CALLED_YET = "Not called yet, so there is no health to show";
@@ -374,110 +670,100 @@ export const HEALTHY = "Healthy";
 export const RECOVERING = "Recovering: the next call to it is a test";
 export const RESTING = "Resting after failures";
 
-/** Why a breaker opened, by `brain.models.routing.FallbackTrigger` value. */
+/** Why a step started resting, by `brain.models.routing.FallbackTrigger` value. */
 export const UNHEALTHY_BECAUSE: Readonly<Record<string, string>> = Object.freeze({
   connection_error: "the provider could not be reached",
   timeout: "the provider did not answer in time",
   rate_limited: "the provider asked for fewer requests",
   provider_error: "the provider reported a fault on its side",
-  circuit_open: "its breaker was already open",
+  circuit_open: "it was already resting",
   context_exceeded: "a request did not fit the model's window",
 });
 
 /**
- * One rung's health in words. See `AN_UNCALLED_RUNG_IS_NOT_A_HEALTHY_ONE`: an unmeasured rung is
+ * One step's health in words. See `AN_UNCALLED_RUNG_IS_NOT_A_HEALTHY_ONE`: an unmeasured step is
  * not called yet whatever state the API sends beside it.
  */
-export function healthWords(rung: RungStateRow): string {
-  if (!rung.measured) {
+export function healthWords(step: RungStateRow): string {
+  if (!step.measured) {
     return NOT_CALLED_YET;
   }
-  switch (rung.state) {
+  switch (step.state) {
     case "closed":
       return HEALTHY;
     case "half_open":
       return RECOVERING;
     case "open": {
-      if (rung.unhealthy_because === null) {
+      if (step.unhealthy_because === null) {
         return RESTING;
       }
-      return `${RESTING}: ${UNHEALTHY_BECAUSE[rung.unhealthy_because] ?? rung.unhealthy_because}`;
+      return `${RESTING}: ${UNHEALTHY_BECAUSE[step.unhealthy_because] ?? step.unhealthy_because}`;
     }
   }
 }
 
-/** A rung's recent calls, as the API counted them. */
-export function recentCalls(rung: RungStateRow): string {
-  const calls = rung.live_seen === 1 ? "recent call" : "recent calls";
-  return `${String(rung.live_seen)} ${calls}, ${String(rung.live_failed)} failed`;
-}
-
-export const TIERS_CANNOT_ANSWER = "Not every tier can answer";
-
-/** One tier the API names as exhausted. */
-export function exhaustedSentence(tier: string): string {
-  return (
-    `The ${tier} tier cannot answer: every rung on it is resting after recent failures, so a ` +
-    "question needing it fails until one recovers."
-  );
+/** A step's recent calls, as the API counted them. */
+export function recentCalls(step: RungStateRow): string {
+  const calls = step.live_seen === 1 ? "recent call" : "recent calls";
+  return `${String(step.live_seen)} ${calls}, ${String(step.live_failed)} failed`;
 }
 
 export const NO_PROVIDER = "No provider is listed.";
-export const NO_RUNG_ON_THE_LADDER =
-  "No rung is on the routing ladder, so no question can be answered by a model.";
+export const NO_STEP_ON_THE_MATRIX =
+  "No step is on the failover matrix, so no question can be answered by a model.";
 
-// ------------------------------------------------------------------------ the two controls
+// ------------------------------------------------------------------------ the row controls
 
-export const SWITCH_ON = "Switch on";
-export const SWITCH_OFF = "Switch off";
+export const TURN_ON = "Turn on";
+export const TURN_OFF = "Turn off";
 export const KEEP_IT_AS_IT_IS = "Keep it as it is";
-export const CHECK = "Check";
-export const SEND_THE_CHECK = "Send the check";
-export const DO_NOT_CHECK = "Do not check";
+export const TEST = "Test";
+export const SEND_THE_TEST = "Send the test";
+export const DO_NOT_TEST = "Do not test";
 
-/** The confirmation's question for a switch, naming the provider. */
-export function switchQuestion(provider: string, on: boolean): string {
-  return `Switch ${on ? "on" : "off"} ${provider}?`;
+/** The confirmation's question for a switch, naming the provider as a person knows it. */
+export function switchQuestion(name: string, on: boolean): string {
+  return `Turn ${on ? "on" : "off"} ${name}?`;
 }
 
 /** What a switch does, in each direction, naming the provider. */
-export function switchConsequence(provider: string, on: boolean): string {
+export function switchConsequence(name: string, on: boolean): string {
   if (on) {
     return (
-      `From the next call, in every server process, rungs naming ${provider} may answer again ` +
+      `From the next call, in every server process, steps naming ${name} may answer again ` +
       "where a key is held and the model profile allows it."
     );
   }
   return (
-    `From the next call, in every server process, no question is sent to ${provider}. Its rungs ` +
-    "leave the chain every tier walks, and a tier with no other rung that answers cannot answer."
+    `From the next call, in every server process, no question is sent to ${name}. Its steps ` +
+    "leave the failover matrix, and a level with no other step that answers cannot answer."
   );
 }
 
 /** Said once the switch has been made, above the card the API's new plan is drawn in. */
-export function switchedSentence(provider: string, on: boolean): string {
-  return `${provider} is now switched ${on ? "on" : "off"}.`;
+export function switchedSentence(name: string, on: boolean): string {
+  return `${name} is now turned ${on ? "on" : "off"}.`;
 }
 
-/** The confirmation's question for a check, naming the provider. */
-export function checkQuestion(provider: string): string {
-  return `Check ${provider}?`;
+/** The confirmation's question for a test, naming the provider. */
+export function checkQuestion(name: string): string {
+  return `Test ${name}?`;
 }
 
-/** What a check does. See `A_CHECK_SPENDS_TOKENS_SO_IT_IS_CONFIRMED`. */
-export function checkConsequence(provider: string): string {
+/** What a test does. See `A_CHECK_SPENDS_TOKENS_SO_IT_IS_CONFIRMED`. */
+export function checkConsequence(name: string): string {
   return (
-    `This sends one short fixed sentence to ${provider} through its first rung that answers. It ` +
+    `This sends one short fixed sentence to ${name} through its first step that answers. It ` +
     "costs a few tokens and is recorded under your name. The provider's reply is not shown."
   );
 }
 
-/** The heading over a check's outcome. */
-export function checkHeading(provider: string): string {
-  return `Check of ${provider}`;
+/** The heading over a test's outcome. */
+export function checkHeading(name: string): string {
+  return `Test of ${name}`;
 }
 
-/** What answered a check and what it cost, as the API measured it. */
+/** What answered a test and what it cost, as the API measured it. */
 export function checkServedSentence(check: CheckBody): string {
   return (
     `Answered by ${check.model ?? "a model the API did not name"} on ` +
@@ -486,12 +772,14 @@ export function checkServedSentence(check: CheckBody): string {
   );
 }
 
-/** The provider's status on a check that failed with one. */
+/** The provider's status on a test that failed with one. */
 export function checkStatusSentence(status: number): string {
   return `The provider answered with HTTP status ${String(status)}.`;
 }
 
-/** One department's line in the spend card, with its share of the total the API sent. */
+// ------------------------------------------------------------------------ cost this month
+
+/** One department's line in the cost card, with its share of the total the API sent. */
 export interface SpendShare {
   readonly key: string;
   readonly costMinor: number;

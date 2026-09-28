@@ -7,7 +7,7 @@ Driven through the real application with the token machinery and the directory b
 the database the switch writes to is a stub that keeps `ops.setting` rows by key, so the switch
 reaches the same ladder the next plan reads.
 
-Task ids: M27.8.8, M27.2.3
+Task ids: M27.8.8, M27.2.3, M5.7.1
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 import os
 import uuid
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any
@@ -41,7 +41,8 @@ from brain.credential_routes import CREDENTIAL_AUTHORITY
 from brain.gate.finish import Finished, ModelCallOutcome
 from brain.identity.bearer import TokenAuthority
 from brain.models.adapter import Completion, SdkDriver, TransportStatusError
-from brain.models.assembly import HOSTED_PROFILE, TOLD, LadderRung, RungSkip
+from brain.install import hold_saved, value_of
+from brain.models.assembly import HOSTED_PROFILE, LOCAL_PROFILE, TOLD, LadderRung, RungSkip
 from brain.models.calls import LadderState, ModelCalls
 from brain.models.driver import DriverRequest, ModelDriver
 from brain.models.evidence import Attempt
@@ -59,9 +60,11 @@ from brain.provider_routes import (
     CHECK_MAX_OUTPUT_TOKENS,
     CHECK_PROMPT,
     CHECK_TOLD,
+    PROFILE_SETTING,
     may_switch,
 )
 from brain.routing_routes import MATRIX_WRITE
+from brain.settings_routes import INSTALL_SETTING_AUTHORITY
 from brain.tables.audit import ACTOR_SETTING, ENT_HASH_SETTING, TRACE_ID_SETTING
 from brain.tables.config import SettingType
 from tests.fixtures.http_client import Response
@@ -78,6 +81,7 @@ from tests.unit.test_api_routes import (
 )
 
 PROVIDERS = f"{API_PREFIX}/models/providers"
+PROFILE = f"{API_PREFIX}/models/profile"
 
 #: The tables a rung save and a check touch, built from the models on a scratch server.
 RUNG_TABLES = (
@@ -110,15 +114,17 @@ def grants(*held: tuple[Capability, Scope]) -> tuple[Grant, ...]:
     return tuple(Grant(capability=one, scope=scope) for one, scope in held)
 
 
-#: `u_admin` reads, switches and manages credentials. `u_wide` reads and switches. `u_narrow`
-#: reads. `u_elsewhere` holds all three scoped to one department. `u_prefix` holds read and write
-#: with only the existence plane. `u_none` holds nothing.
+#: `u_admin` reads, switches, manages credentials and holds the installation settings, which is
+#: the super administrator's authority. `u_wide` reads and switches. `u_narrow` reads.
+#: `u_elsewhere` holds all of them scoped to one department. `u_prefix` holds read and write with
+#: only the existence plane. `u_none` holds nothing.
 GRANTS: Mapping[str, tuple[Grant, ...]] = {
     "u_admin": grants(
         (MODEL_READ, EVERYWHERE),
         (CONFIGURATION, EVERYWHERE),
         (MATRIX_WRITE, EVERYWHERE),
         (CREDENTIAL_AUTHORITY, EVERYWHERE),
+        (INSTALL_SETTING_AUTHORITY, EVERYWHERE),
     ),
     "u_wide": grants(
         (MODEL_READ, EVERYWHERE), (CONFIGURATION, EVERYWHERE), (MATRIX_WRITE, EVERYWHERE)
@@ -128,6 +134,7 @@ GRANTS: Mapping[str, tuple[Grant, ...]] = {
         (MODEL_READ, Scope.department("finance")),
         (CONFIGURATION, EVERYWHERE),
         (MATRIX_WRITE, Scope.department("finance")),
+        (INSTALL_SETTING_AUTHORITY, Scope.department("finance")),
     ),
     "u_prefix": grants(
         (MODEL_READ, EVERYWHERE), (EXISTENCE, EVERYWHERE), (MATRIX_WRITE, EVERYWHERE)
@@ -169,6 +176,8 @@ class Estate:
         rung("openai", tier=Tier.HEAVY),
     )
     settings: dict[str, tuple[Any, str]] = field(default_factory=dict)
+    #: The installation values saved under `install.`, by key: the value and who saved it.
+    installed: dict[str, tuple[str, str]] = field(default_factory=dict)
     attempts: tuple[Attempt, ...] = ()
     held: frozenset[str] = frozenset({"anthropic", "moonshot"})
     answers: dict[str, Completion | BaseException] = field(default_factory=dict)
@@ -248,9 +257,25 @@ class SettingSession(AsyncSession):
             return None
         if isinstance(statement, Insert):
             params = statement.compile(dialect=DIALECT).params
-            _ESTATE.settings[str(params["key"])] = (params["value"], str(params["updated_by"]))
+            if "key" in params:
+                _ESTATE.settings[str(params["key"])] = (params["value"], str(params["updated_by"]))
+                return None
+            # `brain.ops.install_settings.save` inserts a list of rows, so its names are numbered.
+            for index in range(len([name for name in params if name.startswith("key_m")])):
+                _ESTATE.installed[str(params[f"key_m{index}"])] = (
+                    str(params[f"value_m{index}"]),
+                    str(params[f"updated_by_m{index}"]),
+                )
             return None
         columns = [one["name"] for one in statement.column_descriptions]
+        if columns == ["key", "value_type", "value"]:
+            # `brain.ops.install_settings.load`, reading back what was saved.
+            return _Rows(
+                [
+                    (key, SettingType.STRING.value, value)
+                    for key, (value, _by) in sorted(_ESTATE.installed.items())
+                ]
+            )
         assert columns == ["key", "value_type", "value", "updated_by", "updated_at"], columns
         now = datetime.now(UTC)
         rows = [
@@ -309,7 +334,9 @@ def _wiring() -> GateWiring:
     )
 
 
-def _service(estate: Estate) -> ModelService:
+def _service(
+    estate: Estate, profile: Callable[[], str] = lambda: HOSTED_PROFILE
+) -> ModelService:
     drivers: dict[str, ModelDriver] = {
         one: SdkDriver(provider=one, transport=estate.transport(one))
         for one in ("anthropic", "moonshot", "openai")
@@ -319,7 +346,7 @@ def _service(estate: Estate) -> ModelService:
             ladder=estate,
             attempts=AttemptLog(estate),
             drivers=drivers,
-            profile=lambda: HOSTED_PROFILE,
+            profile=profile,
             held=lambda: estate.held,
             clock=lambda: datetime.now(UTC),
         ),
@@ -508,6 +535,89 @@ def test_the_write_capability_must_be_held_unrestricted_and_the_positive_case_ho
         EntitlementSet(principal_id="u_elsewhere", grants=GRANTS["u_elsewhere"]), now
     )
     assert not may_switch(EntitlementSet(principal_id="u_narrow", grants=GRANTS["u_narrow"]), now)
+
+
+# ------------------------------------------------------------------ where answers are made
+
+
+@pytest.fixture
+def chosen(client: TestClient, estate: Estate) -> Iterator[None]:
+    """The executor reading the profile through `value_of`, as the lifespan builds it, with this
+    process's saved values starting at the local profile and put back afterwards."""
+    app: Any = client.app
+    app.state.models = _service(estate, profile=lambda: value_of(PROFILE_SETTING))
+    before = hold_saved({PROFILE_SETTING: LOCAL_PROFILE})
+    yield
+    hold_saved(before)
+
+
+def test_where_answers_are_made_is_saved_by_the_super_administrator_ledgered_and_planned_at_once(
+    client: TestClient, estate: Estate, chosen: None
+) -> None:
+    """The installation row is written under the profile's key with who saved it, attributed for
+    its ledger entry, held by this process, and the plan answered with already sends to the
+    online providers the local profile had left out.
+
+    Delete this and the owner's only way to let questions reach an online provider after setup is
+    a shell on the server, which is the state his install was found in on 2026-09-28."""
+    before = call(client, "GET", "u_admin", PROVIDERS).json()
+    assert before["profile"] == LOCAL_PROFILE
+    assert before["profile_editable"] is True
+    assert {one["skipped_because"] for one in before["rungs"]} == {RungSkip.LOCAL_PROFILE.value}
+
+    chose = call(client, "PUT", "u_admin", PROFILE, {"profile": HOSTED_PROFILE})
+
+    assert chose.status_code == 200
+    assert estate.installed == {"install.model_profile": (HOSTED_PROFILE, "u_admin")}
+    assert estate.attributed == [ACTOR_SETTING, ENT_HASH_SETTING, TRACE_ID_SETTING]
+    assert value_of(PROFILE_SETTING) == HOSTED_PROFILE
+    view = chose.json()
+    assert view["profile"] == HOSTED_PROFILE
+    rungs = {one["deployment_id"]: one for one in view["rungs"]}
+    assert rungs["anthropic-main-0"]["answers"] is True
+    assert rungs["openai-heavy-0"]["skipped_because"] == RungSkip.NO_KEY.value
+
+
+@pytest.mark.parametrize("pid", ["u_wide", "u_elsewhere", "u_narrow", "u_none"])
+def test_where_answers_are_made_is_refused_without_the_setting_authority_over_everything(
+    client: TestClient, estate: Estate, chosen: None, pid: str
+) -> None:
+    """Every administrator short of the installation setting authority held over everything is
+    refused as a caller who may not read the screen is, and nothing is written or held. The
+    reader who may switch providers is not offered the control either.
+
+    Delete this and whoever may switch a provider, or holds the authority for one department,
+    can send every department's questions off the server."""
+    refused = call(client, "PUT", pid, PROFILE, {"profile": HOSTED_PROFILE})
+
+    assert refused.status_code == 404
+    assert refused.json()["message"] == call(client, "GET", "u_none", PROVIDERS).json()["message"]
+    assert estate.installed == {}
+    assert estate.attributed == []
+    assert value_of(PROFILE_SETTING) == LOCAL_PROFILE
+    assert call(client, "GET", "u_wide", PROVIDERS).json()["profile_editable"] is False
+
+
+def test_a_profile_that_is_neither_of_the_two_is_refused_and_nothing_is_written(
+    client: TestClient, estate: Estate, chosen: None
+) -> None:
+    """Delete this and a typed value such as "online" is saved, read by the executor as local
+    because it is not hosted, and shown by the Settings screen as a profile nobody offered."""
+    refused = call(client, "PUT", "u_admin", PROFILE, {"profile": "online"})
+
+    assert refused.status_code == 422
+    assert estate.installed == {}
+    assert value_of(PROFILE_SETTING) == LOCAL_PROFILE
+
+
+def test_the_local_profile_tells_the_administrator_where_the_control_is() -> None:
+    """Delete this and the sentence beside every skipped step goes back to naming "the setup
+    settings", which no screen offers after setup, which is what the owner was told on 2026-09-28."""
+    told = TOLD[RungSkip.LOCAL_PROFILE]
+
+    assert "Where answers are made" in told
+    assert "Models and health" in told
+    assert "setup" not in told
 
 
 # ----------------------------------------------------------------------------- the check
