@@ -68,6 +68,7 @@ from brain.gate.entitlement_store import StoredEntitlements
 from brain.gate.prefix import build_prefix
 from brain.jobs_routes import SCHEDULE_AUTHORITY
 from brain.knowledge.visibility import Visibility
+from brain.notification_routes import EMAIL_PATH, NOTIFICATION_AUTHORITY, REMOVAL_PATH
 from brain.ops.features import SCHEDULE_CONTROL, is_on
 from brain.ops.matrix_gate import GateVerdict
 from brain.ops.retention import sweep
@@ -523,6 +524,54 @@ def test_an_operators_statement_on_a_setting_is_recorded_without_its_value() -> 
     )
     assert all("Example" not in str(one.details) for one in chain)
     assert all(one.ent_hash == UNSUPPLIED and one.trace_id.startswith("tx.") for one in found)
+    assert AuditChain(chain).verify() is None
+
+
+# ------------------------------------------------------------------------- the relay
+
+RELAY_GRANTS = {"u_admin": (Grant(capability=NOTIFICATION_AUTHORITY, scope=EVERYWHERE),)}
+RELAY_KEYS = ("host", "port", "security", "sender", "username")
+
+
+def test_removing_the_relay_retires_its_rows_as_the_application_and_names_the_remover() -> None:
+    """**The relay's removal followed to the row and the ledger.** Saved and then removed through
+    the routes as the application role: `0045`'s policy admits the retirement, every `mail.*` row
+    is retired naming the person, `0059`'s trigger appends one `retired` entry per row attributed
+    to them with the request's reach and trace, and a second removal finds nothing to remove.
+    Delete this and a removal can be refused by the policy in production, or leave retirements
+    the ledger attributes to nobody. **Skips without a server.**"""
+    relay = {
+        "host": "smtp.example.com",
+        "port": 587,
+        "security": "starttls",
+        "sender": "console@example.com",
+        "username": "relay_user",
+    }
+
+    async def save_then_remove(client: httpx.AsyncClient) -> list[int]:
+        asked = headers("u_admin")
+        saved = await client.post(f"{API_PREFIX}{EMAIL_PATH}", json=relay, headers=asked)
+        removed = await client.post(f"{API_PREFIX}{REMOVAL_PATH}", headers=asked)
+        again = await client.post(f"{API_PREFIX}{REMOVAL_PATH}", headers=asked)
+        return [saved.status_code, removed.status_code, again.status_code]
+
+    with through_0059("brain_console_audit_relay") as url:
+        assert pressed(url, RELAY_GRANTS, save_then_remove) == [200, 200, 409]
+        rows = sql(
+            url,
+            "SELECT key, updated_by, deleted_at IS NOT NULL FROM ops.setting "
+            "WHERE key LIKE 'mail.%' ORDER BY key",
+        )
+        found = seen(url, "setting")
+        chain = entries(url)
+
+    keys = sorted(f"mail.{name}" for name in RELAY_KEYS)
+    assert rows == [(key, "u_admin", True) for key in keys]
+    retired = [one for one in found if one.details.get("change") == SettingChange.RETIRED.value]
+    assert summary(retired) == wanted(
+        *(("u_admin", recorder().setting(key=key, change=SettingChange.RETIRED)) for key in keys)
+    )
+    assert attributed(found)
     assert AuditChain(chain).verify() is None
 
 

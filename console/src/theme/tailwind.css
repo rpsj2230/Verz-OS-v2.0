@@ -71,6 +71,9 @@
 @source "../pages/skills";
 @source "../pages/credentials";
 @source "../pages/operations";
+@source "../pages/channels";
+@source "../pages/webhooks";
+@source "../pages/notifications";
 @source not inline("grid");
 
 /*

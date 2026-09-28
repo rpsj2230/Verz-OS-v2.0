@@ -1,5 +1,5 @@
 /**
- * What the Notifications screen asks `brain.notification_routes` for and sends it, and how the
+ * What the Notifications page asks `brain.notification_routes` for and sends it, and how the
  * answers are read. No React.
  *
  * **Nothing here decides who may change a notice or the relay.** The route answers only a caller
@@ -40,11 +40,27 @@ export function readAlerts(page: NotificationsBody): Alerts {
   return { rows };
 }
 
-/** Where the API keeps the screen, and the four writes beneath it. */
+/** Where the API keeps the screen, and the five writes beneath it. */
 export const NOTIFICATIONS_API_PATH = "/notifications";
 export const RELAY_API_PATH = "/notifications/relay";
 export const PASSWORD_API_PATH = "/notifications/relay/password";
 export const TRIAL_API_PATH = "/notifications/relay/test";
+export const REMOVAL_API_PATH = "/notifications/relay/removal";
+
+/** What each relay field accepts, said under it before anything is sent. */
+export const RELAY_FORMATS = Object.freeze({
+  host: "The relay's host name only, such as smtp.example.com: no scheme, no port.",
+  port: "A whole number from 1 to 65535. 587 is usual with STARTTLS, 465 with TLS.",
+  sender: "The address mail is sent from, such as console@example.com.",
+  username: "The user name the relay expects. Leave it empty for a relay that takes none.",
+  password: "Kept in the vault and never shown again.",
+  to: "One email address to send the test message to.",
+});
+
+/** A person by name, from the page's `people`, or the sentence for someone the directory does not list. */
+export function personWords(people: Readonly<Record<string, string>> | undefined, id: string | null): string {
+  return id === null ? "" : (people?.[id] ?? "someone no longer listed");
+}
 
 export function noticeApiPath(kind: string): string {
   return `/notifications/notices/${encodeURIComponent(kind)}`;
@@ -111,16 +127,13 @@ export function portNumber(port: string): number | null {
   return /^\d{1,5}$/.test(port.trim()) ? Number(port.trim()) : null;
 }
 
-/** The password line, in words: held since, not held, or not known with the vault's reason. */
-export function passwordSentence(email: EmailBody): string {
-  const password = email.password;
-  if (password.held === null) {
+/** The password, in a word: held, not held, or not known when the vault could not be asked. */
+export function passwordWord(email: EmailBody): string {
+  const held = email.password.held;
+  if (held === null) {
     return "Not known";
   }
-  if (!password.held) {
-    return "Not held";
-  }
-  return password.written_at === null ? "Held" : `Held, written ${when(password.written_at)}`;
+  return held ? "Held" : "Not held";
 }
 
 /** How a notice reaches people today, in two words. */

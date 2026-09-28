@@ -926,6 +926,7 @@ const WEBHOOKS = {
   replacing: UNBROKEN,
   switching_off: UNBROKEN,
   secret_minimum: 32,
+  people: { [UNBROKEN]: UNBROKEN },
 };
 
 const NOTIFICATIONS = {
@@ -978,7 +979,9 @@ const NOTIFICATIONS = {
   saving_email: UNBROKEN,
   keeping_password: UNBROKEN,
   sending_trial: UNBROKEN,
+  removing_email: UNBROKEN,
   plain_smtp_refused: UNBROKEN,
+  people: { [UNBROKEN]: UNBROKEN },
 };
 
 const STORAGE = {
@@ -1262,6 +1265,77 @@ const JOB_RUNS = {
   ],
   next_cursor: null,
   truncated: false,
+};
+
+/** One channel on the module list as `brain.binding_routes.ChannelRowView` sends it. */
+const CHANNEL_ROW = {
+  channel: "webhook",
+  label: UNBROKEN,
+  receives: true,
+  status: "on",
+  secret: "held",
+  health: "working",
+  last_delivered_at: "2019-03-04T09:00:00Z",
+  events_path: `/api/v1/channels/webhook/${UNBROKEN}`,
+  tenant_fields: ["reply_url"],
+  tenant: { reply_url: UNBROKEN },
+  changed_at: "2019-03-04T09:00:00Z",
+  changed_by: UNBROKEN,
+  changed_by_name: UNBROKEN,
+};
+
+/** A channel this release does not receive on, never set up. */
+const CHANNEL_ROW_SLACK = {
+  channel: "slack",
+  label: "Slack",
+  receives: false,
+  status: "not_set_up",
+  secret: "none",
+  health: "not_set_up",
+  last_delivered_at: null,
+  events_path: "",
+  tenant_fields: [],
+  tenant: {},
+  changed_at: null,
+  changed_by: null,
+  changed_by_name: null,
+};
+
+/** One channel's figures as `brain.console_stats_routes.ChannelStatsView` sends them. */
+const CHANNEL_STATS = {
+  channel: "webhook",
+  bound_people: 3,
+  bound_basis: "everyone",
+  last_event: "2019-03-04T09:00:00Z",
+  at_least: false,
+  periods: ["7d", "30d"].map((range) => ({
+    range,
+    since: "2019-02-02T00:00:00Z",
+    until: "2019-03-04T12:00:00Z",
+    received: 12,
+    sent: 11,
+    failed: 1,
+    unknown: 0,
+    refused_inbound: 2,
+  })),
+  unrecorded: [{ figure: "answers", why: UNBROKEN }],
+};
+
+/** What a channel declares and how it is doing, as `ChannelHealthView` sends it. */
+const CHANNEL_HEALTH = {
+  channel: "webhook",
+  receives: true,
+  features: ["cards", "ephemeral"],
+  max_classification: "confidential",
+  can_carry_label: true,
+  verbs: ["invoke", "read"],
+  rooms: "as_nothing",
+  rooms_told: UNBROKEN,
+  health: "working",
+  told: UNBROKEN,
+  last_received_at: "2019-03-04T09:00:00Z",
+  last_sent_at: "2019-03-04T09:00:00Z",
+  last_fault: null,
 };
 
 export const PAGES: Readonly<Record<string, PageCase>> = {
@@ -2827,11 +2901,25 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
       },
     },
   },
-  // Webhooks. Identifiers are in the tables, which scroll; the served sentences, the vault's state
-  // and the findings are outside them, where they must wrap. No control is pressed here: the
-  // confirmation panels and the register form are held in `tests/webhooks-page.test.tsx`.
+  // Webhooks, the kit list: identifiers are in the table, which scrolls; the served sentences, the
+  // vault's state and the findings are outside it, where they must wrap. The drawers and dialogs
+  // are held in `tests/webhooks-page.test.tsx`.
   "/webhooks": {
     address: "/webhooks",
+    signedIn: true,
+    drawsValues: true,
+    answers: { "/api/v1/webhooks": WEBHOOKS },
+  },
+  // One subscriber's Dashboard: its figures and recent deliveries, from the list's own answer.
+  "/webhooks/:id": {
+    address: `/webhooks/${UNBROKEN}`,
+    signedIn: true,
+    drawsValues: true,
+    answers: { "/api/v1/webhooks": WEBHOOKS },
+  },
+  // One subscriber's Profile: its address, kinds, signing secret and switch.
+  "/webhooks/:id/:view": {
+    address: `/webhooks/${UNBROKEN}/profile`,
     signedIn: true,
     drawsValues: true,
     answers: { "/api/v1/webhooks": WEBHOOKS },
@@ -3018,93 +3106,45 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
       },
     },
   },
-  // Channels. Identifiers, a bound person's id and a delivery sit in lists and definition rows that
-  // must wrap. One channel this release receives on, set up and switched on, and one it does not,
-  // so every part a card can draw is on the page. The confirmations are held in
-  // `tests/channels-page.test.tsx`.
+  // Channels, the kit list: one channel this release receives on, set up and switched on, and one
+  // it does not, with the bound people figure from the stats route for the one it receives on.
   "/channels": {
     address: "/channels",
     signedIn: true,
     drawsValues: true,
     answers: {
-      "/api/v1/channels": {
-        channels: [
-          {
-            channel: "slack",
-            receives: false,
-            events_path: "",
-            tenant_fields: [],
-            configured: false,
-            enabled: false,
-            tenant: {},
-            secret_held: null,
-            updated_by: null,
-            updated_at: null,
-          },
-          {
-            channel: "webhook",
-            receives: true,
-            events_path: "/api/v1/channels/webhook/events",
-            tenant_fields: ["reply_url"],
-            configured: true,
-            enabled: true,
-            tenant: { reply_url: UNBROKEN },
-            secret_held: true,
-            updated_by: UNBROKEN,
-            updated_at: "2019-03-04T09:00:00Z",
-          },
-        ],
-        told: UNBROKEN,
-      },
-      "/api/v1/channels/slack/health": {
-        channel: "slack",
-        receives: false,
-        features: ["cards", "ephemeral"],
-        max_classification: "confidential",
-        can_carry_label: true,
-        health: "not_set_up",
-        told: UNBROKEN,
-        last_received_at: null,
-        last_sent_at: null,
-        last_fault: null,
-      },
-      "/api/v1/channels/webhook/health": {
-        channel: "webhook",
-        receives: true,
-        features: [],
-        max_classification: "internal",
-        can_carry_label: true,
-        health: "failing",
-        told: UNBROKEN,
-        last_received_at: "2019-03-04T09:00:00Z",
-        last_sent_at: "2019-03-04T09:01:00Z",
-        last_fault: {
-          direction: "outbound",
-          outcome: "refused",
-          reason: "vendor_refused",
-          vendor_status: 403,
-          recorded_at: "2019-03-04T09:02:00Z",
-        },
-      },
+      "/api/v1/console/channels": { items: [CHANNEL_ROW, CHANNEL_ROW_SLACK], next_cursor: null },
+      "/api/v1/console/channels/webhook/stats": CHANNEL_STATS,
+    },
+  },
+  // One channel's Dashboard: the header's figures, the stats strip, the health sentence and the
+  // bound people on the list contract, each named and never shown by id.
+  "/channels/:name": {
+    address: "/channels/webhook",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/console/channels/webhook": CHANNEL_ROW,
+      "/api/v1/channels/webhook/health": CHANNEL_HEALTH,
+      "/api/v1/console/channels/webhook/stats": CHANNEL_STATS,
       "/api/v1/channels/webhook/bindings": {
         channel: "webhook",
-        items: [{ principal_id: UNBROKEN, display_name: UNBROKEN, bound_at: "2019-03-01T09:00:00Z" }],
+        items: [{ principal_id: UNBROKEN, display_name: UNBROKEN, bound_at: "2019-03-04T09:00:00Z" }],
         next_cursor: null,
         truncated: false,
         told: UNBROKEN,
       },
-      "/api/v1/channels/webhook/deliveries": {
-        channel: "webhook",
-        deliveries: [
-          {
-            direction: "inbound",
-            outcome: "accepted",
-            reason: null,
-            vendor_status: null,
-            recorded_at: "2019-03-04T09:00:00Z",
-          },
-        ],
-      },
+    },
+  },
+  // One channel's Profile: where its vendor posts, the set-up form with its identifiers and the
+  // write-only secret, and the test message form.
+  "/channels/:name/:view": {
+    address: "/channels/webhook/profile",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/console/channels/webhook": CHANNEL_ROW,
+      "/api/v1/channels/webhook/health": CHANNEL_HEALTH,
     },
   },
   "/*": { address: "/no/such/page", signedIn: true, drawsValues: false, answers: {} },

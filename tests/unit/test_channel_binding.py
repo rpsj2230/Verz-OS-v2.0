@@ -34,7 +34,7 @@ from brain.api_routes import GateWiring
 from brain.app import Settings, create_app
 from brain.audit.ledger import AuditAction, AuditChain
 from brain.audit.record import AuditRecorder, ChannelBindingChange
-from brain.channels.adapter import adapter_for
+from brain.channels.adapter import adapter_for, channel_adapters, channel_wires
 from brain.channels.binding import (
     CODE_CHARS,
     EVERY_CODE_THAT_DOES_NOT_BIND_IS_ONE_ANSWER,
@@ -51,6 +51,7 @@ from brain.channels.binding import (
 )
 from brain.channels.inbound import CODE_REFUSED_TOLD, LINKED_TOLD, Inbound, Redeemed
 from brain.channels.outbound import Outgoing
+from brain.chat_answer import RoomReader
 from brain.console.channel_health import (
     A_STRANGERS_REFUSED_REQUEST_SAYS_NOTHING_ABOUT_THE_CHANNEL,
     FAULTS,
@@ -59,6 +60,7 @@ from brain.console.channel_health import (
 )
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.scope import Scope
+from brain.gate.admission import CHANNEL_VERBS
 from brain.gate.context import Channel
 from brain.gate.ingress import (
     NONCE_TTL,
@@ -99,6 +101,7 @@ from tests.unit.test_channel_pipeline import (
     body_of,
     fresh_record,
     grant,
+    over,
     post_event,
     signed,
 )
@@ -602,10 +605,11 @@ def test_a_bound_sender_nobody_answered_is_a_fault() -> None:
 # ======================================================================== through the routes
 
 #: `u_admin` holds the channel authority over everything and a member grant; `u_narrow` a member
-#: grant alone; `u_none` nothing.
+#: grant alone; `u_wide` the authority over the webhook channel and no other; `u_none` nothing.
 GRANTS: Mapping[str, tuple[Grant, ...]] = {
     "u_admin": (grant(Scope.unrestricted()), Grant(capability=MEMBER, scope=own_scope("u_admin"))),
     "u_narrow": (Grant(capability=MEMBER, scope=own_scope("u_narrow")),),
+    "u_wide": (grant(over("webhook_channel")),),
     "u_none": (),
 }
 
@@ -902,6 +906,121 @@ def test_the_channels_screen_shows_what_each_channel_declares_and_how_it_is_doin
     nothing = client.get(API_PREFIX + "/channels/carrier-pigeon/health", headers=as_("u_admin"))
     assert refused.status_code == nothing.status_code == 404
     assert body_of(refused) == body_of(nothing)
+
+
+# ======================================================================== the module list
+
+LIST = API_PREFIX + binding_routes.CHANNEL_LIST_PATH
+
+
+def test_the_module_list_is_every_channel_the_reader_manages_with_its_state_and_health(
+    client: TestClient, place: Place
+) -> None:
+    """**M27.13.1's list.** Every channel an adapter declares is a row for a reader holding the
+    authority over everything: its label, whether it is set up and on, whether its secret is held
+    and how its deliveries say it is doing, with who changed it last. A channel with no record is
+    not set up and holds no secret, rather than a secret the vault could not be asked about.
+
+    Delete this and the list can drop a channel nobody set up, or show a secret held for one."""
+    place.world.records.kept[Channel.WEBHOOK] = fresh_record()
+    place.world.deliveries.entries.append(
+        DeliveryEntry(Channel.WEBHOOK, Direction.INBOUND, DeliveryOutcome.ACCEPTED)
+    )
+    answer = client.get(LIST, headers=as_("u_admin"))
+    assert answer.status_code == 200, answer.text
+    rows = {one["channel"]: one for one in answer.json()["items"]}
+    declared = {factory().capabilities().channel.value for factory in channel_adapters()}
+    assert set(rows) == declared
+    webhook = rows["webhook"]
+    assert (webhook["status"], webhook["secret"], webhook["health"]) == ("on", "held", "working")
+    assert webhook["receives"] is True and webhook["changed_by"] == "u_admin"
+    assert webhook["last_delivered_at"] is not None
+    slack = rows["slack"]
+    assert (slack["status"], slack["secret"], slack["health"]) == (
+        "not_set_up",
+        "none",
+        "not_set_up",
+    )
+    assert (slack["receives"], slack["tenant"], slack["changed_by"]) == (False, {}, None)
+    assert "next_cursor" in answer.json() and "total" not in answer.json()
+
+
+def test_a_channel_outside_the_readers_authority_is_neither_a_row_nor_a_page(
+    client: TestClient, place: Place
+) -> None:
+    """**DENIED and ABSENT on the module list.** A reader holding the authority over the webhook
+    channel alone is shown that one row, and asking for another channel's page is the same 404 as
+    a name that is no channel; a reader holding nothing is shown an empty list, which is what an
+    install declaring no channel would show.
+
+    Delete this and the list tells a narrow administrator which chat surfaces an install runs."""
+    place.world.records.kept[Channel.WEBHOOK] = fresh_record()
+    place.world.records.kept[Channel.LARK] = fresh_record(Channel.LARK, tenant={})
+    mine = client.get(LIST, headers=as_("u_wide")).json()
+    assert [one["channel"] for one in mine["items"]] == ["webhook"]
+    assert client.get(LIST, headers=as_("u_none")).json()["items"] == []
+
+    own = client.get(f"{LIST}/webhook", headers=as_("u_wide"))
+    assert own.status_code == 200 and own.json()["label"] == "Webhook"
+    hidden = client.get(f"{LIST}/lark", headers=as_("u_wide"))
+    missing = client.get(f"{LIST}/carrier-pigeon", headers=as_("u_admin"))
+    assert hidden.status_code == missing.status_code == 404
+    assert body_of(hidden) == body_of(missing)
+
+
+def test_the_module_list_searches_filters_and_orders_the_rows_the_reader_is_sent(
+    client: TestClient, place: Place
+) -> None:
+    """**The list contract on the server.** A search matches a label, a filter a status, and an
+    order the column asked for, over the rows the reader may manage.
+
+    Delete this and the console's search box and filters send words the route ignores."""
+    place.world.records.kept[Channel.WEBHOOK] = fresh_record()
+    place.world.records.kept[Channel.LARK] = fresh_record(Channel.LARK, enabled=False, tenant={})
+    searched = client.get(LIST, headers=as_("u_admin"), params={"q": "teams"}).json()
+    assert [one["label"] for one in searched["items"]] == ["Microsoft Teams"]
+    off = client.get(LIST, headers=as_("u_admin"), params={"filter": "status:off"}).json()
+    assert [one["channel"] for one in off["items"]] == ["lark"]
+    ordered = client.get(LIST, headers=as_("u_admin"), params={"sort": "-label"}).json()
+    labels = [one["label"] for one in ordered["items"]]
+    assert labels == sorted(labels, reverse=True)
+
+
+def test_every_declared_channel_has_a_label_and_a_line_in_the_verbs_table() -> None:
+    """**No channel is drawn by its key or said to carry nothing.** Each channel an adapter
+    declares has a word for the screen, and `CHANNEL_VERBS` has an entry for it, so the verbs the
+    page shows are the admission rule's and never an empty list standing in for a missing one.
+
+    Delete this and a channel added next month appears as `teams`, carrying no verbs."""
+    for factory in channel_adapters():
+        channel = factory().capabilities().channel
+        assert binding_routes.CHANNEL_LABELS.get(channel), channel
+        assert channel in CHANNEL_VERBS, channel
+
+
+def test_each_channel_says_the_verbs_it_carries_and_how_a_group_is_answered(
+    client: TestClient, place: Place
+) -> None:
+    """**M27.15.43.** The verbs are the admission rule's for the channel, and how a group is
+    answered follows the wire: at the floor on one that reads who is present (Lark), as a floor of
+    nothing on one that cannot (the webhook), and not at all where nothing is received (Slack).
+
+    Delete this and the screen can say a channel approves what admission refuses, or that a room
+    is answered at its floor on a wire that never reads one."""
+    found = {
+        name: client.get(f"{API_PREFIX}/channels/{name}/health", headers=as_("u_admin")).json()
+        for name in ("lark", "webhook", "slack")
+    }
+    assert found["lark"]["verbs"] == sorted(CHANNEL_VERBS[Channel.LARK])
+    assert "approve" in found["lark"]["verbs"] and "approve" not in found["slack"]["verbs"]
+    assert {name: one["rooms"] for name, one in found.items()} == {
+        "lark": "at_the_floor",
+        "webhook": "as_nothing",
+        "slack": "not_received",
+    }
+    assert isinstance(channel_wires()[Channel.LARK], RoomReader)
+    assert not isinstance(channel_wires()[Channel.WEBHOOK], RoomReader)
+    assert {one["rooms_told"] for one in found.values()} == set(binding_routes.ROOMS_TOLD.values())
 
 
 # ======================================================================== the migration

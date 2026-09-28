@@ -15,11 +15,12 @@ import json
 import logging
 from collections.abc import Callable, Iterator, Mapping
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.api import API_PREFIX
 from brain.app import Settings, create_app
@@ -41,6 +42,7 @@ from brain.ops.webhook_store import (
 from brain.tables.webhook_change import WebhookChange
 from brain.webhook_routes import SECRET_PATH, SUBSCRIBERS_PATH, SWITCH_OFF_PATH, WEBHOOKS_PATH
 from tests.fixtures.http_client import Response
+from tests.fixtures.setting_rows import Result, Row
 from tests.unit.test_api_routes import (
     AUDIENCE,
     ISSUER,
@@ -382,6 +384,38 @@ def test_a_manager_sees_where_each_subscriber_points_whether_its_secret_is_held_
     assert body["inbound"]["automation_path"].startswith(API_PREFIX)
     assert {one["channel"] for one in body["inbound"]["channels"]} >= {"slack", "whatsapp"}
     assert "secret_path" not in json.dumps(body) and "webhooks/" not in json.dumps(body)
+
+
+class Names(AsyncSession):
+    """A session answering the one statement the screen makes of the directory: whose names."""
+
+    asked: ClassVar[list[list[str]]] = []
+
+    async def execute(self, statement: Any, *args: Any, **kwargs: Any) -> Any:
+        wanted = sorted(statement.compile().params["id_1"])
+        Names.asked.append(wanted)
+        return Result(Row((pid, f"Name of {pid}")) for pid in wanted)
+
+    async def close(self) -> None:
+        return None
+
+
+def test_a_manager_is_told_who_registered_and_changed_each_subscriber_by_name(
+    app: FastAPI, client: TestClient
+) -> None:
+    """**Names, never ids on the page.** The directory is asked for exactly the people the
+    subscribers name, and answers a name for each, which the console draws in place of the id.
+
+    Delete this and the Webhooks pages draw a principal id where a person's name belongs."""
+    attach(app, Records((a_registered(),)), Vault(version=StaticVersion(written_at=AT)))
+    Names.asked = []
+    app.state.db_sessions = async_sessionmaker(class_=Names)
+    body = client.get(LISTING, headers=headers("u_admin")).json()
+    assert body["people"] == {"u_admin": "Name of u_admin"}
+    assert Names.asked == [["u_admin"]]
+    Names.asked = []
+    refused = client.get(LISTING, headers=headers("u_none")).json()
+    assert refused["people"] == {} and Names.asked == []
 
 
 @pytest.mark.parametrize(

@@ -117,11 +117,6 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
   "src/components/AgentModelPin.tsx": [{ pattern: "/agents/:agentId/:tab", index: 0, writes: true }],
   // A model's price opens on its row in the prices card, above the register's forms (M27.12.5).
   "src/components/ModelPrices.tsx": [{ pattern: "/models", opener: "Set price", index: 0, writes: true }],
-  "src/pages/Notifications.tsx": [
-    { pattern: "/notifications", index: 0, writes: true },
-    { pattern: "/notifications", index: 1, writes: true },
-    { pattern: "/notifications", index: 2, writes: true },
-  ],
   // The grant and pack forms of an open subject, then the grant to several, which is drawn under
   // the list once it is opened and so sits after the list's search.
   "src/pages/People.tsx": [
@@ -156,16 +151,10 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
     { pattern: "/compliance", index: 4, writes: true },
     { pattern: "/compliance", index: 5, writes: true },
   ],
-  // Index 0 is the bound people's search bar, which only narrows; then the webhook channel's set-up
-  // and its test message. The Slack card, not received, draws no form.
-  "src/pages/Channels.tsx": [
-    { pattern: "/channels", index: 1, writes: true },
-    { pattern: "/channels", index: 2, writes: true },
-  ],
-  "src/pages/Webhooks.tsx": [
-    { pattern: "/webhooks", index: 0, writes: false },
-    { pattern: "/webhooks", opener: "Replace secret", index: 1, writes: true },
-    { pattern: "/webhooks", index: 1, writes: true },
+  // A channel's Profile is a view at its own address: its set-up form, then its test message.
+  "src/pages/channels/ChannelProfile.tsx": [
+    { pattern: "/channels/:name/:view", index: 0, writes: true },
+    { pattern: "/channels/:name/:view", index: 1, writes: true },
   ],
 };
 
@@ -175,6 +164,16 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
  * Checked, not trusted: an entry for a file that no longer holds both fails the first test.
  */
 const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
+  "src/pages/webhooks/WebhookActs.tsx":
+    "The registration and the secret replacement are inside drawers opened from the page header or a " +
+    "subscriber's page, outside the main landmark these cases read. tests/webhooks-page.test.tsx submits " +
+    "each blank and holds that no confirmation opens, nothing is sent, and the API's own blank sentence " +
+    "is said beside each field.",
+  "src/pages/notifications/RelayActs.tsx":
+    "The relay, password and test message forms are inside drawers opened from the relay card, outside " +
+    "the main landmark these cases read. tests/notifications-page.test.tsx submits each of the three blank " +
+    "and holds that no confirmation opens, nothing is sent, and the API's own blank sentence is said " +
+    "beside the field.",
   "src/components/ConnectSource.tsx":
     "Its form is inside the Connect a source drawer, which is drawn outside the page's main landmark " +
     "these cases read, and inside first run, which is mounted outside the session guard. " +

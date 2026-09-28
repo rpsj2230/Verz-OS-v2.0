@@ -143,6 +143,7 @@ import {
 import {
   PASSWORD_API_PATH as RELAY_PASSWORD_API_PATH,
   RELAY_API_PATH,
+  REMOVAL_API_PATH as RELAY_REMOVAL_API_PATH,
   TRIAL_API_PATH as RELAY_TRIAL_API_PATH,
   noticeApiPath,
 } from "../../src/pages/notificationsQuery";
@@ -168,6 +169,7 @@ import {
 import { LINKS_API_PATH, queuedPath } from "../../src/pages/knowledgeIntakeQuery";
 import {
   channelApiPath,
+  deliveriesApiPath,
   myCodeApiPath,
   myUnbindApiPath,
   switchApiPath,
@@ -496,7 +498,14 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "Connectors and third-party integrations": {
-    screens: ["/connectors", "/connectors/:connector", "/connectors/:connector/:view", "/channels"],
+    screens: [
+      "/connectors",
+      "/connectors/:connector",
+      "/connectors/:connector/:view",
+      "/channels",
+      "/channels/:name",
+      "/channels/:name/:view",
+    ],
     routes: [
       "/api/v1/connectors",
       "/api/v1/connectors/{connector}/disconnect",
@@ -510,6 +519,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/channels*",
       "/api/v1/me/channels*",
       "/api/v1/console/connectors/{connector}/stats",
+      "/api/v1/console/channels",
+      "/api/v1/console/channels/{name}",
       "/api/v1/console/channels/{name}/stats",
     ],
     tables: [
@@ -549,11 +560,6 @@ export const AREAS: Readonly<Record<string, Area>> = {
         what: "Connect Lark switches knowledge from Wiki and Base on, and no question is answered from Lark yet.",
         because:
           "The Lark knowledge connector that keeps the minimal index and reads pages and records live is still to be built over the settings Connect Lark writes; brain.ops.lark_connect.KNOWLEDGE_IS_SWITCHED_ON_AND_NOTHING_IS_COPIED says so on the screen.",
-      },
-      {
-        what: "A Lark account is linked to a person with a one-time code only once the binding store is wired.",
-        because:
-          "The chat channel receives, verifies and answers Lark's events at /api/v1/channels/lark/events, and offers a code sent in a direct message to brain.channels.inbound.ChatBinder; the store that mints the code in a web session and keeps the binding is the channel binding package's, and until it is wired every sender is answered as unbound, brain.channels.inbound.NOBODY_IS_BOUND_UNTIL_A_BINDING_IS_KEPT.",
       },
     ],
   },
@@ -690,7 +696,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   Webhooks: {
-    screens: ["/webhooks"],
+    screens: ["/webhooks", "/webhooks/:id", "/webhooks/:id/:view"],
     routes: ["/api/v1/webhooks*"],
     tables: ["ops.webhook_subscriber", "ops.webhook_change"],
     installation: [],
@@ -698,7 +704,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       {
         what: "No vendor platform's webhook is received, only the company's own signed webhook.",
         because:
-          "Only brain.channels.webhook has a wire in this release, and the WhatsApp and Lark checks are not written; the Webhooks screen names the channels received from brain.ops.inbound_webhooks.receiving and lists each channel's check.",
+          "Only brain.channels.webhook has a wire in this release, and the WhatsApp and Lark checks are not written; each channel's About view says whether its check is written, from brain.ops.inbound_webhooks.INBOUND as the Webhooks route serves it.",
       },
     ],
   },
@@ -824,6 +830,12 @@ export const READ_AFTER_AN_ACTION: Readonly<
 > = {
   "GET /api/v1/audit/history": { screen: "/audit", spelled: "historyApiPath", built: historyApiPath("principal", "u_1").split("?")[0] ?? "" },
   "GET /api/v1/govern/staff_sources/trial": { screen: "/staff_sources", spelled: "TRIAL_API_PATH", built: TRIAL_API_PATH },
+  // A channel's newest deliveries are read when a person opens its About view.
+  "GET /api/v1/channels/{name}/deliveries": {
+    screen: "/channels/:name/:view",
+    spelled: "deliveriesApiPath",
+    built: deliveriesApiPath("webhook"),
+  },
   // A source's record is read when a person presses Export record on its page.
   "GET /api/v1/console/connectors/{connector}/export": {
     screen: "/connectors/:connector",
@@ -973,16 +985,16 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/Tools.tsx switchPath(choice.tool)": [
     at("POST /api/v1/tools/{name}/switch", "switchPath", toolSwitchPath("notes.read_note")),
   ],
-  "src/pages/Channels.tsx channelApiPath(row.channel)": [
+  "src/pages/channels/ChannelProfile.tsx channelApiPath(row.channel)": [
     at("PUT /api/v1/channels/{name}", "channelApiPath", channelApiPath("webhook")),
   ],
-  "src/pages/Channels.tsx switchApiPath(row.channel)": [
+  "src/pages/channels/ChannelDetailPage.tsx switchApiPath(row.channel)": [
     at("POST /api/v1/channels/{name}/switch", "switchApiPath", switchApiPath("webhook")),
   ],
-  "src/pages/Channels.tsx testApiPath(name)": [
+  "src/pages/channels/ChannelProfile.tsx testApiPath(row.channel)": [
     at("POST /api/v1/channels/{name}/test", "testApiPath", testApiPath("webhook")),
   ],
-  "src/pages/Channels.tsx unbindApiPath(name)": [
+  "src/pages/channels/ChannelDashboard.tsx unbindApiPath(row.channel)": [
     at("POST /api/v1/channels/{name}/bindings/unbind", "unbindApiPath", unbindApiPath("webhook")),
   ],
   "src/components/MyChannels.tsx myCodeApiPath(row.channel)": [
@@ -1104,21 +1116,24 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   ],
   "src/pages/SignInLinks.tsx LINK_API_PATH": [at("POST /api/v1/sign-ins", "LINK_API_PATH", LINK_API_PATH)],
   "src/pages/SignInLinks.tsx UNLINK_API_PATH": [at("POST /api/v1/govern/sign-ins/unlink", "UNLINK_API_PATH", UNLINK_API_PATH)],
-  "src/pages/Webhooks.tsx REGISTER_API_PATH": [at("POST /api/v1/webhooks/subscribers", "REGISTER_API_PATH", REGISTER_API_PATH)],
-  "src/pages/Webhooks.tsx secretApiPath(asked.id)": [
+  "src/pages/webhooks/WebhookActs.tsx REGISTER_API_PATH": [at("POST /api/v1/webhooks/subscribers", "REGISTER_API_PATH", REGISTER_API_PATH)],
+  "src/pages/webhooks/WebhookActs.tsx secretApiPath(subscriberId)": [
     at("POST /api/v1/webhooks/subscribers/{subscriber_id}/secret", "secretApiPath", secretApiPath("billing_bridge")),
   ],
-  "src/pages/Webhooks.tsx switchOffApiPath(asked.id)": [
+  "src/pages/webhooks/WebhookActs.tsx switchOffApiPath(subscriberId)": [
     at("POST /api/v1/webhooks/subscribers/{subscriber_id}/switch-off", "switchOffApiPath", switchOffApiPath("billing_bridge")),
   ],
-  "src/pages/Notifications.tsx noticeApiPath(asked.row.kind)": [
+  "src/pages/notifications/RelayActs.tsx noticeApiPath(row.kind)": [
     at("POST /api/v1/notifications/notices/{kind}", "noticeApiPath", noticeApiPath("evening_digest")),
   ],
-  "src/pages/Notifications.tsx RELAY_API_PATH": [at("POST /api/v1/notifications/relay", "RELAY_API_PATH", RELAY_API_PATH)],
-  "src/pages/Notifications.tsx PASSWORD_API_PATH": [
+  "src/pages/notifications/RelayActs.tsx RELAY_API_PATH": [at("POST /api/v1/notifications/relay", "RELAY_API_PATH", RELAY_API_PATH)],
+  "src/pages/notifications/RelayActs.tsx REMOVAL_API_PATH": [
+    at("POST /api/v1/notifications/relay/removal", "REMOVAL_API_PATH", RELAY_REMOVAL_API_PATH),
+  ],
+  "src/pages/notifications/RelayActs.tsx PASSWORD_API_PATH": [
     at("POST /api/v1/notifications/relay/password", "PASSWORD_API_PATH", RELAY_PASSWORD_API_PATH),
   ],
-  "src/pages/Notifications.tsx TRIAL_API_PATH": [
+  "src/pages/notifications/RelayActs.tsx TRIAL_API_PATH": [
     at("POST /api/v1/notifications/relay/test", "TRIAL_API_PATH", RELAY_TRIAL_API_PATH),
   ],
   "src/pages/skills/SkillForms.tsx SKILLS_API_PATH": [at("POST /api/v1/skills", "SKILLS_API_PATH", SKILLS_API_PATH)],
@@ -2064,6 +2079,21 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: t("test_notification_routes", "test_a_relay_is_saved_as_five_rows_with_its_writer_and_read_back_configured"),
     audit: A_SETTING_ENTRY_NO_TEST_FOLLOWS,
     behaviour: t("test_notification_routes", "test_a_test_message_reaches_the_saved_relay_once_with_the_kept_password"),
+  },
+  "POST /api/v1/notifications/relay/removal": {
+    row: t(
+      "test_notification_routes",
+      "test_removing_the_relay_retires_its_rows_names_who_did_and_the_next_read_is_unconfigured",
+    ),
+    audit: t(
+      "test_console_control_audit",
+      "test_removing_the_relay_retires_its_rows_as_the_application_and_names_the_remover",
+      true,
+    ),
+    behaviour: t(
+      "test_notification_routes",
+      "test_removing_the_relay_retires_its_rows_names_who_did_and_the_next_read_is_unconfigured",
+    ),
   },
   "POST /api/v1/notifications/relay/password": {
     row: t("test_notification_routes", "test_a_password_is_kept_at_its_slot_recorded_and_never_answered"),

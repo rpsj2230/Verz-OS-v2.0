@@ -161,7 +161,7 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "Testing a Lark connection exchanges the pasted credential for a token and makes small reads; " +
     "it writes nothing here or in Lark and keeps nothing it read, which " +
     "tests/unit/test_lark_connect.py holds over the requests a fake Lark server received.",
-  "src/pages/Channels.tsx testApiPath(name)":
+  "src/pages/channels/ChannelProfile.tsx testApiPath(row.channel)":
     "A test message is one product sentence to one destination, sent once per channel record and " +
     "destination, which tests/unit/test_channel_pipeline.py holds; it ends and replaces nothing.",
   "src/components/MyChannels.tsx myCodeApiPath(row.channel)":

@@ -1,6 +1,7 @@
 /**
- * Departments and teams, Elevation, Access review and Subscribers: what each asks for, what each
- * shows, the one control and its confirmation, and the four states each says differently.
+ * Departments and teams, Elevation and Access review: what each asks for, what each shows, the one
+ * control and its confirmation, and the four states each says differently. Subscribers is held in
+ * `tests/notifications-page.test.tsx` since it was rebuilt on the page kit.
  *
  * Mounted directly on a memory router at each page's own address, for the reason
  * `tests/sessions-page.test.tsx` gives: the route table is shared, and these pages are wired into it
@@ -74,18 +75,11 @@ import {
   STRUCTURE_BLANKS,
   readOrganisation,
   readReview,
-  readSubscribers,
   type DepartmentRow,
   type ElevationRequestRow,
   type ReviewRow,
 } from "../src/pages/governPeopleQuery";
 import { SOMETHING_DID_NOT_WORK } from "../src/pages/Overview";
-import {
-  NEVER_DELIVERED,
-  NO_SUBSCRIBERS,
-  READING_SUBSCRIBERS,
-  Subscribers,
-} from "../src/pages/Subscribers";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import {
   declaredParameterSchema,
@@ -99,7 +93,6 @@ const ELEVATION_OPERATION = "/api/v1/govern/elevation";
 const REVIEW_OPERATION = "/api/v1/govern/access-review";
 const DECISION_OPERATION = "/api/v1/govern/access-review/decision";
 const DECISIONS_OPERATION = "/api/v1/govern/access-review/decisions";
-const SUBSCRIBERS_OPERATION = "/api/v1/govern/subscribers";
 
 const TEAMS = "A team lists the people in it you may see.";
 const LEADS = "A department's lead is who leads it, recorded with who appointed them.";
@@ -128,7 +121,6 @@ const COUNTED = "No headcount is shown.";
 const KEEPING = "Keeping a grant records that you reviewed it and it stands.";
 const REMOVING = "Removing a grant takes it away from the next request the person makes.";
 const SHOWS = "Only grants you could have written are listed.";
-const STOPPING = "Switching a subscriber off is not on this screen yet.";
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -140,7 +132,6 @@ const PAGES = {
   "/departments": { element: <Departments />, reading: READING_DEPARTMENTS },
   "/elevation": { element: <Elevation />, reading: READING_ELEVATION },
   "/access_review": { element: <AccessReview />, reading: READING_REVIEW },
-  "/subscribers": { element: <Subscribers />, reading: READING_SUBSCRIBERS },
 } as const;
 
 async function mount(
@@ -1115,79 +1106,5 @@ describe("the access review screen", () => {
     expect(unreachable.container.textContent).toContain(THE_BRAIN_COULD_NOT_BE_REACHED);
     expect(new Set([NOTHING_TO_REVIEW, NO_GRANT_MATCHES, MORE_GRANTS, SOMETHING_DID_NOT_WORK, THE_BRAIN_COULD_NOT_BE_REACHED]).size).toBe(5);
     expect(Object.keys(readReview({ items: [], total: 3 })).sort()).toEqual(["keeping", "removing", "rows", "shows", "truncated"]);
-  });
-});
-
-// ------------------------------------------------------------------ subscribers
-
-const SUBSCRIBERS = {
-  items: [
-    {
-      subscriber_id: "hook_a",
-      endpoint: "https://hooks.example.test/a",
-      kinds: ["approval.requested"],
-      active: true,
-      created_by: "u_admin",
-      last_delivered_at: null,
-    },
-    {
-      subscriber_id: "hook_b",
-      endpoint: "https://hooks.example.test/b",
-      kinds: ["operation.settled"],
-      active: false,
-      created_by: "u_admin",
-      last_delivered_at: "2019-03-04T09:00:00Z",
-    },
-  ],
-  findings: ["nothing takes connector.health_changed"],
-  kinds: ["approval.requested", "operation.settled", "connector.health_changed"],
-  stopping: STOPPING,
-  scope: "Only webhook subscribers are listed.",
-  told: "A subscriber is told that something happened.",
-};
-
-describe("the subscribers screen", () => {
-  test("who is told what, the findings, and how one stops, with no control drawn", async () => {
-    // What breaks if this is deleted: the page draws a switch-off button the API has no audited
-    // write behind, or the sentence saying why there is none drops off.
-    const { container } = await mount("/subscribers", (url) =>
-      url.pathname === SUBSCRIBERS_OPERATION ? json(SUBSCRIBERS) : null,
-    );
-
-    const table = container.querySelector('[aria-label="Subscribers"]')?.textContent ?? "";
-    expect(table).toContain("hook_a");
-    expect(table).toContain("https://hooks.example.test/a");
-    expect(table).toContain(NEVER_DELIVERED);
-    expect(container.textContent).toContain("nothing takes connector.health_changed");
-    expect(container.textContent).toContain(STOPPING);
-    expect(container.querySelector("button")).toBeNull();
-  });
-
-  test("the filters narrow the page by kind and by state", async () => {
-    // What breaks if this is deleted: a state filter that keeps a switched-off subscriber under
-    // "On", which is the quiet integration read as a live one.
-    const { container } = await mount("/subscribers", (url) =>
-      url.pathname === SUBSCRIBERS_OPERATION ? json(SUBSCRIBERS) : null,
-    );
-    const state = [...container.querySelectorAll("select")].find((one) =>
-      one.closest("label")?.textContent?.startsWith("State"),
-    ) as HTMLSelectElement;
-
-    fireEvent.change(state, { target: { value: "active" } });
-    const table = container.querySelector('[aria-label="Subscribers"]')?.textContent ?? "";
-    expect(table).toContain("hook_a");
-    expect(table).not.toContain("hook_b");
-  });
-
-  test("no subscribers is its own sentence and still says how one would stop", async () => {
-    // What breaks if this is deleted: a reader who may not manage subscribers, who is sent the
-    // empty install's answer, sees a blank card; and a body that is not a page throws.
-    const { container } = await mount("/subscribers", (url) =>
-      url.pathname === SUBSCRIBERS_OPERATION ? json({ ...SUBSCRIBERS, items: [], findings: [] }) : null,
-    );
-
-    expect(container.textContent).toContain(NO_SUBSCRIBERS);
-    expect(container.textContent).toContain(STOPPING);
-    expect(readSubscribers({ unexpected: true }).rows).toEqual([]);
   });
 });

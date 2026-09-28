@@ -30,6 +30,17 @@ switch and the relay's configuration are `ops.setting` rows, which `0059`'s trig
 field. The password is a credential write and leaves the `credential` entry every other one
 does.
 
+**The relay is removed by retiring its rows (since 2026-09-29).** `POST .../relay/removal`
+retires the five `mail.*` rows through `brain.ops.mail.retire_settings`, naming the person in
+`updated_by`, which `0059`'s trigger records as a `retired` entry per row; nothing is deleted,
+and a relay saved afterwards is five fresh live rows. The password is a vault slot and stays,
+as the confirmation says. A removal with nothing saved is a 409 saying so, rather than a 200
+that changed nothing.
+
+**People are named, never shown by id.** Whoever last switched a notice or saved the relay, and
+the colleague an alert is about, are read from the directory into `people`, so the page draws
+names and keeps each id for its Advanced section.
+
 **Refusal-pattern alerts addressed to the reader are listed here, since 2026-09-28.**
 `brain.ops.denial_digest_run` keeps each alert for the person entitled to hear it in
 `brain.ops.denial_alert_store`, and this screen reads the reader's own and nobody else's: who it
@@ -53,6 +64,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 from redis.exceptions import RedisError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from brain.api import API_PREFIX, COMMON_RESPONSES, ErrorBody, NoEchoRoute
 from brain.api_routes import Asked
@@ -85,6 +97,7 @@ from brain.ops.mail import (
     configuration_version,
     last_saved,
     password_problems,
+    retire_settings,
     save_settings,
     send_trial,
     settings_from_rows,
@@ -109,7 +122,7 @@ from brain.ops.setting_store import (
     A_SWITCH_SHOWS_ITS_LAST_CHANGE_AND_THE_LEDGER_KEEPS_EVERY_ONE,
     SettingState,
 )
-from brain.routing_routes import sessions_of
+from brain.routing_routes import names_of, sessions_of
 
 log = structlog.get_logger()
 
@@ -125,6 +138,7 @@ NOTICE_PATH: Final = f"{NOTIFICATIONS_PATH}/notices/{{kind}}"
 EMAIL_PATH: Final = f"{NOTIFICATIONS_PATH}/relay"
 PASSWORD_PATH: Final = f"{EMAIL_PATH}/password"
 TRIAL_PATH: Final = f"{EMAIL_PATH}/test"
+REMOVAL_PATH: Final = f"{EMAIL_PATH}/removal"
 
 #: The confirmation's consequence for each write, in the words a person agrees to.
 SWITCHING_OFF: Final = (
@@ -139,6 +153,11 @@ SAVING_EMAIL: Final = (
 KEEPING_THE_RELAY_CREDENTIAL: Final = (
     "The relay's password is replaced in the vault and used for every message from now on. It "
     "cannot be shown or restored from here."
+)
+REMOVING_THE_RELAY: Final = (
+    "No mail is sent from now on, and a test message is refused until a relay is saved again. The "
+    "relay's password stays in the vault until it is replaced. The removal is recorded in the "
+    "audit ledger with your name."
 )
 SENDING_TRIAL: Final = (
     "One test message is sent to this address through the saved relay. It is sent once for each "
@@ -162,6 +181,9 @@ NOT_CONFIGURED: Final = (
     "No relay is configured, so no test message was sent. Save the relay's host, port, security "
     "and sender first."
 )
+
+#: Said when a removal is asked for and nothing is saved.
+NOTHING_TO_REMOVE: Final = "No relay is saved, so there is nothing to remove."
 
 #: Said when the relay asks for a user name and no password is held.
 NO_RELAY_CREDENTIAL_HELD: Final = (
@@ -275,7 +297,10 @@ class NotificationsPage(BaseModel):
     saving_email: str
     keeping_password: str
     sending_trial: str
+    removing_email: str
     plain_smtp_refused: str
+    #: Display names by principal id, for every person the page names. See the module docstring.
+    people: dict[str, str] = {}
 
 
 class NoticeSwitchAsked(BaseModel):
@@ -517,16 +542,21 @@ async def notifications(request: Request, asked: Asked) -> NotificationsPage:
     if not may_manage_notifications(asked.reach, asked.now):
         log.info("notifications screen not answerable", principal=asked.caller.principal.id)
         raise _not_answerable()
+    alerts, alerts_unread = await alerts_for_reader(request, asked.reach.principal_id)
+    password, _ = await asyncio.to_thread(password_view, mail_password_of(request))
     async with _sessions(request)() as session:
         states = await switch_states(session)
         rows = await settings_rows(session)
-    password, _ = await asyncio.to_thread(password_view, mail_password_of(request))
-    alerts, alerts_unread = await alerts_for_reader(request, asked.reach.principal_id)
+        notices = notice_views(states)
+        email = email_view(rows, password)
+        named = {one.changed_by for one in notices} | {email.changed_by}
+        named |= {one.subject for one in alerts or ()}
+        people = await names_for(session, {one for one in named if one})
     return NotificationsPage(
         alerts=alerts,
         alerts_unread=alerts_unread,
-        notices=notice_views(states),
-        email=email_view(rows, password),
+        notices=notices,
+        email=email,
         securities=list(Security),
         email_used_for=WHAT_EMAIL_IS_USED_FOR,
         subscribers=SUBSCRIBERS_ARE_ON_THE_WEBHOOKS_SCREEN,
@@ -537,8 +567,17 @@ async def notifications(request: Request, asked: Asked) -> NotificationsPage:
         saving_email=SAVING_EMAIL,
         keeping_password=KEEPING_THE_RELAY_CREDENTIAL,
         sending_trial=SENDING_TRIAL,
+        removing_email=REMOVING_THE_RELAY,
         plain_smtp_refused=MAIL_DOES_NOT_CROSS_A_NETWORK_IN_THE_CLEAR,
+        people=people,
     )
+
+
+async def names_for(session: AsyncSession, ids: set[str]) -> dict[str, str]:
+    """The directory's names for these principals, asking nothing when there are none."""
+    if not ids:
+        return {}
+    return {str(pid): str(name) for pid, name in (await session.execute(names_of(ids))).all()}
 
 
 def alert_view(one: DenialAlert) -> DenialAlertView:
@@ -623,6 +662,29 @@ async def save_email(request: Request, body: RelayAsked, asked: Asked) -> JSONRe
         await session.commit()
     password, _ = await asyncio.to_thread(password_view, mail_password_of(request))
     log.info("email configuration saved", principal=asked.caller.principal.id)
+    answered = email_view(rows, password)
+    return JSONResponse(status_code=200, content=answered.model_dump(mode="json"))
+
+
+@router.post(REMOVAL_PATH, response_model=RelayView, responses=COMMON_RESPONSES)
+async def remove_email(request: Request, asked: Asked) -> JSONResponse:
+    """Retire the relay's configuration, naming who removed it, or say there is none to remove.
+
+    The authority first, before the database, as every write here. The rows are read in the same
+    transaction as the retirement, so a relay saved a moment earlier is the one removed.
+    """
+    if not may_manage_notifications(asked.reach, asked.now):
+        log.info("relay removal refused", principal=asked.caller.principal.id)
+        raise _not_answerable()
+    async with _sessions(request)() as session:
+        await attribute(session, asked)
+        if not await settings_rows(session):
+            return _refused(409, NOTHING_TO_REMOVE)
+        await retire_settings(session, by=asked.caller.principal.id)
+        rows = await settings_rows(session)
+        await session.commit()
+    password, _ = await asyncio.to_thread(password_view, mail_password_of(request))
+    log.info("email configuration removed", principal=asked.caller.principal.id)
     answered = email_view(rows, password)
     return JSONResponse(status_code=200, content=answered.model_dump(mode="json"))
 

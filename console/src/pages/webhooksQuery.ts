@@ -1,11 +1,9 @@
 /**
- * What the Webhooks screen asks `brain.webhook_routes` for and sends it, and how the answers are
+ * What the Webhooks module asks `brain.webhook_routes` for and sends it, and how the answers are
  * read. No React.
  *
- * `docs/screens.html` does not draw webhooks. The owner's standard in `docs/admin-console.md`
- * lists them as a thing an administrator manages, so the screen takes the design's general shape
- * (a crumb, a heading, a lede, cards holding tables, the hint under a card saying what not to
- * assume) and every fact on it is a field the API sent.
+ * `docs/screens.html` does not draw webhooks, so the module takes the kit's list and SCREEN 14's
+ * detail shape (`pages/webhooks/`), and every fact on it is a field the API sent.
  *
  * **Nothing here decides who may change a subscriber.** `manageable` came from
  * `brain.ops.outbox.may_manage` on the server and only decides whether a control is drawn; every
@@ -51,6 +49,16 @@ export function switchOffApiPath(subscriberId: string): string {
 /** The console address and the menu's label. */
 export const WEBHOOKS_PATH = "/webhooks";
 export const WEBHOOKS_LABEL = "Webhooks";
+
+/** One subscriber's page. The id is the name its registrar gave it, which is how people name it. */
+export function webhookAddress(subscriberId: string): string {
+  return `${WEBHOOKS_PATH}/${encodeURIComponent(subscriberId)}`;
+}
+
+/** A person by name, from the page's `people`, or the sentence for someone the directory does not list. */
+export function personWords(people: Readonly<Record<string, string>> | undefined, id: string): string {
+  return people?.[id] ?? "someone no longer listed";
+}
 
 /** What each state of an arriving channel's check is called on the screen. */
 export const VERIFICATION_LABELS: Record<InboundChannelRow["verification"], string> = {
@@ -139,21 +147,20 @@ export function when(stamp: string | null | undefined): string {
   return Number.isNaN(moment.getTime()) ? stamp : moment.toISOString().replace("T", " ").slice(0, 16);
 }
 
-/** The secret column, in words: held since, not held, or not known with the vault's reason. */
-export function secretSentence(row: SubscriberRow): string {
+/** The secret, in a word: held, not held, or not known when the vault could not be asked. */
+export function secretWord(row: SubscriberRow): string {
   if (row.secret_held === null) {
     return "Not known";
   }
-  if (!row.secret_held) {
-    return "Not held";
-  }
-  return row.secret_written_at ? `Held, written ${when(row.secret_written_at)}` : "Held";
+  return row.secret_held ? "Held" : "Not held";
 }
 
-/** The state column. */
-export function stateSentence(row: SubscriberRow): string {
-  return row.active ? "On" : `Off since ${when(row.deactivated_at)}`;
-}
+/** Where a delivery got to, in words. */
+export const DELIVERY_STATE_WORDS: Readonly<Record<string, string>> = Object.freeze({
+  pending: "Waiting",
+  delivered: "Delivered",
+  exhausted: "Given up",
+});
 
 /** What each change is called on the screen. */
 export const CHANGE_LABELS: Readonly<Record<string, string>> = Object.freeze({
@@ -162,31 +169,16 @@ export const CHANGE_LABELS: Readonly<Record<string, string>> = Object.freeze({
   switched_off: "Switched off",
 });
 
-/** The filter a person narrows the list with. About the page, never about the company. */
-export type StateFilter = "all" | "on" | "off";
-
-export const STATE_FILTERS: readonly StateFilter[] = ["all", "on", "off"];
-
-export const STATE_FILTER_LABELS: Readonly<Record<StateFilter, string>> = Object.freeze({
-  all: "On and off",
-  on: "On",
-  off: "Off",
+/** What each field of the registration accepts, said under it before anything is sent. */
+export const REGISTRATION_FORMATS = Object.freeze({
+  subscriber_id: "Up to 63 lower-case letters, digits and underscores, starting with a letter, such as billing_bridge.",
+  endpoint: "An https address on the public internet, where the receiver listens.",
+  kinds: "Choose at least one. A subscriber is sent identifiers, never content.",
 });
 
-/** The rows on this page that match the filter and the search, in the API's order. */
-export function narrowed(
-  rows: readonly SubscriberRow[],
-  state: StateFilter,
-  search: string,
-): SubscriberRow[] {
-  const needle = search.trim().toLowerCase();
-  return rows.filter(
-    (row) =>
-      (state === "all" || (state === "on") === row.active) &&
-      (needle === "" ||
-        row.subscriber_id.toLowerCase().includes(needle) ||
-        row.endpoint.toLowerCase().includes(needle)),
-  );
+/** What a signing secret accepts, with the minimum the API serves. */
+export function secretFormat(minimum: number): string {
+  return `At least ${String(minimum)} characters, generated rather than typed, and given to the receiver first. It is never shown again.`;
 }
 
 /** The body a registration sends: exactly the four fields the route declares. */

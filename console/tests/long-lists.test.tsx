@@ -138,6 +138,11 @@ const AN_UNBINDING_IS_ONE_PERSONS_CHAT =
   "them; it is confirmed one person at a time so nobody's chat is taken away as a side effect of " +
   "somebody else's.";
 
+const A_CHANNEL_IS_SWITCHED_ON_ITS_OWN_PAGE =
+  "A channel's switch and set-up change what one chat surface answers and what its vendor's requests " +
+  "meet, and each is confirmed on the channel's own page naming it. Switching several at once is how " +
+  "a mis-ticked row takes a chat surface away from everybody on it.";
+
 const A_RUN_IS_WRITTEN_BY_THE_WORKER =
   "A job's past runs are rows the worker writes as it runs the job, and nothing a person presses " +
   "changes one: pause, resume and run now act on the job, from its own header, so there is no act " +
@@ -229,7 +234,8 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
   "/elevation": { bulk: AN_ELEVATION_IS_DECIDED_ON_ITS_OWN_REASON },
   "/access_review": {},
   "/access-requests": { bulk: READ_ONLY },
-  "/channels": { bulk: AN_UNBINDING_IS_ONE_PERSONS_CHAT },
+  "/channels": { bulk: A_CHANNEL_IS_SWITCHED_ON_ITS_OWN_PAGE },
+  "/channels/:name": { bulk: AN_UNBINDING_IS_ONE_PERSONS_CHAT },
 };
 
 /**

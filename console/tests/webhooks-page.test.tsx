@@ -1,49 +1,38 @@
 /**
- * The Webhooks screen: the list, the three controls, their confirmations and the sentences.
+ * The Webhooks module on the page kit: the list, one subscriber's three views, the three writes and
+ * their confirmations, and the two acts drawn as not built yet.
  *
- * Mounted directly on a memory router at its own address, for the reason
- * `tests/sessions-page.test.tsx` gives. The failures worth testing look like the screen working: a
- * control for a reader the API said may not manage, a write sent without its confirmation, a
- * confirmation that paraphrases the API, a secret left in the page after it was sent, and a problem
- * shown away from its field.
+ * Reached through the application's own route table. The failures worth testing look like the page
+ * working: a control for a reader the API said may not manage, a write sent without its
+ * confirmation, a confirmation that paraphrases the API, a signing secret left in the page after it
+ * was sent, a blank field said only after a refusal, and a principal id drawn where a name belongs.
  *
  * **What each write sends is read against the route's own request body**, so a key this console
  * invented is a failure here rather than a 422 in front of an administrator.
  *
- * Task ids: M27.8.12
+ * Task ids: M27.8.12, M27.8.5, M27.15.44, M27.16.1
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
-import {
-  KEEP_LABEL,
-  NOT_MANAGEABLE,
-  NO_SUBSCRIBERS,
-  READING_WEBHOOKS,
-  REGISTER_CONFIRM,
-  REGISTER_LABEL,
-  REPLACE_LABEL,
-  SWITCH_OFF_LABEL,
-} from "../src/pages/Webhooks";
-import { BLANK_SENTENCES, type SubscriberRow, type WebhooksBody } from "../src/pages/webhooksQuery";
+import { ACT_LABELS, UNAVAILABLE } from "../src/pages/webhooks/webhookActions";
+import { NOT_MANAGEABLE } from "../src/pages/webhooks/WebhooksPage";
+import { BLANK_SENTENCES, REGISTRATION_FORMATS, type SubscriberRow, type WebhooksBody } from "../src/pages/webhooksQuery";
+import { fakeIdentityProvider, loadConsole, signIn } from "./support/auth";
+import { apiDocument, declaredRequestBodySchema } from "./support/openapi";
+import { installRadixStubs } from "./support/radix";
 import { readRepoFile } from "./support/repo";
-import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
-import { declaredRequestBodySchema } from "./support/openapi";
 
-const LISTING = "/api/v1/webhooks";
-const REGISTER = "/api/v1/webhooks/subscribers";
 const CONSOLE_ORIGIN = "https://console.test";
 const SECRET = "whsec-SIGNING-SENTINEL-0123456789abcdefABCDEF";
-
 const REGISTERING = "The subscriber is told, at this address, whenever one of the chosen kinds happens.";
 const REPLACING = "The new secret signs every request from now on.";
 const SWITCHING_OFF = "The subscriber is told nothing more. This cannot be undone.";
-const DELIVERY = "The worker sends what is due every minute.";
-const DISPATCH_TOLD = "The dispatch runs every minute, and its last run is shown here.";
 
 beforeAll(async () => {
-  await import("../src/pages/Webhooks");
+  installRadixStubs();
+  await import("../src/pages/Webhook");
 }, 60_000);
 
 function subscriber(overrides: Partial<SubscriberRow> = {}): SubscriberRow {
@@ -52,7 +41,7 @@ function subscriber(overrides: Partial<SubscriberRow> = {}): SubscriberRow {
     endpoint: "https://hooks.example.test/brain",
     kinds: ["approval.requested"],
     active: true,
-    created_by: "u_admin",
+    created_by: "u_ada",
     created_at: "2019-03-04T09:00:00Z",
     deactivated_at: null,
     last_delivered_at: null,
@@ -62,21 +51,14 @@ function subscriber(overrides: Partial<SubscriberRow> = {}): SubscriberRow {
       {
         kind: "approval.requested",
         state: "exhausted",
-        attempts: 0,
+        attempts: 5,
         occurred_at: "2019-03-04T09:10:00Z",
-        last_attempt_at: null,
+        last_attempt_at: "2019-03-04T09:40:00Z",
         reason: "not sent: refused",
         next_attempt_at: null,
       },
     ],
-    changes: [
-      {
-        change: "registered",
-        changed_by: "u_admin",
-        changed_at: "2019-03-04T09:00:00Z",
-        secret_written_at: "2019-03-04T09:00:05Z",
-      },
-    ],
+    changes: [{ change: "registered", changed_by: "u_ada", changed_at: "2019-03-04T09:00:00Z", secret_written_at: null }],
     ...overrides,
   };
 }
@@ -87,362 +69,253 @@ function page(overrides: Partial<WebhooksBody> = {}): WebhooksBody {
     vault: "ready",
     vault_told: "The secrets vault answered.",
     subscribers: [subscriber()],
-    findings: [],
+    findings: ["billing_bridge is told about nothing it can act on."],
     kinds: ["automation.run_finished", "operation.settled", "connector.health_changed", "approval.requested"],
-    delivery: DELIVERY,
+    delivery: "The worker sends what is due every minute.",
     dispatcher: {
       runs_here: true,
       paused: false,
       last_started_at: "2019-03-04T09:20:00Z",
       last_finished_at: "2019-03-04T09:20:01Z",
       last_outcome: "ok",
-      last_report: "1 delivered, 0 to be tried again later, 0 set aside for a person",
-      told: DISPATCH_TOLD,
+      last_report: "1 delivered",
+      told: "The dispatch runs every minute, and its last run is shown here.",
     },
-    inbound: {
-      channels: [
-        { channel: "lark", verification: "not_written", check: "", how: "Nothing here checks either yet." },
-        { channel: "slack", verification: "written", check: "brain.channels.slack:verify", how: "Slack signs each request." },
-      ],
-      channels_told: "No channel on this install receives a webhook.",
-      automation_path: "/api/v1/automation/tool-call",
-      automation_told: "An automation calls this system with a credential of its own.",
-    },
+    inbound: { channels: [], channels_told: "", automation_path: "/api/v1/automation/tool-call", automation_told: "An automation calls in." },
     registering: REGISTERING,
     replacing: REPLACING,
     switching_off: SWITCHING_OFF,
     secret_minimum: 32,
+    people: { u_ada: "Ada Admin" },
     ...overrides,
   };
 }
 
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json" },
-  });
+interface Sent {
+  readonly method: string;
+  readonly path: string;
+  readonly body: unknown;
 }
 
-type Answer = (url: URL, init: RequestInit | undefined) => Response | null;
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+}
 
-async function mount(answer: Answer): Promise<{ container: HTMLElement; idp: FakeIdp }> {
+async function consoleAt(path: string, body: WebhooksBody): Promise<{ container: HTMLElement; sent: Sent[] }> {
+  const sent: Sent[] = [];
   const idp = fakeIdentityProvider({
     api(url, init) {
-      return answer(new URL(url, CONSOLE_ORIGIN), init);
+      const where = new URL(url, CONSOLE_ORIGIN).pathname;
+      const method = (init?.method ?? "GET").toUpperCase();
+      sent.push({ method, path: where, body: typeof init?.body === "string" ? (JSON.parse(init.body) as unknown) : null });
+      if (method !== "GET") {
+        return json({ subscriber_id: "x", change: "registered", changed_at: "2019-03-04T09:00:00Z", secret_written_at: null, told: "Done." });
+      }
+      return where === "/api/v1/webhooks" ? json(body) : null;
     },
   });
   const loaded = await loadConsole({ idp });
   await signIn(loaded);
-  const { Webhooks } = await import("../src/pages/Webhooks");
-  const router = createMemoryRouter([{ path: "/webhooks", element: <Webhooks /> }], {
-    initialEntries: ["/webhooks"],
-  });
+  const { routes } = await import("../src/App");
+  const router = createMemoryRouter(routes, { initialEntries: [path] });
   const { container } = render(<RouterProvider router={router} />);
   await waitFor(() => {
-    if (container.textContent?.includes(READING_WEBHOOKS)) {
-      throw new Error("still reading");
+    if (!container.querySelector("h1") || container.querySelector('[data-slot="loading-state"]')) {
+      throw new Error("the page has not arrived");
     }
   });
-  return { container, idp };
+  return { container, sent };
 }
 
-function posts(idp: FakeIdp): { url: URL; body: unknown }[] {
-  return idp.calls
-    .filter(
-      (call) =>
-        call.init?.method === "POST" && new URL(call.url, CONSOLE_ORIGIN).pathname.startsWith("/api/"),
-    )
-    .map((call) => ({
-      url: new URL(call.url, CONSOLE_ORIGIN),
-      body: call.init?.body === undefined ? undefined : (JSON.parse(String(call.init.body)) as unknown),
-    }));
-}
-
-function button(scope: ParentNode, name: string): HTMLButtonElement {
-  const found = [...scope.querySelectorAll("button")].find(
-    (one) => one.textContent === name || one.getAttribute("aria-label")?.startsWith(name),
+function button(root: ParentNode, name: string): HTMLButtonElement {
+  const found = [...root.querySelectorAll("button")].find(
+    (one) => one.textContent?.trim() === name || one.getAttribute("aria-label")?.startsWith(name),
   );
-  if (!found) {
-    throw new Error(`no button named ${name}`);
+  if (found === undefined) {
+    throw new Error(`No button reading ${name}.`);
   }
-  return found as HTMLButtonElement;
+  return found;
 }
 
-function field(container: HTMLElement, label: string): HTMLInputElement {
-  const found = [...container.querySelectorAll("label")].find(
-    (one) => one.textContent?.trim() === label,
-  );
-  const input = found?.querySelector("input");
-  if (!input) {
-    throw new Error(`no field labelled ${label}`);
+function dialog(): HTMLElement {
+  const found = document.body.querySelector<HTMLElement>('[data-slot="confirm-dialog"]');
+  if (found === null) {
+    throw new Error("No confirmation is open.");
   }
-  return input;
+  return found;
 }
 
-function confirmButton(container: HTMLElement, label: string): HTMLButtonElement {
-  return button(container.querySelector(".confirm") as HTMLElement, label);
+function posts(sent: Sent[]): [string, unknown][] {
+  return sent.filter((one) => one.method === "POST").map((one) => [one.path, one.body]);
 }
 
-describe("what the webhooks screen shows", () => {
-  test("a subscriber reads as where it is told, what about, whether its secret is held and what happened", async () => {
-    // What breaks if this is deleted: every refusal below is satisfied by a page showing nothing.
-    const { container } = await mount((url) => (url.pathname === LISTING ? json(page()) : null));
-    const table = container.querySelector('[aria-label="Webhook subscribers"]')?.textContent ?? "";
-    expect(table).toContain("billing_bridge");
-    expect(table).toContain("https://hooks.example.test/brain");
-    expect(table).toContain("approval.requested");
-    expect(table).toContain("Held, written 2019-03-04 09:00");
-    expect(container.textContent).toContain("not sent: refused");
-    expect(container.textContent).toContain(DELIVERY);
-    expect(container.textContent).toContain("No channel on this install receives a webhook.");
+describe("the Webhooks list", () => {
+  test("a subscriber reads as where it is told, what about, its state and secret, and its registrar is no id", async () => {
+    // What breaks if this is deleted: the list draws a principal id, or a secret held reads as not held.
+    const { container } = await consoleAt("/webhooks", page());
+    const text = container.querySelector("tbody")?.textContent ?? "";
+    expect(text).toContain("billing_bridge");
+    expect(text).toContain("https://hooks.example.test/brain");
+    expect(text).toContain("approval.requested");
+    expect(text).toContain("On");
+    expect(text).toContain("Held");
+    expect(text).toContain("Never");
+    expect(container.textContent).toContain("billing_bridge is told about nothing it can act on.");
+    expect(container.textContent).not.toContain("u_ada");
   });
 
-  test("what the dispatch last did is shown beside the deliveries, with when each waits to be tried", async () => {
-    // What breaks if this is deleted: an administrator is told how delivery works and never whether
-    // it is happening, and a pending delivery reads as stuck with no time it will be tried again.
-    const waiting = subscriber({
-      deliveries: [
-        {
-          kind: "approval.requested",
-          state: "pending",
-          attempts: 2,
-          occurred_at: "2019-03-04T09:10:00Z",
-          last_attempt_at: "2019-03-04T09:11:00Z",
-          reason: "attempt 2 of 8 came back unavailable; next in 120s",
-          next_attempt_at: "2019-03-04T09:13:00Z",
-        },
-      ],
-    });
-    const { container } = await mount((url) =>
-      url.pathname === LISTING ? json(page({ subscribers: [waiting] })) : null,
-    );
-    expect(container.textContent).toContain(DISPATCH_TOLD);
-    const run = container.querySelector('[aria-label="The last run"]')?.textContent ?? "";
-    expect(run).toContain("Finished at 2019-03-04 09:20");
-    expect(run).toContain("1 delivered, 0 to be tried again later, 0 set aside for a person");
-    const deliveries = container.querySelector('[aria-label="Recent deliveries to billing_bridge"]');
-    expect(deliveries?.textContent).toContain("2019-03-04 09:13");
-  });
-
-  test("a reader shown no dispatcher sees no sentence about it, and a failed run says it failed", async () => {
-    // What breaks if this is deleted: the page draws a dispatch state the API did not send, or a
-    // failed run reads as a finished one.
-    const hidden = await mount((url) =>
-      url.pathname === LISTING ? json(page({ manageable: false, subscribers: [], dispatcher: null })) : null,
-    );
-    expect(hidden.container.textContent).not.toContain(DISPATCH_TOLD);
-    const failed = await mount((url) =>
-      url.pathname === LISTING
-        ? json(
-            page({
-              dispatcher: {
-                runs_here: true,
-                paused: false,
-                last_started_at: "2019-03-04T09:20:00Z",
-                last_finished_at: "2019-03-04T09:20:01Z",
-                last_outcome: "failed",
-                last_report: "The run failed with OutboxStoreError.",
-                told: "The dispatch's last run failed.",
-              },
-            }),
-          )
-        : null,
-    );
-    const run = failed.container.querySelector('[aria-label="The last run"]')?.textContent ?? "";
-    expect(run).toContain("Failed at 2019-03-04 09:20");
-    expect(run).toContain("The run failed with OutboxStoreError.");
-  });
-
-  test("each arriving channel says whether its check is written and names it when it is", async () => {
-    // What breaks if this is deleted: a channel with no check reads the same as one with a check.
-    const { container } = await mount((url) => (url.pathname === LISTING ? json(page()) : null));
-    const rows = [...(container.querySelector('[aria-label="Channels"]')?.querySelectorAll("tbody tr") ?? [])].map(
-      (row) => row.textContent ?? "",
-    );
-    expect(rows).toHaveLength(2);
-    expect(rows[0]).toContain("lark");
-    expect(rows[0]).toContain("Not written");
-    expect(rows[1]).toContain("Written");
-    expect(rows[1]).toContain("brain.channels.slack:verify");
-  });
-
-  test("a reader who may not manage sees no list and no control, and is told why", async () => {
-    // What breaks if this is deleted: the register form and its button drawn for a reader the API
-    // said may change nothing.
-    const { container } = await mount((url) =>
-      url.pathname === LISTING ? json(page({ manageable: false, subscribers: [] })) : null,
-    );
+  test("a reader who may not manage sees no list and no control, and is told what managing needs", async () => {
+    // What breaks if this is deleted: a register button for a reader every write refuses.
+    const { container } = await consoleAt("/webhooks", page({ manageable: false, subscribers: [] }));
     expect(container.textContent).toContain(NOT_MANAGEABLE);
-    expect(container.textContent).not.toContain(NO_SUBSCRIBERS);
-    expect(container.querySelectorAll("button")).toHaveLength(0);
+    expect([...container.querySelectorAll("button")].some((one) => one.textContent?.includes(ACT_LABELS.register))).toBe(false);
   });
 
-  test("a secret the vault cannot be asked about reads as not known, never as not held", async () => {
-    // What breaks if this is deleted: a silent vault reads as a subscriber with no secret.
-    const { container } = await mount((url) =>
-      url.pathname === LISTING
-        ? json(page({ vault: "unreachable", vault_told: "The secrets vault did not answer.", subscribers: [subscriber({ secret_held: null, secret_written_at: null })] }))
-        : null,
-    );
-    expect(container.textContent).toContain("Not known");
-    expect(container.textContent).not.toContain("Not held");
-    expect(container.textContent).toContain("The secrets vault did not answer.");
-  });
-
-  test("a switched-off subscriber has no control", async () => {
-    // What breaks if this is deleted: a control offered for an act the route will refuse.
-    const { container } = await mount((url) =>
-      url.pathname === LISTING
-        ? json(page({ subscribers: [subscriber({ active: false, deactivated_at: "2019-03-05T00:00:00Z" })] }))
-        : null,
-    );
-    const labels = [...container.querySelectorAll("button")].map((one) => one.textContent);
-    expect(labels).toEqual([REGISTER_LABEL]);
-    expect(container.textContent).toContain("Off since 2019-03-05 00:00");
-  });
-});
-
-describe("what the webhooks screen does", () => {
-  test("registering is confirmed in the API's words and sends exactly the route's four fields", async () => {
-    // What breaks if this is deleted: a registration sent with no second step, a body key the route
-    // forbids, or a secret left sitting in the form after it was sent.
-    let registered = false;
-    const { container, idp } = await mount((url) => {
-      if (url.pathname === REGISTER) {
-        registered = true;
-        return json({
-          subscriber_id: "new_bridge",
-          change: "registered",
-          changed_at: "2019-03-04T10:00:00Z",
-          secret_written_at: "2019-03-04T10:00:00Z",
-          told: "The subscriber is registered and its signing secret is held in the vault.",
-        });
-      }
-      return url.pathname === LISTING ? json(page({ subscribers: registered ? [] : [subscriber()] })) : null;
+  test("a blank registration says what to fill in beside each field before anything is asked or sent", async () => {
+    // What breaks if this is deleted: an empty registration is one press from a confirmation asking
+    // to register "this subscriber", which is what the old screen did on 2026-09-17.
+    const { container, sent } = await consoleAt("/webhooks", page());
+    fireEvent.click(button(container, ACT_LABELS.register));
+    const form = await waitFor(() => {
+      const found = document.body.querySelector<HTMLFormElement>(`form[aria-label="${ACT_LABELS.register}"]`);
+      expect(found).not.toBeNull();
+      return found as HTMLFormElement;
     });
-    const declared = declaredRequestBodySchema(REGISTER, "post");
+    expect(form.textContent).toContain(REGISTRATION_FORMATS.subscriber_id);
+    expect(form.textContent).toContain(REGISTRATION_FORMATS.endpoint);
+    fireEvent.submit(form);
+    expect(form.querySelector('[aria-label="Problems with subscriber_id"]')?.textContent).toBe(BLANK_SENTENCES.subscriber_id);
+    expect(form.querySelector('[aria-label="Problems with endpoint"]')?.textContent).toBe(BLANK_SENTENCES.endpoint);
+    expect(form.querySelector('[aria-label="Problems with kinds"]')?.textContent).toBe(BLANK_SENTENCES.kinds);
+    expect(form.querySelector('[aria-label="Problems with secret"]')?.textContent).toBe(BLANK_SENTENCES.secret);
+    expect(document.body.querySelector('[data-slot="confirm-dialog"]')).toBeNull();
+    expect(posts(sent)).toEqual([]);
+  });
 
-    fireEvent.change(field(container, "Id"), { target: { value: "new_bridge" } });
-    fireEvent.change(field(container, "Address it is told at"), { target: { value: "https://hooks.example.test/new" } });
-    fireEvent.click(field(container, "operation.settled"));
-    fireEvent.change(field(container, "Signing secret"), { target: { value: SECRET } });
-    fireEvent.click(button(container, REGISTER_LABEL));
-
-    const panel = container.querySelector(".confirm") as HTMLElement;
-    expect(panel.textContent).toContain("new_bridge");
-    expect(panel.textContent).toContain(REGISTERING);
-    expect(posts(idp)).toEqual([]);
-
-    fireEvent.click(confirmButton(container, REGISTER_CONFIRM));
+  test("registering is confirmed in the API's words and sends exactly the route's four fields, then forgets the secret", async () => {
+    // What breaks if this is deleted: a registration sent unconfirmed, a key the route does not
+    // declare, or the signing secret left in the page after it went.
+    const { container, sent } = await consoleAt("/webhooks", page());
+    fireEvent.click(button(container, ACT_LABELS.register));
+    const form = await waitFor(() => {
+      const found = document.body.querySelector<HTMLFormElement>(`form[aria-label="${ACT_LABELS.register}"]`);
+      expect(found).not.toBeNull();
+      return found as HTMLFormElement;
+    });
+    fireEvent.change(form.querySelector('input[name="subscriber_id"]') as HTMLInputElement, { target: { value: "new_bridge" } });
+    fireEvent.change(form.querySelector('input[name="endpoint"]') as HTMLInputElement, { target: { value: "https://hooks.example.test/new" } });
+    fireEvent.click(form.querySelector('input[name="kinds"]') as HTMLInputElement);
+    fireEvent.input(form.querySelector('[data-slot="secret-field"] input') as HTMLInputElement, { target: { value: SECRET } });
+    fireEvent.submit(form);
+    expect(dialog().textContent).toContain(REGISTERING);
+    expect(posts(sent)).toEqual([]);
+    fireEvent.click(button(dialog(), ACT_LABELS.reviewRegistration));
     await waitFor(() => {
-      expect(container.textContent).toContain("The subscriber is registered");
+      expect(posts(sent)).toEqual([
+        [
+          "/api/v1/webhooks/subscribers",
+          { subscriber_id: "new_bridge", endpoint: "https://hooks.example.test/new", kinds: ["automation.run_finished"], secret: SECRET },
+        ],
+      ]);
     });
-    const [sent] = posts(idp);
-    expect(Object.keys(sent?.body as object).sort()).toEqual(Object.keys(declared["properties"] as object).sort());
-    expect(sent?.body).toEqual({
-      subscriber_id: "new_bridge",
-      endpoint: "https://hooks.example.test/new",
-      kinds: ["operation.settled"],
-      secret: SECRET,
-    });
-    expect(container.innerHTML).not.toContain(SECRET);
-  });
-
-  test("a registration with a blank field says what to fill in beside each one, and asks and sends nothing", async () => {
-    // What breaks if this is deleted: a registration with no id, no address, no kind and no secret
-    // opening a confirmation a person can agree to, and being refused only after they have.
-    const { container, idp } = await mount((url) => (url.pathname === LISTING ? json(page()) : null));
-
-    fireEvent.click(button(container, REGISTER_LABEL));
-
-    expect(container.querySelector(".confirm")).toBeNull();
-    expect(posts(idp)).toEqual([]);
-    for (const [name, sentence] of Object.entries(BLANK_SENTENCES)) {
-      expect(container.querySelector(`[aria-label="Problems with ${name}"]`)?.textContent, name).toBe(sentence);
-    }
-
-    fireEvent.change(field(container, "Id"), { target: { value: "new_bridge" } });
-    fireEvent.change(field(container, "Address it is told at"), { target: { value: "https://hooks.example.test/new" } });
-    fireEvent.click(field(container, "operation.settled"));
-    fireEvent.change(field(container, "Signing secret"), { target: { value: SECRET } });
-    fireEvent.click(button(container, REGISTER_LABEL));
-    expect(container.querySelector(".confirm")).not.toBeNull();
-    expect(container.querySelector('[aria-label^="Problems with"]')).toBeNull();
+    const declared = Object.keys((declaredRequestBodySchema("/api/v1/webhooks/subscribers", "post")["properties"] ?? {}) as Record<string, unknown>);
+    expect(Object.keys(posts(sent)[0]?.[1] as Record<string, unknown>).sort()).toEqual(declared.sort());
+    expect(document.body.innerHTML).not.toContain(SECRET);
   });
 
   test("the sentences for a blank field are the API's own", () => {
     // What breaks if this is deleted: the console's copy of the four sentences drifting from the
-    // ones the route answers with, so the same blank field is described two ways depending on which
-    // side noticed it. Read from the Python, with its implicitly joined literals joined.
+    // ones the route answers with. Read from the Python, with its implicitly joined literals joined.
     const python = readRepoFile("src/brain/ops/webhook_admin.py").replace(/"\s+"/g, "");
     for (const [name, sentence] of Object.entries(BLANK_SENTENCES)) {
       expect(python, name).toContain(`"${sentence}"`);
     }
   });
+});
 
-  test("a refused registration shows each problem beside its field and keeps the secret out of the page", async () => {
-    // What breaks if this is deleted: a 422 reads as a generic failure, or the secret stays in the
-    // field for the next person at the screen.
-    const { container } = await mount((url) => {
-      if (url.pathname === REGISTER) {
-        return json(
-          {
-            problems: [
-              { field: "subscriber_id", code: "taken", message: "A subscriber with this id is already registered." },
-              { field: "secret", code: "too_short", message: "Use a secret of at least 32 characters." },
-            ],
-          },
-          422,
-        );
-      }
-      return url.pathname === LISTING ? json(page()) : null;
-    });
-    fireEvent.change(field(container, "Id"), { target: { value: "billing_bridge" } });
-    fireEvent.change(field(container, "Address it is told at"), { target: { value: "https://hooks.example.test/new" } });
-    fireEvent.click(field(container, "operation.settled"));
-    fireEvent.change(field(container, "Signing secret"), { target: { value: "short-SENTINEL" } });
-    fireEvent.click(button(container, REGISTER_LABEL));
-    fireEvent.click(confirmButton(container, REGISTER_CONFIRM));
-
-    await waitFor(() => {
-      expect(container.querySelector('[aria-label="Problems with subscriber_id"]')?.textContent).toContain(
-        "already registered",
-      );
-    });
-    expect(container.querySelector('[aria-label="Problems with secret"]')?.textContent).toContain("32 characters");
-    // Beside their fields and nowhere else: the notice above carries the refusal's reference, and
-    // does not list again a problem an input on the form holds.
-    expect((container.textContent ?? "").split("already registered")).toHaveLength(2);
-    expect(container.querySelector('[aria-label="What was not accepted"]')).toBeNull();
-    expect(field(container, "Signing secret").value).toBe("");
+describe("one subscriber's page", () => {
+  test("the Dashboard lists its deliveries, and a delivery given up offers a replay that is drawn and inert", async () => {
+    // What breaks if this is deleted: an exhausted delivery reads as a working replay control, or
+    // the replay is hidden so the page says the product has no such act.
+    const { container, sent } = await consoleAt("/webhooks/billing_bridge", page());
+    expect(container.querySelector("h1")?.textContent).toBe("billing_bridge");
+    const table = container.querySelector("tbody")?.textContent ?? "";
+    expect(table).toContain("Given up");
+    expect(table).toContain("not sent: refused");
+    const replay = container.querySelector('[data-unavailable][aria-describedby]');
+    expect(replay).not.toBeNull();
+    expect(container.textContent).toContain(UNAVAILABLE.replay.reason);
+    fireEvent.click(replay as HTMLElement);
+    expect(posts(sent)).toEqual([]);
   });
 
-  test("replacing a secret and switching off are each confirmed, and keeping things sends nothing", async () => {
-    // What breaks if this is deleted: a press switches a subscriber off for good with no second
-    // step, or the confirmation is this console's paraphrase.
-    const { container, idp } = await mount((url) => {
-      if (url.pathname.endsWith("/switch-off") || url.pathname.endsWith("/secret")) {
-        return json({ subscriber_id: "billing_bridge", change: "switched_off", changed_at: "2019-03-04T10:00:00Z", secret_written_at: null, told: "The subscriber is switched off." });
-      }
-      return url.pathname === LISTING ? json(page()) : null;
+  test("replacing the secret and switching off are each confirmed in the API's words and send only themselves", async () => {
+    // What breaks if this is deleted: either write goes out on one press, or with a body the route
+    // does not take.
+    const { container, sent } = await consoleAt("/webhooks/billing_bridge/profile", page());
+    fireEvent.click(button(container.querySelector('[data-slot="detail-header"]') as HTMLElement, ACT_LABELS.replace));
+    const form = await waitFor(() => {
+      const found = document.body.querySelector<HTMLFormElement>(`form[aria-label="${ACT_LABELS.replace} of billing_bridge"]`);
+      expect(found).not.toBeNull();
+      return found as HTMLFormElement;
     });
-
-    fireEvent.click(button(container, SWITCH_OFF_LABEL));
-    expect((container.querySelector(".confirm") as HTMLElement).textContent).toContain(SWITCHING_OFF);
-    fireEvent.click(confirmButton(container, KEEP_LABEL));
-    expect(container.querySelector(".confirm")).toBeNull();
-    expect(posts(idp)).toEqual([]);
-
-    fireEvent.click(button(container, REPLACE_LABEL));
-    fireEvent.change(field(container, "New signing secret"), { target: { value: SECRET } });
-    fireEvent.submit(container.querySelector('[aria-label="Replace the signing secret of billing_bridge"]') as HTMLFormElement);
-    expect((container.querySelector(".confirm") as HTMLElement).textContent).toContain(REPLACING);
-    fireEvent.click(confirmButton(container, REPLACE_LABEL));
+    fireEvent.submit(form);
+    expect(form.querySelector('[aria-label="Problems with secret"]')?.textContent).toBe(BLANK_SENTENCES.secret);
+    fireEvent.input(form.querySelector('[data-slot="secret-field"] input') as HTMLInputElement, { target: { value: SECRET } });
+    fireEvent.submit(form);
+    expect(dialog().textContent).toContain(REPLACING);
+    fireEvent.click(button(dialog(), ACT_LABELS.replace));
     await waitFor(() => {
-      expect(posts(idp)).toHaveLength(1);
+      expect(posts(sent)).toEqual([["/api/v1/webhooks/subscribers/billing_bridge/secret", { secret: SECRET }]]);
     });
-    const [rotated] = posts(idp);
-    expect(rotated?.url.pathname).toBe("/api/v1/webhooks/subscribers/billing_bridge/secret");
-    expect(rotated?.body).toEqual({ secret: SECRET });
+    await waitFor(() => {
+      expect(document.body.querySelector('[data-slot="confirm-dialog"]')).toBeNull();
+    });
+    fireEvent.click(button(container.querySelector('[data-slot="detail-header"]') as HTMLElement, ACT_LABELS.switchOff));
+    expect(dialog().textContent).toContain(SWITCHING_OFF);
+    fireEvent.click(button(dialog(), ACT_LABELS.switchOff));
+    await waitFor(() => {
+      expect(posts(sent).at(-1)).toEqual(["/api/v1/webhooks/subscribers/billing_bridge/switch-off", null]);
+    });
+  });
+
+  test("a switched-off subscriber offers no write, and switching back on is drawn and inert with its reason", async () => {
+    // What breaks if this is deleted: a control on a subscriber every write refuses, or "switch back
+    // on" hidden as though the product had no such act.
+    const off = page({ subscribers: [subscriber({ active: false, deactivated_at: "2019-03-05T09:00:00Z" })] });
+    const { container } = await consoleAt("/webhooks/billing_bridge/profile", off);
+    const header = container.querySelector('[data-slot="detail-header"]') as HTMLElement;
+    expect([...header.querySelectorAll("button:not([data-unavailable])")].map((one) => one.textContent)).toEqual([]);
+    expect(container.textContent).toContain(UNAVAILABLE.switchOn.reason);
+  });
+
+  test("the About view names who registered and changed it, with each id under Advanced alone", async () => {
+    // What breaks if this is deleted: the history draws a principal id where a person's name belongs.
+    const { container } = await consoleAt("/webhooks/billing_bridge/about", page());
+    const copy = container.cloneNode(true) as HTMLElement;
+    copy.querySelectorAll('[data-slot="advanced"]').forEach((one) => {
+      one.remove();
+    });
+    expect(copy.textContent).toContain("Ada Admin");
+    expect(copy.textContent).not.toContain("u_ada");
+    expect(container.querySelector('[data-slot="advanced"]')?.textContent).toContain("u_ada");
+  });
+
+  test("a subscriber the list does not hold reads as no subscriber here, whatever the reason", async () => {
+    // What breaks if this is deleted: an address for a hidden subscriber and one for a missing one
+    // read differently.
+    const { container } = await consoleAt("/webhooks/somebody_else", page({ manageable: false, subscribers: [] }));
+    expect(container.textContent).toContain("No subscriber here");
+  });
+
+  test("every act drawn as unavailable names no route the API document declares", () => {
+    // What breaks if this is deleted: a switch-on or replay route lands and the page goes on saying
+    // "coming soon" about it.
+    const paths = Object.keys((apiDocument()["paths"] ?? {}) as Record<string, unknown>);
+    for (const [act, { retiredBy }] of Object.entries(UNAVAILABLE)) {
+      expect(paths.filter((path) => retiredBy.test(path)), act).toEqual([]);
+    }
+    expect(UNAVAILABLE.switchOn.retiredBy.test("/api/v1/webhooks/subscribers/{subscriber_id}/switch-on")).toBe(true);
+    expect(UNAVAILABLE.replay.retiredBy.test("/api/v1/webhooks/deliveries/{delivery}/replay")).toBe(true);
   });
 });

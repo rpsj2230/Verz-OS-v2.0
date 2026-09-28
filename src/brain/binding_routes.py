@@ -36,11 +36,30 @@ capabilities an adapter declares, its features and the most sensitive class it m
 served beside it as declared (M10.1.2, M10.1.3), so the screen says what a surface can do and
 what it may never be sent.
 
-Task ids: M10.3.1, M10.3.2, M10.3.4, M10.1.2, M10.1.3, M10.1.4
+**The module list is a listing of the channels this reader may manage, and nothing else.**
+`GET /console/channels` is one row per channel an adapter declares and the reader holds the
+channel's authority over, on `brain.listing`'s convention, so the console searches, filters and
+orders it on the server; a channel outside the reader's authority is not a row, and one channel's
+own row (`GET /console/channels/{name}`) is the same 404 for it as for a name that is no channel.
+Each row carries the record's state, whether the secret is held, the health above, and who last
+changed the record by name, so the page shows a person and keeps their id under Advanced. See
+`A_CHANNEL_ROW_IS_THE_RECORD_THE_HEALTH_AND_A_NAME`.
+
+**Each channel says the verbs it may carry and how it answers a group (M27.15.43).** The verbs
+are `brain.gate.admission.CHANNEL_VERBS` for the channel, read rather than restated. Rooms are
+read live from the vendor at question time and recorded nowhere, so there is no list of a
+channel's rooms to show; what the screen can say truthfully is how a group is answered on it:
+at the floor of everybody present on a wire that reads a room, as a floor of nothing on one that
+cannot, and not at all on a channel this release does not receive. See `ROOMS_TOLD`.
+
+Task ids: M10.3.1, M10.3.2, M10.3.4, M10.1.2, M10.1.3, M10.1.4, M27.13.1, M27.15.43
 """
 
 from __future__ import annotations
 
+import asyncio
+import enum
+from collections.abc import Collection, Mapping
 from datetime import datetime
 from typing import Annotated, Final
 
@@ -52,17 +71,21 @@ from brain.api import API_PREFIX, COMMON_RESPONSES, NoEchoRoute
 from brain.api_routes import Asked, Asking
 from brain.attribution import trace_of_request
 from brain.channel_routes import (
+    EVENTS_PATH,
     DeliveryRowView,
     channel_named,
     deliveries_of,
     may_manage,
     records_of,
+    secrets_of,
 )
-from brain.channels.adapter import adapter_for, channel_wires
+from brain.channels.adapter import adapter_for, channel_adapters, channel_wires
 from brain.channels.binding import BindingCodes, BindingTable, mint_code
+from brain.chat_answer import RoomReader
 from brain.console.channel_health import ChannelHealthState, channel_health
 from brain.console.reads import permitted
 from brain.core.errors import Absent, Failed
+from brain.gate.admission import CHANNEL_VERBS
 from brain.gate.context import Channel
 from brain.gate.ingress import NONCE_TTL, BindingRefusedError
 from brain.identity.oidc import TokenRefusedError
@@ -72,7 +95,8 @@ from brain.listing import Column, ListAsked, Listing
 from brain.member.connections import my_channels
 from brain.member.shell import member_screen
 from brain.ops.binding_store import StoredBindings, StoredCodes
-from brain.routing_routes import sessions_of
+from brain.ops.channel_store import ChannelRecord, ChannelSecrets, ChannelSecretsUnavailableError
+from brain.routing_routes import names_of, sessions_of
 
 log = structlog.get_logger()
 
@@ -120,6 +144,90 @@ BINDINGS_TOLD: Final = (
 UNBOUND_TOLD: Final = (
     "Unbound. The Brain no longer answers that account as them, and the audit ledger records it."
 )
+
+#: Why a module row carries the record's state, the health and a name.
+A_CHANNEL_ROW_IS_THE_RECORD_THE_HEALTH_AND_A_NAME: Final = (
+    "A channel's row is what its manager decides from: whether it is set up and switched on, "
+    "whether its secret is held, how its deliveries say it is doing, and who changed it last, by "
+    "name. The person's id travels beside the name for the Advanced section, and a channel the "
+    "reader may not manage is no row at all, so the list has nothing to count."
+)
+
+CHANNEL_LIST_PATH: Final = "/console/channels"
+CHANNEL_ROW_PATH: Final = CHANNEL_LIST_PATH + "/{name}"
+
+#: What each channel is called on a screen. A product word, the same on every install.
+CHANNEL_LABELS: Final[Mapping[Channel, str]] = {
+    Channel.EMAIL: "Email",
+    Channel.LARK: "Lark",
+    Channel.SLACK: "Slack",
+    Channel.TEAMS: "Microsoft Teams",
+    Channel.TELEGRAM: "Telegram",
+    Channel.WEBHOOK: "Webhook",
+    Channel.WHATSAPP: "WhatsApp",
+    Channel.WIDGET: "Website widget",
+}
+
+
+class RoomAnswer(enum.StrEnum):
+    """How a group conversation is answered on one channel (M27.15.43)."""
+
+    #: The wire reads who is present, so the room is answered at everybody's floor.
+    AT_THE_FLOOR = "at_the_floor"
+    #: The wire cannot read who is present, so the floor is taken as nothing.
+    AS_NOTHING = "as_nothing"
+    #: This release does not receive on the channel, so no group is answered on it.
+    NOT_RECEIVED = "not_received"
+
+
+#: What the screen says for each. `brain.chat_answer` is where each of them is decided.
+ROOMS_TOLD: Final[Mapping[RoomAnswer, str]] = {
+    RoomAnswer.AT_THE_FLOOR: (
+        "In a group, who is present is read from the vendor when the question is asked. The room "
+        "is answered at the floor of everybody in it, and the asker reads their own answer "
+        "privately, or is sent a link."
+    ),
+    RoomAnswer.AS_NOTHING: (
+        "This channel cannot say who is in a group, so a group's floor is taken as nothing: the "
+        "room is told nothing, and the asker is answered privately, or sent a link."
+    ),
+    RoomAnswer.NOT_RECEIVED: (
+        "This release does not receive on this channel, so no group is answered on it."
+    ),
+}
+
+
+class ChannelStatus(enum.StrEnum):
+    """Whether a channel's record exists and is switched on."""
+
+    ON = "on"
+    OFF = "off"
+    NOT_SET_UP = "not_set_up"
+
+
+class SecretState(enum.StrEnum):
+    """Whether a channel's secret is held, in the four answers the vault can give."""
+
+    HELD = "held"
+    NOT_HELD = "not_held"
+    #: The vault could not be asked, so whether it is held is not known.
+    UNKNOWN = "unknown"
+    #: The channel has no record, so no secret is kept for it.
+    NONE = "none"
+
+
+def channel_label(channel: Channel) -> str:
+    """What a channel is called on a screen."""
+    return CHANNEL_LABELS.get(channel, channel.value)
+
+
+def rooms_for(channel: Channel) -> RoomAnswer:
+    """How a group is answered on this channel, by what its wire can do. See `ROOMS_TOLD`."""
+    # Typed as an object, as `brain.chat_answer` does: whether a wire reads a room is its class's.
+    wire: object = channel_wires().get(channel)
+    if wire is None:
+        return RoomAnswer.NOT_RECEIVED
+    return RoomAnswer.AT_THE_FLOOR if isinstance(wire, RoomReader) else RoomAnswer.AS_NOTHING
 
 
 def code_told(channel: Channel) -> str:
@@ -221,6 +329,11 @@ class ChannelHealthView(BaseModel):
     max_classification: str
     #: Whether it can show a person the label an unchecked payload carries.
     can_carry_label: bool
+    #: What a person may do through it: `brain.gate.admission.CHANNEL_VERBS` (M27.15.43).
+    verbs: list[str]
+    #: How a group conversation is answered on it, and that in words.
+    rooms: RoomAnswer
+    rooms_told: str
     health: ChannelHealthState
     told: str
     last_received_at: datetime | None
@@ -243,6 +356,60 @@ BOUND: Final[Listing[BoundPersonView]] = Listing(
     order="display_name",
 )
 BoundQuery = Annotated[ListAsked, Depends(BOUND.query())]
+
+
+class ChannelRowView(BaseModel):
+    """One channel on the module list, and the head of its own page. Never its secret.
+
+    See `A_CHANNEL_ROW_IS_THE_RECORD_THE_HEALTH_AND_A_NAME`. `last_delivered_at` is the newest
+    message received or sent that went through, which is what "last active" means to a manager;
+    a stranger's refused request is not activity.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    channel: str
+    label: str
+    #: Whether this release can receive and reply on it.
+    receives: bool
+    status: ChannelStatus
+    secret: SecretState
+    health: ChannelHealthState
+    last_delivered_at: datetime | None
+    #: Where its vendor posts, under this install's origin; empty when it cannot receive.
+    events_path: str
+    tenant_fields: list[str]
+    tenant: dict[str, str]
+    changed_at: datetime | None
+    changed_by: str | None
+    changed_by_name: str | None
+
+
+class ChannelListPage(BaseModel):
+    """One page of the channels this reader may manage. Never a count."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    items: list[ChannelRowView]
+    #: Present exactly when a further channel this reader may manage matches.
+    next_cursor: str | None = None
+
+
+#: What the module list may search, filter and order by: the fields a row shows.
+CHANNEL_LIST: Final[Listing[ChannelRowView]] = Listing(
+    name="channels",
+    columns=(
+        Column("label", lambda row: row.label, search=True, sort=True),
+        Column("channel", lambda row: row.channel, search=True),
+        Column("status", lambda row: row.status.value, filter=True, sort=True),
+        Column("health", lambda row: row.health.value, filter=True),
+        Column("receives", lambda row: row.receives, filter=True),
+        Column("last_delivered_at", lambda row: row.last_delivered_at, sort=True),
+    ),
+    key=lambda row: row.channel,
+    order="label",
+)
+ChannelListQuery = Annotated[ListAsked, Depends(CHANNEL_LIST.query())]
 
 
 # ------------------------------------------------------------------------ the wiring
@@ -302,6 +469,77 @@ def _managed(name: str, asked: Asking, *, receiving: bool) -> Channel:
     ):
         raise _absent()
     return channel
+
+
+def _declared() -> list[Channel]:
+    """Every channel an adapter declares, in the adapters' order."""
+    return [factory().capabilities().channel for factory in channel_adapters()]
+
+
+async def _names(request: Request, ids: Collection[str]) -> dict[str, str]:
+    """The directory's names for these principals, or none on a process with no database."""
+    sessions = sessions_of(request)
+    if sessions is None or not ids:
+        return {}
+    async with sessions() as session:
+        found = (await session.execute(names_of(ids))).all()
+    return {str(pid): str(name) for pid, name in found}
+
+
+async def _secret(record: ChannelRecord | None, secrets: ChannelSecrets) -> SecretState:
+    """Whether the record's secret is held, from the slot's metadata. Never the secret."""
+    if record is None:
+        return SecretState.NONE
+    try:
+        held = await asyncio.to_thread(secrets.held, record.secret)
+    except ChannelSecretsUnavailableError:
+        return SecretState.UNKNOWN
+    return SecretState.HELD if held else SecretState.NOT_HELD
+
+
+async def _rows(request: Request, channels: list[Channel]) -> list[ChannelRowView]:
+    """One row per channel named, which the caller has already decided the reader may manage.
+
+    Deliveries are read only for a channel with a record, since a channel nobody set up is
+    `not_set_up` whatever the table says, and names only for the people the records name.
+    """
+    if not channels:
+        return []
+    kept = {one.channel: one for one in await records_of(request).every()}
+    records = {channel: kept.get(channel) for channel in channels}
+    names = await _names(request, {one.updated_by for one in records.values() if one is not None})
+    secrets = secrets_of(request)
+    deliveries = deliveries_of(request)
+    wires = channel_wires()
+    rows: list[ChannelRowView] = []
+    for channel, record in records.items():
+        wire = wires.get(channel)
+        found = channel_health(record, () if record is None else await deliveries.recent(channel))
+        went = [one for one in (found.last_received_at, found.last_sent_at) if one is not None]
+        rows.append(
+            ChannelRowView(
+                channel=channel.value,
+                label=channel_label(channel),
+                receives=wire is not None,
+                status=(
+                    ChannelStatus.NOT_SET_UP
+                    if record is None
+                    else ChannelStatus.ON
+                    if record.enabled
+                    else ChannelStatus.OFF
+                ),
+                secret=await _secret(record, secrets),
+                health=found.health,
+                last_delivered_at=max(went, default=None),
+                events_path=API_PREFIX + EVENTS_PATH.format(name=channel.value) if wire else "",
+                tenant_fields=list(wire.tenant_fields) if wire else [],
+                tenant=dict(record.tenant) if record else {},
+                changed_at=None if record is None else record.updated_at,
+                changed_by=None if record is None else record.updated_by,
+                changed_by_name=None if record is None else names.get(record.updated_by),
+            )
+        )
+    return rows
 
 
 async def _offered(request: Request) -> frozenset[Channel]:
@@ -452,6 +690,9 @@ async def health(name: Name, request: Request, asked: Asked) -> ChannelHealthVie
         features=sorted(one.value for one in declared.features),
         max_classification=declared.max_classification.value,
         can_carry_label=declared.can_carry_label,
+        verbs=sorted(CHANNEL_VERBS.get(channel, frozenset())),
+        rooms=rooms_for(channel),
+        rooms_told=ROOMS_TOLD[rooms_for(channel)],
         health=found.health,
         told=found.told,
         last_received_at=found.last_received_at,
@@ -466,3 +707,24 @@ async def health(name: Name, request: Request, asked: Asked) -> ChannelHealthVie
             recorded_at=fault.recorded_at,
         ),
     )
+
+
+@router.get(CHANNEL_LIST_PATH, response_model=ChannelListPage, responses=COMMON_RESPONSES)
+async def channel_list(request: Request, asked: Asked, listed: ChannelListQuery) -> ChannelListPage:
+    """One page of the channels this reader may manage, searched, filtered and ordered.
+
+    The authority is asked per channel before anything is read, so a channel outside it is
+    neither a row nor a read, and the listing narrows only the rows the reader would be sent.
+    """
+    plan = CHANNEL_LIST.plan(listed, reader=asked.caller.principal.id)
+    mine = [one for one in _declared() if may_manage(asked.reach, one, asked.now)]
+    page = plan.page(await _rows(request, mine))
+    return ChannelListPage(items=list(page.items), next_cursor=page.next_cursor)
+
+
+@router.get(CHANNEL_ROW_PATH, response_model=ChannelRowView, responses=COMMON_RESPONSES)
+async def channel_row(name: Name, request: Request, asked: Asked) -> ChannelRowView:
+    """One channel's row, for its own page. Absent exactly as a name that is no channel."""
+    channel = _managed(name, asked, receiving=False)
+    (row,) = await _rows(request, [channel])
+    return row
