@@ -565,6 +565,10 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.tools.run_skill:SkillLibrary.pinned_skill": Repeat.READS,
         # Whether a stop refuses this call: a read of the switch table, asked at every call.
         "brain.tools.registry:SwitchSource.stop_for": Repeat.READS,
+        # The website check (M12.4.4): one request that never follows a redirect, and one read of
+        # a declared surface that admits no write verb, so a repeat is a second look.
+        "brain.tools.website_check:Prober.probe": Repeat.READS,
+        "brain.tools.website_check:ReadOnlyBrowser.read": Repeat.READS,
         # Service accounts and disabling a person (0095). Registering refuses a taken id, a third
         # live key is refused under the account's lock, and a retirement or a disable that finds
         # the row already in that state writes nothing, so a second call adds no second act.

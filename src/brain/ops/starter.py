@@ -384,6 +384,7 @@ def checked_elsewhere() -> tuple[tuple[Capability, str], ...]:
     from brain.ops.feedback import FLAG_CAPABILITY
     from brain.ops.jobs import DEAD_LETTER_CAPABILITY
     from brain.tools.run_skill import SCRIPT_CAPABILITY
+    from brain.tools.website_check import WEBSITE_CHECK_CAPABILITY
 
     # Described by grammar, as the starter pack's own copies of the same reads already are.
     passage_fields = tuple(
@@ -398,6 +399,7 @@ def checked_elsewhere() -> tuple[tuple[Capability, str], ...]:
         (READ_LOG_CAPABILITY, "Reads other people's entries in the audit read log."),
         (BROWSE_SURFACE, "Reads a declared browser surface."),
         (ACT_ON_SURFACE_CAPABILITY, "Acts on a declared browser surface."),
+        (WEBSITE_CHECK_CAPABILITY, "Checks whether a website within reach is working, over HTTP."),
         (DEAD_LETTER_CAPABILITY, "Reads somebody else's dead-lettered jobs."),
         (VERIFIER_CAPABILITY, "Shows who verified a knowledge item on its badge."),
         (OPAQUE_CAPABILITY, "Reads what an opaque tool returns, which no field policy classifies."),
