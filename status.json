@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-28T19:34:17.840295+00:00",
-  "commit": "2471804c",
-  "commit_subject": "The Operations pages are rebuilt on the page kit, a job has a page with its run history, and the log exports whole",
+  "generated_at": "2026-09-28T20:13:16.340266+00:00",
+  "commit": "ed5a1c1f",
+  "commit_subject": "A source's live reads and a skill's runs and last use are counted on their stats pages (#181)",
   "total": 1576,
   "done": 362,
   "percent": 23.0,
