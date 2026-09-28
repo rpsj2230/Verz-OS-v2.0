@@ -46,6 +46,7 @@ from __future__ import annotations
 # how it is searched, so importing the package has to be what registers it. Without this
 # line the table is absent from `Base.metadata` and autogenerate proposes dropping it.
 from brain.knowledge import search as _search  # noqa: F401
+from brain.tables.acceptance import AcceptanceResultRow
 from brain.tables.access_request import AccessRequestRow
 from brain.tables.adoption import QuestionAskedRow
 from brain.tables.agent import AgentRow
@@ -363,10 +364,13 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # became, so neither points at anything: two writers, neither of which may order the other.
     "know.steward_task",
     "know.solution",
+    # 0133_acceptance_result. Points at nothing: the commit and the check are values.
+    "ops.acceptance_result",
 )
 
 __all__ = [
     "TABLES_IN_DEPENDENCY_ORDER",
+    "AcceptanceResultRow",
     "AccessRequestRow",
     "AdaptiveMemoryRow",
     "AgentAutomationRow",

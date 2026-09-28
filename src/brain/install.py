@@ -446,6 +446,26 @@ INSTALLATION: Final[tuple[Setting, ...]] = (
         ),
         default="unset",
     ),
+    Setting(
+        name="INSTALL_ACCEPTANCE_MEMBER_SUBJECT",
+        belongs=Belongs.IDENTITY,
+        meaning=(
+            "The identity provider's subject of the test login the install acceptance checks act "
+            "as a department member for: the user ID the provider shows on that user's page. "
+            "`unset` means the checks that act as a person wait for it."
+        ),
+        default="unset",
+    ),
+    Setting(
+        name="INSTALL_ACCEPTANCE_HEAD_SUBJECT",
+        belongs=Belongs.IDENTITY,
+        meaning=(
+            "The identity provider's subject of the test login the install acceptance checks act "
+            "as a department head for, as INSTALL_ACCEPTANCE_MEMBER_SUBJECT is the member's. "
+            "`unset` means the checks that act as a head wait for it."
+        ),
+        default="unset",
+    ),
 )
 
 #: The declaration, indexed. Built once because `value_of` is on the read path of every page.
