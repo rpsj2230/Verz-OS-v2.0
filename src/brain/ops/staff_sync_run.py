@@ -45,7 +45,12 @@ contact the company's directory every time anybody looked.
 Option A names, from the same roster, once the roster's transaction has committed. A failure there
 is logged and changes nothing the roster wrote, for that module's reason (M1.8.3).
 
-Task ids: M1.6.1, M1.6.2, M1.6.4, M1.6.5, M1.6.6, M1.6.12, M1.8.6, M1.8.3, M1.8.9
+**Then each synced person's Starter pack, in a third transaction.** Needs Rupash item 105 decided
+that everybody the sync brings in gets the Starter pack for their own department;
+`brain.ops.starter_pack_store.grant_starter_packs` gives it, moves it with a mover and ends it
+with a leaver, and fails the way the heads' reach does: logged, and never undoing the roster.
+
+Task ids: M1.6.1, M1.6.2, M1.6.4, M1.6.5, M1.6.6, M1.6.12, M1.8.6, M1.8.3, M1.8.9, M26.1.2, M26.1.3
 """
 
 from __future__ import annotations
@@ -122,6 +127,7 @@ from brain.ops.staff_sync_store import (
     stop_leavers_agents,
     write_application,
 )
+from brain.ops.starter_pack_store import grant_starter_packs
 from brain.settings import process_environment
 
 # ------------------------------------------------------------------ written-down reasons
@@ -542,6 +548,7 @@ async def sync_staff_on(
         # See `A_LEAVERS_AGENT_STOPS_UNTIL_A_NEW_OWNER_ACCEPTS_IT`.
         await session.execute(stop_leavers_agents(now))
     await _rewrite_heads(sessions, roster, now)
+    await _grant_starter_packs(sessions, roster, now)
     return StaffSyncRun(outcome=outcome, detail=detail)
 
 
@@ -565,6 +572,29 @@ async def _rewrite_heads(
     except Exception as exc:
         # Broad on purpose, and named in the constant above.
         log.warning("staff_sync.head_audit_reach_unwritten", error=type(exc).__name__)
+
+
+async def _grant_starter_packs(
+    sessions: async_sessionmaker[AsyncSession], roster: Roster, now: datetime
+) -> None:
+    """Each synced person's Starter pack, after the roster and the heads, in its own transaction,
+    for `A_HEADS_REACH_NEVER_UNDOES_THE_ROSTER`'s reason."""
+    try:
+        async with sessions() as session, session.begin():
+            plan = await grant_starter_packs(session, roster, read_at=now)
+    except Exception as exc:
+        # Broad on purpose, as the heads' reach is: the roster is already committed.
+        log.warning("staff_sync.starter_packs_unwritten", error=type(exc).__name__)
+        return
+    if plan.refusals or plan.withheld:
+        # Sentences that name no person, so an operator reading the worker's log sees why a
+        # department's people were given nothing.
+        log.info(
+            "staff_sync.starter_packs_withheld",
+            refusals=list(plan.refusals),
+            withheld=list(plan.withheld),
+            unregistered=list(plan.unregistered),
+        )
 
 
 def _sentence(said: str) -> str:
