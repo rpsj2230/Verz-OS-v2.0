@@ -140,7 +140,7 @@ against and what `tests/unit/test_search.py` holds the migration to. Moving it i
 
 Nothing here opens a connection, reads a clock or embeds anything. It builds statements.
 
-Task ids: M15.2.1, M15.2.2, M15.2.3, M15.2.4, M15.2.6, M15.2.7, M35.1.2.1, M35.1.2.3
+Task ids: M15.2.1, M15.2.2, M15.2.3, M15.2.4, M15.2.6, M15.2.7, M35.1.2.1, M35.1.2.3, M7.4.3
 """
 
 from __future__ import annotations
@@ -794,6 +794,15 @@ def width_change_refusal(dimensions: int) -> str:
 #: layer rather than one per module.
 KNOWLEDGE_READ: Final = Capability(value="read:knowledge")
 
+#: What a caller must hold to add a document to the document plane, and where (M7.4.3, M7.6.3).
+#: An administration capability rather than a verb on the read's noun, because the person the
+#: owner's requirement names as adding knowledge is an administrator, and an administrator holds
+#: every `admin:` capability and no read of the data: they place a document in a department
+#: without reading that department. Its scope is judged by `reach_for` exactly as a read's is,
+#: so the departments a holder may add to are a membership of `department` like any reach, and a
+#: grant scoped any other way is refused rather than trimmed.
+KNOWLEDGE_UPLOAD: Final = Capability(value="admin:knowledge")
+
 #: The one column a knowledge scope tests. `reach_for` refuses a grant that tests anything
 #: else, so this is the whole vocabulary rather than the part that happens to be handled.
 SCOPE_COLUMNS: Final[frozenset[str]] = frozenset({DEPARTMENT_FIELD})
@@ -967,8 +976,14 @@ def reach_for(
     *,
     departments: Sequence[str],
     now: datetime | None = None,
+    capability: Capability = KNOWLEDGE_READ,
 ) -> Reach | None:
     """The caller's reach, or None when they hold no read of the knowledge plane at all.
+
+    `capability` is the read unless a caller says otherwise, and the one other capability asked
+    this question is `KNOWLEDGE_UPLOAD`: where a person may add a document is a set of
+    departments reduced from a grant scope by the same rule, so there is one reduction rather
+    than a second one for writes that could admit a scope this one refuses.
 
     None is not the unrestricted reach and there is no way to confuse the two: `Reach` has
     no constructor that means everything, and a caller with no grant produces no `Reach` to
@@ -985,7 +1000,7 @@ def reach_for(
     A grant whose scope is not a department membership is refused rather than reduced. See
     `_assert_reducible_to_departments`, which is the guard that argument lives in.
     """
-    scope = entitlement.scope_for(KNOWLEDGE_READ, now)
+    scope = entitlement.scope_for(capability, now)
     if scope is None:
         return None
     _assert_reducible_to_departments(scope)

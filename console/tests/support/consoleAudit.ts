@@ -119,6 +119,7 @@ import {
 import { APPOINTMENT_PATH, FINISH_PATH } from "../../src/setup/wizard";
 import { BREACHES_API_PATH, breachStepApiPath, topicApiPath } from "../../src/pages/complianceQuery";
 import { handledApiPath } from "../../src/pages/referralsQuery";
+import { uploadPath } from "../../src/pages/knowledgeQuery";
 import { CONSOLE_ROOT, readRepoFile } from "./repo";
 
 // ------------------------------------------------------------------------------------ inputs
@@ -485,6 +486,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
     routes: [
       "/api/v1/govern/library",
+      "/api/v1/knowledge/uploads*",
       "/api/v1/govern/learning",
       "/api/v1/govern/learning/undo",
       "/api/v1/govern/memory",
@@ -506,7 +508,10 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
     installation: ["INSTALL_VECTOR_STORE", "INSTALL_EMBEDDING_REVISION"],
     gaps: [
-      { what: "A document or a data source cannot be added from the console after setup.", leaf: "M42.5.9" },
+      {
+        what: "A data source cannot be added from the console after setup; a document can, on the Knowledge page.",
+        leaf: "M42.5.9",
+      },
       {
         what: "A memory cannot be edited from a screen, and a tier-two rule cannot be promoted nor a tier-three change decided.",
         because:
@@ -753,6 +758,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
     at("POST /api/v1/approvals/{suspension_id}/decision", "approvalDecisionApiPath", approvalDecisionApiPath("sus-1")),
   ],
   "src/pages/Ask.tsx ANSWER_API_PATH": [at("POST /api/v1/answer", "ANSWER_API_PATH", ANSWER_API_PATH)],
+  "src/pages/Knowledge.tsx uploadPath(draft.kind, draft.level, draft.department)": [
+    at("POST /api/v1/knowledge/uploads", "uploadPath", uploadPath("sop", "department", "web").split("?")[0] ?? ""),
+  ],
   "src/pages/AccessRequests.tsx ACCESS_REQUESTS_API_PATH": [
     at("POST /api/v1/access-requests", "ACCESS_REQUESTS_API_PATH", ACCESS_REQUESTS_API_PATH),
   ],
@@ -1152,6 +1160,18 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
         "A request changes nothing anybody holds: it is a row addressed to its owner, and a decision is a grant written on the Roles screen, which is recorded there.",
     },
     behaviour: t("test_access_request_routes", "test_the_owner_reads_the_requests_addressed_to_them_and_nobody_else_does"),
+  },
+  "POST /api/v1/knowledge/uploads": {
+    row: t(
+      "test_knowledge_upload_db",
+      "test_an_administrators_upload_is_found_by_its_department_by_text_and_by_nobody_else",
+      true,
+    ),
+    audit: {
+      none: "Adding a document writes no ledger entry yet: know.item has no trigger and the ledger has no subject kind for a knowledge item, so the Audit screen cannot show an upload.",
+      leaf: "M24.3.1",
+    },
+    behaviour: t("test_knowledge_routes", "test_a_markdown_file_is_added_to_a_department_as_its_uploader"),
   },
   "POST /api/v1/answer": {
     row: { notApplicable: "Asking a question writes no row an administrator manages." },

@@ -39,6 +39,9 @@ from tests.fixtures.scratch_postgres import (
 
 ITEM_MIGRATION = ROOT / "migrations" / "versions" / "0040_knowledge_item.py"
 
+#: The migration that adds `know.item.kind`. Its constants are read rather than restated.
+KIND_MIGRATION = ROOT / "migrations" / "versions" / "0115_knowledge_item_kind.py"
+
 
 def predecessor() -> str:
     """The revision `0040` names as the one before it."""
@@ -47,6 +50,22 @@ def predecessor() -> str:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return str(module.down_revision)
+
+
+def add_item_kind(url: str) -> None:
+    """`know.item.kind` and its check, as `0115` adds them, on a chain that stops at `0040`.
+
+    Applied from `0115`'s own constants rather than by running it, because `0115` also replaces
+    `0069`'s library read, which a chain stopping at `0040` never built. `put_item` writes the
+    column, so without it every write here fails. Whether `0115` itself builds exactly this is
+    `tests/unit/test_knowledge_upload_db.py`'s, against a database migrated to head.
+    """
+    spec = importlib.util.spec_from_file_location("migration_0115_kind", KIND_MIGRATION)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    sql(url, f"ALTER TABLE know.item ADD COLUMN kind VARCHAR({module.KIND_CHARS})")
+    sql(url, f"ALTER TABLE know.item ADD CONSTRAINT ck_item_kind CHECK ({module.KIND_CHECK})")
 
 
 @contextmanager
@@ -64,6 +83,7 @@ def knowledge_items(database: str) -> Iterator[str]:
         migrate(database, "upgrade", "0037")
         migrate(database, "stamp", predecessor())
         migrate(database, "upgrade", "0040")
+        add_item_kind(scratch)
         # `ops.setting`, which `0004` builds and this chain stamps past: the sweep asks whether an
         # administrator switched the request off before it records anything.
         add_modelled(scratch, SCHEDULE_CONTROL_TABLES)

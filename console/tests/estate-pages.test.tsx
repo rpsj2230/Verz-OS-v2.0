@@ -91,7 +91,7 @@ function sentinel(name: string): string {
 function libraryBody(over: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     items: [
-      { item_id: "doc-web-sentinel", level: "department" },
+      { item_id: "doc-web-sentinel", level: "department", kind: "sop" },
       { item_id: "doc-company-sentinel", level: "company" },
       { item_id: "doc-mine-sentinel", level: "personal" },
     ],
@@ -271,7 +271,7 @@ describe("the Knowledge screen", () => {
     ];
 
     expect(backendModelFields(ROUTES, "LibraryPage").sort()).toEqual([...read].sort());
-    expect(backendModelFields(ROUTES, "LibraryRowView").sort()).toEqual(["item_id", "level"]);
+    expect(backendModelFields(ROUTES, "LibraryRowView").sort()).toEqual(["item_id", "kind", "level"]);
   });
 
   test("the page asks for no more items than the route admits", () => {
@@ -288,7 +288,7 @@ describe("the Knowledge screen", () => {
     // Verified columns drawn blank, which read as a library nobody owns and nobody has verified.
     const container = await mount("/library", answering(KNOWLEDGE_API_PATH, libraryBody()));
 
-    expect(headers(container)).toEqual(["Item", "Visible to"]);
+    expect(headers(container)).toEqual(["Item", "Type", "Visible to"]);
     for (const id of ["doc-web-sentinel", "doc-company-sentinel", "doc-mine-sentinel"]) {
       expect(text(container)).toContain(id);
     }

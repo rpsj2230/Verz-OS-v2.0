@@ -9,9 +9,9 @@ What an administrator would need to manage, read out of the schema, the routes a
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
 - 95 tables, from `brain.db.Base.metadata`.
 - 27 installation values, from `brain.install.INSTALLATION`.
-- 192 routes under `/api/v1` and `/setup`, from the API's internal document.
+- 194 routes under `/api/v1` and `/setup`, from the API's internal document.
 - 72 console addresses, from the route table in `console/src/App.tsx`.
-- 74 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 91 routes.
+- 75 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 92 routes.
 - 37 gaps recorded, and 22 routes no screen calls.
 
 ## Area by area
@@ -265,12 +265,14 @@ No gap recorded.
 | `GET /api/v1/govern/learning` | `/learning` |
 | `GET /api/v1/govern/library` | `/library` |
 | `GET /api/v1/govern/memory` | `/memory/:subject` |
+| `GET /api/v1/knowledge/uploads/options` | `/library` |
 | `GET /api/v1/records/{entity}` | `/records/:entity` |
 | `GET /api/v1/records/{entity}/access` | **no screen** |
 | `POST /api/v1/classifications/{entity}/columns/{column}/review` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` |
 | `POST /api/v1/govern/learning/undo` | `/learning` |
+| `POST /api/v1/knowledge/uploads` | `/library` |
 
-- **Gap.** A document or a data source cannot be added from the console after setup. Open leaf `M42.5.9`.
+- **Gap.** A data source cannot be added from the console after setup; a document can, on the Knowledge page. Open leaf `M42.5.9`.
 - **Gap.** A memory cannot be edited from a screen, and a tier-two rule cannot be promoted nor a tier-three change decided. Recorded: brain.ops.memory_store writes an edit and no route offers one: the control belongs on a person's own memory tab, and the Memory screen says edit_is_not_writable. Nothing records agreement or a decision, which the Learning screen says in place of Promote and Decide.
 - **Gap.** A column's classification cannot be changed; a proposed change is reviewed and not applied. Recorded: brain.classification_routes mounts only the dry-run review, and tests/unit/test_classification_routes.py holds that nothing mounted there can change a classification.
 
@@ -491,7 +493,7 @@ No gap recorded.
 
 ## Every write the console sends, followed to the system
 
-Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 74 of 91 write routes have all three proved or not applicable, 13 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
+Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 74 of 92 write routes have all three proved or not applicable, 13 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
 
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
@@ -552,6 +554,7 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /api/v1/jobs/{name}/pause` | `/jobs` | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_job_paused_from_the_screen_is_left_unstarted_by_the_next_tick_and_resumed_is_started` in `tests/unit/test_console_controls_reach_behaviour.py` |
 | `POST /api/v1/jobs/{name}/resume` | `/jobs` | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_job_paused_from_the_screen_is_left_unstarted_by_the_next_tick_and_resumed_is_started` in `tests/unit/test_console_controls_reach_behaviour.py` |
 | `POST /api/v1/jobs/{name}/run` | `/jobs` | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_run_asked_for_from_the_screen_is_started_by_the_next_tick_even_while_paused` in `tests/unit/test_console_controls_reach_behaviour.py` |
+| `POST /api/v1/knowledge/uploads` | `/library` | `test_an_administrators_upload_is_found_by_its_department_by_text_and_by_nobody_else` in `tests/unit/test_knowledge_upload_db.py` (database, in CI) | **None.** Adding a document writes no ledger entry yet: know.item has no trigger and the ledger has no subject kind for a knowledge item, so the Audit screen cannot show an upload. Leaf `M24.3.1`. | `test_a_markdown_file_is_added_to_a_department_as_its_uploader` in `tests/unit/test_knowledge_routes.py` |
 | `POST /api/v1/me/referrals/{referral_id}/handled` | `/referrals` | `test_a_referral_is_filed_without_content_and_read_only_by_its_person` in `tests/unit/test_compliance_store.py` (database, in CI) | **None.** Marking a referral handled writes handled_at and handled_by on its row and no ledger entry: an entry that only a sensitive question writes is the disclosure brain.audit.compliance.intercept argues against. | `test_a_referral_marked_handled_is_shown_handled` in `tests/unit/test_compliance_routes.py` |
 | `POST /api/v1/models/providers` | `/models` | `test_an_added_provider_has_its_key_kept_in_its_own_slot_before_its_row_is_written` in `tests/unit/test_provider_registry_routes.py` | `test_a_key_set_from_the_console_is_recorded_as_its_setter_with_their_reach_and_trace` in `tests/unit/test_credential_routes.py` | `test_a_provider_added_from_the_console_answers_through_the_ladder_with_no_release` in `tests/unit/test_model_calls.py` |
 | `POST /api/v1/models/providers/{provider}/check` | `/models` | `test_a_check_is_one_metered_call_recorded_on_the_ledger_and_never_as_a_question` in `tests/unit/test_provider_routes.py` | Not applicable: A check changes no setting and no record an administrator manages; it is a metered call on the request ledger, not a change to audit. | `test_a_check_is_one_metered_call_recorded_on_the_ledger_and_never_as_a_question` in `tests/unit/test_provider_routes.py` |

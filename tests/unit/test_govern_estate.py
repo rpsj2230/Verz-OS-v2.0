@@ -458,7 +458,7 @@ def test_a_library_row_carries_the_level_and_has_nowhere_to_put_a_predicate() ->
     names = {one.name for one in fields(LibraryRow)}
 
     assert not names & NAMES_THAT_WOULD_BE_A_PREDICATE
-    assert names == {"item_id", "level"}
+    assert names == {"item_id", "level", "kind"}
 
 
 def test_an_item_outside_the_readers_reach_is_absent_from_the_library() -> None:

@@ -64,6 +64,15 @@ export interface RequestOptions {
    */
   readonly method?: "GET" | "POST" | "PATCH" | "PUT";
   readonly body?: unknown;
+  /**
+   * A file sent as the whole request body, raw, under its own media type, with its name in
+   * `x-upload-name`, percent-encoded. The one route that takes one is `POST
+   * /api/v1/knowledge/uploads`, which reads the body as it arrives so a size ceiling applies
+   * before the whole file is held; a JSON body carrying the file as text could not be read that
+   * way. The name travels in a header rather than the URL because a URL is written into every
+   * access log and a filename is where a client's name appears. Never set together with `body`.
+   */
+  readonly file?: { readonly body: Blob; readonly type: string; readonly name: string };
   readonly signal?: AbortSignal;
   /**
    * The path is at the API's root rather than under its versioned base. True only for the
@@ -99,7 +108,10 @@ export async function request<T>(
   if (token) {
     headers["authorization"] = `Bearer ${token}`;
   }
-  if (options.body !== undefined) {
+  if (options.file !== undefined) {
+    headers["content-type"] = options.file.type;
+    headers["x-upload-name"] = encodeURIComponent(options.file.name);
+  } else if (options.body !== undefined) {
     headers["content-type"] = "application/json";
   }
 
@@ -112,7 +124,11 @@ export async function request<T>(
       // credentials means a request cannot be made meaningful by a cookie that happened to
       // be in the browser, which is the whole shape of a cross-site request forgery.
       credentials: "omit",
-      ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
+      ...(options.file !== undefined
+        ? { body: options.file.body }
+        : options.body === undefined
+          ? {}
+          : { body: JSON.stringify(options.body) }),
       ...(options.signal ? { signal: options.signal } : {}),
     });
   } catch (error) {

@@ -43,6 +43,7 @@ from brain.knowledge.document_tools import (
     passages_query,
     reach_through,
     reader,
+    search_queries,
     searcher,
 )
 from brain.knowledge.embed_policy import (
@@ -53,6 +54,7 @@ from brain.knowledge.embed_policy import (
 )
 from brain.knowledge.embed_queue import Embedded, EmbeddingBatch
 from brain.knowledge.embedding import EmbeddedVector
+from brain.knowledge.kinds import KnowledgeKind
 from brain.knowledge.rows import RowQuery
 from brain.knowledge.search import (
     CANDIDATE_DEPTH,
@@ -124,6 +126,9 @@ def body(chunk_id: str, document_id: str, ordinal: int, text: str) -> dict[str, 
         "title": f"title of {document_id}",
         "section": "",
         "updated_at": UPDATED,
+        "department": "web",
+        "visibility": "department",
+        "owner_id": "u_owner",
     }
 
 
@@ -602,3 +607,46 @@ def test_the_department_registry_is_read_for_live_departments_only() -> None:
     live = str(DepartmentRow.deleted_at.is_(None).compile(dialect=POSTGRES))
 
     assert live in compiled(departments_query())
+
+
+# ------------------------------------------------- the place (M7.7.1) and the kind (M7.6.1)
+def test_a_passage_carries_the_department_visibility_and_owner_its_chunk_was_stored_with() -> None:
+    """M7.7.1. The three are read off the chunk row, so a field grant scoped to one department has
+    something to test. Delete this and a passage can lose its place again, and every reader whose
+    grants are scoped to their department is withheld every passage by the redactor."""
+    company = {**body("c_leave_1", "doc_leave", 0, "Leave is booked early."), "department": None}
+    company["visibility"] = "company"
+    source = Recording(
+        ranked=[("c_rota_1", "c_leave_1")],
+        bodies=(body("c_rota_1", "doc_rota", 0, "Escalations go to on-call."), company),
+    )
+
+    found = {one.id: one for one in search(source, "who is on call", READER).records}
+
+    assert (
+        found["c_rota_1"].department,
+        found["c_rota_1"].visibility,
+        found["c_rota_1"].owner_id,
+    ) == (
+        "web",
+        "department",
+        "u_owner",
+    )
+    assert (found["c_leave_1"].department, found["c_leave_1"].visibility) == (None, "company")
+    assert {"department", "visibility", "owner_id"} <= set(PASSAGE_COLUMNS)
+
+
+def test_a_search_narrowed_to_kinds_asks_the_item_table_inside_each_ranking_and_only_then() -> None:
+    """M7.6.1's narrowing, as SQL. Delete this and the kind can be applied after the limit, which is
+    the post-filter `brain.knowledge.search` is written against, or dropped, or applied to every
+    search whether asked for or not."""
+    reach = Reach(principal_id="u_reader", departments=("web",))
+    (plain,) = search_queries("who is on call", reach=reach)
+    (narrow,) = search_queries("who is on call", reach=reach, kinds=(KnowledgeKind.SOP,))
+    sql = compiled(narrow)
+
+    assert "know.item" not in compiled(plain)
+    assert "know.item" in sql
+    assert sql.index("know.item") < sql.index("LIMIT")
+    params = narrow.statement.compile(dialect=POSTGRES).params
+    assert ["sop"] in params.values()

@@ -54,7 +54,7 @@ corpus's reach and the sweep has no principal, so it would see company items onl
 successful run over none of the rest. `know.items_for_review` is the one read past the policy,
 and `0040` argues it.
 
-Task ids: M34.2.1.3
+Task ids: M34.2.1.3, M7.6.1
 """
 
 from __future__ import annotations
@@ -290,6 +290,9 @@ def row_values(item: KnowledgeItem) -> dict[str, object]:
         "verified_at": item.verified_at,
         "review_by": item.review_by,
         "supersedes": item.supersedes or None,
+        # The kind the item was added as (M7.6.1), or NULL for an item added by a path that
+        # chooses none; `0115` explains why nothing is backfilled for those.
+        "kind": None if item.kind is None else item.kind.value,
     }
 
 

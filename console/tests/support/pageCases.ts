@@ -1704,7 +1704,7 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     drawsValues: true,
     answers: {
       "/api/v1/govern/library": {
-        items: [{ item_id: UNBROKEN, level: "department" }],
+        items: [{ item_id: UNBROKEN, level: "department", kind: "sop" }],
         next_cursor: null,
         total: null,
         truncated: true,
@@ -1712,6 +1712,16 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         staleness: null,
         only_existence_and_reach_are_shown: true,
         freshness_and_use_are_not_measured: true,
+      },
+      // What this reader may add: the Add a document card's form is drawn from it, and the
+      // department is the unbroken value a select has to hold on a phone.
+      "/api/v1/knowledge/uploads/options": {
+        kinds: [{ value: "sop", label: "SOP" }],
+        departments: [UNBROKEN],
+        personal: true,
+        types: [{ media_type: "text/markdown", extensions: [".md"], max_bytes: 5242880 }],
+        found_by: "text search",
+        checked_by: "structural check (not an antivirus)",
       },
     },
   },

@@ -35,7 +35,7 @@ they are there: the policy splits `app.departments` on a comma, and a department
 department matches no branch and is invisible to its own team. The half-verification refusal
 is `KnowledgeItem`'s own rule, held by the database because the sweep reads rows and not models.
 
-Task ids: M34.2.1.3
+Task ids: M34.2.1.3, M7.4.1, M7.6.1
 """
 
 from __future__ import annotations
@@ -47,6 +47,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from brain.db import Base, TimestampMixin
 from brain.knowledge.item import KnowledgeState
+from brain.knowledge.kinds import KIND_CHARS, KnowledgeKind
 from brain.knowledge.search import (
     DEPARTMENT_CHARS,
     DOCUMENT_ID_CHARS,
@@ -80,12 +81,17 @@ class KnowledgeItemRow(TimestampMixin, Base):
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     review_by: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     supersedes: Mapped[str | None] = mapped_column(String(DOCUMENT_ID_CHARS), nullable=True)
+    #: What kind of thing the item is, from `brain.knowledge.kinds`' closed list (M7.6.1). Added
+    #: by `0115`, nullable for the items written before it; see that migration for why no value
+    #: is backfilled.
+    kind: Mapped[str | None] = mapped_column(String(KIND_CHARS), nullable=True)
 
     __table_args__ = (
         CheckConstraint(f"item_id ~ '{REFERENCE_SQL_PATTERN}'", name="item_id_is_a_reference"),
         CheckConstraint("length(btrim(owner_id)) > 0", name="owned"),
         CheckConstraint(one_of("visibility", Visibility), name="visibility"),
         CheckConstraint(one_of("state", KnowledgeState), name="state"),
+        CheckConstraint(f"kind IS NULL OR {one_of('kind', KnowledgeKind)}", name="kind"),
         CheckConstraint(
             f"department IS NULL OR department ~ '{SLUG_SQL_PATTERN}'", name="department_is_a_slug"
         ),
