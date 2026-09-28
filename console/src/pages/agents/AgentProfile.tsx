@@ -9,11 +9,11 @@
  * holds. A card the reader was sent nothing for is absent, not empty with a heading over it, which
  * would be a count of hidden things in words.
  *
- * **Every control is live or says why it is not.** Pinning a model and assigning a skill have routes
- * and work (the skill on the Skills page, where an approved skill is chosen); adding a source,
- * choosing channels, changing who can find it, handing it on, changing permissions, previewing as a
- * person, changing a rung and browser use have none and are `UnavailableAction`s with
- * `agentActions.ts`' sentences. Computer use is a sentence, because the product has nothing behind a
+ * **Every control is live or says why it is not.** Pinning a model, assigning a skill and handing the
+ * agent on have routes and work (the skill on the Skills page, where an approved skill is chosen, and
+ * the hand-over through the page's confirmed lifecycle act); adding a source, choosing channels,
+ * changing who can find it, changing permissions, previewing as a person, changing a rung and
+ * browser use have none and are `UnavailableAction`s with `agentActions.ts`' sentences. Computer use is a sentence, because the product has nothing behind a
  * switch.
  *
  * **Identifiers are in the Advanced section.** The agent's slug, the steward's and builder's
@@ -39,6 +39,7 @@ import {
   SectionCard,
   UnavailableAction,
 } from "../../components/kit";
+import { Button } from "../../components/ui/button";
 import { Switch } from "../../components/ui/switch";
 import type { ModelChoice } from "../agentModelPinQuery";
 import type { ChannelOffer, ConnectorStrip, SkillPin } from "../agentQuery";
@@ -205,9 +206,11 @@ function Permissions({ profile }: { readonly profile: ProfileShown }) {
 function Availability({
   facts,
   profile,
+  onTransfer,
 }: {
   readonly facts: HeaderFacts;
   readonly profile: ProfileShown | null;
+  readonly onTransfer?: (() => void) | undefined;
 }) {
   return (
     <SectionCard title={AVAILABILITY_HEADING} lede="Who can find and start this agent. This never gives anybody access to more information.">
@@ -223,8 +226,10 @@ function Availability({
         <Fact label="Steward">
           <span className="flex flex-wrap items-center gap-2">
             {facts.ownerName === undefined ? <span className="text-dim">Not named in the directory</span> : <Chip>{facts.ownerName}</Chip>}
-            {profile === null ? null : (
-              <UnavailableAction size="xs" text="Transfer" label="Hand to a new steward" reason={UNAVAILABLE.transfer.reason} />
+            {profile === null || onTransfer === undefined ? null : (
+              <Button variant="outline" size="xs" onClick={onTransfer}>
+                Transfer
+              </Button>
             )}
           </span>
         </Fact>
@@ -386,6 +391,7 @@ export function AgentProfile({
   channels,
   composition,
   divergent,
+  onTransfer,
 }: {
   readonly agent: AgentIdentity;
   readonly facts: HeaderFacts;
@@ -396,13 +402,15 @@ export function AgentProfile({
   readonly channels: readonly ChannelOffer[];
   readonly composition: readonly DiffRow[];
   readonly divergent: readonly string[];
+  /** Opens the page's confirmed hand-over. Absent where the page offers none. */
+  readonly onTransfer?: (() => void) | undefined;
 }) {
   return (
     <div data-slot="agent-profile" className="flex min-w-0 flex-col gap-4">
       <div className="[display:grid] min-w-0 gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
         <div className="flex min-w-0 flex-col gap-4">
           <Capabilities connectors={connectors} skills={skills} channels={channels} />
-          <Availability facts={facts} profile={profile} />
+          <Availability facts={facts} profile={profile} onTransfer={onTransfer} />
           <Learning />
         </div>
         <div className="flex min-w-0 flex-col gap-4">

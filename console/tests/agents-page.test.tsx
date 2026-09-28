@@ -18,13 +18,14 @@
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
-import { fireEvent, render, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
 import { ROSTER_ADDRESS } from "../src/components/agentWorkspaceState";
 import { NOT_RECORDED, UNAVAILABLE_MARK } from "../src/components/kit";
 import { agentAddress, NO_AGENTS, ROSTER_HEADING } from "../src/pages/Agents";
 import { readRoster } from "../src/pages/agentsQuery";
 import { UNAVAILABLE } from "../src/pages/agents/agentActions";
+import { ACT_DONE, MAY_NOT_CHANGE, TYPED_MISSING } from "../src/pages/agentLifecycleQuery";
 import { NOT_AVAILABLE, readAgentRows } from "../src/pages/agents/AgentsPage";
 import { agentStatsApiPath } from "../src/pages/agents/agentStats";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
@@ -253,7 +254,7 @@ describe("the list", () => {
     expect(paths.sort()).toEqual([ROSTER_API, `/api/v1${agentStatsApiPath("quote_helper")}`].sort());
   });
 
-  test("New agent and each row's lifecycle acts are inert with their reasons, because no route does them", async () => {
+  test("New agent is inert with its reason, because no route makes an agent", async () => {
     // What breaks if this is deleted: a New agent button that opens nothing, which is fake
     // functionality, or one hidden, which says the product has no such act. The reason is the one
     // sentence `agentActions.ts` gives, and pressing the control changes neither the address nor
@@ -270,6 +271,135 @@ describe("the list", () => {
     fireEvent.click(create as HTMLButtonElement);
     expect(router.state.location.pathname).toBe(ROSTER_ADDRESS);
     expect(idp.urls.slice(before).filter((url) => !url.includes("/stats"))).toEqual([]);
+  });
+});
+
+// ------------------------------------------------------------------------ the lifecycle acts
+
+const LIFECYCLE_API = "/api/v1/agents/quote_helper/lifecycle";
+const DIGEST = "a".repeat(64);
+
+function lifecycle(overrides: Readonly<Record<string, unknown>> = {}): Record<string, unknown> {
+  return {
+    agent_id: "quote_helper",
+    display_name: "Quote Helper",
+    state: "enabled",
+    owner_id: "p_quote_helper",
+    effective_hash: DIGEST,
+    may_change: true,
+    may_duplicate: true,
+    duplicate_unavailable: null,
+    ...overrides,
+  };
+}
+
+function rosterWith(state: string): Answer {
+  return { body: { items: [{ ...entry("quote_helper", "Quote Helper"), state }] } };
+}
+
+/** Opens the row's menu from the keyboard and chooses one item, as a keyboard user would. */
+async function chooseOnRow(label: string): Promise<void> {
+  const trigger = screen.getByRole("button", { name: "Actions for Quote Helper" });
+  trigger.focus();
+  await act(async () => {
+    fireEvent.keyDown(trigger, { key: "Enter" });
+  });
+  const menu = await screen.findByRole("menu");
+  const item = within(menu).getByRole("menuitem", { name: label });
+  item.focus();
+  await act(async () => {
+    fireEvent.keyDown(item, { key: "Enter" });
+  });
+}
+
+function posts(idp: FakeIdp): { readonly path: string; readonly body: unknown }[] {
+  return idp.calls
+    .filter((call) => call.init?.method === "POST" && new URL(call.url, CONSOLE_ORIGIN).pathname.startsWith("/api/v1/"))
+    .map((call) => ({ path: new URL(call.url, CONSOLE_ORIGIN).pathname, body: JSON.parse(String(call.init?.body ?? "null")) }));
+}
+
+describe("the lifecycle acts", () => {
+  test("switching an agent off asks the lifecycle route, confirms by name and sends the state it showed", async () => {
+    // What breaks if this is deleted: a Switch off that sends without asking, or sends a state the
+    // page never showed, so the route's stale-page check compares against a guess. The positive case
+    // of the row menu: the write goes out once, from the confirmation, and the list is asked again.
+    const { idp } = await consoleAt(ROSTER_ADDRESS, {
+      [ROSTER_API]: rosterWith("enabled"),
+      [LIFECYCLE_API]: { body: lifecycle() },
+      "/api/v1/agents/quote_helper/disable": { body: lifecycle({ state: "disabled" }) },
+    });
+    const rosterAsked = () => idp.urls.filter((url) => new URL(url, CONSOLE_ORIGIN).pathname === ROSTER_API).length;
+    const before = rosterAsked();
+    await chooseOnRow("Switch off");
+
+    const dialog = await screen.findByRole("alertdialog", { name: "Switch off Quote Helper?" });
+    expect(posts(idp)).toEqual([]);
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "Switch off" }));
+    });
+    await screen.findByText(ACT_DONE.disable);
+    expect(posts(idp)).toEqual([{ path: "/api/v1/agents/quote_helper/disable", body: { expected_state: "enabled" } }]);
+    await waitFor(() => expect(rosterAsked()).toBeGreaterThan(before));
+  });
+
+  test("a refusal is the API's own sentence, and nothing is said to have happened", async () => {
+    // What breaks if this is deleted: a stale page's 409 drawn as a generic failure, or as done.
+    const sentence = "This agent changed after you opened it, so nothing was changed. Look again and choose.";
+    await consoleAt(ROSTER_ADDRESS, {
+      [ROSTER_API]: rosterWith("disabled"),
+      [LIFECYCLE_API]: { body: lifecycle({ state: "disabled" }) },
+      "/api/v1/agents/quote_helper/enable": { status: 409, body: { outcome: "moved", sentence } },
+    });
+    await chooseOnRow("Switch on");
+    const dialog = await screen.findByRole("alertdialog", { name: "Switch on Quote Helper?" });
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "Switch on" }));
+    });
+    await screen.findByText(sentence);
+    expect(screen.queryByText(ACT_DONE.enable)).toBeNull();
+  });
+
+  test("a reader the API says may not act is told so, and no confirmation opens", async () => {
+    // What breaks if this is deleted: a confirmation offered to somebody whose press the route will
+    // refuse, which reads as a broken button after they agreed to it.
+    const { idp } = await consoleAt(ROSTER_ADDRESS, {
+      [ROSTER_API]: rosterWith("enabled"),
+      [LIFECYCLE_API]: { body: lifecycle({ may_change: false }) },
+    });
+    await chooseOnRow("Archive");
+    await screen.findByText(MAY_NOT_CHANGE);
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(posts(idp)).toEqual([]);
+  });
+
+  test("a copy with no name sends nothing and says what to fill in, and a named one sends the digest shown", async () => {
+    // What breaks if this is deleted: a blank duplicate sent for the API to refuse after the person
+    // agreed to it, or a copy sent without the configuration digest the route checks.
+    const { idp } = await consoleAt(ROSTER_ADDRESS, {
+      [ROSTER_API]: rosterWith("enabled"),
+      [LIFECYCLE_API]: { body: lifecycle() },
+      "/api/v1/agents/quote_helper/duplicate": {
+        status: 201,
+        body: { agent: lifecycle({ agent_id: "quote_helper_copy_a1b2c3", state: "disabled" }), leash: [] },
+      },
+    });
+    await chooseOnRow("Duplicate");
+    const dialog = await screen.findByRole("alertdialog", { name: "Duplicate Quote Helper?" });
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "Duplicate" }));
+    });
+    await screen.findByText(TYPED_MISSING.duplicate ?? "");
+    expect(posts(idp)).toEqual([]);
+
+    fireEvent.change(within(dialog).getByLabelText("Name for the copy"), { target: { value: "Quote Helper copy" } });
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "Duplicate" }));
+    });
+    await screen.findByText(ACT_DONE.duplicate);
+    expect(posts(idp)).toEqual([
+      { path: "/api/v1/agents/quote_helper/duplicate", body: { display_name: "Quote Helper copy", expected_hash: DIGEST } },
+    ]);
+    expect(screen.getByRole("link", { name: "Open the copy" }).getAttribute("href")).toBe("/agents/quote_helper_copy_a1b2c3");
   });
 });
 
@@ -355,7 +485,7 @@ describe("what an entry becomes", () => {
       expect(paths.filter((path) => retiredBy.test(path)), act).toEqual([]);
     }
     // The positive sibling: the pattern shape does match the paths it is written for.
-    expect(UNAVAILABLE.archive.retiredBy.test("/api/v1/agents/{agent_id}/archive")).toBe(true);
+    expect(UNAVAILABLE.leash.retiredBy.test("/api/v1/agents/{agent_id}/leash")).toBe(true);
     expect(UNAVAILABLE.create.retiredBy.test("/api/v1/agents/drafts")).toBe(true);
   });
 });

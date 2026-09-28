@@ -125,6 +125,7 @@ import {
 } from "../../src/pages/staffSourcesQuery";
 import { CONNECTORS_API_PATH, disconnectApiPath } from "../../src/pages/connectorsQuery";
 import { LARK_API_PATH, LARK_TEST_API_PATH } from "../../src/pages/larkConnectQuery";
+import { agentMoveApiPath } from "../../src/pages/agentLifecycleQuery";
 import { credentialPath } from "../../src/components/ProviderKeyForm";
 import { REGISTER_API_PATH, secretApiPath, switchOffApiPath } from "../../src/pages/webhooksQuery";
 import {
@@ -412,8 +413,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
         because: "components/ManifestForm.tsx and components/ProcedureCanvas.tsx are built and tested and rendered by no registered page, and no route writes a template version from the console.",
       },
       {
-        what: "An agent cannot be installed, enabled, disabled, archived, handed on or duplicated from the console.",
-        because: "brain.agent_lifecycle_routes serves each move and writes agent.agent under 0137's trigger, and no page has a button that presses one yet.",
+        what: "A published template version cannot be installed from the console.",
+        because: "brain.agent_lifecycle_routes serves the version and its install, and the Agent templates page has no button that presses it yet; switching on and off, archiving, duplicating and handing on are pressed from the Agents pages.",
       },
     ],
   },
@@ -1094,6 +1095,13 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
       automationStopApiPath("quote-helper", "auto_one"),
     ),
   ],
+  "src/pages/agents/LifecycleActs.tsx path": [
+    at("POST /api/v1/agents/{agent_id}/enable", "agentMoveApiPath", agentMoveApiPath("quote-helper", "enable")),
+    at("POST /api/v1/agents/{agent_id}/disable", "agentMoveApiPath", agentMoveApiPath("quote-helper", "disable")),
+    at("POST /api/v1/agents/{agent_id}/archive", "agentMoveApiPath", agentMoveApiPath("quote-helper", "archive")),
+    at("POST /api/v1/agents/{agent_id}/transfer", "agentMoveApiPath", agentMoveApiPath("quote-helper", "transfer")),
+    at("POST /api/v1/agents/{agent_id}/duplicate", "agentMoveApiPath", agentMoveApiPath("quote-helper", "duplicate")),
+  ],
   "src/pages/RoleControls.tsx path": [
     at("POST /api/v1/govern/roles/appointment", "APPOINTMENT_API_PATH", APPOINTMENT_API_PATH),
     at("POST /api/v1/govern/roles/deputy", "DEPUTY_API_PATH", DEPUTY_API_PATH),
@@ -1186,6 +1194,12 @@ function audited(name: string): Proof {
 }
 
 const SETTINGS_PRESSED = audited("test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick");
+/** Each lifecycle move pressed over HTTP against PostgreSQL: the row, and the ledger entry naming who. */
+const LIFECYCLE_PRESSED = t(
+  "test_agent_lifecycle_store",
+  "test_each_move_pressed_reaches_its_row_and_one_ledger_entry_naming_the_person",
+  true,
+);
 const TOOLS_PRESSED = t("test_tool_routes", "test_switching_through_the_routes_reaches_the_row_the_ledger_and_every_call", true);
 const BRANDING_SAVED = t(
   "test_settings_routes",
@@ -1929,6 +1943,31 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: t("test_skill_routes", "test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_assigned_to_an_agent"),
     audit: t("test_skill_store", "test_the_database_refuses_an_unsaid_self_decision_and_an_assignment_nobody_approved", true),
     behaviour: t("test_skill_routes", "test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_assigned_to_an_agent"),
+  },
+  "POST /api/v1/agents/{agent_id}/enable": {
+    row: LIFECYCLE_PRESSED,
+    audit: LIFECYCLE_PRESSED,
+    behaviour: t("test_agent_lifecycle_routes", "test_a_disabled_agent_is_enabled_and_the_store_is_told_who_did_it"),
+  },
+  "POST /api/v1/agents/{agent_id}/disable": {
+    row: LIFECYCLE_PRESSED,
+    audit: LIFECYCLE_PRESSED,
+    behaviour: t("test_agent_lifecycle_routes", "test_disable_then_archive_each_move_the_agent_once_and_name_the_person"),
+  },
+  "POST /api/v1/agents/{agent_id}/archive": {
+    row: LIFECYCLE_PRESSED,
+    audit: LIFECYCLE_PRESSED,
+    behaviour: t("test_agent_lifecycle_routes", "test_disable_then_archive_each_move_the_agent_once_and_name_the_person"),
+  },
+  "POST /api/v1/agents/{agent_id}/transfer": {
+    row: LIFECYCLE_PRESSED,
+    audit: LIFECYCLE_PRESSED,
+    behaviour: t("test_agent_lifecycle_routes", "test_a_transfer_hands_the_agent_to_somebody_here_and_names_who_handed_it"),
+  },
+  "POST /api/v1/agents/{agent_id}/duplicate": {
+    row: LIFECYCLE_PRESSED,
+    audit: LIFECYCLE_PRESSED,
+    behaviour: t("test_agent_lifecycle_routes", "test_a_duplicate_is_a_new_disabled_agent_from_the_same_version_with_the_same_ceiling"),
   },
   "POST /api/v1/agents/{agent_id}/automations": {
     row: t("test_automation_gallery_routes", "test_one_confirmed_request_writes_the_automation_its_registry_entry_and_its_audit_context"),
