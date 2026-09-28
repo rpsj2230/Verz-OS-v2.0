@@ -239,6 +239,13 @@ EXPECTED: Mapping[tuple[str, str], Verification] = {
     ("lark_wiki", "LARK-WIKI-200-nodes-page"): Verification.FOUND,
     ("lark_wiki", "LARK-WIKI-200-code-permission"): Verification.INCONCLUSIVE,
     ("lark_wiki", "LARK-WIKI-429"): Verification.INCONCLUSIVE,
+    # A page's permission settings and its text are not listings, so they say nothing about more.
+    ("lark_wiki", "LARK-WIKI-200-permission-follows"): Verification.INCONCLUSIVE,
+    ("lark_wiki", "LARK-WIKI-200-permission-locked"): Verification.INCONCLUSIVE,
+    ("lark_wiki", "LARK-WIKI-200-raw-content"): Verification.INCONCLUSIVE,
+    # A Base's tables and fields carry no record id, so they are not a listing of its records.
+    ("lark_base", "LARK-200-tables"): Verification.INCONCLUSIVE,
+    ("lark_base", "LARK-200-fields"): Verification.INCONCLUSIVE,
     ("google_drive", "DRIVE-200-files-page"): Verification.FOUND,
     ("google_drive", "DRIVE-200-file"): Verification.FOUND,
     ("google_drive", "DRIVE-403-user-rate-limit"): Verification.INCONCLUSIVE,

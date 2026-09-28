@@ -165,6 +165,10 @@ MEMBERS_CHECK_CHAT: Final = "oc_brain_connect_check"
 #: The scope a group question reads who is present with.
 MEMBERS_SCOPE: Final = "im:chat.members:read"
 
+#: The scope a wiki page's permission settings are read with, which is how the Lark Wiki
+#: connector knows whether a page was restricted (`brain.connectors.lark_wiki.restriction_of`).
+WIKI_PERMISSION_SCOPE: Final = "docs:permission.setting:read"
+
 #: The one path the chat channel's events arrive at, under the install's own address.
 LARK_EVENTS_PATH: Final = "/api/v1/channels/lark/events"
 
@@ -253,8 +257,9 @@ USES: Final[Mapping[Use, UseSpec]] = MappingProxyType(
                 Scope("wiki:wiki:readonly", "list wiki spaces and pages"),
                 Scope("docx:document:readonly", "read a page when a question needs it"),
                 Scope(
-                    "docs:permission.member:retrieve",
-                    "read who may open a page, so nobody is answered from a page they cannot open",
+                    WIKI_PERMISSION_SCOPE,
+                    "read whether a page was restricted, so nobody is answered from a page "
+                    "they cannot open",
                 ),
             ),
             slot="lark_wiki",
@@ -774,19 +779,19 @@ async def _wiki(fetch: Fetch, base: str, token: str) -> UseResult:
             "Working: the app can list a wiki space, which has no page yet to check further.",
         )
     node_token = str(node.get("node_token") or "")
+    # The call `brain.connectors.lark_wiki.read_live` makes before it answers from a page.
     permission = await _get(
         fetch,
         base,
-        f"/open-apis/drive/v1/permissions/{quote(node_token, safe='')}/members",
+        f"/open-apis/drive/v2/permissions/{quote(node_token, safe='')}/public",
         token,
         type="wiki",
-        perm_type="single_page",
     )
     refused = _refused_or_other(spec, permission, not_shared=unshared)
     if refused is not None:
         # Only the permission scope can be missing here; the listing already worked.
         if refused.verdict is Verdict.MISSING_SCOPE:
-            return _missing(spec, ("docs:permission.member:retrieve",))
+            return _missing(spec, (WIKI_PERMISSION_SCOPE,))
         return refused
     if str(node.get("obj_type") or "") == "docx" and node.get("obj_token"):
         document = await _get(
@@ -803,7 +808,8 @@ async def _wiki(fetch: Fetch, base: str, token: str) -> UseResult:
     return UseResult(
         spec.use,
         Verdict.WORKING,
-        "Working: the app can list the wiki, see who may open a page, and read a page's details.",
+        "Working: the app can list the wiki, see whether a page was restricted, and read a "
+        "page's details.",
     )
 
 

@@ -105,7 +105,20 @@ cell, a contract value included, is read from the Base when a question asks for 
 never stored, which the canary planted in a recorded cell proves on every build. It is
 declared as `CONNECTOR` at the foot of this module (`brain.connectors.declaration`).
 
-Task ids: M11.6.3
+**A Base connected from the console needs no hand-written table (M11.9.4).** Connect Lark
+keeps the Base's token and nothing else, so `read_tables` and `read_table` read the Base's
+own tables and typed fields from Lark's documented listings, and `bindings_for` turns each
+field into a binding by its Lark type: the primary field is the one label the index keeps,
+the first modified time its one timestamp, every other readable field is read live, and a
+link, a lookup, an attachment, a person or an unclassified type is bound to nothing. A
+discovered table is tagged by its table id, never its title. See
+`A_BASE_IS_READ_BY_ITS_OWN_SCHEMA` and `A_DISCOVERED_TABLE_IS_NAMED_BY_ITS_ID`.
+
+Rejected: reading the schema once, when Lark is connected, and keeping the bindings as a
+setting. A column renamed or retyped afterwards would be read under yesterday's binding, and
+the setting would be a copy of the Base's structure that nothing refreshes.
+
+Task ids: M11.6.3, M11.9.4
 """
 
 from __future__ import annotations
@@ -113,7 +126,7 @@ from __future__ import annotations
 import enum
 import math
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from types import MappingProxyType
@@ -150,7 +163,7 @@ from brain.connectors.transports import FieldMapping, RestTransport, SourceRecor
 from brain.connectors.write_verification import ReadBack, Reading, unreadable
 from brain.core.envelope import OBJECT_NAME_PATTERN, IdentityMode, TypedResult
 from brain.core.errors import Degraded
-from brain.core.projection import MAX_LABEL_CHARS
+from brain.core.projection import MAX_LABEL_CHARS, is_forbidden
 from brain.core.scope import Scope
 from brain.ops.limits import MINUTE_SECONDS, ConnectorLimit, connector_ceiling, principal_share_of
 
@@ -1967,6 +1980,278 @@ def records_fetch(
     return _fetch
 
 
+# ------------------------------------------------ a Base read as a Base (M11.6.3, M11.9.4)
+#: Why a connected Base's tables and fields are read from the Base itself.
+A_BASE_IS_READ_BY_ITS_OWN_SCHEMA: Final = (
+    "Connect Lark keeps one thing about a Base: its token. Everything a table needs is the "
+    "Base's own statement of itself, which tables it holds and, for each, which fields of "
+    "which Lark type, so they are read from Lark's documented table and field listings when a "
+    "question needs the Base. Each field then becomes a binding by its type through "
+    "KIND_FACTS: a readable kind is read live, the primary field is the one label the index "
+    "keeps, a modified time is its one timestamp, and a link, a lookup, an attachment, a "
+    "person or a type nobody has classified is bound to nothing. Read as a grid of cells the "
+    "Base would lose its types, and the types are what decide what may be kept."
+)
+
+#: Why a discovered table's entity is named by its table id and never by its title.
+A_DISCOVERED_TABLE_IS_NAMED_BY_ITS_ID: Final = (
+    "The entity tag is what a field policy is looked up by. A tag made from the table's title "
+    "changes when somebody renames the table, which silently detaches its classification, and "
+    "it can equal a tag another source already uses: a table called Price list would be read "
+    "under the built-in price list's policy. The table id is stable and belongs to nothing "
+    "else, so a discovered table is tagged lark_ and its table id, and its title is a label."
+)
+
+#: Lark's documented listings of a Base's tables and of one table's fields, as the reader
+#: builds its calls from them. `{app_token}` is the Base's token and `{table_id}` the table's.
+TABLES_PATH: Final = "/open-apis/bitable/v1/apps/{app_token}/tables"
+FIELDS_PATH: Final = "/open-apis/bitable/v1/apps/{app_token}/tables/{table_id}/fields"
+
+#: What a discovered table's entity tag starts with. See `A_DISCOVERED_TABLE_IS_NAMED_BY_ITS_ID`.
+DISCOVERED_ENTITY_PREFIX: Final = "lark_"
+
+_FIELD_ID_RE: Final = re.compile(r"^fld[A-Za-z0-9]{4,32}$")
+_NOT_A_NAME_CHARACTER: Final = re.compile(r"[^a-z0-9]+")
+
+#: The longest a bound target may be, which is the entity tag's own bound in the envelope.
+MAX_TARGET_CHARS: Final = 60
+
+
+@dataclass(frozen=True)
+class SchemaRequest:
+    """One page of a Base's tables, or of one table's fields when `table_id` is set.
+
+    Checked where it is built, like `PageCursor`: the Base and the table are put into an
+    address, so an id that is not one is refused before it can change which call is made.
+    """
+
+    base_id: str
+    table_id: str = ""
+    #: Lark's `page_token`. See `A_VENDOR_IDENTIFIER_IS_NOT_A_CREDENTIAL`.
+    continuation: str = ""
+
+    def __post_init__(self) -> None:
+        if not _BASE_ID_RE.match(self.base_id):
+            msg = f"base id {self.base_id!r} is not a Lark Base identifier"
+            raise ConnectorContractError(msg)
+        if self.table_id and not _TABLE_ID_RE.match(self.table_id):
+            msg = f"table id {self.table_id!r} does not look like a Base table id"
+            raise ConnectorContractError(msg)
+
+
+class SchemaReader(Protocol):
+    """Whatever performs one schema exchange with Lark: `TABLES_PATH` or `FIELDS_PATH`."""
+
+    def list_tables(self, request: SchemaRequest) -> LarkReply: ...
+
+    def list_fields(self, request: SchemaRequest) -> LarkReply: ...
+
+
+def kind_for(api_type: int) -> FieldKind | None:
+    """The kind Lark's numeric field type is, or None for a type nobody here has classified.
+
+    Read out of `KIND_FACTS` rather than a second table, so a kind's number is stated once. A
+    None is bound to nothing: an unclassified type is a question nobody has answered about
+    what its value is, and reading it would be answering it by accident.
+    """
+    for facts in KIND_FACTS.values():
+        if facts.api_type == api_type:
+            return facts.kind
+    return None
+
+
+@dataclass(frozen=True)
+class BaseField:
+    """One field as the Base's field listing describes it: its id, its name, its Lark type."""
+
+    field_id: str
+    name: str
+    api_type: int
+    is_primary: bool = False
+
+    @property
+    def kind(self) -> FieldKind | None:
+        return kind_for(self.api_type)
+
+
+def field_of(item: Mapping[str, Any]) -> BaseField:
+    """One row of a field listing, or a refusal naming what it lacked.
+
+    `type` must be an integer and not a boolean, and `is_primary` counts only as the boolean
+    true: a primary flag that arrived as anything else is not the one label the index keeps.
+    """
+    field_id = item.get("field_id")
+    name = item.get("field_name")
+    api_type = item.get("type")
+    if not isinstance(field_id, str) or not _FIELD_ID_RE.match(field_id):
+        msg = f"a field in this listing has no field id Lark would issue: {field_id!r}"
+        raise ConnectorContractError(msg)
+    if not isinstance(name, str) or not name.strip():
+        msg = (
+            f"field {field_id!r} has no name, and a record's cells are keyed by the field's "
+            "name, so a binding to it would match nothing"
+        )
+        raise ConnectorContractError(msg)
+    if not isinstance(api_type, int) or isinstance(api_type, bool):
+        msg = f"field {field_id!r} states no numeric type, so nothing can say what it holds"
+        raise ConnectorContractError(msg)
+    return BaseField(
+        field_id=field_id, name=name, api_type=api_type, is_primary=item.get("is_primary") is True
+    )
+
+
+def target_for(field: BaseField, *, taken: frozenset[str]) -> str:
+    """The name a field is bound under: its own name made a name, or its id when that fails.
+
+    The field's name folded to lower case with every other character a single underscore,
+    because a person reading an answer recognises `contract_value` and not `fldValue003`. The
+    id is the fallback for a name that cannot become one (written in another script, starting
+    with a digit, reserved, too long) and for a second field folding to a name already taken.
+    """
+    folded = _NOT_A_NAME_CHARACTER.sub("_", field.name.casefold()).strip("_")
+    if (
+        _NAME_RE.match(folded)
+        and len(folded) <= MAX_TARGET_CHARS
+        and folded not in RESERVED_TARGETS
+        and folded not in taken
+    ):
+        return folded
+    fallback = field.field_id.lower()
+    if fallback in taken:
+        msg = (
+            f"field id {field.field_id!r} appears twice in one table's listing; two fields "
+            "with one id are one field read twice under two names"
+        )
+        raise ConnectorContractError(msg)
+    return fallback
+
+
+def bindings_for(fields: Sequence[BaseField]) -> tuple[FieldBinding, ...]:
+    """Every field a table's listing names, as a binding by its type, or bound to nothing.
+
+    See `A_BASE_IS_READ_BY_ITS_OWN_SCHEMA`. What is kept is the minimal index and no more: the
+    primary field as the one label (or, for an auto number, the one identifier) unless its name
+    is on the permanent denylist, and the first modified time as the one timestamp. Every other
+    readable field is read live and never kept, and an unreadable or unclassified one is left
+    out, so a value that cannot be one honest value never arrives at all.
+    """
+    bound: list[FieldBinding] = []
+    taken: set[str] = set()
+    stamped = False
+    for one in fields:
+        kind = one.kind
+        if kind is None or not kind_facts(kind).may_be_read:
+            continue
+        target = target_for(one, taken=frozenset(taken))
+        taken.add(target)
+        shapes = kind_facts(kind).shapes
+        uses: tuple[HotUse, ...] = ()
+        shape: FieldShape | None = None
+        if one.is_primary and FieldShape.LABEL in shapes and not is_forbidden(target):
+            uses, shape = (HotUse.IDENTIFY,), FieldShape.LABEL
+        elif one.is_primary and FieldShape.IDENTIFIER in shapes and not is_forbidden(target):
+            uses, shape = (HotUse.IDENTIFY,), FieldShape.IDENTIFIER
+        elif kind is FieldKind.MODIFIED_TIME and not stamped:
+            uses, shape, stamped = (HotUse.FILTER, HotUse.SORT), FieldShape.TIMESTAMP, True
+        bound.append(
+            FieldBinding(target=target, base_field=one.name, kind=kind, uses=uses, shape=shape)
+        )
+    return tuple(bound)
+
+
+@dataclass(frozen=True)
+class DiscoveredTable:
+    """One table of a Base as the Base describes it: its id, its title and its fields."""
+
+    table_id: str
+    title: str
+    fields: tuple[BaseField, ...] = ()
+
+    @property
+    def entity(self) -> str:
+        """The entity tag, from the table id. See `A_DISCOVERED_TABLE_IS_NAMED_BY_ITS_ID`."""
+        return f"{DISCOVERED_ENTITY_PREFIX}{self.table_id.lower()}"
+
+    def table(self, base_id: str) -> LarkBaseTable | None:
+        """This table as a connection, or None when no field of it can be read at all.
+
+        None rather than a refusal, because a Base holding one table of links and attachments
+        is still a Base whose other tables answer; the caller says which it could not read.
+        """
+        bindings = bindings_for(self.fields)
+        if not bindings:
+            return None
+        return LarkBaseTable(
+            base_id=base_id, table_id=self.table_id, entity=self.entity, bindings=bindings
+        )
+
+
+def _schema_items(reply: LarkReply) -> tuple[Mapping[str, Any], ...]:
+    """The rows of one schema page, refusing a page that is not an answer or not a listing."""
+    assert_lark_answered(reply)
+    data = reply.body.get("data") if isinstance(reply.body, Mapping) else None
+    found = data.get("items") if isinstance(data, Mapping) else None
+    if found is None:
+        return ()
+    if not isinstance(found, list) or not all(isinstance(one, Mapping) for one in found):
+        msg = (
+            "a Base schema listing's items is not a list of objects; treating it as none would "
+            "report a change in Lark's reply as a Base with nothing in it"
+        )
+        raise ConnectorContractError(msg)
+    return tuple(found)
+
+
+def read_tables(
+    reader: SchemaReader, base_id: str, *, budget: MinuteBudget
+) -> tuple[tuple[DiscoveredTable, ...], MinuteBudget]:
+    """Every table of one Base, by its title and id, page by page inside the budget.
+
+    Ended on `has_more` and never on a short page, for the reason `envelope_of` gives, and
+    every page spends the question's budget first, so an exhausted one refuses before asking.
+    """
+    tables: list[DiscoveredTable] = []
+    request = SchemaRequest(base_id=base_id)
+    spent = budget
+    while True:
+        spent = spent.spend()
+        reply = reader.list_tables(request)
+        for item in _schema_items(reply):
+            table_id = item.get("table_id")
+            title = item.get("name")
+            if not isinstance(table_id, str) or not _TABLE_ID_RE.match(table_id):
+                msg = f"a table in this Base's listing has no table id Lark issues: {table_id!r}"
+                raise ConnectorContractError(msg)
+            tables.append(
+                DiscoveredTable(table_id=table_id, title=title if isinstance(title, str) else "")
+            )
+        envelope = envelope_of(reply.body)
+        if not envelope.has_more:
+            return tuple(tables), spent
+        request = replace(request, continuation=envelope.continuation)
+
+
+def read_table(
+    reader: SchemaReader, base_id: str, table: DiscoveredTable, *, budget: MinuteBudget
+) -> tuple[DiscoveredTable, MinuteBudget]:
+    """One table with its fields read from its field listing, inside the budget.
+
+    Read live every time a question needs the table, so a column renamed or retyped in the
+    Base this morning is bound as it is now rather than as it was when Lark was connected.
+    """
+    fields: list[BaseField] = []
+    request = SchemaRequest(base_id=base_id, table_id=table.table_id)
+    spent = budget
+    while True:
+        spent = spent.spend()
+        reply = reader.list_fields(request)
+        fields.extend(field_of(item) for item in _schema_items(reply))
+        envelope = envelope_of(reply.body)
+        if not envelope.has_more:
+            return replace(table, fields=tuple(fields)), spent
+        request = replace(request, continuation=envelope.continuation)
+
+
 # ------------------------------------------------------------------------- health
 #: What one call's outcome says about the connector, as a probe result. Total over
 #: `CallOutcome`, and the two interesting rows are the ones that are not DOWN.
@@ -2210,7 +2495,9 @@ def read_back_reading(operation: RestOperation, reply: LarkReply) -> Reading:
     """One Lark Base list page, complete only when the source said `has_more` is false.
 
     A single-record reply carries no `has_more`, so `envelope_of` refuses it and it reads as
-    unreadable. See `LARK_BASE_A_MISSING_RECORD_ARRIVES_AS_A_REFUSAL`.
+    unreadable. See `LARK_BASE_A_MISSING_RECORD_ARRIVES_AS_A_REFUSAL`. So does a page whose
+    rows carry no record id, which is a listing of the Base's tables or fields rather than of
+    its records, and counted as records it would read as a write having been found.
     """
     try:
         assert_lark_answered(reply)
@@ -2219,6 +2506,8 @@ def read_back_reading(operation: RestOperation, reply: LarkReply) -> Reading:
     except (LarkBaseUnreachableError, LarkBaseRefusedError) as failure:
         return Reading(outcome=failure.call_outcome, matched=0, complete=False)
     except ConnectorContractError:
+        return unreadable()
+    if not all(isinstance(row.get("id"), str) for row in rows):
         return unreadable()
     return Reading(outcome=CallOutcome.OK, matched=len(rows), complete=not envelope.has_more)
 
@@ -2238,6 +2527,8 @@ CONNECTOR: Final = ConnectorDeclaration(
             "LARK-200-code-permission",
             "LARK-200-record",
             "LARK-429",
+            "LARK-200-tables",
+            "LARK-200-fields",
         ),
         findings=(LARK_BASE_A_MISSING_RECORD_ARRIVES_AS_A_REFUSAL,),
     ),
