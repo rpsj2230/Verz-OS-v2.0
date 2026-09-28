@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-28T13:51:00.593689+00:00",
-  "commit": "d0424ab",
-  "commit_subject": "Main's CI run finishes instead of being cancelled by the next merge, so deploys keep landing",
+  "generated_at": "2026-09-28T13:58:47.450579+00:00",
+  "commit": "f4993dd",
+  "commit_subject": "Main runs only the deploy gates, so a merge no longer waits behind a second full CI run",
   "total": 1582,
   "done": 338,
   "percent": 21.4,
