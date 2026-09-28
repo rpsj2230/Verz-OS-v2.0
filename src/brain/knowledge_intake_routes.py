@@ -9,7 +9,8 @@ document** (M7.1.2). It is not a connector: nothing is re-read, nothing else on 
 indexed, and the page is from then on an item like an uploaded file, at the one department or the
 personal level its adder chose, answered from by text search in that scope. The fetch is
 `brain.tools.fetch.fetch`, whose address rule is applied to every hop of the redirect chain,
-through `brain.knowledge.link_fetch.LinkFetcher`, which connects to the address the rule checked;
+over the skill importer's own transport, `brain.ops.skill_fetch.HttpsFetcher`, reused rather than
+copied, which connects to the address the rule checked and names itself a knowledge link;
 the answer's bytes decide its type (`brain.knowledge.uploads.A_LINK_IS_TYPED_BY_WHAT_IT_ANSWERED`);
 the scan, the parse and the store are the upload's own, and the page's address is its first line.
 The address travels in the JSON body rather than the query string, for
@@ -73,7 +74,6 @@ from brain.knowledge.ingest_queue import (
     put_ticket,
 )
 from brain.knowledge.kinds import KindError, KnowledgeKind
-from brain.knowledge.link_fetch import LinkFetcher, SystemResolver
 from brain.knowledge.scanners import configured_scanner
 from brain.knowledge.scanning import scan_for_parsing
 from brain.knowledge.uploads import (
@@ -105,6 +105,7 @@ from brain.knowledge_routes import (
 from brain.ops.admission import CapacityState, Resource, seed_budgets
 from brain.ops.object_store import ObjectStore
 from brain.ops.queue import Job
+from brain.ops.skill_fetch import HttpsFetcher, SystemResolver
 from brain.routing_routes import sessions_of
 from brain.tools.fetch import Fetcher, Resolver
 
@@ -219,9 +220,18 @@ async def _placement(
 
 
 # ------------------------------------------------------------------ the link (M7.1.2)
+#: What a site's log sees as the client of a knowledge link. Names the product and nothing else.
+LINK_USER_AGENT: Final = "company-brain-knowledge-link/1"
+
+
 def make_fetcher() -> Fetcher:
-    """The transport a link is fetched over. A function so a test can hand over recorded pages."""
-    return LinkFetcher()
+    """The transport a link is fetched over. A function so a test can hand over recorded pages.
+
+    The skill importer's pinned transport, not a second one: its one overridden method is the one
+    that would look the name up again, and a second copy of it is a second place for DNS
+    rebinding to come back in.
+    """
+    return HttpsFetcher(user_agent=LINK_USER_AGENT)
 
 
 def make_resolver() -> Resolver:

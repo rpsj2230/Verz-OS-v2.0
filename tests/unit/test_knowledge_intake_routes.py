@@ -382,3 +382,49 @@ def test_a_queued_files_outcome_is_its_senders_to_ask_and_nobody_elses(served: S
     assert theirs.status_code == unknown.status_code == 404
     assert theirs.json()["message"] == unknown.json()["message"]
     assert malformed.status_code in {404, 422}
+
+
+# ------------------------------------------------------------------ the transport
+def test_a_link_is_fetched_over_the_skill_importers_pinned_transport_as_a_knowledge_link(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One transport for every fetch this product makes, connecting to the address the rule
+    checked, and naming which fetch it is in the site's log. Delete this and the link route can go
+    back to a transport of its own that connects by name, which is DNS rebinding reopened."""
+    from brain.ops import skill_fetch
+
+    opened: list[dict[str, Any]] = []
+
+    class Connection:
+        def __init__(self, host: str, port: int, *, address: str, timeout: float, context: Any):
+            opened.append({"host": host, "address": address})
+
+        def request(self, method: str, path: str, headers: dict[str, str]) -> None:
+            opened[-1]["headers"] = headers
+
+        def getresponse(self) -> Any:
+            class Answer:
+                status = 200
+
+                def read(self, amount: int) -> bytes:
+                    return b"<html></html>"[:amount]
+
+            return Answer()
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(skill_fetch, "_PinnedHTTPSConnection", Connection)
+    fetcher = knowledge_intake_routes.make_fetcher()
+
+    assert isinstance(fetcher, skill_fetch.HttpsFetcher)
+    got = fetcher.get_once(PRICING_URL, address="93.184.216.34", max_bytes=100)
+    assert isinstance(got, FetchedBytes)
+    assert opened == [
+        {
+            "host": "www.example.org",
+            "address": "93.184.216.34",
+            "headers": {"User-Agent": knowledge_intake_routes.LINK_USER_AGENT, "Accept": "*/*"},
+        }
+    ]
+    assert knowledge_intake_routes.LINK_USER_AGENT != skill_fetch.USER_AGENT
