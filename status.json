@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-09-22T02:25:04.600192+00:00",
-  "commit": "f3e6696",
-  "commit_subject": "Models and health has a field to paste a provider's key, sent once from a confirmation and never drawn back",
+  "generated_at": "2026-09-28T05:07:59.628382+00:00",
+  "commit": "566957b",
+  "commit_subject": "An LDAP or Active Directory staff list can be read: TLS-only, read-only bind, paged",
   "total": 1595,
-  "done": 327,
-  "percent": 20.5,
+  "done": 328,
+  "percent": 20.6,
   "acts": 47,
   "decided": 107,
   "current_wave": 0,
@@ -26,12 +26,12 @@
       "wave": 1,
       "name": "The gate",
       "total": 163,
-      "done": 145,
-      "percent": 89.0,
+      "done": 146,
+      "percent": 89.6,
       "in_progress": 0,
       "ready_for_testing": 0,
       "blocked": 0,
-      "open": 18,
+      "open": 17,
       "acts": 1,
       "decided": 7
     },
@@ -116,7 +116,7 @@
       "name": "Identity, users, roles, permissions",
       "wave": 1,
       "total": 50,
-      "done": 45,
+      "done": 46,
       "acts": 0,
       "decided": 1
     },
@@ -565,6 +565,7 @@
     "M1.6.2",
     "M1.6.3",
     "M1.6.4",
+    "M1.6.6",
     "M1.6.7",
     "M1.6.8",
     "M1.6.9",
@@ -845,7 +846,7 @@
     }
   },
   "wave_records": {},
-  "closed_today": 2,
+  "closed_today": 1,
   "next_up": [
     "M31.3.2.3",
     "M31.3.2.4",
@@ -854,6 +855,12 @@
     "M41.3.1"
   ],
   "recent": [
+    {
+      "sha": "566957b",
+      "at": "2026-09-28T04:54:11+00:00",
+      "subject": "An LDAP or Active Directory staff list can be read: TLS-only, read-only bind, paged",
+      "closed": "M1.6.6"
+    },
     {
       "sha": "f3e6696",
       "at": "2026-09-22T02:13:24+00:00",
@@ -967,12 +974,6 @@
       "at": "2026-09-21T11:10:43+00:00",
       "subject": "A matrix change is judged before it takes traffic, providers carry their terms, one can be added from the console, and an agent's model can be pinned",
       "closed": "M5.1.3,M5.1.4,M5.2.1,M5.3.2,M5.3.3,M5.3.4,M5.4.1,M5.4.2,M5.4.4,M5.4.5,M5.4.6,M5.5.2,M5.5.3,M5.5.4"
-    },
-    {
-      "sha": "f9febdd",
-      "at": "2026-09-21T10:32:19+00:00",
-      "subject": "The application answers as its own limited database login on the owner's install, and the guide warns about a dollar sign in its password",
-      "closed": "M31.4.2"
     }
   ]
 }
