@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-28T17:20:17.281258+00:00",
-  "commit": "993b9ef9",
-  "commit_subject": "The skill edit check reads only the attach entries on an agent's ledger, not its creation",
+  "generated_at": "2026-09-28T18:47:12.587189+00:00",
+  "commit": "93203310",
+  "commit_subject": "Every agent, skill, connector and channel has a stats address, and the console has an overview",
   "total": 1576,
   "done": 362,
   "percent": 23.0,
