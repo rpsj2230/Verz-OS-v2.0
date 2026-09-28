@@ -7,12 +7,12 @@ What an administrator would need to manage, read out of the schema, the routes a
 ## What was measured
 
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
-- 102 tables, from `brain.db.Base.metadata`.
+- 103 tables, from `brain.db.Base.metadata`.
 - 27 installation values, from `brain.install.INSTALLATION`.
-- 209 routes under `/api/v1` and `/setup`, from the API's internal document.
-- 73 console addresses, from the route table in `console/src/App.tsx`.
-- 82 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 100 routes.
-- 37 gaps recorded, and 28 routes no screen calls.
+- 215 routes under `/api/v1` and `/setup`, from the API's internal document.
+- 74 console addresses, from the route table in `console/src/App.tsx`.
+- 88 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 106 routes.
+- 36 gaps recorded, and 23 routes no screen calls.
 
 ## Area by area
 
@@ -223,31 +223,36 @@ What an administrator would need to manage, read out of the schema, the routes a
 
 ### Connectors and third-party integrations
 
-- **Screens:** `/connectors`
-- **Tables:** `ops.channel`, `ops.channel_delivery`, `ops.connector_connection`, `ops.connector_sync`, `proj.record`, `er.alias`, `er.canonical`, `er.identifier`, `er.link`
+- **Screens:** `/connectors`, `/channels`
+- **Tables:** `auth.binding_code`, `ops.channel`, `ops.channel_delivery`, `ops.connector_connection`, `ops.connector_sync`, `proj.record`, `er.alias`, `er.canonical`, `er.identifier`, `er.link`
 - **Installation values:** `INSTALL_LARK_USES`, `INSTALL_LARK_PLATFORM`, `INSTALL_LARK_BASE`
 
 | Route | Called by |
 | --- | --- |
-| `GET /api/v1/channels` | **no screen** |
-| `GET /api/v1/channels/{name}/deliveries` | **no screen** |
+| `GET /api/v1/channels` | `/channels` |
+| `GET /api/v1/channels/{name}/bindings` | `/channels` |
+| `GET /api/v1/channels/{name}/deliveries` | `/channels` |
+| `GET /api/v1/channels/{name}/health` | `/channels` |
 | `GET /api/v1/connectors` | `/connectors` |
 | `GET /api/v1/connectors/lark-app` | `/connectors` |
+| `GET /api/v1/me/channels` | `/me` |
+| `POST /api/v1/channels/{name}/bindings/unbind` | `/channels` |
 | `POST /api/v1/channels/{name}/events` | **no screen** |
-| `POST /api/v1/channels/{name}/switch` | **no screen** |
-| `POST /api/v1/channels/{name}/test` | **no screen** |
+| `POST /api/v1/channels/{name}/switch` | `/channels` |
+| `POST /api/v1/channels/{name}/test` | `/channels` |
 | `POST /api/v1/connectors` | `/connectors` |
 | `POST /api/v1/connectors/lark-app` | `/connectors` |
 | `POST /api/v1/connectors/lark-app/test` | `/connectors` |
 | `POST /api/v1/connectors/{connector}/disconnect` | `/connectors` |
-| `PUT /api/v1/channels/{name}` | **no screen** |
+| `POST /api/v1/me/channels/{name}/code` | `/me` |
+| `POST /api/v1/me/channels/{name}/unbind` | `/me` |
+| `PUT /api/v1/channels/{name}` | `/channels` |
 
 - **Gap.** A connected source is read and kept, and no question is answered from what is kept. Recorded: No row tool is registered for a connected source's records: brain.tools.startup.classification_for is keyed on the entity alone and Xero and HubSpot both project contact, which that module records as the limit to change first. brain.ops.connector_admin.WHAT_CONNECTING_A_SOURCE_STARTS says so on the screen.
 - **Gap.** HubSpot can be connected and is not read. Recorded: brain.ops.limits records no verified call ceiling for it and brain.connectors.throttle.limits_for refuses to invent one; its row carries brain.ops.connector_sync.NO_VERIFIED_CEILING.
 - **Gap.** Freshdesk, Google Drive and the Laravel views cannot be connected from a screen. Recorded: Each needs a visibility rule, a department declaration or a key file the form cannot collect, which brain.ops.connectable.NOT_FROM_THE_CONSOLE says for each.
 - **Gap.** Connect Lark switches knowledge from Wiki and Base on, and no question is answered from Lark yet. Recorded: The Lark knowledge connector that keeps the minimal index and reads pages and records live is still to be built over the settings Connect Lark writes; brain.ops.lark_connect.KNOWLEDGE_IS_SWITCHED_ON_AND_NOTHING_IS_COPIED says so on the screen.
 - **Gap.** A Lark account is linked to a person with a one-time code only once the binding store is wired. Recorded: The chat channel receives, verifies and answers Lark's events at /api/v1/channels/lark/events, and offers a code sent in a direct message to brain.channels.inbound.ChatBinder; the store that mints the code in a web session and keeps the binding is the channel binding package's, and until it is wired every sender is answered as unbound, brain.channels.inbound.NOBODY_IS_BOUND_UNTIL_A_BINDING_IS_KEPT.
-- **Gap.** A channel's record, switch, test message and deliveries have routes and no screen. Recorded: The Channels screen is drawn over brain.channel_routes by the channels screen package, which follows this one; until then a channel is set up and proved through those routes, each change is in the audit ledger under setting:channel.<channel>, and the deliveries route lists every refusal without its content.
 
 ### API keys, credentials and secrets, held in the vault and never displayed
 
@@ -508,7 +513,7 @@ No gap recorded.
 
 ## Every write the console sends, followed to the system
 
-Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 82 of 100 write routes have all three proved or not applicable, 14 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
+Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 87 of 106 write routes have all three proved or not applicable, 14 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
 
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
@@ -520,6 +525,9 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /api/v1/answer` | `/ask` | Not applicable: Asking a question writes no row an administrator manages. | Not applicable: Asking a question is not a change to the system. | Not applicable: The answer is the behaviour, and tests/invariants hold it. |
 | `POST /api/v1/approvals/{suspension_id}/decision` | `/approvals`, `/approvals/:suspensionId` | `test_a_decided_approval_leaves_one_ledger_entry_that_survives_a_restart` in `tests/unit/test_suspension_store.py` (database, in CI) | `test_a_decided_approval_leaves_one_ledger_entry_that_survives_a_restart` in `tests/unit/test_suspension_store.py` (database, in CI) | `test_an_approved_suspension_is_what_resume_reads_and_a_rejected_one_is_not_run` in `tests/unit/test_suspension_store.py` (database, in CI) |
 | `POST /api/v1/audit/verification` | `/audit` | Not applicable: Walking the ledger reads it and writes nothing. | Not applicable: A verification changes nothing, so there is nothing to record. | `test_a_truncated_ledger_is_reported_through_the_route` in `tests/unit/test_chain_check.py` |
+| `POST /api/v1/channels/{name}/bindings/unbind` | `/channels` | `test_each_bind_rebind_and_unbind_leaves_its_entry_and_the_chain_verifies` in `tests/unit/test_channel_binding.py` (database, in CI) | `test_each_bind_rebind_and_unbind_leaves_its_entry_and_the_chain_verifies` in `tests/unit/test_channel_binding.py` (database, in CI) | `test_an_administrator_lists_who_is_bound_and_unbinds_one_and_a_stranger_is_told_nothing` in `tests/unit/test_channel_binding.py` |
+| `POST /api/v1/channels/{name}/switch` | `/channels` | `test_the_stores_keep_one_row_per_channel_and_switch_only_the_one_named` in `tests/unit/test_channel_pipeline.py` (database, in CI) | `test_each_set_up_and_switch_leaves_one_attributed_entry_and_the_chain_verifies` in `tests/unit/test_channel_pipeline.py` (database, in CI) | `test_switching_one_channel_off_stops_it_receiving_and_sending_and_leaves_another_alone` in `tests/unit/test_channel_pipeline.py` |
+| `POST /api/v1/channels/{name}/test` | `/channels` | `test_a_test_message_is_sent_once_per_record_and_destination` in `tests/unit/test_channel_pipeline.py` | **None.** A test message is recorded in ops.operation under its key and in ops.channel_delivery with its outcome, and the audit ledger has no action for a message sent: brain.ops.mail.A_TEST_IS_ONE_MESSAGE_PER_CONFIGURATION. | `test_a_test_message_is_sent_once_per_record_and_destination` in `tests/unit/test_channel_pipeline.py` |
 | `POST /api/v1/classifications/{entity}/columns/{column}/marks/review` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` | Not applicable: A review of a mark is a dry run and writes nothing. | Not applicable: A review changes nothing, so there is nothing to record. | `test_a_mark_review_stores_nothing` in `tests/unit/test_classified_tables.py` |
 | `POST /api/v1/classifications/{entity}/columns/{column}/review` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` | Not applicable: A review is a dry run and writes nothing. | Not applicable: A review changes nothing, so there is nothing to record. | `test_the_only_writes_mounted_here_are_the_upload_and_the_mark` in `tests/unit/test_classification_routes.py` |
 | `POST /api/v1/connectors` | `/connectors` | `test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_record` in `tests/unit/test_connector_store.py` (database, in CI) | `test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_record` in `tests/unit/test_connector_store.py` (database, in CI) | `test_a_connected_source_is_read_and_once_disconnected_it_is_never_read_again` in `tests/unit/test_connector_sync_run.py` (database, in CI) |
@@ -571,6 +579,8 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /api/v1/jobs/{name}/resume` | `/jobs` | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_job_paused_from_the_screen_is_left_unstarted_by_the_next_tick_and_resumed_is_started` in `tests/unit/test_console_controls_reach_behaviour.py` |
 | `POST /api/v1/jobs/{name}/run` | `/jobs` | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_run_asked_for_from_the_screen_is_started_by_the_next_tick_even_while_paused` in `tests/unit/test_console_controls_reach_behaviour.py` |
 | `POST /api/v1/knowledge/uploads` | `/library` | `test_an_administrators_upload_is_found_by_its_department_by_text_and_by_nobody_else` in `tests/unit/test_knowledge_upload_db.py` (database, in CI) | `test_an_upload_appends_one_ledger_entry_the_audit_screens_reader_finds` in `tests/unit/test_knowledge_upload_db.py` (database, in CI) | `test_a_markdown_file_is_added_to_a_department_as_its_uploader` in `tests/unit/test_knowledge_routes.py` |
+| `POST /api/v1/me/channels/{name}/code` | `/me` | `test_a_code_is_kept_spent_once_and_never_brought_back_by_the_application` in `tests/unit/test_channel_binding.py` (database, in CI) | Not applicable: A code binds nothing until its person sends it from a chat, and the binding it then makes is the channel_binding entry 0118's trigger appends; minting one changes nobody's access. | `test_a_person_mints_a_code_in_my_workspace_sends_it_and_is_answered_as_themself` in `tests/unit/test_channel_binding.py` |
+| `POST /api/v1/me/channels/{name}/unbind` | `/me` | `test_each_bind_rebind_and_unbind_leaves_its_entry_and_the_chain_verifies` in `tests/unit/test_channel_binding.py` (database, in CI) | `test_each_bind_rebind_and_unbind_leaves_its_entry_and_the_chain_verifies` in `tests/unit/test_channel_binding.py` (database, in CI) | `test_a_person_unbinds_their_own_chat_and_it_is_recorded_as_theirs` in `tests/unit/test_channel_binding.py` |
 | `POST /api/v1/me/referrals/{referral_id}/handled` | `/referrals` | `test_a_referral_is_filed_without_content_and_read_only_by_its_person` in `tests/unit/test_compliance_store.py` (database, in CI) | **None.** Marking a referral handled writes handled_at and handled_by on its row and no ledger entry: an entry that only a sensitive question writes is the disclosure brain.audit.compliance.intercept argues against. | `test_a_referral_marked_handled_is_shown_handled` in `tests/unit/test_compliance_routes.py` |
 | `POST /api/v1/models/providers` | `/models` | `test_an_added_provider_has_its_key_kept_in_its_own_slot_before_its_row_is_written` in `tests/unit/test_provider_registry_routes.py` | `test_a_key_set_from_the_console_is_recorded_as_its_setter_with_their_reach_and_trace` in `tests/unit/test_credential_routes.py` | `test_a_provider_added_from_the_console_answers_through_the_ladder_with_no_release` in `tests/unit/test_model_calls.py` |
 | `POST /api/v1/models/providers/{provider}/check` | `/models` | `test_a_check_is_one_metered_call_recorded_on_the_ledger_and_never_as_a_question` in `tests/unit/test_provider_routes.py` | Not applicable: A check changes no setting and no record an administrator manages; it is a metered call on the request ledger, not a change to audit. | `test_a_check_is_one_metered_call_recorded_on_the_ledger_and_never_as_a_question` in `tests/unit/test_provider_routes.py` |
@@ -602,6 +612,7 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /setup/staff-source/sign-in` | `/first-run` | Not applicable: It answers the directory's own sign-in page for the setup code's holder and writes nothing. | Not applicable: Nothing changes when a sign-in page is asked for, so there is nothing to record. | `test_a_directory_is_chosen_signed_in_to_and_its_list_pulled` in `tests/unit/test_setup_staff_routes.py` |
 | `POST /setup/staff-source/trial` | `/first-run` | `test_a_trial_that_read_the_directory_keeps_its_credential_for_the_nightly_sync` in `tests/unit/test_setup_staff_routes.py` | `test_a_trial_that_read_the_directory_keeps_its_credential_for_the_nightly_sync` in `tests/unit/test_setup_staff_routes.py` | `test_a_directory_is_chosen_signed_in_to_and_its_list_pulled` in `tests/unit/test_setup_staff_routes.py` |
 | `PUT /api/v1/agents/{agent_id}/model-pin` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_an_administrator_pins_a_model_a_rung_serves_and_it_is_written_to_the_agent` in `tests/unit/test_agent_model_routes.py` | **None.** An agent's pin is logged and not written to the audit ledger in this release. Leaf `M5.7.3`. | `test_a_pinned_model_is_tried_first_even_from_another_tier` in `tests/unit/test_model_calls.py` |
+| `PUT /api/v1/channels/{name}` | `/channels` | `test_the_stores_keep_one_row_per_channel_and_switch_only_the_one_named` in `tests/unit/test_channel_pipeline.py` (database, in CI) | `test_each_set_up_and_switch_leaves_one_attributed_entry_and_the_chain_verifies` in `tests/unit/test_channel_pipeline.py` (database, in CI) | `test_a_channel_is_set_up_with_its_secret_kept_in_the_vault_and_never_sent_back` in `tests/unit/test_channel_pipeline.py` |
 | `PUT /api/v1/classifications/{entity}/columns/{column}/marks` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` | `test_the_store_writes_and_reads_a_table_as_the_application_role` in `tests/unit/test_classified_tables.py` (database, in CI) | `test_the_store_writes_and_reads_a_table_as_the_application_role` in `tests/unit/test_classified_tables.py` (database, in CI) | `test_applying_a_mark_stores_it_and_moves_the_epoch_when_a_derivation_changes` in `tests/unit/test_classified_tables.py` |
 | `PUT /api/v1/classifications/{entity}/table` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` | `test_the_store_writes_and_reads_a_table_as_the_application_role` in `tests/unit/test_classified_tables.py` (database, in CI) | `test_the_store_writes_and_reads_a_table_as_the_application_role` in `tests/unit/test_classified_tables.py` (database, in CI) | `test_an_administrator_uploads_a_price_list_and_is_answered_its_classification` in `tests/unit/test_classified_tables.py` |
 | `PUT /api/v1/credentials/{family}/{name}` | `/models` | `test_setting_a_key_writes_the_slot_and_answers_that_it_is_held_and_when` in `tests/unit/test_credential_routes.py` | `test_a_key_set_from_the_console_is_recorded_as_its_setter_with_their_reach_and_trace` in `tests/unit/test_credential_routes.py` | `test_a_key_kept_here_is_handed_to_this_process_unless_the_environment_outranks_it` in `tests/unit/test_credentials.py` |

@@ -109,6 +109,11 @@ const A_SKILL_IS_DECIDED_FROM_ITS_OWN_BYTES =
   "writes on this screen are a review, which approves exactly the bytes of one package after " +
   "reading its body, and an assignment of one approved skill to one agent.";
 
+const AN_UNBINDING_IS_ONE_PERSONS_CHAT =
+  "Unbinding stops a chat account being answered as its person, at once, and is recorded against " +
+  "them; it is confirmed one person at a time so nobody's chat is taken away as a side effect of " +
+  "somebody else's.";
+
 /** What each long list does not offer, and why. Everything it does offer is read off the page. */
 const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
   "/records/:entity": {
@@ -152,6 +157,7 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
   "/elevation": { bulk: AN_ELEVATION_IS_DECIDED_ON_ITS_OWN_REASON },
   "/access_review": {},
   "/access-requests": { bulk: READ_ONLY },
+  "/channels": { bulk: AN_UNBINDING_IS_ONE_PERSONS_CHAT },
 };
 
 /**

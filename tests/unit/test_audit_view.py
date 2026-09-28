@@ -40,6 +40,7 @@ from brain.audit.record import (
     ApprovalVerdict,
     AuditRecorder,
     BreachChange,
+    ChannelBindingChange,
     ConnectorChange,
     DenyReason,
     ElevationChange,
@@ -391,6 +392,11 @@ CALLS: dict[str, dict[str, object]] = {
     "principal_state": {"principal_id": "u_weiling", "change": PrincipalStateChange.ENABLED},
     "breach": {"case_id": "3b1f7c2e-8d4a-4e6b-9f0c-1a2b3c4d5e6f", "change": BreachChange.OPENED},
     "agent_owner": {"agent_id": "hr_desk", "from_owner": "u_gone", "to_owner": "u_weiling"},
+    "channel_binding": {
+        "principal_id": "u_weiling",
+        "channel": "lark",
+        "change": ChannelBindingChange.BOUND,
+    },
     "certification": {
         "grant_id": "1f0e6a4c-2b8d-4f7a-9c1e-5d3b2a7f8e90",
         "decision": ReviewDecision.KEEP,

@@ -308,6 +308,7 @@ export const ACTION_PHRASES: Readonly<Record<string, string>> = Object.freeze({
   principal_state: "disabled or enabled",
   breach: "opened, assessed, notified or closed",
   agent_owner: "became the owner of",
+  channel_binding: "bound or unbound a chat account of",
 });
 
 /** The phrase for an action, or its code when the vocabulary has outgrown this console. */
