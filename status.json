@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-28T05:07:59.628382+00:00",
-  "commit": "566957b",
-  "commit_subject": "An LDAP or Active Directory staff list can be read: TLS-only, read-only bind, paged",
+  "generated_at": "2026-09-28T05:48:54.343290+00:00",
+  "commit": "2519150",
+  "commit_subject": "The Brain builds and tests on the Mac: the async driver installs on Apple Silicon, the git hooks run, and the notes stop saying PowerShell",
   "total": 1595,
   "done": 328,
   "percent": 20.6,
