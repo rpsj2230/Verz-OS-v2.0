@@ -564,6 +564,36 @@ def denial_digest(now: datetime, report_only: bool, database_url: str) -> str:
     )
 
 
+#: Why the acceptance checks run nothing in report-only mode.
+AN_ACCEPTANCE_RUN_IN_REPORT_ONLY_MODE_CHECKS_NOTHING: Final = (
+    "Report-only mode exists for controls that remove data, and the acceptance checks remove "
+    "nothing: every write they make is rolled back. brain.ops.schedule never asks for it, and a "
+    "runner that checked anyway when told to report would ignore the mode it was given."
+)
+
+
+def acceptance_run(now: datetime, report_only: bool, database_url: str) -> str:
+    """Run the install acceptance checks when this commit is owed a run, and say what they found.
+
+    `brain.ops.acceptance_run.run_acceptance_now` is the literal call the registry reads, with this
+    process's settings for the cache, the vault and the tool source the checks ask. A run with a
+    failed check raises after its results are written, so the worker records it as failed.
+    Declines in report-only mode, see `AN_ACCEPTANCE_RUN_IN_REPORT_ONLY_MODE_CHECKS_NOTHING`, and
+    takes the worker's event loop for the reason `spend_report_refresh` gives. `now` is the tick's;
+    each check reads its own clock, because a check measures a window in real seconds.
+    """
+    del now
+    if report_only:
+        said = AN_ACCEPTANCE_RUN_IN_REPORT_ONLY_MODE_CHECKS_NOTHING
+        return f"report only: no acceptance check was run. {said}"
+    from brain.ops.acceptance_run import run_acceptance_now
+    from brain.ops.worker import _loop_factory
+
+    return run_acceptance_now(
+        database_url, settings=settings_from(process_environment()), loop_factory=_loop_factory()
+    )
+
+
 #: What each schedulable control still needs before it can be started, by name.
 #:
 #: Thirteen with a `run` since 2026-09-28, which the worker's schedule starts, and the rest saying
@@ -655,6 +685,8 @@ RUNNERS: Final[tuple[Runner, ...]] = (
     # Wired on 2026-09-17 with `ops.vault_access` and the worker overlay's read-only mount of the
     # vault's log. See `brain.ops.vault_audit_ship`.
     Runner(name="vault_audit_ship", run=vault_audit_ship),
+    # Wired on 2026-09-28 with `ops.acceptance_result`. See `brain.ops.acceptance_run`.
+    Runner(name="acceptance_run", run=acceptance_run),
 )
 
 
@@ -707,6 +739,8 @@ def start_control(name: str, *, now: datetime, report_only: bool, database_url: 
             return model_health_probes(now, report_only, database_url)
         case "denial_digest":
             return denial_digest(now, report_only, database_url)
+        case "acceptance_run":
+            return acceptance_run(now, report_only, database_url)
         case _:
             runner = runner_for(name)
             msg = (

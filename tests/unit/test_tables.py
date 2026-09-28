@@ -132,6 +132,7 @@ MIGRATION_MODEL_HEALTH = VERSIONS / "0108_provider_health_and_residency.py"
 MIGRATION_CHANNEL = VERSIONS / "0114_channel_record_and_delivery.py"
 MIGRATION_CLASSIFIED_TABLES = VERSIONS / "0116_classified_tables.py"
 MIGRATION_TOOL_CATALOGUE = VERSIONS / "0117_tool_catalogue_and_switch.py"
+MIGRATION_ACCEPTANCE = VERSIONS / "0133_acceptance_result.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -367,6 +368,8 @@ REQUIREMENT_CHECK_TABLES: tuple[str, ...] = ("ops.requirement_check",)
 CLASSIFIED_TABLES: tuple[str, ...] = ("know.classified_table", "know.classified_row")
 #: And the two 0117 adds: the tool catalogue and the stops on it.
 TOOL_CATALOGUE_TABLES: tuple[str, ...] = ("agent.tool_definition", "agent.tool_switch")
+#: And the one 0133 adds: what each install acceptance check came to, on which commit.
+ACCEPTANCE_TABLES: tuple[str, ...] = ("ops.acceptance_result",)
 
 ALL_TABLES = (
     CORE_TABLES
@@ -426,6 +429,7 @@ ALL_TABLES = (
     + CHANNEL_TABLES
     + CLASSIFIED_TABLES
     + TOOL_CATALOGUE_TABLES
+    + ACCEPTANCE_TABLES
 )
 
 
@@ -1203,6 +1207,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert classified.TABLES == CLASSIFIED_TABLES
     tool_catalogue = migration_module(MIGRATION_TOOL_CATALOGUE)
     assert tool_catalogue.TABLES == TOOL_CATALOGUE_TABLES
+    acceptance = migration_module(MIGRATION_ACCEPTANCE)
+    assert acceptance.TABLES == ACCEPTANCE_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES

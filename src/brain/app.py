@@ -52,6 +52,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from brain.acceptance_routes import router as acceptance_router
 from brain.access_request_routes import router as access_request_router
 from brain.agent_about_routes import router as agent_about_router
 from brain.agent_model_routes import router as agent_model_router
@@ -1433,6 +1434,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # The Tools screen: every tool with what it needs and does, and the switch that stops one for
     # the install or one department's people, behind `admin:tool`. See `brain.tool_routes`.
     app.include_router(tool_router)
+    # The install acceptance checks' results for the commit this serves: passed, failed or not
+    # run, public and read-only like deploy-checks. See `brain.acceptance_routes`.
+    app.include_router(acceptance_router)
 
     @app.get("/health/live", response_model=Health, tags=["health"])
     async def live() -> Health:
