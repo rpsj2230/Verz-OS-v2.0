@@ -460,6 +460,9 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.identity.organisation_store:StructureRecords.retire_scope": (
             Repeat.WRITES_THIS_SYSTEMS_DATABASE
         ),
+        "brain.identity.organisation_store:StructureRecords.rename_scope": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
         # The Roles screen. An appointment is one row in one transaction and a repeat meets the
         # standing grant's partial unique index; a removal retires a live row and a repeat finds
         # none. The two reads write nothing.

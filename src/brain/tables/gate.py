@@ -75,6 +75,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     SmallInteger,
     String,
     Text,
@@ -444,6 +445,12 @@ class CapabilityPackRow(TimestampMixin, SoftDeleteMixin, Base):
     name: Mapped[str] = mapped_column(String(80), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     capabilities: Mapped[list[str]] = mapped_column(ARRAY(String(CAPABILITY_CHARS)), nullable=False)
+    #: Which state of the bundle this row is in, from one, raised by one each time its capabilities
+    #: or its label move (`0141`, M27.15.24). **A version is the same row updated**, so every
+    #: assignment moves with it:
+    #: `brain.govern_pack_routes.A_VERSION_IS_THE_SAME_PACK_MOVED_IN_PLACE` argues why a row per
+    #: version was rejected.
+    version: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
 
     __table_args__ = (
         CheckConstraint(f"name ~ '{NAME_SQL_PATTERN}'", name="name_grammar"),
@@ -452,6 +459,7 @@ class CapabilityPackRow(TimestampMixin, SoftDeleteMixin, Base):
         # having been given and is not, which is the worst shape a permission object can
         # take: the person who assigned it believes the job is done.
         CheckConstraint("cardinality(capabilities) > 0", name="not_empty"),
+        CheckConstraint("version >= 1", name="version_at_least_one"),
         Index(
             "uq_capability_pack_name_live",
             "name",

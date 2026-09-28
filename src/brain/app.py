@@ -102,6 +102,7 @@ from brain.core.errors import Absent, BrainError, Outcome, to_public
 from brain.credential_routes import router as credential_router
 from brain.data_steward_routes import router as data_steward_router
 from brain.data_transfer_routes import router as data_transfer_router
+from brain.directory_routes import router as directory_router
 from brain.docs_routes import router as docs_router
 from brain.erasure_routes import router as erasure_router
 from brain.error_routes import router as error_router
@@ -1455,6 +1456,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # The document a citation on Ask links to, its passages at the reader's reach through the
     # handler and policy the answer used. See `brain.cited_document_routes`.
     app.include_router(cited_document_router)
+    # Every person this install knows, one person's page, and a person added by hand where no staff
+    # list is read (M27.11.2, M27.15.19). See `brain.directory_routes`.
+    app.include_router(directory_router)
 
     @app.get("/health/live", response_model=Health, tags=["health"])
     async def live() -> Health:

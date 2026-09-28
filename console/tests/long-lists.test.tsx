@@ -80,11 +80,6 @@ const AN_ELEVATION_IS_DECIDED_ON_ITS_OWN_REASON =
   "Approving an elevation widens one person's reach for hours on the strength of the explanation " +
   "they wrote, so approving several at once approves explanations nobody read: " +
   "brain.govern_people_routes.AN_ELEVATION_IS_DECIDED_ON_ITS_OWN_REASON.";
-const A_GRANT_IS_REMOVED_BY_REVIEW_IN_BULK =
-  "Removing several grants is the Access review screen's act, which records a decision per grant, " +
-  "runs each through certify and offers it for many rows at once. People removes one capability " +
-  "from one person as a correction, and a second bulk removal would be a second route to the same " +
-  "write with no decision recorded.";
 const AN_UNLINK_LOCKS_A_PERSON_OUT =
   "Unlinking refuses every future request a person makes, and the last administrator's link is " +
   "refused with a sentence to act on. Several unlinks at once is how a mis-ticked row locks a " +
@@ -107,6 +102,10 @@ const A_LOG_ROW_IS_READ_AND_NEVER_WRITTEN =
 const OVERVIEW_CARDS: Readonly<Record<string, string>> = {
   "/department": "/agents",
   "/agents/:agentId/:tab": "/routing",
+  "/people/:personId": "/agents",
+  "/roles": "/people",
+  "/departments/:slug": "/departments",
+  "/departments/:slug/:view": "/scopes",
 };
 const AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST =
   "This screen is an overview, and the list it borrows is one card on it with a link to the screen " +
@@ -120,11 +119,6 @@ const A_SKILL_IS_DECIDED_FROM_ITS_OWN_BYTES =
   "The skills listed are what agents run, and nothing about a listed skill is written from it. The " +
   "writes on this screen are a review, which approves exactly the bytes of one package after " +
   "reading its body, and an assignment of one approved skill to one agent.";
-
-const A_CONNECTION_CHANGES_ONE_SOURCE_AT_A_TIME =
-  "There is at most one live connection per source, and every act on one (connect, edit, replace the " +
-  "key, disconnect) is confirmed in the API's words for that source, because each agrees to what one " +
-  "source may read. docs/admin-console-architecture.md marks bulk as not applicable to connectors.";
 
 /** What each long list does not offer, and why. Everything it does offer is read off the page. */
 /**
@@ -171,14 +165,29 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
     bulk: READ_ONLY,
   },
   "/logs": { bulk: A_LOG_ROW_IS_READ_AND_NEVER_WRITTEN },
-  "/agents": { bulk: READ_ONLY },
-  "/connectors": { bulk: A_CONNECTION_CHANGES_ONE_SOURCE_AT_A_TIME },
+  "/agents": {},
+  "/connectors": {},
   "/agent-templates": { bulk: READ_ONLY },
   "/approvals": { bulk: AN_APPROVAL_IS_DECIDED_FROM_ITS_OWN_CARD },
   "/adoption": { bulk: READ_ONLY },
-  "/people": { bulk: A_GRANT_IS_REMOVED_BY_REVIEW_IN_BULK },
-  "/people/:subject": { bulk: A_GRANT_IS_REMOVED_BY_REVIEW_IN_BULK },
-  "/scopes": { bulk: READ_ONLY },
+  "/people": {},
+  // A person's page borrows the roster for the agents they steward, and links to the Agents list.
+  "/people/:personId": {
+    page: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    search: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    filter: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    sort: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    bulk: READ_ONLY,
+  },
+  "/scopes": {},
+  // The Roles tab reads the directory's first page only to put names to the ids the Approver flag
+  // and the directory group sync carry, and each name links to the person on the People list.
+  "/roles": {
+    page: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    search: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    filter: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    sort: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+  },
   "/skills": { bulk: A_SKILL_IS_DECIDED_FROM_ITS_OWN_BYTES },
   "/skills/:name": { bulk: A_SKILL_IS_DECIDED_FROM_ITS_OWN_BYTES },
   "/library": { bulk: READ_ONLY },
@@ -186,7 +195,23 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
   "/sign-in-links": { bulk: AN_UNLINK_LOCKS_A_PERSON_OUT },
   "/service-accounts": { bulk: RETIRING_AN_ACCOUNT_STOPS_AN_INTEGRATION },
   "/audit": { bulk: READ_ONLY },
-  "/departments": { bulk: A_ROW_IS_A_DEPARTMENT_AND_A_PLACEMENT_NAMES_A_PERSON },
+  "/departments": {},
+  // One department's page asks the list route for its own row, and its Scopes view the scopes naming
+  // it; the lists that page, search and filter those routes are Departments and Scopes.
+  "/departments/:slug": {
+    page: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    search: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    filter: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    sort: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    bulk: A_ROW_IS_A_DEPARTMENT_AND_A_PLACEMENT_NAMES_A_PERSON,
+  },
+  "/departments/:slug/:view": {
+    page: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    search: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    filter: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    sort: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    bulk: A_ROW_IS_A_DEPARTMENT_AND_A_PLACEMENT_NAMES_A_PERSON,
+  },
   "/elevation": { bulk: AN_ELEVATION_IS_DECIDED_ON_ITS_OWN_REASON },
   "/access_review": {},
   "/access-requests": { bulk: READ_ONLY },
@@ -346,7 +371,9 @@ function offered(root: Element, paths: readonly string[]): Set<Capability> {
   ) {
     found.add("filter");
   }
-  if (root.querySelector('tbody input[type="checkbox"], .roster input[type="checkbox"]') !== null) {
+  // The page kit's table selects with a checkbox drawn as a button (`kit/EntityTable`), and a
+  // selection is a bulk act in itself: the selected rows export, and a route that takes a set acts.
+  if (root.querySelector('tbody input[type="checkbox"], .roster input[type="checkbox"], tbody [role="checkbox"]') !== null) {
     found.add("bulk");
   }
   return found;

@@ -298,6 +298,8 @@ COMPANY_NAVIGATION: Final[tuple[Section, ...]] = (
                     Page(label="Roles", to="/roles", key="roles"),
                     Page(label="Capabilities", to="/capabilities", key="capabilities"),
                     Page(label="Scopes", to="/scopes", key="scopes"),
+                    # A pack's contents are capability names, so it opens on the vocabulary's read.
+                    Page(label="Packs", to="/packs", key="capabilities"),
                 ),
             ),
             Entry(

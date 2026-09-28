@@ -78,11 +78,14 @@ def test_the_audit_grammar_is_widened_over_todays_by_halt_alone() -> None:
     subject kind added since, and the next `vault_access` entry would have been refused. The
     narrower lists are the ones the newest earlier migrations wrote, the widened action list is
     the narrower one with `halt` alone added (a later migration widens it again, `0137` with
-    `agent`), and the subject grammar is the model's. Delete this and a draft carried forward can
+    `agent`), and the subject grammar is the one the next migration to widen it starts from
+    (`0141`, with `pack`), whose own is the model's. Delete this and a draft carried forward can
     narrow the ledger silently."""
     m = module()
     assert m.NARROWER_ACTIONS.replace("'grant', ", "'grant', 'halt', ") == m.WIDENED_ACTIONS
-    assert f"subject ~ '{SUBJECT_PATTERN}'" == m.WIDENED_SUBJECTS
+    packs = migration_module(VERSIONS / "0141_packs_people_and_scope_labels_audited.py")
+    assert m.WIDENED_SUBJECTS == packs.NARROWER_SUBJECTS
+    assert f"subject ~ '{SUBJECT_PATTERN}'" == packs.WIDENED_SUBJECTS
     assert (
         m.NARROWER_ACTIONS
         == migration_module(VERSIONS / "0105_agent_owner_audit.py").WIDENED_ACTIONS

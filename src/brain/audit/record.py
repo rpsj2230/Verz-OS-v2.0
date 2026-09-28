@@ -38,6 +38,7 @@ layers that record into it and a future import of this module from `brain.gate` 
 produce a cycle.
 
 Task ids: M24.1.3, M24.1.4, M42.6.5, M27.7.21, M27.7.4, M27.7.8, M27.11.1, M24.2.4
+Task ids: M27.15.19, M27.15.24
 """
 
 from __future__ import annotations
@@ -179,13 +180,21 @@ ACTION_BY_METHOD: Final[Mapping[str, AuditAction]] = MappingProxyType(
         "agent_owner": AuditAction.AGENT_OWNER,
         "halt": AuditAction.HALT,
         "agent": AuditAction.AGENT,
+        "pack": AuditAction.PACK,
     }
 )
 
 
 class PrincipalStateChange(enum.StrEnum):
-    """What happened to a person's sign-in. The two values `0095b`'s trigger writes."""
+    """What happened to a person's standing: created, disabled, or enabled again.
 
+    `DISABLED` and `ENABLED` are the two values `0095b`'s trigger writes on a change of
+    `disabled_at`. `CREATED` is the value `0141`'s trigger writes on every insert into
+    `auth.principal`, whoever made it: the console's hand-added person, the first administrator,
+    the staff sync and a statement typed at a prompt alike (M27.15.19).
+    """
+
+    CREATED = "created"
     DISABLED = "disabled"
     ENABLED = "enabled"
 
@@ -359,7 +368,8 @@ class OrganisationChange(enum.StrEnum):
     the values `0086`'s triggers write about a department, a team or a scope: `RENAMED` is the name
     column moving, which is the one change the console makes to a live row; `CHANGED` is any other
     column moving, which only a statement typed by hand does, and names the columns; `RETIRED` is
-    `deleted_at` being set. A scope has no name the console changes, so a scope is never renamed.
+    `deleted_at` being set. A scope's name is its `label`, and since `0141` the console renames one,
+    so a move of a scope's label is `RENAMED` too and never `CHANGED` (M27.11.1).
     """
 
     JOINED = "joined"
@@ -414,6 +424,32 @@ class HaltAct(enum.StrEnum):
 
     HALT = "halt"
     RESUME = "resume"
+
+
+class PackChange(enum.StrEnum):
+    """What happened to a capability pack. The three values `0141`'s trigger writes (M27.15.24).
+
+    `VERSIONED` is its capabilities or its label moving in place, which is what every holder of
+    the pack then holds at once; `RETIRED` is `deleted_at` being set. A copy is a creation of the
+    new pack, so it has no word of its own here: the ledger records what the row became, and the
+    route answers the caller in the word they pressed.
+    """
+
+    CREATED = "created"
+    VERSIONED = "versioned"
+    RETIRED = "retired"
+
+
+#: The changes whose entry carries the version the pack was left at. A retirement carries none,
+#: because a retired pack is at no version anybody can hold.
+VERSIONED_PACK_CHANGES: Final[frozenset[PackChange]] = frozenset(
+    {PackChange.CREATED, PackChange.VERSIONED}
+)
+
+#: The prefix a pack's version carries in the ledger. The ledger admits a detail value only when it
+#: is a name, a capability or a digest, and a bare number is a value, so `3` would be stored as the
+#: marker; `v3` is a name. `0141`'s trigger writes the same prefix, and a test holds the two to one.
+PACK_VERSION_PREFIX: Final = "v"
 
 
 class ElevationChange(enum.StrEnum):
@@ -922,11 +958,12 @@ class AuditRecorder:
         )
 
     def principal_state(self, *, principal_id: str, change: PrincipalStateChange) -> AuditEntry:
-        """Record that a person was disabled, or enabled again (M1.2.3).
+        """Record that a person was created, disabled, or enabled again (M1.2.3, M27.15.19).
 
         Written in a deployed database by `0095b`'s trigger on `auth.principal`, one entry per
-        change of `disabled_at` between set and unset, and held to these details by a test. The
-        subject is the person, so they read it among the entries about them.
+        change of `disabled_at` between set and unset, and by `0141`'s on every insert, and held to
+        these details by a test. The subject is the person, so they read it among the entries about
+        them, and their creation is the first of those.
         """
         return self._write(
             AuditAction.PRINCIPAL_STATE,
@@ -1162,8 +1199,9 @@ class AuditRecorder:
         department and each of its teams, whose path rides in `team`, or `scope` for a scope, and
         never both. `fields` names the columns a hand-typed change moved, and only on a change, for
         `routing`'s reason; `actor_inferred` is the trigger's mark for a statement nobody named an
-        actor for. A scope has no teams and is never renamed. **Never a name, a label or a
-        predicate**: the row keeps them, and a name is whatever somebody typed.
+        actor for. A scope has no teams; since `0141` its label moving is a rename, as a
+        department's name moving is. **Never a name, a label or a predicate**: the row keeps them,
+        and a name is whatever somebody typed.
 
         One method for both, because the ledger holds one member for both and the recorder is held
         to one method per member. Held to both triggers' details by tests.
@@ -1213,8 +1251,8 @@ class AuditRecorder:
                 f"this names principal={principal_id!r}, department={department!r}, scope={scope!r}"
             )
             raise ValueError(msg)
-        if scope and (team or change is OrganisationChange.RENAMED):
-            msg = f"a scope has no teams and is never renamed; this is {change.value} team={team!r}"
+        if scope and team:
+            msg = f"a scope has no teams; this is {change.value} team={team!r}"
             raise ValueError(msg)
         if (change is OrganisationChange.CHANGED) != bool(fields):
             msg = (
@@ -1230,6 +1268,34 @@ class AuditRecorder:
             details["actor"] = INFERRED_ACTOR
         kind, slug = ("department", department) if department else ("scope", scope)
         return self._write(AuditAction.ORGANISATION, subject(kind, slug), details)
+
+    def pack(self, *, name: str, change: PackChange, version: int | None = None) -> AuditEntry:
+        """Record that a capability pack was created, versioned or retired (M27.15.24).
+
+        Written in a deployed database by `0141`'s trigger on `gate.capability_pack`, on the insert,
+        on an update moving its capabilities or its label, and on the update setting `deleted_at`,
+        and held to these details by a test. The subject is the pack's name, so every version of
+        one bundle is one subject. **Never the capabilities or the label**: the row keeps them, and
+        the version names which state of the row the entry was about, as a skill's digest does.
+
+        `version` is required on a creation and a versioning and refused on a retirement, because an
+        entry that names no version for the first two cannot say what the holders now hold, and one
+        naming a version for the last says a retired pack is at a version somebody can hold.
+        """
+        versioned = change in VERSIONED_PACK_CHANGES
+        if versioned != (version is not None):
+            msg = (
+                "a created or versioned pack names the version it was left at, and a retired one "
+                f"names none; this is {change.value} with version={version!r}"
+            )
+            raise ValueError(msg)
+        details: dict[str, object] = {"change": change.value}
+        if version is not None:
+            if version < 1:
+                msg = f"a pack's version starts at one, and {version} is not a version"
+                raise ValueError(msg)
+            details["version"] = f"{PACK_VERSION_PREFIX}{version}"
+        return self._write(AuditAction.PACK, subject("pack", name), details)
 
     def breach(self, *, case_id: str, change: BreachChange) -> AuditEntry:
         """Record that a breach case moved: opened, assessed, notified, excused or closed (M24.2.4).

@@ -258,7 +258,14 @@ def test_a_disable_ends_the_session_refuses_the_token_and_an_enable_returns_the_
     assert "read:client.hours" in [grant.capability.value for grant in held_on.grants]
     assert rows == [("kc-live", "principal_disabled")]
     assert entries == [("u_admin", "principal:u_joiner", "trace-disable")]
-    assert [(e.actor_id, e.subject, e.trace_id, dict(e.details)) for e in states] == [
+    # Since `0141` the seeded person's creation is the first entry about them, unattributed
+    # because the fixture inserts them as the superuser with no actor set.
+    created, *changed = states
+    assert (created.subject, dict(created.details)) == (
+        "principal:u_joiner",
+        {"change": "created", "actor": "unattributed"},
+    )
+    assert [(e.actor_id, e.subject, e.trace_id, dict(e.details)) for e in changed] == [
         ("u_admin", "principal:u_joiner", "trace-disable", {"change": "disabled"}),
         ("u_admin", "principal:u_joiner", "trace-enable", {"change": "enabled"}),
     ]
@@ -301,8 +308,13 @@ def test_the_trigger_writes_the_details_the_recorder_writes() -> None:
         entry = recorder.principal_state(principal_id="u_joiner", change=change)
         assert dict(entry.details) == {"change": change.value}
     body = migration_module(VERSIONS / "0095b_principal_state_audit.py").TRIGGER_FUNCTION
+    creation = migration_module(
+        VERSIONS / "0141_packs_people_and_scope_labels_audited.py"
+    ).PRINCIPAL_TRIGGER_FUNCTION
+    # `0095b` writes the two changes of `disabled_at`, and `0141` writes the creation.
     for change in PrincipalStateChange:
-        assert f"'{change.value}'" in body
+        written_by = creation if change is PrincipalStateChange.CREATED else body
+        assert f"'{change.value}'" in written_by
 
 
 def test_a_press_that_changes_nothing_and_a_statement_nobody_attributed_are_recorded_honestly() -> (
@@ -351,6 +363,7 @@ def test_a_press_that_changes_nothing_and_a_statement_nobody_attributed_are_reco
     assert first is not None and first.outcome is StateChange.CHANGED
     assert second is not None and second.outcome is StateChange.ALREADY
     assert [(e.actor_id, dict(e.details)) for e in states] == [
+        ("unattributed", {"change": "created", "actor": "unattributed"}),
         ("u_admin", {"change": "disabled"}),
         ("unattributed", {"change": "enabled", "actor": "unattributed"}),
     ]

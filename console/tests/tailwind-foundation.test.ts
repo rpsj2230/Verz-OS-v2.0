@@ -62,6 +62,10 @@ const COMPONENT_LAYER_DIRECTORIES = [
   "src/components/kit",
   "src/pages/agents",
   "src/pages/connectors",
+  "src/pages/access",
+  "src/pages/people",
+  "src/pages/departments",
+  "src/pages/roles",
   "src/hooks",
   "src/lib",
   "src/layout",
@@ -218,6 +222,10 @@ describe("what Tailwind generates", () => {
       "../components/kit",
       "../pages/agents",
       "../pages/connectors",
+      "../pages/access",
+      "../pages/people",
+      "../pages/departments",
+      "../pages/roles",
     ]);
     expect(layer.candidates).toContain("bg-primary");
   });

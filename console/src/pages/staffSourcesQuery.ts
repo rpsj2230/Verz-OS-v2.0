@@ -116,7 +116,7 @@ const NOTHING: StaffSources = Object.freeze({
 /**
  * Read `brain.staff_source_routes.StaffSourcesView` out of a response body.
  *
- * An unreadable body yields an empty page rather than throwing, which is `readPeoplePage`'s
+ * An unreadable body yields an empty page rather than throwing, which is `people/peopleQuery.readPeople`'s
  * choice and for its reason: the shape is fixed by a response model in this repository, so a
  * body that is not this page is a console built against a different API and there is no
  * sentence worth composing about it.

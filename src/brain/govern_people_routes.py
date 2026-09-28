@@ -77,7 +77,15 @@ single decision's store call, its lock, its `may` and its trigger, with its own 
 the order asked. Elevations are not decided in bulk. See
 `AN_ELEVATION_IS_DECIDED_ON_ITS_OWN_REASON`.
 
-Task ids: M27.7.4, M27.7.8, M27.7.9, M27.7.12, M27.8.6, M1.2.3, M1.2.5, M27.15.22
+**A scope is renamed by its label, and only by somebody who could have drawn it** (M27.11.1).
+`POST /govern/departments/scopes/rename` asks `admin:scope` cheaply before the store and
+`brain.console.organisation.may_draw_scope` about the stored predicate under the row's lock, so a
+scope outside the caller's authority and a scope that is not there are one refusal, and the label
+the page showed having moved is said only to a caller who governs the scope. `0141` records the
+move as `renamed`. The Departments listing filters by `slug`, so the console opens one department
+by `filter=slug:<slug>`.
+
+Task ids: M27.7.4, M27.7.8, M27.7.9, M27.7.12, M27.8.6, M1.2.3, M1.2.5, M27.11.1, M27.15.22
 """
 
 from __future__ import annotations
@@ -473,6 +481,11 @@ Name = Annotated[
 #: The name a page showed, compared exactly, so it is not trimmed.
 Shown = Annotated[str, Field(min_length=1, max_length=LABEL_CHARS)]
 
+#: The label a page showed for a scope, compared exactly. Empty is a label a page can show: a scope
+#: written without one, as `0003` and furnishing write theirs, carries `''`, and refusing to compare
+#: it would leave that scope unrenameable from the console for ever.
+ShownLabel = Annotated[str, Field(min_length=0, max_length=LABEL_CHARS)]
+
 #: The most departments one scope may name. A bound on a form, not a permission.
 MOST_DEPARTMENTS_IN_A_SCOPE: Final = 50
 
@@ -591,6 +604,23 @@ class ScopeRetirement(BaseModel):
     @model_validator(mode="after")
     def _is_a_scope(self) -> Self:
         Scope.model_validate(self.expected_scope)
+        return self
+
+
+class ScopeRenaming(BaseModel):
+    """Which scope, the label the page showed, and its new label. Never its predicate."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    slug: Slug
+    expected_label: ShownLabel
+    label: Name
+
+    @model_validator(mode="after")
+    def _names_something_new(self) -> Self:
+        if self.label == self.expected_label:
+            msg = "the new label is the label it already has"
+            raise ValueError(msg)
         return self
 
 
@@ -1193,7 +1223,8 @@ DEPARTMENTS: Final[Listing[DepartmentView]] = Listing(
     name="departments",
     columns=(
         Column("name", lambda row: row.name, search=True, sort=True),
-        Column("slug", lambda row: row.slug, search=True, sort=True),
+        # Filterable, so the console opens one department by `filter=slug:<slug>` (M27.11.1).
+        Column("slug", lambda row: row.slug, search=True, filter=True, sort=True),
         Column("teams", lambda row: tuple(one.name for one in row.teams), search=True, filter=True),
         Column(
             "members",
@@ -1722,6 +1753,38 @@ async def retire_scope(request: Request, body: ScopeRetirement, asked: Asked) ->
         by=_by(asked),
     )
     return _structured(outcome, asked, kind="scope", slug=body.slug, change="retired")
+
+
+@router.post(
+    "/govern/departments/scopes/rename",
+    response_model=StructureChanged,
+    responses=COMMON_RESPONSES,
+)
+async def rename_scope(request: Request, body: ScopeRenaming, asked: Asked) -> StructureChanged:
+    """Change a scope's label, never its predicate, if it still has the label the page showed.
+
+    The authority is asked cheaply before the store; the store then asks `may_draw_scope` about
+    the stored predicate under the row's lock, which is the question a creation or a retirement
+    asks, so nobody renames a boundary they could not have drawn. A scope outside that and a scope
+    that is not there are the one refusal; the label having moved since the page was opened is
+    said, because only a caller who governs the scope reaches that comparison.
+    """
+    reach, now = asked.reach, asked.now
+    if reach.scope_for(SCOPE_AUTHORITY, now) is None:
+        log.info("scope not renamable", principal=asked.caller.principal.id)
+        raise _not_organisable_here()
+
+    def may(record: ScopeRecord) -> bool:
+        return may_draw_scope(reach, record.scope, now)
+
+    outcome = await structure_records_of(request).rename_scope(
+        slug=body.slug,
+        expected_label=body.expected_label,
+        label=body.label,
+        may=may,
+        by=_by(asked),
+    )
+    return _structured(outcome, asked, kind="scope", slug=body.slug, change="renamed")
 
 
 # ------------------------------------------------------------------ elevation
