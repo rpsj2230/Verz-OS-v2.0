@@ -171,22 +171,14 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "Sets the labels a skill is filed under. The previous labels are shown in the box before the " +
     "press and can be typed back, the change is a new row that edits none, and a label reaches no " +
     "agent and changes no procedure.",
-  "src/pages/SignInLinks.tsx LINK_API_PATH":
+  "src/pages/sessions/SignInLinksPage.tsx LINK_API_PATH":
     "Binds a sign-in to a person. A subject already bound elsewhere is refused with a 409 rather " +
     "than re-pointed, so nothing existing is replaced; unlinking is the destructive act and it is " +
     "confirmed.",
-  "src/components/ConnectStaffSource.tsx path":
+  "src/pages/staff-sources/ConnectDrawer.tsx path":
     "Sends the connection test and the first sync's dry run, which keep nothing: no setting, no " +
     "credential and no member is written, which tests/unit/test_staff_connect.py holds for both. " +
     "Saving the connection and applying the first sync have their own requests and are confirmed.",
-  "src/pages/ServiceAccounts.tsx SERVICE_ACCOUNTS_API_PATH":
-    "Registers a new service account owned by the caller. An id or subject already in use is " +
-    "refused with a 409 rather than taken over, so nothing existing is replaced; retiring an account " +
-    "is the destructive act and it is confirmed.",
-  "src/pages/ServiceAccounts.tsx ISSUE_KEY_API_PATH":
-    "Issues a new key beside the ones an account has. A key beyond the limit is refused with a 409 " +
-    "rather than rotating one out, so no key in use is ended; revoking a key is the destructive act " +
-    "and it is confirmed.",
   "src/components/ConnectLark.tsx LARK_TEST_API_PATH":
     "Testing a Lark connection exchanges the pasted credential for a token and makes small reads; " +
     "it writes nothing here or in Lark and keeps nothing it read, which " +
@@ -261,7 +253,7 @@ describe("a destructive write is confirmed", () => {
     const confirmed = everyWrite().filter((write) => write.confirmed).map((write) => write.key);
     expect(confirmed).toContain("src/pages/people/PersonGrants.tsx REMOVAL_API_PATH");
     expect(confirmed).toContain("src/pages/models/RungEditor.tsx rungApiPath(rung.id)");
-    expect(confirmed).toContain("src/pages/Sessions.tsx END_SESSION_API_PATH");
+    expect(confirmed).toContain("src/pages/sessions/SessionsPage.tsx END_SESSION_API_PATH");
     expect(confirmed).toContain("src/pages/models/ProvidersPage.tsx providerSwitchApiPath(pending.provider)");
     expect(confirmed).toContain("src/pages/models/ProvidersPage.tsx providerCheckApiPath(pending.provider)");
     expect(confirmed).toContain("src/pages/models/RoutingPage.tsx retireStepApiPath(asked.rungId)");

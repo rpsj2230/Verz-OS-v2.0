@@ -61,7 +61,8 @@ import {
 import { EXPORTS_API_PATH } from "../../src/pages/dataTransferQuery";
 import { switchPath } from "../../src/pages/featuresQuery";
 import { switchPath as toolSwitchPath } from "../../src/pages/toolsQuery";
-import { savePath } from "../../src/pages/settingsQuery";
+import { defaultPath, savePath } from "../../src/pages/settingsQuery";
+import { installApiPath } from "../../src/pages/agent-templates/AgentTemplateDetailPage";
 import {
   ADD_TEAM_API_PATH,
   DISABLE_API_PATH,
@@ -235,12 +236,13 @@ export function declaredRoutes(document: Record<string, unknown>): string[] {
 
 /** The route template a concrete path was asked of, or null. */
 export function templateOf(document: Record<string, unknown>, path: string): string | null {
-  for (const route of Object.keys(document["paths"] as Record<string, unknown>)) {
-    if (new RegExp(`^${route.replace(/\{[^}]+\}/g, "[^/]+")}$`).test(path)) {
-      return route;
-    }
-  }
-  return null;
+  // The most specific template wins, as it does in the router: `/service-accounts/keys` is the
+  // literal route and not `/service-accounts/{client_id}` with an id of "keys".
+  const matching = Object.keys(document["paths"] as Record<string, unknown>).filter((route) =>
+    new RegExp(`^${route.replace(/\{[^}]+\}/g, "[^/]+")}$`).test(path),
+  );
+  const parameters = (route: string) => (route.match(/\{/g) ?? []).length;
+  return [...matching].sort((a, b) => parameters(a) - parameters(b))[0] ?? null;
 }
 
 // ---------------------------------------------------------------------------- the judgement
@@ -271,7 +273,7 @@ const ONCE_BY_THE_WIZARD =
 /** Every area of the standard, keyed by the standard's own words. */
 export const AREAS: Readonly<Record<string, Area>> = {
   "People, roles, permissions and access control": {
-    screens: ["/people", "/people/:personId", "/people/:personId/:view", "/roles", "/capabilities", "/scopes", "/packs", "/access_review", "/elevation", "/sessions", "/sign-in-links", "/staff_sources", "/access-requests", "/service-accounts"],
+    screens: ["/people", "/people/:personId", "/people/:personId/:view", "/roles", "/capabilities", "/scopes", "/packs", "/access_review", "/elevation", "/sessions", "/sign-in-links", "/staff_sources", "/access-requests", "/service-accounts", "/service-accounts/:clientId"],
     routes: [
       "/api/v1/me",
       "/api/v1/console/navigation",
@@ -417,7 +419,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "Agents and their configuration, including templates": {
-    screens: ["/agents", "/agents/:agentId", "/agents/:agentId/:tab", "/agent-templates", "/approvals", "/approvals/:suspensionId"],
+    screens: ["/agents", "/agents/:agentId", "/agents/:agentId/:tab", "/agent-templates", "/agent-templates/:templateId", "/approvals", "/approvals/:suspensionId"],
     routes: [
       "/api/v1/agents",
       "/api/v1/agents/{agent_id}/workspace",
@@ -431,6 +433,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/agents/{agent_id}/duplicate",
       "/api/v1/console/agents/{agent_id}/stats",
       "/api/v1/agent-templates",
+      "/api/v1/agent-templates/{template_id}",
       "/api/v1/agent-templates/{template_id}/versions/{version}*",
       "/api/v1/approvals*",
     ],
@@ -455,7 +458,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "Skills and tools": {
-    screens: ["/skills", "/skills/:name", "/skills/:name/:view", "/tools"],
+    screens: ["/skills", "/skills/:name", "/skills/:name/:view", "/tools", "/tools/:name"],
     routes: [
       "/api/v1/skills",
       "/api/v1/skills/library",
@@ -1024,8 +1027,8 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
     at("PUT /api/v1/classifications/{entity}/table", "tableApiPath", tableApiPath("prices")),
   ],
   "src/pages/DataTransfer.tsx EXPORTS_API_PATH": [at("POST /api/v1/data-transfer/exports", "EXPORTS_API_PATH", EXPORTS_API_PATH)],
-  "src/pages/Features.tsx switchPath(row.name)": [at("POST /api/v1/install/features/{name}", "switchPath", switchPath("schedule_control"))],
-  "src/pages/Tools.tsx switchPath(choice.tool)": [
+  "src/pages/install/FeaturesPage.tsx switchPath(row.name)": [at("POST /api/v1/install/features/{name}", "switchPath", switchPath("schedule_control"))],
+  "src/pages/tools/ToolDetailPage.tsx switchPath(choice.tool)": [
     at("POST /api/v1/tools/{name}/switch", "switchPath", toolSwitchPath("notes.read_note")),
   ],
   "src/pages/Channels.tsx channelApiPath(row.channel)": [
@@ -1046,7 +1049,19 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/components/MyChannels.tsx myUnbindApiPath(row.channel)": [
     at("POST /api/v1/me/channels/{name}/unbind", "myUnbindApiPath", myUnbindApiPath("webhook")),
   ],
-  "src/pages/Settings.tsx savePath(row.name)": [at("PUT /api/v1/install/settings/{name}", "savePath", savePath("INSTALL_COMPANY_NAME"))],
+  "src/pages/agent-templates/AgentTemplateDetailPage.tsx installApiPath(entry.template_id, entry.version)": [
+    at(
+      "POST /api/v1/agent-templates/{template_id}/versions/{version}/install",
+      "installApiPath",
+      installApiPath("pricing_desk", 3),
+    ),
+  ],
+  "src/pages/settings/SettingsPage.tsx savePath(row.name)": [
+    at("PUT /api/v1/install/settings/{name}", "savePath", savePath("INSTALL_COMPANY_NAME")),
+  ],
+  "src/pages/settings/SettingsPage.tsx defaultPath(row.name)": [
+    at("POST /api/v1/install/settings/{name}/default", "defaultPath", defaultPath("INSTALL_COMPANY_NAME")),
+  ],
   "src/pages/FirstRun.tsx FINISH_PATH": [at("POST /setup/sign-in", "FINISH_PATH", FINISH_PATH, false)],
   "src/pages/FirstRun.tsx APPOINTMENT_PATH": [at("POST /setup/appointment", "APPOINTMENT_PATH", APPOINTMENT_PATH, false)],
   "src/components/StaffListCheck.tsx SIGN_IN_PATH": [
@@ -1055,20 +1070,20 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/components/StaffListCheck.tsx TRIAL_PATH": [
     at("POST /setup/staff-source/trial", "TRIAL_PATH", STAFF_LIST_TRIAL_PATH, false),
   ],
-  "src/pages/StaffSources.tsx CREDENTIAL_API_PATH": [
+  "src/pages/staff-sources/SyncCredential.tsx CREDENTIAL_API_PATH": [
     at("PUT /api/v1/govern/staff_sources/credential", "CREDENTIAL_API_PATH", CREDENTIAL_API_PATH),
   ],
-  "src/pages/StaffSources.tsx transferApiPath(agentId)": [
+  "src/pages/staff-sources/Transfers.tsx transferApiPath(agent.agent_id)": [
     at("POST /api/v1/govern/staff_sources/transfers/{agent_id}", "transferApiPath", transferApiPath("a_quotes")),
   ],
-  "src/components/ConnectStaffSource.tsx path": [
+  "src/pages/staff-sources/ConnectDrawer.tsx path": [
     at("POST /api/v1/govern/staff_sources/test", "CONNECTION_TEST_API_PATH", CONNECTION_TEST_API_PATH),
     at("POST /api/v1/govern/staff_sources/first-sync", "FIRST_SYNC_API_PATH", FIRST_SYNC_API_PATH),
   ],
-  "src/components/ConnectStaffSource.tsx CONNECT_API_PATH": [
+  "src/pages/staff-sources/ConnectDrawer.tsx CONNECT_API_PATH": [
     at("POST /api/v1/govern/staff_sources/connect", "CONNECT_API_PATH", CONNECT_API_PATH),
   ],
-  "src/components/ConnectStaffSource.tsx APPLY_FIRST_SYNC_API_PATH": [
+  "src/pages/staff-sources/ConnectDrawer.tsx APPLY_FIRST_SYNC_API_PATH": [
     at("POST /api/v1/govern/staff_sources/first-sync/apply", "APPLY_FIRST_SYNC_API_PATH", APPLY_FIRST_SYNC_API_PATH),
   ],
   "src/pages/Jobs.tsx actionPath(asked.action, asked.row.control)": [
@@ -1180,8 +1195,8 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/components/DataStewardCard.tsx STEWARD_API_PATH": [
     at("POST /api/v1/govern/data-steward", "STEWARD_API_PATH", STEWARD_API_PATH),
   ],
-  "src/pages/Prompts.tsx editPath(asked.row.agent_id)": [at("POST /api/v1/govern/prompts/{agent_id}", "editPath", editPath("quote-helper"))],
-  "src/pages/Prompts.tsx giveBackPath(asked.row.agent_id)": [
+  "src/pages/prompts/PromptsPage.tsx editPath(asked.row.agent_id)": [at("POST /api/v1/govern/prompts/{agent_id}", "editPath", editPath("quote-helper"))],
+  "src/pages/prompts/PromptsPage.tsx giveBackPath(asked.row.agent_id)": [
     at("POST /api/v1/govern/prompts/{agent_id}/give-back", "giveBackPath", giveBackPath("quote-helper")),
   ],
   "src/pages/Retention.tsx path": [
@@ -1191,12 +1206,12 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
     at("POST /api/v1/govern/legal-holds/lift", "LIFT_API_PATH", LIFT_API_PATH),
     at("POST /api/v1/govern/erasures", "ERASURES_API_PATH", ERASURES_API_PATH),
   ],
-  "src/pages/Sessions.tsx END_SESSION_API_PATH": [at("POST /api/v1/govern/sessions/end", "END_SESSION_API_PATH", END_SESSION_API_PATH)],
-  "src/pages/Sessions.tsx END_SESSIONS_API_PATH": [
+  "src/pages/sessions/SessionsPage.tsx END_SESSION_API_PATH": [at("POST /api/v1/govern/sessions/end", "END_SESSION_API_PATH", END_SESSION_API_PATH)],
+  "src/pages/sessions/SessionsPage.tsx END_SESSIONS_API_PATH": [
     at("POST /api/v1/govern/sessions/end-several", "END_SESSIONS_API_PATH", END_SESSIONS_API_PATH),
   ],
-  "src/pages/SignInLinks.tsx LINK_API_PATH": [at("POST /api/v1/sign-ins", "LINK_API_PATH", LINK_API_PATH)],
-  "src/pages/SignInLinks.tsx UNLINK_API_PATH": [at("POST /api/v1/govern/sign-ins/unlink", "UNLINK_API_PATH", UNLINK_API_PATH)],
+  "src/pages/sessions/SignInLinksPage.tsx LINK_API_PATH": [at("POST /api/v1/sign-ins", "LINK_API_PATH", LINK_API_PATH)],
+  "src/pages/sessions/SignInLinksPage.tsx UNLINK_API_PATH": [at("POST /api/v1/govern/sign-ins/unlink", "UNLINK_API_PATH", UNLINK_API_PATH)],
   "src/pages/Webhooks.tsx REGISTER_API_PATH": [at("POST /api/v1/webhooks/subscribers", "REGISTER_API_PATH", REGISTER_API_PATH)],
   "src/pages/Webhooks.tsx secretApiPath(asked.id)": [
     at("POST /api/v1/webhooks/subscribers/{subscriber_id}/secret", "secretApiPath", secretApiPath("billing_bridge")),
@@ -1342,16 +1357,16 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/Referrals.tsx handledApiPath(chosen.referral_id)": [
     at("POST /api/v1/me/referrals/{referral_id}/handled", "handledApiPath", handledApiPath(COMPLIANCE_CASE)),
   ],
-  "src/pages/ServiceAccounts.tsx SERVICE_ACCOUNTS_API_PATH": [
+  "src/pages/service-accounts/AccountActs.tsx SERVICE_ACCOUNTS_API_PATH": [
     at("POST /api/v1/govern/service-accounts", "SERVICE_ACCOUNTS_API_PATH", SERVICE_ACCOUNTS_API_PATH),
   ],
-  "src/pages/ServiceAccounts.tsx ISSUE_KEY_API_PATH": [
+  "src/pages/service-accounts/AccountActs.tsx ISSUE_KEY_API_PATH": [
     at("POST /api/v1/govern/service-accounts/keys", "ISSUE_KEY_API_PATH", ISSUE_KEY_API_PATH),
   ],
-  "src/pages/ServiceAccounts.tsx REVOKE_KEY_API_PATH": [
+  "src/pages/service-accounts/AccountActs.tsx REVOKE_KEY_API_PATH": [
     at("POST /api/v1/govern/service-accounts/keys/revoke", "REVOKE_KEY_API_PATH", REVOKE_KEY_API_PATH),
   ],
-  "src/pages/ServiceAccounts.tsx RETIRE_ACCOUNT_API_PATH": [
+  "src/pages/service-accounts/AccountActs.tsx RETIRE_ACCOUNT_API_PATH": [
     at("POST /api/v1/govern/service-accounts/retire", "RETIRE_ACCOUNT_API_PATH", RETIRE_ACCOUNT_API_PATH),
   ],
 };
@@ -1400,6 +1415,10 @@ const TOOLS_PRESSED = t("test_tool_routes", "test_switching_through_the_routes_r
 const BRANDING_SAVED = t(
   "test_settings_routes",
   "test_saving_a_company_name_writes_its_row_and_the_console_header_draws_it_next",
+);
+const SETTING_RETURNED = t(
+  "test_settings_routes",
+  "test_returning_to_default_retires_the_saved_row_as_the_person_and_the_default_reads_next",
 );
 const INSTRUCTIONS_PRESSED = audited("test_an_instruction_edit_and_its_give_back_reach_the_install_the_ledger_and_the_prompt");
 const GROUP_RULES_PRESSED = t(
@@ -1563,6 +1582,12 @@ const A_BINDING_CHANGE_IS_AUDITED = t(
   true,
 );
 
+const A_REVOCATION_AND_A_RETIREMENT_ARE_RECORDED = t(
+  "test_service_account_audit",
+  "test_a_revoked_key_and_a_retired_account_each_leave_one_entry_naming_the_owner",
+  true,
+);
+
 /** Every write route a screen sends, followed to the system. */
 const AUTOMATION_PAUSED = t(
   "test_automation_change_store",
@@ -1598,16 +1623,12 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
   },
   "POST /api/v1/govern/service-accounts/keys/revoke": {
     row: A_RETIRED_KEY_IS_NOT_FOUND,
-    audit: {
-      none: "Revoking a key sets its deleted_at and records no credential write, so brain.identity.service_account_store.revoke_key leaves no ledger entry naming who revoked it.",
-    },
+    audit: A_REVOCATION_AND_A_RETIREMENT_ARE_RECORDED,
     behaviour: A_RETIRED_KEY_IS_NOT_FOUND,
   },
   "POST /api/v1/govern/service-accounts/retire": {
     row: A_RETIRED_KEY_IS_NOT_FOUND,
-    audit: {
-      none: "Retiring an account sets deleted_at on it and its keys and records no credential write, so brain.identity.service_account_store.retire leaves no ledger entry naming who retired it.",
-    },
+    audit: A_REVOCATION_AND_A_RETIREMENT_ARE_RECORDED,
     behaviour: A_RETIRED_KEY_IS_NOT_FOUND,
   },
   "PUT /api/v1/channels/{name}": {
@@ -1900,6 +1921,16 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
       none: "The route sets the audit attribution 0059's trigger reads, which BRANDING_SAVED asserts over a stub; no scratch-Postgres test yet reads the ledger entry back.",
     },
     behaviour: BRANDING_SAVED,
+  },
+  "POST /api/v1/agent-templates/{template_id}/versions/{version}/install": {
+    row: t("test_agent_lifecycle_routes", "test_an_installed_version_starts_disabled_and_at_shadow_on_every_target"),
+    audit: t("test_agent_lifecycle_store", "test_each_move_pressed_reaches_its_row_and_one_ledger_entry_naming_the_person", true),
+    behaviour: t("test_agent_lifecycle_routes", "test_an_installed_version_starts_disabled_and_at_shadow_on_every_target"),
+  },
+  "POST /api/v1/install/settings/{name}/default": {
+    row: SETTING_RETURNED,
+    audit: t("test_install_settings", "test_a_value_returned_to_default_is_retired_as_the_app_role_and_the_ledger_names_who", true),
+    behaviour: SETTING_RETURNED,
   },
   "POST /api/v1/tools/{name}/switch": {
     row: t("test_tool_routes", "test_a_super_administrator_switches_a_tool_off_for_the_install"),

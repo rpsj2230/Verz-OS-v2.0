@@ -37,7 +37,7 @@ typing are imported under `TYPE_CHECKING` only, so the audit package stays under
 layers that record into it and a future import of this module from `brain.gate` cannot
 produce a cycle.
 
-Task ids: M24.1.3, M24.1.4, M42.6.5, M27.7.21, M27.7.4, M27.7.8, M27.11.1, M24.2.4
+Task ids: M24.1.3, M24.1.4, M42.6.5, M27.7.21, M27.7.4, M27.7.8, M27.11.1, M24.2.4, M27.11.5
 Task ids: M27.15.19, M27.15.24
 """
 
@@ -304,6 +304,20 @@ class SkillChange(enum.StrEnum):
     #: `0139`: a version retired, so no agent may newly be assigned it, or reinstated.
     RETIRED = "retired"
     REINSTATED = "reinstated"
+
+
+class CredentialChange(enum.StrEnum):
+    """What happened to a service account's credential, beyond a write. The two words `0148`'s
+    triggers write when a row of `auth.api_key` or `auth.service_account` is retired.
+
+    A write (an account registered, a key issued) carries no change at all, as `0054` records it,
+    so these are only the two ways a credential stops working. A retired account retires its keys
+    in the same transaction, so one retirement is a `key_revoked` per live key and then one
+    `account_retired`, each true on its own.
+    """
+
+    KEY_REVOKED = "key_revoked"
+    ACCOUNT_RETIRED = "account_retired"
 
 
 class ConnectorChange(enum.StrEnum):
@@ -948,20 +962,37 @@ class AuditRecorder:
             details["pack"] = pack
         return self._write(AuditAction.CERTIFICATION, subject("grant", grant_id), details)
 
-    def credential(self, *, slot: str) -> AuditEntry:
-        """Record that a credential was written into a vault slot.
+    def credential(
+        self,
+        *,
+        slot: str,
+        change: CredentialChange | None = None,
+        actor_inferred: bool = False,
+    ) -> AuditEntry:
+        """Record that a credential was written into a slot, or that one was taken away.
 
         The entry a deployed database keeps is written by `0054`'s trigger on
         `ops.credential_write`, for the reason `session_end` gives about `0050`, and a test holds
         this entry's subject and details to the trigger's. **There is no parameter for the value,
-        and no details at all**: the slot is the subject, the actor and the time are the entry's
-        own, and what is left of a write once the value is taken out is nothing. A length, a
-        prefix or a fingerprint would each be part of the secret, which
+        and a write has no details at all**: the slot is the subject, the actor and the time are
+        the entry's own, and what is left of a write once the value is taken out is nothing. A
+        length, a prefix or a fingerprint would each be part of the secret, which
         `brain.credential_routes` argues against for a response body and is truer of the table
         kept longest. The subject id is `credential_subject_id`'s.
+
+        A service account's key revoked or the account retired is `change`, which `0148`'s
+        triggers write under the same subject, so one account's history is one subject. One
+        method rather than a second, because `ACTION_BY_METHOD` pins one method per action; the
+        two added parameters are an enumeration and a flag, so neither can carry a value.
+        `actor_inferred` is the detail the trigger adds when nobody named the actor.
         """
+        details: dict[str, object] = {}
+        if change is not None:
+            details["change"] = change.value
+        if actor_inferred:
+            details["actor"] = INFERRED_ACTOR
         return self._write(
-            AuditAction.CREDENTIAL, subject("credential", credential_subject_id(slot)), {}
+            AuditAction.CREDENTIAL, subject("credential", credential_subject_id(slot)), details
         )
 
     def vault_access(

@@ -2011,3 +2011,48 @@ def test_a_published_row_that_does_not_construct_is_absent_from_the_gallery(
     listed_ids = {one["template_id"] for one in body.json()["items"]}
     assert "pricing_desk" in listed_ids
     assert "other_desk" not in listed_ids
+
+
+def test_one_template_is_read_by_the_galleries_rule_with_what_an_install_would_ask_for(
+    client: TestClient, stored: Stored
+) -> None:
+    """The page shows the document the card shows: the highest published version, and a built-in
+    one where nothing is published under its id. Delete this and the page can describe a version
+    no install would pin."""
+    shipped = CATALOGUE[0]
+    stored.versions = [
+        published_row("pricing_desk", 1, display_name="Pricing desk"),
+        published_row("pricing_desk", 3, display_name="Pricing desk"),
+    ]
+
+    published = get(client, "u_elsewhere", f"{TEMPLATES}/pricing_desk")
+    built_in = get(client, "u_elsewhere", f"{TEMPLATES}/{shipped.identity.template_id}")
+
+    assert published.status_code == 200, published.text
+    assert published.json()["entry"]["version"] == 3
+    assert published.json()["entry"]["origin"] == "published"
+    body = built_in.json()
+    assert body["entry"]["origin"] == "built_in"
+    assert body["skills"] == [one.name for one in shipped.skills]
+    assert body["tools"] == list(shipped.authority.allowed_tools)
+    assert body["connectors"] == list(shipped.connectors)
+    assert body["tier"] == shipped.tier.value
+    assert [one["rung"] for one in body["leash"]] == [
+        one.rung.name.lower() for one in shipped.guardrails.leash
+    ]
+
+
+def test_a_template_nobody_shows_reads_exactly_as_a_refused_reader(
+    client: TestClient, stored: Stored
+) -> None:
+    """DENIED and ABSENT are one answer, and the screen's question is asked before the database.
+    Delete this and the page tells a reader which template ids exist."""
+    stored.versions = [published_row("pricing_desk", 1, display_name="Pricing desk")]
+
+    missing = get(client, "u_elsewhere", f"{TEMPLATES}/nobody_desk")
+    before = len(stored.statements)
+    refused = get(client, "u_admin", f"{TEMPLATES}/pricing_desk")
+
+    assert missing.status_code == refused.status_code == 404
+    assert missing.json()["message"] == refused.json()["message"]
+    assert len(stored.statements) == before
