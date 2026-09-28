@@ -112,6 +112,12 @@ import { LARK_API_PATH, LARK_TEST_API_PATH } from "../../src/pages/larkConnectQu
 import { credentialPath } from "../../src/components/ProviderKeyForm";
 import { REGISTER_API_PATH, secretApiPath, switchOffApiPath } from "../../src/pages/webhooksQuery";
 import {
+  ISSUE_KEY_API_PATH,
+  RETIRE_ACCOUNT_API_PATH,
+  REVOKE_KEY_API_PATH,
+  SERVICE_ACCOUNTS_API_PATH,
+} from "../../src/pages/serviceAccountsQuery";
+import {
   PASSWORD_API_PATH as RELAY_PASSWORD_API_PATH,
   RELAY_API_PATH,
   TRIAL_API_PATH as RELAY_TRIAL_API_PATH,
@@ -209,7 +215,7 @@ const ONCE_BY_THE_WIZARD =
 /** Every area of the standard, keyed by the standard's own words. */
 export const AREAS: Readonly<Record<string, Area>> = {
   "People, roles, permissions and access control": {
-    screens: ["/", "/people", "/people/:subject", "/roles", "/capabilities", "/scopes", "/access_review", "/elevation", "/sessions", "/sign-in-links", "/staff_sources", "/access-requests"],
+    screens: ["/", "/people", "/people/:subject", "/roles", "/capabilities", "/scopes", "/access_review", "/elevation", "/sessions", "/sign-in-links", "/staff_sources", "/access-requests", "/service-accounts"],
     routes: [
       "/api/v1/me",
       "/api/v1/console/navigation",
@@ -291,8 +297,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
       },
       { what: "The identity provider and the staff source cannot be changed after setup.", because: ONCE_BY_THE_WIZARD },
       {
-        what: "A service account and its keys are registered, issued, revoked and retired through /api/v1/govern/service-accounts, and no screen calls it.",
-        leaf: "M27.11.5",
+        what: "A service account's end date and owner cannot be changed from Service accounts: no route writes auth.service_account after registration, so a new account is registered instead.",
+        leaf: "M27.15.26",
       },
     ],
   },
@@ -1015,6 +1021,18 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/Referrals.tsx handledApiPath(chosen.referral_id)": [
     at("POST /api/v1/me/referrals/{referral_id}/handled", "handledApiPath", handledApiPath(COMPLIANCE_CASE)),
   ],
+  "src/pages/ServiceAccounts.tsx SERVICE_ACCOUNTS_API_PATH": [
+    at("POST /api/v1/govern/service-accounts", "SERVICE_ACCOUNTS_API_PATH", SERVICE_ACCOUNTS_API_PATH),
+  ],
+  "src/pages/ServiceAccounts.tsx ISSUE_KEY_API_PATH": [
+    at("POST /api/v1/govern/service-accounts/keys", "ISSUE_KEY_API_PATH", ISSUE_KEY_API_PATH),
+  ],
+  "src/pages/ServiceAccounts.tsx REVOKE_KEY_API_PATH": [
+    at("POST /api/v1/govern/service-accounts/keys/revoke", "REVOKE_KEY_API_PATH", REVOKE_KEY_API_PATH),
+  ],
+  "src/pages/ServiceAccounts.tsx RETIRE_ACCOUNT_API_PATH": [
+    at("POST /api/v1/govern/service-accounts/retire", "RETIRE_ACCOUNT_API_PATH", RETIRE_ACCOUNT_API_PATH),
+  ],
 };
 
 /** A named Python test that asserts one of the three, or why there is none. */
@@ -1119,8 +1137,45 @@ const BREACH_STEP: Proofs = {
   behaviour: t("test_compliance_routes", "test_a_case_shows_its_clock_from_the_awareness_and_its_findings"),
 };
 
+/** A service account registered and keyed on real rows, its two ledger entries, and the key acting. */
+const A_KEY_ACTS_AT_ITS_OWNERS_REACH = t(
+  "test_service_accounts",
+  "test_through_0095_a_key_acts_at_its_owners_live_reach_and_stops_with_the_owner",
+  true,
+);
+/** A key revoked and an account retired on real rows, and neither found by the request path after. */
+const A_RETIRED_KEY_IS_NOT_FOUND = t(
+  "test_service_accounts",
+  "test_a_retired_key_or_account_is_not_found_by_the_request_path",
+  true,
+);
+
 /** Every write route a screen sends, followed to the system. */
 export const PROOFS: Readonly<Record<string, Proofs>> = {
+  "POST /api/v1/govern/service-accounts": {
+    row: A_KEY_ACTS_AT_ITS_OWNERS_REACH,
+    audit: A_KEY_ACTS_AT_ITS_OWNERS_REACH,
+    behaviour: A_KEY_ACTS_AT_ITS_OWNERS_REACH,
+  },
+  "POST /api/v1/govern/service-accounts/keys": {
+    row: A_KEY_ACTS_AT_ITS_OWNERS_REACH,
+    audit: A_KEY_ACTS_AT_ITS_OWNERS_REACH,
+    behaviour: A_KEY_ACTS_AT_ITS_OWNERS_REACH,
+  },
+  "POST /api/v1/govern/service-accounts/keys/revoke": {
+    row: A_RETIRED_KEY_IS_NOT_FOUND,
+    audit: {
+      none: "Revoking a key sets its deleted_at and records no credential write, so brain.identity.service_account_store.revoke_key leaves no ledger entry naming who revoked it.",
+    },
+    behaviour: A_RETIRED_KEY_IS_NOT_FOUND,
+  },
+  "POST /api/v1/govern/service-accounts/retire": {
+    row: A_RETIRED_KEY_IS_NOT_FOUND,
+    audit: {
+      none: "Retiring an account sets deleted_at on it and its keys and records no credential write, so brain.identity.service_account_store.retire leaves no ledger entry naming who retired it.",
+    },
+    behaviour: A_RETIRED_KEY_IS_NOT_FOUND,
+  },
   "POST /api/v1/govern/learning/undo": {
     row: UNDO_REACHES_THE_ROW_THE_LEDGER_AND_RECALL,
     audit: UNDO_REACHES_THE_ROW_THE_LEDGER_AND_RECALL,

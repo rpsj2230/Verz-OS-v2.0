@@ -18,15 +18,25 @@ The answer names the capabilities in the ceiling the owner does not hold now, wh
 own reach and nothing about anybody else's, so they are not surprised later by an account that
 cannot do what its ceiling says.
 
+**The ceiling can never carry an approve or admin capability.** `brain.gate.admission` refuses both
+on the API channel whatever the owner holds, so an account listing one would have a ceiling that
+says more than it can ever do, and an auditor reading it would be misled. The verbs a ceiling may
+name are read from `CHANNEL_VERBS` rather than listed again here, so the two cannot drift. See
+`AN_ACCOUNT_NEVER_CARRIES_APPROVE_OR_ADMIN`.
+
 **The key is in exactly one response.** The issue answers the full key once; the listing, every
 other answer and the database hold its handle and its digest and never the secret. A lost key is
 revoked and another issued.
+
+**The listing pages, searches, filters and orders through `brain.listing`**, over the caller's own
+accounts as they are sent and never over the load, so `truncated` stays a fact about the load and a
+search cannot match a field the row does not show.
 
 **Every refusal over somebody else's account is the one 404.** An account another person owns, a
 retired one and one that never existed are not found, for the reason every control in this console
 gives.
 
-Task ids: M1.1.7, M1.8.2
+Task ids: M1.1.7, M1.8.2, M27.15.26
 """
 
 from __future__ import annotations
@@ -35,7 +45,7 @@ from datetime import datetime
 from typing import Annotated, Final, Protocol, Self, runtime_checkable
 
 import structlog
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from pydantic import (
     BaseModel,
@@ -51,6 +61,8 @@ from brain.api_routes import Asked, Asking
 from brain.channels.api_keys import ApiKeyError, IssuedKey
 from brain.core.entitlement import Capability
 from brain.core.errors import Absent, Failed
+from brain.gate.admission import CHANNEL_VERBS
+from brain.gate.context import Channel
 from brain.identity.service_account_store import (
     AN_ACCOUNT_IS_ITS_OWNERS_AND_NOBODY_ELSES,
     AccountListed,
@@ -58,6 +70,7 @@ from brain.identity.service_account_store import (
     StoredServiceAccounts,
 )
 from brain.identity.sessions import ServiceAccount
+from brain.listing import Column, ListAsked, Listing
 from brain.routing_routes import sessions_of
 from brain.tables.service_account import CLIENT_ID_PATTERN, LABEL_CHARS, SUBJECT_CHARS
 
@@ -77,6 +90,15 @@ A_KEY_IS_SHOWN_ONCE: Final = (
     "This is the only time the key is shown. Keep it somewhere safe; if it is lost, revoke it and "
     "issue another."
 )
+
+#: Why a ceiling naming an approve or admin capability is refused. Quotes nothing that was sent.
+AN_ACCOUNT_NEVER_CARRIES_APPROVE_OR_ADMIN: Final = (
+    "A service account can never carry an approve or admin capability: the API channel it acts on "
+    "refuses both whatever its owner holds. List only read, write or invoke capabilities."
+)
+
+#: The verbs a ceiling may name: the API channel's own, read from admission and never restated.
+CEILING_VERBS: Final = CHANNEL_VERBS[Channel.API]
 
 #: The capability every route here asks for, held in any scope.
 SERVICE_ACCOUNT_AUTHORITY: Final = Capability(value="admin:credential")
@@ -133,6 +155,8 @@ class AccountsPage(BaseModel):
 
     items: list[AccountView]
     truncated: bool
+    #: Present exactly when a further account of the caller's matches. See `brain.listing`.
+    next_cursor: str | None = None
     reach: str = AN_ACCOUNT_ACTS_AT_ITS_OWNERS_REACH
     ownership: str = AN_ACCOUNT_IS_ITS_OWNERS_AND_NOBODY_ELSES
 
@@ -156,7 +180,8 @@ class AccountAsked(BaseModel):
             if "*" in one:
                 msg = f"{one!r} is a wildcard; list each capability the account may use"
                 raise ValueError(msg)
-            Capability(value=one)
+            if Capability(value=one).verb not in CEILING_VERBS:
+                raise ValueError(AN_ACCOUNT_NEVER_CARRIES_APPROVE_OR_ADMIN)
         if len(set(value)) != len(value):
             msg = "a capability is listed twice"
             raise ValueError(msg)
@@ -301,6 +326,22 @@ def account_view(one: AccountListed, asked: Asking) -> AccountView:
     )
 
 
+#: What the Service accounts screen may search, filter and order by: the fields a row shows.
+SERVICE_ACCOUNTS: Final[Listing[AccountView]] = Listing(
+    name="service-accounts",
+    columns=(
+        Column("client_id", lambda row: row.client_id, search=True, sort=True),
+        Column("label", lambda row: row.label, search=True, sort=True),
+        Column("ceiling", lambda row: tuple(row.ceiling), search=True, filter=True),
+        Column("lapses_at", lambda row: row.lapses_at, sort=True),
+        Column("created_at", lambda row: row.created_at, sort=True),
+    ),
+    key=lambda row: row.client_id,
+    order="-created_at",
+)
+ServiceAccountsQuery = Annotated[ListAsked, Depends(SERVICE_ACCOUNTS.query())]
+
+
 def _not_done(status: int, told: str) -> JSONResponse:
     """Nothing changed, and why, in the house error shape with the request's trace id."""
     body = ErrorBody(message=told, trace_id=_trace_id())
@@ -311,11 +352,15 @@ router = APIRouter(prefix=API_PREFIX, tags=["service accounts"])
 
 
 @router.get("/govern/service-accounts", response_model=AccountsPage, responses=COMMON_RESPONSES)
-async def accounts_page(request: Request, asked: Asked) -> AccountsPage:
-    """The caller's own live accounts, newest first, each with its live keys."""
+async def accounts_page(
+    request: Request, asked: Asked, wanted: ServiceAccountsQuery
+) -> AccountsPage:
+    """One page of the caller's own live accounts, newest first, each with its live keys."""
     _require_authority(asked)
+    plan = SERVICE_ACCOUNTS.plan(wanted, reader=asked.caller.principal_id)
     listed, full = await store_of(request).owned(asked.caller.principal_id, limit=MAX_ROWS)
-    return AccountsPage(items=[account_view(one, asked) for one in listed], truncated=full)
+    page = plan.page([account_view(one, asked) for one in listed])
+    return AccountsPage(items=list(page.items), next_cursor=page.next_cursor, truncated=full)
 
 
 @router.post(
