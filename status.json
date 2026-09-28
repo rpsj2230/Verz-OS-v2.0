@@ -1,9 +1,9 @@
 {
-  "generated_at": "2026-09-28T08:20:01.709674+00:00",
-  "commit": "d39f331",
-  "commit_subject": "The worker's healthcheck answers in a tenth of a second, so deploys finish and the post-deploy checks run again",
+  "generated_at": "2026-09-28T08:29:27.348829+00:00",
+  "commit": "665d503",
+  "commit_subject": "Item 98 asks only for the Moonshot key and DeepSeek again: the install already chose online providers",
   "total": 1595,
-  "done": 328,
+  "done": 329,
   "percent": 20.6,
   "acts": 47,
   "decided": 107,
@@ -25,12 +25,12 @@
     {
       "wave": 1,
       "name": "The gate",
-      "total": 163,
-      "done": 146,
-      "percent": 89.6,
+      "total": 161,
+      "done": 147,
+      "percent": 91.3,
       "in_progress": 6,
       "ready_for_testing": 0,
-      "blocked": 11,
+      "blocked": 8,
       "open": 0,
       "acts": 1,
       "decided": 7
@@ -38,12 +38,12 @@
     {
       "wave": 2,
       "name": "Data, channels, retrieval",
-      "total": 298,
+      "total": 300,
       "done": 10,
-      "percent": 3.4,
+      "percent": 3.3,
       "in_progress": 0,
       "ready_for_testing": 0,
-      "blocked": 0,
+      "blocked": 2,
       "open": 288,
       "acts": 0,
       "decided": 8
@@ -152,7 +152,7 @@
       "name": "Models, routing, fallback matrix",
       "wave": 1,
       "total": 30,
-      "done": 24,
+      "done": 25,
       "acts": 0,
       "decided": 1
     },
@@ -801,6 +801,7 @@
     "M42.5.6",
     "M42.6.1",
     "M42.6.8",
+    "M5.1.2",
     "M5.1.3",
     "M5.1.4",
     "M5.2.1",
@@ -841,7 +842,7 @@
     },
     "M1.8.5": {
       "status": "BLOCKED",
-      "why": "the web part is the owner's sign-in check (needs-rupash 91, check 1); the chat part waits for Wave 2 (needs-rupash 97)",
+      "why": "moved to Wave 2 (needs-rupash 97): the web part is the owner's sign-in check (needs-rupash 91, check 1); the chat part needs Wave 2's Lark chat channel",
       "updated": "2026-09-28"
     },
     "M1.8.8": {
@@ -851,7 +852,7 @@
     },
     "M2.3.1": {
       "status": "BLOCKED",
-      "why": "the owner's department checks on the install (needs-rupash 91, checks 2 and 3); the chat part waits for Wave 2 (needs-rupash 97)",
+      "why": "moved to Wave 2 (needs-rupash 97): the web part is the owner's department checks (needs-rupash 91, checks 2 and 3); the chat part needs Wave 2's Lark chat channel",
       "updated": "2026-09-28"
     },
     "M2.3.2": {
@@ -869,29 +870,24 @@
       "why": "the routing decision being written to the request row when it is made and shown in the console",
       "updated": "2026-09-28"
     },
-    "M5.1.2": {
-      "status": "BLOCKED",
-      "why": "built (the key field, PR #87); proved when the first provider key is saved into the vault on the install (needs-rupash 85)",
-      "updated": "2026-09-28"
-    },
     "M5.6.1": {
       "status": "BLOCKED",
-      "why": "an answer through each provider on the install needs its key (needs-rupash 85)",
+      "why": "Anthropic, OpenAI and DeepSeek keys are in the vault; the worker could not see the install's saved online-providers setting until the fix of 2026-09-28, and Moonshot has no key (needs-rupash 98)",
       "updated": "2026-09-28"
     },
     "M5.6.3": {
       "status": "BLOCKED",
-      "why": "a proved fallback needs at least two provider keys on the install (needs-rupash 85)",
+      "why": "a proved fallback needs two providers answering on the install, which waits for the worker fix of 2026-09-28 to deploy",
       "updated": "2026-09-28"
     },
     "M5.6.5": {
       "status": "BLOCKED",
-      "why": "the owner's models check on the install (needs-rupash 91, check 6), after the keys (needs-rupash 85)",
+      "why": "the owner's models check on the install (needs-rupash 91, check 6), once the providers answer (needs-rupash 98)",
       "updated": "2026-09-28"
     },
     "M5.7.1": {
       "status": "IN PROGRESS",
-      "why": "all four providers shown on Models and health with Add key, Test and Turn off; the answer on the install then waits for keys (needs-rupash 85)",
+      "why": "four providers on Models and health with Add key, Test and Turn off, and a control to change where answers are made, which nothing in the console could do after setup",
       "updated": "2026-09-28"
     },
     "M5.7.3": {
@@ -926,7 +922,7 @@
     },
     "M31.3.2.5": {
       "status": "BLOCKED",
-      "why": "live since d6290cb; the proof is a provider key replaced on the install and loaded without a redeploy, which waits for the first key (needs-rupash 85)",
+      "why": "live since d6290cb; a DeepSeek key was replaced on the install on 28 Sep, and the proof is that provider answering with it without a redeploy, once the worker fix of 2026-09-28 deploys (needs-rupash 98)",
       "updated": "2026-09-28"
     },
     "M38.2.1.1": {
@@ -936,7 +932,7 @@
     },
     "M38.2.2.2": {
       "status": "BLOCKED",
-      "why": "needs a provider key (needs-rupash 85) and then the owner's real-answer check (needs-rupash 91, check 5)",
+      "why": "needs a provider answering on the install (needs-rupash 98) and then the owner's real-answer check (needs-rupash 91, check 5)",
       "updated": "2026-09-28"
     },
     "M41.3.1": {
@@ -946,7 +942,7 @@
     }
   },
   "wave_records": {},
-  "closed_today": 1,
+  "closed_today": 2,
   "next_up": [
     "M31.3.2.3",
     "M31.3.2.4",
@@ -955,6 +951,12 @@
     "M41.3.1"
   ],
   "recent": [
+    {
+      "sha": "ad91bd6",
+      "at": "2026-09-28T08:28:28+00:00",
+      "subject": "Needs you records the owner's keys and moves the two chat checks to Wave 2",
+      "closed": "M5.1.2"
+    },
     {
       "sha": "566957b",
       "at": "2026-09-28T04:54:11+00:00",
@@ -1068,12 +1070,6 @@
       "at": "2026-09-21T11:35:20+00:00",
       "subject": "/answer runs the gate's front half before any model, and a refusal becomes a request its owner reads",
       "closed": "M2.2.4,M3.9.7,M4.3.4,M4.4.4"
-    },
-    {
-      "sha": "90cdfaf",
-      "at": "2026-09-21T11:10:43+00:00",
-      "subject": "A matrix change is judged before it takes traffic, providers carry their terms, one can be added from the console, and an agent's model can be pinned",
-      "closed": "M5.1.3,M5.1.4,M5.2.1,M5.3.2,M5.3.3,M5.3.4,M5.4.1,M5.4.2,M5.4.4,M5.4.5,M5.4.6,M5.5.2,M5.5.3,M5.5.4"
     }
   ]
 }
