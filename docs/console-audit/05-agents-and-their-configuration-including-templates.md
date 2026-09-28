@@ -3,7 +3,7 @@
 - **Screens:** `/agents`, `/agents/:agentId`, `/agents/:agentId/:tab`, `/agent-templates`, `/approvals`, `/approvals/:suspensionId`
 - **Tables:** `agent.agent`, `agent.template_instance`, `agent.template_version`, `agent.upgrade_decline`, `agent.browser_envelope`, `gate.suspension`
 - **Installation values:** none
-- **Measured here:** 8 routes, 1 called by no screen; 2 write routes, 1 with all three proofs; 1 gaps.
+- **Measured here:** 9 routes, 1 called by no screen; 2 write routes, 1 with all three proofs; 1 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -13,6 +13,7 @@
 | `GET /api/v1/agents/{agent_id}/workspace` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `GET /api/v1/approvals` | `/approvals` |
 | `GET /api/v1/approvals/{suspension_id}` | `/approvals/:suspensionId` |
+| `GET /api/v1/console/agents/{agent_id}/stats` | `/agents`, `/agents/:agentId` |
 | `POST /api/v1/approvals/{suspension_id}/decision` | `/approvals`, `/approvals/:suspensionId` |
 | `PUT /api/v1/agents/{agent_id}/model-pin` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 

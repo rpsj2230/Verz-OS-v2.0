@@ -95,7 +95,9 @@ from brain.channels.widget import allowed_origins
 from brain.classification_routes import router as classification_router
 from brain.compliance_routes import router as compliance_router
 from brain.connector_routes import router as connector_router
+from brain.console_overview_routes import router as console_overview_router
 from brain.console_static import mount_console_entry, mount_console_fallback
+from brain.console_stats_routes import router as console_stats_router
 from brain.core.errors import Absent, BrainError, Outcome, to_public
 from brain.credential_routes import router as credential_router
 from brain.data_steward_routes import router as data_steward_router
@@ -1445,6 +1447,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # The install acceptance checks' results for the commit this serves: passed, failed or not
     # run, public and read-only like deploy-checks. See `brain.acceptance_routes`.
     app.include_router(acceptance_router)
+    # One entity's figures on its detail page, each behind the question its list screen asks, and
+    # the landing screen's health strip and Needs you. See `brain.console_stats_routes` and
+    # `brain.console_overview_routes`.
+    app.include_router(console_stats_router)
+    app.include_router(console_overview_router)
 
     @app.get("/health/live", response_model=Health, tags=["health"])
     async def live() -> Health:
