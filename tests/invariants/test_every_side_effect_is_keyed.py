@@ -50,6 +50,7 @@ ISSUING: frozenset[str] = frozenset(
     {
         "brain.browsing.runner:Browser.act",
         "brain.channels.adapter:ChannelAdapter.send",
+        "brain.channels.adapter:ChannelTransport.send",
         "brain.ops.automation_piece:ToolCaller.call",
         "brain.ops.digest_delivery:DigestSender.send",
         "brain.ops.mail:MailTransport.send",
@@ -64,6 +65,8 @@ DELIVERS_THROUGH_THE_DOOR: frozenset[str] = frozenset(
         "brain.channels.correction",
         "brain.channels.email",
         "brain.channels.lark",
+        # Every channel's vendor call, since `0114`: the one door the pipeline sends through.
+        "brain.channels.outbound",
         "brain.channels.slack",
         "brain.channels.teams",
         "brain.channels.telegram",

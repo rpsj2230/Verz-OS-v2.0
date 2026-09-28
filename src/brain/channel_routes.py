@@ -1,0 +1,712 @@
+"""Channels over HTTP: the address a vendor posts to, and a channel's record, switch and history.
+
+`brain.channels.inbound` decides how a request is received and `brain.channels.outbound` how a
+message leaves; `brain.ops.channel_store` keeps the rows and borrows the secret. This module
+asks them in order, builds the one transport, and decides nothing any of them already decides.
+CH2 draws the Channels screen over these routes; until then they are how a channel is set up and
+proved on an install.
+
+**`POST /channels/{name}/events` is the one address every vendor posts to (M10.2.1).** It takes
+no caller, because a vendor has no session: what it proves is the signature, and the route hands
+the exact bytes to the channel's wire through `receive`, which refuses a switched-off channel
+before the body is read and a bad signature before the wire reads it. A name that is no channel,
+a channel this release has no receiver for, a channel with no record and a channel switched off
+are one 404 with one body, so the address cannot be walked to learn which channels an install
+runs. See `AN_ADDRESS_A_VENDOR_POSTS_TO_SAYS_NOTHING_ABOUT_THE_INSTALL`. An accepted message from
+a sender bound to nobody is answered with the binding prompt, sent back through the channel's own
+vendor and recorded like any other delivery.
+
+**One authority governs a channel, and it is the one Connect Lark already asks.**
+`brain.ops.connector_admin.may_connect_source` over `<channel>_channel`, which is the slot name
+`brain.ops.lark_connect` gives the Lark chat use, so the administrator who may switch Lark's chat
+on there is the one who may switch its channel record here, and a grant narrowed to one channel
+reaches that channel alone. A reader without it for a channel is shown nothing about that channel
+and is refused on it as on a channel that does not exist. See
+`A_CHANNEL_IS_GOVERNED_BY_THE_AUTHORITY_CONNECT_LARK_ASKS`.
+
+**The secret is written into the vault before the record, and is never sent back.** The router is
+`brain.api.NoEchoRoute`, the secret is kept through `brain.ops.credentials.Credentials.keep`, which
+records the write in the audit ledger, and a response says only whether a secret is held. A vault
+that is absent, refused or silent answers 409 or 503 and no record is written, so a channel is
+never switched on by this route with nothing behind it.
+
+**A test message goes out through the same `deliver` every reply does.** It is a product sentence
+with no recipient, keyed on who asked, where to and the record's last change, so a second press
+sends nothing and a record changed since can be tested again, for
+`brain.ops.mail.A_TEST_IS_ONE_MESSAGE_PER_CONFIGURATION`'s reason. On a channel switched off it is
+refused and recorded as `switched_off`, which is how an install shows that switching a channel off
+stops its sending.
+
+**The transport is one class for every channel.** `HttpsTransport` checks the vendor's address
+with `brain.tools.fetch.assert_fetchable` at every send and connects to the address it checked,
+through `brain.ops.webhook_delivery.HttpsSender`, so no channel has its own HTTP client and none
+can skip the address rule.
+
+Task ids: M10.2.1, M10.6.1, M10.6.3, M10.3.3, M10.4.5, M3.2.2
+"""
+
+from __future__ import annotations
+
+import asyncio
+from collections.abc import Callable, Mapping
+from datetime import UTC, datetime
+from typing import Annotated, Final
+
+import psycopg
+import structlog
+from fastapi import APIRouter, Path, Request
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict, Field
+
+from brain.api import API_PREFIX, COMMON_RESPONSES, ErrorBody, NoEchoRoute
+from brain.api_routes import Asked
+from brain.attribution import trace_of_request
+from brain.channels.adapter import (
+    ChannelTransport,
+    ChannelWire,
+    VendorAnswer,
+    VendorRequest,
+    channel_adapters,
+    channel_wires,
+)
+from brain.channels.inbound import (
+    MAX_BODY_BYTES,
+    ChannelAnswerer,
+    ChannelBindings,
+    NoBindingsYet,
+    ReceiptKind,
+    receive,
+    reply_for,
+)
+from brain.channels.outbound import Delivered, LedgerRunner, Outgoing, deliver
+from brain.core.entitlement import EntitlementSet
+from brain.core.errors import Absent, Failed
+from brain.credential_routes import credentials_of
+from brain.db import libpq_conninfo
+from brain.gate.context import Channel
+from brain.gate.resolve import EntitlementStore
+from brain.install_routes import settings_of
+from brain.ops.channel_store import (
+    ChannelRecord,
+    ChannelRecords,
+    ChannelSecrets,
+    ChannelSecretsUnavailableError,
+    DeliveryEntry,
+    DeliveryRecords,
+    EventClaims,
+    StoredChannels,
+    StoredClaims,
+    StoredDeliveries,
+    VaultChannelSecrets,
+    channel_secret_slot,
+)
+from brain.ops.connector_admin import may_connect_source
+from brain.ops.credentials import (
+    MAX_CREDENTIAL_CHARS,
+    TOLD,
+    CredentialProblemError,
+    CredentialsUnavailableError,
+    VaultState,
+)
+from brain.ops.idempotency import Intent, Issued, OperationLedger
+from brain.ops.openbao import OpenBaoVault
+from brain.ops.operation_store import PostgresOperationLedger
+from brain.ops.outbox import SignedRequest
+from brain.ops.secrets import VaultRole
+from brain.ops.webhook_delivery import HttpsSender, SystemResolver
+from brain.routing_routes import sessions_of
+from brain.tables.channel import DeliveryOutcome, Direction, RefusedBecause
+from brain.tools.fetch import Resolver, UnsafeAddressError, assert_fetchable
+
+log = structlog.get_logger()
+
+# ------------------------------------------------------------ written-down reasons
+
+#: Why every refusal of the vendor address is one 404.
+AN_ADDRESS_A_VENDOR_POSTS_TO_SAYS_NOTHING_ABOUT_THE_INSTALL: Final = (
+    "The events address takes no caller, so anybody can post to it. A name that is no channel, a "
+    "channel this release cannot receive on, a channel with no record and a channel switched off "
+    "are answered with one 404 and one body, so posting to each name in turn cannot tell anybody "
+    "which channels this install runs. The refusal is recorded for a channel that exists."
+)
+
+#: Why a channel is governed by the connector authority over its own name.
+A_CHANNEL_IS_GOVERNED_BY_THE_AUTHORITY_CONNECT_LARK_ASKS: Final = (
+    "A channel is set up, switched and tested under admin:connector over <channel>_channel, the "
+    "slot name Connect Lark already gives the Lark chat use. So the person who may switch Lark's "
+    "chat on there may switch its channel here, a grant narrowed to one channel reaches that "
+    "channel alone, and a reader without it is shown nothing about the channel."
+)
+
+# --------------------------------------------------------------------- the figures
+
+CHANNELS_PATH: Final = "/channels"
+CHANNEL_PATH: Final = CHANNELS_PATH + "/{name}"
+EVENTS_PATH: Final = CHANNEL_PATH + "/events"
+SWITCH_PATH: Final = CHANNEL_PATH + "/switch"
+DELIVERIES_PATH: Final = CHANNEL_PATH + "/deliveries"
+TEST_PATH: Final = CHANNEL_PATH + "/test"
+
+#: The source name a channel's authority is asked over: the Lark chat use's slot, generalised.
+CHANNEL_SOURCE_SUFFIX: Final = "_channel"
+
+#: The longest tenant value kept: an identifier or an address, never a document.
+MAX_TENANT_VALUE_CHARS: Final = 500
+
+#: The longest destination a test message is sent to.
+MAX_TO_CHARS: Final = 255
+
+#: What a test message says. A product sentence, so it carries nothing from the company's data.
+TEST_MESSAGE: Final = (
+    "This is a test message from the Brain. If you can read it, this channel can send."
+)
+
+NOT_HERE: Final = "There is nothing at this address."
+NOT_ACCEPTED: Final = "This request was not accepted."
+TOO_LARGE: Final = "This request is larger than a message is."
+NOT_READABLE: Final = "This request is not a message this channel can read."
+NOT_NOW: Final = "This channel cannot check requests just now. Send it again later."
+NO_RECORD: Final = "This channel has no record on this install yet. Set it up first."
+SAVED: Final = "Saved. The channel's secret, if one was given, is in the vault."
+TOLD_CHANNELS: Final = (
+    "Each channel is its own record: switching one off stops it receiving and sending and "
+    "touches no other. A delivery is recorded as accepted, redelivered, sent, refused or "
+    "unknown, with its reason, and never with what it said or who it was from."
+)
+
+#: What a person is told for each delivery outcome of a test message.
+TEST_TOLD: Final[Mapping[DeliveryOutcome, str]] = {
+    DeliveryOutcome.SENT: "Sent. The vendor accepted the test message.",
+    DeliveryOutcome.REFUSED: "Not sent. The reason is recorded in this channel's deliveries.",
+    DeliveryOutcome.UNKNOWN: (
+        "The vendor did not answer, so the test message may or may not have arrived. Check at "
+        "the other end before sending another."
+    ),
+}
+
+_REFUSED_STATUS: Final[Mapping[RefusedBecause, tuple[int, str]]] = {
+    RefusedBecause.NOT_CONFIGURED: (404, NOT_HERE),
+    RefusedBecause.SWITCHED_OFF: (404, NOT_HERE),
+    RefusedBecause.TOO_LARGE: (413, TOO_LARGE),
+    RefusedBecause.NO_SECRET: (503, NOT_NOW),
+    RefusedBecause.VAULT_UNAVAILABLE: (503, NOT_NOW),
+    RefusedBecause.BAD_SIGNATURE: (401, NOT_ACCEPTED),
+    RefusedBecause.UNREADABLE: (400, NOT_READABLE),
+}
+
+_NOT_KEPT_STATUS: Final[Mapping[VaultState, int]] = {
+    VaultState.ABSENT: 409,
+    VaultState.REFUSED: 409,
+    VaultState.UNREACHABLE: 503,
+}
+
+
+# ------------------------------------------------------------------------ the shapes
+
+
+class ChannelView(BaseModel):
+    """One channel as its manager sees it. No field could hold its secret."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    channel: str
+    #: Whether this release can receive and send on it at all.
+    receives: bool
+    #: Where its vendor posts, under this install's own origin; empty when it cannot receive.
+    events_path: str
+    #: The tenant fields its record takes.
+    tenant_fields: list[str]
+    configured: bool
+    enabled: bool
+    tenant: dict[str, str]
+    #: Whether its secret is held, or None when the vault could not be asked.
+    secret_held: bool | None
+    updated_by: str | None
+    updated_at: datetime | None
+
+
+class ChannelsView(BaseModel):
+    """Every channel this reader may manage, and what a record and a delivery are."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    channels: list[ChannelView]
+    told: str
+
+
+class ChannelAsked(BaseModel):
+    """A channel's record to keep, and optionally its secret, which is kept and never returned."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    enabled: bool
+    tenant: dict[str, str] = Field(default_factory=dict, max_length=8)
+    secret: str | None = Field(default=None, max_length=MAX_CREDENTIAL_CHARS)
+
+
+class SwitchAsked(BaseModel):
+    """On or off."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    enabled: bool
+
+
+class DeliveryRowView(BaseModel):
+    """One recorded delivery. What happened and why, never what it said or who it was for."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    direction: Direction
+    outcome: DeliveryOutcome
+    reason: RefusedBecause | None
+    vendor_status: int | None
+    recorded_at: datetime
+
+
+class DeliveriesView(BaseModel):
+    """A channel's newest deliveries, newest first."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    channel: str
+    deliveries: list[DeliveryRowView]
+
+
+class TestAsked(BaseModel):
+    """Where a test message goes: a chat, a conversation or a sender, in the vendor's terms."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    to: str = Field(min_length=1, max_length=MAX_TO_CHARS)
+
+
+class TestView(BaseModel):
+    """What a test message came to."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    outcome: DeliveryOutcome
+    reason: RefusedBecause | None
+    vendor_status: int | None
+    #: False when this test was already sent for this record and destination.
+    issued: bool
+    told: str
+
+
+class EventView(BaseModel):
+    """What the events address answers a vendor that was not refused."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    status: ReceiptKind
+    #: What the reply came to, when one was made.
+    reply: DeliveryOutcome | None = None
+
+
+# ------------------------------------------------------------------------ the transport
+
+
+class HttpsTransport:
+    """`ChannelTransport` over the pinned HTTPS sender, to an address checked at every send."""
+
+    def __init__(self, resolver: Resolver | None = None, sender: HttpsSender | None = None) -> None:
+        self._resolver = resolver if resolver is not None else SystemResolver()
+        self._sender = sender if sender is not None else HttpsSender()
+
+    def send(self, request: VendorRequest) -> VendorAnswer:
+        try:
+            target = assert_fetchable(request.url, self._resolver)
+        except UnsafeAddressError:
+            return VendorAnswer(unsafe_address=True)
+        result = self._sender.send(
+            SignedRequest(
+                url=request.url, address=target.address, headers=request.headers, body=request.body
+            )
+        )
+        return VendorAnswer(
+            status=result.status,
+            timed_out=result.timed_out,
+            connection_failed=result.connection_failed,
+        )
+
+
+# ------------------------------------------------------------------------ the wiring
+
+
+def records_of(request: Request) -> ChannelRecords:
+    """`app.state.channel_records` when a test put one there, the database otherwise."""
+    found = getattr(request.app.state, "channel_records", None)
+    if isinstance(found, ChannelRecords):
+        return found
+    sessions = sessions_of(request)
+    if sessions is None:
+        raise Failed("no database on this process")
+    return StoredChannels(sessions)
+
+
+def deliveries_of(request: Request) -> DeliveryRecords:
+    """`app.state.channel_deliveries` when a test put one there, the database otherwise."""
+    found = getattr(request.app.state, "channel_deliveries", None)
+    if isinstance(found, DeliveryRecords):
+        return found
+    sessions = sessions_of(request)
+    if sessions is None:
+        raise Failed("no database on this process")
+    return StoredDeliveries(sessions)
+
+
+def claims_of(request: Request) -> EventClaims:
+    """`app.state.channel_claims` when a test put one there, `gate.channel_event` otherwise."""
+    found = getattr(request.app.state, "channel_claims", None)
+    if isinstance(found, EventClaims):
+        return found
+    sessions = sessions_of(request)
+    if sessions is None:
+        raise Failed("no database on this process")
+    return StoredClaims(sessions)
+
+
+def secrets_of(request: Request) -> ChannelSecrets:
+    """`app.state.channel_secrets`, or this process's vault as the application, or no vault."""
+    found = getattr(request.app.state, "channel_secrets", None)
+    if isinstance(found, ChannelSecrets):
+        return found
+    settings = settings_of(request)
+    if not settings.vault_address or not settings.vault_token:
+        return VaultChannelSecrets(None)
+    try:
+        vault = OpenBaoVault(
+            settings.vault_address, settings.vault_token, role=VaultRole.APPLICATION
+        )
+    except ValueError:
+        return VaultChannelSecrets(None)
+    return VaultChannelSecrets(vault)
+
+
+def transport_of(request: Request) -> ChannelTransport:
+    """`app.state.channel_transport` when a test put one there, `HttpsTransport` otherwise."""
+    found = getattr(request.app.state, "channel_transport", None)
+    return found if found is not None else HttpsTransport()
+
+
+def ledger_of(request: Request) -> LedgerRunner:
+    """How one send reaches the operation ledger: `app.state.operation_ledger` for a test, or a
+    connection of its own in autocommit mode, opened for the one send on the send's thread, as
+    `brain.notification_routes.trial_in_a_thread` does for a test message."""
+
+    def run(work: Callable[[OperationLedger], Issued]) -> Issued:
+        found = getattr(request.app.state, "operation_ledger", None)
+        if found is not None:
+            return work(found)
+        url = settings_of(request).database_url
+        with psycopg.connect(libpq_conninfo(url), autocommit=True, prepare_threshold=None) as conn:
+            return work(PostgresOperationLedger(conn))
+
+    return run
+
+
+def bindings_of(request: Request) -> ChannelBindings:
+    """`app.state.channel_bindings` once the binding table is wired, `NoBindingsYet` until then."""
+    found = getattr(request.app.state, "channel_bindings", None)
+    return found if found is not None else NoBindingsYet()
+
+
+def answerer_of(request: Request) -> ChannelAnswerer | None:
+    """`app.state.channel_answerer` once the chat channel's package wires one, or None."""
+    return getattr(request.app.state, "channel_answerer", None)
+
+
+class _NoReach:
+    """The entitlement store on a process with no gate wired: asked, it fails loudly."""
+
+    async def load(self, principal_id: str, now: datetime) -> EntitlementSet:
+        del principal_id, now
+        raise Failed("no entitlement store on this process")
+
+
+def reach_of(request: Request) -> EntitlementStore:
+    """The gate's entitlement store, which a message made for somebody is held to at send time."""
+    gate = getattr(request.app.state, "gate", None)
+    store = getattr(gate, "store", None)
+    return store if store is not None else _NoReach()
+
+
+# ------------------------------------------------------------------------ the decisions
+
+
+def channel_named(name: str) -> Channel | None:
+    """The channel an adapter declares under this name, or None."""
+    declared = {factory().capabilities().channel for factory in channel_adapters()}
+    for channel in declared:
+        if channel.value == name:
+            return channel
+    return None
+
+
+def may_manage(reach: EntitlementSet, channel: Channel, now: datetime) -> bool:
+    """See `A_CHANNEL_IS_GOVERNED_BY_THE_AUTHORITY_CONNECT_LARK_ASKS`."""
+    return may_connect_source(reach, f"{channel.value}{CHANNEL_SOURCE_SUFFIX}", now)
+
+
+def tenant_problems(wire: ChannelWire, tenant: Mapping[str, str]) -> list[str]:
+    """Every field the wire does not take, and every value that is not one unbroken line."""
+    problems = [
+        f"{key} is not a field this channel takes"
+        for key in tenant
+        if key not in wire.tenant_fields
+    ]
+    for key, value in tenant.items():
+        if key not in wire.tenant_fields:
+            continue
+        if (
+            not value
+            or len(value) > MAX_TENANT_VALUE_CHARS
+            or any(one.isspace() or not one.isprintable() for one in value)
+        ):
+            problems.append(f"{key} is one line of at most {MAX_TENANT_VALUE_CHARS} characters")
+    return problems
+
+
+def _error(status: int, message: str) -> JSONResponse:
+    body = ErrorBody(message=message, trace_id=trace_of_request())
+    return JSONResponse(status_code=status, content=body.model_dump(mode="json"))
+
+
+def _not_here() -> Absent:
+    return Absent("no channel here for this caller")
+
+
+def _managed_wire(name: str, asked: Asked) -> tuple[Channel, ChannelWire]:
+    """The channel and its wire when this reader may manage it; otherwise one absence."""
+    channel = channel_named(name)
+    wire = None if channel is None else channel_wires().get(channel)
+    if channel is None or wire is None or not may_manage(asked.reach, channel, asked.now):
+        raise _not_here()
+    return channel, wire
+
+
+async def _view(
+    channel: Channel, record: ChannelRecord | None, secrets: ChannelSecrets
+) -> ChannelView:
+    wire = channel_wires().get(channel)
+    held: bool | None = None
+    if record is not None:
+        try:
+            held = await asyncio.to_thread(secrets.held, record.secret)
+        except ChannelSecretsUnavailableError:
+            held = None
+    return ChannelView(
+        channel=channel.value,
+        receives=wire is not None,
+        events_path=API_PREFIX + EVENTS_PATH.format(name=channel.value) if wire else "",
+        tenant_fields=list(wire.tenant_fields) if wire else [],
+        configured=record is not None,
+        enabled=record is not None and record.enabled,
+        tenant=dict(record.tenant) if record else {},
+        secret_held=held,
+        updated_by=record.updated_by if record else None,
+        updated_at=record.updated_at if record else None,
+    )
+
+
+# ------------------------------------------------------------------------ the routes
+
+router = APIRouter(prefix=API_PREFIX, tags=["channels"], route_class=NoEchoRoute)
+
+Name = Annotated[str, Path(max_length=32)]
+
+
+@router.post(EVENTS_PATH, response_model=EventView, responses=COMMON_RESPONSES)
+async def channel_event(name: Name, request: Request) -> JSONResponse:
+    """What a vendor posts. Takes no caller: the signature is what is proved."""
+    channel = channel_named(name)
+    wire = None if channel is None else channel_wires().get(channel)
+    if channel is None or wire is None:
+        return _error(404, NOT_HERE)
+    now = datetime.now(UTC)
+    records = records_of(request)
+    record = await records.get(channel)
+    deliveries = deliveries_of(request)
+    declared = request.headers.get("content-length")
+
+    async def capped() -> bytes:
+        # Read no further than one byte past the bound, so a request that declared no length
+        # cannot make this process hold whatever it chooses to stream.
+        taken = bytearray()
+        async for chunk in request.stream():
+            taken.extend(chunk)
+            if len(taken) > MAX_BODY_BYTES:
+                break
+        return bytes(taken)
+
+    receipt = await receive(
+        wire,
+        record=record,
+        headers={key.lower(): value for key, value in request.headers.items()},
+        declared_length=int(declared) if declared and declared.isdigit() else None,
+        body=capped,
+        secrets=secrets_of(request),
+        claims=claims_of(request),
+        deliveries=deliveries,
+        now=now,
+    )
+    if receipt.kind is ReceiptKind.REFUSED:
+        assert receipt.reason is not None
+        status, message = _REFUSED_STATUS[receipt.reason]
+        log.info("channel request refused", channel=channel.value, reason=receipt.reason.value)
+        return _error(status, message)
+    if receipt.kind is ReceiptKind.HANDSHAKE:
+        return JSONResponse(status_code=200, content=dict(receipt.handshake or {}))
+    if receipt.kind is ReceiptKind.REDELIVERED:
+        return JSONResponse(status_code=200, content=EventView(status=receipt.kind).model_dump())
+
+    assert record is not None
+    reply = await reply_for(
+        receipt,
+        record=record,
+        bindings=bindings_of(request),
+        answerer=answerer_of(request),
+        now=now,
+    )
+    if reply is None:
+        await deliveries.record(
+            DeliveryEntry(
+                channel=channel,
+                direction=Direction.OUTBOUND,
+                outcome=DeliveryOutcome.REFUSED,
+                reason=RefusedBecause.NOT_ANSWERABLE,
+            )
+        )
+        view = EventView(status=receipt.kind, reply=DeliveryOutcome.REFUSED)
+        return JSONResponse(status_code=200, content=view.model_dump())
+    delivered = await _deliver(request, reply, record, now)
+    view = EventView(status=receipt.kind, reply=delivered.outcome)
+    return JSONResponse(status_code=200, content=view.model_dump())
+
+
+async def _deliver(
+    request: Request, outgoing: Outgoing, record: ChannelRecord | None, now: datetime
+) -> Delivered:
+    return await deliver(
+        outgoing,
+        record=record,
+        secrets=secrets_of(request),
+        reach=reach_of(request),
+        transport=transport_of(request),
+        ledger=ledger_of(request),
+        deliveries=deliveries_of(request),
+        now=now,
+    )
+
+
+@router.get(CHANNELS_PATH, response_model=ChannelsView, responses=COMMON_RESPONSES)
+async def channels(request: Request, asked: Asked) -> ChannelsView:
+    """Every channel this reader may manage, with its record. Nothing about any other."""
+    mine = [
+        factory().capabilities().channel
+        for factory in channel_adapters()
+        if may_manage(asked.reach, factory().capabilities().channel, asked.now)
+    ]
+    if not mine:
+        return ChannelsView(channels=[], told=TOLD_CHANNELS)
+    kept = {one.channel: one for one in await records_of(request).every()}
+    secrets = secrets_of(request)
+    return ChannelsView(
+        channels=[await _view(channel, kept.get(channel), secrets) for channel in mine],
+        told=TOLD_CHANNELS,
+    )
+
+
+@router.put(CHANNEL_PATH, response_model=ChannelView, responses=COMMON_RESPONSES)
+async def configure(
+    name: Name, body: ChannelAsked, request: Request, asked: Asked
+) -> ChannelView | JSONResponse:
+    """Keep this channel's record, and its secret first when one is given."""
+    channel, wire = _managed_wire(name, asked)
+    problems = tenant_problems(wire, body.tenant)
+    if problems:
+        return _error(422, " ".join(problems))
+    actor = asked.caller.principal.id
+    if body.secret is not None:
+        try:
+            await credentials_of(request).keep(
+                channel_secret_slot(channel),
+                body.secret,
+                actor=actor,
+                trace_id=trace_of_request(),
+                ent_hash=asked.reach.ent_hash(),
+            )
+        except CredentialsUnavailableError as unavailable:
+            return _error(_NOT_KEPT_STATUS.get(unavailable.state, 503), TOLD[unavailable.state])
+        except CredentialProblemError as problem:
+            return _error(422, " ".join(one.message for one in problem.problems))
+    record = await records_of(request).save(
+        channel, enabled=body.enabled, tenant=body.tenant, actor=actor
+    )
+    log.info("channel saved", channel=channel.value, enabled=record.enabled, actor=actor)
+    return await _view(channel, record, secrets_of(request))
+
+
+@router.post(SWITCH_PATH, response_model=ChannelView, responses=COMMON_RESPONSES)
+async def switch(
+    name: Name, body: SwitchAsked, request: Request, asked: Asked
+) -> ChannelView | JSONResponse:
+    """Switch this channel on or off. Touches this channel's record and no other."""
+    channel, _ = _managed_wire(name, asked)
+    actor = asked.caller.principal.id
+    record = await records_of(request).switch(channel, enabled=body.enabled, actor=actor)
+    if record is None:
+        return _error(409, NO_RECORD)
+    log.info("channel switched", channel=channel.value, enabled=record.enabled, actor=actor)
+    return await _view(channel, record, secrets_of(request))
+
+
+@router.get(DELIVERIES_PATH, response_model=DeliveriesView, responses=COMMON_RESPONSES)
+async def deliveries(name: Name, request: Request, asked: Asked) -> DeliveriesView:
+    """This channel's newest deliveries: what happened and why, and nothing of what was said."""
+    channel, _ = _managed_wire(name, asked)
+    found = await deliveries_of(request).recent(channel)
+    return DeliveriesView(
+        channel=channel.value,
+        deliveries=[
+            DeliveryRowView(
+                direction=one.entry.direction,
+                outcome=one.entry.outcome,
+                reason=one.entry.reason,
+                vendor_status=one.entry.vendor_status,
+                recorded_at=one.recorded_at,
+            )
+            for one in found
+        ],
+    )
+
+
+@router.post(TEST_PATH, response_model=TestView, responses=COMMON_RESPONSES)
+async def test_message(name: Name, body: TestAsked, request: Request, asked: Asked) -> TestView:
+    """Send a test message through this channel's vendor, once per record and destination."""
+    channel, _ = _managed_wire(name, asked)
+    actor = asked.caller.principal.id
+    record = await records_of(request).get(channel)
+    version = "none" if record is None else str(int(record.updated_at.timestamp() * 1_000_000))
+    outgoing = Outgoing(
+        channel=channel,
+        to=body.to,
+        intent=Intent(principal_id=actor, intent_ref=f"channel_test.{version}"),
+        text=TEST_MESSAGE,
+    )
+    delivered = await _deliver(request, outgoing, record, asked.now)
+    log.info(
+        "channel test message",
+        channel=channel.value,
+        outcome=delivered.outcome.value,
+        issued=delivered.issued,
+        actor=actor,
+    )
+    return TestView(
+        outcome=delivered.outcome,
+        reason=delivered.reason,
+        vendor_status=delivered.vendor_status,
+        issued=delivered.issued,
+        told=TEST_TOLD[delivered.outcome],
+    )

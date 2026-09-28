@@ -21,16 +21,40 @@ provider. Those are not the same surface and a field classified `restricted` sho
 in the first one because the answer happened to be asked for there. The ceiling is per
 channel and it is checked here rather than trusted to whoever writes the next adapter.
 
-Task ids: M10.1.1, M10.1.2, M10.1.3, M10.1.4, M10.1.5
+**The channels are found, not listed (M10.1.1).** `channel_adapters` reads every module under
+`brain.channels` for a class shaped like `ChannelAdapter`, and `channel_wires` for a module-level
+`WIRE`. A channel package adds its file and nothing else: no list in `brain.agent_routes`, no
+import in the receiving route. See `A_CHANNEL_IS_ADDED_BY_ADDING_ITS_FILE`.
+
+**A wire is the part of a channel that meets the vendor, and it holds no client.** `ChannelWire`
+verifies what arrived over the exact bytes, reads it into a `ChannelEvent`, and builds the
+request that would deliver a reply; `ChannelTransport` is the one thing that puts a request on the
+network. The split is the adapter's own argument carried one step further: every decision a wire
+makes is a function of bytes and a secret, so it is tested without a vendor, and the transport is
+one class for every channel rather than one HTTP client per adapter. The secret is a parameter and
+never a field, because a wire outlives every request and a key it held would too.
+
+Rejected: a wire method that posts. It would put a socket in every channel module, which
+`tests/invariants/test_channel_adapter_invariants.py` refuses for the adapters for the reason it
+gives, and every wire would then need its own address check against the rule
+`brain.tools.fetch.assert_fetchable` holds once.
+
+Task ids: M10.1.1, M10.1.2, M10.1.3, M10.1.4, M10.1.5, M10.2.1, M10.6.1
 """
 
 from __future__ import annotations
 
 import enum
-from dataclasses import dataclass
+import functools
+import importlib
+import pkgutil
+from collections.abc import Callable, Iterator, Mapping
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Protocol, runtime_checkable
+from types import MappingProxyType, ModuleType
+from typing import Final, Protocol, runtime_checkable
 
+from brain.connectors.throttle import CallOutcome
 from brain.core.field_policy import Classification
 from brain.core.redaction import OPAQUE_LABEL, ChannelPayload
 from brain.gate.context import Channel
@@ -211,3 +235,218 @@ def send_operation(intent: Intent, *, channel: Channel, to: str, viewer: str = "
         tool=f"{channel.value}.send",
         arguments={"to": to, "viewer": viewer},
     )
+
+
+# --------------------------------------------------------------- the registry (M10.1.1)
+
+#: Why the adapters and the wires are discovered rather than listed.
+A_CHANNEL_IS_ADDED_BY_ADDING_ITS_FILE: Final = (
+    "The adapters and the wires are found by reading brain.channels, so a channel package adds "
+    "its module and nothing else. A list kept by hand elsewhere is the one that misses the next "
+    "surface, and a surface it misses is offered nowhere and received on nowhere with every test "
+    "of it green."
+)
+
+#: The name a channel module gives its wire, so discovery reads one attribute and guesses nothing.
+WIRE_NAME: Final = "WIRE"
+
+#: The adapter methods a class needs to be read as an adapter. `ChannelAdapter`'s, by name.
+_ADAPTER_METHODS: Final = ("capabilities", "normalise", "send", "healthy")
+
+
+class ChannelRegistryError(Exception):
+    """Two adapters or two wires claim one channel, or a wire has no adapter to declare it.
+
+    Raised at discovery rather than resolved, because either answer is a guess about which
+    declaration of a surface's ceiling is the real one.
+    """
+
+
+def _channel_modules() -> Iterator[ModuleType]:
+    """Every module in `brain.channels`, in name order, imported."""
+    import brain.channels
+
+    for info in sorted(pkgutil.iter_modules(brain.channels.__path__), key=lambda one: one.name):
+        yield importlib.import_module(f"brain.channels.{info.name}")
+
+
+def _is_adapter_class(candidate: object, module: ModuleType) -> bool:
+    """A class this module defines, not a protocol, answering every `ChannelAdapter` method.
+
+    The same test `tests/invariants/test_redaction_invariants.py` discovers adapters by, so the
+    registry and the invariant that checks every adapter cannot disagree about which exist.
+    """
+    return (
+        isinstance(candidate, type)
+        and candidate.__module__ == module.__name__
+        and not getattr(candidate, "_is_protocol", False)
+        and all(callable(getattr(candidate, name, None)) for name in _ADAPTER_METHODS)
+    )
+
+
+@functools.cache
+def channel_adapters() -> tuple[Callable[[], ChannelAdapter], ...]:
+    """Every adapter this product ships, one per channel, in channel order (M10.1.1).
+
+    Each is constructed once, bare, to ask which channel it declares. None of them takes an
+    argument or holds a credential, for the reason `brain.agent_routes.CHANNEL_ADAPTERS` gives,
+    so asking opens nothing and reads no configuration.
+    """
+    found: dict[Channel, Callable[[], ChannelAdapter]] = {}
+    for module in _channel_modules():
+        for candidate in vars(module).values():
+            if not _is_adapter_class(candidate, module):
+                continue
+            factory: Callable[[], ChannelAdapter] = candidate
+            channel = factory().capabilities().channel
+            if channel in found:
+                msg = f"two adapters declare {channel}; {A_CHANNEL_IS_ADDED_BY_ADDING_ITS_FILE}"
+                raise ChannelRegistryError(msg)
+            found[channel] = factory
+    return tuple(found[channel] for channel in sorted(found))
+
+
+def adapter_for(channel: Channel) -> ChannelAdapter:
+    """A fresh adapter for this channel. Raises `KeyError` for a channel no adapter declares."""
+    for factory in channel_adapters():
+        adapter = factory()
+        if adapter.capabilities().channel is channel:
+            return adapter
+    raise KeyError(channel.value)
+
+
+@functools.cache
+def channel_wires() -> Mapping[Channel, ChannelWire]:
+    """Every channel that can receive and reply, by channel. See `ChannelWire`.
+
+    A wire whose channel no adapter declares is refused: sending checks the adapter's declared
+    ceiling and label, and a wire with nothing declaring them would send past both.
+    """
+    declared = {factory().capabilities().channel for factory in channel_adapters()}
+    found: dict[Channel, ChannelWire] = {}
+    for module in _channel_modules():
+        wire = getattr(module, WIRE_NAME, None)
+        if wire is None:
+            continue
+        channel = wire.channel
+        if found.get(channel) is wire:
+            # The same wire imported into a second module is one wire, not two.
+            continue
+        if channel in found:
+            msg = f"two wires claim {channel}; {A_CHANNEL_IS_ADDED_BY_ADDING_ITS_FILE}"
+            raise ChannelRegistryError(msg)
+        if channel not in declared:
+            msg = f"{channel} has a wire and no adapter to declare what it may carry"
+            raise ChannelRegistryError(msg)
+        found[channel] = wire
+    return MappingProxyType(found)
+
+
+# ------------------------------------------------------------- the wire (M10.2.1, M10.6.1)
+
+
+@dataclass(frozen=True)
+class Arrived:
+    """A request as it arrived: its headers, names lower-cased, and its body's exact bytes.
+
+    Bytes and never a parsed body, for `brain.channels.webhook`'s first argument: a signature
+    covers what was sent, and a re-serialisation is something the sender never signed.
+    """
+
+    headers: Mapping[str, str]
+    body: bytes = field(repr=False)
+
+
+@dataclass(frozen=True)
+class Received:
+    """A verified request, read: the event the gate reads and where a reply to it goes."""
+
+    event: ChannelEvent
+    #: The vendor's address for a reply: a chat, a conversation, a sender. Never a principal.
+    reply_to: str
+
+
+@dataclass(frozen=True)
+class VendorRequest:
+    """One request to a vendor, built and not sent. The headers may carry the credential.
+
+    `repr=False` on the headers and the body, because this object is built with the secret in
+    hand and the commonest way a key reaches a log is an exception handler formatting the object
+    it was holding; see `brain.ops.secrets.Lease`.
+    """
+
+    url: str
+    headers: Mapping[str, str] = field(repr=False)
+    body: bytes = field(repr=False)
+
+
+@dataclass(frozen=True)
+class VendorAnswer:
+    """What one request did at the vendor, in the terms `brain.connectors.throttle.classify` reads.
+
+    `unsafe_address` is this side refusing to connect, because the vendor's address resolved
+    somewhere only this network can reach; nothing was sent. `body` is what the vendor answered
+    with, for a wire whose vendor says 200 and refuses in the body; a transport that reads only
+    the status leaves it empty, and `brain.channel_routes.HttpsTransport` is one.
+    """
+
+    status: int | None = None
+    timed_out: bool = False
+    connection_failed: bool = False
+    unsafe_address: bool = False
+    body: bytes = field(default=b"", repr=False)
+
+
+class ChannelWire(Protocol):
+    """How one channel meets its vendor, as functions of bytes and a secret. No client.
+
+    Found as the module attribute `WIRE` in a `brain.channels` module; see `channel_wires`. Every
+    method is pure: none opens a connection or reads the vault, so the route decides when the
+    body is read and when the secret is borrowed, and a wire cannot decide either for it.
+    """
+
+    @property
+    def channel(self) -> Channel:
+        """The channel this wire receives and replies on."""
+        ...
+
+    @property
+    def tenant_fields(self) -> tuple[str, ...]:
+        """The tenant identifiers a record for this channel must hold, by name."""
+        ...
+
+    def verify(self, arrived: Arrived, secret: str, now: datetime) -> None:
+        """Refuse, with `brain.channels.webhook.WebhookRefusedError`, anything the vendor did not
+        send. Over the exact bytes, and before `read` looks at any of them."""
+        ...
+
+    def handshake(self, arrived: Arrived) -> Mapping[str, str] | None:
+        """A verified request that is the vendor checking the address, answered with this body,
+        or None for a message. Such a request is answered and never claimed."""
+        ...
+
+    def read(self, arrived: Arrived) -> Received:
+        """The verified request as an event and its reply address, or `ValueError`."""
+        ...
+
+    def request_for(
+        self, *, to: str, text: str, secret: str, tenant: Mapping[str, str], now: datetime
+    ) -> VendorRequest:
+        """The request that delivers `text` to `to`, or `ValueError` when the tenant lacks
+        what the vendor needs. `text` is rendered already, with any label in it."""
+        ...
+
+    def judge(self, answer: VendorAnswer) -> CallOutcome:
+        """What the vendor's answer says about the delivery. A vendor that answers 200 with a
+        refusal in its body is judged here, by the wire that knows that vendor."""
+        ...
+
+
+class ChannelTransport(Protocol):
+    """Whatever puts a `VendorRequest` on the network. `brain.channel_routes.HttpsTransport`.
+
+    Synchronous, for `brain.ops.outbox_store.Sender`'s reason: it is called inside the effect
+    `issue_once` runs. It never raises for anything the network did; a silence is `timed_out`.
+    """
+
+    def send(self, request: VendorRequest) -> VendorAnswer: ...
