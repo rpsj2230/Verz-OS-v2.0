@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-28T08:06:22.657573+00:00",
-  "commit": "4dcf99e",
-  "commit_subject": "The task list says which Wave 0 and Wave 1 tasks wait on the owner, and why",
+  "generated_at": "2026-09-28T08:20:01.709674+00:00",
+  "commit": "d39f331",
+  "commit_subject": "The worker's healthcheck answers in a tenth of a second, so deploys finish and the post-deploy checks run again",
   "total": 1595,
   "done": 328,
   "percent": 20.6,
