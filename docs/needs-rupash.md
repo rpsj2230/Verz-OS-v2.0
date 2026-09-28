@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**9 items are open: 91 and 98 to 105.** Item 98 (the Moonshot key and DeepSeek once more) unblocks
+**10 items are open: 91 and 98 to 106.** Item 98 (the Moonshot key and DeepSeek once more) unblocks
 the most; 99 to 105 are decisions, each with a recommendation and a one-line reply. Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
@@ -145,6 +145,17 @@ or remove anything on **Govern > Roles**. The alternative is to give the data st
 hand the pack out by hand, person by person. Also, uploads are checked for being a genuine, safe
 file but not by an antivirus; I recommend accepting that for now and adding one with the scanning
 package later in Wave 2. Reply "starter pack by department".
+
+## 106. Company-wide documents and people whose knowledge access is for their own department
+
+**In plain terms:** building the upload found a fault that fails safe but is still wrong. A person
+whose right to read document text is given for their own department (which is how the Starter pack
+in item 105 gives it) asks about a company-wide document, such as the HR policy, and is told there
+is nothing, because the check compares their department with a document that has none. Their own
+personal documents fail the same way. **Recommendation: a right to read document text in a
+department also reads company-wide documents and the person's own**, so company-wide means
+everyone, as it says; nothing that belongs to another department becomes readable. Reply
+"company-wide for everyone".
 
 # Answered
 
