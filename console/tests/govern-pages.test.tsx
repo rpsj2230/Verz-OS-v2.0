@@ -25,16 +25,27 @@
  * invented is a 422 in front of somebody who filled the form in correctly. The declared keys
  * are read out of the API's own document rather than agreed here.
  *
- * Task ids: M27.7.3, M27.7.4, M27.7.5, M27.7.6, M27.7.7
+ * **A grant's expiry, a person's sign-in and a grant to several are held here too** (M27.11.2): each
+ * sends only what its route declares, and each sends only after the person has seen what it will do.
+ *
+ * Task ids: M27.7.3, M27.7.4, M27.7.5, M27.7.6, M27.7.7, M27.11.2
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { LIST_PAGE_SIZE } from "../src/components/listing";
 import { beforeAll, describe, expect, test } from "vitest";
+import { DISABLE_API_PATH, ENABLE_API_PATH } from "../src/pages/governPeopleQuery";
 import {
   CAPABILITIES_API_PATH,
+  EXPIRY_ALREADY_PAST,
   GRANTS_API_PATH,
+  MOST_GRANTED_AT_ONCE,
+  SEVERAL_FIELDS,
+  SEVERAL_GRANTS_API_PATH,
+  expiryAlreadyPast,
+  severalSchema,
+  submittedSeveral,
   SCOPE_CHOICES_PAGE_SIZE,
   PROPOSAL_FIELDS,
   REMOVAL_API_PATH,
@@ -56,6 +67,13 @@ import {
   NO_SUCH_SUBJECT,
   ONLY_A_PERSONS_GRANT_CAN_BE_REMOVED_HERE,
   REMOVE_GRANT,
+  DISABLE_SIGN_IN,
+  GRANT_TO_SEVERAL,
+  REINSTATE_SIGN_IN,
+  SEVERAL_WRITTEN,
+  SIGN_IN_DISABLED,
+  WRITE_SEVERAL,
+  chooseLabel,
   removeLabel,
   removeQuestion,
 } from "../src/pages/People";
@@ -74,6 +92,7 @@ const PEOPLE_OPERATION = "/api/v1/govern/people";
 const SCOPES_OPERATION = "/api/v1/govern/scopes";
 const GRANTS_OPERATION = "/api/v1/govern/grants";
 const REMOVAL_OPERATION = "/api/v1/govern/grants/removal";
+const SEVERAL_OPERATION = "/api/v1/govern/grants/several";
 const CONSOLE_ORIGIN = "https://console.test";
 
 /**
@@ -102,8 +121,8 @@ interface Answers {
 
 /** One page of people in the shape `brain.govern_routes.PeoplePage` serialises. */
 function peoplePage(
-  items: { subject: string; capabilities: string[] }[],
-  extra: { editable?: boolean; truncated?: boolean } = {},
+  items: { subject: string; capabilities: string[]; disabled?: boolean | null }[],
+  extra: { editable?: boolean; truncated?: boolean; mayDisable?: boolean } = {},
 ): unknown {
   return {
     items,
@@ -111,6 +130,8 @@ function peoplePage(
     total: null,
     truncated: extra.truncated ?? false,
     editable: extra.editable ?? false,
+    may_disable: extra.mayDisable ?? false,
+    disabling: "Their sessions end now and what they hold stops counting until they are reinstated.",
     staleness: null,
   };
 }
@@ -154,7 +175,12 @@ async function consoleAt(
   const idp = fakeIdentityProvider({
     api(url, init) {
       const method = init?.method ?? "GET";
-      if (method === "POST" && (url.includes(REMOVAL_API_PATH) || url.includes(GRANTS_API_PATH))) {
+      const written =
+        url.includes(REMOVAL_API_PATH) ||
+        url.includes(GRANTS_API_PATH) ||
+        url.includes(DISABLE_API_PATH) ||
+        url.includes(ENABLE_API_PATH);
+      if (method === "POST" && written) {
         const written = answers.written ?? { status: 200, body: {} };
         return new Response(JSON.stringify(written.body ?? {}), {
           status: written.status ?? 200,
@@ -826,7 +852,189 @@ describe("what a body that is not a page does", () => {
     // `brain.api.Page` and never populates it.
     const page = readPeoplePage({ items: [], total: 47, editable: true, truncated: false });
 
-    expect(Object.keys(page).sort()).toEqual(["editable", "people", "truncated"]);
+    expect(Object.keys(page).sort()).toEqual(["disabling", "editable", "mayDisable", "people", "truncated"]);
+  });
+});
+
+describe("a grant's expiry (M27.11.2)", () => {
+  test("an expiry chosen in the form travels as an instant, and none travels as no key at all", () => {
+    // What breaks if this is deleted: the form's value reaches the route in the browser's local
+    // spelling, which pydantic reads as a naive instant, or an empty field is sent as "" and the
+    // route answers 422 for a grant nobody meant to bound.
+    const base = { principal_id: "u_2", capability: "read:client.name", scope_slug: "maintenance", reason: "rota" };
+
+    expect(submittedProposal({ ...base, not_after: "2999-01-01T00:00:00.000Z" })?.not_after).toBe(
+      "2999-01-01T00:00:00.000Z",
+    );
+    expect(submittedProposal({ ...base, not_after: "" })).toEqual(base);
+    expect(submittedProposal({ ...base, not_after: "not an instant" })).toBeNull();
+    const declared = declaredRequestBodySchema(GRANTS_OPERATION, "post");
+    expect(Object.keys((declared["properties"] ?? {}) as Record<string, unknown>)).toContain("not_after");
+  });
+
+  test("an expiry already past is said before anything is sent, and one to come is not", () => {
+    // What breaks if this is deleted: a past expiry reaches the route, whose refusal is the
+    // ordinary sentence that names nothing, so the person is told a grant is not writable and
+    // not that the date was the problem.
+    const now = new Date(Date.UTC(2500, 0, 1));
+    expect(expiryAlreadyPast("2019-03-04T09:00:00Z", now)).toBe(true);
+    expect(expiryAlreadyPast("2999-01-01T00:00:00Z", now)).toBe(false);
+    expect(expiryAlreadyPast(undefined, now)).toBe(false);
+    expect(EXPIRY_ALREADY_PAST.split(" ").length).toBeGreaterThan(3);
+  });
+});
+
+describe("a person's sign-in, from their own page (M27.11.2)", () => {
+  const open = `/people/${encodeURIComponent("principal:u_1")}`;
+
+  test("a live person is offered disable, which asks first and posts only their id", async () => {
+    // What breaks if this is deleted: the control sends on the first press, sends to a route of its
+    // own rather than the Departments screen's, or sends a body the route forbids.
+    const { container, idp } = await consoleAt(open, {
+      people: peoplePage([{ subject: "principal:u_1", capabilities: [], disabled: false }], {
+        editable: true,
+        mayDisable: true,
+      }),
+      written: { status: 200, body: {} },
+    });
+
+    const button = [...container.querySelectorAll("button")].find((one) => one.textContent === DISABLE_SIGN_IN);
+    expect(button).toBeDefined();
+    expect(container.textContent).not.toContain(SIGN_IN_DISABLED);
+    fireEvent.click(button as HTMLButtonElement);
+    await waitFor(() => expect(container.querySelector(".confirm")).not.toBeNull());
+    expect(writes(idp)).toEqual([]);
+
+    const confirm = [...container.querySelectorAll(".confirm button")].find((one) => one.textContent === DISABLE_SIGN_IN);
+    fireEvent.click(confirm as HTMLButtonElement);
+    await waitFor(() => expect(writes(idp).length).toBeGreaterThan(0));
+    expect(writes(idp)[0]?.url).toContain(DISABLE_API_PATH);
+    expect(writes(idp)[0]?.body).toEqual({ principal_id: "u_1" });
+  });
+
+  test("a disabled person is said to be and offered reinstatement, and a reader who may not sees no control", async () => {
+    // What breaks if this is deleted: the page offers Disable to somebody already disabled, or
+    // draws a control for a reader the route refuses every time.
+    const disabled = await consoleAt(open, {
+      people: peoplePage([{ subject: "principal:u_1", capabilities: [], disabled: true }], { mayDisable: true }),
+    });
+    const reader = await consoleAt(open, {
+      people: peoplePage([{ subject: "principal:u_1", capabilities: [], disabled: true }], { mayDisable: false }),
+    });
+
+    const labels = (c: HTMLElement) => [...c.querySelectorAll("button")].map((one) => one.textContent);
+    expect(disabled.container.textContent).toContain(SIGN_IN_DISABLED);
+    expect(labels(disabled.container)).toContain(REINSTATE_SIGN_IN);
+    expect(labels(disabled.container)).not.toContain(DISABLE_SIGN_IN);
+    expect(labels(reader.container)).not.toContain(REINSTATE_SIGN_IN);
+  });
+
+  test("a team's page draws no sign-in control, because a team has no sign-in", async () => {
+    // What breaks if this is deleted: a Disable button beside a team, whose every press is refused.
+    const team = "team:web.design";
+    const { container } = await consoleAt(`/people/${encodeURIComponent(team)}`, {
+      people: peoplePage([{ subject: team, capabilities: [], disabled: null }], { mayDisable: true }),
+    });
+
+    const labels = [...container.querySelectorAll("button")].map((one) => one.textContent);
+    expect(labels).not.toContain(DISABLE_SIGN_IN);
+    expect(labels).not.toContain(REINSTATE_SIGN_IN);
+  });
+
+  test("the reinstate route is the Departments screen's own", () => {
+    // What breaks if this is deleted: a second pair of routes for one act, which is two rules
+    // about who may disable somebody and the first to drift is the one nobody tests.
+    expect(ENABLE_API_PATH).toBe("/govern/people/enable");
+    expect(DISABLE_API_PATH).toBe("/govern/people/disable");
+  });
+});
+
+describe("a grant to several people (M27.11.2)", () => {
+  test("the body sends only keys the route declares, and the bound is the route's", () => {
+    // What breaks if this is deleted: a key the route forbids, which is a 422 in front of somebody
+    // who filled the form in correctly, or a console bound that lets a batch the route refuses be
+    // ticked. Both are read from the API's own document rather than agreed here.
+    const declared = declaredRequestBodySchema(SEVERAL_OPERATION, "post");
+    const properties = (declared["properties"] ?? {}) as Record<string, Record<string, unknown>>;
+
+    expect(Object.keys(properties).sort()).toEqual([...SEVERAL_FIELDS, "principal_ids"].sort());
+    expect(properties["principal_ids"]?.["maxItems"]).toBe(MOST_GRANTED_AT_ONCE);
+    expect(Object.keys(severalSchema([])["properties"] ?? {})).toEqual([...SEVERAL_FIELDS]);
+    expect(
+      submittedSeveral(
+        { capability: "read:client.name", scope_slug: "maintenance", reason: "rota", granted_by: "x" },
+        ["u_a", "u_b"],
+      ),
+    ).toEqual({ principal_ids: ["u_a", "u_b"], capability: "read:client.name", scope_slug: "maintenance", reason: "rota" });
+    expect(submittedSeveral({ capability: "read:client.name", scope_slug: "maintenance", reason: "rota" }, [])).toBeNull();
+  });
+
+  test("the people ticked are listed in a confirmation, and only the confirmation sends", async () => {
+    // What breaks if this is deleted: the grant goes out on the form's own submit with nothing
+    // naming who it reaches, a team is offered as a box whose grant has no principal, or the
+    // listing is patched in place rather than asked again.
+    const team = "team:web.design";
+    const { container, idp } = await consoleAt("/people", {
+      people: peoplePage(
+        [
+          { subject: "principal:ada", capabilities: [], disabled: false },
+          { subject: "principal:grace", capabilities: [], disabled: false },
+          { subject: team, capabilities: [], disabled: null },
+        ],
+        { editable: true },
+      ),
+      scopes: scopesPage([{ slug: "maintenance" }]),
+      written: { status: 201, body: { grants: [] } },
+    });
+
+    const opener = [...container.querySelectorAll("button")].find((one) => one.textContent === GRANT_TO_SEVERAL);
+    fireEvent.click(opener as HTMLButtonElement);
+    await waitFor(() => expect(container.querySelector('input[type="checkbox"]')).not.toBeNull());
+    const boxes = [...container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
+    expect(boxes.map((one) => one.getAttribute("aria-label"))).toEqual([
+      chooseLabel("principal:ada"),
+      chooseLabel("principal:grace"),
+    ]);
+    for (const box of boxes) {
+      fireEvent.click(box);
+    }
+
+    // The library's select names each option by its place in the enumeration, not by its value.
+    await waitFor(() => expect(container.querySelector("#several_scope_slug option[value='0']")).not.toBeNull());
+    fireEvent.change(container.querySelector("#several_capability") as HTMLInputElement, {
+      target: { value: "read:client.name" },
+    });
+    fireEvent.change(container.querySelector("#several_scope_slug") as HTMLSelectElement, {
+      target: { value: "0" },
+    });
+    fireEvent.change(container.querySelector("#several_reason") as HTMLTextAreaElement, {
+      target: { value: "the rota" },
+    });
+    const before = governRequests(idp).filter((url) => url.pathname.endsWith("/govern/people")).length;
+    fireEvent.submit(container.querySelectorAll('form:not([role="search"])')[0] as HTMLFormElement);
+
+    await waitFor(() => expect(container.querySelector(".confirm")).not.toBeNull());
+    expect(writes(idp)).toEqual([]);
+    expect([...container.querySelectorAll(".confirm__items li")].map((one) => one.textContent)).toEqual([
+      "ada",
+      "grace",
+    ]);
+    const confirm = [...container.querySelectorAll(".confirm button")].find((one) => one.textContent === WRITE_SEVERAL);
+    fireEvent.click(confirm as HTMLButtonElement);
+
+    await waitFor(() => expect(writes(idp).length).toBeGreaterThan(0));
+    expect(writes(idp)[0]?.url).toContain(SEVERAL_GRANTS_API_PATH);
+    expect(writes(idp)[0]?.body).toEqual({
+      principal_ids: ["ada", "grace"],
+      capability: "read:client.name",
+      scope_slug: "maintenance",
+      reason: "the rota",
+    });
+    await waitFor(() => expect(container.textContent).toContain(SEVERAL_WRITTEN));
+    await waitFor(() => {
+      const after = governRequests(idp).filter((url) => url.pathname.endsWith("/govern/people")).length;
+      expect(after).toBeGreaterThan(before);
+    });
   });
 });
 

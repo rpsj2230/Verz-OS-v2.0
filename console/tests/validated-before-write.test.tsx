@@ -96,9 +96,12 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
     { pattern: "/notifications", index: 1, writes: true },
     { pattern: "/notifications", index: 2, writes: true },
   ],
+  // The grant and pack forms of an open subject, then the grant to several, which is drawn under
+  // the list once it is opened and so sits after the list's search.
   "src/pages/People.tsx": [
     { pattern: "/people/:subject", index: 1, writes: true },
     { pattern: "/people/:subject", index: 2, writes: true },
+    { pattern: "/people", opener: "Grant to several people", index: 1, writes: true },
   ],
   "src/pages/Prompts.tsx": [{ pattern: "/prompts", opener: "Edit instructions", index: 0, writes: true }],
   "src/pages/RequirementChecks.tsx": [{ pattern: "/requirement-checks", index: 0, writes: true }],

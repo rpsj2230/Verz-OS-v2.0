@@ -47,7 +47,24 @@
  * steward and an install set up before the setup wizard named one names them here. See
  * `components/DataStewardCard.tsx`.
  *
- * Task ids: M27.7.3, M27.7.7, M27.8.4, M27.9.9, M1.4.3
+ * **A grant may carry an expiry** (M27.11.2), chosen as an instant in the form. One already past
+ * is refused here with a sentence saying what to change, before anything is sent, because the
+ * API's refusal for it is the ordinary one and names nothing; see `governQuery.expiryAlreadyPast`.
+ *
+ * **A person's sign-in is disabled and reinstated from their own page**, confirmed, through the same
+ * two routes the Departments screen uses (`brain.principal_state_routes`), so there is one control
+ * with two places to press it rather than two controls. The API says on the row whether the person
+ * is disabled and on the page whether this reader may change it; the route asks `may_disable` about
+ * the person's row whatever this drew, and refuses anybody disabling themselves in its own words.
+ *
+ * **A grant to several people is chosen on the list and written all or nothing.** "Grant to several
+ * people" puts a box beside each person on the page and draws the single grant's form without the
+ * person. The confirmation lists everybody chosen; the route writes every grant or none, and a
+ * refusal is shown in the API's words and never says which person it was about. See
+ * `governQuery.A_GRANT_TO_SEVERAL_NAMES_NOBODY`. Only people who already hold something are listed
+ * here, so somebody holding nothing is reached from Departments and teams.
+ *
+ * Task ids: M27.7.3, M27.7.7, M27.8.4, M27.9.9, M1.4.3, M27.11.2
  */
 
 import { useCallback, useMemo, useState } from "react";
@@ -61,8 +78,16 @@ import { useListing } from "../components/useListing";
 import { ConfirmAction } from "../components/ConfirmAction";
 import { DataStewardCard } from "../components/DataStewardCard";
 import { SchemaForm } from "../components/SchemaForm";
+import { DISABLE_API_PATH, ENABLE_API_PATH, stateQuestion } from "./governPeopleQuery";
 import {
+  EXPIRY_ALREADY_PAST,
   GRANTS_API_PATH,
+  MOST_GRANTED_AT_ONCE,
+  SEVERAL_GRANTS_API_PATH,
+  SEVERAL_UI,
+  expiryAlreadyPast,
+  severalSchema,
+  submittedSeveral,
   PACK_ASSIGNMENT_API_PATH,
   PACK_UI,
   PACKS_API_PATH,
@@ -83,7 +108,9 @@ import {
   scopeChoicesApiPath,
   subjectAddress,
   submittedProposal,
+  type PeoplePage,
   type PersonRow,
+  type SeveralProposal,
 } from "./governQuery";
 import { FailureNotice } from "../ui/FailureNotice";
 
@@ -122,10 +149,44 @@ export const FILTERS_LABEL = "Narrow the subjects";
 export const ONLY_A_PERSONS_GRANT_CAN_BE_REMOVED_HERE =
   "This subject is not a person, so a grant of theirs cannot be removed from this screen.";
 
-/** What a grant written here carries, said out loud because the form has no control for it. */
-export const A_GRANT_WRITTEN_HERE_DOES_NOT_LAPSE =
-  "A grant written here has no expiry. This screen has no control for one yet, so it stands " +
-  "until somebody removes it.";
+/** A person's sign-in state, said on their own page only when it is disabled. */
+export const SIGN_IN_DISABLED =
+  "This person's sign-in is disabled, so what they hold counts for nothing until it is reinstated.";
+
+/** The two sign-in controls, as verbs. The same two routes as the Departments screen's. */
+export const DISABLE_SIGN_IN = "Disable sign-in";
+export const REINSTATE_SIGN_IN = "Reinstate sign-in";
+export const LEAVE_SIGN_IN = "Leave it as it is";
+
+/** What opens the choosing of several people, and what closes it. */
+export const GRANT_TO_SEVERAL = "Grant to several people";
+export const STOP_CHOOSING = "Stop choosing";
+
+/** Beside each person on the list while several are being chosen. Names the person. */
+export function chooseLabel(subject: string): string {
+  return `Choose ${subject} for the grant`;
+}
+
+/** What is said when the several-people form is sent with nobody chosen. Before anything is sent. */
+export const CHOOSE_PEOPLE_FIRST = "Tick the people to grant it to first; nothing has been sent.";
+/** What is said when more are ticked than one request may carry. */
+export const TOO_MANY_CHOSEN =
+  "More people are ticked than one grant to several may carry. Untick some and grant the rest after.";
+
+/** The question the several-people confirmation asks. Names no figure: the list under it names each. */
+export function severalQuestion(capability: string, scope: string): string {
+  return `Grant ${capability} over ${scope} to each of these people?`;
+}
+
+/** What a grant to several does, for its confirmation. */
+export const SEVERAL_CONSEQUENCE =
+  "Each person listed is granted it, or nobody is: if any one of them is refused, nothing is " +
+  "written, and the refusal does not say who it was about.";
+export const WRITE_SEVERAL = "Write these grants";
+export const KEEP_SEVERAL = "Leave it";
+
+/** What is said once a grant to several was written. About the act, never a figure. */
+export const SEVERAL_WRITTEN = "Done: each person chosen now holds the grant.";
 
 /** The accessible names of the two lists. */
 export const PEOPLE_LIST_LABEL = "Subjects holding a grant";
@@ -286,6 +347,8 @@ function GrantForm({ subject, onWritten }: { readonly subject: string; readonly 
   const schema = useMemo(() => proposalSchema(slugs), [slugs]);
   const principalId = principalIn(subject);
 
+  const [past, setPast] = useState(false);
+
   const write = useCallback(
     (submitted: unknown) => {
       const proposal = submittedProposal(submitted);
@@ -295,6 +358,11 @@ function GrantForm({ subject, onWritten }: { readonly subject: string; readonly 
         // expensive wrong write in this console.
         return;
       }
+      if (expiryAlreadyPast(proposal.not_after, new Date())) {
+        setPast(true);
+        return;
+      }
+      setPast(false);
       setBusy(true);
       void (async () => {
         const result = await request<unknown>(GRANTS_API_PATH, {
@@ -327,7 +395,7 @@ function GrantForm({ subject, onWritten }: { readonly subject: string; readonly 
         busy={busy}
         onSubmit={write}
       />
-      <p className="note">{A_GRANT_WRITTEN_HERE_DOES_NOT_LAPSE}</p>
+      {past ? <p className="note">{EXPIRY_ALREADY_PAST}</p> : null}
     </section>
   );
 }
@@ -392,6 +460,207 @@ function PackForm({ subject, onWritten }: { readonly subject: string; readonly o
 }
 
 /**
+ * A person's sign-in state on their own page, and the control that changes it (M27.11.2).
+ *
+ * The Departments screen's two routes pressed from here, so there is one rule about who may
+ * disable somebody and it is the route's. Nothing is drawn for a row the API gave no state, which
+ * is a team's, and the button only when the page says this reader may change one. The state is
+ * said only when it is disabled: "enabled" beside everybody is a word on every row that means
+ * nothing happened.
+ */
+function SignInControl({
+  person,
+  page,
+  onWritten,
+}: {
+  readonly person: PersonRow;
+  readonly page: PeoplePage;
+  readonly onWritten: () => void;
+}) {
+  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  const principalId = principalIn(person.subject);
+  const disabled = person.disabled ?? null;
+
+  const press = useCallback(
+    (id: string, disable: boolean) => {
+      setBusy(true);
+      void (async () => {
+        const result = await request<unknown>(disable ? DISABLE_API_PATH : ENABLE_API_PATH, {
+          method: "POST",
+          body: { principal_id: id },
+        });
+        setBusy(false);
+        setAsking(false);
+        if (!result.ok) {
+          // The route's own words, including its refusal of anybody disabling themselves.
+          setFailure(result.failure);
+          return;
+        }
+        setFailure(null);
+        onWritten();
+      })();
+    },
+    [onWritten],
+  );
+
+  if (principalId === null || disabled === null) {
+    return null;
+  }
+  const disable = !disabled;
+  const verb = disable ? DISABLE_SIGN_IN : REINSTATE_SIGN_IN;
+  return (
+    <>
+      {disabled ? <p className="note">{SIGN_IN_DISABLED}</p> : null}
+      {failure === null ? null : <FailureNotice failure={failure} />}
+      {asking ? (
+        <ConfirmAction
+          question={stateQuestion(principalId, disable)}
+          consequence={page.disabling}
+          confirmLabel={verb}
+          cancelLabel={LEAVE_SIGN_IN}
+          busy={busy}
+          onConfirm={() => {
+            press(principalId, disable);
+          }}
+          onCancel={() => {
+            setAsking(false);
+          }}
+        />
+      ) : null}
+      {page.mayDisable ? (
+        <button
+          type="button"
+          className="button"
+          disabled={busy || asking}
+          onClick={() => {
+            setFailure(null);
+            setAsking(true);
+          }}
+        >
+          {verb}
+        </button>
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * The form a grant to several people is written through (M27.11.2).
+ *
+ * The people are the ones ticked on the list and never a field, so the form is the single grant's
+ * without the person. Nobody ticked, too many ticked and an expiry already past are each said here
+ * before anything is sent. A valid form opens a confirmation listing everybody chosen, and only the
+ * confirmation sends; the route writes every grant or none, and its refusal is drawn in its own
+ * words and names nobody, which is `A_GRANT_TO_SEVERAL_NAMES_NOBODY`.
+ */
+function SeveralForm({
+  chosen,
+  onWritten,
+}: {
+  /** The principal ids ticked on this page, in the list's order. */
+  readonly chosen: readonly string[];
+  readonly onWritten: () => void;
+}) {
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [pending, setPending] = useState<SeveralProposal | null>(null);
+  const scopes = useResource<unknown>(scopeChoicesApiPath());
+  const slugs = useMemo(
+    () => readScopesPage(scopes.data).scopes.map((one) => one.slug),
+    [scopes.data],
+  );
+  const schema = useMemo(() => severalSchema(slugs), [slugs]);
+
+  const review = useCallback(
+    (submitted: unknown) => {
+      if (chosen.length === 0) {
+        setProblem(CHOOSE_PEOPLE_FIRST);
+        return;
+      }
+      if (chosen.length > MOST_GRANTED_AT_ONCE) {
+        setProblem(TOO_MANY_CHOSEN);
+        return;
+      }
+      const proposal = submittedSeveral(submitted, chosen);
+      if (proposal === null) {
+        return;
+      }
+      if (expiryAlreadyPast(proposal.not_after, new Date())) {
+        setProblem(EXPIRY_ALREADY_PAST);
+        return;
+      }
+      setProblem(null);
+      setFailure(null);
+      setPending(proposal);
+    },
+    [chosen],
+  );
+
+  const send = useCallback(
+    (proposal: SeveralProposal) => {
+      setBusy(true);
+      void (async () => {
+        const result = await request<unknown>(SEVERAL_GRANTS_API_PATH, {
+          method: "POST",
+          body: proposal,
+        });
+        setBusy(false);
+        setPending(null);
+        if (!result.ok) {
+          setFailure(result.failure);
+          return;
+        }
+        setFailure(null);
+        onWritten();
+      })();
+    },
+    [onWritten],
+  );
+
+  return (
+    <section className="card">
+      {pending === null ? null : (
+        <ConfirmAction
+          question={severalQuestion(pending.capability, pending.scope_slug)}
+          consequence={SEVERAL_CONSEQUENCE}
+          details={
+            <ul className="confirm__items">
+              {pending.principal_ids.map((one) => (
+                <li key={one}>
+                  <code>{one}</code>
+                </li>
+              ))}
+            </ul>
+          }
+          confirmLabel={WRITE_SEVERAL}
+          cancelLabel={KEEP_SEVERAL}
+          busy={busy}
+          onConfirm={() => {
+            send(pending);
+          }}
+          onCancel={() => {
+            setPending(null);
+          }}
+        />
+      )}
+      <SchemaForm
+        caption="Write one grant for each person ticked above"
+        schema={schema}
+        uiSchema={SEVERAL_UI}
+        failure={failure}
+        busy={busy || pending !== null}
+        idPrefix="several"
+        onSubmit={review}
+      />
+      {problem === null ? null : <p className="note">{problem}</p>}
+    </section>
+  );
+}
+
+/**
  * The listing itself, and the open subject beside it.
  *
  * The list is `useListing`'s, so its search, its capability filter, its order and "Show more" are
@@ -414,6 +683,31 @@ function PeopleRows({
   const openPage = readPeoplePage(opened.data);
   const open = openSubject === undefined ? null : personIn(openPage.people, openSubject);
 
+  // Choosing several people for one grant. The ticks are subject keys, and what is sent is the
+  // ticked people still on this page, so a filter that hides somebody also takes them out.
+  const [choosing, setChoosing] = useState(false);
+  const [ticked, setTicked] = useState<ReadonlySet<string>>(() => new Set());
+  const [severalWritten, setSeveralWritten] = useState(false);
+  const chosen = page.people
+    .filter((one) => ticked.has(one.subject))
+    .map((one) => principalIn(one.subject))
+    .filter((one): one is string => one !== null);
+  const toggle = (subject: string) => {
+    const next = new Set(ticked);
+    if (next.has(subject)) {
+      next.delete(subject);
+    } else {
+      next.add(subject);
+    }
+    setTicked(next);
+  };
+  const severalDone = useCallback(() => {
+    setTicked(new Set());
+    setChoosing(false);
+    setSeveralWritten(true);
+    onWritten();
+  }, [onWritten]);
+
   return (
     <>
       <ListControls label={FILTERS_LABEL} listing={listing} choices={PEOPLE_FILTERS} sorts={PEOPLE_SORTS} />
@@ -430,6 +724,18 @@ function PeopleRows({
           <ul className="roster" aria-label={PEOPLE_LIST_LABEL}>
             {page.people.map((person) => (
               <li key={person.subject}>
+                {choosing && principalIn(person.subject) !== null ? (
+                  <>
+                    <input
+                      type="checkbox"
+                      aria-label={chooseLabel(person.subject)}
+                      checked={ticked.has(person.subject)}
+                      onChange={() => {
+                        toggle(person.subject);
+                      }}
+                    />{" "}
+                  </>
+                ) : null}
                 <Link to={subjectAddress(person.subject)}>{person.subject}</Link>{" "}
                 {person.capabilities.map((capability) => (
                   <code key={capability}>{capability}</code>
@@ -438,6 +744,25 @@ function PeopleRows({
             ))}
           </ul>
           <ShowMore listing={listing} />
+          {page.editable ? (
+            <button
+              type="button"
+              className="button"
+              onClick={() => {
+                setSeveralWritten(false);
+                setTicked(new Set());
+                setChoosing(!choosing);
+              }}
+            >
+              {choosing ? STOP_CHOOSING : GRANT_TO_SEVERAL}
+            </button>
+          ) : null}
+          {choosing ? <SeveralForm chosen={chosen} onWritten={severalDone} /> : null}
+          {severalWritten ? (
+            <p className="note" role="status">
+              {SEVERAL_WRITTEN}
+            </p>
+          ) : null}
         </>
       )}
 
@@ -448,6 +773,7 @@ function PeopleRows({
       {open === null ? null : (
         <section className="card">
           <h2>{open.subject}</h2>
+          <SignInControl person={open} page={openPage} onWritten={onWritten} />
           <HeldCapabilities person={open} editable={openPage.editable} onWritten={onWritten} />
         </section>
       )}

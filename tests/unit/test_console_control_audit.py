@@ -894,6 +894,57 @@ def test_a_grant_written_and_removed_from_the_people_screen_reaches_row_ledger_a
     assert AuditChain(chain).verify() is None
 
 
+def test_a_grant_to_several_is_written_for_everybody_or_for_nobody_against_postgresql() -> None:
+    """M27.11.2's all or nothing, pressed over HTTP against PostgreSQL, where a stub session's
+    rollback proves nothing about which rows survive.
+
+    `u_2` and `u_3` are granted together and both then hold the capability. `u_4` and `u_2` are
+    then granted together and refused: `u_2` already holds it, the live unique index refuses their
+    row, and `u_4`, whose row was written first, holds nothing afterwards because it went with the
+    same rollback. The refusal is the single grant's sentence and names neither person. Delete this
+    and the route can commit row by row, which the stub session cannot tell apart from one
+    transaction. **Skips without a server.**"""
+    with through_0059("brain_console_audit_several") as url:
+        for one in ("u_admin", "u_2", "u_3", "u_4"):
+            a_principal(url, one)
+        sql(
+            url,
+            "INSERT INTO gate.scope (slug, predicate, is_department, label) "
+            "VALUES (%s, %s::jsonb, true, 'Maintenance')",
+            MAINTENANCE,
+            f'{{"department": "{MAINTENANCE}"}}',
+        )
+
+        def several(people: list[str]) -> Callable[[httpx.AsyncClient], Awaitable[tuple[int, str]]]:
+            async def press(client: httpx.AsyncClient) -> tuple[int, str]:
+                response = await client.post(
+                    f"{API_PREFIX}/govern/grants/several",
+                    json={
+                        "principal_ids": people,
+                        "capability": GRANTED,
+                        "scope_slug": MAINTENANCE,
+                        "reason": "covering the maintenance rota",
+                    },
+                    headers=headers("u_admin"),
+                )
+                return response.status_code, response.text
+
+            return press
+
+        written = pressed(url, GRANT_GRANTS, several(["u_2", "u_3"]))
+        refused = pressed(url, GRANT_GRANTS, several(["u_4", "u_2"]))
+        held = [holds_granted(url, one) for one in ("u_2", "u_3", "u_4")]
+        rows_for_u_4 = sql(
+            url, "SELECT count(*) FROM gate.capability_grant WHERE principal_id = 'u_4'"
+        )
+
+    assert written[0] == 201
+    assert refused[0] == 404
+    assert "u_4" not in refused[1] and "u_2" not in refused[1]
+    assert held == [True, True, False]
+    assert rows_for_u_4 == [(0,)]
+
+
 # ------------------------------------------------------------------------- legal holds
 
 
