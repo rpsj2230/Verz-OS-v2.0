@@ -29,9 +29,9 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0138"
-# The head of origin/main when this was written. The queue ahead of it holds 0118, 0133, 0136 and
-# 0137, and whoever lands this after them re-points it at the newest.
-down_revision = "0120"
+# The head of origin/main when this was written. The queue ahead of it holds 0118, 0136 and 0137,
+# and whoever lands this after them re-points it at the newest.
+down_revision = "0133"
 branch_labels = None
 depends_on = None
 

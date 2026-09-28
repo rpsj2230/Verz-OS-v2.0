@@ -1,6 +1,7 @@
 """What a model call cost, from the provider's own count at the price this install set (M27.12.5).
 
-The figure an agent's runs and cost are read from (M27.15.27), in the install's currency (M27.15.33).
+The figure an agent's runs and cost are read from (M27.15.27), in the install's currency
+(M27.15.33).
 
 Pure: `brain.models.pricing` and the per-call record `brain.models.metering.Meter` keeps for it.
 The recorder that writes the figure and the database it lands in are `test_usage_store`'s.
@@ -9,6 +10,7 @@ The recorder that writes the figure and the database it lands in are `test_usage
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Any
 
 import pytest
 
@@ -201,7 +203,7 @@ def test_each_answered_call_is_kept_under_the_model_its_rung_asked_for() -> None
 def test_a_usage_whose_calls_do_not_add_up_is_refused() -> None:
     """What breaks if this is deleted: a cost is priced from calls that disagree with the tokens on
     the same ledger row, and neither can be reconciled with the other."""
-    usage = {
+    usage: dict[str, Any] = {
         "calls": 1,
         "tokens_in": 10,
         "tokens_out": 2,

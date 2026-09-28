@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import types
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from datetime import datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -38,6 +38,7 @@ from brain.ops.usage_store import (
     department_of,
 )
 from brain.session import make_session_factory
+from brain.tables import skill as skill_table
 from brain.tables import skill_invocation as table
 from tests.fixtures.scratch_postgres import (
     add_modelled,
@@ -192,7 +193,7 @@ def database() -> Iterator[str]:
         migrate(name, "upgrade", "0034")
         migrate(name, "stamp", "0042")
         migrate(name, "upgrade", "0043")
-        migrate(name, "stamp", "0120")
+        migrate(name, "stamp", "0133")
         migrate(name, "upgrade", "0138")
         add_modelled(scratch, ("ops.setting",))
         sql(scratch, "GRANT SELECT ON ops.setting TO brain_app")
@@ -234,7 +235,7 @@ def priced(url: str, *prices: tuple[str, str, Price]) -> None:
 
 def recording(
     url: str, work: Callable[[UsageRecorder], Any], currency: str = SGD
-) -> Sequence[dict[str, Any]]:
+) -> Sequence[Mapping[str, Any]]:
     """Run `work` with a recorder over the application role, and hand back what it logged."""
 
     async def go() -> None:
@@ -405,9 +406,9 @@ def test_the_migration_builds_the_table_exactly_as_the_model_declares_it(databas
     assert copied.DIGEST_PATTERN == table.DIGEST_PATTERN
     assert copied.TRACE_ID_CHARS == table.TRACE_ID_CHARS
     assert (copied.AGENT_ID_CHARS, copied.NAME_CHARS, copied.DIGEST_CHARS) == (
-        table.AGENT_ID_CHARS,
-        table.NAME_CHARS,
-        table.DIGEST_CHARS,
+        skill_table.AGENT_ID_CHARS,
+        skill_table.NAME_CHARS,
+        skill_table.DIGEST_CHARS,
     )
 
 
