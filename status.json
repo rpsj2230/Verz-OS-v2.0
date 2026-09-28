@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-28T16:02:02.239680+00:00",
-  "commit": "933de11",
-  "commit_subject": "Both workers are given the cache the application is given",
+  "generated_at": "2026-09-28T16:06:42.243519+00:00",
+  "commit": "65f0433",
+  "commit_subject": "Each citation on Ask links to its record or passage, says how fresh it is and carries its badge",
   "total": 1576,
   "done": 358,
   "percent": 22.7,
