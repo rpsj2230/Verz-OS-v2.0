@@ -426,7 +426,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "agent.tool_switch",
       "agent.skill_category",
     ],
-    installation: [],
+    installation: ["INSTALL_ACCEPTANCE_SKILL_SOURCE"],
     gaps: [
       {
         what: "A skill cannot be removed from an agent from the console, only replaced by another version of it.",

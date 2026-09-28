@@ -274,13 +274,15 @@ def acceptance_scope() -> Any:
     return Scope.department(RESERVED_DEPARTMENTS[0])
 
 
-def test_no_check_needs_a_login_or_a_value_from_the_owner() -> None:
+def test_no_check_needs_a_login_and_the_one_setting_a_check_reads_names_public_code() -> None:
     """Every person a check acts as is a reserved principal made inside its transaction, so the
-    install declares no setting for a test login and the harness has no way to bind one. Delete
-    this and a check can come to depend on a login somebody has to create by hand."""
+    install declares no setting for a test login and the harness has no way to bind one. The one
+    acceptance setting names public skills for the import check to fetch, which is the install's
+    to choose, and unset that check is not run rather than failed. Delete this and a check can come
+    to depend on a login somebody has to create by hand."""
     from brain.install import BY_NAME
 
-    assert not [name for name in BY_NAME if "ACCEPTANCE" in name]
+    assert [name for name in BY_NAME if "ACCEPTANCE" in name] == ["INSTALL_ACCEPTANCE_SKILL_SOURCE"]
     assert not hasattr(Harness, "test_login")
 
 
@@ -484,7 +486,7 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     """**The run as the worker makes it, against PostgreSQL at head.** Twice: every check that can
     be asked without a cache passes both times, the limits check says it was not run, the two
     Lark checks needing a bound person say so until the events route reads chat bindings, the skill
-    import says GitHub did not answer, because no test here reaches the network, and after
+    import says this install names no public skill, which is the declared default, and after
     both runs every table a check wrote to holds what it held before, while the result rows are
     there, one run each, keyed by the commit. Delete this and a check that commits, or one
     that cannot pass on a real schema, reaches the owner's server first."""
@@ -515,7 +517,7 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         assert outcomes.pop(needs_a_binding) == (NOT_RUN, BINDING_A_CHAT_ACCOUNT_IS_NOT_DEPLOYED)
     assert outcomes.pop("a_skill_is_imported_from_a_github_commit_and_from_an_address") == (
         NOT_RUN,
-        "GitHub did not answer this server, so no import from it could be asked",
+        "this install names no public skill to import, so no import from GitHub was asked",
     )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
     assert len(outcomes) == 9
