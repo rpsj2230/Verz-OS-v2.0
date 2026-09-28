@@ -29,6 +29,14 @@ refusal arrives at the nothing-found branch by construction. The enum member exi
 audit ledger, raised by the layer that actually saw a `Denied`. That absence is the
 mechanism; a branch there would be the leak.
 
+**A refusal is shown to an administrator, and only there (M8.2.1).** `Abstention.for_administrator`
+is the reason and the entity and field withheld, as log fields the capture keeps as words, and
+`brain.gate.answer` writes them as a warning under the request's trace reference, which the Logs
+screen shows to a reader of the whole install's log. Until 2026-09-28 the only record was the
+route's `answered` line at information level, sampled one in ten, whose `abstained` key is not in
+the capture's vocabulary, so the Logs screen showed its shape and never the words "not entitled".
+See `A_REFUSAL_IS_TOLD_TO_AN_ADMINISTRATOR_AND_READS_AS_NOTHING_TO_THE_ASKER`.
+
 **A claim without a citation is not an answer.** `brain.gate.provenance` says what stands
 behind an answer, and where nothing does, the honest output is an abstention rather than a
 sentence. Configurable per agent (M8.2.4), defaulting to required, on the same default-deny
@@ -208,6 +216,24 @@ def scope_of_reach(admissible: Iterable[str]) -> SearchScope:
 
 # ------------------------------------------------------- the outcome (M8.2.3)
 
+#: Why a refusal is told to an administrator and to nobody else.
+A_REFUSAL_IS_TOLD_TO_AN_ADMINISTRATOR_AND_READS_AS_NOTHING_TO_THE_ASKER: Final = (
+    "The asker is told what an absent record tells them, because a different sentence would "
+    "say the record exists. The refusal still happened, and a system where nobody can ever see "
+    "that somebody was refused has lost its audit, so the reason and the entity and field that "
+    "were withheld go to the application log as a warning under the request's trace reference, "
+    "which only a reader of the whole install's log may open. The notice has no field to carry "
+    "them, and the log is never shown to the asker."
+)
+
+#: Why a withheld field is carried by one reason and refused on the other four.
+ONLY_NOT_ENTITLED_NAMES_WHAT_WAS_WITHHELD: Final = (
+    "Naming the entity and field withheld is what makes a refusal something an administrator "
+    "can act on, and it is true only of a refusal: beside nothing found it would invent a "
+    "refusal, and beside nothing connected or not answering it would be a fact about a record "
+    "recorded under a reason that is about configuration or relevance."
+)
+
 #: Why a source is carried by one reason and refused on the other four.
 ONLY_NOTHING_CONNECTED_NAMES_A_SOURCE: Final = (
     "Nothing connected is said alike to every asker, because it is decided from the rules and "
@@ -256,6 +282,10 @@ class Abstention:
     #: The source a matched rule names and nothing here reads, on `NOTHING_CONNECTED` only. See
     #: `ONLY_NOTHING_CONNECTED_NAMES_A_SOURCE`. Empty when no rule's shape matched.
     missing_source: str = ""
+    #: The entity and field withheld, on `NOT_ENTITLED` only, as names and never values. See
+    #: `ONLY_NOT_ENTITLED_NAMES_WHAT_WAS_WITHHELD`.
+    withheld_entity: str = ""
+    withheld_field: str = ""
 
     def __post_init__(self) -> None:
         if self.missing_source and self.reason is not AbstentionReason.NOTHING_CONNECTED:
@@ -264,24 +294,56 @@ class Abstention:
                 f"{ONLY_NOTHING_CONNECTED_NAMES_A_SOURCE}"
             )
             raise ValueError(msg)
+        named = self.withheld_entity or self.withheld_field
+        if named and self.reason is not AbstentionReason.NOT_ENTITLED:
+            msg = (
+                f"an abstention for {self.reason.value!r} cannot name what was withheld. "
+                f"{ONLY_NOT_ENTITLED_NAMES_WHAT_WAS_WITHHELD}"
+            )
+            raise ValueError(msg)
 
     def for_asker(self) -> AbstentionNotice:
         """The only thing that may be said to the person who asked."""
         return AbstentionNotice(text=PUBLIC_TEXT[self.reason], scope=self.scope)
+
+    def for_administrator(self) -> dict[str, str] | None:
+        """What an administrator's trace records of a refusal, or None for every other reason.
+
+        Log fields, each a key `brain.ops.log_capture.VOCABULARY` keeps as a word, so the Logs
+        screen shows `reason`, `entity` and `field` rather than their shapes. See
+        `A_REFUSAL_IS_TOLD_TO_AN_ADMINISTRATOR_AND_READS_AS_NOTHING_TO_THE_ASKER`.
+        """
+        if self.reason is not AbstentionReason.NOT_ENTITLED:
+            return None
+        fields = {"reason": self.reason.name.lower()}
+        if self.withheld_entity:
+            fields["entity"] = self.withheld_entity
+        if self.withheld_field:
+            fields["field"] = self.withheld_field
+        return fields
 
 
 def nothing_retrieved(scope: SearchScope, *, detail: str = "") -> Abstention:
     return Abstention(reason=AbstentionReason.NOTHING_RETRIEVED, scope=scope, detail=detail)
 
 
-def not_entitled(scope: SearchScope, *, detail: str = "") -> Abstention:
+def not_entitled(
+    scope: SearchScope, *, detail: str = "", entity: str = "", field: str = ""
+) -> Abstention:
     """The audit-side reason for a refusal, raised by the layer that saw the `Denied`.
 
     Its public half is `NOT_FOUND_TEXT`, the same object `nothing_retrieved` produces. This
     constructor exists so the ledger can record what actually happened, which is the same
     division of labour `brain.core.errors` describes: DENIED exists only for the audit log.
+    `entity` and `field` name what was withheld, for `Abstention.for_administrator`.
     """
-    return Abstention(reason=AbstentionReason.NOT_ENTITLED, scope=scope, detail=detail)
+    return Abstention(
+        reason=AbstentionReason.NOT_ENTITLED,
+        scope=scope,
+        detail=detail,
+        withheld_entity=entity,
+        withheld_field=field,
+    )
 
 
 def nothing_connected(

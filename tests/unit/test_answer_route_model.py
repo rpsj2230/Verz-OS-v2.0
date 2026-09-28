@@ -24,6 +24,7 @@ from brain.api_routes import model_lane_of, passage_search_for
 from brain.app import Settings, create_app
 from brain.core.entitlement import Capability, Grant
 from brain.core.scope import Scope
+from brain.gate.badge_store import StoredItems
 from brain.gate.model_lane import DocumentSearchTool, ModelLane
 from brain.knowledge.document_tools import SEARCH_DOCUMENTS
 from brain.ops.model_service import ModelService
@@ -136,6 +137,26 @@ def test_a_process_missing_either_half_hands_the_lane_no_model_step() -> None:
         assert model_lane_of(SimpleNamespace(models=models, passage_search=search)) == ModelLane(
             search=search, model=calls
         )
+    finally:
+        owned.close()
+
+
+def test_a_process_with_a_database_hands_the_lane_the_badge_lookup() -> None:
+    """With sessions the lane reads cited documents' items for their badges (M7.4.7); without, it
+    badges nothing rather than calling every document unverified.
+
+    Delete this and the lookup can fall out of `model_lane_of`, which no lane test notices because
+    each builds its own `ModelLane`, and no answer on an install carries a badge."""
+    calls, _ = executor(Ladder(()), {})
+    owned = httpx.Client()
+    try:
+        models = ModelService(calls=calls, client=owned)
+        wired = model_lane_of(
+            SimpleNamespace(models=models, passage_search=Passages(), db_sessions=object())
+        )
+
+        assert wired is not None
+        assert isinstance(wired.items, StoredItems)
     finally:
         owned.close()
 
