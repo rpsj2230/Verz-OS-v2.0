@@ -38,7 +38,8 @@ place). See `WHAT_IS_CHANGED_HERE_AND_WHAT_IS_NOT`.
 **The screen is grouped by what a setting is for, not by who hands it over on install day.**
 `brain.install.Belongs` is the second and stays the declaration's; `Section` is the first, in
 the owner's words (Company and branding; Language, money and time; Models; Knowledge and search;
-Sign-in; Staff list; Files and storage; Lark), and a test holds every setting to exactly one.
+Sign-in; Staff list; Files and storage; Lark; and Install checks, for what the install's own
+acceptance checks fetch), and a test holds every setting to exactly one.
 
 **When a change takes effect is said per row, and it is decided by where the value lives.** A value
 in the environment file is read when a process starts, so a change to it needs a restart, always.
@@ -165,6 +166,7 @@ class Section(enum.StrEnum):
     STAFF = "staff"
     FILES = "files"
     LARK = "lark"
+    CHECKS = "checks"
 
 
 #: The sections in the order the screen draws them: what an owner changes first, first.
@@ -181,6 +183,7 @@ SECTION_TITLES: Final[Mapping[Section, str]] = MappingProxyType(
         Section.STAFF: "Staff list",
         Section.FILES: "Files and storage",
         Section.LARK: "Lark",
+        Section.CHECKS: "Install checks",
     }
 )
 
@@ -216,6 +219,7 @@ SECTION_OF: Final[Mapping[str, Section]] = MappingProxyType(
         "INSTALL_LARK_BASE": Section.LARK,
         "INSTALL_KNOWLEDGE_SCANNER": Section.FILES,
         "INSTALL_CLAMAV_ADDRESS": Section.FILES,
+        "INSTALL_ACCEPTANCE_SKILL_SOURCE": Section.CHECKS,
     }
 )
 
@@ -251,6 +255,7 @@ LABELS: Final[Mapping[str, str]] = MappingProxyType(
         "INSTALL_LARK_BASE": "Lark Base that is read",
         "INSTALL_KNOWLEDGE_SCANNER": "What checks a file before it is read",
         "INSTALL_CLAMAV_ADDRESS": "Antivirus address",
+        "INSTALL_ACCEPTANCE_SKILL_SOURCE": "Public skills the install check imports",
     }
 )
 
@@ -335,6 +340,10 @@ READ_ONLY_BECAUSE: Final[Mapping[str, str]] = MappingProxyType(
             f"{_ENVIRONMENT_FILE}it names the antivirus service the compose file starts, and a "
             "wrong one refuses every upload while the antivirus is switched on."
         ),
+        "INSTALL_ACCEPTANCE_SKILL_SOURCE": (
+            f"{_ENVIRONMENT_FILE}it names code this server fetches from GitHub after every "
+            "deploy, so it is chosen with whoever decides what the server may reach."
+        ),
     }
 )
 
@@ -374,6 +383,7 @@ READ_BY: Final[Mapping[str, tuple[str, ...]]] = {
     "INSTALL_LARK_BASE": ("brain.lark_connect_routes",),
     "INSTALL_KNOWLEDGE_SCANNER": ("brain.knowledge.scanners",),
     "INSTALL_CLAMAV_ADDRESS": ("brain.knowledge.scanners",),
+    "INSTALL_ACCEPTANCE_SKILL_SOURCE": ("brain.ops.acceptance_checks_skills",),
 }
 
 #: How a Keycloak issuer ends: the realm's name is its last path segment.

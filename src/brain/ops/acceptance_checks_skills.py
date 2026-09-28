@@ -16,10 +16,15 @@ department-scoped administrator, which exercises none of the writes the leaves n
 **The import from GitHub fetches before it writes anything.** A check holds the install's write
 locks from its first audited write to its rollback, and a fetch can take the transport's whole
 timeout, so both fetches finish before the first row is written. A fetch that never reached GitHub
-is not a verdict on the product. See `AN_IMPORT_THAT_CANNOT_REACH_GITHUB_IS_NOT_RUN`. Rejected: a
+is not a verdict on the product. See `AN_IMPORT_THAT_CANNOT_REACH_GITHUB_IS_NOT_RUN`.
+
+**What it fetches is the install's to name, in `INSTALL_ACCEPTANCE_SKILL_SOURCE`, and unnamed it
+fetches nothing.** A repository, a commit and a folder, then the address of a second `SKILL.md`,
+public and at a full commit so the bytes cannot move under the check. Rejected: a repository
+compiled in here, which is one address every install would reach whether its owner chose it or
+not, and the reason the client-independence sweep refuses a host in the source. Rejected too: a
 repository the check owns, which would put this product's own account into every install's
-acceptance run; the repository below is public, well known, and fetched at a released commit, so
-the bytes cannot move under the check.
+acceptance run. See `AN_IMPORT_NOBODY_NAMED_IS_NOT_RUN`.
 
 **Every name the checks write is the run's.** Skills are `acceptance_<run>_...`, the agent is
 `acceptance_<run>`, placed in acceptance_a, and categories carry a word nothing else holds. The two
@@ -78,21 +83,18 @@ AN_IMPORT_THAT_CANNOT_REACH_GITHUB_IS_NOT_RUN: Final = (
     "the check failed."
 )
 
-# ------------------------------------------------------------------------ the figures
-#: A public repository whose `SKILL.md` folders the product's parser accepts.
-PUBLIC_SKILLS_REPOSITORY: Final = "obra/superpowers"
-
-#: The commit of that repository's v6.4.2 release, in full, as an import must name one.
-PUBLIC_SKILLS_COMMIT: Final = "8ca22dba9a94f28898bbce59f2537ff4d87c747d"
-
-#: The folder the repository import reads its one `SKILL.md` from.
-PUBLIC_SKILL_FOLDER: Final = "skills/verification-before-completion"
-
-#: A second skill of the same commit, by its raw address: another skill, so another digest.
-PUBLIC_SKILL_ADDRESS: Final = (
-    f"https://raw.githubusercontent.com/{PUBLIC_SKILLS_REPOSITORY}/{PUBLIC_SKILLS_COMMIT}"
-    "/skills/receiving-code-review/SKILL.md"
+#: Why the import check fetches only what the install names.
+AN_IMPORT_NOBODY_NAMED_IS_NOT_RUN: Final = (
+    "Which public skills this server fetches from GitHub is the install's to decide, so the "
+    "repository, commit, folder and address are read from INSTALL_ACCEPTANCE_SKILL_SOURCE, and "
+    "while it is unset nothing is fetched and the check is not run. A value that does not name a "
+    "repository at a full commit and an https address is not run either: it is the install's "
+    "setting that is wrong, and the product was never asked."
 )
+
+# ------------------------------------------------------------------------ the figures
+#: The installation setting naming what the import check fetches. See `brain.install`.
+SKILL_SOURCE_SETTING: Final = "INSTALL_ACCEPTANCE_SKILL_SOURCE"
 
 #: An address on no host a skill is fetched from. `.invalid` is reserved and resolves nowhere.
 OFF_THE_LIST: Final = "https://skills.example.invalid/SKILL.md"
@@ -102,6 +104,47 @@ BODY: Final = ("Read the question.", "Answer it from the acceptance check.")
 
 
 # ------------------------------------------------------------------------ the helpers
+@dataclass(frozen=True)
+class PublicSkills:
+    """What `INSTALL_ACCEPTANCE_SKILL_SOURCE` names: a repository's folder at a commit, and an
+    address. Only its shape is read here; whether the commit is a full one and the address is on
+    an allowed host is the product's own rule, asked by the check."""
+
+    repository: str
+    commit: str
+    folder: str
+    address: str
+
+
+def public_skills(value: str) -> PublicSkills | None:
+    """The four parts of `owner/repository@commit:folder,address`, or None for anything else.
+
+    `unset`, the declared default, is None like any other value without the four parts; the check
+    tells the two apart by the value, so an unnamed source and a mistyped one say different things.
+    """
+    pinned, comma, address = value.strip().partition(",")
+    repository, at, located = pinned.strip().partition("@")
+    commit, colon, folder = located.partition(":")
+    parts = (repository.strip(), commit.strip(), folder.strip(), address.strip())
+    if not (comma and at and colon) or not all(parts) or "," in address:
+        return None
+    return PublicSkills(*parts)
+
+
+def _fetchable(address: str) -> bool:
+    """Whether the import's own rules would fetch this address: its shape, then its host."""
+    from brain.console.skill_library import url_source_problem
+    from brain.tools.fetch import SKILL_SOURCE_HOSTS, UnsafeAddressError, assert_on_the_list
+
+    if url_source_problem(address) is not None:
+        return False
+    try:
+        assert_on_the_list(address, SKILL_SOURCE_HOSTS)
+    except UnsafeAddressError:
+        return False
+    return True
+
+
 def _named(h: Harness, what: str) -> str:
     """A skill name nothing on the install holds: the run's, and what the check calls it."""
     return f"acceptance_{h.run}_{what}"
@@ -355,18 +398,37 @@ async def a_skill_is_imported_from_a_github_commit_and_from_an_address(h: Harnes
         read_url,
         url_source_problem,
     )
+    from brain.install import BY_NAME, value_of
     from brain.ops.skill_store import StoredSkills
     from brain.tools.fetch import UnsafeAddressError, fetch_skill_source, fetch_skill_url
     from brain.tools.skills import SkillError, SkillState, SourceKind
 
+    named = value_of(SKILL_SOURCE_SETTING)
+    public = public_skills(named)
+    if public is None and named.strip() in ("", BY_NAME[SKILL_SOURCE_SETTING].default):
+        raise CheckNotRunError(
+            "this install names no public skill to import, so no import from GitHub was asked"
+        )
+    if public is None or not _fetchable(public.address):
+        raise CheckNotRunError(
+            "the public skill this install names is not a repository folder at a commit and an "
+            "https address on an allowed host"
+        )
+    try:
+        source = github_source(public.repository, public.commit, public.folder)
+    except SkillLibraryError:
+        raise CheckNotRunError(
+            "the public skill this install names is not a repository folder at a full commit"
+        ) from None
+
     watched = _Watched(*_transport())
     try:
-        github_source(PUBLIC_SKILLS_REPOSITORY, "main", PUBLIC_SKILL_FOLDER)
+        github_source(public.repository, "main", public.folder)
     except SkillLibraryError:
         pass
     else:
         raise CheckFailedError("a repository import naming a branch rather than a commit was taken")
-    if url_source_problem(PUBLIC_SKILL_ADDRESS.replace("https://", "http://", 1)) is None:
+    if url_source_problem(public.address.replace("https://", "http://", 1)) is None:
         raise CheckFailedError("an import from a plain http address was taken")
     try:
         fetch_skill_url(OFF_THE_LIST, fetcher=watched, resolver=watched)
@@ -378,13 +440,12 @@ async def a_skill_is_imported_from_a_github_commit_and_from_an_address(h: Harnes
         raise CheckFailedError("an address on no allowed host was looked up or connected to")
 
     # Both fetches before any write: see the module docstring.
-    source = github_source(PUBLIC_SKILLS_REPOSITORY, PUBLIC_SKILLS_COMMIT, PUBLIC_SKILL_FOLDER)
     try:
         tarball = await asyncio.to_thread(
             fetch_skill_source, source, fetcher=watched, resolver=watched
         )
         answered = await asyncio.to_thread(
-            fetch_skill_url, PUBLIC_SKILL_ADDRESS, fetcher=watched, resolver=watched
+            fetch_skill_url, public.address, fetcher=watched, resolver=watched
         )
     except SkillError:
         if watched.unreached:
@@ -394,7 +455,7 @@ async def a_skill_is_imported_from_a_github_commit_and_from_an_address(h: Harnes
         raise CheckFailedError("GitHub answered and the import's own rules refused it") from None
     try:
         from_commit = read_github(source, tarball)
-        from_address = read_url(PUBLIC_SKILL_ADDRESS, answered)
+        from_address = read_url(public.address, answered)
     except SkillLibraryError:
         raise CheckFailedError("a public SKILL.md fetched from GitHub could not be read") from None
 
@@ -414,15 +475,15 @@ async def a_skill_is_imported_from_a_github_commit_and_from_an_address(h: Harnes
     pinned = commit_kept.imported.source
     if (pinned.kind, pinned.location, pinned.commit, pinned.path) != (
         SourceKind.GITHUB,
-        PUBLIC_SKILLS_REPOSITORY,
-        PUBLIC_SKILLS_COMMIT,
-        PUBLIC_SKILL_FOLDER,
+        public.repository,
+        public.commit,
+        public.folder,
     ):
         raise CheckFailedError("a repository import did not keep its commit and folder")
     addressed = address_kept.imported.source
     if (addressed.kind, addressed.location, addressed.content_digest) != (
         SourceKind.URL,
-        PUBLIC_SKILL_ADDRESS,
+        public.address,
         hashlib.sha256(answered).hexdigest(),
     ):
         raise CheckFailedError("an address import did not keep the digest of what it answered")

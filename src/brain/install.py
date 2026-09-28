@@ -470,6 +470,19 @@ INSTALLATION: Final[tuple[Setting, ...]] = (
         ),
         default="clamav:3310",
     ),
+    # --- the skill import acceptance check, M38.5.1 (brain.ops.acceptance_checks_skills)
+    Setting(
+        name="INSTALL_ACCEPTANCE_SKILL_SOURCE",
+        belongs=Belongs.CONNECTORS,
+        meaning=(
+            "Two public skills the install's own acceptance check imports from GitHub after each "
+            "deploy, written owner/repository@commit:folder,address: a repository at a full "
+            "commit and the folder holding its SKILL.md, then the https address of a second "
+            "SKILL.md. Nothing is kept: the import is rolled back. `unset` records that check as "
+            "not run, and nothing is fetched."
+        ),
+        default="unset",
+    ),
 )
 
 #: The declaration, indexed. Built once because `value_of` is on the read path of every page.

@@ -1,7 +1,10 @@
 """The skill library's install acceptance checks: registered, pinned, and passing on a real schema.
 
-The pure half holds the checks to the suite and the fixture they fetch to the rules the import
-applies: a full commit, an https address, hosts on the list. The database half builds PostgreSQL to
+The pure half holds the checks to the suite, reads `INSTALL_ACCEPTANCE_SKILL_SOURCE` from its
+raw value, holds the fixture it names to the rules the import applies (a full commit, an https
+address, hosts on the list), and runs the import check with the setting unset or mistyped, which
+is not run with nothing fetched. The pinned repository, commit, folder and address live here and
+nowhere in the source: an install names its own. The database half builds PostgreSQL to
 head and runs the four checks as the worker would, with GitHub replaced by a fake transport that
 answers the pinned commit's tarball and one raw file, so no test here reaches the network. Every
 check passes, and afterwards every table a check wrote to holds what it held before, which is
@@ -23,13 +26,22 @@ import sys
 import tarfile
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlsplit
 
 import pytest
 
 from brain.ops import acceptance_checks_skills as skills
-from brain.ops.acceptance import CHECK_MODULES, FAILED, NOT_RUN, PASSED, Check, registered
+from brain.ops.acceptance import (
+    CHECK_MODULES,
+    FAILED,
+    NOT_RUN,
+    PASSED,
+    Check,
+    CheckNotRunError,
+    registered,
+)
+from brain.ops.acceptance_run import Harness
 from brain.tools.fetch import SKILL_SOURCE_HOSTS, FetchedBytes, github_tarball_url
 from brain.tools.skills import COMMIT_RE, SkillError
 from tests.unit.test_acceptance import at_head, counts
@@ -50,6 +62,26 @@ LEAVES = {
     ),
     "categories_are_kept_and_offered_from_what_a_reader_was_shown": ("M12.4.13",),
 }
+
+#: A public repository whose `SKILL.md` folders the product's parser accepts, as an install would
+#: name it in `INSTALL_ACCEPTANCE_SKILL_SOURCE`. Pinned here and not in the source: which public
+#: code a server fetches is the install's to choose, and the client-independence sweep refuses a
+#: host compiled into the product.
+REPOSITORY = "obra/superpowers"
+
+#: The commit of that repository's v6.4.2 release, in full, as an import must name one.
+COMMIT = "8ca22dba9a94f28898bbce59f2537ff4d87c747d"
+
+#: The folder the repository import reads its one `SKILL.md` from.
+FOLDER = "skills/verification-before-completion"
+
+#: A second skill of the same commit, by its raw address: another skill, so another digest.
+ADDRESS = (
+    f"https://raw.githubusercontent.com/{REPOSITORY}/{COMMIT}/skills/receiving-code-review/SKILL.md"
+)
+
+#: The whole setting, as `.env` or Install, Settings would hold it.
+SOURCE = f"{REPOSITORY}@{COMMIT}:{FOLDER},{ADDRESS}"
 
 #: A public address the fake resolver answers with. Nothing ever connects to it.
 PUBLIC_ADDRESS = "140.82.121.4"
@@ -76,7 +108,7 @@ def a_skill_md(name: str, description: str) -> bytes:
 
 def a_commit_tarball(folder: str, skill_md: bytes) -> bytes:
     """A tarball shaped as GitHub builds one for a commit: one top folder, the tree under it."""
-    top = f"superpowers-{skills.PUBLIC_SKILLS_COMMIT}"
+    top = f"superpowers-{COMMIT}"
     out = io.BytesIO()
     with tarfile.open(fileobj=out, mode="w:gz") as archive:
         for name, data in (
@@ -106,14 +138,14 @@ class FakeGitHub:
     def get_once(self, url: str, *, address: str, max_bytes: int) -> FetchedBytes | str:
         if self.redirect_to:
             return self.redirect_to
-        tarball = github_tarball_url(skills.PUBLIC_SKILLS_REPOSITORY, skills.PUBLIC_SKILLS_COMMIT)
+        tarball = github_tarball_url(REPOSITORY, COMMIT)
         if url == tarball:
             body = a_commit_tarball(
-                skills.PUBLIC_SKILL_FOLDER,
+                FOLDER,
                 a_skill_md("fetched-at-a-commit", "Use when a repository is imported at a commit"),
             )
             return FetchedBytes(body=body, final_url=url)
-        if url == skills.PUBLIC_SKILL_ADDRESS:
+        if url == ADDRESS:
             body = a_skill_md("fetched-from-an-address", "Use when a skill arrives by its address")
             return FetchedBytes(body=body, final_url=url)
         msg = "the fake GitHub holds no such address"
@@ -142,18 +174,107 @@ def test_what_the_import_check_fetches_is_pinned_and_on_the_hosts_a_skill_comes_
     rule with an address the rule admits."""
     from brain.console.skill_library import github_source, url_source_problem
 
-    assert COMMIT_RE.match(skills.PUBLIC_SKILLS_COMMIT)
-    source = github_source(
-        skills.PUBLIC_SKILLS_REPOSITORY, skills.PUBLIC_SKILLS_COMMIT, skills.PUBLIC_SKILL_FOLDER
-    )
-    assert source.commit == skills.PUBLIC_SKILLS_COMMIT
+    assert COMMIT_RE.match(COMMIT)
+    source = github_source(REPOSITORY, COMMIT, FOLDER)
+    assert source.commit == COMMIT
     assert urlsplit(github_tarball_url(source.location, source.commit)).hostname in (
         SKILL_SOURCE_HOSTS
     )
-    assert url_source_problem(skills.PUBLIC_SKILL_ADDRESS) is None
-    assert urlsplit(skills.PUBLIC_SKILL_ADDRESS).hostname in SKILL_SOURCE_HOSTS
-    assert f"/{skills.PUBLIC_SKILLS_COMMIT}/" in urlsplit(skills.PUBLIC_SKILL_ADDRESS).path
+    assert url_source_problem(ADDRESS) is None
+    assert urlsplit(ADDRESS).hostname in SKILL_SOURCE_HOSTS
+    assert f"/{COMMIT}/" in urlsplit(ADDRESS).path
     assert urlsplit(skills.OFF_THE_LIST).hostname not in SKILL_SOURCE_HOSTS
+
+
+def test_the_setting_is_read_into_its_four_parts_and_nothing_else_is() -> None:
+    """`owner/repository@commit:folder,address` from the raw value an install writes, and every
+    shape missing a part is None rather than a partial source. Delete this and a mistyped setting
+    can fetch a folder of the wrong repository, or an empty address."""
+    assert skills.public_skills(SOURCE) == skills.PublicSkills(REPOSITORY, COMMIT, FOLDER, ADDRESS)
+    assert skills.public_skills(f"  {REPOSITORY}@{COMMIT}:{FOLDER} , {ADDRESS} ") == (
+        skills.PublicSkills(REPOSITORY, COMMIT, FOLDER, ADDRESS)
+    )
+    for broken in (
+        "",
+        "unset",
+        f"{REPOSITORY}@{COMMIT}:{FOLDER}",
+        f"{REPOSITORY}:{FOLDER},{ADDRESS}",
+        f"{REPOSITORY}@{COMMIT},{ADDRESS}",
+        f"@{COMMIT}:{FOLDER},{ADDRESS}",
+        f"{REPOSITORY}@:{FOLDER},{ADDRESS}",
+        f"{REPOSITORY}@{COMMIT}:,{ADDRESS}",
+        f"{REPOSITORY}@{COMMIT}:{FOLDER},",
+        f"{REPOSITORY}@{COMMIT}:{FOLDER},{ADDRESS},{ADDRESS}",
+    ):
+        assert skills.public_skills(broken) is None, broken
+
+
+def test_the_setting_is_declared_unset_and_read_by_this_check_alone() -> None:
+    """Declared in `brain.install` with `unset` as its default, so a fresh install fetches nothing,
+    and named on the Settings screen as read by this module, read-only with its reason. Delete this
+    and a default every install fetches can creep back in, or the value can sit on no screen."""
+    from brain.console.configuration import EDITABLE_SETTINGS, READ_BY, READ_ONLY_BECAUSE
+    from brain.install import BY_NAME
+
+    declared = BY_NAME[skills.SKILL_SOURCE_SETTING]
+    assert declared.default == "unset" and not declared.required
+    assert skills.public_skills(declared.default) is None
+    assert READ_BY[skills.SKILL_SOURCE_SETTING] == ("brain.ops.acceptance_checks_skills",)
+    assert skills.SKILL_SOURCE_SETTING not in EDITABLE_SETTINGS
+    assert READ_ONLY_BECAUSE[skills.SKILL_SOURCE_SETTING]
+
+
+def _nothing_is_fetched() -> tuple[FakeGitHub, FakeGitHub]:
+    raise AssertionError("the import check reached for a transport with no source named")
+
+
+@pytest.mark.parametrize(
+    ("value", "reason"),
+    [
+        (None, "this install names no public skill to import, so no import from GitHub was asked"),
+        (
+            "unset",
+            "this install names no public skill to import, so no import from GitHub was asked",
+        ),
+        (
+            f"{REPOSITORY}@{COMMIT}:{FOLDER}",
+            "the public skill this install names is not a repository folder at a commit and an "
+            "https address on an allowed host",
+        ),
+        (
+            f"{REPOSITORY}@{COMMIT}:{FOLDER},https://skills.example.net/SKILL.md",
+            "the public skill this install names is not a repository folder at a commit and an "
+            "https address on an allowed host",
+        ),
+        (
+            f"{REPOSITORY}@main:{FOLDER},{ADDRESS}",
+            "the public skill this install names is not a repository folder at a full commit",
+        ),
+    ],
+)
+def test_the_import_check_is_not_run_and_fetches_nothing_until_the_install_names_a_source(
+    monkeypatch: pytest.MonkeyPatch, value: str | None, reason: str
+) -> None:
+    """`AN_IMPORT_NOBODY_NAMED_IS_NOT_RUN`: unset, or set to something that is not a repository at
+    a full commit and an allowed address, the check is not run with its own sentence, before it
+    asks for a transport or touches the database. Delete this and a fresh install fetches from a
+    host nobody chose, or reports a mistyped setting as a broken import."""
+    from brain.install import hold_saved
+
+    [imports] = [one for one in mine() if one.name.startswith("a_skill_is_imported")]
+    if value is None:
+        monkeypatch.delenv(skills.SKILL_SOURCE_SETTING, raising=False)
+    else:
+        monkeypatch.setenv(skills.SKILL_SOURCE_SETTING, value)
+    monkeypatch.setattr(skills, "_transport", _nothing_is_fetched)
+    held = hold_saved({})
+    try:
+        with pytest.raises(CheckNotRunError) as refused:
+            # The harness is never reached: every refusal here comes before the first read.
+            asyncio.run(imports.run(cast(Harness, object())))
+    finally:
+        hold_saved(held)
+    assert str(refused.value) == reason
 
 
 def test_the_transport_the_check_uses_is_the_one_the_import_route_hands_the_fetch() -> None:
@@ -208,6 +329,7 @@ def test_on_a_real_database_every_skill_check_passes_and_leaves_nothing_behind(
     client's library, reaches the owner's server first."""
     github = FakeGitHub()
     monkeypatch.setattr(skills, "_transport", lambda: (github, github))
+    monkeypatch.setenv(skills.SKILL_SOURCE_SETTING, SOURCE)
     with at_head("brain_acceptance_skills") as url:
         before = (counts(url), skill_counts(url))
         outcomes = run_checks(url, mine())
@@ -226,6 +348,7 @@ def test_the_import_check_is_not_run_when_github_is_silent_and_fails_when_its_ru
     import's rule refusing, so the check fails. Delete this and an install with no route out
     reports its import as broken, or a broken import hides behind not run."""
     [imports] = [one for one in mine() if one.name.startswith("a_skill_is_imported")]
+    monkeypatch.setenv(skills.SKILL_SOURCE_SETTING, SOURCE)
     with at_head("brain_acceptance_skills_fetch") as url:
         monkeypatch.setattr(skills, "_transport", unreachable)
         silent = run_checks(url, (imports,))
