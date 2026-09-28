@@ -629,6 +629,14 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.ops.channel_store:EventClaims.first": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.ops.channel_store:ChannelSecrets.read": Repeat.READS,
         "brain.ops.channel_store:ChannelSecrets.held": Repeat.READS,
+        # The Lark chat channel (L1). A GET through the transport is the one read a group's
+        # floor needs, who is in the conversation, and it changes nothing at the vendor.
+        "brain.channels.adapter:ChannelTransport.read": Repeat.READS,
+        # A code is consumed by `NonceLedger.consume`, a unique insert, and the binding is a row.
+        "brain.channels.inbound:ChatBinder.redeem": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.chat_answer:People.live": Repeat.READS,
+        "brain.chat_answer:RoomReader.members_request": Repeat.READS,
+        "brain.chat_answer:RoomReader.members_page": Repeat.READS,
     }
 )
 

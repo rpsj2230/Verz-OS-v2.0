@@ -336,8 +336,10 @@ class SignedWebhookWire:
     def tenant_fields(self) -> tuple[str, ...]:
         return (REPLY_URL,)
 
-    def verify(self, arrived: Arrived, secret: str, now: datetime) -> None:
-        """`verify` over the exact bytes, the signed time and the signature, and nothing read."""
+    def verify(self, arrived: Arrived, secret: str, now: datetime) -> Arrived:
+        """`verify` over the exact bytes, the signed time and the signature, and nothing read.
+
+        The same request back: the company's system signs and does not encrypt."""
         verify(
             secret=secret,
             signature=arrived.headers.get(SIGNATURE_HEADER, ""),
@@ -345,6 +347,7 @@ class SignedWebhookWire:
             body=arrived.body,
             now=now,
         )
+        return arrived
 
     def handshake(self, arrived: Arrived) -> Mapping[str, str] | None:
         """The company's system does not check an address before it posts, so never."""

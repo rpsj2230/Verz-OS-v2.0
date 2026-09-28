@@ -147,6 +147,7 @@ from brain.core.entitlement import EntitlementSet
 from brain.core.envelope import TypedResult
 from brain.core.errors import Absent, BrainError, Failed
 from brain.core.field_policy import FieldPolicy
+from brain.core.principal import Principal
 from brain.core.redaction import (
     ChannelPayload,
     LockedField,
@@ -156,7 +157,7 @@ from brain.core.redaction import (
 from brain.core.scope import Clause, Op, Scope
 from brain.gate.addressing import from_web
 from brain.gate.admission import admit, second_factor_gives_back, verbs_withheld
-from brain.gate.answer import answer_lane, frames_of
+from brain.gate.answer import Answered, answer_lane, frames_of
 from brain.gate.answer_cache import AnswerStore
 from brain.gate.caches import MAX_QUESTION_CHARS
 from brain.gate.catalogue import AgentCeiling
@@ -1009,7 +1010,7 @@ def sensitive_referrals_of(request: Request) -> SensitiveReferrals | None:
     return StoredSensitiveReferrals(sessions) if sessions is not None else None
 
 
-async def referred(request: Request, asked: Asking, question: str) -> str | None:
+async def referred(request: Request, reach: EntitlementSet, question: str) -> str | None:
     """The referral sentence for a sensitive question, filed first; None for any other question.
 
     A process with nowhere to file one refuses with the fault every caller gets for a missing
@@ -1022,9 +1023,9 @@ async def referred(request: Request, asked: Asking, question: str) -> str | None
     if store is None:
         raise Failed("no database on this process")
     await store.refer(
-        asked_by=asked.reach.principal_id,
+        asked_by=reach.principal_id,
         topic=decision.topic,
-        ent_hash=asked.reach.ent_hash(),
+        ent_hash=reach.ent_hash(),
         trace_id=_bound_trace_id(),
     )
     return decision.reply()
@@ -1145,7 +1146,34 @@ def asked_too_often(request: Request, verdict: StoreVerdict) -> JSONResponse:
     )
 
 
-async def roster_of(state: Any, asked: Asking, registry: ToolRegistry) -> AnswerRoster:
+@dataclass(frozen=True)
+class Answering:
+    """Who a question is answered for: the person, the one reach, the channel and the instant.
+
+    What `answered_for` needs of an `Asking`, and nothing that came from a token. A person bound to
+    a chat channel has no bearer token and no verified claims, and building them a `Caller` would
+    forge the one type `validate_token` alone makes. So the web route and a chat channel both hand
+    over these four and one function answers, which is how a person gets the same answer in both
+    places (M2.3.1). `reach` is already admitted for `channel`, as `Asking.reach` is.
+    """
+
+    principal: Principal
+    reach: EntitlementSet
+    channel: Channel
+    now: datetime
+
+    @classmethod
+    def of(cls, asked: Asking) -> Answering:
+        """The web route's caller, as the four facts answering reads."""
+        return cls(
+            principal=asked.caller.principal,
+            reach=asked.reach,
+            channel=asked.channel,
+            now=asked.now,
+        )
+
+
+async def roster_of(state: Any, asked: Answering, registry: ToolRegistry) -> AnswerRoster:
     """The agents this person may be answered by: the default and every stored agent they may run.
 
     The stored agents come from `brain.app.lifespan`'s `agent_roster`, read on each question so an
@@ -1156,10 +1184,173 @@ async def roster_of(state: Any, asked: Asking, registry: ToolRegistry) -> Answer
     records = await read() if read is not None else ()
     return answer_roster(
         records,
-        viewer_for(asked.caller.principal),
+        viewer_for(asked.principal),
         default=default_agents(registry),
         tool_names=(one.name for one in registry.definitions()),
     )
+
+
+async def answered_for(
+    request: Request, recorder: Recorder, asking: Answering, ask: Question
+) -> Answered | StoreVerdict:
+    """One question answered for one person at one reach, or the window that refused it.
+
+    The body of `answer`, taken out so a chat channel answers a bound person by the same code
+    the web route runs, rather than by a copy of it that would drift (M2.3.1, M38.2.2.3).
+    `request` is the one being served, for the process's state and its trace; the web route
+    passes its own, and a chat channel passes the vendor's event request. A refusal by a
+    window is returned rather than rendered, because a stream and a chat say it differently.
+    """
+    registry = getattr(request.app.state, "tools", None)
+    if not isinstance(registry, ToolRegistry):
+        # A process-level fault, identical for every caller and every question, so it
+        # discloses nothing about what exists. `brain.app.lifespan` builds one before it
+        # yields.
+        raise Failed("no tool registry on this process")
+
+    # Uploaded classified tables (Classification screen) join the fast lane beside the
+    # built-in rules, each column answered only to who may read it.
+    tables = await classified_lane_of(request.app.state)
+    rules = (*getattr(request.app.state, "fast_path_rules", ()), *tables.rules)
+    sink = getattr(request.app.state, "trace_sink", None) or CountingTraceSink()
+    # What a finished request owes, installed by `brain.app.lifespan` through
+    # `request_recorders_for`. Empty on a process with no database, which has nowhere to hold
+    # a record and nowhere a report could read one from.
+    recorders: tuple[RequestRecorder, ...] = getattr(request.app.state, "request_recorders", ())
+    # Built from what `asking` resolved and nothing the request carried: the principal came
+    # from the directory and the channel from the token's claims. `Origin` refuses an id the
+    # audit ledger would not accept, which is a process fault identical for every caller.
+    origin = Origin(trace_id=recorder.trace_id, principal=asking.principal, channel=asking.channel)
+    # IDENTIFY and ENTITLE ran in `asking`, after the recorder was opened at ingress; they are
+    # entered here, in order, so the front half's refusal to start before ENTITLE is a real check,
+    # and before the windows, so a question refused by one reads as identified in the log.
+    recorder.identified(asking.principal.id, asking.channel)
+    recorder.ent_hash = asking.reach.ent_hash()
+    recorder.enter(GateStep.ENTITLE)
+    # The person's and the channel's windows, before anything is filed or looked up. Recorded by
+    # nothing: the decision that records comes once the agent is known, below.
+    windows = limit_store_of(request.app.state)
+    asker = asking.reach.principal_id
+    early = await windows_say(
+        windows,
+        now=asking.now,
+        limits=request_limits(principal_id=asker, channel=str(asking.channel)),
+        caller=asker,
+        record=False,
+    )
+    if early is not None and not early.allowed:
+        return early
+    # Before the front half and the lane, so before the cache and any model: a sensitive question
+    # is routed to its topic's named person and recorded without what was asked, and the asker is
+    # told one sentence whatever the topic (M24.2.2). See `brain.audit.compliance`.
+    referral = await referred(request, asking.reach, ask.question)
+
+    address = from_web(ask.question, ask.agent)
+    policies = {**field_policies(registry), **tables.policies}
+    # A referred question is looked up in no store and stored in none: the step is entered and
+    # misses, as it does on a process with none, so the request row reads as any other's.
+    caching = (
+        None
+        if referral is not None
+        else caching_of(request.app.state, policies, sources_at(registry, asking.reach, asking.now))
+    )
+
+    try:
+        roster = await roster_of(request.app.state, asking, registry)
+        front = run_front_half(
+            address.question,
+            recorder=recorder,
+            reach=asking.reach,
+            channel=asking.channel,
+            agents=roster.agents,
+            choosing=Choosing(
+                visible_agents=roster.visible,
+                default_agent=DEFAULT_AGENT,
+                addressed=address.agent_id,
+            ),
+            registry=registry.definitions(),
+            now=asking.now,
+            caching=caching,
+        )
+        # Every window, the agent's included, and the one call that records. See
+        # A_QUESTION_IS_REFUSED_BEFORE_IT_COSTS_ANYTHING_AND_COUNTED_ONCE_IT_IS_ADMITTED.
+        counted = await windows_say(
+            windows,
+            now=asking.now,
+            limits=request_limits(
+                principal_id=asker,
+                channel=str(asking.channel),
+                agent_id=front.selection.agent_id,
+            ),
+            caller=asker,
+            record=True,
+        )
+        if counted is not None and not counted.allowed:
+            return counted
+        # A stored agent answers at the caller's reach narrowed by its ceiling, and the default
+        # at the caller's own. Everything read below is read at that reach and no other.
+        agent = roster.records.get(front.selection.agent_id)
+        reach = run_entitlement(asking.reach, agent)
+        sources = sources_at(registry, reach, asking.now)
+        answered = await answer_lane(
+            address.question,
+            origin=origin,
+            recorders=recorders,
+            rules=rules,
+            readers={**row_readers(registry), **tables.readers},
+            entitlement=reach,
+            policies=policies,
+            reachable_sources=sources,
+            sink=sink,
+            now=asking.now,
+            # The completion instant, read by the lane once in its `finally`. The wall clock,
+            # because on the web route `asking.now` was read from it before
+            # authenticating, so the ledger's duration covers identifying, entitling and
+            # answering, and ends before the frames are written.
+            clock=lambda: datetime.now(UTC),
+            cached=front.cached,
+            # Only a request the front half routed to a tier may reach a model, so no model is
+            # called before ROUTE and PROJECT: a fast-lane question answers or abstains.
+            model=model_lane_for(request.app.state, agent, registry)
+            if front.calls_a_model
+            else None,
+            front=front.record(),
+            gaps=gaps_for_question(address.question, reach.scope_for(KNOWLEDGE_READ, asking.now)),
+            recorder=recorder,
+            referral=referral,
+        )
+        if answered.text is not None:
+            # An answer computed on this request at this reach, stored under the key its own
+            # lookup used (M3.5.2). A hit, a refusal and a fault carry no text and are not kept.
+            remember(
+                address.question,
+                answered.text,
+                front=front,
+                reach=asking.reach,
+                caching=caching,
+                now=asking.now,
+            )
+    except BrainError:
+        # Already in the taxonomy, already has a public message, already maps to a status.
+        raise
+    except Exception as exc:
+        # Broad for the reason the records route gives about its own: whatever a driver raises
+        # would otherwise reach the response as FastAPI's default body, which is not
+        # `ErrorBody`, or as a message with a connection string in it.
+        raise Failed(f"answering: {type(exc).__name__}") from exc
+
+    # The reason, never the question and never the answer. An abstention reason is the audit
+    # half of the outcome and a log is an audit surface; the question is the caller's and the
+    # answer is theirs, and neither belongs in a stream governed by who can read logs.
+    log.info(
+        "answered",
+        principal=asking.principal.id,
+        rules=len(rules),
+        abstained=answered.abstention.reason.value if answered.abstention else None,
+        from_cache=answered.from_cache,
+    )
+
+    return answered
 
 
 @router.post("/answer", responses=LIMITED_RESPONSES)
@@ -1187,159 +1378,11 @@ async def answer(request: Request, recorder: Ingress, asked: Asked, ask: Questio
     Asking past a window is a 429 before the lane runs, and a refused question is never counted:
     `A_QUESTION_IS_REFUSED_BEFORE_IT_COSTS_ANYTHING_AND_COUNTED_ONCE_IT_IS_ADMITTED`.
     """
-    registry = getattr(request.app.state, "tools", None)
-    if not isinstance(registry, ToolRegistry):
-        # A process-level fault, identical for every caller and every question, so it
-        # discloses nothing about what exists. `brain.app.lifespan` builds one before it
-        # yields.
-        raise Failed("no tool registry on this process")
-
-    # Uploaded classified tables (Classification screen) join the fast lane beside the
-    # built-in rules, each column answered only to who may read it.
-    tables = await classified_lane_of(request.app.state)
-    rules = (*getattr(request.app.state, "fast_path_rules", ()), *tables.rules)
-    sink = getattr(request.app.state, "trace_sink", None) or CountingTraceSink()
-    # What a finished request owes, installed by `brain.app.lifespan` through
-    # `request_recorders_for`. Empty on a process with no database, which has nowhere to hold
-    # a record and nowhere a report could read one from.
-    recorders: tuple[RequestRecorder, ...] = getattr(request.app.state, "request_recorders", ())
-    # Built from what `asking` resolved and nothing the request carried: the principal came
-    # from the directory and the channel from the token's claims. `Origin` refuses an id the
-    # audit ledger would not accept, which is a process fault identical for every caller.
-    origin = Origin(
-        trace_id=recorder.trace_id, principal=asked.caller.principal, channel=asked.channel
-    )
-    # IDENTIFY and ENTITLE ran in `asking`, after the recorder was opened at ingress; they are
-    # entered here, in order, so the front half's refusal to start before ENTITLE is a real check,
-    # and before the windows, so a question refused by one reads as identified in the log.
-    recorder.identified(asked.caller.principal.id, asked.channel)
-    recorder.ent_hash = asked.reach.ent_hash()
-    recorder.enter(GateStep.ENTITLE)
-    # The person's and the channel's windows, before anything is filed or looked up. Recorded by
-    # nothing: the decision that records comes once the agent is known, below.
-    windows = limit_store_of(request.app.state)
-    asker = asked.reach.principal_id
-    early = await windows_say(
-        windows,
-        now=asked.now,
-        limits=request_limits(principal_id=asker, channel=str(asked.channel)),
-        caller=asker,
-        record=False,
-    )
-    if early is not None and not early.allowed:
-        return asked_too_often(request, early)
-    # Before the front half and the lane, so before the cache and any model: a sensitive question
-    # is routed to its topic's named person and recorded without what was asked, and the asker is
-    # told one sentence whatever the topic (M24.2.2). See `brain.audit.compliance`.
-    referral = await referred(request, asked, ask.question)
-
-    address = from_web(ask.question, ask.agent)
-    policies = {**field_policies(registry), **tables.policies}
-    # A referred question is looked up in no store and stored in none: the step is entered and
-    # misses, as it does on a process with none, so the request row reads as any other's.
-    caching = (
-        None
-        if referral is not None
-        else caching_of(request.app.state, policies, reachable_sources(registry, asked))
-    )
-
-    try:
-        roster = await roster_of(request.app.state, asked, registry)
-        front = run_front_half(
-            address.question,
-            recorder=recorder,
-            reach=asked.reach,
-            channel=asked.channel,
-            agents=roster.agents,
-            choosing=Choosing(
-                visible_agents=roster.visible,
-                default_agent=DEFAULT_AGENT,
-                addressed=address.agent_id,
-            ),
-            registry=registry.definitions(),
-            now=asked.now,
-            caching=caching,
-        )
-        # Every window, the agent's included, and the one call that records. See
-        # A_QUESTION_IS_REFUSED_BEFORE_IT_COSTS_ANYTHING_AND_COUNTED_ONCE_IT_IS_ADMITTED.
-        counted = await windows_say(
-            windows,
-            now=asked.now,
-            limits=request_limits(
-                principal_id=asker,
-                channel=str(asked.channel),
-                agent_id=front.selection.agent_id,
-            ),
-            caller=asker,
-            record=True,
-        )
-        if counted is not None and not counted.allowed:
-            return asked_too_often(request, counted)
-        # A stored agent answers at the caller's reach narrowed by its ceiling, and the default
-        # at the caller's own. Everything read below is read at that reach and no other.
-        agent = roster.records.get(front.selection.agent_id)
-        reach = run_entitlement(asked.reach, agent)
-        sources = sources_at(registry, reach, asked.now)
-        answered = await answer_lane(
-            address.question,
-            origin=origin,
-            recorders=recorders,
-            rules=rules,
-            readers={**row_readers(registry), **tables.readers},
-            entitlement=reach,
-            policies=policies,
-            reachable_sources=sources,
-            sink=sink,
-            now=asked.now,
-            # The completion instant, read by the lane once in its `finally`. The wall clock,
-            # because `asked.now` was read from it at the top of `asking`, before
-            # authentication, so the ledger's duration covers identifying, entitling and
-            # answering, and ends before the frames are written.
-            clock=lambda: datetime.now(UTC),
-            cached=front.cached,
-            # Only a request the front half routed to a tier may reach a model, so no model is
-            # called before ROUTE and PROJECT: a fast-lane question answers or abstains.
-            model=model_lane_for(request.app.state, agent, registry)
-            if front.calls_a_model
-            else None,
-            front=front.record(),
-            gaps=gaps_for_question(address.question, reach.scope_for(KNOWLEDGE_READ, asked.now)),
-            recorder=recorder,
-            referral=referral,
-        )
-        if answered.text is not None:
-            # An answer computed on this request at this reach, stored under the key its own
-            # lookup used (M3.5.2). A hit, a refusal and a fault carry no text and are not kept.
-            remember(
-                address.question,
-                answered.text,
-                front=front,
-                reach=asked.reach,
-                caching=caching,
-                now=asked.now,
-            )
-    except BrainError:
-        # Already in the taxonomy, already has a public message, already maps to a status.
-        raise
-    except Exception as exc:
-        # Broad for the reason the records route gives about its own: whatever a driver raises
-        # would otherwise reach the response as FastAPI's default body, which is not
-        # `ErrorBody`, or as a message with a connection string in it.
-        raise Failed(f"answering: {type(exc).__name__}") from exc
-
-    # The reason, never the question and never the answer. An abstention reason is the audit
-    # half of the outcome and a log is an audit surface; the question is the caller's and the
-    # answer is theirs, and neither belongs in a stream governed by who can read logs.
-    log.info(
-        "answered",
-        principal=asked.caller.principal.id,
-        rules=len(rules),
-        abstained=answered.abstention.reason.value if answered.abstention else None,
-        from_cache=answered.from_cache,
-    )
-
+    outcome = await answered_for(request, recorder, Answering.of(asked), ask)
+    if isinstance(outcome, StoreVerdict):
+        return asked_too_often(request, outcome)
     return StreamingResponse(
-        frames_of(answered),
+        frames_of(outcome),
         media_type=EVENT_STREAM,
         headers={
             # A permission requirement rather than a performance note. See the constant above.

@@ -28,7 +28,20 @@ setting is written, so no use is ever switched on without a key behind it.
 `brain.attribution.attribute`, so `ops.setting`'s trigger records who switched Lark on, at what
 reach, in which request, rather than `0003`'s placeholders (`brain.ops.write_attribution`).
 
-Task ids: M11.9.4, M11.9.1
+**The chat channel is switched on as the channel it is, not as a connector.** Its secret, with
+the Encrypt Key and Verification Token Lark's events are checked with, is kept at
+`providers/channel_lark` through `brain.ops.channel_store.channel_secret_slot`, the one slot the
+application reads when an event arrives, and the channel's own record is written through
+`brain.channel_routes.records_of` with the App ID, the platform and the bot's open id. So Connect
+Lark and the Channels screen are two views of one record, and the channel is governed by the one
+authority both ask. See `THE_CHAT_CHANNEL_IS_ONE_RECORD_WHICHEVER_SCREEN_SWITCHES_IT`.
+
+**The card says whether events are arriving (M10.2.1).** The events address to paste, and the
+channel's newest deliveries read by `brain.ops.channel_store`: when the last message was received,
+when the last one was refused and why in words, and what the last reply came to. Nothing of any
+message, and only to a reader who may switch the chat channel on.
+
+Task ids: M11.9.4, M11.9.1, M10.2.1, M10.6.3
 """
 
 from __future__ import annotations
@@ -46,30 +59,38 @@ from pydantic import BaseModel, ConfigDict
 from brain.api import API_PREFIX, COMMON_RESPONSES, ErrorBody, NoEchoRoute
 from brain.api_routes import Asked, Asking
 from brain.attribution import attribute, trace_of_request
+from brain.channel_routes import deliveries_of, records_of
+from brain.channels.adapter import BOT_ID
+from brain.channels.lark import APP_ID_FIELD, PLATFORM_FIELD, LarkSecret
 from brain.connectors.staff_directories import LARK_PLATFORMS, Fetch
 from brain.console.reads import permitted
 from brain.console.screens import screen
 from brain.core.entitlement import EntitlementSet
 from brain.core.errors import Absent, Failed
 from brain.credential_routes import credentials_of, may_manage
+from brain.gate.context import Channel
 from brain.install import InstallError, hold_saved, value_of
+from brain.ops.channel_store import DeliveryView, channel_secret_slot
 from brain.ops.connector_admin import may_connect_source
 from brain.ops.credentials import (
     TOLD,
     CredentialProblemError,
     Credentials,
     CredentialsUnavailableError,
+    KeySlot,
     VaultState,
     connector_key_slot,
 )
 from brain.ops.install_settings import load, save
 from brain.ops.lark_connect import (
     KNOWLEDGE_IS_SWITCHED_ON_AND_NOTHING_IS_COPIED,
-    THE_CHANNEL_RECEIVER_IS_NOT_BUILT_YET,
+    THE_CHANNEL_ANSWERS_AT_EACH_READERS_OWN_REACH,
+    THE_CHANNEL_IS_SAVED_BEFORE_LARK_CHECKS_ITS_ADDRESS,
     THE_TEST_ONLY_READS,
     USES,
     Problem,
     Use,
+    bot_open_id,
     credential_value,
     developer_console,
     events_address,
@@ -83,6 +104,7 @@ from brain.ops.lark_connect import (
 )
 from brain.ops.staff_sync_run import http_fetch
 from brain.routing_routes import sessions_of
+from brain.tables.channel import DeliveryOutcome, Direction, RefusedBecause
 
 log = structlog.get_logger()
 
@@ -94,6 +116,15 @@ EACH_USE_IS_SWITCHED_ON_UNDER_THE_AUTHORITY_THAT_ALREADY_GOVERNS_IT: Final = (
     "authority that already governs its credential: the staff list asks the credential authority "
     "the Staff sources screen asks, and each other use asks the connector installation authority "
     "over its own slot. Holding one does not switch on another."
+)
+
+#: Why the chat channel's secret and record are the channel's own.
+THE_CHAT_CHANNEL_IS_ONE_RECORD_WHICHEVER_SCREEN_SWITCHES_IT: Final = (
+    "Switching the chat channel on here keeps its App Secret, Encrypt Key and Verification Token "
+    "together in the channel's own vault slot, the one the application reads when an event "
+    "arrives, and writes the channel's record with the App ID, the platform and the bot's id. The "
+    "Channels screen reads and switches that same record, so the two screens cannot disagree about "
+    "whether Lark is on."
 )
 
 #: Why the one credential is kept more than once.
@@ -137,6 +168,48 @@ STAFF_ELSEWHERE: Final = (
     "Switched on here, but the Staff sources screen has since chosen another staff source, so "
     "the staff list is not read from Lark."
 )
+#: What the card says about Lark's events, for each state the channel can be in.
+EVENTS_OFF: Final = (
+    "The chat channel is not switched on here yet, so Lark's check of the events address is "
+    "refused. Save the chat channel with its Encrypt Key and Verification Token first."
+)
+EVENTS_NONE_YET: Final = (
+    "No event has arrived yet. Once the events address is saved in Lark, the message event is "
+    "added and the version is approved, send the bot a direct message and this changes."
+)
+EVENTS_ARRIVING: Final = "Events are arriving."
+REFUSED_EVENT_TOLD: Final = {
+    RefusedBecause.BAD_SIGNATURE: (
+        "The last event was refused because it did not verify: the Encrypt Key or Verification "
+        "Token saved here is not the one on Lark's Encryption Strategy tab. Paste both again and "
+        "save."
+    ),
+    RefusedBecause.UNREADABLE: (
+        "The last event was not one this channel reads: it reads text messages to the bot "
+        "(im.message.receive_v1) from people. A picture, a file or another app's message is "
+        "refused this way and needs nothing doing."
+    ),
+    RefusedBecause.NO_SECRET: (
+        "The last event could not be checked because the chat channel's keys are not in the "
+        "vault. Save the chat channel again."
+    ),
+    RefusedBecause.VAULT_UNAVAILABLE: (
+        "The last event could not be checked because the vault did not answer. Lark sends it "
+        "again later."
+    ),
+    RefusedBecause.TOO_LARGE: "The last event was larger than a message is and was refused.",
+    RefusedBecause.SWITCHED_OFF: EVENTS_OFF,
+    RefusedBecause.NOT_CONFIGURED: EVENTS_OFF,
+}
+REPLY_TOLD: Final = {
+    DeliveryOutcome.SENT: "The last reply was sent.",
+    DeliveryOutcome.UNKNOWN: "Lark did not answer the last reply, so it may not have arrived.",
+    DeliveryOutcome.REFUSED: (
+        "The last reply was not sent. If Lark refused it, check the four chat scopes are added "
+        "and a version with them is approved."
+    ),
+}
+
 SAVED: Final = (
     "The credential is in the vault and the uses you chose are switched on. Nothing was copied "
     "from Lark."
@@ -182,6 +255,23 @@ class LarkStepView(BaseModel):
     text: str
 
 
+class LarkEventsView(BaseModel):
+    """Where Lark's events go and whether they are arriving. Nothing of any message."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    #: The address to paste as Lark's Request URL, or empty when the install names none.
+    address: str
+    switched_on: bool
+    last_received: datetime | None
+    last_refused: datetime | None
+    #: Why the last refused event was refused, as `ops.channel_delivery` records it.
+    refused_because: str | None
+    last_reply: datetime | None
+    reply_outcome: str | None
+    told: str
+
+
 class LarkView(BaseModel):
     """The guide for the uses asked about, every use's standing, and what testing does."""
 
@@ -199,6 +289,8 @@ class LarkView(BaseModel):
     #: Where the chat channel's events will arrive, or empty when this install names no address.
     events_address: str
     channel_note: str
+    #: The chat channel's events, for a reader who may switch it on; None for anybody else.
+    events: LarkEventsView | None = None
     knowledge_note: str
     test_note: str
     staff_sources_screen: str
@@ -215,6 +307,9 @@ class LarkAsked(BaseModel):
     uses: list[str]
     platform: str
     base_link: str = ""
+    #: The chat channel's two event keys, from Lark's Encryption Strategy tab. Kept, never shown.
+    encrypt_key: str = ""
+    verification_token: str = ""
 
 
 class LarkUseResultView(BaseModel):
@@ -342,7 +437,7 @@ def _status(use: Use, *, on: bool, held: bool | None) -> str:
     if use is Use.STAFF_LIST:
         return STAFF_ON if _saved("INSTALL_STAFF_SOURCE") == "lark" else STAFF_ELSEWHERE
     if use is Use.CHANNEL:
-        return f"{SWITCHED_ON} {THE_CHANNEL_RECEIVER_IS_NOT_BUILT_YET}"
+        return f"{SWITCHED_ON} {THE_CHANNEL_ANSWERS_AT_EACH_READERS_OWN_REACH}"
     return f"{SWITCHED_ON} {KNOWLEDGE_IS_SWITCHED_ON_AND_NOTHING_IS_COPIED}"
 
 
@@ -351,11 +446,78 @@ def _held(store: Credentials, uses: Sequence[Use]) -> tuple[VaultState, dict[Use
     if not store.configured:
         return VaultState.ABSENT, {}
     try:
-        return VaultState.READY, {
-            use: store.held(connector_key_slot(USES[use].slot)).held for use in uses
-        }
+        return VaultState.READY, {use: store.held(_slot_of(use)).held for use in uses}
     except CredentialsUnavailableError as unavailable:
         return unavailable.state, {}
+
+
+def _slot_of(use: Use) -> KeySlot:
+    """Where a use's credential is kept: the chat channel's own slot, or the use's connector's."""
+    if use is Use.CHANNEL:
+        return channel_secret_slot(Channel.LARK)
+    return connector_key_slot(USES[use].slot)
+
+
+def events_told(
+    *, switched_on: bool, recent: Sequence[DeliveryView]
+) -> tuple[str, DeliveryView | None, DeliveryView | None, DeliveryView | None]:
+    """What the card says about events, and the newest received, refused and reply entries."""
+    received = next(
+        (
+            one
+            for one in recent
+            if one.entry.direction is Direction.INBOUND
+            and one.entry.outcome in (DeliveryOutcome.ACCEPTED, DeliveryOutcome.REDELIVERED)
+        ),
+        None,
+    )
+    refused = next(
+        (
+            one
+            for one in recent
+            if one.entry.direction is Direction.INBOUND
+            and one.entry.outcome is DeliveryOutcome.REFUSED
+        ),
+        None,
+    )
+    reply = next((one for one in recent if one.entry.direction is Direction.OUTBOUND), None)
+    if not switched_on:
+        return EVENTS_OFF, received, refused, reply
+    newest = recent[0] if recent else None
+    if newest is not None and newest is refused and refused.entry.reason is not None:
+        told = REFUSED_EVENT_TOLD.get(refused.entry.reason, EVENTS_ARRIVING)
+    elif received is None:
+        told = EVENTS_NONE_YET
+    else:
+        told = EVENTS_ARRIVING
+    if reply is not None and received is not None:
+        told = f"{told} {REPLY_TOLD[reply.entry.outcome]}"
+    return told, received, refused, reply
+
+
+async def _events_view(request: Request, may: bool) -> LarkEventsView | None:
+    """The chat channel's events for a reader who may switch it on. See the module docstring."""
+    if not may:
+        return None
+    try:
+        record = await records_of(request).get(Channel.LARK)
+        recent = await deliveries_of(request).recent(Channel.LARK) if record is not None else ()
+    except Failed:
+        record, recent = None, ()
+    switched_on = record is not None and record.enabled
+    told, received, refused, reply = events_told(switched_on=switched_on, recent=recent)
+    return LarkEventsView(
+        address=events_address(_saved("INSTALL_OIDC_REDIRECT_URIS")),
+        switched_on=switched_on,
+        last_received=None if received is None else received.recorded_at,
+        last_refused=None if refused is None else refused.recorded_at,
+        refused_because=(
+            None if refused is None or refused.entry.reason is None else refused.entry.reason.value
+        ),
+        last_reply=None if reply is None else reply.recorded_at,
+        reply_outcome=None if reply is None else reply.entry.outcome.value,
+        told=told,
+    )
 
 
 def _scope_views(uses: Sequence[Use]) -> list[LarkScopeView]:
@@ -394,6 +556,8 @@ def _judged(
         uses=chosen,
         platform=body.platform,
         base_link=body.base_link,
+        encrypt_key=body.encrypt_key,
+        verification_token=body.verification_token,
     )
     return chosen, (_problems(found) if found else None)
 
@@ -458,7 +622,8 @@ async def lark(
         base="" if _saved("INSTALL_LARK_BASE") in ("", "unset") else _saved("INSTALL_LARK_BASE"),
         developer_console=developer_console(where),
         events_address=events_address(_saved("INSTALL_OIDC_REDIRECT_URIS")),
-        channel_note=THE_CHANNEL_RECEIVER_IS_NOT_BUILT_YET,
+        channel_note=THE_CHANNEL_IS_SAVED_BEFORE_LARK_CHECKS_ITS_ADDRESS,
+        events=await _events_view(request, may_switch_on(asked.reach, Use.CHANNEL, asked.now)),
         knowledge_note=KNOWLEDGE_IS_SWITCHED_ON_AND_NOTHING_IS_COPIED,
         test_note=THE_TEST_ONLY_READS,
         staff_sources_screen=STAFF_SOURCES_SCREEN,
@@ -512,12 +677,11 @@ async def save_lark(request: Request, body: LarkAsked, asked: Asked) -> JSONResp
         return refused
     credentials = credentials_of(request)
     trace_id = trace_of_request()
-    value = credential_value(body.app_id, body.app_secret)
     try:
         for use in chosen:
             await credentials.keep(
-                connector_key_slot(USES[use].slot),
-                value,
+                _slot_of(use),
+                _kept_for(use, body),
                 actor=asked.reach.principal_id,
                 trace_id=trace_id,
                 ent_hash=asked.reach.ent_hash(),
@@ -534,6 +698,8 @@ async def save_lark(request: Request, body: LarkAsked, asked: Asked) -> JSONResp
         )
     values = settings_for(chosen, platform=body.platform, base_link=body.base_link)
     await settings_of(request).save(values, asked)
+    if Use.CHANNEL in chosen:
+        await _switch_the_channel_on(request, body, asked, trace_id)
     log.info(
         "lark uses switched on",
         principal=asked.caller.principal.id,
@@ -545,6 +711,49 @@ async def save_lark(request: Request, body: LarkAsked, asked: Asked) -> JSONResp
         staff_sources_screen=STAFF_SOURCES_SCREEN,
     )
     return JSONResponse(status_code=200, content=answered.model_dump(mode="json"))
+
+
+def _kept_for(use: Use, body: LarkAsked) -> str:
+    """The value kept for a use: the chat channel's three secrets together, or the credential."""
+    if use is Use.CHANNEL:
+        return LarkSecret(
+            app_secret=body.app_secret.strip(),
+            encrypt_key=body.encrypt_key.strip(),
+            verification_token=body.verification_token.strip(),
+        ).kept()
+    return credential_value(body.app_id, body.app_secret)
+
+
+async def _switch_the_channel_on(
+    request: Request, body: LarkAsked, asked: Asking, trace_id: str
+) -> None:
+    """Write the chat channel's record, switched on. See the named constant.
+
+    The bot's id is read from Lark; an app whose version is not released yet has no bot to read,
+    and then the id the record already holds is kept, so a second save after release fills it.
+    """
+    records = records_of(request)
+    held = await records.get(Channel.LARK)
+    bot = await bot_open_id(
+        fetch_of(request),
+        platform=body.platform,
+        app_id=body.app_id,
+        app_secret=body.app_secret,
+        open_base=open_base_of(request),
+    )
+    known = bot or ("" if held is None else held.tenant.get(BOT_ID, ""))
+    tenant = {APP_ID_FIELD: body.app_id.strip(), PLATFORM_FIELD: body.platform}
+    if known:
+        tenant[BOT_ID] = known
+    await records.save(
+        Channel.LARK,
+        enabled=True,
+        tenant=tenant,
+        actor=asked.caller.principal.id,
+        ent_hash=asked.reach.ent_hash(),
+        trace_id=trace_id,
+    )
+    log.info("lark chat channel switched on", bot_known=bool(known))
 
 
 __all__ = [

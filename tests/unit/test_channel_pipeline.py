@@ -56,6 +56,7 @@ from brain.channels.inbound import (
     ReceiptKind,
     receive,
 )
+from brain.channels.lark import WIRE as LARK_WIRE
 from brain.channels.outbound import (
     A_MESSAGE_FOR_NOBODY_IN_PARTICULAR_CARRIES_NOTHING,
     Delivered,
@@ -294,6 +295,10 @@ class Transport:
         self.sent.append(request)
         return self.answer
 
+    def read(self, request: VendorRequest) -> VendorAnswer:
+        # The webhook channel reads nothing from its vendor; a read here is a wiring fault.
+        raise AssertionError(f"nothing reads through the webhook's transport: {request.url}")
+
     def texts(self) -> list[str]:
         return [json.loads(one.body)["text"] for one in self.sent]
 
@@ -463,7 +468,7 @@ def test_every_adapter_in_the_package_is_registered_once_in_channel_order() -> N
         Channel.WHATSAPP,
     }
     assert channel_adapters() == CHANNEL_ADAPTERS
-    assert dict(channel_wires()) == {Channel.WEBHOOK: WIRE}
+    assert dict(channel_wires()) == {Channel.LARK: LARK_WIRE, Channel.WEBHOOK: WIRE}
 
 
 PROBE_MODULE = """
@@ -935,14 +940,14 @@ def test_a_name_that_is_no_channel_and_a_switched_off_channel_are_one_answer(
     raw, sent = signed(message())
     off = post_event(client, raw, sent)
     nothing = post_event(client, raw, sent, name="carrier-pigeon")
-    unreceived = post_event(client, raw, sent, name="lark")
+    unreceived = post_event(client, raw, sent, name="whatsapp")
     assert off.status_code == nothing.status_code == unreceived.status_code == 404
     assert body_of(off) == body_of(nothing) == body_of(unreceived)
     assert world.deliveries.seen() == [("inbound", "refused", "switched_off")]
 
 
 def test_a_bound_sender_with_nothing_to_answer_them_is_refused_and_recorded(
-    client: TestClient, world: World
+    client: TestClient, world: World, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A bound sender is the answerer's; with none wired nothing is sent and the refusal is
     recorded. With one wired, what it made is what is sent.
@@ -962,6 +967,8 @@ def test_a_bound_sender_with_nothing_to_answer_them_is_refused_and_recorded(
             return bound if digest == bound.identity_hash else None
 
     client.app.state.channel_bindings = Bound()  # type: ignore[attr-defined]
+    # A process with nothing able to answer: `answerer_of` answers None exactly there.
+    monkeypatch.setattr(channel_routes, "answerer_of", lambda request: None)
     raw, sent = signed(message("m-2"))
     assert post_event(client, raw, sent).json() == {"status": "accepted", "reply": "refused"}
     assert world.deliveries.seen()[-1] == ("outbound", "refused", "not_answerable")
@@ -969,16 +976,26 @@ def test_a_bound_sender_with_nothing_to_answer_them_is_refused_and_recorded(
 
     class Answerer:
         async def answer(
-            self, inbound: Inbound, *, binding: Binding, reply_to: str, now: datetime
-        ) -> Outgoing:
+            self,
+            inbound: Inbound,
+            *,
+            binding: Binding,
+            record: ChannelRecord,
+            reply_to: str,
+            now: datetime,
+        ) -> tuple[Outgoing, ...]:
             assert binding is bound
-            return Outgoing(
-                channel=Channel.WEBHOOK,
-                to=reply_to,
-                intent=Intent(principal_id=binding.principal_id, intent_ref="answer.1"),
-                text="an answer",
+            assert record.channel is Channel.WEBHOOK
+            return (
+                Outgoing(
+                    channel=Channel.WEBHOOK,
+                    to=reply_to,
+                    intent=Intent(principal_id=binding.principal_id, intent_ref="answer.1"),
+                    text="an answer",
+                ),
             )
 
+    monkeypatch.undo()
     client.app.state.channel_answerer = Answerer()  # type: ignore[attr-defined]
     raw, sent = signed(message("m-3"))
     assert post_event(client, raw, sent).json() == {"status": "accepted", "reply": "sent"}
