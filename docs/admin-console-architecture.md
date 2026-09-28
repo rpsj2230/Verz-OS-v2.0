@@ -1499,7 +1499,7 @@ never drawn "healthy".
 | List connected | who, when, pinned digest, and "what this source declares has changed since you agreed" when today's manifest digest differs |
 | Details | trust sentences, credential held and when written (never the value), ceiling, agents whose manifest names it, skills whose tools come from it |
 | Connect | exists (settings validated by the connection class's own refusal) |
-| Test connection | to build: one probe through the connector's client under its throttle, recorded in a probe table, never returning business rows; needs a vault role that may read the key (W3.2) |
+| Test connection | exists (M27.15.8, needs-rupash 107): the console writes a request (`connector.probe_requested.<source>` in `ops.setting`, on the ledger through `0059`'s trigger) under `admin:connector` over the source; the worker makes one call on its next pass under the source's verified ceiling and the read's lock, leasing the key as a read does, and records a `probed` attempt (`0142`) whose health becomes the source's; nothing the source sent is kept or shown (`ops/connector_probe.py`, `ops/connector_probe_run.py`) |
 | Edit configuration | disconnect and connect in one transaction, because the settings are what the digest was pinned over; an in-place edit would change what was agreed to without agreement |
 | Replace key | a credential write to `connector_keys/<source>` (the policy already allows update); to build as a slot on I4 and a button here |
 | Reconnect | connect after disconnect: a new row, history kept |

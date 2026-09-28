@@ -16,12 +16,12 @@
  * is answered by the API exactly as one nobody connected, and is drawn the same. A 404 is not
  * explained: a name nothing ships and a name the reader may not open are one answer.
  *
- * **Every act whose route exists works; testing a connection is drawn and inert.** Connect, Connect
- * Lark, edit settings, replace the key, export the record and disconnect, each confirmed in the
- * API's words where it changes something (`SourceActs.tsx`); test connection is
- * `kit/UnavailableAction` with `connectorActions.ts`' sentence.
+ * **Every act works.** Connect, Connect Lark, edit settings, replace the key, export the record and
+ * disconnect, each confirmed in the API's words where it changes something (`SourceActs.tsx`), and
+ * test connection (`TestConnection.tsx`), which the worker makes and the header reports: waiting,
+ * then what it found. A reader who may not manage the source sees the newest test and no button.
  *
- * Task ids: M27.11.9, M27.15.39, M27.15.58, M11.7.7, M27.16.1, M27.10.2
+ * Task ids: M27.11.9, M27.15.39, M27.15.58, M11.7.7, M27.16.1, M27.10.2, M27.15.8
  */
 
 import { ChevronDown, IdCard, Info, LayoutDashboard, Plus, Settings } from "lucide-react";
@@ -36,7 +36,6 @@ import {
   LoadingState,
   Note,
   StatCard,
-  UnavailableAction,
   ViewSwitch,
   type DetailView,
 } from "../../components/kit";
@@ -45,13 +44,13 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../../components/ui/dropdown-menu";
 import { FailureNotice } from "../../ui/FailureNotice";
 import { CONNECTORS_API_PATH, when, type Connected, type Connectors as ConnectorsBody } from "../connectorsQuery";
-import { ACT_LABELS, UNAVAILABLE } from "./connectorActions";
+import { ACT_LABELS } from "./connectorActions";
+import { worthShowing } from "./connectorProbe";
 import { ConnectorAbout } from "./ConnectorAbout";
 import { ConnectorDashboard } from "./ConnectorDashboard";
 import { ConnectorProfile } from "./ConnectorProfile";
@@ -77,6 +76,7 @@ import {
   exportRecord,
   type OpenAct,
 } from "./SourceActs";
+import { ConnectionTestNote, NOT_TESTED, TestConnectionButton, useConnectionTest } from "./TestConnection";
 
 /** The three views, in the owner's order. The first is where the bare address lands. */
 export const VIEWS = ["dashboard", "profile", "about"] as const;
@@ -169,16 +169,6 @@ function ManageMenu({
             </DropdownMenuItem>
           </>
         ) : null}
-        {connected === undefined ? null : (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-[11px] font-normal text-dim">Coming soon</DropdownMenuLabel>
-            <DropdownMenuItem disabled className="flex-col items-start gap-0.5">
-              <span>{ACT_LABELS.test}</span>
-              <span className="text-[11px] leading-snug text-dim">{UNAVAILABLE.test.reason}</span>
-            </DropdownMenuItem>
-          </>
-        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -189,12 +179,17 @@ function SourceAnswer({ name, tab }: { readonly name: string; readonly tab: stri
   const [open, setOpen] = useState<OpenAct | null>(null);
   const [told, setTold] = useState<string | null>(null);
   const [exportFailure, setExportFailure] = useState<ApiFailure | null>(null);
+  const [testFailure, setTestFailure] = useState<ApiFailure | null>(null);
   const answer = useResource<unknown>(sourceApiPath(name), version);
   const context = useResource<ConnectorsBody>(CONNECTORS_API_PATH, version);
   const detail = useMemo(() => readSourceDetail(answer.data), [answer.data]);
   const page = context.data;
   const connected = page?.connectors?.find((one) => one.name === name);
   const form = page?.connectable.find((one) => one.name === name);
+  const tested = useCallback(() => {
+    setVersion((count) => count + 1);
+  }, []);
+  const test = useConnectionTest(name, connected !== undefined, tested);
 
   const done = useCallback((sentence: string) => {
     setOpen(null);
@@ -211,6 +206,7 @@ function SourceAnswer({ name, tab }: { readonly name: string; readonly tab: stri
   const act = useCallback((next: OpenAct) => {
     setTold(null);
     setExportFailure(null);
+    setTestFailure(null);
     setOpen(next);
   }, []);
   const saveExport = useCallback(() => {
@@ -243,6 +239,7 @@ function SourceAnswer({ name, tab }: { readonly name: string; readonly tab: stri
     .filter((one): one is string => one !== null && one !== "")
     .join(" · ");
   const mayConnect = source.status === "not_connected" && source.connectFrom === "console" && source.mayManage && form !== undefined;
+  const showsTest = connected !== undefined && worthShowing(test.probe);
 
   const header = (
     <DetailHeader
@@ -282,8 +279,17 @@ function SourceAnswer({ name, tab }: { readonly name: string; readonly tab: stri
               {ACT_LABELS.connectLark}
             </Button>
           ) : null}
-          {connected === undefined ? null : (
-            <UnavailableAction label={ACT_LABELS.test} text={ACT_LABELS.test} reason={UNAVAILABLE.test.reason} />
+          {connected === undefined || !source.mayManage ? null : (
+            <TestConnectionButton
+              name={source.name}
+              label={source.label}
+              probe={test.probe}
+              onAsked={(fresh) => {
+                setTold(null);
+                test.took(fresh);
+              }}
+              onFailed={setTestFailure}
+            />
           )}
           <ManageMenu detail={detail} connected={connected} onAct={act} onExport={saveExport} />
         </>
@@ -305,10 +311,12 @@ function SourceAnswer({ name, tab }: { readonly name: string; readonly tab: stri
         )
       }
       footnote={
-        told === null && exportFailure === null ? undefined : (
+        told === null && exportFailure === null && testFailure === null && !showsTest ? undefined : (
           <div role="status" className="flex flex-col gap-2">
             {told === null || told === "" ? null : <Note kind="works">{told}</Note>}
+            {showsTest ? <ConnectionTestNote probe={test.probe} onCheckAgain={test.checkAgain} /> : null}
             {exportFailure === null ? null : <FailureNotice failure={exportFailure} title={NOT_EXPORTED} />}
+            {testFailure === null ? null : <FailureNotice failure={testFailure} title={NOT_TESTED} />}
           </div>
         )
       }

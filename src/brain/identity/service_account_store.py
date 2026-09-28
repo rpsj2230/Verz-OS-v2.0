@@ -15,11 +15,17 @@ as an account that does not exist. See `AN_ACCOUNT_IS_ITS_OWNERS_AND_NOBODY_ELSE
 is `ops.credential_write`, whose `0054` trigger appends the entry in the same transaction, with the
 slot `service_accounts/<client id>` and the writer on the row. A key's secret is never in either.
 
+**Revoking a key and retiring an account leave one too, since `0148`**, from triggers on the two
+tables under the same subject, so an account's whole history is one subject. Until then both
+wrote `deleted_at` and nothing else. The actor is the owner, set through
+`brain.tables.audit.attributed_to` in the retiring transaction, because the rows have no column
+naming who retired them. See `A_RETIREMENT_NAMES_WHO_PRESSED_IT`.
+
 **A third live key is refused under the account's lock.** `api_keys.issue` refuses it given the
 live keys, and the keys are read after the account row is locked, so two presses at once cannot each
 see one key and each add a second.
 
-Task ids: M1.1.7, M1.8.2
+Task ids: M1.1.7, M1.8.2, M27.11.5
 """
 
 from __future__ import annotations
@@ -38,7 +44,7 @@ from brain.channels.api_keys import ApiKeyError, ApiKeyRecord, IssuedKey, issue
 from brain.core.entitlement import Capability
 from brain.identity.sessions import ServiceAccount
 from brain.ops.credential_write_store import written
-from brain.tables.audit import ENT_HASH_SETTING, TRACE_ID_SETTING
+from brain.tables.audit import ENT_HASH_SETTING, TRACE_ID_SETTING, attributed_to
 from brain.tables.identity import PrincipalRow
 from brain.tables.service_account import ApiKeyRow, ServiceAccountRow
 
@@ -47,6 +53,14 @@ AN_ACCOUNT_IS_ITS_OWNERS_AND_NOBODY_ELSES: Final = (
     "A service account acts at its owner's reach, so only its owner may make it, give it a key, "
     "take a key away or retire it. The owner is whoever registered it, and every statement names "
     "them, so another person's account is not found rather than refused."
+)
+
+#: Why a revocation and a retirement are attributed before they are written.
+A_RETIREMENT_NAMES_WHO_PRESSED_IT: Final = (
+    "0148's triggers record a revoked key and a retired account under the account's credential "
+    "subject, and read the actor from the transaction, because neither row has a column naming "
+    "who retired it. So the owner, the reach and the request are set in the same transaction "
+    "before the update; a statement that set nothing is recorded as the database role, inferred."
 )
 
 #: The ledger slot an account's writes are recorded under. `brain.audit.record.CREDENTIAL_SLOT`.
@@ -219,6 +233,21 @@ class StoredServiceAccounts:
         )
         return listed, len(rows) >= limit
 
+    async def owned_one(self, client_id: str, owner: str) -> AccountListed | None:
+        """One live account this owner owns, with its live keys, or None: another person's, a
+        retired one and one that never existed are the same None."""
+        async with self.sessions() as session, session.begin():
+            row = (await session.execute(owned_account(client_id, owner))).mappings().one_or_none()
+            if row is None:
+                return None
+            keys = (await session.execute(live_keys_of((client_id,)))).mappings().all()
+        return AccountListed(
+            account=account_from(dict(row)),
+            label=row["label"],
+            created_at=row["created_at"],
+            keys=tuple(key_from(dict(one)) for one in keys),
+        )
+
     async def register(
         self,
         account: ServiceAccount,
@@ -312,13 +341,21 @@ class StoredServiceAccounts:
             await session.execute(written(slot_for(client_id), owner))
         return minted
 
-    async def revoke_key(self, handle: str, *, owner: str) -> bool:
-        """Retire one live key of an account this owner owns. False when there was none."""
+    async def revoke_key(
+        self, handle: str, *, owner: str, ent_hash: str = "", trace_id: str = ""
+    ) -> bool:
+        """Retire one live key of an account this owner owns. False when there was none.
+
+        Attributed to the owner first, so `0148`'s trigger names them. See
+        `A_RETIREMENT_NAMES_WHO_PRESSED_IT`.
+        """
         owned = select(ServiceAccountRow.client_id).where(
             ServiceAccountRow.owner_principal_id == owner,
             ServiceAccountRow.deleted_at.is_(None),
         )
         async with self.sessions() as session, session.begin():
+            for statement in attributed_to(actor_id=owner, ent_hash=ent_hash, trace_id=trace_id):
+                await session.execute(statement)
             done = await session.execute(
                 update(ApiKeyRow)
                 .where(
@@ -331,9 +368,17 @@ class StoredServiceAccounts:
             )
             return done.first() is not None
 
-    async def retire(self, client_id: str, *, owner: str) -> bool:
-        """Retire an account this owner owns, and every live key it has. False when none."""
+    async def retire(
+        self, client_id: str, *, owner: str, ent_hash: str = "", trace_id: str = ""
+    ) -> bool:
+        """Retire an account this owner owns, and every live key it has. False when none.
+
+        The keys go first, so the ledger reads one `key_revoked` per live key and then
+        `account_retired`, all attributed to the owner.
+        """
         async with self.sessions() as session, session.begin():
+            for statement in attributed_to(actor_id=owner, ent_hash=ent_hash, trace_id=trace_id):
+                await session.execute(statement)
             row = (
                 (await session.execute(owned_account(client_id, owner, lock=True)))
                 .mappings()
@@ -356,6 +401,7 @@ class StoredServiceAccounts:
 
 __all__ = [
     "AN_ACCOUNT_IS_ITS_OWNERS_AND_NOBODY_ELSES",
+    "A_RETIREMENT_NAMES_WHO_PRESSED_IT",
     "SLOT_FAMILY",
     "AccountListed",
     "ApiKeyError",

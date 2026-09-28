@@ -43,8 +43,6 @@ interface FormCase {
 
 /** Every form in a file that also holds a write, by file. The count is checked against the source. */
 const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
-  // The connect form is the first form on the staff sources page; the credential form follows it.
-  "src/components/ConnectStaffSource.tsx": [{ pattern: "/staff_sources", index: 0, writes: true }],
   "src/components/DataStewardCard.tsx": [{ pattern: "/people", index: 1, writes: true }],
   // Index 0 is the ledger's filter bar, which only narrows; index 1 checks a published head.
   "src/pages/Audit.tsx": [
@@ -64,14 +62,6 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
   // team, creating a department and drawing a scope. The rename form is one form in the source,
   // drawn for a department or a team, and opens above the lead's form; the department's stands for
   // both, and tests/govern-people-pages.test.tsx submits the team's blank.
-  "src/pages/Departments.tsx": [
-    { pattern: "/departments", index: 1, writes: true },
-    { pattern: "/departments", index: 2, writes: true },
-    { pattern: "/departments", index: 3, writes: true },
-    { pattern: "/departments", index: 4, writes: true },
-    { pattern: "/departments", index: 5, writes: true },
-    { pattern: "/departments", opener: "Rename department", index: 1, writes: true },
-  ],
   "src/pages/Elevation.tsx": [{ pattern: "/elevation", index: 0, writes: true }],
   // The Add a document card sits above the library, so its form comes before the list's search.
   "src/pages/Knowledge.tsx": [{ pattern: "/library", index: 0, writes: true }],
@@ -92,56 +82,43 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
     { pattern: "/library", index: 4, writes: true },
   ],
   "src/pages/AccessRequests.tsx": [{ pattern: "/access-requests", index: 0, writes: true }],
-  "src/pages/Matrix.tsx": [{ pattern: "/routing/:rungId", index: 1, writes: true }],
-  // After the matrix's own search form: the golden question, then the rung to add.
-  "src/components/MatrixGate.tsx": [
-    { pattern: "/routing", index: 1, writes: true },
-    { pattern: "/routing", index: 2, writes: true },
+  // Index 0 on the Routing page is the matrix's search form, which only narrows. On a step's page its
+  // numbers and then where it sits follow; the golden question and the residency rule come after.
+  "src/pages/models/RungEditor.tsx": [
+    { pattern: "/routing/:rungId", index: 1, writes: true },
+    { pattern: "/routing/:rungId", index: 2, writes: true },
   ],
-  // The add form is the only form until a provider's terms are opened, which draws theirs first.
-  "src/components/ProviderRegister.tsx": [
-    { pattern: "/models", index: 0, writes: true },
-    { pattern: "/models", opener: "Record terms", index: 0, writes: true },
-  ],
-  // After the register's add form: the residency constraint form, then a tier's numbers once opened,
+  "src/pages/models/GoldenQuestions.tsx": [{ pattern: "/routing", index: 1, writes: true }],
+  // Add a step opens above the matrix, so it is then the first form.
+  "src/pages/models/AddStep.tsx": [{ pattern: "/routing", opener: "Add a step", index: 0, writes: true }],
+  // Under Advanced after the golden question: the residency rule, and a level's numbers once opened,
   // which draws above the residency form.
   "src/components/RoutingSettings.tsx": [
-    { pattern: "/models", index: 1, writes: true },
-    { pattern: "/models", opener: "Edit numbers", index: 1, writes: true },
+    { pattern: "/routing", index: 2, writes: true },
+    { pattern: "/routing", opener: "Edit numbers", index: 2, writes: true },
   ],
-  // A provider's key field opens on its row and is then the first form on the page, above the register's.
-  "src/components/ProviderKeyForm.tsx": [{ pattern: "/models", opener: "Replace key", index: 0, writes: true }],
-  // A credential's Profile is a view at its own address, and its set-or-replace form is the only form.
+  // Adding a provider opens above the list, whose search form then follows it.
+  "src/pages/models/AddProvider.tsx": [{ pattern: "/models", opener: "Add a provider", index: 0, writes: true }],
+  // A provider's Profile: the terms form, and the key form above it once Replace key is pressed.
+  "src/pages/models/ProviderProfile.tsx": [{ pattern: "/models/:provider/:view", index: 0, writes: true }],
+  "src/components/ProviderKeyForm.tsx": [{ pattern: "/models/:provider/:view", opener: "Replace key", index: 0, writes: true }],
   "src/pages/credentials/SetValueForm.tsx": [{ pattern: "/credentials/:family/:name/:view", index: 0, writes: true }],
   // The Profile is a view at its own address, so the pin's form is on that page case with no opener.
   "src/components/AgentModelPin.tsx": [{ pattern: "/agents/:agentId/:tab", index: 0, writes: true }],
   // A model's price opens on its row in the prices card, above the register's forms (M27.12.5).
-  "src/components/ModelPrices.tsx": [{ pattern: "/models", opener: "Set price", index: 0, writes: true }],
+  // The prices card is under the providers list, after the list's search form.
+  "src/components/ModelPrices.tsx": [{ pattern: "/models", opener: "Set price", index: 1, writes: true }],
   // The grant and pack forms of an open subject, then the grant to several, which is drawn under
   // the list once it is opened and so sits after the list's search.
-  "src/pages/People.tsx": [
-    { pattern: "/people/:subject", index: 1, writes: true },
-    { pattern: "/people/:subject", index: 2, writes: true },
-    { pattern: "/people", opener: "Grant to several people", index: 1, writes: true },
-  ],
-  "src/pages/Prompts.tsx": [{ pattern: "/prompts", opener: "Edit instructions", index: 0, writes: true }],
+  "src/pages/prompts/PromptsPage.tsx": [{ pattern: "/prompts", opener: "Edit instructions", index: 0, writes: true }],
   "src/pages/RequirementChecks.tsx": [{ pattern: "/requirement-checks", index: 0, writes: true }],
-  // One form in the source, drawn twice (appoint and deputy); the first stands for both.
-  "src/pages/RoleControls.tsx": [{ pattern: "/roles", index: 0, writes: true }],
-  // After the appointment and deputy forms: the directory group mapping.
-  "src/pages/GroupRules.tsx": [{ pattern: "/roles", index: 2, writes: true }],
   "src/pages/Retention.tsx": [
     { pattern: "/retention", index: 0, writes: true },
     { pattern: "/retention", index: 1, writes: true },
     { pattern: "/retention", index: 2, writes: true },
   ],
-  "src/pages/SignInLinks.tsx": [{ pattern: "/sign-in-links", index: 1, writes: true }],
-  // Index 1 is the registration until an account's Issue a key opens its form above it.
-  "src/pages/ServiceAccounts.tsx": [
-    { pattern: "/service-accounts", index: 1, writes: true },
-    { pattern: "/service-accounts", opener: "Issue a key", index: 1, writes: true },
-  ],
-  "src/pages/StaffSources.tsx": [{ pattern: "/staff_sources", index: 1, writes: true }],
+  // The connect form is in a drawer, judged below; the credential form is the one form on the page.
+  "src/pages/staff-sources/SyncCredential.tsx": [{ pattern: "/staff_sources", index: 0, writes: true }],
   // The naming form, then the four forms of the one open case, then the form that opens a case.
   "src/pages/Compliance.tsx": [
     { pattern: "/compliance", index: 0, writes: true },
@@ -179,19 +156,38 @@ const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
     "these cases read, and inside first run, which is mounted outside the session guard. " +
     "tests/connectors-page.test.tsx opens the drawer, submits it blank, and holds that no " +
     "confirmation opens, nothing is sent and the API's blank sentences are said beside the fields.",
+  "src/pages/sessions/SignInLinksPage.tsx":
+    "The link form is inside the Link a sign-in drawer opened from the page header, outside the " +
+    "main landmark these cases read. tests/sign-in-links-page.test.tsx submits it blank and holds " +
+    "that nothing is sent and a sentence saying what to enter is drawn beside each field.",
+  "src/pages/agent-templates/AgentTemplateDetailPage.tsx":
+    "The install form's fields are a name the template already fills in and a tick, and a blank name " +
+    "installs under the template's own name, which the hint under it says before anything is sent. " +
+    "Submitting opens the confirmation and sends nothing; tests/agent-templates.test.tsx holds that " +
+    "the install is sent only from the confirmation, with the digest the page read.",
+  "src/pages/service-accounts/AccountActs.tsx":
+    "The register and issue forms are inside drawers opened from the page header, a row's menu and an " +
+    "account's page, outside the main landmark these cases read. Each says what every field accepts " +
+    "before it is sent, and tests/service-accounts-page.test.tsx submits each blank and holds that no " +
+    "confirmation opens, nothing is sent, and the blank sentences are said beside their fields.",
   "src/pages/connectors/SourceActs.tsx":
     "The edit and the key forms are inside drawers opened from a source's Manage menu, outside the " +
     "main landmark these cases read. tests/connectors-page.test.tsx submits each blank and holds " +
     "that no confirmation opens, nothing is sent, and the API's own blank sentence is said.",
+  "src/pages/staff-sources/ConnectDrawer.tsx":
+    "The connect form is inside the drawer opened from the page's Connect a source button, outside the " +
+    "main landmark these cases read. tests/staff-sources-page.test.tsx opens the drawer, submits it " +
+    "blank, and holds that no confirmation opens, nothing is sent and each empty box is named beside it.",
   "src/components/ConnectLark.tsx":
     "Its Test and Save buttons stay disabled until an App ID and an App Secret are typed, so a " +
     "blank form cannot be sent. What is typed is judged by the API before anything reaches Lark: " +
     "input_problems answers 422 by field for a malformed App ID, secret or Base link, which " +
     "tests/unit/test_lark_connect.py holds with nothing sent to " +
     "the fake Lark server, and tests/lark-connect.test.tsx drives the form.",
-  "src/pages/Settings.tsx":
-    "Each editable row's form sends one value, from a confirmation, and the API judges it with " +
-    "setting_problem before anything is written, answering 422 with a sentence drawn beside the field. " +
+  "src/pages/settings/SettingsPage.tsx":
+    "Each editable row's form sends one value, from a confirmation, and says under the field what it " +
+    "accepts; the API judges it with setting_problem before anything is written, answering 422 with a " +
+    "sentence drawn beside the field. " +
     "tests/unit/test_settings_routes.py holds a refused value writing no row; the page case draws " +
     "no editable row, so no form is opened here.",
   "src/pages/skills/SkillForms.tsx":
@@ -201,6 +197,24 @@ const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
     "Import until importProblem accepts the repository and commit or the address, and Save until the " +
     "edit has text, which tests/skills-page.test.tsx holds for Add. The assign form only opens a " +
     "confirmation naming an agent the API listed.",
+  "src/pages/people/GrantDrawers.tsx": "Every form here opens in a drawer, which the kit renders outside the page's main landmark where " +
+    "this harness looks. Each is submitted blank in tests/people-access-pages.test.tsx, which holds " +
+    "that nothing is sent and that the form says, beside each field, what to fill in and in what form.",
+  "src/pages/people/PersonPlacements.tsx": "Every form here opens in a drawer, which the kit renders outside the page's main landmark where " +
+    "this harness looks. Each is submitted blank in tests/people-access-pages.test.tsx, which holds " +
+    "that nothing is sent and that the form says, beside each field, what to fill in and in what form.",
+  "src/pages/people/PersonSessions.tsx": "Every form here opens in a drawer, which the kit renders outside the page's main landmark where " +
+    "this harness looks. Each is submitted blank in tests/people-access-pages.test.tsx, which holds " +
+    "that nothing is sent and that the form says, beside each field, what to fill in and in what form.",
+  "src/pages/departments/StructureDrawers.tsx": "Every form here opens in a drawer, which the kit renders outside the page's main landmark where " +
+    "this harness looks. Each is submitted blank in tests/people-access-pages.test.tsx, which holds " +
+    "that nothing is sent and that the form says, beside each field, what to fill in and in what form.",
+  "src/pages/roles/RoleDrawers.tsx": "Every form here opens in a drawer, which the kit renders outside the page's main landmark where " +
+    "this harness looks. Each is submitted blank in tests/people-access-pages.test.tsx, which holds " +
+    "that nothing is sent and that the form says, beside each field, what to fill in and in what form.",
+  "src/pages/roles/PacksPage.tsx": "Every form here opens in a drawer, which the kit renders outside the page's main landmark where " +
+    "this harness looks. Each is submitted blank in tests/people-access-pages.test.tsx, which holds " +
+    "that nothing is sent and that the form says, beside each field, what to fill in and in what form.",
   "src/pages/Ask.tsx":
     "The question form cannot be sent blank by a person: its only submit button is disabled until " +
     "askBody accepts the text, and the field's maxLength stops a question longer than the route " +
@@ -251,6 +265,7 @@ function pressFirst(root: Element, label: string): void {
 
 beforeAll(async () => {
   await import("../src/pages/Matrix");
+  await import("../src/pages/Provider");
   await import("../src/pages/Classification");
   await import("../src/pages/People");
 }, 120_000);

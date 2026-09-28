@@ -52,13 +52,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from brain.acceptance_routes import router as acceptance_router
-from brain.access_request_routes import router as access_request_router
-from brain.agent_about_routes import router as agent_about_router
-from brain.agent_lifecycle_routes import router as agent_lifecycle_router
-from brain.agent_model_routes import router as agent_model_router
 from brain.agent_routes import every_agent, record_of
-from brain.agent_routes import router as agent_router
 from brain.agents.model import AgentRecord
 from brain.api import (
     ErrorBody,
@@ -70,17 +64,9 @@ from brain.api import (
     unexpected_failure,
 )
 from brain.api_routes import GateWiring, passage_search_for, second_factor_needed
-from brain.api_routes import router as api_router
-from brain.approval_routes import router as approval_router
-from brain.artifact_routes import router as artifact_router
 from brain.attribution import trace_of_request
 from brain.audit.ledger import TRACE_ID
-from brain.audit_routes import router as audit_router
-from brain.automation_gallery_routes import router as automation_gallery_router
 from brain.automation_routes import AutomationWiring
-from brain.automation_routes import router as automation_router
-from brain.automation_schedule_routes import router as automation_schedule_router
-from brain.binding_routes import router as binding_router
 from brain.cache import (
     AsyncValkeyClient,
     NoEntitlementCache,
@@ -92,25 +78,10 @@ from brain.cache import (
     make_async_client,
     make_client,
 )
-from brain.channel_routes import router as channel_router
 from brain.channels.widget import allowed_origins
-from brain.cited_document_routes import router as cited_document_router
-from brain.classification_routes import router as classification_router
-from brain.compliance_routes import router as compliance_router
-from brain.connector_routes import router as connector_router
-from brain.console_overview_figures_routes import router as console_overview_figures_router
-from brain.console_overview_routes import router as console_overview_router
 from brain.console_static import mount_console_entry, mount_console_fallback
-from brain.console_stats_routes import router as console_stats_router
 from brain.core.errors import Absent, BrainError, Outcome, to_public
-from brain.credential_routes import router as credential_router
-from brain.data_steward_routes import router as data_steward_router
-from brain.data_transfer_routes import router as data_transfer_router
 from brain.docs_routes import router as docs_router
-from brain.erasure_routes import router as erasure_router
-from brain.error_routes import router as error_router
-from brain.estate_routes import router as estate_router
-from brain.feature_routes import router as feature_router
 from brain.firstrun import GRANTED_BY
 from brain.gate.admission import SECOND_FACTOR_NEEDED_MESSAGE
 from brain.gate.entitlement_store import StoredEntitlements
@@ -119,11 +90,6 @@ from brain.gate.resolve import EntitlementCache
 from brain.gate.roster import AgentRoster
 from brain.gate.rule_store import load_rules, rule_ids
 from brain.gate.suspension_store import StoredSuspensions
-from brain.govern_pack_routes import router as govern_pack_router
-from brain.govern_people_routes import router as govern_people_router
-from brain.govern_role_routes import router as govern_role_router
-from brain.govern_routes import router as govern_router
-from brain.group_rule_routes import router as group_rule_router
 from brain.identity.administration_reconciliation import (
     TRACE_PREFIX as RECONCILIATION_TRACE,
 )
@@ -142,21 +108,9 @@ from brain.identity.principal_store import StoredPrincipals
 from brain.identity.roles import IdentityError
 from brain.identity.sign_in_binding import sign_in_bindings
 from brain.install import InstallError, installed_name, value_of
-from brain.install_routes import router as install_router
-from brain.jobs_routes import router as jobs_router
 from brain.knowledge.row_store import SessionRowSource
-from brain.knowledge_intake_routes import router as knowledge_intake_router
-from brain.knowledge_lifecycle_routes import router as knowledge_lifecycle_router
-from brain.knowledge_routes import router as knowledge_router
-from brain.lark_connect_routes import router as lark_connect_router
-from brain.log_routes import router as log_router
 from brain.migrate import run_migrations
-from brain.mine_routes import router as mine_router
-from brain.model_health_routes import router as model_health_router
 from brain.models.default_ladder import reconcile as reconcile_default_ladder
-from brain.navigation_routes import router as navigation_router
-from brain.notification_routes import router as notification_router
-from brain.operate_routes import router as operate_router
 from brain.ops.artifact_store import artifacts_for
 from brain.ops.automation_owner_store import StoredAutomations
 from brain.ops.credential_write_store import credential_writes_for
@@ -184,10 +138,6 @@ from brain.ops.trace_sink import CountingTraceSink
 from brain.ops.usage_store import UsageRecorder
 from brain.ops.vault_renewal import keep_renewing, renewer_at_start
 from brain.ops.webhook_admin import signing_secrets_at_start
-from brain.principal_state_routes import router as principal_state_router
-from brain.prompt_routes import router as prompt_router
-from brain.provider_registry_routes import router as provider_registry_router
-from brain.provider_routes import router as provider_router
 from brain.readiness import (
     CACHE_PART,
     DATABASE_LOGIN_PART,
@@ -201,12 +151,7 @@ from brain.readiness import (
     vault_answers,
     vault_configured,
 )
-from brain.record_access_routes import router as record_access_router
-from brain.report_routes import router as report_router
-from brain.requirement_check_routes import router as requirement_check_router
-from brain.retention_routes import router as retention_router
-from brain.routing_routes import router as routing_router
-from brain.service_account_routes import router as service_account_router
+from brain.routers import ROUTERS
 from brain.session import (
     check_login_row_security,
     check_reachable,
@@ -215,24 +160,13 @@ from brain.session import (
     make_app_engine,
     make_application_sessions,
 )
-from brain.session_routes import router as session_router
 
 # Re-exported, because tests, `console/scripts/export-openapi.py` and `brain.serve`'s history all
 # import it from here. It is defined in `brain.settings`, which builds nothing when imported; a
 # process that needs a setting and not the application imports that instead. See
 # `brain.settings.SETTINGS_ARE_READ_WITHOUT_BUILDING_THE_APPLICATION`.
 from brain.settings import Settings as Settings
-from brain.settings_routes import router as settings_router
-from brain.setup_routes import router as setup_router
-from brain.setup_staff_routes import router as setup_staff_router
-from brain.sign_in_routes import router as sign_in_router
-from brain.skill_routes import router as skill_router
-from brain.staff_source_routes import router as staff_source_router
-from brain.storage_routes import router as storage_router
-from brain.tool_routes import router as tool_router
 from brain.tools.startup import build_registry
-from brain.vault_routes import router as vault_router
-from brain.webhook_routes import router as webhook_router
 
 log = structlog.get_logger()
 
@@ -1212,268 +1146,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     mount_console_entry(app)
 
     app.include_router(docs_router)
-    # Mounted here and nowhere else. An unmounted router is the failure this repository keeps
-    # finding, and the timeout middleware three paragraphs up is the most recent one.
-    app.include_router(api_router)
-    # Who can see a record, for somebody who can already see it. See `brain.record_access_routes`.
-    app.include_router(record_access_router)
-    # The routing matrix. A second router rather than more routes on the first, because the
-    # rules differ: `api_routes` answers about entities, where the name itself is enumerable,
-    # and this one answers about the model chain, where it is not. Both take the same
-    # `asking` dependency, which `api_routes` declares once and this imports.
-    app.include_router(routing_router)
-    # Field-level classification. A third router for the reason there is a second: the rules
-    # differ again. This one answers about the policy over a document's columns rather than
-    # about its rows, it takes no session because there is nothing stored to read, and its
-    # write verb is `admin` rather than `write` because what it governs is what other people
-    # may see. The same `asking` dependency, imported rather than re-declared.
-    app.include_router(classification_router)
-    # The agent roster and one agent's workspace. A fourth router because the refusal differs
-    # again: who may see an agent is its audience rather than a capability, and a hidden agent
-    # and a missing one are one answer. The same `asking` dependency, imported.
-    app.include_router(agent_router)
-    # One agent's About tab, which reads the agent's automations and so cannot sit on the
-    # workspace's router without an import cycle. The same audience and the same one 404.
-    app.include_router(agent_about_router)
-    # Enabling, disabling, archiving, handing on and duplicating an agent, and installing a
-    # published template version. Its own router because these are writes and the agent router
-    # above is the page's read: an `admin:` authority asked before the agent is read, its
-    # audience, a precondition the page drew, and a row whose trigger writes the ledger entry.
-    app.include_router(agent_lifecycle_router)
-    # The approvals queue and one approval's card. A fifth router because the refusal differs
-    # again: who is offered an approval is `pending_for` over the action's own row, and an
-    # approval out of reach, decided, lapsed or missing is one answer. GET only; see the module.
-    app.include_router(approval_router)
-    # The endpoint an automation step calls. A sixth router because the caller differs: it
-    # authenticates an automation's credential rather than a person's token, and runs as the
-    # automation's owner. It does not take `asking`, and `asking` does not take its credential.
-    app.include_router(automation_router)
-    # The automation gallery on an agent's Automations tab, and its one confirmed install. Its own
-    # router because the write is: an `admin:` authority asked before the agent is read, a
-    # confirmation recomputed on the server, and a row whose trigger writes the ledger entry.
-    app.include_router(automation_gallery_router)
-    # An agent's installed automations, their runs, and the confirmed start and stop. Its own
-    # router for the gallery's reason: an authority asked before anything is read, a confirmation
-    # recomputed on the server, and a row whose trigger writes the ledger entry.
-    app.include_router(automation_schedule_router)
-    # Binding a Keycloak subject to a principal. A seventh router because it has two callers:
-    # an administrator over everything under the prefix, through `asking`, and the setup
-    # wizard's finishing screen at /setup/sign-in, which takes the setup code and a verified
-    # token and no `asking`, and closes once anybody signs in. See `brain.sign_in_routes`.
-    app.include_router(sign_in_router)
-    # The setup wizard's appointment, which runs `apply_install` and appoints the first
-    # administrator the finishing screen above then signs in. An eighth router because its caller
-    # holds the setup code and no token at all. See `brain.setup_routes`.
-    app.include_router(setup_router)
-    # The wizard's staff list screen: what to register, where to sign in, and one read of the
-    # list, each behind the setup code the appointment asks for. See `brain.setup_staff_routes`.
-    app.include_router(setup_staff_router)
-    # Setting a credential, and seeing which are held. Beside the wizard because the wizard's
-    # provider key is kept through the same store, and a router of its own because its subject is
-    # the one value no other route may carry: it writes into the vault, answers that a secret is
-    # held and when, and is built on `brain.api.NoEchoRoute` so not even a refused body is
-    # repeated. See `brain.credential_routes`.
-    app.include_router(credential_router)
-    # The Secrets vault screen: the seal, every slot, each source's leases and the audit log's
-    # shipping. Read only, under the credentials route's capability. See `brain.vault_routes`.
-    app.include_router(vault_router)
-    # The Requirement checks screen: the register's rows by area and what a person saw each do on
-    # this install, recorded. See `brain.requirement_check_routes`.
-    app.include_router(requirement_check_router)
-    # The five install screens. A ninth router because what it answers about is the deployment
-    # rather than the company's data: no name to guess, no row belonging to anybody, and no
-    # session on four of the five. The same `asking` dependency, imported. See
-    # `brain.install_routes`.
-    app.include_router(install_router)
-    # The three Report screens: service levels, spend and adoption. A router of its own because
-    # the decision differs again and in the opposite direction to the matrix's: none of these
-    # checks a capability at all, because the module that owns each screen narrows it row by
-    # row and a check here would be the first half of that predicate in a second copy. See
-    # `brain.report_routes`.
-    app.include_router(report_router)
-    # The retention report and the four writes that decide whether the sweep acts. A router of
-    # its own because two of its writes are the only way a deletion is approved or suspended:
-    # every write needs its authority over everything, and the report is shown whole to a
-    # company-wide reader and to nobody else. See `brain.retention_routes`.
-    app.include_router(retention_router)
-    # What the Retention screen needs beside the report: who may act, what each act does in the
-    # words a confirmation shows, the export log, and the erasure queue with its one write, which
-    # files a request the worker's queue carries out. See `brain.erasure_routes`.
-    app.include_router(erasure_router)
-    # The Artifacts screen. A list only when something attached records what an agent produced,
-    # and a sentence saying nothing does until then. See `brain.artifact_routes`.
-    app.include_router(artifact_router)
-    # My workspace, the member screen `home`: what the person asking has asked, kept and been
-    # given, gated on the member grant and on nothing administrative. See `brain.mine_routes`.
-    app.include_router(mine_router)
-    # The four Govern screens, and the two writes over a grant. A router of its own because
-    # what it answers about is the permission system itself: whether a screen opens is
-    # `brain.console.reads.permitted` rather than a bare capability, so an existence-only
-    # reader is refused a configuration screen, and the two writes defer entirely to
-    # `brain.console.scoped_authority` and `brain.console.govern`. See `brain.govern_routes`.
-    app.include_router(govern_router)
-    # Assigning a capability pack, and the Approver misconfiguration flag on the Roles screen.
-    # Every grant a pack means goes through the same authority a single grant does. See
-    # `brain.govern_pack_routes`.
-    app.include_router(govern_pack_router)
-    # Who holds each role, and appointing, deputising and removing one. See
-    # `brain.govern_role_routes`.
-    app.include_router(govern_role_router)
-    # Which identity-provider group confers which role, on the Roles screen, and what the sync
-    # has written from them. See `brain.group_rule_routes`.
-    app.include_router(group_rule_router)
-    # The Skills screen, SCREEN 6 of `docs/screens.html`. A router of its own because what it
-    # answers about is neither a grant nor an agent: it is the skill library, its review queue and
-    # the procedures the agents a reader may see are pinned to. Its three writes add a skill,
-    # decide about one as somebody other than who added it, and assign an approved one through
-    # `attach_skill`, each asking its `admin:` authority first. See `brain.skill_routes`.
-    app.include_router(skill_router)
-    # The connectors screen. A router of its own because what it answers about is which outside
-    # systems this company reads, where the name itself is the disclosure: the list is narrowed
-    # by the reader's own grant and a refusal names nothing. Connecting and disconnecting a source
-    # are its two writes, under `admin:connector` over that source, and what connecting does not do
-    # yet is served beside the list. See `brain.connector_routes`.
-    app.include_router(connector_router)
-    # Connect Lark: the steps, a read-only test and switching its uses on. See
-    # `brain.lark_connect_routes`.
-    app.include_router(lark_connect_router)
-    # The Staff sources screen and the trial run behind it. A router of its own because it
-    # refuses nobody on its listing: a source sits at `brain.console.govern.NOWHERE`, so the
-    # answer for a reader who reaches none of them is the empty page rather than the refusal
-    # the four govern screens make, and refusing instead would let a caller read off whether
-    # somebody else holds a capability. See `brain.staff_source_routes`.
-    app.include_router(staff_source_router)
-    # The Audit screen, the Govern section's last item in `docs/screens.html`. A router of its own
-    # because what it reads is the ledger, where every row is decided one at a time by
-    # `brain.audit.view.AuditView` and a page is filled from what survives. See
-    # `brain.audit_routes`.
-    app.include_router(audit_router)
-    # Sessions and sign-in links, beside People in Govern, and the two controls that end a session
-    # and unlink an account. See `brain.session_routes`.
-    app.include_router(session_router)
-    # The Knowledge, Learning and Memory screens. A router of its own because all three are the
-    # estate-wide reads `brain.console.govern_estate` decides, and all three stand on a store
-    # that is empty on every install today: each response says which of its facts has no source
-    # rather than drawing an empty table that reads as a company with nothing in it. No write.
-    # See `brain.estate_routes`.
-    app.include_router(estate_router)
-    # Live runs and Models and health, the two Operate screens `docs/screens.html` draws beside
-    # the overview. A router of its own because its two refusals differ from every router above:
-    # live runs narrows row by row and refuses nobody, and the models answer is whole-install and
-    # refuses a reader who could not see everybody's. See `brain.operate_routes`.
-    app.include_router(operate_router)
-    # Models and providers: every provider this install can call, switched on and off behind
-    # `admin:routing_matrix` over everything, the ladder as the next call will walk it with each
-    # rung's measured health, and a metered check. See `brain.provider_routes`.
-    app.include_router(provider_router)
-    # The provider registry: terms and lane overrides recorded, an OpenAI-compatible provider
-    # added with its key written to the vault first, and the register exported. See
-    # `brain.provider_registry_routes`.
-    app.include_router(provider_registry_router)
-    # An agent's pinned provider and model, tried before its tier. See `brain.agent_model_routes`.
-    app.include_router(agent_model_router)
-    # A tier's window and headroom, and residency constraints. See `brain.model_health_routes`.
-    app.include_router(model_health_router)
-    # Departments and teams, Elevation, Access review and Subscribers, beside People in Govern. A
-    # router of its own because one of its four is the only write that records a review decision,
-    # and two of its screens say what the install does not store rather than drawing an empty
-    # list. See `brain.govern_people_routes`.
-    app.include_router(govern_people_router)
-    # Scheduled jobs beside Live runs: how each job last went, and pause, resume and run now as
-    # rows the worker's tick reads. Read for everybody and narrowed per job; the controls need
-    # `admin:schedule` over everything and the `schedule_control` feature. See `brain.jobs_routes`.
-    app.include_router(jobs_router)
-    # Errors: the failed jobs and failed requests the database keeps, each behind the decision
-    # that already says who may see it, and a field saying the process log is kept nowhere the
-    # console can read. See `brain.error_routes`.
-    app.include_router(error_router)
-    # Logs: the warnings and errors this install kept, redacted on their way in, searchable and
-    # paged, behind `admin:application_log` over everything. See `brain.log_routes`.
-    app.include_router(log_router)
-    # Features: which genuinely new features this install has switched on, and the switch, behind
-    # `admin:feature` over everything. See `brain.feature_routes` and `brain.ops.features`.
-    app.include_router(feature_router)
-    # Prompts: the system instructions every agent is given, shown and never edited, and each
-    # agent's own instructions, edited as a local change to its template. See
-    # `brain.prompt_routes`.
-    app.include_router(prompt_router)
-    # Webhooks: every subscriber, where it points, whether its signing secret is held and its
-    # recent outcomes, and registering, replacing a secret and switching off behind
-    # `admin:webhook_subscriber`. Built on `NoEchoRoute`, because two of its writes carry a
-    # secret. See `brain.webhook_routes`.
-    app.include_router(webhook_router)
-    # Notifications: every notice this product composes, who is told what and whether anything
-    # sends it, the switch that stops one, and the email relay with its password in the vault and
-    # a test message, behind `admin:notification` over everything. See
-    # `brain.notification_routes`.
-    app.include_router(notification_router)
-    # Storage: the buckets the product keeps, each one's retention and why, and where the store
-    # is, behind `admin:storage` over everything. Never an object's name. See
-    # `brain.storage_routes`.
-    app.include_router(storage_router)
-    # Settings, under Install: every installation value with where it came from, and branding
-    # saved, behind `admin:install_setting` over everything. See `brain.settings_routes`.
-    app.include_router(settings_router)
-    # Import and export: what the code can move and whether an install can move it now, and the
-    # audit trail export, recorded in the ledger before the document is handed over. See
-    # `brain.data_transfer_routes`.
-    app.include_router(data_transfer_router)
-    # Which console a reader is given: the company console, or a department's with the menu
-    # SCREEN 2 draws narrowed to what they hold. Decided from grants at the admitted reach, so
-    # the shell renders an answer rather than a permission check of its own. See
-    # `brain.navigation_routes`.
-    app.include_router(navigation_router)
-    # The data steward: who every read of the company's data begins with, and naming one on an
-    # install whose setup named nobody, behind `admin:data_steward` over everything. See
-    # `brain.data_steward_routes` and `brain.identity.data_steward`.
-    app.include_router(data_steward_router)
-    # Service accounts: an integration registered at its owner's reach, a key shown once, and both
-    # taken away, behind `admin:credential`. See `brain.service_account_routes`.
-    app.include_router(service_account_router)
-    # Disabling a person and enabling them again, from the Departments and teams screen, behind the
-    # grant decision in a scope admitting their row. See `brain.principal_state_routes`.
-    app.include_router(principal_state_router)
-    # Asking for access: one constant reply to the asker, and the owner's own list, which is how
-    # a request is delivered. See `brain.access_request_routes`.
-    app.include_router(access_request_router)
-    # The Compliance screen: a sensitive topic's named person and the referrals routed to them, the
-    # processing register per connector, and breach cases with the PDPA clock, behind
-    # `admin:compliance` over everything. See `brain.compliance_routes`.
-    app.include_router(compliance_router)
-    # Channels: the one address every vendor posts a message to, which takes no caller and proves
-    # the signature, and each channel's record, switch, test message and deliveries behind the
-    # connector authority over `<channel>_channel`. See `brain.channel_routes`.
-    app.include_router(channel_router)
-    # Adding a document to the knowledge layer from the Knowledge page, read by the text path and
-    # placed where the uploader holds `admin:knowledge`. See `brain.knowledge_routes`.
-    app.include_router(knowledge_router)
-    # The Tools screen: every tool with what it needs and does, and the switch that stops one for
-    # the install or one department's people, behind `admin:tool`. See `brain.tool_routes`.
-    app.include_router(tool_router)
-    # A stored document verified, handed over, replaced and proposed for the whole company, the
-    # tasks each opens and captured solutions decided. See `brain.knowledge_lifecycle_routes`.
-    app.include_router(knowledge_lifecycle_router)
-    # Adding a web page by its link, and a bulk upload queued for the worker to read (M7.1.2,
-    # M7.1.5). See `brain.knowledge_intake_routes`.
-    app.include_router(knowledge_intake_router)
-    # The install acceptance checks' results for the commit this serves: passed, failed or not
-    # run, public and read-only like deploy-checks. See `brain.acceptance_routes`.
-    app.include_router(acceptance_router)
-    # The document a citation on Ask links to, its passages at the reader's reach through the
-    # handler and policy the answer used. See `brain.cited_document_routes`.
-    app.include_router(cited_document_router)
-    # The landing screen's figure row: how the last seven days' requests ended and what they cost,
-    # each at the reader's basis. See `brain.console_overview_figures_routes`.
-    app.include_router(console_overview_figures_router)
-    # Binding a chat account with a one-time code minted in My workspace, unbinding it, and the
-    # Channels screen's bindings and health behind the channel's own authority. See
-    # `brain.binding_routes`.
-    app.include_router(binding_router)
-    # One entity's figures on its detail page, each behind the question its list screen asks, and
-    # the landing screen's health strip and Needs you. See `brain.console_stats_routes` and
-    # `brain.console_overview_routes`.
-    app.include_router(console_stats_router)
-    app.include_router(console_overview_router)
+    # Every other router, each one import line in `brain.routers` and mounted in the order of
+    # their names, which is safe because no two of them answer one address: see that module.
+    for router in ROUTERS:
+        app.include_router(router)
 
     @app.get("/health/live", response_model=Health, tags=["health"])
     async def live() -> Health:

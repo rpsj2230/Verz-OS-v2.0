@@ -4,9 +4,10 @@ CLAUDE.md says a genuinely new feature "goes into this repository behind a flag 
 everyone switched off", and until this module there was no flag to put one behind. What existed
 were switches for one kind of thing each: a routing rung's `enabled` column, the plugin
 lifecycle's four states with nothing loading a plugin, a connector registry nothing constructs,
-and `Settings.release_check`, which is read from the environment and so cannot be turned from a
-browser. None of them is a place a new feature can be declared and turned on by an administrator
-without a shell.
+and `Settings.release_check`, which is read from the environment and so could not be turned from a
+browser. None of them was a place a new feature could be declared and turned on by an
+administrator without a shell. The release check is now a feature here as well (`RELEASE_CHECK`),
+beside the environment's value rather than instead of it (M27.15.51).
 
 **A feature is declared in this file, with the functions that read it, and nowhere else.**
 `FEATURES` is closed and compiled, for the reason `brain.ops.controls.CONTROLS` is: what the
@@ -53,7 +54,7 @@ request to see it, and every reader here already holds a session in the request 
 Not claimed, and the reason is the paragraph on module enablement above: the leaf names features
 and modules, and this switches features.
 
-Task ids: none
+Task ids: M27.15.51
 """
 
 from __future__ import annotations
@@ -203,8 +204,26 @@ SCHEDULE_CONTROL: Final = Feature(
     ),
 )
 
+#: Looking for newer releases from Version and updates. Either this switch or the environment's
+#: `BRAIN_RELEASE_CHECK` turns the look on, so an install that set the variable keeps its answer,
+#: and one that never edits its environment file can agree from the console instead.
+RELEASE_CHECK: Final = Feature(
+    name="release_check",
+    title="Look for newer releases",
+    what=(
+        "Version and updates asks the product's published list of releases whether a newer one "
+        "exists, when the page is opened, and says whether this install is behind. The request "
+        "goes outside your network."
+    ),
+    while_off=(
+        "Nothing is asked outside your network, and the page says it cannot tell whether this "
+        "install is behind. The environment file can still switch the look on for every page."
+    ),
+    read_by=("brain.install_routes:updates",),
+)
+
 #: Every feature this product can switch on, in the order the screen lists them.
-FEATURES: Final[tuple[Feature, ...]] = (PROMPT_EDITING, SCHEDULE_CONTROL)
+FEATURES: Final[tuple[Feature, ...]] = (PROMPT_EDITING, SCHEDULE_CONTROL, RELEASE_CHECK)
 
 
 def feature(name: str, features: Sequence[Feature] = FEATURES) -> Feature:

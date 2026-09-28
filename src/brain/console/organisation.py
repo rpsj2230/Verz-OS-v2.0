@@ -89,7 +89,11 @@ by the same clause rule that decides which scopes go with it. See
 
 Scope: domain logic. Nothing here opens a connection, renders anything or reads a clock.
 
-Task ids: M27.7.4, M27.11.1, M27.15.22
+**A person is added by hand by whoever governs where they will sit** (M27.15.19), on an install
+reading no staff list: `may_add_person` is `may_organise`'s question asked about the new row. See
+`A_PERSON_ADDED_BY_HAND_IS_PLACED_BY_WHOEVER_GOVERNS_WHERE_THEY_SIT`.
+
+Task ids: M27.7.4, M27.11.1, M27.15.19, M27.15.22
 """
 
 from __future__ import annotations
@@ -153,6 +157,15 @@ A_LEAD_WHO_APPOINTED_THEMSELVES_CHOSE_THEIR_OWN_REVIEWER: Final = (
     "A department's lead is who recertifies what its people hold, so appointing yourself is "
     "choosing who reviews your own access, which is the self-grant with a title on it. Standing "
     "yourself down is permitted: it takes a title away and gives nobody anything."
+)
+
+#: Why adding a person by hand takes the organising authority over where they will sit.
+A_PERSON_ADDED_BY_HAND_IS_PLACED_BY_WHOEVER_GOVERNS_WHERE_THEY_SIT: Final = (
+    "A person added by hand is a row in the directory every department's access is reviewed "
+    "against, and they arrive already sitting somewhere. So adding one takes the authority a "
+    "placement takes, approve:grant, held over the department they will sit in, or over the whole "
+    "company for somebody in no department. They arrive holding nothing: a person is granted "
+    "afterwards, one decision at a time, by whoever may write that grant."
 )
 
 #: The screen whose read decides whether a person may be named on this page.
@@ -470,6 +483,20 @@ def may_appoint(
     if person.principal_id == entitlement.principal_id:
         return False
     return may_place(entitlement, department=department, person=person, now=now)
+
+
+def may_add_person(
+    entitlement: EntitlementSet, *, department: str | None, now: datetime | None = None
+) -> bool:
+    """Whether this reader may add a person by hand, sitting in `department` (M27.15.19).
+
+    The organising authority over the row the new person will sit in, which is the question
+    `may_organise` asks about a person already there. A person in no department sits at `NOWHERE`,
+    so adding one takes the authority over the whole company, because a missing field never
+    satisfies a scope. See `A_PERSON_ADDED_BY_HAND_IS_PLACED_BY_WHOEVER_GOVERNS_WHERE_THEY_SIT`.
+    """
+    where = NOWHERE if department is None else {"department": department}
+    return _in_reach(entitlement, ORGANISING_AUTHORITY, where, now)
 
 
 # ------------------------------------------------------------------------ the structure (M27.11.1)

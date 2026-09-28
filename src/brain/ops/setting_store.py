@@ -141,7 +141,7 @@ def put_statement(
     key: str,
     *,
     value_type: SettingType,
-    value: bool | str,
+    value: bool | str | dict[str, Any],
     description: str,
     updated_by: str,
 ) -> Insert:
@@ -179,7 +179,7 @@ async def put(
     key: str,
     *,
     value_type: SettingType,
-    value: bool | str,
+    value: bool | str | dict[str, Any],
     description: str,
     updated_by: str,
 ) -> None:

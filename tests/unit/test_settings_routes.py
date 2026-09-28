@@ -8,7 +8,7 @@ route that wrote the wrong key is caught rather than agreed with.
 A saved company name is followed past the row to the console's own configuration document, because
 branding is configuration only if the header the console draws is what changes.
 
-Task ids: M41.1.4, M41.1.5, M41.1.6, M41.1.7
+Task ids: M41.1.4, M41.1.5, M41.1.6, M41.1.7, M27.12.7
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy.sql.dml import Insert
+from sqlalchemy.sql.dml import Insert, Update
 from sqlalchemy.sql.selectable import Select
 
 from brain.api import API_PREFIX
@@ -53,13 +53,24 @@ GRANTS = {
 
 
 class InstallRows:
-    """The `install.` rows of `ops.setting`: the upsert `save` makes and the select `load` makes."""
+    """The `install.` rows of `ops.setting`: the upsert `save` makes, the select `load` makes, and
+    the retirement `retire` makes, each read back from the statement's own parameters."""
 
     def __init__(self) -> None:
         self.rows: dict[str, str] = {}
         self.writes: list[dict[str, Any]] = []
+        self.retired: list[dict[str, Any]] = []
 
     def answer(self, statement: Any) -> Result | None:
+        # `Update.table` is typed as any from-clause; this one's is the setting table itself.
+        if isinstance(statement, Update) and getattr(statement.table, "name", "") == "setting":
+            params = statement.compile().params
+            key = str(params["key_1"])
+            if key not in self.rows:
+                return Result([])
+            del self.rows[key]
+            self.retired.append({"key": key, "updated_by": params["updated_by"]})
+            return Result([key])
         if isinstance(statement, Insert) and statement.table.name == "setting":
             params = statement.compile().params
             written = {
@@ -121,6 +132,7 @@ def test_a_caller_without_the_authority_over_everything_is_refused_before_anythi
         with console_client(GRANTS, database=database) as (client, stub):
             assert get(client, pid, SCREEN).status_code == 404
             assert put(client, pid, "INSTALL_COMPANY_NAME", "Contoso").status_code == 404
+            assert default_of(client, pid, "INSTALL_COMPANY_NAME").status_code == 404
             assert stub.statements == []
 
 
@@ -250,6 +262,88 @@ def test_saving_the_currency_and_time_zone_writes_both_rows_and_money_reads_them
     shown = {row["name"]: (row["value"], row["source"]) for row in locale["settings"]}
     assert shown["INSTALL_CURRENCY"] == ("SGD", "saved")
     assert shown["INSTALL_TIME_ZONE"] == ("Asia/Singapore", "saved")
+
+
+def default_of(client: TestClient, pid: str, name: str) -> Any:
+    return client.post(f"{SCREEN}/{name}/default", headers=headers(pid))
+
+
+def row_named(body: dict[str, Any], name: str) -> dict[str, Any]:
+    return next(row for group in body["groups"] for row in group["settings"] if row["name"] == name)
+
+
+def test_every_row_says_what_it_would_read_with_its_saved_value_taken_away(
+    served: tuple[TestClient, Stub],
+) -> None:
+    """The confirmation of "return to default" names the value it returns to. Delete this and the
+    screen can promise the product default where the environment file sets another value."""
+    client, _ = served
+    hold_saved({"INSTALL_COMPANY_NAME": "Northwind Trading"})
+    try:
+        body = get(client, "u_admin", SCREEN).json()
+    finally:
+        hold_saved({})
+    company = row_named(body, "INSTALL_COMPANY_NAME")
+    declared = next(one for one in INSTALLATION if one.name == "INSTALL_COMPANY_NAME")
+
+    assert (company["value"], company["source"]) == ("Northwind Trading", "saved")
+    assert (company["without_saved"], company["without_saved_source"]) == (
+        declared.default,
+        "default",
+    )
+
+
+def test_returning_to_default_retires_the_saved_row_as_the_person_and_the_default_reads_next(
+    served: tuple[TestClient, Stub], installed: InstallRows
+) -> None:
+    """needs-rupash gap (e). The saved row is retired, not overwritten, with the person as the
+    row's last writer inside the audit attribution, so `0059` records `retired` against them;
+    the answer and the header this process draws next read the default again.
+
+    Delete this and the only way back to the default is to type it, which saves a row that goes on
+    outranking the environment file for ever."""
+    client, stub = served
+    put(client, "u_admin", "INSTALL_COMPANY_NAME", "Northwind Trading")
+
+    answer = default_of(client, "u_admin", "INSTALL_COMPANY_NAME")
+
+    assert answer.status_code == 200, answer.text
+    assert installed.retired == [{"key": "install.company_name", "updated_by": "u_admin"}]
+    assert stub.commits == 2
+    assert ("brain.actor_id", "u_admin") in stub.attributions
+    company = row_named(answer.json(), "INSTALL_COMPANY_NAME")
+    assert company["source"] == "default"
+    document = client.get(CONSOLE_CONFIG_PATH).text
+    assert "Northwind Trading" not in document
+
+
+def test_returning_to_default_with_nothing_saved_answers_409_and_commits_nothing(
+    served: tuple[TestClient, Stub], installed: InstallRows
+) -> None:
+    """The sibling: nothing to take away is said, not pretended. Delete this and the button reports
+    success on a setting that never changed."""
+    client, stub = served
+    answer = default_of(client, "u_admin", "INSTALL_PRODUCT_NAME")
+
+    assert answer.status_code == 409
+    assert answer.json()["message"]
+    assert installed.retired == [] and stub.commits == 0
+
+
+@pytest.mark.parametrize("name", ["INSTALL_OIDC_ISSUER", "INSTALL_STAFF_SOURCE", "INSTALL_NOPE"])
+def test_a_setting_this_screen_does_not_change_is_not_returned_to_default(
+    served: tuple[TestClient, Stub], installed: InstallRows, name: str
+) -> None:
+    """A saved identity provider value taken away from a browser points sign-in somewhere else.
+    Delete this and any saved setting can be retired from the console."""
+    client, stub = served
+    installed.rows["install.oidc_issuer"] = "https://id.example/realms/brain"
+
+    answer = default_of(client, "u_admin", name)
+
+    assert answer.status_code == 422
+    assert answer.json()["message"] == f"{name} is not changed on this screen."
+    assert installed.retired == [] and stub.commits == 0
 
 
 @pytest.mark.parametrize(

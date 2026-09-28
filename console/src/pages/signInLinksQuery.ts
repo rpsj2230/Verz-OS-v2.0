@@ -1,31 +1,23 @@
 /**
- * What the Sign-in links screen asks the API for, and what its two writes may send. No React.
+ * What the Sign-in links page asks the API for, what its two writes send, and the sentences it
+ * says about them. No React.
  *
- * **A sign-in link is which identity provider account signs in as which person**, and this screen
- * sits beside People and Sessions in Govern, which is where `docs/screens.html` SCREEN 10 puts who
- * a person is and how they get in. It lists the people who can sign in, links an account to a
- * person, and unlinks one.
- *
- * **The account itself is never shown and never sent back.** The server stores a one-way
- * fingerprint of it and not the account, so the listing cannot name one and says so in the API's
- * words. The account a person types into the link form is sent once and the field is emptied
- * whatever the answer, so nothing on the page repeats it. See
+ * **A sign-in link is which identity provider account signs in as which person.** The account is
+ * never shown and never sent back: the server stores a one-way fingerprint of it, and the account
+ * a person types into the link form is sent once and the field emptied whatever the answer. See
  * `AN_ACCOUNT_TYPED_IN_IS_SENT_ONCE_AND_NOT_KEPT`.
  *
  * **Nothing here decides who may see or change a link.** The listing opens for somebody holding
- * the authority to make a link over the whole company, the unlink is refused for the last
- * administrator by the store under its lock, and a link is refused for the reasons
- * `brain.sign_in_routes` names. This module reads the answers and says them.
+ * the authority to make a link over the whole company, the store refuses to unlink the last
+ * administrator under its lock, and `brain.sign_in_routes` refuses a link for the reasons it
+ * names. The one check made first is the route's own grammar for the account (not empty, nothing
+ * around it), so the form can say which field is wrong before a request.
  *
- * **Checks before a write are the route's own grammar, so a person is told before a request.**
- * An empty account, or one with space around it, is refused by `brain.identity.sign_in_binding`
- * as not exactly what a token carries; this module refuses the same thing first so the form can
- * say which field is wrong rather than returning the route's code.
- *
- * Task ids: M27.7.11, M27.8.6
+ * Task ids: M27.7.11, M27.8.6, M27.16.1
  */
 
 import type { components } from "../api/schema";
+import type { FieldProblem } from "../api/errors";
 import type { FilterChoice, SortChoice } from "../components/listing";
 
 /** One person who can sign in, as `brain.session_routes.SignInLinkView` sends it. */
@@ -38,7 +30,7 @@ export const AN_ACCOUNT_TYPED_IN_IS_SENT_ONCE_AND_NOT_KEPT =
   "or a field that kept it after a success, would put the account on a screen the listing was " +
   "built never to show it on.";
 
-/** Where the API keeps this screen and its two writes. */
+/** Where the API keeps this page and its two writes. */
 export const LINKS_API_PATH = "/govern/sign-ins";
 export const UNLINK_API_PATH = "/govern/sign-ins/unlink";
 export const LINK_API_PATH = "/sign-ins";
@@ -46,15 +38,18 @@ export const LINK_API_PATH = "/sign-ins";
 /** The console address. */
 export const SIGN_IN_LINKS_PATH = "/sign-in-links";
 
-/** The filters the links route declares that this screen offers, over values on rows drawn. */
+/** The longest account or person ID the link route takes. `brain.sign_in_routes.MAX_IDENTIFIER_CHARS`. */
+export const MAX_IDENTIFIER_CHARS = 255;
+
+/** The filters the links route declares that this page offers, over values on rows drawn. */
 export const LINK_FILTERS: readonly FilterChoice<LinkRow>[] = [
   { column: "department", label: "Department", everything: "All departments", read: (row) => row.department },
 ];
 
-/** The orders this screen offers, as the route spells them. Empty is the route's own, by name. */
+/** The orders this page offers, as the route spells them. Empty is the route's own, by name. */
 export const LINK_SORTS: readonly SortChoice[] = [
-  { value: "", label: "By name" },
-  { value: "department", label: "By department" },
+  { value: "", label: "Name" },
+  { value: "department", label: "Department" },
   { value: "-linked_at", label: "Most recently linked first" },
 ];
 
@@ -82,7 +77,31 @@ function text(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
-/** Read `brain.session_routes.SignInLinksPage` out of a response body. */
+/** One row out of the answer, or null: carried only with a person, a name and a date. */
+function readLink(item: unknown): LinkRow | null {
+  if (typeof item !== "object" || item === null || Array.isArray(item)) {
+    return null;
+  }
+  // A cast at the boundary: every field is read back through a type check below.
+  const entry = item as Readonly<Record<string, unknown>>;
+  const person = text(entry["principal_id"]);
+  const name = text(entry["display_name"]);
+  const linked = text(entry["linked_at"]);
+  if (person === "" || name === "" || linked === "") {
+    return null;
+  }
+  const department = entry["department"];
+  return {
+    principal_id: person,
+    display_name: name,
+    department: typeof department === "string" && department !== "" ? department : null,
+    linked_at: linked,
+    last_administrator: entry["last_administrator"] === true,
+    yours: entry["yours"] === true,
+  };
+}
+
+/** Read `brain.session_routes.SignInLinksPage` out of a response body. Each person once, in order. */
 export function readLinksPage(payload: unknown): LinksPage {
   if (typeof payload !== "object" || payload === null) {
     return NO_LINKS;
@@ -97,8 +116,17 @@ export function readLinksPage(payload: unknown): LinksPage {
   if (!Array.isArray(body.items)) {
     return NO_LINKS;
   }
+  const seen = new Set<string>();
+  const links: LinkRow[] = [];
+  for (const item of body.items as readonly unknown[]) {
+    const row = readLink(item);
+    if (row !== null && !seen.has(row.principal_id)) {
+      seen.add(row.principal_id);
+      links.push(row);
+    }
+  }
   return {
-    links: body.items as LinkRow[],
+    links,
     truncated: body.truncated === true,
     account: text(body.account),
     unlinking: text(body.unlinking),
@@ -125,23 +153,30 @@ export interface LinkAsked {
   readonly principal_id: string;
 }
 
-/** Why a link was not sent. Each is a sentence the form shows beside the field it is about. */
+/** What each field of the link form takes, said under it before anything is sent. */
+export const ACCOUNT_HINT =
+  "The user ID your identity provider shows for this account, usually 36 letters, digits and " +
+  "hyphens. Paste it exactly, with no spaces before or after.";
+export const PERSON_HINT =
+  "The person's ID as People and access shows it, not their name or email address. Up to 255 characters.";
+
+/** Why a link was not sent. Each is drawn beside the field it is about. */
 export const ACCOUNT_IS_EMPTY = "Enter the identity provider account ID.";
 export const ACCOUNT_HAS_SPACE_AROUND_IT =
   "The account ID has space before or after it. Copy it again exactly as the identity provider " +
   "shows it.";
-export const PERSON_IS_EMPTY = "Enter the person's ID, as People and grants shows it.";
+export const PERSON_IS_EMPTY = "Enter the person's ID, as People and access shows it.";
 
-/** The problems with a link before it is sent, in the order the form shows its fields. */
-export function linkProblems(subject: string, principalId: string): readonly string[] {
-  const problems: string[] = [];
+/** The problems with a link before it is sent, by the field each is about. */
+export function linkProblems(subject: string, principalId: string): readonly FieldProblem[] {
+  const problems: FieldProblem[] = [];
   if (subject === "") {
-    problems.push(ACCOUNT_IS_EMPTY);
+    problems.push({ field: "subject", code: "blank", message: ACCOUNT_IS_EMPTY });
   } else if (subject !== subject.trim()) {
-    problems.push(ACCOUNT_HAS_SPACE_AROUND_IT);
+    problems.push({ field: "subject", code: "not_exact", message: ACCOUNT_HAS_SPACE_AROUND_IT });
   }
   if (principalId.trim() === "") {
-    problems.push(PERSON_IS_EMPTY);
+    problems.push({ field: "principal_id", code: "blank", message: PERSON_IS_EMPTY });
   }
   return problems;
 }

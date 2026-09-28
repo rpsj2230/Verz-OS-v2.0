@@ -1,445 +1,283 @@
 /**
- * The Service accounts screen: the list, registering, a key issued and shown once, a key revoked
- * and an account retired.
+ * Service accounts on the shared page kit: the list of the reader's own accounts, one account's
+ * page, and the four acts (register, issue a key shown once, revoke, retire), each confirmed.
  *
- * Mounted directly on a memory router at its own address, for the reason
- * `tests/audit-page.test.tsx` gives. The failures worth testing look like the screen working: a key
- * still on the page after the person said they kept it, a key in a request or in the browser's
- * storage, a body carrying an owner, a revoke or a retire sent from one press, and the API's refusal
- * of an approve or admin capability paraphrased or lost.
+ * The failures worth testing are not layout ones: a key reaching anywhere but the drawer that
+ * issued it, a write sent without its confirmation, a body naming an owner, a form saying what it
+ * accepts only after a refusal, a handle or an id in page text outside Advanced, and an act called
+ * "coming soon" whose route has arrived.
  *
- * Task ids: M27.11.5, M27.15.26
+ * **Reachable means through the application's own route table**, as `connectors-page.test.tsx`
+ * mounts it, so a test passes only if the address resolves.
+ *
+ * Task ids: M27.11.5, M27.15.26, M27.16.1
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
-import { fireEvent, render, waitFor } from "@testing-library/react";
-import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
-import {
-  CONFIRM_RETIRE_LABEL,
-  CONFIRM_REVOKE_LABEL,
-  COPIED,
-  COPY_LABEL,
-  CEILING_LABEL,
-  ENDS_LABEL,
-  ID_LABEL,
-  ISSUE_BUTTON,
-  ISSUE_LABEL,
-  KEEP_LABEL,
-  KEPT_LABEL,
-  KEY_ENDS_LABEL,
-  NO_ACCOUNTS,
-  READING_ACCOUNTS,
-  RETIRE_LABEL,
-  REVOKE_LABEL,
-} from "../src/pages/ServiceAccounts";
-import {
-  BLANK_SENTENCES,
-  endOfDay,
-  type AccountRow,
-} from "../src/pages/serviceAccountsQuery";
-import { routes } from "../src/App";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { beforeAll, describe, expect, test } from "vitest";
+import { HINTS, KEPT_LABEL, REVIEW } from "../src/pages/service-accounts/AccountActs";
+import { ACT_LABELS, NOT_HELD_MARK, UNAVAILABLE } from "../src/pages/service-accounts/serviceAccountActions";
+import { BLANK_SENTENCES } from "../src/pages/serviceAccountsQuery";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
-import { LIST_PAGE_SIZE } from "../src/components/listing";
-import { declaredParameterSchema, declaredQueryParameters, declaredRequestBodySchema } from "./support/openapi";
+import { apiDocument, declaredPropertyNames, declaredRequestBodySchema } from "./support/openapi";
+import { installRadixStubs } from "./support/radix";
 
-const LIST_OPERATION = "/api/v1/govern/service-accounts";
-const KEYS_OPERATION = "/api/v1/govern/service-accounts/keys";
-const REVOKE_OPERATION = "/api/v1/govern/service-accounts/keys/revoke";
-const RETIRE_OPERATION = "/api/v1/govern/service-accounts/retire";
 const CONSOLE_ORIGIN = "https://console.test";
-const REACH = "A service account acts at your reach, narrowed to the capabilities it lists.";
-const OWNERSHIP = "Only its owner may make it, give it a key, take a key away or retire it.";
-const SECRET = "brn.h4ndle01.s3cr3t-never-listed-anywhere-else";
-const SHOWN_ONCE = "This is the only time the key is shown.";
-const NEVER_APPROVE_OR_ADMIN = "A service account can never carry an approve or admin capability.";
+const SECRET = "brn.KEY-SENTINEL.9f3c";
+const HANDLE = "hdl_sentinel_1";
 
 beforeAll(async () => {
-  await import("../src/pages/ServiceAccounts");
+  installRadixStubs();
+  await import("../src/pages/ServiceAccount");
 }, 60_000);
 
-afterEach(() => {
-  Reflect.deleteProperty(navigator, "clipboard");
-});
-
-function account(overrides: Partial<AccountRow> & { client_id: string }): AccountRow {
+function anAccount(over: Record<string, unknown> = {}): Record<string, unknown> {
   return {
+    client_id: "svc_weekly_report",
     label: "Weekly report",
-    ceiling: ["read:invoice", "read:margin"],
+    ceiling: ["read:client.hours", "read:client.margin"],
     lapses_at: "2999-03-04T09:00:00Z",
     created_at: "2019-03-04T09:00:00Z",
-    keys: [],
-    not_held_now: ["read:margin"],
-    ...overrides,
+    keys: [{ handle: HANDLE, label: "Reporting server", issued_at: "2019-03-04T09:00:00Z", lapses_at: "2999-03-04T09:00:00Z" }],
+    not_held_now: ["read:client.margin"],
+    ...over,
   };
 }
 
-function page(items: AccountRow[]): unknown {
-  return { items, truncated: false, reach: REACH, ownership: OWNERSHIP };
+const LIST = { items: [anAccount()], truncated: false, next_cursor: null, reach: "REACH", ownership: "OWNERSHIP" };
+
+interface Mounted {
+  readonly container: HTMLElement;
+  readonly idp: FakeIdp;
+  readonly router: ReturnType<typeof createMemoryRouter>;
 }
 
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
-}
-
-type Answer = (url: URL, init: RequestInit | undefined) => Response | null;
-
-async function mount(answer: Answer): Promise<{ container: HTMLElement; idp: FakeIdp }> {
+async function consoleAt(path: string, gets: Readonly<Record<string, { status?: number; body: unknown }>> = {}): Promise<Mounted> {
+  const answers: Record<string, { status?: number; body: unknown }> = {
+    "/api/v1/govern/service-accounts": { body: LIST },
+    "/api/v1/govern/service-accounts/svc_weekly_report": { body: anAccount() },
+    ...gets,
+  };
   const idp = fakeIdentityProvider({
     api(url, init) {
-      return answer(new URL(url, CONSOLE_ORIGIN), init);
+      const pathname = new URL(url, CONSOLE_ORIGIN).pathname;
+      const reply = (body: unknown, status = 200) =>
+        new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+      if (init?.method === "POST") {
+        if (pathname === "/api/v1/govern/service-accounts/keys") {
+          return reply({ client_id: "svc_weekly_report", handle: "hdl_new", key: SECRET, lapses_at: "2999-01-01T00:00:00Z", shown_once: "SHOWN-ONCE" }, 201);
+        }
+        if (pathname === "/api/v1/govern/service-accounts") {
+          return reply({ ...anAccount({ client_id: "svc_new", label: "", keys: [] }) }, 201);
+        }
+        return reply({ told: "TOLD-SENTENCE" });
+      }
+      const answer = answers[pathname];
+      return answer === undefined ? null : reply(answer.body, answer.status ?? 200);
     },
   });
   const loaded = await loadConsole({ idp });
   await signIn(loaded);
-  const { ServiceAccounts } = await import("../src/pages/ServiceAccounts");
-  const router = createMemoryRouter([{ path: "/service-accounts", element: <ServiceAccounts /> }], {
-    initialEntries: ["/service-accounts"],
-  });
+  const { routes } = await import("../src/App");
+  const router = createMemoryRouter(routes, { initialEntries: [path] });
   const { container } = render(<RouterProvider router={router} />);
+  await settle(container);
+  return { container, idp, router };
+}
+
+async function settle(container: HTMLElement): Promise<void> {
   await waitFor(() => {
-    if (container.textContent?.includes(READING_ACCOUNTS)) {
-      throw new Error("still reading");
+    if (!container.querySelector("h1") || container.querySelector('[data-slot="loading-state"]')) {
+      throw new Error("the page is still asking");
     }
   });
-  return { container, idp };
 }
 
-function posts(idp: FakeIdp, operation: string): Record<string, unknown>[] {
+function posts(idp: FakeIdp): { path: string; body: unknown }[] {
   return idp.calls
-    .filter((call) => call.init?.method === "POST" && new URL(call.url, CONSOLE_ORIGIN).pathname === operation)
-    .map((call) => JSON.parse(String(call.init?.body ?? "null")) as Record<string, unknown>);
+    .filter((call) => call.init?.method === "POST" && new URL(call.url, CONSOLE_ORIGIN).pathname.startsWith("/api/"))
+    .map((call) => ({
+      path: new URL(call.url, CONSOLE_ORIGIN).pathname,
+      body: call.init?.body === undefined ? undefined : (JSON.parse(String(call.init.body)) as unknown),
+    }));
 }
 
-function listings(idp: FakeIdp): number {
-  return idp.calls.filter(
-    (call) => (call.init?.method ?? "GET") === "GET" && new URL(call.url, CONSOLE_ORIGIN).pathname === LIST_OPERATION,
-  ).length;
+function outsideAdvanced(container: HTMLElement): string {
+  const copy = container.cloneNode(true) as HTMLElement;
+  copy.querySelectorAll('[data-slot="advanced"]').forEach((one) => {
+    one.remove();
+  });
+  return copy.textContent ?? "";
 }
 
-function buttonNamed(container: HTMLElement, name: string): HTMLButtonElement {
-  const found = [...container.querySelectorAll("button")].find(
-    (one) => one.textContent === name || one.getAttribute("aria-label")?.startsWith(name),
-  );
-  if (found === undefined) {
-    throw new Error(`no button named ${name}`);
-  }
-  return found as HTMLButtonElement;
+async function confirmIn(name: string): Promise<void> {
+  const dialog = await screen.findByRole("alertdialog");
+  await act(async () => {
+    fireEvent.click(within(dialog).getByRole("button", { name }));
+  });
 }
 
-function field(container: HTMLElement, label: string): HTMLInputElement | HTMLTextAreaElement {
-  const found = [...container.querySelectorAll("label")].find((one) => one.textContent?.startsWith(label));
-  const input = found?.querySelector("input, textarea");
-  if (!input) {
-    throw new Error(`no field labelled ${label}`);
-  }
-  return input as HTMLInputElement | HTMLTextAreaElement;
-}
-
-function formNamed(container: HTMLElement, name: string): HTMLFormElement {
-  const found = container.querySelector(`form[aria-label^="${name}"]`);
-  if (found === null) {
-    throw new Error(`no form named ${name}`);
-  }
-  return found as HTMLFormElement;
-}
-
-describe("what the service accounts screen sends", () => {
-  test("every write sends only fields its route declares, and none of them names an owner", async () => {
-    // What breaks if this is deleted: a body key a route forbids, which is a 422 in front of an
-    // administrator who filled the form in, or an owner field that would lend somebody else's reach.
-    const declared = (path: string) =>
-      Object.keys(declaredRequestBodySchema(path, "post")["properties"] as object).sort();
-    expect(declared(LIST_OPERATION)).toEqual(["ceiling", "client_id", "label", "not_after", "subject"]);
-    expect(declared(KEYS_OPERATION)).toEqual(["client_id", "label", "not_after"]);
-    expect(declared(REVOKE_OPERATION)).toEqual(["handle"]);
-    expect(declared(RETIRE_OPERATION)).toEqual(["client_id"]);
-    for (const path of [LIST_OPERATION, KEYS_OPERATION, REVOKE_OPERATION, RETIRE_OPERATION]) {
-      expect(declared(path).filter((name) => /owner|principal/.test(name))).toEqual([]);
+describe("what this module agrees with the API about", () => {
+  test("no act the module calls coming soon has a route, and every body it sends is one the API declares", () => {
+    // What breaks if this is deleted: "coming soon" said after the route lands, or a registration
+    // that sends an owner field the route would take as lending somebody else's reach.
+    const paths = Object.keys((apiDocument()["paths"] ?? {}) as Record<string, unknown>);
+    for (const [one, { retiredBy }] of Object.entries(UNAVAILABLE)) {
+      expect(paths.filter((path) => retiredBy.test(path)), one).toEqual([]);
     }
-  });
-
-  test("the listing sends only the parameters its route declares", async () => {
-    // What breaks if this is deleted: a page size or a parameter the route refuses, which is a 422
-    // where the list should be.
-    const declared = new Set(declaredQueryParameters(LIST_OPERATION, "get"));
-    const limit = declaredParameterSchema(LIST_OPERATION, "get", "limit");
-    const { idp } = await mount((url) => (url.pathname === LIST_OPERATION ? json(page([])) : null));
-
-    const sent = idp.urls
-      .filter((url) => new URL(url, CONSOLE_ORIGIN).pathname === LIST_OPERATION)
-      .flatMap((url) => [...new URL(url, CONSOLE_ORIGIN).searchParams.keys()]);
-    expect(sent.length).toBeGreaterThan(0);
-    expect(sent.filter((name) => !declared.has(name))).toEqual([]);
-    expect(LIST_PAGE_SIZE).toBeLessThanOrEqual(limit["maximum"] as number);
-  });
-
-  test("the screen is in the route table and the menu at its own address", () => {
-    // What breaks if this is deleted: a page nobody can open, which is what these routes were before.
-    const children = routes.find((one) => one.path === "/")?.children ?? [];
-    expect(children.map((one) => one.path)).toContain("service-accounts");
+    expect(UNAVAILABLE.changeEnd.retiredBy.test("/api/v1/govern/service-accounts/{client_id}/end")).toBe(true);
+    expect(paths).toContain("/api/v1/govern/service-accounts/{client_id}");
+    const registration = declaredPropertyNames(declaredRequestBodySchema("/api/v1/govern/service-accounts", "post"));
+    expect(registration).not.toContain("owner");
+    expect(registration).not.toContain("owner_principal_id");
   });
 });
 
-describe("what the service accounts screen shows and does", () => {
-  test("an account is listed with what it cannot use now, and a key by its handle and never a secret", async () => {
-    // What breaks if this is deleted: every refusal below is satisfied by an empty page; and a
-    // capability the caller does not hold is shown as if the account could use it.
-    const { container } = await mount((url) =>
-      url.pathname === LIST_OPERATION
-        ? json(
-            page([
-              account({
-                client_id: "svc_weekly_report",
-                keys: [{ handle: "h4ndle01", label: "cron", issued_at: "2019-03-04T09:00:00Z", lapses_at: "2999-01-01T00:00:00Z" }],
-              }),
-            ]),
-          )
-        : null,
-    );
+describe("the list", () => {
+  test("draws the reader's accounts by name, with no key handle, and each capability they cannot use marked", async () => {
+    // What breaks if this is deleted: identifiers back in the table, or a ceiling drawn as if every
+    // capability worked when the owner no longer holds one.
+    const { container } = await consoleAt("/service-accounts");
 
-    const accounts = container.querySelector('[aria-label="Your service accounts"]')?.textContent ?? "";
-    expect(accounts).toContain("svc_weekly_report");
-    expect(accounts).toContain("read:margin (you do not hold it now)");
-    expect(accounts).not.toContain("read:invoice (you do not hold it now)");
-    const keys = container.querySelector('[aria-label="Live keys"]')?.textContent ?? "";
-    expect(keys).toContain("h4ndle01");
-    expect(container.textContent).toContain(REACH);
-    expect(container.textContent).toContain(OWNERSHIP);
+    const text = outsideAdvanced(container);
+    expect(text).toContain("Weekly report");
+    expect(text).toContain("read:client.hours");
+    expect(text).not.toContain(HANDLE);
+    const chips = [...container.querySelectorAll('[data-slot="chip"]')].map((one) => one.textContent);
+    expect(chips).toContain(`read:client.margin ${NOT_HELD_MARK}`);
+    expect(chips).toContain("read:client.hours");
   });
 
-  test("no accounts is said in words rather than drawn as an empty table", async () => {
-    // What breaks if this is deleted: an empty page that cannot be told from one still loading.
-    const { container } = await mount((url) => (url.pathname === LIST_OPERATION ? json(page([])) : null));
-    expect(container.textContent).toContain(NO_ACCOUNTS);
-    expect(container.querySelector("table")).toBeNull();
+  test("registering says what every field accepts first, refuses blanks beside them, and sends no owner", async () => {
+    // What breaks if this is deleted: a form that teaches its format only by refusing, a blank sent
+    // to the API, or a registration sent without its confirmation.
+    const { container, idp, router } = await consoleAt("/service-accounts");
+
+    await act(async () => {
+      fireEvent.click(screen.getAllByRole("button", { name: new RegExp(ACT_LABELS.register) })[0] as HTMLElement);
+    });
+    const drawer = await screen.findByRole("dialog");
+    expect(drawer.textContent).toContain(HINTS.client_id);
+    expect(drawer.textContent).toContain(HINTS.ceiling);
+    await act(async () => {
+      fireEvent.click(within(drawer).getByRole("button", { name: REVIEW }));
+    });
+    expect(drawer.textContent).toContain(BLANK_SENTENCES.client_id);
+    expect(drawer.textContent).toContain(BLANK_SENTENCES.ceiling);
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(posts(idp)).toEqual([]);
+
+    fireEvent.change(within(drawer).getByLabelText("Account ID"), { target: { value: "svc_new" } });
+    fireEvent.change(within(drawer).getByLabelText("Capabilities it may use"), { target: { value: "read:client.hours" } });
+    fireEvent.change(within(drawer).getByLabelText("Stops working after"), { target: { value: "2999-01-01" } });
+    await act(async () => {
+      fireEvent.click(within(drawer).getByRole("button", { name: REVIEW }));
+    });
+    expect(posts(idp)).toEqual([]);
+    await confirmIn(ACT_LABELS.register);
+
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe("/service-accounts/svc_new");
+    });
+    const [sent] = posts(idp);
+    expect(sent?.path).toBe("/api/v1/govern/service-accounts");
+    expect(Object.keys(sent?.body as object).sort()).toEqual(["ceiling", "client_id", "label", "not_after"]);
+    expect(container).toBeTruthy();
+  });
+});
+
+describe("one account's page", () => {
+  test("shows its figures and keys, keeps handles in Advanced, and offers changing the end date as not yet available", async () => {
+    // What breaks if this is deleted: a handle in page text, or an inert control drawn as live.
+    const { container } = await consoleAt("/service-accounts/svc_weekly_report");
+
+    expect(container.querySelector("h1")?.textContent).toBe("Weekly report");
+    expect(outsideAdvanced(container)).not.toContain(HANDLE);
+    expect(container.querySelector('[data-slot="advanced"]')?.textContent).toContain(HANDLE);
+    expect(outsideAdvanced(container)).toContain("Reporting server");
+    const unavailable = container.querySelector("[data-unavailable]");
+    expect(unavailable?.textContent).toContain(ACT_LABELS.changeEnd);
   });
 
-  test("registering sends the account with no owner and says which capabilities it cannot use yet", async () => {
-    // What breaks if this is deleted: the form sending an empty subject the route refuses, a day
-    // with no time zone the route refuses, or a registration that succeeds silently.
-    const { container, idp } = await mount((url, init) => {
-      if (url.pathname === LIST_OPERATION && init?.method === "POST") {
-        return json(account({ client_id: "svc_weekly_report" }), 201);
-      }
-      return url.pathname === LIST_OPERATION ? json(page([])) : null;
-    });
-    const before = listings(idp);
+  test("revoking a key sends its handle only from the confirmation, and the page reads the account again", async () => {
+    // What breaks if this is deleted: a revocation from one press, or a page that goes on drawing
+    // a revoked key.
+    const { idp } = await consoleAt("/service-accounts/svc_weekly_report");
+    const before = idp.calls.filter((call) => new URL(call.url, CONSOLE_ORIGIN).pathname === "/api/v1/govern/service-accounts/svc_weekly_report").length;
 
-    fireEvent.change(field(container, ID_LABEL), { target: { value: " svc_weekly_report " } });
-    fireEvent.change(field(container, CEILING_LABEL), { target: { value: "read:invoice\n\nread:margin\n" } });
-    fireEvent.change(field(container, ENDS_LABEL), { target: { value: "2999-03-04" } });
-    fireEvent.submit(formNamed(container, "Register a service account"));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Revoke Reporting server" }));
+    });
+    expect(posts(idp)).toEqual([]);
+    await confirmIn("Revoke key");
 
     await waitFor(() => {
-      expect(posts(idp, LIST_OPERATION)).toHaveLength(1);
-    });
-    expect(posts(idp, LIST_OPERATION)[0]).toEqual({
-      client_id: "svc_weekly_report",
-      label: "",
-      ceiling: ["read:invoice", "read:margin"],
-      not_after: endOfDay("2999-03-04"),
+      expect(posts(idp)).toEqual([{ path: "/api/v1/govern/service-accounts/keys/revoke", body: { handle: HANDLE } }]);
     });
     await waitFor(() => {
-      expect(container.textContent).toContain("You do not hold read:margin now");
-    });
-    await waitFor(() => {
-      expect(listings(idp)).toBeGreaterThan(before);
-    });
-  });
-
-  test("a registration left blank sends nothing and says what to fill in", async () => {
-    // What breaks if this is deleted: an empty registration reaching the API, refused only after
-    // somebody pressed the button, in words about a field they cannot see.
-    const { container, idp } = await mount((url) => (url.pathname === LIST_OPERATION ? json(page([])) : null));
-
-    fireEvent.submit(formNamed(container, "Register a service account"));
-
-    await waitFor(() => {
-      expect(container.textContent).toContain(BLANK_SENTENCES.ceiling);
-    });
-    expect(container.textContent).toContain(BLANK_SENTENCES.client_id);
-    expect(container.textContent).toContain(BLANK_SENTENCES.not_after);
-    expect(posts(idp, LIST_OPERATION)).toEqual([]);
-  });
-
-  test("an approve or admin capability is refused beside the ceiling in the API's own words", async () => {
-    // What breaks if this is deleted: the API's refusal of a capability no service account may carry
-    // drawn nowhere near the field that holds it, or paraphrased into something that decides here.
-    const { container } = await mount((url, init) => {
-      if (url.pathname === LIST_OPERATION && init?.method === "POST") {
-        return json(
-          {
-            message: "The request was not accepted.",
-            trace_id: "trace-1",
-            problems: [{ field: "ceiling", code: "value_error", message: NEVER_APPROVE_OR_ADMIN }],
-          },
-          422,
-        );
-      }
-      return url.pathname === LIST_OPERATION ? json(page([])) : null;
-    });
-
-    fireEvent.change(field(container, ID_LABEL), { target: { value: "svc_nightly" } });
-    fireEvent.change(field(container, CEILING_LABEL), { target: { value: "admin:credential" } });
-    fireEvent.change(field(container, ENDS_LABEL), { target: { value: "2999-03-04" } });
-    fireEvent.submit(formNamed(container, "Register a service account"));
-
-    await waitFor(() => {
-      expect(container.querySelector('[aria-label="Problems with ceiling"]')?.textContent).toContain(
-        NEVER_APPROVE_OR_ADMIN,
-      );
-    });
-    expect(field(container, CEILING_LABEL).getAttribute("aria-invalid")).toBe("true");
-  });
-
-  test("a key is shown once with a copy button, then gone, and is never in a request or the browser's storage", async () => {
-    // What breaks if this is deleted: the one place a key can be read being lost before it is
-    // copied, or kept after the person said they kept it, or written somewhere a later visitor to
-    // this browser could read it back.
-    const writeText = vi.fn(async (_text: string) => {});
-    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
-    let issued = false;
-    const { container, idp } = await mount((url, init) => {
-      if (url.pathname === KEYS_OPERATION && init?.method === "POST") {
-        issued = true;
-        return json(
-          { client_id: "svc_weekly_report", handle: "h4ndle01", key: SECRET, lapses_at: "2999-01-01T00:00:00Z", shown_once: SHOWN_ONCE },
-          201,
-        );
-      }
-      if (url.pathname === LIST_OPERATION) {
-        const keys = issued
-          ? [{ handle: "h4ndle01", label: "", issued_at: "2019-03-04T09:00:00Z", lapses_at: "2999-01-01T00:00:00Z" }]
-          : [];
-        return json(page([account({ client_id: "svc_weekly_report", keys })]));
-      }
-      return null;
-    });
-
-    fireEvent.click(buttonNamed(container, ISSUE_LABEL));
-    fireEvent.change(field(container, KEY_ENDS_LABEL), { target: { value: "2999-01-01" } });
-    fireEvent.click(buttonNamed(container, ISSUE_BUTTON));
-
-    await waitFor(() => {
-      expect(container.querySelector('[aria-label="Key"]')?.textContent).toBe(SECRET);
-    });
-    expect(posts(idp, KEYS_OPERATION)).toEqual([
-      { client_id: "svc_weekly_report", label: "", not_after: endOfDay("2999-01-01") },
-    ]);
-    expect(container.textContent).toContain(SHOWN_ONCE);
-    await waitFor(() => {
-      expect(container.querySelector('[aria-label="Live keys"]')?.textContent).toContain("h4ndle01");
-    });
-    expect(container.querySelector('[aria-label="Live keys"]')?.textContent).not.toContain(SECRET);
-
-    fireEvent.click(buttonNamed(container, COPY_LABEL));
-    await waitFor(() => {
-      expect(container.textContent).toContain(COPIED);
-    });
-    expect(writeText).toHaveBeenCalledWith(SECRET);
-
-    fireEvent.click(buttonNamed(container, KEPT_LABEL));
-    await waitFor(() => {
-      expect(container.textContent).not.toContain(SECRET);
-    });
-    const sent = idp.calls.map((call) => `${call.url} ${String(call.init?.body ?? "")}`).join("\n");
-    expect(sent).not.toContain(SECRET);
-    const stored = [localStorage, sessionStorage].flatMap((store) =>
-      Object.keys(store).map((name) => `${name}=${store.getItem(name) ?? ""}`),
-    );
-    expect(stored.join("\n")).not.toContain(SECRET);
-  });
-
-  test("a key left without an end sends nothing and says what to choose", async () => {
-    // What breaks if this is deleted: a key issue reaching the API with no end, refused in words
-    // about a field the person has just looked at and filled in everything else of.
-    const { container, idp } = await mount((url) =>
-      url.pathname === LIST_OPERATION ? json(page([account({ client_id: "svc_weekly_report" })])) : null,
-    );
-
-    fireEvent.click(buttonNamed(container, ISSUE_LABEL));
-    fireEvent.click(buttonNamed(container, ISSUE_BUTTON));
-
-    await waitFor(() => {
-      expect(container.textContent).toContain(BLANK_SENTENCES.key_not_after);
-    });
-    expect(posts(idp, KEYS_OPERATION)).toEqual([]);
-  });
-
-  test("revoking a key is confirmed first, and sends only its handle", async () => {
-    // What breaks if this is deleted: one press stopping an integration, or a revocation that
-    // names the account and takes every key it has.
-    const { container, idp } = await mount((url, init) => {
-      if (url.pathname === REVOKE_OPERATION && init?.method === "POST") {
-        return json({ told: "The key is revoked and is refused from its next use." });
-      }
-      return url.pathname === LIST_OPERATION
-        ? json(
-            page([
-              account({
-                client_id: "svc_weekly_report",
-                keys: [{ handle: "h4ndle01", label: "", issued_at: "2019-03-04T09:00:00Z", lapses_at: "2999-01-01T00:00:00Z" }],
-              }),
-            ]),
-          )
-        : null;
-    });
-
-    fireEvent.click(buttonNamed(container, REVOKE_LABEL));
-    expect(container.querySelector(".confirm")?.textContent).toContain("Revoke the key h4ndle01 of Weekly report?");
-    fireEvent.click(buttonNamed(container, KEEP_LABEL));
-    expect(posts(idp, REVOKE_OPERATION)).toEqual([]);
-
-    fireEvent.click(buttonNamed(container, REVOKE_LABEL));
-    fireEvent.click(buttonNamed(container, CONFIRM_REVOKE_LABEL));
-    await waitFor(() => {
-      expect(posts(idp, REVOKE_OPERATION)).toEqual([{ handle: "h4ndle01" }]);
-    });
-    await waitFor(() => {
-      expect(container.textContent).toContain("The key is revoked and is refused from its next use.");
+      const after = idp.calls.filter((call) => new URL(call.url, CONSOLE_ORIGIN).pathname === "/api/v1/govern/service-accounts/svc_weekly_report").length;
+      expect(after).toBeGreaterThan(before);
     });
   });
 
-  test("retiring an account is confirmed first, and sends only its id", async () => {
-    // What breaks if this is deleted: one press stopping an integration and every key it has.
-    const { container, idp } = await mount((url, init) => {
-      if (url.pathname === RETIRE_OPERATION && init?.method === "POST") {
-        return json({ told: "The account and all its keys are retired." });
-      }
-      return url.pathname === LIST_OPERATION ? json(page([account({ client_id: "svc_weekly_report" })])) : null;
-    });
+  test("an issued key is shown once in its drawer and is gone from the page once kept", async () => {
+    // What breaks if this is deleted: the key stays in the page after it was kept, or is drawn
+    // anywhere but the answer that issued it.
+    const { container, idp } = await consoleAt("/service-accounts/svc_weekly_report");
 
-    fireEvent.click(buttonNamed(container, RETIRE_LABEL));
-    expect(container.querySelector(".confirm")?.textContent).toContain("Retire Weekly report?");
-    expect(posts(idp, RETIRE_OPERATION)).toEqual([]);
-    fireEvent.click(buttonNamed(container, CONFIRM_RETIRE_LABEL));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: new RegExp(`^${ACT_LABELS.issue}$`) }));
+    });
+    const drawer = await screen.findByRole("dialog");
+    expect(drawer.textContent).toContain(HINTS.key_not_after);
+    fireEvent.change(within(drawer).getByLabelText("Key stops working after"), { target: { value: "2999-01-01" } });
+    await act(async () => {
+      fireEvent.click(within(drawer).getByRole("button", { name: REVIEW }));
+    });
+    await confirmIn(ACT_LABELS.issue);
+    await waitFor(() => {
+      expect(screen.getByRole("dialog").textContent).toContain(SECRET);
+    });
+    expect(container.textContent).not.toContain(SECRET);
 
-    await waitFor(() => {
-      expect(posts(idp, RETIRE_OPERATION)).toEqual([{ client_id: "svc_weekly_report" }]);
+    await act(async () => {
+      fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: KEPT_LABEL }));
     });
     await waitFor(() => {
-      expect(container.textContent).toContain("The account and all its keys are retired.");
+      expect(document.body.textContent).not.toContain(SECRET);
     });
+    expect(posts(idp).map((one) => one.path)).toEqual(["/api/v1/govern/service-accounts/keys"]);
   });
 
-  test("a third key refused by the API is said in the API's words", async () => {
-    // What breaks if this is deleted: the limit on live keys reaching the person as a bare failure
-    // with no sentence saying to revoke the one being replaced first.
-    const limit = "svc_weekly_report already has 2 live keys, which is the limit. Revoke the one being replaced first.";
-    const { container } = await mount((url, init) => {
-      if (url.pathname === KEYS_OPERATION && init?.method === "POST") {
-        return json({ message: limit, trace_id: "trace-2" }, 409);
-      }
-      return url.pathname === LIST_OPERATION ? json(page([account({ client_id: "svc_weekly_report" })])) : null;
-    });
+  test("retiring the account is confirmed and returns to the list", async () => {
+    // What breaks if this is deleted: a retirement from one press, or a page left drawing an
+    // account that no longer works.
+    const { idp, router } = await consoleAt("/service-accounts/svc_weekly_report");
 
-    fireEvent.click(buttonNamed(container, ISSUE_LABEL));
-    fireEvent.change(field(container, KEY_ENDS_LABEL), { target: { value: "2999-01-01" } });
-    fireEvent.click(buttonNamed(container, ISSUE_BUTTON));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: ACT_LABELS.retire }));
+    });
+    expect(posts(idp)).toEqual([]);
+    await confirmIn(ACT_LABELS.retire);
 
     await waitFor(() => {
-      expect(container.textContent).toContain(limit);
+      expect(router.state.location.pathname).toBe("/service-accounts");
     });
-    expect(container.querySelector('[aria-label="Key"]')).toBeNull();
+    expect(posts(idp)).toEqual([{ path: "/api/v1/govern/service-accounts/retire", body: { client_id: "svc_weekly_report" } }]);
+  });
+
+  test("an account the reader may not open is the API's sentence and nothing else", async () => {
+    // What breaks if this is deleted: another person's account drawn, or a refusal worded
+    // differently from an absence.
+    const { container } = await consoleAt("/service-accounts/svc_someone_else", {
+      "/api/v1/govern/service-accounts/svc_someone_else": {
+        status: 404,
+        body: { message: "I could not find that.", trace_id: "TRACE-SENTINEL" },
+      },
+    });
+
+    expect(container.textContent).toContain("TRACE-SENTINEL");
+    expect(container.textContent).not.toContain("svc_someone_else");
   });
 });

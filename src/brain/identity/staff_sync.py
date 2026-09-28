@@ -667,6 +667,18 @@ AUDIT_KIND_DECISIONS: Final[Mapping[str, AuditKindDecision]] = MappingProxyType(
                     "that another department, an agent or a person had been stopped."
                 ),
             ),
+            AuditKindDecision(
+                kind="pack",
+                covered=False,
+                because=(
+                    "Not covered, for the reason department is not, since the kind was added on "
+                    "2026-09-28. A pack is created, versioned, copied or retired only by somebody "
+                    "holding approve:grant over the whole company and every capability the pack "
+                    "carries, which this sync never grants a head, and a pack is the whole "
+                    "company's: assigning one to a head's people is recorded under the person as "
+                    "a grant, which a head already reads."
+                ),
+            ),
         )
     }
 )

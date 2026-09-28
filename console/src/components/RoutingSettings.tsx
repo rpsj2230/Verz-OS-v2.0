@@ -1,9 +1,9 @@
 /**
- * The Models screen's routing settings: each level's size limit and headroom, the rules on where a
+ * The Routing page's settings, under its Advanced section: each level's size limit and headroom, the rules on where a
  * question may be processed, and the fallback alerts of the last day. Plain words and every input
  * named by its label (`htmlFor`), for the owner's reasons of 2026-09-28.
  *
- * `routingSettingsQuery.ts` holds the arguments. Like `ProviderRegister.tsx` it reads nothing of
+ * `routingSettingsQuery.ts` holds the arguments. It reads nothing of
  * its own: it is handed the providers answer the health card holds, and every write answers with
  * the plan after it, which it hands back to the card. Every write asks first through
  * `components/ConfirmAction.tsx` and is refused by the API without the matrix's write grant over

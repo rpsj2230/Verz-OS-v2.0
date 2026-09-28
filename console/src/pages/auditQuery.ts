@@ -276,6 +276,13 @@ export function offeredActors(page: LedgerPage, chosen: string): readonly string
  * Every member of `brain.audit.ledger.AuditAction` has a phrase, which the test holds against the
  * vocabulary the API's own document declares, so a thirteenth action cannot arrive rendered as
  * its code on a screen written in sentences.
+ *
+ * **An action that covers several changes is phrased by the change it was.** Until 2026-09-28 every
+ * `organisation` entry read "placed in a team or made a lead, or ended", a department created
+ * included, because the phrase was chosen by the action alone. The triggers write which change it
+ * was in `details.change` (`brain.audit.record.OrganisationChange`, `PrincipalStateChange`,
+ * `PackChange`), so `CHANGE_PHRASES` says each one, and the action's own phrase is only for an entry
+ * whose change this console has no words for.
  */
 export const ACTION_PHRASES: Readonly<Record<string, string>> = Object.freeze({
   grant: "granted a capability to",
@@ -302,10 +309,10 @@ export const ACTION_PHRASES: Readonly<Record<string, string>> = Object.freeze({
   webhook: "changed the webhook subscriber",
   erasure: "filed or finished",
   memory: "corrected",
-  organisation: "placed in a team or made a lead, or ended",
+  organisation: "changed the organisation, about",
   elevation: "asked for more, or approved or denied",
   vault_access: "answered a call about",
-  principal_state: "disabled or enabled",
+  principal_state: "changed the standing of",
   breach: "opened, assessed, notified or closed",
   agent_owner: "became the owner of",
   // What 0137's trigger writes: a hand-over is agent_owner's, and a duplicate is a new agent created.
@@ -313,11 +320,38 @@ export const ACTION_PHRASES: Readonly<Record<string, string>> = Object.freeze({
   // A stop on the install or on one department, agent, connector or person, or its resume (0136).
   halt: "stopped or resumed work under",
   channel_binding: "bound or unbound a chat account of",
+  pack: "changed the pack",
 });
 
-/** The phrase for an action, or its code when the vocabulary has outgrown this console. */
-export function phraseFor(action: string): string {
-  return ACTION_PHRASES[action] ?? action;
+/** The phrase for each change an action's entries record in `details.change`, by action. */
+export const CHANGE_PHRASES: Readonly<Record<string, Readonly<Record<string, string>>>> = Object.freeze({
+  organisation: Object.freeze({
+    joined: "added a team member:",
+    left: "took out of a team:",
+    appointed: "appointed as a department lead:",
+    stood_down: "stood down as a department lead:",
+    created: "created",
+    renamed: "renamed",
+    changed: "changed by hand",
+    retired: "retired",
+  }),
+  principal_state: Object.freeze({
+    disabled: "disabled the sign-in of",
+    enabled: "reinstated the sign-in of",
+    created: "added to the directory:",
+  }),
+  pack: Object.freeze({
+    created: "created the pack",
+    versioned: "made a new version of the pack",
+    retired: "retired the pack",
+  }),
+});
+
+/** The phrase for an action, by the change its details name when there are words for it. */
+export function phraseFor(action: string, details?: Readonly<Record<string, unknown>> | null): string {
+  const change = details?.["change"];
+  const byChange = typeof change === "string" ? CHANGE_PHRASES[action]?.[change] : undefined;
+  return byChange ?? ACTION_PHRASES[action] ?? action;
 }
 
 /** A subject as the row names it: "principal u_wide". */

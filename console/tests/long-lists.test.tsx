@@ -72,9 +72,6 @@ const A_RUNG_IS_SAVED_ONE_AT_A_TIME =
   "Saving a rung changes the chain the next model call walks, and switching several off at once can " +
   "leave a tier with no rung switched on, which nothing refuses: " +
   "brain.routing_routes.A_RUNG_IS_SAVED_ONE_AT_A_TIME.";
-const A_CREDENTIAL_IS_WRITTEN_ONE_SLOT_AT_A_TIME =
-  "A value is typed for one slot and replaces what that slot holds, so no act applies to several " +
-  "rows: each has its own value, and a key replaced on the wrong row stops what used it.";
 const AN_APPROVAL_IS_DECIDED_FROM_ITS_OWN_CARD =
   "An approval lets one suspended action run and its card is the statement of what it will do, so " +
   "approving several at once approves artefacts nobody read, and a rejection names its own reason: " +
@@ -83,19 +80,6 @@ const AN_ELEVATION_IS_DECIDED_ON_ITS_OWN_REASON =
   "Approving an elevation widens one person's reach for hours on the strength of the explanation " +
   "they wrote, so approving several at once approves explanations nobody read: " +
   "brain.govern_people_routes.AN_ELEVATION_IS_DECIDED_ON_ITS_OWN_REASON.";
-const A_GRANT_IS_REMOVED_BY_REVIEW_IN_BULK =
-  "Removing several grants is the Access review screen's act, which records a decision per grant, " +
-  "runs each through certify and offers it for many rows at once. People removes one capability " +
-  "from one person as a correction, and a second bulk removal would be a second route to the same " +
-  "write with no decision recorded.";
-const AN_UNLINK_LOCKS_A_PERSON_OUT =
-  "Unlinking refuses every future request a person makes, and the last administrator's link is " +
-  "refused with a sentence to act on. Several unlinks at once is how a mis-ticked row locks a " +
-  "colleague out of the system, so each link is retired from its own row and confirmation.";
-const RETIRING_AN_ACCOUNT_STOPS_AN_INTEGRATION =
-  "Retiring an account or revoking a key stops an integration from its next request, and each " +
-  "confirmation names the one it stops. Several at once is how a mis-ticked row stops an integration " +
-  "nobody chose to stop, so each is retired or revoked from its own row.";
 const A_ROW_IS_A_DEPARTMENT_AND_A_PLACEMENT_NAMES_A_PERSON =
   "The rows of this list are departments. Placing somebody names a department, a team and a person, " +
   "and appointing a lead names one person for one department, so there is no act that applies to " +
@@ -115,6 +99,12 @@ const OVERVIEW_CARDS: Readonly<Record<string, string>> = {
   // paged, searched, filtered and ordered on /skills.
   "/skills/:name": "/skills",
   "/skills/:name/:view": "/skills",
+  "/models/:provider": "/models",
+  "/models/:provider/:view": "/models",
+  "/people/:personId": "/agents",
+  "/roles": "/people",
+  "/departments/:slug": "/departments",
+  "/departments/:slug/:view": "/scopes",
 };
 const AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST =
   "This screen is an overview, and the list it borrows is one card on it with a link to the screen " +
@@ -124,24 +114,18 @@ const A_PIN_IS_ONE_AGENTS =
   "The one write beside this list pins a model for this agent alone, and the steps drawn are the " +
   "level's, which are saved one at a time on the Routing screen, so there is no act to do to many " +
   "of them from here.";
+const A_PROVIDER_PAGE_IS_ONE_PROVIDER =
+  "This page is one provider, and the steps it lists are that provider's, drawn in the chain's " +
+  "order and changed one at a time on the Routing screen, so there is no act to do to several here.";
 const A_SKILL_IS_DECIDED_FROM_ITS_OWN_BYTES =
   "Every write on a skill is about one version or one agent: a review approves exactly the bytes a " +
   "reviewer read, a retirement names the agents still running that version for somebody to detach, " +
   "and a detachment ends one assignment, so there is no act that applies to several rows at once.";
 
-const A_CONNECTION_CHANGES_ONE_SOURCE_AT_A_TIME =
-  "There is at most one live connection per source, and every act on one (connect, edit, replace the " +
-  "key, disconnect) is confirmed in the API's words for that source, because each agrees to what one " +
-  "source may read. docs/admin-console-architecture.md marks bulk as not applicable to connectors.";
 const AN_UNBINDING_IS_ONE_PERSONS_CHAT =
   "Unbinding stops a chat account being answered as its person, at once, and is recorded against " +
   "them; it is confirmed one person at a time so nobody's chat is taken away as a side effect of " +
   "somebody else's.";
-
-const A_CHANNEL_IS_SWITCHED_ON_ITS_OWN_PAGE =
-  "A channel's switch and set-up change what one chat surface answers and what its vendor's requests " +
-  "meet, and each is confirmed on the channel's own page naming it. Switching several at once is how " +
-  "a mis-ticked row takes a chat surface away from everybody on it.";
 
 const A_RUN_IS_WRITTEN_BY_THE_WORKER =
   "A job's past runs are rows the worker writes as it runs the job, and nothing a person presses " +
@@ -176,6 +160,22 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
     bulk: READ_ONLY,
   },
   "/routing": { sort: CHAIN_IN_ORDER, bulk: A_RUNG_IS_SAVED_ONE_AT_A_TIME },
+  "/models": {},
+  // A provider's page draws that provider out of the providers list and links back to it.
+  "/models/:provider": {
+    page: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    search: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    filter: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    sort: CHAIN_IN_ORDER,
+    bulk: A_PROVIDER_PAGE_IS_ONE_PROVIDER,
+  },
+  "/models/:provider/:view": {
+    page: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    search: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    filter: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    sort: CHAIN_IN_ORDER,
+    bulk: A_PROVIDER_PAGE_IS_ONE_PROVIDER,
+  },
   "/routing/:rungId": { sort: CHAIN_IN_ORDER, bulk: A_RUNG_IS_SAVED_ONE_AT_A_TIME },
   // The Profile's model card draws the agent's level from the matrix and links to the Routing screen.
   "/agents/:agentId/:tab": {
@@ -200,16 +200,32 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
     bulk: READ_ONLY,
   },
   "/logs": { bulk: A_LOG_ROW_IS_READ_AND_NEVER_WRITTEN },
-  "/jobs/:name": { bulk: A_RUN_IS_WRITTEN_BY_THE_WORKER },
-  "/agents": { bulk: READ_ONLY },
-  "/connectors": { bulk: A_CONNECTION_CHANGES_ONE_SOURCE_AT_A_TIME },
-  "/agent-templates": { bulk: READ_ONLY },
+  "/agents": {},
+  "/connectors": {},
+  "/automations": {},
+  "/agent-templates": {},
+  "/jobs/:name": {},
   "/approvals": { bulk: AN_APPROVAL_IS_DECIDED_FROM_ITS_OWN_CARD },
   "/adoption": { bulk: READ_ONLY },
-  "/people": { bulk: A_GRANT_IS_REMOVED_BY_REVIEW_IN_BULK },
-  "/people/:subject": { bulk: A_GRANT_IS_REMOVED_BY_REVIEW_IN_BULK },
-  "/scopes": { bulk: READ_ONLY },
-  "/skills": { bulk: A_SKILL_IS_DECIDED_FROM_ITS_OWN_BYTES },
+  "/people": {},
+  // A person's page borrows the roster for the agents they steward, and links to the Agents list.
+  "/people/:personId": {
+    page: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    search: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    filter: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    sort: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    bulk: READ_ONLY,
+  },
+  "/scopes": {},
+  // The Roles tab reads the directory's first page only to put names to the ids the Approver flag
+  // and the directory group sync carry, and each name links to the person on the People list.
+  "/roles": {
+    page: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    search: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    filter: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    sort: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+  },
+  "/skills": {},
   "/skills/:name": {
     page: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
     search: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
@@ -226,15 +242,31 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
   },
   "/library": { bulk: READ_ONLY },
   "/sessions": {},
-  "/sign-in-links": { bulk: AN_UNLINK_LOCKS_A_PERSON_OUT },
-  "/service-accounts": { bulk: RETIRING_AN_ACCOUNT_STOPS_AN_INTEGRATION },
+  "/sign-in-links": {},
+  "/service-accounts": {},
   "/audit": { bulk: READ_ONLY },
-  "/credentials": { bulk: A_CREDENTIAL_IS_WRITTEN_ONE_SLOT_AT_A_TIME },
-  "/departments": { bulk: A_ROW_IS_A_DEPARTMENT_AND_A_PLACEMENT_NAMES_A_PERSON },
+  "/credentials": {},
+  "/departments": {},
+  // One department's page asks the list route for its own row, and its Scopes view the scopes naming
+  // it; the lists that page, search and filter those routes are Departments and Scopes.
+  "/departments/:slug": {
+    page: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    search: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    filter: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    sort: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    bulk: A_ROW_IS_A_DEPARTMENT_AND_A_PLACEMENT_NAMES_A_PERSON,
+  },
+  "/departments/:slug/:view": {
+    page: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    search: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    filter: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    sort: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    bulk: A_ROW_IS_A_DEPARTMENT_AND_A_PLACEMENT_NAMES_A_PERSON,
+  },
   "/elevation": { bulk: AN_ELEVATION_IS_DECIDED_ON_ITS_OWN_REASON },
   "/access_review": {},
   "/access-requests": { bulk: READ_ONLY },
-  "/channels": { bulk: A_CHANNEL_IS_SWITCHED_ON_ITS_OWN_PAGE },
+  "/channels": {},
   "/channels/:name": { bulk: AN_UNBINDING_IS_ONE_PERSONS_CHAT },
 };
 
@@ -392,7 +424,9 @@ function offered(root: Element, paths: readonly string[]): Set<Capability> {
   ) {
     found.add("filter");
   }
-  if (root.querySelector('tbody input[type="checkbox"], .roster input[type="checkbox"]') !== null) {
+  // The page kit's table selects with a checkbox drawn as a button (`kit/EntityTable`), and a
+  // selection is a bulk act in itself: the selected rows export, and a route that takes a set acts.
+  if (root.querySelector('tbody input[type="checkbox"], .roster input[type="checkbox"], tbody [role="checkbox"]') !== null) {
     found.add("bulk");
   }
   return found;
@@ -401,6 +435,7 @@ function offered(root: Element, paths: readonly string[]): Set<Capability> {
 beforeAll(async () => {
   await import("../src/pages/Records");
   await import("../src/pages/Matrix");
+  await import("../src/pages/Provider");
   await import("../src/pages/Approvals");
   await import("../src/pages/People");
 }, 120_000);
