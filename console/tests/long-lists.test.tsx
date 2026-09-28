@@ -189,6 +189,7 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
   "/sign-in-links": { bulk: AN_UNLINK_LOCKS_A_PERSON_OUT },
   "/service-accounts": { bulk: RETIRING_AN_ACCOUNT_STOPS_AN_INTEGRATION },
   "/audit": { bulk: READ_ONLY },
+  "/credentials": {},
   "/departments": { bulk: A_ROW_IS_A_DEPARTMENT_AND_A_PLACEMENT_NAMES_A_PERSON },
   "/elevation": { bulk: AN_ELEVATION_IS_DECIDED_ON_ITS_OWN_REASON },
   "/access_review": {},
@@ -356,8 +357,8 @@ function offered(root: Element, paths: readonly string[]): Set<Capability> {
   }
   // The kit's table ticks a row with the component layer's checkbox, a button carrying the role,
   // and an older page with a native input; either is a selection an act is taken over. On a kit
-  // list that act is at least Export selected, so Agents and Connectors, whose writes are one row
-  // at a time, offer bulk as an export of the reader's own ticks.
+  // list that act is at least Export selected, so Agents, Connectors and Credentials, whose writes
+  // are one row at a time, offer bulk as an export of the reader's own ticks.
   if (root.querySelector('tbody input[type="checkbox"], tbody [role="checkbox"], .roster input[type="checkbox"]') !== null) {
     found.add("bulk");
   }

@@ -93,6 +93,8 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
   ],
   // A provider's key field opens on its row and is then the first form on the page, above the register's.
   "src/components/ProviderKeyForm.tsx": [{ pattern: "/models", opener: "Replace key", index: 0, writes: true }],
+  // A credential's Profile is a view at its own address, and its set-or-replace form is the only form.
+  "src/pages/credentials/SetValueForm.tsx": [{ pattern: "/credentials/:family/:name/:view", index: 0, writes: true }],
   // The Profile is a view at its own address, so the pin's form is on that page case with no opener.
   "src/components/AgentModelPin.tsx": [{ pattern: "/agents/:agentId/:tab", index: 0, writes: true }],
   "src/pages/Notifications.tsx": [

@@ -30,8 +30,8 @@
  * directory below, and every class an old page
  * uses that Tailwind could also generate is refused outright with `@source not inline`. The page
  * kit (`components/kit/`) is read with them, and so is each module page rebuilt on the kit, starting
- * with `pages/agents/` (M27.10.2), `pages/overview/` (M27.16.1) and `pages/knowledge/`; a module
- * that moves adds its directory the same way.
+ * with `pages/agents/` (M27.10.2), `pages/overview/` (M27.16.1), `pages/knowledge/` and
+ * `pages/credentials/`; a module that moves adds its directory the same way.
  * `tests/tailwind-foundation.test.ts` compiles this file the way the build does and asserts that
  * no class name in an old sheet or an old page comes out as a utility.
  *
@@ -69,6 +69,7 @@
 @source "../pages/connectors";
 @source "../pages/overview";
 @source "../pages/knowledge";
+@source "../pages/credentials";
 @source not inline("grid");
 
 /*

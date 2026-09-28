@@ -79,7 +79,7 @@ function Figures({ name }: { readonly name: string }) {
   const stats = useResource<unknown>(connectorStatsApiPath(name));
   const read = stats.data === null ? null : readConnectorStats(stats.data);
   const figures = connectorPeriodOf(read, period);
-  const atLeast = read?.truncated === true ? "at least" : undefined;
+  const atLeast = read?.atLeast === true ? "at least" : undefined;
   return (
     <div className="flex min-w-0 flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">

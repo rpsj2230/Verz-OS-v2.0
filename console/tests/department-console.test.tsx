@@ -55,7 +55,7 @@ function sentinel(name: string): string {
 }
 
 /** The addresses of the screens about this server, none of which a department is offered. */
-const ABOUT_THE_SERVER = ["/updates", "/recovery", "/limits", "/features", "/storage", "/vault", "/settings"];
+const ABOUT_THE_SERVER = ["/updates", "/recovery", "/limits", "/features", "/storage", "/credentials", "/settings"];
 
 /** The reader's own work, as every console lists it. */
 const OWN_WORK_ADDRESSES = OWN_WORK.sections.map((one) => one.to);
