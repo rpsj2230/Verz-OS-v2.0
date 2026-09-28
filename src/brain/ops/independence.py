@@ -298,6 +298,9 @@ ALLOWED_HOSTS: Final[frozenset[str]] = frozenset(
         # Standards bodies and registries. A URL to one of these is a citation, not a client.
         "www.w3.org",
         "schema.org",
+        # The Office Open XML namespaces (ECMA-376), which every XLSX part declares and which
+        # `brain.knowledge.table_file` matches elements by. An identifier, never fetched.
+        "schemas.openxmlformats.org",
         "ghcr.io",
         "quay.io",
         # The two public package indexes the locks resolve against. `brain.ops.dependency_policy`

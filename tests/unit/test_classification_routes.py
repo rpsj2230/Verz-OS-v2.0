@@ -9,10 +9,11 @@ place for a token to be minted subtly differently, and a test failing for that r
 like a permission bug.
 
 **There is no session factory anywhere in this file, and that is a property rather than a
-saving.** This router opens nothing, reads nothing from `app.state` beyond the gate, and
-stores nothing, because a `TableClassification` is a constant compiled into the process.
-`test_a_review_is_answered_on_a_process_with_no_database` is where that is asserted instead
-of described.
+saving.** For a built-in classification this router opens nothing, reads nothing from
+`app.state` beyond the gate, and stores nothing, because such a `TableClassification` is a
+constant compiled into the process. `test_a_review_is_answered_on_a_process_with_no_database`
+is where that is asserted instead of described. An uploaded table's classification is stored,
+and `tests/unit/test_classified_tables.py` drives those routes over an in-memory store.
 
 **The two refusals are compared body to body rather than status to status.** A caller who
 may not read a classification and a caller asking about an entity nothing classifies must be
@@ -624,18 +625,15 @@ def test_the_only_column_of_a_new_classification_is_reported_as_newly_reachable(
     assert newly_reachable(one_column, nothing_classified) == ()
 
 
-def test_a_dropped_derivation_is_a_change_the_epoch_does_not_record() -> None:
-    """**A finding held here rather than fixed here.** `FieldPolicy.epoch` digests
-    `derived_from` since 2026-09-21, but `ColumnRule.as_field_rule` drops it, so the policy a
-    classification compiles to carries no derivation. The edit above changes what every
-    caller short of the cost capability sees and leaves the epoch identical, which means the
-    answer cache would go on serving rows computed under the old closure.
+def test_a_dropped_derivation_moves_the_epoch() -> None:
+    """**The finding this file held until 2026-09-28, now fixed and inverted.**
+    `ColumnRule.as_field_rule` dropped `derived_from`, so the policy a classification compiled
+    to carried no derivation and dropping the one on `cost` left the epoch identical while
+    changing what every caller short of the cost capability sees. The answer cache is keyed on
+    that epoch, so it would have gone on serving rows closed under the old rule.
 
-    Asserted rather than described, so the day `as_field_rule` carries the derivation this
-    test fails and the person changing it reads the paragraph above.
-
-    Delete this and the gap goes back to being invisible, and the review's two epochs start
-    reading as proof that a proposal is not a change."""
+    Delete this and `as_field_rule` can drop the derivation again with the suite green, and the
+    cache serves the margin to people who can work out the cost from it."""
     answer = review(
         ENTITY,
         "cost",
@@ -647,7 +645,7 @@ def test_a_dropped_derivation_is_a_change_the_epoch_does_not_record() -> None:
     )
 
     assert answer.widens is True
-    assert answer.epoch_now == answer.epoch_after
+    assert answer.epoch_now != answer.epoch_after
 
 
 def test_classifying_a_column_nothing_classified_is_a_widening(client: TestClient) -> None:
@@ -844,17 +842,18 @@ def test_a_review_carries_no_handle_of_anything_stored(client: TestClient) -> No
 
 
 # ------------------------------------------------------------------ the mounted set
-def test_nothing_mounted_here_can_change_a_classification(client: TestClient) -> None:
-    """**The claim the console has to be able to make honestly.** There is no store behind
-    this surface, so there is no route that writes one, and the way to check that is the
-    application's own document rather than anybody's recollection: every classification path
-    declares GET and nothing else, except the review, which declares POST and stores nothing.
+def test_the_only_writes_mounted_here_are_the_upload_and_the_mark(client: TestClient) -> None:
+    """**The claim the console has to be able to make honestly.** Two requests store anything:
+    the upload of a table (`PUT .../table`) and a mark on one of its columns (`PUT
+    .../marks`), both ledgered by `0116`'s trigger. Both reviews are POSTs that store nothing,
+    and the read is a GET. Read off the application's own document rather than anybody's
+    recollection.
 
     Asserted over what is mounted rather than over this module's source, because a second
     router could mount a write at the same prefix and nothing in this file would notice.
 
-    Delete this and a save can appear without the screen that describes the absence of one
-    being corrected."""
+    Delete this and a third write can appear, on a built-in classification the console still
+    tells people is a source edit and a deploy."""
     app = app_of(client)
     paths = {
         path: sorted(methods)
@@ -865,6 +864,9 @@ def test_nothing_mounted_here_can_change_a_classification(client: TestClient) ->
     assert paths == {
         f"{CLASSIFICATIONS}/{{entity}}": ["get"],
         f"{CLASSIFICATIONS}/{{entity}}/columns/{{column}}/review": ["post"],
+        f"{CLASSIFICATIONS}/{{entity}}/table": ["put"],
+        f"{CLASSIFICATIONS}/{{entity}}/columns/{{column}}/marks/review": ["post"],
+        f"{CLASSIFICATIONS}/{{entity}}/columns/{{column}}/marks": ["put"],
     }
 
 
@@ -892,7 +894,15 @@ def test_the_view_is_not_a_page_and_carries_no_count(client: TestClient) -> None
     makes it consistent with the one rule they must not copy."""
     body = read(client, "u_narrow").json()
 
-    assert set(body) == {"entity", "columns", "epoch", "editable"}
+    assert set(body) == {
+        "entity",
+        "columns",
+        "epoch",
+        "editable",
+        "stored",
+        "title",
+        "key_column",
+    }
     assert "total" not in read(client, "u_narrow").text
     assert "next_cursor" not in read(client, "u_narrow").text
 

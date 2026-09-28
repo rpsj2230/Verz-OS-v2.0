@@ -61,6 +61,7 @@ from brain.tables.budget import BudgetVersionRow
 from brain.tables.channel import ChannelDeliveryRow, ChannelRow
 from brain.tables.channel_event import ChannelEventRow
 from brain.tables.chat import ConversationRow, MessageRole, MessageRow
+from brain.tables.classified_table import ClassifiedRecordRow, ClassifiedTableRow
 from brain.tables.compliance import BreachCaseRow, SensitiveReferralRow
 from brain.tables.config import SettingRow, SettingType
 from brain.tables.connector_connection import ConnectorConnectionRow
@@ -347,6 +348,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # refusal on a channel with no record is recorded too.
     "ops.channel",
     "ops.channel_delivery",
+    # 0116_classified_tables. A row points at its table, so the table comes first.
+    "know.classified_table",
+    "know.classified_row",
 )
 
 __all__ = [
@@ -375,6 +379,8 @@ __all__ = [
     "ChannelDeliveryRow",
     "ChannelEventRow",
     "ChannelRow",
+    "ClassifiedRecordRow",
+    "ClassifiedTableRow",
     "ConnectorConnectionRow",
     "ConnectorSyncRow",
     "ControlRunRow",
