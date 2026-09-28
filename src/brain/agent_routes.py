@@ -163,16 +163,24 @@ What a read needs is that the row is the body that was signed, and `SignedManife
 the digest on construction without any key, so a document edited after signing still cannot
 reach a response.
 
-Rejected: a disabled or archived flag on a roster entry. `brain.agents.model.
+Rejected: a disabled or archived flag on a roster entry for everybody. `brain.agents.model.
 runnable_agent_ids` records why a caller is told nothing about why an agent they used
 yesterday is not chosen today, and a roster saying "disabled" beside a name is that sentence.
+The lifecycle word and the highest rung travel on an entry exactly where the header already
+sends them, to a reader of the Settings tab, and are null for everybody else. See
+`THE_ROSTER_NAMES_THE_STEWARD_AND_STATES_THE_AGENT_ONLY_WHERE_THE_HEADER_DOES`.
+
+**The steward is named, not only identified.** A principal id is an internal handle, and the
+console keeps those off its pages except in an Advanced section; the steward's display name is
+the same fact in words, read for the owners of the visible agents only and never for an agent
+the audience left out.
 
 **The roster and the template gallery page, search, filter and order through `brain.listing`**,
 over the entries the audience decided. Every agent is read, as before; the page is cut from what
 survived, so a cursor says there are more agents this reader may see and never that there are
 agents they may not.
 
-Task ids: M39.1.2.5, M27.8.6
+Task ids: M39.1.2.5, M27.8.6, M27.10.2
 """
 
 from __future__ import annotations
@@ -260,6 +268,7 @@ from brain.models.routing import Tier
 from brain.ops.spend import Actual, SpendError
 from brain.routing_routes import sessions_of
 from brain.tables.agent import AgentRow
+from brain.tables.identity import PrincipalRow
 from brain.tables.spend import SpendActualRow
 from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
 from brain.tools.registry import ToolRegistry
@@ -369,6 +378,16 @@ THE_HEADER_DATES_THE_AGENT_FOR_EVERYBODY_AND_STATES_IT_FOR_THE_SETTINGS_READ: Fi
     "is configuration. Both are sent where the Settings tab is and are null everywhere else."
 )
 
+#: Why the roster names the steward for everybody and states the agent only for the Settings read.
+THE_ROSTER_NAMES_THE_STEWARD_AND_STATES_THE_AGENT_ONLY_WHERE_THE_HEADER_DOES: Final = (
+    "The steward's name is the steward's id in words a person can read, and the workspace "
+    "already gives every member of the audience the id, so naming them discloses nothing a "
+    "click does not. The lifecycle word and the highest rung travel on a roster entry exactly "
+    "where the header sends them, to a reader of the Settings tab, and are null for everybody "
+    "else, so a member of the audience is still told nothing about why an agent is not chosen "
+    "today and the leash stays configuration."
+)
+
 #: Why the Profile block follows the Settings tab and its capability names follow the vocabulary.
 THE_PROFILE_IS_CONFIGURATION_AND_ITS_CAPABILITY_NAMES_ARE_THE_VOCABULARYS: Final = (
     "The tier, the ceiling in words, the tools the ceiling names and the leash are the agent's "
@@ -453,6 +472,14 @@ class RosterEntry(BaseModel):
     #: Agents screen's read. Null for everybody else, and null is the field's absence rather
     #: than an unrestricted ceiling: `Scope()` dumps to a clause list of its own.
     ceiling: dict[str, Any] | None = None
+    #: The steward's display name, for everybody the audience covers, or null for a steward
+    #: with no principal row. See
+    #: `THE_ROSTER_NAMES_THE_STEWARD_AND_STATES_THE_AGENT_ONLY_WHERE_THE_HEADER_DOES`.
+    owner_name: str | None = None
+    #: `AgentRecord.state`, for a reader of the Settings tab and nobody else, as on the header.
+    state: str | None = None
+    #: The highest rung any action could be held to, where the header sends it and as it says it.
+    leash_up_to: str | None = None
 
 
 class RosterPage(Page[RosterEntry]):
@@ -483,6 +510,9 @@ class AgentHeaderView(BaseModel):
     agent_id: str
     display_name: str
     owner_id: str
+    #: The steward's display name, sent to everybody the steward's id is sent to. See
+    #: `THE_ROSTER_NAMES_THE_STEWARD_AND_STATES_THE_AGENT_ONLY_WHERE_THE_HEADER_DOES`.
+    owner_name: str | None = None
     summary: str | None = None
     template_id: str | None = None
     template_version: int | None = None
@@ -911,12 +941,38 @@ def viewer_of(asked: Asking) -> AgentViewer:
     return viewer_for(asked.caller.principal)
 
 
-def roster_entry(record: AgentRecord, *, ceilings: bool) -> RosterEntry:
+@dataclass(frozen=True)
+class Stated:
+    """What a reader of the Settings tab is told about one agent on the roster, as on its header."""
+
+    state: str
+    leash_up_to: str | None
+
+
+def stated_of(
+    record: AgentRecord, install: Install | None, registry: ToolRegistry | None
+) -> Stated:
+    """The lifecycle word and the highest rung, computed as `workspace` computes the header's."""
+    highest = leash_up_to(configured(record, install, registry).leash)
+    return Stated(
+        state=record.state.value,
+        leash_up_to=None if highest is None else rung_key(highest),
+    )
+
+
+def roster_entry(
+    record: AgentRecord,
+    *,
+    ceilings: bool,
+    owner_name: str | None = None,
+    stated: Stated | None = None,
+) -> RosterEntry:
     """One agent as a row of SCREEN 4's table, at this reader's reach.
 
     `ceilings` is the Agents screen's own read, asked once by the caller rather than per row,
     so every row of one answer was decided by one question. See
-    `A_ROSTER_ENTRY_SAYS_NO_MORE_THAN_THE_WORKSPACE_IT_OPENS`.
+    `A_ROSTER_ENTRY_SAYS_NO_MORE_THAN_THE_WORKSPACE_IT_OPENS`. `stated` is handed in only for a
+    reader of the Settings tab, which is where the header sends the same two words.
 
     The department is `AgentAudience.department`, which is empty for every audience but a
     department's, and empty is sent as absent rather than as a blank column.
@@ -927,6 +983,9 @@ def roster_entry(record: AgentRecord, *, ceilings: bool) -> RosterEntry:
         owner_id=record.audience.owner_id,
         department=record.audience.department or None,
         ceiling=record.authority.scope.model_dump(mode="json") if ceilings else None,
+        owner_name=owner_name,
+        state=None if stated is None else stated.state,
+        leash_up_to=None if stated is None else stated.leash_up_to,
     )
 
 
@@ -938,6 +997,9 @@ ROSTER: Final[Listing[RosterEntry]] = Listing(
         Column("agent_id", lambda row: row.agent_id, search=True, sort=True),
         Column("owner_id", lambda row: row.owner_id, search=True, filter=True),
         Column("department", lambda row: row.department, search=True, filter=True, sort=True),
+        Column("owner_name", lambda row: row.owner_name, search=True, sort=True),
+        Column("state", lambda row: row.state, filter=True, sort=True),
+        Column("leash_up_to", lambda row: row.leash_up_to, filter=True),
     ),
     key=lambda row: row.agent_id,
     order="display_name",
@@ -967,15 +1029,29 @@ def roster(
     *,
     ceilings: bool = False,
     plan: Plan[RosterEntry] | None = None,
+    names: Mapping[str, str] | None = None,
+    stated: Mapping[str, Stated] | None = None,
 ) -> RosterPage:
     """One page of the agents this viewer's audience covers, cut after filtering.
 
     Ordered by name and then by id unless the plan asks otherwise, so two readings of an unchanged
     table are one list and the order says nothing about when an agent was created. With no plan,
-    the first `MAX_ROSTER_ENTRIES` in that order.
+    the first `MAX_ROSTER_ENTRIES` in that order. `names` are stewards' display names by
+    principal id, and `stated` is handed in only for a reader of the Settings tab.
     """
     visible = visible_agent_ids(records, viewer)
-    entries = [roster_entry(one, ceilings=ceilings) for one in records if one.agent_id in visible]
+    named = names or {}
+    told = stated or {}
+    entries = [
+        roster_entry(
+            one,
+            ceilings=ceilings,
+            owner_name=named.get(one.audience.owner_id),
+            stated=told.get(one.agent_id),
+        )
+        for one in records
+        if one.agent_id in visible
+    ]
     chosen = plan or ROSTER.plan(ListAsked(limit=MAX_ROSTER_ENTRIES), reader=viewer.principal_id)
     page = chosen.page(entries)
     return RosterPage(
@@ -1325,6 +1401,7 @@ def workspace(
     registry: ToolRegistry | None = None,
     spend: Sequence[Actual] = (),
     created_at: datetime | None = None,
+    owner_name: str | None = None,
 ) -> WorkspaceView:
     """One visible agent's workspace at this caller's reach.
 
@@ -1359,6 +1436,7 @@ def workspace(
             agent_id=record.agent_id,
             display_name=record.display_name,
             owner_id=record.audience.owner_id,
+            owner_name=owner_name,
             summary=(install.summary or None) if install is not None else None,
             template_id=install.template_id if install is not None else None,
             template_version=install.template_version if install is not None else None,
@@ -1428,6 +1506,36 @@ def spend_for(agent_id: str, since: datetime) -> Select[tuple[SpendActualRow]]:
         .order_by(SpendActualRow.at.desc())
         .limit(MAX_HEADLINE_ROWS)
     )
+
+
+def principals_named(principal_ids: Sequence[str]) -> Select[tuple[PrincipalRow]]:
+    """The principal rows behind a set of stewards, read for their display names only."""
+    return select(PrincipalRow).where(PrincipalRow.id.in_(sorted(set(principal_ids))))
+
+
+def installs_for(
+    agent_ids: Sequence[str],
+) -> Select[tuple[TemplateInstanceRow, TemplateVersionRow]]:
+    """Several agents' installs and the versions they are pinned to, joined as `install_for` is."""
+    return (
+        select(TemplateInstanceRow, TemplateVersionRow)
+        .join(
+            TemplateVersionRow,
+            and_(
+                TemplateVersionRow.template_id == TemplateInstanceRow.template_id,
+                TemplateVersionRow.version == TemplateInstanceRow.template_version,
+            ),
+        )
+        .where(TemplateInstanceRow.id.in_(sorted(set(agent_ids))))
+    )
+
+
+async def steward_names(session: AsyncSession, owners: Sequence[str]) -> dict[str, str]:
+    """Display names by principal id for these stewards, asking nothing when there are none."""
+    if not owners:
+        return {}
+    rows = (await session.execute(principals_named(owners))).scalars().all()
+    return {row.id: row.display_name for row in rows}
 
 
 def published_templates() -> Select[tuple[TemplateVersionRow]]:
@@ -1520,14 +1628,35 @@ async def agents(request: Request, asked: Asked, listed: RosterQuery) -> RosterP
     """
     plan = ROSTER.plan(listed, reader=asked.caller.principal.id)
     factory = _require_session_factory(request)
+    viewer = viewer_of(asked)
+    stated: dict[str, Stated] = {}
     async with factory() as session:
         rows = (await session.execute(every_agent())).scalars().all()
-    records = [record for record in (record_of(row) for row in rows) if record is not None]
+        records = [record for record in (record_of(row) for row in rows) if record is not None]
+        # Only the agents the audience admitted are read about any further, so nothing about an
+        # agent this caller may not see is fetched on their behalf, the workspace's own order.
+        visible = visible_agent_ids(records, viewer)
+        shown = [one for one in records if one.agent_id in visible]
+        names = await steward_names(session, [one.audience.owner_id for one in shown])
+        if shown and may_read_settings(asked):
+            pairs = (await session.execute(installs_for([one.agent_id for one in shown]))).all()
+            by_id = {one.agent_id: one for one in shown}
+            installs = {
+                pair[0].id: install_of(pair[0], pair[1], by_id[pair[0].id])
+                for pair in pairs
+                if pair[0].id in by_id
+            }
+            registry = _tool_registry(request)
+            stated = {
+                one.agent_id: stated_of(one, installs.get(one.agent_id), registry) for one in shown
+            }
     return roster(
         records,
-        viewer_of(asked),
+        viewer,
         ceilings=permitted(screen(AGENT_SCREEN).read, asked.reach, asked.now),
         plan=plan,
+        names=names,
+        stated=stated,
     )
 
 
@@ -1547,6 +1676,7 @@ async def agent_workspace(request: Request, agent_id: str, asked: Asked) -> Work
         record, created_at = await _visible_record(session, agent_id, asked)
         pair = (await session.execute(install_for(agent_id))).one_or_none()
         costs = (await session.execute(spend_for(agent_id, since))).scalars().all()
+        names = await steward_names(session, [record.audience.owner_id])
     install = install_of(pair[0], pair[1], record) if pair is not None else None
     spend = [one for one in (actual_of(row) for row in costs) if one is not None]
     return workspace(
@@ -1556,6 +1686,7 @@ async def agent_workspace(request: Request, agent_id: str, asked: Asked) -> Work
         registry=_tool_registry(request),
         spend=spend,
         created_at=created_at,
+        owner_name=names.get(record.audience.owner_id),
     )
 
 

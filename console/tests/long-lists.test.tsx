@@ -36,7 +36,7 @@
 
 import { beforeAll, describe, expect, test } from "vitest";
 import { apiDocument, declaredResponseSchema } from "./support/openapi";
-import { PAGES } from "./support/pageCases";
+import { PAGES, awaited } from "./support/pageCases";
 import { mountIn } from "./support/screenStates";
 
 type Capability = "page" | "search" | "filter" | "sort" | "bulk";
@@ -94,16 +94,11 @@ const A_LOG_ROW_IS_READ_AND_NEVER_WRITTEN =
  */
 const OVERVIEW_CARDS: Readonly<Record<string, string>> = {
   "/department": "/agents",
-  "/agents/:agentId": "/routing",
 };
 const AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST =
   "This screen is an overview, and the list it borrows is one card on it with a link to the screen " +
   "that pages, searches, filters and orders the same route; drawing a second set of controls on the " +
   "card would be a second list of the same rows.";
-const A_PIN_IS_ONE_AGENTS =
-  "The one write beside this list pins a model for this agent alone, and the steps drawn are the " +
-  "level's, which are saved one at a time on the Routing screen, so there is no act to do to many " +
-  "of them from here.";
 const A_SKILL_IS_DECIDED_FROM_ITS_OWN_BYTES =
   "The skills listed are what agents run, and nothing about a listed skill is written from it. The " +
   "writes on this screen are a review, which approves exactly the bytes of one package after " +
@@ -119,14 +114,6 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
   },
   "/routing": { sort: CHAIN_IN_ORDER, bulk: A_RUNG_IS_SAVED_ONE_AT_A_TIME },
   "/routing/:rungId": { sort: CHAIN_IN_ORDER, bulk: A_RUNG_IS_SAVED_ONE_AT_A_TIME },
-  // The Profile's model card draws the agent's level from the matrix and links to the Routing screen.
-  "/agents/:agentId": {
-    page: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
-    search: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
-    filter: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
-    sort: CHAIN_IN_ORDER,
-    bulk: A_PIN_IS_ONE_AGENTS,
-  },
   "/department": {
     page: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
     search: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
@@ -192,6 +179,11 @@ function routeOf(path: string): string | null {
 /** Whether a response the route declares can be cut off. */
 function bounded(path: string): boolean {
   const route = routeOf(path);
+  if (route === null && awaited(path)) {
+    // A route another package is building, answered by a page case in the shape it was briefed
+    // with. It is read against the document the day it is declared there.
+    return false;
+  }
   if (route === null) {
     throw new Error(`No route in the API document answers ${path}.`);
   }

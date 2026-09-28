@@ -57,7 +57,7 @@ function declaredLayerOrder(): string[] {
 }
 
 /** The directories the component layer added, whose class names are meant to be utilities. */
-const COMPONENT_LAYER_DIRECTORIES = ["src/components/ui", "src/hooks", "src/lib"];
+const COMPONENT_LAYER_DIRECTORIES = ["src/components/ui", "src/components/kit", "src/pages/agents", "src/hooks", "src/lib"];
 
 /**
  * Every class name an old page can carry: the old sheets' class selectors, and every word of every
@@ -195,16 +195,18 @@ describe("the cascade order", () => {
 });
 
 describe("what Tailwind generates", () => {
-  test("Tailwind reads the component directory and nothing else", async () => {
+  test("Tailwind reads the component directories and nothing else", async () => {
     // What breaks if this is deleted: with automatic detection Tailwind reads every file in the
     // console, comments included, and generates a rule for every word that happens to be a utility.
-    // Every one of those rules outranks the old pages. Reading `components/ui` alone keeps the set
-    // of generated rules to the classes the new components actually use.
+    // Every one of those rules outranks the old pages. Reading `components/ui`, the page kit and the
+    // module pages rebuilt on it keeps the set of generated rules to the classes those use.
     const layer = await compileLayer();
 
     expect(layer.detectionOff).toBe(true);
     expect(layer.sources.map((one) => relative(join(CONSOLE_ROOT, "src", "theme"), join(one.base, one.pattern)).split("\\").join("/"))).toEqual([
       "../components/ui",
+      "../components/kit",
+      "../pages/agents",
     ]);
     expect(layer.candidates).toContain("bg-primary");
   });

@@ -54,6 +54,7 @@ import { parseCss } from "./support/css";
 import { PAGES, UNBROKEN } from "./support/pageCases";
 import { COMPANY_CONSOLE, NAVIGATION_ADDRESS, departmentConsole } from "./support/navigation";
 import { readConsoleFile } from "./support/repo";
+import { compileLayer, compiledRules } from "./support/tailwind";
 
 const CONSOLE_ORIGIN = "https://console.test";
 
@@ -142,6 +143,20 @@ async function mount(pattern: string): Promise<HTMLElement> {
 
 const RULES: readonly OrderedRule[] = consoleRules();
 
+/**
+ * What a mounted page is held to: the old sheets and, above them, the component layer's rules as
+ * Tailwind compiles them for the class names the kit and the rebuilt pages use. A page built on the
+ * kit is styled by utilities that no sheet on disk holds, so reading the old sheets alone would pass
+ * or fail it for reasons unrelated to how it renders (`docs/admin-console-architecture.md` 5.7). The
+ * utilities are one layer up, which is the cascade order `theme/tailwind.css` declares.
+ */
+let PAGE_RULES: readonly OrderedRule[] = RULES;
+
+beforeAll(async () => {
+  const compiled = compiledRules((await compileLayer()).css);
+  PAGE_RULES = [...RULES, ...compiled.map((rule) => ({ ...rule, order: RULES.length + rule.order, layer: 1 }))];
+}, 60_000);
+
 /** The design tokens, so a width written as a token is compared as the length it stands for. */
 const TOKENS: Readonly<Record<string, string>> = Object.fromEntries(
   RULES.filter((rule) => rule.selector === ":root" && rule.atRule === "").flatMap((rule) =>
@@ -161,7 +176,7 @@ function named(element: Element): string {
 /** Whether an element, or anything holding it, scrolls sideways at this width. */
 function insideSidewaysScroll(element: Element, width: number): boolean {
   for (let at: Element | null = element; at !== null; at = at.parentElement) {
-    const overflow = declared(at, "overflow-x", RULES, width) ?? declared(at, "overflow", RULES, width);
+    const overflow = declared(at, "overflow-x", PAGE_RULES, width) ?? declared(at, "overflow", PAGE_RULES, width);
     if (overflow !== undefined && /\b(auto|scroll)\b/.test(overflow)) {
       return true;
     }
@@ -188,9 +203,9 @@ function unbrokenValues(container: HTMLElement, width: number): { seen: number; 
     if (insideSidewaysScroll(holder, width)) {
       continue;
     }
-    const whiteSpace = inherited(holder, "white-space", RULES, width, userAgentWhiteSpace) ?? "normal";
-    const wrap = inherited(holder, "overflow-wrap", RULES, width) ?? "normal";
-    const wordBreak = inherited(holder, "word-break", RULES, width) ?? "normal";
+    const whiteSpace = inherited(holder, "white-space", PAGE_RULES, width, userAgentWhiteSpace) ?? "normal";
+    const wrap = inherited(holder, "overflow-wrap", PAGE_RULES, width) ?? "normal";
+    const wordBreak = inherited(holder, "word-break", PAGE_RULES, width) ?? "normal";
     const mayWrap = whiteSpace !== "nowrap" && whiteSpace !== "pre";
     const breaksAWord = wrap === "anywhere" || wordBreak === "break-all";
     if (!mayWrap || !breaksAWord) {

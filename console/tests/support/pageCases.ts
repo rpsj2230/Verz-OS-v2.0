@@ -25,6 +25,39 @@ export const UNBROKEN = `UNBROKEN${"x".repeat(72)}`;
 
 export const RUNG_ID = "11111111-1111-4111-8111-111111111111";
 
+/**
+ * Addresses a page asks that the API document does not declare yet, because another package is
+ * building the route, and why each is answered here anyway.
+ *
+ * A page case must answer every request a page makes, or `screen-states` reports the page as asking
+ * for something nobody answers; and `long-lists` reads every answered address against the API
+ * document. The agent pages ask the shared stats route (`agents/agentStats.ts`) that the stats
+ * package serves, so it is answered here in the shape that package was briefed with, and listed so
+ * the document check knows it is expected rather than a typo. Delete the entry when the route lands.
+ */
+export const AWAITED_ROUTES: Readonly<Record<string, string>> = {
+  "/api/v1/console/agents/{id}/stats":
+    "The per-entity stats route is built in parallel by the stats package on its own branch; the " +
+    "agent pages code against its path and draw the failed state until it answers.",
+};
+
+/** Whether an address is one of `AWAITED_ROUTES`. */
+export function awaited(path: string): boolean {
+  return Object.keys(AWAITED_ROUTES).some((route) =>
+    new RegExp(`^${route.replace(/\{[^}]+\}/g, "[^/]+")}$`).test(path),
+  );
+}
+
+/** One agent's figures as the stats route is briefed to send them. */
+const AGENT_STATS = {
+  range: "30d",
+  runs: 391,
+  answered: 360,
+  refused: 12,
+  cost_minor: 18240,
+  last_active_at: "2019-03-04T09:42:00Z",
+};
+
 export interface PageCase {
   /** The address mounted for this pattern. */
   readonly address: string;
@@ -123,8 +156,12 @@ const WORKSPACE = {
     display_name: UNBROKEN,
     summary: UNBROKEN,
     owner_id: UNBROKEN,
+    owner_name: UNBROKEN,
     template_id: UNBROKEN,
     template_version: 4,
+    created_at: "2019-03-01T09:00:00Z",
+    state: "enabled",
+    leash_up_to: "assisted",
   },
   tabs: ["conversations", "settings"].map((tab) => ({ tab, label: tab, purpose: UNBROKEN })),
   // The capability block and the figures, whose widest values are a connector name, a skill
@@ -133,7 +170,7 @@ const WORKSPACE = {
   connectors: { shown: [{ source: UNBROKEN, presence: "attached" }], overflow: 0 },
   channels: [{ channel: UNBROKEN, profile: "plain" }],
   divergent: ["persona"],
-  headline: { basis: "own", range: "30d", spend_minor: 1234, runs: 7 },
+  headline: { basis: "own", range: "30d", spend_minor: 1234, runs: 7, recorded: true },
   composition: [
     {
       part: "persona",
@@ -987,13 +1024,18 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
             agent_id: "quote-helper",
             display_name: UNBROKEN,
             owner_id: UNBROKEN,
+            owner_name: UNBROKEN,
             department: UNBROKEN,
+            state: "enabled",
+            leash_up_to: "assisted",
             ceiling: { clauses: [{ field: "department", op: "eq", value: UNBROKEN }] },
           },
         ],
         next_cursor: null,
         truncated: false,
       },
+      // Each row's figures, from the shared stats route. See `AWAITED_ROUTES`.
+      "/api/v1/console/agents/quote-helper/stats": AGENT_STATS,
     },
   },
   // The catalogue. Its widest values are a template slug and the publisher's principal id,
@@ -1020,12 +1062,16 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
       },
     },
   },
+  // The Dashboard, which the bare address opens: the workspace for the header and the figures from
+  // the shared stats route. The Profile's model card, which reads the matrix, is on its own view.
   "/agents/:agentId": {
     address: "/agents/quote-helper",
     signedIn: true,
     drawsValues: true,
-    // The matrix too, which the Profile's model card draws the order a question tries from (M5.7.3).
-    answers: { "/api/v1/agents/quote-helper/workspace": WORKSPACE, "/api/v1/routing/rungs": MATRIX },
+    answers: {
+      "/api/v1/agents/quote-helper/workspace": WORKSPACE,
+      "/api/v1/console/agents/quote-helper/stats": AGENT_STATS,
+    },
   },
   // The Automations tab, so the gallery and the installed automations it draws are held to a phone
   // as well as the workspace.

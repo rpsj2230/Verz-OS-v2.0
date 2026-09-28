@@ -47,9 +47,11 @@ from brain.agent_routes import (
     every_agent,
     gallery,
     install_for,
+    installs_for,
     install_of,
     manifest_of,
     one_agent,
+    principals_named,
     record_of,
     roster,
 )
@@ -88,6 +90,7 @@ from brain.knowledge.visibility import Visibility
 from brain.models.routing import DEFAULT_TIER
 from brain.ops.jobs import NAMES_THAT_WOULD_BE_A_HIDDEN_COUNT, hidden_count_fields
 from brain.tables.agent import AgentRow
+from brain.tables.identity import PrincipalRow
 from brain.tables.spend import SpendActualRow
 from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
 from brain.tools.registry import ToolRegistry
@@ -329,8 +332,14 @@ class Stored:
         self.installs: dict[str, tuple[TemplateInstanceRow, TemplateVersionRow]] = {}
         self.spend: list[SpendActualRow] = []
         self.versions: list[TemplateVersionRow] = []
+        #: The display names the principal table holds, by id. A steward missing here has no
+        #: row, which is the case a roster entry sends as no name at all.
+        self.names: dict[str, str] = dict(STEWARD_NAMES)
         self.statements: list[Any] = []
 
+
+#: The stewards' names as the principal table would hold them. `u_steward` owns most agents here.
+STEWARD_NAMES: Mapping[str, str] = {"u_steward": "Steward One", "u_narrow": "Person u_narrow"}
 
 _STORED = Stored()
 
@@ -357,6 +366,18 @@ def _asked_for(statement: Any) -> str:
     return str(statement.whereclause.right.value)
 
 
+def _asked_for_many(statement: Any) -> list[str] | None:
+    """The ids an IN clause names, or None for a statement that names one."""
+    value = statement.whereclause.right.value
+    return [str(one) for one in value] if isinstance(value, list) else None
+
+
+def principal_row(pid: str, name: str) -> PrincipalRow:
+    return PrincipalRow(
+        id=pid, kind="human", employment="staff", display_name=name, primary_department=None
+    )
+
+
 class StubSession(AsyncSession):
     """An `AsyncSession` that answers the five statements this router makes, and no other.
 
@@ -371,9 +392,19 @@ class StubSession(AsyncSession):
         _STORED.statements.append(statement)
         described = statement.column_descriptions
         if len(described) == 2:
+            many = _asked_for_many(statement)
+            if many is not None:
+                return StubResult(
+                    [_STORED.installs[one] for one in many if one in _STORED.installs]
+                )
             pair = _STORED.installs.get(_asked_for(statement))
             return StubResult([pair] if pair is not None else [])
         entity = described[0]["entity"]
+        if entity is PrincipalRow:
+            asked = _asked_for_many(statement) or []
+            return StubResult(
+                [principal_row(one, _STORED.names[one]) for one in asked if one in _STORED.names]
+            )
         if entity is SpendActualRow:
             return StubResult(list(_STORED.spend))
         if entity is TemplateVersionRow:
@@ -461,6 +492,8 @@ def test_the_roster_lists_the_agents_the_callers_audience_covers(
     response = get(client, "u_narrow", AGENTS)
 
     assert response.status_code == 200
+    # No state and no rung: this reader holds no Settings tab. See
+    # `test_the_roster_states_an_agent_and_its_rung_to_the_settings_read_and_to_nobody_else`.
     assert response.json()["items"] == [
         {
             "agent_id": "company_desk",
@@ -468,6 +501,9 @@ def test_the_roster_lists_the_agents_the_callers_audience_covers(
             "owner_id": "u_steward",
             "department": None,
             "ceiling": None,
+            "owner_name": "Steward One",
+            "state": None,
+            "leash_up_to": None,
         },
         {
             "agent_id": "my_notes",
@@ -475,6 +511,9 @@ def test_the_roster_lists_the_agents_the_callers_audience_covers(
             "owner_id": "u_narrow",
             "department": None,
             "ceiling": None,
+            "owner_name": "Person u_narrow",
+            "state": None,
+            "leash_up_to": None,
         },
         {
             "agent_id": "web_helper",
@@ -482,6 +521,9 @@ def test_the_roster_lists_the_agents_the_callers_audience_covers(
             "owner_id": "u_steward",
             "department": "web",
             "ceiling": None,
+            "owner_name": "Steward One",
+            "state": None,
+            "leash_up_to": None,
         },
     ]
 
@@ -506,8 +548,10 @@ def test_the_ceiling_column_is_sent_to_a_reader_of_the_agents_screen_and_to_nobo
 
     assert admin[0]["ceiling"] == narrow.model_dump(mode="json")
     assert member[0]["ceiling"] is None
-    assert {k: v for k, v in admin[0].items() if k != "ceiling"} == {
-        k: v for k, v in member[0].items() if k != "ceiling"
+    # The state and the rung are the Settings read's, which `u_admin` holds; asserted on their own.
+    settings_only = {"ceiling", "state", "leash_up_to"}
+    assert {k: v for k, v in admin[0].items() if k not in settings_only} == {
+        k: v for k, v in member[0].items() if k not in settings_only
     }
 
 
@@ -627,6 +671,9 @@ def test_no_roster_answer_carries_a_count_of_anything(client: TestClient, stored
         "owner_id",
         "department",
         "ceiling",
+        "owner_name",
+        "state",
+        "leash_up_to",
     }
     assert hidden_count_fields((agent_routes.RosterEntry, RosterPage, WorkspaceView)) == ()
     # And asked of the pydantic models themselves, because `hidden_count_fields` reads
@@ -790,7 +837,7 @@ def test_the_install_of_an_agent_the_caller_may_not_see_is_never_read(
 
     stored.statements.clear()
     assert workspace_of(client, "u_wide", "their_notes").status_code == 200
-    assert tables() == ["AgentRow", "TemplateVersionRow", "SpendActualRow"]
+    assert tables() == ["AgentRow", "TemplateVersionRow", "SpendActualRow", "PrincipalRow"]
 
 
 def test_the_header_is_the_agent_its_steward_and_its_lineage_whoever_may_open_it(
@@ -812,6 +859,7 @@ def test_the_header_is_the_agent_its_steward_and_its_lineage_whoever_may_open_it
         "agent_id": "quote_helper",
         "display_name": "Quote Helper",
         "owner_id": "u_steward",
+        "owner_name": "Steward One",
         "summary": "Drafts a first answer to a pricing question.",
         "template_id": "pricing_desk",
         "template_version": 3,
@@ -1041,6 +1089,7 @@ def test_an_install_that_does_not_construct_is_an_agent_with_no_lineage_and_no_c
         "agent_id": "quote_helper",
         "display_name": "Quote Helper",
         "owner_id": "u_steward",
+        "owner_name": "Steward One",
         "summary": None,
         "template_id": None,
         "template_version": None,
@@ -1124,6 +1173,20 @@ def test_the_statements_ask_for_the_agent_named_and_join_the_pin_on_both_halves(
         str(joined.whereclause.compile(dialect=DIALECT))
         == "agent.template_instance.id = %(id_1)s::VARCHAR"
     )
+
+    many = installs_for(["b_desk", "a_desk", "b_desk"])
+    compiled_many = " ".join(str(many.compile(dialect=DIALECT)).split())
+    assert (
+        "JOIN agent.template_version ON agent.template_version.template_id = "
+        "agent.template_instance.template_id AND agent.template_version.version = "
+        "agent.template_instance.template_version" in compiled_many
+    )
+    assert many.whereclause is not None
+    assert many.whereclause.right.value == ["a_desk", "b_desk"]
+    named = principals_named(["u_b", "u_a"])
+    assert named.whereclause is not None
+    assert str(named.whereclause.left) == "principal.id"
+    assert named.whereclause.right.value == ["u_a", "u_b"]
 
 
 def test_a_stored_agent_reads_back_as_the_record_with_its_audience_intact() -> None:
@@ -1569,6 +1632,62 @@ def test_the_creation_time_reaches_the_audience_and_the_state_and_rung_only_the_
     assert member["created_at"] == admin["created_at"] == "2019-03-01T09:00:00Z"
     assert (member["state"], member["leash_up_to"]) == (None, None)
     assert (admin["state"], admin["leash_up_to"]) == ("disabled", "assisted")
+
+
+def test_the_roster_states_an_agent_and_its_rung_to_the_settings_read_and_to_nobody_else(
+    client: TestClient, stored: Stored
+) -> None:
+    """The roster sends the lifecycle word and the highest rung exactly where the header does:
+    the Settings reader is told this agent is disabled and reaches the assisted rung, and a member
+    of the same audience gets the same row with both null. The two words are the header's own,
+    computed from the same install.
+
+    Delete this and a member learns from the list why an agent is not chosen today, which the
+    header was written to keep from them, or the administrator's list loses its state column."""
+    row = an_acting_agent(stored)
+    row.disabled_at = INSTALLED_AT
+    app_of(client).state.tools = tools_acting()
+
+    member = get(client, "u_narrow", AGENTS).json()["items"]
+    admin = get(client, "u_admin", AGENTS).json()["items"]
+    header = workspace_of(client, "u_admin", "quote_helper").json()["agent"]
+
+    assert [(one["state"], one["leash_up_to"]) for one in member] == [(None, None)]
+    assert [(one["state"], one["leash_up_to"]) for one in admin] == [("disabled", "assisted")]
+    assert (admin[0]["state"], admin[0]["leash_up_to"]) == (header["state"], header["leash_up_to"])
+
+
+def test_the_steward_is_named_on_the_roster_and_the_header_and_an_unknown_one_is_not_invented(
+    client: TestClient, stored: Stored
+) -> None:
+    """A steward with a principal row is named on both the roster entry and the header, from the
+    principal table and nowhere else, and a steward with no row gets no name rather than their id
+    in its place. Only the stewards of agents the audience admitted are asked about.
+
+    Delete this and the list goes back to printing principal ids where a person's name goes, or a
+    name is guessed for an owner the directory does not hold."""
+    stored.agents["company_desk"] = agent_row("company_desk")
+    stored.agents["orphan_desk"] = agent_row("orphan_desk", owner_id="u_gone")
+    stored.agents["their_notes"] = agent_row(
+        "their_notes", level=Visibility.PERSONAL, owner_id="u_wide"
+    )
+    stored.names["u_wide"] = "Somebody Else"
+
+    items = get(client, "u_narrow", AGENTS).json()["items"]
+    header = workspace_of(client, "u_narrow", "company_desk").json()["agent"]
+
+    assert [(one["agent_id"], one["owner_name"]) for one in items] == [
+        ("company_desk", "Steward One"),
+        ("orphan_desk", None),
+    ]
+    assert header["owner_name"] == "Steward One"
+    asked = [
+        list(statement.whereclause.right.value)
+        for statement in stored.statements
+        if statement.column_descriptions[0]["entity"] is PrincipalRow
+    ]
+    assert asked
+    assert all("u_wide" not in one for one in asked)
 
 
 def test_the_profile_is_the_agents_setup_for_a_reader_of_the_settings_tab_and_nobody_else(

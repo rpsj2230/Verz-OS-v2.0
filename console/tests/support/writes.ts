@@ -13,7 +13,8 @@
  * makes it is followed outwards: an immediately invoked body executes where it sits, a function
  * handed to `useCallback` or kept in a constant is followed to every place its name is used, and
  * the walk ends at the first JSX attribute it meets. The write is confirmed when every walk ends
- * at `onConfirm` on `<ConfirmAction>`, and not confirmed when any walk ends anywhere else, which
+ * at `onConfirm` on `<ConfirmAction>` or on the kit's `<ConfirmDialog>`, which takes the same props
+ * as a modal, and not confirmed when any walk ends anywhere else, which
  * is reported as the attribute and the element it ended at so a reader can see the button.
  *
  * **It fails towards reporting.** A use this cannot follow (a function stored in an object, a
@@ -47,7 +48,9 @@ export interface WriteSite {
 export const CONTROL_DIRECTORIES = ["src/pages", "src/components"] as const;
 
 const HOOKS_WITH_DEPENDENCIES = new Set(["useCallback", "useMemo", "useEffect", "useLayoutEffect"]);
-const CONFIRMED = "onConfirm on <ConfirmAction>";
+/** The elements a destructive write may be sent from: the in-page confirmation and its modal twin. */
+export const CONFIRMATION_ELEMENTS = ["ConfirmAction", "ConfirmDialog"] as const;
+const CONFIRMED = new Set(CONFIRMATION_ELEMENTS.map((name) => `onConfirm on <${name}>`));
 
 function everyNode(source: ts.SourceFile): ts.Node[] {
   const nodes: ts.Node[] = [];
@@ -257,7 +260,7 @@ export function writesIn(file: string): WriteSite[] {
       address,
       key: `${file} ${address}`,
       reachedFrom,
-      confirmed: reachedFrom.length > 0 && reachedFrom.every((one) => one === CONFIRMED),
+      confirmed: reachedFrom.length > 0 && reachedFrom.every((one) => CONFIRMED.has(one)),
     });
   }
   return sites;
@@ -283,13 +286,16 @@ export interface Confirmation {
   readonly attributes: Readonly<Record<string, ts.Expression | ts.StringLiteral | null>>;
 }
 
-/** Every `<ConfirmAction>` written in a file that can hold a control. */
+/** Every `<ConfirmAction>` and `<ConfirmDialog>` written in a file that can hold a control. */
 export function everyConfirmation(): Confirmation[] {
   const found: Confirmation[] = [];
   for (const file of CONTROL_DIRECTORIES.flatMap((directory) => consoleSourcePaths(directory))) {
     const source = parseConsoleSource(file);
     for (const node of everyNode(source)) {
-      if (!(ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) || node.tagName.getText(source) !== "ConfirmAction") {
+      if (
+        !(ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) ||
+        !(CONFIRMATION_ELEMENTS as readonly string[]).includes(node.tagName.getText(source))
+      ) {
         continue;
       }
       const attributes: Record<string, ts.Expression | ts.StringLiteral | null> = {};
