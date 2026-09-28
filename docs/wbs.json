@@ -571,7 +571,9 @@
     "Another provider with an OpenAI-compatible interface is added from the console with only its address, key and model names, with no release",
     "An agent uses a model level by default, and an administrator may pin a specific provider and model for it, tried first with the level's fallback behind it"
    ],
-   "leaf_waves": {},
+   "leaf_waves": {
+    "M5.7.3": 3
+   },
    "leaf_acts": {},
    "leaf_decided": {
     "M5.1.1": {
@@ -599,11 +601,6 @@
     "M5.7.1": {
      "status": "READY FOR TESTING",
      "why": "Models and health shows all four providers with Add key, Test and Turn off (PR #100); proved when each answers on the install (needs-rupash 98)",
-     "updated": "2026-09-28"
-    },
-    "M5.7.3": {
-     "status": "BLOCKED",
-     "why": "built (PR #100): the agent page shows a pinned model as step 1 with the level's steps behind it; proving it needs an agent, which Wave 3 creates (needs-rupash 100)",
      "updated": "2026-09-28"
     }
    }
@@ -773,7 +770,12 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
-   "leaf_decided": {},
+   "leaf_decided": {
+    "M7.7.5": {
+     "kind": "DECIDED",
+     "why": "Merged into M10.7.2, which asks for the same outcome: An anonymous website widget visitor holds one grant over knowledge an administrator marked public and nothing else, a question about anything else is answered as nothing found, marking or unmarking an item public is audited with who did it, and a department admin can mark only their own department's knowledge public Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101)."
+    }
+   },
    "act_groups": {},
    "leaf_progress": {
     "M7.1.1": {
@@ -919,12 +921,23 @@
     "Takeover signal fed to the circuit breaker",
     "Escalation and sensitive topics are proved on an install: an escalated question reaches the named person in their own channel with who asked, what, what was tried and what is needed and times out as configured, and a question about HR, harassment, whistleblowing, salary, medical or legal matters is intercepted and routed before any agent answers without its content being recorded, with the checks recorded"
    ],
-   "leaf_waves": {},
+   "leaf_waves": {
+    "M8.2.4": 3,
+    "M8.3.5": 3
+   },
    "leaf_acts": {},
    "leaf_decided": {
+    "M8.1.3": {
+     "kind": "DECIDED",
+     "why": "Merged into M11.4.9, which asks for the same outcome: Staleness surfaced in the answer Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101)."
+    },
     "M8.2.3": {
      "kind": "DECIDED",
      "why": "Merged into M4.3.3, which asks for the same outcome: Permission-denied indistinguishable from nothing-found at record level. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M8.3.3": {
+     "kind": "DECIDED",
+     "why": "Merged into M10.7.1, which asks for the same outcome: An approval is decided only in the console, the staff web application or on a Lark card; a reply on WhatsApp, email or any other channel never decides one, and the approver is told where to decide it Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101)."
     }
    },
    "act_groups": {},
@@ -935,11 +948,6 @@
      "updated": "2026-09-28"
     },
     "M8.1.2": {
-     "status": "IN PROGRESS",
-     "why": "Wave 2 batch 2, citations, freshness and abstention on Ask (R2)",
-     "updated": "2026-09-28"
-    },
-    "M8.1.3": {
      "status": "IN PROGRESS",
      "why": "Wave 2 batch 2, citations, freshness and abstention on Ask (R2)",
      "updated": "2026-09-28"
@@ -993,6 +1001,10 @@
    "leaf_waves": {},
    "leaf_acts": {},
    "leaf_decided": {
+    "M9.1.4": {
+     "kind": "DECIDED",
+     "why": "Merged into M25.3.1, which asks for the same outcome: Conversation export per user Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101)."
+    },
     "M9.2.2": {
      "kind": "DECIDED",
      "why": "Merged into M4.3.1, which asks for the same outcome: Structural lock rendering, identical for every viewer. Owner approved merging duplicates on 2026-09-17."
@@ -1079,9 +1091,16 @@
     "Group chat and channel policy are proved on an install: in one group chat people with different reach see a shared message at the floor of everyone present and each receives their own body privately or as a link where the gate re-runs, a channel whose policy excludes a sensitivity class refuses to carry it, and an approval card is offered only where approvals are allowed, with the checks recorded",
     "The website widget is proved on an install: an anonymous visitor on a website is answered only from knowledge marked public, a question about anything else returns nothing found, and repeated requests from one origin are capped and the session expires sooner than a signed-in one, with the checks recorded"
    ],
-   "leaf_waves": {},
+   "leaf_waves": {
+    "M10.7.3": 3
+   },
    "leaf_acts": {},
-   "leaf_decided": {},
+   "leaf_decided": {
+    "M10.7.5": {
+     "kind": "DECIDED",
+     "why": "Merged into M10.7.2, which asks for the same outcome: An anonymous website widget visitor holds one grant over knowledge an administrator marked public and nothing else, a question about anything else is answered as nothing found, marking or unmarking an item public is audited with who did it, and a department admin can mark only their own department's knowledge public Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101)."
+    }
+   },
    "act_groups": {},
    "leaf_progress": {
     "M10.1.1": {
@@ -1342,9 +1361,37 @@
     "Google Analytics, once connected from the console, is ready to use with no server step: a permitted person's question is answered from it on the install and an agent bound to it can use it",
     "Search Console, once connected from the console, is ready to use with no server step: a permitted person's question is answered from it on the install and an agent bound to it can use it"
    ],
-   "leaf_waves": {},
+   "leaf_waves": {
+    "M11.8.8": 3,
+    "M11.8.10": 3,
+    "M11.9.3": 3,
+    "M11.9.4": 3,
+    "M11.9.5": 3,
+    "M11.9.6": 3,
+    "M11.9.7": 3,
+    "M11.9.8": 3,
+    "M11.9.9": 3,
+    "M11.9.10": 3,
+    "M11.9.11": 3,
+    "M11.9.12": 3,
+    "M11.9.13": 3,
+    "M11.9.14": 3
+   },
    "leaf_acts": {},
-   "leaf_decided": {},
+   "leaf_decided": {
+    "M11.5.3": {
+     "kind": "DECIDED",
+     "why": "Merged into M22.1.1, which asks for the same outcome: Global budgets: concurrent model calls, source calls per connector, browser sessions, long-running tasks, document jobs, embedding jobs, tokens per minute Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101)."
+    },
+    "M11.9.1": {
+     "kind": "DECIDED",
+     "why": "Merged into M11.8.1, which asks for the same outcome: Manifest review refuses a projected field that is not an id, join key, status value, timestamp, visibility predicate or a display label of at most 120 characters Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101)."
+    },
+    "M11.9.2": {
+     "kind": "DECIDED",
+     "why": "Merged into M11.5.1, which asks for the same outcome: Live fetch path with an eight-hundred-millisecond timeout Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101)."
+    }
+   },
    "act_groups": {},
    "leaf_progress": {
     "M11.1.1": {
@@ -1403,11 +1450,6 @@
      "updated": "2026-09-28"
     },
     "M11.8.2": {
-     "status": "IN PROGRESS",
-     "why": "Wave 2 batch 2, connector registries and the minimal index (C1), under the owner's rule that connectors never bulk-sync",
-     "updated": "2026-09-28"
-    },
-    "M11.9.1": {
      "status": "IN PROGRESS",
      "why": "Wave 2 batch 2, connector registries and the minimal index (C1), under the owner's rule that connectors never bulk-sync",
      "updated": "2026-09-28"
@@ -1502,7 +1544,15 @@
     "Every tools requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves",
     "A skill's digest covers the bytes of every script it carries, so a skill with scripts is admitted and changing one byte of a script requires a new review"
    ],
-   "leaf_waves": {},
+   "leaf_waves": {
+    "M12.2.5": 3,
+    "M12.2.7": 3,
+    "M12.2.8": 3,
+    "M12.3.3": 3,
+    "M12.4.2": 3,
+    "M12.4.8": 3,
+    "M12.4.10": 3
+   },
    "leaf_acts": {},
    "leaf_decided": {
     "M12.1.2": {
@@ -1512,6 +1562,14 @@
     "M12.1.6": {
      "kind": "DECIDED",
      "why": "Merged into M0.5.6, which asks for the same outcome: Registry sweep: tool naming grammar. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M12.4.1": {
+     "kind": "DECIDED",
+     "why": "Merged into M12.3.8, which asks for the same outcome: Every tool that sends a message to a client, issues a quotation, changes DNS or hosting, changes financial records, deletes information, publishes content or changes a production system declares that effect, and no leash entry or promotion lets such a call run before a person approves the exact prepared action Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101)."
+    },
+    "M12.4.16": {
+     "kind": "DECIDED",
+     "why": "Merged into M12.4.11, which asks for the same outcome: A skill's approval digest covers the bytes of every script it carries, so a script changed after approval is refused before it runs Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101)."
     }
    },
    "act_groups": {},
@@ -2550,7 +2608,12 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
-   "leaf_decided": {},
+   "leaf_decided": {
+    "M22.2.4": {
+     "kind": "DECIDED",
+     "why": "Merged into M7.1.5, which asks for the same outcome: Ingestion queue with backpressure Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101)."
+    }
+   },
    "act_groups": {},
    "leaf_progress": {}
   },
@@ -2586,6 +2649,10 @@
     "M23.1.4": {
      "kind": "DECIDED",
      "why": "Merged into M10.5.5, which asks for the same outcome: Web widget with session minting and abuse guard. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M23.2.3": {
+     "kind": "DECIDED",
+     "why": "Merged into M21.3.2, which asks for the same outcome: Machine traffic excluded and labelled Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101)."
     }
    },
    "act_groups": {},
@@ -2618,11 +2685,6 @@
     "M23.2.2": {
      "status": "READY FOR TESTING",
      "why": "the hourly denial digest runs in the worker (PR #101, merged): proved when a repeatedly refused colleague produces a notice on the install",
-     "updated": "2026-09-28"
-    },
-    "M23.2.3": {
-     "status": "READY FOR TESTING",
-     "why": "rate limits live (PR #101, merged): proved when a person asking past the window on the install gets the 429 and Ask says when to ask again",
      "updated": "2026-09-28"
     }
    }
@@ -3344,6 +3406,10 @@
     "M27.8.12": {
      "kind": "DECIDED",
      "why": "Merged into M17.5.3, which asks for the same outcome: Subscriber management in the console. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M27.13.4": {
+     "kind": "DECIDED",
+     "why": "Merged into M12.2.2, which asks for the same outcome: Import from GitHub with a pinned commit Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101)."
     }
    },
    "act_groups": {},
@@ -4755,7 +4821,7 @@
     "Wave report generated automatically from the closed task ids",
     "W0: nothing user-facing, but the pipeline itself deploys and is provably working",
     "W1: a person asks in the console and gets a permission-correct answer from seeded data",
-    "W2: the same question answered in Lark, against connector cassettes",
+    "W2: a real question answered live in Lark from a connected source",
     "W3: agents installed from templates, answering with knowledge and memory",
     "W4: automations running, approvals landing in Lark",
     "W5: real connector credentials wired, browser tasks, go-live",

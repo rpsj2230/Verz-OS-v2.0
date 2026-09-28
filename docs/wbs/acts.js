@@ -75,6 +75,85 @@ const KINDS = ["ACT", "UNBUILDABLE", DECIDED];
 
 //: Leaf id to its flag. Ordered by id, which is also plan order inside a module.
 const ACTS = {
+  // -------------------------------------------------------- duplicates merged, needs-rupash 101
+  "M12.4.16": {
+    kind: "DECIDED",
+    gate: false,
+    text: "A skill's digest covers the bytes of every script it carries, so a skill with scripts is admitted and changing one byte of a script requires a new review",
+    why: "Merged into M12.4.11, which asks for the same outcome: A skill's approval digest covers the bytes of every script it carries, so a script changed after approval is refused before it runs Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101).",
+  },
+  "M7.7.5": {
+    kind: "DECIDED",
+    gate: false,
+    text: "Marking a knowledge item public is allowed to a super admin, or to a department admin for their own department's items only, and each marking writes a ledger entry naming the person",
+    why: "Merged into M10.7.2, which asks for the same outcome: An anonymous website widget visitor holds one grant over knowledge an administrator marked public and nothing else, a question about anything else is answered as nothing found, marking or unmarking an item public is audited with who did it, and a department admin can mark only their own department's knowledge public Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101).",
+  },
+  "M10.7.5": {
+    kind: "DECIDED",
+    gate: false,
+    text: "The website widget is proved on an install: an anonymous visitor on a website is answered only from knowledge marked public, a question about anything else returns nothing found, and repeated requests from one origin are capped and the session expires sooner than a signed-in one, with the checks recorded",
+    why: "Merged into M10.7.2, which asks for the same outcome: An anonymous website widget visitor holds one grant over knowledge an administrator marked public and nothing else, a question about anything else is answered as nothing found, marking or unmarking an item public is audited with who did it, and a department admin can mark only their own department's knowledge public Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101).",
+  },
+  "M11.9.1": {
+    kind: "DECIDED",
+    gate: false,
+    text: "A connector keeps only a minimal index of a source (identifiers, display names and the few fields needed to find a record), never a copy of business values, and a test fails if the projection holds a field outside that minimal set",
+    why: "Merged into M11.8.1, which asks for the same outcome: Manifest review refuses a projected field that is not an id, join key, status value, timestamp, visibility predicate or a display label of at most 120 characters Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101).",
+  },
+  "M11.9.2": {
+    kind: "DECIDED",
+    gate: false,
+    text: "Every value an answer or an agent uses from a connected source is read live from the source at that moment, at the asker's reach",
+    why: "Merged into M11.5.1, which asks for the same outcome: Live fetch path with an eight-hundred-millisecond timeout Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101).",
+  },
+  "M12.4.1": {
+    kind: "DECIDED",
+    gate: false,
+    text: "Each sensitive action the owner named (sending a client email, issuing a quotation, changing DNS, recording a financial change, deleting a record, publishing content, changing a production system) has a registered tool that performs it only after approval of the exact prepared action",
+    why: "Merged into M12.3.8, which asks for the same outcome: Every tool that sends a message to a client, issues a quotation, changes DNS or hosting, changes financial records, deletes information, publishes content or changes a production system declares that effect, and no leash entry or promotion lets such a call run before a person approves the exact prepared action Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101).",
+  },
+  "M8.3.3": {
+    kind: "DECIDED",
+    gate: false,
+    text: "Notice of a pending approval reaches the approver in their own channel, and the decision itself is taken only in the console, the staff web application or on a Lark card",
+    why: "Merged into M10.7.1, which asks for the same outcome: An approval is decided only in the console, the staff web application or on a Lark card; a reply on WhatsApp, email or any other channel never decides one, and the approver is told where to decide it Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101).",
+  },
+  "M8.1.3": {
+    kind: "DECIDED",
+    gate: false,
+    text: "Freshness and staleness state on every citation",
+    why: "Merged into M11.4.9, which asks for the same outcome: Staleness surfaced in the answer Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101).",
+  },
+  "M22.2.4": {
+    kind: "DECIDED",
+    gate: false,
+    text: "Ingestion throttling so a bulk parse cannot slow the chat",
+    why: "Merged into M7.1.5, which asks for the same outcome: Ingestion queue with backpressure Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101).",
+  },
+  "M11.5.3": {
+    kind: "DECIDED",
+    gate: false,
+    text: "Global and per-source call budgets",
+    why: "Merged into M22.1.1, which asks for the same outcome: Global budgets: concurrent model calls, source calls per connector, browser sessions, long-running tasks, document jobs, embedding jobs, tokens per minute Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101).",
+  },
+  "M9.1.4": {
+    kind: "DECIDED",
+    gate: false,
+    text: "Export of a single conversation",
+    why: "Merged into M25.3.1, which asks for the same outcome: Conversation export per user Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101).",
+  },
+  "M23.2.3": {
+    kind: "DECIDED",
+    gate: false,
+    text: "Automated traffic identification and exclusion from metrics",
+    why: "Merged into M21.3.2, which asks for the same outcome: Machine traffic excluded and labelled Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101).",
+  },
+  "M27.13.4": {
+    kind: "DECIDED",
+    gate: false,
+    text: "Import from the console: knowledge upload, a skill from a repository, a template document",
+    why: "Merged into M12.2.2, which asks for the same outcome: Import from GitHub with a pinned commit Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101).",
+  },
   // -------------------------------------------------------- M29.1 plugin interfaces, decided
   //
   // Needs Rupash item 58, answered Option B on 2026-09-16. `brain.plugins.points` is the

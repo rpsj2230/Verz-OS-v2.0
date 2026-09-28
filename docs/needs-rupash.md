@@ -2,8 +2,8 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**10 items are open: 91 and 98 to 106.** Item 98 (the Moonshot key and DeepSeek once more) unblocks
-the most; 99 to 105 are decisions, each with a recommendation and a one-line reply. Each says in plain terms what it is, what I recommend, and every step.
+**1 item is open: 91,** the checks only you can do on your install; it waits for the Knowledge
+upload grants (item 105) to land. Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
 
@@ -54,110 +54,61 @@ need a model to answer. Tell me "checks done" and I close the tasks from your re
 The chat parts of checks 1 and 2 (binding a Lark identity with a code, the same reach in chat)
 cannot be done until Wave 2 builds the Lark chat channel; both moved there with item 97.
 
-## 98. The Moonshot key, and DeepSeek once more (about five minutes)
-
-**In plain terms:** your Claude (Anthropic), OpenAI and DeepSeek keys reached the vault on 28 Sep.
-No Moonshot (Kimi) key did, and DeepSeek was saved twice 24 seconds apart, so the second paste may
-have been the Moonshot key saved under DeepSeek. Your install is already set to use online
-providers (you chose it in setup on 16 Sep), and since 28 Sep the worker sees that and checks each
-provider every minute. **Recommendation: do both now,** on the rebuilt Models screen. Unblocks
-M5.6.1, M5.6.3 and M5.7.1, and proves Wave 0's M31.3.2.5.
-
-1. Open the console (signed in) and go to **Models and health**.
-2. On the **Moonshot (Kimi)** row press **Add key**, paste the key from the Moonshot platform, press
-   **Save the key**, then confirm.
-3. On the **DeepSeek** row press **Replace key**, paste the key from the DeepSeek platform, save and
-   confirm.
-4. Press **Test** on each of the four rows, then tell me "keys fixed". I then check that each
-   provider answers and record it.
-
-## 99. Wave 2: how connected systems answer questions
-
-**In plain terms:** your rule is that connectors never copy a company's data: the Brain keeps a
-small index (names, ids, dates) and reads everything else from the source at the moment someone
-asks. Planning Wave 2 found three places that need your yes. (1) Drive files and Lark Wiki pages:
-only their titles and ids are indexed, and their text is read live through the source's own
-search, never copied or embedded; the sync's current step that copies document text is removed.
-(2) A live read needs the source's key at question time, and today only the background worker may
-borrow a key. **Recommendation: let the application borrow a key for one question at a time**, the
-same short lease the worker uses; it needs the vault's rules reloaded once, with three of your five
-unseal pieces (I will send the commands). The alternative, the worker doing every live read, is
-slower and stops answering whenever the worker restarts. (3) Until Wave 3 builds agents, a
-connector question is answered by matching the index and then reading live; a model choosing
-which system to ask comes with agents. Reply "connectors as recommended".
-
-## 100. Wave 2: the agent halves of fifteen tasks move to Wave 3
-
-**In plain terms:** agents are created in Wave 3 (M27.11.6), so the parts of these Wave 2 tasks that
-say "an agent does it" cannot be tried in Wave 2: M11.9.2 to M11.9.14, M11.8.8, M10.7.3, M12.2.5,
-M12.2.7, M12.2.8, M12.3.3, M12.4.8, M12.4.10, M8.2.4 and M8.3.5, and "an agent prepares" in M11.8.10
-and M12.4.2, and Wave 1's M5.7.3 (a model pinned for one agent), built on 28 Sep, whose proof needs
-an agent. **Recommendation: build and prove their Wave 2 half now and move the agent half to
-Wave 3**, as item 97 did for the chat checks. Also: M38.2.2.3 ("what is live after Wave 2") says
-"against connector cassettes", and the plan says real credentials only at go-live; both contradict
-your rule that done means working on your install. Recommendation: reword M38.2.2.3 to "a real
-question answered live in Lark from a connected source". Reply "move agent halves".
-
-## 101. Wave 2: duplicate tasks to merge
-
-**In plain terms:** these pairs ask for the same result, so each would be proved twice. On 17 Sep
-you approved merging duplicates; I ask again because these are new. **Recommendation: merge each
-into the first-named, keeping one proof:** M12.4.16 into M12.4.11; M7.7.5 and M10.7.5 into M10.7.2;
-M11.9.1 into M11.8.1; M11.9.2 into M11.5.1; M12.4.1 into M12.3.8; M8.3.3 into M10.7.1; M8.1.3 into
-M11.4.9; M22.2.4 into M7.1.5; M11.5.3 into M22.1.1; M9.1.4 into M25.3.1; M23.2.3 into M21.3.2;
-M27.13.4 into M12.2.2; and M11.2.2 is proved by the same first connector sync that proves Wave 0's
-vault lease tasks (M31.3.2.3 and .4). Reply "merge duplicates".
-
-## 102. Wave 2: which accounts some connectors use
-
-**In plain terms:** four questions, each with my recommendation. (1) Teams and Telegram are on your
-feature list but not in your brief's channel list. Recommendation: build both and prove them on a
-free Microsoft 365 developer tenant and a test Telegram bot, not on company accounts. (2) M11.6.7
-says "Google Drive or Microsoft 365". Recommendation: Drive only for now. (3) The maintenance
-portal connector (M11.6.1) assumes the portal is a Laravel system on MySQL. Is it? (4) M11.4.8
-"backfill" fills the small index only, never values. Reply "accounts as recommended" and answer (3).
-
-## 103. Wave 2: a second install and the load test run in CI
-
-**In plain terms:** M12.3.1 and M12.4.9 need "a second install" to move a skill between, and M22.3.3
-is a load test. **Recommendation: a scratch install built inside CI for both**, so nothing extra
-runs on your server and no load is put on the install your company uses. Reply "use CI".
-
-## 104. Should an answered question's risk score and route be viewable?
-
-**In plain terms:** for every question the Brain now records its risk score (how likely it is an
-attempt to trick the system), which level and model answered it, and why each was chosen. For a
-question that failed, the **Errors** screen shows all of it. For one that was answered, no screen
-does, because the Questions screen deliberately does not list individual people's outcomes.
-**Recommendation: show a short reference under every answer, and let a Super Admin look that
-reference up** to see its score and route, so a person can report "this answer was odd" and you
-can see why, without any screen listing everybody's questions. Reply "reference under answers", or
-"leave it" to keep it as it is.
-
-## 105. Who can read the documents you upload
-
-**In plain terms:** Knowledge now takes Markdown, PDF and Word uploads for one department. A person
-only reads documents they are granted, and today nobody on your install holds a knowledge grant, so
-an uploaded document would answer nobody, and the Starter pack that grants it cannot be handed out.
-**Recommendation: every person the staff sync brings in gets the Starter pack for their own
-department automatically,** so they read their department's documents from day one; you still add
-or remove anything on **Govern > Roles**. The alternative is to give the data steward the right to
-hand the pack out by hand, person by person. Also, uploads are checked for being a genuine, safe
-file but not by an antivirus; I recommend accepting that for now and adding one with the scanning
-package later in Wave 2. Reply "starter pack by department".
-
-## 106. Company-wide documents and people whose knowledge access is for their own department
-
-**In plain terms:** building the upload found a fault that fails safe but is still wrong. A person
-whose right to read document text is given for their own department (which is how the Starter pack
-in item 105 gives it) asks about a company-wide document, such as the HR policy, and is told there
-is nothing, because the check compares their department with a document that has none. Their own
-personal documents fail the same way. **Recommendation: a right to read document text in a
-department also reads company-wide documents and the person's own**, so company-wide means
-everyone, as it says; nothing that belongs to another department becomes readable. Reply
-"company-wide for everyone".
-
 # Answered
+
+## 98. The Moonshot key - DONE 2026-09-28
+
+All four keys are in the vault: Anthropic, OpenAI and DeepSeek from 16:01 to 16:03 SGT and Moonshot at
+16:09. A Test on the Models screen had Claude answer (claude-sonnet-5). The other three answer once the
+failover matrix names them, which waits on a golden question the Brain can answer (item 105's grants).
+
+## 106. Company-wide documents reach everyone - DECIDED 2026-09-28
+
+A right to read document text in a department also reads company-wide documents and the person's own
+personal ones, so company-wide means everyone. Nothing belonging to another department becomes readable.
+
+## 105. Who reads uploaded documents - DECIDED 2026-09-28
+
+Every person the staff sync brings in gets the Starter pack for their own department automatically;
+administrators still add or remove anything on Govern > Roles. Uploads are checked for being a genuine,
+safe file; an antivirus comes with the scanning package later in Wave 2.
+
+## 104. A reference under every answer - DECIDED 2026-09-28
+
+Every answer shows a short reference, and a Super Admin can look that reference up to see its risk
+score, level, model and why each was chosen. No screen lists everybody's questions.
+
+## 103. A second install and the load test run in CI - DECIDED 2026-09-28
+
+Replied "Use CLI", read as the recommended "use CI": M12.3.1 and M12.4.9 use a scratch install built
+inside CI, and M22.3.3's load test runs there, never on the company's install.
+
+## 102. Which accounts some connectors use - DECIDED 2026-09-28
+
+As recommended: Teams and Telegram are proved on a free Microsoft 365 developer tenant and a test
+Telegram bot; Google Drive only for now; M11.4.8's backfill fills the small index only. The maintenance
+portal is a Laravel system on MySQL.
+
+## 101. Duplicate tasks merged - DECIDED 2026-09-28
+
+M12.4.16 into M12.4.11; M7.7.5 and M10.7.5 into M10.7.2; M11.9.1 into M11.8.1; M11.9.2 into M11.5.1;
+M12.4.1 into M12.3.8; M8.3.3 into M10.7.1; M8.1.3 into M11.4.9; M22.2.4 into M7.1.5; M11.5.3 into
+M22.1.1; M9.1.4 into M25.3.1; M23.2.3 into M21.3.2; M27.13.4 into M12.2.2. M11.2.2 is proved by the
+first connector sync that proves M31.3.2.3 and M31.3.2.4.
+
+## 100. The agent halves move to Wave 3 - DECIDED 2026-09-28
+
+M11.9.3 to M11.9.14, M11.8.8, M10.7.3, M12.2.5, M12.2.7, M12.2.8, M12.3.3, M12.4.8, M12.4.10, M8.2.4,
+M8.3.5, M11.8.10, M12.4.2 and Wave 1's M5.7.3 move to Wave 3 whole, as item 97 did: their Wave 2 parts
+are built now and each closes when its agent part is proved. M38.2.2.3 now reads "a real question
+answered live in Lark from a connected source".
+
+## 99. How connected systems answer questions - DECIDED 2026-09-28
+
+Connectors keep a small index and read everything else live when asked, borrowing the source's key for
+that one question (the vault's rules are reloaded once, with three unseal pieces). Drive and Wiki text
+is searched live, never copied or embedded. Answers must stay fast: live reads run in parallel under a
+time budget, and a slow source is cut off and named rather than making the person wait.
 
 ## 97. The chat parts of two install checks move to Wave 2 - DECIDED 2026-09-28
 
