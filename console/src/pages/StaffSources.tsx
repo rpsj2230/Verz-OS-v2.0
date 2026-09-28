@@ -3,7 +3,7 @@
  * run that reads the source and changes nothing.
  *
  * It sits under Govern, beside People and grants, which is where `docs/screens.html` puts
- * everything about who is here and what they may reach. That file draws thirteen screens and
+ * everything about who is here and what they may reach. That file draws fourteen screens and
  * this is not one of them, so the information architecture is followed and the layout is taken
  * from the nearest neighbours it does draw: Connectors is a list of outside systems with a
  * state beside each, and People and grants is a listing with one thing opened next to it.

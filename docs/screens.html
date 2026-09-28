@@ -253,6 +253,50 @@
     .kpis.k4,.kpis.k3{grid-template-columns:repeat(2,1fr)}
   }
 
+  /* ---- screen 14: one agent, a shared header and three tabs ---- */
+  .aghead{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px}
+  .agid{display:flex;align-items:center;gap:12px;min-width:0}
+  .av.ag{width:42px;height:42px;font-size:13px;background:var(--acc-wash);color:var(--acc-text)}
+  .agname{font-family:var(--brandfont);font-size:20px;font-weight:600;color:var(--ink);letter-spacing:-.01em;display:flex;flex-wrap:wrap;align-items:center;gap:8px;line-height:1.2}
+  .agsub{font-family:var(--mono);font-size:10.5px;color:var(--dim);margin-top:3px}
+  .chipline{font-family:var(--mono);font-size:9.5px;color:var(--dim);border:1px solid var(--line);border-radius:99px;padding:2px 8px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+  .act.soon{border-style:dashed;color:var(--faint)}
+  .seg{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px}
+  .tabs{display:inline-flex;background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:3px;gap:2px}
+  .tab{font-size:12.5px;padding:5px 16px;border-radius:3px;color:var(--dim)}
+  .tab.on{background:var(--panel);color:var(--ink);font-weight:600;box-shadow:0 1px 2px rgba(35,31,32,.1)}
+  .tablab{font-family:var(--mono);font-size:9.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--acc-text);border-top:1px dashed var(--line);padding-top:13px;margin-top:4px;display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px}
+  .tablab span{color:var(--faint);letter-spacing:.03em;text-transform:none}
+  .caplab{width:96px;color:var(--dim);font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;vertical-align:top;padding-top:9px}
+  .chips{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+  .srcchip.req{border:1px dashed var(--line);background:var(--panel)}
+  .srcchip.sk{background:var(--acc-wash);color:var(--acc-text)}
+  .sizes{display:inline-flex;gap:4px}
+  .sizes span{font-size:11.5px;border:1px solid var(--line);border-radius:99px;padding:1px 9px;color:var(--dim)}
+  .sizes span.on{background:var(--acc-wash);border-color:var(--brand);color:var(--acc-text);font-weight:600}
+  .tiers{display:flex;flex-direction:column;font-size:12.5px}
+  .tiers div{display:grid;grid-template-columns:18px 132px 1fr;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)}
+  .tiers div:last-child{border-bottom:0}
+  .tiers i{font-style:normal;font-family:var(--mono);font-size:10px;color:var(--faint)}
+  .tiers b{color:var(--ink);font-weight:600}
+  .flow{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+  .flow .tcard p{margin:0;font-size:12px;line-height:1.5;color:var(--body)}
+  .flow .tcard .tt i{font-style:normal;font-family:var(--mono);font-size:10px;background:var(--acc-wash);color:var(--acc-text);border-radius:99px;width:19px;height:19px;display:inline-grid;place-items:center;margin-right:6px}
+  .never{display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--ink)}
+  .never div::before{content:"\2298";color:var(--crit);margin-right:8px}
+  .never em{font-style:normal;font-family:var(--mono);font-size:10px;color:var(--faint);margin-left:6px}
+  .kv.long{justify-content:flex-start;gap:12px}
+  .kv.long .k{flex:none;width:86px}
+  .kv.long .v{flex:1;white-space:normal;text-align:left;font-family:var(--ui);font-size:12.5px}
+  .kv.long .v .chips{justify-content:flex-start}
+  .overview{border:1px dashed var(--line);border-radius:3px;padding:10px 12px;font-size:13px;line-height:1.6;color:var(--body);max-width:78ch}
+  .overview small{display:block;font-family:var(--mono);font-size:9.5px;color:var(--faint);margin-top:5px}
+  @media (max-width:900px){
+    .flow{grid-template-columns:1fr}
+    .tiers div{grid-template-columns:18px 1fr}
+    .tiers div span{grid-column:2}
+  }
+
 </style>
 
 <div class="page">
@@ -1364,6 +1408,242 @@
 
   <div class="callout">
     <b>What I took from AnyGen, and what I did not.</b> Adopted: the agent as a container you open rather than a row you edit; capabilities as one block of connectors, skills and channels; cost on the agent's front page instead of in a report; memory as a visible file with change history; artifacts as a first-class thing the agent produced. Rejected, with reason: their <em>Adaptive learning</em> is a single on/off toggle, which is exactly the memory-poisoning path - ours stays four tiers with only tier 3 gated. They have no leash concept at all, which is fine for a productivity tool and not for an agent touching client contracts. And their Browser Operator runs in the user's own authenticated session; an agent riding a human's session inherits everything that human holds and no audit can separate them afterwards, so ours stays in a disposable sandbox with credentials injected at the tool boundary.
+  </div>
+</section>
+
+
+<!-- ============ 14 ============ -->
+<section class="scr">
+  <div class="scrhead">
+    <span class="scrnum">SCREEN 14</span>
+    <h2>Agent Detail</h2>
+    <span class="who">Department Admin &middot; Ticket triage</span>
+  </div>
+  <p class="scrjob">The page a person opens from a row on Screen 4. Screen 13 argued what one agent is assembled from; this is how that page is laid out, as you decided it on 17 September: one header and three figures shared by everything below them, then three tabs in your order, <em>Dashboard</em>, <em>Profile</em> and <em>About</em>, each at its own address so a link can open any of them. Dashboard opens first and says what the agent has been doing. Profile says what it is built from and how far it may go. About says in plain words what it is for, how it works and what it will never do.</p>
+
+  <div class="pane">
+    <div class="panebar">
+      <span class="crumb"><b>ADMIN CONSOLE</b> &rsaquo; Agents and AI &rsaquo; Agents &rsaquo; <em>Ticket triage</em></span>
+      <span class="filters"><span class="act quiet">Settings</span><span class="act soon">Add to a chat group</span></span>
+    </div>
+    <div class="panebody">
+
+      <div class="aghead">
+        <div class="agid">
+          <span class="av ag">TT</span>
+          <div>
+            <div class="agname">Ticket triage <span class="pill ok">Enabled</span> <span class="chipline">leash up to <span class="rung au"><i></i>Autonomous</span></span></div>
+            <div class="agsub">Support &middot; steward Example Owner D &middot; from Queue triager v2</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="kpis k3">
+        <div class="kpi"><span class="lab">Spend, 30 days</span><span class="val">182.40 &rsaquo;</span><span class="sub">all runs &middot; opens Usage and cost</span></div>
+        <div class="kpi"><span class="lab">Skills</span><span class="val">8</span><span class="sub">assigned, each a pinned version</span></div>
+        <div class="kpi"><span class="lab">Days since created</span><span class="val">23</span><span class="sub">created 25 Aug</span></div>
+      </div>
+
+      <div class="seg">
+        <span class="tabs"><span class="tab on">Dashboard</span><span class="tab">Profile</span><span class="tab">About</span></span>
+        <span class="fchip">Sections</span>
+      </div>
+
+      <!-- ---- tab 1: Dashboard ---- -->
+      <div class="tablab">Dashboard &middot; opens first <span>/agents/ticket-triage</span></div>
+
+      <div class="kpis k3">
+        <div class="kpi"><span class="lab">Runs, 30 days</span><span class="val">391</span><span class="sub">all runs</span></div>
+        <div class="kpi"><span class="lab">Approvals waiting</span><span class="val">3</span><span class="sub warn">oldest 2 h</span></div>
+        <div class="kpi"><span class="lab">Automations running</span><span class="val">1</span><span class="sub">this agent's own</span></div>
+      </div>
+
+      <div class="cols">
+        <div class="card">
+          <h3>Recent runs</h3>
+          <div class="in">
+            <table>
+              <thead><tr><th>When</th><th>Asked by</th><th>Outcome</th><th style="text-align:right">Cost</th></tr></thead>
+              <tbody>
+                <tr><td>09:42</td><td class="name">Example Person 1</td><td>Suggested a queue</td><td class="n">0.021</td></tr>
+                <tr><td>09:10</td><td class="name">Example Person 2</td><td>Drafted a reply</td><td class="n">0.034</td></tr>
+                <tr><td>08:30</td><td class="name">Morning queue sweep</td><td><span class="pill warn">Waiting on approval</span></td><td class="n">0.019</td></tr>
+                <tr><td>Yesterday</td><td class="name">Example Person 3</td><td>Answered</td><td class="n">0.012</td></tr>
+                <tr><td>Yesterday</td><td class="name">Example Person 1</td><td>Turned away: outside what they may see</td><td class="n">0.004</td></tr>
+              </tbody>
+            </table>
+            <div class="hint" style="margin-top:9px">Who asked, what happened and what it cost, newest first. A run that was turned away is listed as turned away and <b>names nothing it refused</b>.</div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:15px;min-width:0">
+          <div class="card">
+            <h3>Waiting on a person <a href="#">Approvals &rarr;</a></h3>
+            <div class="in">
+              <div class="att">
+                <div class="aitem"><span class="stripe warn"></span><div><span class="t">Draft reply to a refund request</span><span class="d">2 h</span></div></div>
+                <div class="aitem"><span class="stripe warn"></span><div><span class="t">Suggested queue change for an escalation</span><span class="d">40 min</span></div></div>
+                <div class="aitem"><span class="stripe warn"></span><div><span class="t">Draft reply to a delivery question</span><span class="d">12 min</span></div></div>
+              </div>
+              <div class="hint" style="margin-top:9px">Actions this agent stopped before they happened, <b>counted only over the ones this reader could decide</b>.</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>Automations</h3>
+            <div class="in">
+              <div class="kv"><span class="k"><b style="color:var(--ink)">Morning queue sweep</b><br><span style="font-family:var(--mono);font-size:10px;color:var(--dim)">Weekdays 08:30 &middot; next tomorrow 08:30</span></span><span class="v"><span class="act">Stop</span></span></div>
+              <div class="kv"><span class="k"><b style="color:var(--ink)">Stale ticket nudge</b><br><span style="font-family:var(--mono);font-size:10px;color:var(--dim)">Every 4 hours &middot; not scheduled</span></span><span class="v"><span class="act">Start</span></span></div>
+              <div class="hint" style="margin-top:9px">What this agent runs on a schedule, <b>as the person it runs as</b>. Starting and stopping one takes effect.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---- tab 2: Profile ---- -->
+      <div class="tablab">Profile <span>/agents/ticket-triage/profile</span></div>
+
+      <div class="cols">
+        <div class="card">
+          <h3>Capabilities - what this agent is built from</h3>
+          <div class="in">
+            <table>
+              <tbody>
+                <tr>
+                  <td class="caplab">Connectors</td>
+                  <td><div class="chips"><span class="srcchip">freshdesk</span> <span class="srcchip">google_drive</span> <span class="srcchip">hubspot</span> <span class="srcchip req">laravel &middot; requested</span> <span class="srcchip">lark_base</span> <span class="srcchip">2 more &#9662;</span> <span class="act soon">+</span></div></td>
+                </tr>
+                <tr>
+                  <td class="caplab">Skills</td>
+                  <td><div class="chips"><span class="srcchip sk">ticket-summary</span> <span class="srcchip sk">priority-rules</span> <span class="srcchip sk">queue-routing</span> <span class="srcchip sk">reply-drafting</span> <span class="srcchip">4 more &#9662;</span> <span class="act">+</span></div></td>
+                </tr>
+                <tr>
+                  <td class="caplab">Channels</td>
+                  <td><div class="chips"><span class="srcchip">email with attachments</span> <span class="srcchip">lark as cards</span> <span class="srcchip">slack as cards</span> <span class="srcchip">teams as cards</span> <span class="act soon">+</span></div></td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="hint" style="margin-top:10px">Each is a <b>reviewed item it refers to, never a copy</b>. Attached means the agent is set up to use the source; requested means its setup asks for the source and nothing links it to the agent yet. "2 more" counts the reader's own rows off the strip, <b>never a source out of their reach</b>, which makes no chip at all. Channels are the chats and email that could carry this agent's answers to the reader.</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Permissions - the most it may ever reach</h3>
+          <div class="in">
+            <div class="kv long"><span class="k">Records</span><span class="v">Tickets and contacts in the Support department</span></div>
+            <div class="kv long"><span class="k">May read</span><span class="v">ticket subject, status, priority and queue; contact name, email and company; document titles and text in shared folders</span></div>
+            <div class="kv long"><span class="k">Actions</span><span class="v"><span class="chips"><span class="srcchip">search tickets</span><span class="srcchip">read a ticket</span><span class="srcchip">look up a contact</span><span class="srcchip">search shared documents</span><span class="srcchip">suggest a queue and a priority</span><span class="srcchip">draft a reply</span><span class="srcchip">draft a refund summary</span></span></span></div>
+            <div class="kv long"><span class="k">At most</span><span class="v">It drafts. It cannot change a record, send anything or move money.</span></div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:9px"><span class="act soon">Change permissions</span><span class="act soon">Preview as a person</span></div>
+            <div class="hint" style="margin-top:9px">Each time it works it holds what the person it works for holds, <b>narrowed by this</b>. It gives nobody extra access.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="cols">
+        <div class="card">
+          <h3>Availability - who can find and start it</h3>
+          <div class="in">
+            <div class="kv"><span class="k">Level</span><span class="v"><span class="srcchip">Department</span> <span class="act soon">Change</span></span></div>
+            <div class="kv"><span class="k">Steward</span><span class="v"><span class="srcchip">Example Owner D</span> <span class="act soon">Transfer</span></span></div>
+            <div class="kv"><span class="k">Department</span><span class="v"><span class="srcchip">Support &times;</span> <span class="act soon">+</span></span></div>
+            <div class="kv long"><span class="k">People</span><span class="v" style="color:var(--dim)">Not a list. Personal is the steward only, Department is everyone in it, Company is everyone.</span></div>
+            <div class="kv"><span class="k">Built by</span><span class="v">Example Owner A &middot; settings readers only</span></div>
+            <div class="hint" style="margin-top:9px;border-left-color:var(--lock)"><b>Availability is discovery, never authority.</b> Who can find the agent is a level, not a list of names, because a list would hand the reader a directory of a department they may hold no grant over.</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Model and autonomy</h3>
+          <div class="in">
+            <div class="kv"><span class="k">Model size</span><span class="v"><span class="sizes"><span>Small</span><span class="on">Main</span><span>Heavy</span></span></span></div>
+            <div class="kv"><span class="k">Models used</span><span class="v">Hosted, main <span style="color:var(--faint)">&rarr;</span> Hosted, small <span style="color:var(--faint)">&rarr;</span> Local</span></div>
+            <table class="leash" style="margin-top:6px">
+              <thead><tr><th>Approval setting, by action</th><th>Rung</th><th>Evidence</th></tr></thead>
+              <tbody>
+                <tr><td class="name">Suggest a queue and a priority</td><td><span class="rung au"><i></i>Autonomous</span></td><td>1,200 runs, no correction</td></tr>
+                <tr><td class="name">Draft a reply</td><td><span class="rung as"><i></i>Assisted</span></td><td>40 drafts approved</td></tr>
+                <tr><td class="name">Draft a refund summary</td><td><span class="rung sh"><i></i>Shadow</span></td><td>added last week</td></tr>
+                <tr><td class="name">Send an email</td><td><span class="rung sh"><i></i>Shadow</span></td><td>not a permitted action</td></tr>
+              </tbody>
+            </table>
+            <div class="hint" style="margin-top:9px">Autonomous acts on its own. Assisted prepares the action and waits for a person. Shadow only practises, and nothing is carried out. <b>An action with no setting is Shadow.</b> The models behind each size are set once for every agent, on Models and routing.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="two">
+        <div class="card">
+          <h3>Learning from conversations <a href="#">Learning review &rarr;</a></h3>
+          <div class="in">
+            <div class="tiers">
+              <div><i>1</i><b>Within a conversation</b><span>Stays inside the conversation it came from.</span></div>
+              <div><i>2</i><b>Automatic</b><span>Changes how it answers, never what anybody may see.</span></div>
+              <div><i>3</i><b>After agreement</b><span>Suggested first, applied once separate conversations agree.</span></div>
+              <div><i>4</i><b>Needs a person</b><span>Would change who may see what. A person decides.</span></div>
+            </div>
+            <div class="hint" style="margin-top:9px">Ordered by how far a change would reach, not by how sure it is. <b>There is deliberately no single on and off switch</b>, because one switch would let anything be learnt unchecked.</div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
+          <div class="card">
+            <h3>Browser use</h3>
+            <div class="in">
+              <div class="kv"><span class="k">Let this agent use a browser</span><span class="v"><span class="act soon">Off</span></span></div>
+              <div class="hint" style="margin-top:9px">A sealed browser thrown away afterwards. It never uses anybody's own signed-in browser; passwords are filled in for it and <b>never shown to the model</b>; what it may do and how its work is checked are fixed before it starts.</div>
+            </div>
+          </div>
+          <div class="card">
+            <h3>Computer use</h3>
+            <div class="in">
+              <div class="hint" style="margin-top:4px;border-left-color:var(--lock)"><b>Not offered, so there is no switch.</b> Nothing in the product controls a computer's screen, keyboard or mouse. An agent acts only through actions the product checks first.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---- tab 3: About ---- -->
+      <div class="tablab">About <span>/agents/ticket-triage/about</span></div>
+
+      <div class="card">
+        <h3>About this agent - what it is for, how it works, what it will never do <a href="#">See how it is set up &rarr;</a></h3>
+        <div class="in" style="display:flex;flex-direction:column;gap:12px;padding-top:11px">
+          <div>
+            <div class="caplab" style="padding:0 0 4px">Summary</div>
+            <div style="font-size:14px;font-weight:600;color:var(--ink)">Suggests a queue and a priority for each new ticket.</div>
+          </div>
+          <div class="overview">Ticket triage helps the Support team keep the ticket queue moving. Each weekday morning, and whenever somebody asks it about a ticket, it reads the ticket and the customer's record, suggests which queue the ticket belongs in and how urgent it is, and drafts a first reply. A person reviews every reply before anything reaches a customer, and refund summaries are still being practised, so nothing comes of them yet.<small>Written by the agent's steward, for readers only. It is never passed to a model.</small></div>
+
+          <div>
+            <div class="caplab" style="padding:0 0 6px;width:auto">How it works</div>
+            <div class="flow">
+              <div class="tcard"><div class="tt"><span><i>1</i>What starts it</span></div><p>Somebody asks it in email, Lark, Slack or Teams.</p><p>On a schedule: Morning queue sweep, weekdays 08:30.</p></div>
+              <div class="tcard"><div class="tt"><span><i>2</i>What it reads</span></div><p>Tickets (freshdesk), shared documents (google_drive), contacts (hubspot), base tables (lark_base) and wiki pages (lark_wiki).</p><p>Only tickets and contacts in the Support department, and never more than the person it works for may see.</p><p>Its setup also asks for laravel and xero, which it cannot use yet.</p></div>
+              <div class="tcard"><div class="tt"><span><i>3</i>What it does</span></div><p><u>Suggest a queue and a priority</u>: on its own.</p><p><u>Draft a reply</u>: prepares it, then waits for a person.</p><p><u>Draft a refund summary</u>: only practises it.</p></div>
+              <div class="tcard"><div class="tt"><span><i>4</i>Where a person steps in</span></div><p>A draft reply waits on the Approvals page, for somebody who may do that action themselves on that record.</p><p>A refund summary is only practised, so there is nothing to approve.</p></div>
+              <div class="tcard"><div class="tt"><span><i>5</i>Where the result goes</span></div><p>Back to whoever asked, in the chat or email they used.</p><p>A scheduled run's result goes to the person it runs as; others see only that it ran.</p><p>Anything it writes stays a draft for a person to send.</p></div>
+            </div>
+          </div>
+
+          <div>
+            <div class="caplab" style="padding:0 0 6px;width:auto">What it will never do</div>
+            <div class="never">
+              <div>It never sends anything, changes a record or moves money itself: at most it drafts for a person.</div>
+              <div>It never reads anything outside tickets and contacts in the Support department.</div>
+              <div>It never sees more than the person it is working for could see themselves.<em>true of every agent</em></div>
+            </div>
+          </div>
+
+          <div class="hint">The flow and the three sentences are <b>computed from how the agent is set up and nothing else</b>, so they cannot describe something it is not set up to do. Each action in step 3 opens its approval setting on the Profile. Steps a reader may not see are left out and the rest renumber, so a gap never counts what was withheld.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="callout">
+    <b>What this page keeps that a settings page would lose.</b> Every figure and name on it is an example. A control whose action is not built yet is drawn dashed and does nothing, rather than hidden or faked. Nothing on it counts what the reader cannot see: the overflow on a row counts their own items, approvals count only what they could decide, and a source out of their reach makes no chip. Learning keeps its four tiers with no single switch, and Computer use is a sentence rather than a switch, because the product has nothing behind one. The element-by-element mapping to what the product stores, and what each control calls, is in the Admin Console design, Part 4.1a.
   </div>
 </section>
 

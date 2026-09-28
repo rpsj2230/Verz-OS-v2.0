@@ -438,7 +438,7 @@ def sweep_traceability() -> None:
 
     # And the other half of the same question, which the line above cannot ask: a console can
     # serve every read it has and still not be the console `docs/screens.html` designs. That
-    # file is thirteen screens with the section each sits in, it was written before any of them
+    # file is fourteen screens with the section each sits in, it was written before any of them
     # was built, and on 2026-09-16 the owner opened his own install and asked what the point of
     # it was. Nothing had ever compared the two. See
     # `brain.ops.console_design.A_DESIGN_NOTHING_MEASURES_IS_A_PICTURE`.
