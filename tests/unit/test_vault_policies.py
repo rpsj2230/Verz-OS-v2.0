@@ -409,6 +409,22 @@ def test_the_worker_reads_no_connector_key_itself_and_may_mint_only_the_run_toke
     assert not [path for path in granted if path.startswith("auth/token/roles")]
 
 
+def test_the_application_may_mint_only_the_run_token_a_question_borrows_a_key_with() -> None:
+    """M11.9.2 and needs-rupash 99: a question borrows a connected source's key for one read, so
+    the application may mint a child against the `connector-run` role and no other, and still reads
+    nothing under the connector key engine with its own token. The key is read with the run token,
+    which carries the `connector-run` policy alone and is revoked when the read ends
+    (`brain.ops.live_read_run`).
+
+    Delete this and the mint can widen to `auth/token/create` with no role, which mints a token of
+    any policy this one holds, or the application's own token can gain a read of every key."""
+    granted = _granted_paths(_policy_file(VaultRole.APPLICATION).read_text(encoding="utf-8"))
+    minting = {path: sorted(caps) for path, caps in granted.items() if "token/create" in path}
+    assert minting == {"auth/token/create/connector-run": ["create", "update"]}
+    assert not [path for path in granted if path.startswith("auth/token/roles")]
+    assert "read" not in granted["connector_keys/data/+"]
+
+
 def test_the_run_token_policy_reads_a_source_key_and_revokes_itself_and_nothing_more() -> None:
     """The one policy that reads a source's key, carried only by a token minted per attempt. No
     renewal, so a stuck run loses its authority at the TTL; no create, so a run token mints nothing;

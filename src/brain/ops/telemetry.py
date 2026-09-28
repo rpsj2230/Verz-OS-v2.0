@@ -840,6 +840,9 @@ def status_of_finished(finished: Finished) -> RequestStatus:
     opaque path that raises `Denied`. `Finished` carries no exception, so the day a lane
     raises one, a status for it is `status_for(outcome)` and needs the exception carried.
 
+    A question whose answer is held by a connected source that did not answer in time is
+    `DEGRADED`: `Answered.partial` with no answer beside it, and never which source.
+
     A model call made for its own sake, the Models screen's provider check, is `ANSWERED` when a
     provider answered and `DEGRADED` when none could be reached, with nothing about which rung
     or why; see `brain.gate.finish.ModelCallOutcome`.
@@ -863,6 +866,10 @@ def status_of_finished(finished: Finished) -> RequestStatus:
         return RequestStatus.ANSWERED
     if outcome.abstention is not None:
         return RequestStatus.NOTHING_RETURNED
+    if outcome.composed is None and outcome.partial is not None:
+        # The source holding the answer did not answer in time and nothing was substituted,
+        # which is DEGRADED's own definition (M11.5.5). See `brain.gate.answer._unreached`.
+        return RequestStatus.DEGRADED
     return RequestStatus.ANSWERED
 
 

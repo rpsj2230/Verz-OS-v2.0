@@ -69,14 +69,25 @@ Three other shapes were considered and rejected.
   It would also need a read before the registry is built, which is `brain.app`'s ordering to
   change rather than this module's.
 
-**`classification_for` is keyed on the entity alone, and that is a limit rather than a
-design.** Its callers do not say which source they mean, so it answers an entity a source
-brings on every install, including one that does not read that source: `/classifications/client`
-shows the demo's rules there to whoever may read classifications, while `/records/client`
-still refuses, because no tool is registered for it. That is sound only while no two owners
-classify one entity, which is tested, and it is the shape `fast_lane.entities_served` had
-until 2026-09-14, when a rule and a reader for one entity under two sources was a 500. The
-day a second source classifies `client`, this takes the source too, and so do its callers.
+**`classification_for` takes the source, and the answer lane gives it one (M15.4.2).** Until
+2026-09-28 it was keyed on the entity alone, which was sound only while no two owners classified
+one entity: the day a second source classified `contact`, the answer lane would have redacted the
+first source's contacts by the second's rules, withholding every field only the first classified,
+so connecting a second source stopped the first answering. With `source=` it answers that source's
+own classification or a built-in, and `brain.api_routes.source_field_policies` hands the lane one
+policy per source and entity. Without `source=` it answers as before, the first owner's, for the
+callers that name only an entity (`/records/{entity}`, `/classifications/{entity}`), which is a
+limit still standing for those screens and is why `test_every_entity_is_classified_by_one_owner`
+now holds each source to one classification per entity rather than the product to one per entity.
+
+**A shipped connector's classifications are registered on every install, beside the tool source's.**
+A connector's entities are filed in `SOURCE_ROW_ENTITIES` under its name, and `build_registry`
+registers them under that name whatever `BRAIN_TOOL_SOURCE` says, because a connector is connected
+from the console at run time and the registry is built once, at start. The demo is filed there too
+and is not a connector, so it is still registered only where the demo is read. They are not read off
+the connector's own declaration, because `brain.connectors.declaration` is on the scheduled sync's
+path and imports nothing from `brain.knowledge`, which `tests/invariants/test_minimal_index.py`
+holds.
 
 **The row source is injected and there is no default.** `RowTool.reader` binds to a
 `RowSource`, and a builder that supplied its own would be a second path to data with its
@@ -124,16 +135,17 @@ What this module does fix is the thing that was actually broken: a registry now 
 builder makes it, the application calls that builder at startup, and every rule runs on the
 way in. Registering the first real tool is a `records=` argument, not an afternoon.
 
-Task ids: M12.1.5
+Task ids: M12.1.5, M15.4.2
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from types import MappingProxyType
 from typing import Final
 
 from brain import demo
+from brain.connectors.declaration import shipped
 from brain.knowledge.columns import PRICE_LIST, TableClassification
 from brain.knowledge.document_tools import KNOWLEDGE_PIN, QuestionEmbedder, knowledge_tools
 from brain.knowledge.embed_policy import embedding_revision
@@ -199,6 +211,20 @@ SOURCE_ROW_DESCRIPTIONS: Final[Mapping[str, Mapping[str, str]]] = MappingProxyTy
 )
 
 
+def source_row_entities() -> Mapping[str, tuple[TableClassification, ...]]:
+    """Every source's own classifications, by source, read at call time."""
+    return SOURCE_ROW_ENTITIES
+
+
+def connector_row_sources() -> tuple[str, ...]:
+    """Every shipped connector with classifications filed here, which `build_registry` registers.
+
+    The shipped connectors and no other source, so the demo's entities stay where the demo is read:
+    see `A_SOURCES_OWN_ENTITIES_ARE_REGISTERED_ONLY_WHERE_THAT_SOURCE_IS_READ`.
+    """
+    return tuple(sorted(name for name in source_row_entities() if name in shipped()))
+
+
 def row_entities_for(source: str) -> tuple[TableClassification, ...]:
     """Every entity an install reading `source` has a row tool for: the built-ins, then its own.
 
@@ -206,22 +232,22 @@ def row_entities_for(source: str) -> tuple[TableClassification, ...]:
     so an entity cannot be registered for a source that does not bring it by any route other
     than editing `SOURCE_ROW_ENTITIES`, which is a decision somebody can see being made.
     """
-    return (*BUILT_IN_ROW_ENTITIES, *SOURCE_ROW_ENTITIES.get(source, ()))
+    return (*BUILT_IN_ROW_ENTITIES, *source_row_entities().get(source, ()))
 
 
 def every_row_classification() -> tuple[TableClassification, ...]:
     """Every classification the product knows, whichever install it is registered on.
 
-    What `classification_for` searches. Exposed so a test can hold it to one classification
-    per entity, which is the condition under which an entity-keyed lookup has one answer.
+    What `classification_for` searches when it is given no source. Exposed so a test can hold
+    each source to one classification per entity.
     """
     return (
         *BUILT_IN_ROW_ENTITIES,
-        *(one for owned in SOURCE_ROW_ENTITIES.values() for one in owned),
+        *(one for owned in source_row_entities().values() for one in owned),
     )
 
 
-def classification_for(entity: str) -> TableClassification | None:
+def classification_for(entity: str, *, source: str | None = None) -> TableClassification | None:
     """The column classification governing this entity, or None if nothing classifies it.
 
     Here rather than in whatever needs it, because the lists above are the one place that
@@ -234,9 +260,11 @@ def classification_for(entity: str) -> TableClassification | None:
     rule applied one level up: a caller who could tell "there is no such entity here" from
     "you may not reach it" could map the installation by asking.
 
-    Keyed on the entity alone, which is a limit: see the module docstring.
+    With `source`, that source's own classification or a built-in, and nothing another source
+    brought (M15.4.2). Without it, the first owner's, which is a limit: see the module docstring.
     """
-    return next((c for c in every_row_classification() if c.entity == entity), None)
+    known = every_row_classification() if source is None else row_entities_for(source)
+    return next((c for c in known if c.entity == entity), None)
 
 
 def description_for(source: str, entity: str) -> str:
@@ -270,7 +298,9 @@ def question_embedder(env: Mapping[str, str] | None = None) -> QuestionEmbedder 
     return QuestionEmbedder(service=make_client(env=env), revision=revision)
 
 
-def build_registry(*, source: str, records: RowSource | None = None) -> ToolRegistry:
+def build_registry(
+    *, source: str, records: RowSource | None = None, sources: Iterable[str] | None = None
+) -> ToolRegistry:
     """Every tool this application offers, checked and frozen (M12.1.5).
 
     `source` names the system the rows came from and is required. `RowTool` refuses an empty
@@ -284,17 +314,30 @@ def build_registry(*, source: str, records: RowSource | None = None) -> ToolRegi
     data on a subject it has plenty of, which is worse than the tool being missing, because
     a missing tool is a gap somebody notices and an empty answer is a fact somebody believes.
 
+    `sources` are the other sources whose own entities are registered beside `source`'s, each
+    under its own name and each classified by its own rules (M15.4.2); None means every shipped
+    connector that brings classifications (`connector_row_sources`). The built-ins are registered
+    once, under `source`, because the price list is the product's and not any system's.
+
     Returns frozen. A caller receiving an unfrozen registry could register into it after the
     whole-registry checks had run, which is the same as not running them.
     """
     registry = ToolRegistry()
+    others = connector_row_sources() if sources is None else tuple(sources)
+    owned = source_row_entities()
+    pairs = [(source, one) for one in row_entities_for(source)] + [
+        (other, one)
+        for other in dict.fromkeys(others)
+        if other != source
+        for one in owned.get(other, ())
+    ]
 
     if records is not None:
-        for classification in row_entities_for(source):
+        for owner, classification in pairs:
             tool = RowTool(
-                source=source,
+                source=owner,
                 classification=classification,
-                description=description_for(source, classification.entity),
+                description=description_for(owner, classification.entity),
             )
             registry.register(
                 tool.definition(),
