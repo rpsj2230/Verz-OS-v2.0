@@ -285,7 +285,7 @@ Full per-route tables were produced for this document and are summarised here; t
 | `agent_routes` | agents, workspace, templates | audience; `read:agent`; skills screen for templates | none | cap 500 |
 | `approval_routes` | queue, card, decision | the action's own capability over its row | none: store absent (F3) | |
 | `automation_gallery_routes`, `automation_routes` | gallery, preview, install; `POST /automation/tool-call` | `admin:automation`; automation credential | `agent.automation` (starts paused); trigger 0055 | server-recomputed confirmation digest |
-| `skill_routes` | skills, add, review, assign | `admin:skill`, `admin:skill_review` over everything | `agent.skill`, `skill_review`, `skill_assignment`, instance overlay; trigger 0056 | upload and paste only |
+| `skill_routes` | skills, add, import, edit as a version, categories, review, assign | `admin:skill`, `admin:skill_review` over everything | `agent.skill`, `skill_review`, `skill_assignment`, `skill_category`, instance overlay; triggers 0056, 0121 | upload, paste, a GitHub commit, or an address on GitHub's hosts |
 | `connector_routes` | connectors, connect, disconnect | `read:connector`; `admin:connector` over the source | vault key, `ops.credential_write`, `ops.connector_connection`; triggers 0054, 0057 | xero and hubspot only |
 | `credential_routes` | credentials, set credential | `admin:credential` over everything | vault, `ops.credential_write`; trigger 0054 | provider slots only; **no page calls either route** |
 | `provider_routes`, `routing_routes` | providers, switch, check; rungs, edit rung | `admin:routing_matrix`; `read:routing_matrix` (never granted) | `ops.setting provider.*`, `ops.routing_rung`; trigger 0059 | four rung fields editable, no add or reorder |
@@ -657,12 +657,13 @@ exist; everything else is served today.
 
 #### C3 Skills and tools
 
-- **Entity:** `agent.skill`, `skill_review`, `skill_assignment`, detachment and retirement (to
-  build); the frozen tool registry (`tools/startup.build_registry`).
+- **Entity:** `agent.skill` (every version, each naming the one it was edited from),
+  `skill_review`, `skill_assignment`, `skill_category`, detachment and retirement (to build); the
+  frozen tool registry (`tools/startup.build_registry`).
 - **Belongs:** the company skill library, the review queue, assignments, the tool catalogue.
   **Separate:** a skill on one agent (C1 tab, same routes).
-- **Permissions:** `read:skill`; `admin:skill` to add and assign; `admin:skill_review` to decide
-  (never your own import).
+- **Permissions:** `read:skill`; `admin:skill` to add, import, edit, categorise and assign;
+  `admin:skill_review` to decide, your own import included since D4, recorded as your own.
 - **List tabs:** Library; Needs review; Retired; Tools (to build: a read of the registry, which no
   route lists).
 - **Actions:** Part 4.2.

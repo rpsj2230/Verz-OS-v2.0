@@ -175,6 +175,9 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.skill_routes:SkillLibrary.add": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.skill_routes:SkillLibrary.decide": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.skill_routes:SkillLibrary.assign": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.skill_routes:SkillLibrary.categories": Repeat.READS,
+        # A second call appends a second row naming the same categories, and the newest applies.
+        "brain.skill_routes:SkillLibrary.categorise": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.skill_routes:AgentInstalls.agent": Repeat.READS,
         # Approvals: reads and writes of this system's own suspension rows.
         "brain.approval_routes:SuspensionSource.open_suspensions": Repeat.READS,

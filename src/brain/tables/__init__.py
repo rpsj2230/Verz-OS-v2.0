@@ -355,6 +355,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0117_tool_catalogue_and_switch. A stop points at the catalogue row of the tool it stops.
     "agent.tool_definition",
     "agent.tool_switch",
+    # 0121_skill_sources_versions_and_categories. Points at nothing: a name is not unique in
+    # `agent.skill`, and the person who set the categories is a value.
+    "agent.skill_category",
 )
 
 __all__ = [

@@ -300,6 +300,8 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "agent.automation_schedule",
         "agent.skill",
         "agent.skill_assignment",
+        # The categories set on a skill's name: `set_by` is an actor, not an owner (`0121`).
+        "agent.skill_category",
         "agent.skill_review",
         # A tool the install registers, and a stop on it (`0117`): who threw or lifted a switch is
         # an actor, not an owner, and a stop is about a tool and a department, never a person.

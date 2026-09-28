@@ -549,14 +549,17 @@ def test_a_skill_naming_something_that_is_not_a_tool_name_is_refused() -> None:
 def test_a_single_tool_without_brackets_reads_as_one_item() -> None:
     """The commonest way to write one item. Guessing here is safe because the guess still
     has to be a real tool name, so a wrong one produces an unknown tool, never an extra."""
-    skill = skill_from_markdown("---\nname: x\ndescription: y\ntools: a.read_b\n---\nbody")
+    skill = skill_from_markdown("---\nname: x\ndescription: Use when y\ntools: a.read_b\n---\nbody")
     assert skill.tools == ("a.read_b",)
 
 
 def test_an_empty_list_declares_no_tools() -> None:
     """A skill that uses no tools is a legitimate thing to write, and an empty list must not
     read as the string `[]` and then fail the tool-name check with a confusing message."""
-    assert skill_from_markdown("---\nname: x\ndescription: y\ntools: []\n---\nbody").tools == ()
+    assert (
+        skill_from_markdown("---\nname: x\ndescription: Use when y\ntools: []\n---\nbody").tools
+        == ()
+    )
 
 
 def test_an_unclosed_frontmatter_list_is_refused() -> None:

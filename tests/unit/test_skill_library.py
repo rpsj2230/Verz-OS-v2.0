@@ -46,7 +46,6 @@ from brain.console.skill_library import (
     A_SCRIPT_THE_DIGEST_DOES_NOT_COVER_IS_A_SCRIPT_NOBODY_APPROVED,
     ASSIGN_REASON,
     MAX_PACKAGE_BYTES,
-    NOBODY_DECIDES_ABOUT_A_SKILL_THEY_ADDED,
     REPLACE_REASON,
     REVIEW_AUTHORITY,
     SKILL_AUTHORITY,
@@ -93,7 +92,7 @@ CONFIGURATION = plane_capability(Plane.CONFIGURATION)
 
 SKILL_MD = """---
 name: hosting-expiry
-description: Checks whether a client domain is close to renewal
+description: Use when a client asks whether their domain is close to renewal
 version: 1.0.0
 tools: [crm.read_client, desk.read_ticket]
 ---
@@ -105,7 +104,7 @@ def text_with(**lines: str) -> str:
     """The sample `SKILL.md` with some frontmatter lines replaced or added."""
     fields = {
         "name": "hosting-expiry",
-        "description": "Checks whether a client domain is close to renewal",
+        "description": "Use when a client asks whether their domain is close to renewal",
         "version": "1.0.0",
         "tools": "[crm.read_client, desk.read_ticket]",
     }
@@ -406,36 +405,52 @@ def test_a_skill_is_added_by_a_named_person_at_an_instant_with_a_zone() -> None:
 
 # ------------------------------------------------------------------------- deciding about one
 @pytest.mark.parametrize("approve", [True, False])
-def test_nobody_decides_about_a_skill_they_added_and_somebody_else_can(approve: bool) -> None:
-    """The importer is refused an approval and a rejection alike; a second person is not.
+def test_the_importer_may_decide_about_their_own_skill_and_it_is_marked_as_their_own(
+    approve: bool,
+) -> None:
+    """**M12.4.6, the owner's D4.** The person who added a skill may approve or reject it, and the
+    decision says it was their own; a second person's decision says it was not.
 
-    Delete this and the person who wants a procedure in front of every agent approves it
-    themselves, which is the approval the review exists to replace."""
+    Delete this and either the refusal D4 overturned comes back, so an administrator cannot approve
+    the skill they imported, or a self-approval is recorded as an ordinary one and the audit screen
+    cannot list it."""
+    own = decided(a_library_skill(), reviewer=IMPORTER, approve=approve, at=NOW)
+    other = decided(a_library_skill(), reviewer=REVIEWER, approve=approve, at=NOW)
+
+    assert own.imported.reviewer == IMPORTER
+    assert own.imported.state is (SkillState.APPROVED if approve else SkillState.REJECTED)
+    assert own.imported.is_executable() is approve
+    assert (own.self_decided, other.self_decided) == (True, False)
+    assert other.imported.reviewer == REVIEWER
+    assert own.digest == other.digest == a_library_skill().digest
+    assert own.submitted_by == other.submitted_by == IMPORTER
+
+
+def test_an_undecided_skill_is_nobody_s_own_decision() -> None:
+    """`self_decided` is false until somebody decides, even though the reviewer and the importer
+    are then both empty or unequal. Delete this and an empty reviewer compared with nothing reads as
+    a self-decision the moment somebody stores one with a blank importer."""
     one = a_library_skill()
 
-    with pytest.raises(SkillLibraryError) as refused:
-        decided(one, reviewer=IMPORTER, approve=approve, at=NOW)
-    after = decided(one, reviewer=REVIEWER, approve=approve, at=NOW)
-
-    assert NOBODY_DECIDES_ABOUT_A_SKILL_THEY_ADDED in str(refused.value)
-    assert after.imported.reviewer == REVIEWER
-    assert after.imported.state is (SkillState.APPROVED if approve else SkillState.REJECTED)
-    assert after.imported.is_executable() is approve
-    assert after.digest == one.digest
-    assert after.submitted_by == IMPORTER
+    assert one.self_decided is False
+    assert (
+        LibrarySkill(
+            imported=one.imported, digest=one.digest, submitted_by="", submitted_at=NOW
+        ).self_decided
+        is False
+    )
 
 
-def test_the_importer_is_refused_before_the_state_of_the_skill_is_considered() -> None:
-    """A decided skill asked about by its importer is refused as their own, not as decided.
+def test_the_decision_reason_names_the_owner_s_decision_and_what_is_recorded() -> None:
+    """The written-down reason says the owner decided it, that the ledger records the word the
+    audit screen finds, and that somebody who may only add still needs somebody else.
 
-    Delete this and the order of the two refusals can swap, and the importer learns which of their
-    skills somebody has already decided by trying to decide them."""
-    one = an_approved_skill()
+    Delete this and the constant can be reworded into the rule it replaced with every test green."""
+    reason = library_module.AN_ADMINISTRATOR_MAY_APPROVE_WHAT_THEY_IMPORTED_AND_THE_LEDGER_SAYS_SO
 
-    with pytest.raises(SkillLibraryError) as refused:
-        decided(one, reviewer=IMPORTER, approve=False, at=NOW)
-
-    assert NOBODY_DECIDES_ABOUT_A_SKILL_THEY_ADDED in str(refused.value)
+    assert "self_approved" in reason and "self_rejected" in reason
+    assert "may add skills and may not review them still needs somebody else" in reason
+    assert not hasattr(library_module, "NOBODY_DECIDES_ABOUT_A_SKILL_THEY_ADDED")
 
 
 def test_a_second_decision_is_refused_and_the_first_stands() -> None:
@@ -479,11 +494,13 @@ def test_the_queue_is_every_undecided_skill_oldest_first_and_an_edit_is_diffed()
         a_library_skill(at=NOW - timedelta(days=9)), reviewer=REVIEWER, approve=True, at=NOW
     )
     edit = a_library_skill(
-        text_with(description="Checks whether a client domain renews within a month"),
+        text_with(description="Use when a client asks whether their domain renews within a month"),
         at=NOW - timedelta(days=2),
     )
     new = a_library_skill(
-        text_with(name="quote-format", description="Formats a quote for a client"),
+        text_with(
+            name="quote-format", description="Use when a client asks for a quote to be formatted"
+        ),
         at=NOW - timedelta(days=5),
     )
 
@@ -781,7 +798,7 @@ def test_a_skill_whose_description_cannot_route_is_refused_at_assignment() -> No
 
     Delete this and the assignment can go round `register_skill` to `attach_skill`, and a skill
     described by its own name is chosen by the router on the name alone."""
-    weak = an_approved_skill(text_with(description="Use for hosting expiry"))
+    weak = an_approved_skill(text_with(description="Use when hosting expiry"))
     signed, instance, record = an_install()
 
     with pytest.raises(AgentTabError, match="adds no word"):
@@ -827,7 +844,7 @@ def test_an_assignment_is_recorded_under_the_folded_name_and_a_second_spelling_i
     held = a_library_skill()
     same_name = a_library_skill(text_with(version="2.0.0")).imported.skill
     other_spelling = a_library_skill(
-        text_with(name="hosting_expiry", description="Checks domains a second way")
+        text_with(name="hosting_expiry", description="Use when domains are checked a second way")
     ).imported.skill
     entry = AuditRecorder(
         AuditChain(), actor_id="u_admin", ent_hash="0" * 32, trace_id="t", clock=lambda: NOW

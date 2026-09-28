@@ -19,14 +19,27 @@ author types.
 `ImportedSkill.with_content` clears the review, and this module never re-approves anything:
 there is no path here that takes something out of the queue except a person deciding.
 
+**The review pane shows the words that changed, not only which fields did (M12.2.6).** A queue
+entry names the changed fields, which is enough to sort a hundred of them; it is not enough to
+decide one, because "body changed" on a page of instructions sends the reviewer to read the whole
+page again, and a reviewer asked to find one altered sentence in forty is a reviewer who approves
+without finding it. `content_diff` is the words: each frontmatter field before and after, and the
+body line by line as kept, removed and added, in order, so the kept and removed lines are the old
+body and the kept and added lines are the new one. Rejected: a unified diff as one string. It is
+a format for a terminal, its hunk headers are numbers a reviewer has to decode, and a console
+would have to parse it back into lines to colour them.
+
 Task ids: M12.2.6
 """
 
 from __future__ import annotations
 
+import difflib
+import enum
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Final
 
 from brain.tools.skills import ImportedSkill, Skill, SkillState, diff_skills
 
@@ -139,3 +152,84 @@ def summarise(entries: Sequence[QueueEntry], now: datetime) -> QueueSummary:
         edits=sum(1 for e in entries if e.is_edit),
         stale=len(stale(entries, now)),
     )
+
+
+# ------------------------------------------------------------ the words that changed (M12.2.6)
+#: The frontmatter a reviewer reads, in the order a `SKILL.md` declares it. The body is diffed by
+#: line and never shown here as one value.
+DIFFED_FIELDS: Final[tuple[str, ...]] = ("name", "description", "version", "tools", "scripts")
+
+
+class LineChange(enum.StrEnum):
+    """What happened to one line of a body between two versions."""
+
+    KEPT = "kept"
+    REMOVED = "removed"
+    ADDED = "added"
+
+
+@dataclass(frozen=True)
+class DiffLine:
+    """One line of the body, and whether the new version kept, removed or added it."""
+
+    change: LineChange
+    text: str
+
+
+@dataclass(frozen=True)
+class FieldChange:
+    """One frontmatter field that differs, with both values as a reviewer reads them."""
+
+    field: str
+    before: str
+    after: str
+
+
+@dataclass(frozen=True)
+class SkillDiff:
+    """What an edit changed: the frontmatter fields that differ, and the body line by line."""
+
+    fields: tuple[FieldChange, ...]
+    body: tuple[DiffLine, ...]
+
+    @property
+    def body_changed(self) -> bool:
+        return any(line.change is not LineChange.KEPT for line in self.body)
+
+    def old_body(self) -> tuple[str, ...]:
+        return tuple(line.text for line in self.body if line.change is not LineChange.ADDED)
+
+    def new_body(self) -> tuple[str, ...]:
+        return tuple(line.text for line in self.body if line.change is not LineChange.REMOVED)
+
+
+def _shown(value: object) -> str:
+    """A field as the reviewer reads it: a list joined with commas, anything else as written."""
+    if isinstance(value, tuple):
+        return ", ".join(str(item) for item in value)
+    return str(value)
+
+
+def content_diff(old: Skill, new: Skill) -> SkillDiff:
+    """The words that changed between two versions of a skill, for the review pane (M12.2.6).
+
+    `autojunk` is off: its heuristic treats a line that recurs often, a blank line or a closing
+    bracket, as noise to be skipped when matching, which on a document of instructions is
+    exactly the line whose removal changes the meaning of the step after it.
+    """
+    fields = tuple(
+        FieldChange(field=name, before=_shown(getattr(old, name)), after=_shown(getattr(new, name)))
+        for name in DIFFED_FIELDS
+        if getattr(old, name) != getattr(new, name)
+    )
+    before = old.body.split("\n") if old.body else []
+    after = new.body.split("\n") if new.body else []
+    lines: list[DiffLine] = []
+    matcher = difflib.SequenceMatcher(a=before, b=after, autojunk=False)
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            lines.extend(DiffLine(LineChange.KEPT, text) for text in before[i1:i2])
+            continue
+        lines.extend(DiffLine(LineChange.REMOVED, text) for text in before[i1:i2])
+        lines.extend(DiffLine(LineChange.ADDED, text) for text in after[j1:j2])
+    return SkillDiff(fields=fields, body=tuple(lines))
