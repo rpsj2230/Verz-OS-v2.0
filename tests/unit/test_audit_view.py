@@ -41,6 +41,7 @@ from brain.audit.record import (
     ApprovalVerdict,
     AuditRecorder,
     BreachChange,
+    ChannelBindingChange,
     ConnectorChange,
     DenyReason,
     ElevationChange,
@@ -398,6 +399,11 @@ CALLS: dict[str, dict[str, object]] = {
         "halt_id": "7c9e2f1a-4b3d-4e8f-a1c2-6d5e4f3a2b1c",
         "act": HaltAct.HALT,
         "scope": HaltScope.EVERYTHING,
+    },
+    "channel_binding": {
+        "principal_id": "u_weiling",
+        "channel": "lark",
+        "change": ChannelBindingChange.BOUND,
     },
     "certification": {
         "grant_id": "1f0e6a4c-2b8d-4f7a-9c1e-5d3b2a7f8e90",

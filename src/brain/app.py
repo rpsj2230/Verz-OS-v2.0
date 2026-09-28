@@ -80,6 +80,7 @@ from brain.automation_gallery_routes import router as automation_gallery_router
 from brain.automation_routes import AutomationWiring
 from brain.automation_routes import router as automation_router
 from brain.automation_schedule_routes import router as automation_schedule_router
+from brain.binding_routes import router as binding_router
 from brain.cache import (
     AsyncValkeyClient,
     NoEntitlementCache,
@@ -1451,6 +1452,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # The install acceptance checks' results for the commit this serves: passed, failed or not
     # run, public and read-only like deploy-checks. See `brain.acceptance_routes`.
     app.include_router(acceptance_router)
+    # Binding a chat account with a one-time code minted in My workspace, unbinding it, and the
+    # Channels screen's bindings and health behind the channel's own authority. See
+    # `brain.binding_routes`.
+    app.include_router(binding_router)
 
     @app.get("/health/live", response_model=Health, tags=["health"])
     async def live() -> Health:

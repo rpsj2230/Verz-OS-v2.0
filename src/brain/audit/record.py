@@ -179,6 +179,7 @@ ACTION_BY_METHOD: Final[Mapping[str, AuditAction]] = MappingProxyType(
         "agent_owner": AuditAction.AGENT_OWNER,
         "halt": AuditAction.HALT,
         "agent": AuditAction.AGENT,
+        "channel_binding": AuditAction.CHANNEL_BINDING,
     }
 )
 
@@ -195,6 +196,13 @@ class SignInChange(enum.StrEnum):
 
     BOUND = "bound"
     RETIRED = "retired"
+
+
+class ChannelBindingChange(enum.StrEnum):
+    """What happened to a chat binding. The two values `0118`'s trigger writes."""
+
+    BOUND = "bound"
+    UNBOUND = "unbound"
 
 
 #: A reason code, not a sentence. Same grammar as a field name, so it survives
@@ -945,6 +953,23 @@ class AuditRecorder:
             AuditAction.AGENT_OWNER,
             subject("agent", agent_id),
             {"change": "owner_changed", "from_owner": from_owner, "to_owner": to_owner},
+        )
+
+    def channel_binding(
+        self, *, principal_id: str, channel: str, change: ChannelBindingChange
+    ) -> AuditEntry:
+        """Record that a chat identity was bound to a person, or that a binding was taken away.
+
+        Written in a deployed database by `0118`'s trigger on `auth.principal_identity`, for every
+        channel but the console, and held to these details by a test. The subject is the person,
+        so everything that reached them through a chat account is on their own subject; the
+        identity is never recorded, because the digest the row keeps already says which, and the
+        raw identity is a phone number or an account id the ledger must not hold.
+        """
+        return self._write(
+            AuditAction.CHANNEL_BINDING,
+            subject("principal", principal_id),
+            {"change": change.value, "channel": channel},
         )
 
     def retention(self, *, release_id: str, change: RetentionChange) -> AuditEntry:

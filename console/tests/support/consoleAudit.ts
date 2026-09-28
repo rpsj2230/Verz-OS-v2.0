@@ -159,6 +159,14 @@ import {
   newVersionPath,
 } from "../../src/pages/knowledgeLifecycleQuery";
 import { LINKS_API_PATH, queuedPath } from "../../src/pages/knowledgeIntakeQuery";
+import {
+  channelApiPath,
+  myCodeApiPath,
+  myUnbindApiPath,
+  switchApiPath,
+  testApiPath,
+  unbindApiPath,
+} from "../../src/pages/channelsQuery";
 import { CONSOLE_ROOT, readRepoFile } from "./repo";
 
 // ------------------------------------------------------------------------------------ inputs
@@ -471,15 +479,17 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "Connectors and third-party integrations": {
-    screens: ["/connectors"],
+    screens: ["/connectors", "/channels"],
     routes: [
       "/api/v1/connectors",
       "/api/v1/connectors/{connector}/disconnect",
       "/api/v1/connectors/lark-app",
       "/api/v1/connectors/lark-app/test",
       "/api/v1/channels*",
+      "/api/v1/me/channels*",
     ],
     tables: [
+      "auth.binding_code",
       "ops.channel",
       "ops.channel_delivery",
       "ops.connector_connection",
@@ -516,11 +526,6 @@ export const AREAS: Readonly<Record<string, Area>> = {
         what: "A Lark account is linked to a person with a one-time code only once the binding store is wired.",
         because:
           "The chat channel receives, verifies and answers Lark's events at /api/v1/channels/lark/events, and offers a code sent in a direct message to brain.channels.inbound.ChatBinder; the store that mints the code in a web session and keeps the binding is the channel binding package's, and until it is wired every sender is answered as unbound, brain.channels.inbound.NOBODY_IS_BOUND_UNTIL_A_BINDING_IS_KEPT.",
-      },
-      {
-        what: "A channel's record, switch, test message and deliveries have routes and no screen.",
-        because:
-          "The Channels screen is drawn over brain.channel_routes by the channels screen package, which follows this one; until then a channel is set up and proved through those routes, each change is in the audit ledger under setting:channel.<channel>, and the deliveries route lists every refusal without its content.",
       },
     ],
   },
@@ -921,6 +926,24 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/Tools.tsx switchPath(choice.tool)": [
     at("POST /api/v1/tools/{name}/switch", "switchPath", toolSwitchPath("notes.read_note")),
   ],
+  "src/pages/Channels.tsx channelApiPath(row.channel)": [
+    at("PUT /api/v1/channels/{name}", "channelApiPath", channelApiPath("webhook")),
+  ],
+  "src/pages/Channels.tsx switchApiPath(row.channel)": [
+    at("POST /api/v1/channels/{name}/switch", "switchApiPath", switchApiPath("webhook")),
+  ],
+  "src/pages/Channels.tsx testApiPath(name)": [
+    at("POST /api/v1/channels/{name}/test", "testApiPath", testApiPath("webhook")),
+  ],
+  "src/pages/Channels.tsx unbindApiPath(name)": [
+    at("POST /api/v1/channels/{name}/bindings/unbind", "unbindApiPath", unbindApiPath("webhook")),
+  ],
+  "src/components/MyChannels.tsx myCodeApiPath(row.channel)": [
+    at("POST /api/v1/me/channels/{name}/code", "myCodeApiPath", myCodeApiPath("webhook")),
+  ],
+  "src/components/MyChannels.tsx myUnbindApiPath(row.channel)": [
+    at("POST /api/v1/me/channels/{name}/unbind", "myUnbindApiPath", myUnbindApiPath("webhook")),
+  ],
   "src/pages/Settings.tsx savePath(row.name)": [at("PUT /api/v1/install/settings/{name}", "savePath", savePath("INSTALL_COMPANY_NAME"))],
   "src/pages/FirstRun.tsx FINISH_PATH": [at("POST /setup/sign-in", "FINISH_PATH", FINISH_PATH, false)],
   "src/pages/FirstRun.tsx APPOINTMENT_PATH": [at("POST /setup/appointment", "APPOINTMENT_PATH", APPOINTMENT_PATH, false)],
@@ -1307,6 +1330,21 @@ const A_RETIRED_KEY_IS_NOT_FOUND = t(
   "test_a_retired_key_or_account_is_not_found_by_the_request_path",
   true,
 );
+const A_CHANNEL_RECORD_IS_KEPT_AND_SWITCHED = t(
+  "test_channel_pipeline",
+  "test_the_stores_keep_one_row_per_channel_and_switch_only_the_one_named",
+  true,
+);
+const A_CHANNEL_CHANGE_IS_AUDITED = t(
+  "test_channel_pipeline",
+  "test_each_set_up_and_switch_leaves_one_attributed_entry_and_the_chain_verifies",
+  true,
+);
+const A_BINDING_CHANGE_IS_AUDITED = t(
+  "test_channel_binding",
+  "test_each_bind_rebind_and_unbind_leaves_its_entry_and_the_chain_verifies",
+  true,
+);
 
 /** Every write route a screen sends, followed to the system. */
 export const PROOFS: Readonly<Record<string, Proofs>> = {
@@ -1333,6 +1371,56 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
       none: "Retiring an account sets deleted_at on it and its keys and records no credential write, so brain.identity.service_account_store.retire leaves no ledger entry naming who retired it.",
     },
     behaviour: A_RETIRED_KEY_IS_NOT_FOUND,
+  },
+  "PUT /api/v1/channels/{name}": {
+    row: A_CHANNEL_RECORD_IS_KEPT_AND_SWITCHED,
+    audit: A_CHANNEL_CHANGE_IS_AUDITED,
+    behaviour: t(
+      "test_channel_pipeline",
+      "test_a_channel_is_set_up_with_its_secret_kept_in_the_vault_and_never_sent_back",
+    ),
+  },
+  "POST /api/v1/channels/{name}/switch": {
+    row: A_CHANNEL_RECORD_IS_KEPT_AND_SWITCHED,
+    audit: A_CHANNEL_CHANGE_IS_AUDITED,
+    behaviour: t(
+      "test_channel_pipeline",
+      "test_switching_one_channel_off_stops_it_receiving_and_sending_and_leaves_another_alone",
+    ),
+  },
+  "POST /api/v1/channels/{name}/test": {
+    row: t("test_channel_pipeline", "test_a_test_message_is_sent_once_per_record_and_destination"),
+    audit: {
+      none: "A test message is recorded in ops.operation under its key and in ops.channel_delivery with its outcome, and the audit ledger has no action for a message sent: brain.ops.mail.A_TEST_IS_ONE_MESSAGE_PER_CONFIGURATION.",
+    },
+    behaviour: t("test_channel_pipeline", "test_a_test_message_is_sent_once_per_record_and_destination"),
+  },
+  "POST /api/v1/channels/{name}/bindings/unbind": {
+    row: A_BINDING_CHANGE_IS_AUDITED,
+    audit: A_BINDING_CHANGE_IS_AUDITED,
+    behaviour: t(
+      "test_channel_binding",
+      "test_an_administrator_lists_who_is_bound_and_unbinds_one_and_a_stranger_is_told_nothing",
+    ),
+  },
+  "POST /api/v1/me/channels/{name}/code": {
+    row: t(
+      "test_channel_binding",
+      "test_a_code_is_kept_spent_once_and_never_brought_back_by_the_application",
+      true,
+    ),
+    audit: {
+      notApplicable: "A code binds nothing until its person sends it from a chat, and the binding it then makes is the channel_binding entry 0118's trigger appends; minting one changes nobody's access.",
+    },
+    behaviour: t(
+      "test_channel_binding",
+      "test_a_person_mints_a_code_in_my_workspace_sends_it_and_is_answered_as_themself",
+    ),
+  },
+  "POST /api/v1/me/channels/{name}/unbind": {
+    row: A_BINDING_CHANGE_IS_AUDITED,
+    audit: A_BINDING_CHANGE_IS_AUDITED,
+    behaviour: t("test_channel_binding", "test_a_person_unbinds_their_own_chat_and_it_is_recorded_as_theirs"),
   },
   "POST /api/v1/govern/learning/undo": {
     row: UNDO_REACHES_THE_ROW_THE_LEDGER_AND_RECALL,
