@@ -7,8 +7,9 @@
  * **One request for the provider, and each view asks only for its own.** The provider is the
  * providers list narrowed to its slug (`modelsActions.providerApiPath`), which also carries the
  * steps and the profile, so the status drawn is the plan the next call makes. The figures are
- * `GET /models/providers/{provider}/stats`, drawn by `StatsStrip`; a figure it names as not recorded
- * reads "Not recorded yet" with the reason, never nought.
+ * `GET /models/providers/{provider}/stats`, drawn by `StatsStrip`: what it answered, from the
+ * metadata ledger; failures and cost are named as not recorded and read "Not recorded yet" with the
+ * reason, never nought.
  *
  * **A provider that is not there and one the reader may not see are one answer.** The list route
  * refuses an unreadable reader with its own sentence, drawn as the failure; a slug that matches no
@@ -67,6 +68,7 @@ import {
   TURN_OFF,
   TURN_ON,
   type CheckBody,
+  type ProviderStateRow,
 } from "../modelsQuery";
 import {
   KEEP_PROVIDER,
@@ -96,10 +98,10 @@ export const LOADING_PROVIDER = "Loading this provider.";
 export const FIGURES_LABEL = "This provider at a glance";
 export const NO_SUCH_PROVIDER = "No provider at this address";
 export const NO_SUCH_PROVIDER_DESCRIPTION = "Open the providers list to choose one.";
-export const CALLS_LABEL = "Calls, 30 days";
+export const ANSWERED_LABEL = "Answered, 30 days";
 export const FAILURES_LABEL = "Failures, 30 days";
 export const COST_LABEL = "Cost, 30 days";
-export const ON_ITS_STEPS = "on its steps in the matrix now";
+export const ANSWERED_SUB = "requests whose model calls all went to it";
 
 const VIEW_ICONS: Readonly<Record<ProviderView, typeof LayoutDashboard>> = {
   dashboard: LayoutDashboard,
@@ -118,7 +120,9 @@ function ProviderAnswer({ provider, view }: { readonly provider: string; readonl
   const answer = useResource<unknown>(providerApiPath(provider), version);
   const stats = useResource<unknown>(providerStatsApiPath(provider), version);
   const body = useMemo(() => readProviders(answer.data), [answer.data]);
-  const row = body?.providers.find((one) => one.provider === provider) ?? null;
+  // The list narrowed to this provider answers it as its one item; `providers` is every provider.
+  const items = (answer.data as { items?: unknown } | null)?.items;
+  const row = (Array.isArray(items) ? (items as ProviderStateRow[]) : []).find((one) => one.provider === provider) ?? null;
   const navigate = useNavigate();
   const [asked, setAsked] = useState<Ask | null>(null);
   const [busy, setBusy] = useState(false);
@@ -250,10 +254,10 @@ function ProviderAnswer({ provider, view }: { readonly provider: string; readonl
       figures={
         <StatsStrip label={FIGURES_LABEL} busy={stats.busy} failure={stats.failure} count={3}>
           <StatCard
-            label={CALLS_LABEL}
-            value={figure(figures?.calls)}
-            sub={figure(figures?.calls) === undefined ? undefined : ON_ITS_STEPS}
-            unrecordedWhy={unrecordedWhy(figures, "calls")}
+            label={ANSWERED_LABEL}
+            value={figure(figures?.answered)}
+            sub={figure(figures?.answered) === undefined ? undefined : ANSWERED_SUB}
+            unrecordedWhy={unrecordedWhy(figures, "answered")}
           />
           <StatCard
             label={FAILURES_LABEL}

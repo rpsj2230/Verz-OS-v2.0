@@ -136,14 +136,21 @@ type Ask =
   | { readonly kind: "check"; readonly provider: string; readonly name: string }
   | { readonly kind: "profile"; readonly profile: string };
 
-/** The rows out of the list's body: a provider only with its slug, once each, in the order sent. */
+/**
+ * The rows out of the list's body, its `items`: a provider only with its slug, once each, in the
+ * order sent. `providers` beside them is every provider, for names; the page is `items`.
+ */
 export function readProviderRows(payload: unknown): readonly ProviderStateRow[] {
   const body = readProviders(payload);
   if (body === null) {
     return [];
   }
   const seen = new Set<string>();
-  return body.providers.filter((one) => {
+  const items = (payload as { items?: unknown }).items;
+  if (!Array.isArray(items)) {
+    return [];
+  }
+  return (items as ProviderStateRow[]).filter((one) => {
     if (typeof one.provider !== "string" || one.provider === "" || seen.has(one.provider)) {
       return false;
     }
@@ -255,7 +262,6 @@ function WhereAnswersAreMade({ body, onAsk }: { readonly body: ProvidersBody; re
 export function ProvidersPage() {
   const [version, setVersion] = useState(0);
   const listing = useListing<ProviderStateRow>(PROVIDERS_API_PATH, {
-    listKey: "providers",
     choices: PROVIDER_FILTERS,
     version,
   });

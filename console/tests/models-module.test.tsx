@@ -20,7 +20,7 @@ import { beforeAll, describe, expect, test } from "vitest";
 import { NOT_RECORDED } from "../src/components/kit";
 import { UNAVAILABLE } from "../src/pages/models/modelsActions";
 import { LAST_TEST_COLUMN, PROVIDERS_LEDE, readProviderRows } from "../src/pages/models/ProvidersPage";
-import { CALLS_LABEL, COST_LABEL, FAILURES_LABEL, NO_SUCH_PROVIDER } from "../src/pages/models/ProviderDetailPage";
+import { ANSWERED_LABEL, COST_LABEL, FAILURES_LABEL, NO_SUCH_PROVIDER } from "../src/pages/models/ProviderDetailPage";
 import { lastTestWords } from "../src/pages/models/providerWords";
 import { FAILOVER_MATRIX, HELD_HEADING } from "../src/pages/models/RoutingPage";
 import { matrixLines } from "../src/pages/models/routingWords";
@@ -130,6 +130,7 @@ function plan(providers: readonly Record<string, unknown>[], rungs: readonly Rec
   return {
     profile: "hosted",
     providers,
+    items: providers,
     rungs,
     exhausted_tiers: [],
     editable: true,
@@ -216,7 +217,9 @@ describe("the providers list", () => {
     // What breaks if this is deleted: a list keyed on nothing, where a repeated slug draws two rows and
     // a click on either opens the same page.
     expect(readProviderRows(plan([provider("openai"), provider("openai"), provider("")])).map((one) => one.provider)).toEqual(["openai"]);
-    expect(readProviderRows({ providers: "nope" })).toEqual([]);
+    expect(readProviderRows({ ...plan([provider("openai")]), items: "nope" })).toEqual([]);
+    // The page is `items`: a provider in `providers` alone is not a row of the list.
+    expect(readProviderRows({ ...plan([provider("openai"), provider("moonshot")]), items: [provider("moonshot")] }).map((one) => one.provider)).toEqual(["moonshot"]);
   });
 
   test("the one act not built yet says so, and its route has not arrived", () => {
@@ -234,16 +237,19 @@ describe("the providers list", () => {
 const STATS = {
   provider: "openai",
   days: 30,
-  calls: 12,
-  failures: 1,
+  answered: 12,
+  failures: null,
   cost_minor: null,
-  unrecorded: [{ figure: "model_cost", why: "Nothing on this install records what a model call costs yet." }],
+  unrecorded: [
+    { figure: "failures", why: "A failed call is kept only where the routing decides whether a provider is resting." },
+    { figure: "model_cost", why: "Cost is kept per request, so it is not split by provider here." },
+  ],
 };
 
 describe("one provider's page", () => {
   test("the figures are the stats route's, and the cost nothing records is not recorded rather than nought", async () => {
     // What breaks if this is deleted: a dashboard drawing 0.00 for a cost nothing measured, which
-    // says the provider cost nothing.
+    // says the provider cost nothing, or a count of failures nothing attributes to a provider.
     const { container } = await consoleAt("/models/openai", {
       [`GET ${PROVIDERS}`]: () => plan([provider("openai")], [step(RUNG_A, "main", 0, "openai", "gpt-5-mini")]),
       [`GET ${PROVIDERS}/openai/stats`]: () => STATS,
@@ -252,10 +258,11 @@ describe("one provider's page", () => {
       expect(container.querySelector('[data-slot="kpi-strip"]')).not.toBeNull();
     });
     const figures = [...container.querySelectorAll('[data-slot="stat-card"]')].map((one) => one.textContent ?? "");
-    expect(figures[0]).toContain(CALLS_LABEL);
+    expect(figures[0]).toContain(ANSWERED_LABEL);
     expect(figures[0]).toContain("12");
     expect(figures[1]).toContain(FAILURES_LABEL);
-    expect(figures[1]).toContain("1");
+    expect(figures[1]).toContain(NOT_RECORDED);
+    expect(figures[1]).not.toMatch(/\b0\b/);
     expect(figures[2]).toContain(COST_LABEL);
     expect(figures[2]).toContain(NOT_RECORDED);
     expect(figures[2]).not.toMatch(/\b0(\.00)?\b/);

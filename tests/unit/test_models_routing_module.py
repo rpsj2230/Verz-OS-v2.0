@@ -51,11 +51,10 @@ from brain.ops.setting_store import SettingState
 from brain.provider_routes import (
     CHECK_NAMESPACE,
     COST_IS_NOT_SPLIT_BY_PROVIDER,
-    FAILED_OUTCOMES,
+    FAILURES_ARE_NOT_ATTRIBUTED,
     NO_COST_RECORDED,
-    NO_STEP_NO_CALLS,
-    NOT_SENT_OUTCOME,
     CheckView,
+    answered_by,
     check_value,
     checks_from,
     stats_view,
@@ -63,7 +62,6 @@ from brain.provider_routes import (
 from brain.routing_routes import MATRIX_READ, MATRIX_WRITE
 from brain.tables.identity import one_of
 from brain.tables.model_registry import ChangeKind
-from brain.tables.routing import ATTEMPT_OUTCOMES
 from tests.fixtures.console_http import headers
 from tests.fixtures.http_client import Response
 from tests.fixtures.retirable import has_pgvector, retirable
@@ -72,7 +70,7 @@ from tests.unit import test_routing_routes as routing
 from tests.unit.test_console_control_audit import pressed
 from tests.unit.test_credential_writes import entries
 from tests.unit.test_model_calls import rung
-from tests.unit.test_provider_routes import PROVIDERS, Estate, call
+from tests.unit.test_provider_routes import PROVIDERS, Estate, SettingSession, call
 from tests.unit.test_provider_routes import client as client  # the fixture, by its name
 from tests.unit.test_provider_routes import estate as estate  # the fixture, by its name
 from tests.unit.test_routing_routes import executed as executed  # the fixture, by its name
@@ -316,12 +314,13 @@ def test_the_providers_list_searches_filters_and_pages_and_the_steps_stay_whole(
     off = call(client, "GET", "u_narrow", f"{PROVIDERS}?filter=switched_on:false").json()
     first = call(client, "GET", "u_narrow", f"{PROVIDERS}?limit=1").json()
 
-    assert [one["provider"] for one in found["providers"]] == ["moonshot"]
-    assert len(found["rungs"]) == len(estate.rungs)
-    assert off["providers"] == []
-    assert len(first["providers"]) == 1 and first["next_cursor"]
+    assert [one["provider"] for one in found["items"]] == ["moonshot"]
+    assert len(found["providers"]) > 1 and len(found["rungs"]) == len(estate.rungs)
+    assert off["items"] == []
+    assert len(first["items"]) == 1 and first["next_cursor"]
     whole = call(client, "GET", "u_narrow", PROVIDERS).json()
-    assert [one["listed"] for one in whole["providers"]] == list(range(len(whole["providers"])))
+    assert [one["listed"] for one in whole["items"]] == list(range(len(whole["items"])))
+    assert whole["items"] == whole["providers"]
     assert "total" not in whole
 
 
@@ -368,21 +367,49 @@ def test_a_last_test_this_release_cannot_read_is_no_test() -> None:
     )
 
 
-def test_a_provider_no_step_names_has_no_calls_recorded_and_the_cost_is_never_nought(
-    client: TestClient,
+class _Counted:
+    """What the ledger's count answers in the stub: the number handed in."""
+
+    def __init__(self, number: int) -> None:
+        self.number = number
+
+    def scalar_one(self) -> int:
+        return self.number
+
+
+class LedgerSession(SettingSession):
+    """`tests.unit.test_provider_routes`' stub session, answering the ledger's count with 7."""
+
+    async def execute(self, statement: Any, *args: Any, **kwargs: Any) -> Any:
+        described = getattr(statement, "column_descriptions", None)
+        if described is not None and [one["name"] for one in described] == ["count"]:
+            return _Counted(7)
+        return await super().execute(statement, *args, **kwargs)
+
+
+@pytest.fixture
+def ledger(client: TestClient) -> TestClient:
+    """The providers' application with a session that also answers the ledger's count."""
+    client.app.state.db_sessions = async_sessionmaker(class_=LedgerSession)  # type: ignore[attr-defined]
+    return client
+
+
+def test_a_providers_figures_count_what_it_answered_and_name_failures_and_cost_unrecorded(
+    ledger: TestClient,
 ) -> None:
     """A figure nothing records is null and named, never zero. Delete this and the dashboard can
-    say a provider nobody routes to had no failures, which is a measurement nobody made."""
-    answer = call(client, "GET", "u_narrow", f"{PROVIDERS}/deepseek/stats")
-    missing = call(client, "GET", "u_narrow", f"{PROVIDERS}/nobody/stats")
-    refused = call(client, "GET", "u_none", f"{PROVIDERS}/deepseek/stats")
+    say a provider had no failures, which is a measurement nobody made, or a missing provider can
+    answer differently from one the reader may not see."""
+    answer = call(ledger, "GET", "u_narrow", f"{PROVIDERS}/deepseek/stats")
+    missing = call(ledger, "GET", "u_narrow", f"{PROVIDERS}/nobody/stats")
+    refused = call(ledger, "GET", "u_none", f"{PROVIDERS}/deepseek/stats")
 
     assert answer.status_code == 200
     body = answer.json()
-    assert (body["calls"], body["failures"], body["cost_minor"]) == (None, None, None)
+    assert (body["failures"], body["cost_minor"]) == (None, None)
+    assert body["answered"] == 7
     assert {one["figure"]: one["why"] for one in body["unrecorded"]} == {
-        "calls": NO_STEP_NO_CALLS,
-        "failures": NO_STEP_NO_CALLS,
+        "failures": FAILURES_ARE_NOT_ATTRIBUTED,
         "model_cost": COST_IS_NOT_SPLIT_BY_PROVIDER if RUN_SPEND_IS_RECORDED else NO_COST_RECORDED,
     }
     assert missing.status_code == refused.status_code == 404
@@ -392,25 +419,29 @@ def test_a_provider_no_step_names_has_no_calls_recorded_and_the_cost_is_never_no
     assert unlabelled[0] == unlabelled[1]
 
 
-def test_a_counted_provider_carries_its_numbers_and_only_the_cost_is_unrecorded() -> None:
-    """The positive half. Delete this and `stats_view` could drop a count it was handed."""
-    view = stats_view("anthropic", counted=(12, 3), cost_recorded=False)
-    recorded = stats_view("anthropic", counted=(12, 3), cost_recorded=True)
+def test_a_counted_provider_carries_its_number_and_names_failures_and_cost() -> None:
+    """The positive half. Delete this and `stats_view` could drop the count it was handed, or
+    draw a failure count it was never given."""
+    view = stats_view("anthropic", answered=12, cost_recorded=False)
+    recorded = stats_view("anthropic", answered=12, cost_recorded=True)
 
-    assert (view.calls, view.failures, view.cost_minor) == (12, 3, None)
-    assert [(one.figure, one.why) for one in view.unrecorded] == [("model_cost", NO_COST_RECORDED)]
-    assert recorded.cost_minor is None
-    assert [(one.figure, one.why) for one in recorded.unrecorded] == [
-        ("model_cost", COST_IS_NOT_SPLIT_BY_PROVIDER)
+    assert (view.answered, view.failures, view.cost_minor) == (12, None, None)
+    assert [(one.figure, one.why) for one in view.unrecorded] == [
+        ("failures", FAILURES_ARE_NOT_ATTRIBUTED),
+        ("model_cost", NO_COST_RECORDED),
     ]
+    assert [one.why for one in recorded.unrecorded][-1] == COST_IS_NOT_SPLIT_BY_PROVIDER
 
 
-def test_the_failures_are_attempt_outcomes_and_exclude_an_answer_and_an_unsent_call() -> None:
-    """Held against the column's own vocabulary. Delete this and a renamed outcome silently stops
-    counting as a failure, or `ok` starts to."""
-    assert set(ATTEMPT_OUTCOMES) >= FAILED_OUTCOMES | {NOT_SENT_OUTCOME}
-    assert {"ok", "refused", NOT_SENT_OUTCOME}.isdisjoint(FAILED_OUTCOMES)
-    assert set(ATTEMPT_OUTCOMES) - FAILED_OUTCOMES == {"ok", "refused", NOT_SENT_OUTCOME}
+def test_the_answered_count_reads_the_ledger_by_provider_and_window_and_no_attempt() -> None:
+    """Compiled, because the stub session runs nothing. Delete this and the count can be taken
+    from the executor's attempts, which no screen may read, or over every provider."""
+    compiled = answered_by("openai", AT).compile()
+    text = str(compiled)
+
+    assert "obs.request_telemetry" in text and "model_attempt" not in text
+    assert "request_telemetry.provider = " in text and "request_telemetry.received_at >= " in text
+    assert set(compiled.params.values()) == {"openai", AT}
 
 
 KEYISH = re.compile(r"key|credential|secret|vault|token", re.IGNORECASE)

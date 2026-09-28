@@ -109,22 +109,26 @@ refused while the install has no currency: a figure set in none is the plausibly
 `brain.locale` refuses to draw. See `brain.models.pricing` and `brain.ops.price_store`.
 
 **The providers are a list the console pages, searches and filters** (M27.16.1, 2026-09-28): the
-`providers` field of the read follows `brain.listing`'s contract, ordered as the product lists
-them, and every other field is the whole plan, because a step is not a provider and the matrix is
-one answer. **Each provider carries its last test**, kept as the `provider_check.<slug>` setting
-by `check`: how it ended and the model it used, with the row's own writer and instant, so the
-list says "Answered, 3 Sep" without a second table, and `0059`'s trigger puts each test on the
-ledger. See `A_TEST_IS_REMEMBERED_WHERE_ITS_SWITCH_IS`.
+read's `items` and `next_cursor` are `brain.api.Page`'s convention over `brain.listing`'s contract,
+ordered as the product lists them. `providers` stays every provider, unnarrowed, because the matrix
+and the forms beside it name providers the question may have left off the page, and every other
+field is the whole plan, because a step is not a provider and the matrix is one answer.
 
-**One provider's figures are `GET /models/providers/{provider}/stats`**: calls and failures over
-thirty days, counted from `ops.model_attempt` through the steps that name it. **Cost is named and
-left out, never nought.** While nothing records a call's cost
-(`brain.console.agent_profile.RUN_SPEND_IS_RECORDED`) it says so; once cost is recorded, it is
-recorded per request, whose calls can span providers, and read through the spend grant, which a
-reader of this screen need not hold, so it is not split by provider here and the Spend report shows
-it by model. A step's attempts are counted while the step is on the matrix: the table's row policy
-shows live steps only, so a retired or moved step's calls leave the figure with it, and the figure
-says so.
+**Each provider carries its last test**, kept as the `provider_check.<slug>` setting by `check`:
+how it ended and the model it used, with the row's own writer and instant, so the list says
+"Answered, 3 Sep" without a second table, and `0059`'s trigger puts each test on the ledger. See
+`A_TEST_IS_REMEMBERED_WHERE_ITS_SWITCH_IS`.
+
+**One provider's figures are `GET /models/providers/{provider}/stats`**, over thirty days.
+**Answered is counted from the metadata ledger**, `obs.request_telemetry`: the requests whose model
+calls all went to this provider, which is the one provider the row names (`brain.models.metering.
+_agreed`). The same ledger the Models screen's own figures read, under the same screen's
+everybody basis, and no row, person or question leaves the count. **Failures and cost are named
+and left out, never nought.** A failed call is kept only in `ops.model_attempt`, the executor's own
+store, which no screen reads (`tests/unit/test_operate_routes.py` holds it), and a request that
+failed over to another provider names the one that answered; cost is kept per request, whose calls
+can span providers, and read through the spend grant, which a reader of this screen need not hold,
+so the Spend report shows it by model. See `A_PROVIDERS_FIGURES_ARE_READ_FROM_THE_LEDGER`.
 
 **The routing configuration exports without keys** (M27.15.38): `GET /routing/export` is the
 plan's steps, the providers' switches and registry rows and the levels' numbers, as one JSON
@@ -209,7 +213,7 @@ from brain.ops.usage_store import UsageRecorder
 from brain.routing_routes import MATRIX_WRITE
 from brain.settings_routes import may_configure
 from brain.tables.config import SettingType
-from brain.tables.routing import ModelAttemptRow, RoutingRungRow
+from brain.tables.telemetry import RequestTelemetryRow
 
 log = structlog.get_logger()
 
@@ -324,20 +328,20 @@ CHECK_NAMESPACE: Final = "provider_check"
 #: How many days a provider's figures cover, as the other console figures read thirty days.
 STATS_DAYS: Final = 30
 
-#: The attempt outcomes a provider's figures count as failures: the provider or the connection
-#: failed. Not `ok`, not `refused`, which is the model declining on content and so an answer, and
-#: not `circuit_open`, which is an attempt the breaker never sent and so not a call at all.
-FAILED_OUTCOMES: Final[frozenset[str]] = frozenset(
-    {"connection_error", "context_exceeded", "provider_error", "rate_limited", "stopped", "timeout"}
+#: Why a provider's figures come from the metadata ledger and not from its attempts.
+A_PROVIDERS_FIGURES_ARE_READ_FROM_THE_LEDGER: Final = (
+    "A call in flight and a call that failed are written by the executor to its own store, which "
+    "decides whether a provider is resting and which no screen reads. The metadata ledger records "
+    "each finished request with the one provider that answered it, so that is what a provider's "
+    "page counts, and a failure, which the ledger does not attribute to a provider, is named as "
+    "not recorded rather than counted from a table the screen may not read."
 )
 
-#: The outcome of an attempt that was never sent, which is not counted as a call.
-NOT_SENT_OUTCOME: Final = "circuit_open"
-
-#: Why a provider's calls are not recorded, for one no step names.
-NO_STEP_NO_CALLS: Final = (
-    "No step on the failover matrix uses this provider, so no call to it is recorded. A test is "
-    "sent through its default model and is not counted here."
+#: Why a provider's failures are not shown.
+FAILURES_ARE_NOT_ATTRIBUTED: Final = (
+    "A failed call is kept only where the routing decides whether a provider is resting, and a "
+    "request that failed over is recorded under the provider that answered it. A provider resting "
+    "after failures is marked on the failover matrix."
 )
 
 #: Why a provider's cost is not recorded.
@@ -592,6 +596,9 @@ class ProvidersView(BaseModel):
     depth_alerts: list[ChainDepthAlertView] = []
     #: Whether this reader may change where answers are made. Presentation only.
     profile_editable: bool = False
+    #: The page of providers matching the list's question, in the product's order: the
+    #: `brain.api.Page` convention's `items`. A write's answer carries every provider here.
+    items: list[ProviderStateView] = []
     #: Present exactly when a further provider matches the list's question. See `brain.listing`.
     next_cursor: str | None = None
 
@@ -613,7 +620,8 @@ class ProviderStatsView(BaseModel):
 
     provider: str
     days: int
-    calls: int | None
+    #: Requests whose model calls all went to this provider, or null without a ledger.
+    answered: int | None
     failures: int | None
     cost_minor: int | None
     unrecorded: list[UnrecordedView]
@@ -858,6 +866,7 @@ def providers_view(
     return ProvidersView(
         profile=normalised_profile(plan.profile),
         providers=providers,
+        items=providers,
         rungs=rungs,
         exhausted_tiers=[one.value for one in exhausted_tiers(rows)],
         editable=may_switch(reach, now),
@@ -896,50 +905,36 @@ def checks_from(states: Mapping[str, SettingState]) -> dict[str, LastCheckView]:
     return found
 
 
-def attempt_figures(provider: str, since: datetime) -> Select[tuple[int, int]]:
-    """Calls to a provider since `since`, and how many failed, through its live steps.
+def answered_by(provider: str, since: datetime) -> Select[tuple[int]]:
+    """How many requests since `since` the metadata ledger records as answered by `provider`.
 
-    A call is a finished attempt the breaker sent; a failure is one whose outcome is in
-    `FAILED_OUTCOMES`. `deleted_at` is tested here as well as by the step table's policy, for
-    `brain.routing_routes.live_rungs`' reason.
+    The row's `provider` is the one provider every answered call of the request named, so a count
+    over it is the requests this provider answered. Bounded below by `received_at`, the ledger's
+    partition key, so the window reads the partitions it covers.
     """
-    sent = ModelAttemptRow.outcome != NOT_SENT_OUTCOME
-    failed = ModelAttemptRow.outcome.in_(sorted(FAILED_OUTCOMES))
-    return (
-        select(func.count().filter(sent), func.count().filter(failed))
-        .select_from(ModelAttemptRow)
-        .join(RoutingRungRow, RoutingRungRow.id == ModelAttemptRow.rung_id)
-        .where(
-            RoutingRungRow.provider == provider,
-            RoutingRungRow.deleted_at.is_(None),
-            ModelAttemptRow.started_at >= since,
-            ModelAttemptRow.finished_at.is_not(None),
-        )
+    return select(func.count()).where(
+        RequestTelemetryRow.provider == provider, RequestTelemetryRow.received_at >= since
     )
 
 
-def stats_view(
-    provider: str, *, counted: tuple[int, int] | None, cost_recorded: bool
-) -> ProviderStatsView:
-    """One provider's figures. `counted` is None for a provider no step names, whose calls are
-    then not recorded rather than nought; the cost is not recorded while nothing writes it."""
-    unrecorded = []
-    if counted is None:
-        unrecorded.append(UnrecordedView(figure="calls", why=NO_STEP_NO_CALLS))
-        unrecorded.append(UnrecordedView(figure="failures", why=NO_STEP_NO_CALLS))
-    unrecorded.append(
-        UnrecordedView(
-            figure="model_cost",
-            why=COST_IS_NOT_SPLIT_BY_PROVIDER if cost_recorded else NO_COST_RECORDED,
-        )
-    )
+def stats_view(provider: str, *, answered: int, cost_recorded: bool) -> ProviderStatsView:
+    """One provider's figures: what it answered, and failures and cost named as not recorded.
+
+    See `A_PROVIDERS_FIGURES_ARE_READ_FROM_THE_LEDGER` for why failures are not a number here.
+    """
     return ProviderStatsView(
         provider=provider,
         days=STATS_DAYS,
-        calls=None if counted is None else counted[0],
-        failures=None if counted is None else counted[1],
+        answered=answered,
+        failures=None,
         cost_minor=None,
-        unrecorded=unrecorded,
+        unrecorded=[
+            UnrecordedView(figure="failures", why=FAILURES_ARE_NOT_ATTRIBUTED),
+            UnrecordedView(
+                figure="model_cost",
+                why=COST_IS_NOT_SPLIT_BY_PROVIDER if cost_recorded else NO_COST_RECORDED,
+            ),
+        ],
     )
 
 
@@ -1261,15 +1256,16 @@ router = APIRouter(prefix=API_PREFIX, tags=["models"])
 
 @router.get("/models/providers", response_model=ProvidersView, responses=COMMON_RESPONSES)
 async def providers(request: Request, asked: Asked, listed: ProvidersQuery) -> ProvidersView:
-    """Every provider matching the list's question, and every live rung, as the next call will
-    see them. The question narrows `providers` alone: the steps are the whole matrix."""
+    """Every provider, the page of them matching the list's question as `items`, and every live
+    rung, as the next call will see them. The question narrows `items` alone: `providers` and the
+    steps are the whole of the plan."""
     if not may_read(asked.reach, asked.now):
         log.info("providers not answerable", principal=asked.caller.principal.id)
         raise _not_answerable()
     plan = PROVIDERS.plan(listed, reader=asked.caller.principal.id)
     view = await _view(request, asked, models_of(request).calls)
     page = plan.page(view.providers)
-    return view.model_copy(update={"providers": list(page.items), "next_cursor": page.next_cursor})
+    return view.model_copy(update={"items": list(page.items), "next_cursor": page.next_cursor})
 
 
 @router.get(
@@ -1278,24 +1274,21 @@ async def providers(request: Request, asked: Asked, listed: ProvidersQuery) -> P
     responses=COMMON_RESPONSES,
 )
 async def provider_stats(request: Request, provider: str, asked: Asked) -> ProviderStatsView:
-    """One provider's calls, failures and cost over `STATS_DAYS`, each figure a number or named
-    as not recorded. A provider that does not exist is refused as one the reader may not see."""
+    """One provider's answered requests over `STATS_DAYS`, with failures and cost named as not
+    recorded. A provider that does not exist is refused as one the reader may not see."""
     if not may_read(asked.reach, asked.now):
         log.info("provider stats not answerable", principal=asked.caller.principal.id)
         raise _not_answerable()
     plan = await models_of(request).calls.planned()
     if provider not in listed_providers(plan):
         raise _not_answerable()
-    counted: tuple[int, int] | None = None
-    if names_the_provider(plan, provider):
-        factory = _sessions(request)
-        if factory is None:
-            raise Failed("no database on this process")
-        since = asked.now - timedelta(days=STATS_DAYS)
-        async with factory() as session:
-            calls, failures = (await session.execute(attempt_figures(provider, since))).one()
-        counted = (int(calls), int(failures))
-    return stats_view(provider, counted=counted, cost_recorded=RUN_SPEND_IS_RECORDED)
+    factory = _sessions(request)
+    if factory is None:
+        raise Failed("no database on this process")
+    since = asked.now - timedelta(days=STATS_DAYS)
+    async with factory() as session:
+        answered = (await session.execute(answered_by(provider, since))).scalar_one()
+    return stats_view(provider, answered=int(answered), cost_recorded=RUN_SPEND_IS_RECORDED)
 
 
 @router.get("/routing/export", response_model=RoutingExportView, responses=COMMON_RESPONSES)

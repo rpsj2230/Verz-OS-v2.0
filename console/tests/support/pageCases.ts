@@ -628,7 +628,7 @@ const LIVE_RUNS = {
  * names a credential and carries a registry row, a last test and what it was sent, so every control,
  * the key form and the terms form are drawn. The slug is the provider page's address too.
  */
-export const PROVIDERS_ANSWER = {
+const PROVIDERS_PLAN = {
   profile: "hosted",
   providers: [
     {
@@ -716,14 +716,20 @@ export const PROVIDERS_ANSWER = {
   next_cursor: null,
 };
 
-/** One provider's figures: two counted, and the cost named as not recorded with its reason. */
+/** The same answer with its list page: the list route answers every provider as `items` too. */
+export const PROVIDERS_ANSWER = { ...PROVIDERS_PLAN, items: PROVIDERS_PLAN.providers };
+
+/** One provider's figures: what it answered, with failures and cost named as not recorded. */
 const PROVIDER_STATS = {
   provider: UNBROKEN,
   days: 30,
-  calls: 12,
-  failures: 1,
+  answered: 12,
+  failures: null,
   cost_minor: null,
-  unrecorded: [{ figure: "model_cost", why: UNBROKEN }],
+  unrecorded: [
+    { figure: "failures", why: UNBROKEN },
+    { figure: "model_cost", why: UNBROKEN },
+  ],
 };
 
 /** A provider's history: one entry under its own subject, switched off by a person named by id. */
