@@ -39,7 +39,23 @@ binding table exists (CH2's) nobody is bound, and `NoBindingsYet` says so rather
 `brain.gate.addressing.from_mention` takes a leading `@agent_id` off the question, and only a
 leading one, for the reason that module gives about quoted text choosing an agent.
 
-Task ids: M3.2.2, M3.9.8, M10.2.1, M10.3.3, M10.6.1, M10.6.3
+**A shared conversation is answered only when a message names the bot (M10.2.6).** A chat whose
+wire reads a `brain.channels.adapter.Conversation` says who the message named, by digest; in a
+conversation more than one person reads, a message that did not name the bot's own identity is
+somebody talking to somebody else, and it is neither answered nor prompted. See
+`A_SHARED_CONVERSATION_IS_ANSWERED_ONLY_WHEN_IT_NAMES_THE_BOT`.
+
+**The binding prompt is sent once, to the sender alone (M10.3.3, M1.8.5).** Keyed on the
+identity's digest and the record's last change, so a second message from one unbound sender does
+not repeat it, and addressed to the sender's own conversation with the bot, so a room is not told
+which of its members is unbound. See `THE_BINDING_PROMPT_IS_SENT_ONCE_AND_TO_THE_SENDER_ALONE`.
+
+**A binding code is offered to the binder before the prompt, from a private conversation only
+(M1.8.5).** `ChatBinder` is the receiving side of binding: the code is minted in a web session and
+redeemed by the store that keeps bindings (CH2's), and nothing here knows its shape. A code posted
+where others read it binds nobody. See `A_CODE_IS_REDEEMED_ONLY_WHERE_THE_SENDER_ALONE_READS_IT`.
+
+Task ids: M3.2.2, M3.9.8, M10.2.1, M10.2.6, M10.3.3, M10.6.1, M10.6.3, M1.8.5
 """
 
 from __future__ import annotations
@@ -47,14 +63,14 @@ from __future__ import annotations
 import asyncio
 import enum
 import hashlib
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Final, Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from brain.channels.adapter import Arrived, ChannelAdapter, ChannelWire
+from brain.channels.adapter import BOT_ID, Arrived, ChannelAdapter, ChannelWire, Conversation
 from brain.channels.outbound import Outgoing
 from brain.channels.webhook import WebhookRefusedError
 from brain.gate.addressing import Address, from_mention
@@ -89,6 +105,39 @@ NOBODY_IS_BOUND_UNTIL_A_BINDING_IS_KEPT: Final = (
     "have been answered is told how to bind, and nobody is answered as somebody they are not."
 )
 
+#: Why a message in a shared conversation that does not name the bot is left alone.
+A_SHARED_CONVERSATION_IS_ANSWERED_ONLY_WHEN_IT_NAMES_THE_BOT: Final = (
+    "In a conversation more than one person reads, a message is for the bot only when its "
+    "mentions name the bot's own identity, keyed on the vendor's id and never on the text. Any "
+    "other message is somebody talking to somebody else, and it is neither answered nor prompted."
+)
+
+#: Why the prompt to an unbound sender is keyed on them and addressed to them alone.
+THE_BINDING_PROMPT_IS_SENT_ONCE_AND_TO_THE_SENDER_ALONE: Final = (
+    "A sender bound to nobody is told how to bind once for each configuration of the channel, "
+    "under a key derived from their identity's digest, so a second message does not repeat it; "
+    "it goes to the sender's own conversation with the bot, so a room is never told which of its "
+    "members is unbound."
+)
+
+#: Why a code posted where others read it binds nobody.
+A_CODE_IS_REDEEMED_ONLY_WHERE_THE_SENDER_ALONE_READS_IT: Final = (
+    "A binding code travels through the channel, so in a shared conversation everybody present "
+    "has read it and could present it from their own account first. It is offered to the binder "
+    "only from a conversation the sender alone reads; one posted where others read it binds nobody."
+)
+
+#: What a sender is told when their code bound this chat to them. Says nothing about anybody else.
+LINKED_TOLD: Final = (
+    "This chat is now linked to your account. Ask me anything you could ask in the console."
+)
+
+#: What a sender is told when a message that was a code bound nothing.
+CODE_REFUSED_TOLD: Final = (
+    "That code did not link this chat. Codes work once and for ten minutes: make a new one from "
+    "your profile in the console and send it here."
+)
+
 #: The largest body read. A chat message with its envelope, never a document: a vendor that
 #: sends a file sends a reference to it.
 MAX_BODY_BYTES: Final = 256 * 1024
@@ -103,6 +152,8 @@ class Inbound:
 
     event: ChannelEvent
     address: Address
+    #: Where it was said, for a chat whose conversations can hold more than one reader.
+    conversation: Conversation | None = None
 
 
 class ReceiptKind(enum.StrEnum):
@@ -135,12 +186,47 @@ class ChannelBindings(Protocol):
 
 
 class ChannelAnswerer(Protocol):
-    """What answers a bound sender: the gate, run as them. The chat channel's package wires it."""
+    """What answers a bound sender: the gate, run as them. `brain.chat_answer.ChatAnswerer`.
+
+    A sequence, because one question in a shared conversation can need more than one message: a
+    posting everybody reads, made at their floor, and an aside only the asker reads.
+    """
 
     async def answer(
-        self, inbound: Inbound, *, binding: Binding, reply_to: str, now: datetime
-    ) -> Outgoing:
-        """The answer to send, made at the bound person's reach and carrying its hash."""
+        self,
+        inbound: Inbound,
+        *,
+        binding: Binding,
+        record: ChannelRecord,
+        reply_to: str,
+        now: datetime,
+    ) -> Sequence[Outgoing]:
+        """The messages to send, each made at the reach it may be read at and carrying its hash."""
+        ...
+
+
+class Redeemed(enum.StrEnum):
+    """What offering a message to the binder came to."""
+
+    #: The message was a live code, and this chat identity is now bound to its minter.
+    BOUND = "bound"
+    #: The message was a code and binds nobody: wrong, expired or already used.
+    REFUSED = "refused"
+    #: The message is not a code; it goes on to be answered as an unbound sender's message.
+    NOT_A_CODE = "not_a_code"
+
+
+class ChatBinder(Protocol):
+    """Where a chat identity is bound with a single-use code minted in a web session.
+
+    The receiving side of M1.8.5 and M10.3.1: this package hands over the event and what the
+    sender typed, and the store that keeps bindings (CH2's) decides whether it is a code, redeems
+    it once through `brain.channels.binding.bind_once` and keeps the binding. Nothing here knows
+    a code's shape, so the two cannot disagree about it.
+    """
+
+    async def redeem(self, event: ChannelEvent, text: str, *, now: datetime) -> Redeemed:
+        """Bind this event's sender with the code in `text`, or say why nothing was bound."""
         ...
 
 
@@ -204,19 +290,20 @@ async def receive(
     if secret is None:
         return await _refuse(deliveries, channel, RefusedBecause.NO_SECRET)
 
-    arrived = Arrived(headers=headers, body=raw)
     try:
-        wire.verify(arrived, secret, now)
+        # What verified is what is read: the same bytes, or, for a vendor that encrypts, the
+        # body opened with the secret. Nothing below sees the request as it arrived.
+        opened = wire.verify(Arrived(headers=headers, body=raw), secret, now)
     except WebhookRefusedError:
         return await _refuse(deliveries, channel, RefusedBecause.BAD_SIGNATURE)
     del secret
 
-    handshake = wire.handshake(arrived)
+    handshake = wire.handshake(opened)
     if handshake is not None:
         return Receipt(kind=ReceiptKind.HANDSHAKE, handshake=handshake)
 
     try:
-        received = wire.read(arrived)
+        received = wire.read(opened)
         first = await claims.first(received.event)
     except ValueError:
         # `ExternalIdTooLongError` is one: an id the dedupe key cannot hold is refused rather
@@ -231,7 +318,11 @@ async def receive(
         return Receipt(kind=ReceiptKind.REDELIVERED)
     return Receipt(
         kind=ReceiptKind.ACCEPTED,
-        inbound=Inbound(event=received.event, address=from_mention(received.event.text)),
+        inbound=Inbound(
+            event=received.event,
+            address=from_mention(received.event.text),
+            conversation=received.conversation,
+        ),
         reply_to=received.reply_to,
     )
 
@@ -250,6 +341,32 @@ def reply_intent(record: ChannelRecord, event: ChannelEvent) -> Intent:
     return Intent(principal_id=record.updated_by, intent_ref=f"channel_reply.{digest}")
 
 
+def prompt_intent(record: ChannelRecord, digest: str) -> Intent:
+    """The intent the binding prompt is sent under: one per sender per configuration.
+
+    Keyed on the identity's digest rather than the message, so the operation ledger sends it once
+    however many messages the sender writes, and on the record's last change, so a channel set up
+    again prompts again. See `THE_BINDING_PROMPT_IS_SENT_ONCE_AND_TO_THE_SENDER_ALONE`.
+    """
+    version = int(record.updated_at.timestamp() * 1_000_000)
+    return Intent(
+        principal_id=record.updated_by, intent_ref=f"channel_prompt.{version}.{digest[:32]}"
+    )
+
+
+def names_the_bot(record: ChannelRecord, conversation: Conversation) -> bool:
+    """Whether a message in this conversation is for the bot. See the named constant.
+
+    A conversation only its sender reads is for the bot by arriving. A shared one must have named
+    the identity the record's `BOT_ID` holds; a record naming no bot answers no shared message,
+    which is the narrow direction.
+    """
+    if not conversation.shared:
+        return True
+    bot = record.tenant.get(BOT_ID, "")
+    return bool(bot) and identity_hash(record.channel, bot) in conversation.addressed
+
+
 async def reply_for(
     receipt: Receipt,
     *,
@@ -257,30 +374,54 @@ async def reply_for(
     bindings: ChannelBindings,
     answerer: ChannelAnswerer | None,
     now: datetime,
-) -> Outgoing | None:
-    """What to send back to an accepted message, or None when nothing on this install answers it.
+    binder: ChatBinder | None = None,
+) -> tuple[Outgoing, ...] | None:
+    """What to send back to an accepted message: None when nothing on this install answers it,
+    and nothing at all for a shared conversation's message that was not for the bot.
 
-    A sender bound to nobody is sent the unrecognised prompt and nothing else (M10.3.3). A bound
-    sender is the answerer's; with none wired the caller records `not_answerable`.
+    A sender bound to nobody may be binding: a message in a conversation they alone read is
+    offered to `binder` first (M1.8.5). Otherwise they are sent the unrecognised prompt, once and
+    to them alone (M10.3.3). A bound sender is the answerer's; with none wired the caller records
+    `not_answerable`.
     """
     if receipt.inbound is None:
         msg = "only an accepted message is replied to"
         raise ValueError(msg)
-    event = receipt.inbound.event
-    binding = await bindings.binding_for(
-        event.channel, identity_hash(event.channel, event.channel_identity)
-    )
+    inbound = receipt.inbound
+    event = inbound.event
+    conversation = inbound.conversation
+    if conversation is not None and not names_the_bot(record, conversation):
+        return ()
+    digest = identity_hash(event.channel, event.channel_identity)
+    binding = await bindings.binding_for(event.channel, digest)
     if binding is None:
-        return Outgoing(
-            channel=event.channel,
-            to=receipt.reply_to,
-            intent=reply_intent(record, event),
-            text=Unrecognised(channel=event.channel).prompt,
+        private = conversation is None or not conversation.shared
+        if binder is not None and private:
+            redeemed = await binder.redeem(event, event.text.strip(), now=now)
+            if redeemed is not Redeemed.NOT_A_CODE:
+                told = LINKED_TOLD if redeemed is Redeemed.BOUND else CODE_REFUSED_TOLD
+                return (
+                    Outgoing(
+                        channel=event.channel,
+                        to=receipt.reply_to,
+                        intent=reply_intent(record, event),
+                        text=told,
+                    ),
+                )
+        return (
+            Outgoing(
+                channel=event.channel,
+                to=receipt.reply_to if conversation is None else conversation.sender_to,
+                intent=prompt_intent(record, digest),
+                text=Unrecognised(channel=event.channel).prompt,
+            ),
         )
     if answerer is None:
         return None
-    return await answerer.answer(
-        receipt.inbound, binding=binding, reply_to=receipt.reply_to, now=now
+    return tuple(
+        await answerer.answer(
+            inbound, binding=binding, record=record, reply_to=receipt.reply_to, now=now
+        )
     )
 
 

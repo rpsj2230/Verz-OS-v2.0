@@ -229,11 +229,32 @@ class HttpsSender:
         *,
         timeout_seconds: float = DELIVERY_TIMEOUT_SECONDS,
         context: ssl.SSLContext | None = None,
+        kept_answer_bytes: int = 0,
     ) -> None:
         self._timeout = timeout_seconds
         self._context = context if context is not None else ssl.create_default_context()
+        # Zero for a webhook, whose status is its answer. A chat vendor answers in the body, so
+        # `brain.channel_routes.HttpsTransport` asks for it to be kept, up to this bound.
+        self._kept = kept_answer_bytes
 
     def send(self, request: SignedRequest) -> SendResult:
+        """POST the request: a delivery."""
+        return self._round_trip(request, "POST")
+
+    def read(self, request: SignedRequest) -> SendResult:
+        """GET the address, with no body: a read that changes nothing at the far end.
+
+        Its own method rather than a flag on `send`, so a read is never made through the door
+        `brain.ops.effects` holds to a key, and a delivery never through this one.
+        """
+        return self._round_trip(request, "GET")
+
+    def mint(self, request: SignedRequest) -> SendResult:
+        """POST a credential for a short-lived token: the exchange a chat vendor asks before a
+        send or a read. It changes nothing at the far end, and the token expires on its own."""
+        return self._round_trip(request, "POST")
+
+    def _round_trip(self, request: SignedRequest, method: str) -> SendResult:
         parts = urlsplit(request.url)
         host = parts.hostname
         if parts.scheme != "https" or not host:
@@ -254,12 +275,15 @@ class HttpsSender:
             "User-Agent": USER_AGENT,
         }
         try:
-            connection.request("POST", path, body=request.body, headers=headers)
+            connection.request(
+                method, path, body=request.body if method == "POST" else None, headers=headers
+            )
             answer = connection.getresponse()
-            answer.read(MAX_ANSWER_BYTES)
+            read = answer.read(max(MAX_ANSWER_BYTES, self._kept))
             return SendResult(
                 status=answer.status,
                 retry_after_seconds=retry_after_seconds(answer.getheader("Retry-After")),
+                body=read[: self._kept],
             )
         except TimeoutError:
             return SendResult(timed_out=True)

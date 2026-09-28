@@ -47,14 +47,25 @@ stops its sending.
 **The transport is one class for every channel.** `HttpsTransport` checks the vendor's address
 with `brain.tools.fetch.assert_fetchable` at every send and connects to the address it checked,
 through `brain.ops.webhook_delivery.HttpsSender`, so no channel has its own HTTP client and none
-can skip the address rule.
+can skip the address rule. It keeps the vendor's answer, because Lark refuses inside a 200; makes a
+request's token exchange immediately before it, because Lark authorises with a token minted from
+the App ID and App Secret; and has a `read` beside `send`, a GET for who is in a conversation,
+which `brain.ops.effects` classifies as a read so no send can go by it.
 
-Task ids: M10.2.1, M10.6.1, M10.6.3, M10.3.3, M10.4.5, M3.2.2
+**A chat message is acknowledged before it is answered, and answered by the gate as the bound
+person.** A chat vendor posts again after a few seconds of silence, so a message that arrived with
+a conversation is answered 200 once claimed and its reply is made after the response, recorded in
+the channel's deliveries like any other (`A_CHAT_IS_ACKNOWLEDGED_BEFORE_IT_IS_ANSWERED`). The reply
+is `brain.chat_answer.ChatAnswerer`'s on any process with a gate, and a code sent by an unbound
+sender is offered to `app.state.channel_binder` once the binding store sets one.
+
+Task ids: M10.2.1, M10.6.1, M10.6.3, M10.3.3, M10.4.5, M3.2.2, M10.2.6, M1.8.5
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from typing import Annotated, Final
@@ -64,9 +75,10 @@ import structlog
 from fastapi import APIRouter, Path, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
+from starlette.background import BackgroundTask
 
 from brain.api import API_PREFIX, COMMON_RESPONSES, ErrorBody, NoEchoRoute
-from brain.api_routes import Asked
+from brain.api_routes import Asked, wiring_of
 from brain.attribution import trace_of_request
 from brain.channels.adapter import (
     ChannelTransport,
@@ -80,12 +92,15 @@ from brain.channels.inbound import (
     MAX_BODY_BYTES,
     ChannelAnswerer,
     ChannelBindings,
+    ChatBinder,
     NoBindingsYet,
+    Receipt,
     ReceiptKind,
     receive,
     reply_for,
 )
 from brain.channels.outbound import Delivered, LedgerRunner, Outgoing, deliver
+from brain.chat_answer import ChatAnswerer
 from brain.core.entitlement import EntitlementSet
 from brain.core.errors import Absent, Failed
 from brain.credential_routes import credentials_of
@@ -119,6 +134,7 @@ from brain.ops.idempotency import Intent, Issued, OperationLedger
 from brain.ops.openbao import OpenBaoVault
 from brain.ops.operation_store import PostgresOperationLedger
 from brain.ops.outbox import SignedRequest
+from brain.ops.outbox_store import SendResult
 from brain.ops.secrets import VaultRole
 from brain.ops.webhook_delivery import HttpsSender, SystemResolver
 from brain.routing_routes import sessions_of
@@ -143,6 +159,14 @@ A_PLATFORM_PROVES_A_SIGNATURE_AND_HAS_NO_SIGN_IN: Final = (
     "no caller. What it takes instead is the channel's signature over the exact bytes, checked "
     "before the body is read, on a channel that is switched on; an unsigned request is refused, "
     "and on a channel that is not received it is answered as an address with nothing at it."
+)
+
+#: Why a chat's reply is made after the vendor has been answered.
+A_CHAT_IS_ACKNOWLEDGED_BEFORE_IT_IS_ANSWERED: Final = (
+    "A chat vendor waits a few seconds for the address to answer and posts the event again when "
+    "it hears nothing, and an answer can take longer than that. So a chat message is answered 200 "
+    "as soon as it is claimed, and the reply is made and sent after; a redelivery meanwhile is "
+    "refused by the claim, and what the reply came to is in the channel's deliveries."
 )
 
 #: Why a channel is governed by the connector authority over its own name.
@@ -177,6 +201,10 @@ SIGNED_NOT_SIGNED_IN: Final[frozenset[str]] = frozenset({API_PREFIX + EVENTS_PAT
 
 #: The source name a channel's authority is asked over: the Lark chat use's slot, generalised.
 CHANNEL_SOURCE_SUFFIX: Final = "_channel"
+
+#: How much of a vendor's answer the transport keeps: a chat vendor's refusal, a page of the
+#: people in one conversation. The bound on what arrives, applied to what is read back.
+KEPT_ANSWER_BYTES: Final = MAX_BODY_BYTES
 
 #: The longest tenant value kept: an identifier or an address, never a document.
 MAX_TENANT_VALUE_CHARS: Final = 500
@@ -336,27 +364,92 @@ class EventView(BaseModel):
 
 
 class HttpsTransport:
-    """`ChannelTransport` over the pinned HTTPS sender, to an address checked at every send."""
+    """`ChannelTransport` over the pinned HTTPS sender, to an address checked at every request.
+
+    Keeps the vendor's answer, up to `KEPT_ANSWER_BYTES`, because a chat vendor refuses inside a
+    200 and the wire that knows it has to read the body to say so. A request carrying a
+    `TokenExchange` has it made first, to an address checked the same way, and the token put in
+    its `Authorization` header; the token is held for that one request and nowhere else. An
+    exchange that does not produce a token is answered as the exchange's own answer, so the wire
+    judges what the vendor said about the credential rather than a request never made.
+    """
 
     def __init__(self, resolver: Resolver | None = None, sender: HttpsSender | None = None) -> None:
         self._resolver = resolver if resolver is not None else SystemResolver()
-        self._sender = sender if sender is not None else HttpsSender()
+        self._sender = (
+            sender if sender is not None else HttpsSender(kept_answer_bytes=KEPT_ANSWER_BYTES)
+        )
 
-    def send(self, request: VendorRequest) -> VendorAnswer:
+    def _signed(
+        self, url: str, headers: Mapping[str, str], body: bytes
+    ) -> SignedRequest | VendorAnswer:
+        """The request to the address that passed the check, or the refusal to connect."""
         try:
-            target = assert_fetchable(request.url, self._resolver)
+            target = assert_fetchable(url, self._resolver)
         except UnsafeAddressError:
             return VendorAnswer(unsafe_address=True)
-        result = self._sender.send(
-            SignedRequest(
-                url=request.url, address=target.address, headers=request.headers, body=request.body
-            )
-        )
-        return VendorAnswer(
-            status=result.status,
-            timed_out=result.timed_out,
-            connection_failed=result.connection_failed,
-        )
+        return SignedRequest(url=url, address=target.address, headers=headers, body=body)
+
+    def _authorised(self, request: VendorRequest) -> dict[str, str] | VendorAnswer:
+        """The request's headers with the exchanged token in them, or the exchange's answer."""
+        headers = dict(request.headers)
+        exchange = request.exchange
+        if exchange is None:
+            return headers
+        signed = self._signed(exchange.url, {}, exchange.body)
+        if isinstance(signed, VendorAnswer):
+            return signed
+        answered = _answer_of(self._sender.mint(signed))
+        token = bearer_from(answered, exchange.answered_in)
+        if token is None:
+            return answered
+        headers["Authorization"] = f"Bearer {token}"
+        return headers
+
+    def send(self, request: VendorRequest) -> VendorAnswer:
+        if request.method != "POST":
+            msg = "a send is a POST; a read goes through `read`"
+            raise ValueError(msg)
+        headers = self._authorised(request)
+        if isinstance(headers, VendorAnswer):
+            return headers
+        signed = self._signed(request.url, headers, request.body)
+        if isinstance(signed, VendorAnswer):
+            return signed
+        return _answer_of(self._sender.send(signed))
+
+    def read(self, request: VendorRequest) -> VendorAnswer:
+        if request.method != "GET":
+            msg = "a read is a GET; a send goes through `send`, inside `issue_once`"
+            raise ValueError(msg)
+        headers = self._authorised(request)
+        if isinstance(headers, VendorAnswer):
+            return headers
+        signed = self._signed(request.url, headers, b"")
+        if isinstance(signed, VendorAnswer):
+            return signed
+        return _answer_of(self._sender.read(signed))
+
+
+def _answer_of(result: SendResult) -> VendorAnswer:
+    return VendorAnswer(
+        status=result.status,
+        timed_out=result.timed_out,
+        connection_failed=result.connection_failed,
+        body=result.body,
+    )
+
+
+def bearer_from(answer: VendorAnswer, answered_in: str) -> str | None:
+    """The token a successful exchange answered with, or None for anything else."""
+    if answer.status != 200 or not answer.body:
+        return None
+    try:
+        parsed = json.loads(answer.body)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    token = parsed.get(answered_in) if isinstance(parsed, dict) else None
+    return token if isinstance(token, str) and token else None
 
 
 # ------------------------------------------------------------------------ the wiring
@@ -441,8 +534,29 @@ def bindings_of(request: Request) -> ChannelBindings:
 
 
 def answerer_of(request: Request) -> ChannelAnswerer | None:
-    """`app.state.channel_answerer` once the chat channel's package wires one, or None."""
-    return getattr(request.app.state, "channel_answerer", None)
+    """`app.state.channel_answerer` when a test put one there; otherwise the gate, run as the
+    bound person through `brain.chat_answer.ChatAnswerer`, on a process that has a gate to run;
+    otherwise None, which is recorded as `not_answerable`."""
+    found: ChannelAnswerer | None = getattr(request.app.state, "channel_answerer", None)
+    if found is not None:
+        return found
+    if wiring_of(request) is None:
+        return None
+    return ChatAnswerer(
+        request,
+        secrets=secrets_of(request),
+        transport=transport_of(request),
+        bindings=bindings_of(request),
+    )
+
+
+def binder_of(request: Request) -> ChatBinder | None:
+    """`app.state.channel_binder` once the binding store is wired (CH2's), None until then.
+
+    None takes no message as a code, so an unbound sender is prompted, which is
+    `NOBODY_IS_BOUND_UNTIL_A_BINDING_IS_KEPT`'s direction."""
+    found: ChatBinder | None = getattr(request.app.state, "channel_binder", None)
+    return found
 
 
 class _NoReach:
@@ -590,27 +704,59 @@ async def channel_event(name: Name, request: Request) -> JSONResponse:
         return JSONResponse(status_code=200, content=EventView(status=receipt.kind).model_dump())
 
     assert record is not None
-    reply = await reply_for(
-        receipt,
-        record=record,
-        bindings=bindings_of(request),
-        answerer=answerer_of(request),
-        now=now,
-    )
-    if reply is None:
+    if receipt.inbound is not None and receipt.inbound.conversation is not None:
+        # A chat vendor waits seconds, not the length of an answer, and posts the event again
+        # when it hears nothing: so the reply is made after the answer to the vendor has gone.
+        # See `A_CHAT_IS_ACKNOWLEDGED_BEFORE_IT_IS_ANSWERED`.
+        view = EventView(status=receipt.kind)
+        return JSONResponse(
+            status_code=200,
+            content=view.model_dump(),
+            background=BackgroundTask(_reply, request, receipt, record, now),
+        )
+    outcome = await _reply(request, receipt, record, now)
+    view = EventView(status=receipt.kind, reply=outcome)
+    return JSONResponse(status_code=200, content=view.model_dump())
+
+
+async def _reply(
+    request: Request, receipt: Receipt, record: ChannelRecord, now: datetime
+) -> DeliveryOutcome | None:
+    """Make and send the reply to an accepted message; what the first message sent came to.
+
+    Nothing sent answers None: a shared conversation's message that was not for the bot. Nothing
+    able to answer records `not_answerable`. An answer that failed while it was being made is
+    recorded the same way and logged by its kind alone, because a chat has nobody waiting on a
+    status code to be told, and the message it answered is claimed and will not come again.
+    """
+    deliveries = deliveries_of(request)
+    try:
+        replies = await reply_for(
+            receipt,
+            record=record,
+            bindings=bindings_of(request),
+            answerer=answerer_of(request),
+            binder=binder_of(request),
+            now=now,
+        )
+    except Exception as exc:
+        log.warning("channel reply not made", channel=record.channel.value, kind=type(exc).__name__)
+        replies = None
+    if replies is None:
         await deliveries.record(
             DeliveryEntry(
-                channel=channel,
+                channel=record.channel,
                 direction=Direction.OUTBOUND,
                 outcome=DeliveryOutcome.REFUSED,
                 reason=RefusedBecause.NOT_ANSWERABLE,
             )
         )
-        view = EventView(status=receipt.kind, reply=DeliveryOutcome.REFUSED)
-        return JSONResponse(status_code=200, content=view.model_dump())
-    delivered = await _deliver(request, reply, record, now)
-    view = EventView(status=receipt.kind, reply=delivered.outcome)
-    return JSONResponse(status_code=200, content=view.model_dump())
+        return DeliveryOutcome.REFUSED
+    # Each message is held to its reader's reach when it leaves, not when the event came.
+    outcomes = [
+        (await _deliver(request, one, record, datetime.now(UTC))).outcome for one in replies
+    ]
+    return outcomes[0] if outcomes else None
 
 
 async def _deliver(

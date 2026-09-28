@@ -47,29 +47,68 @@ accepts the mapping Lark posts, refuses anything it cannot read, and produces th
 could not be tested for the case that matters, which is a group message rendered at the
 wrong reach.
 
-Task ids: M10.2.2, M10.2.5, M10.2.6
+**`WIRE` is Lark on the one events address, and it trusts nothing it has not opened.** Lark
+signs an event with the app's Encrypt Key over the time, a nonce and the exact bytes, encrypts
+the body with the same key, and puts the Verification Token inside it. `verify_event` checks the
+signature over the bytes before anything is decrypted, opens the body, and compares the token in
+constant time; a body that is not encrypted is refused, so the one downgrade an attacker holding
+neither key could try is closed. Lark's address check, the `url_verification` challenge, is the
+one request that may arrive unsigned, and it is answered only when it decrypts under the key and
+carries the token, and it causes nothing but its own echo. See
+`AN_EVENT_IS_SIGNED_ENCRYPTED_AND_TOKENED_OR_REFUSED`. The algorithm is Lark's own server SDK's
+(`larksuite/oapi-sdk-python`, `lark_oapi/event/dispatcher_handler.py` and
+`lark_oapi/core/utils/decryptor.py`) and the decryption is held to the worked example in Lark's
+event subscription documentation, "test key" opening to "hello world".
+
+**Every reply is sent with a token minted for it.** Lark authorises a send with a tenant access
+token exchanged for the App ID and App Secret, so `request_for` builds the send and hands the
+exchange beside it as a `TokenExchange`; the transport makes the two back to back and keeps the
+token nowhere. A room posting, a direct message and a per-viewer card are three addresses in one
+`to` string, so the operation ledger keys each separately: `chat:`, `user:` and `aside:`. The
+shapes are the vendor's documented ones as a generated SDK records them (`chyroc/lark`,
+`api_message_send.go`, `api_message_send_ephemeral.go`, `api_chat_member_get_list.go`,
+`api_bot_info.go`), and `judge` reads Lark's `code`, which is where it refuses inside a 200.
+
+Task ids: M10.2.2, M10.2.5, M10.2.6, M10.2.1, M10.6.1
 """
 
 from __future__ import annotations
 
+import base64
+import binascii
 import enum
+import hashlib
+import hmac
 import json
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Final, assert_never
+from urllib.parse import quote, urlencode
+
+from cryptography.hazmat.primitives import padding
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from brain.channels.adapter import (
+    BOT_ID,
+    Arrived,
     ChannelCapabilities,
+    Conversation,
     DeliveryRefusedError,
     Feature,
+    Received,
+    TokenExchange,
+    VendorAnswer,
+    VendorRequest,
     assert_can_send,
     send_operation,
 )
 from brain.channels.cards import assert_label_survives, render_body
 from brain.channels.room import Degradation, Member, plan
-from brain.connectors.throttle import CallOutcome
+from brain.channels.webhook import WebhookRefusedError, assert_raw_bytes
+from brain.connectors.staff_directories import LARK_PLATFORMS
+from brain.connectors.throttle import CallOutcome, classify
 from brain.core.field_policy import Classification
 from brain.core.redaction import ChannelPayload
 from brain.gate.context import Channel
@@ -295,6 +334,10 @@ def normalise_message(raw: object) -> LarkMessage:
     except json.JSONDecodeError as exc:
         msg = "the message content is not JSON; Lark encodes it as a JSON string"
         raise LarkRefusedError(msg) from exc
+    said = content.get("text")
+    if not isinstance(said, str):
+        msg = "the message content has no text; a Lark event without one cannot be read"
+        raise LarkRefusedError(msg)
 
     chat_type = _text(message, "chat_type", "the message")
     try:
@@ -317,13 +360,41 @@ def normalise_message(raw: object) -> LarkMessage:
             channel=Channel.LARK,
             external_id=_text(message, "message_id", "the message"),
             channel_identity=_text(sender_id, "open_id", "the sender"),
-            text=_text(content, "text", "the message content"),
+            text=question_of(said, mentions),
             received_at=_received_at(header),
         ),
         chat_id=_text(message, "chat_id", "the message"),
         chat_type=chat,
         mentions=tuple(_mention(item, index) for index, item in enumerate(mentions)),
     )
+
+
+#: A mention's placeholder as Lark writes it into the text.
+_PLACEHOLDER: Final = re.compile(r"@_user_\d+")
+
+
+def question_of(said: str, mentions: Sequence[object]) -> str:
+    """What the sender asked: their words with Lark's placeholders made readable (M10.2.2).
+
+    Placeholders that open the message say who it is for and are removed, so `@Brain what is
+    left on SNM` asks what is left on SNM. One later in the text names somebody the question is
+    about and becomes the name Lark rendered for it. **The name is words in a question and
+    decides nothing**: who the message was addressed to is read from the ids alone, as
+    `MENTIONS_ARE_KEYED_ON_THE_STABLE_ID` says, and a person who renames themselves changes only
+    the wording of their own question. A placeholder no mention names is left as typed.
+    """
+    names = {
+        str(node.get("key")): str(node.get("name") or "")
+        for node in mentions
+        if isinstance(node, Mapping) and isinstance(node.get("key"), str)
+    }
+    text = said.strip()
+    while True:
+        opening = _PLACEHOLDER.match(text)
+        if opening is None or opening.group(0) not in names:
+            break
+        text = text[opening.end() :].lstrip()
+    return _PLACEHOLDER.sub(lambda one: names.get(one.group(0)) or one.group(0), text).strip()
 
 
 def addressed_to(message: LarkMessage, *, identity: str) -> bool:
@@ -430,8 +501,9 @@ class DeliveryPlan:
 
     deliveries: tuple[Delivery, ...]
     degradation: Degradation
-    #: Where the gate can run again for whoever follows it. Only ever set when nothing may
-    #: be said here, and required in that case: silence is not one of the outcomes.
+    #: Where the gate can run again for whoever follows it. Set when nothing is posted here,
+    #: and required then, since silence is not one of the outcomes; and set beside a room
+    #: posting the asker holds more than, where the surface has no private way to say the rest.
     link: str = ""
 
 
@@ -464,7 +536,7 @@ def plan_delivery(
     members: Sequence[Member],
     asker_id: str,
     capabilities: ChannelCapabilities,
-    room_body: Rendered,
+    room_body: Rendered | None,
     asker_body: Rendered,
     now: datetime,
     link: str = "",
@@ -483,6 +555,13 @@ def plan_delivery(
     `room_body` and `asker_body` are computed by the gate and handed over. Nothing here
     redacts or intersects: that is the gate's work, and a channel doing it again would be a
     second opinion whose permissive half wins the day the two disagree.
+
+    **A floor that holds nothing posts nothing to the room**, whatever `room_body` says: an
+    answer made at no reach at all is an abstention in front of everybody, and the asker's own
+    body goes to them alone. `room_body` None says the caller has nothing worth posting at the
+    floor; where the asker has no aside either, that is the link. `FLOOR_ONLY` carries the link
+    beside the room posting, because the room's answer is all the surface can say and the asker
+    holds more: the ladder ends where the gate runs again for them (M10.4.3).
     """
     if audience_is_one_person(message.chat_type):
         present = frozenset(member.principal_id for member in members)
@@ -527,15 +606,20 @@ def plan_delivery(
             raise LarkRefusedError(msg)
         return DeliveryPlan(deliveries=(), degradation=render.degradation, link=link)
 
-    built = [
-        Delivery(
-            chat_id=message.chat_id,
-            visibility=Visibility.ROOM,
-            payload=room_body.payload,
-            ent_hash=room_body.ent_hash,
-            degradation=render.degradation,
-        )
-    ]
+    floor_holds_something = bool(render.envelope.grants) and not render.envelope.is_expired(now)
+    built = (
+        [
+            Delivery(
+                chat_id=message.chat_id,
+                visibility=Visibility.ROOM,
+                payload=room_body.payload,
+                ent_hash=room_body.ent_hash,
+                degradation=render.degradation,
+            )
+        ]
+        if room_body is not None and floor_holds_something
+        else []
+    )
 
     # `render.aside_for` rather than a comparison of the two reaches, and rather than a
     # second check that this surface can do ephemeral messages. `room.plan` sets it only for
@@ -557,6 +641,14 @@ def plan_delivery(
 
     planned = tuple(built)
     _assert_room_only_carries_the_floor(planned, floor_hash)
+    if not planned and not link:
+        msg = (
+            "nothing was worth posting in this room, the asker has no aside and no link was "
+            "offered; a question with no answer and no route is silence"
+        )
+        raise LarkRefusedError(msg)
+    if render.degradation is Degradation.FLOOR_ONLY or not planned:
+        return DeliveryPlan(deliveries=planned, degradation=render.degradation, link=link)
     return DeliveryPlan(deliveries=planned, degradation=render.degradation)
 
 
@@ -689,3 +781,424 @@ def deliver(
 
     operation = send_operation(intent, channel=Channel.LARK, to=delivery.chat_id, viewer=viewer)
     return issue_once(ledger, operation, send)
+
+
+# ------------------------------------------------------------ the wire (M10.2.1, M10.6.1)
+
+#: Why an event is opened only after its signature is checked, and refused unless encrypted.
+AN_EVENT_IS_SIGNED_ENCRYPTED_AND_TOKENED_OR_REFUSED: Final = (
+    "A Lark event is refused unless its body is encrypted with the app's Encrypt Key, its "
+    "signature over the time, the nonce and the exact bytes is the key's, the time is within five "
+    "minutes, and the Verification Token inside it is the app's. The signature is checked before "
+    "anything is decrypted. Lark's address check is the one request that may come unsigned: it is "
+    "answered only when it decrypts under the key and carries the token, and it does nothing but "
+    "echo its challenge."
+)
+
+#: Lark's headers for an event, lower-cased as `Arrived` holds them.
+TIMESTAMP_HEADER: Final = "x-lark-request-timestamp"
+NONCE_HEADER: Final = "x-lark-request-nonce"
+SIGNATURE_HEADER: Final = "x-lark-signature"
+
+#: The event this channel reads, and Lark's address check.
+MESSAGE_RECEIVED: Final = "im.message.receive_v1"
+URL_VERIFICATION: Final = "url_verification"
+
+#: The tenant fields the Lark channel's record holds: the app, the platform it was made on, and
+#: the bot's own open id, which is how a group message is known to be for it.
+APP_ID_FIELD: Final = "app_id"
+PLATFORM_FIELD: Final = "platform"
+LARK_TENANT_FIELDS: Final = (APP_ID_FIELD, PLATFORM_FIELD, BOT_ID)
+
+#: How far out of step Lark's timestamp may be. The window `brain.channels.webhook` uses, for
+#: its reason: it bounds how long a captured signature is worth anything.
+EVENT_WINDOW: Final = timedelta(minutes=5)
+
+#: Lark's code for a call refused on rate, whatever the status beside it.
+RATE_LIMITED_CODE: Final = 99991400
+
+#: The largest card Lark accepts, and the ceiling a per-viewer body is held to.
+MAX_CARD_BYTES: Final = 30 * 1024
+
+#: How many people one page of a chat's members holds. Lark's documented maximum.
+MEMBERS_PAGE: Final = 100
+
+#: The three address kinds a reply is sent to, in the `to` string the ledger keys on.
+ROOM_ADDRESS: Final = "chat"
+SENDER_ADDRESS: Final = "user"
+ASIDE_ADDRESS: Final = "aside"
+
+
+def _refused() -> WebhookRefusedError:
+    # One sentence for every reason, for `WebhookRefusedError`'s own: which check failed is
+    # what somebody probing would fix next.
+    return WebhookRefusedError("this request was not accepted")
+
+
+@dataclass(frozen=True)
+class LarkSecret:
+    """The three values the Lark channel keeps in its one vault slot, and never the App ID.
+
+    Kept as one compact JSON value because a channel has one slot (`providers/channel_lark`) and
+    the vault's credential rule wants one unbroken line. The App ID is in the record's tenant,
+    where the Channels screen may show it; nothing here is ever shown.
+    """
+
+    app_secret: str = field(repr=False)
+    encrypt_key: str = field(repr=False)
+    verification_token: str = field(repr=False)
+
+    @classmethod
+    def parse(cls, kept: str) -> LarkSecret:
+        """The kept value read back, or `ValueError` for anything that is not all three."""
+        try:
+            parsed = json.loads(kept)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                "the Lark channel's secret is not the value this module keeps"
+            ) from exc
+        if not isinstance(parsed, Mapping):
+            raise ValueError("the Lark channel's secret is not the value this module keeps")
+        values = [parsed.get(name) for name in ("app_secret", "encrypt_key", "verification_token")]
+        if not all(isinstance(one, str) and one for one in values):
+            raise ValueError("the Lark channel's secret is missing one of its three values")
+        app_secret, encrypt_key, token = (str(one) for one in values)
+        return cls(app_secret=app_secret, encrypt_key=encrypt_key, verification_token=token)
+
+    def kept(self) -> str:
+        """The value written to the vault: compact, so it is one unbroken line."""
+        return json.dumps(
+            {
+                "app_secret": self.app_secret,
+                "encrypt_key": self.encrypt_key,
+                "verification_token": self.verification_token,
+            },
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+
+
+def sign_event(encrypt_key: str, timestamp: str, nonce: str, body: bytes) -> str:
+    """The signature Lark puts on an event: sha256 over the time, the nonce, the key and the
+    bytes, as its server SDK computes it. Exported so a test signs with the one definition."""
+    material = (timestamp + nonce + encrypt_key).encode("utf-8") + body
+    return hashlib.sha256(material).hexdigest()
+
+
+def open_event(encrypted: str, encrypt_key: str) -> bytes:
+    """Lark's encrypted body, opened: AES-256-CBC under sha256 of the key, the IV first.
+
+    Raises `WebhookRefusedError` for anything that does not open, including padding that is
+    not PKCS#7, so a body encrypted under another key is a refusal and never a garbled read.
+    """
+    try:
+        raw = base64.b64decode(encrypted, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise _refused() from exc
+    if len(raw) < 32 or len(raw) % 16:
+        raise _refused()
+    key = hashlib.sha256(encrypt_key.encode("utf-8")).digest()
+    decryptor = Cipher(algorithms.AES(key), modes.CBC(raw[:16])).decryptor()
+    padded = decryptor.update(raw[16:]) + decryptor.finalize()
+    unpadder = padding.PKCS7(128).unpadder()
+    try:
+        return unpadder.update(padded) + unpadder.finalize()
+    except ValueError as exc:
+        raise _refused() from exc
+
+
+def _json_object(raw: bytes) -> Mapping[str, Any]:
+    try:
+        parsed = json.loads(raw)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise _refused() from exc
+    if not isinstance(parsed, Mapping):
+        raise _refused()
+    return parsed
+
+
+def _token_of(event: Mapping[str, Any]) -> str:
+    """The Verification Token an opened event carries: in the header for schema 2.0 events and
+    at the top for Lark's address check, as its SDK reads it."""
+    header = event.get("header")
+    found = header.get("token") if isinstance(header, Mapping) else event.get("token")
+    return found if isinstance(found, str) else ""
+
+
+def verify_event(
+    *,
+    secret: LarkSecret,
+    body: bytes,
+    timestamp: str,
+    nonce: str,
+    signature: str,
+    now: datetime,
+) -> bytes:
+    """The event opened, or `WebhookRefusedError`. See the named constant for the order.
+
+    Raises rather than returning a flag, for `brain.channels.webhook.verify`'s reason.
+    """
+    assert_raw_bytes(body)
+    signed = bool(timestamp or nonce or signature)
+    if signed:
+        try:
+            sent_at = datetime.fromtimestamp(int(timestamp), tz=UTC)
+        except (ValueError, OverflowError, OSError) as exc:
+            raise _refused() from exc
+        if abs(sent_at - now) > EVENT_WINDOW:
+            raise _refused()
+        expected = sign_event(secret.encrypt_key, timestamp, nonce, bytes(body))
+        if not hmac.compare_digest(expected, signature):
+            raise _refused()
+    encrypted = _json_object(bytes(body)).get("encrypt")
+    if not isinstance(encrypted, str) or not encrypted:
+        raise _refused()
+    opened = open_event(encrypted, secret.encrypt_key)
+    event = _json_object(opened)
+    if not hmac.compare_digest(_token_of(event), secret.verification_token):
+        raise _refused()
+    if not signed and event.get("type") != URL_VERIFICATION:
+        # Only the address check may come unsigned; an event that should have been signed and
+        # was not is the one a replay or a forgery would be.
+        raise _refused()
+    return opened
+
+
+def _address(kind: str, *parts: str) -> str:
+    return ":".join((kind, *parts))
+
+
+def _host(tenant: Mapping[str, str]) -> str:
+    platform = tenant.get(PLATFORM_FIELD, "")
+    if platform not in LARK_PLATFORMS:
+        msg = f"this channel's record names no Lark platform: one of {', '.join(LARK_PLATFORMS)}"
+        raise ValueError(msg)
+    return f"https://{LARK_PLATFORMS[platform][1]}"
+
+
+def _exchange(host: str, tenant: Mapping[str, str], secret: LarkSecret) -> TokenExchange:
+    app_id = tenant.get(APP_ID_FIELD, "")
+    if not app_id:
+        raise ValueError(f"this channel's record names no {APP_ID_FIELD}")
+    body = json.dumps({"app_id": app_id, "app_secret": secret.app_secret}, separators=(",", ":"))
+    return TokenExchange(
+        url=f"{host}/open-apis/auth/v3/tenant_access_token/internal",
+        body=body.encode("utf-8"),
+        answered_in="tenant_access_token",
+    )
+
+
+def card_for(text: str) -> dict[str, Any]:
+    """A per-viewer card carrying `text` as plain text: Lark's per-viewer message is a card.
+
+    Plain text rather than Lark's markdown, so nothing in an answer is read as markup, and the
+    label a payload carries survives into what is shown exactly as `render_body` wrote it.
+    """
+    return {
+        "config": {"wide_screen_mode": True},
+        "elements": [{"tag": "div", "text": {"tag": "plain_text", "content": text}}],
+    }
+
+
+@dataclass(frozen=True)
+class LarkWire:
+    """`brain.channels.adapter.ChannelWire` for Lark. Holds no secret and opens nothing."""
+
+    @property
+    def channel(self) -> Channel:
+        return Channel.LARK
+
+    @property
+    def tenant_fields(self) -> tuple[str, ...]:
+        return LARK_TENANT_FIELDS
+
+    def verify(self, arrived: Arrived, secret: str, now: datetime) -> Arrived:
+        """`verify_event`, and the request back with its body opened."""
+        try:
+            kept = LarkSecret.parse(secret)
+        except ValueError as exc:
+            raise _refused() from exc
+        opened = verify_event(
+            secret=kept,
+            body=arrived.body,
+            timestamp=arrived.headers.get(TIMESTAMP_HEADER, ""),
+            nonce=arrived.headers.get(NONCE_HEADER, ""),
+            signature=arrived.headers.get(SIGNATURE_HEADER, ""),
+            now=now,
+        )
+        return Arrived(headers=arrived.headers, body=opened)
+
+    def handshake(self, arrived: Arrived) -> Mapping[str, str] | None:
+        """Lark's address check, answered with its own challenge; None for an event."""
+        event = _json_object(arrived.body)
+        if event.get("type") != URL_VERIFICATION:
+            return None
+        challenge = event.get("challenge")
+        if not isinstance(challenge, str) or not challenge:
+            raise _refused()
+        return {"challenge": challenge}
+
+    def read(self, arrived: Arrived) -> Received:
+        """A received message as the gate's event, and the three places a reply may go.
+
+        Anything but `im.message.receive_v1` from a person is `ValueError`: no other event is
+        subscribed to, and a message another app sent is not a question anybody asked.
+        """
+        try:
+            event = _json_object(arrived.body)
+        except WebhookRefusedError as exc:
+            raise ValueError("an opened Lark event is a JSON object") from exc
+        header = event.get("header")
+        kind = header.get("event_type") if isinstance(header, Mapping) else None
+        if kind != MESSAGE_RECEIVED:
+            raise ValueError(f"this channel reads {MESSAGE_RECEIVED} and nothing else")
+        body = event.get("event")
+        sender = body.get("sender") if isinstance(body, Mapping) else None
+        if not isinstance(sender, Mapping) or sender.get("sender_type") != "user":
+            raise ValueError("a message another app sent is not a question anybody asked")
+        try:
+            message = normalise_message(event)
+        except LarkRefusedError as exc:
+            raise ValueError(str(exc)) from exc
+        sender_id = message.event.channel_identity
+        room = _address(ROOM_ADDRESS, message.chat_id)
+        shared = not audience_is_one_person(message.chat_type)
+        return Received(
+            event=message.event,
+            reply_to=room,
+            conversation=Conversation(
+                room_to=room,
+                sender_to=_address(SENDER_ADDRESS, sender_id),
+                conversation_id=message.chat_id,
+                shared=shared,
+                aside_to=_address(ASIDE_ADDRESS, message.chat_id, sender_id) if shared else "",
+                addressed=frozenset(one.identity for one in message.mentions),
+            ),
+        )
+
+    def request_for(
+        self, *, to: str, text: str, secret: str, tenant: Mapping[str, str], now: datetime
+    ) -> VendorRequest:
+        """The send for one address, with the token exchange that authorises it beside it.
+
+        `chat:` posts to a conversation, `user:` sends to one person's own chat with the bot, and
+        `aside:` sends a card only that person sees inside a group. `ValueError` for an address
+        of no kind, a record short of what Lark needs, or a card larger than Lark takes.
+        """
+        del now  # Lark stamps its own time; the parameter is the protocol's.
+        kept = LarkSecret.parse(secret)
+        host = _host(tenant)
+        kind, _, rest = to.partition(":")
+        if kind in (ROOM_ADDRESS, SENDER_ADDRESS) and rest:
+            id_type = "chat_id" if kind == ROOM_ADDRESS else "open_id"
+            url = f"{host}/open-apis/im/v1/messages?{urlencode({'receive_id_type': id_type})}"
+            payload: dict[str, Any] = {
+                "receive_id": rest,
+                "msg_type": "text",
+                "content": json.dumps({"text": text}),
+            }
+        elif kind == ASIDE_ADDRESS and rest.count(":") == 1:
+            chat_id, open_id = rest.split(":")
+            url = f"{host}/open-apis/ephemeral/v1/send"
+            payload = {
+                "chat_id": chat_id,
+                "open_id": open_id,
+                "msg_type": "interactive",
+                "card": card_for(text),
+            }
+            if len(json.dumps(payload["card"]).encode("utf-8")) > MAX_CARD_BYTES:
+                raise ValueError("this answer is larger than a Lark card takes")
+        else:
+            raise ValueError(f"{to!r} is not an address this channel sends to")
+        return VendorRequest(
+            url=url,
+            headers={"Content-Type": "application/json; charset=utf-8"},
+            body=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
+            exchange=_exchange(host, tenant, kept),
+        )
+
+    def judge(self, answer: VendorAnswer) -> CallOutcome:
+        """Lark's `code` decides, because Lark refuses inside a 200.
+
+        Zero with a 200 is delivered; the rate code is a quota at any status; any other code is
+        a refusal. A 200 whose body cannot be read may have been delivered, so it is not known
+        rather than sent. Everything with no body to read is `classify`'s.
+        """
+        if answer.unsafe_address:
+            return CallOutcome.REJECTED
+        code = _code(answer.body)
+        if code == RATE_LIMITED_CODE:
+            return CallOutcome.QUOTA
+        if answer.status == 200:
+            if code is None:
+                return CallOutcome.UNAVAILABLE
+            return CallOutcome.OK if code == 0 else CallOutcome.REJECTED
+        outcome = classify(
+            status=answer.status,
+            timed_out=answer.timed_out,
+            connection_failed=answer.connection_failed,
+        )
+        return CallOutcome.REJECTED if outcome is CallOutcome.OK else outcome
+
+    def members_request(
+        self, *, conversation_id: str, page: str, secret: str, tenant: Mapping[str, str]
+    ) -> VendorRequest:
+        """One page of who is in a chat, by open id. The read a group's floor needs (M10.4.1).
+
+        Lark leaves the chat's bots out of this list, the bot included, so the list is people.
+        """
+        kept = LarkSecret.parse(secret)
+        host = _host(tenant)
+        query = {"member_id_type": "open_id", "page_size": str(MEMBERS_PAGE)}
+        if page:
+            query["page_token"] = page
+        return VendorRequest(
+            url=(
+                f"{host}/open-apis/im/v1/chats/{quote(conversation_id, safe='')}/members"
+                f"?{urlencode(query)}"
+            ),
+            headers={},
+            body=b"",
+            method="GET",
+            exchange=_exchange(host, tenant, kept),
+        )
+
+    def members_page(self, answer: VendorAnswer) -> tuple[frozenset[str], str]:
+        """The digests of the people on one page, and the next page's token or empty.
+
+        Digested at once, so no open id outlives this call. `ValueError` for any answer that is
+        not a page: a floor computed over a list that failed to read would be a floor over nobody.
+        """
+        if self.judge(answer) is not CallOutcome.OK:
+            raise ValueError("Lark did not answer with who is in this chat")
+        data = _json_object(answer.body).get("data")
+        if not isinstance(data, Mapping):
+            raise ValueError("Lark's page of members has no data")
+        items = data.get("items") or []
+        if not isinstance(items, list):
+            raise ValueError("Lark's page of members is not a list")
+        found = set()
+        for item in items:
+            member = item.get("member_id") if isinstance(item, Mapping) else None
+            if not isinstance(member, str) or not member:
+                raise ValueError("a member on Lark's page has no id")
+            found.add(identity_hash(Channel.LARK, member))
+        more = data.get("has_more") is True
+        token = data.get("page_token")
+        return frozenset(found), (token if more and isinstance(token, str) else "")
+
+
+def _code(body: bytes) -> int | None:
+    """Lark's `code` from an answer's body, or None when there is no readable one."""
+    if not body:
+        return None
+    try:
+        parsed = json.loads(body)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    code = parsed.get("code") if isinstance(parsed, Mapping) else None
+    return code if isinstance(code, int) and not isinstance(code, bool) else None
+
+
+#: This channel's wire, found by `brain.channels.adapter.channel_wires`.
+WIRE: Final = LarkWire()

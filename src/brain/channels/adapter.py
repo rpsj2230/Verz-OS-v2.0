@@ -39,7 +39,15 @@ Rejected: a wire method that posts. It would put a socket in every channel modul
 gives, and every wire would then need its own address check against the rule
 `brain.tools.fetch.assert_fetchable` holds once.
 
-Task ids: M10.1.1, M10.1.2, M10.1.3, M10.1.4, M10.1.5, M10.2.1, M10.6.1
+**A chat's wire says where a message was said, and a vendor's credential can be exchanged for its
+token on the way out.** `Received.conversation` carries the three addresses a reply can go to, who
+reads each, and who the message named, so the decision about who reads an answer is made over
+shapes rather than over one vendor's strings. `VendorRequest.exchange` carries the exchange a
+vendor like Lark asks before every request, and `verify` hands back the request opened, for a
+vendor that encrypts. All three arrived with the Lark channel and change nothing for a wire that
+declares none of them.
+
+Task ids: M10.1.1, M10.1.2, M10.1.3, M10.1.4, M10.1.5, M10.2.1, M10.6.1, M10.2.6
 """
 
 from __future__ import annotations
@@ -358,12 +366,43 @@ class Arrived:
 
 
 @dataclass(frozen=True)
+class Conversation:
+    """Where a chat message was said, for a channel whose conversations can hold more than one.
+
+    Three addresses because a reply has three possible audiences, and choosing among them is a
+    permission decision rather than a formatting one: `room_to` is read by everybody in the
+    conversation, `sender_to` by the sender alone in a conversation of their own with the bot,
+    and `aside_to` by the sender alone inside this one, the vendor's per-viewer message, or empty
+    where the vendor has none. `addressed` holds the digests of the identities the message named,
+    keyed on the vendor's own ids, so a shared conversation is answered only when it named the
+    bot (M10.2.2, M10.2.6); see `BOT_ID`.
+    """
+
+    room_to: str
+    sender_to: str
+    #: The vendor's own id for the conversation, for reading who is in it.
+    conversation_id: str
+    #: More than one person reads what is posted to `room_to`.
+    shared: bool
+    aside_to: str = ""
+    addressed: frozenset[str] = frozenset()
+
+
+#: The tenant field a channel with shared conversations names its own bot in: the vendor's id for
+#: it. A message in a shared conversation that does not name that identity is not for the bot.
+BOT_ID: Final = "bot_id"
+
+
+@dataclass(frozen=True)
 class Received:
     """A verified request, read: the event the gate reads and where a reply to it goes."""
 
     event: ChannelEvent
     #: The vendor's address for a reply: a chat, a conversation, a sender. Never a principal.
     reply_to: str
+    #: Present for a chat whose conversations can hold more than one reader. None for a channel
+    #: where the reply goes back to the sender alone, as the company's own system's does.
+    conversation: Conversation | None = None
 
 
 @dataclass(frozen=True)
@@ -378,6 +417,27 @@ class VendorRequest:
     url: str
     headers: Mapping[str, str] = field(repr=False)
     body: bytes = field(repr=False)
+    #: `POST` to deliver; `GET` for the one read a chat needs, who is in a conversation.
+    method: str = "POST"
+    #: A credential exchanged for a bearer token first, for a vendor that authorises requests
+    #: with a token of its own minting rather than with the secret itself.
+    exchange: TokenExchange | None = field(default=None, repr=False)
+
+
+@dataclass(frozen=True)
+class TokenExchange:
+    """A POST that exchanges the channel's credential for a short-lived bearer token.
+
+    Carried on the request rather than made by the wire, because a wire opens no connection. The
+    transport makes it immediately before the request it authorises and keeps the token nowhere,
+    so a token is never older than one delivery and never outlives it. `answered_in` names where
+    in the vendor's JSON answer the token is. `repr=False` for `VendorRequest`'s reason: the body
+    holds the credential.
+    """
+
+    url: str
+    body: bytes = field(repr=False)
+    answered_in: str = "access_token"  # the JSON key, not a value
 
 
 @dataclass(frozen=True)
@@ -386,8 +446,8 @@ class VendorAnswer:
 
     `unsafe_address` is this side refusing to connect, because the vendor's address resolved
     somewhere only this network can reach; nothing was sent. `body` is what the vendor answered
-    with, for a wire whose vendor says 200 and refuses in the body; a transport that reads only
-    the status leaves it empty, and `brain.channel_routes.HttpsTransport` is one.
+    with, for a wire whose vendor says 200 and refuses in the body, and for the one read a chat
+    makes; `brain.channel_routes.HttpsTransport` keeps it up to its bound.
     """
 
     status: int | None = None
@@ -415,9 +475,13 @@ class ChannelWire(Protocol):
         """The tenant identifiers a record for this channel must hold, by name."""
         ...
 
-    def verify(self, arrived: Arrived, secret: str, now: datetime) -> None:
+    def verify(self, arrived: Arrived, secret: str, now: datetime) -> Arrived:
         """Refuse, with `brain.channels.webhook.WebhookRefusedError`, anything the vendor did not
-        send. Over the exact bytes, and before `read` looks at any of them."""
+        send. Over the exact bytes, and before `read` looks at any of them.
+
+        Returns the request as `handshake` and `read` are to see it: the same request, or, for a
+        vendor that encrypts what it sends, the request with its body opened. Opening belongs to
+        verifying because its key is the secret, and only this method is handed the secret."""
         ...
 
     def handshake(self, arrived: Arrived) -> Mapping[str, str] | None:
@@ -447,6 +511,12 @@ class ChannelTransport(Protocol):
 
     Synchronous, for `brain.ops.outbox_store.Sender`'s reason: it is called inside the effect
     `issue_once` runs. It never raises for anything the network did; a silence is `timed_out`.
+
+    `read` is the other half, and a separate method so the two cannot be confused: a `GET` that
+    changes nothing at the vendor, the one read a chat makes, who is in a conversation. It refuses
+    anything but a `GET`, so a send cannot reach the vendor by the door that is not keyed.
     """
 
     def send(self, request: VendorRequest) -> VendorAnswer: ...
+
+    def read(self, request: VendorRequest) -> VendorAnswer: ...

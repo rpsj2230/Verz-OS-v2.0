@@ -721,3 +721,65 @@ def test_the_lark_adapter_cannot_be_handed_anything_but_a_payload() -> None:
     assert isinstance(adapter, ChannelAdapter)
     assert adapter.healthy(NOW) is True
     assert LarkAdapter(reachable=False).healthy(NOW) is False
+
+
+# ============================================================ the ladder, routed (M10.4.3)
+
+
+def test_a_floor_that_holds_nothing_posts_nothing_even_when_handed_a_body() -> None:
+    """An answer made at no reach is an abstention in front of everybody, so an empty floor posts
+    nothing and the asker's body goes to them alone. Delete this and every group with one unbound
+    person in it is shown "I could not find that" beside the asker's private answer."""
+    members = [_member("u_asker", READ_NAME), _member("u_stranger")]
+    message = normalise_message(_raw(mentions=[_mention_json()]))
+    empty = Rendered(payload=ChannelPayload(), ent_hash=floor(members).ent_hash())
+    mine = Rendered(payload=_payload("SNM"), ent_hash=members[0].entitlement.ent_hash())
+    plan = plan_delivery(
+        message,
+        members=members,
+        asker_id="u_asker",
+        capabilities=_caps(Feature.EPHEMERAL),
+        room_body=empty,
+        asker_body=mine,
+        now=NOW,
+    )
+    assert [d.visibility for d in plan.deliveries] == [Visibility.EPHEMERAL]
+    assert plan.degradation is Degradation.EPHEMERAL_ASIDE
+
+
+def test_a_surface_with_no_aside_posts_the_floor_and_carries_the_link_beside_it() -> None:
+    """FLOOR_ONLY, the ladder's middle rung: the room reads the floor and the asker is offered the
+    link for what they hold beyond it. Delete this and the asker's larger answer is lost without a
+    word on a surface that cannot say it privately."""
+    asker, _, members, room_floor = _group_setup()
+    message = normalise_message(_raw(mentions=[_mention_json()]))
+    plan = plan_delivery(
+        message,
+        members=members,
+        asker_id="u_asker",
+        capabilities=_caps(),
+        room_body=Rendered(payload=_payload("SNM"), ent_hash=room_floor.ent_hash()),
+        asker_body=Rendered(payload=_payload("SNM", "m"), ent_hash=asker.entitlement.ent_hash()),
+        now=NOW,
+        link="https://console.example/ask",
+    )
+    assert plan.degradation is Degradation.FLOOR_ONLY
+    assert [d.visibility for d in plan.deliveries] == [Visibility.ROOM]
+    assert plan.link == "https://console.example/ask"
+
+
+def test_nothing_worth_posting_no_aside_and_no_link_is_refused() -> None:
+    """A room body withheld by the caller, no aside and no link is silence. Delete this and a
+    question in a group can end in nothing at all."""
+    asker, _, members, _ = _group_setup()
+    message = normalise_message(_raw(mentions=[_mention_json()]))
+    with pytest.raises(LarkRefusedError, match="silence"):
+        plan_delivery(
+            message,
+            members=members,
+            asker_id="u_asker",
+            capabilities=_caps(),
+            room_body=None,
+            asker_body=Rendered(payload=_payload("SNM"), ent_hash=asker.entitlement.ent_hash()),
+            now=NOW,
+        )

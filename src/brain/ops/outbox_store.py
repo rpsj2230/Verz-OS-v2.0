@@ -77,7 +77,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from types import MappingProxyType
 from typing import Any, Final, Protocol, cast
@@ -204,6 +204,9 @@ class SendResult:
     timed_out: bool = False
     connection_failed: bool = False
     retry_after_seconds: float | None = None
+    #: The answer's body, kept only by a sender told to keep it: a chat vendor refuses inside a
+    #: 200. A webhook's is read and dropped, and this is empty.
+    body: bytes = field(default=b"", repr=False)
 
     def __post_init__(self) -> None:
         if self.status is None and not self.timed_out and not self.connection_failed:
