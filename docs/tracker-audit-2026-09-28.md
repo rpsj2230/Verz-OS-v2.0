@@ -15,3 +15,9 @@ passed on main at c57a512 and locally against PostgreSQL 18 with pgvector (263 p
 | M7.4.1 | install | know.item on the install has owner_id, visibility and department (scope), verified_by, verified_at, review_by and state; the content is know.chunk.body |
 | M7.4.2 | install | know.item on the install carries ck_item_visibility: company, department or personal, and nothing else |
 | M3.2.2 | install and CI | gate.channel_event on the install has pk_channel_event PRIMARY KEY (channel, external_id); tests/unit/test_channel_pipeline.py shows a redelivered event claimed once and answered once |
+
+## Checked in the console on the owner's install, signed in as the owner (2026-09-28, 20:01 SGT)
+
+| Task | Where proved | Evidence |
+| --- | --- | --- |
+| M3.4.2 | install | A question asked on Ask ("Install check (Claude, 28 Sep): what can you help me with?") left its obs.request_telemetry row with risk_score 0, routed_lane answer, lane_basis default and selection_stage default, written when the request was decided; read back read-only |
