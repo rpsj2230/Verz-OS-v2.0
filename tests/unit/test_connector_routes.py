@@ -41,9 +41,15 @@ from brain.connector_routes import (
     CONNECTORS_PATH,
     CONNECTORS_READ,
     DISCONNECT_PATH,
+    EDIT_PATH,
+    EXPORT_PATH,
+    KEY_PATH,
+    SOURCE_PATH,
+    SOURCES_PATH,
     ConnectorsView,
 )
 from brain.connectors.contract import HealthState
+from brain.connectors.declaration import shipped
 from brain.connectors.manifest import manifest_digest
 from brain.connectors.registry import INSTALL_AUTHORITY
 from brain.console.connector_trust import (
@@ -70,12 +76,19 @@ from brain.ops.connector_admin import (
     CONNECTING_A_SOURCE,
     DISCONNECTED,
     DISCONNECTING_A_SOURCE,
+    EDITED,
+    KEY_REPLACED,
     TOLD,
     VAULT_SAYS,
     WHAT_CONNECTING_A_SOURCE_STARTS,
 )
 from brain.ops.connector_recordings import recorded_in_words
-from brain.ops.connector_store import Connection, ConnectorTakenError, NotConnectedError
+from brain.ops.connector_store import (
+    Connection,
+    ConnectionRecord,
+    ConnectorTakenError,
+    NotConnectedError,
+)
 from brain.ops.connector_sync import (
     KEY_DECLINED,
     NO_VERIFIED_CEILING,
@@ -976,3 +989,293 @@ def test_no_listing_carries_the_path_a_key_is_kept_at(app: FastAPI, client: Test
     assert answered.status_code == 200
     assert "connector_keys" not in answered.text
     assert "connector_keys" not in " ".join(str(one) for one in logged)
+
+
+# ------------------------------------------------------ the module's list and one source's page
+
+SOURCES: Final = f"{API_PREFIX}{SOURCES_PATH}"
+
+
+def source_path(name: str) -> str:
+    return API_PREFIX + SOURCE_PATH.replace("{connector}", name)
+
+
+def export_path(name: str) -> str:
+    return API_PREFIX + EXPORT_PATH.replace("{connector}", name)
+
+
+def edit_path(name: str) -> str:
+    return API_PREFIX + EDIT_PATH.replace("{connector}", name)
+
+
+def key_path(name: str) -> str:
+    return API_PREFIX + KEY_PATH.replace("{connector}", name)
+
+
+def read(c: TestClient, pid: str, path: str) -> Response:
+    response: Response = c.get(path, headers=headers(pid))
+    return response
+
+
+class ChangingRecords(Records):
+    """`Records` that also edits and keeps a history, as `StoredConnections` does."""
+
+    def __init__(self, existing: tuple[Connection, ...] = ()) -> None:
+        super().__init__(existing)
+        self.ended: list[ConnectionRecord] = []
+        self.edits: list[dict[str, Any]] = []
+
+    async def reconnect(
+        self,
+        *,
+        connector: str,
+        settings: Mapping[str, str],
+        digest: str,
+        actor: str,
+        trace_id: str,
+        ent_hash: str,
+        declared: Sequence[str] = (),
+    ) -> Connection:
+        old = self.rows.get(connector)
+        if old is None:
+            raise NotConnectedError(connector)
+        self.ended.append(
+            ConnectionRecord(
+                connector=connector,
+                settings=old.settings,
+                digest=old.digest,
+                connected_by=old.connected_by,
+                connected_at=old.connected_at,
+                disconnected_by=actor,
+                disconnected_at=LONG_AGO + timedelta(days=1),
+            )
+        )
+        made = Connection(
+            connector=connector,
+            settings=dict(settings),
+            digest=digest,
+            connected_by=actor,
+            connected_at=LONG_AGO + timedelta(days=1),
+        )
+        self.rows[connector] = made
+        self.edits.append({"connection": made, "declared": tuple(declared)})
+        return made
+
+    async def history(self, connector: str) -> tuple[ConnectionRecord, ...]:
+        live = self.rows.get(connector)
+        current = (
+            ()
+            if live is None
+            else (
+                ConnectionRecord(
+                    connector=connector,
+                    settings=live.settings,
+                    digest=live.digest,
+                    connected_by=live.connected_by,
+                    connected_at=live.connected_at,
+                    disconnected_by=None,
+                    disconnected_at=None,
+                ),
+            )
+        )
+        return (*current, *(one for one in self.ended if one.connector == connector))
+
+
+def test_the_module_lists_every_shipped_source_and_a_connection_only_adds_to_its_row(
+    app: FastAPI, client: TestClient
+) -> None:
+    """Every declared source is a row whether or not it is connected, a connected one says so with
+    its department and last read, and a failing attempt reads failing. Delete this and the list can
+    show only what is connected, which is the old screen the owner found told him nothing about
+    what could be connected, or draw a failing source as connected."""
+    freshdesk = a_connection("freshdesk")
+    attach(app, Records((a_connection("xero"), freshdesk)), held_vault())
+    app.state.connector_sync_records = SyncRecords(
+        {
+            "xero": an_attempt("xero"),
+            "freshdesk": an_attempt(
+                "freshdesk", outcome=SyncOutcome.FAILED, health=HealthState.DOWN
+            ),
+        }
+    )
+    answered = read(client, "u_admin", SOURCES)
+
+    assert answered.status_code == 200
+    body = answered.json()
+    rows = {one["name"]: one for one in body["items"]}
+    assert set(rows) == set(shipped())
+    assert (rows["xero"]["status"], rows["xero"]["health"]) == ("connected", "ok")
+    assert rows["xero"]["last_read_at"] is not None and rows["xero"]["department"] is None
+    assert (rows["freshdesk"]["status"], rows["freshdesk"]["department"]) == (
+        "failing",
+        "support",
+    )
+    assert rows["hubspot"]["status"] == "not_connected"
+    assert (rows["hubspot"]["connect_from"], rows["lark_wiki"]["connect_from"]) == (
+        "console",
+        "lark",
+    )
+    assert rows["laravel"]["connect_from"] == "server"
+    assert body["total"] is None
+    narrowed = read(client, "u_admin", f"{SOURCES}?filter=status:connected").json()
+    assert [one["name"] for one in narrowed["items"]] == ["xero"]
+
+
+def test_a_connection_the_reader_may_not_see_reads_exactly_as_one_nobody_made(
+    app: FastAPI, client: TestClient
+) -> None:
+    """DENIED and ABSENT, on the list, the page and the export: a reader whose grant covers only
+    Xero is told HubSpot is not connected, in the same words as when it is not, with no history
+    and no settings. The positive half is the same reader told about Xero. Delete this and the
+    module discloses which sources a company reads to anybody holding one narrow grant."""
+    hubspot = a_connection("hubspot")
+    attach(app, ChangingRecords((a_connection("xero"), hubspot)), held_vault())
+    connected = [
+        read(client, "u_narrow", path).json()
+        for path in (SOURCES, source_path("hubspot"), export_path("hubspot"))
+    ]
+    attach(app, ChangingRecords((a_connection("xero"),)), held_vault())
+    absent = [
+        read(client, "u_narrow", path).json()
+        for path in (SOURCES, source_path("hubspot"), export_path("hubspot"))
+    ]
+
+    for one in (connected[2], absent[2]):
+        one.pop("exported_at")
+    assert connected == absent
+    rows = {one["name"]: one["status"] for one in connected[0]["items"]}
+    assert (rows["xero"], rows["hubspot"]) == ("connected", "not_connected")
+    assert connected[1]["history"] == [] and connected[1]["settings"] == []
+    xero = read(client, "u_narrow", source_path("xero")).json()
+    assert xero["source"]["status"] == "connected" and xero["history"]
+
+
+def test_a_source_s_page_names_what_it_keeps_and_reads_live_and_never_a_value(
+    app: FastAPI, client: TestClient
+) -> None:
+    """The profile half: the settings under their labels, each projected entity with its field
+    names, the tools it reads live with, the ceiling and how it is read. Delete this and the page
+    can lose the minimal index, which is the owner's rule made visible, or draw the settings under
+    their internal names."""
+    attach(app, ChangingRecords((a_connection("freshdesk"),)), held_vault())
+    answered = read(client, "u_admin", source_path("freshdesk"))
+
+    assert answered.status_code == 200
+    body = answered.json()
+    manifest = manifest_for("freshdesk", settings_for("freshdesk"))
+    assert [(one["label"], one["value"]) for one in body["settings"]] == [
+        (one.label, settings_for("freshdesk")[one.name])
+        for one in CONNECTABLE["freshdesk"].settings
+    ]
+    assert body["keeps"] == [
+        {"entity": one.entity, "fields": [field.name for field in one.fields]}
+        for one in manifest.projections
+    ]
+    assert [one["tool"] for one in body["reads_live"]] == [one.name for one in manifest.tools]
+    assert body["source"]["department"] == "support" and body["department_says"] == ""
+    assert "every 15 minutes" in body["reading"]
+    assert body["ceiling"] and body["recorded"]
+    assert body["history"][0]["connected_by"] == "u_admin"
+    assert body["agents"] == [] and body["skills"] == []
+    assert read(client, "u_admin", source_path("nothing_ships_this")).status_code == 404
+
+
+def test_an_export_carries_the_declaration_and_history_and_no_key(
+    app: FastAPI, client: TestClient
+) -> None:
+    """M27.15.39: the record exports with the settings, the digest agreed to, what the manifest
+    declares and every connection in its history, and no key whatever the vault holds. Delete this
+    and an export can drop the history, or carry the vault path a key is kept at."""
+    records = ChangingRecords((a_connection("xero"),))
+    vault = held_vault()
+    attach(app, records, vault, Recorded())
+    assert post(client, "u_admin", key_path("xero"), {"credential": KEY}).status_code == 200
+    answered = read(client, "u_admin", export_path("xero"))
+
+    assert answered.status_code == 200
+    body = answered.json()
+    assert body["connection"]["settings"] == settings_for("xero")
+    assert body["connection"]["declaration_agreed"] is True
+    assert body["declaration"]["access"] and body["declaration"]["keeps"]
+    assert len(body["history"]) == 1 and body["credential"]
+    assert KEY not in answered.text and "connector_keys" not in answered.text
+
+
+def test_an_edit_leaves_two_rows_one_live_and_the_key_where_it_was(
+    app: FastAPI, client: TestClient
+) -> None:
+    """W2.9's edit: new settings reach the store as one reconnection pinned to their own digest,
+    with the steward's grants, and the old connection stays in the history; no key is written.
+    Delete this and an edit can change the settings under the old digest, or write a key."""
+    records, vault = ChangingRecords((a_connection("freshdesk"),)), held_vault()
+    attach(app, records, vault, Recorded())
+    changed = {**settings_for("freshdesk"), "department": "billing"}
+    answered = post(client, "u_admin", edit_path("freshdesk"), {"settings": changed})
+
+    assert answered.status_code == 200, answered.text
+    assert answered.json()["told"] == EDITED
+    [made] = records.edits
+    assert made["connection"].settings == changed
+    assert made["connection"].digest == manifest_digest(manifest_for("freshdesk", changed))
+    assert made["declared"] == declared_capabilities(manifest_for("freshdesk", changed))
+    history = read(client, "u_admin", source_path("freshdesk")).json()["history"]
+    assert [one["disconnected_at"] is None for one in history] == [True, False]
+    assert vault.written == []
+
+
+def test_an_edit_is_refused_before_anything_changes_when_it_should_be(
+    app: FastAPI, client: TestClient
+) -> None:
+    """A caller without the authority, a source not connected and a malformed name are the one
+    refusal; settings the connector refuses and settings that change nothing are told as problems.
+    Nothing is edited by any of them, and the positive case is the edit above. Delete this and an
+    edit by the wrong person, or an edit of nothing, writes two rows."""
+    records = ChangingRecords((a_connection("xero"),))
+    attach(app, records, held_vault())
+    same = {"settings": settings_for("xero")}
+    for refused in (
+        post(client, "u_none", edit_path("xero"), same),
+        post(client, "u_narrow", edit_path("hubspot"), {"settings": settings_for("hubspot")}),
+        post(client, "u_admin", edit_path("hubspot"), {"settings": settings_for("hubspot")}),
+        post(client, "u_admin", edit_path("Not-A-Name"), same),
+    ):
+        assert (refused.status_code, without_trace(refused)) == (
+            404,
+            {"message": Absent.public_message},
+        )
+    unchanged = post(client, "u_admin", edit_path("xero"), same)
+    wrong = post(client, "u_admin", edit_path("xero"), {"settings": {"tenant_id": "*"}})
+
+    assert unchanged.status_code == 422
+    assert [one["code"] for one in unchanged.json()["problems"]] == ["unchanged"]
+    assert wrong.status_code == 422
+    assert [one["field"] for one in wrong.json()["problems"]] == ["tenant_id"]
+    assert records.edits == []
+
+
+def test_a_replaced_key_is_a_credential_write_and_changes_no_connection(
+    app: FastAPI, client: TestClient
+) -> None:
+    """W2.9's key replacement: the key reaches the source's own slot and is recorded as a write by
+    the person, the connection is not asked to change, and the answer carries no key. A source not
+    connected is the one refusal, a blank key a problem, and an install with no vault a 409.
+    Delete this and a replacement can reconnect the source, or write a key for nothing."""
+    records, vault, writes = ChangingRecords((a_connection("xero"),)), Vault(), Recorded()
+    attach(app, records, vault, writes)
+    answered = post(client, "u_admin", key_path("xero"), {"credential": KEY})
+
+    assert answered.status_code == 200
+    assert answered.json()["told"] == KEY_REPLACED
+    assert vault.written == [("connector_keys/xero", {KEY_FIELD: KEY})]
+    assert [(one["slot"], one["written_by"]) for one in writes.records] == [
+        ("connector_keys/xero", "u_admin")
+    ]
+    assert records.connects == [] and records.disconnects == [] and records.edits == []
+    assert KEY not in answered.text
+    assert post(client, "u_admin", key_path("hubspot"), {"credential": KEY}).status_code == 404
+    assert post(client, "u_none", key_path("xero"), {"credential": KEY}).status_code == 404
+    blank = post(client, "u_admin", key_path("xero"), {"credential": " "})
+    assert [one["code"] for one in blank.json()["problems"]] == ["blank"]
+    attach(app, records, None)
+    assert post(client, "u_admin", key_path("xero"), {"credential": KEY}).status_code == 409
+    assert len(vault.written) == 1

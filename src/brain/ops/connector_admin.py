@@ -28,12 +28,16 @@ source with no verified call ceiling is not read at all. The screen and the conf
 disconnecting leaves the key in the vault, because the application may not delete one, which
 `DISCONNECTING_A_SOURCE` tells the person to finish at the source.
 
+**An edit and a key replacement are asked of the same authority as a connection**, and each says
+what it leaves alone: an edit leaves the key, and a replaced key leaves the connection. See
+`EDITING_A_SOURCE` and `REPLACING_A_KEY`.
+
 Rejected: generating nothing and asking only for the key, with the source's identifiers filled in
 by the first sync. A connection whose scope is decided by what the key happens to reach is exactly
 the connector `brain.connectors.contract.ConnectorScope` refuses to build: narrowing later does not
 un-fetch what was already read.
 
-Task ids: M42.6.5
+Task ids: M42.6.5, M27.11.9, M11.2.6
 """
 
 from __future__ import annotations
@@ -100,6 +104,46 @@ CONNECTED: Final = (
 DISCONNECTED: Final = (
     "The source is disconnected. Its key is still in the vault: revoke it in the source's own "
     "settings."
+)
+
+#: The confirmation's consequence for an edit, in the words a person agrees to.
+EDITING_A_SOURCE: Final = (
+    "The connection is recorded as disconnected by you and connected again with these settings, "
+    "now, as one change; the ledger records both and its history keeps the old settings. What the "
+    "source declares with these settings is what you agree to it reading. Its key stays as it is: "
+    "replace the key separately if the new settings need another one."
+)
+
+#: What an edit's success says.
+EDITED: Final = (
+    "The source is connected with the new settings. The old connection is kept in its history, "
+    "and its key was not changed. The worker reads it with these settings on its next run."
+)
+
+#: What an edit that would change nothing is told, against the source rather than a setting.
+NOTHING_TO_EDIT: Final = (
+    "These are the settings it is connected with, and what it declares is what was agreed to, so "
+    "there is nothing to change."
+)
+
+#: The confirmation's consequence for replacing a key.
+REPLACING_A_KEY: Final = (
+    "The new key is written into the vault over the old one and never shown again, and the ledger "
+    "records who wrote it. The connection, its settings and what it was agreed to read stay as "
+    "they are. The worker uses the new key on its next attempt, so revoke the old key in the "
+    "source's own settings once it has read."
+)
+
+#: What a replaced key's success says.
+KEY_REPLACED: Final = (
+    "The new key is held in the vault. The worker uses it on its next attempt; revoke the old key "
+    "in the source's own settings."
+)
+
+#: What an exported connection record says about its key, in place of one.
+NO_KEY_IS_EXPORTED: Final = (
+    "No key is exported. A key is kept in the vault and never leaves it, so connecting from this "
+    "record asks for the key again."
 )
 
 #: What a person is told for each vault state when a key is written or asked about.

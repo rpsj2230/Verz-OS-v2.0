@@ -375,7 +375,18 @@ def ceiling_in_words(manifest: ConnectorManifest) -> str:
     row are one answer here deliberately: both mean nothing has been verified, and a connector
     naming a ceiling that does not exist is not a state a reader can act on differently.
     """
-    measured = connector_ceiling(manifest.ceiling) if manifest.ceiling else None
+    return ceiling_named_in_words(manifest.ceiling)
+
+
+def ceiling_named_in_words(name: str) -> str:
+    """`ceiling_in_words` for a ceiling named rather than read off a manifest.
+
+    A source nobody has connected has no manifest to read the name off, and its page still says
+    what its verified ceiling is, because that is a fact about this release and the thing a person
+    wants to know before connecting it. Each connector names its ceiling after itself, which its
+    own tests hold (`CEILING_NAME == CONNECTOR_NAME`).
+    """
+    measured = connector_ceiling(name) if name else None
     if measured is None:
         return (
             "No verified ceiling has been recorded for this source, so nothing here is pacing "

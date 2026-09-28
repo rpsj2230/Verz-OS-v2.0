@@ -397,6 +397,13 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.ops.connector_store:ConnectorRecords.disconnect": (
             Repeat.WRITES_THIS_SYSTEMS_DATABASE
         ),
+        # An edit is a disconnection and a connection in one transaction under the source's lock;
+        # a repeat with the same settings disconnects the connection the first one made and
+        # records it again, two more rows and no key. The history is a bounded read.
+        "brain.ops.connector_store:ConnectorChanges.reconnect": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
+        "brain.ops.connector_store:ConnectorChanges.history": Repeat.READS,
         # The Learning screen's undo and a memory's edit. Each is this system's own rows in one
         # transaction, decided under a lock on the memory; a repeat reads the first one's correction
         # and writes nothing, which is `brain.memory.digest.undo`'s own idempotency.
