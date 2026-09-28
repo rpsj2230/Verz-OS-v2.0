@@ -166,6 +166,7 @@ SENTENCE_CHARS: Final = 400
 CHECK_MODULES: Final = (
     "brain.ops.acceptance_checks",
     "brain.ops.acceptance_oversight",
+    "brain.ops.acceptance_checks_chat",
 )
 
 
