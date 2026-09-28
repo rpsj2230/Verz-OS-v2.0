@@ -424,7 +424,13 @@ COMPANY_NAVIGATION: Final[tuple[Section, ...]] = (
                     Page(label="Capacity", to="/connections", key="connections"),
                 ),
             ),
-            _one("Secrets and credentials", "/vault"),
+            Entry(
+                label="Secrets and credentials",
+                pages=(
+                    Page(label="Credentials", to="/credentials"),
+                    Page(label="Vault activity", to="/vault"),
+                ),
+            ),
             _one("Storage", "/storage"),
             _one("Backup and recovery", "/recovery", "recovery"),
             Entry(

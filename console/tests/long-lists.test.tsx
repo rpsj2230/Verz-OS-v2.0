@@ -72,6 +72,9 @@ const A_RUNG_IS_SAVED_ONE_AT_A_TIME =
   "Saving a rung changes the chain the next model call walks, and switching several off at once can " +
   "leave a tier with no rung switched on, which nothing refuses: " +
   "brain.routing_routes.A_RUNG_IS_SAVED_ONE_AT_A_TIME.";
+const A_CREDENTIAL_IS_WRITTEN_ONE_SLOT_AT_A_TIME =
+  "A value is typed for one slot and replaces what that slot holds, so no act applies to several " +
+  "rows: each has its own value, and a key replaced on the wrong row stops what used it.";
 const AN_APPROVAL_IS_DECIDED_FROM_ITS_OWN_CARD =
   "An approval lets one suspended action run and its card is the statement of what it will do, so " +
   "approving several at once approves artefacts nobody read, and a rejection names its own reason: " +
@@ -215,6 +218,7 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
   "/sign-in-links": { bulk: AN_UNLINK_LOCKS_A_PERSON_OUT },
   "/service-accounts": { bulk: RETIRING_AN_ACCOUNT_STOPS_AN_INTEGRATION },
   "/audit": { bulk: READ_ONLY },
+  "/credentials": { bulk: A_CREDENTIAL_IS_WRITTEN_ONE_SLOT_AT_A_TIME },
   "/departments": { bulk: A_ROW_IS_A_DEPARTMENT_AND_A_PLACEMENT_NAMES_A_PERSON },
   "/elevation": { bulk: AN_ELEVATION_IS_DECIDED_ON_ITS_OWN_REASON },
   "/access_review": {},

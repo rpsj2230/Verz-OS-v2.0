@@ -132,6 +132,7 @@ import { editApiPath, exportApiPath, keyApiPath } from "../../src/pages/connecto
 import { LARK_API_PATH, LARK_TEST_API_PATH } from "../../src/pages/larkConnectQuery";
 import { agentMoveApiPath } from "../../src/pages/agentLifecycleQuery";
 import { credentialPath } from "../../src/components/ProviderKeyForm";
+import { credentialApiPath } from "../../src/pages/credentials/credentialRows";
 import { REGISTER_API_PATH, secretApiPath, switchOffApiPath } from "../../src/pages/webhooksQuery";
 import {
   ISSUE_KEY_API_PATH,
@@ -408,6 +409,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/agents/{agent_id}/archive",
       "/api/v1/agents/{agent_id}/transfer",
       "/api/v1/agents/{agent_id}/duplicate",
+      "/api/v1/console/agents/{agent_id}/stats",
       "/api/v1/agent-templates",
       "/api/v1/agent-templates/{template_id}/versions/{version}*",
       "/api/v1/approvals*",
@@ -445,6 +447,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/skills/{digest}/retirement",
       "/api/v1/skills/{digest}/reinstatement",
       "/api/v1/skills/{digest}/detachments",
+      "/api/v1/console/skills/{skill_name}/stats",
       "/api/v1/tools",
       "/api/v1/tools/{name}/switch",
     ],
@@ -506,6 +509,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/connectors/lark-app/test",
       "/api/v1/channels*",
       "/api/v1/me/channels*",
+      "/api/v1/console/connectors/{connector}/stats",
+      "/api/v1/console/channels/{name}/stats",
     ],
     tables: [
       "auth.binding_code",
@@ -553,7 +558,14 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "API keys, credentials and secrets, held in the vault and never displayed": {
-    screens: ["/webhooks", "/vault", "/models"],
+    screens: [
+      "/credentials",
+      "/credentials/:family/:name",
+      "/credentials/:family/:name/:view",
+      "/webhooks",
+      "/vault",
+      "/models",
+    ],
     routes: ["/api/v1/credentials*", "/api/v1/vault"],
     tables: ["ops.credential_write", "ops.vault_access"],
     installation: [],
@@ -736,17 +748,13 @@ export const AREAS: Readonly<Record<string, Area>> = {
   },
   "System health and the state of every service": {
     screens: ["/", "/models", "/runs"],
-    routes: ["/api/v1/console/overview/figures"],
+    routes: ["/api/v1/console/overview/figures", "/api/v1/console/overview"],
     tables: ["ops.halt"],
     installation: [],
     gaps: [
       {
-        what: "The install cannot be stopped or resumed from the console: 0136 stores a halt and its resume, and no store, route or Stop control reads or writes the table yet.",
+        what: "The install cannot be stopped or resumed from the console: 0136 stores a halt and its resume, GET /api/v1/console/overview reads the halts in force, and no route or Stop control writes one yet.",
         leaf: "M27.12.4",
-      },
-      {
-        what: "The state of each service the install runs on is not shown.",
-        because: "/health/ready answers the orchestrator outside /api/v1. The Overview draws the same parts beside Needs you from GET /api/v1/console/overview, which the stats package serves (PR #165) and this install does not answer until it lands. Each rung's circuit breaker is shown, on the Models and health screen from GET /api/v1/models/providers, replayed from the attempts the executor recorded.",
       },
     ],
   },
@@ -1036,6 +1044,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   ],
   "src/components/ProviderKeyForm.tsx credentialPath(slot)": [
     at("PUT /api/v1/credentials/{family}/{name}", "credentialPath", credentialPath("providers/anthropic")),
+  ],
+  "src/pages/credentials/SetValueForm.tsx credentialApiPath(detail.row.slot)": [
+    at("PUT /api/v1/credentials/{family}/{name}", "credentialApiPath", credentialApiPath("providers/mail_relay")),
   ],
   "src/components/RoutingSettings.tsx tierApiPath(asked.tier)": [
     at("PUT /api/v1/models/tiers/{tier}", "tierApiPath", tierApiPath("main")),

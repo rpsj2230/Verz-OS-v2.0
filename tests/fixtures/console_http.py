@@ -11,12 +11,12 @@ Task ids: none
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import TextClause
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -116,9 +116,15 @@ class Store:
 
 @contextmanager
 def console_client(
-    grants: Mapping[str, tuple[Grant, ...]], *, database: bool = True
+    grants: Mapping[str, tuple[Grant, ...]],
+    *,
+    database: bool = True,
+    routers: Sequence[APIRouter] = (),
 ) -> Iterator[tuple[TestClient, Stub]]:
-    """The application with these grants, and the stub its sessions answer from."""
+    """The application with these grants, and the stub its sessions answer from.
+
+    `routers` are included beside `ROUTERS`, for a test file whose router this list does not name.
+    """
     global _STUB
     _STUB = Stub()
     app: FastAPI = create_app(Settings(env="development"))
@@ -126,7 +132,7 @@ def console_client(
     # arrangement: a route registered twice answers from the first registration, which is the same
     # function, so these tests exercise the routers whether or not the lines in `brain.app` are in
     # the tree they run in, as in a mutation worktree at a commit that predates them.
-    for router in ROUTERS:
+    for router in (*ROUTERS, *routers):
         app.include_router(router)
     with TestClient(app, raise_server_exceptions=False) as client:
         app.state.gate = gate_wiring(grants)

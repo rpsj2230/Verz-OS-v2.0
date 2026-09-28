@@ -74,7 +74,12 @@ renewal, and `holding` returns a client presenting it. `revoke_self` gives it ba
 which OpenBao answers for anybody, so a console can say sealed, open or silent even when the token
 it holds has lapsed, which is exactly when somebody needs to know which of the three it is.
 
-Task ids: M31.3.2.3, M31.3.2.4, M27.8.7, M27.8.12, M42.6.5, M42.6.2
+**Whether the policy the vault loaded is this release's is asked of the vault.** A change to
+`ops/openbao/policies/application.hcl` takes effect only once somebody holding the unseal pieces
+loads the policies again, so `capabilities_self` asks what the loaded policy lets this token do on
+one path. The Credentials screen asks it of the one mint live reads need.
+
+Task ids: M31.3.2.3, M31.3.2.4, M27.8.7, M27.8.12, M42.6.5, M42.6.2, M27.15.50
 """
 
 from __future__ import annotations
@@ -511,6 +516,25 @@ class OpenBaoVault:
             msg = "the vault described its seal without a readable initialized or sealed"
             raise SecretsUnavailableError(msg)
         return SealStatus(initialized=initialized, sealed=sealed)
+
+    def capabilities_self(self, path: str) -> tuple[str, ...]:
+        """What the policies this token carries allow on one path, as the vault computes it.
+
+        `sys/capabilities-self` is granted by the vault's `default` policy, which the installer
+        leaves on every token, so a process can ask what the policy the vault *loaded* lets it do,
+        which is not always what `ops/openbao/policies` in this release says. The answer carries
+        the path's list under the path, and under `capabilities` too when one path is asked;
+        newer servers also wrap it in `data`. Anything else raises rather than reading as `deny`.
+        """
+        payload = self._call("POST", "sys/capabilities-self", {"paths": [path]})
+        wrapped = payload.get("data")
+        for source in (payload, wrapped if isinstance(wrapped, dict) else {}):
+            for key in (path, "capabilities"):
+                found = source.get(key)
+                if isinstance(found, list) and all(isinstance(one, str) for one in found):
+                    return tuple(found)
+        msg = "the vault described this token's capabilities without a readable list"
+        raise SecretsUnavailableError(msg)
 
     def static_kv_defined(self, path: str) -> bool:
         """Whether the slot exists at all, written or not: its metadata answers rather than 404.

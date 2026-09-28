@@ -3,10 +3,11 @@
 - **Screens:** `/skills`, `/skills/:name`, `/skills/:name/:view`, `/tools`
 - **Tables:** `agent.skill`, `agent.skill_review`, `agent.skill_assignment`, `agent.tool_definition`, `agent.tool_switch`, `agent.skill_category`, `agent.skill_invocation`, `agent.skill_retirement`, `agent.skill_detachment`
 - **Installation values:** `INSTALL_ACCEPTANCE_SKILL_SOURCE`
-- **Measured here:** 13 routes, 0 called by no screen; 10 write routes, 10 with all three proofs; 2 gaps.
+- **Measured here:** 14 routes, 0 called by no screen; 10 write routes, 10 with all three proofs; 2 gaps.
 
 | Route | Called by |
 | --- | --- |
+| `GET /api/v1/console/skills/{skill_name}/stats` | `/skills/:name` |
 | `GET /api/v1/skills` | `/skills/:name`, `/skills/:name/:view` |
 | `GET /api/v1/skills/library` | `/skills` |
 | `GET /api/v1/tools` | `/tools` |

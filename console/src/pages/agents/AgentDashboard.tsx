@@ -107,7 +107,7 @@ export function AgentDashboard({
   const read = stats.data === null ? null : readAgentStats(stats.data);
   const figures = periodOf(read, period);
   const whose = basisWords(read?.basis);
-  const atLeast = read?.truncated === true ? "at least, " : "";
+  const atLeast = read?.atLeast === true ? "at least, " : "";
   const sub = whose === undefined ? undefined : `${atLeast}${whose}`;
 
   return (

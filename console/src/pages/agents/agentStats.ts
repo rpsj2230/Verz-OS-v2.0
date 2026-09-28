@@ -5,7 +5,7 @@
  * `brain.console_stats_routes` (the stats package, built in parallel with this one). An agent's
  * answer is `AgentStatsView`: whose the figures are (`basis`, `cost_basis`), the install's
  * `currency`, when the agent was `last_active`, whether the requests were read to their bound
- * (`truncated`), one set of figures per period (7 and 30 days), and `unrecorded`, the figures the
+ * (`at_least`), one set of figures per period (7 and 30 days), and `unrecorded`, the figures the
  * page asks for that nothing on this install records, each with the reason.
  *
  * **A figure nothing records is "Not recorded yet" with its reason, never nought.** `cost_minor` is
@@ -66,7 +66,7 @@ export interface AgentStats {
   /** When the agent last answered, as an ISO instant. */
   readonly lastActiveAt?: string;
   /** The requests were read to their bound, so the figures are at least these. */
-  readonly truncated: boolean;
+  readonly atLeast: boolean;
   readonly periods: readonly AgentPeriod[];
   readonly unrecorded: readonly Unrecorded[];
 }
@@ -160,7 +160,7 @@ export function readAgentStats(payload: unknown): AgentStats | null {
     ...(costBasis === undefined ? {} : { costBasis }),
     ...(currency === undefined ? {} : { currency }),
     ...(lastActiveAt === undefined ? {} : { lastActiveAt }),
-    truncated: fields["truncated"] === true,
+    atLeast: fields["at_least"] === true,
     periods,
     unrecorded,
   };

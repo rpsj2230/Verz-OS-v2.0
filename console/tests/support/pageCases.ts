@@ -35,22 +35,7 @@ export const RUNG_ID = "11111111-1111-4111-8111-111111111111";
  * package serves, so it is answered here in the shape that package was briefed with, and listed so
  * the document check knows it is expected rather than a typo. Delete the entry when the route lands.
  */
-export const AWAITED_ROUTES: Readonly<Record<string, string>> = {
-  "/api/v1/console/agents/{id}/stats":
-    "The per-entity stats route is built in parallel by the stats package (brain.console_stats_routes, " +
-    "on its own branch); the agent pages code against its declared shape and draw the failed state " +
-    "until it answers.",
-  "/api/v1/console/connectors/{connector}/stats":
-    "The same stats package serves a source's figures; the Connectors list and a source's Dashboard " +
-    "code against ConnectorStatsView and draw the failed state until it answers.",
-  "/api/v1/console/overview":
-    "The landing screen's health strip and Needs you are served by the stats package " +
-    "(brain.console_overview_routes, PR #165); the Overview codes against OverviewView and leaves both " +
-    "blocks out, as for any 404, until it answers.",
-  "/api/v1/console/skills/{name}/stats":
-    "The same stats package serves one skill's figures (SkillStatsView); a skill's Dashboard codes " +
-    "against that shape and draws the failed state until it answers.",
-};
+export const AWAITED_ROUTES: Readonly<Record<string, string>> = {};
 
 /** One source's figures as `brain.console_stats_routes.ConnectorStatsView` sends them. */
 const CONNECTOR_STATS = {
@@ -60,7 +45,7 @@ const CONNECTOR_STATS = {
   last_read_to_the_end: "2019-03-04T09:30:00Z",
   consecutive_failures: 0,
   index_ids: 1234,
-  truncated: false,
+  at_least: false,
   periods: ["7d", "30d"].map((range) => ({
     range,
     since: "2019-02-02T00:00:00Z",
@@ -128,7 +113,7 @@ const AGENT_STATS = {
   cost_basis: "everyone",
   currency: "SGD",
   last_active: "2019-03-04T09:42:00Z",
-  truncated: false,
+  at_least: false,
   periods: ["7d", "30d"].map((range) => ({
     range,
     since: "2019-02-02T00:00:00Z",
@@ -1013,6 +998,52 @@ const STORAGE = {
   read_at: "2019-03-04T09:00:00Z",
 };
 
+/** The Credentials list as `brain.credential_routes.CredentialsPage` sends it. */
+const CREDENTIAL_VAULT = {
+  seal: "open",
+  told: UNBROKEN,
+  slots_unread: "",
+  token_policy: "own",
+  token_policies: ["application", "default"],
+  token_told: UNBROKEN,
+  live_reads: "waiting",
+  live_reads_told: UNBROKEN,
+};
+
+const CREDENTIAL_ROW = {
+  slot: "providers/mail_relay",
+  family: "providers",
+  name: "mail_relay",
+  kind: "relay",
+  holder: UNBROKEN,
+  state: "held",
+  held: true,
+  set_at: "2019-03-04T09:00:00Z",
+  outranked_by: "ANTHROPIC_API_KEY",
+  read_by: "application",
+  writable: true,
+  write_told: "",
+};
+
+export const CREDENTIALS = { vault: CREDENTIAL_VAULT, items: [CREDENTIAL_ROW], next_cursor: null };
+
+/** One slot's page as `brain.credential_routes.CredentialDetailView` sends it. */
+export const CREDENTIAL = {
+  vault: CREDENTIAL_VAULT,
+  row: CREDENTIAL_ROW,
+  description: UNBROKEN,
+  fields: [{ field: "value", label: "Password", accepts: UNBROKEN }],
+  ask_for: [UNBROKEN],
+  never: [UNBROKEN],
+  takes_effect: "outranked",
+  takes_effect_told: UNBROKEN,
+  use_recorded: false,
+  last_used_at: null,
+  last_used_told: UNBROKEN,
+  history: [{ at: "2019-03-04T09:00:00Z", by: UNBROKEN, by_id: UNBROKEN }],
+  history_told: UNBROKEN,
+};
+
 const VAULT_SLOT = {
   slot: UNBROKEN,
   description: UNBROKEN,
@@ -1185,8 +1216,10 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
             { name: "cache", state: "not_configured", gates: false },
             { name: UNBROKEN, state: "ready", gates: false },
           ],
+          halts: [{ scope: "department", target: UNBROKEN, since: "2019-03-04T11:30:00Z" }],
+          halts_known: true,
           worker_last_seen: "2019-03-04T11:58:00Z",
-          unrecorded: [{ figure: "halts", why: UNBROKEN }],
+          unrecorded: [{ figure: "budget_stops", why: UNBROKEN }],
         },
         needs_you: [
           { queue: "approvals", waiting: 3, at_least: false, opens: "/approvals" },
@@ -1358,7 +1391,7 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         next_cursor: null,
         truncated: false,
       },
-      // Each row's figures, from the shared stats route. See `AWAITED_ROUTES`.
+      // Each row's figures, from the shared stats route, `brain.console_stats_routes`.
       "/api/v1/console/agents/quote-helper/stats": AGENT_STATS,
     },
   },
@@ -2725,8 +2758,28 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     drawsValues: true,
     answers: { "/api/v1/storage": STORAGE },
   },
-  // Secrets vault. The slot and lease tables scroll; the seal's sentence, the rotation and the
-  // shipping sentences wrap outside them.
+  // Credentials. The list's table scrolls; the vault card's sentences and the policies wrap above it.
+  "/credentials": {
+    address: "/credentials",
+    signedIn: true,
+    drawsValues: true,
+    answers: { "/api/v1/credentials": CREDENTIALS },
+  },
+  // One credential's Dashboard: its figures, where it stands and the vault card.
+  "/credentials/:family/:name": {
+    address: "/credentials/providers/mail_relay",
+    signedIn: true,
+    drawsValues: true,
+    answers: { "/api/v1/credentials/providers/mail_relay": CREDENTIAL },
+  },
+  // Its Profile, the view with the write-only form, the hints and the links to where else it is used.
+  "/credentials/:family/:name/:view": {
+    address: "/credentials/providers/mail_relay/profile",
+    signedIn: true,
+    drawsValues: true,
+    answers: { "/api/v1/credentials/providers/mail_relay": CREDENTIAL },
+  },
+  // Vault activity. The lease table scrolls; the shipping sentences wrap outside it.
   "/vault": {
     address: "/vault",
     signedIn: true,

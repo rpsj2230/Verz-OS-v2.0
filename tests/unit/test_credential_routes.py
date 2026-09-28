@@ -37,7 +37,6 @@ from brain.credential_routes import (
     CREDENTIAL_AUTHORITY,
     CREDENTIALS_PATH,
     CredentialKeptView,
-    SlotView,
 )
 from brain.ops.credentials import (
     KEY_FIELD,
@@ -389,7 +388,7 @@ def test_a_body_in_the_wrong_shape_is_refused_without_repeating_what_was_sent(
     for body, where in (
         ({"value": KEY, "extra": KEY}, "extra"),
         ({"value": [KEY]}, "value"),
-        ({"valu": KEY}, "value"),
+        ({"valu": KEY}, "valu"),
     ):
         refused = put(client, "u_admin", body=body)
         assert refused.status_code == 422
@@ -402,46 +401,8 @@ def test_a_body_in_the_wrong_shape_is_refused_without_repeating_what_was_sent(
 
 
 # ------------------------------------------------------------------ the listing
-def test_the_listing_says_which_slots_hold_a_key_and_when_and_carries_no_field_for_one(
-    app: FastAPI, client: TestClient
-) -> None:
-    """Every slot, in path order, each held with the vault's time. Asserted over the whole body
-    and against the view's own fields, so a field added later is checked here. Delete this and the
-    one read the console has for "is a key held" is unchecked."""
-    holding(app, Vault(version=StaticVersion(written_at=AT)))
-
-    answer = listed(client, "u_admin")
-
-    assert answer.status_code == 200
-    body = answer.json()
-    assert (body["vault"], body["told"]) == ("ready", TOLD[VaultState.READY])
-    assert [one["slot"] for one in body["slots"]] == sorted(SLOTS)
-    assert all(one["held"] is True for one in body["slots"])
-    assert {one["set_at"] for one in body["slots"]} == {AT.isoformat().replace("+00:00", "Z")}
-    assert set(SlotView.model_fields) == {"slot", "description", "held", "set_at"}
-
-
-@pytest.mark.parametrize(
-    ("vault", "state"),
-    [
-        (None, VaultState.ABSENT),
-        (Vault(fail=VaultUnreachableError("x")), VaultState.UNREACHABLE),
-        (Vault(fail=VaultRefusedError("x", status=403)), VaultState.REFUSED),
-    ],
-)
-def test_a_listing_the_vault_cannot_answer_says_why_and_calls_no_slot_empty(
-    app: FastAPI, client: TestClient, vault: Vault | None, state: VaultState
-) -> None:
-    """Not known is not "not held". Every slot is listed with `held` null and the vault's state in
-    words. Delete this and an unreachable vault lists every slot empty, and somebody pastes a key
-    into a vault that is down."""
-    holding(app, vault)
-
-    body = listed(client, "u_admin").json()
-
-    assert (body["vault"], body["told"]) == (state.value, TOLD[state])
-    assert [one["slot"] for one in body["slots"]] == sorted(SLOTS)
-    assert all(one["held"] is None and one["set_at"] is None for one in body["slots"])
+# The list is the Credentials screen's, over every slot the install declares, and is held in
+# `tests/unit/test_credentials_screen.py` with the vault's seal and policies it is drawn beside.
 
 
 # --------------------------------------------------------------------- M27.8.7

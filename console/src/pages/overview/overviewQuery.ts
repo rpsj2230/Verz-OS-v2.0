@@ -26,9 +26,14 @@
  * line reading "Access review 0" to somebody who may not open access review says the queue exists
  * and is being kept from them.
  *
- * **The overview route is not in the generated schema until PR #157 lands**, so its shape is typed
- * here from `brain.console_overview_routes.OverviewView` and read field by field, keeping only what
- * was sent. The figures route is this package's own and comes from the generated schema.
+ * **The overview's shape is `brain.console_overview_routes.OverviewView`**, typed here and read
+ * field by field, keeping only what was sent. The figures route comes from the generated schema.
+ *
+ * **Halts in force are drawn from `health.halts`, and an unreadable halt state is said in words.**
+ * The route sends the halts this reader may be told of (a halt on everything to everybody, narrower
+ * ones through the halt screen's grant) and `halts_known` false when they could not be read, which
+ * admission treats as halted. So "none" is drawn only over a state that was read, and never the
+ * reason or who declared a halt, which the route does not send.
  *
  * Task ids: M27.15.17, M27.16.1
  */
@@ -73,6 +78,14 @@ export interface ReadinessPart {
   readonly state: string;
 }
 
+/** One halt in force this reader may be told of: what it stops and since when. */
+export interface HaltLine {
+  readonly scope: string;
+  /** What a targeted halt names; empty for a halt on everything. */
+  readonly target: string;
+  readonly since?: string;
+}
+
 /** One queue this reader may act on, and how many items in it they may act on. */
 export interface WaitingQueue {
   readonly queue: string;
@@ -88,6 +101,10 @@ export interface OverviewAnswer {
   readonly status: string;
   readonly parts: readonly ReadinessPart[];
   readonly workerLastSeen?: string;
+  /** The halts in force this reader may be told of, or absent when the route sent none. */
+  readonly halts?: readonly HaltLine[];
+  /** False when the halts could not be read, which admission treats as halted. */
+  readonly haltsKnown: boolean;
   readonly healthNotRecorded: readonly NotRecorded[];
   readonly needsYou: readonly WaitingQueue[];
   readonly uncounted: readonly NotRecorded[];
@@ -188,10 +205,13 @@ export function readOverview(payload: unknown): OverviewAnswer | null {
     needsYou.push({ queue, waiting, atLeast: line?.["at_least"] === true, ...(opens === undefined ? {} : { opens }) });
   }
   const seen = text(health["worker_last_seen"]);
+  const halts = Array.isArray(health["halts"]) ? readHalts(health["halts"]) : undefined;
   return {
     status,
     parts,
     ...(seen === undefined ? {} : { workerLastSeen: seen }),
+    ...(halts === undefined ? {} : { halts }),
+    haltsKnown: health["halts_known"] !== false,
     healthNotRecorded: readNotRecorded(health["unrecorded"]),
     needsYou,
     uncounted: readNotRecorded(body["uncounted"]),
@@ -205,6 +225,32 @@ function readWeekCost(body: Fields | null): WeekCost | undefined {
   const basis = text(body?.["cost_basis"]);
   return minor === undefined || currency === undefined || basis === undefined ? undefined : { minor, currency, basis };
 }
+
+/** Each halt line that is one: a scope, a target (empty for everything) and when it began. */
+function readHalts(value: readonly unknown[]): HaltLine[] {
+  const read: HaltLine[] = [];
+  for (const one of value) {
+    const line = fieldsOf(one);
+    const scope = text(line?.["scope"]);
+    const target = line?.["target"];
+    if (scope === undefined || typeof target !== "string") {
+      continue;
+    }
+    const since = text(line?.["since"]);
+    read.push({ scope, target, ...(since === undefined ? {} : { since }) });
+  }
+  return read;
+}
+
+/** A halt as a person reads it: "Everything" or "Department: finance". */
+export function haltWords(halt: HaltLine): string {
+  return halt.scope === "everything" || halt.target === "" ? "Everything" : `${humanised(halt.scope)}: ${halt.target}`;
+}
+
+/** The halts card's figure: how many are in force, or that nobody can tell. */
+export const HALTS_UNKNOWN = "Cannot tell";
+export const HALTS_UNKNOWN_SUB = "New work is refused until the halts can be read.";
+export const NO_HALTS = "None";
 
 /** The figure row out of a response body, or `null` when a figure is not a count. */
 export function readFigures(payload: unknown): Figures | null {
