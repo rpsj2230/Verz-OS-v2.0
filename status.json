@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-09-28T15:41:32.374953+00:00",
-  "commit": "1cd7d01",
-  "commit_subject": "A connected source's record is read live while the asker waits, inside a named budget, and a slow source is named rather than waited for",
+  "generated_at": "2026-09-28T15:42:20.057881+00:00",
+  "commit": "7281330",
+  "commit_subject": "Twelve tasks close on the install's own acceptance checks, which ran after the deploy at 604e41d",
   "total": 1576,
-  "done": 346,
-  "percent": 22.0,
+  "done": 358,
+  "percent": 22.7,
   "acts": 47,
   "decided": 131,
   "current_wave": 0,
@@ -26,10 +26,10 @@
       "wave": 1,
       "name": "The gate",
       "total": 160,
-      "done": 148,
-      "percent": 92.5,
+      "done": 149,
+      "percent": 93.1,
       "in_progress": 0,
-      "ready_for_testing": 4,
+      "ready_for_testing": 3,
       "blocked": 8,
       "open": 0,
       "acts": 1,
@@ -39,10 +39,10 @@
       "wave": 2,
       "name": "Data, channels, retrieval",
       "total": 264,
-      "done": 25,
-      "percent": 9.5,
+      "done": 36,
+      "percent": 13.6,
       "in_progress": 20,
-      "ready_for_testing": 46,
+      "ready_for_testing": 35,
       "blocked": 2,
       "open": 171,
       "acts": 0,
@@ -116,7 +116,7 @@
       "name": "Identity, users, roles, permissions",
       "wave": 1,
       "total": 50,
-      "done": 46,
+      "done": 47,
       "acts": 0,
       "decided": 1
     },
@@ -170,7 +170,7 @@
       "name": "Knowledge, assets, document parsing",
       "wave": 2,
       "total": 39,
-      "done": 5,
+      "done": 10,
       "acts": 0,
       "decided": 1
     },
@@ -197,7 +197,7 @@
       "name": "Channels",
       "wave": 2,
       "total": 34,
-      "done": 2,
+      "done": 6,
       "acts": 0,
       "decided": 1
     },
@@ -314,7 +314,7 @@
       "name": "Rate limiting and abuse",
       "wave": 2,
       "total": 7,
-      "done": 0,
+      "done": 2,
       "acts": 0,
       "decided": 2
     },
@@ -572,6 +572,7 @@
     "M1.7.1",
     "M1.8.1",
     "M1.8.2",
+    "M1.8.3",
     "M1.8.4",
     "M1.8.6",
     "M1.8.7",
@@ -579,6 +580,10 @@
     "M1.9.1",
     "M10.1.1",
     "M10.1.5",
+    "M10.2.1",
+    "M10.3.3",
+    "M10.4.5",
+    "M10.6.3",
     "M12.1.5",
     "M12.1.6",
     "M12.2.1",
@@ -595,6 +600,8 @@
     "M2.2.1",
     "M2.2.2",
     "M2.2.4",
+    "M23.2.1",
+    "M23.2.2",
     "M24.1.1",
     "M24.1.2",
     "M24.1.3",
@@ -840,21 +847,21 @@
     "M5.7.2",
     "M6.1.5",
     "M6.2.6",
+    "M7.1.1",
     "M7.2.2",
+    "M7.2.5",
     "M7.3.1",
     "M7.3.2",
     "M7.4.1",
-    "M7.4.2"
+    "M7.4.2",
+    "M7.4.3",
+    "M7.6.3",
+    "M7.7.1"
   ],
   "leaf_status": {
     "M1.6.5": {
       "status": "READY FOR TESTING",
       "why": "Google Workspace, Entra and Lark staff lists built (PR #97); proved when the owner connects Lark as the staff source and the first sync lists people with their departments (needs-rupash 91)",
-      "updated": "2026-09-28"
-    },
-    "M1.8.3": {
-      "status": "READY FOR TESTING",
-      "why": "built (PR #98): the staff sync writes a head's audit reads over their department's people and Audit is on the department menu; proved when a department head signs in and sees only their people's activity",
       "updated": "2026-09-28"
     },
     "M1.8.5": {
@@ -902,21 +909,6 @@
       "why": "Models and health shows all four providers with Add key, Test and Turn off (PR #100); proved when each answers on the install (needs-rupash 98)",
       "updated": "2026-09-28"
     },
-    "M7.1.1": {
-      "status": "READY FOR TESTING",
-      "why": "knowledge upload (PR #106, merged, migration 0115): proved when a document uploaded for one department answers that department and nobody else, which needs a knowledge grant (needs-rupash 105)",
-      "updated": "2026-09-28"
-    },
-    "M7.2.5": {
-      "status": "READY FOR TESTING",
-      "why": "knowledge upload (PR #106, merged, migration 0115): proved when a document uploaded for one department answers that department and nobody else, which needs a knowledge grant (needs-rupash 105)",
-      "updated": "2026-09-28"
-    },
-    "M7.4.3": {
-      "status": "READY FOR TESTING",
-      "why": "knowledge upload (PR #106, merged, migration 0115): proved when a document uploaded for one department answers that department and nobody else, which needs a knowledge grant (needs-rupash 105)",
-      "updated": "2026-09-28"
-    },
     "M7.4.4": {
       "status": "READY FOR TESTING",
       "why": "built in knowledge lifecycle (K2, merged f0722dd3); proved when a company-wide request waits on Approvals and applies only when another holder of approve:knowledge.visibility approves",
@@ -960,16 +952,6 @@
     "M7.6.2": {
       "status": "READY FOR TESTING",
       "why": "built in knowledge lifecycle (K2, merged f0722dd3); proved when a captured solution waits until another admin:knowledge holder approves it, then answers as a verified approved solution",
-      "updated": "2026-09-28"
-    },
-    "M7.6.3": {
-      "status": "READY FOR TESTING",
-      "why": "knowledge upload (PR #106, merged, migration 0115): proved when a document uploaded for one department answers that department and nobody else, which needs a knowledge grant (needs-rupash 105)",
-      "updated": "2026-09-28"
-    },
-    "M7.7.1": {
-      "status": "READY FOR TESTING",
-      "why": "knowledge upload (PR #106, merged, migration 0115): proved when a document uploaded for one department answers that department and nobody else, which needs a knowledge grant (needs-rupash 105)",
       "updated": "2026-09-28"
     },
     "M7.7.2": {
@@ -1027,11 +1009,6 @@
       "why": "Wave 2 batch 2, Channels screen and identity binding (CH2)",
       "updated": "2026-09-28"
     },
-    "M10.2.1": {
-      "status": "READY FOR TESTING",
-      "why": "channel pipeline (PR #105, merged, migration 0114): proved on the install with the signed webhook channel, set up, refused, delivered once and switched off",
-      "updated": "2026-09-28"
-    },
     "M10.2.2": {
       "status": "READY FOR TESTING",
       "why": "built in the Lark channel (L1, merged d426e3d3); proved once the owner creates the Lark app from Connect Lark and a group mention is answered while an unmentioned message is left alone",
@@ -1055,11 +1032,6 @@
     "M10.3.2": {
       "status": "IN PROGRESS",
       "why": "Wave 2 batch 2, Channels screen and identity binding (CH2)",
-      "updated": "2026-09-28"
-    },
-    "M10.3.3": {
-      "status": "READY FOR TESTING",
-      "why": "channel pipeline (PR #105, merged, migration 0114): proved on the install with the signed webhook channel, set up, refused, delivered once and switched off",
       "updated": "2026-09-28"
     },
     "M10.3.4": {
@@ -1087,19 +1059,9 @@
       "why": "built in the Lark channel (L1, merged d426e3d3); provable server-side with bindings the check writes, and by a person once the binding route (CH2) lands",
       "updated": "2026-09-28"
     },
-    "M10.4.5": {
-      "status": "READY FOR TESTING",
-      "why": "channel pipeline (PR #105, merged, migration 0114): proved on the install with the signed webhook channel, set up, refused, delivered once and switched off",
-      "updated": "2026-09-28"
-    },
     "M10.6.1": {
       "status": "IN PROGRESS",
       "why": "the webhook and Lark wires are live (PR #105; L1, merged d426e3d3); every other vendor's wire comes with its own package",
-      "updated": "2026-09-28"
-    },
-    "M10.6.3": {
-      "status": "READY FOR TESTING",
-      "why": "channel pipeline (PR #105, merged, migration 0114): proved on the install with the signed webhook channel, set up, refused, delivered once and switched off",
       "updated": "2026-09-28"
     },
     "M11.1.1": {
@@ -1222,16 +1184,6 @@
       "why": "rate limits live (PR #101, merged): proved when a person asking past the window on the install gets the 429 and Ask says when to ask again",
       "updated": "2026-09-28"
     },
-    "M23.2.1": {
-      "status": "READY FOR TESTING",
-      "why": "rate limits live (PR #101, merged): proved when a person asking past the window on the install gets the 429 and Ask says when to ask again",
-      "updated": "2026-09-28"
-    },
-    "M23.2.2": {
-      "status": "READY FOR TESTING",
-      "why": "the hourly denial digest runs in the worker (PR #101, merged): proved when a repeatedly refused colleague produces a notice on the install",
-      "updated": "2026-09-28"
-    },
     "M24.3.4": {
       "status": "BLOCKED",
       "why": "the owner's audit check on the install (needs-rupash 91, check 4)",
@@ -1284,7 +1236,7 @@
     }
   },
   "wave_records": {},
-  "closed_today": 19,
+  "closed_today": 31,
   "next_up": [
     "M31.3.2.3",
     "M31.3.2.4",
@@ -1293,6 +1245,12 @@
     "M41.3.1"
   ],
   "recent": [
+    {
+      "sha": "7281330",
+      "at": "2026-09-28T15:38:32+00:00",
+      "subject": "Twelve tasks close on the install's own acceptance checks, which ran after the deploy at 604e41d",
+      "closed": "M1.8.3,M10.2.1,M10.3.3,M10.4.5,M10.6.3,M23.2.1,M23.2.2,M7.1.1,M7.2.5,M7.4.3,M7.6.3,M7.7.1"
+    },
     {
       "sha": "afde61e",
       "at": "2026-09-28T14:00:15+00:00",
@@ -1406,12 +1364,6 @@
       "at": "2026-09-21T14:57:16+00:00",
       "subject": "The worker's pool, vault audit shipping, the unseal procedure and the handover close on proof, and Needs you asks about LDAP and a password",
       "closed": "M0.3.5,M31.3.2.1,M31.3.2.6,M41.2.6,M41.4.1"
-    },
-    {
-      "sha": "565290e",
-      "at": "2026-09-21T14:42:50+00:00",
-      "subject": "The secrets vault runs on the owner's install and gates readiness, with its key slots defined",
-      "closed": "M31.1.1.5,M38.4.1.3"
     }
   ]
 }
