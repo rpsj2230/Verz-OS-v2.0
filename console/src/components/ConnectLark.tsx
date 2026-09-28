@@ -17,7 +17,12 @@
  * **The staff list is handed to the Staff sources screen afterwards**, which is where its runs, a
  * dry run and the leavers are, and the card links there.
  *
- * Task ids: M11.9.4
+ * **The chat channel asks for two more values and shows whether Lark's events are arriving.** The
+ * Encrypt Key and Verification Token from Lark's Encryption Strategy tab are typed beside the App
+ * Secret and cleared with it; the card shows the events address to paste as Lark's Request URL and
+ * the API's sentence about the last event, so the owner sees Lark reach the install without a log.
+ *
+ * Task ids: M11.9.4, M10.2.1
  */
 
 import { useEffect, useState, type FormEvent } from "react";
@@ -31,6 +36,7 @@ import {
   LARK_API_PATH,
   LARK_TEST_API_PATH,
   larkBody,
+  type LarkEvents,
   toggled,
   verdictWords,
   type LarkGuide,
@@ -53,9 +59,55 @@ export const NOT_SAVED = "Lark was not connected";
 export const NOT_TESTED = "The test did not run";
 export const SECRET_SUPPLIED = "Supplied, and never shown again";
 export const STAFF_SOURCES_LINK = "Open Staff sources";
+export const LARK_EVENTS = "Lark's events";
+export const EVENTS_ADDRESS = "Events address to paste in Lark";
+export const NO_ADDRESS =
+  "This install names no address of its own yet, so there is no events address to paste. Set the " +
+  "install's sign-in redirect address first.";
 
 const FORM = "connect-lark";
-const FIELDS = ["app_id", "app_secret", "uses", "platform", "base_link"];
+const FIELDS = ["app_id", "app_secret", "uses", "platform", "base_link", "encrypt_key", "verification_token"];
+
+function when(at: string | null): string {
+  return at === null ? "never" : new Date(at).toLocaleString();
+}
+
+/** Where Lark's events go and whether they are arriving: the API's sentence and three instants. */
+function EventsPanel({ events }: { readonly events: LarkEvents }) {
+  return (
+    <section aria-label={LARK_EVENTS}>
+      <h3>{LARK_EVENTS}</h3>
+      {events.address === "" ? (
+        <p className="note">{NO_ADDRESS}</p>
+      ) : (
+        <p>
+          {EVENTS_ADDRESS}: <code>{events.address}</code>
+        </p>
+      )}
+      <p role="status">{events.told}</p>
+      <dl className="fields" aria-label="The last events">
+        <div className="fields__row">
+          <dt>Last message received</dt>
+          <dd>{when(events.last_received ?? null)}</dd>
+        </div>
+        <div className="fields__row">
+          <dt>Last request refused</dt>
+          <dd>
+            {when(events.last_refused ?? null)}
+            {events.refused_because ? ` (${events.refused_because.replaceAll("_", " ")})` : null}
+          </dd>
+        </div>
+        <div className="fields__row">
+          <dt>Last reply</dt>
+          <dd>
+            {when(events.last_reply ?? null)}
+            {events.reply_outcome ? ` (${events.reply_outcome})` : null}
+          </dd>
+        </div>
+      </dl>
+    </section>
+  );
+}
 
 function Standing({ guide }: { readonly guide: LarkGuide }) {
   return (
@@ -109,6 +161,8 @@ function Wizard({ guide, onChoose, onSaved }: {
 }) {
   const [appId, setAppId] = useState("");
   const [secret, setSecret] = useState("");
+  const [encryptKey, setEncryptKey] = useState("");
+  const [verificationToken, setVerificationToken] = useState("");
   const [baseLink, setBaseLink] = useState(guide.base);
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState(false);
@@ -116,6 +170,8 @@ function Wizard({ guide, onChoose, onSaved }: {
   const [failure, setFailure] = useState<ApiFailure | null>(null);
   const [saved, setSaved] = useState<LarkSaved | null>(null);
   const chosen = guide.chosen;
+  const chat = chosen.includes("chat_channel");
+  const keys = { encryptKey, verificationToken };
   const mayAll = chosen.length > 0 && guide.uses.filter((one) => chosen.includes(one.name)).every((one) => one.may_switch_on);
   const problems = failure?.problems ?? [];
   // Nothing is sent from a blank form: both buttons wait for an App ID and an App Secret.
@@ -130,7 +186,7 @@ function Wizard({ guide, onChoose, onSaved }: {
     void (async () => {
       const result = await request<LarkTested>(LARK_TEST_API_PATH, {
         method: "POST",
-        body: larkBody(appId, secret, chosen, guide.platform, baseLink),
+        body: larkBody(appId, secret, chosen, guide.platform, baseLink, keys),
       });
       setBusy(false);
       if (!result.ok) {
@@ -142,10 +198,12 @@ function Wizard({ guide, onChoose, onSaved }: {
   }
 
   function save(): void {
-    const body = larkBody(appId, secret, chosen, guide.platform, baseLink);
+    const body = larkBody(appId, secret, chosen, guide.platform, baseLink, keys);
     setBusy(true);
-    // The secret leaves the field before the request does. See `THE_SECRET_STAYS_IN_ITS_FIELD`.
+    // The secrets leave their fields before the request does. See `THE_SECRET_STAYS_IN_ITS_FIELD`.
     setSecret("");
+    setEncryptKey("");
+    setVerificationToken("");
     void (async () => {
       const result = await request<LarkSaved>(LARK_API_PATH, { method: "POST", body });
       setBusy(false);
@@ -222,16 +280,19 @@ function Wizard({ guide, onChoose, onSaved }: {
           </ul>
         </>
       )}
-      {chosen.includes("chat_channel") ? (
+      {chat ? (
         <p className="note">
           {guide.channel_note}
           {guide.events_address === "" ? null : (
             <>
               {" "}
-              <code>{guide.events_address}</code>
+              {EVENTS_ADDRESS}: <code>{guide.events_address}</code>
             </>
           )}
         </p>
+      ) : null}
+      {guide.events !== null && guide.events !== undefined && (chat || guide.events.switched_on) ? (
+        <EventsPanel events={guide.events} />
       ) : null}
 
       <h3>{PASTE_AND_TEST}</h3>
@@ -283,6 +344,56 @@ function Wizard({ guide, onChoose, onSaved }: {
           <p className="field-description">Kept in the vault when you save, and never shown again.</p>
           <FieldProblems problems={problems} form={FORM} names="app_secret" />
         </div>
+        {chat ? (
+          <>
+            <div className="rjsf-field">
+              <label className="control-label" htmlFor={`${FORM}-encrypt_key`}>
+                Encrypt Key
+              </label>
+              <input
+                id={`${FORM}-encrypt_key`}
+                className="form-control"
+                type="text"
+                name="encrypt_key"
+                value={encryptKey}
+                autoComplete="off"
+                spellCheck={false}
+                {...problemAttributes(problems, FORM, "encrypt_key")}
+                disabled={busy}
+                onChange={(event) => {
+                  setEncryptKey(event.target.value);
+                }}
+              />
+              <p className="field-description">
+                From Events &amp; Callbacks, Encryption Strategy. Kept in the vault and never shown again.
+              </p>
+              <FieldProblems problems={problems} form={FORM} names="encrypt_key" />
+            </div>
+            <div className="rjsf-field">
+              <label className="control-label" htmlFor={`${FORM}-verification_token`}>
+                Verification Token
+              </label>
+              <input
+                id={`${FORM}-verification_token`}
+                className="form-control"
+                type="text"
+                name="verification_token"
+                value={verificationToken}
+                autoComplete="off"
+                spellCheck={false}
+                {...problemAttributes(problems, FORM, "verification_token")}
+                disabled={busy}
+                onChange={(event) => {
+                  setVerificationToken(event.target.value);
+                }}
+              />
+              <p className="field-description">
+                From the same tab. Kept in the vault with the Encrypt Key and never shown again.
+              </p>
+              <FieldProblems problems={problems} form={FORM} names="verification_token" />
+            </div>
+          </>
+        ) : null}
         {chosen.includes("knowledge_base") ? (
           <div className="rjsf-field">
             <label className="control-label" htmlFor={`${FORM}-base_link`}>
@@ -347,6 +458,12 @@ function Wizard({ guide, onChoose, onSaved }: {
                 <dt>App Secret</dt>
                 <dd>{SECRET_SUPPLIED}</dd>
               </div>
+              {chat ? (
+                <div className="fields__row">
+                  <dt>Encrypt Key and Verification Token</dt>
+                  <dd>{SECRET_SUPPLIED}</dd>
+                </div>
+              ) : null}
             </dl>
           }
           confirmLabel={SAVE_LARK}

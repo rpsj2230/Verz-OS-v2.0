@@ -473,9 +473,9 @@ export const AREAS: Readonly<Record<string, Area>> = {
           "The Lark knowledge connector that keeps the minimal index and reads pages and records live is still to be built over the settings Connect Lark writes; brain.ops.lark_connect.KNOWLEDGE_IS_SWITCHED_ON_AND_NOTHING_IS_COPIED says so on the screen.",
       },
       {
-        what: "The Lark chat channel is set up and tested and does not yet receive Lark's events.",
+        what: "A Lark account is linked to a person with a one-time code only once the binding store is wired.",
         because:
-          "This release receives only the company's own signed webhook at /api/v1/channels/{name}/events, and Lark's receiver is still to be built, so Lark's Events and callbacks page has nothing to verify; brain.ops.lark_connect.THE_CHANNEL_RECEIVER_IS_NOT_BUILT_YET says so in the steps.",
+          "The chat channel receives, verifies and answers Lark's events at /api/v1/channels/lark/events, and offers a code sent in a direct message to brain.channels.inbound.ChatBinder; the store that mints the code in a web session and keeps the binding is the channel binding package's, and until it is wired every sender is answered as unbound, brain.channels.inbound.NOBODY_IS_BOUND_UNTIL_A_BINDING_IS_KEPT.",
       },
       {
         what: "A channel's record, switch, test message and deliveries have routes and no screen.",

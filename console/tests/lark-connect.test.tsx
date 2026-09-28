@@ -2,7 +2,10 @@
  * Connect Lark on the Connectors screen: the steps and scopes are the API's, a test shows each
  * use's verdict with the missing scope named, and a save is confirmed and never shows the secret.
  *
- * Task ids: M11.9.4
+ * The chat channel asks for its two event keys, sends them with the secret and clears them, and
+ * the card shows the events address to paste in Lark and whether events are arriving.
+ *
+ * Task ids: M11.9.4, M10.2.1
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -10,6 +13,8 @@ import { fireEvent, render, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
 import {
   CONNECT_LARK,
+  EVENTS_ADDRESS,
+  LARK_EVENTS,
   SAVE_LARK,
   SCOPES_TO_ADD,
   SECRET_SUPPLIED,
@@ -22,6 +27,18 @@ import { backendModelFields } from "./support/python";
 
 const ORIGIN = "https://console.test";
 const SECRET = "LARK-SECRET-SENTINEL-77aa";
+const ENCRYPT_KEY = "LARK-ENCRYPT-SENTINEL-19bd";
+const VERIFY_TOKEN = "LARK-VERIFY-SENTINEL-c04e";
+const EVENTS = {
+  address: "https://brain.example.test/api/v1/channels/lark/events",
+  switched_on: true,
+  last_received: "2019-03-04T09:00:00Z",
+  last_refused: null,
+  refused_because: null,
+  last_reply: "2019-03-04T09:00:02Z",
+  reply_outcome: "sent",
+  told: "Events are arriving. The last reply was sent.",
+};
 const ROUTES = "src/brain/lark_connect_routes.py";
 
 beforeAll(async () => {
@@ -59,6 +76,7 @@ function guide(chosen: string[]): LarkGuide {
     developer_console: "https://open.larksuite.com/app",
     events_address: "",
     channel_note: "CHANNEL-NOTE",
+    events: chosen.includes("chat_channel") ? EVENTS : null,
     knowledge_note: "KNOWLEDGE-NOTE",
     test_note: "TEST-NOTE",
     staff_sources_screen: "/staff_sources",
@@ -201,6 +219,57 @@ describe("Connect Lark", () => {
     const sent = posts(idp);
     expect(sent.map((one) => one.path)).toEqual(["/api/v1/connectors/lark-app/test"]);
     expect(sent[0]?.body).toMatchObject({ app_id: "cli_abcdef", app_secret: SECRET, uses: ["staff_list"] });
+  });
+
+  test("the chat channel asks for its two keys, sends them, and clears them with the secret", async () => {
+    // What breaks if this is deleted: the chat channel is saved with no key to check Lark's
+    // events against, or a key stays in the page after it was kept.
+    const { container, idp } = await mount();
+    expect(container.querySelector("#connect-lark-encrypt_key")).toBeNull();
+    fireEvent.click(checkbox(container, "Chat channel"));
+    await waitFor(() => {
+      expect(container.querySelector("#connect-lark-encrypt_key")).not.toBeNull();
+    });
+    for (const [id, value] of [
+      ["#connect-lark-app_id", "cli_abcdef"],
+      ["#connect-lark-app_secret", SECRET],
+      ["#connect-lark-encrypt_key", ENCRYPT_KEY],
+      ["#connect-lark-verification_token", VERIFY_TOKEN],
+    ] as const) {
+      fireEvent.change(container.querySelector(id) as HTMLInputElement, { target: { value } });
+    }
+    fireEvent.click(button(container, SAVE_LARK));
+    const confirm = container.querySelector(".confirm") as HTMLElement;
+    expect(confirm.textContent).not.toContain(ENCRYPT_KEY);
+    fireEvent.click(button(confirm, SAVE_LARK));
+    await waitFor(() => {
+      expect(posts(idp).map((one) => one.path)).toEqual(["/api/v1/connectors/lark-app"]);
+    });
+    expect(posts(idp)[0]?.body).toMatchObject({
+      uses: ["chat_channel"],
+      encrypt_key: ENCRYPT_KEY,
+      verification_token: VERIFY_TOKEN,
+    });
+    await waitFor(() => {
+      expect(container.innerHTML).not.toContain(VERIFY_TOKEN);
+    });
+    expect(container.innerHTML).not.toContain(ENCRYPT_KEY);
+    expect(container.innerHTML).not.toContain(SECRET);
+  });
+
+  test("the card shows the events address to paste and whether events are arriving", async () => {
+    // What breaks if this is deleted: the owner has no address to paste into Lark and no way to
+    // see Lark's events reach the install.
+    const { container } = await mount();
+    expect(container.querySelector(`[aria-label="${LARK_EVENTS}"]`)).toBeNull();
+    fireEvent.click(checkbox(container, "Chat channel"));
+    await waitFor(() => {
+      expect(container.querySelector(`[aria-label="${LARK_EVENTS}"]`)).not.toBeNull();
+    });
+    const panel = container.querySelector(`[aria-label="${LARK_EVENTS}"]`) as HTMLElement;
+    expect(panel.textContent).toContain(`${EVENTS_ADDRESS}: ${EVENTS.address}`);
+    expect(panel.querySelector("[role='status']")?.textContent).toBe(EVENTS.told);
+    expect(panel.textContent).toContain("(sent)");
   });
 
   test("a save is confirmed without showing the secret, clears it, and links to Staff sources", async () => {

@@ -104,12 +104,14 @@ INBOUND: Final[tuple[InboundChannel, ...]] = (
     ),
     InboundChannel(
         channel=Channel.LARK,
-        verification=Verification.NOT_WRITTEN,
-        check="",
+        verification=Verification.WRITTEN,
+        check="brain.channels.lark:verify_event",
         how=(
-            "Lark signs or encrypts each event with keys from the app's settings. Nothing here "
-            "checks either yet, so an event claiming to be from Lark could not be told apart from "
-            "a forged one."
+            "Lark signs each event with the app's Encrypt Key over the time, a nonce and the exact "
+            "bytes, encrypts it with the same key and puts the Verification Token inside; the "
+            "check refuses an unencrypted body, a signature that is not the key's, a request more "
+            "than five minutes old and a token that is not the app's. It is received at its "
+            "channel's events address while its record is switched on."
         ),
     ),
     InboundChannel(

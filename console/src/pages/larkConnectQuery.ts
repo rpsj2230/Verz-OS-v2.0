@@ -11,7 +11,7 @@
  * secret twice; so it stays in the field until the save is sent, is cleared then whatever comes
  * back, and is never put into an address, a store or a log. See `THE_SECRET_STAYS_IN_ITS_FIELD`.
  *
- * Task ids: M11.9.4
+ * Task ids: M11.9.4, M10.2.1
  */
 
 import type { components } from "../api/schema";
@@ -24,15 +24,17 @@ export type LarkAsked = components["schemas"]["LarkAsked"];
 export type LarkTested = components["schemas"]["LarkTestView"];
 export type LarkUseResult = components["schemas"]["LarkUseResultView"];
 export type LarkSaved = components["schemas"]["LarkSavedView"];
+export type LarkEvents = components["schemas"]["LarkEventsView"];
 
 export const THE_SCOPE_LIST_IS_THE_APIS =
   "Which scopes each use needs is written once, on the server, and the test checks exactly that " +
   "list. A copy here would be the one a person reads and the one nobody updates.";
 
 export const THE_SECRET_STAYS_IN_ITS_FIELD =
-  "The App Secret is typed once, sent by a test and by a save, and cleared from the field when " +
-  "the save is sent. It is never put into an address, a store or a log, and the API never sends " +
-  "it back, so a refused save asks for it again.";
+  "The App Secret, and for the chat channel its Encrypt Key and Verification Token, are typed " +
+  "once, sent by a test and by a save, and cleared from their fields when the save is sent. None " +
+  "is ever put into an address, a store or a log, and the API never sends one back, so a refused " +
+  "save asks for them again.";
 
 export const LARK_API_PATH = "/connectors/lark-app";
 export const LARK_TEST_API_PATH = "/connectors/lark-app/test";
@@ -55,6 +57,14 @@ export function guidePath(uses: readonly string[] | null, platform: string): str
   return text === "" ? LARK_API_PATH : `${LARK_API_PATH}?${text}`;
 }
 
+/** The chat channel's two event keys, from Lark's Encryption Strategy tab. */
+export interface ChatKeys {
+  readonly encryptKey: string;
+  readonly verificationToken: string;
+}
+
+export const NO_CHAT_KEYS: ChatKeys = { encryptKey: "", verificationToken: "" };
+
 /** What a test and a save send: exactly these fields, untrimmed. The API judges each in words. */
 export function larkBody(
   appId: string,
@@ -62,8 +72,17 @@ export function larkBody(
   uses: readonly string[],
   platform: string,
   baseLink: string,
+  keys: ChatKeys = NO_CHAT_KEYS,
 ): LarkAsked {
-  return { app_id: appId, app_secret: appSecret, uses: [...uses], platform, base_link: baseLink };
+  return {
+    app_id: appId,
+    app_secret: appSecret,
+    uses: [...uses],
+    platform,
+    base_link: baseLink,
+    encrypt_key: keys.encryptKey,
+    verification_token: keys.verificationToken,
+  };
 }
 
 /** The uses in the order the API lists them, with `name` switched to `on`. */

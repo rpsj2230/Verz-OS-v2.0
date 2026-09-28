@@ -40,11 +40,16 @@ the vault; it registers no connection the sync worker would read and ingests not
 and the live reader are the Lark knowledge connector's to build over exactly these settings. See
 `KNOWLEDGE_IS_SWITCHED_ON_AND_NOTHING_IS_COPIED`.
 
-**The chat channel is configured and does not yet receive Lark's events**, and the step says so
-rather than handing out an address that Lark's verification would refuse: no channel in this
-release receives a webhook (`brain.webhook_routes` says the same). The address is built from the
-install's own redirect URI so the step can show where messages will arrive once the receiver
-ships. See `THE_CHANNEL_RECEIVER_IS_NOT_BUILT_YET`.
+**The chat channel is received at the one events address, and switching it on writes the
+channel's own record (M10.6.3).** Lark's events are verified with the app's Encrypt Key and
+Verification Token (`brain.channels.lark.verify_event`), so those two are asked for beside the App
+Secret, and the three are kept together at `providers/channel_lark`, the slot the application
+reads when an event arrives, and never under `connector_keys/`, which it may not read. Saving
+writes the channel's record with the App ID, the platform and the bot's own open id, the last read
+from Lark's bot information, which is how a group message is known to be for the bot. The steps
+put the save before Lark's Request URL, because Lark checks the address the moment it is entered
+and this install answers that check only for a channel switched on with its keys held. See
+`THE_CHANNEL_IS_SAVED_BEFORE_LARK_CHECKS_ITS_ADDRESS`.
 
 Rejected: a scope list per use typed into the page. The test and the steps would then hold two
 copies, and the one a person reads would drift from the one the test checks.
@@ -53,7 +58,7 @@ Rejected: testing with the credential already kept. The application may write a 
 and never read one back (`brain.ops.credentials`), so the test takes the credential as it is
 typed, before it is kept, and a re-test later asks for it again.
 
-Task ids: M11.9.4, M11.9.1
+Task ids: M11.9.4, M11.9.1, M10.6.3, M10.4.3
 """
 
 from __future__ import annotations
@@ -109,13 +114,25 @@ KNOWLEDGE_IS_SWITCHED_ON_AND_NOTHING_IS_COPIED: Final = (
     "minimal index and reads content live from Lark when a question needs it."
 )
 
-#: What the chat channel can and cannot do in this release.
-THE_CHANNEL_RECEIVER_IS_NOT_BUILT_YET: Final = (
-    "The chat channel's credential, bot and scopes are set up and tested here, but this release "
-    "does not yet receive Lark's events, so Lark would refuse the address if it were entered "
-    "under Events & callbacks now. Leave that page for now. The address messages will arrive at "
-    "is shown so it can be entered on the day the receiver ships."
+#: Why the chat channel is saved here before its address is entered in Lark.
+THE_CHANNEL_IS_SAVED_BEFORE_LARK_CHECKS_ITS_ADDRESS: Final = (
+    "Lark checks the Request URL the moment it is saved there, by sending an encrypted challenge "
+    "this install answers only for a chat channel that is switched on with its Encrypt Key and "
+    "Verification Token held. So the chat channel is saved here first, with both keys, and the "
+    "address below is entered in Lark after; entered before, Lark reports that it could not be "
+    "verified."
 )
+
+#: What the chat channel does once it is on, in one sentence for the screen.
+THE_CHANNEL_ANSWERS_AT_EACH_READERS_OWN_REACH: Final = (
+    "A person who has linked their Lark account is answered in a direct message as Ask answers "
+    "them on the web. In a group, the room is answered only with what everybody in it may see, and "
+    "the person who asked reads their own answer in a card only they see, or a link to Ask. "
+    "Somebody not linked yet is told once how to link, in their own chat with the bot."
+)
+
+#: The one event the chat channel subscribes to, in Lark's own name for it.
+MESSAGE_EVENT: Final = "im.message.receive_v1"
 
 # --------------------------------------------------------------------- the figures
 
@@ -142,8 +159,17 @@ _BASE_IN_LINK: Final = re.compile(r"/base/([A-Za-z0-9]{8,64})")
 #: A scope name as Lark writes it inside a refusal: words joined by colons.
 _SCOPE_IN_TEXT: Final = re.compile(r"[a-z]+(?::[a-z_.]+)+")
 
-#: The one path the chat channel's events will arrive at, under the install's own address.
+#: A chat id that names no chat, which the chat channel's test asks the members of. See `_channel`.
+MEMBERS_CHECK_CHAT: Final = "oc_brain_connect_check"
+
+#: The scope a group question reads who is present with.
+MEMBERS_SCOPE: Final = "im:chat.members:read"
+
+#: The one path the chat channel's events arrive at, under the install's own address.
 LARK_EVENTS_PATH: Final = "/api/v1/channels/lark/events"
+
+#: The console's Ask page, which a chat's link names.
+ASK_PATH: Final = "/ask"
 
 
 class Use(enum.StrEnum):
@@ -264,8 +290,8 @@ USES: Final[Mapping[Use, UseSpec]] = MappingProxyType(
             label="Chat channel",
             what=(
                 "Let people ask the Brain in Lark chats: a direct message to the bot, or a "
-                "mention of it in a group. Each answer is limited to what everyone in the chat "
-                "may see."
+                "mention of it in a group. A group is answered only with what everyone in it may "
+                "see, and the asker reads the rest privately."
             ),
             scopes=(
                 Scope("im:message.p2p_msg:readonly", "receive direct messages sent to the bot"),
@@ -274,20 +300,42 @@ USES: Final[Mapping[Use, UseSpec]] = MappingProxyType(
                     "receive group messages that mention the bot, and no others",
                 ),
                 Scope(
-                    "im:chat:readonly", "read who is in a chat, so an answer fits everyone in it"
+                    MEMBERS_SCOPE,
+                    "read who is in a group, so what the room reads fits everyone in it",
                 ),
                 Scope(
                     "im:message:send_as_bot",
-                    "send the bot's own replies. The one scope that writes: it can post as the "
-                    "bot and cannot read or change anybody else's messages",
+                    "send the bot's own replies and the cards only one person sees. The one "
+                    "scope that writes: it posts as the bot and cannot read or change anybody "
+                    "else's messages",
                     read_only=False,
                 ),
             ),
+            # The authority a chat channel is governed by, `admin:connector` over this name, which
+            # `brain.channel_routes` asks too. Its secret is not kept here: see the module.
             slot="lark_channel",
             extra=(
                 "In the left menu open Add Features (or Features), choose Bot, and turn it on. "
                 "The chat scopes only work for an app that has a bot.",
-                THE_CHANNEL_RECEIVER_IS_NOT_BUILT_YET,
+                "In the left menu open Events & Callbacks, then the Encryption Strategy tab. If "
+                "the Encrypt Key is empty, click Reset (or Generate) to make one. Copy the Encrypt "
+                "Key and the Verification Token and paste both below with the App ID and App "
+                "Secret. They are kept in the vault with the secret and never shown again.",
+                "Press Save below now, before the next step. "
+                + THE_CHANNEL_IS_SAVED_BEFORE_LARK_CHECKS_ITS_ADDRESS,
+                "Back in Events & Callbacks, open the Event Configuration tab. Set the "
+                "subscription mode to sending events to your server (Lark calls it Request URL, "
+                "or Send events to developer server), paste this install's events address shown "
+                "below, and click Save. Lark checks the address at once and shows it as verified.",
+                f"Still on Event Configuration, click Add Events, search for {MESSAGE_EVENT} "
+                "(Lark lists it as Message received, or Receive messages v2.0), tick it and click "
+                "Add. It is the only event the Brain needs. If Lark asks to add the scopes the "
+                "event requires, accept: they are the two receiving scopes above.",
+                "After the version is approved, open Lark, search for the app by its name, open "
+                "a chat with its bot and send hello. The bot answers once with how to link your "
+                "account. Link it from your profile in the console with a one-time code sent to "
+                "the bot, then ask a question. To use it in a group, open the group's settings, "
+                "choose Bots, add the app's bot, and mention it in a question.",
             ),
         ),
     }
@@ -358,7 +406,13 @@ def steps_for(uses: Sequence[Use], *, platform: str) -> tuple[Step, ...]:
     if Use.STAFF_LIST in chosen:
         found.append(Step("Let it read everyone", USES[Use.STAFF_LIST].extra[0]))
     if Use.CHANNEL in chosen:
-        found.append(Step("Events & callbacks: not yet", THE_CHANNEL_RECEIVER_IS_NOT_BUILT_YET))
+        chat = USES[Use.CHANNEL].extra
+        found += [
+            Step("Copy the Encrypt Key and Verification Token", chat[1]),
+            Step("Save here first", chat[2]),
+            Step("Point Lark's events at this install", chat[3]),
+            Step(f"Subscribe to {MESSAGE_EVENT}", chat[4]),
+        ]
     found += [
         Step(
             "Release a version",
@@ -383,23 +437,48 @@ def steps_for(uses: Sequence[Use], *, platform: str) -> tuple[Step, ...]:
         Step(
             "Test, then save",
             "Paste the App ID and App Secret below and press Test connection. Each use you chose "
-            "says it works or exactly what to add. When they work, press Save to switch them on.",
+            "says it works or exactly what to add. When they work, press Save to switch them on."
+            + (
+                " For the chat channel, paste the Encrypt Key and Verification Token again and "
+                "save once more after the version is approved: that save records the bot's own "
+                "id, which is how a group message is known to be for it."
+                if Use.CHANNEL in chosen
+                else ""
+            ),
         )
     )
+    if Use.CHANNEL in chosen:
+        found.append(Step("Ask the bot", USES[Use.CHANNEL].extra[5]))
     return tuple(found)
 
 
-def events_address(redirect_uris: str) -> str:
-    """Where Lark will send the chat channel's events: the install's own origin and one path.
-
-    Built from `INSTALL_OIDC_REDIRECT_URIS`, the one installation setting that already names this
-    install's public address, so no second setting can disagree with it. Empty when it names none.
-    """
+def _origin(redirect_uris: str) -> str:
+    """This install's public origin, from the first redirect URI, or empty when it names none."""
     first = next((one.strip() for one in redirect_uris.split(",") if one.strip()), "")
     parts = urlsplit(first)
     if parts.scheme not in ("https", "http") or not parts.netloc:
         return ""
-    return f"{parts.scheme}://{parts.netloc}{LARK_EVENTS_PATH}"
+    return f"{parts.scheme}://{parts.netloc}"
+
+
+def events_address(redirect_uris: str) -> str:
+    """Where Lark sends the chat channel's events: the install's own origin and one path.
+
+    Built from `INSTALL_OIDC_REDIRECT_URIS`, the one installation setting that already names this
+    install's public address, so no second setting can disagree with it. Empty when it names none.
+    """
+    origin = _origin(redirect_uris)
+    return f"{origin}{LARK_EVENTS_PATH}" if origin else ""
+
+
+def ask_address(redirect_uris: str) -> str:
+    """The console's Ask page on this install, where a chat's link sends somebody to be answered.
+
+    From the same setting as `events_address`, for its reason. The page carries no answer and no
+    question, so following it runs the gate again for whoever follows it (M10.4.3).
+    """
+    origin = _origin(redirect_uris)
+    return f"{origin}{ASK_PATH}" if origin else ""
 
 
 # ------------------------------------------------------------------------ judging input
@@ -437,15 +516,54 @@ def uses_from(names: Iterable[str]) -> tuple[tuple[Use, ...], tuple[Problem, ...
     return chosen, problems
 
 
-def input_problems(
-    *, app_id: str, app_secret: str, uses: Sequence[Use], platform: str, base_link: str
-) -> tuple[Problem, ...]:
-    """Everything wrong with the identifier, the secret, the platform and the Base link, at once.
+def _one_piece(value: str) -> bool:
+    return len(value) <= 200 and not any(one.isspace() or not one.isprintable() for one in value)
 
-    The secret is judged for shape only (present, one piece, not too long): whether Lark accepts
-    it is the test's to say. Nothing here repeats what was typed.
+
+def _chat_key_problems(encrypt_key: str, verification_token: str) -> list[Problem]:
+    """The chat channel's two event keys: present and each one piece. Never repeated back."""
+    found: list[Problem] = []
+    for name, value, where in (
+        ("encrypt_key", encrypt_key.strip(), "Encrypt Key"),
+        ("verification_token", verification_token.strip(), "Verification Token"),
+    ):
+        if not value:
+            found.append(
+                Problem(
+                    name,
+                    "blank",
+                    f"Paste the {where} from Events & Callbacks, Encryption Strategy. Events are "
+                    "refused without it.",
+                )
+            )
+        elif not _one_piece(value):
+            found.append(
+                Problem(
+                    name, "shape", f"That is not one {where}. Copy it again with the copy icon."
+                )
+            )
+    return found
+
+
+def input_problems(
+    *,
+    app_id: str,
+    app_secret: str,
+    uses: Sequence[Use],
+    platform: str,
+    base_link: str,
+    encrypt_key: str = "",
+    verification_token: str = "",
+) -> tuple[Problem, ...]:
+    """Everything wrong with what was sent, at once: identifier, secret, platform, Base link, and
+    for the chat channel its Encrypt Key and Verification Token.
+
+    The secrets are judged for shape only (present, one piece, not too long): whether Lark accepts
+    them is the test's and the first event's to say. Nothing here repeats what was typed.
     """
     found: list[Problem] = []
+    if Use.CHANNEL in uses:
+        found += _chat_key_problems(encrypt_key, verification_token)
     ident = app_id.strip()
     if not ident:
         found.append(Problem("app_id", "blank", "Paste the App ID from Credentials & Basic Info."))
@@ -708,6 +826,15 @@ async def _base(fetch: Fetch, base: str, token: str, table_token: str) -> UseRes
 
 
 async def _channel(fetch: Fetch, base: str, token: str) -> UseResult:
+    """The bot, and the one scope a question in a group reads with, checked without a chat.
+
+    The members read is asked of a chat that does not exist, so it reads nobody: Lark checks a
+    token's scope before it looks for the chat, so a missing scope answers with its code and a
+    granted one with the chat not being found. **If Lark ever looked for the chat first, this
+    would say working with the scope missing, and the first group question would fall back to the
+    asker's own private answer, never to a wider one.** The two receiving scopes cannot be asked
+    about from outside at all; the first message is their test, and Events arriving says so.
+    """
     spec = USES[Use.CHANNEL]
     bot = await _get(fetch, base, "/open-apis/bot/v3/info", token)
     no_bot = "The app has no bot yet. " + spec.extra[0]
@@ -718,18 +845,68 @@ async def _channel(fetch: Fetch, base: str, token: str) -> UseResult:
         return refused
     if not isinstance(bot.body.get("bot"), Mapping):
         return UseResult(spec.use, Verdict.NOT_SHARED, no_bot)
-    chats = await _get(fetch, base, "/open-apis/im/v1/chats", token, page_size="1")
-    refused = _refused_or_other(spec, chats, not_shared=no_bot)
-    if refused is not None:
-        if refused.verdict is Verdict.MISSING_SCOPE:
-            return _missing(spec, ("im:chat:readonly",))
-        return refused
+    members = await _get(
+        fetch, base, f"/open-apis/im/v1/chats/{MEMBERS_CHECK_CHAT}/members", token, page_size="1"
+    )
+    code = _code(members)
+    if code == MISSING_SCOPE_CODE:
+        return _missing(spec, (MEMBERS_SCOPE,))
+    if code in TOKEN_REFUSED_CODES:
+        return UseResult(
+            spec.use,
+            Verdict.CREDENTIAL_REFUSED,
+            "Lark did not accept the app's token for this call. Check the App ID and App Secret.",
+        )
+    if members.status in (429, 500, 502, 503, 504):
+        return UseResult(
+            spec.use, Verdict.UNREACHABLE, "Lark did not answer this call properly. Try again."
+        )
     return UseResult(
         spec.use,
         Verdict.WORKING,
-        "Working: the bot is on and can see its chats. The message scopes are checked by Lark "
-        "when the first message arrives. " + THE_CHANNEL_RECEIVER_IS_NOT_BUILT_YET,
+        "Working: the bot is on and may read who is in a group. The two receiving scopes are "
+        "checked by Lark when the first message arrives: send the bot a direct message and watch "
+        "Events arriving on this card.",
     )
+
+
+async def _tenant_token(fetch: Fetch, base: str, app_id: str, app_secret: str) -> str | None:
+    """A tenant token for this app, or None when Lark did not give one. Changes nothing."""
+    exchanged = await fetch(
+        Outbound(
+            "POST",
+            f"{base}/open-apis/auth/v3/tenant_access_token/internal",
+            {"Content-Type": "application/json"},
+            json_body={"app_id": app_id.strip(), "app_secret": app_secret.strip()},
+        )
+    )
+    token = exchanged.body.get("tenant_access_token")
+    if exchanged.status != 200 or _code(exchanged) != 0 or not isinstance(token, str) or not token:
+        return None
+    return token
+
+
+async def bot_open_id(
+    fetch: Fetch, *, platform: str, app_id: str, app_secret: str, open_base: str | None = None
+) -> str:
+    """The app's bot's own open id, which the chat channel's record names it by, or empty.
+
+    Read, never written, and empty rather than raising for anything Lark does not answer: an app
+    whose version is not released yet has no bot to name, and the steps ask for a second save
+    after release for exactly that.
+    """
+    _, host = LARK_PLATFORMS[platform]
+    base = open_base if open_base is not None else f"https://{host}"
+    try:
+        token = await _tenant_token(fetch, base, app_id, app_secret)
+        if token is None:
+            return ""
+        bot = await _get(fetch, base, "/open-apis/bot/v3/info", token)
+    except DirectorySignInError:
+        return ""
+    found = bot.body.get("bot")
+    open_id = found.get("open_id") if isinstance(found, Mapping) else None
+    return open_id if bot.status == 200 and isinstance(open_id, str) else ""
 
 
 def _released(results: Sequence[UseResult]) -> tuple[UseResult, ...]:
@@ -768,20 +945,12 @@ async def probe_connection(
     _, host = LARK_PLATFORMS[platform]
     base = open_base if open_base is not None else f"https://{host}"
     try:
-        exchanged = await fetch(
-            Outbound(
-                "POST",
-                f"{base}/open-apis/auth/v3/tenant_access_token/internal",
-                {"Content-Type": "application/json"},
-                json_body={"app_id": app_id.strip(), "app_secret": app_secret.strip()},
-            )
-        )
+        token = await _tenant_token(fetch, base, app_id, app_secret)
     except DirectorySignInError:
         return ProbeResult(
             False, f"This server could not reach Lark at {base}. Nothing was tried.", ()
         )
-    token = exchanged.body.get("tenant_access_token")
-    if exchanged.status != 200 or _code(exchanged) != 0 or not isinstance(token, str) or not token:
+    if token is None:
         return ProbeResult(
             False,
             "Lark did not accept this App ID and App Secret. Copy both again from Credentials & "

@@ -33,6 +33,7 @@ from fastapi.testclient import TestClient
 from brain.api import API_PREFIX
 from brain.api_routes import Asking
 from brain.app import Settings, create_app
+from brain.channels.lark import LarkSecret
 from brain.connector_routes import CONNECTORS_READ
 from brain.connectors import lark_wiki
 from brain.connectors.registry import INSTALL_AUTHORITY
@@ -41,12 +42,24 @@ from brain.console.reads import Plane, plane_capability
 from brain.core.entitlement import EntitlementSet, Grant
 from brain.core.scope import Clause, Op, Scope
 from brain.credential_routes import CREDENTIAL_AUTHORITY
+from brain.gate.context import Channel
 from brain.install import BY_NAME, hold_saved
-from brain.lark_connect_routes import LARK_PATH, LARK_TEST_PATH
+from brain.lark_connect_routes import (
+    EVENTS_ARRIVING,
+    EVENTS_NONE_YET,
+    EVENTS_OFF,
+    LARK_PATH,
+    LARK_TEST_PATH,
+    REFUSED_EVENT_TOLD,
+    REPLY_TOLD,
+)
+from brain.ops.channel_store import DeliveryEntry
 from brain.ops.connectable import CONNECTABLE, NotConnectableError, manifest_for
 from brain.ops.connector_slots import SLOT_SCOPES
 from brain.ops.credentials import KEY_FIELD, Credentials
 from brain.ops.lark_connect import (
+    MEMBERS_SCOPE,
+    MESSAGE_EVENT,
     USES,
     Use,
     Verdict,
@@ -58,6 +71,7 @@ from brain.ops.lark_connect import (
     steps_for,
 )
 from brain.ops.staff_sync_run import CLIENT_CREDENTIAL_SEPARATOR, http_fetch
+from brain.tables.channel import DeliveryOutcome, Direction, RefusedBecause
 from tests.unit.test_api_routes import (
     AUDIENCE,
     ISSUER,
@@ -68,12 +82,16 @@ from tests.unit.test_api_routes import (
     token_for,
     verifier,
 )
+from tests.unit.test_channel_pipeline import Deliveries, Records
 from tests.unit.test_credentials import Recorded, Vault
 
 APP_ID: Final = "cli_a1b2c3d4e5f6"
 #: A secret nothing else in any output could contain, so finding it anywhere is a leak.
 SECRET: Final = "LARK-SECRET-SENTINEL-51d9"
 TOKEN: Final = "t-tenant-token-fake"
+#: The chat channel's two event keys, sentinels for the same reason as `SECRET`.
+ENCRYPT_KEY: Final = "LARK-ENCRYPT-SENTINEL-7c2e"
+VERIFY_TOKEN: Final = "LARK-VERIFY-SENTINEL-0b4a"
 BASE: Final = "bascnFAKE0123456789"
 SECOND_FACTOR: Final[Mapping[str, object]] = {"amr": ["otp"]}
 
@@ -240,7 +258,7 @@ def test_the_scope_list_and_the_steps_follow_the_uses_chosen() -> None:
     assert both == staff | {one.name for one in USES[Use.WIKI].scopes}
     text = " ".join(one.text for one in steps_for([Use.STAFF_LIST], platform="larksuite.com"))
     assert "contact:user.email:readonly" in text
-    assert "wiki:wiki:readonly" not in text and "im:chat:readonly" not in text
+    assert "wiki:wiki:readonly" not in text and MEMBERS_SCOPE not in text
     assert "All members" in text
     titles = [one.title for one in steps_for([Use.WIKI, Use.CHANNEL], platform="feishu.cn")]
     assert "Share your wiki spaces with it" in titles and "Turn on the bot" in titles
@@ -429,6 +447,10 @@ def client(app: FastAPI, lark: FakeLark) -> Iterator[TestClient]:
         app.state.connector_records = NeverAsked()
         app.state.lark_open_base = lark.base
         app.state.lark_settings = StoredValues()
+        # The chat channel's own record and deliveries, in memory: a save writes the one and
+        # the card reads the other.
+        app.state.channel_records = Records()
+        app.state.channel_deliveries = Deliveries()
         yield c
 
 
@@ -443,6 +465,8 @@ def body(*uses: Use, secret: str = SECRET) -> dict[str, object]:
         "uses": [use.value for use in uses],
         "platform": "larksuite.com",
         "base_link": f"https://example.invalid/base/{BASE}",
+        "encrypt_key": ENCRYPT_KEY,
+        "verification_token": VERIFY_TOKEN,
     }
 
 
@@ -475,7 +499,7 @@ def test_the_test_route_reports_each_use_and_writes_nothing(
     route can store what it was sent to test."""
     vault = Vault()
     app.state.credentials = Credentials(vault, environ={}, writes=Recorded())
-    lark.refuse["/open-apis/im/v1/chats"] = missing("im:chat:readonly")
+    lark.refuse["/open-apis/im/v1/chats"] = missing(MEMBERS_SCOPE)
     answered = client.post(
         f"{API_PREFIX}{LARK_TEST_PATH}",
         headers=headers("u_admin"),
@@ -485,7 +509,7 @@ def test_the_test_route_reports_each_use_and_writes_nothing(
     verdicts = {one["name"]: (one["verdict"], one["missing"]) for one in answered.json()["uses"]}
     assert verdicts == {
         "knowledge_wiki": ("working", []),
-        "chat_channel": ("missing_scope", ["im:chat:readonly"]),
+        "chat_channel": ("missing_scope", [MEMBERS_SCOPE]),
     }
     assert vault.written == [] and app.state.lark_settings.saved == []
     assert {method for method, _, _ in lark.seen[1:]} == {"GET"}
@@ -594,10 +618,12 @@ def test_the_secret_is_never_answered_or_logged(
         ]
     assert any(SECRET in fields[KEY_FIELD] for _, fields in vault.written)
     out = capsys.readouterr()
-    for answered in answers:
-        assert SECRET not in answered.text
-    assert SECRET not in out.out + out.err + caplog.text
-    assert SECRET not in " ".join(str(one) for one in logged)
+    assert any(ENCRYPT_KEY in fields[KEY_FIELD] for _, fields in vault.written)
+    for sentinel in (SECRET, ENCRYPT_KEY, VERIFY_TOKEN):
+        for answered in answers:
+            assert sentinel not in answered.text
+        assert sentinel not in out.out + out.err + caplog.text
+        assert sentinel not in " ".join(str(one) for one in logged)
 
 
 def test_after_a_save_each_use_says_where_it_stands(app: FastAPI, client: TestClient) -> None:
@@ -631,6 +657,12 @@ def test_connecting_lark_copies_no_content_and_registers_nothing_the_sync_worker
     app.state.credentials = Credentials(Vault(), environ={}, writes=Recorded())
     answered = client.post(f"{API_PREFIX}{LARK_PATH}", headers=headers("u_admin"), json=body(*Use))
     assert answered.status_code == 200
+    # The one read a save makes: the chat channel's bot id, after the token exchange.
+    assert [(method, urlsplit(path).path) for method, path, _ in lark.seen] == [
+        ("POST", "/open-apis/auth/v3/tenant_access_token/internal"),
+        ("GET", "/open-apis/bot/v3/info"),
+    ]
+    lark.seen.clear()
     (values,) = app.state.lark_settings.saved
     assert set(values) <= set(BY_NAME)
     assert all(re.fullmatch(r"[A-Za-z0-9_.,:-]*", one) for one in values.values())
@@ -640,3 +672,154 @@ def test_connecting_lark_copies_no_content_and_registers_nothing_the_sync_worker
             manifest_for(name, {})
     lark_wiki.assert_maps_no_content(lark_wiki.NODE_MAPPING)
     assert lark.seen == []
+
+
+# ------------------------------------------------------------------ the chat channel (L1)
+
+
+def test_the_chat_steps_name_every_scope_and_the_event_and_save_before_the_address() -> None:
+    """The owner creates the Lark app from these steps and nothing else, so they name each of the
+    four chat scopes, the one event, both keys, and put the save here before the Request URL in
+    Lark, which Lark checks the moment it is entered. Delete this and a step can be dropped or
+    reordered, and the owner's app is refused its address with no sentence saying why."""
+    steps = steps_for([Use.CHANNEL], platform="larksuite.com")
+    titles = [one.title for one in steps]
+    text = " ".join(one.text for one in steps)
+    for scope in (
+        "im:message.p2p_msg:readonly",
+        "im:message.group_at_msg:readonly",
+        MEMBERS_SCOPE,
+        "im:message:send_as_bot",
+    ):
+        assert scope in text
+    assert {one.name for one in USES[Use.CHANNEL].scopes} == {
+        "im:message.p2p_msg:readonly",
+        "im:message.group_at_msg:readonly",
+        MEMBERS_SCOPE,
+        "im:message:send_as_bot",
+    }
+    assert MESSAGE_EVENT == "im.message.receive_v1" and MESSAGE_EVENT in text
+    assert "Encrypt Key" in text and "Verification Token" in text
+    order = [
+        "Turn on the bot",
+        "Add the scopes",
+        "Copy the Encrypt Key and Verification Token",
+        "Save here first",
+        "Point Lark's events at this install",
+        f"Subscribe to {MESSAGE_EVENT}",
+        "Release a version",
+        "Have it approved",
+        "Test, then save",
+        "Ask the bot",
+    ]
+    assert [one for one in titles if one in order] == order
+
+
+def test_the_chat_channel_needs_both_event_keys_and_names_each_field_missing(
+    client: TestClient, lark: FakeLark
+) -> None:
+    """Without the Encrypt Key and Verification Token no event verifies, so a save without them
+    is refused by field before anything reaches Lark. Delete this and the channel is switched on
+    with keys that refuse every event, and the card says only that nothing arrived."""
+    sent = body(Use.CHANNEL) | {"encrypt_key": "", "verification_token": "two words"}
+    answered = client.post(f"{API_PREFIX}{LARK_PATH}", headers=headers("u_admin"), json=sent)
+    assert answered.status_code == 422
+    problems = {one["field"]: one["code"] for one in answered.json()["problems"]}
+    assert problems == {"encrypt_key": "blank", "verification_token": "shape"}
+    assert lark.seen == []
+    wiki_only = body(Use.WIKI) | {"encrypt_key": "", "verification_token": ""}
+    assert (
+        client.post(
+            f"{API_PREFIX}{LARK_TEST_PATH}", headers=headers("u_admin"), json=wiki_only
+        ).status_code
+        == 200
+    )
+
+
+def test_saving_the_chat_channel_keeps_its_keys_where_the_application_reads_them(
+    app: FastAPI, client: TestClient
+) -> None:
+    """CH1's finding, fixed: the application reads `providers/channel_lark` and may not read
+    `connector_keys/lark_channel`. So the App Secret, Encrypt Key and Verification Token are kept
+    together there, as the Lark wire parses them, nothing is kept in the connector slot, and the
+    channel's own record is written on, naming the app, the platform and the bot. Delete this and
+    Connect Lark switches the chat on with a secret no event can be checked against."""
+    vault = Vault()
+    app.state.credentials = Credentials(vault, environ={}, writes=Recorded())
+    answered = client.post(
+        f"{API_PREFIX}{LARK_PATH}", headers=headers("u_admin"), json=body(Use.CHANNEL)
+    )
+    assert answered.status_code == 200
+    ((slot, fields),) = vault.written
+    assert slot == "providers/channel_lark"
+    kept = LarkSecret.parse(fields[KEY_FIELD])
+    assert (kept.app_secret, kept.encrypt_key, kept.verification_token) == (
+        SECRET,
+        ENCRYPT_KEY,
+        VERIFY_TOKEN,
+    )
+    record = app.state.channel_records.kept[Channel.LARK]
+    assert record.enabled
+    assert dict(record.tenant) == {
+        "app_id": APP_ID,
+        "platform": "larksuite.com",
+        "bot_id": "ou_bot",
+    }
+    assert record.secret.path == "providers/channel_lark"
+
+
+def test_a_save_before_release_keeps_the_bot_id_already_known(
+    app: FastAPI, client: TestClient, lark: FakeLark
+) -> None:
+    """Before release Lark may have no bot to read, and a later save must not forget the id an
+    earlier one recorded. Delete this and saving again after a key change stops every group
+    answer, because the record no longer names the bot a group message has to mention."""
+    app.state.credentials = Credentials(Vault(), environ={}, writes=Recorded())
+    client.post(f"{API_PREFIX}{LARK_PATH}", headers=headers("u_admin"), json=body(Use.CHANNEL))
+    lark.refuse["/open-apis/bot/"] = {"code": 10003, "msg": "bot not enabled"}
+    client.post(f"{API_PREFIX}{LARK_PATH}", headers=headers("u_admin"), json=body(Use.CHANNEL))
+    assert app.state.channel_records.kept[Channel.LARK].tenant["bot_id"] == "ou_bot"
+    app.state.channel_records.kept.clear()
+    client.post(f"{API_PREFIX}{LARK_PATH}", headers=headers("u_admin"), json=body(Use.CHANNEL))
+    assert "bot_id" not in app.state.channel_records.kept[Channel.LARK].tenant
+
+
+def test_the_card_shows_the_events_address_and_whether_events_are_arriving(
+    app: FastAPI, client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The owner's proof that Lark reaches the install: the address to paste, and what the last
+    event came to, in words, with nothing of any message. Only a reader who may switch the chat
+    on is shown it. Delete this and the card cannot tell a working channel from one whose keys
+    refuse every event."""
+    app.state.credentials = Credentials(Vault(), environ={}, writes=Recorded())
+    monkeypatch.setenv("INSTALL_OIDC_REDIRECT_URIS", "https://brain.example.test/callback")
+    before = client.get(f"{API_PREFIX}{LARK_PATH}", headers=headers("u_admin")).json()["events"]
+    assert before["address"] == "https://brain.example.test/api/v1/channels/lark/events"
+    assert before["switched_on"] is False and before["told"] == EVENTS_OFF
+    client.post(f"{API_PREFIX}{LARK_PATH}", headers=headers("u_admin"), json=body(Use.CHANNEL))
+    waiting = client.get(f"{API_PREFIX}{LARK_PATH}", headers=headers("u_admin")).json()["events"]
+    assert waiting["switched_on"] is True and waiting["told"] == EVENTS_NONE_YET
+    deliveries = app.state.channel_deliveries
+    asyncio.run(
+        deliveries.record(
+            DeliveryEntry(
+                channel=Channel.LARK,
+                direction=Direction.INBOUND,
+                outcome=DeliveryOutcome.REFUSED,
+                reason=RefusedBecause.BAD_SIGNATURE,
+            )
+        )
+    )
+    refused = client.get(f"{API_PREFIX}{LARK_PATH}", headers=headers("u_admin")).json()["events"]
+    assert refused["refused_because"] == "bad_signature"
+    assert refused["told"] == REFUSED_EVENT_TOLD[RefusedBecause.BAD_SIGNATURE]
+    for entry in (
+        DeliveryEntry(Channel.LARK, Direction.INBOUND, DeliveryOutcome.ACCEPTED),
+        DeliveryEntry(Channel.LARK, Direction.OUTBOUND, DeliveryOutcome.SENT, vendor_status=200),
+    ):
+        asyncio.run(deliveries.record(entry))
+    arriving = client.get(f"{API_PREFIX}{LARK_PATH}", headers=headers("u_admin")).json()["events"]
+    assert arriving["told"] == f"{EVENTS_ARRIVING} {REPLY_TOLD[DeliveryOutcome.SENT]}"
+    assert arriving["last_received"] is not None and arriving["reply_outcome"] == "sent"
+    narrow = client.get(f"{API_PREFIX}{LARK_PATH}", headers=headers("u_narrow")).json()
+    assert narrow["events"] is None
