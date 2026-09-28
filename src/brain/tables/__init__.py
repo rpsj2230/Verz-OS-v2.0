@@ -127,6 +127,7 @@ from brain.tables.staff import StaffMemberRow, StaffSyncRunRow
 from brain.tables.suspension import SuspensionRow
 from brain.tables.telemetry import RequestTelemetryRow
 from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
+from brain.tables.tool_definition import ToolDefinitionRow, ToolSwitchRow
 from brain.tables.upgrade import UpgradeDeclineRow
 from brain.tables.vault_access import VaultAccessRow
 from brain.tables.webhook_change import WebhookChangeRow
@@ -351,6 +352,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0116_classified_tables. A row points at its table, so the table comes first.
     "know.classified_table",
     "know.classified_row",
+    # 0117_tool_catalogue_and_switch. A stop points at the catalogue row of the tool it stops.
+    "agent.tool_definition",
+    "agent.tool_switch",
 )
 
 __all__ = [
@@ -452,6 +456,8 @@ __all__ = [
     "TeamRow",
     "TemplateInstanceRow",
     "TemplateVersionRow",
+    "ToolDefinitionRow",
+    "ToolSwitchRow",
     "UpgradeDeclineRow",
     "VaultAccessRow",
     "WebhookChangeRow",

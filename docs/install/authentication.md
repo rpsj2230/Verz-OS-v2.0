@@ -352,6 +352,7 @@ everything, written by first run and recorded in the ledger. They come in three 
 | `admin:skill` | running the system |
 | `admin:skill_review` | running the system |
 | `admin:storage` | running the system |
+| `admin:tool` | running the system |
 | `admin:webhook_subscriber` | running the system |
 | `approve:grant` | letting the second person in |
 | `read:agent` | reading how the system is run |

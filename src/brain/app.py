@@ -170,6 +170,7 @@ from brain.ops.secrets import VaultRole
 from brain.ops.sensitive_read_store import SensitiveReadRecorder
 from brain.ops.starter_store import furnish as furnish_install
 from brain.ops.telemetry_store import TelemetryRecorder
+from brain.ops.tool_store import SessionSwitchSource, record_catalogue
 from brain.ops.trace_sink import CountingTraceSink
 from brain.ops.vault_renewal import keep_renewing, renewer_at_start
 from brain.ops.webhook_admin import signing_secrets_at_start
@@ -218,6 +219,7 @@ from brain.sign_in_routes import router as sign_in_router
 from brain.skill_routes import router as skill_router
 from brain.staff_source_routes import router as staff_source_router
 from brain.storage_routes import router as storage_router
+from brain.tool_routes import router as tool_router
 from brain.tools.startup import build_registry
 from brain.vault_routes import router as vault_router
 from brain.webhook_routes import router as webhook_router
@@ -520,6 +522,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     records = SessionRowSource(app.state.db_sessions) if app.state.db_sessions else None
     app.state.tools = build_registry(source=settings.tool_source, records=records)
     app.state.ready["tools"] = True
+    # Every call to a registered tool asks the switch table first, and each tool's catalogue row
+    # is written so a stop has a row to name. Never fatal: a catalogue row a switch needs is
+    # written by the switch itself. See `brain.tools.registry.ToolRegistry.govern`.
+    if app.state.db_sessions:
+        app.state.tools.govern(SessionSwitchSource(app.state.db_sessions))
+        try:
+            await record_catalogue(app.state.db_sessions, app.state.tools)
+        except Exception:
+            log.exception("tool catalogue could not be recorded")
     # The passage search the answer lane's model step reads through: the registered document
     # tool's own handler, so the reach is decided where the tool decides it. None without a row
     # source, which is a lane that abstains on a question no rule answers. See
@@ -1419,6 +1430,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Adding a document to the knowledge layer from the Knowledge page, read by the text path and
     # placed where the uploader holds `admin:knowledge`. See `brain.knowledge_routes`.
     app.include_router(knowledge_router)
+    # The Tools screen: every tool with what it needs and does, and the switch that stops one for
+    # the install or one department's people, behind `admin:tool`. See `brain.tool_routes`.
+    app.include_router(tool_router)
 
     @app.get("/health/live", response_model=Health, tags=["health"])
     async def live() -> Health:

@@ -314,6 +314,7 @@ ADMINISTRATION: Final[tuple[str, ...]] = (
     "admin:skill",
     "admin:skill_review",
     "admin:storage",
+    "admin:tool",
     "admin:webhook_subscriber",
 )
 

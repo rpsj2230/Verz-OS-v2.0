@@ -7,12 +7,12 @@ What an administrator would need to manage, read out of the schema, the routes a
 ## What was measured
 
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
-- 99 tables, from `brain.db.Base.metadata`.
+- 97 tables, from `brain.db.Base.metadata`.
 - 27 installation values, from `brain.install.INSTALLATION`.
-- 204 routes under `/api/v1` and `/setup`, from the API's internal document.
-- 72 console addresses, from the route table in `console/src/App.tsx`.
-- 78 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 96 routes.
-- 38 gaps recorded, and 28 routes no screen calls.
+- 194 routes under `/api/v1` and `/setup`, from the API's internal document.
+- 73 console addresses, from the route table in `console/src/App.tsx`.
+- 75 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 92 routes.
+- 37 gaps recorded, and 22 routes no screen calls.
 
 ## Area by area
 
@@ -144,7 +144,7 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `GET /api/v1/operate/models` | `/models` |
 | `GET /api/v1/routing/changes` | `/routing`, `/routing/:rungId` |
 | `GET /api/v1/routing/golden-questions` | `/routing`, `/routing/:rungId` |
-| `GET /api/v1/routing/rungs` | `/agents/:agentId`, `/routing`, `/routing/:rungId` |
+| `GET /api/v1/routing/rungs` | `/models`, `/routing`, `/routing/:rungId` |
 | `PATCH /api/v1/routing/rungs/{rung_id}` | `/routing`, `/routing/:rungId` |
 | `POST /api/v1/models/providers` | `/models` |
 | `POST /api/v1/models/providers/{provider}/check` | `/models` |
@@ -155,13 +155,13 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `POST /api/v1/routing/golden-questions` | `/routing`, `/routing/:rungId` |
 | `POST /api/v1/routing/golden-questions/{question_id}/retire` | `/routing`, `/routing/:rungId` |
 | `POST /api/v1/routing/rungs` | `/routing`, `/routing/:rungId` |
-| `PUT /api/v1/models/profile` | `/models` |
 | `PUT /api/v1/models/providers/{provider}` | `/models` |
 | `PUT /api/v1/models/providers/{provider}/terms` | `/models` |
 | `PUT /api/v1/models/tiers/{tier}` | `/models` |
 
 - **Gap.** A provider's terms and an added provider's retirement are logged and not on the audit ledger: the ledger's action list gains no provider entry in this release. Open leaf `M5.6.4`.
-- **Gap.** The model endpoint cannot be changed after setup. Recorded: Set by the first-run wizard, which saves them to ops.setting, and no route changes one afterwards; changing one today is editing the server's environment file or the row by hand.
+- **Gap.** A provider key cannot be written or replaced from a screen after setup. Open leaf `M27.8.8`.
+- **Gap.** The model profile and endpoint cannot be changed after setup. Recorded: Set by the first-run wizard, which saves them to ops.setting, and no route changes one afterwards; changing one today is editing the server's environment file or the row by hand.
 
 ### Agents and their configuration, including templates
 
@@ -184,16 +184,18 @@ What an administrator would need to manage, read out of the schema, the routes a
 
 ### Skills and tools
 
-- **Screens:** `/skills`, `/skills/:name`
-- **Tables:** `agent.skill`, `agent.skill_review`, `agent.skill_assignment`
+- **Screens:** `/skills`, `/skills/:name`, `/tools`
+- **Tables:** `agent.skill`, `agent.skill_review`, `agent.skill_assignment`, `agent.tool_definition`, `agent.tool_switch`
 - **Installation values:** none
 
 | Route | Called by |
 | --- | --- |
 | `GET /api/v1/skills` | `/skills`, `/skills/:name` |
+| `GET /api/v1/tools` | `/tools` |
 | `POST /api/v1/skills` | `/skills`, `/skills/:name` |
 | `POST /api/v1/skills/{digest}/assignments` | `/skills`, `/skills/:name` |
 | `POST /api/v1/skills/{digest}/review` | `/skills`, `/skills/:name` |
+| `POST /api/v1/tools/{name}/switch` | `/tools` |
 
 - **Gap.** A skill cannot be fetched from a repository or a link, only pasted or uploaded. Recorded: brain.tools.fetch can fetch and check a source, and agent.skill admits only an upload; nothing on an install is given the network reach a fetch needs.
 - **Gap.** A skill cannot be removed from an agent from the console, only replaced by another version of it. Recorded: brain.console.agent_tabs.detach decides a removal and no route performs one; brain.skill_routes assigns and replaces.
@@ -220,30 +222,23 @@ What an administrator would need to manage, read out of the schema, the routes a
 ### Connectors and third-party integrations
 
 - **Screens:** `/connectors`
-- **Tables:** `ops.channel`, `ops.channel_delivery`, `ops.connector_connection`, `ops.connector_sync`, `proj.record`, `er.alias`, `er.canonical`, `er.identifier`, `er.link`
+- **Tables:** `ops.connector_connection`, `ops.connector_sync`, `proj.record`, `er.alias`, `er.canonical`, `er.identifier`, `er.link`
 - **Installation values:** `INSTALL_LARK_USES`, `INSTALL_LARK_PLATFORM`, `INSTALL_LARK_BASE`
 
 | Route | Called by |
 | --- | --- |
-| `GET /api/v1/channels` | **no screen** |
-| `GET /api/v1/channels/{name}/deliveries` | **no screen** |
 | `GET /api/v1/connectors` | `/connectors` |
 | `GET /api/v1/connectors/lark-app` | `/connectors` |
-| `POST /api/v1/channels/{name}/events` | **no screen** |
-| `POST /api/v1/channels/{name}/switch` | **no screen** |
-| `POST /api/v1/channels/{name}/test` | **no screen** |
 | `POST /api/v1/connectors` | `/connectors` |
 | `POST /api/v1/connectors/lark-app` | `/connectors` |
 | `POST /api/v1/connectors/lark-app/test` | `/connectors` |
 | `POST /api/v1/connectors/{connector}/disconnect` | `/connectors` |
-| `PUT /api/v1/channels/{name}` | **no screen** |
 
 - **Gap.** A connected source is read and kept, and no question is answered from what is kept. Recorded: No row tool is registered for a connected source's records: brain.tools.startup.classification_for is keyed on the entity alone and Xero and HubSpot both project contact, which that module records as the limit to change first. brain.ops.connector_admin.WHAT_CONNECTING_A_SOURCE_STARTS says so on the screen.
 - **Gap.** HubSpot can be connected and is not read. Recorded: brain.ops.limits records no verified call ceiling for it and brain.connectors.throttle.limits_for refuses to invent one; its row carries brain.ops.connector_sync.NO_VERIFIED_CEILING.
 - **Gap.** Freshdesk, Google Drive and the Laravel views cannot be connected from a screen. Recorded: Each needs a visibility rule, a department declaration or a key file the form cannot collect, which brain.ops.connectable.NOT_FROM_THE_CONSOLE says for each.
 - **Gap.** Connect Lark switches knowledge from Wiki and Base on, and no question is answered from Lark yet. Recorded: The Lark knowledge connector that keeps the minimal index and reads pages and records live is still to be built over the settings Connect Lark writes; brain.ops.lark_connect.KNOWLEDGE_IS_SWITCHED_ON_AND_NOTHING_IS_COPIED says so on the screen.
-- **Gap.** The Lark chat channel is set up and tested and does not yet receive Lark's events. Recorded: This release receives only the company's own signed webhook at /api/v1/channels/{name}/events, and Lark's receiver is still to be built, so Lark's Events and callbacks page has nothing to verify; brain.ops.lark_connect.THE_CHANNEL_RECEIVER_IS_NOT_BUILT_YET says so in the steps.
-- **Gap.** A channel's record, switch, test message and deliveries have routes and no screen. Recorded: The Channels screen is drawn over brain.channel_routes by the channels screen package, which follows this one; until then a channel is set up and proved through those routes, each change is in the audit ledger under setting:channel.<channel>, and the deliveries route lists every refusal without its content.
+- **Gap.** The Lark chat channel is set up and tested and does not yet receive Lark's events. Recorded: No channel in this release receives a webhook, so there is no address for Lark's Events and callbacks page to verify; brain.ops.lark_connect.THE_CHANNEL_RECEIVER_IS_NOT_BUILT_YET says so in the steps.
 
 ### API keys, credentials and secrets, held in the vault and never displayed
 
@@ -262,7 +257,7 @@ No gap recorded.
 ### Knowledge bases, documents and data sources
 
 - **Screens:** `/library`, `/learning`, `/memory`, `/memory/:subject`, `/records`, `/records/:entity`, `/classification`, `/classification/:entity`, `/classification/:entity/:column`, `/artifacts`
-- **Tables:** `know.item`, `know.chunk`, `mem.adaptive`, `mem.persistent`, `mem.learning`, `mem.correction`, `gate.fast_path_rule`, `gate.field_policy`, `agent.artifact`, `know.classified_table`, `know.classified_row`
+- **Tables:** `know.item`, `know.chunk`, `mem.adaptive`, `mem.persistent`, `mem.learning`, `mem.correction`, `gate.fast_path_rule`, `gate.field_policy`, `agent.artifact`
 - **Installation values:** `INSTALL_VECTOR_STORE`, `INSTALL_EMBEDDING_REVISION`
 
 | Route | Called by |
@@ -272,20 +267,14 @@ No gap recorded.
 | `GET /api/v1/govern/learning` | `/learning` |
 | `GET /api/v1/govern/library` | `/library` |
 | `GET /api/v1/govern/memory` | `/memory/:subject` |
-| `GET /api/v1/knowledge/uploads/options` | `/library` |
 | `GET /api/v1/records/{entity}` | `/records/:entity` |
 | `GET /api/v1/records/{entity}/access` | **no screen** |
-| `POST /api/v1/classifications/{entity}/columns/{column}/marks/review` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` |
 | `POST /api/v1/classifications/{entity}/columns/{column}/review` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` |
 | `POST /api/v1/govern/learning/undo` | `/learning` |
-| `POST /api/v1/knowledge/uploads` | `/library` |
-| `PUT /api/v1/classifications/{entity}/columns/{column}/marks` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` |
-| `PUT /api/v1/classifications/{entity}/table` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` |
 
-- **Gap.** A data source cannot be added from the console after setup; a document can, on the Knowledge page. Open leaf `M42.5.9`.
+- **Gap.** A document or a data source cannot be added from the console after setup. Open leaf `M42.5.9`.
 - **Gap.** A memory cannot be edited from a screen, and a tier-two rule cannot be promoted nor a tier-three change decided. Recorded: brain.ops.memory_store writes an edit and no route offers one: the control belongs on a person's own memory tab, and the Memory screen says edit_is_not_writable. Nothing records agreement or a decision, which the Learning screen says in place of Promote and Decide.
-- **Gap.** A built-in classification's column is reviewed and not applied; an uploaded table's column is marked and applied. Recorded: The shipped price list is a constant compiled into the API's process and changes with a release; brain.classification_routes applies a mark only to a table stored in know.classified_table, which tests/unit/test_classification_routes.py holds by the routes it mounts.
-- **Gap.** A price list uploaded as a document on the Knowledge page is not yet offered conversion to classified rows; it is uploaded on the Classification screen. Open leaf `M7.7.3`.
+- **Gap.** A column's classification cannot be changed; a proposed change is reviewed and not applied. Recorded: brain.classification_routes mounts only the dry-run review, and tests/unit/test_classification_routes.py holds that nothing mounted there can change a classification.
 
 ### File and object storage
 
@@ -357,7 +346,7 @@ No gap recorded.
 | `POST /api/v1/webhooks/subscribers/{subscriber_id}/secret` | `/webhooks` |
 | `POST /api/v1/webhooks/subscribers/{subscriber_id}/switch-off` | `/webhooks` |
 
-- **Gap.** No vendor platform's webhook is received, only the company's own signed webhook. Recorded: Only brain.channels.webhook has a wire in this release, and the WhatsApp and Lark checks are not written; the Webhooks screen names the channels received from brain.ops.inbound_webhooks.receiving and lists each channel's check.
+- **Gap.** No platform's webhook is received. Recorded: No route receives one, and the WhatsApp and Lark checks are not written; the Webhooks screen lists each channel's check from brain.ops.inbound_webhooks.
 
 ### Scheduled jobs and background work
 
@@ -504,7 +493,7 @@ No gap recorded.
 
 ## Every write the console sends, followed to the system
 
-Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 78 of 96 write routes have all three proved or not applicable, 14 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
+Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 75 of 92 write routes have all three proved or not applicable, 13 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
 
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
@@ -516,8 +505,7 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /api/v1/answer` | `/ask` | Not applicable: Asking a question writes no row an administrator manages. | Not applicable: Asking a question is not a change to the system. | Not applicable: The answer is the behaviour, and tests/invariants hold it. |
 | `POST /api/v1/approvals/{suspension_id}/decision` | `/approvals`, `/approvals/:suspensionId` | `test_a_decided_approval_leaves_one_ledger_entry_that_survives_a_restart` in `tests/unit/test_suspension_store.py` (database, in CI) | `test_a_decided_approval_leaves_one_ledger_entry_that_survives_a_restart` in `tests/unit/test_suspension_store.py` (database, in CI) | `test_an_approved_suspension_is_what_resume_reads_and_a_rejected_one_is_not_run` in `tests/unit/test_suspension_store.py` (database, in CI) |
 | `POST /api/v1/audit/verification` | `/audit` | Not applicable: Walking the ledger reads it and writes nothing. | Not applicable: A verification changes nothing, so there is nothing to record. | `test_a_truncated_ledger_is_reported_through_the_route` in `tests/unit/test_chain_check.py` |
-| `POST /api/v1/classifications/{entity}/columns/{column}/marks/review` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` | Not applicable: A review of a mark is a dry run and writes nothing. | Not applicable: A review changes nothing, so there is nothing to record. | `test_a_mark_review_stores_nothing` in `tests/unit/test_classified_tables.py` |
-| `POST /api/v1/classifications/{entity}/columns/{column}/review` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` | Not applicable: A review is a dry run and writes nothing. | Not applicable: A review changes nothing, so there is nothing to record. | `test_the_only_writes_mounted_here_are_the_upload_and_the_mark` in `tests/unit/test_classification_routes.py` |
+| `POST /api/v1/classifications/{entity}/columns/{column}/review` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` | Not applicable: A review is a dry run and writes nothing. | Not applicable: A review changes nothing, so there is nothing to record. | `test_nothing_mounted_here_can_change_a_classification` in `tests/unit/test_classification_routes.py` |
 | `POST /api/v1/connectors` | `/connectors` | `test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_record` in `tests/unit/test_connector_store.py` (database, in CI) | `test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_record` in `tests/unit/test_connector_store.py` (database, in CI) | `test_a_connected_source_is_read_and_once_disconnected_it_is_never_read_again` in `tests/unit/test_connector_sync_run.py` (database, in CI) |
 | `POST /api/v1/connectors/lark-app` | `/connectors` | `test_a_save_keeps_one_credential_in_each_uses_slot_and_switches_them_on` in `tests/unit/test_lark_connect.py` | **None.** The write is an ops.setting row, which migration 0059's trigger records as a setting entry naming the key, the change and the writer, and no test follows this route's write to that entry. | `test_after_a_save_each_use_says_where_it_stands` in `tests/unit/test_lark_connect.py` |
 | `POST /api/v1/connectors/lark-app/test` | `/connectors` | Not applicable: A Lark test writes no row here or in Lark: every request after the token exchange is a read, which the fake Lark server records. | Not applicable: Nothing is written, so there is nothing for the ledger to record, and the secret is never logged. | `test_the_test_route_reports_each_use_and_writes_nothing` in `tests/unit/test_lark_connect.py` |
@@ -566,7 +554,6 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /api/v1/jobs/{name}/pause` | `/jobs` | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_job_paused_from_the_screen_is_left_unstarted_by_the_next_tick_and_resumed_is_started` in `tests/unit/test_console_controls_reach_behaviour.py` |
 | `POST /api/v1/jobs/{name}/resume` | `/jobs` | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_job_paused_from_the_screen_is_left_unstarted_by_the_next_tick_and_resumed_is_started` in `tests/unit/test_console_controls_reach_behaviour.py` |
 | `POST /api/v1/jobs/{name}/run` | `/jobs` | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_run_asked_for_from_the_screen_is_started_by_the_next_tick_even_while_paused` in `tests/unit/test_console_controls_reach_behaviour.py` |
-| `POST /api/v1/knowledge/uploads` | `/library` | `test_an_administrators_upload_is_found_by_its_department_by_text_and_by_nobody_else` in `tests/unit/test_knowledge_upload_db.py` (database, in CI) | `test_an_upload_appends_one_ledger_entry_the_audit_screens_reader_finds` in `tests/unit/test_knowledge_upload_db.py` (database, in CI) | `test_a_markdown_file_is_added_to_a_department_as_its_uploader` in `tests/unit/test_knowledge_routes.py` |
 | `POST /api/v1/me/referrals/{referral_id}/handled` | `/referrals` | `test_a_referral_is_filed_without_content_and_read_only_by_its_person` in `tests/unit/test_compliance_store.py` (database, in CI) | **None.** Marking a referral handled writes handled_at and handled_by on its row and no ledger entry: an entry that only a sensitive question writes is the disclosure brain.audit.compliance.intercept argues against. | `test_a_referral_marked_handled_is_shown_handled` in `tests/unit/test_compliance_routes.py` |
 | `POST /api/v1/models/providers` | `/models` | `test_an_added_provider_has_its_key_kept_in_its_own_slot_before_its_row_is_written` in `tests/unit/test_provider_registry_routes.py` | `test_a_key_set_from_the_console_is_recorded_as_its_setter_with_their_reach_and_trace` in `tests/unit/test_credential_routes.py` | `test_a_provider_added_from_the_console_answers_through_the_ladder_with_no_release` in `tests/unit/test_model_calls.py` |
 | `POST /api/v1/models/providers/{provider}/check` | `/models` | `test_a_check_is_one_metered_call_recorded_on_the_ledger_and_never_as_a_question` in `tests/unit/test_provider_routes.py` | Not applicable: A check changes no setting and no record an administrator manages; it is a metered call on the request ledger, not a change to audit. | `test_a_check_is_one_metered_call_recorded_on_the_ledger_and_never_as_a_question` in `tests/unit/test_provider_routes.py` |
@@ -586,6 +573,7 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /api/v1/skills` | `/skills`, `/skills/:name` | `test_an_import_and_a_decision_each_write_one_row_and_one_entry_through_the_store` in `tests/unit/test_skill_store.py` (database, in CI) | `test_an_import_and_a_decision_each_write_one_row_and_one_entry_through_the_store` in `tests/unit/test_skill_store.py` (database, in CI) | `test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_assigned_to_an_agent` in `tests/unit/test_skill_routes.py` |
 | `POST /api/v1/skills/{digest}/assignments` | `/skills`, `/skills/:name` | `test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_assigned_to_an_agent` in `tests/unit/test_skill_routes.py` | `test_the_database_refuses_a_decision_by_the_importer_and_an_assignment_nobody_approved` in `tests/unit/test_skill_store.py` (database, in CI) | `test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_assigned_to_an_agent` in `tests/unit/test_skill_routes.py` |
 | `POST /api/v1/skills/{digest}/review` | `/skills`, `/skills/:name` | `test_an_import_and_a_decision_each_write_one_row_and_one_entry_through_the_store` in `tests/unit/test_skill_store.py` (database, in CI) | `test_an_import_and_a_decision_each_write_one_row_and_one_entry_through_the_store` in `tests/unit/test_skill_store.py` (database, in CI) | `test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_assigned_to_an_agent` in `tests/unit/test_skill_routes.py` |
+| `POST /api/v1/tools/{name}/switch` | `/tools` | `test_a_super_administrator_switches_a_tool_off_for_the_install` in `tests/unit/test_tool_routes.py` | `test_switching_through_the_routes_reaches_the_row_the_ledger_and_every_call` in `tests/unit/test_tool_routes.py` (database, in CI) | `test_switching_through_the_routes_reaches_the_row_the_ledger_and_every_call` in `tests/unit/test_tool_routes.py` (database, in CI) |
 | `POST /api/v1/webhooks/subscribers` | `/webhooks` | `test_a_registration_is_written_with_the_reader_as_its_creator_and_its_secret_kept` in `tests/unit/test_webhook_routes.py` | `test_each_webhook_change_through_the_store_appends_one_entry_naming_its_own_author` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_due_event_is_signed_received_verified_and_recorded_delivered` in `tests/unit/test_webhook_delivery.py` (database, in CI) |
 | `POST /api/v1/webhooks/subscribers/{subscriber_id}/secret` | `/webhooks` | `test_replacing_a_secret_writes_the_new_one_and_a_switched_off_subscriber_is_refused` in `tests/unit/test_webhook_routes.py` | `test_each_webhook_change_through_the_store_appends_one_entry_naming_its_own_author` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_the_worker_reads_the_secret_at_the_path_the_console_writes_it_to` in `tests/unit/test_webhook_delivery.py` |
 | `POST /api/v1/webhooks/subscribers/{subscriber_id}/switch-off` | `/webhooks` | `test_switching_off_records_who_did_it_and_a_second_switch_off_is_refused` in `tests/unit/test_webhook_routes.py` | `test_each_webhook_change_through_the_store_appends_one_entry_naming_its_own_author` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_registering_replacing_and_switching_off_reach_the_rows_and_the_fan_out` in `tests/unit/test_webhook_store.py` (database, in CI) |
@@ -594,13 +582,10 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /setup/staff-source/sign-in` | `/first-run` | Not applicable: It answers the directory's own sign-in page for the setup code's holder and writes nothing. | Not applicable: Nothing changes when a sign-in page is asked for, so there is nothing to record. | `test_a_directory_is_chosen_signed_in_to_and_its_list_pulled` in `tests/unit/test_setup_staff_routes.py` |
 | `POST /setup/staff-source/trial` | `/first-run` | `test_a_trial_that_read_the_directory_keeps_its_credential_for_the_nightly_sync` in `tests/unit/test_setup_staff_routes.py` | `test_a_trial_that_read_the_directory_keeps_its_credential_for_the_nightly_sync` in `tests/unit/test_setup_staff_routes.py` | `test_a_directory_is_chosen_signed_in_to_and_its_list_pulled` in `tests/unit/test_setup_staff_routes.py` |
 | `PUT /api/v1/agents/{agent_id}/model-pin` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_an_administrator_pins_a_model_a_rung_serves_and_it_is_written_to_the_agent` in `tests/unit/test_agent_model_routes.py` | **None.** An agent's pin is logged and not written to the audit ledger in this release. Leaf `M5.7.3`. | `test_a_pinned_model_is_tried_first_even_from_another_tier` in `tests/unit/test_model_calls.py` |
-| `PUT /api/v1/classifications/{entity}/columns/{column}/marks` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` | `test_the_store_writes_and_reads_a_table_as_the_application_role` in `tests/unit/test_classified_tables.py` (database, in CI) | `test_the_store_writes_and_reads_a_table_as_the_application_role` in `tests/unit/test_classified_tables.py` (database, in CI) | `test_applying_a_mark_stores_it_and_moves_the_epoch_when_a_derivation_changes` in `tests/unit/test_classified_tables.py` |
-| `PUT /api/v1/classifications/{entity}/table` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` | `test_the_store_writes_and_reads_a_table_as_the_application_role` in `tests/unit/test_classified_tables.py` (database, in CI) | `test_the_store_writes_and_reads_a_table_as_the_application_role` in `tests/unit/test_classified_tables.py` (database, in CI) | `test_an_administrator_uploads_a_price_list_and_is_answered_its_classification` in `tests/unit/test_classified_tables.py` |
 | `PUT /api/v1/credentials/{family}/{name}` | `/models` | `test_setting_a_key_writes_the_slot_and_answers_that_it_is_held_and_when` in `tests/unit/test_credential_routes.py` | `test_a_key_set_from_the_console_is_recorded_as_its_setter_with_their_reach_and_trace` in `tests/unit/test_credential_routes.py` | `test_a_key_kept_here_is_handed_to_this_process_unless_the_environment_outranks_it` in `tests/unit/test_credentials.py` |
 | `PUT /api/v1/govern/compliance/topics/{topic}` | `/compliance` | `test_naming_a_person_writes_one_route_row_and_a_setting_entry_without_the_value` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_naming_a_person_writes_one_route_row_and_a_setting_entry_without_the_value` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_a_sensitive_question_is_routed_to_the_person_named_for_its_topic` in `tests/unit/test_compliance_routes.py` |
 | `PUT /api/v1/govern/staff_sources/credential` | `/staff_sources` | `test_the_credential_is_replaced_into_its_slot_recorded_and_never_sent_back` in `tests/unit/test_staff_sync_routes.py` | `test_a_credential_write_appends_exactly_the_entry_the_recorder_writes_and_the_chain_holds` in `tests/unit/test_credential_writes.py` (database, in CI) | `test_a_scheduled_run_reads_lark_with_the_kept_credential_and_applies_the_plan` in `tests/unit/test_staff_sync_run.py` |
 | `PUT /api/v1/install/settings/{name}` | `/settings` | `test_saving_a_company_name_writes_its_row_and_the_console_header_draws_it_next` in `tests/unit/test_settings_routes.py` | **None.** The route sets the audit attribution 0059's trigger reads, which BRANDING_SAVED asserts over a stub; no scratch-Postgres test yet reads the ledger entry back. | `test_saving_a_company_name_writes_its_row_and_the_console_header_draws_it_next` in `tests/unit/test_settings_routes.py` |
-| `PUT /api/v1/models/profile` | `/models` | `test_where_answers_are_made_is_saved_by_the_super_administrator_ledgered_and_planned_at_once` in `tests/unit/test_provider_routes.py` | **None.** The route sets the audit attribution 0059's trigger reads, which the row test asserts over a stub; no scratch-Postgres test yet reads the ledger entry back. | `test_where_answers_are_made_is_saved_by_the_super_administrator_ledgered_and_planned_at_once` in `tests/unit/test_provider_routes.py` |
 | `PUT /api/v1/models/providers/{provider}` | `/models` | `test_the_stores_read_the_ladder_write_attempts_by_id_and_keep_a_switch` in `tests/unit/test_model_service.py` (database, in CI) | **None.** The write is an ops.setting row, which migration 0059's trigger records as a setting entry naming the key, the change and the writer, and no test follows this route's write to that entry. | `test_switching_a_provider_off_takes_its_rungs_out_of_the_next_plan_at_once` in `tests/unit/test_provider_routes.py` |
 | `PUT /api/v1/models/providers/{provider}/terms` | `/models` | `test_terms_recorded_for_a_built_in_provider_write_its_first_registry_row` in `tests/unit/test_provider_registry_routes.py` | **None.** A provider's terms are logged and not written to the audit ledger in this release. Leaf `M5.6.4`. | `test_a_constrained_call_skips_an_undocumented_rung_for_the_documented_one_behind_it` in `tests/unit/test_model_calls.py` |
 | `PUT /api/v1/models/tiers/{tier}` | `/models` | `test_a_tier_rule_is_written_as_the_window_and_only_the_keys_the_router_reads` in `tests/unit/test_model_health_routes.py` | **None.** A tier's numbers are logged and not written to the audit ledger in this release. Leaf `M5.2.2`. | `test_a_request_is_classified_against_the_tier_table_the_ladder_read` in `tests/unit/test_model_calls.py` |
