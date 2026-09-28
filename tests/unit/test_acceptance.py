@@ -44,6 +44,7 @@ from brain.ops.acceptance import (
     registered,
     served,
 )
+from brain.ops.acceptance_checks_chat import BINDING_A_CHAT_ACCOUNT_IS_NOT_DEPLOYED
 from brain.ops.acceptance_run import Harness
 from brain.settings import settings_from
 from tests.unit.test_limit_store import FakeClient
@@ -105,6 +106,11 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "unusual_volume_is_found_per_person",
         "repeated_refusals_raise_a_denial_notice",
         "a_head_reads_their_own_peoples_audit_entries_only",
+    ]
+    assert by_module["brain.ops.acceptance_checks_chat"] == [
+        "a_lark_group_message_is_answered_only_when_it_names_the_bot",
+        "a_person_bound_in_lark_is_given_their_web_answer_directly",
+        "a_lark_group_hears_its_floor_and_the_asker_reads_the_rest_alone",
     ]
     oversight = {one.name: one.leaves for one in registered()}
     assert oversight["unusual_volume_is_found_per_person"] == ("M23.2.1",)
@@ -385,8 +391,12 @@ def at_head(database: str) -> Iterator[str]:
         yield url
 
 
-#: What the database half hands the run: an issuer the binding writer accepts, and no cache.
-ISSUER = {"INSTALL_OIDC_ISSUER": "https://id.example.invalid/realms/brain"}
+#: What the database half hands the run: an issuer the binding writer accepts, an address of the
+#: install's own for the chat checks' link to Ask, and no cache.
+INSTALL = {
+    "INSTALL_OIDC_ISSUER": "https://id.example.invalid/realms/brain",
+    "INSTALL_OIDC_REDIRECT_URIS": "https://brain.example.invalid/callback",
+}
 
 #: Every table a check writes to and nothing may be left in afterwards.
 WRITTEN_BY_CHECKS = (
@@ -401,6 +411,8 @@ WRITTEN_BY_CHECKS = (
     "gate.channel_event",
     "know.item",
     "know.chunk",
+    "know.classified_table",
+    "know.classified_row",
     "obs.request_telemetry",
     "gate.team",
     "gate.team_membership",
@@ -434,7 +446,8 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """**The run as the worker makes it, against PostgreSQL at head.** Twice: every check that can
-    be asked without a cache passes both times, the limits check says it was not run, and after
+    be asked without a cache passes both times, the limits check says it was not run, the two
+    Lark checks needing a bound person say so until the events route reads chat bindings, and after
     both runs every table a check wrote to holds what it held before, while the result rows are
     there, one run each, keyed by the commit. Delete this and a check that commits, or one
     that cannot pass on a real schema, reaches the owner's server first."""
@@ -442,7 +455,7 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
 
     with at_head("brain_acceptance_run") as url:
         before = counts(url)
-        for name, value in ISSUER.items():
+        for name, value in INSTALL.items():
             monkeypatch.setenv(name, value)
         waited = run_on(url, {})
         bound = run_on(url, {})
@@ -458,10 +471,15 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         assert (first.name, first.outcome) == (second.name, second.outcome)
     outcomes = {one.name: (one.outcome, one.reason) for one in waited[1]}
     assert outcomes.pop("asking_past_a_window_is_refused_with_a_retry_hint")[0] == NOT_RUN
+    for needs_a_binding in (
+        "a_person_bound_in_lark_is_given_their_web_answer_directly",
+        "a_lark_group_hears_its_floor_and_the_asker_reads_the_rest_alone",
+    ):
+        assert outcomes.pop(needs_a_binding) == (NOT_RUN, BINDING_A_CHAT_ACCOUNT_IS_NOT_DEPLOYED)
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
-    assert len(outcomes) == 5
+    assert len(outcomes) == 6
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 12
+    assert runs == [(2,)] and len(recorded) == 18
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }
@@ -480,7 +498,7 @@ def test_a_reserved_department_in_use_stops_the_run_before_it_writes() -> None:
             "INSERT INTO auth.principal (id, kind, employment, display_name, primary_department)"
             " VALUES ('u_real', 'human', 'staff', 'A real person', 'acceptance_a')",
         )
-        _, results = run_on(url, ISSUER)
+        _, results = run_on(url, INSTALL)
         entries = sql(url, "SELECT count(*) FROM obs.audit_entry")
 
     assert {one.outcome for one in results} == {NOT_RUN}
@@ -507,7 +525,7 @@ def test_the_worker_runs_once_per_commit_and_again_when_asked() -> None:
                 await engine.dispose()
 
         first = asyncio.run(occasion())
-        run_on(url, ISSUER, force=False)
+        run_on(url, INSTALL, force=False)
         second = asyncio.run(occasion())
         sql(
             url,
@@ -533,7 +551,7 @@ def test_the_page_serves_the_newest_run_of_the_commit_it_is_asked_about() -> Non
     from brain.session import make_app_engine, make_application_sessions
 
     with at_head("brain_acceptance_page") as url:
-        run_on(url, ISSUER)
+        run_on(url, INSTALL)
         app = FastAPI()
         app.include_router(router)
         engine = make_app_engine(normalise_database_url(url))
