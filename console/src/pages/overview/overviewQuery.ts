@@ -76,10 +76,26 @@ export interface WaitingQueue {
   readonly opens?: string;
 }
 
+/** One halt in force the reader may be told of: what it stops, and since when. */
+export interface Halt {
+  /** `brain.ops.halt.HaltScope`: everything, department, agent, connector or person. */
+  readonly scope: string;
+  /** What a targeted halt names; empty for a halt on everything. */
+  readonly target: string;
+  readonly since: string;
+}
+
 /** The overview as this console holds it. */
 export interface OverviewAnswer {
   readonly status: string;
   readonly parts: readonly ReadinessPart[];
+  /** The halts in force, widest first. Empty when nothing is stopped or the state is unknown. */
+  readonly halts: readonly Halt[];
+  /**
+   * Whether the halts could be read. Absent when the API sent no word on it, which is a route
+   * older than the halt store, and then the strip says what `unrecorded` says instead.
+   */
+  readonly haltsKnown?: boolean;
   readonly workerLastSeen?: string;
   readonly healthNotRecorded: readonly NotRecorded[];
   readonly needsYou: readonly WaitingQueue[];
@@ -171,10 +187,27 @@ export function readOverview(payload: unknown): OverviewAnswer | null {
     const opens = consoleAddress(line?.["opens"]);
     needsYou.push({ queue, waiting, atLeast: line?.["at_least"] === true, ...(opens === undefined ? {} : { opens }) });
   }
+  const halts: Halt[] = [];
+  for (const one of listOf(health["halts"])) {
+    const halt = fieldsOf(one);
+    const scope = text(halt?.["scope"]);
+    const since = text(halt?.["since"]);
+    const target = halt?.["target"];
+    if (scope !== undefined && since !== undefined && typeof target === "string") {
+      halts.push({ scope, target: target.trim(), since });
+    }
+  }
+  const known = health["halts_known"];
   const seen = text(health["worker_last_seen"]);
   return {
     status,
     parts,
+    // A halt the API sent but this reader cannot read is still a stop, so an unreadable entry
+    // makes the whole state unknown rather than dropping to "Nothing stopped".
+    halts,
+    ...(typeof known === "boolean"
+      ? { haltsKnown: known && halts.length === listOf(health["halts"]).length }
+      : {}),
     ...(seen === undefined ? {} : { workerLastSeen: seen }),
     healthNotRecorded: readNotRecorded(health["unrecorded"]),
     needsYou,
@@ -325,6 +358,48 @@ export const HEALTH_FIGURES: Readonly<Record<string, string>> = Object.freeze({
   halts: "Halts in force",
   budget_stops: "Budget stops",
 });
+
+/** Said when the halts were read and none is in force. */
+export const NOTHING_STOPPED = "Nothing stopped";
+
+/** Said when the halts could not be read. Admission refuses everything then, so the page says so. */
+export const STOP_STATE_UNKNOWN = "Stop state unknown, treated as stopped";
+
+/** What each scope of halt stops, as the words after "Stopped:". */
+function stoppedWhat(halt: Halt): string {
+  switch (halt.scope) {
+    case "everything":
+      return "everything";
+    case "department":
+      return `department ${halt.target}`;
+    case "agent":
+      return `agent ${halt.target}`;
+    case "connector":
+      return `source ${halt.target}`;
+    case "person":
+      // The target is a principal id, which belongs in Advanced and nowhere else on a page.
+      return "one person's work";
+    default:
+      return halt.target === "" ? humanised(halt.scope).toLocaleLowerCase("en-GB") : `${halt.scope.replace(/_/g, " ")} ${halt.target}`;
+  }
+}
+
+/** An instant as the strip says it: the time alone when it is today, else the day and the time. */
+export function sinceWords(at: string, now: Date = new Date()): string {
+  const when = new Date(at);
+  if (Number.isNaN(when.getTime())) {
+    return at;
+  }
+  const time = when.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  return when.toDateString() === now.toDateString()
+    ? time
+    : `${when.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}, ${time}`;
+}
+
+/** One halt in plain words: "Stopped: everything since 14:05". */
+export function haltWords(halt: Halt, now: Date = new Date()): string {
+  return `Stopped: ${stoppedWhat(halt)} since ${sinceWords(halt.since, now)}`;
+}
 
 /** Whose requests the figures are over, in words. */
 export function basisWords(basis: string): string {

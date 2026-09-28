@@ -57,6 +57,8 @@ import {
   AUDIT_PATH,
   FIGURES_API_PATH,
   HEALTH_FIGURES,
+  NOTHING_STOPPED,
+  STOP_STATE_UNKNOWN,
   OVERVIEW_API_PATH,
   QUEUE_PAGES,
   SOURCES_API_PATH,
@@ -64,6 +66,7 @@ import {
   activityWords,
   basisWords,
   connectedSources,
+  haltWords,
   partIsReady,
   partWords,
   queueLabel,
@@ -73,6 +76,7 @@ import {
   recentActivity,
   waitingWords,
   type Counted,
+  type Halt,
   type NotRecorded,
   type OverviewAnswer,
 } from "./overviewQuery";
@@ -86,6 +90,7 @@ export const HEALTH_LABEL = "This install";
 export const READINESS_LABEL = "Readiness";
 export const WORKER_LABEL = "Worker last seen";
 export const WORKER_SUB = "newest scheduled run you can see";
+export const HALTS_LABEL = "Stopped";
 
 export const FIGURES_LABEL = "Last 7 days";
 export const ANSWERED_LABEL = "Questions answered";
@@ -168,16 +173,50 @@ function whyOf(rows: readonly NotRecorded[], figure: string): string | undefined
 
 // ------------------------------------------------------------------------------ the health strip
 
+/**
+ * What is stopped, in words: nothing, each halt in force, or that nobody can tell. The last is drawn
+ * as a stop, because admission refuses everything while the halts cannot be read.
+ */
+function HaltsValue({ halts, known }: { readonly halts: readonly Halt[]; readonly known: boolean }) {
+  if (!known) {
+    return (
+      <span data-halts="unknown" className="text-[14px] leading-snug font-medium tracking-normal text-crit">
+        {STOP_STATE_UNKNOWN}
+      </span>
+    );
+  }
+  if (halts.length === 0) {
+    return <span data-halts="none">{NOTHING_STOPPED}</span>;
+  }
+  return (
+    <ul data-halts="stopped" className="m-0 flex list-none flex-col gap-1 p-0 text-[14px] leading-snug font-medium tracking-normal text-crit">
+      {halts.map((halt) => (
+        <li key={`${halt.scope} ${halt.target} ${halt.since}`} className="min-w-0 [overflow-wrap:anywhere]">
+          {haltWords(halt)}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function HealthStrip({ overview }: { readonly overview: Resource<unknown> }) {
   if (isNotTheirs(overview.failure)) {
     return null;
   }
   const read = overview.data === null ? null : readOverview(overview.data);
-  const health = Object.entries(HEALTH_FIGURES).filter(([figure]) => read?.healthNotRecorded.some((one) => one.figure === figure));
+  // The halts card when the API says what is stopped; otherwise whatever it names as not recorded.
+  const haltsKnown = read?.haltsKnown;
+  const health = Object.entries(HEALTH_FIGURES).filter(
+    ([figure]) => !(figure === "halts" && haltsKnown !== undefined) && read?.healthNotRecorded.some((one) => one.figure === figure),
+  );
+  const cards = 2 + (haltsKnown === undefined ? 0 : 1) + health.length;
   return (
     <section aria-label={HEALTH_LABEL} className="flex min-w-0 flex-col gap-2">
-      <StatsStrip label={HEALTH_LABEL} busy={overview.busy} failure={overview.failure} count={2 + health.length}>
+      <StatsStrip label={HEALTH_LABEL} busy={overview.busy} failure={overview.failure} count={cards}>
         <StatCard label={READINESS_LABEL} value={read === null ? undefined : readinessWords(read.status)} />
+        {read === null || haltsKnown === undefined ? null : (
+          <StatCard label={HALTS_LABEL} value={<HaltsValue halts={read.halts} known={haltsKnown} />} />
+        )}
         <StatCard label={WORKER_LABEL} value={whenWords(read?.workerLastSeen)} sub={WORKER_SUB} />
         {health.map(([figure, label]) => (
           <StatCard key={figure} label={label} unrecordedWhy={whyOf(read?.healthNotRecorded ?? [], figure)} />
