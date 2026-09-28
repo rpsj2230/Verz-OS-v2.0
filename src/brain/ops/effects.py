@@ -583,6 +583,28 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
             Repeat.WRITES_THIS_SYSTEMS_DATABASE
         ),
         "brain.ops.sensitive_referral_store:SensitiveReferrals.tally": Repeat.READS,
+        # The channel pipeline (`0114`). A wire is functions of bytes and a secret; the transport
+        # is the one door a channel's message leaves by, called inside `issue_once` by
+        # `brain.channels.outbound.deliver`.
+        "brain.channels.adapter:ChannelWire.verify": Repeat.READS,
+        "brain.channels.adapter:ChannelWire.handshake": Repeat.READS,
+        "brain.channels.adapter:ChannelWire.read": Repeat.READS,
+        "brain.channels.adapter:ChannelWire.request_for": Repeat.READS,
+        "brain.channels.adapter:ChannelWire.judge": Repeat.READS,
+        "brain.channels.adapter:ChannelTransport.send": Repeat.ISSUES,
+        "brain.channels.inbound:ChannelBindings.binding_for": Repeat.READS,
+        # The gate run as the bound person: a model call and reads, and the send is `deliver`'s.
+        "brain.channels.inbound:ChannelAnswerer.answer": Repeat.NO_EFFECT_AT_THE_FAR_END,
+        "brain.ops.channel_store:ChannelRecords.get": Repeat.READS,
+        "brain.ops.channel_store:ChannelRecords.every": Repeat.READS,
+        "brain.ops.channel_store:ChannelRecords.save": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.ops.channel_store:ChannelRecords.switch": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.ops.channel_store:DeliveryRecords.record": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.ops.channel_store:DeliveryRecords.recent": Repeat.READS,
+        # A claim is an insert the primary key refuses a second time: that is what it is for.
+        "brain.ops.channel_store:EventClaims.first": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.ops.channel_store:ChannelSecrets.read": Repeat.READS,
+        "brain.ops.channel_store:ChannelSecrets.held": Repeat.READS,
     }
 )
 
