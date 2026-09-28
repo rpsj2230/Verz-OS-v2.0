@@ -1,7 +1,7 @@
 """The front half's decisions reach the request row, and a redelivered message is claimed once.
 
-The mapping half runs everywhere. The database half needs a server and runs in CI: `0039` then
-`0100` for real on a fresh database, written as `brain_app` so the grants and the row-level
+The mapping half runs everywhere. The database half needs a server and runs in CI: `0039`, `0100`
+and `0113` for real on a fresh database, written as `brain_app` so the grants and the row-level
 security policies are what is exercised, not the owner's bypass.
 
 Task ids: M3.2.2, M3.4.2, M3.6.3
@@ -18,11 +18,14 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from brain.core.entitlement import EntitlementSet
 from brain.core.lane import Lane
+from brain.gate.classify import LaneBasis
 from brain.gate.context import Channel
 from brain.gate.event_store import ExternalIdTooLongError, first_delivery
 from brain.gate.finish import Finished, FinishError, FrontRecord, Origin
 from brain.gate.ingress import ChannelEvent
 from brain.gate.select import SelectionStage
+from brain.models.metering import ModelRoute
+from brain.models.routing import Tier, TierBasis
 from brain.ops.telemetry import request_telemetry_of
 from brain.ops.telemetry_store import record
 from brain.tables.channel_event import EXTERNAL_ID_CHARS
@@ -36,10 +39,16 @@ FRONT = FrontRecord(
     routed_lane=Lane.ANSWER,
     selection_stage=SelectionStage.ADDRESSED,
     selected_agent="finance",
+    lane_basis=LaneBasis.FAST_REFUSED,
 )
+ROUTE = ModelRoute(tier=Tier.HEAVY, basis=TierBasis.PINNED)
 
 
-def _finished(front: FrontRecord | None = None, trace: str = "t-front-row") -> Finished:
+def _finished(
+    front: FrontRecord | None = None,
+    trace: str = "t-front-row",
+    route: ModelRoute | None = None,
+) -> Finished:
     origin = Origin(trace_id=trace, principal=asker("u_one"), channel=Channel.CONSOLE)
     return Finished(
         origin,
@@ -50,6 +59,7 @@ def _finished(front: FrontRecord | None = None, trace: str = "t-front-row") -> F
         lane=Lane.FAST,
         tool_calls=0,
         front=front,
+        route=route,
     )
 
 
@@ -74,20 +84,42 @@ def test_the_row_carries_the_front_halfs_decisions_as_they_were_made() -> None:
     assert row["routed_lane"] is Lane.ANSWER
     assert row["selection_stage"] is SelectionStage.ADDRESSED
     assert row["selected_agent"] == "finance"
+    assert row["lane_basis"] is LaneBasis.FAST_REFUSED
     assert row["lane"] is Lane.FAST
 
 
-def test_a_request_the_front_half_did_not_run_for_leaves_all_four_empty() -> None:
-    """None rather than a zero score or a default lane, which a report would believe."""
+def test_the_row_carries_the_route_the_executor_noted_and_not_one_derived_from_the_lane() -> None:
+    """M3.6.3: the tier and its basis come off `Finished.route`, which the meter took from the
+    executor's decision. A heavy pinned route beside an answer-lane question is what a derivation
+    from the lane could never produce, so it can only have come from the route.
+
+    Delete this and the row's tier can be filled from the lane after the fact, which is the
+    inference the leaf forbids."""
+    row = request_telemetry_of(_finished(FRONT, route=ROUTE)).ledger_row()
+    assert (row["routed_tier"], row["tier_basis"]) == (Tier.HEAVY, TierBasis.PINNED)
+    assert row["routed_lane"] is Lane.ANSWER
+
+
+def test_a_request_the_front_half_did_not_run_for_leaves_all_its_columns_empty() -> None:
+    """None rather than a zero score, a default lane or a default tier, which a report would
+    believe."""
     row = request_telemetry_of(_finished()).ledger_row()
-    for column in ("risk_score", "routed_lane", "selection_stage", "selected_agent"):
+    for column in (
+        "risk_score",
+        "routed_lane",
+        "selection_stage",
+        "selected_agent",
+        "lane_basis",
+        "routed_tier",
+        "tier_basis",
+    ):
         assert row[column] is None, column
 
 
 @pytest.mark.parametrize("score", [-1, 101])
 def test_a_score_outside_the_scale_is_refused(score: int) -> None:
     with pytest.raises(FinishError):
-        FrontRecord(score, Lane.ANSWER, SelectionStage.DEFAULT, "general")
+        FrontRecord(score, Lane.ANSWER, SelectionStage.DEFAULT, "general", LaneBasis.DEFAULT)
 
 
 def test_an_external_id_longer_than_the_key_is_refused_rather_than_truncated() -> None:
@@ -107,13 +139,16 @@ DATABASE = "brain_test_m322_front_half"
 
 @pytest.fixture(scope="module")
 def database() -> Iterator[str]:
-    """`0039` for the ledger, then `0100`, each run for real on the one before it stamped."""
+    """`0039` for the ledger, then `0100` and `0113`, each run for real on the one before it
+    stamped."""
     scratch = fresh(DATABASE)
     try:
         migrate(DATABASE, "stamp", "0038")
         migrate(DATABASE, "upgrade", "0039")
         migrate(DATABASE, "stamp", "0097")
         migrate(DATABASE, "upgrade", "0100")
+        migrate(DATABASE, "stamp", "0108")
+        migrate(DATABASE, "upgrade", "0113")
         yield scratch
     finally:
         drop(DATABASE)
@@ -150,7 +185,8 @@ def test_a_redelivered_message_is_claimed_once_and_the_same_id_elsewhere_is_its_
 
 
 def test_the_front_halfs_columns_are_written_as_the_application_role(database: str) -> None:
-    """The recorder's insert, as `brain_app`, lands the four columns on the migrated ledger."""
+    """The recorder's insert, as `brain_app`, lands the routing decision on the migrated ledger,
+    and each check admits the codes the enums hold."""
     sql(database, "TRUNCATE obs.request_telemetry")
 
     async def go() -> None:
@@ -158,7 +194,7 @@ def test_the_front_halfs_columns_are_written_as_the_application_role(database: s
         try:
             async with async_sessionmaker(bound)() as session:
                 await session.execute(text("SET ROLE brain_app"))
-                await record(session, request_telemetry_of(_finished(FRONT)))
+                await record(session, request_telemetry_of(_finished(FRONT, route=ROUTE)))
                 await record(session, request_telemetry_of(_finished(None, trace="t-plain")))
                 await session.commit()
         finally:
@@ -167,9 +203,48 @@ def test_the_front_halfs_columns_are_written_as_the_application_role(database: s
     run(go)
     assert sql(
         database,
-        "SELECT trace_id, risk_score, routed_lane, selection_stage, selected_agent "
-        "FROM obs.request_telemetry ORDER BY trace_id",
+        "SELECT trace_id, risk_score, routed_lane, selection_stage, selected_agent, lane_basis, "
+        "routed_tier, tier_basis FROM obs.request_telemetry ORDER BY trace_id",
     ) == [
-        ("t-front-row", 55, "answer", "addressed", "finance"),
-        ("t-plain", None, None, None, None),
+        ("t-front-row", 55, "answer", "addressed", "finance", "fast_refused", "heavy", "pinned"),
+        ("t-plain", None, None, None, None, None, None, None),
     ]
+
+
+@pytest.mark.parametrize(
+    ("column", "real", "invented"),
+    [
+        ("lane_basis", "long_question", "guessed"),
+        ("routed_tier", "small", "biggest"),
+        ("tier_basis", "residency_floor", "hunch"),
+    ],
+)
+def test_a_route_code_no_enum_holds_is_refused_by_that_columns_check(
+    database: str, column: str, real: str, invented: str
+) -> None:
+    """0113's checks, run for real: the longest real code is written, and a code outside
+    `LaneBasis`, `Tier` or `TierBasis` is refused by the check named for that column.
+
+    Delete this and a check copied wrongly into the migration admits any word, or a width too
+    narrow refuses a real code, and a five-year row says a question was routed for a reason no
+    release ever had."""
+    import psycopg
+
+    statement = (
+        "INSERT INTO obs.request_telemetry (received_at, trace_id, traffic_class, principal, "
+        "entitlement_hash, lane, cache_hit, status, duration_ms, lane_basis, routed_tier, "
+        "tier_basis) VALUES (%s, 't-code', 'human_interactive', 'u_one', %s, 'fast', false, "
+        "'answered', 1, %s, %s, %s)"
+    )
+    ent_hash = EntitlementSet(principal_id="u_one").ent_hash()
+
+    def insert(code: str) -> None:
+        # Every other route column holds a real code, so only `column`'s check can refuse.
+        codes = {"lane_basis": "default", "routed_tier": "main", "tier_basis": "default"}
+        codes[column] = code
+        sql(database, statement, AT, ent_hash, *codes.values())
+
+    insert(real)
+    with pytest.raises(psycopg.errors.CheckViolation) as refused:
+        insert(invented)
+    assert refused.value.diag.constraint_name == f"ck_request_telemetry_{column}"

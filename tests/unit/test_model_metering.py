@@ -4,7 +4,7 @@ Three halves of one path: `brain.models.metering` counts a request's calls, `bra
 turns the count into the ledger row's seven model fields, and `brain.models.evidence` replays the
 attempts those calls left into each deployment's breaker.
 
-Task ids: M27.7.14, M27.1.5, M27.8.8, M5.3.4
+Task ids: M27.7.14, M27.1.5, M27.8.8, M5.3.4, M3.6.3
 """
 
 from __future__ import annotations
@@ -30,12 +30,16 @@ from brain.models.evidence import (
     outcome_of,
     replayed,
 )
-from brain.models.metering import Meter, MeteringError, ModelUsage
+from brain.models.metering import Meter, MeteringError, ModelRoute, ModelUsage
 from brain.models.routing import (
     BREAKER_CONSECUTIVE_FAILURES,
     BREAKER_MAX_COOLDOWN_SECONDS,
     BreakerState,
     FallbackTrigger,
+    RoutingRequest,
+    Tier,
+    TierBasis,
+    classify_tier,
 )
 from brain.ops.telemetry import (
     FILLED_BY_A_MODEL_CALL,
@@ -118,6 +122,36 @@ def test_a_request_answered_by_two_models_sums_their_tokens_and_names_neither() 
     assert usage.model is None
     assert usage.provider is None
     assert usage.agent_version == "a1"
+
+
+def test_a_routed_request_names_its_route_even_with_no_attempt_and_no_usage() -> None:
+    """M3.6.3. The route is taken from the decision object, and it survives a request that was
+    routed and never attempted, which is a request refused for no compliant rung.
+
+    Delete this and the route is folded into the usage, and the degraded request an administrator
+    most needs to read loses the tier it was sent to."""
+    meter = Meter()
+    assert meter.route() is None
+    meter.routed(classify_tier(RoutingRequest(lane=Lane.TASK)))
+
+    assert meter.route() == ModelRoute(tier=Tier.HEAVY, basis=TierBasis.TASK_LANE)
+    assert meter.usage() is None
+
+
+def test_two_calls_routed_differently_name_no_route_and_two_alike_name_it() -> None:
+    """For `A_REQUEST_ANSWERED_BY_TWO_MODELS_NAMES_NONE`'s reason: one column cannot hold two
+    routes, and naming either would file the other call under it.
+
+    Delete this and a request's second route silently overwrites its first on the row."""
+    alike = Meter()
+    for _ in range(2):
+        alike.routed(classify_tier(RoutingRequest(lane=Lane.ANSWER)))
+    assert alike.route() == ModelRoute(tier=Tier.MAIN, basis=TierBasis.DEFAULT)
+
+    split = Meter()
+    split.routed(classify_tier(RoutingRequest(lane=Lane.ANSWER)))
+    split.routed(classify_tier(RoutingRequest(lane=Lane.TASK)))
+    assert split.route() is None
 
 
 def test_an_answer_recorded_before_any_attempt_is_refused() -> None:

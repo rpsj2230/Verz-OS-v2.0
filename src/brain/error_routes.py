@@ -25,17 +25,25 @@ that already says who may see it.**
   The reference is the one the console shows a person beside a failure, so an administrator
   told a reference can find what happened to it.
 
+**A failed request shows the whole routing decision its row holds (M3.4.2, M3.6.3).** The
+screen's risk score; the lane it was routed to and the rule that chose it; the agent and the stage
+that chose it; the tier the model call was routed to and the step that settled it; and the model
+and provider that answered, if one did. Each is a name or a number written as it was decided, and
+none says what the asker was shown or refused: whether a model was reached was already the `lane`
+column, which is the budget the request spent.
+
 **A list and never a count, and a full list says so.** Each list is bounded, newest first, and
 `truncated` says a list came back full. Because the bound applies only to rows the reader may
 see, a full list says nothing about rows they may not.
 
-Task ids: none
+Task ids: M3.4.2, M3.6.3
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime, timedelta
-from typing import Annotated, Final
+from typing import Annotated, Any, Final
 
 import structlog
 from fastapi import APIRouter, Query, Request
@@ -105,12 +113,20 @@ class RequestFailureView(BaseModel):
     status: str
     duration_ms: float
     #: What the gate's front half decided (M3.4.2, M3.6.3), or null for a request it did not
-    #: run for: the question's injection score, the lane it was routed to, and which stage of
-    #: selection chose which agent. A score and names, never the question.
+    #: run for: the question's injection score, the lane it was routed to and the rule that
+    #: chose it, and which stage of selection chose which agent. A score and names, never the
+    #: question.
     risk_score: int | None = None
     routed_lane: str | None = None
+    lane_basis: str | None = None
     selection_stage: str | None = None
     selected_agent: str | None = None
+    #: Where the executor routed the model call and the step that settled it (M3.6.3), and the
+    #: model and provider that answered; null where no call was routed or none answered.
+    routed_tier: str | None = None
+    tier_basis: str | None = None
+    model: str | None = None
+    provider: str | None = None
 
 
 class ErrorsPage(BaseModel):
@@ -154,23 +170,31 @@ def failed_runs(
     )
 
 
-def failed_requests(
-    start: datetime, end: datetime
-) -> Select[tuple[str, datetime, str, str, float, int | None, str | None, str | None, str | None]]:
-    """Failed and degraded requests that arrived in `[start, end)`, newest first. Nine columns
-    and none of them names a person: the four front-half decisions name an agent at most."""
+#: The ledger's columns a failed request is shown with, in the order `request_view` reads them.
+#: None names a person: the routing decision names an agent, a model and a provider at most.
+REQUEST_COLUMNS: Final = (
+    RequestTelemetryRow.trace_id,
+    RequestTelemetryRow.received_at,
+    RequestTelemetryRow.lane,
+    RequestTelemetryRow.status,
+    RequestTelemetryRow.duration_ms,
+    RequestTelemetryRow.risk_score,
+    RequestTelemetryRow.routed_lane,
+    RequestTelemetryRow.lane_basis,
+    RequestTelemetryRow.selection_stage,
+    RequestTelemetryRow.selected_agent,
+    RequestTelemetryRow.routed_tier,
+    RequestTelemetryRow.tier_basis,
+    RequestTelemetryRow.model,
+    RequestTelemetryRow.provider,
+)
+
+
+def failed_requests(start: datetime, end: datetime) -> Select[Any]:
+    """Failed and degraded requests that arrived in `[start, end)`, newest first, as
+    `REQUEST_COLUMNS`."""
     return (
-        select(
-            RequestTelemetryRow.trace_id,
-            RequestTelemetryRow.received_at,
-            RequestTelemetryRow.lane,
-            RequestTelemetryRow.status,
-            RequestTelemetryRow.duration_ms,
-            RequestTelemetryRow.risk_score,
-            RequestTelemetryRow.routed_lane,
-            RequestTelemetryRow.selection_stage,
-            RequestTelemetryRow.selected_agent,
-        )
+        select(*REQUEST_COLUMNS)
         .where(
             RequestTelemetryRow.status.in_(FAILED_REQUESTS),
             RequestTelemetryRow.received_at >= start,
@@ -178,6 +202,42 @@ def failed_requests(
         )
         .order_by(RequestTelemetryRow.received_at.desc())
         .limit(MAX_FAILURES + 1)
+    )
+
+
+def request_view(row: Sequence[Any]) -> RequestFailureView:
+    """One failed request as the screen shows it, read in `REQUEST_COLUMNS`' order."""
+    (
+        trace_id,
+        received,
+        lane,
+        status,
+        duration,
+        risk,
+        routed,
+        lane_basis,
+        stage,
+        agent,
+        tier,
+        tier_basis,
+        model,
+        provider,
+    ) = row
+    return RequestFailureView(
+        reference=trace_id,
+        received_at=received,
+        lane=lane,
+        status=status,
+        duration_ms=duration,
+        risk_score=risk,
+        routed_lane=routed,
+        lane_basis=lane_basis,
+        selection_stage=stage,
+        selected_agent=agent,
+        routed_tier=tier,
+        tier_basis=tier_basis,
+        model=model,
+        provider=provider,
     )
 
 
@@ -236,21 +296,6 @@ async def errors(
             for name, started, finished, detail in runs[:MAX_FAILURES]
         ],
         jobs_truncated=len(runs) > MAX_FAILURES,
-        requests=[
-            RequestFailureView(
-                reference=trace_id,
-                received_at=received,
-                lane=lane,
-                status=status,
-                duration_ms=duration,
-                risk_score=risk,
-                routed_lane=routed,
-                selection_stage=stage,
-                selected_agent=agent,
-            )
-            for trace_id, received, lane, status, duration, risk, routed, stage, agent in found[
-                :MAX_FAILURES
-            ]
-        ],
+        requests=[request_view(one) for one in found[:MAX_FAILURES]],
         requests_truncated=len(found) > MAX_FAILURES,
     )

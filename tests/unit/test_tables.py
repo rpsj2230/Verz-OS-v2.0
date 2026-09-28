@@ -63,9 +63,10 @@ from brain.core.field_policy import Classification
 from brain.core.principal import Employment, PrincipalKind
 from brain.db import metadata
 from brain.gate.admission import Assurance
+from brain.gate.classify import LaneBasis
 from brain.gate.context import Channel
 from brain.gate.ingress import identity_hash
-from brain.models.routing import FallbackTrigger, RungRole, Tier
+from brain.models.routing import FallbackTrigger, RungRole, Tier, TierBasis
 from brain.ops.migration_policy import check_file
 from brain.tables.identity import SessionEndReason
 from brain.tables.routing import ATTEMPT_OUTCOMES
@@ -120,6 +121,7 @@ MIGRATION_STAFF_ROSTER = VERSIONS / "0096_staff_roster.py"
 MIGRATION_SERVICE_ACCOUNTS = VERSIONS / "0095_service_accounts_and_partner_reach.py"
 MIGRATION_MODEL_REGISTRY = VERSIONS / "0097_model_registry_and_matrix_gate.py"
 MIGRATION_GATE_FRONT_HALF = VERSIONS / "0100_gate_front_half.py"
+MIGRATION_REQUEST_ROUTE = VERSIONS / "0113_request_route.py"
 MIGRATION_ACCESS_REQUEST = VERSIONS / "0101_access_request.py"
 MIGRATION_SENSITIVE_READ = VERSIONS / "0098_sensitive_reads_and_budget_audit.py"
 MIGRATION_REQUIREMENT_CHECK = VERSIONS / "0099_requirement_check.py"
@@ -2206,6 +2208,51 @@ def test_0100_adds_the_front_half_columns_nullable_and_drops_them_on_the_way_dow
         assert table("obs.request_telemetry").columns[column].nullable
         assert f"ALTER TABLE obs.request_telemetry DROP COLUMN {column}" in down
     assert "DROP TABLE gate.channel_event" in down
+
+
+# ------------------------------------------------------------------ 0113, the request's route
+def test_0113_copies_every_check_and_width_it_shares_with_the_model() -> None:
+    """The migration's copied predicates and widths are the model's, which are built from the
+    enums, and each width holds its enum's longest member.
+
+    Delete this and a new lane rule, tier or tier step reaches the model and not the database,
+    and the first row naming it is refused at write time, or a column too narrow for a real code
+    is caught by the first question routed for that reason."""
+    route = migration_module(MIGRATION_REQUEST_ROUTE)
+    found = checks("obs.request_telemetry")
+    assert found["ck_request_telemetry_lane_basis"] == route.LANE_BASIS
+    assert found["ck_request_telemetry_routed_tier"] == route.ROUTED_TIER
+    assert found["ck_request_telemetry_tier_basis"] == route.TIER_BASIS
+    columns = table("obs.request_telemetry").columns
+    widths = {name: columns[name].type.length for name in route.COLUMNS}
+    assert widths == {
+        "lane_basis": route.BASIS_CHARS,
+        "routed_tier": route.TIER_CHARS,
+        "tier_basis": route.BASIS_CHARS,
+    }
+    for name, members in (
+        ("lane_basis", LaneBasis),
+        ("routed_tier", Tier),
+        ("tier_basis", TierBasis),
+    ):
+        assert max(len(one.value) for one in members) <= widths[name], name
+
+
+def test_0113_adds_the_route_columns_nullable_on_0108_and_drops_them_on_the_way_down() -> None:
+    """Nullable, because every row written before 0113 has none, and applied on the head it was
+    written against; the downgrade takes all three away and the file passes the policy.
+
+    Delete this and a required column is added to a populated ledger, or the downgrade leaves a
+    column no release reads."""
+    route = migration_module(MIGRATION_REQUEST_ROUTE)
+    assert (route.revision, route.down_revision) == ("0113", "0108")
+    up = squash(rendered("upgrade", MIGRATION_REQUEST_ROUTE))
+    down = squash(rendered("downgrade", MIGRATION_REQUEST_ROUTE))
+    for column in route.COLUMNS:
+        assert f"ALTER TABLE obs.request_telemetry ADD COLUMN {column}" in up
+        assert table("obs.request_telemetry").columns[column].nullable
+        assert f"ALTER TABLE obs.request_telemetry DROP COLUMN {column}" in down
+    assert check_file(MIGRATION_REQUEST_ROUTE) == []
 
 
 # ------------------------------------------------------------------ 0101, access requests

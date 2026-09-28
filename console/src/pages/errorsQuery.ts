@@ -10,7 +10,13 @@
  * application's own warnings and errors are on the Logs screen, and `process_log_is_not_kept` is
  * false; the older sentence is kept for an API from before it, which sends true.
  *
- * Task ids: none
+ * **A failed question shows the whole routing decision its row holds (M3.4.2, M3.6.3)**: the
+ * risk score, the lane and the rule that chose it, the agent and the stage that chose it, the tier
+ * the model call was routed to and the step that settled it, and the model that answered. Each
+ * code is put into words here and nothing is worked out: a code this table does not know is shown
+ * as the code, so a newer API's rule is still said rather than dropped.
+ *
+ * Task ids: M3.4.2, M3.6.3
  */
 
 import type { components } from "../api/schema";
@@ -83,6 +89,57 @@ export function agentWords(agent: string | null | undefined, stage: string | nul
     return NOT_SCREENED;
   }
   return stage ? `${agent} (${STAGE_WORDS[stage] ?? stage})` : agent;
+}
+
+/** Why the lane was chosen, in words, from `brain.gate.classify.LaneBasis`. */
+export const LANE_BASIS_WORDS: Readonly<Record<string, string>> = {
+  requested: "asked for by the person",
+  exact_intent: "an exact question shape",
+  fast_refused: "fast lane asked for, not an exact shape",
+  long_question: "a long question",
+  task_phrase: "worded as a piece of work",
+  default: "the default",
+};
+
+/** Why the tier was chosen, in words, from `brain.models.routing.TierBasis`. */
+export const TIER_BASIS_WORDS: Readonly<Record<string, string>> = {
+  fast_lane: "the fast lane takes no model",
+  pinned: "pinned",
+  task_lane: "the task lane's tier",
+  default: "the default",
+  tool_floor: "raised for tool use",
+  residency_floor: "raised for residency",
+  context: "raised for the prompt's size",
+};
+
+/** A routed value and the words for why, or `NOT_SCREENED` when the row holds no value. */
+function withBasis(
+  value: string | null | undefined,
+  basis: string | null | undefined,
+  words: Readonly<Record<string, string>>,
+): string {
+  if (!value) {
+    return NOT_SCREENED;
+  }
+  return basis ? `${value} (${words[basis] ?? basis})` : value;
+}
+
+/** The lane a request was routed to, and why (M3.6.3). */
+export function laneWords(lane: string | null | undefined, basis: string | null | undefined): string {
+  return withBasis(lane, basis, LANE_BASIS_WORDS);
+}
+
+/** The tier a request's model call was routed to, and why (M3.6.3). */
+export function tierWords(tier: string | null | undefined, basis: string | null | undefined): string {
+  return withBasis(tier, basis, TIER_BASIS_WORDS);
+}
+
+/** The model that answered and its provider, or `NOT_SCREENED` when none did. */
+export function modelWords(model: string | null | undefined, provider: string | null | undefined): string {
+  if (!model) {
+    return NOT_SCREENED;
+  }
+  return provider ? `${model} (${provider})` : model;
 }
 
 /** How a request ended, in words, from `brain.ops.telemetry.RequestStatus`. */

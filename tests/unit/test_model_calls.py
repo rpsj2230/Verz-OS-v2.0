@@ -4,7 +4,7 @@ Driven with a ladder, an attempt log and drivers held in memory, so the walk is 
 policy layer describes it and nothing opens a socket or a connection.
 
 Task ids: M27.7.14, M27.8.8, M5.3.4, M5.4.6, M5.5.4, M5.5.2, M5.1.3, M5.7.3, M5.6.4, M5.4.1,
-M5.7.2, M5.2.2, M5.4.3, M5.4.7, M5.4.8, M5.5.1
+M5.7.2, M5.2.2, M5.4.3, M5.4.7, M5.4.8, M5.5.1, M3.6.3
 """
 
 from __future__ import annotations
@@ -47,7 +47,7 @@ from brain.models.driver import (
 )
 from brain.models.evidence import Attempt, RingEntry, StoredRings
 from brain.models.health import AlertLevel, DepthAlert
-from brain.models.metering import Meter
+from brain.models.metering import Meter, ModelRoute
 from brain.models.registry import ModelPin, ProviderKind, ProviderRecord
 from brain.models.residency import ScopedResidency
 from brain.models.routing import (
@@ -59,6 +59,7 @@ from brain.models.routing import (
     ResidencyRequirement,
     RoutingRequest,
     Tier,
+    TierBasis,
 )
 from brain.models.tier_rules import TierRule
 
@@ -1054,6 +1055,50 @@ def test_a_reach_with_nowhere_compliant_is_refused_and_one_elsewhere_is_answered
     assert complete(calls, Meter(), reach=(Scope.department("sales"),)).deployment_id == (
         "anthropic-main-0"
     )
+
+
+# ------------------------------------------------------------- the route on the meter (M3.6.3)
+def test_the_tier_the_executor_classified_is_on_the_meter_as_it_decided_it() -> None:
+    """**M3.6.3 at the decision.** Against a table whose main tier holds fewer tokens than the
+    request carries, the executor sends it heavy for its size, and the meter holds that route,
+    which the compiled numbers would never have produced (they keep it main by default).
+
+    Delete this and the row's tier can be re-derived from the lane or the seed windows after the
+    walk, and it names a tier the call never ran in."""
+    asked = RoutingRequest(lane=Lane.ANSWER, estimated_context_tokens=60_000)
+    rungs = (rung("anthropic"), rung("moonshot", tier=Tier.HEAVY))
+    calls, _ = executor(
+        Ladder(rungs, tiers=(TierRule(Tier.MAIN, 50_000),)),
+        {"anthropic": Scripted(ok()), "moonshot": Scripted(ok())},
+    )
+    meter = Meter()
+
+    assert complete(calls, meter, tier=None, routing=asked).deployment_id == "moonshot-heavy-0"
+    assert meter.route() == ModelRoute(tier=Tier.HEAVY, basis=TierBasis.CONTEXT)
+
+
+def test_a_route_is_noted_before_any_attempt_and_an_outright_tier_is_not_a_route() -> None:
+    """The route is noted before a rung is selected, so a request with nowhere compliant says
+    where it was sent; a tier chosen outright, as a provider check's is, is no routing decision.
+
+    Delete this and the degraded request is the one row with no tier, or a provider check is
+    recorded as routed by a classifier that never ran."""
+    refused, _ = executor(
+        Ladder((rung("anthropic"),), residency=(EU,)), {"anthropic": Scripted(ok())}
+    )
+    meter = Meter()
+    with pytest.raises(NoCompliantRoute):
+        complete(
+            refused, meter, tier=None, routing=RoutingRequest(lane=Lane.ANSWER), reach=(FINANCE,)
+        )
+    assert meter.route() == ModelRoute(tier=Tier.MAIN, basis=TierBasis.DEFAULT)
+    assert meter.usage() is None
+
+    outright, _ = executor(Ladder((rung("anthropic"),)), {"anthropic": Scripted(ok())})
+    chosen = Meter()
+    complete(outright, chosen, tier=Tier.MAIN)
+    assert chosen.route() is None
+    assert chosen.usage() is not None
 
 
 # ------------------------------------------------------------- the stored rings (M5.4.3)

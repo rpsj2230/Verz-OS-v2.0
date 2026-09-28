@@ -23,7 +23,7 @@ from brain.core.scope import Scope
 from brain.gate.answer_cache import lookup, store_answer
 from brain.gate.cache_key import CachedAnswer
 from brain.gate.catalogue import AgentCeiling, project
-from brain.gate.classify import classify_lane
+from brain.gate.classify import LaneBasis, classify_lane
 from brain.gate.context import Channel, GateStep, Recorder, StepOutOfOrderError, open_trace
 from brain.gate.front import AgentSetup, Caching, Choosing, FrontHalf, run_front_half
 from brain.gate.injection import assess
@@ -292,13 +292,17 @@ def test_a_high_risk_question_is_scored_and_still_runs_every_step() -> None:
 
 
 def test_the_record_holds_the_decisions_as_they_were_made() -> None:
-    """M3.4.2 and M3.6.3: the row's score, lane, stage and agent are the chain's own objects.
+    """M3.4.2 and M3.6.3: the row's score, lane and its rule, stage and agent are the chain's
+    own objects, and a question worded as work carries the rule that sent it to the task lane.
 
     Delete this and the record can be filled from a second classification made afterwards."""
     front, _ = _run(INJECTED)
     record = front.record()
     assert record.risk_score == front.screened.score > 0
     assert record.routed_lane is front.lane.lane
+    assert record.lane_basis is front.lane.basis
     assert record.selection_stage is front.selection.stage
     assert record.selected_agent == front.selection.agent_id
     assert _run()[0].record().selection_stage is SelectionStage.DEFAULT
+    work = _run("go through every client")[0].record()
+    assert (work.routed_lane, work.lane_basis) == (Lane.TASK, LaneBasis.TASK_PHRASE)

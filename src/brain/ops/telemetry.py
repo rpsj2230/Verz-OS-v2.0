@@ -52,7 +52,7 @@ to a trace store cannot reconstruct a person's movements. That difference is not
 written here. It falls out of running the row through `tracing.mask`, which is the only way
 anything in this module produces a span.
 
-**Twelve of the nineteen fields are optional, and each one says why it may be None.** Five are
+**Every optional field says why it may be None.** Five are
 `UNFILLABLE_TODAY`, which names what is missing: nothing times a first token or a tool call,
 the epoch never reaches a route, no connector is reached and the lane is never told what was
 withheld. `tool_count` left that mapping on 2026-09-15, when the lane started counting the
@@ -61,7 +61,8 @@ calls it makes (M21.3.4). The other seven are `FILLED_BY_A_MODEL_CALL`, and they
 provider, the tokens, the agent and the fallback and retry counts come from the request's
 `brain.models.metering.Meter` through `Finished.model_usage`, and they are None exactly when the
 request called no model, which is every question a fast-path rule answers or the lane abstained on
-before asking one. The fields
+before asking one. The front half's are `FILLED_BY_THE_FRONT_HALF` and the executor's route is
+`FILLED_BY_A_ROUTED_CALL`. The fields
 that can be filled on every request are required and have no default, so the difference is
 enforced by the dataclass rather than by a comment.
 
@@ -168,11 +169,21 @@ to both would be counted twice, and a cost joined to either would be a guess. So
 matched on the id and the principal together, and a pair that still names two shapes is
 unrecorded. See `A_TRACE_THAT_NAMES_TWO_SHAPES_NAMES_NONE`.
 
+**The routing decision is on the row whole, each part written from the object that decided it
+(M3.4.2, M3.6.3).** The screen's score, the lane with the rule that chose it (`lane_basis`) and the
+agent with its stage come off `brain.gate.finish.FrontRecord`; the tier the executor classified and
+the step that settled it (`routed_tier`, `tier_basis`) come off the request's meter, where
+`brain.models.calls.ModelCalls.complete` noted them as it decided; the model and provider that
+answered were already here. Every one is a name, so the row says why a question ran where it did
+without holding a sentence, and nothing is recomputed afterwards by a classifier that may have
+changed. See `ROUTE_FIELDS`.
+
 What is still not built, said rather than left to be inferred. There is **no payload store**:
 `brain.ops.trace_sink` drops the payload because there is nowhere with the right permissions to
 put it. And `open_request` still has no caller, for the reason above.
 
-Task ids: M27.1.1, M27.1.2, M27.1.3, M27.1.4, M27.1.5, M27.1.6, M30.5.2, M21.3.4
+Task ids: M27.1.1, M27.1.2, M27.1.3, M27.1.4, M27.1.5, M27.1.6, M30.5.2, M21.3.4, M3.4.2
+Task ids: M3.6.3
 """
 
 from __future__ import annotations
@@ -190,12 +201,14 @@ from typing import TYPE_CHECKING, Final, assert_never, get_type_hints
 from brain.audit.ledger import ENT_HASH, TRACE_ID
 from brain.core.errors import Outcome
 from brain.core.lane import Lane
+from brain.gate.classify import LaneBasis
 from brain.gate.context import TrafficClass, traffic_class_for
 
 # At run time, unlike `Finished` below: `status_of_finished` branches on this type, and a branch
 # is behaviour rather than an annotation.
 from brain.gate.finish import ModelCallOutcome, ToolCallOutcome
 from brain.gate.select import SelectionStage
+from brain.models.routing import Tier, TierBasis
 from brain.ops.retention import DataClass, Lifetime, horizon_for
 from brain.ops.tracing import (
     SAFE_ATTRIBUTES,
@@ -542,10 +555,21 @@ FRONT_HALF_FIELDS: Final[tuple[str, ...]] = (
     "routed_lane",
     "selection_stage",
     "selected_agent",
+    "lane_basis",
 )
 
+#: The tier the executor routed the request's model call to, and the step that settled it
+#: (M3.6.3). Their own slice because the front half does not decide them: the executor does,
+#: against the tier table it read, and notes them on the request's meter as it decides.
+ROUTE_FIELDS: Final[tuple[str, ...]] = ("routed_tier", "tier_basis")
+
 #: Every field a request record declares, in the order the record declares them.
-TELEMETRY_FIELDS: Final[tuple[str, ...]] = (*REQUEST_FIELDS, *COMPLETION_FIELDS, *FRONT_HALF_FIELDS)
+TELEMETRY_FIELDS: Final[tuple[str, ...]] = (
+    *REQUEST_FIELDS,
+    *COMPLETION_FIELDS,
+    *FRONT_HALF_FIELDS,
+    *ROUTE_FIELDS,
+)
 
 #: The fields holding a name, an identifier or a hash. Checked against `tracing.mask` before
 #: a record exists, so none of them can hold a sentence.
@@ -563,6 +587,9 @@ _NAME_FIELDS: Final[frozenset[str]] = frozenset(
         "routed_lane",
         "selection_stage",
         "selected_agent",
+        "lane_basis",
+        "routed_tier",
+        "tier_basis",
     }
 )
 
@@ -668,6 +695,20 @@ FILLED_BY_THE_FRONT_HALF: Final[Mapping[str, str]] = MappingProxyType(
 )
 
 
+#: The fields only a request whose model call was routed fills, and why each is None otherwise.
+#: A fourth mapping for `FILLED_BY_THE_FRONT_HALF`'s reason: None here is neither unmeasured nor
+#: the front half's absence, and it is not `FILLED_BY_A_MODEL_CALL`'s either, because a call
+#: refused for no compliant rung was routed and never attempted.
+FILLED_BY_A_ROUTED_CALL: Final[Mapping[str, str]] = MappingProxyType(
+    dict.fromkeys(
+        ROUTE_FIELDS,
+        "no model call this request made was routed by brain.models.routing.classify_tier: it "
+        "made none, its tier was chosen outright as a provider check's is, or two calls were "
+        "routed differently, which names no route for A_REQUEST_ANSWERED_BY_TWO_MODELS_NAMES_NONE",
+    )
+)
+
+
 @dataclass(frozen=True, kw_only=True)
 class RequestTelemetry:
     """One request, as the metadata ledger holds it. Names and counts, and no content.
@@ -675,11 +716,12 @@ class RequestTelemetry:
     Keyword-only, because nineteen positional fields is an ordering nobody can hold in their
     head and a swapped pair of counts is a silent wrong number rather than an error.
 
-    Fields are declared in the order M27.1.5 names them and then M30.5.2's, and
-    `TELEMETRY_FIELDS` is that order written once. The seven with no default are the seven a
-    caller can fill on every request; the twelve defaulting to None are `UNFILLABLE_TODAY` and
-    `FILLED_BY_A_MODEL_CALL`, and a test pins the optional fields against the two mappings so
-    neither can describe a record that no longer matches it.
+    Fields are declared in the order M27.1.5 names them, then M30.5.2's, then the front half's
+    and the route's, and `TELEMETRY_FIELDS` is that order written once. The seven with no
+    default are the seven a caller can fill on every request; every field defaulting to None is
+    named by exactly one of `UNFILLABLE_TODAY`, `FILLED_BY_A_MODEL_CALL`,
+    `FILLED_BY_THE_FRONT_HALF` and `FILLED_BY_A_ROUTED_CALL`, and a test pins the optional fields
+    against the four so none can describe a record that no longer matches it.
 
     Every string field is checked against `tracing.mask` at construction, so a record
     carrying a person's name rather than their identifier does not exist to be written. See
@@ -722,6 +764,12 @@ class RequestTelemetry:
     #: Which stage of `brain.gate.select.select_agent` chose the agent, and which agent.
     selection_stage: SelectionStage | None = None
     selected_agent: str | None = None
+    #: Which rule of `brain.gate.classify.classify_lane` chose `routed_lane` (M3.6.3).
+    lane_basis: LaneBasis | None = None
+    #: The tier `brain.models.calls.ModelCalls.complete` classified the model call into, and the
+    #: step of `brain.models.routing.classify_tier` that settled it (M3.6.3).
+    routed_tier: Tier | None = None
+    tier_basis: TierBasis | None = None
 
     def __post_init__(self) -> None:
         for name in sorted(_NAME_FIELDS):
@@ -863,6 +911,7 @@ def request_telemetry_of(finished: Finished) -> RequestTelemetry:
     outcome = finished.outcome
     usage = finished.model_usage
     front = finished.front
+    route = finished.route
     elapsed = finished.completed_at - finished.at
     micros = (elapsed.days * 86_400 + elapsed.seconds) * 1_000_000 + elapsed.microseconds
     return RequestTelemetry(
@@ -894,6 +943,9 @@ def request_telemetry_of(finished: Finished) -> RequestTelemetry:
         routed_lane=None if front is None else front.routed_lane,
         selection_stage=None if front is None else front.selection_stage,
         selected_agent=None if front is None else front.selected_agent,
+        lane_basis=None if front is None else front.lane_basis,
+        routed_tier=None if route is None else route.tier,
+        tier_basis=None if route is None else route.basis,
     )
 
 

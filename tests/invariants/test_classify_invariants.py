@@ -15,6 +15,7 @@ from brain.core.lane import Lane
 from brain.gate.classify import (
     INTENTS,
     TASK_WORD_COUNT,
+    LaneBasis,
     classify_lane,
     match_intent,
 )
@@ -182,6 +183,35 @@ def test_every_decision_records_a_reason() -> None:
         "go through every client",
     ):
         assert classify_lane(question).reason.strip()
+
+
+#: One question per branch of `classify_lane`, with the lane it lands in and the rule that chose it.
+LANE_BASES: tuple[tuple[str, Lane | None, Lane, LaneBasis], ...] = (
+    ("hours left on Acme", Lane.TASK, Lane.TASK, LaneBasis.REQUESTED),
+    ("hours left on Acme", None, Lane.FAST, LaneBasis.EXACT_INTENT),
+    ("what is going on with Acme", Lane.FAST, Lane.ANSWER, LaneBasis.FAST_REFUSED),
+    ("client " * (TASK_WORD_COUNT + 1), None, Lane.TASK, LaneBasis.LONG_QUESTION),
+    ("go through every client", None, Lane.TASK, LaneBasis.TASK_PHRASE),
+    ("what is going on with Acme", None, Lane.ANSWER, LaneBasis.DEFAULT),
+)
+
+
+@pytest.mark.parametrize(("question", "requested", "lane", "basis"), LANE_BASES)
+def test_every_lane_names_the_rule_that_chose_it(
+    question: str, requested: Lane | None, lane: Lane, basis: LaneBasis
+) -> None:
+    """M3.6.3. The request row holds the basis beside the lane, because the reason is a sentence
+    the ledger cannot keep; so each branch names itself where it decides.
+
+    Delete this and a branch can return another branch's name, and the row says a question went
+    to the task lane because it was long when somebody asked for it."""
+    decided = classify_lane(question, requested=requested)
+    assert (decided.lane, decided.basis) == (lane, basis)
+
+
+def test_every_rule_that_can_choose_a_lane_is_reached_by_some_question() -> None:
+    """Delete this and a basis can be added with no branch that returns it."""
+    assert {basis for *_, basis in LANE_BASES} == set(LaneBasis)
 
 
 def test_the_default_is_the_answer_lane() -> None:

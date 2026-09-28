@@ -5,7 +5,7 @@
  * Mounted on its own at its address, because the route table is a shared file this change does not
  * edit. The shapes are read from `brain.error_routes` itself.
  *
- * Task ids: none
+ * Task ids: M3.4.2, M3.6.3
  */
 
 import { fireEvent, waitFor } from "@testing-library/react";
@@ -14,14 +14,16 @@ import {
   ERRORS_API_PATH,
   ERRORS_PATH,
   FULL_LIST,
+  LANE_BASIS_WORDS,
   LOG_IS_ON_THE_LOGS_SCREEN,
   NO_JOB_FAILURES,
   NO_REQUEST_FAILURES,
   NOT_SCREENED,
   PROCESS_LOG_IS_NOT_KEPT,
+  TIER_BASIS_WORDS,
 } from "../src/pages/errorsQuery";
 import { json, mountPage, settled, type Answer } from "./support/pageHarness";
-import { backendModelFields } from "./support/python";
+import { backendEnumMembers, backendModelFields } from "./support/python";
 
 const LIST = `GET /api/v1${ERRORS_API_PATH}`;
 const ROUTES = "src/brain/error_routes.py";
@@ -48,8 +50,13 @@ function page(overrides: Record<string, unknown> = {}): Record<string, unknown> 
         duration_ms: 812.4,
         risk_score: 55,
         routed_lane: "answer",
+        lane_basis: "fast_refused",
         selection_stage: "addressed",
         selected_agent: "AGENT-SENTINEL",
+        routed_tier: "main",
+        tier_basis: "residency_floor",
+        model: "MODEL-SENTINEL",
+        provider: "PROVIDER-SENTINEL",
       },
     ],
     requests_truncated: true,
@@ -85,16 +92,33 @@ describe("what the Errors screen draws", () => {
     expect(text).toContain(PROCESS_LOG_IS_NOT_KEPT);
   });
 
-  test("a failed question shows what the gate's front half decided about it", async () => {
-    // What breaks if this is deleted: the risk score, the routed lane and the agent written on every
-    // request and read by no screen (M3.4.2, M3.6.3), or a request the front half never saw drawn
-    // with a made-up score rather than "Not recorded".
+  test("a failed question shows the whole routing decision the gate made about it", async () => {
+    // What breaks if this is deleted: the risk score, the lane and why, the agent and how, the tier
+    // and why, and the model written on every request and read by no screen (M3.4.2, M3.6.3), or two
+    // of them drawn in each other's columns.
     const { container } = await errorsPage({ [LIST]: () => json(page()) });
     const row = [...container.querySelectorAll("tbody tr")].find((one) =>
       (one.textContent ?? "").includes("REFERENCE-SENTINEL"),
     );
     const cells = [...(row?.querySelectorAll("td") ?? [])].map((one) => one.textContent);
-    expect(cells.slice(-3)).toEqual(["55", "answer", "AGENT-SENTINEL (named by the person)"]);
+    expect(cells.slice(-5)).toEqual([
+      "55",
+      "answer (fast lane asked for, not an exact shape)",
+      "AGENT-SENTINEL (named by the person)",
+      "main (raised for residency)",
+      "MODEL-SENTINEL (PROVIDER-SENTINEL)",
+    ]);
+  });
+
+  test("every lane rule and tier step the API can send has words", () => {
+    // What breaks if this is deleted: a rule added to the backend's enum that the page shows as a
+    // bare code, and the table here drifting from the enum it translates.
+    expect(Object.keys(LANE_BASIS_WORDS).sort()).toEqual(
+      Object.values(backendEnumMembers("src/brain/gate/classify.py", "LaneBasis")).sort(),
+    );
+    expect(Object.keys(TIER_BASIS_WORDS).sort()).toEqual(
+      Object.values(backendEnumMembers("src/brain/models/routing.py", "TierBasis")).sort(),
+    );
   });
 
   test("a failed question the front half never saw says so rather than showing a score", async () => {
@@ -108,15 +132,20 @@ describe("what the Errors screen draws", () => {
       duration_ms: 3,
       risk_score: null,
       routed_lane: null,
+      lane_basis: null,
       selection_stage: null,
       selected_agent: null,
+      routed_tier: null,
+      tier_basis: null,
+      model: null,
+      provider: null,
     };
     const { container } = await errorsPage({ [LIST]: () => json(page({ requests: [unscreened] })) });
     const plain = [...container.querySelectorAll("tbody tr")].find((one) =>
       (one.textContent ?? "").includes("PLAIN-SENTINEL"),
     );
     const plainCells = [...(plain?.querySelectorAll("td") ?? [])].map((one) => one.textContent);
-    expect(plainCells.slice(-3)).toEqual([NOT_SCREENED, NOT_SCREENED, NOT_SCREENED]);
+    expect(plainCells.slice(-5)).toEqual(Array(5).fill(NOT_SCREENED));
   });
 
   test("two empty lists are two sentences, and the log sentence leaves when the API stops sending it", async () => {
