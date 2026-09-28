@@ -25,14 +25,22 @@ Rejected: attributing the write through the `brain.actor_id` setting, as `0003`'
 revocation. The actor is on the row, which is better than a setting, because a setting is only as
 right as the code that remembered to set it and a column is refused by its constraint when blank.
 
-Task ids: M27.8.7
+**The Credentials screen reads two things here, and neither is a value.** A slot's history is the
+ledger's `credential` entries under its subject with each actor's display name, and when a slot's
+value was last used is the latest instant a table that records a use holds for it: a provider's
+health rings, a source's attempts that borrowed its key, a channel's deliveries. The object store
+and the relay record no use, so nothing is read for them and the screen says so.
+
+Task ids: M27.8.7, M27.11.10
 """
 
 from __future__ import annotations
 
-from typing import Any
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any, Final
 
-from sqlalchemy import Insert, insert, text
+from sqlalchemy import Insert, TextClause, insert, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.tables.audit import ENT_HASH_SETTING, TRACE_ID_SETTING
@@ -76,3 +84,72 @@ def credential_writes_for(
     if sessions is None:
         return None
     return StoredCredentialWrites(sessions)
+
+
+# ------------------------------------------------------------------ the Credentials screen's reads
+
+#: The most changes one slot's history is read from, newest first. A resource bound.
+MAX_CHANGES: Final = 200
+
+#: The ledger's word for a credential write, which `0054`'s trigger appends.
+CREDENTIAL_ACTION: Final = "credential"
+
+
+@dataclass(frozen=True)
+class Change:
+    """One credential write the ledger holds: when, the actor's id and their name where known."""
+
+    at: datetime
+    actor_id: str
+    actor_name: str | None
+
+
+def changes_of(subject: str, *, limit: int = MAX_CHANGES) -> TextClause:
+    """The credential entries under one subject, newest first, with each actor's display name."""
+    return text(
+        "SELECT e.at, e.actor_id, p.display_name FROM obs.audit_entry AS e "
+        "LEFT JOIN auth.principal AS p ON p.id = e.actor_id "
+        "WHERE e.subject = :subject AND e.action = :action ORDER BY e.seq DESC LIMIT :limit"
+    ).bindparams(subject=subject, action=CREDENTIAL_ACTION, limit=limit)
+
+
+#: When each kind of slot's value was last used, where anything records it. Keyed by the kind's
+#: value so this module needs nothing from the catalogue that decides which kind a slot is.
+LAST_USED: Final[dict[str, str]] = {
+    # A live call to the provider, recorded on its health rings.
+    "provider": "SELECT max(last_live_at) FROM ops.provider_health WHERE provider = :name",
+    # An attempt by the worker that borrowed the source's key.
+    "connector": (
+        "SELECT max(started_at) FROM ops.connector_sync WHERE connector = :name AND lease <> 'none'"
+    ),
+    # A delivery the secret verified or signed.
+    "channel": (
+        "SELECT max(recorded_at) FROM ops.channel_delivery WHERE channel = :name "
+        "AND outcome IN ('accepted', 'redelivered', 'sent')"
+    ),
+}
+
+
+class StoredCredentialHistory:
+    """The Credentials screen's two reads over this install's database. Judges nothing.
+
+    The route decides whose figures a reader may be shown; this reads what it is asked for.
+    """
+
+    def __init__(self, sessions: async_sessionmaker[AsyncSession]) -> None:
+        self._sessions = sessions
+
+    async def changes(self, subject: str) -> tuple[Change, ...]:
+        async with self._sessions() as session, session.begin():
+            rows = (await session.execute(changes_of(subject))).all()
+        return tuple(
+            Change(at=row[0], actor_id=str(row[1]), actor_name=row[2] or None) for row in rows
+        )
+
+    async def last_used(self, kind: str, name: str) -> datetime | None:
+        statement = LAST_USED.get(kind)
+        if statement is None or not name:
+            return None
+        async with self._sessions() as session, session.begin():
+            found = (await session.execute(text(statement), {"name": name})).scalar()
+        return found if isinstance(found, datetime) else None

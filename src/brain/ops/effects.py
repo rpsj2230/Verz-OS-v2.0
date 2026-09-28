@@ -387,6 +387,11 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.ops.vault_status:VaultStatusReader.static_kv_defined": Repeat.READS,
         "brain.ops.vault_status:VaultStatusReader.static_kv_version": Repeat.READS,
         "brain.ops.vault_audit_ship:VaultAccessRecords.since": Repeat.READS,
+        # The Credentials screen: what the loaded policy lets this token do on one path, a slot's
+        # ledger entries and when its value was last used. Three reads, none of them a value.
+        "brain.ops.credential_catalogue:CapabilityLookup.capabilities_self": Repeat.READS,
+        "brain.credential_routes:CredentialHistory.changes": Repeat.READS,
+        "brain.credential_routes:CredentialHistory.last_used": Repeat.READS,
         # The Webhooks screen. Each write is this system's own rows in one transaction; the vault
         # write inside a registration or a rotation goes through `CredentialVault.write_static_kv`,
         # classified above as the same result when repeated.

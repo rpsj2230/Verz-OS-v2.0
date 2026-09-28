@@ -101,11 +101,15 @@ vendor issued into `connector_keys/<source>`, and that write is recorded in `ops
 and reaches the ledger exactly as a provider key's does, because it is this function. The two
 kinds share `KeySlot`, which is a path and a sentence; only `CredentialSlot` names a provider, so
 `put_to_use` and `told_in_use` cannot be handed a connector's slot, which nothing reads out of the
-environment. The console's credential route writes `SLOTS` and nothing else, so a connector's key
-is written by connecting the source, under `admin:connector`, and never under `admin:credential`.
-See `A_CONNECTED_SOURCE_S_KEY_IS_WRITTEN_BY_CONNECTING_IT`.
+environment. A source's **first** key is written by connecting it, under `admin:connector`; once
+its slot holds one, the Credentials screen may replace it (`brain.ops.credential_catalogue`), which
+is a write through this same function. See `A_CONNECTED_SOURCE_S_KEY_IS_WRITTEN_BY_CONNECTING_IT`.
 
-Task ids: M27.8.7, M5.1.2, M42.6.5, M31.3.2.5
+**A slot may hold more than one field.** The object store's slot holds a key pair, and the mail
+relay's holds its password under `password`, so `keep_fields` writes named fields, judging each
+one as `keep` judges a key, and `keep` is `keep_fields` with the one field start-up reads.
+
+Task ids: M27.8.7, M5.1.2, M42.6.5, M31.3.2.5, M27.15.50
 """
 
 from __future__ import annotations
@@ -219,9 +223,10 @@ THE_KEY_IS_KEPT_BEFORE_IT_IS_RECORDED_AND_A_LOST_RECORD_IS_LOUD: Final = (
 A_CONNECTED_SOURCE_S_KEY_IS_WRITTEN_BY_CONNECTING_IT: Final = (
     "A source's key is kept by the same write as a provider key, so it is recorded in the ledger "
     "the same way, and it is never read back by either. It is a different kind of slot because "
-    "nothing reads it into this process's environment, and it is written only by connecting the "
-    "source under admin:connector, because a key written without the settings that say what it "
-    "reaches is a key nothing on the connectors screen can account for."
+    "nothing reads it into this process's environment, and its first key is written only by "
+    "connecting the source under admin:connector, because a key written without the settings that "
+    "say what it reaches is a key nothing on the connectors screen can account for. A slot that "
+    "already holds a key may be replaced from the Credentials screen as well."
 )
 
 # --------------------------------------------------------------------- the figures
@@ -273,12 +278,17 @@ TOLD: Final[Mapping[VaultState, str]] = MappingProxyType(
 
 
 class InUse(enum.StrEnum):
-    """Whether the process that wrote a key now uses it. See the named constant."""
+    """When a value just written is used. See `A_KEY_IN_USE_HERE_IS_NOT_IN_USE_EVERYWHERE`."""
 
-    #: This process uses it now; every other server process from its next start.
+    #: A provider key: this process uses it now; every other server process within a minute.
     HERE = "here"
     #: The environment sets this variable, which wins over the vault on every start.
     OUTRANKED = "outranked"
+    #: Read from the vault each time it is used, so the next use takes it: a source's key, a
+    #: channel's secret, the relay's password.
+    NEXT_USE = "next_use"
+    #: Read once when the system starts, so a restart takes it: the object store's key pair.
+    AT_START = "at_start"
 
 
 # ------------------------------------------------------------------------ the shapes
@@ -357,10 +367,14 @@ SLOTS: Final[Mapping[str, CredentialSlot]] = MappingProxyType(
 
 @dataclass(frozen=True)
 class Problem:
-    """One thing wrong with a credential before it is written: a code and what to do about it."""
+    """One thing wrong with a credential before it is written: a code and what to do about it.
+
+    `field` names which of a slot's fields it is about, for a slot that holds more than one.
+    """
 
     code: str
     message: str
+    field: str = KEY_FIELD
 
 
 @dataclass(frozen=True)
@@ -504,6 +518,14 @@ class Credentials:
         """Whether this install names a vault at all. Not whether it answers."""
         return self._vault is not None
 
+    @property
+    def outranking(self) -> frozenset[str]:
+        """The provider variables this process's environment set before the vault was asked.
+
+        Names and never values. A slot whose variable is here is outranked on every start.
+        """
+        return self._outranking
+
     def recording_to(self, writes: CredentialWrites | None) -> Credentials:
         """This store, with every credential it keeps recorded to `writes`.
 
@@ -575,11 +597,37 @@ class Credentials:
         the actor and the trace id and nothing else. `ent_hash` is the writer's reach as a digest,
         and empty from the setup wizard, which has none.
         """
+        return await self.keep_fields(
+            slot, {KEY_FIELD: value}, actor=actor, trace_id=trace_id, ent_hash=ent_hash
+        )
+
+    async def keep_fields(
+        self,
+        slot: KeySlot,
+        values: Mapping[str, str],
+        *,
+        actor: str,
+        trace_id: str,
+        ent_hash: str = "",
+    ) -> Kept:
+        """`keep` for a slot of named fields: every field judged, then one write of all of them.
+
+        One write, because a slot's fields are one version in the vault: a key pair written a
+        field at a time would stand for a moment as a new access key beside the old secret, which
+        is a pair no store accepts. A problem names its field, and nothing is sent while any field
+        has one.
+        """
         vault = self._vault
         if vault is None:
             log.info("credential not kept", slot=slot.path, actor=actor, vault=VaultState.ABSENT)
             raise CredentialsUnavailableError(VaultState.ABSENT)
-        problems = problems_with(value)
+        problems = tuple(
+            Problem(code=one.code, message=one.message, field=name)
+            for name, value in values.items()
+            for one in problems_with(value)
+        )
+        if not values:
+            problems = (Problem(code="blank", message="Nothing was given."),)
         if problems:
             log.info(
                 "credential refused",
@@ -590,7 +638,9 @@ class Credentials:
             raise CredentialProblemError(problems)
         try:
             set_at = await asyncio.to_thread(
-                vault.write_static_kv, slot.path, {KEY_FIELD: value.strip()}
+                vault.write_static_kv,
+                slot.path,
+                {name: value.strip() for name, value in values.items()},
             )
         except VaultUnreachableError as silent:
             state = VaultState.UNREACHABLE
