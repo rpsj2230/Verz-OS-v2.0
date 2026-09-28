@@ -9,16 +9,16 @@ What an administrator would need to manage, read out of the schema, the routes a
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
 - 102 tables, from `brain.db.Base.metadata`.
 - 27 installation values, from `brain.install.INSTALLATION`.
-- 210 routes under `/api/v1` and `/setup`, from the API's internal document.
-- 73 console addresses, from the route table in `console/src/App.tsx`.
-- 82 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 100 routes.
-- 36 gaps recorded, and 28 routes no screen calls.
+- 209 routes under `/api/v1` and `/setup`, from the API's internal document.
+- 74 console addresses, from the route table in `console/src/App.tsx`.
+- 86 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 104 routes.
+- 37 gaps recorded, and 23 routes no screen calls.
 
 ## Area by area
 
 ### People, roles, permissions and access control
 
-- **Screens:** `/`, `/people`, `/people/:subject`, `/roles`, `/capabilities`, `/scopes`, `/access_review`, `/elevation`, `/sessions`, `/sign-in-links`, `/staff_sources`, `/access-requests`
+- **Screens:** `/`, `/people`, `/people/:subject`, `/roles`, `/capabilities`, `/scopes`, `/access_review`, `/elevation`, `/sessions`, `/sign-in-links`, `/staff_sources`, `/access-requests`, `/service-accounts`
 - **Tables:** `auth.principal`, `auth.principal_identity`, `auth.session`, `auth.directory_role_grant`, `gate.capability_grant`, `gate.capability_pack`, `gate.capability_pack_assignment`, `gate.capability_registry`, `gate.scope`, `gate.grants_version`, `gate.policy_epoch`, `gate.review_decision`, `gate.elevation_request`, `auth.staff_member`, `auth.staff_sync_run`, `auth.service_account`, `auth.api_key`, `gate.access_request`, `gate.role_grant`, `auth.group_role_rule`, `gate.break_glass_notice`
 - **Installation values:** `INSTALL_OIDC_ISSUER`, `INSTALL_OIDC_REALM`, `INSTALL_OIDC_CLIENT_ID`, `INSTALL_OIDC_REDIRECT_URIS`, `INSTALL_BROKERED_DIRECTORY`, `INSTALL_STAFF_SOURCE`, `INSTALL_STAFF_SOURCE_LOCATION`, `INSTALL_BROKERED_CLIENT_ID`
 
@@ -38,7 +38,7 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `GET /api/v1/govern/roles/holders` | `/roles` |
 | `GET /api/v1/govern/roles/misconfigurations` | `/roles` |
 | `GET /api/v1/govern/scopes` | `/people/:subject`, `/scopes` |
-| `GET /api/v1/govern/service-accounts` | **no screen** |
+| `GET /api/v1/govern/service-accounts` | `/service-accounts` |
 | `GET /api/v1/govern/sessions` | `/sessions` |
 | `GET /api/v1/govern/sign-ins` | `/sign-in-links` |
 | `GET /api/v1/govern/staff_sources` | `/staff_sources` |
@@ -64,10 +64,10 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `POST /api/v1/govern/roles/group-rules` | **no screen** |
 | `POST /api/v1/govern/roles/group-rules/retirement` | **no screen** |
 | `POST /api/v1/govern/roles/removal` | **no screen** |
-| `POST /api/v1/govern/service-accounts` | **no screen** |
-| `POST /api/v1/govern/service-accounts/keys` | **no screen** |
-| `POST /api/v1/govern/service-accounts/keys/revoke` | **no screen** |
-| `POST /api/v1/govern/service-accounts/retire` | **no screen** |
+| `POST /api/v1/govern/service-accounts` | `/service-accounts` |
+| `POST /api/v1/govern/service-accounts/keys` | `/service-accounts` |
+| `POST /api/v1/govern/service-accounts/keys/revoke` | `/service-accounts` |
+| `POST /api/v1/govern/service-accounts/retire` | `/service-accounts` |
 | `POST /api/v1/govern/sessions/end` | `/sessions` |
 | `POST /api/v1/govern/sessions/end-several` | `/sessions` |
 | `POST /api/v1/govern/sign-ins/unlink` | `/sign-in-links` |
@@ -84,7 +84,7 @@ What an administrator would need to manage, read out of the schema, the routes a
 - **Gap.** Roles, capabilities and scopes are read and never changed. Recorded: No route writes gate.scope or the role and capability registries; they are declared by the product and by migrations.
 - **Gap.** A break-glass notice to the standing Super Admins is shown on their Elevation screen and is not sent by email or chat, and nobody is told when somebody only asks. Recorded: Nothing records a Super Admin's email address or chat identity for a notice to be sent to: auth.principal holds no address and principal_identity holds digests. The notice is written in the approval's transaction to gate.break_glass_notice and read by its recipient; a request is not an elevation until it is approved.
 - **Gap.** The identity provider and the staff source cannot be changed after setup. Recorded: Set by the first-run wizard, which saves them to ops.setting, and no route changes one afterwards; changing one today is editing the server's environment file or the row by hand.
-- **Gap.** A service account and its keys are registered, issued, revoked and retired through /api/v1/govern/service-accounts, and no screen calls it. Open leaf `M27.11.5`.
+- **Gap.** A service account's end date and owner cannot be changed from Service accounts: no route writes auth.service_account after registration, so a new account is registered instead. Open leaf `M27.15.26`.
 
 ### Departments, teams and client configuration
 
@@ -128,6 +128,7 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `POST /setup/staff-source/trial` | `/first-run` |
 | `PUT /api/v1/install/settings/{name}` | `/settings` |
 
+- **Gap.** Languages, currency and time zone cannot be changed after setup. Recorded: Set by the first-run wizard, which saves them to ops.setting, and no route changes one afterwards; changing one today is editing the server's environment file or the row by hand.
 - **Gap.** Limits and budgets are read and never changed. Recorded: No route writes ops.budget_version or a ceiling; a limit is a release today.
 
 ### AI providers, models and the routing between them
@@ -143,7 +144,6 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `GET /api/v1/operate/models` | `/models` |
 | `GET /api/v1/routing/changes` | `/routing`, `/routing/:rungId` |
 | `GET /api/v1/routing/golden-questions` | `/routing`, `/routing/:rungId` |
-| `GET /api/v1/routing/golden-questions/askers` | `/routing` |
 | `GET /api/v1/routing/rungs` | `/agents/:agentId`, `/routing`, `/routing/:rungId` |
 | `PATCH /api/v1/routing/rungs/{rung_id}` | `/routing`, `/routing/:rungId` |
 | `POST /api/v1/models/providers` | `/models` |
@@ -508,7 +508,7 @@ No gap recorded.
 
 ## Every write the console sends, followed to the system
 
-Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 82 of 100 write routes have all three proved or not applicable, 14 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
+Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 84 of 104 write routes have all three proved or not applicable, 14 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
 
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
@@ -558,6 +558,10 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /api/v1/govern/roles/group-rules` | **no screen** | `test_mapping_and_retiring_through_the_routes_reach_the_rows_and_the_ledger` in `tests/unit/test_group_sync.py` (database, in CI) | `test_mapping_and_retiring_through_the_routes_reach_the_rows_and_the_ledger` in `tests/unit/test_group_sync.py` (database, in CI) | `test_a_sign_in_writes_and_removes_synced_rows_and_the_ledger_records_both` in `tests/unit/test_group_sync.py` (database, in CI) |
 | `POST /api/v1/govern/roles/group-rules/retirement` | **no screen** | `test_mapping_and_retiring_through_the_routes_reach_the_rows_and_the_ledger` in `tests/unit/test_group_sync.py` (database, in CI) | `test_mapping_and_retiring_through_the_routes_reach_the_rows_and_the_ledger` in `tests/unit/test_group_sync.py` (database, in CI) | `test_mapping_and_retiring_through_the_routes_reach_the_rows_and_the_ledger` in `tests/unit/test_group_sync.py` (database, in CI) |
 | `POST /api/v1/govern/roles/removal` | **no screen** | `test_an_appointment_through_the_routes_reaches_the_row_and_the_ledger_with_its_reason` in `tests/unit/test_role_grant.py` (database, in CI) | `test_an_appointment_through_the_routes_reaches_the_row_and_the_ledger_with_its_reason` in `tests/unit/test_role_grant.py` (database, in CI) | `test_the_guard_refuses_a_removal_below_the_floor_and_allows_one_above_it` in `tests/unit/test_role_grant.py` (database, in CI) |
+| `POST /api/v1/govern/service-accounts` | `/service-accounts` | `test_through_0095_a_key_acts_at_its_owners_live_reach_and_stops_with_the_owner` in `tests/unit/test_service_accounts.py` (database, in CI) | `test_through_0095_a_key_acts_at_its_owners_live_reach_and_stops_with_the_owner` in `tests/unit/test_service_accounts.py` (database, in CI) | `test_through_0095_a_key_acts_at_its_owners_live_reach_and_stops_with_the_owner` in `tests/unit/test_service_accounts.py` (database, in CI) |
+| `POST /api/v1/govern/service-accounts/keys` | `/service-accounts` | `test_through_0095_a_key_acts_at_its_owners_live_reach_and_stops_with_the_owner` in `tests/unit/test_service_accounts.py` (database, in CI) | `test_through_0095_a_key_acts_at_its_owners_live_reach_and_stops_with_the_owner` in `tests/unit/test_service_accounts.py` (database, in CI) | `test_through_0095_a_key_acts_at_its_owners_live_reach_and_stops_with_the_owner` in `tests/unit/test_service_accounts.py` (database, in CI) |
+| `POST /api/v1/govern/service-accounts/keys/revoke` | `/service-accounts` | `test_a_retired_key_or_account_is_not_found_by_the_request_path` in `tests/unit/test_service_accounts.py` (database, in CI) | **None.** Revoking a key sets its deleted_at and records no credential write, so brain.identity.service_account_store.revoke_key leaves no ledger entry naming who revoked it. | `test_a_retired_key_or_account_is_not_found_by_the_request_path` in `tests/unit/test_service_accounts.py` (database, in CI) |
+| `POST /api/v1/govern/service-accounts/retire` | `/service-accounts` | `test_a_retired_key_or_account_is_not_found_by_the_request_path` in `tests/unit/test_service_accounts.py` (database, in CI) | **None.** Retiring an account sets deleted_at on it and its keys and records no credential write, so brain.identity.service_account_store.retire leaves no ledger entry naming who retired it. | `test_a_retired_key_or_account_is_not_found_by_the_request_path` in `tests/unit/test_service_accounts.py` (database, in CI) |
 | `POST /api/v1/govern/sessions/end` | `/sessions` | `test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request` in `tests/unit/test_session_store.py` (database, in CI) | `test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request` in `tests/unit/test_session_store.py` (database, in CI) | `test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request` in `tests/unit/test_session_store.py` (database, in CI) |
 | `POST /api/v1/govern/sessions/end-several` | `/sessions` | `test_several_sessions_are_ended_one_at_a_time_each_decided_by_the_single_endings_question` in `tests/unit/test_session_routes.py` | `test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request` in `tests/unit/test_session_store.py` (database, in CI) | `test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request` in `tests/unit/test_session_store.py` (database, in CI) |
 | `POST /api/v1/govern/sign-ins/unlink` | `/sign-in-links` | `test_an_unlink_retires_the_link_names_who_did_it_and_the_account_is_refused_after` in `tests/unit/test_sign_in_links.py` (database, in CI) | `test_an_unlink_retires_the_link_names_who_did_it_and_the_account_is_refused_after` in `tests/unit/test_sign_in_links.py` (database, in CI) | `test_an_unlink_retires_the_link_names_who_did_it_and_the_account_is_refused_after` in `tests/unit/test_sign_in_links.py` (database, in CI) |
