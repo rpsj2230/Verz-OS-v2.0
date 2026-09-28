@@ -34,18 +34,28 @@ written leaves the staff list applied and the reach as it was, stale by one run,
 `THE_STALENESS_WINDOW` and not a new failure. The opposite order, one transaction for both, would
 let a unique-index race on one head's grant take every joiner and leaver with it.
 
+**A former head keeps nothing the roster gave them.** The rewrite walks live leads, so a lead
+stood down, a department retired or a head the roster marks as having left would otherwise keep
+reading their old people until the lapse. Every sync-written audit grant held by somebody who is
+not a live head is retired in the run that finds them. See `A_FORMER_HEAD_KEEPS_NOTHING`.
+
+**A head of several departments is one reach**, for `audit_reach_for_head`'s reason: one per
+department, each run would retire what the one before it wrote.
+
 The ledger entries are the grant trigger's (`0003`): an insert is a grant and a retirement a
-revocation, attributed to `granted_by`, which is `roster:<source>`, because a scheduled run has no
-person and no reach. `brain.ops.write_attribution` excuses this path for that reason.
+revocation, attributed to `granted_by`, which is `roster.<source>`, because a scheduled run has no
+person and no reach. `brain.ops.write_attribution` excuses this path for that reason. It was
+`roster:<source>` until the ledger's actor grammar was found to refuse the colon, which rolled
+every rewrite back on a real database; see `staff_sync.A_SYNCS_GRANTOR_IS_THE_LEDGERS_ACTOR`.
 
 Task ids: M1.8.3
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime
-from typing import Any
+from typing import Any, Final
 
 from sqlalchemy import Insert, Update, func, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -64,18 +74,68 @@ from brain.identity.staff_sync import (
     renewed,
 )
 from brain.identity.teams import PrincipalSubject
+from brain.ops.staff_sync_store import leavers_principals
 from brain.tables.gate import CapabilityGrantRow, DepartmentRow
 from brain.tables.identity import PrincipalIdentityRow
 from brain.tables.organisation import DepartmentLeadRow
 
+#: Why the grants a sync gave somebody are retired once they are no longer a head.
+A_FORMER_HEAD_KEEPS_NOTHING: Final = (
+    "Revocation is the deletion of a grant, and the rewrite walks live leads, so a lead stood "
+    "down, a department retired or a head the roster marks as having left is never looked at "
+    "again. Left alone, their sync-written audit grants would go on reading their old people "
+    "until the lapse two sync intervals later. So every such grant held by somebody who is not "
+    "a live head is retired in the run that finds them, and the lapse is only the backstop for "
+    "a sync that stops."
+)
+
 
 def leads() -> Any:
-    """Every live lead: the principal and the slug of the department they lead."""
+    """Every live lead the roster has not marked as having left, with the department's slug."""
     return (
         select(DepartmentLeadRow.principal_id, DepartmentRow.slug)
         .join(DepartmentRow, DepartmentRow.id == DepartmentLeadRow.department_id)
-        .where(DepartmentLeadRow.ended_at.is_(None), DepartmentRow.deleted_at.is_(None))
-        .order_by(DepartmentRow.slug, DepartmentLeadRow.principal_id)
+        .where(
+            DepartmentLeadRow.ended_at.is_(None),
+            DepartmentRow.deleted_at.is_(None),
+            DepartmentLeadRow.principal_id.not_in(leavers_principals()),
+        )
+        .order_by(DepartmentLeadRow.principal_id, DepartmentRow.slug)
+    )
+
+
+def heads_from(rows: Iterable[Sequence[Any]]) -> dict[str, tuple[str, ...]]:
+    """Each head and every department they lead, so a head of two is one reach."""
+    found: dict[str, list[str]] = {}
+    for principal_id, slug in rows:
+        found.setdefault(str(principal_id), []).append(str(slug))
+    return {head: tuple(sorted(slugs)) for head, slugs in found.items()}
+
+
+def _roster_audit_grants() -> tuple[Any, ...]:
+    """The live audit grants some staff sync wrote, as WHERE conditions."""
+    return (
+        CapabilityGrantRow.deleted_at.is_(None),
+        CapabilityGrantRow.capability.in_(sorted(AUDIT_CAPABILITIES_A_SYNC_MAY_WRITE)),
+        CapabilityGrantRow.granted_by.startswith(ROSTER_PREFIX, autoescape=True),
+    )
+
+
+def roster_audit_holders() -> Any:
+    """Every principal holding a live audit grant a staff sync wrote."""
+    return (
+        select(CapabilityGrantRow.principal_id)
+        .where(CapabilityGrantRow.principal_id.is_not(None), *_roster_audit_grants())
+        .distinct()
+    )
+
+
+def retire_a_former_heads_grants(principal_id: str) -> Update:
+    """Retire every live audit grant a sync wrote them. See `A_FORMER_HEAD_KEEPS_NOTHING`."""
+    return (
+        update(CapabilityGrantRow)
+        .where(CapabilityGrantRow.principal_id == principal_id, *_roster_audit_grants())
+        .values(deleted_at=func.statement_timestamp())
     )
 
 
@@ -189,7 +249,10 @@ async def rewrite_head_audit_reach(
     session: AsyncSession, roster: Roster, *, read_at: datetime
 ) -> tuple[HeadAuditReach, ...]:
     """Apply every live head's audit reach for this roster, in the session's transaction."""
-    heads = (await session.execute(leads())).all()
+    heads = heads_from((await session.execute(leads())).all())
+    holders = (await session.execute(roster_audit_holders())).scalars().all()
+    for former in sorted({str(one) for one in holders} - heads.keys()):
+        await session.execute(retire_a_former_heads_grants(former))
     if not heads:
         return ()
     digests = [digest_of(one.work_address) for one in roster.people]
@@ -199,11 +262,11 @@ async def rewrite_head_audit_reach(
     }
     known = known_from(roster, bound)
     applied: list[HeadAuditReach] = []
-    for head_id, slug in heads:
+    for head_id, slugs in heads.items():
         rows = (await session.execute(audit_grants_of(head_id))).scalars().all()
         held = [held_grant(row) for row in rows]
         reach = audit_reach_for_head(
-            roster, department=slug, head_id=head_id, known=known, read_at=read_at, held=held
+            roster, department=slugs, head_id=head_id, known=known, read_at=read_at, held=held
         )
         for statement in writes_for(reach, held, read_at=read_at):
             await session.execute(statement)

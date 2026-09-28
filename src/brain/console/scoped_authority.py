@@ -96,9 +96,9 @@ that was missing.
 **M33.2.1.2, the department's own activity, was blocked until 2026-09-09 and is here now.** It
 is the one surface in this module whose authority is not a scope, and the reason is the
 finding recorded in `A_DEPARTMENT_SCOPED_AUDIT_GRANT_MATCHES_NOTHING`: an audit entry carries
-no department, so a head's audit grant cannot hold a department clause and there is nothing
-for `within_reach` to test against. The owner's answer, Option A on item 48, is that a head's
-audit permissions name the people instead, written by
+no department, so the audit grants that decide a head's rows cannot hold a department clause
+and there is nothing for `within_reach` to test against. The owner's answer, Option A on item
+48, is that a head's audit permissions name the people instead, written by
 `brain.identity.staff_sync.audit_reach_for_head` and rewritten by the directory sync. What
 this module adds is the narrowing on the way in and `activity_basis`, which puts the age of
 that membership on the screen rather than leaving a stale page looking current.
@@ -937,8 +937,9 @@ def department_activity(
     grants, because that is `brain.identity.roles`' question. It is asked instead of
     `within_reach(entitlement, ACTIVITY_AUTHORITY, Scope.department(department))`, which every
     other department surface here can ask and this one cannot: an audit grant scoped to a
-    department is precisely the thing that matches no entry, so a head's real grant does not
-    contain a department clause for that test to succeed against.
+    department is precisely the thing that matches no entry, so the grants that decide a head's
+    rows name people and no department, and the page grant names the department only beside
+    the people, which a whole department is not inside.
 
     Passing `criteria` narrows further by action, kind and date. Any actors it names are
     intersected with `members` rather than replacing them, so a caller cannot widen the page

@@ -38,6 +38,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import fields
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi import FastAPI
@@ -54,6 +55,8 @@ from brain.agents.model import (
 )
 from brain.api import API_PREFIX
 from brain.app import Settings, create_app
+from brain.audit.ledger import AuditAction, AuditChain
+from brain.audit.view import AuditView
 from brain.console.connector_trust import trust_rows
 from brain.console.department_console import (
     DEPARTMENT_NAVIGATION,
@@ -76,6 +79,8 @@ from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.principal import PrincipalKind
 from brain.core.scope import Clause, Op, Scope
 from brain.gate.context import Channel
+from brain.identity.staff_source import DEFAULT_TRUST, Roster, StaffRecord
+from brain.identity.staff_sync import audit_reach_for_head
 from brain.knowledge.visibility import Visibility
 from brain.navigation_routes import NavigationView
 from brain.ops.question_gap_store import Gap
@@ -152,7 +157,7 @@ def test_a_reader_holding_every_screen_in_one_department_is_given_that_departmen
     assert [one.heading for one in decided.sections] == ["Operate", "Govern", "Report"]
     assert [[one.label for one in section.entries] for section in decided.sections] == [
         ["Department", "Live runs", "Connectors"],
-        ["People and grants", "Agents and leashes", "Knowledge", "Skills", "Learning"],
+        ["People and grants", "Agents and leashes", "Knowledge", "Skills", "Learning", "Audit"],
         ["Gaps", "Usage"],
     ]
 
@@ -395,6 +400,7 @@ def test_the_route_answers_each_reader_the_console_their_grants_give_them(
         "library",
         "skills",
         "learning",
+        "audit",
         "questions",
         "usage",
     ]
@@ -548,6 +554,56 @@ def open_questions(reader: EntitlementSet) -> frozenset[str]:
     return frozenset(one.department for one in shown.gaps)
 
 
+def _entries_by(*actors: str) -> tuple[Any, ...]:
+    chain = AuditChain()
+    for index, actor in enumerate(actors):
+        chain.append(
+            at=NOW - timedelta(hours=index + 1),
+            actor_id=actor,
+            action=AuditAction.GRANT,
+            subject=f"principal:u_subject{index}",
+            ent_hash="a" * 32,
+            trace_id="t1",
+            details={"capability": "read:client.name"},
+        )
+    return chain.entries
+
+
+def open_audit(reader: EntitlementSet) -> frozenset[str]:
+    """Audit: the department each actor on the rows shown sits in. The screen's own gate first,
+    as `GET /audit` asks it, then `AuditView`, which is the route's whole decision."""
+    sits = {"u_m": MAINTENANCE, "u_f": FINANCE}
+    if not permitted(screen("audit").read, reader, NOW):
+        return frozenset()
+    page = AuditView(_entries_by("u_m", "u_f"), reader=reader, now=NOW).page(limit=50)
+    return frozenset(sits[row.actor_id] for row in page.rows)
+
+
+def as_maintenances_head(reader: EntitlementSet) -> EntitlementSet:
+    """This reader as the staff sync leaves the head of maintenance: its audit grants over the
+    maintenance person, less any capability the reader already holds, which it never writes."""
+    people = (
+        StaffRecord(work_address="m@example.com", display_name="M", department=MAINTENANCE),
+        StaffRecord(work_address="f@example.com", display_name="F", department=FINANCE),
+    )
+    written = audit_reach_for_head(
+        Roster(source="lark", people=people, complete=True, asserts=DEFAULT_TRUST["lark"]),
+        department=MAINTENANCE,
+        head_id=reader.principal_id,
+        known={"m@example.com": "u_m", "f@example.com": "u_f"},
+        read_at=NOW,
+    ).to_insert
+    held = {one.capability for one in reader.grants}
+    added = tuple(one.as_grant() for one in written if one.capability not in held)
+    return EntitlementSet(principal_id=reader.principal_id, grants=(*reader.grants, *added))
+
+
+def as_the_companys_auditor(reader: EntitlementSet) -> EntitlementSet:
+    """This reader with every audit kind across the install."""
+    every = Grant(capability=Capability(value="read:audit.*"), scope=WHOLE)
+    return EntitlementSet(principal_id=reader.principal_id, grants=(*reader.grants, every))
+
+
 MAINTENANCE_PERSON = AgentViewer(principal_id="u_maintenance", departments=frozenset({MAINTENANCE}))
 FINANCE_PERSON = AgentViewer(principal_id="u_finance", departments=frozenset({FINANCE}))
 
@@ -573,6 +629,10 @@ OPENERS: dict[
         lambda reader: open_skills(FINANCE_PERSON, reader),
     ),
     "learning": (open_learning, open_learning),
+    "audit": (
+        lambda reader: open_audit(as_maintenances_head(reader)),
+        lambda reader: open_audit(as_the_companys_auditor(reader)),
+    ),
     "questions": (open_questions, open_questions),
     "usage": (open_usage, open_usage),
 }
