@@ -48,6 +48,7 @@ import { Adoption } from "./pages/Adoption";
 import { Agents } from "./pages/Agents";
 import { AgentTemplates } from "./pages/AgentTemplates";
 import { Ask } from "./pages/Ask";
+import { CitedDocument } from "./pages/CitedDocument";
 import { Capabilities } from "./pages/Capabilities";
 import { Capacity } from "./pages/Capacity";
 import { Connectors } from "./pages/Connectors";
@@ -449,6 +450,10 @@ export const routes: RouteObject[] = [
       // Referred to me: the caller's own referrals, read by the person named and needing no grant.
       { path: "referrals", element: <Referrals /> },
       { path: "*", element: <NotFound /> },
+      // The document a citation on Ask opens, at the passage in the address's fragment, which no
+      // server sees. Under Ask's own address because it is reached from an answer. Eager, for
+      // `Roles`' reason. See `pages/CitedDocument.tsx`.
+      { path: "ask/documents/:documentId", element: <CitedDocument /> },
     ],
   },
 ];
