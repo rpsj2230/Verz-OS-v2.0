@@ -45,7 +45,14 @@ start. Retiring a department retires its teams first, while the department the t
 its path through is still live, then the scopes the route's callable says go with it, then the
 department.
 
-Task ids: M27.7.4, M27.11.1
+**Retiring a department first reads the live grants that could be written over it** (M27.15.22):
+the predicates of live grants, pack assignments and scoped role grants carrying a department
+clause, read after the department and its scopes are locked, each asked `holds` by the route. Any
+one answering yes refuses the retirement with `LIVE_GRANTS`, and the store says nothing more,
+because which grant and how many is not the caller's to learn. A grant written in the instant
+between that read and the commit is the state every retirement left before this read existed.
+
+Task ids: M27.7.4, M27.11.1, M27.15.22
 """
 
 from __future__ import annotations
@@ -57,7 +64,7 @@ from datetime import datetime
 from typing import Any, Final, Protocol, runtime_checkable
 
 import structlog
-from sqlalchemy import Select, func, insert, select, text, update
+from sqlalchemy import CompoundSelect, Select, func, insert, or_, select, text, union_all, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.sql.dml import ReturningInsert, ReturningUpdate
@@ -69,9 +76,16 @@ from brain.core.scope_sql import PredicateRefusedError
 from brain.identity.organisation_sync import HeldLead, HeldMembership, OrganisationPlan
 from brain.identity.teams import Team as TeamRecord
 from brain.tables.audit import ACTOR_SETTING, ENT_HASH_SETTING, TRACE_ID_SETTING
-from brain.tables.gate import DepartmentRow, ScopeRow, TeamRow
+from brain.tables.gate import (
+    CapabilityGrantRow,
+    CapabilityPackAssignmentRow,
+    DepartmentRow,
+    ScopeRow,
+    TeamRow,
+)
 from brain.tables.identity import PrincipalRow
 from brain.tables.organisation import DepartmentLeadRow, TeamMembershipRow
+from brain.tables.role_grant import RoleGrantRow
 
 #: Why an appointment names the lead it ends by row.
 A_LEAD_IS_ENDED_BY_ITS_OWN_ROW_AND_NEVER_BY_ITS_DEPARTMENT: Final = (
@@ -108,6 +122,8 @@ class StructureRefusal(enum.StrEnum):
     COMPANY_WIDE_SCOPE = "company_wide_scope"
     #: The scope a live department is defined by, which goes with its department.
     DEPARTMENTS_OWN_SCOPE = "departments_own_scope"
+    #: A live grant is still written over the department a retirement names.
+    LIVE_GRANTS = "live_grants"
 
 
 @dataclass(frozen=True)
@@ -234,12 +250,15 @@ class StructureRecords(Protocol):
         slug: str,
         expected_name: str,
         takes: Callable[[str, ScopeRecord | None, str], bool],
+        holds: Callable[[Scope | None], bool],
         by: Attribution,
     ) -> Structured:
         """Retire a live department, its teams, and every live scope `takes` says goes with it.
 
         `takes` is asked about each live scope's slug, the scope as the type reads it or None when
-        the type refuses the row, and the slug of the scope the department row names.
+        the type refuses the row, and the slug of the scope the department row names. `holds` is
+        asked about each live grant's predicate carrying a department clause, as the type reads it
+        or None, and one yes is `LIVE_GRANTS` with nothing written.
         """
         ...
 
@@ -468,6 +487,40 @@ def live_scope_named(slug: str) -> Select[tuple[ScopeRow]]:
 def live_scopes_for_retirement() -> Select[tuple[ScopeRow]]:
     """Every live scope, locked, for a department's retirement to ask which go with it."""
     return select(ScopeRow).where(ScopeRow.deleted_at.is_(None)).with_for_update()
+
+
+#: A predicate with at least one clause on the department field, as JSONB containment asks it, so
+#: `ix_capability_grant_scope` and its siblings' GIN indexes answer it.
+A_DEPARTMENT_CLAUSE: Final[dict[str, Any]] = {"clauses": [{"field": "department"}]}
+
+
+def live_grant_predicates() -> CompoundSelect[tuple[Any]]:
+    """The predicates of every live grant, pack assignment and role grant naming a department.
+
+    Live is not retired and not lapsed by the statement's own clock. Only the predicates: a
+    retirement asks whether any holds it back, never whose they are.
+    """
+    at = func.statement_timestamp()
+
+    def live(table: Any) -> Select[tuple[Any]]:
+        return select(table.scope).where(
+            table.deleted_at.is_(None),
+            or_(table.not_after.is_(None), table.not_after > at),
+            table.scope.contains(A_DEPARTMENT_CLAUSE),
+        )
+
+    return union_all(
+        live(CapabilityGrantRow), live(CapabilityPackAssignmentRow), live(RoleGrantRow)
+    )
+
+
+def grant_predicate(stored: Any) -> Scope | None:
+    """A stored grant predicate as the type reads it, or None when the type refuses it."""
+    try:
+        return Scope.model_validate(stored)
+    except ValueError:
+        log.warning("grant predicate does not construct")
+        return None
 
 
 def live_departments_named(slugs: Sequence[str]) -> Select[tuple[str]]:
@@ -799,6 +852,7 @@ class StoredOrganisation:
         slug: str,
         expected_name: str,
         takes: Callable[[str, ScopeRecord | None, str], bool],
+        holds: Callable[[Scope | None], bool],
         by: Attribution,
     ) -> Structured:
         try:
@@ -812,9 +866,12 @@ class StoredOrganisation:
                 department_id, name, defining = row
                 if name != expected_name:
                     raise _StructureRefusedError(StructureRefusal.CHANGED_SINCE)
+                scopes = (await session.execute(live_scopes_for_retirement())).scalars().all()
+                predicates = (await session.execute(live_grant_predicates())).scalars()
+                if any(holds(grant_predicate(one)) for one in predicates):
+                    raise _StructureRefusedError(StructureRefusal.LIVE_GRANTS)
                 # Teams first, while the department their trigger reads the path through is live.
                 await session.execute(retiring_teams_of(department_id))
-                scopes = (await session.execute(live_scopes_for_retirement())).scalars().all()
                 going = [one.slug for one in scopes if takes(one.slug, scope_record(one), defining)]
                 if going:
                     await session.execute(retiring_scopes(going))

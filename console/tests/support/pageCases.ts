@@ -519,17 +519,40 @@ const DEPARTMENTS = {
         { principal_id: `${UNBROKEN}2`, display_name: UNBROKEN, disabled: false },
       ],
       lead: { principal_id: `${UNBROKEN}1`, display_name: UNBROKEN, disabled: false },
+      shapeable: true,
     },
   ],
   next_cursor: null,
   unplaced: [{ principal_id: `${UNBROKEN}0`, display_name: UNBROKEN, disabled: false, department: UNBROKEN }],
   truncated: true,
   may_organise: true,
+  may_found: true,
+  may_draw_scopes: true,
   staleness: null,
   teams: UNBROKEN,
   leads: UNBROKEN,
   counted: UNBROKEN,
   organising: UNBROKEN,
+  shaping: UNBROKEN,
+  retiring_department: UNBROKEN,
+  retiring_team: UNBROKEN,
+  retiring_scope: UNBROKEN,
+};
+
+/** The scopes the Departments page's Scopes card lists: one it offers to retire. */
+const DEPARTMENT_SCOPES = {
+  items: [
+    {
+      slug: UNBROKEN,
+      label: UNBROKEN,
+      is_department: false,
+      scope: { clauses: [{ field: "department", op: "eq", value: UNBROKEN }] },
+    },
+  ],
+  next_cursor: null,
+  truncated: false,
+  departments: [UNBROKEN],
+  staleness: null,
 };
 
 const ELEVATION = {
@@ -1964,7 +1987,7 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     address: "/departments",
     signedIn: true,
     drawsValues: true,
-    answers: { "/api/v1/govern/departments": DEPARTMENTS },
+    answers: { "/api/v1/govern/departments": DEPARTMENTS, "/api/v1/govern/scopes": DEPARTMENT_SCOPES },
   },
   "/access_review": {
     address: "/access_review",
