@@ -15,7 +15,7 @@
  * query parameters of the console address, so an administrator can send a colleague the view they
  * are looking at. The cursor is not, because it is a position in one reader's page.
  *
- * Task ids: M27.8.14, M27.8.6
+ * Task ids: M27.8.14, M27.8.6, M27.15.48
  */
 
 import type { components } from "../api/schema";
@@ -28,24 +28,20 @@ export type LogEntry = components["schemas"]["LogEntryView"];
 export const LOGS_API_PATH = "/logs";
 export const LOGS_PATH = "/logs";
 export const LOGS_LABEL = "Logs";
-export const LOGS_CRUMB = "Operate › Logs";
-export const LOGS_LEDE =
-  "Warnings and errors the application logged, newest first. Search by event name, narrow by level " +
-  "and period, and quote a reference to find the request it belongs to on the Errors screen.";
+export const LOGS_LEDE = "Warnings and errors the application logged, newest first, with every value taken out.";
 
-/** Said once, above the rows. */
+/** Said once, under the rows. */
 export const NO_VALUE_IS_KEPT =
-  "A value in a log line is never kept. A field shows its name, and its value only when it is one of " +
-  "the product's own words or numbers; anything else shows as its shape. An exception shows its type " +
-  "and never its message.";
+  "A field shows its value only when it is one of the product's own words or numbers, and an exception shows its type.";
 
-export const READING_THE_LOG = "Reading the log.";
+export const READING_THE_LOG = "Loading the log.";
 export const THE_BRAIN_COULD_NOT_BE_REACHED = "The Brain could not be reached";
 export const UNREADABLE_ANSWER =
   "The API answered in a shape this console does not read, so no row is listed. The console and " +
   "the API are probably from different releases.";
-export const NO_ENTRIES = "Nothing was kept for this search in this period.";
-export const NO_MORE_ENTRIES = "There are no older rows for this search in this period.";
+export const NO_ENTRIES = "Nothing kept for this search";
+export const NO_ENTRIES_MORE = "Change the level, the period or the search.";
+export const NO_MORE_ENTRIES = "There are no more rows for this search in this period.";
 export const SHOW_OLDER = "Show older entries";
 export const SHOW_NEWER = "Show newer entries";
 
@@ -55,17 +51,20 @@ export const NAME_NOT_KEPT_WHY =
   "This event's name was not written in the source, so it was not kept; its place in the source is.";
 
 /** What the page cannot show, each sentence gated on the field the API sends. */
-export const WHAT_IS_NOT_HERE_HEADING = "What this screen cannot show";
 export const DEBUG_IS_NOT_KEPT = "Debug lines are never kept.";
-export const INFO_IS_A_SAMPLE =
-  "Information lines are kept as a small sample, so an information line missing here may still have been logged.";
-export const WORKER_OUTPUT_IS_NOT_KEPT =
-  "The background worker's own output stays on its container and is not kept here; a scheduled job " +
-  "that failed is on the Errors screen.";
+export const INFO_IS_A_SAMPLE = "Information lines are kept as a sample.";
+export const WORKER_OUTPUT_IS_NOT_KEPT = "The worker's own output is not kept here; a failed job is on Errors.";
 
 export function keptFor(days: number): string {
-  return `A row is kept for ${String(days)} days once the retention sweep is released, and the oldest rows go first if the log reaches its ceiling.`;
+  return `A row is kept for ${String(days)} days.`;
 }
+
+/** The export's button, and what it says it holds. */
+export const EXPORT_LOG = "Export";
+export const EXPORT_LOG_TITLE = "Exports every row this search finds in this period, as a CSV file.";
+export const EXPORT_CUT_OFF = "The period held more rows than one export carries; choose a shorter period for the rest.";
+export const EXPORT_SAVED = "The export was saved as a file.";
+export const EXPORT_NOT_SAVED = "This browser could not save the export as a file.";
 
 /** The accessible names. */
 export const SEARCH_LABEL = "Search the log";
@@ -185,6 +184,31 @@ export function logsApiPath(filters: LogFilters, now: Date, cursor: string | nul
     query.set("cursor", cursor);
   }
   return `${LOGS_API_PATH}?${query.toString()}`;
+}
+
+/** The export of every row a search finds in its period (M27.15.48), with the page's own window. */
+export function logsExportApiPath(filters: LogFilters, now: Date): string {
+  const paged = new URLSearchParams(logsApiPath(filters, now, null).split("?")[1] ?? "");
+  paged.delete("limit");
+  return `${LOGS_API_PATH}/export?${paged.toString()}`;
+}
+
+/** What the export answers, as this console reads it. */
+export interface LogExport {
+  readonly filename: string;
+  readonly document: string;
+  readonly cutOff: boolean;
+}
+
+export function readLogExport(payload: unknown): LogExport | null {
+  if (typeof payload !== "object" || payload === null) {
+    return null;
+  }
+  const body = payload as { filename?: unknown; document?: unknown; cut_off?: unknown };
+  if (typeof body.filename !== "string" || typeof body.document !== "string") {
+    return null;
+  }
+  return { filename: body.filename, document: body.document, cutOff: body.cut_off === true };
 }
 
 /** One page, as this console holds it. */

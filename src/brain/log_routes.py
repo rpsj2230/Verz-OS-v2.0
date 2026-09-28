@@ -36,14 +36,27 @@ kept.
 on its own container, and rows are kept for the trace window, and each is a field on the answer so
 the sentence leaves the page on the day it stops being true.
 
-Task ids: M27.8.14, M27.8.6
+**An export is the screen's read in one file (M27.15.48).** `GET /logs/export` takes the screen's
+level, search, window and order, asks the same decision first, and answers the rows as a CSV
+document, newest first, up to `EXPORT_ROWS`. Every row in it is one the exporter could page to on
+the screen, redacted on its way into the table exactly as the screen's are, so the file holds
+nothing its reader could not already read and no number about anything else. `cut_off` says the
+window held more than one export carries, which is a fact about the log every reader of it shares,
+not a count of rows withheld from this one. Rejected: exporting only the rows the browser had
+paged to, which reads as the window's log and is the first fifty rows of it. See
+`AN_EXPORT_IS_THE_SCREENS_READ_IN_ONE_FILE`.
+
+Task ids: M27.8.14, M27.8.6, M27.15.48
 """
 
 from __future__ import annotations
 
+import csv
 import enum
+import io
+from collections.abc import Sequence
 from datetime import datetime, timedelta
-from typing import Annotated, Final
+from typing import Annotated, Any, Final
 
 import structlog
 from fastapi import APIRouter, Query, Request
@@ -105,6 +118,33 @@ LOG_READ: Final = ConsoleRead(
     plane=Plane.CONFIGURATION,
 )
 
+#: Why the export is the screen's own read and nothing wider.
+AN_EXPORT_IS_THE_SCREENS_READ_IN_ONE_FILE: Final = (
+    "The export asks the decision the screen asks, before anything is read, and answers the rows "
+    "the screen would page through for the same level, search and window, redacted the same way "
+    "on their way into the table. So the file holds nothing its reader could not already read, "
+    "and the log is not narrowed per reader, so there is no withheld row for it to count."
+)
+
+#: The most rows one export carries. A day's warnings on a busy install, with room.
+EXPORT_ROWS: Final = 5_000
+
+#: The export's columns, in order: the screen's columns, then the fields as `name=value` pairs.
+EXPORT_COLUMNS: Final[tuple[str, ...]] = (
+    "at",
+    "last_at",
+    "level",
+    "event",
+    "origin",
+    "reference",
+    "error_type",
+    "repeats",
+    "fields",
+)
+
+#: A spreadsheet opens a cell starting with one of these as a formula.
+_FORMULA_START: Final = ("=", "+", "-", "@", "\t", "\r")
+
 #: The window when nobody says, and the longest one may ask for.
 DEFAULT_WINDOW: Final = timedelta(days=1)
 MAX_WINDOW: Final = timedelta(days=TRACE_RETENTION_DAYS + 1)
@@ -149,6 +189,21 @@ class LogPage(BaseModel):
     info_is_a_sample: bool = True
     #: The background worker prints to its own container's output, which is not kept here.
     worker_output_is_not_kept: bool = True
+
+
+class LogExport(BaseModel):
+    """The rows a search holds, as one CSV document handed over once. No count of anything."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    start: datetime
+    end: datetime
+    filename: str
+    #: CSV with a header line, `EXPORT_COLUMNS`, newest first unless oldest first was asked for.
+    document: str
+    #: The window held more rows than one export carries, and the oldest (or newest) are not in it.
+    cut_off: bool
+    told: str
 
 
 class LogOrder(enum.StrEnum):
@@ -198,6 +253,33 @@ def window_of(
     return since, until
 
 
+def _view(row: Sequence[Any]) -> LogEntryView:
+    """One stored row, in `ENTRY_COLUMNS` order, as the screen and the export both show it."""
+    (
+        _,
+        at,
+        last_at,
+        stored_level,
+        stored_event,
+        origin,
+        trace_id,
+        error_type,
+        repeats,
+        stored_fields,
+    ) = row
+    return LogEntryView(
+        at=at,
+        last_at=last_at,
+        level=LogLevel(stored_level),
+        event=stored_event,
+        origin=origin,
+        reference=trace_id,
+        error_type=error_type,
+        repeats=repeats,
+        fields=dict(fields_of(stored_fields)),
+    )
+
+
 router = APIRouter(prefix=API_PREFIX, tags=["operate"])
 
 
@@ -242,30 +324,85 @@ async def logs(
     return LogPage(
         start=since,
         end=until,
-        items=[
-            LogEntryView(
-                at=at,
-                last_at=last_at,
-                level=LogLevel(stored_level),
-                event=stored_event,
-                origin=origin,
-                reference=trace_id,
-                error_type=error_type,
-                repeats=repeats,
-                fields=dict(fields_of(stored_fields)),
-            )
-            for (
-                _,
-                at,
-                last_at,
-                stored_level,
-                stored_event,
-                origin,
-                trace_id,
-                error_type,
-                repeats,
-                stored_fields,
-            ) in page
-        ],
+        items=[_view(one) for one in page],
         next_cursor=cursor_of(page[-1][1], page[-1][0]) if len(found) > limit else None,
+    )
+
+
+# ------------------------------------------------------------------ the export (M27.15.48)
+def _cell(value: object) -> str:
+    """One value as text a spreadsheet opens as text: a formula's first character is escaped."""
+    text = "" if value is None else str(value)
+    return f"'{text}" if text.startswith(_FORMULA_START) else text
+
+
+def export_document(rows: list[LogEntryView]) -> str:
+    """The rows as CSV with a header line, in `EXPORT_COLUMNS`. Pure, so a test reads it whole."""
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, lineterminator="\r\n")
+    writer.writerow(EXPORT_COLUMNS)
+    for row in rows:
+        fields = "; ".join(f"{name}={value}" for name, value in sorted(row.fields.items()))
+        writer.writerow(
+            _cell(one)
+            for one in (
+                row.at.isoformat(),
+                row.last_at.isoformat(),
+                row.level.value,
+                row.event,
+                row.origin,
+                row.reference,
+                row.error_type,
+                row.repeats,
+                fields,
+            )
+        )
+    return buffer.getvalue()
+
+
+#: What the export's answer says, whatever it holds.
+EXPORT_TOLD: Final = (
+    "The file holds the rows this search finds in this window, as the screen shows them: each "
+    "value was redacted before it was kept."
+)
+
+
+@router.get("/logs/export", response_model=LogExport, responses=COMMON_RESPONSES)
+async def export_logs(
+    request: Request,
+    asked: Asked,
+    level: LogLevel | None = None,
+    event: Annotated[str | None, Query(min_length=1, max_length=MAX_EVENT_CHARS)] = None,
+    start: datetime | None = None,
+    end: datetime | None = None,
+    order: LogOrder = LogOrder.NEWEST,
+) -> LogExport:
+    """The rows the screen's search finds in its window, as one CSV document.
+
+    The decision first, then the window, then the database, in the screen's order. See
+    `AN_EXPORT_IS_THE_SCREENS_READ_IN_ONE_FILE`.
+    """
+    if not may_read_application_log(asked.reach, asked.now):
+        raise Absent(f"the {LOG_SCREEN} screen is not answerable for this caller")
+    since, until = window_of(start, end, asked.now)
+    statement = entries(
+        start=since,
+        end=until,
+        level=level,
+        event=event,
+        after=None,
+        limit=EXPORT_ROWS,
+        newest_first=order is LogOrder.NEWEST,
+    )
+    async with _require_sessions(request)() as session:
+        found = (await session.execute(statement)).all()
+    rows = [_view(one) for one in found[:EXPORT_ROWS]]
+    log.info("log exported", principal=asked.caller.principal.id)
+    return LogExport(
+        start=since,
+        end=until,
+        filename=f"log-{since:%Y%m%dT%H%M}-{until:%Y%m%dT%H%M}.csv",
+        document=export_document(rows),
+        cut_off=len(found) > EXPORT_ROWS,
+        told=EXPORT_TOLD,
     )

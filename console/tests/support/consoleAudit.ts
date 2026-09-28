@@ -703,7 +703,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "Scheduled jobs and background work": {
-    screens: ["/jobs", "/runs"],
+    screens: ["/jobs", "/jobs/:name", "/jobs/:name/:view", "/runs"],
     routes: ["/api/v1/jobs*", "/api/v1/operate/runs"],
     tables: ["ops.control_run", "ops.operation", "ops.acceptance_result"],
     installation: [],
@@ -729,7 +729,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
   },
   "Logs and errors": {
     screens: ["/errors", "/logs"],
-    routes: ["/api/v1/errors", "/api/v1/logs"],
+    routes: ["/api/v1/errors", "/api/v1/logs*"],
     tables: ["obs.application_log"],
     installation: [],
     gaps: [
@@ -968,7 +968,7 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/Classification.tsx tableApiPath(named)": [
     at("PUT /api/v1/classifications/{entity}/table", "tableApiPath", tableApiPath("prices")),
   ],
-  "src/pages/DataTransfer.tsx EXPORTS_API_PATH": [at("POST /api/v1/data-transfer/exports", "EXPORTS_API_PATH", EXPORTS_API_PATH)],
+  "src/pages/operations/DataTransferPage.tsx EXPORTS_API_PATH": [at("POST /api/v1/data-transfer/exports", "EXPORTS_API_PATH", EXPORTS_API_PATH)],
   "src/pages/Features.tsx switchPath(row.name)": [at("POST /api/v1/install/features/{name}", "switchPath", switchPath("schedule_control"))],
   "src/pages/Tools.tsx switchPath(choice.tool)": [
     at("POST /api/v1/tools/{name}/switch", "switchPath", toolSwitchPath("notes.read_note")),
@@ -1016,7 +1016,7 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/components/ConnectStaffSource.tsx APPLY_FIRST_SYNC_API_PATH": [
     at("POST /api/v1/govern/staff_sources/first-sync/apply", "APPLY_FIRST_SYNC_API_PATH", APPLY_FIRST_SYNC_API_PATH),
   ],
-  "src/pages/Jobs.tsx actionPath(asked.action, asked.row.control)": [
+  "src/pages/operations/JobActs.tsx actionPath(asked.action, asked.row.control)": [
     at("POST /api/v1/jobs/{name}/pause", "actionPath", actionPath("pause", "spend_report_refresh")),
     at("POST /api/v1/jobs/{name}/resume", "actionPath", actionPath("resume", "spend_report_refresh")),
     at("POST /api/v1/jobs/{name}/run", "actionPath", actionPath("run", "spend_report_refresh")),
