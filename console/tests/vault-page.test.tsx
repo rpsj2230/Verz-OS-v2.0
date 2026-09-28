@@ -1,6 +1,6 @@
 /**
- * The Secrets vault screen: the seal, each slot's state, the connector run leases, rotation, and
- * the shipping of the vault's audit log.
+ * The Vault activity screen: the connector run leases and the shipping of the vault's audit log. The
+ * seal, the token's policies and every slot are on Credentials (`tests/credentials-page.test.tsx`).
  *
  * Mounted directly on a memory router at its own address, for the reason
  * `tests/sessions-page.test.tsx` gives. The failures worth testing look like the screen working: a
@@ -97,57 +97,26 @@ async function mount(answer: (url: URL) => Response | null): Promise<HTMLElement
 }
 
 describe("what the secrets vault screen shows", () => {
-  test("the seal, each slot's state and when it was written, and a defined slot as defined", async () => {
-    // What breaks if this is deleted: the seal drops off the screen an operator opens after a
-    // restart, or a slot the installer defined reads as missing.
-    const container = await mount((url) => (url.pathname === SCREEN ? json(vault()) : null));
-    expect(container.querySelector('[aria-label="The seal"]')?.textContent).toContain("Open");
-    const providers = container.querySelector('[aria-label="Provider slots"]')?.textContent ?? "";
-    expect(providers).toContain("Holds a key");
-    expect(providers).toContain("2019-03-04 09:00 UTC");
-    expect(providers).toContain("Empty");
-    const connectors = container.querySelector('[aria-label="Connector slots"]')?.textContent ?? "";
-    expect(connectors).toContain("Defined, empty");
-    expect(connectors).toContain("crm.objects.contacts.read");
-    expect(connectors).toContain("crm.objects.*.write");
-  });
-
-  test("the policies this process's token carries are named, and a root token is not its own", async () => {
-    // What breaks if this is deleted: a root token in BRAIN_VAULT_TOKEN reads as a healthy vault,
-    // because nothing on the screen says which policies the token carries.
-    const own = await mount((url) => (url.pathname === SCREEN ? json(vault()) : null));
-    const ownCard = own.querySelector(`[aria-label="This process's token"]`)?.textContent ?? "";
-    expect(ownCard).toContain("Its own policy only");
-    expect(ownCard).toContain("application, default");
-    const root = await mount((url) =>
-      url.pathname === SCREEN
-        ? json(vault({ token_policy: "other", token_policies: ["root"], token_told: "mint one" }))
-        : null,
-    );
-    const rootCard = root.querySelector(`[aria-label="This process's token"]`)?.textContent ?? "";
-    expect(rootCard).toContain("Not its own policy alone");
-    expect(rootCard).toContain("root");
-    expect(rootCard).toContain("mint one");
-  });
-
-  test("each source's leases are counted by how they ended, with rotation and shipping beside them", async () => {
+  test("each source's leases are counted by how they ended, with the shipping beside them", async () => {
     // What breaks if this is deleted: a token that lived on after its run is not shown, or the
-    // screen stops saying that a replaced key needs no restart.
+    // vault's own audit log stops being accounted for.
     const container = await mount((url) => (url.pathname === SCREEN ? json(vault()) : null));
     const leases = container.querySelector('[aria-label="Leases"]')?.textContent ?? "";
     expect(leases).toContain("xero");
     expect(leases).toMatch(/8\s*5\s*1\s*2/);
     expect(container.textContent).toContain(LEASES_TOLD);
-    expect(container.textContent).toContain(ROTATION);
+    // The seal, the token and the slots moved to Credentials, so they are not drawn twice.
+    expect(container.querySelector('[aria-label="Provider slots"]')).toBeNull();
+    expect(container.textContent).not.toContain(ROTATION);
     const shipped = container.querySelector('[aria-label="Audit shipping"]')?.textContent ?? "";
     expect(shipped).toContain("12");
     expect(shipped).toContain("3");
     expect(container.textContent).toContain(AUDIT_TOLD);
   });
 
-  test("a sealed vault says so and no lease or count is drawn as zero when none could be taken", async () => {
-    // What breaks if this is deleted: a sealed vault reads as a vault with no keys, or an install
-    // whose application has no database reads as one whose worker never ran.
+  test("no lease or count is drawn as zero when none could be taken", async () => {
+    // What breaks if this is deleted: an install whose application has no database reads as one
+    // whose worker never ran.
     const container = await mount((url) =>
       url.pathname === SCREEN
         ? json(
@@ -161,8 +130,6 @@ describe("what the secrets vault screen shows", () => {
           )
         : null,
     );
-    expect(container.textContent).toContain("Sealed");
-    expect(container.textContent).toContain(SEALED);
     expect(container.textContent).toContain(NO_DATABASE);
     expect(container.textContent).not.toContain(NO_LEASES);
     expect(container.querySelector('[aria-label="Leases"]')).toBeNull();
