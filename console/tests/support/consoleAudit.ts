@@ -49,6 +49,7 @@ import {
 import { assignPath, reviewPath, SKILLS_API_PATH } from "../../src/pages/skillsQuery";
 import { EXPORTS_API_PATH } from "../../src/pages/dataTransferQuery";
 import { switchPath } from "../../src/pages/featuresQuery";
+import { switchPath as toolSwitchPath } from "../../src/pages/toolsQuery";
 import { savePath } from "../../src/pages/settingsQuery";
 import {
   DISABLE_API_PATH,
@@ -383,9 +384,15 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "Skills and tools": {
-    screens: ["/skills", "/skills/:name"],
-    routes: ["/api/v1/skills", "/api/v1/skills/{digest}/review", "/api/v1/skills/{digest}/assignments"],
-    tables: ["agent.skill", "agent.skill_review", "agent.skill_assignment"],
+    screens: ["/skills", "/skills/:name", "/tools"],
+    routes: [
+      "/api/v1/skills",
+      "/api/v1/skills/{digest}/review",
+      "/api/v1/skills/{digest}/assignments",
+      "/api/v1/tools",
+      "/api/v1/tools/{name}/switch",
+    ],
+    tables: ["agent.skill", "agent.skill_review", "agent.skill_assignment", "agent.tool_definition", "agent.tool_switch"],
     installation: [],
     gaps: [
       {
@@ -800,6 +807,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   ],
   "src/pages/DataTransfer.tsx EXPORTS_API_PATH": [at("POST /api/v1/data-transfer/exports", "EXPORTS_API_PATH", EXPORTS_API_PATH)],
   "src/pages/Features.tsx switchPath(row.name)": [at("POST /api/v1/install/features/{name}", "switchPath", switchPath("schedule_control"))],
+  "src/pages/Tools.tsx switchPath(choice.tool)": [
+    at("POST /api/v1/tools/{name}/switch", "switchPath", toolSwitchPath("notes.read_note")),
+  ],
   "src/pages/Settings.tsx savePath(row.name)": [at("PUT /api/v1/install/settings/{name}", "savePath", savePath("INSTALL_COMPANY_NAME"))],
   "src/pages/FirstRun.tsx FINISH_PATH": [at("POST /setup/sign-in", "FINISH_PATH", FINISH_PATH, false)],
   "src/pages/FirstRun.tsx APPOINTMENT_PATH": [at("POST /setup/appointment", "APPOINTMENT_PATH", APPOINTMENT_PATH, false)],
@@ -1029,6 +1039,7 @@ function audited(name: string): Proof {
 }
 
 const SETTINGS_PRESSED = audited("test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick");
+const TOOLS_PRESSED = t("test_tool_routes", "test_switching_through_the_routes_reaches_the_row_the_ledger_and_every_call", true);
 const BRANDING_SAVED = t(
   "test_settings_routes",
   "test_saving_a_company_name_writes_its_row_and_the_console_header_draws_it_next",
@@ -1248,6 +1259,11 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
       none: "The route sets the audit attribution 0059's trigger reads, which BRANDING_SAVED asserts over a stub; no scratch-Postgres test yet reads the ledger entry back.",
     },
     behaviour: BRANDING_SAVED,
+  },
+  "POST /api/v1/tools/{name}/switch": {
+    row: t("test_tool_routes", "test_a_super_administrator_switches_a_tool_off_for_the_install"),
+    audit: TOOLS_PRESSED,
+    behaviour: TOOLS_PRESSED,
   },
   "POST /api/v1/install/features/{name}": {
     row: SETTINGS_PRESSED,

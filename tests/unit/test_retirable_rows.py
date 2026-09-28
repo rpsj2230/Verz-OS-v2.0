@@ -125,6 +125,17 @@ RECIPES: Final[dict[str, Recipe]] = {
         "principal_id = 'u_rr_{n}'",
         parents=(PERSON,),
     ),
+    "agent.tool_switch": Recipe(
+        "INSERT INTO agent.tool_switch (tool_name, department, switched_off_by)"
+        " VALUES ('rr.read_tool_{n}', NULL, 'u_admin')",
+        "tool_name = 'rr.read_tool_{n}'",
+        parents=(
+            "INSERT INTO agent.tool_definition (name, source, entity, description,"
+            " required_capability, side_effect, sensitive, result_contract, identity_mode)"
+            " VALUES ('rr.read_tool_{n}', 'rr', 'tool', 'A tool {n}', 'read:tool', 'none', false,"
+            " 'typed', 'delegated')",
+        ),
+    ),
     "auth.group_role_rule": Recipe(
         "INSERT INTO auth.group_role_rule (idp_group, role, created_by, reason)"
         " VALUES ('rr_group_{n}', 'auditor', 'u_admin', 'measured')",

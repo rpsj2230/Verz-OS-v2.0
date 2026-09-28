@@ -164,6 +164,7 @@ const GROUPS: readonly NavGroup[] = [
       { to: "/subscribers", label: "Subscribers and notifications" },
       { to: "/classification", label: "Classification" },
       { to: "/compliance", label: "Compliance" },
+      { to: "/tools", label: "Tools" },
     ],
   },
   {
