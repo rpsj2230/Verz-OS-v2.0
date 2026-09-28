@@ -13,6 +13,15 @@ env:
   UV_VERSION: "0.12.9"
 
 jobs:
+  # Main runs only what guards the deploy. Every pull request has already passed the whole suite
+  # before it merges, and the next pull request's run is on top of the newest main, so running
+  # the unit shards, console, coverage, handover, analyser and the two supply-chain scans again
+  # on main doubled CI for nothing a deploy needs. On the free plan's 20 concurrent jobs that
+  # second run queued every deploy (measured 2026-09-28: 22 jobs a run, deploys waiting behind
+  # pull requests). Main still runs lint and types, the sweeps, the install from empty, the
+  # migrations over an install-shaped database, the previous release on the new schema, the
+  # whole stack and the tracker check.
+  #
   # Which kind of change this is. A change that touches only the task list (the work breakdown,
   # its compiled JSON, the tracker page, the delivery checklist and the requirements register)
   # cannot change what the product does, so it skips the suites that test the product and runs
@@ -103,7 +112,7 @@ jobs:
     name: Unit tests, shard ${{ matrix.shard }}
     runs-on: ubuntu-latest
     needs: changes
-    if: ${{ needs.changes.outputs.tasks_only != 'true' }}
+    if: ${{ github.event_name == 'pull_request' && needs.changes.outputs.tasks_only != 'true' }}
     strategy:
       # A red shard does not cancel the others, so one run reports every failure in the suite
       # rather than the first shard's. Eight since 2026-09-28: four took 9 to 12 minutes each and
@@ -215,7 +224,7 @@ jobs:
     needs: [tests, changes]
     # Runs when a shard failed as well, and fails itself. A job skipped because what it needs
     # failed reports as passing a required check, so a skipped floor would read as a green one.
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && github.event_name == 'pull_request' }}
     steps:
       - name: Every shard passed
         env:
@@ -351,7 +360,7 @@ jobs:
     name: Console types, boundaries, tests, build
     runs-on: ubuntu-latest
     needs: changes
-    if: ${{ needs.changes.outputs.tasks_only != 'true' }}
+    if: ${{ github.event_name == 'pull_request' && needs.changes.outputs.tasks_only != 'true' }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -651,7 +660,7 @@ jobs:
     name: The personal data analyser starts, answers and fits its limit
     runs-on: ubuntu-latest
     needs: changes
-    if: ${{ needs.changes.outputs.tasks_only != 'true' }}
+    if: ${{ github.event_name == 'pull_request' && needs.changes.outputs.tasks_only != 'true' }}
     env:
       COMPOSE_FILE: docker-compose.presidio.yml
     steps:
@@ -719,7 +728,7 @@ jobs:
     # A drop waiting on a lock hung the first run for an hour; see the remove step.
     timeout-minutes: 30
     needs: changes
-    if: ${{ needs.changes.outputs.tasks_only != 'true' }}
+    if: ${{ github.event_name == 'pull_request' && needs.changes.outputs.tasks_only != 'true' }}
     services:
       postgres:
         image: pgvector/pgvector:pg18
@@ -962,7 +971,7 @@ jobs:
     name: Dependency audit
     runs-on: ubuntu-latest
     needs: changes
-    if: ${{ needs.changes.outputs.tasks_only != 'true' }}
+    if: ${{ github.event_name == 'pull_request' && needs.changes.outputs.tasks_only != 'true' }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -1008,7 +1017,7 @@ jobs:
     name: Vulnerability scan, locks and image
     runs-on: ubuntu-latest
     needs: changes
-    if: ${{ needs.changes.outputs.tasks_only != 'true' }}
+    if: ${{ github.event_name == 'pull_request' && needs.changes.outputs.tasks_only != 'true' }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
