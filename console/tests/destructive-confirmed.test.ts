@@ -62,6 +62,25 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "Adding a document writes a new item. The same file sent again to the same place is the same item " +
     "with the same text, because its reference is a digest of the bytes, the owner and the place, which " +
     "tests/unit/test_knowledge_upload.py holds, so nothing existing is ended or removed.",
+  "src/components/KnowledgeLifecycle.tsx taskDonePath(taskId)":
+    "Marking a task read closes a notice in the reader's own list: a document handed to them, or a " +
+    "promotion or a solution of theirs decided. What it reports is unchanged and in the ledger, and a " +
+    "review is never closed this way, which tests/unit/test_knowledge_lifecycle_db.py holds.",
+  "src/components/KnowledgeLifecycle.tsx verificationPath(itemId)":
+    "Verifying records that a named person vouched for the document today and when it is next due. " +
+    "The earlier verification is kept in the ledger, which records the columns that changed, so " +
+    "nothing is lost; tests/unit/test_knowledge_lifecycle_db.py holds the entry.",
+  "src/components/KnowledgeLifecycle.tsx promotionPath(itemId)":
+    "Asking for the whole company changes nothing: it raises a card on the Approvals screen, and the " +
+    "document widens only when somebody else approves it there, which " +
+    "tests/unit/test_knowledge_lifecycle_db.py holds.",
+  "src/components/KnowledgeLifecycle.tsx SOLUTIONS_API_PATH":
+    "Capturing a solution adds a row that waits for somebody else's decision. It answers nothing and " +
+    "ends nothing until it is approved.",
+  "src/components/KnowledgeLifecycle.tsx solutionDecisionPath(one.solution_id)":
+    "Deciding a solution is the answer to the question its card asks, as deciding an approval is: the " +
+    "problem and the solution are drawn above the two buttons, approving adds a document and refusing " +
+    "adds nothing, and both are recorded in the ledger.",
   "src/pages/Ask.tsx ANSWER_API_PATH":
     "Asking a question changes nothing an administrator manages: the answer is computed for the " +
     "reader and nothing they hold is ended or replaced.",

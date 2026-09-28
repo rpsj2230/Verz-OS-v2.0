@@ -76,11 +76,18 @@ and until then it decides nothing anyway.
 agent_output` keeps the row and supersedes or archives; this module has no delete path at all,
 and `library_gaps` reports a callable whose name could be read as approving.
 
+**Since 2026-09-28 two of these are what the console's lifecycle routes call.** The audit of
+2026-09-17 found `supersede` and `propose_promotion` reached only from here, and this module
+imported by nothing. `brain.knowledge_lifecycle_routes` asks `request_promotion` for every
+promotion and `assert_replaceable` for every new version, over the stored row, so the member's
+rules and the console's are one set. Both take the fields they read through a protocol rather than
+a `KnowledgeItem`, because the stored row holds no text.
+
 Scope: domain logic. Nothing here opens a connection, reads a clock or renders anything; `now`
 and the windows are parameters, as in every module this one calls.
 
 Task ids: M40.3.1.1, M40.3.1.2, M40.3.1.3, M40.3.1.4, M40.3.1.5, M40.3.2.1, M40.3.2.2
-Task ids: M40.3.2.3, M40.3.2.4, M40.3.3.1, M40.3.3.2, M40.3.3.3
+Task ids: M40.3.2.3, M40.3.2.4, M40.3.3.1, M40.3.3.2, M40.3.3.3, M7.4.4, M7.4.5
 """
 
 from __future__ import annotations
@@ -91,7 +98,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from types import MappingProxyType
-from typing import Any, Final
+from typing import Any, Final, Protocol
 
 from brain.agents.model import AgentRecord
 from brain.console.agent_output import (
@@ -106,7 +113,9 @@ from brain.core.entitlement import EntitlementSet
 from brain.knowledge.item import (
     KnowledgeItem,
     KnowledgeState,
+    Superseding,
     VerificationState,
+    assert_supersedable,
     badge,
     supersede,
 )
@@ -382,6 +391,19 @@ def replace(
     Returns both, as `supersede` does, so the caller cannot forget to write the predecessor
     back and leave two live items saying different things.
     """
+    assert_replaceable(current, successor)
+    return supersede(current, successor)
+
+
+def assert_replaceable(current: Superseding, successor: KnowledgeItem) -> None:
+    """`replace`'s two rules, for a caller holding a stored row rather than a document (M7.4.5).
+
+    The console's new-version route replaces a document whose text it never reads, so it holds
+    `know.item`'s row and cannot hand `replace` a `KnowledgeItem` to copy. It asks this instead,
+    and the database's `know.supersede_item` makes the move: the successor carries a review cycle,
+    and `brain.knowledge.item.assert_supersedable` refuses a loop, a fork, a widening and a move.
+    One statement of both rules, whichever caller asks.
+    """
     if successor.review_by is None:
         msg = (
             f"{successor.item_id!r} replaces {current.item_id!r} and carries no review date, "
@@ -390,7 +412,7 @@ def replace(
             f"{A_REPLACEMENT_WITH_NO_REVIEW_DATE_LEAVES_THE_SWEEP_WITHOUT_ANNOUNCING_IT}"
         )
         raise LibraryError(msg)
-    return supersede(current, successor)
+    assert_supersedable(current, successor)
 
 
 def retire(item: KnowledgeItem) -> KnowledgeItem:
@@ -541,8 +563,25 @@ class PromotionRequest:
             raise LibraryError(msg)
 
 
+class Stewarded(Protocol):
+    """What asking for a promotion reads of an item: which, whose, and where it sits.
+
+    `KnowledgeItem` satisfies it, and so does `brain.knowledge.lifecycle.StoredItem`, the stored
+    row the console's promotion route holds.
+    """
+
+    @property
+    def item_id(self) -> str: ...
+
+    @property
+    def owner_id(self) -> str: ...
+
+    @property
+    def visibility(self) -> KnowledgeVisibility: ...
+
+
 def request_promotion(
-    item: KnowledgeItem,
+    item: Stewarded,
     *,
     proposer_id: str,
     review_by: datetime,

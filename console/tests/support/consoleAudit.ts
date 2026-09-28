@@ -133,6 +133,16 @@ import { APPOINTMENT_PATH, FINISH_PATH } from "../../src/setup/wizard";
 import { BREACHES_API_PATH, breachStepApiPath, topicApiPath } from "../../src/pages/complianceQuery";
 import { handledApiPath } from "../../src/pages/referralsQuery";
 import { uploadPath } from "../../src/pages/knowledgeQuery";
+import {
+  SOLUTIONS_API_PATH,
+  passagesPath,
+  promotionPath,
+  solutionDecisionPath,
+  stewardPath,
+  taskDonePath,
+  verificationPath,
+  newVersionPath,
+} from "../../src/pages/knowledgeLifecycleQuery";
 import { CONSOLE_ROOT, readRepoFile } from "./repo";
 
 // ------------------------------------------------------------------------------------ inputs
@@ -520,6 +530,9 @@ export const AREAS: Readonly<Record<string, Area>> = {
     routes: [
       "/api/v1/govern/library",
       "/api/v1/knowledge/uploads*",
+      "/api/v1/knowledge/items*",
+      "/api/v1/knowledge/tasks*",
+      "/api/v1/knowledge/solutions*",
       "/api/v1/govern/learning",
       "/api/v1/govern/learning/undo",
       "/api/v1/govern/memory",
@@ -531,6 +544,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
     tables: [
       "know.item",
       "know.chunk",
+      "know.steward_task",
+      "know.solution",
       "mem.adaptive",
       "mem.persistent",
       "mem.learning",
@@ -737,6 +752,12 @@ export const READ_AFTER_AN_ACTION: Readonly<
 > = {
   "GET /api/v1/audit/history": { screen: "/audit", spelled: "historyApiPath", built: historyApiPath("principal", "u_1").split("?")[0] ?? "" },
   "GET /api/v1/govern/staff_sources/trial": { screen: "/staff_sources", spelled: "TRIAL_API_PATH", built: TRIAL_API_PATH },
+  // A version's text is read when a person presses Read this version on an opened document.
+  "GET /api/v1/knowledge/items/{item_id}/passages": {
+    screen: "/library",
+    spelled: "passagesPath",
+    built: passagesPath("upload.x"),
+  },
   "GET /setup/staff-source/registration": {
     screen: "/first-run",
     spelled: "REGISTRATION_PATH",
@@ -800,6 +821,35 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/Ask.tsx ANSWER_API_PATH": [at("POST /api/v1/answer", "ANSWER_API_PATH", ANSWER_API_PATH)],
   "src/pages/Knowledge.tsx uploadPath(draft.kind, draft.level, draft.department)": [
     at("POST /api/v1/knowledge/uploads", "uploadPath", uploadPath("sop", "department", "web").split("?")[0] ?? ""),
+  ],
+  "src/components/KnowledgeLifecycle.tsx taskDonePath(taskId)": [
+    at("POST /api/v1/knowledge/tasks/{task_id}/done", "taskDonePath", taskDonePath("steward.x")),
+  ],
+  "src/components/KnowledgeLifecycle.tsx verificationPath(itemId)": [
+    at("POST /api/v1/knowledge/items/{item_id}/verification", "verificationPath", verificationPath("upload.x")),
+  ],
+  "src/components/KnowledgeLifecycle.tsx newVersionPath(document.item_id, instant)": [
+    at(
+      "POST /api/v1/knowledge/items/{item_id}/versions",
+      "newVersionPath",
+      newVersionPath("upload.x", "2999-01-01T12:00:00+00:00").split("?")[0] ?? "",
+    ),
+  ],
+  "src/components/KnowledgeLifecycle.tsx promotionPath(itemId)": [
+    at("POST /api/v1/knowledge/items/{item_id}/promotion", "promotionPath", promotionPath("upload.x")),
+  ],
+  "src/components/KnowledgeLifecycle.tsx stewardPath(document.item_id)": [
+    at("POST /api/v1/knowledge/items/{item_id}/steward", "stewardPath", stewardPath("upload.x")),
+  ],
+  "src/components/KnowledgeLifecycle.tsx SOLUTIONS_API_PATH": [
+    at("POST /api/v1/knowledge/solutions", "SOLUTIONS_API_PATH", SOLUTIONS_API_PATH),
+  ],
+  "src/components/KnowledgeLifecycle.tsx solutionDecisionPath(one.solution_id)": [
+    at(
+      "POST /api/v1/knowledge/solutions/{solution_id}/decision",
+      "solutionDecisionPath",
+      solutionDecisionPath("solution.x"),
+    ),
   ],
   "src/pages/AccessRequests.tsx ACCESS_REQUESTS_API_PATH": [
     at("POST /api/v1/access-requests", "ACCESS_REQUESTS_API_PATH", ACCESS_REQUESTS_API_PATH),
@@ -1083,6 +1133,21 @@ const A_WEBHOOK_IS_DELIVERED = t(
   "test_a_due_event_is_signed_received_verified_and_recorded_delivered",
   true,
 );
+/** `tests/unit/test_knowledge_lifecycle_db.py`, which presses the lifecycle's routes against PostgreSQL. */
+function lifecycle(name: string): Proof {
+  return t("test_knowledge_lifecycle_db", name, true);
+}
+const LIFECYCLE_SUPERSEDED = lifecycle(
+  "test_a_newer_version_supersedes_the_older_which_stays_readable_and_answers_use_the_newer",
+);
+const LIFECYCLE_PROMOTED = lifecycle(
+  "test_a_promotion_waits_on_the_approvals_screen_and_is_applied_when_a_super_admin_approves",
+);
+const LIFECYCLE_REVIEWED = lifecycle(
+  "test_a_document_due_for_review_opens_a_task_for_its_steward_which_verifying_closes",
+);
+const LIFECYCLE_SOLVED = lifecycle("test_a_captured_solution_becomes_knowledge_only_when_somebody_else_approves_it");
+const LIFECYCLE_HANDED_OVER = lifecycle("test_a_steward_is_handed_over_to_somebody_who_reaches_it_and_is_told");
 const NO_TRIAL_LEDGER: Proof = {
   none: "A test message is recorded in ops.operation under its key, and the audit ledger has no action for a message sent: brain.ops.mail.A_TEST_IS_ONE_MESSAGE_PER_CONFIGURATION.",
 };
@@ -1236,6 +1301,44 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
       true,
     ),
     behaviour: t("test_knowledge_routes", "test_a_markdown_file_is_added_to_a_department_as_its_uploader"),
+  },
+  "POST /api/v1/knowledge/items/{item_id}/verification": {
+    row: LIFECYCLE_REVIEWED,
+    audit: LIFECYCLE_SUPERSEDED,
+    behaviour: LIFECYCLE_REVIEWED,
+  },
+  "POST /api/v1/knowledge/items/{item_id}/versions": {
+    row: LIFECYCLE_SUPERSEDED,
+    audit: LIFECYCLE_SUPERSEDED,
+    behaviour: LIFECYCLE_SUPERSEDED,
+  },
+  "POST /api/v1/knowledge/items/{item_id}/promotion": {
+    row: LIFECYCLE_PROMOTED,
+    audit: LIFECYCLE_PROMOTED,
+    behaviour: LIFECYCLE_PROMOTED,
+  },
+  "POST /api/v1/knowledge/items/{item_id}/steward": {
+    row: LIFECYCLE_HANDED_OVER,
+    audit: LIFECYCLE_HANDED_OVER,
+    behaviour: LIFECYCLE_HANDED_OVER,
+  },
+  "POST /api/v1/knowledge/tasks/{task_id}/done": {
+    row: LIFECYCLE_HANDED_OVER,
+    audit: {
+      notApplicable:
+        "Marking a task read closes a notice in the reader's own list and changes nothing anybody holds; what it reports was recorded when it happened.",
+    },
+    behaviour: LIFECYCLE_HANDED_OVER,
+  },
+  "POST /api/v1/knowledge/solutions": {
+    row: LIFECYCLE_SOLVED,
+    audit: LIFECYCLE_SOLVED,
+    behaviour: LIFECYCLE_SOLVED,
+  },
+  "POST /api/v1/knowledge/solutions/{solution_id}/decision": {
+    row: LIFECYCLE_SOLVED,
+    audit: LIFECYCLE_SOLVED,
+    behaviour: LIFECYCLE_SOLVED,
   },
   "POST /api/v1/answer": {
     row: { notApplicable: "Asking a question writes no row an administrator manages." },

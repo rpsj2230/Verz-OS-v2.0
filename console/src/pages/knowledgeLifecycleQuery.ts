@@ -1,0 +1,182 @@
+/**
+ * What the Knowledge page asks the API about a stored document's life, and the words it says. No
+ * React.
+ *
+ * The routes are `brain.knowledge_lifecycle_routes`: the documents this person looks after, one
+ * document's record and history, one version's text, the four acts on a document (verify, a newer
+ * version, hand over, ask for the whole company), this person's tasks, and captured solutions. The
+ * API decides who may see and do each of them; this module builds the addresses and turns a date a
+ * person picked into the instant the API takes, and nothing here decides who may do what.
+ *
+ * **An address carries identifiers and closed-list words, never a name or a sentence.** A new
+ * version's file name travels in its header, as K1's upload's does, and a reason, a problem and an
+ * answer travel in a body. `brain.api_routes.A_QUESTION_IN_A_URL_IS_A_QUESTION_IN_EVERY_LOG` is
+ * the rule.
+ *
+ * **A date a person picks is a day, and the API takes an instant.** The day is sent as noon UTC on
+ * that day, so it is the same day wherever the browser is, and a day that is not after today is
+ * said before anything is sent, because the API would refuse it for the same reason.
+ *
+ * Task ids: M7.4.4, M7.4.5, M7.4.6, M7.6.2, M7.7.2
+ */
+
+import type { components } from "../api/schema";
+
+export type LookedAfter = components["schemas"]["LookedAfterView"];
+export type DocumentRow = components["schemas"]["DocumentView"];
+export type DocumentDetail = components["schemas"]["DocumentDetailView"];
+export type VersionRow = components["schemas"]["VersionView"];
+export type Passages = components["schemas"]["PassagesView"];
+export type Tasks = components["schemas"]["TasksView"];
+export type TaskRow = components["schemas"]["TaskView"];
+export type Solutions = components["schemas"]["SolutionsView"];
+export type SolutionRow = components["schemas"]["SolutionView"];
+
+/** Where each read and write lives, under the API's versioned base. */
+export const ITEMS_API_PATH = "/knowledge/items";
+export const TASKS_API_PATH = "/knowledge/tasks";
+export const SOLUTIONS_API_PATH = "/knowledge/solutions";
+
+function one(id: string): string {
+  return `${ITEMS_API_PATH}/${encodeURIComponent(id)}`;
+}
+
+export function itemPath(id: string): string {
+  return one(id);
+}
+
+export function passagesPath(id: string): string {
+  return `${one(id)}/passages`;
+}
+
+export function verificationPath(id: string): string {
+  return `${one(id)}/verification`;
+}
+
+export function stewardPath(id: string): string {
+  return `${one(id)}/steward`;
+}
+
+export function promotionPath(id: string): string {
+  return `${one(id)}/promotion`;
+}
+
+/** A newer version's address: the review date as an instant, and nothing about the file. */
+export function newVersionPath(id: string, reviewBy: string): string {
+  const query = new URLSearchParams({ review_by: reviewBy });
+  return `${one(id)}/versions?${query.toString()}`;
+}
+
+export function taskDonePath(id: string): string {
+  return `${TASKS_API_PATH}/${encodeURIComponent(id)}/done`;
+}
+
+export function solutionDecisionPath(id: string): string {
+  return `${SOLUTIONS_API_PATH}/${encodeURIComponent(id)}/decision`;
+}
+
+/**
+ * The instant a picked day stands for: noon UTC on that day, so the day does not move with the
+ * browser's timezone. Null for anything that is not a day.
+ */
+export function instantOf(day: string): string | null {
+  return /^\d{4}-\d{2}-\d{2}$/.test(day) ? `${day}T12:00:00+00:00` : null;
+}
+
+/** Whether a picked day is after today, which every review date must be. */
+export function isAfterToday(day: string, today: Date = new Date()): boolean {
+  const instant = instantOf(day);
+  if (instant === null) {
+    return false;
+  }
+  const todayDay = today.toISOString().slice(0, 10);
+  return day > todayDay;
+}
+
+/** The day a date input starts on: half a year ahead, which a person can change. */
+export function defaultReviewDay(today: Date = new Date()): string {
+  const ahead = new Date(today.getTime() + 182 * 24 * 60 * 60 * 1000);
+  return ahead.toISOString().slice(0, 10);
+}
+
+/** A stored instant as the day it falls on, or the sentence for one that is not set. */
+export function dayOf(instant: string | null | undefined, none = "not set"): string {
+  return typeof instant === "string" && instant.length >= 10 ? instant.slice(0, 10) : none;
+}
+
+/** The level a document reaches, in the words the library uses. */
+export function reachWords(level: string, department: string | null | undefined): string {
+  if (level === "company") {
+    return "the whole company";
+  }
+  if (level === "department") {
+    return department ? `the ${department} department` : "its department";
+  }
+  return "its steward only";
+}
+
+/** What the badge says, with who and when only when the API sent them. */
+export function verificationWords(row: {
+  readonly verification: string;
+  readonly verified_by?: string | null;
+  readonly verified_at?: string | null;
+}): string {
+  const named = row.verified_by ? ` by ${row.verified_by}` : "";
+  const when = row.verified_at ? ` on ${dayOf(row.verified_at)}` : "";
+  switch (row.verification) {
+    case "verified":
+      return `verified${named}${when}`;
+    case "due":
+      return `verified${named}${when}, due for review`;
+    case "superseded":
+      return "replaced by a newer version";
+    default:
+      return "not verified by anyone";
+  }
+}
+
+/** Where a promotion this person asked for has got to, in a sentence. */
+export function promotionWords(promotion: DocumentRow["promotion"]): string {
+  if (promotion === null || promotion === undefined) {
+    return "not asked for";
+  }
+  switch (promotion.status) {
+    case "waiting":
+      return `waiting on the Approvals screen until ${dayOf(promotion.expires_at)}`;
+    case "approved":
+      return "approved for the whole company";
+    case "rejected":
+      return "not approved";
+    default:
+      return "lapsed without a decision; ask again";
+  }
+}
+
+/** What a version's state is called in a history. */
+export function stateWords(state: string): string {
+  switch (state) {
+    case "published":
+      return "current";
+    case "superseded":
+      return "replaced";
+    case "archived":
+      return "withdrawn";
+    default:
+      return "draft";
+  }
+}
+
+/** What a captured solution's state is called. */
+export function solutionWords(state: string): string {
+  switch (state) {
+    case "approved":
+      return "approved, and now company knowledge";
+    case "rejected":
+      return "not approved";
+    default:
+      return "waiting for somebody who may approve it";
+  }
+}
+
+/** The fields a request may name a problem against on this page, so none is listed twice. */
+export const LIFECYCLE_FIELDS = ["review_by", "steward_id", "reason", "file", "problem", "answer", "department"];

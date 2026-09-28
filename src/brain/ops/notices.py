@@ -138,7 +138,8 @@ NOTICES: Final[tuple[Notice, ...]] = (
         about="That the item needs checking, by its identifier and never its title.",
         how=(
             "Recorded as an approval request and sent to every webhook subscriber that takes "
-            "approval requests. No person is sent it directly yet."
+            "approval requests. When the owner is asked, it opens a task on their Knowledge page, "
+            "which verifying or replacing the item closes. No email or chat sends it yet."
         ),
         composed_by="brain.knowledge.item_store:nag_event",
         sent_by="brain.knowledge.item_store:run_reverification",

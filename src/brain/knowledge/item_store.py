@@ -41,8 +41,11 @@ the entity `knowledge_item`, because a re-verification is an owner being asked t
 document again, which is what that kind says. Rejected: a kind of its own, which would widen a
 closed enum and two check constraints to state a fact the existing kind already states.
 
-**Nothing sends a nag yet.** See `NOTHING_SENDS_A_NAG_YET`, which the run's summary carries so
-that nobody reading a successful control run takes it for an owner having been told.
+**A nag to an owner is their task, and nothing else sends it yet.** `0120`'s trigger on the outbox
+opens a task on the owner's Knowledge page for every nag routed to them, under the nag's own id,
+so the nag and the task are one fact; verifying the item closes it. No email or chat sends it, and
+`NOTHING_SENDS_A_NAG_YET`, which the run's summary carries, says so, so that nobody reading a
+successful control run takes it for an owner having been sent something.
 
 **An administrator can switch the nag off, and a run asks before it records anything.**
 `brain.ops.notices.notice_is_on` is read at the start of the run, in its transaction, so a switch
@@ -54,7 +57,7 @@ corpus's reach and the sweep has no principal, so it would see company items onl
 successful run over none of the rest. `know.items_for_review` is the one read past the policy,
 and `0040` argues it.
 
-Task ids: M34.2.1.3, M7.6.1
+Task ids: M34.2.1.3, M7.6.1, M7.4.6
 """
 
 from __future__ import annotations
@@ -146,11 +149,11 @@ A_GRANT_THE_DOCUMENT_PLANE_CANNOT_READ_REACHES_NOTHING_HERE: Final = (
 
 #: What does not happen yet, carried in every run's summary.
 NOTHING_SENDS_A_NAG_YET: Final = (
-    "Nothing sends a nag to a person yet. Each is recorded as an outbox event, with a delivery "
-    "for every subscriber that takes approval requests, and the worker's outbox dispatch sends "
-    "those to the subscribing systems, which are told an identifier and never a title. No channel "
-    "composes the sentence an owner would read, so no owner has been told anything by this, and "
-    "whatever sends one has to ask the owner's reach again when it does."
+    "No email or chat sends a nag yet. Each is recorded as an outbox event, with a delivery for "
+    "every subscriber that takes approval requests, and the worker's outbox dispatch sends those "
+    "to the subscribing systems, which are told an identifier and never a title. A nag routed to "
+    "an owner also opens a task on their Knowledge page, which is the one place a person reads "
+    "it, and whatever sends one by another channel has to ask the owner's reach again when it does."
 )
 
 #: Why a personal item's owner and its row's owner must be one person.

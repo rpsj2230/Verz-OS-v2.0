@@ -90,7 +90,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from types import MappingProxyType
-from typing import Any, Final
+from typing import Any, Final, Protocol
 
 from brain.core.department import DEPARTMENT_FIELD
 from brain.core.entitlement import Capability, EntitlementSet, Grant
@@ -98,14 +98,14 @@ from brain.core.scope import Clause, Op, Scope
 from brain.knowledge.item import (
     BADGE_TEXT,
     KnowledgeError,
-    KnowledgeItem,
     ReverificationTask,
     UnderReview,
     VerificationState,
+    Vouched,
     badge,
     due_for_reverification,
 )
-from brain.knowledge.visibility import OWNER_FIELD
+from brain.knowledge.visibility import OWNER_FIELD, KnowledgeVisibility
 
 # ------------------------------------------------------------------ written-down reasons
 
@@ -269,7 +269,21 @@ class DisclosedBadge:
         return template.format(who=self.verified_by, when=when)
 
 
-def _place(item: KnowledgeItem) -> dict[str, Any]:
+class Attributable(Vouched, Protocol):
+    """What deciding a disclosed badge reads: the verification, the place and the steward.
+
+    `KnowledgeItem` satisfies it, and so does a stored row, which holds no text: the lifecycle
+    view of a stored document asks the same question an answer does, through the same function.
+    """
+
+    @property
+    def visibility(self) -> KnowledgeVisibility: ...
+
+    @property
+    def owner_id(self) -> str: ...
+
+
+def _place(item: Attributable) -> dict[str, Any]:
     """The fields a `read:knowledge.verifier` grant's scope may be written against.
 
     Two, both named by the constants their scope builders already use, so a grant scoped on
@@ -287,7 +301,7 @@ def _place(item: KnowledgeItem) -> dict[str, Any]:
     return {DEPARTMENT_FIELD: item.visibility.department, OWNER_FIELD: item.owner_id}
 
 
-def requirement_to_name_the_verifier(item: KnowledgeItem) -> EntitlementSet:
+def requirement_to_name_the_verifier(item: Attributable) -> EntitlementSet:
     """What somebody must hold before this item's verifier may be named to them.
 
     One grant: the capability, in the place the item sits. An `EntitlementSet` rather than a
@@ -309,7 +323,7 @@ def requirement_to_name_the_verifier(item: KnowledgeItem) -> EntitlementSet:
     )
 
 
-def may_name_verifier(item: KnowledgeItem, reader: EntitlementSet, *, now: datetime) -> bool:
+def may_name_verifier(item: Attributable, reader: EntitlementSet, *, now: datetime) -> bool:
     """Whether this reader may be told who verified this item (M7.4.7).
 
     Two ways in, and no third.
@@ -357,7 +371,7 @@ def may_name_verifier(item: KnowledgeItem, reader: EntitlementSet, *, now: datet
     return scope is not None and scope.matches(_place(item))
 
 
-def disclose(item: KnowledgeItem, *, reader: EntitlementSet, now: datetime) -> DisclosedBadge:
+def disclose(item: Attributable, *, reader: EntitlementSet, now: datetime) -> DisclosedBadge:
     """The badge this reader may be shown, as of `now` (M7.4.7).
 
     The state comes from `brain.knowledge.item.badge` and is not recomputed. That module

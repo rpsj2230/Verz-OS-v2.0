@@ -309,7 +309,10 @@ everything, written by first run and recorded in the ledger. They come in three 
   credentials, the stop button, budgets, routing, retention and the rest.
 - **Letting the second person in**: `approve:grant`, which is the People screen's grant write,
   the Access review, and authorising a break-glass session. Without it nobody on a fresh install
-  could grant anybody anything from the console.
+  could grant anybody anything from the console. And `approve:knowledge.visibility`, which is
+  approving a document for the whole company on the Approvals screen; nobody else on a fresh
+  install holds it, and a grant is bounded by what its writer holds, so without it no document
+  could ever be published company-wide.
 - **Reading how the system is run**: every console screen's own read at the existence and
   configuration planes, the two plane capabilities themselves, the audit entries about
   governing the system, and the reads of the Routing and Classification pages. That says a thing
@@ -355,6 +358,7 @@ everything, written by first run and recorded in the ledger. They come in three 
 | `admin:tool` | running the system |
 | `admin:webhook_subscriber` | running the system |
 | `approve:grant` | letting the second person in |
+| `approve:knowledge.visibility` | letting the second person in |
 | `read:agent` | reading how the system is run |
 | `read:artifact` | reading how the system is run |
 | `read:audit` | reading how the system is run |
