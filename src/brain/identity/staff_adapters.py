@@ -70,6 +70,14 @@ the identifiers the source uses, the other addresses it says belong to somebody,
 it carried that are not people. A consumer holding a `StaffSource` never sees it, and nothing
 in it is a credential or can be used to authenticate anybody.
 
+**A manager is resolved inside the read, and a group walk that stopped early says so.** Every
+directory here names a person's manager by something other than an address (a Workspace
+relation, an expanded Graph object, a Lark union id, an LDAP distinguished name), and each is
+turned into the manager's work address only against people in the same read: a manager the
+read did not list is somebody this roster cannot name. Group membership is a second walk in
+every vendor's API, so its completeness is its own flag, `groups_complete`, rather than the
+roster's: a person missing from a group the walk never reached has not left it.
+
 Rejected: making the source string a constructor argument so that two Workspace tenants could
 be reconciled separately. Two tenants of one vendor is a real configuration and this does not
 support it, because supporting it means keying the trust table on something other than the
@@ -146,6 +154,16 @@ THE_ADDRESS_IS_THE_JOIN_AND_IS_NOT_THE_IDENTITY: Final = (
     "app renames everybody; Active Directory's distinguished name changes when somebody "
     "moves organisational unit. `union_id` and `objectGUID` are the stable ones, and a "
     "source with nothing stable at all says so by carrying no identifiers."
+)
+
+#: Why a Lark person with no Lark Mail mailbox is joined on their account's address.
+A_LARK_TENANT_WITHOUT_LARK_MAIL_HAS_ONLY_THE_ACCOUNT_ADDRESS: Final = (
+    "Lark fills enterprise_email only where the company runs Lark Mail. A company whose mail is "
+    "elsewhere has it empty for everybody, and the address its administrator invited each person "
+    "with is the account's email, which is what that person signs in to everything else with. So "
+    "the enterprise address wins wherever there is one and the account address is read only "
+    "where there is not; reading enterprise_email alone would drop every person in such a "
+    "company and the sync would refuse a roster of nobody on every run."
 )
 
 #: The source strings, which must be keys of `DEFAULT_TRUST` or the trust silently falls to
@@ -226,6 +244,9 @@ class RosterReading:
     #: Casefolded work address to their manager's casefolded work address, for a source that
     #: says who manages whom and only where the manager was in the same read. Empty elsewhere.
     managers: Mapping[str, str] = field(default_factory=dict)
+    #: False when the group walk stopped before every group was read, so a person missing from
+    #: a group has not been shown to have left it. True for a source with no group walk.
+    groups_complete: bool = True
 
 
 def _assemble(
@@ -238,6 +259,7 @@ def _assemble(
     aliases: Mapping[str, tuple[str, ...]],
     dropped: Sequence[str],
     managers: Mapping[str, str] | None = None,
+    groups_complete: bool = True,
 ) -> RosterReading:
     """Build the reading. The one place a `Roster` is constructed in this file.
 
@@ -257,7 +279,18 @@ def _assemble(
         aliases=dict(aliases),
         dropped=tuple(dropped),
         managers=dict(managers or {}),
+        groups_complete=groups_complete,
     )
+
+
+def _in_read(named: Mapping[str, str], listed: Iterable[str]) -> dict[str, str]:
+    """Person to manager, both casefolded, keeping only managers this read also listed.
+
+    A manager outside the read is somebody the roster cannot name, and naming them by an address
+    nobody here has seen would put a stranger above somebody in the org chart.
+    """
+    known = set(listed)
+    return {person: boss for person, boss in named.items() if boss in known and boss != person}
 
 
 def _record(
@@ -498,11 +531,16 @@ class GoogleWorkspaceSource:
     **The organisational unit path is the department, minus its leading slash, and it is not
     flattened.** `/Engineering/Platform` is a different department from `/Engineering`, and
     collapsing them would put a sub-team inside its parent's scope, which is a widening.
+
+    **The manager is a `relations` entry of type `manager`, and its value is an address.** It is
+    the one relation read; `assistant`, `dotted_line_manager` and the rest say nothing about who
+    answers for somebody.
     """
 
     pages: Sequence[Mapping[str, Any]]
     group_members: Mapping[str, Sequence[str]] = field(default_factory=dict)
     configured_trust: frozenset[Asserts] | None = None
+    groups_complete: bool = True
 
     def roster(self) -> Roster:
         return self.reading().roster
@@ -513,6 +551,7 @@ class GoogleWorkspaceSource:
         dropped: list[str] = []
         stable: dict[str, str] = {}
         aliases: dict[str, tuple[str, ...]] = {}
+        named: dict[str, str] = {}
         for page in self.pages:
             for one in page.get("users") or []:
                 address = str(one.get("primaryEmail") or "")
@@ -538,6 +577,9 @@ class GoogleWorkspaceSource:
                 known = tuple(str(alias).casefold() for alias in one.get("aliases") or ())
                 if known:
                     aliases[folded] = known
+                boss = _workspace_manager(one.get("relations") or ())
+                if boss:
+                    named[folded] = boss
         return _assemble(
             GOOGLE_WORKSPACE,
             people,
@@ -546,7 +588,17 @@ class GoogleWorkspaceSource:
             stable_ids=stable,
             aliases=aliases,
             dropped=dropped,
+            managers=_in_read(named, (one.work_address.casefold() for one in people)),
+            groups_complete=self.groups_complete,
         )
+
+
+def _workspace_manager(relations: Sequence[Any]) -> str:
+    """The casefolded address of the first `manager` relation, or the empty string."""
+    for one in relations:
+        if isinstance(one, Mapping) and one.get("type") == "manager":
+            return str(one.get("value") or "").strip().casefold()
+    return ""
 
 
 def _finished(pages: Sequence[Mapping[str, Any]], continuation: str) -> bool:
@@ -580,11 +632,16 @@ class MicrosoftEntraSource:
     **`accountEnabled` is the whole of not-here.** Graph has no second field for it, unlike
     Workspace, and reading it is not optional: a disabled account whose roster entry says
     active keeps every role it held.
+
+    **The manager is the expanded `manager` object, joined on its `userPrincipalName`** for the
+    same reason the person is, and a manager whose name carries `#EXT#` is a guest this roster
+    does not list.
     """
 
     pages: Sequence[Mapping[str, Any]]
     group_members: Mapping[str, Sequence[str]] = field(default_factory=dict)
     configured_trust: frozenset[Asserts] | None = None
+    groups_complete: bool = True
 
     def roster(self) -> Roster:
         return self.reading().roster
@@ -595,6 +652,7 @@ class MicrosoftEntraSource:
         dropped: list[str] = []
         stable: dict[str, str] = {}
         aliases: dict[str, tuple[str, ...]] = {}
+        named: dict[str, str] = {}
         for page in self.pages:
             for one in page.get("value") or []:
                 address = str(one.get("userPrincipalName") or "")
@@ -622,6 +680,9 @@ class MicrosoftEntraSource:
                 known = _proxy_addresses(one.get("proxyAddresses") or (), folded)
                 if known:
                     aliases[folded] = known
+                boss = one.get("manager")
+                if isinstance(boss, Mapping):
+                    named[folded] = str(boss.get("userPrincipalName") or "").strip().casefold()
         return _assemble(
             MICROSOFT_ENTRA,
             people,
@@ -630,6 +691,8 @@ class MicrosoftEntraSource:
             stable_ids=stable,
             aliases=aliases,
             dropped=dropped,
+            managers=_in_read(named, (one.work_address.casefold() for one in people)),
+            groups_complete=self.groups_complete,
         )
 
 
@@ -671,12 +734,19 @@ class LarkSource:
     records "app permission denied" as a company with nobody in it, which on a complete
     roster is every person in the company being removed at once.
 
-    **`enterprise_email` is the work address and `email` is theirs.** The personal one is
-    populated more often, which is what makes it the tempting field, and it joins to nothing.
+    **`enterprise_email` is the work address wherever Lark Mail gives one, and `email` only where
+    it does not.** Beside a Lark Mail address the account's own is often personal, which is what
+    makes it the tempting field, and it joins to nothing. A company whose mail is elsewhere has no
+    Lark Mail address for anybody, and there the account's address is the work one: see
+    `A_LARK_TENANT_WITHOUT_LARK_MAIL_HAS_ONLY_THE_ACCOUNT_ADDRESS` and `lark_work_address`.
 
-    **Three status flags and none of them is `active`.** `is_frozen` is suspended,
-    `is_resigned` is left, `is_activated` false is somebody who has never signed in. All
-    three mean the person is not working here today.
+    **Four status flags and none of them is `active`.** `is_frozen` is suspended,
+    `is_resigned` is left, `is_exited` is somebody who left the organisation themselves, and
+    `is_activated` false is somebody who has never signed in. All four mean the person is not
+    working here today.
+
+    **The manager is `leader_user_id`, in whichever id type the walk asked for.** The walk asks
+    for union ids, so it is resolved against the union ids of this same read.
 
     **A department identifier is not a department name.** `department_ids` are opaque `od-`
     strings, and passing one through creates a department that no scope predicate matches, so
@@ -693,6 +763,7 @@ class LarkSource:
     department_names: Mapping[str, str] = field(default_factory=dict)
     group_members: Mapping[str, Sequence[str]] = field(default_factory=dict)
     configured_trust: frozenset[Asserts] | None = None
+    groups_complete: bool = True
 
     def roster(self) -> Roster:
         return self.reading().roster
@@ -702,6 +773,7 @@ class LarkSource:
         people: list[StaffRecord] = []
         dropped: list[str] = []
         stable: dict[str, str] = {}
+        leader_of: dict[str, str] = {}
         for page in self.pages:
             code = page.get("code", LARK_SUCCESS_CODE)
             if code != LARK_SUCCESS_CODE:
@@ -712,7 +784,7 @@ class LarkSource:
                 )
                 raise RosterUnavailableError(msg)
             for one in (page.get("data") or {}).get("items") or []:
-                address = str(one.get("enterprise_email") or "")
+                address = lark_work_address(one)
                 folded = address.strip().casefold()
                 status = one.get("status") or {}
                 placed = [
@@ -733,6 +805,7 @@ class LarkSource:
                     active=(
                         not status.get("is_frozen", False)
                         and not status.get("is_resigned", False)
+                        and not status.get("is_exited", False)
                         and bool(status.get("is_activated", True))
                     ),
                 )
@@ -743,6 +816,15 @@ class LarkSource:
                 identifier = str(one.get("union_id") or "")
                 if identifier:
                     stable[folded] = identifier
+                leader = str(one.get("leader_user_id") or "")
+                if leader:
+                    leader_of[folded] = leader
+        address_of = {identifier: address for address, identifier in stable.items()}
+        named = {
+            person: address_of[leader]
+            for person, leader in leader_of.items()
+            if leader in address_of
+        }
         return _assemble(
             LARK,
             people,
@@ -751,7 +833,20 @@ class LarkSource:
             stable_ids=stable,
             aliases={},
             dropped=dropped,
+            managers=_in_read(named, stable),
+            groups_complete=self.groups_complete,
         )
+
+
+def lark_work_address(person: Mapping[str, Any]) -> str:
+    """The address a Lark person is joined on: Lark Mail's where there is one, else the account's.
+
+    One function for the adapter and for the walk that maps a user group's members to addresses,
+    so the two cannot disagree about who somebody is. See
+    `A_LARK_TENANT_WITHOUT_LARK_MAIL_HAS_ONLY_THE_ACCOUNT_ADDRESS`.
+    """
+    enterprise = str(person.get("enterprise_email") or "").strip()
+    return enterprise or str(person.get("email") or "").strip()
 
 
 def _lark_finished(pages: Sequence[Mapping[str, Any]]) -> bool:

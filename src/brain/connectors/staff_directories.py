@@ -54,17 +54,33 @@ carried: the secret, the code and the verifier are fields of `Outbound` and of n
 module returns, and `Outbound`'s representation leaves them out. See
 `A_REFUSAL_REPEATS_THE_VENDOR_AND_NEVER_THE_REQUEST`.
 
-**Groups are not read.** A first-run trial proposes who would be added and nothing else:
-nobody exists yet to be removed, and `staff_source.CHOOSING_A_STAFF_LIST_IS_NOT_APPOINTING_ANYBODY`
-keeps roles out of the choice. Each vendor's group walk is a second endpoint per group and is
-the scheduled sync's work.
+**Groups are read only when the caller asks, and a first-run trial does not.** A trial proposes
+who would be added and nothing else: nobody exists yet to be removed, and
+`staff_source.CHOOSING_A_STAFF_LIST_IS_NOT_APPOINTING_ANYBODY` keeps roles out of the choice. The
+scheduled sync asks (`pull(..., groups=True)`), because a directory group may be mapped to a role
+and never to anything else (needs-rupash item 96). Each vendor's group walk is a list of groups
+and a second endpoint per group, on a page budget of its own, and a walk that runs out hands the
+adapter `groups_complete=False` rather than stopping the read: see `A_GROUP_WALK_IS_ITS_OWN_BUDGET`.
+A group's identifier goes into a path, so it is checked against `GROUP_ID` first and a group
+whose identifier is not that shape is skipped and counted as not read.
+
+**The scopes are the ones each vendor's documentation names for exactly the fields read.** Lark
+checks a scope per field and answers a field it may not show by leaving it out, which is the
+quiet failure: without `contact:user.employee:readonly` every person arrives with no work
+address and no status, and the call still succeeds. So `LARK_SCOPES` is written field by field
+from the contact API's documentation (2026-09-28): `contact:department.organize:readonly` for
+both endpoints and department names, `contact:user.base:readonly` for names,
+`contact:user.employee:readonly` for the Lark Mail address and the status,
+`contact:user.department:readonly` for departments and the manager, and
+`contact:user.email:readonly` for the account address used where there is no Lark Mail. See
+`A_LARK_SCOPE_IS_CHECKED_PER_FIELD_AND_A_MISSING_ONE_IS_SILENT`.
 
 **What has never happened.** None of these addresses has been called from this repository. The
 scopes, parameters and answer shapes are written from each vendor's documentation, the same
 standing `tests/fixtures/roster_payloads.py` declares for the pages, and the tests prove the
 order of the calls, what each carries, and the refusals, against a stand-in.
 
-Task ids: M42.5.7
+Task ids: M42.5.7, M1.6.5
 """
 
 from __future__ import annotations
@@ -73,7 +89,7 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Final, Protocol
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import quote, urlencode, urlsplit
 
 from brain.identity.staff_adapters import (
     GOOGLE_WORKSPACE,
@@ -82,6 +98,7 @@ from brain.identity.staff_adapters import (
     GoogleWorkspaceSource,
     LarkSource,
     MicrosoftEntraSource,
+    lark_work_address,
 )
 from brain.identity.staff_source import StaffSource
 
@@ -108,12 +125,44 @@ A_REFUSAL_REPEATS_THE_VENDOR_AND_NEVER_THE_REQUEST: Final = (
     "and the verifier leave in a request and appear in no refusal, no result and no log line."
 )
 
+#: Why the group walk has a budget of its own and never makes the roster incomplete.
+A_GROUP_WALK_IS_ITS_OWN_BUDGET: Final = (
+    "Who works here and which groups they are in are two walks, and only the first decides "
+    "whether anybody may be removed. A company with more groups than the walk may read would "
+    "otherwise spend the people's pages on groups and hand over a roster read as incomplete, "
+    "which removes nobody for ever. So the groups get their own pages, and running out of them "
+    "marks the groups as incomplete and leaves the roster's completeness to the people's walk."
+)
+
+#: Why Lark's scopes are listed field by field.
+A_LARK_SCOPE_IS_CHECKED_PER_FIELD_AND_A_MISSING_ONE_IS_SILENT: Final = (
+    "Lark admits a call on one scope and then shows each field only to the scope its "
+    "documentation names for that field. A field the app may not see is left out and the call "
+    "still succeeds, so an app without the employee scope reads every person with no work "
+    "address and no status, and nothing refuses. Each scope here is the one named for a field "
+    "the roster reads, and the steps ask for every one of them."
+)
+
 # --------------------------------------------------------------------- the vendors
 #: Google's authorisation page, token endpoint and Directory API.
 GOOGLE_AUTHORISE_URL: Final = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_EXCHANGE_URL: Final = "https://oauth2.googleapis.com/token"
 GOOGLE_DIRECTORY_URL: Final = "https://admin.googleapis.com/admin/directory/v1/users"
+GOOGLE_GROUPS_URL: Final = "https://admin.googleapis.com/admin/directory/v1/groups"
 GOOGLE_READ_USERS_URL: Final = "https://www.googleapis.com/auth/admin.directory.user.readonly"
+GOOGLE_READ_GROUPS_URL: Final = "https://www.googleapis.com/auth/admin.directory.group.readonly"
+
+#: The one Workspace account the Directory API is asked about: the caller's own. A domain would
+#: leave out everybody on the company's other domains from a list that says it is complete.
+GOOGLE_OWN_ACCOUNT: Final = "my_customer"
+
+#: The fields a Directory read asks for, as Google's `fields` parameter, and nothing more.
+GOOGLE_USER_FIELDS: Final = (
+    "nextPageToken,users(id,primaryEmail,name/fullName,suspended,archived,orgUnitPath,aliases,"
+    "relations)"
+)
+GOOGLE_GROUP_FIELDS: Final = "nextPageToken,groups(id,email)"
+GOOGLE_MEMBER_FIELDS: Final = "nextPageToken,members(email,type)"
 
 #: Where the scheduled sync reads a Google Sheet's values, with an API key rather than a person.
 #: Declared here with the other vendors' addresses; `brain.ops.staff_sync_run` is its reader.
@@ -123,6 +172,17 @@ GOOGLE_SHEETS_URL: Final = "https://sheets.googleapis.com/v4/spreadsheets"
 MICROSOFT_LOGIN_HOST: Final = "login.microsoftonline.com"
 MICROSOFT_GRAPH_URL: Final = "https://graph.microsoft.com"
 MICROSOFT_READ_USERS_URL: Final = "https://graph.microsoft.com/User.Read.All"
+
+#: The application permissions the scheduled read needs: people and their managers, then groups
+#: and their members. Named for the steps, which ask for exactly these.
+MICROSOFT_USERS_PERMISSION: Final = "User.Read.All"
+MICROSOFT_GROUPS_PERMISSION: Final = "GroupMember.Read.All"
+
+#: What a Graph read of people selects, and the manager it expands to. Nothing else is asked for.
+MICROSOFT_USER_FIELDS: Final = (
+    "id,userPrincipalName,displayName,department,accountEnabled,proxyAddresses"
+)
+MICROSOFT_MANAGER_EXPAND: Final = "manager($select=id,userPrincipalName)"
 
 #: Lark's two platforms: the international one and the one in mainland China. A tenant lives on
 #: exactly one, and the location for a Lark source says which.
@@ -137,12 +197,33 @@ LARK_PLATFORMS: Final[Mapping[str, tuple[str, str]]] = {
     "feishu.cn": (FEISHU_ACCOUNTS_HOST, FEISHU_OPEN_HOST),
 }
 
-#: What a Lark sign-in asks to read: people, their work address, their departments, and the
-#: department names. Written from the contact API's documentation and never granted anywhere.
+#: What reading Lark's people needs, field by field from the contact API's documentation: see
+#: `A_LARK_SCOPE_IS_CHECKED_PER_FIELD_AND_A_MISSING_ONE_IS_SILENT`. Never granted anywhere here.
 LARK_SCOPES: Final = (
-    "contact:user.base:readonly contact:user.email:readonly "
-    "contact:user.department:readonly contact:department.base:readonly"
+    "contact:department.organize:readonly contact:user.base:readonly "
+    "contact:user.employee:readonly contact:user.department:readonly contact:user.email:readonly"
 )
+
+#: What reading Lark's user groups needs. The scheduled sync reads groups; a sign-in does not.
+LARK_GROUP_SCOPE: Final = "contact:group:readonly"
+
+#: Every scope the scheduled sync reads Lark with, which is what its steps ask for.
+LARK_SYNC_SCOPES: Final = f"{LARK_SCOPES} {LARK_GROUP_SCOPE}"
+
+#: What each of those scopes lets the sync read, in the words every screen that asks for them
+#: uses. A test holds its keys equal to `LARK_SYNC_SCOPES`.
+LARK_SCOPE_PURPOSE: Final[Mapping[str, str]] = {
+    "contact:department.organize:readonly": "read your departments and their names",
+    "contact:user.base:readonly": "read each person's name",
+    "contact:user.employee:readonly": (
+        "read each person's Lark Mail address and whether they are active, suspended or have left"
+    ),
+    "contact:user.department:readonly": "read which department each person is in and their manager",
+    "contact:user.email:readonly": (
+        "read the email on each person's account, used for anybody without a Lark Mail address"
+    ),
+    "contact:group:readonly": "read your user groups and who is in them",
+}
 
 #: How many pages one walk may read before it stops and hands over what it has as incomplete.
 MAX_PAGES: Final = 200
@@ -166,6 +247,10 @@ CHALLENGE: Final = re.compile(r"^[A-Za-z0-9_-]{43}$")
 VERIFIER: Final = re.compile(r"^[A-Za-z0-9._~-]{43,128}$")
 STATE: Final = re.compile(r"^[A-Za-z0-9_-]{16,128}$")
 CLIENT_ID: Final = re.compile(r"^[A-Za-z0-9._:@-]{1,200}$")
+
+#: What a group's identifier from any of the three vendors may be before it goes into a path.
+#: Google's and Lark's are letters and digits and Graph's is a GUID; nothing needs a slash.
+GROUP_ID: Final = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 
 
 class DirectorySignInError(Exception):
@@ -246,9 +331,9 @@ REGISTRATION: Final[Mapping[str, Registration]] = {
             "as a redirect URL under Security settings, and copy its App ID and App Secret."
         ),
         grant=(
-            "Add the contact permissions to read users, their email addresses, their "
-            "departments and department names, set the app's contact range to everyone who "
-            "should be listed, and publish the version."
+            f"Add these scopes under Permissions & Scopes: {', '.join(LARK_SCOPES.split())}. "
+            "Set the app's contact range to everyone who should be listed, and publish the "
+            "version."
         ),
         location="larksuite.com for Lark, or feishu.cn for Feishu.",
     ),
@@ -426,11 +511,105 @@ def on_graph(link: str) -> bool:
     return parts.scheme == graph.scheme and parts.netloc == graph.netloc
 
 
-async def _google(fetch: Fetch, token: str, domain: str, budget: int) -> StaffSource:
+@dataclass
+class _Budget:
+    """How many more pages a walk may read. Spent one page at a time, refused at nought."""
+
+    left: int
+
+    def spend(self) -> bool:
+        if self.left < 1:
+            return False
+        self.left -= 1
+        return True
+
+
+#: Group name to the addresses in it, and whether every group was read.
+GroupRead = tuple[dict[str, tuple[str, ...]], bool]
+
+
+def _unambiguous(found: Sequence[tuple[str, str, Sequence[str]]]) -> dict[str, tuple[str, ...]]:
+    """Group name to members, a name two groups share being told apart by each group's id.
+
+    A rule is written against a name, so a name that means two groups would confer a role from
+    both, which is how a retired group goes on appointing people. Each keeps its own entry as
+    `<name> (<id>)`, and a rule on the bare name matches neither.
+    """
+    counted: dict[str, int] = {}
+    for _, name, _members in found:
+        counted[name] = counted.get(name, 0) + 1
+    return {
+        (name if counted[name] == 1 else f"{name} ({ident})"): tuple(members)
+        for ident, name, members in found
+    }
+
+
+async def _google_groups(fetch: Fetch, token: str, budget: _Budget) -> GroupRead:
+    """Every group in the account and its members, direct or through another group."""
+    listed: list[tuple[str, str]] = []
+    after = ""
+    while True:
+        if not budget.spend():
+            return {}, False
+        query = {
+            "customer": GOOGLE_OWN_ACCOUNT,
+            "maxResults": "200",
+            "fields": GOOGLE_GROUP_FIELDS,
+        }
+        if after:
+            query["pageToken"] = after
+        url = f"{GOOGLE_GROUPS_URL}?{urlencode(query)}"
+        page = _page(await fetch(Outbound("GET", url, _bearer(token))), "the Workspace groups")
+        listed += [
+            (str(one.get("id") or ""), str(one.get("email") or "").strip().casefold())
+            for one in page.get("groups") or ()
+            if isinstance(one, Mapping)
+        ]
+        after = str(page.get("nextPageToken") or "")
+        if not after:
+            break
+    found: list[tuple[str, str, Sequence[str]]] = []
+    complete = True
+    for ident, name in listed:
+        if not GROUP_ID.match(ident) or not name:
+            complete = False
+            continue
+        members: list[str] = []
+        after = ""
+        while True:
+            if not budget.spend():
+                return _unambiguous(found), False
+            query = {
+                "maxResults": "200",
+                "includeDerivedMembership": "true",
+                "fields": GOOGLE_MEMBER_FIELDS,
+            }
+            if after:
+                query["pageToken"] = after
+            url = f"{GOOGLE_GROUPS_URL}/{quote(ident, safe='')}/members?{urlencode(query)}"
+            page = _page(await fetch(Outbound("GET", url, _bearer(token))), f"the group {name}")
+            members += [
+                str(one.get("email") or "")
+                for one in page.get("members") or ()
+                if isinstance(one, Mapping) and one.get("type") == "USER" and one.get("email")
+            ]
+            after = str(page.get("nextPageToken") or "")
+            if not after:
+                break
+        found.append((ident, name, members))
+    return _unambiguous(found), complete
+
+
+async def _google(fetch: Fetch, token: str, budget: int, *, groups: bool) -> StaffSource:
     pages: list[Mapping[str, Any]] = []
     after = ""
     for _ in range(budget):
-        query = {"domain": domain, "maxResults": "500", "projection": "basic"}
+        query = {
+            "customer": GOOGLE_OWN_ACCOUNT,
+            "maxResults": "500",
+            "projection": "basic",
+            "fields": GOOGLE_USER_FIELDS,
+        }
         if after:
             query["pageToken"] = after
         request = Outbound("GET", f"{GOOGLE_DIRECTORY_URL}?{urlencode(query)}", _bearer(token))
@@ -439,26 +618,97 @@ async def _google(fetch: Fetch, token: str, domain: str, budget: int) -> StaffSo
         after = str(page.get("nextPageToken") or "")
         if not after:
             break
-    return GoogleWorkspaceSource(pages=pages)
+    if not groups:
+        return GoogleWorkspaceSource(pages=pages)
+    members, complete = await _google_groups(fetch, token, _Budget(budget))
+    return GoogleWorkspaceSource(pages=pages, group_members=members, groups_complete=complete)
 
 
-async def _microsoft(fetch: Fetch, token: str, budget: int) -> StaffSource:
-    fields = "id,userPrincipalName,displayName,department,accountEnabled,proxyAddresses"
-    link = f"{MICROSOFT_GRAPH_URL}/v1.0/users?{urlencode({'$select': fields, '$top': '999'})}"
+def _next_on_graph(page: Mapping[str, Any], what: str) -> str:
+    """The page's next link, or the empty string, refusing one that is not on Graph itself."""
+    link = str(page.get("@odata.nextLink") or "")
+    if link and not on_graph(link):
+        msg = (
+            f"The Entra directory pointed the next page of {what} somewhere other than "
+            "Microsoft Graph, so it was not followed."
+        )
+        raise DirectorySignInError(msg)
+    return link
+
+
+async def _microsoft_groups(
+    fetch: Fetch, token: str, budget: _Budget, address_of: Mapping[str, str]
+) -> GroupRead:
+    """Every group and its members, through nested groups, as addresses of people in this read.
+
+    Members are selected by id alone and turned into addresses against the people just read, so
+    the group walk reads nothing about a person the people walk did not. Selecting a member's
+    fields is an advanced query in Graph, which needs `ConsistencyLevel: eventual` and `$count`.
+    """
+    listed: list[tuple[str, str]] = []
+    query = urlencode({"$select": "id,displayName", "$top": "999"})
+    link = f"{MICROSOFT_GRAPH_URL}/v1.0/groups?{query}"
+    while link:
+        if not budget.spend():
+            return {}, False
+        page = _page(await fetch(Outbound("GET", link, _bearer(token))), "the Entra groups")
+        listed += [
+            (str(one.get("id") or ""), str(one.get("displayName") or "").strip())
+            for one in page.get("value") or ()
+            if isinstance(one, Mapping)
+        ]
+        link = _next_on_graph(page, "groups")
+    found: list[tuple[str, str, Sequence[str]]] = []
+    complete = True
+    advanced = {**_bearer(token), "ConsistencyLevel": "eventual"}
+    for ident, name in listed:
+        if not GROUP_ID.match(ident) or not name:
+            complete = False
+            continue
+        members: list[str] = []
+        query = urlencode({"$count": "true", "$select": "id", "$top": "999"})
+        link = (
+            f"{MICROSOFT_GRAPH_URL}/v1.0/groups/{quote(ident, safe='')}/transitiveMembers?{query}"
+        )
+        while link:
+            if not budget.spend():
+                return _unambiguous(found), False
+            answer = await fetch(Outbound("GET", link, advanced))
+            page = _page(answer, f"the members of {name}")
+            members += [
+                address_of[str(one.get("id"))]
+                for one in page.get("value") or ()
+                if isinstance(one, Mapping) and str(one.get("id")) in address_of
+            ]
+            link = _next_on_graph(page, f"the members of {name}")
+        found.append((ident, name, members))
+    return _unambiguous(found), complete
+
+
+async def _microsoft(fetch: Fetch, token: str, budget: int, *, groups: bool) -> StaffSource:
+    query = {
+        "$select": MICROSOFT_USER_FIELDS,
+        "$expand": MICROSOFT_MANAGER_EXPAND,
+        "$top": "999",
+    }
+    link = f"{MICROSOFT_GRAPH_URL}/v1.0/users?{urlencode(query)}"
     pages: list[Mapping[str, Any]] = []
     for _ in range(budget):
         page = _page(await fetch(Outbound("GET", link, _bearer(token))), "the Entra directory")
         pages.append(page)
-        link = str(page.get("@odata.nextLink") or "")
+        link = _next_on_graph(page, "people")
         if not link:
             break
-        if not on_graph(link):
-            msg = (
-                "The Entra directory pointed its next page somewhere other than Microsoft Graph, "
-                "so it was not followed."
-            )
-            raise DirectorySignInError(msg)
-    return MicrosoftEntraSource(pages=pages)
+    if not groups:
+        return MicrosoftEntraSource(pages=pages)
+    address_of = {
+        str(one.get("id")): str(one.get("userPrincipalName") or "")
+        for page in pages
+        for one in page.get("value") or ()
+        if isinstance(one, Mapping) and one.get("id") and one.get("userPrincipalName")
+    }
+    members, complete = await _microsoft_groups(fetch, token, _Budget(budget), address_of)
+    return MicrosoftEntraSource(pages=pages, group_members=members, groups_complete=complete)
 
 
 def _lark_page(answer: Answer, what: str) -> Mapping[str, Any]:
@@ -481,9 +731,87 @@ def _unfinished(pages: list[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
     return [*pages[:-1], {**last, "data": {**held, "has_more": True}}]
 
 
-async def _lark(fetch: Fetch, token: str, platform: str, budget: int) -> StaffSource:
+async def _lark_groups(
+    fetch: Fetch, token: str, base: str, budget: _Budget, address_of: Mapping[str, str]
+) -> GroupRead:
+    """Every ordinary user group and its user members, as addresses of people in this read.
+
+    Members are asked for as union ids, the identifier the people walk keeps, and turned into
+    addresses against it. A department placed in a group is not expanded: Lark lists it as a
+    member of another type, and this reads users only.
+    """
+    listed: list[tuple[str, str]] = []
+    after = ""
+    while True:
+        if not budget.spend():
+            return {}, False
+        query = {"page_size": "100", "type": "1"}
+        if after:
+            query["page_token"] = after
+        url = f"{base}/group/simplelist?{urlencode(query)}"
+        data = _lark_page(await fetch(Outbound("GET", url, _bearer(token))), "Lark's user groups")
+        listed += [
+            (str(one.get("id") or ""), str(one.get("name") or "").strip())
+            for one in data.get("grouplist") or ()
+            if isinstance(one, Mapping)
+        ]
+        after = str(data.get("page_token") or "") if data.get("has_more") else ""
+        if not after:
+            break
+    found: list[tuple[str, str, Sequence[str]]] = []
+    complete = True
+    for ident, name in listed:
+        if not GROUP_ID.match(ident) or not name:
+            complete = False
+            continue
+        members: list[str] = []
+        after = ""
+        while True:
+            if not budget.spend():
+                return _unambiguous(found), False
+            query = {"page_size": "100", "member_id_type": "union_id", "member_type": "user"}
+            if after:
+                query["page_token"] = after
+            url = f"{base}/group/{quote(ident, safe='')}/member/simplelist?{urlencode(query)}"
+            answer = await fetch(Outbound("GET", url, _bearer(token)))
+            data = _lark_page(answer, f"the members of {name}")
+            members += [
+                address_of[str(one.get("member_id"))]
+                for one in data.get("memberlist") or ()
+                if isinstance(one, Mapping) and str(one.get("member_id")) in address_of
+            ]
+            after = str(data.get("page_token") or "") if data.get("has_more") else ""
+            if not after:
+                break
+        found.append((ident, name, members))
+    return _unambiguous(found), complete
+
+
+async def _lark(
+    fetch: Fetch, token: str, platform: str, budget: int, *, groups: bool
+) -> StaffSource:
     _, open_host = LARK_PLATFORMS[platform]
     base = f"https://{open_host}/open-apis/contact/v3"
+    people = await _lark_people(fetch, token, base, budget)
+    if not groups:
+        return people
+    address_of = {
+        str(one.get("union_id")): lark_work_address(one)
+        for page in people.pages
+        for one in (page.get("data") or {}).get("items") or ()
+        if isinstance(one, Mapping) and one.get("union_id") and lark_work_address(one)
+    }
+    members, complete = await _lark_groups(fetch, token, base, _Budget(budget), address_of)
+    return LarkSource(
+        pages=people.pages,
+        department_names=people.department_names,
+        group_members=members,
+        groups_complete=complete,
+    )
+
+
+async def _lark_people(fetch: Fetch, token: str, base: str, budget: int) -> LarkSource:
+    """The department tree, then each department's people, as union ids and open department ids."""
     names: dict[str, str] = {}
     after = ""
     while budget:
@@ -515,10 +843,12 @@ async def _lark(fetch: Fetch, token: str, platform: str, budget: int) -> StaffSo
                 # that stopped between two departments ends on a page that says it is the last.
                 return LarkSource(pages=_unfinished(pages), department_names=names)
             budget -= 1
+            # Union ids, so `leader_user_id` names the manager by the id the roster keeps.
             query = {
                 "department_id": department,
                 "department_id_type": "open_department_id",
                 "page_size": "50",
+                "user_id_type": "union_id",
             }
             if after:
                 query["page_token"] = after
@@ -529,7 +859,7 @@ async def _lark(fetch: Fetch, token: str, platform: str, budget: int) -> StaffSo
             for one in data.get("items") or ():
                 if not isinstance(one, Mapping):
                     continue
-                key = str(one.get("union_id") or one.get("enterprise_email") or "").casefold()
+                key = str(one.get("union_id") or lark_work_address(one)).casefold()
                 if key and key in seen:
                     continue
                 seen.add(key)
@@ -542,7 +872,13 @@ async def _lark(fetch: Fetch, token: str, platform: str, budget: int) -> StaffSo
 
 
 async def pull(
-    fetch: Fetch, source: str, *, token: str, location: str, pages: int | None = None
+    fetch: Fetch,
+    source: str,
+    *,
+    token: str,
+    location: str,
+    pages: int | None = None,
+    groups: bool = False,
 ) -> StaffSource:
     """Read the directory with the token, and hand back the adapter holding every page read.
 
@@ -550,6 +886,9 @@ async def pull(
     the limit is one figure). A walk that runs out hands back what it read, and the adapter reads
     that as an incomplete roster, which nothing may remove anybody from: the console's connection
     test asks for a few pages and says how many people they held.
+
+    `groups` walks the groups as well, on a budget of `pages` more. See
+    `A_GROUP_WALK_IS_ITS_OWN_BUDGET`.
     """
     if pages is None:
         pages = MAX_PAGES
@@ -561,10 +900,11 @@ async def pull(
     if problem:
         raise DirectorySignInError(problem)
     if source == GOOGLE_WORKSPACE:
-        return await _google(fetch, token, where, pages)
+        # The domain named the tenant signed in to; the read is of the whole account.
+        return await _google(fetch, token, pages, groups=groups)
     if source == MICROSOFT_ENTRA:
-        return await _microsoft(fetch, token, pages)
-    return await _lark(fetch, token, where, pages)
+        return await _microsoft(fetch, token, pages, groups=groups)
+    return await _lark(fetch, token, where, pages, groups=groups)
 
 
 def signed_in_sources() -> Sequence[str]:
