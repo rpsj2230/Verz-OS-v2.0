@@ -24,6 +24,7 @@ import {
   AGENTS_LABEL,
   ANSWERED_LABEL,
   COST_LABEL,
+  HALTS_LABEL,
   NEEDS_YOU,
   NOT_COUNTED,
   NOTHING_RETURNED_LABEL,
@@ -34,6 +35,8 @@ import {
 import {
   activeAgents,
   connectedSources,
+  HALTS_UNKNOWN,
+  NO_HALTS,
   queueLabel,
   readFigures,
   readOverview,
@@ -141,6 +144,23 @@ function textOutsideAdvanced(root: Element): string {
 }
 
 describe("what the Overview draws", () => {
+  test("the health strip draws the halts the API sent, none only over a state it read, and never why", async () => {
+    // What breaks if this is deleted: a strip reading "None" while admission refuses everything
+    // because the halts could not be read, or a halt in force missing from the landing screen.
+    const page = await overviewWith();
+    expect(figure(page.root, HALTS_LABEL)).toBe("1");
+    expect(section(page.root, "This install")?.textContent).toContain(`Department: ${UNBROKEN}`);
+
+    const overview = ANSWERS[OVERVIEW] as { health: Record<string, unknown> };
+    const quiet = await overviewWith({ [OVERVIEW]: { ...overview, health: { ...overview.health, halts: [] } } });
+    expect(figure(quiet.root, HALTS_LABEL)).toBe(NO_HALTS);
+
+    const unread = await overviewWith({
+      [OVERVIEW]: { ...overview, health: { ...overview.health, halts: [], halts_known: false } },
+    });
+    expect(figure(unread.root, HALTS_LABEL)).toBe(HALTS_UNKNOWN);
+  });
+
   test("Needs you draws each queue the API sent with its count and link, and no queue it did not send", async () => {
     // What breaks if this is deleted: a Needs you that fills in the queues the reader may not act on
     // with zeros, which says those queues exist and are being kept from them, or one that drops the

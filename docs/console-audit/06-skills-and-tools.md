@@ -3,10 +3,11 @@
 - **Screens:** `/skills`, `/skills/:name`, `/tools`
 - **Tables:** `agent.skill`, `agent.skill_review`, `agent.skill_assignment`, `agent.tool_definition`, `agent.tool_switch`, `agent.skill_category`
 - **Installation values:** `INSTALL_ACCEPTANCE_SKILL_SOURCE`
-- **Measured here:** 9 routes, 0 called by no screen; 7 write routes, 7 with all three proofs; 2 gaps.
+- **Measured here:** 10 routes, 1 called by no screen; 7 write routes, 7 with all three proofs; 2 gaps.
 
 | Route | Called by |
 | --- | --- |
+| `GET /api/v1/console/skills/{skill_name}/stats` | **no screen** |
 | `GET /api/v1/skills` | `/skills`, `/skills/:name` |
 | `GET /api/v1/tools` | `/tools` |
 | `POST /api/v1/skills` | `/skills`, `/skills/:name` |
