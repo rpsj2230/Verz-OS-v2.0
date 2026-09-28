@@ -38,11 +38,13 @@ from brain.ops.telemetry import (
     _NAME_FIELDS,
     COMPLETION_FIELDS,
     FILLED_BY_A_MODEL_CALL,
+    FILLED_BY_A_ROUTED_CALL,
     FILLED_BY_THE_FRONT_HALF,
     FRONT_HALF_FIELDS,
     LEDGER_DATA_CLASS,
     LEDGER_RETENTION_DAYS,
     REQUEST_FIELDS,
+    ROUTE_FIELDS,
     TELEMETRY_FIELDS,
     UNFILLABLE_TODAY,
     Ingress,
@@ -366,9 +368,12 @@ def test_the_record_carries_exactly_the_fields_the_leaf_names() -> None:
     without_units = tuple(one.removesuffix("_ms") for one in REQUEST_FIELDS)
     assert without_units == LEAF_FIELDS
 
-    assert (*REQUEST_FIELDS, *COMPLETION_FIELDS, *FRONT_HALF_FIELDS) == TELEMETRY_FIELDS
+    assert (*REQUEST_FIELDS, *COMPLETION_FIELDS, *FRONT_HALF_FIELDS, *ROUTE_FIELDS) == (
+        TELEMETRY_FIELDS
+    )
     assert not {one.removesuffix("_ms") for one in COMPLETION_FIELDS} & set(LEAF_FIELDS)
     assert not set(FRONT_HALF_FIELDS) & set(LEAF_FIELDS)
+    assert not set(ROUTE_FIELDS) & set(LEAF_FIELDS)
 
     on_record = tuple(declared.name for declared in fields(RequestTelemetry))
     assert on_record == ("ingress", *TELEMETRY_FIELDS)
@@ -423,13 +428,18 @@ def test_the_fields_nothing_can_fill_today_are_exactly_the_optional_ones() -> No
         for declared in fields(RequestTelemetry)
         if declared.name != "ingress" and declared.default is None
     }
-    assert not set(UNFILLABLE_TODAY) & set(FILLED_BY_A_MODEL_CALL)
-    assert not (set(UNFILLABLE_TODAY) | set(FILLED_BY_A_MODEL_CALL)) & set(FILLED_BY_THE_FRONT_HALF)
-    assert (
-        set(UNFILLABLE_TODAY) | set(FILLED_BY_A_MODEL_CALL) | set(FILLED_BY_THE_FRONT_HALF)
-        == optional
+    mappings = (
+        UNFILLABLE_TODAY,
+        FILLED_BY_A_MODEL_CALL,
+        FILLED_BY_THE_FRONT_HALF,
+        FILLED_BY_A_ROUTED_CALL,
     )
+    assert sum(len(one) for one in mappings) == len(set[str]().union(*mappings)), "a field twice"
+    assert set[str]().union(*mappings) == optional
     assert set(FILLED_BY_THE_FRONT_HALF) == set(FRONT_HALF_FIELDS)
+    assert set(FILLED_BY_A_ROUTED_CALL) == set(ROUTE_FIELDS)
+    for name, because in FILLED_BY_A_ROUTED_CALL.items():
+        assert because.strip(), f"{name} says nothing about why it may be None"
     assert set(FILLED_BY_A_MODEL_CALL) == {
         "agent_version",
         "model",
@@ -577,6 +587,7 @@ def test_a_fillable_field_has_no_default_at_all() -> None:
             declared.name in UNFILLABLE_TODAY
             or declared.name in FILLED_BY_A_MODEL_CALL
             or declared.name in FILLED_BY_THE_FRONT_HALF
+            or declared.name in FILLED_BY_A_ROUTED_CALL
         ):
             assert declared.default is None, declared.name
         else:

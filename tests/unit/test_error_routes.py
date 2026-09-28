@@ -6,7 +6,7 @@ The stub answers the two statements by the columns they select, and reads the co
 first statement was bound to, so the property that the bound on the list applies only to jobs the
 reader may see is asserted on the statement rather than on the response.
 
-Task ids: none
+Task ids: M3.4.2, M3.6.3
 """
 
 from __future__ import annotations
@@ -72,7 +72,22 @@ class Ledgers:
             ("spend_report_refresh", AGO, AGO, LEAKY)
         ]
         self.requests: list[tuple[object, ...]] = [
-            (REFERENCE, AGO, "answer", "failed", 812.0, 55, "answer", "addressed", "finance")
+            (
+                REFERENCE,
+                AGO,
+                "answer",
+                "degraded",
+                812.0,
+                55,
+                "answer",
+                "fast_refused",
+                "addressed",
+                "finance",
+                "main",
+                "residency_floor",
+                "kimi-k2",
+                "moonshot",
+            )
         ]
         self.bound: list[list[str]] = []
 
@@ -92,8 +107,13 @@ class Ledgers:
             "duration_ms",
             "risk_score",
             "routed_lane",
+            "lane_basis",
             "selection_stage",
             "selected_agent",
+            "routed_tier",
+            "tier_basis",
+            "model",
+            "provider",
         ]:
             return Result(Row(one) for one in self.requests)
         return None
@@ -138,8 +158,13 @@ def test_a_reader_of_both_screens_sees_a_failed_job_by_kind_and_a_failed_request
         "duration_ms",
         "risk_score",
         "routed_lane",
+        "lane_basis",
         "selection_stage",
         "selected_agent",
+        "routed_tier",
+        "tier_basis",
+        "model",
+        "provider",
     }
     assert "someone@example.invalid" not in str(body)
     # The log is kept since `brain.ops.log_capture`, so the page points at the Logs screen.
@@ -190,7 +215,7 @@ def test_a_list_that_came_back_full_says_so_and_carries_no_figure(
 ) -> None:
     """Delete this and a truncated list reads as every failure there was."""
     client, _ = served
-    ledgers.requests = [(REFERENCE, AGO, "answer", "failed", 1.0, None, None, None, None)] * (
+    ledgers.requests = [(REFERENCE, AGO, "answer", "failed", 1.0, *(None,) * 9)] * (
         MAX_FAILURES + 1
     )
 
@@ -202,14 +227,23 @@ def test_a_list_that_came_back_full_says_so_and_carries_no_figure(
     assert not {key for key in body if "count" in key or "total" in key}
 
 
-def test_a_failed_request_shows_what_the_gates_front_half_decided(
+def test_a_failed_request_shows_the_whole_routing_decision_its_row_holds(
     served: tuple[TestClient, Stub],
 ) -> None:
-    """M3.4.2 and M3.6.3 on the screen: the risk score, the routed lane, the selection stage and
-    the agent, from the request row, beside the reference.
+    """M3.4.2 and M3.6.3 on the screen: the risk score, the routed lane and its rule, the stage
+    and the agent, the tier and the step that settled it, and the model and provider, each from
+    the request row by its own column, beside the reference.
 
-    Delete this and the four columns are written on every request and read by no screen."""
+    Delete this and a column is written on every request and read by no screen, or two columns
+    are read into each other's places and the page says the lane was chosen for the tier's
+    reason."""
     client, _ = served
     row = get(client, "u_admin", ERRORS).json()["requests"][0]
-    assert (row["risk_score"], row["routed_lane"]) == (55, "answer")
+    assert (row["risk_score"], row["routed_lane"], row["lane_basis"]) == (
+        55,
+        "answer",
+        "fast_refused",
+    )
     assert (row["selection_stage"], row["selected_agent"]) == ("addressed", "finance")
+    assert (row["routed_tier"], row["tier_basis"]) == ("main", "residency_floor")
+    assert (row["model"], row["provider"]) == ("kimi-k2", "moonshot")

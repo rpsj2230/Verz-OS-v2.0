@@ -108,7 +108,11 @@ search is INVOKE, the redactor is REDACT and the sentence or the model's prose i
 entered before the work it names, so the order `GateStep` declares is checked on the whole path
 and not only in front of the model. A cache hit enters none of them: nothing was invoked.
 
-Task ids: M30.5.2, M21.3.4, M3.9.3, M4.4.4, M2.2.4, M3.1.2
+**The route the model call took is read off the same meter (M3.6.3).** The executor notes the
+tier it classified on the request's `Meter` as it decides it, and `finish` hands `Meter.route` to
+the recorders beside the usage, so the row's tier is the one walked and never one re-derived.
+
+Task ids: M30.5.2, M21.3.4, M3.9.3, M4.4.4, M2.2.4, M3.1.2, M3.6.3
 """
 
 from __future__ import annotations
@@ -397,6 +401,8 @@ async def answer_lane(
                 agent_id=None
                 if model is None or model.agent is None
                 else model.agent.record.agent_id,
+                # Where the executor routed the model call, as it decided it (M3.6.3).
+                route=meter.route(),
             ),
         )
 

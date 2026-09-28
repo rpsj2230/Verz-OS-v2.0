@@ -35,11 +35,16 @@ The circuit breaker is a pure state machine and takes `now` as a parameter. A br
 reads the clock itself cannot be tested for the half-open transition, and the half-open
 transition is the part that actually goes wrong.
 
+**A tier decision names the rule that settled it (M3.6.3).** `TierDecision.reason` is the
+argument as a sentence, which a ledger holding names cannot keep. `TierBasis` is the last step
+that moved the tier, set where the step runs, so the request row can say why a question ran where
+it did without anybody replaying this function against tier rows that have since changed.
+
 Nothing in this module performs I/O, imports a provider SDK, or touches the database. It
 is the policy; `brain.models` will grow the driver beside it.
 
 Task ids: M5.2.1, M5.2.3, M5.3.1, M5.3.2, M5.4.1, M5.4.2, M5.4.4, M5.4.5, M5.4.6
-Task ids: M5.5.1, M5.5.2, M5.5.3, M5.5.4
+Task ids: M5.5.1, M5.5.2, M5.5.3, M5.5.4, M3.6.3
 """
 
 from __future__ import annotations
@@ -228,16 +233,36 @@ class RoutingRequest:
     residency: ResidencyRequirement = UNCONSTRAINED
 
 
+class TierBasis(enum.StrEnum):
+    """The step of `classify_tier` that settled the tier: the last one that set or moved it."""
+
+    #: The fast lane takes no model, whatever else was asked.
+    FAST_LANE = "fast_lane"
+    #: A tier pinned by the caller, an agent's or a skill's, and nothing moved it.
+    PINNED = "pinned"
+    #: The task lane's heaviest tier.
+    TASK_LANE = "task_lane"
+    #: The unpinned default, `DEFAULT_TIER`.
+    DEFAULT = "default"
+    #: Raised off SMALL because tools were in scope.
+    TOOL_FLOOR = "tool_floor"
+    #: Raised off SMALL because the scope carries a residency constraint.
+    RESIDENCY_FLOOR = "residency_floor"
+    #: Escalated upward because the estimate passed a tier's headroom.
+    CONTEXT = "context"
+
+
 @dataclass(frozen=True)
 class TierDecision:
     """The tier, plus the argument for it.
 
     `reason` is carried for the same purpose as `ProcessProfile.reason` in
     `brain.runtime`: a number or a choice with no argument attached gets changed by
-    whoever is next annoyed by it.
+    whoever is next annoyed by it. `basis` is the step that settled it, as a name.
     """
 
     tier: Tier
+    basis: TierBasis
     reason: str
     residency: ResidencyRequirement
     #: True when even the chosen tier cannot hold the estimate. There is no higher tier to
@@ -289,6 +314,7 @@ def classify_tier(
         )
         return TierDecision(
             tier=Tier.NONE,
+            basis=TierBasis.FAST_LANE,
             reason=f"fast lane, so no model at all{pinned}",
             residency=request.residency,
         )
@@ -305,20 +331,22 @@ def classify_tier(
     # the three ladder members, and without this the escalation below would be rejected as
     # widening a literal type back to Tier.
     tier: Tier
+    # Set beside `tier` at every step that sets or moves it, so it names the last one.
+    basis: TierBasis
     if request.requested_tier is not None:
-        tier = request.requested_tier
+        tier, basis = request.requested_tier, TierBasis.PINNED
         steps.append(f"pinned to {tier} by the caller")
     elif request.lane is Lane.TASK:
-        tier = Tier.HEAVY
+        tier, basis = Tier.HEAVY, TierBasis.TASK_LANE
         steps.append("task lane, so the heaviest tier")
     else:
-        tier = DEFAULT_TIER
+        tier, basis = DEFAULT_TIER, TierBasis.DEFAULT
         steps.append(f"lane={request.lane} with no pin, so the {DEFAULT_TIER} default")
 
     if tier is Tier.SMALL and request.tool_count > 0:
         # A tool loop re-sends the whole transcript every turn. A small model that misuses
         # a tool costs more in wasted turns than the per-token saving it was chosen for.
-        tier = Tier.MAIN
+        tier, basis = Tier.MAIN, TierBasis.TOOL_FLOOR
         steps.append(f"{request.tool_count} tool(s) in scope, so not below {Tier.MAIN}")
 
     if tier is Tier.SMALL and request.residency.is_constrained:
@@ -333,7 +361,7 @@ def classify_tier(
         #
         # This overrides an explicit pin on purpose. The constraint attaches to the scope,
         # and the caller does not own the scope's obligations.
-        tier = Tier.MAIN
+        tier, basis = Tier.MAIN, TierBasis.RESIDENCY_FLOOR
         steps.append(f"residency-constrained scope, so not on {Tier.SMALL}")
 
     def fraction(of: Tier) -> float:
@@ -350,7 +378,7 @@ def classify_tier(
             f"{request.estimated_context_tokens:,} tokens is over "
             f"{fraction(tier):.0%} of {tier}'s {window:,}, so up to {higher}"
         )
-        tier = higher
+        tier, basis = higher, TierBasis.CONTEXT
 
     overflows = request.estimated_context_tokens > windows.get(tier, 0) * fraction(tier)
     if overflows:
@@ -358,6 +386,7 @@ def classify_tier(
 
     return TierDecision(
         tier=tier,
+        basis=basis,
         reason="; ".join(steps),
         residency=request.residency,
         context_overflows=overflows,

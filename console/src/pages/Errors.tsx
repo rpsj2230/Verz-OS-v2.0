@@ -4,9 +4,10 @@
  *
  * Under Operate, after Scheduled jobs. Two tables, each with its own empty sentence and its own
  * sentence for a list that came back full, a window to choose, and the four states every screen
- * keeps apart. Nothing here is a control.
+ * keeps apart. Nothing here is a control. A failed question's row carries the gate's whole
+ * routing decision, put into words by `errorsQuery.ts`.
  *
- * Task ids: none
+ * Task ids: M3.4.2, M3.6.3
  */
 
 import { useState } from "react";
@@ -24,9 +25,11 @@ import {
   FULL_LIST,
   JOBS_CAPTION,
   JOBS_HEADING,
+  laneWords,
   LOG_HEADING,
   LOG_IS_ON_THE_LOGS_SCREEN,
   LOGS_LINK,
+  modelWords,
   NO_JOB_FAILURES,
   NO_REQUEST_FAILURES,
   NOT_SCREENED,
@@ -36,6 +39,7 @@ import {
   REQUESTS_CAPTION,
   REQUESTS_HEADING,
   STATUS_WORDS,
+  tierWords,
   UNREADABLE_ANSWER,
   WINDOWS,
 } from "./errorsQuery";
@@ -113,6 +117,8 @@ function Failures({ hours }: { readonly hours: number }) {
                   <th scope="col">Risk score</th>
                   <th scope="col">Routed to</th>
                   <th scope="col">Agent</th>
+                  <th scope="col">Tier</th>
+                  <th scope="col">Model</th>
                 </tr>
               </thead>
               <tbody>
@@ -126,8 +132,10 @@ function Failures({ hours }: { readonly hours: number }) {
                     <td>{STATUS_WORDS[one.status] ?? one.status}</td>
                     <td>{`${String(Math.round(one.duration_ms))} ms`}</td>
                     <td>{one.risk_score == null ? NOT_SCREENED : String(one.risk_score)}</td>
-                    <td>{one.routed_lane ?? NOT_SCREENED}</td>
+                    <td>{laneWords(one.routed_lane, one.lane_basis)}</td>
                     <td>{agentWords(one.selected_agent, one.selection_stage)}</td>
+                    <td>{tierWords(one.routed_tier, one.tier_basis)}</td>
+                    <td>{modelWords(one.model, one.provider)}</td>
                   </tr>
                 ))}
               </tbody>

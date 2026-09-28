@@ -17,11 +17,18 @@ answer lane, where a model reads the actual words.
 
 Falling through is cheap and being wrong is not. That asymmetry is the whole design.
 
+**Every decision names the rule that made it, as a code the request row can hold (M3.6.3).**
+`LaneDecision.reason` is a sentence, and the metadata ledger holds names and never a sentence,
+so the row carried the lane and nothing about why. `LaneBasis` is the same decision as a name,
+set on the branch that decides, so the row says why without anybody re-running this function
+against a vocabulary that may have changed since.
+
 Task ids: M3.6.1, M3.6.3
 """
 
 from __future__ import annotations
 
+import enum
 import re
 from dataclasses import dataclass
 
@@ -189,16 +196,35 @@ TASK_PHRASES: tuple[re.Pattern[str], ...] = (
 TASK_WORD_COUNT = 60
 
 
+class LaneBasis(enum.StrEnum):
+    """Which rule of `classify_lane` chose the lane, one member per branch that returns."""
+
+    #: The asker asked for the task lane, which is honoured.
+    REQUESTED = "requested"
+    #: The question is one of `INTENTS` exactly, every slot a name.
+    EXACT_INTENT = "exact_intent"
+    #: The fast lane was asked for and the question is no exact intent, so a model reads it.
+    FAST_REFUSED = "fast_refused"
+    #: Longer than `TASK_WORD_COUNT` words.
+    LONG_QUESTION = "long_question"
+    #: One of `TASK_PHRASES` describes a piece of work.
+    TASK_PHRASE = "task_phrase"
+    #: Nothing above applied: a person is waiting and a model reads the question.
+    DEFAULT = "default"
+
+
 @dataclass(frozen=True)
 class LaneDecision:
     """The lane, and the reason, recorded rather than inferred afterwards.
 
     M3.6.3. The reason is written at the moment of the decision because reconstructing it
     later means re-running a classifier that may have changed since, and the trace would
-    then explain a decision that was never made.
+    then explain a decision that was never made. `basis` is that reason as a name, which is
+    the half the request row can hold.
     """
 
     lane: Lane
+    basis: LaneBasis
     reason: str
     intent: IntentMatch | None = None
 
@@ -213,12 +239,15 @@ def classify_lane(question: str, *, requested: Lane | None = None) -> LaneDecisi
     that claim is checked rather than accepted.
     """
     if requested is Lane.TASK:
-        return LaneDecision(Lane.TASK, "the asker requested the task lane")
+        return LaneDecision(Lane.TASK, LaneBasis.REQUESTED, "the asker requested the task lane")
 
     intent = match_intent(question)
     if intent is not None:
         return LaneDecision(
-            Lane.FAST, f"exact intent match on {intent.intent} with every slot present", intent
+            Lane.FAST,
+            LaneBasis.EXACT_INTENT,
+            f"exact intent match on {intent.intent} with every slot present",
+            intent,
         )
 
     if requested is Lane.FAST:
@@ -226,14 +255,21 @@ def classify_lane(question: str, *, requested: Lane | None = None) -> LaneDecisi
         # silently ignored preference looks like a bug to whoever asked for it.
         return LaneDecision(
             Lane.ANSWER,
+            LaneBasis.FAST_REFUSED,
             "fast lane requested but the question matches no exact intent, so a model reads it",
         )
 
     if len(question.split()) > TASK_WORD_COUNT:
-        return LaneDecision(Lane.TASK, f"more than {TASK_WORD_COUNT} words")
+        return LaneDecision(
+            Lane.TASK, LaneBasis.LONG_QUESTION, f"more than {TASK_WORD_COUNT} words"
+        )
 
     for phrase in TASK_PHRASES:
         if phrase.search(question):
-            return LaneDecision(Lane.TASK, "the question describes multi-step work")
+            return LaneDecision(
+                Lane.TASK, LaneBasis.TASK_PHRASE, "the question describes multi-step work"
+            )
 
-    return LaneDecision(Lane.ANSWER, "a person is waiting and a model reads the question")
+    return LaneDecision(
+        Lane.ANSWER, LaneBasis.DEFAULT, "a person is waiting and a model reads the question"
+    )
