@@ -10,7 +10,7 @@
  * in, and a sentence about what the install does not record dropping off a page that then draws an
  * empty list as a fact.
  *
- * Task ids: M27.7.4, M27.7.8, M27.7.9, M27.7.12
+ * Task ids: M27.7.4, M27.7.8, M27.7.9, M27.7.12, M27.11.1, M27.15.22
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -32,10 +32,20 @@ import {
   APPOINT_LABEL,
   CANCEL_LABEL as KEEP_ORGANISATION,
   CHOOSE_SOMEBODY_FIRST,
+  CREATE_TEAM_LABEL,
   DISABLED,
   DISABLE_LABEL,
+  DRAW_SCOPE_LABEL,
   Departments,
   ENABLE_LABEL,
+  FOUND_HEADING,
+  RENAME_DEPARTMENT_LABEL,
+  RENAME_LABEL,
+  RENAME_TEAM_LABEL,
+  RETIRE_DEPARTMENT_LABEL,
+  RETIRE_SCOPE_LABEL,
+  RETIRE_TEAM_LABEL,
+  SCOPES_HEADING,
   NOBODY_IN_TEAM,
   NOBODY_LISTED,
   NONE_MATCH as NO_DEPARTMENT_MATCHES,
@@ -59,7 +69,9 @@ import {
 import { LIST_PAGE_SIZE } from "../src/components/listing";
 import {
   ASK_BLANKS,
+  FOUNDING_DOES,
   MOST_DECIDED_AT_ONCE,
+  STRUCTURE_BLANKS,
   readOrganisation,
   readReview,
   readSubscribers,
@@ -93,6 +105,20 @@ const TEAMS = "A team lists the people in it you may see.";
 const LEADS = "A department's lead is who leads it, recorded with who appointed them.";
 const ORGANISING = "Placing somebody or appointing a lead takes the authority the Access review screen asks for.";
 const MEMBERSHIP_OPERATION = "/api/v1/govern/departments/membership";
+const RENAME_OPERATION = "/api/v1/govern/departments/rename";
+const RETIREMENT_OPERATION = "/api/v1/govern/departments/retirement";
+const TEAM_OPERATION = "/api/v1/govern/departments/team";
+const TEAM_RENAME_OPERATION = "/api/v1/govern/departments/team/rename";
+const TEAM_RETIREMENT_OPERATION = "/api/v1/govern/departments/team/retirement";
+const SCOPE_OPERATION = "/api/v1/govern/departments/scopes";
+const SCOPE_RETIREMENT_OPERATION = "/api/v1/govern/departments/scopes/retirement";
+const SCOPES_READ = "/api/v1/govern/scopes";
+const RETIRING_DEPARTMENT =
+  "Retiring a department retires its teams and every live scope naming it. A department is not retired while a live grant is still written over it.";
+const RETIRING_TEAM = "Retiring a team takes it off this page. Nobody's access changes.";
+const RETIRING_SCOPE = "Retiring a scope stops any new grant being written over it.";
+const UNDER_LIVE_GRANTS =
+  "Nothing was changed: A department is not retired while a live grant is still written over it.";
 const LEAD_OPERATION = "/api/v1/govern/departments/lead";
 const DISABLE_OPERATION = "/api/v1/govern/people/disable";
 const ENABLE_OPERATION = "/api/v1/govern/people/enable";
@@ -431,12 +457,265 @@ describe("the departments and teams screen", () => {
       "disabling",
       "leads",
       "mayDisable",
+      "mayDrawScopes",
+      "mayFound",
       "mayOrganise",
       "organising",
+      "retiringDepartment",
+      "retiringScope",
+      "retiringTeam",
+      "shaping",
       "teams",
       "truncated",
       "unplaced",
     ]);
+  });
+
+  // ---------------------------------------------------------------- the structure (M27.11.1)
+
+  function structured(overrides: Record<string, unknown>, departments: DepartmentRow[] = [{ ...WEB, shapeable: true }]): unknown {
+    return {
+      ...(organisation(departments) as object),
+      retiring_department: RETIRING_DEPARTMENT,
+      retiring_team: RETIRING_TEAM,
+      retiring_scope: RETIRING_SCOPE,
+      ...overrides,
+    };
+  }
+
+  type Sent = { path: string; body: unknown };
+
+  /** A page answering the organisation and recording each write, which it answers with `reply`. */
+  async function structurePage(
+    body: unknown,
+    reply: (path: string) => Response = () => json({ kind: "department", department: null, slug: "x", change: "created", at: "2019-03-04T09:00:00Z" }),
+    scopes: unknown = { items: [], truncated: false, departments: [] },
+  ) {
+    const sent: Sent[] = [];
+    const mounted = await mount("/departments", (url, init) => {
+      if (init?.method === "POST") {
+        sent.push({ path: url.pathname, body: JSON.parse(String(init.body)) });
+        return reply(url.pathname);
+      }
+      if (url.pathname === DEPARTMENTS_OPERATION) {
+        return json(body);
+      }
+      return url.pathname === SCOPES_READ ? json(scopes) : null;
+    });
+    const { container } = mounted;
+    const labelled = (label: string) =>
+      [...container.querySelectorAll("button")].find(
+        (one) => one.getAttribute("aria-label") === label || (one.textContent === label && one.getAttribute("aria-label") === null),
+      ) as HTMLButtonElement | undefined;
+    const confirm = () => {
+      fireEvent.click([...container.querySelectorAll(".confirm button")][1] as HTMLButtonElement);
+    };
+    const fill = (form: HTMLFormElement, label: string, value: string) => {
+      const field = [...form.querySelectorAll("label")].find((one) => one.textContent?.startsWith(label))?.querySelector("input, select");
+      fireEvent.change(field as HTMLInputElement, { target: { value } });
+    };
+    const form = (label: string) => container.querySelector(`form[aria-label="${label}"]`) as HTMLFormElement;
+    const declared = (path: string) =>
+      Object.keys(declaredRequestBodySchema(path, "post")["properties"] as object).sort();
+    return { ...mounted, sent, labelled, confirm, fill, form, declared };
+  }
+
+  test("an administrator creates, renames and retires a department, each confirmed and sending only the declared keys", async () => {
+    // What breaks if this is deleted: a department is created or retired without a confirmation, a
+    // rename sends the short name or omits the name the page showed, a blank or unchanged name is
+    // sent, or the retirement's confirmation paraphrases what happens to scopes and grants.
+    const page = await structurePage(structured({ may_found: true }));
+    const { container, sent, labelled, confirm, fill, form, declared } = page;
+
+    const founding = form(FOUND_HEADING);
+    fireEvent.submit(founding);
+    expect(container.textContent).toContain(STRUCTURE_BLANKS.slug);
+    expect(container.querySelector(".confirm")).toBeNull();
+    fill(founding, "Short name", "sales");
+    fill(founding, "Name", "Sales");
+    fireEvent.submit(founding);
+    expect(container.textContent).toContain("Create the department Sales, short name sales?");
+    expect(container.textContent).toContain(FOUNDING_DOES);
+    expect(sent).toEqual([]);
+    confirm();
+    await waitFor(() => {
+      expect(sent).toHaveLength(1);
+    });
+    expect(sent[0]).toEqual({ path: DEPARTMENTS_OPERATION, body: { slug: "sales", name: "Sales" } });
+    expect(Object.keys(sent[0]?.body as object).sort()).toEqual(declared(DEPARTMENTS_OPERATION));
+    await waitFor(() => {
+      expect(container.textContent).toContain("Done: Create the department Sales, short name sales, recorded at");
+    });
+
+    fireEvent.click(labelled(`${RENAME_DEPARTMENT_LABEL}: Web`) as HTMLButtonElement);
+    const renaming = form(`${RENAME_DEPARTMENT_LABEL}: Web`);
+    expect((renaming.querySelector("input") as HTMLInputElement).value).toBe("Web");
+    fireEvent.submit(renaming);
+    expect(container.textContent).toContain(STRUCTURE_BLANKS.same);
+    expect(container.querySelector(".confirm")).toBeNull();
+    fill(renaming, "New name", "Web and design");
+    fireEvent.submit(renaming);
+    expect(container.textContent).toContain("Rename the department Web to Web and design?");
+    confirm();
+    await waitFor(() => {
+      expect(sent).toHaveLength(2);
+    });
+    expect(sent[1]).toEqual({ path: RENAME_OPERATION, body: { slug: "web", expected_name: "Web", name: "Web and design" } });
+    expect(Object.keys(sent[1]?.body as object).sort()).toEqual(declared(RENAME_OPERATION));
+
+    await waitFor(() => {
+      expect(labelled(`${RETIRE_DEPARTMENT_LABEL}: Web`)).toBeDefined();
+    });
+    fireEvent.click(labelled(`${RETIRE_DEPARTMENT_LABEL}: Web`) as HTMLButtonElement);
+    expect(container.textContent).toContain("Retire the department Web?");
+    expect(container.textContent).toContain(RETIRING_DEPARTMENT);
+    confirm();
+    await waitFor(() => {
+      expect(sent).toHaveLength(3);
+    });
+    expect(sent[2]).toEqual({ path: RETIREMENT_OPERATION, body: { slug: "web", expected_name: "Web" } });
+    expect(Object.keys(sent[2]?.body as object).sort()).toEqual(declared(RETIREMENT_OPERATION));
+  });
+
+  test("a department under a live grant is refused in the API's one sentence and still drawn", async () => {
+    // What breaks if this is deleted: M27.15.22's refusal is swallowed and the page says the
+    // department was retired, or the page stops drawing the department the API kept.
+    const { container, labelled, confirm } = await structurePage(structured({ may_found: true }), () =>
+      json({ message: UNDER_LIVE_GRANTS, trace_id: "t" }, 404),
+    );
+    fireEvent.click(labelled(`${RETIRE_DEPARTMENT_LABEL}: Web`) as HTMLButtonElement);
+    confirm();
+    await waitFor(() => {
+      expect(container.textContent).toContain(UNDER_LIVE_GRANTS);
+    });
+    expect(container.textContent).not.toContain("Done:");
+    expect(container.querySelector('[aria-label="People in Web"]')).not.toBeNull();
+  });
+
+  test("a department administrator creates, renames and retires a team, and is offered nothing over departments", async () => {
+    // What breaks if this is deleted: a team is written without a confirmation or with a key the
+    // route forbids, a team's retirement paraphrases what it does, or a reader who may shape one
+    // department is offered to create or retire departments, which every press would refuse.
+    const { container, sent, labelled, confirm, fill, form, declared } = await structurePage(structured({}));
+
+    expect(container.querySelector(`form[aria-label="${FOUND_HEADING}"]`)).toBeNull();
+    expect(labelled(`${RETIRE_DEPARTMENT_LABEL}: Web`)).toBeUndefined();
+    expect(container.textContent).not.toContain(SCOPES_HEADING);
+
+    const adding = form(`${CREATE_TEAM_LABEL} in Web`);
+    fireEvent.submit(adding);
+    expect(container.textContent).toContain(STRUCTURE_BLANKS.name);
+    fill(adding, "Short name", "hosting");
+    fill(adding, "Name", "Hosting");
+    fireEvent.submit(adding);
+    expect(container.textContent).toContain("Create the team Hosting, short name hosting, in Web?");
+    confirm();
+    await waitFor(() => {
+      expect(sent).toHaveLength(1);
+    });
+    expect(sent[0]).toEqual({ path: TEAM_OPERATION, body: { department: "web", slug: "hosting", name: "Hosting" } });
+    expect(Object.keys(sent[0]?.body as object).sort()).toEqual(declared(TEAM_OPERATION));
+
+    await waitFor(() => {
+      expect(labelled(`${RENAME_TEAM_LABEL}: Design`)).toBeDefined();
+    });
+    fireEvent.click(labelled(`${RENAME_TEAM_LABEL}: Design`) as HTMLButtonElement);
+    const renaming = form(`${RENAME_TEAM_LABEL}: Design`);
+    fill(renaming, "New name", "   ");
+    fireEvent.submit(renaming);
+    expect(container.textContent).toContain(STRUCTURE_BLANKS.rename);
+    fill(renaming, "New name", "Visual design");
+    fireEvent.submit(renaming);
+    confirm();
+    await waitFor(() => {
+      expect(sent).toHaveLength(2);
+    });
+    expect(sent[1]).toEqual({
+      path: TEAM_RENAME_OPERATION,
+      body: { department: "web", slug: "design", expected_name: "Design", name: "Visual design" },
+    });
+    expect(Object.keys(sent[1]?.body as object).sort()).toEqual(declared(TEAM_RENAME_OPERATION));
+
+    await waitFor(() => {
+      expect(labelled(`${RETIRE_TEAM_LABEL}: Design`)).toBeDefined();
+    });
+    fireEvent.click(labelled(`${RETIRE_TEAM_LABEL}: Design`) as HTMLButtonElement);
+    expect(container.textContent).toContain("Retire the team Design?");
+    expect(container.textContent).toContain(RETIRING_TEAM);
+    confirm();
+    await waitFor(() => {
+      expect(sent).toHaveLength(3);
+    });
+    expect(sent[2]).toEqual({
+      path: TEAM_RETIREMENT_OPERATION,
+      body: { department: "web", slug: "design", expected_name: "Design" },
+    });
+    expect(Object.keys(sent[2]?.body as object).sort()).toEqual(declared(TEAM_RETIREMENT_OPERATION));
+    expect(RENAME_LABEL).toBe("Rename");
+  });
+
+  test("a scope is drawn over departments on the page and retired in the API's words, and the two never retired offer nothing", async () => {
+    // What breaks if this is deleted: the scope form offers a department nobody on the page is in,
+    // sends a team with two departments, sends a key the route forbids, retires a scope against a
+    // predicate other than the one drawn, or offers to retire a department's own scope or the
+    // company-wide one, which the route refuses every time.
+    const WEB_ALL = { slug: "web_all", label: "All of web", is_department: false, scope: { clauses: [{ field: "department", op: "eq", value: "web" }] } };
+    const scopes = {
+      items: [
+        { slug: "company", label: "The company", is_department: false, scope: { clauses: [] } },
+        { slug: "web", label: "Web", is_department: true, scope: { clauses: [{ field: "department", op: "eq", value: "web" }] } },
+        WEB_ALL,
+      ],
+      truncated: false,
+      departments: ["web"],
+    };
+    const { container, sent, labelled, confirm, fill, form, declared } = await structurePage(
+      structured({ may_draw_scopes: true }, [{ ...WEB, shapeable: true }, FINANCE]),
+      undefined,
+      scopes,
+    );
+    await waitFor(() => {
+      expect(container.querySelector(`[aria-label="${SCOPES_HEADING}"]`)?.textContent).toContain("All of web");
+    });
+    expect([...container.querySelectorAll("button")].filter((one) => one.textContent === RETIRE_SCOPE_LABEL)).toHaveLength(1);
+
+    const drawing = form(DRAW_SCOPE_LABEL);
+    fireEvent.submit(drawing);
+    expect(container.textContent).toContain(STRUCTURE_BLANKS.departments);
+    expect(container.querySelector(".confirm")).toBeNull();
+    const boxes = [...drawing.querySelectorAll('input[type="checkbox"]')] as HTMLInputElement[];
+    expect(boxes.map((one) => one.closest("label")?.textContent?.trim())).toEqual(["Web web", "Finance finance"]);
+    fireEvent.click(boxes[1] as HTMLInputElement);
+    fireEvent.click(boxes[0] as HTMLInputElement);
+    expect(drawing.querySelector("select")).toBeNull();
+    fireEvent.click(boxes[1] as HTMLInputElement);
+    fill(drawing, "Only this team", "design");
+    fill(drawing, "Short name", "web_design");
+    fill(drawing, "Name", "Web design");
+    fireEvent.submit(drawing);
+    expect(container.textContent).toContain("Draw the scope Web design, short name web_design?");
+    confirm();
+    await waitFor(() => {
+      expect(sent).toHaveLength(1);
+    });
+    expect(sent[0]).toEqual({
+      path: SCOPE_OPERATION,
+      body: { slug: "web_design", label: "Web design", departments: ["web"], team: "design" },
+    });
+    expect(Object.keys(sent[0]?.body as object).sort()).toEqual(declared(SCOPE_OPERATION));
+
+    await waitFor(() => {
+      expect(labelled(`${RETIRE_SCOPE_LABEL}: All of web`)).toBeDefined();
+    });
+    fireEvent.click(labelled(`${RETIRE_SCOPE_LABEL}: All of web`) as HTMLButtonElement);
+    expect(container.textContent).toContain("Retire the scope All of web?");
+    expect(container.textContent).toContain(RETIRING_SCOPE);
+    confirm();
+    await waitFor(() => {
+      expect(sent).toHaveLength(2);
+    });
+    expect(sent[1]).toEqual({ path: SCOPE_RETIREMENT_OPERATION, body: { slug: "web_all", expected_scope: WEB_ALL.scope } });
+    expect(Object.keys(sent[1]?.body as object).sort()).toEqual(declared(SCOPE_RETIREMENT_OPERATION));
   });
 });
 

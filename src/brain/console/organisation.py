@@ -76,13 +76,20 @@ reach, and asking about those would be the refusal that says they exist. See
 **A retirement is soft and it is not a revocation.** A retired department is named by no live
 scope, so the grant route, which resolves a scope by its live slug, refuses a new grant over it. A
 grant already written carries its own copy of the predicate and is never touched: revocation is the
-removal of a grant somebody decides to remove, and a department wound up is not that decision. See
-`A_RETIRED_DEPARTMENT_IS_NAMED_BY_NO_LIVE_SCOPE` and
-`A_RETIRED_DEPARTMENT_LEAVES_EVERY_GRANT_ALREADY_WRITTEN_IN_FORCE`.
+removal of a grant somebody decides to remove, and a department wound up is not that decision.
+
+**So a department is not retired while a live grant is still written over it** (M27.15.22). Until
+2026-09-28 the retirement went ahead and left such a grant in force over a department nobody could
+grant over again, which is a grant with no living boundary to review it against. Now the grants
+move first, each one removed or written again elsewhere by somebody deciding it, and the refusal
+says so without naming a grant or a figure. Which grants hold it back is `holds_retirement_back`,
+by the same clause rule that decides which scopes go with it. See
+`A_DEPARTMENT_UNDER_LIVE_GRANTS_IS_NOT_RETIRED` and
+`THE_GRANTS_HOLDING_A_RETIREMENT_BACK_ARE_NEVER_NAMED`.
 
 Scope: domain logic. Nothing here opens a connection, renders anything or reads a clock.
 
-Task ids: M27.7.4, M27.11.1
+Task ids: M27.7.4, M27.11.1, M27.15.22
 """
 
 from __future__ import annotations
@@ -185,11 +192,19 @@ A_RETIRED_DEPARTMENT_IS_NAMED_BY_NO_LIVE_SCOPE: Final = (
     "retired department."
 )
 
-#: What retiring a department does not do, which is the half somebody would otherwise assume.
-A_RETIRED_DEPARTMENT_LEAVES_EVERY_GRANT_ALREADY_WRITTEN_IN_FORCE: Final = (
-    "Grants already written over a retired department are not retired with it. Each grant carries "
-    "its own copy of the scope it was written over, and taking access away is removing a grant, "
-    "which somebody decides grant by grant on the People and grants or Access review screens."
+#: What a retirement waits for, said on its confirmation and as its refusal.
+A_DEPARTMENT_UNDER_LIVE_GRANTS_IS_NOT_RETIRED: Final = (
+    "A department is not retired while a live grant is still written over it. Remove each such "
+    "grant, or write it again over a scope that stays, on the People and grants or Access review "
+    "screens, and then retire the department."
+)
+
+#: Why that refusal names no grant, no holder and no figure.
+THE_GRANTS_HOLDING_A_RETIREMENT_BACK_ARE_NEVER_NAMED: Final = (
+    "The refusal says that a live grant is written over the department and never which, whose or "
+    "how many. Retiring takes the authority over every department and scope, which is not the "
+    "authority to read every grant, so a name or a figure would tell the caller about grants the "
+    "People and grants screen may withhold from them."
 )
 
 #: Why the company-wide scope cannot be retired from the console.
@@ -516,6 +531,18 @@ def retired_with(slug: str, record: ScopeRecord | None, *, department: str, defi
     if slug == defining:
         return True
     return record is not None and names_department(record.scope, department)
+
+
+def holds_retirement_back(scope: Scope | None, *, department: str) -> bool:
+    """Whether a live grant written over `scope` holds `department`'s retirement back.
+
+    The clause rule `retired_with` asks of a scope, asked of the grant's own copy: a grant over the
+    department's scope, over a named set including it or over one of its teams holds it back, and a
+    grant over the whole company, which names no department, does not. None is a stored predicate
+    the type refuses, which cannot be asked, and it holds back: letting it through would retire a
+    department under a grant nobody could read. See `A_DEPARTMENT_UNDER_LIVE_GRANTS_IS_NOT_RETIRED`.
+    """
+    return scope is None or names_department(scope, department)
 
 
 def founded(slug: str, name: str) -> tuple[DepartmentRecord, ScopeRecord]:

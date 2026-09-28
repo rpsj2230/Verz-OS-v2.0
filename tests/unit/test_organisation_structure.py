@@ -15,7 +15,7 @@ the grant route and the one resolver. **It skips without a server**, which is CI
 server without pgvector builds what `0086` sits on by running `0062`'s chain and then `0086`, which
 `through_0086` states.
 
-Task ids: M27.11.1
+Task ids: M27.11.1, M27.15.22
 """
 
 from __future__ import annotations
@@ -37,8 +37,8 @@ from brain.app import Settings, create_app
 from brain.audit.ledger import AuditChain
 from brain.audit.record import AuditRecorder, OrganisationChange
 from brain.console.organisation import (
+    A_DEPARTMENT_UNDER_LIVE_GRANTS_IS_NOT_RETIRED,
     A_DEPARTMENTS_OWN_SCOPE_GOES_WITH_ITS_DEPARTMENT,
-    A_RETIRED_DEPARTMENT_LEAVES_EVERY_GRANT_ALREADY_WRITTEN_IN_FORCE,
     COMPANY_ID,
     DEPARTMENT_AUTHORITY,
     SCOPE_AUTHORITY,
@@ -47,6 +47,7 @@ from brain.console.organisation import (
     Member,
     drawn,
     founded,
+    holds_retirement_back,
     may_draw_scope,
     may_found_or_retire_departments,
     may_know_taken_scope,
@@ -208,6 +209,24 @@ def test_retiring_a_department_takes_its_own_scope_by_name_and_every_scope_namin
     assert not retired_with(sales.slug, sales, department="web", defining="web")
     assert not retired_with("broken", None, department="web", defining="web")
     assert not retired_with(COMPANY_SCOPE.slug, COMPANY_SCOPE, department="web", defining="web")
+
+
+def test_a_live_grant_over_a_department_or_a_scope_naming_it_holds_its_retirement_back() -> None:
+    """M27.15.22's decision, and the clause rule `retired_with` uses. Delete this and a grant over a
+    named set including web, or over one of web's teams, no longer holds web's retirement back and
+    is left over a department nobody can grant over again; or a grant over the whole company or over
+    another department holds every retirement back for ever; or a predicate the type refuses lets a
+    department be retired under a grant nobody could read."""
+    team = team_scope("web.design")
+
+    assert holds_retirement_back(WEB, department="web")
+    assert holds_retirement_back(membership_scope(["sales", "web"]), department="web")
+    assert holds_retirement_back(team, department="web")
+    assert holds_retirement_back(None, department="web")
+    assert not holds_retirement_back(WHOLE, department="web")
+    assert not holds_retirement_back(COMPANY_SCOPE.scope, department="web")
+    assert not holds_retirement_back(Scope.department("sales"), department="web")
+    assert not holds_retirement_back(team, department="sales")
 
 
 def test_a_scope_retirement_refuses_out_of_reach_then_the_company_then_a_departments_own() -> None:
@@ -420,6 +439,8 @@ class Structure(StructureRecords):
     departments: dict[str, tuple[str, str]] = field(default_factory=dict)
     teams: dict[tuple[str, str], str] = field(default_factory=dict)
     scopes: dict[str, ScopeRecord] = field(default_factory=dict)
+    #: The predicates of the live grants a department's retirement asks about.
+    grants: list[Scope | None] = field(default_factory=list)
     calls: list[str] = field(default_factory=list)
     by: list[Attribution] = field(default_factory=list)
     #: A refusal every write answers with instead of doing anything, when set.
@@ -459,6 +480,7 @@ class Structure(StructureRecords):
         slug: str,
         expected_name: str,
         takes: Callable[[str, ScopeRecord | None, str], bool],
+        holds: Callable[[Scope | None], bool],
         by: Attribution,
     ) -> Structured:
         if (refused := self._asked("retire_department", by)) is not None:
@@ -468,6 +490,8 @@ class Structure(StructureRecords):
         name, defining = self.departments[slug]
         if name != expected_name:
             return StructureRefusal.CHANGED_SINCE
+        if any(holds(one) for one in self.grants):
+            return StructureRefusal.LIVE_GRANTS
         for key in [one for one in self.teams if one[0] == slug]:
             del self.teams[key]
         for scope in [one for one, record in self.scopes.items() if takes(one, record, defining)]:
@@ -877,6 +901,50 @@ def test_every_readable_refusal_is_a_sentence_saying_what_to_do() -> None:
     assert structure.departments["web"] == ("Web", "web")
 
 
+def test_a_department_under_a_live_grant_is_refused_in_one_sentence_naming_no_grant() -> None:
+    """M27.15.22 over HTTP. A grant over a scope naming web holds web's retirement back, and the
+    refusal is the one sentence, whichever grants and however many; a grant over finance holds
+    nothing back and finance is retired beside it.
+
+    Delete this and the route stops asking `holds_retirement_back`, so web is retired under a live
+    grant, or the refusal is the ordinary "I could not find that" an administrator can do nothing
+    with, or it grows a grant's name or a figure the caller may not be allowed to know."""
+    one = seeded()
+    one.grants = [membership_scope(["sales", "web"])]
+    several = seeded()
+    several.grants = [WEB, WEB, team_scope("web.design"), WHOLE]
+    with client_over(one) as client:
+        held_by_one = post(
+            client,
+            "u_admin",
+            "/govern/departments/retirement",
+            {"slug": "web", "expected_name": "Web"},
+        )
+    with client_over(several) as client:
+        held_by_several = post(
+            client,
+            "u_admin",
+            "/govern/departments/retirement",
+            {"slug": "web", "expected_name": "Web"},
+        )
+        finance = post(
+            client,
+            "u_admin",
+            "/govern/departments/retirement",
+            {"slug": "finance", "expected_name": "Finance"},
+        )
+
+    sentence = f"Nothing was changed: {A_DEPARTMENT_UNDER_LIVE_GRANTS_IS_NOT_RETIRED}"
+    assert ordinary(held_by_one) == (404, sentence)
+    assert ordinary(held_by_several) == ordinary(held_by_one)
+    assert set(held_by_one.json()) == set(held_by_several.json())
+    assert "web" in one.departments
+    assert {"web", "web_all"} <= set(several.scopes)
+    assert ("web", "design") in several.teams
+    assert finance.status_code == 200
+    assert "finance" not in several.departments
+
+
 def test_a_body_the_types_refuse_is_a_422_that_reaches_no_store() -> None:
     """Validation before the write. Delete this and a team with its department's short name, a team
     named for a role, a short name the grammar refuses, a scope naming a department twice, a rename
@@ -947,9 +1015,7 @@ def test_the_page_offers_each_structure_control_only_where_its_authority_is_held
     assert [(one["slug"], one["shapeable"]) for one in web["items"]] == [("web", True)]
     assert (none["may_found"], none["may_draw_scopes"]) == (False, False)
     assert {one["shapeable"] for one in none["items"]} == {False}
-    assert admin["retiring_department"].endswith(
-        A_RETIRED_DEPARTMENT_LEAVES_EVERY_GRANT_ALREADY_WRITTEN_IN_FORCE
-    )
+    assert admin["retiring_department"].endswith(A_DEPARTMENT_UNDER_LIVE_GRANTS_IS_NOT_RETIRED)
 
 
 def test_the_stored_organisation_is_the_structure_the_routes_ask_for() -> None:
@@ -1311,21 +1377,38 @@ def test_the_store_answers_an_out_of_reach_row_as_it_answers_a_missing_one() -> 
     assert finance == [("Finance", True, True, True)]
 
 
-def test_a_retired_department_refuses_a_new_grant_and_every_grant_already_written_stays() -> None:
-    """**The behaviour a retirement changes, through the grant route and the one resolver.** One
-    person is granted a capability over web and another over a scope naming web and sales; web is
-    retired. A second person is then refused a grant over web and over the scope naming it, and
-    granted one over sales, which is still live. The two grants written before stay live rows, no
-    revocation is recorded, and the resolver still gives their holder exactly what they gave.
+def removing(capability: str, holder: str = "u_holder") -> tuple[str, str, Mapping[str, Any]]:
+    return (
+        "u_admin",
+        "/govern/grants/removal",
+        {"principal_id": holder, "capability": capability},
+    )
 
-    Delete this and retiring a department can silently revoke its grants, or leave a scope naming it
-    live so a new grant still reaches it, or retire a department's neighbour with it. **Skips
-    without a server.**"""
-    both = membership_scope(["web", "sales"])
+
+RETIRING_WEB: Final = (
+    "u_admin",
+    "/govern/departments/retirement",
+    {"slug": "web", "expected_name": "Web"},
+)
+
+
+def test_a_department_is_retired_only_once_its_live_grants_move_and_then_refuses_new_ones() -> None:
+    """**M27.15.22 through the grant route, the removal route and the one resolver.** One person is
+    granted a capability over web and another over a scope naming web and sales. Retiring web is
+    refused in the one sentence while either grant is live, including a pack assignment over web
+    written beside them; once each is removed, web is retired. A second person is then refused a
+    grant over web and over the scope naming it, and granted one over sales, which is still live.
+    The only revocations recorded are the three removals somebody made.
+
+    Delete this and a department is retired under a live grant, which is left over a boundary
+    nobody can grant over again; or the refusal is read as a grant's name or a figure; or the store
+    cannot read the pack or role grant tables as the application, so every retirement fails; or
+    retiring a department still leaves a scope naming it live. **Skips without a server.**"""
+    sentence = f"Nothing was changed: {A_DEPARTMENT_UNDER_LIVE_GRANTS_IS_NOT_RETIRED}"
     with through_0086("brain_structure_retired_grant") as url:
         for pid in ("u_holder", "u_other"):
             a_person(url, pid)
-        before = pressing(
+        written = pressing(
             url,
             (
                 ("u_admin", "/govern/departments", {"slug": "web", "name": "Web"}),
@@ -1337,13 +1420,32 @@ def test_a_retired_department_refuses_a_new_grant_and_every_grant_already_writte
                 ),
                 granting(GRANTED, "web"),
                 granting(GRANTED_LATER, "web_and_sales"),
-                (
-                    "u_admin",
-                    "/govern/departments/retirement",
-                    {"slug": "web", "expected_name": "Web"},
-                ),
+                RETIRING_WEB,
+                removing(GRANTED),
+                RETIRING_WEB,
             ),
         )
+        # A pack assignment over web, written as the superuser, holds it back as a grant does.
+        pack = sql(
+            url,
+            "INSERT INTO gate.capability_pack (name, description, capabilities)"
+            " VALUES ('web_pack', 'what web needs', ARRAY['read:knowledge']) RETURNING id",
+        )[0][0]
+        sql(
+            url,
+            "INSERT INTO gate.capability_pack_assignment"
+            " (principal_id, pack_id, scope, granted_by, reason)"
+            " VALUES ('u_other', %s, %s::jsonb, 'u_admin', 'the work needs it')",
+            pack,
+            WEB.model_dump_json(),
+        )
+        packed = pressing(url, (removing(GRANTED_LATER), RETIRING_WEB))
+        sql(
+            url,
+            "UPDATE gate.capability_pack_assignment SET deleted_at = now() WHERE pack_id = %s",
+            pack,
+        )
+        retired = pressing(url, (RETIRING_WEB,))
         after = pressing(
             url,
             (
@@ -1358,19 +1460,19 @@ def test_a_retired_department_refuses_a_new_grant_and_every_grant_already_writte
             " WHERE deleted_at IS NULL ORDER BY principal_id, capability",
         )
         revoked = [one for one in entries(url) if one.action.value == "revoke"]
-        still = (held_scope(url, "u_holder", GRANTED), held_scope(url, "u_holder", GRANTED_LATER))
 
-    assert [one.status for one in before] == [201, 201, 201, 201, 201, 200], [
-        one.body for one in before
+    assert [one.status for one in written] == [201, 201, 201, 201, 201, 404, 200, 404], [
+        one.body for one in written
     ]
+    assert [one.status for one in packed] == [200, 404], [one.body for one in packed]
+    refusals = [written[5].body, written[7].body, packed[1].body]
+    assert {one["message"] for one in refusals} == {sentence}
+    assert {frozenset(one) for one in refusals} == {frozenset(written[5].body)}
+    assert [one.status for one in retired] == [200], [one.body for one in retired]
     assert [one.status for one in after] == [404, 404, 201], [one.body for one in after]
-    assert live == [
-        ("u_holder", GRANTED, WEB.model_dump(mode="json")),
-        ("u_holder", GRANTED_LATER, both.model_dump(mode="json")),
-        ("u_other", GRANTED, Scope.department("sales").model_dump(mode="json")),
-    ]
-    assert revoked == []
-    assert still == (WEB, both)
+    assert live == [("u_other", GRANTED, Scope.department("sales").model_dump(mode="json"))]
+    # The two removals and the pack assignment ended by hand; the retirement revoked nothing.
+    assert len(revoked) == 3
 
 
 def test_a_grant_over_a_newly_drawn_scope_is_written_through_the_grant_route() -> None:
