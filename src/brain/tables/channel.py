@@ -16,6 +16,11 @@ own row and cannot reach another's. See `A_CHANNEL_IS_SWITCHED_OFF_ON_ITS_OWN_RO
 channel at another credential's slot, and a value pasted into the column is refused by its shape.
 `brain.ops.channel_store.A_CHANNEL_CREDENTIAL_IS_A_PROVIDER_CREDENTIAL` argues the engine.
 
+**A change to a channel's record is in the audit ledger.** `0114`'s trigger appends a `setting`
+entry under `setting:channel.<channel>` for a set-up and for each switch, attributed to the row's
+`updated_by` and to the reach and trace the store sets on the transaction; its secret's
+replacement is `0054`'s `credential` entry. Neither holds a tenant value or the secret.
+
 **A delivery row carries no content.** A channel, a direction, an outcome, a reason from a closed
 list, the vendor's status when it answered one, and an instant. No body, no sender, no recipient,
 no external id: a refused request is somebody's message, and a table of refusals that kept them

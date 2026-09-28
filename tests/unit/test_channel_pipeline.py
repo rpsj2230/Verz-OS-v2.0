@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import re
 import sys
 import time
 from collections.abc import Awaitable, Callable, Iterator, Mapping
@@ -23,11 +24,12 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import MappingProxyType, ModuleType
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlalchemy.schema import CreateIndex, CreateTable
 
 import brain.channels
@@ -36,6 +38,8 @@ from brain.agent_routes import CHANNEL_ADAPTERS
 from brain.api import API_PREFIX
 from brain.api_routes import GateWiring
 from brain.app import Settings, create_app
+from brain.audit.ledger import AuditChain
+from brain.audit.record import AuditRecorder, SettingChange
 from brain.channels.adapter import (
     Arrived,
     ChannelRegistryError,
@@ -101,6 +105,7 @@ from brain.tables.channel import (
     CHANNEL_SECRET_PREFIX,
     SECRET_PATH_CHARS,
     ChannelDeliveryRow,
+    ChannelRow,
     DeliveryOutcome,
     Direction,
     RefusedBecause,
@@ -108,6 +113,7 @@ from brain.tables.channel import (
 )
 from brain.tables.identity import one_of
 from tests.fixtures.operation_ledger import MemoryLedger
+from tests.fixtures.retirable import has_pgvector, retirable
 from tests.fixtures.scratch_postgres import engine, modelled, run, sql
 from tests.unit.test_api_routes import (
     AUDIENCE,
@@ -119,6 +125,8 @@ from tests.unit.test_api_routes import (
     token_for,
     verifier,
 )
+from tests.unit.test_automation_owner_store import app_engine
+from tests.unit.test_credential_writes import entries
 from tests.unit.test_tables import DIALECT, checks, migration_module, rendered, squash, table
 
 MIGRATION = Path(__file__).resolve().parents[2] / "migrations" / "versions"
@@ -134,6 +142,12 @@ LONG_AGO = datetime(2019, 3, 4, 9, 0, tzinfo=UTC)
 CANARY = "CANARY-MESSAGE-7QX2P"
 
 EVENTS = f"{API_PREFIX}/channels/{{name}}/events"
+
+#: A reach digest and a trace a store write is attributed to, in the ledger's own shapes.
+REACH = "1f" * 16
+TRACE = "trace-channel-1"
+AS_ADMIN: dict[str, str] = {"actor": "u_admin", "ent_hash": REACH, "trace_id": TRACE}
+AS_OTHER: dict[str, str] = {"actor": "u_other", "ent_hash": REACH, "trace_id": TRACE}
 
 
 # ------------------------------------------------------------------------ the seams
@@ -162,6 +176,8 @@ class Records:
 
     kept: dict[Channel, ChannelRecord] = field(default_factory=dict)
     changes: int = 0
+    #: Who, at what reach and in which request, for every write, in order.
+    attributed: list[tuple[str, str, str]] = field(default_factory=list)
 
     async def get(self, channel: Channel) -> ChannelRecord | None:
         return self.kept.get(channel)
@@ -170,9 +186,17 @@ class Records:
         return tuple(self.kept[one] for one in sorted(self.kept))
 
     async def save(
-        self, channel: Channel, *, enabled: bool, tenant: Mapping[str, str], actor: str
+        self,
+        channel: Channel,
+        *,
+        enabled: bool,
+        tenant: Mapping[str, str],
+        actor: str,
+        ent_hash: str,
+        trace_id: str,
     ) -> ChannelRecord:
         self.changes += 1
+        self.attributed.append((actor, ent_hash, trace_id))
         kept = ChannelRecord(
             channel=channel,
             enabled=enabled,
@@ -184,11 +208,14 @@ class Records:
         self.kept[channel] = kept
         return kept
 
-    async def switch(self, channel: Channel, *, enabled: bool, actor: str) -> ChannelRecord | None:
+    async def switch(
+        self, channel: Channel, *, enabled: bool, actor: str, ent_hash: str, trace_id: str
+    ) -> ChannelRecord | None:
         found = self.kept.get(channel)
         if found is None:
             return None
         self.changes += 1
+        self.attributed.append((actor, ent_hash, trace_id))
         self.kept[channel] = ChannelRecord(
             channel=channel,
             enabled=enabled,
@@ -870,6 +897,33 @@ def test_a_streamed_request_is_read_no_further_than_one_byte_past_a_message(
     assert world.secrets.reads == []
 
 
+def test_the_events_address_takes_no_sign_in_and_refuses_every_unsigned_request(
+    client: TestClient, world: World
+) -> None:
+    """`A_PLATFORM_PROVES_A_SIGNATURE_AND_HAS_NO_SIGN_IN`, the one written exception to the rule
+    that every route under the prefix authenticates its caller. Unsigned, the channel that is on
+    refuses as unaccepted, every other name answers as nothing there, and nothing is answered;
+    every other channel route asks for a sign-in.
+
+    Delete this and the exception in `tests/unit/test_api_routes.py` excuses a route nothing
+    shows refusing a stranger."""
+    world.records.kept[Channel.WEBHOOK] = fresh_record()
+    assert {API_PREFIX + channel_routes.EVENTS_PATH} == channel_routes.SIGNED_NOT_SIGNED_IN
+    for name in [*(one.value for one in Channel), "carrier-pigeon"]:
+        answer = client.post(EVENTS.format(name=name), content=json.dumps(message()).encode())
+        assert answer.status_code == (401 if name == "webhook" else 404), name
+    assert world.transport.sent == [] and world.claims.asked == 0
+    for method, path in (
+        ("GET", "/channels"),
+        ("PUT", "/channels/webhook"),
+        ("POST", "/channels/webhook/switch"),
+        ("GET", "/channels/webhook/deliveries"),
+        ("POST", "/channels/webhook/test"),
+    ):
+        refused = client.request(method, API_PREFIX + path, json=None if method == "GET" else {})
+        assert refused.status_code == 401, path
+
+
 def test_a_name_that_is_no_channel_and_a_switched_off_channel_are_one_answer(
     client: TestClient, world: World
 ) -> None:
@@ -1330,6 +1384,217 @@ def test_the_list_and_the_deliveries_show_the_manager_what_happened_and_nothing_
     assert narrow == []
 
 
+# ======================================================================== the audit ledger
+
+
+@dataclass
+class CredentialRecords:
+    """`brain.ops.credentials.CredentialWrites`, keeping every record it was asked to make."""
+
+    kept: list[dict[str, str]] = field(default_factory=list)
+
+    async def record(self, *, slot: str, written_by: str, trace_id: str, ent_hash: str) -> None:
+        self.kept.append(
+            {"slot": slot, "written_by": written_by, "trace_id": trace_id, "ent_hash": ent_hash}
+        )
+
+
+def test_a_set_up_and_a_switch_are_attributed_to_the_caller_s_reach_and_request(
+    client: TestClient, world: World
+) -> None:
+    """**The owner's rule that every change is audited, through the routes.** Each write reaches
+    the store with the caller, their live reach digest and the request's trace, which is what the
+    trigger writes into the ledger entry instead of `0003`'s placeholders.
+
+    Delete this and a route can write a channel with the placeholders, and the ledger cannot say
+    at what reach, or in which request, a channel was switched on."""
+    put = client.put(
+        f"{API_PREFIX}/channels/webhook",
+        json={"enabled": True, "tenant": {REPLY_URL: REPLY_TO}},
+        headers=headers("u_admin"),
+    )
+    off = client.post(
+        f"{API_PREFIX}/channels/webhook/switch", json={"enabled": False}, headers=headers("u_admin")
+    )
+    assert put.status_code == off.status_code == 200
+    assert [actor for actor, _, _ in world.records.attributed] == ["u_admin", "u_admin"]
+    for _, reach, trace in world.records.attributed:
+        assert re.fullmatch(r"[0-9a-f]{32}", reach) and reach != "0" * 32
+        assert trace and not trace.startswith("tx.")
+    assert world.records.attributed[0][2] != world.records.attributed[1][2]
+
+
+def test_a_secret_replaced_is_recorded_by_its_slot_and_never_by_its_value(
+    client: TestClient, world: World
+) -> None:
+    """The secret's replacement is `0054`'s `credential` entry, naming the channel's slot, the
+    caller and the request, and the record handed to it has nowhere to put the value.
+
+    Delete this and a secret can be replaced from the console with nothing in the ledger."""
+    writes = CredentialRecords()
+    client.app.state.credentials = Credentials(world.vault, writes=writes)  # type: ignore[attr-defined]
+    answer = client.put(
+        f"{API_PREFIX}/channels/webhook",
+        json={"enabled": True, "tenant": {}, "secret": SECRET},
+        headers=headers("u_admin"),
+    )
+    assert answer.status_code == 200
+    assert len(writes.kept) == 1
+    kept = writes.kept[0]
+    assert (kept["slot"], kept["written_by"]) == (f"{CHANNEL_SECRET_PREFIX}webhook", "u_admin")
+    assert kept["trace_id"] == world.records.attributed[0][2]
+    assert SECRET not in repr(writes.kept)
+
+
+class Executed:
+    """An `AsyncSession` stand-in keeping the statements it was given, in order."""
+
+    def __init__(self, returned: Any) -> None:
+        self.statements: list[Any] = []
+        self.returned = returned
+
+    async def __aenter__(self) -> Executed:
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        return None
+
+    def begin(self) -> Executed:
+        return self
+
+    async def execute(self, statement: Any) -> Any:
+        self.statements.append(statement)
+        returned = self.returned
+
+        class Result:
+            def scalar_one(self) -> Any:
+                return returned
+
+            def scalar_one_or_none(self) -> Any:
+                return returned
+
+        return Result()
+
+
+def test_the_store_sets_the_attribution_in_the_transaction_before_it_writes() -> None:
+    """`A_CHANNEL_CHANGE_IS_ATTRIBUTED_IN_ITS_OWN_TRANSACTION`, read off the statements. The three
+    settings first, then the write, in one session, for a save and for a switch.
+
+    Delete this and the store can write first and attribute afterwards, when the trigger has
+    already read nothing."""
+    row = ChannelRow(
+        channel="webhook",
+        enabled=True,
+        tenant={},
+        secret_path=f"{CHANNEL_SECRET_PREFIX}webhook",
+        secret_role="application",
+        updated_by="u_admin",
+        updated_at=LONG_AGO,
+    )
+    for write in ("save", "switch"):
+        session = Executed(row)
+        # A factory handing back the stand-in: the store only calls it and enters what it returns.
+        stored = StoredChannels(cast(Any, lambda held=session: held))
+
+        async def through(stored: StoredChannels = stored, write: str = write) -> object:
+            if write == "save":
+                return await stored.save(Channel.WEBHOOK, enabled=True, tenant={}, **AS_ADMIN)
+            return await stored.switch(Channel.WEBHOOK, enabled=False, **AS_ADMIN)
+
+        run(through)
+        said = [str(one) for one in session.statements]
+        settings = [one.compile().params for one in session.statements[:3]]
+        assert all("set_config" in one for one in said[:3]), write
+        assert [one["name"] for one in settings] == [
+            "brain.actor_id",
+            "brain.ent_hash",
+            "brain.trace_id",
+        ]
+        assert [one["value"] for one in settings] == ["u_admin", REACH, TRACE]
+        assert len(said) == 4 and "ops.channel" in said[3], write
+
+
+def trigger() -> str:
+    return " ".join(migration().CHANNEL_TRIGGER_FUNCTION.split())
+
+
+def test_the_channel_trigger_writes_the_setting_words_its_writer_and_never_the_tenant() -> None:
+    """Held to `AuditRecorder.setting`, which writes the same entry in code: the subject names the
+    channel, the words are the setting's, the actor is the row's own `updated_by`, and the details
+    are the change word alone.
+
+    Delete this and the trigger can drift from the recorder, name no channel, or write a tenant
+    value into the table that is kept longest."""
+    body = trigger()
+    written = re.findall(r"v_changes := v_changes \|\| '(\w+)'::text;", body)
+    assert sorted(written) == ["set", "switched_off", "switched_on"]
+    assert set(written) <= {one.value for one in SettingChange}
+    assert "v_subject text := 'setting:channel.' || NEW.channel;" in body
+    assert "v_details := jsonb_build_object('change', v_changes[i]);" in body
+    assert "v_seq, v_at, NEW.updated_by, 'setting', v_subject, v_ent_hash," in body
+    assert "OLD.tenant IS DISTINCT FROM NEW.tenant" in body
+    assert "OLD.enabled IS DISTINCT FROM NEW.enabled" in body
+    assert "NEW.tenant)" not in body and "secret" not in body
+    entry = AuditRecorder(
+        AuditChain(), actor_id="u_admin", ent_hash=REACH, trace_id=TRACE, clock=lambda: LONG_AGO
+    ).setting(key="channel.webhook", change=SettingChange.SWITCHED_OFF)
+    assert (entry.subject, dict(entry.details)) == (
+        "setting:channel.webhook",
+        {"change": "switched_off"},
+    )
+    up = squash(rendered("upgrade", MIGRATION_0114))
+    assert "CREATE TRIGGER channel_is_audited AFTER INSERT OR UPDATE ON ops.channel" in up
+    down = squash(rendered("downgrade", MIGRATION_0114))
+    assert "DROP TRIGGER channel_is_audited ON ops.channel" in down
+    assert "DROP FUNCTION ops.record_channel_change()" in down
+
+
+@pytest.fixture(scope="module")
+def migrated() -> Iterator[str]:
+    """A database built through every migration that ships, which a server with pgvector builds."""
+    with retirable("brain_test_channel_audit") as url:
+        if not has_pgvector(url):
+            pytest.skip("the migrations to 0114 need pgvector, which CI's server has")
+        yield url
+
+
+def test_each_set_up_and_switch_leaves_one_attributed_entry_and_the_chain_verifies(
+    migrated: str,
+) -> None:
+    """**The owner's rule against a server, as the application role.** A set-up is `set` and
+    `switched_on`; a switch off is `switched_off`; a save that changes nothing appends nothing; a
+    new tenant is `set`. Every entry names the channel, the writer, their reach and the request,
+    holds the change word and nothing else, and the chain verifies.
+
+    Delete this and the trigger is only ever read, and the first time it runs is on an install."""
+    sql(migrated, "TRUNCATE ops.channel")
+    before = len(entries(migrated))
+
+    async def through() -> None:
+        db = app_engine(migrated)
+        stored = StoredChannels(async_sessionmaker(db, expire_on_commit=False))
+        await stored.save(Channel.WEBHOOK, enabled=True, tenant={REPLY_URL: REPLY_TO}, **AS_ADMIN)
+        await stored.switch(Channel.WEBHOOK, enabled=False, **AS_OTHER)
+        await stored.save(Channel.WEBHOOK, enabled=False, tenant={REPLY_URL: REPLY_TO}, **AS_OTHER)
+        await stored.save(Channel.WEBHOOK, enabled=False, tenant={}, **AS_ADMIN)
+        await db.dispose()
+
+    run(through)
+    chain = entries(migrated)
+    mine = chain[before:]
+    assert [(one.actor_id, one.subject, dict(one.details)) for one in mine] == [
+        ("u_admin", "setting:channel.webhook", {"change": "set"}),
+        ("u_admin", "setting:channel.webhook", {"change": "switched_on"}),
+        ("u_other", "setting:channel.webhook", {"change": "switched_off"}),
+        ("u_admin", "setting:channel.webhook", {"change": "set"}),
+    ]
+    assert {(one.action.value, one.ent_hash, one.trace_id) for one in mine} == {
+        ("setting", REACH, TRACE)
+    }
+    assert REPLY_TO not in repr(mine)
+    assert AuditChain(chain).verify() is None
+
+
 # ======================================================================== the migration
 
 
@@ -1407,19 +1672,15 @@ def test_the_stores_keep_one_row_per_channel_and_switch_only_the_one_named(datab
     reference derived. Delete this and the upsert and the switch are only ever faked."""
     sql(database, "TRUNCATE ops.channel")
     db = engine(database)
-    from sqlalchemy.ext.asyncio import async_sessionmaker
-
     stored = StoredChannels(async_sessionmaker(db, expire_on_commit=False))
 
     async def through() -> tuple[
         ChannelRecord | None, ChannelRecord | None, tuple[ChannelRecord, ...]
     ]:
-        await stored.save(
-            Channel.WEBHOOK, enabled=True, tenant={REPLY_URL: REPLY_TO}, actor="u_admin"
-        )
-        await stored.save(Channel.LARK, enabled=True, tenant={}, actor="u_admin")
-        await stored.switch(Channel.WEBHOOK, enabled=False, actor="u_other")
-        missing = await stored.switch(Channel.SLACK, enabled=False, actor="u_other")
+        await stored.save(Channel.WEBHOOK, enabled=True, tenant={REPLY_URL: REPLY_TO}, **AS_ADMIN)
+        await stored.save(Channel.LARK, enabled=True, tenant={}, **AS_ADMIN)
+        await stored.switch(Channel.WEBHOOK, enabled=False, **AS_OTHER)
+        missing = await stored.switch(Channel.SLACK, enabled=False, **AS_OTHER)
         webhook = await stored.get(Channel.WEBHOOK)
         every = await stored.every()
         await db.dispose()
@@ -1470,8 +1731,6 @@ def test_deliveries_are_appended_and_read_newest_first_and_a_claim_is_granted_on
     sql(database, "TRUNCATE ops.channel_delivery")
     sql(database, "TRUNCATE gate.channel_event")
     db = engine(database)
-    from sqlalchemy.ext.asyncio import async_sessionmaker
-
     sessions = async_sessionmaker(db, expire_on_commit=False)
     deliveries = StoredDeliveries(sessions)
     claims = StoredClaims(sessions)

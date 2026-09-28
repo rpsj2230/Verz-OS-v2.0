@@ -21,6 +21,13 @@ as the model providers' keys, so a reader that took any path would be a second w
 and the record's own check derives the path from the channel. See
 `A_CHANNEL_READS_ONLY_ITS_OWN_SLOT`.
 
+**Every change to a record is attributed, and the database writes it to the ledger.** `save` and
+`switch` take who is writing, at what reach and in which request, and execute
+`brain.tables.audit.attributed_to` in the transaction before the write, so the trigger `0114` puts
+on `ops.channel` records the entry with the writer's reach digest and the request's trace rather
+than `0003`'s placeholders. The route has no other way to write a record. See
+`A_CHANNEL_CHANGE_IS_ATTRIBUTED_IN_ITS_OWN_TRANSACTION`.
+
 **A delivery entry is checked before it is written.** The pairing of direction and outcome and the
 rule that a reason is given exactly when nothing was delivered are the table's checks, and
 `DeliveryEntry` makes them again so a wrong entry fails where it was built rather than as a
@@ -53,6 +60,7 @@ from brain.ops.credentials import KEY_FIELD, CredentialVault, KeySlot, VaultStat
 from brain.ops.openbao import VaultRefusedError, VaultUnreachableError
 from brain.ops.provider_keys import StaticKvReader
 from brain.ops.secrets import SecretRef, SecretsUnavailableError, VaultRole
+from brain.tables.audit import attributed_to
 from brain.tables.channel import (
     CHANNEL_SECRET_PREFIX,
     OUTCOMES_BY_DIRECTION,
@@ -78,6 +86,13 @@ A_CHANNEL_READS_ONLY_ITS_OWN_SLOT: Final = (
     "Channel secrets share an engine with the model providers' keys, so a reader that took any "
     "path would be a second way to read a provider's key. A reference outside the channel prefix "
     "is refused before the vault is asked."
+)
+
+#: Why a record's write carries its attribution.
+A_CHANNEL_CHANGE_IS_ATTRIBUTED_IN_ITS_OWN_TRANSACTION: Final = (
+    "The ledger entry for a channel's set-up or switch is written by a trigger, which cannot know "
+    "who is writing. The store sets the writer, their reach digest and the request's trace on the "
+    "transaction before the write, so the entry names all three instead of placeholders."
 )
 
 #: How many delivery rows a listing reads at most. A page, not a history.
@@ -159,13 +174,22 @@ class ChannelRecords(Protocol):
         ...
 
     async def save(
-        self, channel: Channel, *, enabled: bool, tenant: Mapping[str, str], actor: str
+        self,
+        channel: Channel,
+        *,
+        enabled: bool,
+        tenant: Mapping[str, str],
+        actor: str,
+        ent_hash: str,
+        trace_id: str,
     ) -> ChannelRecord:
-        """Create or replace this channel's record, and answer with it as kept."""
+        """Create or replace this channel's record, attributed, and answer with it as kept."""
         ...
 
-    async def switch(self, channel: Channel, *, enabled: bool, actor: str) -> ChannelRecord | None:
-        """Switch this channel's record on or off, or None when there is no record."""
+    async def switch(
+        self, channel: Channel, *, enabled: bool, actor: str, ent_hash: str, trace_id: str
+    ) -> ChannelRecord | None:
+        """Switch this channel's record on or off, attributed, or None when there is none."""
         ...
 
 
@@ -226,6 +250,12 @@ def _record_of(row: ChannelRow) -> ChannelRecord:
     )
 
 
+async def _attribute(session: AsyncSession, *, actor: str, ent_hash: str, trace_id: str) -> None:
+    """See `A_CHANNEL_CHANGE_IS_ATTRIBUTED_IN_ITS_OWN_TRANSACTION`. Before the write, always."""
+    for statement in attributed_to(actor_id=actor, ent_hash=ent_hash, trace_id=trace_id):
+        await session.execute(statement)
+
+
 class StoredChannels:
     """`ops.channel`, read and written as the application role."""
 
@@ -245,7 +275,14 @@ class StoredChannels:
             return tuple(_record_of(row) for row in rows)
 
     async def save(
-        self, channel: Channel, *, enabled: bool, tenant: Mapping[str, str], actor: str
+        self,
+        channel: Channel,
+        *,
+        enabled: bool,
+        tenant: Mapping[str, str],
+        actor: str,
+        ent_hash: str,
+        trace_id: str,
     ) -> ChannelRecord:
         ref = channel_secret_ref(channel)
         values: dict[str, Any] = {
@@ -264,9 +301,12 @@ class StoredChannels:
             .returning(ChannelRow)
         )
         async with self._sessions() as session, session.begin():
+            await _attribute(session, actor=actor, ent_hash=ent_hash, trace_id=trace_id)
             return _record_of((await session.execute(statement)).scalar_one())
 
-    async def switch(self, channel: Channel, *, enabled: bool, actor: str) -> ChannelRecord | None:
+    async def switch(
+        self, channel: Channel, *, enabled: bool, actor: str, ent_hash: str, trace_id: str
+    ) -> ChannelRecord | None:
         statement = (
             update(ChannelRow)
             .where(ChannelRow.channel == channel.value)
@@ -274,6 +314,7 @@ class StoredChannels:
             .returning(ChannelRow)
         )
         async with self._sessions() as session, session.begin():
+            await _attribute(session, actor=actor, ent_hash=ent_hash, trace_id=trace_id)
             row = (await session.execute(statement)).scalar_one_or_none()
             return None if row is None else _record_of(row)
 

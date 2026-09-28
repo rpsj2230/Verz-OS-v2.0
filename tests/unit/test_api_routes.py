@@ -52,6 +52,7 @@ from brain.api_routes import (
     filter_scope,
 )
 from brain.app import Settings, create_app
+from brain.channel_routes import SIGNED_NOT_SIGNED_IN
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.core.redaction import LOCK_TEXT
@@ -907,10 +908,17 @@ def test_every_route_under_the_prefix_authenticates_its_caller() -> None:
     authentication. The first PATCH mounted under this prefix found it. A write is the route
     where this matters most, and it was the one shape the check could not see.
 
+    **One written exception, `brain.channel_routes.SIGNED_NOT_SIGNED_IN`**: the address a vendor
+    posts a channel's message to, which has no sign-in to present and proves the channel's
+    signature instead. It is held to exactly that one path here, and its refusal of an unsigned
+    request is driven in `tests/unit/test_channel_pipeline.py`.
+
     Delete this and the next route under this prefix is public until somebody notices."""
     app: FastAPI = create_app(Settings(env="development"))
     document = app.openapi()["paths"]
-    paths = [p for p in document if p.startswith(API_PREFIX)]
+    assert {f"{API_PREFIX}/channels/{{name}}/events"} == SIGNED_NOT_SIGNED_IN
+    assert set(document) >= SIGNED_NOT_SIGNED_IN
+    paths = [p for p in document if p.startswith(API_PREFIX) and p not in SIGNED_NOT_SIGNED_IN]
 
     assert paths, "no route is mounted under the API prefix"
 

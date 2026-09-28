@@ -63,6 +63,7 @@ from typing import Final
 import structlog
 
 from brain.ops.credentials import CredentialVault, VaultState, problems_with
+from brain.ops.inbound_webhooks import CHANNEL_EVENTS_PATH, receiving
 from brain.ops.limits import MAX_BACKOFF_SECONDS
 from brain.ops.openbao import (
     SIGNING_PREFIX,
@@ -95,12 +96,32 @@ A_SIGNING_KEY_A_PERSON_COULD_TYPE_IS_ONE_SOMEBODY_COULD_GUESS: Final = (
     "its own shared secret to, for the same reason."
 )
 
-#: What a person is told about inbound webhooks, above the list of channels.
+#: What a person is told about inbound webhooks when this release receives on no channel.
 NO_CHANNEL_RECEIVES_A_WEBHOOK: Final = (
-    "No channel on this install receives a webhook: none has an address a platform could send to, "
-    "and no secret is held for any of them. Below is each channel a platform would call in on, "
-    "and whether the check that a request really came from that platform is written yet."
+    "No channel on this install receives a webhook: none has an address a platform could send to. "
+    "Below is each channel a platform would call in on, and whether the check that a request "
+    "really came from that platform is written yet."
 )
+
+
+def receiving_told() -> str:
+    """What a person is told about inbound webhooks, above the list of channels.
+
+    Built from `brain.ops.inbound_webhooks.receiving`, so the sentence names exactly the channels
+    this release has a receiver for, and says the two things an install decides about each: its
+    record switched on, and its secret held. `NO_CHANNEL_RECEIVES_A_WEBHOOK` when there are none.
+    """
+    names = sorted(one.value for one in receiving())
+    if not names:
+        return NO_CHANNEL_RECEIVES_A_WEBHOOK
+    listed = ", ".join(names)
+    return (
+        f"A platform posts to {CHANNEL_EVENTS_PATH} under this install's address, and this release "
+        f"receives there for: {listed}. Each is received only while its channel record is "
+        "switched on and its secret is held; every other channel's address answers as though "
+        "nothing were there. Below is each channel a platform would call in on, and whether "
+        "the check that a request really came from that platform is written yet."
+    )
 
 
 def how_delivery_works() -> str:
