@@ -48,6 +48,7 @@ import { Adoption } from "./pages/Adoption";
 import { Agents } from "./pages/Agents";
 import { AgentTemplates } from "./pages/AgentTemplates";
 import { Ask } from "./pages/Ask";
+import { CitedDocument } from "./pages/CitedDocument";
 import { Capabilities } from "./pages/Capabilities";
 import { Capacity } from "./pages/Capacity";
 import { Connectors } from "./pages/Connectors";
@@ -453,6 +454,10 @@ export const routes: RouteObject[] = [
       // install or a department. One path: a tool is shown whole. See `pages/Tools.tsx`.
       { path: "tools", element: <Tools /> },
       { path: "*", element: <NotFound /> },
+      // The document a citation on Ask opens, at the passage in the address's fragment, which no
+      // server sees. Under Ask's own address because it is reached from an answer. Eager, for
+      // `Roles`' reason. See `pages/CitedDocument.tsx`.
+      { path: "ask/documents/:documentId", element: <CitedDocument /> },
     ],
   },
 ];
