@@ -44,8 +44,9 @@ row. It is not the prober `brain.models.health` keeps out of the live ring: a pe
 button once is live traffic through the whole path, and three failed presses opening a breaker is
 the breaker being right. The reply is not returned, because nothing a model says about a fixed
 sentence is a fact an administrator needs; that it answered, which deployment and model served it,
-and what it cost, are. It is recorded on the metadata ledger and not as a question, because it is
-not one. See `A_CHECK_IS_A_REQUEST_AND_NOT_A_PROBE`.
+and what it cost, are. It is recorded on the metadata ledger and in spend, at the price the
+administrator set for the model, and not as a question, because it is not one. See
+`A_CHECK_IS_A_REQUEST_AND_NOT_A_PROBE`.
 
 **A provider no step names is checked through its default model, not refused** (found on the
 owner's install on 2026-09-28: Test on OpenAI, whose key he had just saved, answered that nothing
@@ -100,7 +101,15 @@ on the row and `0059`'s trigger appends a `setting` entry for it:
 `brain.ops.setting_store.A_SWITCH_SHOWS_ITS_LAST_CHANGE_AND_THE_LEDGER_KEEPS_EVERY_ONE`. A rung is
 added through the matrix gate (`brain.routing_routes`), never here.
 
+**What a model costs is set here, per provider and model, in the install's currency (M27.12.5).**
+`GET /models/prices` lists every model on the ladder and every model priced, each with its price
+and whether a call to it is costed; `PUT /models/prices` sets one, for the holder of the switch's
+capability, attributed so `0059`'s trigger ledgers who changed which provider's prices. A price is
+refused while the install has no currency: a figure set in none is the plausibly wrong unit
+`brain.locale` refuses to draw. See `brain.models.pricing` and `brain.ops.price_store`.
+
 Task ids: M27.8.8, M27.2.3, M5.6.4, M5.7.1, M5.7.2, M5.2.2, M5.4.3, M5.4.8, M5.5.1
+Task ids: M27.12.5
 """
 
 from __future__ import annotations
@@ -109,14 +118,15 @@ import asyncio
 from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime, timedelta
 from types import MappingProxyType
-from typing import Any, Final, Literal
+from typing import Annotated, Any, Final, Literal
 
 import structlog
 from fastapi import APIRouter, Request
-from pydantic import BaseModel, ConfigDict
+from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from brain.api import API_PREFIX, COMMON_RESPONSES
+from brain.api import API_PREFIX, COMMON_RESPONSES, refused_request
 from brain.api_routes import Asked
 from brain.attribution import attribute
 from brain.console.model_matrix import exhausted_tiers, matrix
@@ -128,6 +138,7 @@ from brain.core.lane import Lane
 from brain.credential_routes import SlotView, credentials_of, listing, may_manage
 from brain.gate.finish import Finished, ModelCallOutcome, Origin, RequestRecorder, finish
 from brain.install import hold_saved
+from brain.locale import currency as install_currency
 from brain.models.assembly import (
     HOSTED_PROFILE,
     LOCAL_PROFILE,
@@ -143,7 +154,8 @@ from brain.models.disclosure import DataCategory
 from brain.models.driver import DriverFailure, DriverMessage, ProviderUnavailable, Role
 from brain.models.evidence import EVIDENCE_WINDOW
 from brain.models.metering import Meter
-from brain.models.registry import ProviderKind, ProviderRecord
+from brain.models.pricing import NO_CURRENCY, Price, PricingError, decimal_of
+from brain.models.registry import MODEL_NAME_PATTERN, SLUG_PATTERN, ProviderKind, ProviderRecord
 from brain.models.routing import TIER_LADDER, BreakerState, FallbackTrigger, NoCompliantRoute, Tier
 from brain.models.tier_rules import TierTable
 from brain.models.wire import LOCAL_PROVIDER
@@ -161,9 +173,11 @@ from brain.ops.model_service import (
     switch_provider,
     switch_states,
 )
+from brain.ops.price_store import read_prices, set_price
 from brain.ops.provider_health_store import live_constraints, recent_alerts
 from brain.ops.provider_keys import PROVIDER_SLOTS
 from brain.ops.telemetry_store import TelemetryRecorder
+from brain.ops.usage_store import UsageRecorder
 from brain.routing_routes import MATRIX_WRITE
 from brain.settings_routes import may_configure
 
@@ -996,7 +1010,8 @@ async def check(request: Request, provider: str, asked: Asked) -> CheckView:
     recorders: tuple[RequestRecorder, ...] = tuple(
         one
         for one in getattr(request.app.state, "request_recorders", ())
-        if isinstance(one, TelemetryRecorder)
+        # The ledger's row and the check's cost (M27.12.5): a check is a billed call.
+        if isinstance(one, TelemetryRecorder | UsageRecorder)
     )
     await finish(
         recorders,
@@ -1131,3 +1146,147 @@ def _unanswered(
         trace_id=trace_id,
         default_model=default is not None,
     )
+
+
+# ------------------------------------------------------------------------------ the prices
+#: Said when a price is set before the install has a currency to set it in.
+A_PRICE_NEEDS_THE_INSTALLS_CURRENCY: Final = (
+    "Choose the install's currency on Install, Settings first. A price is kept in that currency, "
+    "and one set in none would be counted in whichever currency is chosen later."
+)
+
+
+class ModelPriceView(BaseModel):
+    """One model: whether the ladder uses it, its price, and whether a call to it is costed.
+
+    `costed` is true only for a price in the install's currency; a model with no price, or one
+    priced in another currency, is not costed, and its calls leave no cost row.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    provider: str
+    model: str
+    on_ladder: bool
+    input_minor_per_million: str | None
+    output_minor_per_million: str | None
+    currency: str | None
+    costed: bool
+
+
+class PricesView(BaseModel):
+    """Every model the ladder names or a price names, in provider then model order."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    currency: str
+    models: list[ModelPriceView]
+
+
+class PriceAsked(BaseModel):
+    """One model's price: minor units of the install's currency per million tokens, as text."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    provider: Annotated[str, Field(pattern=SLUG_PATTERN)]
+    model: Annotated[str, Field(pattern=MODEL_NAME_PATTERN)]
+    input_minor_per_million: Annotated[str, Field(min_length=1, max_length=24)]
+    output_minor_per_million: Annotated[str, Field(min_length=1, max_length=24)]
+
+    @field_validator("input_minor_per_million", "output_minor_per_million")
+    @classmethod
+    def _a_price(cls, value: str) -> str:
+        try:
+            decimal_of(value)
+        except PricingError as refused:
+            raise ValueError(str(refused)) from None
+        return value.strip()
+
+
+def price_views(
+    plan: Planned, prices: Mapping[tuple[str, str], Price], *, currency: str
+) -> list[ModelPriceView]:
+    """Each model on the ladder or priced, with its price and whether its calls are costed."""
+    ladder = {(one.provider, one.model) for one in plan.state.rungs}
+    views = []
+    for provider, model in sorted(ladder | set(prices)):
+        price = prices.get((provider, model))
+        views.append(
+            ModelPriceView(
+                provider=provider,
+                model=model,
+                on_ladder=(provider, model) in ladder,
+                input_minor_per_million=None if price is None else str(price.input_minor),
+                output_minor_per_million=None if price is None else str(price.output_minor),
+                currency=None if price is None else price.currency,
+                costed=price is not None and price.currency == currency,
+            )
+        )
+    return views
+
+
+async def _prices_view(request: Request) -> PricesView:
+    factory = _sessions(request)
+    if factory is None:
+        raise Failed("no database on this process")
+    plan = await models_of(request).calls.planned()
+    async with factory() as session:
+        prices = await read_prices(session)
+    code = install_currency()
+    return PricesView(currency=code, models=price_views(plan, prices, currency=code))
+
+
+@router.get("/models/prices", response_model=PricesView, responses=COMMON_RESPONSES)
+async def model_prices(request: Request, asked: Asked) -> PricesView:
+    """Every model on the ladder or priced, with what a million tokens cost on it."""
+    if not may_read(asked.reach, asked.now):
+        log.info("model prices not answerable", principal=asked.caller.principal.id)
+        raise _not_answerable()
+    return await _prices_view(request)
+
+
+@router.put("/models/prices", response_model=PricesView, responses=COMMON_RESPONSES)
+async def set_model_price(request: Request, body: PriceAsked, asked: Asked) -> Response:
+    """Set one model's price in the install's currency, and answer with every model's.
+
+    The authority first, then the provider's name, then the currency, then the database, which is
+    the switch's own order. See `A_PRICE_NEEDS_THE_INSTALLS_CURRENCY`.
+    """
+    if not may_switch(asked.reach, asked.now):
+        log.info("model price refused", principal=asked.caller.principal.id)
+        raise _not_answerable()
+    if body.provider not in switchable(await models_of(request).calls.planned()):
+        log.info("model price names no provider", principal=asked.caller.principal.id)
+        raise _not_answerable()
+    code = install_currency()
+    if code == NO_CURRENCY:
+        return refused_request(
+            [
+                {
+                    "loc": ("body", "currency"),
+                    "type": "value_error",
+                    "msg": A_PRICE_NEEDS_THE_INSTALLS_CURRENCY,
+                }
+            ],
+            _trace_id(),
+        )
+    price = Price(
+        input_minor=decimal_of(body.input_minor_per_million),
+        output_minor=decimal_of(body.output_minor_per_million),
+        currency=code,
+    )
+    factory = _sessions(request)
+    if factory is None:
+        raise Failed("no database on this process")
+    async with factory() as session:
+        # Who, at what reach, in which request, for the ledger entry the setting's trigger writes.
+        await attribute(session, asked)
+        await set_price(session, body.provider, body.model, price, by=asked.caller.principal.id)
+        await session.commit()
+    log.info(
+        "model priced",
+        provider=body.provider,
+        model=body.model,
+        principal=asked.caller.principal.id,
+    )
+    return JSONResponse((await _prices_view(request)).model_dump(mode="json"))

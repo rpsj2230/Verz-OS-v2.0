@@ -1491,14 +1491,14 @@ def test_the_headline_is_this_agents_spend_at_whichever_basis_the_reader_holds(
         "range": "30d",
         "spend_minor": 1000,
         "runs": 2,
-        "recorded": False,
+        "recorded": True,
     }
     assert narrower == {
         "basis": "own",
         "range": "30d",
         "spend_minor": 0,
         "runs": 0,
-        "recorded": False,
+        "recorded": True,
     }
     assert set(agent_routes.HeadlineView.model_fields) == {
         "basis",
@@ -1534,7 +1534,7 @@ def test_a_cost_outside_the_window_or_without_a_trace_is_absent_from_the_figure(
         "range": "30d",
         "spend_minor": 400,
         "runs": 1,
-        "recorded": False,
+        "recorded": True,
     }
 
 

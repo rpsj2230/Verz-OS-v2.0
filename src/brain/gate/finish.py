@@ -114,7 +114,14 @@ refused call still carries nothing, which is the absence `ToolCallOutcome` argue
 meter as it was decided; with `FrontRecord`'s lane, its basis and the selected agent it is the
 whole routing decision, and the row is written from these objects rather than re-derived.
 
-Task ids: M37.3.2.4, M30.5.2, M21.3.4, M27.7.14, M24.3.2, M3.4.2, M3.6.3
+**Which skills a run used, and which source a question read, are the last two facts (M27.15.9,
+M27.1.5).** `skills` is each skill whose card the run offered to a model, by name and digest, as
+`brain.gate.model_lane.draft` offered it, and it needs `agent_id`: a card is offered only by a run
+of a stored agent, so skills without an agent are a wiring fault and refused here. `connector` is
+the source the lane's readers read, one name or None, counted by the wrapper that counts the
+reads; `brain.ops.usage_store` and `brain.ops.telemetry` are their readers.
+
+Task ids: M37.3.2.4, M30.5.2, M21.3.4, M27.7.14, M24.3.2, M3.4.2, M3.6.3, M27.15.9, M27.1.5
 """
 
 from __future__ import annotations
@@ -280,6 +287,18 @@ class FrontRecord:
 
 
 @dataclass(frozen=True)
+class SkillUse:
+    """One skill a run offered to a model: its name and the digest of the version it was shown.
+
+    No description and no body: `brain.tools.skills.SkillCard` has no body to give, and the
+    description is the author's words, which a record of use has no reason to keep.
+    """
+
+    skill_name: str
+    digest: str
+
+
+@dataclass(frozen=True)
 class Finished:
     """One admitted request the lane has finished with, however it finished.
 
@@ -316,6 +335,11 @@ class Finished:
     #: The tier the executor routed this request's model call to and why, from its meter, or
     #: None when no call was routed (M3.6.3). Present on a call refused before any attempt.
     route: ModelRoute | None = None
+    #: Each skill the run offered to a model, by digest (M27.15.9). Empty when it offered none.
+    skills: tuple[SkillUse, ...] = ()
+    #: The one source the lane's readers read, or None when they read none or more than one
+    #: (M27.1.5). A name, never a record.
+    connector: str | None = None
 
     def __post_init__(self) -> None:
         if self.at.tzinfo is None:
@@ -323,6 +347,12 @@ class Finished:
             raise FinishError(msg)
         if self.completed_at.tzinfo is None:
             msg = "a naive completion instant cannot be subtracted from the judged one"
+            raise FinishError(msg)
+        if self.skills and self.agent_id is None:
+            msg = (
+                "a skill is offered only by a run of an agent, so skills with no agent are a "
+                "use nobody could be told which agent made"
+            )
             raise FinishError(msg)
 
 

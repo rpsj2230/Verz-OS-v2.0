@@ -3,10 +3,11 @@
 - **Screens:** `/models`, `/routing`, `/routing/:rungId`
 - **Tables:** `ops.routing_rung`, `ops.routing_tier`, `ops.model_attempt`, `ops.model_provider`, `ops.golden_question`, `ops.routing_change`, `ops.provider_health`, `ops.chain_depth_alert`, `ops.residency_constraint`
 - **Installation values:** `INSTALL_MODEL_PROFILE`, `INSTALL_MODEL_ENDPOINT`, `INSTALL_EMBEDDING_DIMENSIONS`
-- **Measured here:** 21 routes, 0 called by no screen; 14 write routes, 4 with all three proofs; 2 gaps.
+- **Measured here:** 23 routes, 0 called by no screen; 15 write routes, 4 with all three proofs; 2 gaps.
 
 | Route | Called by |
 | --- | --- |
+| `GET /api/v1/models/prices` | `/models` |
 | `GET /api/v1/models/providers` | `/models` |
 | `GET /api/v1/models/providers-register` | `/models` |
 | `GET /api/v1/operate/models` | `/models` |
@@ -24,6 +25,7 @@
 | `POST /api/v1/routing/golden-questions` | `/routing`, `/routing/:rungId` |
 | `POST /api/v1/routing/golden-questions/{question_id}/retire` | `/routing`, `/routing/:rungId` |
 | `POST /api/v1/routing/rungs` | `/routing`, `/routing/:rungId` |
+| `PUT /api/v1/models/prices` | `/models` |
 | `PUT /api/v1/models/profile` | `/models` |
 | `PUT /api/v1/models/providers/{provider}` | `/models` |
 | `PUT /api/v1/models/providers/{provider}/terms` | `/models` |
@@ -46,6 +48,7 @@
 | `POST /api/v1/routing/golden-questions` | `/routing`, `/routing/:rungId` | `test_a_golden_question_is_recorded_only_as_a_principal_the_directory_holds` in `tests/unit/test_routing_routes.py` | **None.** A golden question is a check the matrix gate asks and is logged, not written to the audit ledger; the changes it holds are recorded in ops.routing_change. Leaf `M5.6.2`. | `test_a_change_that_stops_the_ladder_answering_is_held_with_the_failing_question_shown` in `tests/unit/test_matrix_gate.py` |
 | `POST /api/v1/routing/golden-questions/{question_id}/retire` | `/routing`, `/routing/:rungId` | `test_a_retired_golden_question_is_marked_retired_and_asked_no_more` in `tests/unit/test_routing_routes.py` | **None.** Retiring a golden question is logged, not written to the audit ledger. Leaf `M5.6.2`. | `test_a_gate_with_no_golden_questions_holds_the_change_and_says_to_record_some` in `tests/unit/test_matrix_gate.py` |
 | `POST /api/v1/routing/rungs` | `/routing`, `/routing/:rungId` | `test_a_rung_is_added_at_the_end_of_its_tier_only_through_the_gate` in `tests/unit/test_routing_routes.py` | `test_a_rung_saved_from_the_screen_leaves_its_row_and_an_entry_naming_what_moved` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_provider_added_from_the_console_answers_through_the_ladder_with_no_release` in `tests/unit/test_model_calls.py` |
+| `PUT /api/v1/models/prices` | `/models` | `test_the_price_of_each_model_is_merged_into_its_providers_one_row` in `tests/unit/test_usage_store.py` (database, in CI) | **None.** The write is an ops.setting row, which migration 0059's trigger records as a setting entry naming the key, the change and the writer, and no test follows this route's write to that entry. | `test_a_model_call_is_metered_once_however_often_its_request_is_recorded` in `tests/unit/test_usage_store.py` (database, in CI) |
 | `PUT /api/v1/models/profile` | `/models` | `test_where_answers_are_made_is_saved_by_the_super_administrator_ledgered_and_planned_at_once` in `tests/unit/test_provider_routes.py` | **None.** The route sets the audit attribution 0059's trigger reads, which the row test asserts over a stub; no scratch-Postgres test yet reads the ledger entry back. | `test_where_answers_are_made_is_saved_by_the_super_administrator_ledgered_and_planned_at_once` in `tests/unit/test_provider_routes.py` |
 | `PUT /api/v1/models/providers/{provider}` | `/models` | `test_the_stores_read_the_ladder_write_attempts_by_id_and_keep_a_switch` in `tests/unit/test_model_service.py` (database, in CI) | **None.** The write is an ops.setting row, which migration 0059's trigger records as a setting entry naming the key, the change and the writer, and no test follows this route's write to that entry. | `test_switching_a_provider_off_takes_its_rungs_out_of_the_next_plan_at_once` in `tests/unit/test_provider_routes.py` |
 | `PUT /api/v1/models/providers/{provider}/terms` | `/models` | `test_terms_recorded_for_a_built_in_provider_write_its_first_registry_row` in `tests/unit/test_provider_registry_routes.py` | **None.** A provider's terms are logged and not written to the audit ledger in this release. Leaf `M5.6.4`. | `test_a_constrained_call_skips_an_undocumented_rung_for_the_documented_one_behind_it` in `tests/unit/test_model_calls.py` |
