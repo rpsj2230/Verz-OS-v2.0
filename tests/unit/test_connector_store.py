@@ -556,3 +556,93 @@ def test_a_second_live_connection_is_refused_and_a_disconnection_cannot_be_undon
     assert refused == ["UniqueViolation"]
     assert clears == 1
     assert undone == 0
+
+
+def test_an_edit_leaves_two_rows_one_live_two_ledger_entries_and_no_key_write() -> None:
+    """W2.9's edit, followed to the system as the application's role: a reconnection marks the live
+    row disconnected by the person editing and inserts the new settings as a second row, in one
+    transaction; the ledger gains a disconnection and a connection after the first connection's
+    entries and no credential entry, because the key was not touched; the history reads both rows
+    newest first; and the chain verifies. Delete this and an edit can update settings in place
+    under the old digest, or leave two live rows. **Skips without a server.**"""
+    edited = {"tenant_id": "99999999-8888-7777-6666-555555555555"}
+    with through_0057("brain_connector_connection_edit") as url:
+
+        async def walk() -> tuple[Any, ...]:
+            engine = app_engine(url)
+            try:
+                sessions = make_session_factory(engine)
+                credentials = Credentials(
+                    Vault(), environ={}, writes=StoredCredentialWrites(sessions)
+                )
+                store = StoredConnections(sessions)
+
+                async def keep_key() -> datetime | None:
+                    kept = await credentials.keep(
+                        connector_key_slot("xero"),
+                        KEY,
+                        actor="u_admin",
+                        trace_id="trace-connect",
+                        ent_hash="c" * 32,
+                    )
+                    return kept.set_at
+
+                await store.connect(
+                    connector="xero",
+                    settings=SETTINGS,
+                    digest=DIGEST,
+                    actor="u_admin",
+                    trace_id="trace-connect",
+                    ent_hash="c" * 32,
+                    keep_key=keep_key,
+                )
+                made = await store.reconnect(
+                    connector="xero",
+                    settings=edited,
+                    digest="b" * 64,
+                    actor="u_other",
+                    trace_id="trace-edit",
+                    ent_hash="e" * 32,
+                )
+                refused: list[str] = []
+                try:
+                    await store.reconnect(
+                        connector="hubspot",
+                        settings=edited,
+                        digest="b" * 64,
+                        actor="u_other",
+                        trace_id="trace-edit",
+                        ent_hash="e" * 32,
+                    )
+                except NotConnectedError:
+                    refused.append("hubspot")
+                return made, await store.connected(), await store.history("xero"), refused
+            finally:
+                await engine.dispose()
+
+        made, live, history, refused = run(walk)
+        rows = sql(
+            url,
+            "SELECT settings, digest, connected_by, disconnected_by FROM ops.connector_connection"
+            " ORDER BY connected_at, disconnected_at NULLS LAST",
+        )
+        chain = entries(url)
+
+    assert made.settings == edited and refused == ["hubspot"]
+    assert [(one.connector, one.digest) for one in live] == [("xero", "b" * 64)]
+    assert rows == [
+        (SETTINGS, DIGEST, "u_admin", "u_other"),
+        (edited, "b" * 64, "u_other", None),
+    ]
+    assert [(one.settings, one.disconnected_by) for one in history] == [
+        (edited, None),
+        (SETTINGS, "u_other"),
+    ]
+    assert [(one.action.value, one.actor_id, one.details) for one in chain] == [
+        ("credential", "u_admin", {}),
+        ("connector", "u_admin", {"change": "connected"}),
+        ("connector", "u_other", {"change": "disconnected"}),
+        ("connector", "u_other", {"change": "connected"}),
+    ]
+    assert [one.trace_id for one in chain[2:]] == ["trace-edit", "trace-edit"]
+    assert AuditChain(chain).verify() is None

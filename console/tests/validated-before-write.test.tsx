@@ -43,8 +43,6 @@ interface FormCase {
 
 /** Every form in a file that also holds a write, by file. The count is checked against the source. */
 const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
-  // Index 0 on the Connectors screen is Connect Lark's form, judged below.
-  "src/components/ConnectSource.tsx": [{ pattern: "/connectors", index: 1, writes: true }],
   // The connect form is the first form on the staff sources page; the credential form follows it.
   "src/components/ConnectStaffSource.tsx": [{ pattern: "/staff_sources", index: 0, writes: true }],
   "src/components/DataStewardCard.tsx": [{ pattern: "/people", index: 1, writes: true }],
@@ -167,6 +165,15 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
  * Checked, not trusted: an entry for a file that no longer holds both fails the first test.
  */
 const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
+  "src/components/ConnectSource.tsx":
+    "Its form is inside the Connect a source drawer, which is drawn outside the page's main landmark " +
+    "these cases read, and inside first run, which is mounted outside the session guard. " +
+    "tests/connectors-page.test.tsx opens the drawer, submits it blank, and holds that no " +
+    "confirmation opens, nothing is sent and the API's blank sentences are said beside the fields.",
+  "src/pages/connectors/SourceActs.tsx":
+    "The edit and the key forms are inside drawers opened from a source's Manage menu, outside the " +
+    "main landmark these cases read. tests/connectors-page.test.tsx submits each blank and holds " +
+    "that no confirmation opens, nothing is sent, and the API's own blank sentence is said.",
   "src/components/ConnectLark.tsx":
     "Its Test and Save buttons stay disabled until an App ID and an App Secret are typed, so a " +
     "blank form cannot be sent. What is typed is judged by the API before anything reaches Lark: " +

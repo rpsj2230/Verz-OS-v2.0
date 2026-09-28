@@ -121,6 +121,11 @@ const A_SKILL_IS_DECIDED_FROM_ITS_OWN_BYTES =
   "writes on this screen are a review, which approves exactly the bytes of one package after " +
   "reading its body, and an assignment of one approved skill to one agent.";
 
+const A_CONNECTION_CHANGES_ONE_SOURCE_AT_A_TIME =
+  "There is at most one live connection per source, and every act on one (connect, edit, replace the " +
+  "key, disconnect) is confirmed in the API's words for that source, because each agrees to what one " +
+  "source may read. docs/admin-console-architecture.md marks bulk as not applicable to connectors.";
+
 /** What each long list does not offer, and why. Everything it does offer is read off the page. */
 /**
  * The two lists read through a tool a model also calls, whose request has no position to page by:
@@ -167,6 +172,7 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
   },
   "/logs": { bulk: A_LOG_ROW_IS_READ_AND_NEVER_WRITTEN },
   "/agents": { bulk: READ_ONLY },
+  "/connectors": { bulk: A_CONNECTION_CHANGES_ONE_SOURCE_AT_A_TIME },
   "/agent-templates": { bulk: READ_ONLY },
   "/approvals": { bulk: AN_APPROVAL_IS_DECIDED_FROM_ITS_OWN_CARD },
   "/adoption": { bulk: READ_ONLY },

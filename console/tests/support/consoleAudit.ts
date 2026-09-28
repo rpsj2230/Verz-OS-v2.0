@@ -124,6 +124,7 @@ import {
   transferApiPath,
 } from "../../src/pages/staffSourcesQuery";
 import { CONNECTORS_API_PATH, disconnectApiPath } from "../../src/pages/connectorsQuery";
+import { editApiPath, exportApiPath, keyApiPath } from "../../src/pages/connectors/connectorSources";
 import { LARK_API_PATH, LARK_TEST_API_PATH } from "../../src/pages/larkConnectQuery";
 import { credentialPath } from "../../src/components/ProviderKeyForm";
 import { REGISTER_API_PATH, secretApiPath, switchOffApiPath } from "../../src/pages/webhooksQuery";
@@ -460,10 +461,15 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "Connectors and third-party integrations": {
-    screens: ["/connectors"],
+    screens: ["/connectors", "/connectors/:connector", "/connectors/:connector/:view"],
     routes: [
       "/api/v1/connectors",
       "/api/v1/connectors/{connector}/disconnect",
+      "/api/v1/connectors/{connector}/edit",
+      "/api/v1/connectors/{connector}/key",
+      "/api/v1/console/connectors",
+      "/api/v1/console/connectors/{connector}",
+      "/api/v1/console/connectors/{connector}/export",
       "/api/v1/connectors/lark-app",
       "/api/v1/connectors/lark-app/test",
       "/api/v1/channels*",
@@ -484,7 +490,11 @@ export const AREAS: Readonly<Record<string, Area>> = {
       {
         what: "A connected source is read and kept, and no question is answered from what is kept.",
         because:
-          "No row tool is registered for a connected source's records: brain.tools.startup.classification_for is keyed on the entity alone and Xero and HubSpot both project contact, which that module records as the limit to change first. brain.ops.connector_admin.WHAT_CONNECTING_A_SOURCE_STARTS says so on the screen.",
+          "No row tool is registered for a connected source's records: brain.tools.startup.classification_for is keyed on the entity alone and Xero and HubSpot both project contact, which that module records as the limit to change first. brain.ops.connector_admin.WHAT_CONNECTING_A_SOURCE_STARTS says so in the connect confirmation.",
+      },
+      {
+        what: "A connection cannot be tested from the console yet: only the worker reads a source's key, and a successful probe has no outcome ops.connector_sync can hold without claiming a full read.",
+        leaf: "M27.15.8",
       },
       {
         what: "HubSpot can be connected and is not read.",
@@ -773,6 +783,12 @@ export const READ_AFTER_AN_ACTION: Readonly<
 > = {
   "GET /api/v1/audit/history": { screen: "/audit", spelled: "historyApiPath", built: historyApiPath("principal", "u_1").split("?")[0] ?? "" },
   "GET /api/v1/govern/staff_sources/trial": { screen: "/staff_sources", spelled: "TRIAL_API_PATH", built: TRIAL_API_PATH },
+  // A source's record is read when a person presses Export record on its page.
+  "GET /api/v1/console/connectors/{connector}/export": {
+    screen: "/connectors/:connector",
+    spelled: "exportApiPath",
+    built: exportApiPath("xero"),
+  },
   // A version's text is read when a person presses Read this version on an opened document.
   "GET /api/v1/knowledge/items/{item_id}/passages": {
     screen: "/library",
@@ -1056,8 +1072,14 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/Skills.tsx assignPath(one.digest)": [
     at("POST /api/v1/skills/{digest}/assignments", "assignPath", assignPath("d".repeat(64))),
   ],
-  "src/pages/Connectors.tsx disconnectApiPath(row.name)": [
+  "src/pages/connectors/SourceActs.tsx disconnectApiPath(name)": [
     at("POST /api/v1/connectors/{connector}/disconnect", "disconnectApiPath", disconnectApiPath("xero")),
+  ],
+  "src/pages/connectors/SourceActs.tsx editApiPath(name)": [
+    at("POST /api/v1/connectors/{connector}/edit", "editApiPath", editApiPath("xero")),
+  ],
+  "src/pages/connectors/SourceActs.tsx keyApiPath(name)": [
+    at("POST /api/v1/connectors/{connector}/key", "keyApiPath", keyApiPath("xero")),
   ],
   "src/components/ConnectSource.tsx CONNECTORS_API_PATH": [at("POST /api/v1/connectors", "CONNECTORS_API_PATH", CONNECTORS_API_PATH)],
   "src/components/ConnectLark.tsx LARK_TEST_API_PATH": [
@@ -1221,6 +1243,11 @@ const A_SETTING_ENTRY_NO_TEST_FOLLOWS: Proof = {
 const CONNECTION_REACHES_THE_ROW_AND_THE_LEDGER = t(
   "test_connector_store",
   "test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_record",
+  true,
+);
+const AN_EDIT_LEAVES_TWO_ROWS_AND_TWO_LEDGER_ENTRIES = t(
+  "test_connector_store",
+  "test_an_edit_leaves_two_rows_one_live_two_ledger_entries_and_no_key_write",
   true,
 );
 const A_CONNECTED_SOURCE_IS_READ_AND_A_DISCONNECTED_ONE_IS_NOT = t(
@@ -1394,6 +1421,16 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: CONNECTION_REACHES_THE_ROW_AND_THE_LEDGER,
     audit: CONNECTION_REACHES_THE_ROW_AND_THE_LEDGER,
     behaviour: A_CONNECTED_SOURCE_IS_READ_AND_A_DISCONNECTED_ONE_IS_NOT,
+  },
+  "POST /api/v1/connectors/{connector}/edit": {
+    row: AN_EDIT_LEAVES_TWO_ROWS_AND_TWO_LEDGER_ENTRIES,
+    audit: AN_EDIT_LEAVES_TWO_ROWS_AND_TWO_LEDGER_ENTRIES,
+    behaviour: t("test_connector_routes", "test_an_edit_leaves_two_rows_one_live_and_the_key_where_it_was"),
+  },
+  "POST /api/v1/connectors/{connector}/key": {
+    row: CONNECTION_REACHES_THE_ROW_AND_THE_LEDGER,
+    audit: CONNECTION_REACHES_THE_ROW_AND_THE_LEDGER,
+    behaviour: t("test_connector_routes", "test_a_replaced_key_is_a_credential_write_and_changes_no_connection"),
   },
   "POST /api/v1/govern/access-review/decision": {
     row: t("test_review_store", "test_keeping_and_removing_reach_the_rows_the_ledger_and_what_the_holder_is_resolved_to", true),
