@@ -24,6 +24,13 @@ reaches that channel alone. A reader without it for a channel is shown nothing a
 and is refused on it as on a channel that does not exist. See
 `A_CHANNEL_IS_GOVERNED_BY_THE_AUTHORITY_CONNECT_LARK_ASKS`.
 
+**Every set-up, switch and secret replacement is in the audit ledger, naming the channel and never
+the secret.** The record's write carries the caller, their reach digest and the trace to
+`brain.ops.channel_store`, and `0114`'s trigger appends a `setting` entry under
+`setting:channel.<channel>` saying `set`, `switched_on` or `switched_off`. The secret goes through
+`brain.ops.credentials.Credentials.keep`, whose record is `0054`'s `credential` entry under the
+channel's slot, with nothing of the value. See `EVERY_CHANGE_TO_A_CHANNEL_IS_AUDITED`.
+
 **The secret is written into the vault before the record, and is never sent back.** The router is
 `brain.api.NoEchoRoute`, the secret is kept through `brain.ops.credentials.Credentials.keep`, which
 records the write in the audit ledger, and a response says only whether a secret is held. A vault
@@ -136,6 +143,14 @@ A_CHANNEL_IS_GOVERNED_BY_THE_AUTHORITY_CONNECT_LARK_ASKS: Final = (
     "slot name Connect Lark already gives the Lark chat use. So the person who may switch Lark's "
     "chat on there may switch its channel here, a grant narrowed to one channel reaches that "
     "channel alone, and a reader without it is shown nothing about the channel."
+)
+
+#: Why a channel's set-up, switch and secret each leave a ledger entry.
+EVERY_CHANGE_TO_A_CHANNEL_IS_AUDITED: Final = (
+    "Setting a channel up, switching it on or off and replacing its secret each leave an entry in "
+    "the audit ledger with who did it, at what reach and in which request: a setting entry naming "
+    "the channel for the record, and a credential entry naming its slot for the secret. Neither "
+    "holds the tenant's values or anything of the secret."
 )
 
 # --------------------------------------------------------------------- the figures
@@ -642,7 +657,12 @@ async def configure(
         except CredentialProblemError as problem:
             return _error(422, " ".join(one.message for one in problem.problems))
     record = await records_of(request).save(
-        channel, enabled=body.enabled, tenant=body.tenant, actor=actor
+        channel,
+        enabled=body.enabled,
+        tenant=body.tenant,
+        actor=actor,
+        ent_hash=asked.reach.ent_hash(),
+        trace_id=trace_of_request(),
     )
     log.info("channel saved", channel=channel.value, enabled=record.enabled, actor=actor)
     return await _view(channel, record, secrets_of(request))
@@ -655,7 +675,13 @@ async def switch(
     """Switch this channel on or off. Touches this channel's record and no other."""
     channel, _ = _managed_wire(name, asked)
     actor = asked.caller.principal.id
-    record = await records_of(request).switch(channel, enabled=body.enabled, actor=actor)
+    record = await records_of(request).switch(
+        channel,
+        enabled=body.enabled,
+        actor=actor,
+        ent_hash=asked.reach.ent_hash(),
+        trace_id=trace_of_request(),
+    )
     if record is None:
         return _error(409, NO_RECORD)
     log.info("channel switched", channel=channel.value, enabled=record.enabled, actor=actor)

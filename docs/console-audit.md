@@ -7,12 +7,12 @@ What an administrator would need to manage, read out of the schema, the routes a
 ## What was measured
 
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
-- 95 tables, from `brain.db.Base.metadata`.
+- 97 tables, from `brain.db.Base.metadata`.
 - 27 installation values, from `brain.install.INSTALLATION`.
-- 192 routes under `/api/v1` and `/setup`, from the API's internal document.
+- 198 routes under `/api/v1` and `/setup`, from the API's internal document.
 - 72 console addresses, from the route table in `console/src/App.tsx`.
 - 74 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 91 routes.
-- 37 gaps recorded, and 22 routes no screen calls.
+- 38 gaps recorded, and 28 routes no screen calls.
 
 ## Area by area
 
@@ -220,23 +220,30 @@ What an administrator would need to manage, read out of the schema, the routes a
 ### Connectors and third-party integrations
 
 - **Screens:** `/connectors`
-- **Tables:** `ops.connector_connection`, `ops.connector_sync`, `proj.record`, `er.alias`, `er.canonical`, `er.identifier`, `er.link`
+- **Tables:** `ops.channel`, `ops.channel_delivery`, `ops.connector_connection`, `ops.connector_sync`, `proj.record`, `er.alias`, `er.canonical`, `er.identifier`, `er.link`
 - **Installation values:** `INSTALL_LARK_USES`, `INSTALL_LARK_PLATFORM`, `INSTALL_LARK_BASE`
 
 | Route | Called by |
 | --- | --- |
+| `GET /api/v1/channels` | **no screen** |
+| `GET /api/v1/channels/{name}/deliveries` | **no screen** |
 | `GET /api/v1/connectors` | `/connectors` |
 | `GET /api/v1/connectors/lark-app` | `/connectors` |
+| `POST /api/v1/channels/{name}/events` | **no screen** |
+| `POST /api/v1/channels/{name}/switch` | **no screen** |
+| `POST /api/v1/channels/{name}/test` | **no screen** |
 | `POST /api/v1/connectors` | `/connectors` |
 | `POST /api/v1/connectors/lark-app` | `/connectors` |
 | `POST /api/v1/connectors/lark-app/test` | `/connectors` |
 | `POST /api/v1/connectors/{connector}/disconnect` | `/connectors` |
+| `PUT /api/v1/channels/{name}` | **no screen** |
 
 - **Gap.** A connected source is read and kept, and no question is answered from what is kept. Recorded: No row tool is registered for a connected source's records: brain.tools.startup.classification_for is keyed on the entity alone and Xero and HubSpot both project contact, which that module records as the limit to change first. brain.ops.connector_admin.WHAT_CONNECTING_A_SOURCE_STARTS says so on the screen.
 - **Gap.** HubSpot can be connected and is not read. Recorded: brain.ops.limits records no verified call ceiling for it and brain.connectors.throttle.limits_for refuses to invent one; its row carries brain.ops.connector_sync.NO_VERIFIED_CEILING.
 - **Gap.** Freshdesk, Google Drive and the Laravel views cannot be connected from a screen. Recorded: Each needs a visibility rule, a department declaration or a key file the form cannot collect, which brain.ops.connectable.NOT_FROM_THE_CONSOLE says for each.
 - **Gap.** Connect Lark switches knowledge from Wiki and Base on, and no question is answered from Lark yet. Recorded: The Lark knowledge connector that keeps the minimal index and reads pages and records live is still to be built over the settings Connect Lark writes; brain.ops.lark_connect.KNOWLEDGE_IS_SWITCHED_ON_AND_NOTHING_IS_COPIED says so on the screen.
-- **Gap.** The Lark chat channel is set up and tested and does not yet receive Lark's events. Recorded: No channel in this release receives a webhook, so there is no address for Lark's Events and callbacks page to verify; brain.ops.lark_connect.THE_CHANNEL_RECEIVER_IS_NOT_BUILT_YET says so in the steps.
+- **Gap.** The Lark chat channel is set up and tested and does not yet receive Lark's events. Recorded: This release receives only the company's own signed webhook at /api/v1/channels/{name}/events, and Lark's receiver is still to be built, so Lark's Events and callbacks page has nothing to verify; brain.ops.lark_connect.THE_CHANNEL_RECEIVER_IS_NOT_BUILT_YET says so in the steps.
+- **Gap.** A channel's record, switch, test message and deliveries have routes and no screen. Recorded: The Channels screen is drawn over brain.channel_routes by the channels screen package, which follows this one; until then a channel is set up and proved through those routes, each change is in the audit ledger under setting:channel.<channel>, and the deliveries route lists every refusal without its content.
 
 ### API keys, credentials and secrets, held in the vault and never displayed
 
@@ -344,7 +351,7 @@ No gap recorded.
 | `POST /api/v1/webhooks/subscribers/{subscriber_id}/secret` | `/webhooks` |
 | `POST /api/v1/webhooks/subscribers/{subscriber_id}/switch-off` | `/webhooks` |
 
-- **Gap.** No platform's webhook is received. Recorded: No route receives one, and the WhatsApp and Lark checks are not written; the Webhooks screen lists each channel's check from brain.ops.inbound_webhooks.
+- **Gap.** No vendor platform's webhook is received, only the company's own signed webhook. Recorded: Only brain.channels.webhook has a wire in this release, and the WhatsApp and Lark checks are not written; the Webhooks screen names the channels received from brain.ops.inbound_webhooks.receiving and lists each channel's check.
 
 ### Scheduled jobs and background work
 

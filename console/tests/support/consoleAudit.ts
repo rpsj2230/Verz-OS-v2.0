@@ -424,8 +424,11 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/connectors/{connector}/disconnect",
       "/api/v1/connectors/lark-app",
       "/api/v1/connectors/lark-app/test",
+      "/api/v1/channels*",
     ],
     tables: [
+      "ops.channel",
+      "ops.channel_delivery",
       "ops.connector_connection",
       "ops.connector_sync",
       "proj.record",
@@ -459,7 +462,12 @@ export const AREAS: Readonly<Record<string, Area>> = {
       {
         what: "The Lark chat channel is set up and tested and does not yet receive Lark's events.",
         because:
-          "No channel in this release receives a webhook, so there is no address for Lark's Events and callbacks page to verify; brain.ops.lark_connect.THE_CHANNEL_RECEIVER_IS_NOT_BUILT_YET says so in the steps.",
+          "This release receives only the company's own signed webhook at /api/v1/channels/{name}/events, and Lark's receiver is still to be built, so Lark's Events and callbacks page has nothing to verify; brain.ops.lark_connect.THE_CHANNEL_RECEIVER_IS_NOT_BUILT_YET says so in the steps.",
+      },
+      {
+        what: "A channel's record, switch, test message and deliveries have routes and no screen.",
+        because:
+          "The Channels screen is drawn over brain.channel_routes by the channels screen package, which follows this one; until then a channel is set up and proved through those routes, each change is in the audit ledger under setting:channel.<channel>, and the deliveries route lists every refusal without its content.",
       },
     ],
   },
@@ -568,9 +576,9 @@ export const AREAS: Readonly<Record<string, Area>> = {
     installation: [],
     gaps: [
       {
-        what: "No platform's webhook is received.",
+        what: "No vendor platform's webhook is received, only the company's own signed webhook.",
         because:
-          "No route receives one, and the WhatsApp and Lark checks are not written; the Webhooks screen lists each channel's check from brain.ops.inbound_webhooks.",
+          "Only brain.channels.webhook has a wire in this release, and the WhatsApp and Lark checks are not written; the Webhooks screen names the channels received from brain.ops.inbound_webhooks.receiving and lists each channel's check.",
       },
     ],
   },

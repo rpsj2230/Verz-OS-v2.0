@@ -89,6 +89,7 @@ from brain.cache import (
     make_async_client,
     make_client,
 )
+from brain.channel_routes import router as channel_router
 from brain.channels.widget import allowed_origins
 from brain.classification_routes import router as classification_router
 from brain.compliance_routes import router as compliance_router
@@ -1408,6 +1409,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # processing register per connector, and breach cases with the PDPA clock, behind
     # `admin:compliance` over everything. See `brain.compliance_routes`.
     app.include_router(compliance_router)
+    # Channels: the one address every vendor posts a message to, which takes no caller and proves
+    # the signature, and each channel's record, switch, test message and deliveries behind the
+    # connector authority over `<channel>_channel`. See `brain.channel_routes`.
+    app.include_router(channel_router)
 
     @app.get("/health/live", response_model=Health, tags=["health"])
     async def live() -> Health:

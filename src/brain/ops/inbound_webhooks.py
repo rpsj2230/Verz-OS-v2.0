@@ -6,13 +6,15 @@ request written and tested, and two of them have nothing. So this is the list th
 one row per channel a platform would call in on, each saying whether the check that a request
 really came from that platform is written, which function it is, and what it needs.
 
-**Three facts per channel, and only one of them varies today.** Whether the check is written is
-different per channel. Whether a secret is held for it, and whether any address receives it, are
-the same answer everywhere, no, and the screen states that answer once above the list, in
-`brain.ops.webhook_admin.NO_CHANNEL_RECEIVES_A_WEBHOOK`, rather than leaving it out: a list that
-said only "check written" reads as channels that work. `test_inbound_webhooks` holds the route half
-against the application's own routes, so the day a receiving route arrives the sentence has to
-move.
+**Three facts per channel, and two of them vary.** Whether the check is written is different per
+channel. Whether this release receives a channel at all is `receiving`'s answer, read off the
+wires `brain.channels.adapter.channel_wires` discovers, and a channel it names is received at
+`CHANNEL_EVENTS_PATH` only while its record is switched on and its secret is held, which is the
+install's own state and is shown on the channel's record rather than here. The screen states which
+channels are received once above the list, in `brain.ops.webhook_admin.receiving_told`, rather
+than leaving it out: a list that said only "check written" reads as channels that work.
+`test_inbound_webhooks` holds that sentence and the one receiving route against the application's
+own routes, so a channel given a receiver moves the sentence with it.
 
 **A written check is named by the function, and the name is resolved, not trusted.** A row that
 said "written" beside a function renamed a month ago would be the same claim the old sentence
@@ -23,7 +25,7 @@ Rejected: reading the verification state out of the adapters. `ChannelCapabiliti
 adapter can carry and nothing about inbound requests, and widening it would put a fact about a
 module's functions into a value each adapter declares by hand, which is the copy that drifts.
 
-Task ids: M27.8.12
+Task ids: M27.8.12, M10.2.1
 """
 
 from __future__ import annotations
@@ -34,11 +36,27 @@ from typing import Final
 
 from brain.gate.context import Channel
 
+#: Where a platform posts a channel's messages, under the install's own origin. Held equal to
+#: `brain.channel_routes.EVENTS_PATH` by `tests/unit/test_inbound_webhooks.py`.
+CHANNEL_EVENTS_PATH: Final = "/api/v1/channels/{channel}/events"
+
+
+def receiving() -> frozenset[Channel]:
+    """The channels this release receives: those with a wire in `brain.channels`.
+
+    Read from the wires rather than listed, so the screen cannot name a channel that has no
+    receiver or leave out one that has. Imported inside, because the channel modules are the
+    product's heaviest imports and this module is read by a screen that may never ask.
+    """
+    from brain.channels.adapter import channel_wires
+
+    return frozenset(channel_wires())
+
 
 class Verification(enum.StrEnum):
     """How far the check that a request came from its platform has got."""
 
-    #: Written and tested, and called by nothing that receives, because nothing receives.
+    #: Written and tested. Whether a route calls it on every request is `receiving`'s answer.
     WRITTEN = "written"
     #: Not written: a request claiming to be from this platform could not be told from a forgery.
     NOT_WRITTEN = "not_written"
@@ -127,9 +145,10 @@ INBOUND: Final[tuple[InboundChannel, ...]] = (
         verification=Verification.WRITTEN,
         check="brain.channels.webhook:verify",
         how=(
-            "A system of the company's own signs each request with a shared secret over the time "
-            "and the exact bytes, the same construction this install signs its own deliveries "
-            "with; the check refuses a stale request and a repeated one."
+            "A system of the company's own signs each request with the channel's secret over the "
+            "time and the exact bytes, the same construction this install signs its own deliveries "
+            "with; the check refuses a stale request, and a repeated message is claimed once. It "
+            "is received at its channel's events address while its record is switched on."
         ),
     ),
     InboundChannel(
