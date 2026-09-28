@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-28T15:42:20.057881+00:00",
-  "commit": "7281330",
-  "commit_subject": "Twelve tasks close on the install's own acceptance checks, which ran after the deploy at 604e41d",
+  "generated_at": "2026-09-28T16:02:02.239680+00:00",
+  "commit": "933de11",
+  "commit_subject": "Both workers are given the cache the application is given",
   "total": 1576,
   "done": 358,
   "percent": 22.7,
