@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-28T16:55:53.535574+00:00",
-  "commit": "df47f97",
-  "commit_subject": "Four rate-limit tasks close on the acceptance check run inside the app container",
+  "generated_at": "2026-09-28T17:20:17.281258+00:00",
+  "commit": "993b9ef9",
+  "commit_subject": "The skill edit check reads only the attach entries on an agent's ledger, not its creation",
   "total": 1576,
   "done": 362,
   "percent": 23.0,
