@@ -1,8 +1,8 @@
 /**
  * What an agent's workspace is made of, as shapes, and the two rules those shapes keep.
  *
- * Nothing here renders and nothing here fetches. It is the vocabulary the three components
- * beside it are written against, kept in one file for the reason `src/ui/tone.ts` is kept
+ * Nothing here renders and nothing here fetches. It is the vocabulary the agent page
+ * (`pages/agents/`) is written against, kept in one file for the reason `src/ui/tone.ts` is kept
  * apart from the components that use it: the rules below are properties of the *shapes*,
  * and a property of a shape can be checked by reading the shape rather than by trusting
  * every renderer that will ever be written against it.
@@ -19,8 +19,8 @@
  * **No shape here has anywhere to put a count of what was left out.** Not a total, not a
  * remainder, not a number of tabs, not a number of rows. `brain.ops.jobs.
  * hidden_count_fields` is the same check made of the Python surfaces, over a list of the
- * names such a field arrives under, and `tests/agent-workspace.test.tsx` reads that list
- * out of the Python source and asks it of the interfaces below. A list written here would
+ * names such a field arrives under, and `tests/agent-page.test.tsx` reads that list out of
+ * the Python source and asks it of the interfaces below. A list written here would
  * be a copy that stops matching the day somebody adds a name there.
  *
  * **The vocabularies come from the Python side wherever the Python side has one.** The
@@ -31,8 +31,9 @@
  * for the reason `tests/support/repo.ts` exists: a constant compared against itself is
  * green for every value it could hold.
  *
- * The one vocabulary this file owns is the pane, because nothing on the Python side names
- * it. M39.1.2.3 names two panes and there are two.
+ * The tab strip's own state, a reducer over a tab and a right-hand pane, lived here until
+ * 2026-09-28, when the page moved to SCREEN 14's three views at their own addresses and the
+ * strip and the pane went with it; `pages/agents/AgentDetailPage.tsx` says what replaced each.
  *
  * Task ids: M39.1.1.5, M39.1.2.1, M39.1.2.3, M39.1.2.5
  */
@@ -49,53 +50,6 @@ export const AGENT_ADDRESS_PREFIX = "/agents/";
 
 /** Where the roster is: the prefix without the separator that introduces one agent. */
 export const ROSTER_ADDRESS = "/agents";
-
-/**
- * The address of one tab of one agent, spelled as `brain.console.workspace.deep_link`
- * spells it.
- *
- * This composes an address and never decides whether it resolves. `resolve` answers `None`
- * to all five of its failures, and a console that guessed which of them had happened would
- * be the oracle that function exists to refuse.
- */
-export function tabAddress(agentId: string, tab: string): string {
-  return `${AGENT_ADDRESS_PREFIX}${agentId}/${tab}`;
-}
-
-/**
- * The three ids the workspace's markup wires itself together with.
- *
- * Derived from the agent and the tab rather than counted, so nothing in the DOM is an
- * ordinal: `aria-controls="agent-tab-3"` would put the position of a tab in the strip into
- * an attribute, and the position of a tab in a strip that was narrowed for this reader is
- * the one number the strip exists not to publish.
- */
-export function headingId(agentId: string): string {
-  return `agent-${agentId}-name`;
-}
-
-export function tabId(agentId: string, tab: string): string {
-  return `agent-${agentId}-tab-${tab}`;
-}
-
-export function panelId(agentId: string, tab: string): string {
-  return `agent-${agentId}-panel-${tab}`;
-}
-
-/**
- * The two things the right pane can be showing. Closed, and short, in the spelling
- * `src/ui/tone.ts` uses for its own closed vocabulary.
- *
- * There is deliberately no third member. A pane meaning "whatever was there last" is a
- * state nobody chose, and a pane meaning "none" would make an empty right-hand column a
- * thing a reader has to interpret.
- */
-export const PANES = ["dashboard", "profile"] as const;
-
-export type Pane = (typeof PANES)[number];
-
-/** Where the right pane starts. The figures, because they are what an agent is opened for. */
-export const FIRST_PANE: Pane = "dashboard";
 
 /**
  * Written down because "show the label and leave the value blank" is the change that would
@@ -267,134 +221,3 @@ export const A_DIFF_ROW_CARRIES_BOTH_SIDES_OR_IT_IS_NOT_A_ROW =
   "to see it. Silence tells them none of the three. So a path whose value is withheld is " +
   "absent from the rows entirely, both columns are required, and there is nowhere in the " +
   "table or around it for a count of the rows that did not arrive.";
-
-/** What this workspace is holding while somebody uses it. Two fields, and no third. */
-export interface WorkspaceState {
-  /** Which tab the main area is showing. A key from the strip it was given. */
-  readonly tab: string;
-  /** Which of the two views the right pane is showing. */
-  readonly pane: Pane;
-}
-
-/**
- * The two things somebody can do to that state.
- *
- * A discriminated union rather than two setters, because the property M39.1.2.3 asks for
- * is about what one action leaves alone, and that is a claim about a transition. Two
- * setters have no transition to make the claim about.
- */
-export type WorkspaceAction =
-  | { readonly kind: "select-tab"; readonly tab: string }
-  | { readonly kind: "show-pane"; readonly pane: Pane };
-
-/**
- * The next state (M39.1.2.3).
- *
- * **`show-pane` writes the pane and copies the rest, and that is the whole leaf in one
- * line.** See `SWITCHING_THE_RIGHT_PANE_MOVES_NOTHING_BUT_THE_RIGHT_PANE`. The property is
- * asserted over arbitrary sequences of actions rather than over one switch, because the
- * failure this guards against is not a reducer that resets the tab on the first switch: it
- * is one that resets it under some combination nobody tried by hand.
- *
- * Pure, and the component holds it through `useReducer`, so the same transition is
- * checkable without rendering anything and observable when something is rendered. The
- * rendered half is the one the reducer cannot see: a layout that puts the tab panel inside
- * each pane's branch keeps this state perfectly and remounts the panel underneath it.
- */
-export function reduce(state: WorkspaceState, action: WorkspaceAction): WorkspaceState {
-  switch (action.kind) {
-    case "select-tab":
-      return { tab: action.tab, pane: state.pane };
-    case "show-pane":
-      return { tab: state.tab, pane: action.pane };
-  }
-}
-
-/**
- * Written down because the reducer is one line and the rule it keeps is the leaf.
- */
-export const SWITCHING_THE_RIGHT_PANE_MOVES_NOTHING_BUT_THE_RIGHT_PANE =
-  "Somebody reading a conversation opens the profile to check which template the agent " +
-  "came from, and comes back. If the tab moved while they were gone they are now reading " +
-  "a different tab and nothing told them, and if the panel was rebuilt they have lost " +
-  "whatever they had open in it. So a pane action writes the pane and copies everything " +
-  "else, and the panel is rendered in one place rather than once inside each pane, " +
-  "because a conditional that swaps the subtree keeps the state and destroys the DOM " +
-  "holding it.";
-
-/**
- * Written down because the obvious implementation of "back to the roster" is a navigation
- * performed from a key handler.
- */
-export const THE_WAY_BACK_IS_A_LINK_AND_NEVER_A_NAVIGATION_THIS_COMPONENT_PERFORMS =
-  "A key handler that navigated would take the decision away from the router that owns " +
-  "the address, and it would swallow the key for everything nested inside the workspace: " +
-  "a dialog, a menu and a form all want Escape too, and the one that gets it is whichever " +
-  "listener was registered. So the way back is an ordinary link, placed before the strip " +
-  "so that shift and tab reach it with no handler at all, and Escape moves focus to it " +
-  "rather than following it. Focus is reversible and navigation is not.";
-
-/**
- * Which tab a strip should open on, given where a deep link asked to land.
- *
- * Falls back to the first tab in the strip, silently, and the silence is the point: a
- * sentence explaining that the requested tab is not there would answer the question
- * `brain.console.workspace.resolve` returns `None` to, which is whether that tab exists
- * and this reader may not see it. An empty strip has no tab to open and returns the empty
- * string, which the component renders as no panel and says nothing about.
- */
-export function openingTab(tabs: readonly WorkspaceTabView[], wanted?: string): string {
-  const asked = tabs.find((one) => one.tab === wanted);
-  if (asked) {
-    return asked.tab;
-  }
-  return tabs[0]?.tab ?? "";
-}
-
-/**
- * The tab one arrow key away, wrapping at both ends.
- *
- * Wrapping is the WAI-ARIA tabs behaviour and is what makes a strip navigable without
- * counting: the right arrow from the last tab is the first tab, so nobody has to know how
- * many there are. Returns the tab it was given when the strip holds one tab or none, so a
- * key press is never a move to nothing.
- */
-export function tabByStep(
-  tabs: readonly WorkspaceTabView[],
-  current: string,
-  step: number,
-): string {
-  if (tabs.length === 0) {
-    return current;
-  }
-  const at = tabs.findIndex((one) => one.tab === current);
-  // A current tab the strip does not hold is the deep-link case again, and the answer is
-  // the same one `openingTab` gives: start at the beginning rather than refusing to move.
-  const from = at === -1 ? 0 : at;
-  const next = (from + step + tabs.length) % tabs.length;
-  return tabs[next]?.tab ?? current;
-}
-
-/**
- * The letters an agent's avatar shows.
- *
- * **An avatar is the one thing in the header with no fact behind it**, and that is why it
- * is computed from the name rather than fetched. `brain.agents.model.AgentRecord` has no
- * image column and nothing in this repository stores one, so a picture would arrive as a
- * URL, which is a second fact about the agent and a request to somewhere this console does
- * not control. Initials of the name already on the screen add nothing the reader does not
- * already have, which is what makes them safe to draw beside a name that may be all the
- * reader is allowed.
- *
- * Two letters at most, from the first and last words, and one letter when there is one
- * word. Upper cased with an explicit locale, so the result does not depend on the browser's:
- * the Turkish dotless i turns a lower case i into a different letter under a Turkish locale,
- * and an avatar that differs by the reader's machine is a difference two people comparing
- * screens can see.
- */
-export function initials(displayName: string): string {
-  const words = displayName.split(/\s+/u).filter((word) => word.length > 0);
-  const first = words[0] ?? "";
-  const last = words.length > 1 ? (words[words.length - 1] ?? "") : "";
-  return `${first.slice(0, 1)}${last.slice(0, 1)}`.toLocaleUpperCase("en-GB");
-}

@@ -34,11 +34,12 @@ import pytest
 from brain import demo
 from brain.api_routes import MAX_FILTERS, row_readers
 from brain.app import Settings, create_app
-from brain.core.entitlement import EntitlementSet, Grant
+from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.envelope import IdentityMode
+from brain.core.field_policy import Classification
 from brain.core.scope import Scope
 from brain.identity.lifecycle import STARTER_PACK
-from brain.knowledge.columns import PRICE_LIST
+from brain.knowledge.columns import PRICE_LIST, ColumnRule, TableClassification
 from brain.knowledge.document_tools import (
     KNOWLEDGE_ENTITY,
     READ_DOCUMENT,
@@ -47,6 +48,7 @@ from brain.knowledge.document_tools import (
 )
 from brain.knowledge.rows import RowQuery
 from brain.knowledge.search import reach_for
+from brain.tools import startup
 from brain.tools.registry import ToolRegistrationError, ToolRegistry
 from brain.tools.startup import (
     BUILT_IN_ROW_ENTITIES,
@@ -290,18 +292,59 @@ def test_the_answer_lane_reads_no_document_tool_as_a_reader_of_rows() -> None:
 
 
 def test_every_entity_is_classified_by_one_owner() -> None:
-    """`classification_for` is keyed on the entity alone, and that has one answer only while no
-    two owners classify one entity: the product's built-ins and every source's own. The day a
-    second source classifies `client` this fails, and the lookup has to take the source, which
-    is the change `fast_lane.entities_served` needed on 2026-09-14.
+    """Each source classifies an entity once, and no source reclassifies a built-in. Since
+    2026-09-28 `classification_for` takes the source (M15.4.2), so two sources may each classify
+    `invoice` and each is answered by its own. The lookup without a source, which the records
+    route makes, answers the first owner's, and that limit is stated in `brain.tools.startup`
+    rather than held here, so a second source classifying a kind is not refused.
 
-    Delete this and two sources' classifications of one entity make the records route redact one
-    system's rows by the other's policy, chosen by the order two tuples were concatenated in."""
-    entities = [one.entity for one in every_row_classification()]
-    owned = {c.entity for classifications in SOURCE_ROW_ENTITIES.values() for c in classifications}
+    Delete this and one source's two classifications of an entity, or a source's copy of the price
+    list, make the records route redact rows by whichever tuple was concatenated first."""
+    built_in = {c.entity for c in BUILT_IN_ROW_ENTITIES}
+    for source, owned in startup.source_row_entities().items():
+        entities = [one.entity for one in owned]
+        assert len(entities) == len(set(entities)), (source, entities)
+        assert not built_in & set(entities), source
+        for classification in owned:
+            assert classification_for(classification.entity, source=source) == classification
 
-    assert len(entities) == len(set(entities)), entities
-    assert set(entities) == {c.entity for c in BUILT_IN_ROW_ENTITIES} | owned
+    assert {c.entity for c in every_row_classification()} == built_in | {
+        c.entity for owned in SOURCE_ROW_ENTITIES.values() for c in owned
+    }
+
+
+def test_a_connectors_classifications_are_registered_beside_the_tool_source_and_the_demos_not(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A shipped connector's entities, filed under its name, are registered on every install with a
+    row source, each under that connector's name; the demo's are registered only where the demo is
+    read (M15.4.2).
+
+    Delete this and a connector's row tools exist only on an install whose tool source names it,
+    so a second connected source is never answered, or the demo's three tools appear everywhere."""
+    xero_invoices = TableClassification(
+        entity="invoice",
+        rules=(
+            ColumnRule(
+                column="invoice_number",
+                required_capability=Capability(value="read:invoice.invoice_number"),
+                classification=Classification.INTERNAL,
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        startup, "SOURCE_ROW_ENTITIES", {**SOURCE_ROW_ENTITIES, "xero": (xero_invoices,)}
+    )
+    monkeypatch.setattr(
+        startup,
+        "SOURCE_ROW_DESCRIPTIONS",
+        {**startup.SOURCE_ROW_DESCRIPTIONS, "xero": {"invoice": "Read Xero invoices."}},
+    )
+
+    assert startup.connector_row_sources() == ("xero",)
+    registered = set(row_readers(build_registry(source="local", records=_Rows())))
+    assert registered == {("local", "price_list"), ("xero", "invoice")}
+    assert classification_for("invoice", source="xero") == xero_invoices
 
 
 def test_an_entity_a_source_brings_is_answered_with_that_sources_classification() -> None:

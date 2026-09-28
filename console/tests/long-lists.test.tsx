@@ -36,7 +36,7 @@
 
 import { beforeAll, describe, expect, test } from "vitest";
 import { apiDocument, declaredResponseSchema } from "./support/openapi";
-import { PAGES } from "./support/pageCases";
+import { PAGES, awaited } from "./support/pageCases";
 import { mountIn } from "./support/screenStates";
 
 type Capability = "page" | "search" | "filter" | "sort" | "bulk";
@@ -56,6 +56,14 @@ const EVERY_COLUMN_HAS_A_FILTER_BOX =
   "A second control per column listing the values on the page would offer the same filter twice.";
 const READ_ONLY =
   "Nothing on this list is written from the console, so there is no act to do to many rows at once.";
+const DOCUMENT_PLANE_HAS_NO_POSITION =
+  "A cited document comes through knowledge.read_document, the typed tool a model also calls, and " +
+  "it takes a reference and a bound and no position, so there is nothing a cursor, a search or a " +
+  "filter could be passed to; the route says when the document is longer than the page, and a " +
+  "cursor there is a change to the model's tool, as it is for the row plane.";
+const A_DOCUMENT_HAS_ONE_ORDER =
+  "A document is read in the order it was written, which is the order its passages are stored in; " +
+  "any other order would put a sentence before the one it follows.";
 const CHAIN_IN_ORDER =
   "A routing chain is drawn in tier and position order because that order is the chain, which " +
   "brain.routing_routes.A_CHAIN_HAS_ONE_ORDER declares: any other order would draw a fallback " +
@@ -98,7 +106,7 @@ const A_LOG_ROW_IS_READ_AND_NEVER_WRITTEN =
  */
 const OVERVIEW_CARDS: Readonly<Record<string, string>> = {
   "/department": "/agents",
-  "/agents/:agentId": "/routing",
+  "/agents/:agentId/:tab": "/routing",
 };
 const AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST =
   "This screen is an overview, and the list it borrows is one card on it with a link to the screen " +
@@ -114,7 +122,26 @@ const A_SKILL_IS_DECIDED_FROM_ITS_OWN_BYTES =
   "reading its body, and an assignment of one approved skill to one agent.";
 
 /** What each long list does not offer, and why. Everything it does offer is read off the page. */
+/**
+ * The two lists read through a tool a model also calls, whose request has no position to page by:
+ * the row plane behind Records and the document plane behind a cited document. Excused paging,
+ * search and filter for that reason and no other.
+ */
+const THROUGH_A_MODELS_TOOL: Readonly<Record<string, string>> = {
+  "/records/:entity": ROW_PLANE_HAS_NO_POSITION,
+  "/ask/documents/:documentId": DOCUMENT_PLANE_HAS_NO_POSITION,
+};
+
 const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
+  // A document's passages are its text in reading order, read through the handler the answer used,
+  // which takes a reference and a bound and nothing to page, search, filter or order by.
+  "/ask/documents/:documentId": {
+    page: DOCUMENT_PLANE_HAS_NO_POSITION,
+    search: DOCUMENT_PLANE_HAS_NO_POSITION,
+    filter: DOCUMENT_PLANE_HAS_NO_POSITION,
+    sort: A_DOCUMENT_HAS_ONE_ORDER,
+    bulk: READ_ONLY,
+  },
   "/records/:entity": {
     page: ROW_PLANE_HAS_NO_POSITION,
     filter: EVERY_COLUMN_HAS_A_FILTER_BOX,
@@ -124,7 +151,7 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
   "/routing": { sort: CHAIN_IN_ORDER, bulk: A_RUNG_IS_SAVED_ONE_AT_A_TIME },
   "/routing/:rungId": { sort: CHAIN_IN_ORDER, bulk: A_RUNG_IS_SAVED_ONE_AT_A_TIME },
   // The Profile's model card draws the agent's level from the matrix and links to the Routing screen.
-  "/agents/:agentId": {
+  "/agents/:agentId/:tab": {
     page: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
     search: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
     filter: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
@@ -197,6 +224,11 @@ function routeOf(path: string): string | null {
 /** Whether a response the route declares can be cut off. */
 function bounded(path: string): boolean {
   const route = routeOf(path);
+  if (route === null && awaited(path)) {
+    // A route another package is building, answered by a page case in the shape it was briefed
+    // with. It is read against the document the day it is declared there.
+    return false;
+  }
   if (route === null) {
     throw new Error(`No route in the API document answers ${path}.`);
   }
@@ -333,7 +365,7 @@ describe("long lists", () => {
     }
   }, 30_000);
 
-  test("only the row plane and an overview card are excused paging, and only a fact is excused an order", () => {
+  test("only a model's tool and an overview card are excused paging, and only a fact is excused an order", () => {
     // What breaks if this is deleted: the table quietly regrowing the excuses M27.8.6 removed. Every
     // list but the records route pages, searches and filters, except a card on an overview whose
     // link goes to a screen that does all three over the same route; and the only lists not ordered
@@ -348,11 +380,19 @@ describe("long lists", () => {
         }
         continue;
       }
-      if (pattern !== "/records/:entity") {
+      if (!(pattern in THROUGH_A_MODELS_TOOL)) {
         expect(["page", "search", "filter"].filter((one) => one in missing), pattern).toEqual([]);
       }
+      if (pattern in THROUGH_A_MODELS_TOOL) {
+        const reason = THROUGH_A_MODELS_TOOL[pattern];
+        for (const capability of ["page", "search", "filter"] as const) {
+          expect([reason, EVERY_COLUMN_HAS_A_FILTER_BOX], `${pattern} ${capability}`).toContain(
+            missing[capability] ?? reason,
+          );
+        }
+      }
       if ("sort" in missing) {
-        expect([ROW_PLANE_HAS_NO_ORDER, CHAIN_IN_ORDER]).toContain(missing.sort);
+        expect([ROW_PLANE_HAS_NO_ORDER, CHAIN_IN_ORDER, A_DOCUMENT_HAS_ONE_ORDER]).toContain(missing.sort);
       }
     }
   });

@@ -1,6 +1,6 @@
 # What the application may do with the secrets vault.
 #
-# Task ids: M31.3.2.2, M27.8.7, M27.8.12, M42.6.5, M42.6.2
+# Task ids: M31.3.2.2, M27.8.7, M27.8.12, M42.6.5, M42.6.2, M11.9.2
 #
 # The application answers questions. It borrows connector credentials for the length of one
 # request and gives them back, which is why most rules below are about *creating and
@@ -104,12 +104,25 @@ path "connector_keys/metadata/+" {
   capabilities = ["read"]
 }
 
+# One question's read of a connected source borrows that source's key for the one read, by the
+# owner's decision (needs-rupash 99, 2026-09-28): a run token minted against the connector-run token
+# role, the key read with that token and not with this one, and the token revoked when the read ends.
+# brain.ops.live_read_run argues it, and brain.ops.connector_sync_run.WorkerConnectorKeys refuses a
+# minted token that carries more than the connector-run policy. So this process still reads no key
+# itself, and a copy of its token reads none without leaving a mint in the vault's audit log. One
+# role and no other, no auth/token/create without a role, and nothing under auth/token/roles, so the
+# application cannot widen the role it mints against. Takes effect on an install once the policies
+# are loaded again, which the installer's policy step does with the unseal pieces.
+path "auth/token/create/connector-run" {
+  capabilities = ["create", "update"]
+}
+
 # Deny by omission is the default here, so the following are listed only to say they were
 # considered and refused rather than forgotten:
 #
 #   sys/policy*          changing its own policy is the escalation this file exists to prevent
 #   sys/unseal           the application is not the operator
-#   auth/*               minting tokens for other roles
+#   auth/*               minting tokens for any role but connector-run, and the roles themselves
 #   secret/data/*        static secrets, for the reason at the top
 #   providers/metadata/* update or delete: see above
 #   providers/delete/*   and destroy/*: removing a provider key is done at the server

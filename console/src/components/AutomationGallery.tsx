@@ -2,12 +2,10 @@
  * The Automations tab: what this agent could take on, and the one confirmed step that installs it
  * (M39.6.1.3).
  *
- * **The gallery is handed in, not fetched here, and that is `AgentWorkspace`'s own warning
- * heeded.** That component selects a tab as the arrow keys move, and says the day a tab's panel
- * issues its own request is the day holding an arrow key becomes a stream of requests. The panel
- * is rebuilt on every tab change, so a fetch in it would be one per visit. This component says
- * once that it has been shown, `pages/Agent.tsx` asks for the gallery then and keeps the answer
- * across tab changes, and this component draws what it is given. The preview and the install are requested here, because
+ * **The gallery is handed in, not fetched here.** The section is rebuilt every time somebody
+ * moves between an agent's views, so a fetch in it would be one per visit. This component says
+ * once that it has been shown, `pages/agents/AgentDetailPage.tsx` asks for the gallery then and
+ * keeps the answer across view changes, and this component draws what it is given. The preview and the install are requested here, because
  * each is a person pressing a button and not a person moving through tabs.
  *
  * **Installing is two presses and the second one is the confirmation.** Install asks the API what

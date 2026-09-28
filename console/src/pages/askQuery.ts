@@ -35,10 +35,16 @@
  * adds the id when one was chosen, and `brain.gate.select.select_agent` decides whether this
  * person may use it; the picker lists the roster `GET /api/v1/agents` sent (M3.9.8).
  *
- * Task ids: M42.6.3, M3.9.8
+ * **A citation arrives as fields and is drawn as a link** (M8.1.1 to M8.1.3, M7.4.7). `readCitation`
+ * reads what `brain.gate.provenance.Evidence.view` sent, `citationAddress` says where it leads,
+ * and `freshnessWords` puts the API's freshness beside the date. See
+ * `A_CITATION_IS_DRAWN_AS_A_LINK_TO_WHAT_IT_NAMES`.
+ *
+ * Task ids: M42.6.3, M3.9.8, M8.1.1, M8.1.2, M8.1.3, M7.4.7
  */
 
 import type { AnswerEvent } from "../api/events";
+import { citedDocumentAddress } from "./citedDocumentQuery";
 
 /** Written down because a question is the one value on this screen that must not travel. */
 export const A_QUESTION_TYPED_HERE_IS_A_QUESTION_TYPED_ONCE =
@@ -99,11 +105,120 @@ export function askBody(
   return named === "" ? { question: asked } : { question: asked, agent: named };
 }
 
+/** Written down because a citation that cannot be followed is one nobody checks. */
+export const A_CITATION_IS_DRAWN_AS_A_LINK_TO_WHAT_IT_NAMES =
+  "A citation frame carries the record or the document it names, where in the document, how " +
+  "fresh the read was and who vouched for it, each as a field. The screen draws a link to the " +
+  "record's rows or to the passage, the freshness in words with the date in the reader's own " +
+  "zone, and the badge. Every one of those fields came from the API; this console reads them " +
+  "and decides nothing about any of them.";
+
+/**
+ * One citation as the API sent it (`brain.gate.provenance.Evidence.view`). Every field is a
+ * string, so nothing on a citation can be read as a count, and an empty string is the API
+ * saying nothing, never a value this console filled in.
+ */
+export interface CitationView {
+  /** `record`, `document`, or empty for a frame that carried a sentence rather than fields. */
+  readonly kind: string;
+  /** What the citation names, without its read time. */
+  readonly label: string;
+  /** `live`, `ageing`, `stale` or `unstated`, and the API's words for it. */
+  readonly freshness: string;
+  readonly freshnessText: string;
+  /** When it was read or, for a document, written; empty when that could not be dated. */
+  readonly readAt: string;
+  /** The verification badge's sentence and state, for a cited document with one. */
+  readonly badge: string;
+  readonly badgeState: string;
+  readonly entity: string;
+  readonly documentId: string;
+  /** Where in the document the passage is, as `Anchor.fragment` built it. */
+  readonly anchor: string;
+}
+
+function field(fields: Record<string, unknown>, name: string): string {
+  const value = fields[name];
+  return typeof value === "string" ? value : "";
+}
+
+/**
+ * One citation frame's data as a view. A frame that is not a JSON object is a sentence, drawn as
+ * its own label and linked nowhere, so nothing a frame carried is lost to this reader.
+ */
+export function readCitation(data: string): CitationView {
+  let parsed: unknown = null;
+  try {
+    parsed = JSON.parse(data);
+  } catch {
+    parsed = null;
+  }
+  const fields =
+    typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : { label: data };
+  return {
+    kind: field(fields, "kind"),
+    label: field(fields, "label"),
+    freshness: field(fields, "freshness"),
+    freshnessText: field(fields, "freshness_text"),
+    readAt: field(fields, "read_at"),
+    badge: field(fields, "badge"),
+    badgeState: field(fields, "badge_state"),
+    entity: field(fields, "entity"),
+    documentId: field(fields, "document_id"),
+    anchor: field(fields, "anchor"),
+  };
+}
+
+/** The records screen's address for one entity, which is where a record citation leads. */
+export function recordsAddressOf(entity: string): string {
+  return `/records/${encodeURIComponent(entity)}`;
+}
+
+/**
+ * Where a citation leads: a record to its entity's rows, a document to the passage it cited.
+ * Null for a citation that names neither, which is drawn as text.
+ */
+export function citationAddress(citation: CitationView): string | null {
+  if (citation.kind === "record" && citation.entity !== "") {
+    return recordsAddressOf(citation.entity);
+  }
+  if (citation.kind === "document" && citation.documentId !== "") {
+    return citedDocumentAddress(citation.documentId, citation.anchor);
+  }
+  return null;
+}
+
+/**
+ * How fresh a citation is, in words: the API's own, then the date in the reader's zone.
+ *
+ * A document's date is when its copy was written and a record's when it was read, so the verb
+ * differs and the record keeps its time of day. Empty for a frame that carried no freshness.
+ */
+export function freshnessWords(citation: CitationView): string {
+  if (citation.freshnessText === "") {
+    return "";
+  }
+  const parsed = new Date(citation.readAt);
+  if (citation.readAt === "" || Number.isNaN(parsed.getTime())) {
+    return citation.freshnessText;
+  }
+  const document = citation.kind === "document";
+  const date = parsed.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    ...(document ? {} : { hour: "2-digit", minute: "2-digit" }),
+  });
+  return `${citation.freshnessText}, ${document ? "updated" : "read"} ${date}`;
+}
+
 /**
  * What has arrived so far, and nothing about what has not.
  *
- * Four fields and not one of them is a number or a reason. `steps` and `citations` are the
- * frames' own strings, kept in the order they arrived, because the order is the API's
+ * Four fields and not one of them is a number or a reason. `steps` are the frames' own strings
+ * and `citations` their fields, kept in the order they arrived, because the order is the API's
  * decision: citations go out before the prose they support, which is a state machine on the
  * Python side rather than a convention, and a console that sorted or grouped them would be
  * choosing a different order for a screen the API already ordered.
@@ -111,8 +226,8 @@ export function askBody(
 export interface AnswerView {
   /** Progress labels, from the API's closed vocabulary. Never composed here. */
   readonly steps: readonly string[];
-  /** One record and field standing behind the answer, rendered as the API rendered it. */
-  readonly citations: readonly string[];
+  /** What stands behind the answer, as the API sent each citation. */
+  readonly citations: readonly CitationView[];
   /** The answer, or the one sentence a refusal is. This console cannot tell which. */
   readonly answer: string;
   /** The stream ended properly. */
@@ -129,7 +244,7 @@ export interface AnswerView {
  */
 export const NOTHING_ASKED: AnswerView = Object.freeze({
   steps: Object.freeze([]) as readonly string[],
-  citations: Object.freeze([]) as readonly string[],
+  citations: Object.freeze([]) as readonly CitationView[],
   answer: "",
   finished: false,
   failed: null,
@@ -155,7 +270,7 @@ export function withEvent(view: AnswerView, event: AnswerEvent): AnswerView {
     case "step":
       return { ...view, steps: [...view.steps, event.data] };
     case "citation":
-      return { ...view, citations: [...view.citations, event.data] };
+      return { ...view, citations: [...view.citations, readCitation(event.data)] };
     case "text":
       return { ...view, answer: view.answer + event.data };
     case "done":

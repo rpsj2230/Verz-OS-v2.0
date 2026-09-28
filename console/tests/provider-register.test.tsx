@@ -171,20 +171,13 @@ describe("an agent's pinned model", () => {
     // What breaks if this is deleted: M5.7.3's pin has no way in from the console, is typed as a
     // slug and a model name nobody can check, or is sent from an unconfirmed press that moves
     // every question to the agent.
-    const { container, idp } = await mounted("/agents/quote-helper", {
-      ...PAGES["/agents/:agentId"]?.answers,
+    const { container, idp } = await mounted("/agents/quote-helper/profile", {
+      ...PAGES["/agents/:agentId/:tab"]?.answers,
       "/api/v1/agents/quote-helper/model-pin": {
         agent_id: "quote-helper",
         provider: "anthropic",
         model: "claude-sonnet-5",
       },
-    });
-    await waitFor(() => {
-      const profile = [...container.querySelectorAll("button")].find((one) => one.textContent === "Profile");
-      if (profile === undefined) {
-        throw new Error("the workspace has not arrived");
-      }
-      fireEvent.click(profile);
     });
     await waitFor(() => {
       if (!container.querySelector('form[aria-label="Pin a model for this agent"]')) {

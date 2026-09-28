@@ -123,7 +123,16 @@ stored, which the canary planted in the recorded amount proves on every build. I
 declared as `CONNECTOR` at the foot of this module, which is how the Connectors screen, the
 worker's reading and the read-back table find it (`brain.connectors.declaration`).
 
-Task ids: M11.6.5
+**A record the index found is read again from Xero when a question needs its values (M11.9.2).**
+`XeroLiveLookup` narrows the list operation the reading already uses to the one invoice or contact
+an index row names, through Xero's documented `where` filter on the record's id, so the reply is
+interpreted by the same `interpret` as a scheduled page and carries the amount the index never
+holds. The id is refused unless it is letters, digits and hyphens, because it is laid into Xero's
+query language and a value carrying a quote could change the query. A read runs under the
+connection's key, declared as the service's (M11.2.5): Xero issues one key per connection, not one
+per person.
+
+Task ids: M11.6.5, M11.9.2
 """
 
 from __future__ import annotations
@@ -1461,6 +1470,45 @@ class XeroReading:
         return projected_record(entity, row, last_seen_at=seen_at)
 
 
+#: What a record id laid into Xero's `where` filter may be. Xero's ids are GUIDs; anything with a
+#: quote, a bracket or an operator in it could change the query, so only these are admitted.
+LIVE_ID_PATTERN: Final = re.compile(r"^[0-9A-Za-z-]{1,64}$")
+
+#: The field each entity's id is filtered on, in Xero's spelling. Documented at
+#: developer.xero.com/documentation/api/accounting/invoices (and /contacts), under "where".
+LIVE_ID_FIELDS: Final[Mapping[str, str]] = MappingProxyType(
+    {ENTITY_INVOICE: "InvoiceID", ENTITY_CONTACT: "ContactID"}
+)
+
+
+class XeroLiveLookup:
+    """One invoice or contact, read from Xero while somebody waits (M11.9.2).
+
+    The service's credentials, declared: a Xero connection holds one key, issued for the
+    organisation, and there is no person's own Xero key for a read to run under.
+    """
+
+    def entities(self) -> tuple[str, ...]:
+        return tuple(LIVE_ID_FIELDS)
+
+    def identity_mode(self, entity: str) -> IdentityMode:
+        del entity
+        return IdentityMode.SERVICE
+
+    def arguments_for(self, entity: str, source_id: str) -> Mapping[str, str]:
+        field = LIVE_ID_FIELDS.get(entity)
+        if field is None:
+            msg = f"this connector reads {sorted(LIVE_ID_FIELDS)} live and was asked for {entity!r}"
+            raise XeroError(msg)
+        if not LIVE_ID_PATTERN.match(source_id):
+            msg = (
+                "a record id laid into Xero's where filter is letters, digits and hyphens, and "
+                "this one is not; it is refused rather than escaped"
+            )
+            raise XeroError(msg)
+        return MappingProxyType({"where": f'{field}==Guid("{source_id}")'})
+
+
 def built_from_the_console(settings: Mapping[str, str], ref: SecretRef) -> ConnectorManifest:
     """The manifest a connection made on the Connectors screen declares."""
     return xero_manifest(XeroConnection(tenant_id=settings["tenant_id"]), ref=ref)
@@ -1506,4 +1554,5 @@ CONNECTOR: Final = ConnectorDeclaration(
     ),
     recorded=Recorded(tested=True),
     reading=XeroReading(),
+    live=XeroLiveLookup(),
 )

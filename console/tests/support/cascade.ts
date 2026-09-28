@@ -50,6 +50,12 @@ export interface OrderedRule extends CssRule {
   readonly sheet: string;
   /** Its position across every sheet, which breaks a tie in specificity. */
   readonly order: number;
+  /**
+   * Its cascade layer's rank, when it has one: a rule in a later layer beats one in an earlier layer
+   * whatever their specificities, which is how `theme/tailwind.css` puts the component layer's
+   * utilities above the old sheets' `legacy` layer. Absent is the old sheets' rank, nought.
+   */
+  readonly layer?: number;
 }
 
 /** Every rule in the named sheets, numbered in the order a page receives them. */
@@ -163,7 +169,7 @@ export function declared(
   rules: readonly OrderedRule[],
   width: number,
 ): string | undefined {
-  let best: { rank: [number, number, number]; order: number; value: string } | undefined;
+  let best: { layer: number; rank: [number, number, number]; order: number; value: string } | undefined;
   for (const rule of rules) {
     const value = rule.declarations[property];
     if (value === undefined || !appliesAt(rule.atRule, width)) {
@@ -174,12 +180,14 @@ export function declared(
         continue;
       }
       const rank = specificity(selector);
+      const layer = rule.layer ?? 0;
       const beats =
         best === undefined ||
-        outranks(rank, best.rank) > 0 ||
-        (outranks(rank, best.rank) === 0 && rule.order >= best.order);
+        layer > best.layer ||
+        (layer === best.layer &&
+          (outranks(rank, best.rank) > 0 || (outranks(rank, best.rank) === 0 && rule.order >= best.order)));
       if (beats) {
-        best = { rank, order: rule.order, value };
+        best = { layer, rank, order: rule.order, value };
       }
     }
   }
