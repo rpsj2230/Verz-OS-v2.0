@@ -108,13 +108,25 @@ same cache every caller's reach goes through, keyed on the owner's grants versio
 from the owner is gone from the account on the next request. See
 `A_SERVICE_ACCOUNT_IS_ANSWERED_AT_ITS_OWNERS_REACH`.
 
-Task ids: M31.1.4.1, M31.1.4.3, M31.1.4.4, M32.5.2.1, M1.1.7, M1.8.2
+**A question is counted, and asking past a window is a 429 that says when to come back.** The
+person's own window, the channel's and the answering agent's are `brain.ops.limits`' policy in
+`brain.ops.limit_store`'s Valkey windows, the store `brain.app.lifespan` already opens for the
+answer cache. They are asked twice and recorded once: before the question is filed or looked
+up, with the two windows known before anything is done, so a loop is refused before it costs
+anything; and again once the agent is chosen, with all three, which is the decision that
+records. Only that second call records, so a request refused by either never enters a window.
+See `A_QUESTION_IS_REFUSED_BEFORE_IT_COSTS_ANYTHING_AND_COUNTED_ONCE_IT_IS_ADMITTED`.
+
+Task ids: M31.1.4.1, M31.1.4.3, M31.1.4.4, M32.5.2.1, M1.1.7, M1.8.2, M23.1.1, M23.1.2, M23.1.3,
+M23.1.5
 """
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import inspect
+import secrets
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
@@ -123,12 +135,12 @@ from typing import Annotated, Any, Final, cast
 import structlog
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, JsonValue, StringConstraints
 
 from brain.agents.model import AGENT_ID_CHARS, AgentRecord
 from brain.agents.template import config_hash
-from brain.api import API_PREFIX, COMMON_RESPONSES, Page
+from brain.api import API_PREFIX, COMMON_RESPONSES, ErrorBody, Page, bound_trace_id
 from brain.audit.compliance import intercept
 from brain.audit.record import DenyReason
 from brain.core.department import gaps_for_question
@@ -176,6 +188,14 @@ from brain.knowledge.rows import (
 )
 from brain.knowledge.search import KNOWLEDGE_READ
 from brain.ops.denial_store import Denial, Denials, StoredDenials, record_beside
+from brain.ops.limit_store import StoreVerdict, ValkeyWindowStore, make_store
+from brain.ops.limits import (
+    Limit,
+    refusal_sentence,
+    request_limits,
+    retry_after_header,
+    retry_hint,
+)
 from brain.ops.model_service import ModelService
 from brain.ops.sensitive_referral_store import SensitiveReferrals, StoredSensitiveReferrals
 from brain.ops.trace_sink import CountingTraceSink
@@ -1035,6 +1055,96 @@ async def recorded_at_ingress(request: Request) -> AsyncIterator[Recorder]:
 Ingress = Annotated[Recorder, Depends(recorded_at_ingress)]
 
 
+# ------------------------------------------------------------ asking past a window
+
+#: Why the windows are asked twice and recorded once, and where each ask sits.
+A_QUESTION_IS_REFUSED_BEFORE_IT_COSTS_ANYTHING_AND_COUNTED_ONCE_IT_IS_ADMITTED: Final = (
+    "Which agent answers is decided by the front half, so the agent's window cannot be asked "
+    "before the question has been screened and its agent chosen. Asking every window only then "
+    "would let a loop file a sensitive-topic referral and look in the answer cache on every "
+    "attempt before being refused. Recording the person's and the channel's windows first and "
+    "the agent's later would record a request the agent's window then refused, which is the "
+    "one thing a window must never hold. So the two windows known at once are asked first and "
+    "record nothing, and every window is asked again, and recorded, once the agent is known."
+)
+
+#: What the generated document says a limited route may answer, beside the common shape.
+LIMITED_RESPONSES: Final[dict[int | str, dict[str, Any]]] = {
+    **COMMON_RESPONSES,
+    429: {
+        "model": ErrorBody,
+        "description": "Asked more often than a window allows. `Retry-After` says when, in "
+        "whole seconds, and the message says it in words.",
+    },
+}
+
+
+def limit_store_of(state: Any) -> ValkeyWindowStore | None:
+    """The sliding windows this process counts questions in, or None on a process with no Valkey.
+
+    What a test installed, or the synchronous client `brain.app.lifespan` opens for the answer
+    cache, wrapped once and kept on the state so its health counters span requests. The same
+    Valkey and a different key prefix, so no second connection is opened and no key collides.
+    None where no cache is configured: there are then no windows to count in, and
+    `brain.ops.limit_store.UNREACHABLE_POLICY` already says a fairness window with no store
+    admits.
+    """
+    found = getattr(state, "limit_store", None)
+    if isinstance(found, ValkeyWindowStore):
+        return found
+    client = getattr(state, "answer_client", None)
+    if client is None:
+        return None
+    made = make_store(client)
+    state.limit_store = made
+    return made
+
+
+async def windows_say(
+    store: ValkeyWindowStore | None,
+    *,
+    now: datetime,
+    limits: Sequence[Limit],
+    caller: str,
+    record: bool,
+) -> StoreVerdict | None:
+    """Ask the windows on a thread, because the client blocks. None where there are none."""
+    if store is None:
+        return None
+    ask = store.check_and_record if record else store.check_only
+    return await asyncio.to_thread(ask, now=now, limits=limits, caller=caller)
+
+
+def asked_too_often(request: Request, verdict: StoreVerdict) -> JSONResponse:
+    """The 429: `ErrorBody` with the wait in words, and the same wait in `Retry-After`.
+
+    The hint is `limits.retry_hint`: exact for the first refusals, lengthening once a caller has
+    shown it is not reading it. Jitter comes from `secrets` so it cannot be predicted from
+    anything the caller saw. `no-store` for the reason the answer itself carries it: this is an
+    answer about one caller's window.
+    """
+    decision = verdict.decision
+    wait = retry_hint(
+        decision.retry_after_seconds,
+        consecutive_refusals=verdict.consecutive_refusals,
+        jitter=secrets.randbelow(1000) / 1000,
+    )
+    binding = decision.binding
+    log.info(
+        "question refused by a window",
+        scope=str(binding.scope) if binding is not None else None,
+        period=binding.period if binding is not None else None,
+        retry_after_seconds=round(wait, 1),
+        degraded=verdict.degraded,
+    )
+    body = ErrorBody(message=refusal_sentence(binding, wait), trace_id=bound_trace_id(request))
+    return JSONResponse(
+        status_code=429,
+        content=body.model_dump(),
+        headers={"Retry-After": retry_after_header(wait), "Cache-Control": "no-store"},
+    )
+
+
 async def roster_of(state: Any, asked: Asking, registry: ToolRegistry) -> AnswerRoster:
     """The agents this person may be answered by: the default and every stored agent they may run.
 
@@ -1052,10 +1162,8 @@ async def roster_of(state: Any, asked: Asking, registry: ToolRegistry) -> Answer
     )
 
 
-@router.post("/answer", responses=COMMON_RESPONSES)
-async def answer(
-    request: Request, recorder: Ingress, asked: Asked, ask: Question
-) -> StreamingResponse:
+@router.post("/answer", responses=LIMITED_RESPONSES)
+async def answer(request: Request, recorder: Ingress, asked: Asked, ask: Question) -> Response:
     """One question, answered as a stream of events, at this caller's reach.
 
     **The first route in this application that answers a question rather than serving rows.**
@@ -1075,6 +1183,9 @@ async def answer(
     The response is uncacheable by anything in front of it, which is a permission requirement
     and not a performance note: see
     `AN_ANSWER_IS_COMPUTED_FOR_ONE_REACH_AND_CACHED_BY_NOBODY`.
+
+    Asking past a window is a 429 before the lane runs, and a refused question is never counted:
+    `A_QUESTION_IS_REFUSED_BEFORE_IT_COSTS_ANYTHING_AND_COUNTED_ONCE_IT_IS_ADMITTED`.
     """
     registry = getattr(request.app.state, "tools", None)
     if not isinstance(registry, ToolRegistry):
@@ -1095,6 +1206,19 @@ async def answer(
     origin = Origin(
         trace_id=recorder.trace_id, principal=asked.caller.principal, channel=asked.channel
     )
+    # The person's and the channel's windows, before anything is filed or looked up. Recorded by
+    # nothing: the decision that records comes once the agent is known, below.
+    windows = limit_store_of(request.app.state)
+    asker = asked.reach.principal_id
+    early = await windows_say(
+        windows,
+        now=asked.now,
+        limits=request_limits(principal_id=asker, channel=str(asked.channel)),
+        caller=asker,
+        record=False,
+    )
+    if early is not None and not early.allowed:
+        return asked_too_often(request, early)
     # Before the front half and the lane, so before the cache and any model: a sensitive question
     # is routed to its topic's named person and recorded without what was asked, and the asker is
     # told one sentence whatever the topic (M24.2.2). See `brain.audit.compliance`.
@@ -1132,6 +1256,21 @@ async def answer(
             now=asked.now,
             caching=caching,
         )
+        # Every window, the agent's included, and the one call that records. See
+        # A_QUESTION_IS_REFUSED_BEFORE_IT_COSTS_ANYTHING_AND_COUNTED_ONCE_IT_IS_ADMITTED.
+        counted = await windows_say(
+            windows,
+            now=asked.now,
+            limits=request_limits(
+                principal_id=asker,
+                channel=str(asked.channel),
+                agent_id=front.selection.agent_id,
+            ),
+            caller=asker,
+            record=True,
+        )
+        if counted is not None and not counted.allowed:
+            return asked_too_often(request, counted)
         # A stored agent answers at the caller's reach narrowed by its ceiling, and the default
         # at the caller's own. Everything read below is read at that reach and no other.
         agent = roster.records.get(front.selection.agent_id)

@@ -41,6 +41,15 @@ Nothing here opens a connection. The sliding window is the algorithm; Valkey is 
 hits live in production, and a state machine that owned a Redis client could not be tested
 for the case that matters, which is the boundary between two windows.
 
+**On the request path since 2026-09-28, and until then on none.** Everything above was
+written, tested and called by nothing a person could reach: no question was ever counted.
+`brain.api_routes.answer` now asks the per-principal, per-channel and per-agent windows before
+a question reaches the lane, through `brain.ops.limit_store`, and a refusal is a 429 carrying
+`Retry-After` and `refusal_sentence`, which says when the person may ask again. The limit a
+stored window is judged against is read back from this policy by its key (`limit_for`) and is
+never stored beside the hits, so a limit lowered while windows are in flight applies to them
+at once, which is the case `WindowState.retry_after` was written for.
+
 Task ids: M23.1.1, M23.1.2, M23.1.3, M23.1.4, M23.1.5, M23.2.1, M23.2.2, M23.2.3
 """
 
@@ -52,6 +61,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from types import MappingProxyType
+from typing import Final, assert_never
 
 from brain.core.errors import BrainError, Outcome
 from brain.core.principal import PrincipalKind
@@ -540,6 +550,44 @@ DEFAULT_CHANNEL_PER_MINUTE = 120
 DEFAULT_AGENT_PER_MINUTE = 60
 
 
+def principal_limit(
+    principal_id: str, *, per_minute: int = DEFAULT_PRINCIPAL_PER_MINUTE
+) -> Limit:
+    """One person's questions a minute. See `DEFAULT_PRINCIPAL_PER_MINUTE`."""
+    return Limit(
+        scope=LimitScope.PRINCIPAL,
+        subject=principal_id,
+        period="minute",
+        limit=per_minute,
+        window_seconds=MINUTE_SECONDS,
+        reason="one person's questions a minute; far above any human rate, so it catches loops",
+    )
+
+
+def channel_limit(channel: str, *, per_minute: int = DEFAULT_CHANNEL_PER_MINUTE) -> Limit:
+    """Everybody on one channel, a minute. See `DEFAULT_CHANNEL_PER_MINUTE`."""
+    return Limit(
+        scope=LimitScope.CHANNEL,
+        subject=channel,
+        period="minute",
+        limit=per_minute,
+        window_seconds=MINUTE_SECONDS,
+        reason="everybody on one channel; contains a misbehaving integration",
+    )
+
+
+def agent_limit(agent_id: str, *, per_minute: int = DEFAULT_AGENT_PER_MINUTE) -> Limit:
+    """Everybody using one agent, a minute. See `DEFAULT_AGENT_PER_MINUTE`."""
+    return Limit(
+        scope=LimitScope.AGENT,
+        subject=agent_id,
+        period="minute",
+        limit=per_minute,
+        window_seconds=MINUTE_SECONDS,
+        reason="everybody using one agent; a looping agent is a likely accident",
+    )
+
+
 def request_limits(
     *,
     principal_id: str,
@@ -562,34 +610,11 @@ def request_limits(
     one.
     """
     limits = [
-        Limit(
-            scope=LimitScope.PRINCIPAL,
-            subject=principal_id,
-            period="minute",
-            limit=principal_per_minute,
-            window_seconds=MINUTE_SECONDS,
-            reason="one person's questions a minute; far above any human rate, so it catches loops",
-        ),
-        Limit(
-            scope=LimitScope.CHANNEL,
-            subject=channel,
-            period="minute",
-            limit=channel_per_minute,
-            window_seconds=MINUTE_SECONDS,
-            reason="everybody on one channel; contains a misbehaving integration",
-        ),
+        principal_limit(principal_id, per_minute=principal_per_minute),
+        channel_limit(channel, per_minute=channel_per_minute),
     ]
     if agent_id is not None:
-        limits.append(
-            Limit(
-                scope=LimitScope.AGENT,
-                subject=agent_id,
-                period="minute",
-                limit=agent_per_minute,
-                window_seconds=MINUTE_SECONDS,
-                reason="everybody using one agent; a looping agent is a likely accident",
-            )
-        )
+        limits.append(agent_limit(agent_id, per_minute=agent_per_minute))
     if connector is not None:
         limits.extend(source_limits(connector, principal_id=principal_id))
     return tuple(limits)
@@ -712,6 +737,18 @@ WIDGET_MINTS_PER_MINUTE = 10
 WIDGET_LIVE_SESSIONS_PER_ORIGIN = 20
 
 
+def widget_mint_limit(origin: str, *, per_minute: int = WIDGET_MINTS_PER_MINUTE) -> Limit:
+    """New anonymous sessions one site may open a minute. See `WIDGET_MINTS_PER_MINUTE`."""
+    return Limit(
+        scope=LimitScope.WIDGET_ORIGIN,
+        subject=origin,
+        period="minute",
+        limit=per_minute,
+        window_seconds=MINUTE_SECONDS,
+        reason="new anonymous sessions one site may open a minute",
+    )
+
+
 @dataclass(frozen=True)
 class MintDecision:
     """Whether a new anonymous widget session may be issued.
@@ -751,14 +788,7 @@ def mint_widget_session(
         msg = "live_sessions counts sessions and cannot be negative"
         raise ValueError(msg)
 
-    limit = Limit(
-        scope=LimitScope.WIDGET_ORIGIN,
-        subject=origin,
-        period="minute",
-        limit=mints_per_minute,
-        window_seconds=MINUTE_SECONDS,
-        reason="new anonymous sessions one site may open a minute",
-    )
+    limit = widget_mint_limit(origin, per_minute=mints_per_minute)
     if live_sessions >= max_live:
         return MintDecision(
             minted=False,
@@ -985,3 +1015,228 @@ def counts_towards_metrics(kind: PrincipalKind, traffic: TrafficClass) -> bool:
     is done against a fiction; it is excluded from the numbers about people.
     """
     return not is_automated(kind, traffic)
+
+
+# ------------------------------------------------------------- judging a stored window
+def limit_for(key: LimitKey) -> Limit | None:
+    """The limit a window found in the store is judged against, read from this policy.
+
+    The store keeps hits and never the limit beside them, deliberately: a limit copied into
+    the store at the moment a hit was recorded is a limit that cannot be lowered for a window
+    already in flight, and lowering one during an incident is exactly when it matters. So the
+    Limits screen, finding a key it did not ask about, asks here what that key is allowed.
+
+    Built from the same constructors `request_limits` and `source_limits` use, so the two
+    answers cannot differ for any key either of them produces. None for a key this policy does
+    not produce: a period nobody declares, an empty subject, or a connector with no verified
+    ceiling. A screen told None shows nothing for that window rather than a guess, which is
+    `source_limits`' reason for refusing to invent a ceiling.
+    """
+    scope, subject, period = key
+    if not subject:
+        return None
+    candidates: tuple[Limit, ...]
+    match scope:
+        case LimitScope.PRINCIPAL:
+            candidates = (principal_limit(subject),)
+        case LimitScope.CHANNEL:
+            candidates = (channel_limit(subject),)
+        case LimitScope.AGENT:
+            candidates = (agent_limit(subject),)
+        case LimitScope.WIDGET_ORIGIN:
+            candidates = (widget_mint_limit(subject),)
+        case LimitScope.CONNECTOR:
+            candidates = source_limits(subject, principal_id=subject)
+        case LimitScope.PRINCIPAL_CONNECTOR:
+            principal_id, _, connector = subject.rpartition(":")
+            candidates = source_limits(connector, principal_id=principal_id)
+        case _:
+            assert_never(scope)
+    return next((one for one in candidates if one.key == key), None)
+
+
+# ------------------------------------------------------------------ the declared windows
+@dataclass(frozen=True)
+class DeclaredWindow:
+    """One kind of window this install counts, as a person reading the Limits screen needs it.
+
+    `applies_to` is words rather than a subject: a declaration is about every person, every
+    channel or one named connector, and a row naming a real principal would be a live window
+    dressed as a declaration.
+    """
+
+    scope: LimitScope
+    applies_to: str
+    period: str
+    limit: int
+    window_seconds: float
+    raisable: bool
+    reason: str
+
+
+def _declared(applies_to: str, limit: Limit) -> DeclaredWindow:
+    return DeclaredWindow(
+        scope=limit.scope,
+        applies_to=applies_to,
+        period=limit.period,
+        limit=limit.limit,
+        window_seconds=limit.window_seconds,
+        raisable=limit.raisable,
+        reason=limit.reason,
+    )
+
+
+def declared_windows() -> tuple[DeclaredWindow, ...]:
+    """Every window this install counts, built by the constructors the request path calls.
+
+    The subjects handed to the constructors are placeholders and are dropped: only the figures
+    survive, and they are the figures a real request is judged against because they came out
+    of the same function. A table typed out here instead would be a second statement of the
+    limits, and the screen would go on showing thirty a minute the day the request path was
+    changed to twenty.
+    """
+    found = [
+        _declared("each person", principal_limit("each person")),
+        _declared("each channel", channel_limit("each channel")),
+        _declared("each agent", agent_limit("each agent")),
+        _declared("each website with a chat widget", widget_mint_limit("each website")),
+    ]
+    for ceiling in SOURCE_CEILINGS:
+        for one in source_limits(ceiling.name, principal_id="each person"):
+            if one.scope is LimitScope.PRINCIPAL_CONNECTOR:
+                found.append(_declared(f"each person's share of {ceiling.name}", one))
+            else:
+                found.append(_declared(ceiling.name, one))
+    return tuple(found)
+
+
+# ------------------------------------------------------------------ telling the person
+#: Why a refusal says when, in words, as well as in a header.
+A_REFUSAL_SAYS_WHEN_IN_WORDS: Final = (
+    "Retry-After is read by a program and by nobody else. A person looking at the console is "
+    "shown the message the API sent, and 'too many requests' with no time in it sends them to "
+    "try again at once, which is refused again and reads as the product being broken. So the "
+    "sentence carries the same wait the header does, rounded the same way, and a test holds "
+    "the two to one another."
+)
+
+
+def retry_after_header(seconds: float) -> str:
+    """`Retry-After` as whole seconds, rounded up and never below one.
+
+    Up, because a hint rounded down names an instant at which the window is still full, and a
+    client that obeys it exactly is refused for obeying. Never zero, because zero is an
+    instruction to retry immediately, which a refusal is never.
+    """
+    return str(max(1, math.ceil(seconds)))
+
+
+def retry_hint(retry_after_seconds: float, *, consecutive_refusals: int, jitter: float) -> float:
+    """The hint a refused caller is given: exact, until they show they are not reading it.
+
+    `backoff_seconds` with the jitter applied only once backoff has begun. Within the first
+    `BACKOFF_AFTER_REFUSALS` the hint is the measured time until the window has room, and it
+    is shown to a person as a number of seconds; jitter there would tell somebody to wait
+    forty seconds when thirty would do, for the benefit of clients that are not looping. Once a
+    caller has been refused past that, it is a loop, and decorrelating loops is what jitter
+    is for.
+    """
+    spread = jitter if consecutive_refusals > BACKOFF_AFTER_REFUSALS else 0.0
+    return backoff_seconds(
+        retry_after_seconds, consecutive_refusals=consecutive_refusals, jitter=spread
+    )
+
+
+def _whose(scope: LimitScope, period: str) -> str:
+    """Whose allowance ran out, in words that name no subject.
+
+    A person is told it was their own, or everybody's on the way they came in, or the
+    assistant's, because the remedy differs: their own passes if they wait, and a shared one
+    may not. No subject is named, so a refusal says nothing about who else is asking or which
+    system a question needed.
+    """
+    match scope:
+        case LimitScope.PRINCIPAL:
+            return f"You have asked more often in the last {period} than this install allows."
+        case LimitScope.CHANNEL:
+            return (
+                f"More questions have arrived this way in the last {period} than this "
+                "install allows."
+            )
+        case LimitScope.AGENT:
+            return (
+                f"The assistant you asked has been asked more often in the last {period} than "
+                "this install allows."
+            )
+        case LimitScope.CONNECTOR:
+            return (
+                f"A system this needs has been asked more often in the last {period} than it "
+                "allows."
+            )
+        case LimitScope.PRINCIPAL_CONNECTOR:
+            return (
+                f"You have asked a system this needs more often in the last {period} than "
+                "your share of it allows."
+            )
+        case LimitScope.WIDGET_ORIGIN:
+            return (
+                f"This site has opened more conversations in the last {period} than this "
+                "install allows."
+            )
+        case _:
+            assert_never(scope)
+
+
+def when_again(retry_after_seconds: float) -> str:
+    """When the person may ask again, from the same rounding the header uses.
+
+    Seconds under two minutes and whole minutes, rounded up, from there. See
+    `A_REFUSAL_SAYS_WHEN_IN_WORDS`.
+    """
+    whole = int(retry_after_header(retry_after_seconds))
+    if whole < 2 * MINUTE_SECONDS:
+        return f"You can ask again in {whole} second{'' if whole == 1 else 's'}."
+    return f"You can ask again in {math.ceil(whole / MINUTE_SECONDS)} minutes."
+
+
+def refusal_sentence(binding: Limit | None, retry_after_seconds: float) -> str:
+    """The message a refused request carries: whose allowance, and when to come back."""
+    whose = (
+        "This is being asked for more quickly than this install allows."
+        if binding is None
+        else _whose(binding.scope, binding.period)
+    )
+    return f"{whose} {when_again(retry_after_seconds)}"
+
+
+# --------------------------------------------------------------------- people's traffic
+#: The traffic classes whose requests belong in the numbers about people.
+#:
+#: Derived from `counts_towards_metrics` over every class rather than listed, so a query that
+#: filters on it and the in-process filter `usage_view` and `spend` apply are one rule. A
+#: stored request row carries its traffic class and not its principal's kind; that is enough,
+#: because a service account's token belongs to no session and so arrives on `Channel.API`,
+#: which is AUTOMATION whoever holds it.
+HUMAN_TRAFFIC: Final[frozenset[TrafficClass]] = frozenset(
+    one for one in TrafficClass if counts_towards_metrics(PrincipalKind.HUMAN, one)
+)
+
+#: How far back a principal's recent volume is counted for `assess_volume`. A day rather than
+#: an hour: office traffic arrives in working hours, so an hour's figure against an hourly
+#: mean over whole days calls every busy morning four times normal.
+VOLUME_OBSERVED_PERIOD: Final = timedelta(days=1)
+
+#: How many periods before the observed one make a principal's baseline. A week, so a Monday
+#: is compared with a week that contains one.
+VOLUME_BASELINE_PERIODS: Final = 7
+
+
+def baseline_from(prior: int, *, periods: int = VOLUME_BASELINE_PERIODS) -> float:
+    """A principal's usual volume per period, from what they asked across the baseline."""
+    if prior < 0:
+        msg = "a prior volume counts requests and cannot be negative"
+        raise ValueError(msg)
+    if periods < 1:
+        msg = "a baseline is taken over at least one period"
+        raise ValueError(msg)
+    return prior / periods

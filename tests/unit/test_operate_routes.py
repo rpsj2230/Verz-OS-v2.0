@@ -17,7 +17,7 @@ them true**, by reading the source tree rather than trusting a constant: nothing
 attempt, nothing stores a provider's health, the queue driver's tables get no policy, and nothing
 calls a queue cancellation.
 
-Task ids: M27.2.2, M27.2.3, M27.2.6
+Task ids: M27.2.2, M27.2.3, M27.2.6, M23.2.3
 """
 
 from __future__ import annotations
@@ -45,7 +45,9 @@ from brain.console.screens import screen
 from brain.console.workspace import intersections_in
 from brain.core.entitlement import EntitlementSet, Grant
 from brain.core.lane import Lane
+from brain.core.principal import PrincipalKind
 from brain.core.scope import Scope
+from brain.gate.context import TrafficClass
 from brain.identity.bearer import TokenAuthority
 from brain.models.routing import Tier
 from brain.operate_routes import (
@@ -70,6 +72,7 @@ from brain.operate_routes import (
 )
 from brain.ops.controls import CONTROLS, control
 from brain.ops.jobs import NAMES_THAT_WOULD_BE_A_HIDDEN_COUNT
+from brain.ops.limits import counts_towards_metrics
 from brain.ops.provider_keys import PROVIDER_SLOTS
 from brain.ops.queue import driver_rls_statements
 from brain.ops.schedule_runner import STALLED_AFTER
@@ -557,7 +560,29 @@ def test_the_window_is_the_hours_asked_for_and_ends_at_the_instant_admitted(
     assert "GROUP BY obs.request_telemetry.lane" in sql
     assert "obs.request_telemetry.received_at >=" in sql
     assert "obs.request_telemetry.received_at <" in sql
-    assert sorted(compiled.params.values()) == [start, end]
+    dates = [value for value in compiled.params.values() if isinstance(value, datetime)]
+    assert sorted(dates) == [start, end]
+
+
+def test_the_fast_lane_share_is_counted_over_peoples_requests_and_not_machine_traffic() -> None:
+    """M23.2.3. An automation asks the same few questions on a schedule and reaches the fast
+    lane far more often than a person, so counting it makes "answered without a model" a figure
+    about a schedule. The statement filters on the classes `limits.HUMAN_TRAFFIC` names, asserted
+    against `counts_towards_metrics` over every class rather than against a list, so the two
+    cannot drift.
+
+    Delete this and the filter can be dropped with the window test above still green."""
+    start, end = datetime(2019, 3, 1, tzinfo=UTC), datetime(2019, 3, 8, tzinfo=UTC)
+    compiled = requests_by_lane(start, end).compile(dialect=DIALECT)
+
+    assert "obs.request_telemetry.traffic_class IN" in str(compiled)
+    classes = [value for value in compiled.params.values() if isinstance(value, list)]
+    people = sorted(
+        str(one) for one in TrafficClass if counts_towards_metrics(PrincipalKind.HUMAN, one)
+    )
+    assert classes == [people]
+    assert str(TrafficClass.AUTOMATION) not in people
+    assert str(TrafficClass.HUMAN_INTERACTIVE) in people
 
 
 def test_a_window_outside_the_bound_is_refused_and_the_bound_is_the_service_level_routes(
