@@ -229,8 +229,20 @@ def test_a_declaration_gives_a_console_form_or_a_reason_and_never_both_or_neithe
         replace(declared, not_from_the_console="Connected at the server.")
     with pytest.raises(DeclarationError, match="both or neither"):
         replace(declared, console=None, reading=None)
-    explained = replace(declared, console=None, reading=None, not_from_the_console="Not yet.")
+    explained = replace(
+        declared, console=None, reading=None, live=None, not_from_the_console="Not yet."
+    )
     assert explained.console is None and explained.not_from_the_console == "Not yet."
+
+
+def test_a_live_lookup_needs_the_reading_it_reads_through() -> None:
+    """A record read live is read through the reading's operation and interpretation (M11.9.2).
+    Delete this and a connector can declare how to read one record with nothing to read it through,
+    and every live read of it fails at question time instead of the build failing at start-up."""
+    with pytest.raises(DeclarationError, match="live lookup and no reading"):
+        replace(xero.CONNECTOR, reading=None)
+    assert replace(xero.CONNECTOR, reading=None, live=None).live is None
+    assert xero.CONNECTOR.live is not None and xero.CONNECTOR.reading is not None
 
 
 def test_a_reading_needs_a_source_the_console_can_connect() -> None:

@@ -136,6 +136,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, JsonValue, StringConstraints
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from brain.agents.model import AGENT_ID_CHARS, AgentRecord
 from brain.agents.template import config_hash
@@ -165,6 +166,7 @@ from brain.gate.context import Channel, GateStep, Recorder, open_trace
 from brain.gate.fast_lane import RowReader
 from brain.gate.finish import Origin, RequestRecorder
 from brain.gate.front import AgentSetup, Caching, Choosing, remember, run_front_half
+from brain.gate.live_records import LiveRecords
 from brain.gate.model_lane import PASSAGE_POLICY, AgentRun, DocumentSearchTool, ModelLane
 from brain.gate.resolve import EntitlementCache, EntitlementStore, VersionSource, resolve
 from brain.gate.roster import (
@@ -197,6 +199,7 @@ from brain.ops.limits import (
     retry_after_header,
     retry_hint,
 )
+from brain.ops.live_read_run import live_records_for
 from brain.ops.model_service import ModelService
 from brain.ops.sensitive_referral_store import SensitiveReferrals, StoredSensitiveReferrals
 from brain.ops.trace_sink import CountingTraceSink
@@ -900,6 +903,44 @@ def field_policies(registry: ToolRegistry) -> dict[str, FieldPolicy]:
     return policies
 
 
+def source_field_policies(registry: ToolRegistry) -> dict[tuple[str, str], FieldPolicy]:
+    """One field policy per source and entity, for the answer lane's redaction (M15.4.2).
+
+    Beside `field_policies` rather than instead of it, because the lane is the caller that knows
+    which source a row came from, and every other caller of that function names an entity alone.
+    Two sources projecting the same kind of record are each redacted by their own rules here, so
+    connecting the second never withholds the first one's fields. Built before the question is
+    read, for `field_policies`' reason.
+    """
+    policies: dict[tuple[str, str], FieldPolicy] = {}
+    for definition in registry.definitions():
+        if not definition.entity or not definition.source:
+            continue
+        classification = classification_for(definition.entity, source=definition.source)
+        if classification is not None:
+            policies[(definition.source, definition.entity)] = classification.policy()
+    return policies
+
+
+def live_records_of(state: Any) -> LiveRecords | None:
+    """What reads a connected source's records live for this process, or None where nothing can.
+
+    `app.state.live_records` when the lifespan put one there, and otherwise one built over this
+    process's database and vault on first use and kept on the state, so its throttle, breakers
+    and fetches in flight are the process's and not the request's (M11.9.2). None on a process
+    with no database, which has no connection table to say what is connected.
+    """
+    found = getattr(state, "live_records", None)
+    if isinstance(found, LiveRecords):
+        return found
+    sessions = getattr(state, "db_sessions", None)
+    if not isinstance(sessions, async_sessionmaker):
+        return None
+    built = live_records_for(sessions, getattr(state, "vault", None))
+    state.live_records = built
+    return built
+
+
 def passage_search_for(registry: ToolRegistry) -> DocumentSearchTool | None:
     """The passage search the answer lane's model step reads through, or None without one.
 
@@ -1318,6 +1359,10 @@ async def answered_for(
             gaps=gaps_for_question(address.question, reach.scope_for(KNOWLEDGE_READ, asking.now)),
             recorder=recorder,
             referral=referral,
+            # A connected source's record is read from it while the asker waits (M11.9.2), and
+            # each source's rows are redacted by its own classification (M15.4.2).
+            live=live_records_of(request.app.state),
+            source_policies=source_field_policies(registry),
         )
         if answered.text is not None:
             # An answer computed on this request at this reach, stored under the key its own

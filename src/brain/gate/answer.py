@@ -112,18 +112,37 @@ and not only in front of the model. A cache hit enters none of them: nothing was
 tier it classified on the request's `Meter` as it decides it, and `finish` hands `Meter.route` to
 the recorders beside the usage, so the row's tier is the one walked and never one re-derived.
 
-Task ids: M30.5.2, M21.3.4, M3.9.3, M4.4.4, M2.2.4, M3.1.2, M3.6.3
+**A record a connected source holds is answered from that source, read while the asker waits
+(M11.9.2, M11.5.1).** The index row the fast path found names the record; when the lane was handed
+`LiveRecords` and the source reads that kind of record live, the lane reads it again from the source
+through `brain.gate.live_records` inside `brain.connectors.live_read.LIVE_READ_BUDGET_MS`, and
+redacts and answers from what came back. A source that did not answer in time is not waited for: the
+asker is told `federation.PartialAnswer.notice`, which names the source only when their own reach
+already discloses it (M11.5.5), and the request is recorded as degraded. A live answer is never
+kept in the answer cache, because a kept value served later is a copy rather than a read; and a
+request that read live spent the answer lane's budget, so it is recorded there. See
+`A_LIVE_READ_SPENDS_THE_ANSWER_LANES_BUDGET` and `A_LIVE_VALUE_IS_NOT_KEPT_FOR_THE_NEXT_ASKER`.
+
+**Each source's rows are redacted by that source's own classification (M15.4.2).** `source_policies`
+is keyed by source and entity, and a policy found there is the one used; `policies`, keyed by entity
+alone, is the fallback for a caller that has no source to give. Two sources projecting the same kind
+of record are then each redacted as their own, rather than one of them by whichever was classified
+first, which withheld every field only the other one classified.
+
+Task ids: M30.5.2, M21.3.4, M3.9.3, M4.4.4, M2.2.4, M3.1.2, M3.6.3, M11.9.2, M11.5.1, M11.5.5
+Task ids: M15.4.2
 """
 
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Final
 
 import structlog
 
+from brain.connectors.federation import PartialAnswer
 from brain.core.department import Gap
 from brain.core.entitlement import EntitlementSet
 from brain.core.envelope import TypedResult
@@ -152,6 +171,7 @@ from brain.gate.fast_lane import (
     unserved_match,
 )
 from brain.gate.finish import Finished, FrontRecord, Origin, RequestRecorder, attributable, finish
+from brain.gate.live_records import LiveRecords
 from brain.gate.model_lane import ModelLane, draft
 from brain.gate.streaming import AnswerStream, Progress, at_tool_input_start, cache_hit
 from brain.knowledge.rows import RowRecord, RowRequest
@@ -200,6 +220,22 @@ THE_MODEL_STEP_TAKES_ONLY_A_QUESTION_NO_RULE_MATCHED: Final = (
     "lane's whatever it found, and only a question no rule matched at all is the model's."
 )
 
+#: Why a request that read a source live is recorded under the answer lane.
+A_LIVE_READ_SPENDS_THE_ANSWER_LANES_BUDGET: Final = (
+    "A live read is allowed its own timeout, which is longer than the fast lane's whole objective, "
+    "and it waits on a system this one does not run. A request that made one spent the answer "
+    "lane's allowance whether or not a model was asked, and recording it under the fast lane "
+    "would measure a source's latency against a target no source call can meet."
+)
+
+#: Why an answer read live carries no text for the answer cache.
+A_LIVE_VALUE_IS_NOT_KEPT_FOR_THE_NEXT_ASKER: Final = (
+    "The owner's rule is that every value an answer uses from a connected source is read from the "
+    "source when the question is asked. An answer kept in the cache and served to the next asker "
+    "is a value read some minutes ago, served as though it were read now, which is a copy by "
+    "another name. So a live answer is shown and not kept."
+)
+
 #: The lane a request that called no model is recorded under. See the constant above.
 LANE: Final = Lane.FAST
 
@@ -216,6 +252,13 @@ class ToolCalls:
 
     def __init__(self) -> None:
         self.started = 0
+        #: Source calls made live for this request, which also moves it to the answer lane.
+        self.live = 0
+
+    def read_live(self, calls: int) -> None:
+        """Count the live reads of one refresh, as calls started and as live reads."""
+        self.started += calls
+        self.live += calls
 
     def start(self) -> None:
         """Count one call that is about to start and is not a row read, such as a passage search."""
@@ -270,8 +313,12 @@ class Answered:
     #: True when the answer came from the cache and no read happened.
     from_cache: bool = False
     #: The answer's text exactly as the text frame carries it, present only beside `composed`.
-    #: What the answer cache stores, so a later hit says what this answer said.
+    #: What the answer cache stores, so a later hit says what this answer said. None for an answer
+    #: read live, which is not kept: see `A_LIVE_VALUE_IS_NOT_KEPT_FOR_THE_NEXT_ASKER`.
     text: str | None = None
+    #: What a live read left out, when it left anything out. With no `composed` beside it, the
+    #: request is degraded: the source that holds the answer did not answer in time.
+    partial: PartialAnswer | None = None
 
     def __post_init__(self) -> None:
         if not self.frames:
@@ -325,6 +372,8 @@ async def answer_lane(
     gaps: Sequence[Gap] = (),
     referral: str | None = None,
     recorder: Recorder | None = None,
+    live: LiveRecords | None = None,
+    source_policies: Mapping[tuple[str, str], FieldPolicy] | None = None,
 ) -> Answered:
     """Answer one question, and finish the request once whatever the answer was.
 
@@ -357,6 +406,10 @@ async def answer_lane(
     `referral` is the sentence for a question `brain.audit.compliance.intercept` kept off the
     ordinary path (M24.2.2): nothing is looked up, cached or asked, and the frames carry the same
     steps an answer does, so only the sentence differs. See `_referred`.
+
+    `live` reads a fast-path record's values from its source (M11.9.2), and `source_policies`
+    redacts each source's rows by its own classification (M15.4.2); both are absent on a lane that
+    reads nothing live and knows no source's classification, which answers exactly as before.
     """
     attributable(origin, entitlement.principal_id)
     calls = ToolCalls()
@@ -380,6 +433,8 @@ async def answer_lane(
             gaps=tuple(gaps),
             referral=referral,
             recorder=recorder,
+            live=live,
+            source_policies=source_policies,
         )
         return outcome
     finally:
@@ -393,7 +448,9 @@ async def answer_lane(
                 outcome=outcome,
                 completed_at=completed_at,
                 entitlement_hash=entitlement.ent_hash(),
-                lane=LANE if usage is None else MODEL_LANE,
+                # A model call or a live read spent the answer lane's budget. See
+                # A_LIVE_READ_SPENDS_THE_ANSWER_LANES_BUDGET.
+                lane=LANE if usage is None and not calls.live else MODEL_LANE,
                 tool_calls=calls.started,
                 model_usage=usage,
                 front=front,
@@ -425,6 +482,8 @@ async def _outcome(
     gaps: tuple[Gap, ...] = (),
     referral: str | None = None,
     recorder: Recorder | None = None,
+    live: LiveRecords | None = None,
+    source_policies: Mapping[tuple[str, str], FieldPolicy] | None = None,
 ) -> Answered:
     """Answer one question, or decline, and hand back the frames either way.
 
@@ -513,13 +572,31 @@ async def _outcome(
         # three: see THE_ASKER_IS_NEVER_TOLD_WHICH_KIND_OF_NOTHING_HAPPENED.
         return _abstained(stream, frames, gaps, nothing_retrieved(scope, detail="no single rule"))
 
-    policy = policies.get(found.entity)
+    policy = policy_for(found, policies, source_policies)
     if policy is None:
         # An entity with a rule and no classification is a misconfigured install, and it is
         # answered like every other nothing. Redacting against a default policy would be the
         # other option and it is the one that ships an unclassified column.
         log.warning("answer.no_policy", entity=found.entity, rule=found.rule_id)
         return _abstained(stream, frames, gaps, nothing_retrieved(scope, detail="unclassified"))
+
+    read_live = False
+    if live is not None:
+        # The index found the record; its source answers for it. See
+        # brain.gate.live_records.THE_INDEX_FINDS_A_RECORD_AND_THE_SOURCE_ANSWERS_FOR_IT.
+        refreshed = await live.refresh(
+            found.result,
+            source=found.source,
+            entity=found.entity,
+            asker=entitlement.principal_id,
+            trace_id=trace_id,
+        )
+        if refreshed is not None:
+            calls.read_live(refreshed.calls)
+            if refreshed.result is None:
+                return _unreached(stream, frames, gaps, refreshed.partial, scope)
+            found = replace(found, result=refreshed.result)
+            read_live = True
 
     # The redactor's own pair, so the trace the sink records is the one that did the work.
     _enter(recorder, GateStep.REDACT)
@@ -548,7 +625,47 @@ async def _outcome(
 
     _enter(recorder, GateStep.COMPOSE)
     composed = compose(served_from(found, payload), redacted, sink=sink, now=now)
-    return _answered(stream, frames, gaps, composed, scope)
+    return _answered(stream, frames, gaps, composed, scope, kept=not read_live)
+
+
+def policy_for(
+    found: FastLaneAnswer,
+    policies: Mapping[str, FieldPolicy],
+    source_policies: Mapping[tuple[str, str], FieldPolicy] | None,
+) -> FieldPolicy | None:
+    """The classification this answer's rows are redacted by: its own source's, first (M15.4.2).
+
+    Keyed by source and entity where the caller knows the sources' classifications, so a second
+    source projecting the same kind of record never redacts the first one's rows by its own rules.
+    The entity-keyed mapping is the fallback for an entity only the product classifies, such as an
+    uploaded table, which is the same for whichever source is named.
+    """
+    if source_policies is not None:
+        own = source_policies.get((found.source, found.entity))
+        if own is not None:
+            return own
+    return policies.get(found.entity)
+
+
+def _unreached(
+    stream: AnswerStream,
+    frames: list[str],
+    gaps: Sequence[Gap],
+    partial: PartialAnswer,
+    scope: SearchScope,
+) -> Answered:
+    """The source holding the answer did not answer in time, said as the asker may hear it.
+
+    `PartialAnswer.notice` names the source only when this asker's reach already discloses it,
+    which is `scope`, derived from reach and never from what ran (M11.5.5). Not an abstention: the
+    record exists at this reach and was not read, which is a degraded request and not a gap in
+    what the company's data covers, so the ledger records it as degraded and no gap row is kept.
+    """
+    notice = partial.notice(disclosable=frozenset(scope.covered))
+    return Answered(
+        frames=(*frames, stream.text(_with_gaps(notice, gaps)), stream.done()),
+        partial=partial,
+    )
 
 
 def _referred(referral: str) -> Answered:
@@ -681,18 +798,21 @@ def _answered(
     gaps: Sequence[Gap],
     composed: ComposedAnswer,
     scope: SearchScope,
+    *,
+    kept: bool = True,
 ) -> Answered:
     """Close the stream with the citations, then the prose, then done.
 
     One function for the fast path and the model step, so the text the frame carries and the
-    text the cache stores are one value and cannot drift.
+    text the cache stores are one value and cannot drift. `kept` is False for an answer read live,
+    which carries no text for the cache: see `A_LIVE_VALUE_IS_NOT_KEPT_FOR_THE_NEXT_ASKER`.
     """
     text = _with_gaps(_with_scope(composed.text, scope), gaps)
     for citation in composed.citations:
         frames.append(stream.citation(citation))
     frames.append(stream.text(text))
     frames.append(stream.done())
-    return Answered(frames=tuple(frames), composed=composed, text=text)
+    return Answered(frames=tuple(frames), composed=composed, text=text if kept else None)
 
 
 def _abstained(
