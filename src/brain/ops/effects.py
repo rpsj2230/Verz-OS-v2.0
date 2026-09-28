@@ -299,6 +299,12 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.knowledge.parse_ocr:OcrEngine.read": Repeat.NO_EFFECT_AT_THE_FAR_END,
         "brain.knowledge.rows:RowSource.rows": Repeat.READS,
         "brain.knowledge.scanning:Scanner.scan": Repeat.NO_EFFECT_AT_THE_FAR_END,
+        # One ClamAV scan: the daemon reads the bytes and answers a verdict, and keeps nothing.
+        "brain.knowledge.scanners:ClamdLink.exchange": Repeat.NO_EFFECT_AT_THE_FAR_END,
+        # A queued upload: counting the queue reads it, and a second job for one ticket writes the
+        # same item under the same id, which `brain.knowledge.ingest_queue.ingest_job` argues.
+        "brain.knowledge_intake_routes:IntakeQueue.counts": Repeat.READS,
+        "brain.knowledge_intake_routes:IntakeQueue.enqueue": Repeat.ENQUEUES_WORK,
         # Connect Lark's settings: installation rows upserted on their live key, so a second save
         # writes the same values over the first.
         "brain.lark_connect_routes:LarkSettings.save": Repeat.WRITES_THIS_SYSTEMS_DATABASE,

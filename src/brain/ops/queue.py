@@ -1541,6 +1541,21 @@ async def enqueue_job(app: App, job: Job, *, slot_class: SlotClass = SlotClass.S
     return await app.configure_task(job.task, queue=queue).defer_async(**dict(job.args))
 
 
+async def outstanding_jobs(app: App, tasks: Iterable[str]) -> tuple[int, int]:
+    """How many jobs of these tasks are waiting and how many are running, as the driver counts.
+
+    For a door that refuses at a depth (`brain.knowledge.uploads.admit_ingestion`), which needs
+    the queue's own count rather than one kept beside it: a second counter drifts from the rows
+    the worker actually fetches. Here because the driver's API may be named nowhere else.
+    """
+    waiting = running = 0
+    for name in tasks:
+        for row in await app.job_manager.list_tasks_async(task=name):
+            waiting += int(row["todo"])
+            running += int(row["doing"])
+    return waiting, running
+
+
 def _tables_in(connection: Connection[Any], schema: str) -> frozenset[str]:
     """Every table the catalogue has in this schema, by name.
 

@@ -68,9 +68,13 @@ class HttpsFetcher:
         *,
         timeout_seconds: float = FETCH_TIMEOUT_SECONDS,
         context: ssl.SSLContext | None = None,
+        user_agent: str = USER_AGENT,
     ) -> None:
         self._timeout = timeout_seconds
         self._context = context if context is not None else ssl.create_default_context()
+        # Which of the product's fetches this is, for the host's log: a skill import, or a page
+        # an administrator added to the knowledge layer (`brain.knowledge_intake_routes`).
+        self._user_agent = user_agent
 
     def get_once(self, url: str, *, address: str, max_bytes: int) -> FetchedBytes | str:
         parts = urlsplit(url)
@@ -89,7 +93,9 @@ class HttpsFetcher:
             context=self._context,
         )
         try:
-            connection.request("GET", path, headers={"User-Agent": USER_AGENT, "Accept": "*/*"})
+            connection.request(
+                "GET", path, headers={"User-Agent": self._user_agent, "Accept": "*/*"}
+            )
             answer = connection.getresponse()
             if answer.status in REDIRECT_STATUSES:
                 location = answer.getheader("Location")

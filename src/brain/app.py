@@ -138,6 +138,7 @@ from brain.install import InstallError, installed_name, value_of
 from brain.install_routes import router as install_router
 from brain.jobs_routes import router as jobs_router
 from brain.knowledge.row_store import SessionRowSource
+from brain.knowledge_intake_routes import router as knowledge_intake_router
 from brain.knowledge_routes import router as knowledge_router
 from brain.lark_connect_routes import router as lark_connect_router
 from brain.log_routes import router as log_router
@@ -1433,6 +1434,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # The Tools screen: every tool with what it needs and does, and the switch that stops one for
     # the install or one department's people, behind `admin:tool`. See `brain.tool_routes`.
     app.include_router(tool_router)
+    # Adding a web page by its link, and a bulk upload queued for the worker to read (M7.1.2,
+    # M7.1.5). See `brain.knowledge_intake_routes`.
+    app.include_router(knowledge_intake_router)
 
     @app.get("/health/live", response_model=Health, tags=["health"])
     async def live() -> Health:

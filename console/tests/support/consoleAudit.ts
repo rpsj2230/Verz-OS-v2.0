@@ -133,6 +133,7 @@ import { APPOINTMENT_PATH, FINISH_PATH } from "../../src/setup/wizard";
 import { BREACHES_API_PATH, breachStepApiPath, topicApiPath } from "../../src/pages/complianceQuery";
 import { handledApiPath } from "../../src/pages/referralsQuery";
 import { uploadPath } from "../../src/pages/knowledgeQuery";
+import { LINKS_API_PATH, queuedPath } from "../../src/pages/knowledgeIntakeQuery";
 import { CONSOLE_ROOT, readRepoFile } from "./repo";
 
 // ------------------------------------------------------------------------------------ inputs
@@ -520,6 +521,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
     routes: [
       "/api/v1/govern/library",
       "/api/v1/knowledge/uploads*",
+      "/api/v1/knowledge/links",
       "/api/v1/govern/learning",
       "/api/v1/govern/learning/undo",
       "/api/v1/govern/memory",
@@ -541,8 +543,18 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "know.classified_table",
       "know.classified_row",
     ],
-    installation: ["INSTALL_VECTOR_STORE", "INSTALL_EMBEDDING_REVISION"],
+    installation: [
+      "INSTALL_VECTOR_STORE",
+      "INSTALL_EMBEDDING_REVISION",
+      "INSTALL_KNOWLEDGE_SCANNER",
+      "INSTALL_CLAMAV_ADDRESS",
+    ],
     gaps: [
+      {
+        what: "Which scanner checks an uploaded file, the structural check or ClamAV added to it, is an installation value and not a control; the Knowledge page says which one checks a file.",
+        because:
+          "Whether a server can hold an antivirus's signature database is the owner's capacity decision, so brain.knowledge.scanners ships the structural check and reads INSTALL_KNOWLEDGE_SCANNER at every scan, which tests/unit/test_scanners.py holds.",
+      },
       {
         what: "A data source cannot be added from the console after setup; a document can, on the Knowledge page.",
         leaf: "M42.5.9",
@@ -800,6 +812,14 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/Ask.tsx ANSWER_API_PATH": [at("POST /api/v1/answer", "ANSWER_API_PATH", ANSWER_API_PATH)],
   "src/pages/Knowledge.tsx uploadPath(draft.kind, draft.level, draft.department)": [
     at("POST /api/v1/knowledge/uploads", "uploadPath", uploadPath("sop", "department", "web").split("?")[0] ?? ""),
+  ],
+  "src/pages/KnowledgeIntake.tsx LINKS_API_PATH": [at("POST /api/v1/knowledge/links", "LINKS_API_PATH", LINKS_API_PATH)],
+  "src/pages/KnowledgeIntake.tsx queuedPath(place.kind, place.level, place.department)": [
+    at(
+      "POST /api/v1/knowledge/uploads/queued",
+      "queuedPath",
+      queuedPath("sop", "department", "web").split("?")[0] ?? "",
+    ),
   ],
   "src/pages/AccessRequests.tsx ACCESS_REQUESTS_API_PATH": [
     at("POST /api/v1/access-requests", "ACCESS_REQUESTS_API_PATH", ACCESS_REQUESTS_API_PATH),
@@ -1236,6 +1256,31 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
       true,
     ),
     behaviour: t("test_knowledge_routes", "test_a_markdown_file_is_added_to_a_department_as_its_uploader"),
+  },
+  "POST /api/v1/knowledge/links": {
+    row: t(
+      "test_knowledge_intake_db",
+      "test_a_page_added_by_link_is_found_by_its_department_by_text_and_by_nobody_else",
+      true,
+    ),
+    audit: t("test_knowledge_intake_db", "test_a_page_added_by_link_appends_the_ledger_entry_an_upload_does", true),
+    behaviour: t("test_knowledge_intake_routes", "test_an_administrator_adds_a_page_by_its_link_for_one_department"),
+  },
+  "POST /api/v1/knowledge/uploads/queued": {
+    row: t(
+      "test_knowledge_intake_db",
+      "test_a_queued_file_is_read_by_the_worker_job_and_found_by_its_department",
+      true,
+    ),
+    audit: t(
+      "test_knowledge_intake_db",
+      "test_a_queued_files_ledger_entry_names_its_uploader_their_reach_and_its_trace",
+      true,
+    ),
+    behaviour: t(
+      "test_knowledge_intake_routes",
+      "test_a_queued_file_is_kept_ticketed_and_queued_and_never_parsed_in_the_request",
+    ),
   },
   "POST /api/v1/answer": {
     row: { notApplicable: "Asking a question writes no row an administrator manages." },

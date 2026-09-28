@@ -446,6 +446,27 @@ INSTALLATION: Final[tuple[Setting, ...]] = (
         ),
         default="unset",
     ),
+    # --- the knowledge scanner, M7.1.3 (brain.knowledge.scanners)
+    Setting(
+        name="INSTALL_KNOWLEDGE_SCANNER",
+        belongs=Belongs.STORAGE,
+        meaning=(
+            "What checks a file before the knowledge layer reads it. `structural` is the check "
+            "every install runs in process, which refuses the shapes that attack a parser but "
+            "recognises no malware. `clamav` adds the ClamAV antivirus at the address below, and "
+            "while it does not answer every upload is refused and says so."
+        ),
+        default="structural",
+    ),
+    Setting(
+        name="INSTALL_CLAMAV_ADDRESS",
+        belongs=Belongs.STORAGE,
+        meaning=(
+            "Where the ClamAV daemon listens, as host:port, read only when the scanner above is "
+            "`clamav`. The default is the service name and port a compose file gives it."
+        ),
+        default="clamav:3310",
+    ),
 )
 
 #: The declaration, indexed. Built once because `value_of` is on the read path of every page.
