@@ -50,10 +50,11 @@ from brain.settings import settings_from
 from tests.unit.test_limit_store import FakeClient
 
 ROOT = Path(__file__).resolve().parents[2]
+#: Every module a check or the harness raises a verdict from: the harness, and each module named in
+#: `CHECK_MODULES`, so a new check module is held to the literal-reason rule the day it is named.
 SOURCES = (
-    ROOT / "src" / "brain" / "ops" / "acceptance_checks.py",
-    ROOT / "src" / "brain" / "ops" / "acceptance_oversight.py",
     ROOT / "src" / "brain" / "ops" / "acceptance_run.py",
+    *(ROOT / "src" / f"{module.replace('.', '/')}.py" for module in acceptance.CHECK_MODULES),
 )
 
 #: Pinned far from any wall clock, for CLAUDE.md's reason about fixtures with dates in them.
@@ -62,6 +63,16 @@ LONG_AGO = datetime(2019, 3, 6, 9, 0, tzinfo=UTC)
 
 async def _nothing(harness: Harness) -> None:
     del harness
+
+
+@pytest.fixture(autouse=True)
+def _no_network(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every run of the suite here imports from a GitHub that does not answer, so no test in this
+    file reaches the network; `tests/unit/test_acceptance_skills.py` fakes one that does."""
+    from brain.ops import acceptance_checks_skills
+    from tests.unit.test_acceptance_skills import unreachable
+
+    monkeypatch.setattr(acceptance_checks_skills, "_transport", unreachable)
 
 
 # ------------------------------------------------------------------------ the registry
@@ -92,8 +103,10 @@ def test_every_leaf_a_check_names_is_a_leaf_of_the_work_breakdown() -> None:
 
 def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     """Held per module, so a package adding checks in a module of its own changes only its own
-    line here: limits, channels and documents, then volume, refusals and a head's audit. Delete
-    this and a check can drop out of the suite with the page simply listing one fewer row."""
+    line here: limits, channels and documents, then volume, refusals and a head's audit, then Lark
+    chat's three and the skill library's four, the modules in `CHECK_MODULES` order rather than the
+    order a process imported them. Delete this and a check can drop out of the suite with the page
+    simply listing one fewer row, or the page can lead with whichever module was imported first."""
     by_module: dict[str, list[str]] = {}
     for one in registered():
         by_module.setdefault(one.run.__module__, []).append(one.name)
@@ -112,6 +125,13 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "a_person_bound_in_lark_is_given_their_web_answer_directly",
         "a_lark_group_hears_its_floor_and_the_asker_reads_the_rest_alone",
     ]
+    assert by_module["brain.ops.acceptance_checks_skills"] == [
+        "a_pasted_or_uploaded_skill_waits_undecided_and_unread",
+        "a_skill_is_imported_from_a_github_commit_and_from_an_address",
+        "an_edit_is_a_new_version_and_moves_no_agent_until_reassigned",
+        "categories_are_kept_and_offered_from_what_a_reader_was_shown",
+    ]
+    assert list(by_module) == list(acceptance.CHECK_MODULES)
     oversight = {one.name: one.leaves for one in registered()}
     assert oversight["unusual_volume_is_found_per_person"] == ("M23.2.1",)
     assert oversight["repeated_refusals_raise_a_denial_notice"] == ("M23.2.2",)
@@ -123,10 +143,19 @@ def test_every_reason_a_check_raises_is_a_literal_sentence() -> None:
     and never built from a value. Every `CheckFailedError` and `CheckNotRunError` is raised with a
     string literal or a module constant. Delete this and a reason can be an f-string quoting the
     row a check read."""
-    constants: set[str] = set()
     raised = 0
     for path in SOURCES:
-        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        constants = {
+            target.id
+            for node in tree.body
+            if isinstance(node, ast.Assign | ast.AnnAssign)
+            and isinstance(node.value, ast.Constant)
+            and isinstance(node.value.value, str)
+            for target in (node.targets if isinstance(node, ast.Assign) else [node.target])
+            if isinstance(target, ast.Name)
+        }
+        for node in ast.walk(tree):
             if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
                 continue
             if node.func.id not in ("CheckFailedError", "CheckNotRunError"):
@@ -413,6 +442,13 @@ WRITTEN_BY_CHECKS = (
     "know.chunk",
     "know.classified_table",
     "know.classified_row",
+    "agent.skill",
+    "agent.skill_review",
+    "agent.skill_category",
+    "agent.skill_assignment",
+    "agent.agent",
+    "agent.template_instance",
+    "agent.template_version",
     "obs.request_telemetry",
     "gate.team",
     "gate.team_membership",
@@ -447,7 +483,8 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
 ) -> None:
     """**The run as the worker makes it, against PostgreSQL at head.** Twice: every check that can
     be asked without a cache passes both times, the limits check says it was not run, the two
-    Lark checks needing a bound person say so until the events route reads chat bindings, and after
+    Lark checks needing a bound person say so until the events route reads chat bindings, the skill
+    import says GitHub did not answer, because no test here reaches the network, and after
     both runs every table a check wrote to holds what it held before, while the result rows are
     there, one run each, keyed by the commit. Delete this and a check that commits, or one
     that cannot pass on a real schema, reaches the owner's server first."""
@@ -476,10 +513,14 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         "a_lark_group_hears_its_floor_and_the_asker_reads_the_rest_alone",
     ):
         assert outcomes.pop(needs_a_binding) == (NOT_RUN, BINDING_A_CHAT_ACCOUNT_IS_NOT_DEPLOYED)
+    assert outcomes.pop("a_skill_is_imported_from_a_github_commit_and_from_an_address") == (
+        NOT_RUN,
+        "GitHub did not answer this server, so no import from it could be asked",
+    )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
-    assert len(outcomes) == 6
+    assert len(outcomes) == 9
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 18
+    assert runs == [(2,)] and len(recorded) == 26
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }

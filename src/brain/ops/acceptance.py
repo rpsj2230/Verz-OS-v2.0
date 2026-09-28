@@ -167,6 +167,7 @@ CHECK_MODULES: Final = (
     "brain.ops.acceptance_checks",
     "brain.ops.acceptance_oversight",
     "brain.ops.acceptance_checks_chat",
+    "brain.ops.acceptance_checks_skills",
 )
 
 
@@ -252,10 +253,20 @@ def check(*, leaves: Sequence[str], sentence: str) -> Callable[[CheckBody], Chec
 
 
 def registered(modules: Iterable[str] = CHECK_MODULES) -> tuple[Check, ...]:
-    """Every check in the suite, in the order the modules declare them."""
-    for module in modules:
+    """Every check in the suite: module by module as `modules` names them, each in its own order.
+
+    Ordered by the names rather than by `_REGISTERED`, which is import order: with a second check
+    module, whichever a process happened to import first would lead the Install page.
+    """
+    named = tuple(modules)
+    for module in named:
         importlib.import_module(module)
-    return tuple(_REGISTERED)
+    return tuple(
+        one
+        for module in named
+        for one in _REGISTERED
+        if getattr(one.run, "__module__", "") == module
+    )
 
 
 # --------------------------------------------------------------------------- results
