@@ -160,6 +160,7 @@ import {
   newVersionPath,
 } from "../../src/pages/knowledgeLifecycleQuery";
 import { LINKS_API_PATH, queuedPath } from "../../src/pages/knowledgeIntakeQuery";
+import { VERIFICATIONS_API_PATH, historyPath } from "../../src/pages/knowledge/knowledgeDocuments";
 import { CONSOLE_ROOT, readRepoFile } from "./repo";
 
 // ------------------------------------------------------------------------------------ inputs
@@ -533,6 +534,9 @@ export const AREAS: Readonly<Record<string, Area>> = {
   "Knowledge bases, documents and data sources": {
     screens: [
       "/library",
+      "/library/:itemId",
+      "/library/:itemId/:view",
+      "/solutions",
       "/learning",
       "/memory",
       "/memory/:subject",
@@ -550,6 +554,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/knowledge/tasks*",
       "/api/v1/knowledge/solutions*",
       "/api/v1/knowledge/links",
+      "/api/v1/knowledge/documents",
+      "/api/v1/knowledge/verifications",
       "/api/v1/govern/learning",
       "/api/v1/govern/learning/undo",
       "/api/v1/govern/memory",
@@ -602,6 +608,16 @@ export const AREAS: Readonly<Record<string, Area>> = {
       {
         what: "A price list uploaded as a document on the Knowledge page is not yet offered conversion to classified rows; it is uploaded on the Classification screen.",
         leaf: "M7.7.3",
+      },
+      {
+        what: "A document cannot be archived from the console; Archive is drawn inert with its reason.",
+        because:
+          "know.item's policy admits only live rows, so the update moving one to archived is refused under it as a supersession was before 0120 wrote know.supersede_item; archiving needs its own write past the policy, which is a migration.",
+      },
+      {
+        what: "The knowledge inventory cannot be exported; Export inventory is drawn inert with its reason.",
+        because:
+          "An export is recorded in ops.data_export, whose data sets are a closed list the table checks (brain.tables.data_export.ExportDataSet), so a knowledge inventory is a new member and a migration widening the check; an unrecorded export of titles is not offered meanwhile.",
       },
     ],
   },
@@ -789,9 +805,15 @@ export const READ_AFTER_AN_ACTION: Readonly<
     spelled: "exportApiPath",
     built: exportApiPath("xero"),
   },
-  // A version's text is read when a person presses Read this version on an opened document.
+  // A document's history is read when a person opens its About view.
+  "GET /api/v1/knowledge/items/{item_id}/history": {
+    screen: "/library/:itemId/:view",
+    spelled: "historyPath",
+    built: historyPath("upload.x"),
+  },
+  // A version's text is read when a person presses Show the text on a document's Profile.
   "GET /api/v1/knowledge/items/{item_id}/passages": {
-    screen: "/library",
+    screen: "/library/:itemId/:view",
     spelled: "passagesPath",
     built: passagesPath("upload.x"),
   },
@@ -870,40 +892,43 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
     at("POST /api/v1/approvals/{suspension_id}/decision", "approvalDecisionApiPath", approvalDecisionApiPath("sus-1")),
   ],
   "src/pages/Ask.tsx ANSWER_API_PATH": [at("POST /api/v1/answer", "ANSWER_API_PATH", ANSWER_API_PATH)],
-  "src/pages/Knowledge.tsx uploadPath(draft.kind, draft.level, draft.department)": [
+  "src/pages/knowledge/addForms.tsx uploadPath(place.kind, place.level, place.department)": [
     at("POST /api/v1/knowledge/uploads", "uploadPath", uploadPath("sop", "department", "web").split("?")[0] ?? ""),
   ],
-  "src/components/KnowledgeLifecycle.tsx taskDonePath(taskId)": [
+  "src/pages/knowledge/parts.tsx taskDonePath(taskId)": [
     at("POST /api/v1/knowledge/tasks/{task_id}/done", "taskDonePath", taskDonePath("steward.x")),
   ],
-  "src/components/KnowledgeLifecycle.tsx verificationPath(itemId)": [
+  "src/pages/knowledge/actForms.tsx verificationPath(itemId)": [
     at("POST /api/v1/knowledge/items/{item_id}/verification", "verificationPath", verificationPath("upload.x")),
   ],
-  "src/components/KnowledgeLifecycle.tsx newVersionPath(document.item_id, instant)": [
+  "src/pages/knowledge/KnowledgePage.tsx VERIFICATIONS_API_PATH": [
+    at("POST /api/v1/knowledge/verifications", "VERIFICATIONS_API_PATH", VERIFICATIONS_API_PATH),
+  ],
+  "src/pages/knowledge/actForms.tsx newVersionPath(itemId, instant)": [
     at(
       "POST /api/v1/knowledge/items/{item_id}/versions",
       "newVersionPath",
       newVersionPath("upload.x", "2999-01-01T12:00:00+00:00").split("?")[0] ?? "",
     ),
   ],
-  "src/components/KnowledgeLifecycle.tsx promotionPath(itemId)": [
+  "src/pages/knowledge/actForms.tsx promotionPath(itemId)": [
     at("POST /api/v1/knowledge/items/{item_id}/promotion", "promotionPath", promotionPath("upload.x")),
   ],
-  "src/components/KnowledgeLifecycle.tsx stewardPath(document.item_id)": [
+  "src/pages/knowledge/actForms.tsx stewardPath(itemId)": [
     at("POST /api/v1/knowledge/items/{item_id}/steward", "stewardPath", stewardPath("upload.x")),
   ],
-  "src/components/KnowledgeLifecycle.tsx SOLUTIONS_API_PATH": [
+  "src/pages/knowledge/SolutionsPage.tsx SOLUTIONS_API_PATH": [
     at("POST /api/v1/knowledge/solutions", "SOLUTIONS_API_PATH", SOLUTIONS_API_PATH),
   ],
-  "src/components/KnowledgeLifecycle.tsx solutionDecisionPath(one.solution_id)": [
+  "src/pages/knowledge/SolutionsPage.tsx solutionDecisionPath(one.solutionId)": [
     at(
       "POST /api/v1/knowledge/solutions/{solution_id}/decision",
       "solutionDecisionPath",
       solutionDecisionPath("solution.x"),
     ),
   ],
-  "src/pages/KnowledgeIntake.tsx LINKS_API_PATH": [at("POST /api/v1/knowledge/links", "LINKS_API_PATH", LINKS_API_PATH)],
-  "src/pages/KnowledgeIntake.tsx queuedPath(place.kind, place.level, place.department)": [
+  "src/pages/knowledge/addForms.tsx LINKS_API_PATH": [at("POST /api/v1/knowledge/links", "LINKS_API_PATH", LINKS_API_PATH)],
+  "src/pages/knowledge/addForms.tsx queuedPath(place.kind, place.level, place.department)": [
     at(
       "POST /api/v1/knowledge/uploads/queued",
       "queuedPath",
@@ -1507,6 +1532,11 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: LIFECYCLE_SOLVED,
     audit: LIFECYCLE_SOLVED,
     behaviour: LIFECYCLE_SOLVED,
+  },
+  "POST /api/v1/knowledge/verifications": {
+    row: t("test_knowledge_documents_db", "test_several_documents_are_verified_as_several_single_verifications", true),
+    audit: t("test_knowledge_documents_db", "test_several_documents_are_verified_as_several_single_verifications", true),
+    behaviour: t("test_knowledge_documents_db", "test_several_documents_are_verified_as_several_single_verifications", true),
   },
   "POST /api/v1/knowledge/links": {
     row: t(

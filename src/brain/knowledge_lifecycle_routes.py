@@ -35,30 +35,52 @@ on file. A promotion already waiting, and an act raced by another, are a 409.
   this person, and closing one that only reports (M7.4.6, M7.7.2).
 - `GET` and `POST /knowledge/solutions`, `POST /knowledge/solutions/{id}/decision`: capture a
   solution and decide one (M7.6.2).
+- `GET /knowledge/documents`: the Knowledge list, every version the caller may see with its
+  steward's name, its review date and its state, over `brain.listing` (M27.15.40).
+- `GET /knowledge/items/{item_id}/history`: what happened to a document and when, from the ledger.
+- `POST /knowledge/verifications`: several documents verified with one review date, each one the
+  single verification and each reporting its own outcome (M27.15.40).
+
+**The Knowledge list is the detail route's rule applied to many rows.** A row is on it exactly when
+`Authority.may_see` admits it, which is what `GET /knowledge/items/{item_id}` answers, so the list
+names nothing the reader could not open; a replaced version is on it when the document that
+replaced it is live in their reach, which is the one place its history is read from. The search,
+the filters and the order run over the rows decided, never over the load, which is `brain.listing`'s
+rule, and the load's `truncated` is the same whatever was asked. See
+`THE_LIST_IS_THE_DETAIL_ROUTES_RULE_OVER_MANY_ROWS`.
+
+**A person is named, never identified, on a row.** The steward and a disclosed verifier travel as
+display names beside their ids, so the console draws names and keeps ids for its Advanced section.
 
 **No response carries a count of anything the caller was not shown.** Each list is the caller's own
 rows, bounded, and `truncated` says the bound was reached and never by how much.
 
-Task ids: M7.4.4, M7.4.5, M7.4.6, M7.6.2, M7.7.2
+Rejected: archiving a document from the console in this change. `know.item`'s policy admits only
+live rows, so the update moving one to `archived` is refused under it exactly as a supersession was
+before `0120` wrote `know.supersede_item`; it needs its own write past the policy, which is a
+migration, and this change has no migration number.
+
+Task ids: M7.4.4, M7.4.5, M7.4.6, M7.6.2, M7.7.2, M27.15.40
 """
 
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
+from dataclasses import replace
 from datetime import datetime
 from typing import Annotated, Any, Final
 from urllib.parse import unquote
 from uuid import uuid4
 
 import structlog
-from fastapi import APIRouter, Path, Query, Request
+from fastapi import APIRouter, Depends, Path, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from brain.api import API_PREFIX, COMMON_RESPONSES, ErrorBody, RequestProblemView
+from brain.api import API_PREFIX, COMMON_RESPONSES, ErrorBody, Page, RequestProblemView
 from brain.api_routes import Asked, Asking
 from brain.attribution import of_request, trace_of_request
 from brain.core.entitlement import EntitlementSet
@@ -82,6 +104,7 @@ from brain.knowledge.lifecycle import (
     NOT_OFFERED,
     NOT_SEEN,
     Authority,
+    HistoryEvent,
     LifecycleError,
     StewardTask,
     StoredItem,
@@ -89,19 +112,24 @@ from brain.knowledge.lifecycle import (
     assert_may_hand_over,
     assert_may_propose,
     authority_for,
+    event_of,
     successor_place,
     task_sentence,
     verification_for,
 )
 from brain.knowledge.lifecycle_store import (
+    MAX_HISTORY,
     MAX_ITEMS,
     MAX_PASSAGES,
     LifecycleStoreError,
     as_person,
     close_task,
+    documents,
     held_item,
+    ledger_entries,
     live_item,
     live_items,
+    names_of,
     open_tasks,
     passages,
     promotions_asked,
@@ -142,7 +170,7 @@ from brain.knowledge.uploads import (
     read_arriving,
     text_path_type,
 )
-from brain.knowledge.verification import disclose
+from brain.knowledge.verification import disclose, may_name_verifier
 from brain.knowledge.visibility import Visibility, VisibilityError, propose_promotion
 from brain.knowledge_routes import (
     FOUND_BY_TEXT,
@@ -151,6 +179,7 @@ from brain.knowledge_routes import (
     live_departments,
     read_one_at_a_time,
 )
+from brain.listing import MAX_SEVERAL, Column, ListAsked, Listing, each_of
 from brain.member_library import (
     LibraryError,
     PromotionRequest,
@@ -176,6 +205,22 @@ TASKS_PATH: Final = "/knowledge/tasks"
 TASK_DONE_PATH: Final = "/knowledge/tasks/{task_id}/done"
 SOLUTIONS_PATH: Final = "/knowledge/solutions"
 SOLUTION_DECISION_PATH: Final = "/knowledge/solutions/{solution_id}/decision"
+DOCUMENTS_PATH: Final = "/knowledge/documents"
+HISTORY_PATH: Final = "/knowledge/items/{item_id}/history"
+VERIFICATIONS_PATH: Final = "/knowledge/verifications"
+
+#: Why the Knowledge list admits a row exactly when the detail route would answer it.
+THE_LIST_IS_THE_DETAIL_ROUTES_RULE_OVER_MANY_ROWS: Final = (
+    "A row on the Knowledge list is a version Authority.may_see admits, which is the question "
+    "GET /knowledge/items/{item_id} asks before it answers. A list admitting more would name "
+    "documents the reader is refused when they open them, which tells them the refusal is a "
+    "permission rather than an absence; a list admitting less would hide documents the reader "
+    "may open. So the list and the detail are one rule, asked row by row."
+)
+
+#: The words the Review due filter matches a row by.
+REVIEW_DUE: Final = "due"
+REVIEW_NOT_DUE: Final = "not_due"
 
 # ------------------------------------------------------------------ written-down reasons
 #: Why every refusal about whether the caller may act is the same absence.
@@ -195,6 +240,9 @@ PROMOTION_WAITS: Final = (
 
 #: The one 404 for a task that is not the caller's to close.
 TASK_NOT_CLOSABLE: Final = "that task is not one you may close"
+
+#: What one document verified among several says.
+VERIFIED_SAYS: Final = "verified"
 
 #: The id grammar every path parameter here is held to before anything is read.
 _ID: Final = Path(min_length=1, max_length=128, pattern=ITEM_ID_PATTERN)
@@ -238,6 +286,10 @@ class DocumentView(BaseModel):
     #: What it solved, for an approved solution this reader may see.
     solves: str | None = None
     promotion: PromotionView | None = None
+    #: The steward's display name, when the directory holds one.
+    steward_name: str | None = None
+    #: The verifier's display name, only beside a `verified_by` this reader may be told.
+    verified_by_name: str | None = None
 
 
 class LookedAfterView(BaseModel):
@@ -399,6 +451,9 @@ class SolutionView(BaseModel):
     decided_at: datetime | None
     #: The document it became, once approved.
     item_id: str | None
+    #: The capturer's and the decider's display names, when the directory holds them.
+    captured_by_name: str | None = None
+    decided_by_name: str | None = None
 
 
 class SolutionsView(BaseModel):
@@ -429,6 +484,64 @@ class SolutionDecisionAsked(BaseModel):
 
     verdict: SolutionState
     review_by: AwareDatetime | None = None
+
+
+class DocumentsPage(Page[DocumentView]):
+    """One page of the Knowledge list. `total` is inherited and never set."""
+
+    #: The live load came back full. Never how much more there is.
+    truncated: bool = False
+
+
+class HistoryEventView(BaseModel):
+    """One thing that happened to one version, and when. Never who: see
+    `brain.knowledge.lifecycle.A_HISTORY_SAYS_WHAT_HAPPENED_AND_WHEN_AND_NEVER_WHO`."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    item_id: str
+    at: datetime
+    event: HistoryEvent
+
+
+class HistoryView(BaseModel):
+    """A document's history from the ledger, oldest first, over the versions the reader may see."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    item_id: str
+    events: list[HistoryEventView]
+    #: The read reached its bound. Never how much more there is.
+    truncated: bool = False
+
+
+class VerificationsAsked(BaseModel):
+    """Several documents, and the next review date every one of them is verified with."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    item_ids: list[Annotated[str, Field(min_length=1, max_length=128, pattern=ITEM_ID_PATTERN)]] = (
+        Field(min_length=1, max_length=MAX_SEVERAL)
+    )
+    review_by: AwareDatetime
+
+
+class VerifiedView(BaseModel):
+    """One document's outcome: verified, or the one sentence its single verification would say."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    item_id: str
+    verified: bool
+    says: str
+
+
+class VerificationsView(BaseModel):
+    """Every document asked about, in the order asked, each with its own outcome."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    outcomes: list[VerifiedView]
 
 
 LIFECYCLE_RESPONSES: Final[dict[int | str, dict[str, Any]]] = {
@@ -495,9 +608,15 @@ def document_view(
     now: datetime,
     promotion: PromotionView | None = None,
     solves: str | None = None,
+    names: Mapping[str, str] | None = None,
 ) -> DocumentView:
-    """One document for this reader: the badge as they may be told it, never the text."""
+    """One document for this reader: the badge as they may be told it, never the text.
+
+    `names` are display names by principal id. The verifier's is attached only beside a verifier
+    `disclose` names, so a name loaded for somebody the badge withholds goes no further.
+    """
     shown = disclose(item, reader=reader, now=now)
+    named = names or {}
     return DocumentView(
         item_id=item.item_id,
         title=item.title or item.item_id,
@@ -517,7 +636,14 @@ def document_view(
         you_steward=item.owner_id == authority.principal_id,
         solves=solves,
         promotion=promotion,
+        steward_name=named.get(item.owner_id),
+        verified_by_name=named.get(shown.verified_by) if shown.verified_by else None,
     )
+
+
+def people_named_on(items: Sequence[StoredItem]) -> set[str]:
+    """Everybody a page of documents might name: each steward and each verifier on file."""
+    return {one.owner_id for one in items} | {one.verified_by for one in items if one.verified_by}
 
 
 def promotion_view(one: Any, now: datetime) -> PromotionView:
@@ -573,14 +699,14 @@ async def looked_after(request: Request, asked: Asked) -> LookedAfterView:
 
     async def load(
         session: AsyncSession,
-    ) -> tuple[tuple[StoredItem, ...], dict[str, Any], dict[str, str]]:
+    ) -> tuple[tuple[StoredItem, ...], dict[str, Any], dict[str, str], dict[str, str]]:
         items = await live_items(session, limit=MAX_ITEMS)
         kept = [one.item_id for one in items if one.kind is KnowledgeKind.APPROVED_SOLUTION]
         found = await solved(session, kept)
         asked_for = await promotions_asked(session, reach=asked.reach, now=asked.now)
-        return items, asked_for, found
+        return items, asked_for, found, await names_of(session, people_named_on(items))
 
-    items, asked_for, found = await in_transaction(request, asked, authority, load)
+    items, asked_for, found, names = await in_transaction(request, asked, authority, load)
     return LookedAfterView(
         items=[
             document_view(
@@ -594,6 +720,7 @@ async def looked_after(request: Request, asked: Asked) -> LookedAfterView:
                     else None
                 ),
                 solves=found.get(one.item_id),
+                names=names,
             )
             for one in items
             if authority.may_act(one)
@@ -611,13 +738,13 @@ async def one_document(
 
     async def load(
         session: AsyncSession,
-    ) -> tuple[tuple[StoredItem, ...], dict[str, Any], dict[str, str]]:
+    ) -> tuple[tuple[StoredItem, ...], dict[str, Any], dict[str, str], dict[str, str]]:
         chain = await versions(session, item_id)
         asked_for = await promotions_asked(session, reach=asked.reach, now=asked.now)
         found = await solved(session, [one.item_id for one in chain])
-        return chain, asked_for, found
+        return chain, asked_for, found, await names_of(session, people_named_on(chain))
 
-    chain, asked_for, found = await in_transaction(request, asked, authority, load)
+    chain, asked_for, found, names = await in_transaction(request, asked, authority, load)
     target = next((one for one in chain if one.item_id == item_id), None)
     if target is None or not authority.may_see(target):
         raise Absent(NOT_SEEN)
@@ -632,6 +759,7 @@ async def one_document(
             now=asked.now,
             promotion=promotion,
             solves=found.get(item_id),
+            names=names,
         ),
         versions=[
             VersionView(
@@ -648,6 +776,88 @@ async def one_document(
         ],
         offered=offered_on(target, authority, waiting),
     )
+
+
+#: What the Knowledge list may search, filter and order by: fields on the row it sends, and never
+#: a stored value the row withholds (`brain.listing.A_SEARCH_READS_ONLY_WHAT_THE_ROW_SHOWS`).
+DOCUMENTS: Final[Listing[DocumentView]] = Listing(
+    name="knowledge_documents",
+    columns=(
+        Column("title", lambda row: row.title, search=True, sort=True),
+        Column("steward", lambda row: row.steward_name or "", search=True, sort=True),
+        Column("department", lambda row: row.department or "", filter=True, sort=True),
+        Column("level", lambda row: row.level, filter=True, sort=True),
+        Column("state", lambda row: row.state, filter=True, sort=True),
+        Column("kind", lambda row: row.kind or "", filter=True, sort=True),
+        Column("review", lambda row: REVIEW_DUE if row.due else REVIEW_NOT_DUE, filter=True),
+        Column("review_by", lambda row: row.review_by, sort=True),
+    ),
+    key=lambda row: row.item_id,
+    order="title",
+)
+DocumentsQuery = Annotated[ListAsked, Depends(DOCUMENTS.query())]
+
+
+@router.get(DOCUMENTS_PATH, response_model=DocumentsPage, responses=COMMON_RESPONSES)
+async def knowledge_list(request: Request, asked: Asked, listed: DocumentsQuery) -> DocumentsPage:
+    """Every version this reader may see, one page of it, narrowed and ordered as asked.
+
+    The question is checked before anything is read, so a malformed one is answered alike on every
+    install. The load is the live documents to `MAX_ITEMS` and the versions each replaced, whatever
+    was asked, and every row is `Authority.may_see`'s answer. See
+    `THE_LIST_IS_THE_DETAIL_ROUTES_RULE_OVER_MANY_ROWS`.
+    """
+    plan = DOCUMENTS.plan(listed, reader=asked.caller.principal.id)
+    authority = await authority_of(request, asked)
+
+    async def load(session: AsyncSession) -> tuple[tuple[StoredItem, ...], bool, dict[str, str]]:
+        found, full = await documents(session, limit=MAX_ITEMS)
+        return found, full, await names_of(session, people_named_on(found))
+
+    found, full, names = await in_transaction(request, asked, authority, load)
+    rows = [
+        document_view(one, authority=authority, reader=asked.reach, now=asked.now, names=names)
+        for one in found
+        if authority.may_see(one)
+    ]
+    page = plan.page(rows)
+    return DocumentsPage(items=list(page.items), next_cursor=page.next_cursor, truncated=full)
+
+
+@router.get(HISTORY_PATH, response_model=HistoryView, responses=COMMON_RESPONSES)
+async def history(request: Request, asked: Asked, item_id: Annotated[str, _ID]) -> HistoryView:
+    """What happened to a document and when, from the ledger, over the versions the reader may see.
+
+    Absent in the one sentence for a document the reader may not see. No entry names its actor, and
+    a verification is listed only where the badge's own rule would name that verifier to this
+    reader. See `brain.knowledge.lifecycle.A_HISTORY_SAYS_WHAT_HAPPENED_AND_WHEN_AND_NEVER_WHO`.
+    """
+    authority = await authority_of(request, asked)
+
+    async def load(session: AsyncSession) -> tuple[tuple[StoredItem, ...], tuple[Any, ...]]:
+        chain = await versions(session, item_id)
+        target = next((one for one in chain if one.item_id == item_id), None)
+        if target is None or not authority.may_see(target):
+            return chain, ()
+        seen = [one.item_id for one in chain if authority.may_see(one)]
+        return chain, await ledger_entries(session, seen)
+
+    chain, entries = await in_transaction(request, asked, authority, load)
+    target = next((one for one in chain if one.item_id == item_id), None)
+    if target is None or not authority.may_see(target):
+        raise Absent(NOT_SEEN)
+    by_id = {one.item_id: one for one in chain}
+    events: list[HistoryEventView] = []
+    for entry in entries:
+        event = event_of(entry.details)
+        if event is None:
+            continue
+        if event is HistoryEvent.VERIFIED and not may_name_verifier(
+            replace(by_id[entry.item_id], verified_by=entry.actor_id), asked.reach, now=asked.now
+        ):
+            continue
+        events.append(HistoryEventView(item_id=entry.item_id, at=entry.at, event=event))
+    return HistoryView(item_id=item_id, events=events, truncated=len(entries) >= MAX_HISTORY)
 
 
 @router.get(PASSAGES_PATH, response_model=PassagesView, responses=COMMON_RESPONSES)
@@ -735,27 +945,63 @@ async def _acted_on(
     return done
 
 
+async def _verify_one(
+    request: Request, asked: Asking, authority: Authority, item_id: str, review_by: datetime
+) -> StoredItem:
+    """One verification by the caller now: the act both verification routes run.
+
+    Raises `Absent` for a document the caller may not act on or that does not exist, and the
+    lifecycle's own errors for an act on a document they may act on.
+    """
+
+    async def act(session: AsyncSession, item: StoredItem) -> None:
+        done = verification_for(item, by=authority.principal_id, at=asked.now, review_by=review_by)
+        await record_verification(session, item, done)
+
+    item = await _acted_on(request, asked, authority, item_id, act)
+    log.info("knowledge.verified", principal=authority.principal_id, item=item_id)
+    return item
+
+
 @router.post(VERIFICATION_PATH, response_model=DocumentView, responses=LIFECYCLE_RESPONSES)
 async def verify(
     request: Request, asked: Asked, body: VerificationAsked, item_id: Annotated[str, _ID]
 ) -> DocumentView | JSONResponse:
     """Verified by the caller now, with the next review date (M7.4.6)."""
     authority = await authority_of(request, asked)
-
-    async def act(session: AsyncSession, item: StoredItem) -> None:
-        done = verification_for(
-            item, by=authority.principal_id, at=asked.now, review_by=body.review_by
-        )
-        await record_verification(session, item, done)
-
     try:
-        item = await _acted_on(request, asked, authority, item_id, act)
+        item = await _verify_one(request, asked, authority, item_id, body.review_by)
     except LifecycleError as exc:
         return refused("review_by", "not_verified", str(exc))
     except LifecycleStoreError as exc:
         return refused("item", "moved", str(exc), status=409)
-    log.info("knowledge.verified", principal=authority.principal_id, item=item_id)
     return document_view(item, authority=authority, reader=asked.reach, now=asked.now)
+
+
+@router.post(VERIFICATIONS_PATH, response_model=VerificationsView, responses=LIFECYCLE_RESPONSES)
+async def verify_several(
+    request: Request, asked: Asked, body: VerificationsAsked
+) -> VerificationsView:
+    """Several documents verified with one review date, each by the single act (M27.15.40).
+
+    `brain.listing.each_of` runs `_verify_one` once per document, in the order asked and each in
+    its own transaction, so each takes its own lock and leaves its own ledger entry, and a document
+    the caller may not act on is reported in the words one that does not exist gets. See
+    `brain.listing.SEVERAL_ACTS_ARE_EACH_DECIDED_ALONE`.
+    """
+    authority = await authority_of(request, asked)
+
+    async def one(item_id: str) -> VerifiedView:
+        try:
+            await _verify_one(request, asked, authority, item_id, body.review_by)
+        except Absent:
+            return VerifiedView(item_id=item_id, verified=False, says=NOT_OFFERED)
+        except (LifecycleError, LifecycleStoreError) as exc:
+            return VerifiedView(item_id=item_id, verified=False, says=str(exc))
+        return VerifiedView(item_id=item_id, verified=True, says=VERIFIED_SAYS)
+
+    done = await each_of(body.item_ids, one)
+    return VerificationsView(outcomes=[view for _, view in done])
 
 
 async def entitlement_of(session: AsyncSession, principal_id: str, now: datetime) -> EntitlementSet:
@@ -1037,7 +1283,8 @@ async def close(request: Request, asked: Asked, task_id: Annotated[str, _ID]) ->
 
 
 # ------------------------------------------------------------------ the solutions
-def _solution_view(one: CapturedSolution) -> SolutionView:
+def _solution_view(one: CapturedSolution, names: Mapping[str, str] | None = None) -> SolutionView:
+    named = names or {}
     return SolutionView(
         solution_id=one.solution_id,
         department=one.department,
@@ -1050,13 +1297,19 @@ def _solution_view(one: CapturedSolution) -> SolutionView:
         decided_by=one.decided_by or None,
         decided_at=one.decided_at,
         item_id=one.item_id if one.state is SolutionState.APPROVED else None,
+        captured_by_name=named.get(one.captured_by),
+        decided_by_name=named.get(one.decided_by) if one.decided_by else None,
     )
 
 
-def _solutions_view(found: Sequence[CapturedSolution], authority: Authority) -> SolutionsView:
+def _solutions_view(
+    found: Sequence[CapturedSolution], authority: Authority, names: Mapping[str, str]
+) -> SolutionsView:
     return SolutionsView(
-        waiting=[_solution_view(one) for one in found if may_decide(one, authority)],
-        yours=[_solution_view(one) for one in found if one.captured_by == authority.principal_id],
+        waiting=[_solution_view(one, names) for one in found if may_decide(one, authority)],
+        yours=[
+            _solution_view(one, names) for one in found if one.captured_by == authority.principal_id
+        ],
         departments=list(authority.store_reach().departments),
     )
 
@@ -1066,11 +1319,13 @@ async def solutions_page(request: Request, asked: Asked) -> SolutionsView:
     """What waits for this person's decision, what they captured, and where they may capture."""
     authority = await authority_of(request, asked)
 
-    async def load(session: AsyncSession) -> tuple[CapturedSolution, ...]:
-        return await solutions(session, principal_id=authority.principal_id)
+    async def load(session: AsyncSession) -> tuple[tuple[CapturedSolution, ...], dict[str, str]]:
+        found = await solutions(session, principal_id=authority.principal_id)
+        people = {one.captured_by for one in found} | {one.decided_by for one in found}
+        return found, await names_of(session, people)
 
-    found = await in_transaction(request, asked, authority, load)
-    return _solutions_view(found, authority)
+    found, names = await in_transaction(request, asked, authority, load)
+    return _solutions_view(found, authority, names)
 
 
 @router.post(
