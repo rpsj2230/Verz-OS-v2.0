@@ -115,7 +115,7 @@ function Facts({ one, becomes }: { readonly one: InstalledAutomationShown; reado
       <div className="fields__row">
         <dt>{RUNS_AS_LABEL}</dt>
         <dd>
-          {one.runsAsName} <code>{one.runsAs}</code>
+          {one.runsAsName}
         </dd>
       </div>
       <div className="fields__row">

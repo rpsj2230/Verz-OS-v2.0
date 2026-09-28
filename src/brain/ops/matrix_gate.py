@@ -28,9 +28,24 @@ failed" from a gate that asked nothing is the green `evaluation.score` refuses f
 So the change is held with the reason saying to record golden questions on the Routing screen.
 See `A_GATE_THAT_ASKED_NOTHING_HAS_PASSED_NOTHING`.
 
+**A step is retired, or moved, through the same gate** (M5.3.3, 2026-09-28). A retirement is the
+ladder without the rung; a move is the rung at another step, in its own level or another. **A move
+never updates a position**: `uq_routing_rung_tier_position_live` is checked row by row, so shifting
+a level's positions in one UPDATE collides with itself halfway through. `placements` therefore
+gives the moved rung, and when no free position sits where it is going the rungs after it, fresh
+positions above every live one in the level, and the route retires those rows and inserts them
+again in one transaction. Positions only ever grow, which is `docs/admin-console-architecture.md`'s
+"insert-only positions". Rejected: numbering a level 0, 10, 20 so a move can take 15. It postpones
+the collision rather than removing it, and the gaps would be a meaning nobody reads.
+
+**A change that leaves a level with no step is held before anything is asked**
+(`levels_left_empty`). A level with no step has nowhere to send a question, and the golden
+questions might not touch that level, so their pass would not be evidence that the level still
+answers. See `A_LEVEL_KEEPS_AT_LEAST_ONE_STEP`.
+
 Scope: pure. Questions, answers, findings and the baseline are parameters.
 
-Task ids: M5.6.2
+Task ids: M5.6.2, M5.3.3
 """
 
 from __future__ import annotations
@@ -40,7 +55,7 @@ from dataclasses import dataclass, replace
 from typing import Final
 
 from brain.models.assembly import LadderRung
-from brain.models.routing import Tier
+from brain.models.routing import TIER_LADDER, Tier
 from brain.ops.canaries import CanaryFinding
 from brain.ops.evaluation import Baseline, CaseResult, Severity, score
 from brain.tables.model_registry import GoldenExpectation
@@ -63,6 +78,28 @@ NO_GOLDEN_QUESTIONS: Final = (
 
 #: The case id every canary finding is recorded under, numbered.
 CANARY_CASE: Final = "canary"
+
+#: Why a retirement or a move may not empty a level.
+A_LEVEL_KEEPS_AT_LEAST_ONE_STEP: Final = (
+    "A level with no step has nowhere to send a question that needs it, and the golden questions "
+    "may never touch that level, so their passing says nothing about it. A retirement or a move "
+    "that would leave a level empty is held with that reason before the gate asks anything."
+)
+
+#: The owner's names for the levels, which a held change's reason is written in.
+LEVEL_NAMES: Final = {Tier.SMALL: "Simple", Tier.MAIN: "Medium", Tier.HEAVY: "Complex"}
+
+#: The widest position a rung can hold: `ops.routing_rung.position` is a `smallint`.
+POSITION_CEILING: Final = 2**15 - 1
+
+
+def level_left_empty(tier: Tier) -> str:
+    """The reason a change that empties `tier` is held, in the owner's words."""
+    return (
+        f"This would leave the {LEVEL_NAMES.get(tier, tier.value)} level with no step, so a "
+        "question needing it would have nowhere to go. Add another step to that level first, "
+        "then try again."
+    )
 
 
 @dataclass(frozen=True)
@@ -103,11 +140,46 @@ class RungAddition:
         return f"{self.provider}-{self.model}"[:120]
 
 
-MatrixChange = RungEdit | RungAddition
+@dataclass(frozen=True)
+class RungRetirement:
+    """A live rung taken off the ladder. Its row is retired and its attempts stay."""
+
+    rung_id: str
+
+
+@dataclass(frozen=True)
+class RungMove:
+    """A live rung moved to another step, in its own level or another.
+
+    `step` counts from 1 in the level as it will stand, the way the Routing screen numbers it;
+    a step past the end is the end.
+    """
+
+    rung_id: str
+    tier: Tier
+    step: int
+
+
+MatrixChange = RungEdit | RungAddition | RungRetirement | RungMove
+
+#: One live rung as a move reads it: its id, its level and its position.
+Placed = tuple[str, Tier, int]
+
+
+@dataclass(frozen=True)
+class Placement:
+    """A rung a move rewrites, and the position it takes in the move's level."""
+
+    rung_id: str
+    position: int
 
 
 class GateError(ValueError):
     """A change the ladder cannot hold, such as an edit naming no live rung."""
+
+
+#: What a move to the step a rung already holds is refused with.
+ALREADY_THERE: Final = "the step is already there, so there is nothing to move"
 
 
 def next_position(rungs: Sequence[LadderRung], tier: Tier) -> int:
@@ -116,13 +188,85 @@ def next_position(rungs: Sequence[LadderRung], tier: Tier) -> int:
     return max(positions) + 1 if positions else 0
 
 
+def _in_order(live: Sequence[Placed], tier: Tier) -> list[Placed]:
+    return sorted((one for one in live if one[1] is tier), key=lambda one: one[2])
+
+
+def placements(live: Sequence[Placed], move: RungMove) -> tuple[Placement, ...]:
+    """The rungs a move rewrites, in chain order, each with the position it takes.
+
+    The moved rung alone when a free position sits where it is going (the end of the level, or a
+    gap a retirement left); otherwise the moved rung and every rung after it, at fresh positions
+    above every live one in the level, so no insert can meet a live position. See the module
+    docstring on why positions are never updated.
+    """
+    moving = next((one for one in live if one[0] == move.rung_id), None)
+    if moving is None:
+        msg = "the move names no live rung"
+        raise GateError(msg)
+    if move.step < 1:
+        msg = "a step is counted from 1"
+        raise GateError(msg)
+    others = [one for one in _in_order(live, move.tier) if one[0] != move.rung_id]
+    index = min(move.step - 1, len(others))
+    if moving[1] is move.tier and _in_order(live, move.tier).index(moving) == index:
+        raise GateError(ALREADY_THERE)
+    top = max((one[2] for one in live if one[1] is move.tier), default=-1)
+    before = others[index - 1][2] if index > 0 else -1
+    if index == len(others):
+        span: list[str] = [move.rung_id]
+        start = top + 1
+    elif others[index][2] - before > 1:
+        return (Placement(move.rung_id, others[index][2] - 1),)
+    else:
+        span = [move.rung_id, *(one[0] for one in others[index:])]
+        start = top + 1
+    if start + len(span) - 1 > POSITION_CEILING:
+        msg = "the level has used every position a step can hold"
+        raise GateError(msg)
+    return tuple(Placement(rung_id, start + offset) for offset, rung_id in enumerate(span))
+
+
+def levels_left_empty(live: Sequence[Placed], change: MatrixChange) -> tuple[Tier, ...]:
+    """The levels that hold a step now and would hold none after `change`, in ladder order.
+
+    Only a retirement and a move take a step out of a level; an edit and an addition leave every
+    level's steps where they are. See `A_LEVEL_KEEPS_AT_LEAST_ONE_STEP`.
+    """
+    if not isinstance(change, RungRetirement | RungMove):
+        return ()
+    found = next((one for one in live if one[0] == change.rung_id), None)
+    if found is None or (isinstance(change, RungMove) and change.tier is found[1]):
+        return ()
+    if any(one[1] is found[1] and one[0] != change.rung_id for one in live):
+        return ()
+    return tuple(tier for tier in TIER_LADDER if tier is found[1])
+
+
 def overlaid(
     rungs: Sequence[LadderRung], change: MatrixChange, *, new_rung_id: str
 ) -> tuple[LadderRung, ...]:
     """The live rungs with `change` applied, as the ladder would stand if it took traffic.
 
-    `new_rung_id` names an added rung for the attempt rows of the trial; an edit keeps its own.
+    `new_rung_id` names an added rung for the attempt rows of the trial; an edit keeps its own,
+    and a move's rungs keep theirs, because the rows they name exist while the trial runs.
     """
+    if isinstance(change, RungRetirement):
+        if not any(one.rung_id == change.rung_id for one in rungs):
+            msg = "the retirement names no live rung"
+            raise GateError(msg)
+        return tuple(one for one in rungs if one.rung_id != change.rung_id)
+    if isinstance(change, RungMove):
+        placed = {
+            one.rung_id: one.position
+            for one in placements([(one.rung_id, one.tier, one.position) for one in rungs], change)
+        }
+        return tuple(
+            replace(one, tier=change.tier, position=placed[one.rung_id])
+            if one.rung_id in placed
+            else one
+            for one in rungs
+        )
     if isinstance(change, RungEdit):
         found = [one for one in rungs if one.rung_id == change.rung_id]
         if not found:

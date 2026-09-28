@@ -80,6 +80,7 @@ from brain.automation_gallery_routes import router as automation_gallery_router
 from brain.automation_routes import AutomationWiring
 from brain.automation_routes import router as automation_router
 from brain.automation_schedule_routes import router as automation_schedule_router
+from brain.automations_routes import router as automations_router
 from brain.binding_routes import router as binding_router
 from brain.cache import (
     AsyncValkeyClient,
@@ -106,6 +107,7 @@ from brain.core.errors import Absent, BrainError, Outcome, to_public
 from brain.credential_routes import router as credential_router
 from brain.data_steward_routes import router as data_steward_router
 from brain.data_transfer_routes import router as data_transfer_router
+from brain.directory_routes import router as directory_router
 from brain.docs_routes import router as docs_router
 from brain.erasure_routes import router as erasure_router
 from brain.error_routes import router as error_router
@@ -1256,6 +1258,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # router for the gallery's reason: an authority asked before anything is read, a confirmation
     # recomputed on the server, and a row whose trigger writes the ledger entry.
     app.include_router(automation_schedule_router)
+    # The Automations module: every automation a reader may see, one automation's page and
+    # figures, and the confirmed pause, resume, schedule change, removal and adoption.
+    app.include_router(automations_router)
     # Binding a Keycloak subject to a principal. A seventh router because it has two callers:
     # an administrator over everything under the prefix, through `asking`, and the setup
     # wizard's finishing screen at /setup/sign-in, which takes the setup code and a verified
@@ -1474,6 +1479,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # `brain.console_overview_routes`.
     app.include_router(console_stats_router)
     app.include_router(console_overview_router)
+    # Every person this install knows, one person's page, and a person added by hand where no staff
+    # list is read (M27.11.2, M27.15.19). See `brain.directory_routes`.
+    app.include_router(directory_router)
 
     @app.get("/health/live", response_model=Health, tags=["health"])
     async def live() -> Health:

@@ -429,7 +429,7 @@ def test_an_entry_and_its_pages_are_checked_when_they_are_built() -> None:
         if one.label == "Roles and permissions"
     )
     assert (roles.to, roles.key) == ("/roles", "roles")
-    assert [page.to for page in roles.pages] == ["/roles", "/capabilities", "/scopes"]
+    assert [page.to for page in roles.pages] == ["/roles", "/capabilities", "/scopes", "/packs"]
 
 
 def test_the_company_menu_is_the_nine_groups_with_one_entry_per_module() -> None:
@@ -477,6 +477,7 @@ def test_an_entry_is_served_with_its_pages_as_tabs_only_when_it_has_several() ->
         "/roles",
         "/capabilities",
         "/scopes",
+        "/packs",
     ]
     assert entries["People"].tabs == []
     assert [section.group for section in served.sections] == [one.value for one in ModuleGroup]

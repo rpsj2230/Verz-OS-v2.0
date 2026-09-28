@@ -103,8 +103,13 @@ and there is nothing for `within_reach` to test against. The owner's answer, Opt
 this module adds is the narrowing on the way in and `activity_basis`, which puts the age of
 that membership on the screen rather than leaving a stale page looking current.
 
+**A pack is written only by somebody who could have granted everything in it, everywhere**
+(M27.15.24). `may_write_packs` and `may_bundle` are `within_reach` asked over the unrestricted
+scope, of the grant authority and of each capability the pack carries. See
+`NOBODY_BUNDLES_WHAT_THEY_COULD_NOT_GRANT_ALONE`.
+
 Task ids: M33.2.1.2, M33.2.1.3, M33.2.1.4, M33.2.2.1, M33.2.2.2, M33.2.2.3, M33.2.2.4
-Task ids: M33.2.2.5
+Task ids: M33.2.2.5, M27.15.24
 """
 
 from __future__ import annotations
@@ -424,6 +429,48 @@ def grantable(
     usually meaningful and re-sorting discards it. No second value carries what was dropped.
     """
     return tuple(one for one in proposals if may_grant(one, granter, now))
+
+
+# ------------------------------------------------------------------- packs (M27.15.24)
+#: Why a pack's writer holds the grant authority and every capability of the pack, over everything.
+NOBODY_BUNDLES_WHAT_THEY_COULD_NOT_GRANT_ALONE: Final = (
+    "A pack is a list of capabilities every holder is granted at once, over whatever scope each "
+    "assignment names, and changing it changes what every holder holds without anybody being "
+    "granted anything one at a time. So writing one takes the grant authority over the whole "
+    "company, because a pack is the whole company's, and every capability the pack carries held "
+    "over the whole company, because a pack is where a capability its writer could not grant "
+    "hides in the middle of a list nobody reads. A versioning asks it of the pack before and "
+    "after, because taking a capability out takes it from every holder, and removing a grant is "
+    "a decision only somebody who could have written it may make."
+)
+
+
+def may_write_packs(entitlement: EntitlementSet, now: datetime | None = None) -> bool:
+    """Whether this reader may create, version, copy or retire a pack at all (M27.15.24).
+
+    The grant authority held over a scope containing everything, which `within_reach` answers for
+    an unrestricted scope only when the holding restricts nothing. See
+    `NOBODY_BUNDLES_WHAT_THEY_COULD_NOT_GRANT_ALONE`.
+    """
+    return within_reach(entitlement, REACH_AUTHORITY, Scope.unrestricted(), now)
+
+
+def may_bundle(
+    entitlement: EntitlementSet,
+    capabilities: Iterable[Capability],
+    now: datetime | None = None,
+) -> bool:
+    """Whether this reader may write a pack carrying exactly these capabilities (M27.15.24).
+
+    `may_write_packs`, and every capability held over everything, each asked against its own value
+    so a trailing `.*` covers what it covers and no more, as `may_grant` asks. One capability the
+    writer lacks refuses the lot, and the answer names none of them, for the reason
+    `ceiling_within_reach` gives about a list of what a reader is short of.
+    """
+    if not may_write_packs(entitlement, now):
+        return False
+    everything = Scope.unrestricted()
+    return all(within_reach(entitlement, one, everything, now) for one in capabilities)
 
 
 # ------------------------------------------------------------------- deputies (M33.2.2.5)

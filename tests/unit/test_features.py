@@ -103,6 +103,7 @@ def test_every_declared_reader_asks_about_its_feature_and_nothing_else_asks() ->
     assert {reader.partition(":")[0] for one in FEATURES for reader in one.read_by} == {
         "brain.prompt_routes",
         "brain.jobs_routes",
+        "brain.install_routes",
     }
 
 
@@ -213,7 +214,7 @@ def test_switching_a_feature_on_writes_its_row_and_the_next_read_sees_it(
     assert stub.commits == 1
     listed = get(client, "u_admin", FEATURES_PATH).json()
     on = {one["name"]: one["on"] for one in listed["features"]}
-    assert on == {"prompt_editing": False, "schedule_control": True}
+    assert on == {"prompt_editing": False, "schedule_control": True, "release_check": False}
 
 
 def test_switching_off_keeps_the_row_and_says_who_turned_it_off(

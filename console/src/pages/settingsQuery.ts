@@ -12,7 +12,14 @@
  * code meaning none is never drawn: an unset currency reads "Not set yet" and its field starts
  * empty, with an example beside it.
  *
- * Task ids: M41.1.4, M41.1.5, M41.1.6, M41.1.7, M41.2.6, M41.4.1
+ * **A saved value can be taken away, which is "return to default"** (M27.12.7). It retires the
+ * saved row, so the setting reads the environment file's value or the product default again; each
+ * row carries which (`without_saved`), so the confirmation names the value before anything is sent.
+ *
+ * **Every field says what it accepts before it is sent** (`FORMATS`), in the words the API's own
+ * refusal would use. It decides nothing: `brain.console.configuration.setting_problem` judges.
+ *
+ * Task ids: M41.1.4, M41.1.5, M41.1.6, M41.1.7, M41.2.6, M41.4.1, M27.12.7, M27.16.1
  */
 
 import type { components } from "../api/schema";
@@ -30,12 +37,17 @@ export const SETTINGS_API_PATH = "/install/settings";
 export const SETTINGS_PATH = "/settings";
 export const SETTINGS_LABEL = "Settings";
 
-export const SETTINGS_CRUMB = "Install › Settings";
 export const SETTINGS_LEDE =
-  "Every value that makes this install the company's own, grouped by what it is for. The ones that " +
-  "are safe to change are changed here; each of the others says where it is changed instead. No " +
-  "key, token or password is shown here.";
+  "The values that make this install the company's own. Change the editable ones here; each of the " +
+  "others says where it is changed. No key, token or password is shown.";
 export const READING_SETTINGS = "Reading this install's settings.";
+export const RETURN_TO_DEFAULT = "Return to default";
+export const KEEP_SAVED = "Keep the saved value";
+export const RETURNED = "Returned to its default.";
+export const NOT_SAVED = "The setting was not saved";
+export const NOT_RETURNED = "The setting was not returned to its default";
+export const FURNISHED_HEADING = "Starter set";
+export const VARIABLES_LABEL = "Each setting's variable in the environment file, and what reads it.";
 export const UNREADABLE_SETTINGS = "The answer could not be read as this install's settings.";
 export const SAVE = "Save";
 export const SAVED = "Saved.";
@@ -68,6 +80,46 @@ export const SOURCE_WORDS: Readonly<Record<string, string>> = {
 /** Where a saved value is sent. */
 export function savePath(name: string): string {
   return `${SETTINGS_API_PATH}/${encodeURIComponent(name)}`;
+}
+
+/** Where a saved value is taken away, returning the setting to its default. */
+export function defaultPath(name: string): string {
+  return `${SETTINGS_API_PATH}/${encodeURIComponent(name)}/default`;
+}
+
+/** Whether "return to default" is offered: an editable setting with a value saved here. */
+export function mayReturnToDefault(row: SettingRow): boolean {
+  return row.editable && row.source === "saved";
+}
+
+/** The confirmation's question for taking a saved value away. */
+export function defaultQuestion(row: SettingRow): string {
+  return `Return ${row.label.toLowerCase()} to its default?`;
+}
+
+/** What taking it away does: the value it reads next and where that comes from. */
+export function defaultConsequence(row: SettingRow): string {
+  const next = row.without_saved === "" ? NOT_SET_YET : row.without_saved;
+  const from = row.without_saved_source === "environment" ? "the environment file" : "the product default";
+  return `The saved value is removed and ${row.label} reads "${next}" from ${from}. ${row.applies} The change is recorded with your name.`;
+}
+
+/** What each field accepts, said under it before anything is sent. The API judges. */
+export const FORMATS: Readonly<Record<string, string>> = Object.freeze({
+  INSTALL_COMPANY_NAME: "Up to 200 characters, as the console's header should show it.",
+  INSTALL_PRODUCT_NAME: "Up to 200 characters, the name people know this system by.",
+  INSTALL_LOGO_URL: "A full address starting https://, or a path on this install such as /logo.svg.",
+  INSTALL_ACCENT_COLOUR: "# followed by six hexadecimal digits, such as #2563eb.",
+  INSTALL_SENDER_ADDRESS: "One email address that mail from this install is sent from, such as brain@example.com.",
+  INSTALL_LOCALES: "Language codes separated by commas, such as en,zh-Hans.",
+  INSTALL_CURRENCY: "A three-letter currency code, such as SGD.",
+  INSTALL_TIME_ZONE: "A time zone name, such as Asia/Singapore.",
+  INSTALL_MODEL_PROFILE: "Where questions may be answered: on this server only, or by online providers.",
+});
+
+/** What a field accepts, or one plain sentence for a setting the table does not know. */
+export function formatOf(name: string): string {
+  return FORMATS[name] ?? "Up to 200 characters on one line.";
 }
 
 /** Read `SettingsPage` out of a response body, or null when it is not one. */

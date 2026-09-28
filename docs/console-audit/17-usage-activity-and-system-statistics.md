@@ -11,8 +11,8 @@
 | `GET /api/v1/report/adoption` | `/adoption` |
 | `GET /api/v1/report/quality` | `/quality` |
 | `GET /api/v1/report/questions` | `/department`, `/questions` |
-| `GET /api/v1/report/service-levels` | `/models`, `/service-levels` |
-| `GET /api/v1/report/spend` | `/models`, `/spend` |
+| `GET /api/v1/report/service-levels` | `/service-levels` |
+| `GET /api/v1/report/spend` | `/spend` |
 | `GET /api/v1/report/usage` | `/department`, `/usage` |
 
 No gap recorded.

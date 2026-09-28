@@ -36,6 +36,7 @@ import { ACCESS_REQUESTS_API_PATH } from "../../src/pages/accessRequestsQuery";
 import { automationStartApiPath, automationStopApiPath } from "../../src/pages/agentAutomationsQuery";
 import { STEWARD_API_PATH } from "../../src/pages/dataStewardQuery";
 import { automationGalleryApiPath, automationInstallApiPath, automationPreviewApiPath } from "../../src/pages/automationGalleryQuery";
+import { changeApiPath } from "../../src/pages/automations/automationsQuery";
 import { approvalDecisionApiPath } from "../../src/pages/approvalsQuery";
 import { historyApiPath, VERIFICATION_API_PATH } from "../../src/pages/auditQuery";
 import { CHECKS_API_PATH } from "../../src/pages/requirementChecksQuery";
@@ -60,7 +61,8 @@ import {
 import { EXPORTS_API_PATH } from "../../src/pages/dataTransferQuery";
 import { switchPath } from "../../src/pages/featuresQuery";
 import { switchPath as toolSwitchPath } from "../../src/pages/toolsQuery";
-import { savePath } from "../../src/pages/settingsQuery";
+import { defaultPath, savePath } from "../../src/pages/settingsQuery";
+import { installApiPath } from "../../src/pages/agent-templates/AgentTemplateDetailPage";
 import {
   ADD_TEAM_API_PATH,
   DISABLE_API_PATH,
@@ -82,14 +84,25 @@ import {
 import {
   APPOINTMENT_API_PATH,
   DEPUTY_API_PATH,
-  GRANTS_API_PATH,
   GROUP_RULES_API_PATH,
   GROUP_RULE_RETIREMENT_API_PATH,
+  ROLE_REMOVAL_API_PATH,
+} from "../../src/pages/governQuery";
+import {
+  DIRECTORY_API_PATH,
+  GRANTS_API_PATH,
   PACK_ASSIGNMENT_API_PATH,
   REMOVAL_API_PATH,
-  ROLE_REMOVAL_API_PATH,
   SEVERAL_GRANTS_API_PATH,
-} from "../../src/pages/governQuery";
+  transferApiPath as personTransferApiPath,
+} from "../../src/pages/people/peopleQuery";
+import { RENAME_SCOPE_API_PATH } from "../../src/pages/departments/departmentsQuery";
+import {
+  PACKS_API_PATH,
+  PACK_COPY_API_PATH,
+  PACK_RETIREMENT_API_PATH,
+  PACK_VERSION_API_PATH,
+} from "../../src/pages/roles/PacksPage";
 import { actionPath } from "../../src/pages/jobsQuery";
 import { rungApiPath } from "../../src/pages/matrixQuery";
 import { ADD_RUNG_API_PATH, GOLDEN_API_PATH, retireGoldenApiPath } from "../../src/pages/matrixGateQuery";
@@ -128,11 +141,13 @@ import {
   transferApiPath,
 } from "../../src/pages/staffSourcesQuery";
 import { CONNECTORS_API_PATH, disconnectApiPath } from "../../src/pages/connectorsQuery";
+import { probeApiPath } from "../../src/pages/connectors/connectorProbe";
 import { editApiPath, exportApiPath, keyApiPath } from "../../src/pages/connectors/connectorSources";
 import { LARK_API_PATH, LARK_TEST_API_PATH } from "../../src/pages/larkConnectQuery";
 import { agentMoveApiPath } from "../../src/pages/agentLifecycleQuery";
 import { credentialPath } from "../../src/components/ProviderKeyForm";
 import { credentialApiPath } from "../../src/pages/credentials/credentialRows";
+import { moveStepApiPath, retireStepApiPath } from "../../src/pages/models/modelsActions";
 import { REGISTER_API_PATH, secretApiPath, switchOffApiPath } from "../../src/pages/webhooksQuery";
 import {
   ISSUE_KEY_API_PATH,
@@ -221,12 +236,13 @@ export function declaredRoutes(document: Record<string, unknown>): string[] {
 
 /** The route template a concrete path was asked of, or null. */
 export function templateOf(document: Record<string, unknown>, path: string): string | null {
-  for (const route of Object.keys(document["paths"] as Record<string, unknown>)) {
-    if (new RegExp(`^${route.replace(/\{[^}]+\}/g, "[^/]+")}$`).test(path)) {
-      return route;
-    }
-  }
-  return null;
+  // The most specific template wins, as it does in the router: `/service-accounts/keys` is the
+  // literal route and not `/service-accounts/{client_id}` with an id of "keys".
+  const matching = Object.keys(document["paths"] as Record<string, unknown>).filter((route) =>
+    new RegExp(`^${route.replace(/\{[^}]+\}/g, "[^/]+")}$`).test(path),
+  );
+  const parameters = (route: string) => (route.match(/\{/g) ?? []).length;
+  return [...matching].sort((a, b) => parameters(a) - parameters(b))[0] ?? null;
 }
 
 // ---------------------------------------------------------------------------- the judgement
@@ -257,11 +273,12 @@ const ONCE_BY_THE_WIZARD =
 /** Every area of the standard, keyed by the standard's own words. */
 export const AREAS: Readonly<Record<string, Area>> = {
   "People, roles, permissions and access control": {
-    screens: ["/people", "/people/:subject", "/roles", "/capabilities", "/scopes", "/access_review", "/elevation", "/sessions", "/sign-in-links", "/staff_sources", "/access-requests", "/service-accounts"],
+    screens: ["/people", "/people/:personId", "/people/:personId/:view", "/roles", "/capabilities", "/scopes", "/packs", "/access_review", "/elevation", "/sessions", "/sign-in-links", "/staff_sources", "/access-requests", "/service-accounts", "/service-accounts/:clientId"],
     routes: [
       "/api/v1/me",
       "/api/v1/console/navigation",
       "/api/v1/govern/people",
+      "/api/v1/govern/directory*",
       "/api/v1/govern/roles",
       "/api/v1/govern/capabilities",
       "/api/v1/govern/scopes",
@@ -320,12 +337,16 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
     gaps: [
       {
-        what: "A pack cannot be assigned or withdrawn, and a capability that arrived through a pack cannot be removed.",
-        because: "No route writes gate.capability_pack_assignment. brain.govern_routes.remove_grant refuses a pack's capability in the ordinary words, because withdrawing it removes every other capability in the pack.",
+        what: "Capabilities are read and never changed, and what a role grants is not edited.",
+        because: "The capability registry is declared by the product's tools and connected sources, and a role grants nothing, so there is nothing to edit.",
       },
       {
-        what: "Roles, capabilities and scopes are read and never changed.",
-        because: "No route writes gate.scope or the role and capability registries; they are declared by the product and by migrations.",
+        what: "What a run through an agent reaches for somebody else is not previewed on their Access view.",
+        leaf: "M27.15.61",
+      },
+      {
+        what: "GET /api/v1/govern/people, the grant-holder listing, is read by no screen since People lists every person from the directory.",
+        because: "It is kept for any client of the API that reads grant holders by subject; the People list and each person's Grants view read GET /api/v1/govern/directory and its detail, which carry the same holdings with their scope and lapse.",
       },
       {
         what: "A break-glass notice to the standing Super Admins is shown on their Elevation screen and is not sent by email or chat, and nobody is told when somebody only asks.",
@@ -340,7 +361,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "Departments, teams and client configuration": {
-    screens: ["/departments", "/department"],
+    screens: ["/departments", "/departments/:slug", "/departments/:slug/:view", "/department"],
     routes: ["/api/v1/govern/departments*"],
     tables: ["gate.department", "gate.team", "gate.team_membership", "gate.department_lead"],
     installation: ["INSTALL_COMPANY_NAME", "INSTALL_PRODUCT_NAME", "INSTALL_LOGO_URL", "INSTALL_ACCENT_COLOUR"],
@@ -364,12 +385,13 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "AI providers, models and the routing between them": {
-    screens: ["/models", "/routing", "/routing/:rungId"],
+    screens: ["/models", "/models/:provider", "/models/:provider/:view", "/routing", "/routing/:rungId"],
     routes: [
       "/api/v1/operate/models",
       "/api/v1/models/providers*",
       "/api/v1/models/profile",
       "/api/v1/models/prices",
+      "/api/v1/routing/export",
       "/api/v1/routing/rungs*",
       "/api/v1/routing/changes",
       "/api/v1/routing/golden-questions*",
@@ -389,15 +411,15 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
     installation: ["INSTALL_MODEL_PROFILE", "INSTALL_MODEL_ENDPOINT", "INSTALL_EMBEDDING_DIMENSIONS"],
     gaps: [
-      {
-        what: "A provider's terms and an added provider's retirement are logged and not on the audit ledger: the ledger's action list gains no provider entry in this release.",
-        leaf: "M5.6.4",
-      },
       { what: "The model endpoint cannot be changed after setup.", because: ONCE_BY_THE_WIZARD },
+      {
+        what: "A provider's page shows no cost: cost is kept per request, whose calls can reach more than one provider, so it is left out rather than drawn as nought, and the Spend report shows it by model.",
+        because: "brain.ops.usage_store writes one cost row per request with its model and no provider, and the spend rows are read under the spend grant, which a reader of the models screen need not hold.",
+      },
     ],
   },
   "Agents and their configuration, including templates": {
-    screens: ["/agents", "/agents/:agentId", "/agents/:agentId/:tab", "/agent-templates", "/approvals", "/approvals/:suspensionId"],
+    screens: ["/agents", "/agents/:agentId", "/agents/:agentId/:tab", "/agent-templates", "/agent-templates/:templateId", "/approvals", "/approvals/:suspensionId"],
     routes: [
       "/api/v1/agents",
       "/api/v1/agents/{agent_id}/workspace",
@@ -411,6 +433,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/agents/{agent_id}/duplicate",
       "/api/v1/console/agents/{agent_id}/stats",
       "/api/v1/agent-templates",
+      "/api/v1/agent-templates/{template_id}",
       "/api/v1/agent-templates/{template_id}/versions/{version}*",
       "/api/v1/approvals*",
     ],
@@ -435,7 +458,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "Skills and tools": {
-    screens: ["/skills", "/skills/:name", "/skills/:name/:view", "/tools"],
+    screens: ["/skills", "/skills/:name", "/skills/:name/:view", "/tools", "/tools/:name"],
     routes: [
       "/api/v1/skills",
       "/api/v1/skills/library",
@@ -475,19 +498,33 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "Workflows and automations": {
-    screens: ["/agents/:agentId/:tab"],
+    screens: ["/agents/:agentId/:tab", "/automations", "/automations/:automationId", "/automations/:automationId/:view"],
     routes: [
       "/api/v1/agents/{agent_id}/automation-templates*",
       "/api/v1/agents/{agent_id}/automations",
       "/api/v1/agents/{agent_id}/automations/{automation_id}/start",
       "/api/v1/agents/{agent_id}/automations/{automation_id}/stop",
+      "/api/v1/console/automations*",
+      "/api/v1/automations/{automation_id}/*",
     ],
-    tables: ["agent.automation", "agent.automation_run", "agent.automation_schedule", "gate.automation_owner"],
+    tables: [
+      "agent.automation",
+      "agent.automation_run",
+      "agent.automation_schedule",
+      "agent.automation_change",
+      "gate.automation_owner",
+    ],
     installation: [],
     gaps: [
       {
-        what: "An installed automation cannot be changed or removed, only started and stopped.",
-        because: "brain.automation_schedule_routes starts and stops one and brain.console.agent_automations.remove decides a removal that no route performs; 0067 grants an update of the next run alone.",
+        what: "A removed automation cannot be brought back, and installing the same outcome again for the same agent and person is refused.",
+        because:
+          "A removal is a final row in agent.automation_change (brain.console.automations.A_REMOVAL_IS_FINAL_AND_KEEPS_ITS_HISTORY) and 0055's one-install-per-agent-template-and-person constraint still reads the removed install; the page draws Bring back as not available yet.",
+      },
+      {
+        what: "An automation registered to call the tool route with its own credential (gate.automation_owner) is not listed or adoptable on a screen.",
+        because:
+          "Nothing on an install writes that registration yet: brain.ops.automation_owner_store.StoredAutomations.put has no caller, so there is no row to list; its adopt is kept for when one exists.",
       },
       {
         what: "Three of the four automation templates cannot be started on any install.",
@@ -502,9 +539,11 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/connectors/{connector}/disconnect",
       "/api/v1/connectors/{connector}/edit",
       "/api/v1/connectors/{connector}/key",
+      "/api/v1/connectors/{connector}/probe",
       "/api/v1/console/connectors",
       "/api/v1/console/connectors/{connector}",
       "/api/v1/console/connectors/{connector}/export",
+      "/api/v1/console/connectors/{connector}/probe",
       "/api/v1/connectors/lark-app",
       "/api/v1/connectors/lark-app/test",
       "/api/v1/channels*",
@@ -530,10 +569,6 @@ export const AREAS: Readonly<Record<string, Area>> = {
         what: "A connected source is read and kept, and no question is answered from what is kept.",
         because:
           "No row tool is registered for a connected source's records: brain.tools.startup.classification_for is keyed on the entity alone and Xero and HubSpot both project contact, which that module records as the limit to change first. brain.ops.connector_admin.WHAT_CONNECTING_A_SOURCE_STARTS says so in the connect confirmation.",
-      },
-      {
-        what: "A connection cannot be tested from the console yet: only the worker reads a source's key, and a successful probe has no outcome ops.connector_sync can hold without claiming a full read.",
-        leaf: "M27.15.8",
       },
       {
         what: "HubSpot can be connected and is not read.",
@@ -877,19 +912,42 @@ function at(route: string, spelled: string, built: string, versioned = true): Wr
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/Learning.tsx UNDO_API_PATH": [at("POST /api/v1/govern/learning/undo", "UNDO_API_PATH", UNDO_API_PATH)],
-  "src/pages/Departments.tsx asked.path": [
-    at("POST /api/v1/govern/departments/membership", "MEMBERSHIP_API_PATH", MEMBERSHIP_API_PATH),
-    at("POST /api/v1/govern/departments/lead", "LEAD_API_PATH", LEAD_API_PATH),
-    at("POST /api/v1/govern/departments", "FOUND_API_PATH", FOUND_API_PATH),
-    at("POST /api/v1/govern/departments/rename", "RENAME_DEPARTMENT_API_PATH", RENAME_DEPARTMENT_API_PATH),
-    at("POST /api/v1/govern/departments/retirement", "RETIRE_DEPARTMENT_API_PATH", RETIRE_DEPARTMENT_API_PATH),
+  "src/pages/departments/StructureDrawers.tsx FOUND_API_PATH": [at("POST /api/v1/govern/departments", "FOUND_API_PATH", FOUND_API_PATH)],
+  "src/pages/departments/StructureDrawers.tsx ADD_TEAM_API_PATH": [
     at("POST /api/v1/govern/departments/team", "ADD_TEAM_API_PATH", ADD_TEAM_API_PATH),
-    at("POST /api/v1/govern/departments/team/rename", "RENAME_TEAM_API_PATH", RENAME_TEAM_API_PATH),
-    at("POST /api/v1/govern/departments/team/retirement", "RETIRE_TEAM_API_PATH", RETIRE_TEAM_API_PATH),
+  ],
+  "src/pages/departments/StructureDrawers.tsx DRAW_SCOPE_API_PATH": [
     at("POST /api/v1/govern/departments/scopes", "DRAW_SCOPE_API_PATH", DRAW_SCOPE_API_PATH),
+  ],
+  "src/pages/departments/StructureDrawers.tsx RENAME_DEPARTMENT_API_PATH": [
+    at("POST /api/v1/govern/departments/rename", "RENAME_DEPARTMENT_API_PATH", RENAME_DEPARTMENT_API_PATH),
+  ],
+  "src/pages/departments/StructureDrawers.tsx RENAME_TEAM_API_PATH": [
+    at("POST /api/v1/govern/departments/team/rename", "RENAME_TEAM_API_PATH", RENAME_TEAM_API_PATH),
+  ],
+  "src/pages/departments/StructureDrawers.tsx RENAME_SCOPE_API_PATH": [
+    at("POST /api/v1/govern/departments/scopes/rename", "RENAME_SCOPE_API_PATH", RENAME_SCOPE_API_PATH),
+  ],
+  "src/pages/departments/StructureDrawers.tsx RETIRE_DEPARTMENT_API_PATH": [
+    at("POST /api/v1/govern/departments/retirement", "RETIRE_DEPARTMENT_API_PATH", RETIRE_DEPARTMENT_API_PATH),
+  ],
+  "src/pages/departments/StructureDrawers.tsx RETIRE_TEAM_API_PATH": [
+    at("POST /api/v1/govern/departments/team/retirement", "RETIRE_TEAM_API_PATH", RETIRE_TEAM_API_PATH),
+  ],
+  "src/pages/departments/StructureDrawers.tsx RETIRE_SCOPE_API_PATH": [
     at("POST /api/v1/govern/departments/scopes/retirement", "RETIRE_SCOPE_API_PATH", RETIRE_SCOPE_API_PATH),
-    at("POST /api/v1/govern/people/disable", "DISABLE_API_PATH", DISABLE_API_PATH),
-    at("POST /api/v1/govern/people/enable", "ENABLE_API_PATH", ENABLE_API_PATH),
+  ],
+  "src/pages/departments/StructureDrawers.tsx MEMBERSHIP_API_PATH": [
+    at("POST /api/v1/govern/departments/membership", "MEMBERSHIP_API_PATH", MEMBERSHIP_API_PATH),
+  ],
+  "src/pages/departments/StructureDrawers.tsx LEAD_API_PATH": [
+    at("POST /api/v1/govern/departments/lead", "LEAD_API_PATH", LEAD_API_PATH),
+  ],
+  "src/pages/people/PersonPlacements.tsx MEMBERSHIP_API_PATH": [
+    at("POST /api/v1/govern/departments/membership", "MEMBERSHIP_API_PATH", MEMBERSHIP_API_PATH),
+  ],
+  "src/pages/people/PersonPlacements.tsx LEAD_API_PATH": [
+    at("POST /api/v1/govern/departments/lead", "LEAD_API_PATH", LEAD_API_PATH),
   ],
   "src/pages/Elevation.tsx ELEVATION_REQUESTS_API_PATH": [
     at("POST /api/v1/govern/elevation/requests", "ELEVATION_REQUESTS_API_PATH", ELEVATION_REQUESTS_API_PATH),
@@ -968,9 +1026,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/Classification.tsx tableApiPath(named)": [
     at("PUT /api/v1/classifications/{entity}/table", "tableApiPath", tableApiPath("prices")),
   ],
+  "src/pages/install/FeaturesPage.tsx switchPath(row.name)": [at("POST /api/v1/install/features/{name}", "switchPath", switchPath("schedule_control"))],
   "src/pages/operations/DataTransferPage.tsx EXPORTS_API_PATH": [at("POST /api/v1/data-transfer/exports", "EXPORTS_API_PATH", EXPORTS_API_PATH)],
-  "src/pages/Features.tsx switchPath(row.name)": [at("POST /api/v1/install/features/{name}", "switchPath", switchPath("schedule_control"))],
-  "src/pages/Tools.tsx switchPath(choice.tool)": [
+  "src/pages/tools/ToolDetailPage.tsx switchPath(choice.tool)": [
     at("POST /api/v1/tools/{name}/switch", "switchPath", toolSwitchPath("notes.read_note")),
   ],
   "src/pages/Channels.tsx channelApiPath(row.channel)": [
@@ -991,7 +1049,19 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/components/MyChannels.tsx myUnbindApiPath(row.channel)": [
     at("POST /api/v1/me/channels/{name}/unbind", "myUnbindApiPath", myUnbindApiPath("webhook")),
   ],
-  "src/pages/Settings.tsx savePath(row.name)": [at("PUT /api/v1/install/settings/{name}", "savePath", savePath("INSTALL_COMPANY_NAME"))],
+  "src/pages/agent-templates/AgentTemplateDetailPage.tsx installApiPath(entry.template_id, entry.version)": [
+    at(
+      "POST /api/v1/agent-templates/{template_id}/versions/{version}/install",
+      "installApiPath",
+      installApiPath("pricing_desk", 3),
+    ),
+  ],
+  "src/pages/settings/SettingsPage.tsx savePath(row.name)": [
+    at("PUT /api/v1/install/settings/{name}", "savePath", savePath("INSTALL_COMPANY_NAME")),
+  ],
+  "src/pages/settings/SettingsPage.tsx defaultPath(row.name)": [
+    at("POST /api/v1/install/settings/{name}/default", "defaultPath", defaultPath("INSTALL_COMPANY_NAME")),
+  ],
   "src/pages/FirstRun.tsx FINISH_PATH": [at("POST /setup/sign-in", "FINISH_PATH", FINISH_PATH, false)],
   "src/pages/FirstRun.tsx APPOINTMENT_PATH": [at("POST /setup/appointment", "APPOINTMENT_PATH", APPOINTMENT_PATH, false)],
   "src/components/StaffListCheck.tsx SIGN_IN_PATH": [
@@ -1000,20 +1070,20 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/components/StaffListCheck.tsx TRIAL_PATH": [
     at("POST /setup/staff-source/trial", "TRIAL_PATH", STAFF_LIST_TRIAL_PATH, false),
   ],
-  "src/pages/StaffSources.tsx CREDENTIAL_API_PATH": [
+  "src/pages/staff-sources/SyncCredential.tsx CREDENTIAL_API_PATH": [
     at("PUT /api/v1/govern/staff_sources/credential", "CREDENTIAL_API_PATH", CREDENTIAL_API_PATH),
   ],
-  "src/pages/StaffSources.tsx transferApiPath(agentId)": [
+  "src/pages/staff-sources/Transfers.tsx transferApiPath(agent.agent_id)": [
     at("POST /api/v1/govern/staff_sources/transfers/{agent_id}", "transferApiPath", transferApiPath("a_quotes")),
   ],
-  "src/components/ConnectStaffSource.tsx path": [
+  "src/pages/staff-sources/ConnectDrawer.tsx path": [
     at("POST /api/v1/govern/staff_sources/test", "CONNECTION_TEST_API_PATH", CONNECTION_TEST_API_PATH),
     at("POST /api/v1/govern/staff_sources/first-sync", "FIRST_SYNC_API_PATH", FIRST_SYNC_API_PATH),
   ],
-  "src/components/ConnectStaffSource.tsx CONNECT_API_PATH": [
+  "src/pages/staff-sources/ConnectDrawer.tsx CONNECT_API_PATH": [
     at("POST /api/v1/govern/staff_sources/connect", "CONNECT_API_PATH", CONNECT_API_PATH),
   ],
-  "src/components/ConnectStaffSource.tsx APPLY_FIRST_SYNC_API_PATH": [
+  "src/pages/staff-sources/ConnectDrawer.tsx APPLY_FIRST_SYNC_API_PATH": [
     at("POST /api/v1/govern/staff_sources/first-sync/apply", "APPLY_FIRST_SYNC_API_PATH", APPLY_FIRST_SYNC_API_PATH),
   ],
   "src/pages/operations/JobActs.tsx actionPath(asked.action, asked.row.control)": [
@@ -1021,25 +1091,37 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
     at("POST /api/v1/jobs/{name}/resume", "actionPath", actionPath("resume", "spend_report_refresh")),
     at("POST /api/v1/jobs/{name}/run", "actionPath", actionPath("run", "spend_report_refresh")),
   ],
-  "src/pages/Matrix.tsx rungApiPath(rung.id)": [at("PATCH /api/v1/routing/rungs/{rung_id}", "rungApiPath", rungApiPath("rung-1"))],
-  "src/components/MatrixGate.tsx GOLDEN_API_PATH": [
+  "src/pages/models/RungEditor.tsx rungApiPath(rung.id)": [at("PATCH /api/v1/routing/rungs/{rung_id}", "rungApiPath", rungApiPath("rung-1"))],
+  "src/pages/models/RungEditor.tsx moveStepApiPath(rung.id)": [
+    at("POST /api/v1/routing/rungs/{rung_id}/move", "moveStepApiPath", moveStepApiPath("rung-1")),
+  ],
+  "src/pages/models/RungEditor.tsx retireStepApiPath(rung.id)": [
+    at("POST /api/v1/routing/rungs/{rung_id}/retire", "retireStepApiPath", retireStepApiPath("rung-1")),
+  ],
+  "src/pages/models/RoutingPage.tsx moveStepApiPath(asked.rungId)": [
+    at("POST /api/v1/routing/rungs/{rung_id}/move", "moveStepApiPath", moveStepApiPath("rung-1")),
+  ],
+  "src/pages/models/RoutingPage.tsx retireStepApiPath(asked.rungId)": [
+    at("POST /api/v1/routing/rungs/{rung_id}/retire", "retireStepApiPath", retireStepApiPath("rung-1")),
+  ],
+  "src/pages/models/GoldenQuestions.tsx GOLDEN_API_PATH": [
     at("POST /api/v1/routing/golden-questions", "GOLDEN_API_PATH", GOLDEN_API_PATH),
   ],
-  "src/components/MatrixGate.tsx retireGoldenApiPath(asked.row.id)": [
+  "src/pages/models/GoldenQuestions.tsx retireGoldenApiPath(asked.row.id)": [
     at(
       "POST /api/v1/routing/golden-questions/{question_id}/retire",
       "retireGoldenApiPath",
       retireGoldenApiPath("33333333-3333-4333-8333-333333333333"),
     ),
   ],
-  "src/components/MatrixGate.tsx ADD_RUNG_API_PATH": [at("POST /api/v1/routing/rungs", "ADD_RUNG_API_PATH", ADD_RUNG_API_PATH)],
-  "src/components/ProviderRegister.tsx termsApiPath(asked.provider)": [
+  "src/pages/models/AddStep.tsx ADD_RUNG_API_PATH": [at("POST /api/v1/routing/rungs", "ADD_RUNG_API_PATH", ADD_RUNG_API_PATH)],
+  "src/pages/models/ProviderProfile.tsx termsApiPath(row.provider)": [
     at("PUT /api/v1/models/providers/{provider}/terms", "termsApiPath", termsApiPath("anthropic")),
   ],
-  "src/components/ProviderRegister.tsx retireProviderApiPath(asked.provider)": [
+  "src/pages/models/ProviderDetailPage.tsx retireProviderApiPath(pending.provider)": [
     at("POST /api/v1/models/providers/{provider}/retire", "retireProviderApiPath", retireProviderApiPath("acme_llm")),
   ],
-  "src/components/ProviderRegister.tsx ADD_PROVIDER_API_PATH": [
+  "src/pages/models/AddProvider.tsx ADD_PROVIDER_API_PATH": [
     at("POST /api/v1/models/providers", "ADD_PROVIDER_API_PATH", ADD_PROVIDER_API_PATH),
   ],
   "src/components/ProviderKeyForm.tsx credentialPath(slot)": [
@@ -1067,28 +1149,54 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/components/AgentModelPin.tsx modelPinApiPath(agentId)": [
     at("PUT /api/v1/agents/{agent_id}/model-pin", "modelPinApiPath", modelPinApiPath("quote-helper")),
   ],
-  "src/pages/Models.tsx providerSwitchApiPath(pending.provider)": [
+  "src/pages/models/ProvidersPage.tsx providerSwitchApiPath(pending.provider)": [
     at("PUT /api/v1/models/providers/{provider}", "providerSwitchApiPath", providerSwitchApiPath("anthropic")),
   ],
-  "src/pages/Models.tsx PROFILE_API_PATH": [at("PUT /api/v1/models/profile", "PROFILE_API_PATH", PROFILE_API_PATH)],
   "src/components/ModelPrices.tsx PRICES_API_PATH": [at("PUT /api/v1/models/prices", "PRICES_API_PATH", PRICES_API_PATH)],
-  "src/pages/Models.tsx providerCheckApiPath(pending.provider)": [
+  "src/pages/models/ProvidersPage.tsx PROFILE_API_PATH": [at("PUT /api/v1/models/profile", "PROFILE_API_PATH", PROFILE_API_PATH)],
+  "src/pages/models/ProvidersPage.tsx providerCheckApiPath(pending.provider)": [
     at("POST /api/v1/models/providers/{provider}/check", "providerCheckApiPath", providerCheckApiPath("anthropic")),
   ],
-  "src/pages/People.tsx REMOVAL_API_PATH": [at("POST /api/v1/govern/grants/removal", "REMOVAL_API_PATH", REMOVAL_API_PATH)],
-  "src/pages/People.tsx GRANTS_API_PATH": [at("POST /api/v1/govern/grants", "GRANTS_API_PATH", GRANTS_API_PATH)],
-  "src/pages/People.tsx SEVERAL_GRANTS_API_PATH": [
+  "src/pages/models/ProviderDetailPage.tsx providerSwitchApiPath(pending.provider)": [
+    at("PUT /api/v1/models/providers/{provider}", "providerSwitchApiPath", providerSwitchApiPath("anthropic")),
+  ],
+  "src/pages/models/ProviderDetailPage.tsx providerCheckApiPath(pending.provider)": [
+    at("POST /api/v1/models/providers/{provider}/check", "providerCheckApiPath", providerCheckApiPath("anthropic")),
+  ],
+  "src/pages/people/PersonGrants.tsx REMOVAL_API_PATH": [at("POST /api/v1/govern/grants/removal", "REMOVAL_API_PATH", REMOVAL_API_PATH)],
+  "src/pages/people/PersonGrants.tsx REVIEW_DECISION_API_PATH": [
+    at("POST /api/v1/govern/access-review/decision", "REVIEW_DECISION_API_PATH", REVIEW_DECISION_API_PATH),
+  ],
+  "src/pages/people/GrantDrawers.tsx GRANTS_API_PATH": [at("POST /api/v1/govern/grants", "GRANTS_API_PATH", GRANTS_API_PATH)],
+  "src/pages/people/GrantDrawers.tsx SEVERAL_GRANTS_API_PATH": [
     at("POST /api/v1/govern/grants/several", "SEVERAL_GRANTS_API_PATH", SEVERAL_GRANTS_API_PATH),
   ],
-  "src/pages/People.tsx disable ? DISABLE_API_PATH : ENABLE_API_PATH": [
+  "src/pages/people/GrantDrawers.tsx PACK_ASSIGNMENT_API_PATH": [
+    at("POST /api/v1/govern/packs/assignment", "PACK_ASSIGNMENT_API_PATH", PACK_ASSIGNMENT_API_PATH),
+  ],
+  "src/pages/people/GrantDrawers.tsx DIRECTORY_API_PATH": [at("POST /api/v1/govern/directory", "DIRECTORY_API_PATH", DIRECTORY_API_PATH)],
+  "src/pages/people/PersonDetailPage.tsx disable ? DISABLE_API_PATH : ENABLE_API_PATH": [
     at("POST /api/v1/govern/people/disable", "DISABLE_API_PATH", DISABLE_API_PATH),
     at("POST /api/v1/govern/people/enable", "ENABLE_API_PATH", ENABLE_API_PATH),
+  ],
+  "src/pages/people/PersonOverview.tsx transferApiPath(waiting.agentId)": [
+    at("POST /api/v1/govern/staff_sources/transfers/{agent_id}", "transferApiPath", personTransferApiPath("a_quotes")),
+  ],
+  "src/pages/people/PersonSessions.tsx LINK_API_PATH": [at("POST /api/v1/sign-ins", "LINK_API_PATH", LINK_API_PATH)],
+  "src/pages/people/PersonSessions.tsx END_SESSION_API_PATH": [
+    at("POST /api/v1/govern/sessions/end", "END_SESSION_API_PATH", END_SESSION_API_PATH),
+  ],
+  "src/pages/people/PersonSessions.tsx END_SESSIONS_API_PATH": [
+    at("POST /api/v1/govern/sessions/end-several", "END_SESSIONS_API_PATH", END_SESSIONS_API_PATH),
+  ],
+  "src/pages/people/PersonSessions.tsx UNLINK_API_PATH": [
+    at("POST /api/v1/govern/sign-ins/unlink", "UNLINK_API_PATH", UNLINK_API_PATH),
   ],
   "src/components/DataStewardCard.tsx STEWARD_API_PATH": [
     at("POST /api/v1/govern/data-steward", "STEWARD_API_PATH", STEWARD_API_PATH),
   ],
-  "src/pages/Prompts.tsx editPath(asked.row.agent_id)": [at("POST /api/v1/govern/prompts/{agent_id}", "editPath", editPath("quote-helper"))],
-  "src/pages/Prompts.tsx giveBackPath(asked.row.agent_id)": [
+  "src/pages/prompts/PromptsPage.tsx editPath(asked.row.agent_id)": [at("POST /api/v1/govern/prompts/{agent_id}", "editPath", editPath("quote-helper"))],
+  "src/pages/prompts/PromptsPage.tsx giveBackPath(asked.row.agent_id)": [
     at("POST /api/v1/govern/prompts/{agent_id}/give-back", "giveBackPath", giveBackPath("quote-helper")),
   ],
   "src/pages/Retention.tsx path": [
@@ -1098,12 +1206,12 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
     at("POST /api/v1/govern/legal-holds/lift", "LIFT_API_PATH", LIFT_API_PATH),
     at("POST /api/v1/govern/erasures", "ERASURES_API_PATH", ERASURES_API_PATH),
   ],
-  "src/pages/Sessions.tsx END_SESSION_API_PATH": [at("POST /api/v1/govern/sessions/end", "END_SESSION_API_PATH", END_SESSION_API_PATH)],
-  "src/pages/Sessions.tsx END_SESSIONS_API_PATH": [
+  "src/pages/sessions/SessionsPage.tsx END_SESSION_API_PATH": [at("POST /api/v1/govern/sessions/end", "END_SESSION_API_PATH", END_SESSION_API_PATH)],
+  "src/pages/sessions/SessionsPage.tsx END_SESSIONS_API_PATH": [
     at("POST /api/v1/govern/sessions/end-several", "END_SESSIONS_API_PATH", END_SESSIONS_API_PATH),
   ],
-  "src/pages/SignInLinks.tsx LINK_API_PATH": [at("POST /api/v1/sign-ins", "LINK_API_PATH", LINK_API_PATH)],
-  "src/pages/SignInLinks.tsx UNLINK_API_PATH": [at("POST /api/v1/govern/sign-ins/unlink", "UNLINK_API_PATH", UNLINK_API_PATH)],
+  "src/pages/sessions/SignInLinksPage.tsx LINK_API_PATH": [at("POST /api/v1/sign-ins", "LINK_API_PATH", LINK_API_PATH)],
+  "src/pages/sessions/SignInLinksPage.tsx UNLINK_API_PATH": [at("POST /api/v1/govern/sign-ins/unlink", "UNLINK_API_PATH", UNLINK_API_PATH)],
   "src/pages/Webhooks.tsx REGISTER_API_PATH": [at("POST /api/v1/webhooks/subscribers", "REGISTER_API_PATH", REGISTER_API_PATH)],
   "src/pages/Webhooks.tsx secretApiPath(asked.id)": [
     at("POST /api/v1/webhooks/subscribers/{subscriber_id}/secret", "secretApiPath", secretApiPath("billing_bridge")),
@@ -1151,6 +1259,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/connectors/SourceActs.tsx keyApiPath(name)": [
     at("POST /api/v1/connectors/{connector}/key", "keyApiPath", keyApiPath("xero")),
   ],
+  "src/pages/connectors/TestConnection.tsx probeApiPath(name)": [
+    at("POST /api/v1/connectors/{connector}/probe", "probeApiPath", probeApiPath("xero")),
+  ],
   "src/components/ConnectSource.tsx CONNECTORS_API_PATH": [at("POST /api/v1/connectors", "CONNECTORS_API_PATH", CONNECTORS_API_PATH)],
   "src/components/ConnectLark.tsx LARK_TEST_API_PATH": [
     at("POST /api/v1/connectors/lark-app/test", "LARK_TEST_API_PATH", LARK_TEST_API_PATH),
@@ -1158,6 +1269,13 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/components/ConnectLark.tsx LARK_API_PATH": [at("POST /api/v1/connectors/lark-app", "LARK_API_PATH", LARK_API_PATH)],
   "src/components/AutomationGallery.tsx automationInstallApiPath(agentId)": [
     at("POST /api/v1/agents/{agent_id}/automations", "automationInstallApiPath", automationInstallApiPath("quote-helper")),
+  ],
+  "src/pages/automations/AutomationActs.tsx changeApiPath(detail.row.id, act)": [
+    at("POST /api/v1/automations/{automation_id}/pause", "changeApiPath", changeApiPath("auto_one", "pause")),
+    at("POST /api/v1/automations/{automation_id}/resume", "changeApiPath", changeApiPath("auto_one", "resume")),
+    at("POST /api/v1/automations/{automation_id}/reschedule", "changeApiPath", changeApiPath("auto_one", "reschedule")),
+    at("POST /api/v1/automations/{automation_id}/remove", "changeApiPath", changeApiPath("auto_one", "remove")),
+    at("POST /api/v1/automations/{automation_id}/adopt", "changeApiPath", changeApiPath("auto_one", "adopt")),
   ],
   "src/components/AgentAutomations.tsx path": [
     at(
@@ -1178,25 +1296,30 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
     at("POST /api/v1/agents/{agent_id}/transfer", "agentMoveApiPath", agentMoveApiPath("quote-helper", "transfer")),
     at("POST /api/v1/agents/{agent_id}/duplicate", "agentMoveApiPath", agentMoveApiPath("quote-helper", "duplicate")),
   ],
-  "src/pages/RoleControls.tsx path": [
+  "src/pages/roles/RoleDrawers.tsx APPOINTMENT_API_PATH": [
     at("POST /api/v1/govern/roles/appointment", "APPOINTMENT_API_PATH", APPOINTMENT_API_PATH),
-    at("POST /api/v1/govern/roles/deputy", "DEPUTY_API_PATH", DEPUTY_API_PATH),
   ],
-  "src/pages/GroupRules.tsx GROUP_RULES_API_PATH": [
+  "src/pages/roles/RoleDrawers.tsx DEPUTY_API_PATH": [at("POST /api/v1/govern/roles/deputy", "DEPUTY_API_PATH", DEPUTY_API_PATH)],
+  "src/pages/roles/RoleDrawers.tsx GROUP_RULES_API_PATH": [
     at("POST /api/v1/govern/roles/group-rules", "GROUP_RULES_API_PATH", GROUP_RULES_API_PATH),
   ],
-  "src/pages/GroupRules.tsx GROUP_RULE_RETIREMENT_API_PATH": [
+  "src/pages/roles/RoleDrawers.tsx GROUP_RULE_RETIREMENT_API_PATH": [
     at(
       "POST /api/v1/govern/roles/group-rules/retirement",
       "GROUP_RULE_RETIREMENT_API_PATH",
       GROUP_RULE_RETIREMENT_API_PATH,
     ),
   ],
-  "src/pages/RoleControls.tsx ROLE_REMOVAL_API_PATH": [
+  "src/pages/roles/RoleDrawers.tsx ROLE_REMOVAL_API_PATH": [
     at("POST /api/v1/govern/roles/removal", "ROLE_REMOVAL_API_PATH", ROLE_REMOVAL_API_PATH),
   ],
-  "src/pages/People.tsx PACK_ASSIGNMENT_API_PATH": [
-    at("POST /api/v1/govern/packs/assignment", "PACK_ASSIGNMENT_API_PATH", PACK_ASSIGNMENT_API_PATH),
+  "src/pages/roles/PacksPage.tsx PACKS_API_PATH": [at("POST /api/v1/govern/packs", "PACKS_API_PATH", PACKS_API_PATH)],
+  "src/pages/roles/PacksPage.tsx PACK_VERSION_API_PATH": [
+    at("POST /api/v1/govern/packs/version", "PACK_VERSION_API_PATH", PACK_VERSION_API_PATH),
+  ],
+  "src/pages/roles/PacksPage.tsx PACK_COPY_API_PATH": [at("POST /api/v1/govern/packs/copy", "PACK_COPY_API_PATH", PACK_COPY_API_PATH)],
+  "src/pages/roles/PacksPage.tsx PACK_RETIREMENT_API_PATH": [
+    at("POST /api/v1/govern/packs/retirement", "PACK_RETIREMENT_API_PATH", PACK_RETIREMENT_API_PATH),
   ],
   "src/pages/Audit.tsx VERIFICATION_API_PATH": [
     at("POST /api/v1/audit/verification", "VERIFICATION_API_PATH", VERIFICATION_API_PATH),
@@ -1234,16 +1357,16 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/Referrals.tsx handledApiPath(chosen.referral_id)": [
     at("POST /api/v1/me/referrals/{referral_id}/handled", "handledApiPath", handledApiPath(COMPLIANCE_CASE)),
   ],
-  "src/pages/ServiceAccounts.tsx SERVICE_ACCOUNTS_API_PATH": [
+  "src/pages/service-accounts/AccountActs.tsx SERVICE_ACCOUNTS_API_PATH": [
     at("POST /api/v1/govern/service-accounts", "SERVICE_ACCOUNTS_API_PATH", SERVICE_ACCOUNTS_API_PATH),
   ],
-  "src/pages/ServiceAccounts.tsx ISSUE_KEY_API_PATH": [
+  "src/pages/service-accounts/AccountActs.tsx ISSUE_KEY_API_PATH": [
     at("POST /api/v1/govern/service-accounts/keys", "ISSUE_KEY_API_PATH", ISSUE_KEY_API_PATH),
   ],
-  "src/pages/ServiceAccounts.tsx REVOKE_KEY_API_PATH": [
+  "src/pages/service-accounts/AccountActs.tsx REVOKE_KEY_API_PATH": [
     at("POST /api/v1/govern/service-accounts/keys/revoke", "REVOKE_KEY_API_PATH", REVOKE_KEY_API_PATH),
   ],
-  "src/pages/ServiceAccounts.tsx RETIRE_ACCOUNT_API_PATH": [
+  "src/pages/service-accounts/AccountActs.tsx RETIRE_ACCOUNT_API_PATH": [
     at("POST /api/v1/govern/service-accounts/retire", "RETIRE_ACCOUNT_API_PATH", RETIRE_ACCOUNT_API_PATH),
   ],
 };
@@ -1269,6 +1392,18 @@ function audited(name: string): Proof {
   return t("test_console_control_audit", name, true);
 }
 
+/** `0140`'s registry trigger against PostgreSQL: registered, changed and retired, never the terms. */
+const REGISTRY_LEDGERED = t(
+  "test_models_routing_module",
+  "test_a_registry_row_registered_changed_and_retired_leaves_three_entries_no_terms",
+  true,
+);
+/** A step moved and retired over HTTP against PostgreSQL: the rows, the roles, the records, the ledger. */
+const STEP_MOVED_AND_RETIRED = t(
+  "test_models_routing_module",
+  "test_a_move_and_a_retirement_leave_the_rows_roles_records_and_entries_they_claim",
+  true,
+);
 const SETTINGS_PRESSED = audited("test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick");
 /** Each lifecycle move pressed over HTTP against PostgreSQL: the row, and the ledger entry naming who. */
 const LIFECYCLE_PRESSED = t(
@@ -1280,6 +1415,10 @@ const TOOLS_PRESSED = t("test_tool_routes", "test_switching_through_the_routes_r
 const BRANDING_SAVED = t(
   "test_settings_routes",
   "test_saving_a_company_name_writes_its_row_and_the_console_header_draws_it_next",
+);
+const SETTING_RETURNED = t(
+  "test_settings_routes",
+  "test_returning_to_default_retires_the_saved_row_as_the_person_and_the_default_reads_next",
 );
 const INSTRUCTIONS_PRESSED = audited("test_an_instruction_edit_and_its_give_back_reach_the_install_the_ledger_and_the_prompt");
 const GROUP_RULES_PRESSED = t(
@@ -1369,6 +1508,21 @@ const THE_STRUCTURE_CHANGES_AS_ASKED = t(
   "test_organisation_structure",
   "test_an_administrator_creates_renames_and_retires_departments_teams_and_scopes",
 );
+const PERSON_ADDED_BY_HAND = t(
+  "test_directory_routes",
+  "test_a_person_added_by_hand_is_recorded_and_then_listed_with_what_they_hold",
+  true,
+);
+const PACK_WRITE_REACHES_EVERYTHING = t(
+  "test_govern_pack_routes",
+  "test_each_pack_write_reaches_its_row_one_ledger_entry_and_every_holder",
+  true,
+);
+const PACK_WRITTEN: Proofs = {
+  row: PACK_WRITE_REACHES_EVERYTHING,
+  audit: PACK_WRITE_REACHES_EVERYTHING,
+  behaviour: PACK_WRITE_REACHES_EVERYTHING,
+};
 function structure(behaviour: Proof): Proofs {
   return { row: STRUCTURE_REACHES_THE_ROWS_AND_THE_LEDGER, audit: STRUCTURE_REACHES_THE_ROWS_AND_THE_LEDGER, behaviour };
 }
@@ -1428,7 +1582,34 @@ const A_BINDING_CHANGE_IS_AUDITED = t(
   true,
 );
 
+const A_REVOCATION_AND_A_RETIREMENT_ARE_RECORDED = t(
+  "test_service_account_audit",
+  "test_a_revoked_key_and_a_retired_account_each_leave_one_entry_naming_the_owner",
+  true,
+);
+
 /** Every write route a screen sends, followed to the system. */
+const AUTOMATION_PAUSED = t(
+  "test_automation_change_store",
+  "test_a_paused_automation_does_not_run_on_the_next_tick_and_the_ledger_says_who",
+  true,
+);
+const AUTOMATION_ADOPTED_AND_RESUMED = t(
+  "test_automation_change_store",
+  "test_an_ownerless_automation_stops_and_waits_and_once_adopted_runs_as_the_adopter",
+  true,
+);
+const AUTOMATION_RESCHEDULED = t(
+  "test_automation_change_store",
+  "test_a_schedule_change_moves_the_next_run_and_the_runner_keeps_to_the_new_cadence",
+  true,
+);
+const AUTOMATION_REMOVED = t(
+  "test_automation_change_store",
+  "test_a_removed_automation_never_runs_again_and_cannot_be_started_from_its_agent",
+  true,
+);
+
 export const PROOFS: Readonly<Record<string, Proofs>> = {
   "POST /api/v1/govern/service-accounts": {
     row: A_KEY_ACTS_AT_ITS_OWNERS_REACH,
@@ -1442,16 +1623,12 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
   },
   "POST /api/v1/govern/service-accounts/keys/revoke": {
     row: A_RETIRED_KEY_IS_NOT_FOUND,
-    audit: {
-      none: "Revoking a key sets its deleted_at and records no credential write, so brain.identity.service_account_store.revoke_key leaves no ledger entry naming who revoked it.",
-    },
+    audit: A_REVOCATION_AND_A_RETIREMENT_ARE_RECORDED,
     behaviour: A_RETIRED_KEY_IS_NOT_FOUND,
   },
   "POST /api/v1/govern/service-accounts/retire": {
     row: A_RETIRED_KEY_IS_NOT_FOUND,
-    audit: {
-      none: "Retiring an account sets deleted_at on it and its keys and records no credential write, so brain.identity.service_account_store.retire leaves no ledger entry naming who retired it.",
-    },
+    audit: A_REVOCATION_AND_A_RETIREMENT_ARE_RECORDED,
     behaviour: A_RETIRED_KEY_IS_NOT_FOUND,
   },
   "PUT /api/v1/channels/{name}": {
@@ -1530,6 +1707,20 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
   "POST /api/v1/govern/departments/team/retirement": structure(THE_STRUCTURE_CHANGES_AS_ASKED),
   "POST /api/v1/govern/departments/scopes": structure(A_NEW_SCOPE_IS_GRANTABLE),
   "POST /api/v1/govern/departments/scopes/retirement": structure(THE_STRUCTURE_CHANGES_AS_ASKED),
+  "POST /api/v1/govern/departments/scopes/rename": {
+    row: t("test_organisation_structure", "test_a_scope_renamed_writes_its_label_and_one_ledger_entry_saying_renamed", true),
+    audit: t("test_organisation_structure", "test_a_scope_renamed_writes_its_label_and_one_ledger_entry_saying_renamed", true),
+    behaviour: t("test_organisation_structure", "test_a_scope_is_renamed_by_its_label_by_whoever_could_have_drawn_it"),
+  },
+  "POST /api/v1/govern/directory": {
+    row: PERSON_ADDED_BY_HAND,
+    audit: PERSON_ADDED_BY_HAND,
+    behaviour: PERSON_ADDED_BY_HAND,
+  },
+  "POST /api/v1/govern/packs": PACK_WRITTEN,
+  "POST /api/v1/govern/packs/version": PACK_WRITTEN,
+  "POST /api/v1/govern/packs/copy": PACK_WRITTEN,
+  "POST /api/v1/govern/packs/retirement": PACK_WRITTEN,
   "POST /api/v1/govern/people/disable": {
     row: DISABLE_REACHES_THE_ROW_THE_LEDGER_AND_THE_TOKEN,
     audit: DISABLE_REACHES_THE_ROW_THE_LEDGER_AND_THE_TOKEN,
@@ -1579,6 +1770,13 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: CONNECTION_REACHES_THE_ROW_AND_THE_LEDGER,
     audit: CONNECTION_REACHES_THE_ROW_AND_THE_LEDGER,
     behaviour: t("test_connector_routes", "test_a_replaced_key_is_a_credential_write_and_changes_no_connection"),
+  },
+  // A press is a request row the worker answers with an attempt row: both are asserted in the one
+  // database test, and the ledger entry the press appends in the one built through every migration.
+  "POST /api/v1/connectors/{connector}/probe": {
+    row: t("test_connector_probe_run", "test_a_test_asked_for_is_made_once_with_the_workers_key_and_keeps_nothing", true),
+    audit: t("test_connector_probe_run", "test_a_press_is_on_the_ledger_and_a_test_survives_the_downgrade", true),
+    behaviour: t("test_connector_probe_run", "test_a_declined_key_is_recorded_on_the_sources_health_and_the_schedule_is_unmoved", true),
   },
   "POST /api/v1/govern/access-review/decision": {
     row: t("test_review_store", "test_keeping_and_removing_reach_the_rows_the_ledger_and_what_the_holder_is_resolved_to", true),
@@ -1724,6 +1922,16 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     },
     behaviour: BRANDING_SAVED,
   },
+  "POST /api/v1/agent-templates/{template_id}/versions/{version}/install": {
+    row: t("test_agent_lifecycle_routes", "test_an_installed_version_starts_disabled_and_at_shadow_on_every_target"),
+    audit: t("test_agent_lifecycle_store", "test_each_move_pressed_reaches_its_row_and_one_ledger_entry_naming_the_person", true),
+    behaviour: t("test_agent_lifecycle_routes", "test_an_installed_version_starts_disabled_and_at_shadow_on_every_target"),
+  },
+  "POST /api/v1/install/settings/{name}/default": {
+    row: SETTING_RETURNED,
+    audit: t("test_install_settings", "test_a_value_returned_to_default_is_retired_as_the_app_role_and_the_ledger_names_who", true),
+    behaviour: SETTING_RETURNED,
+  },
   "POST /api/v1/tools/{name}/switch": {
     row: t("test_tool_routes", "test_a_super_administrator_switches_a_tool_off_for_the_install"),
     audit: TOOLS_PRESSED,
@@ -1857,6 +2065,16 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     },
     behaviour: t("test_matrix_gate", "test_a_gate_with_no_golden_questions_holds_the_change_and_says_to_record_some"),
   },
+  "POST /api/v1/routing/rungs/{rung_id}/move": {
+    row: STEP_MOVED_AND_RETIRED,
+    audit: STEP_MOVED_AND_RETIRED,
+    behaviour: STEP_MOVED_AND_RETIRED,
+  },
+  "POST /api/v1/routing/rungs/{rung_id}/retire": {
+    row: STEP_MOVED_AND_RETIRED,
+    audit: STEP_MOVED_AND_RETIRED,
+    behaviour: STEP_MOVED_AND_RETIRED,
+  },
   "POST /api/v1/routing/rungs": {
     row: t("test_routing_routes", "test_a_rung_is_added_at_the_end_of_its_tier_only_through_the_gate"),
     audit: audited("test_a_rung_saved_from_the_screen_leaves_its_row_and_an_entry_naming_what_moved"),
@@ -1864,10 +2082,7 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
   },
   "PUT /api/v1/models/providers/{provider}/terms": {
     row: t("test_provider_registry_routes", "test_terms_recorded_for_a_built_in_provider_write_its_first_registry_row"),
-    audit: {
-      none: "A provider's terms are logged and not written to the audit ledger in this release.",
-      leaf: "M5.6.4",
-    },
+    audit: REGISTRY_LEDGERED,
     behaviour: t(
       "test_model_calls",
       "test_a_constrained_call_skips_an_undocumented_rung_for_the_documented_one_behind_it",
@@ -1875,10 +2090,7 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
   },
   "POST /api/v1/models/providers/{provider}/retire": {
     row: t("test_provider_registry_routes", "test_an_added_provider_is_retired_and_a_built_in_one_cannot_be"),
-    audit: {
-      none: "Retiring an added provider is logged and not written to the audit ledger in this release.",
-      leaf: "M5.6.4",
-    },
+    audit: REGISTRY_LEDGERED,
     behaviour: t("test_model_assembly", "test_a_provider_with_no_driver_is_told_which_of_the_two_things_is_missing"),
   },
   "POST /api/v1/models/providers": {
@@ -2149,6 +2361,31 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: t("test_automation_gallery_routes", "test_one_confirmed_request_writes_the_automation_its_registry_entry_and_its_audit_context"),
     audit: t("test_agent_automation_store", "test_an_install_writes_one_row_one_ledger_entry_and_a_second_install_writes_neither", true),
     behaviour: t("test_automation_gallery_routes", "test_one_confirmed_request_writes_the_automation_its_registry_entry_and_its_audit_context"),
+  },
+  "POST /api/v1/automations/{automation_id}/pause": {
+    row: AUTOMATION_PAUSED,
+    audit: AUTOMATION_PAUSED,
+    behaviour: AUTOMATION_PAUSED,
+  },
+  "POST /api/v1/automations/{automation_id}/resume": {
+    row: AUTOMATION_ADOPTED_AND_RESUMED,
+    audit: AUTOMATION_ADOPTED_AND_RESUMED,
+    behaviour: AUTOMATION_ADOPTED_AND_RESUMED,
+  },
+  "POST /api/v1/automations/{automation_id}/reschedule": {
+    row: AUTOMATION_RESCHEDULED,
+    audit: AUTOMATION_RESCHEDULED,
+    behaviour: AUTOMATION_RESCHEDULED,
+  },
+  "POST /api/v1/automations/{automation_id}/remove": {
+    row: AUTOMATION_REMOVED,
+    audit: AUTOMATION_REMOVED,
+    behaviour: AUTOMATION_REMOVED,
+  },
+  "POST /api/v1/automations/{automation_id}/adopt": {
+    row: AUTOMATION_ADOPTED_AND_RESUMED,
+    audit: AUTOMATION_ADOPTED_AND_RESUMED,
+    behaviour: t("test_automations_routes", "test_an_ownerless_automation_is_adopted_in_the_adopters_name_and_stays_paused"),
   },
   "POST /api/v1/agents/{agent_id}/automations/{automation_id}/start": {
     row: t("test_automation_run_store", "test_the_console_starts_and_stops_as_the_application_role_and_the_ledger_says_who", true),

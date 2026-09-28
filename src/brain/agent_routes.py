@@ -180,7 +180,11 @@ over the entries the audience decided. Every agent is read, as before; the page 
 survived, so a cursor says there are more agents this reader may see and never that there are
 agents they may not.
 
-Task ids: M39.1.2.5, M27.8.6, M27.10.2
+**One template has a page of its own, behind the gallery's read and read by the gallery's rule**
+(`template_detail`): the document an id names is the one its card shows, and an id the gallery
+would not show is the gallery's own refusal, so the page is no way to test which ids exist.
+
+Task ids: M39.1.2.5, M27.8.6, M27.10.2, M27.11.7
 """
 
 from __future__ import annotations
@@ -782,6 +786,37 @@ class TemplateEntry(BaseModel):
     origin: str
 
 
+class TemplateRungView(BaseModel):
+    """One starting rung of a template's leash: what it covers, and how far it may go alone."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    target: str
+    rung: str
+
+
+class TemplateDetailView(BaseModel):
+    """One template's page: its card, and what an install of it would ask for.
+
+    Every field is read off the manifest the gallery shows for this id, so the page and the card
+    cannot describe two different documents. What it asks for is a request and never a grant:
+    installing widens nobody, and a run is still bounded by whoever called it.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    entry: TemplateEntry
+    persona: str
+    tier: str
+    skills: list[str]
+    connectors: list[str]
+    tools: list[str]
+    capabilities: list[str]
+    leash: list[TemplateRungView]
+    max_side_effect: str
+    golden_cases: int
+
+
 class TemplateGallery(Page[TemplateEntry]):
     """One page of the templates this reader may be offered, by name unless asked otherwise.
 
@@ -1108,6 +1143,43 @@ def gallery(
         items=list(page.items),
         next_cursor=page.next_cursor,
         truncated=page.next_cursor is not None,
+    )
+
+
+def template_detail(
+    template_id: str, published: Sequence[TemplateManifest]
+) -> TemplateDetailView | None:
+    """The manifest the gallery shows for this id, as its page, or None when it shows none.
+
+    `gallery`'s rule for which document an id names, applied to one id: the highest published
+    version, and the built-in one only where nothing is published under its id.
+    """
+    chosen: TemplateManifest | None = None
+    origin = Origin.PUBLISHED
+    for one in published:
+        if one.identity.template_id != template_id:
+            continue
+        if chosen is None or one.identity.version > chosen.identity.version:
+            chosen = one
+    if chosen is None:
+        origin = Origin.BUILT_IN
+        chosen = next((one for one in CATALOGUE if one.identity.template_id == template_id), None)
+    if chosen is None:
+        return None
+    return TemplateDetailView(
+        entry=template_entry(chosen, origin),
+        persona=chosen.persona,
+        tier=chosen.tier.value,
+        skills=[one.name for one in chosen.skills],
+        connectors=list(chosen.connectors),
+        tools=list(chosen.authority.allowed_tools),
+        capabilities=[one.value for one in chosen.authority.capabilities],
+        leash=[
+            TemplateRungView(target=one.target, rung=one.rung.name.lower())
+            for one in chosen.guardrails.leash
+        ],
+        max_side_effect=chosen.guardrails.max_side_effect.value,
+        golden_cases=len(chosen.golden_set),
     )
 
 
@@ -1722,3 +1794,32 @@ async def agent_templates(
                 error=type(exc).__name__,
             )
     return gallery(published, plan)
+
+
+@router.get(
+    "/agent-templates/{template_id}", response_model=TemplateDetailView, responses=COMMON_RESPONSES
+)
+async def agent_template(request: Request, template_id: str, asked: Asked) -> TemplateDetailView:
+    """One template's page, behind the gallery's own read and in its order: the screen's
+    question first, then the database. A template the gallery would not show and a reader the
+    gallery refuses get the one refusal, so the page cannot be used to test which ids exist."""
+    if not permitted(screen(TEMPLATE_SCREEN).read, asked.reach, asked.now):
+        log.info("template page not answerable", principal=asked.caller.principal.id)
+        raise _no_templates_here()
+    factory = _require_session_factory(request)
+    async with factory() as session:
+        rows = (await session.execute(published_templates())).scalars().all()
+    published: list[TemplateManifest] = []
+    for row in rows:
+        try:
+            published.append(manifest_of(row.document))
+        except (KeyError, ValueError) as exc:
+            log.warning(
+                "published template does not construct",
+                template=row.template_id,
+                error=type(exc).__name__,
+            )
+    found = template_detail(template_id, published)
+    if found is None:
+        raise _no_templates_here()
+    return found

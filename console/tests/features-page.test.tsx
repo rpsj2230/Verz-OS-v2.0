@@ -5,24 +5,28 @@
  * Mounted on its own at its address, because the route table is a shared file this change does not
  * edit. The shapes are read from `brain.feature_routes` itself, so a renamed field fails here.
  *
- * Task ids: none
+ * Task ids: M27.15.51, M27.16.1
  */
 
-import { fireEvent, waitFor } from "@testing-library/react";
-import { describe, expect, test } from "vitest";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { beforeAll, describe, expect, test } from "vitest";
 import {
-  COMPONENTS_ARE_CHOSEN_BY_THE_PROFILE,
   FEATURES_API_PATH,
   FEATURES_PATH,
   KEEP_IT,
   NEVER_CHANGED,
-  PLUGINS_HAVE_NO_LOADER,
+  NOT_SWITCHED_HERE,
   SWITCH_ON,
   UNREADABLE_ANSWER,
 } from "../src/pages/featuresQuery";
 import { SOMETHING_DID_NOT_WORK } from "../src/pages/Overview";
 import { button, json, mountPage, settled, type Answer } from "./support/pageHarness";
 import { backendModelFields } from "./support/python";
+import { installRadixStubs } from "./support/radix";
+
+beforeAll(() => {
+  installRadixStubs();
+});
 
 const LIST = `GET /api/v1${FEATURES_API_PATH}`;
 const SWITCH = `POST /api/v1${FEATURES_API_PATH}/schedule_control`;
@@ -64,18 +68,23 @@ async function featuresPage(answers: Record<string, Answer>) {
 }
 
 describe("what the Features screen draws", () => {
-  test("a feature with its sentences, who reads it, and that nobody has switched it", async () => {
+  test("a feature with its sentences and that nobody has switched it, with its readers in Advanced", async () => {
     // What breaks if this is deleted: a switch drawn without saying what it does or what reads it,
     // which is a control a person turns on trust.
     const { container } = await featuresPage({ [LIST]: () => json(page()) });
 
-    const text = container.textContent ?? "";
+    const copy = container.cloneNode(true) as HTMLElement;
+    copy.querySelectorAll('[data-slot="advanced"]').forEach((one) => {
+      one.remove();
+    });
+    const text = copy.textContent ?? "";
     expect(text).toContain("WHAT-SENTENCE");
     expect(text).toContain("WHILE-OFF-SENTENCE");
-    expect(text).toContain("brain.jobs_routes:pause_job");
     expect(text).toContain(NEVER_CHANGED);
-    expect(text).toContain(COMPONENTS_ARE_CHOSEN_BY_THE_PROFILE);
-    expect(text).toContain(PLUGINS_HAVE_NO_LOADER);
+    expect(text).toContain(NOT_SWITCHED_HERE);
+    // The reader is a module path, which is for whoever builds the product: Advanced only.
+    expect(text).not.toContain("brain.jobs_routes:pause_job");
+    expect(container.querySelector('[data-slot="advanced"]')?.textContent).toContain("brain.jobs_routes:pause_job");
   });
 
   test("the facts about what cannot be switched leave when the API stops sending them", async () => {
@@ -92,8 +101,7 @@ describe("what the Features screen draws", () => {
         ),
     });
 
-    expect(container.textContent).not.toContain(PLUGINS_HAVE_NO_LOADER);
-    expect(container.textContent).not.toContain(COMPONENTS_ARE_CHOSEN_BY_THE_PROFILE);
+    expect(container.textContent).not.toContain(NOT_SWITCHED_HERE);
   });
 
   test("a refusal is the API's sentence with its reference, and an unreadable answer says so", async () => {
@@ -124,13 +132,18 @@ describe("switching a feature", () => {
     });
 
     fireEvent.click(button(container, SWITCH_ON));
-    expect(container.textContent).toContain("WHAT-SENTENCE");
-    fireEvent.click(button(container, KEEP_IT));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog.textContent).toContain("WHAT-SENTENCE");
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: KEEP_IT }));
+    });
     expect(sent.filter((one) => one.method === "POST")).toHaveLength(0);
 
     fireEvent.click(button(container, SWITCH_ON));
-    const confirm = [...container.querySelectorAll(".confirm button")].find((one) => one.textContent === SWITCH_ON);
-    fireEvent.click(confirm as HTMLButtonElement);
+    const again = await screen.findByRole("alertdialog");
+    await act(async () => {
+      fireEvent.click(within(again).getByRole("button", { name: SWITCH_ON }));
+    });
 
     await waitFor(() => {
       expect(container.textContent).toContain("is now switched on");

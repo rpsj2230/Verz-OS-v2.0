@@ -261,6 +261,9 @@ def test_the_documented_error_shape_is_the_one_the_application_returns() -> None
     that lost a race with a run or another person, with a `NotChangedView` saying which, for the
     gallery's reason.
 
+    **The Automations module's five changes are the eighth, for their 409s**, with the same
+    `NotChangedView` and for the same reason: `brain.automations_routes`.
+
     **Adding a model provider is the seventh, for its 409 and 503.**
     `brain.provider_registry_routes` writes the provider's key to the vault before its row, and
     answers a key it could not keep with the credential write's own `CredentialNotKeptView`, for
@@ -318,6 +321,12 @@ def test_the_documented_error_shape_is_the_one_the_application_returns() -> None
                 DUPLICATE_PATH,
                 INSTALL_PATH,
             )
+        },
+        **{
+            (f"{API_PREFIX}/automations/{{automation_id}}/{act}", "409"): (
+                "#/components/schemas/NotChangedView"
+            )
+            for act in ("pause", "resume", "reschedule", "remove", "adopt")
         },
     }
 

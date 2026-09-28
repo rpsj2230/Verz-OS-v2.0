@@ -109,10 +109,12 @@ SUBJECT_PATTERN = f"^({'|'.join(sorted(SUBJECT_KINDS))}):{_bare(IDENTIFIER)}$"
 
 
 # --------------------------------------------------- what a trigger-written entry carries
-#: The kind a grant row and a pack assignment are both recorded under. `SUBJECT_KINDS` has
-#: no `pack` member and this file deliberately does not add one: the vocabulary is closed
-#: because the client-visible audit view filters on it, and widening it to make one trigger
-#: read better is how a closed set stops being closed.
+#: The kind a grant row and a pack assignment are both recorded under. A pack *assignment* stays
+#: here and must: it is somebody gaining capabilities, and widening the vocabulary to make one
+#: trigger read better is how a closed set stops being closed. `SUBJECT_KINDS` has had a `pack`
+#: member since `0141`, and it is a different event rather than a nicer name for this one: a pack
+#: created, versioned or retired changes what every holder holds at once and names nobody, so it
+#: is filed under the pack, by a deliberate edit in two places (M27.15.24).
 GRANT_SUBJECT_KIND = "grant"
 
 #: The action a pack assignment is recorded under, and the reason.

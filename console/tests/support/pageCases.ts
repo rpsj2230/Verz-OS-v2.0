@@ -75,6 +75,70 @@ const CONNECTOR_ROW = {
   may_manage: true,
 };
 
+/** One automation on the Automations list, every drawn value the unbroken token. */
+const AUTOMATION_ROW = {
+  automation_id: "auto_one",
+  name: `I ${UNBROKEN}`,
+  agent_id: "quote_helper",
+  agent_name: UNBROKEN,
+  owner_name: UNBROKEN,
+  schedule: UNBROKEN,
+  state: "running",
+  next_run_at: "2019-03-11T07:00:00Z",
+  last_run_at: "2019-03-04T07:00:00Z",
+  last_outcome: "succeeded",
+};
+
+/** One automation's page with every change offered, so every control is drawn at a phone's width. */
+const AUTOMATION_DETAIL = {
+  automation: AUTOMATION_ROW,
+  guards: UNBROKEN,
+  stopped_because: UNBROKEN,
+  cannot_run: UNBROKEN,
+  cadence: { every: "week", hour_utc: 7, weekday: 0 },
+  installed_by_name: UNBROKEN,
+  installed_at: "2019-02-01T09:00:00Z",
+  runs: [
+    {
+      finished_at: "2019-03-04T07:00:00Z",
+      outcome: "succeeded",
+      reason: UNBROKEN,
+      ran_as_name: UNBROKEN,
+      reach: "same",
+      result: [UNBROKEN],
+    },
+  ],
+  basis: "everyone",
+  history: [{ at: "2019-02-01T09:00:00Z", what: UNBROKEN, by_name: UNBROKEN }],
+  confirmation: "c".repeat(64),
+  may_pause: true,
+  may_resume: true,
+  resume_becomes: "2019-03-11T07:00:00Z",
+  may_reschedule: true,
+  may_remove: true,
+  may_adopt: true,
+  schedule_accepts: UNBROKEN,
+  weekdays: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+  confirm_pause: UNBROKEN,
+  confirm_resume: UNBROKEN,
+  confirm_reschedule: UNBROKEN,
+  confirm_remove: UNBROKEN,
+  confirm_adopt: UNBROKEN,
+  task: UNBROKEN,
+  template_id: UNBROKEN,
+  owner_id: UNBROKEN,
+};
+
+/** One automation's figures as `brain.automations_routes.AutomationStatsView` sends them. */
+const AUTOMATION_STATS = {
+  automation_id: "auto_one",
+  basis: "everyone",
+  last_run_at: "2019-03-04T07:00:00Z",
+  next_run_at: "2019-03-11T07:00:00Z",
+  periods: ["7d", "30d"].map((range) => ({ range, runs: 12, succeeded: 10, failed: 1, refused: 1 })),
+  unrecorded: [{ figure: "run_cost", why: UNBROKEN }],
+};
+
 /** One source's page, with the widest values the page draws: settings, index fields and history. */
 const CONNECTOR_SOURCE = {
   source: CONNECTOR_ROW,
@@ -100,6 +164,18 @@ const CONNECTOR_SOURCE = {
   skills: [{ name: UNBROKEN, version: "1.0.0", state: "approved" }],
   confirm_edit: UNBROKEN,
   confirm_key: UNBROKEN,
+};
+
+/** A source's newest connection test, as `brain.connector_routes.ConnectorProbeView` sends it. */
+const CONNECTOR_PROBE = {
+  connector: "xero",
+  requested_at: "2019-03-04T10:00:00Z",
+  pending: false,
+  verdict: "failed",
+  tested_at: "2019-03-04T10:00:40Z",
+  health: "down",
+  said: UNBROKEN,
+  confirm: UNBROKEN,
 };
 
 /** Whether an address is one of `AWAITED_ROUTES`. */
@@ -282,13 +358,79 @@ const AGENT_AUTOMATIONS = {
   result_rule: UNBROKEN,
 };
 
-/** One page of people, whose subject key and capability are both unbreakable tokens. */
-const PEOPLE = {
-  items: [{ subject: `principal:${UNBROKEN}`, capabilities: [UNBROKEN] }],
+/** One person as the directory sends one, every value an unbreakable token. */
+const PERSON = {
+  principal_id: "p_1",
+  display_name: UNBROKEN,
+  department: UNBROKEN,
+  department_name: UNBROKEN,
+  employment: "contractor",
+  standing: "live",
+  second_factor: false,
+  last_signed_in_at: "2019-03-04T09:00:00Z",
+  packs: [UNBROKEN],
+};
+
+/** One page of the directory: every person, grant or none. */
+const DIRECTORY = {
+  items: [PERSON],
   next_cursor: null,
-  total: null,
   truncated: false,
   editable: true,
+  may_disable: true,
+  may_add: true,
+  adding: UNBROKEN,
+  disabling: UNBROKEN,
+  staleness: null,
+};
+
+/** One person's page: a direct grant and a pack, a team and a lead, and every sentence served. */
+const PERSON_DETAIL = {
+  person: PERSON,
+  placements: {
+    department: { slug: UNBROKEN, name: UNBROKEN },
+    teams: [{ department: UNBROKEN, slug: UNBROKEN, name: UNBROKEN }],
+    leads: [{ slug: UNBROKEN, name: UNBROKEN }],
+  },
+  held: [
+    {
+      kind: "grant",
+      row_id: "11111111-1111-4111-8111-000000000001",
+      capabilities: [UNBROKEN],
+      pack: null,
+      pack_label: null,
+      pack_version: null,
+      scope: { clauses: [{ field: "department", op: "eq", value: UNBROKEN }] },
+      scope_slug: UNBROKEN,
+      scope_label: UNBROKEN,
+      granted_by: "p_2",
+      granted_by_name: UNBROKEN,
+      reason: UNBROKEN,
+      granted_at: "2019-03-04T09:00:00Z",
+      not_after: "2999-03-04T09:00:00Z",
+    },
+    {
+      kind: "pack",
+      row_id: "11111111-1111-4111-8111-000000000002",
+      capabilities: [UNBROKEN],
+      pack: UNBROKEN,
+      pack_label: UNBROKEN,
+      pack_version: 2,
+      scope: { clauses: [{ field: "department", op: "eq", value: UNBROKEN }] },
+      scope_slug: null,
+      scope_label: null,
+      granted_by: "p_2",
+      granted_by_name: null,
+      reason: UNBROKEN,
+      granted_at: "2019-03-04T09:00:00Z",
+      not_after: null,
+    },
+  ],
+  editable: true,
+  may_disable: true,
+  may_organise: true,
+  disabling: UNBROKEN,
+  from_a_pack: UNBROKEN,
   staleness: null,
 };
 
@@ -352,7 +494,7 @@ const STAFF_SOURCES = {
 
 /**
  * One guide for connecting a staff source, whose title, steps and help are unbreakable tokens.
- * The form is drawn, because the reader may connect, so the forms test opens it.
+ * The reader may connect; the form is in a drawer, which `tests/staff-sources-page.test.tsx` opens.
  */
 const STAFF_SOURCE_GUIDES = {
   guides: [
@@ -481,122 +623,136 @@ const LIVE_RUNS = {
 };
 
 /**
- * The models screen's five answers. Its own route's tiers, providers and unmeasured sentences
- * carry unbreakable tokens, the chain is `MATRIX`, and the spend line's department is one too,
- * because a department key sits in a `.fields__row` label rather than in a scrolling table. The
- * providers answer is editable and names a credential, so both controls and the vault's column are
- * drawn, and its unbroken provider, model and switcher all sit inside the two scrolling tables.
+ * The providers answer every page of the Models and routing module reads: one provider whose slug,
+ * description, model, deployment and vault slot are tokens with nowhere to break. It is editable,
+ * names a credential and carries a registry row, a last test and what it was sent, so every control,
+ * the key form and the terms form are drawn. The slug is the provider page's address too.
  */
+const PROVIDERS_PLAN = {
+  profile: "hosted",
+  providers: [
+    {
+      listed: 0,
+      provider: UNBROKEN,
+      description: UNBROKEN,
+      hosted: true,
+      switched_on: false,
+      switched_by: UNBROKEN,
+      switched_at: "2019-03-04T09:00:00Z",
+      key_held: true,
+      credential: { slot: UNBROKEN, description: UNBROKEN, held: true, set_at: "2019-03-04T09:00:00Z" },
+      registered: {
+        label: UNBROKEN,
+        kind: "openai_compatible",
+        base_url: `https://${UNBROKEN}.example`,
+        models: [UNBROKEN],
+        processing_region: UNBROKEN,
+        residency_class: "region_pinned",
+        storage_location: UNBROKEN,
+        retention_terms: UNBROKEN,
+        training_terms: UNBROKEN,
+        agreement_url: null,
+        lane_overrides: [{ lane: "answer", timeout_seconds: 10, attempts: null }],
+      },
+      disclosed: [{ category: "question", told: UNBROKEN, attempts: 3 }],
+      last_check: { answered: false, outcome: "timeout", model: UNBROKEN, at: "2019-03-04T09:00:00Z" },
+    },
+  ],
+  rungs: [
+    {
+      rung_id: RUNG_ID,
+      tier: "main",
+      position: 0,
+      role: "primary",
+      deployment_id: UNBROKEN,
+      provider: UNBROKEN,
+      model: UNBROKEN,
+      enabled: true,
+      answers: false,
+      skipped_because: "switched_off",
+      told: "This provider is switched off on this screen, so nothing is sent to it.",
+      state: "closed",
+      measured: false,
+      unhealthy_because: null,
+      live_seen: 0,
+      live_failed: 0,
+      probes_seen: 2,
+      probes_failed: 1,
+      last_probe_at: "2019-03-04T09:00:00Z",
+      last_live_at: null,
+    },
+  ],
+  exhausted_tiers: ["main"],
+  editable: true,
+  profile_editable: true,
+  vault: "ready",
+  vault_told: "The secrets vault answered.",
+  tiers: [
+    { tier: "small", context_window: 128000, escalation_headroom: 0.8, configured: false },
+    { tier: "main", context_window: 50000, escalation_headroom: 0.5, configured: true },
+  ],
+  residency: [
+    {
+      id: "44444444-4444-4444-8444-444444444444",
+      scope: { clauses: [{ field: "department", op: "eq", value: UNBROKEN }] },
+      allowed_regions: [UNBROKEN],
+      on_prem_only: false,
+      note: UNBROKEN,
+      created_by: UNBROKEN,
+      created_at: "2019-03-04T09:00:00Z",
+    },
+  ],
+  depth_alerts: [
+    {
+      raised_at: "2019-03-04T09:00:00Z",
+      level: "warning",
+      tier: "main",
+      depth: 2,
+      served_by: UNBROKEN,
+      reason: UNBROKEN,
+      trace_id: UNBROKEN,
+    },
+  ],
+  next_cursor: null,
+};
+
+/** The same answer with its list page: the list route answers every provider as `items` too. */
+export const PROVIDERS_ANSWER = { ...PROVIDERS_PLAN, items: PROVIDERS_PLAN.providers };
+
+/** One provider's figures: what it answered, with failures and cost named as not recorded. */
+const PROVIDER_STATS = {
+  provider: UNBROKEN,
+  days: 30,
+  answered: 12,
+  failures: null,
+  cost_minor: null,
+  unrecorded: [
+    { figure: "failures", why: UNBROKEN },
+    { figure: "model_cost", why: UNBROKEN },
+  ],
+};
+
+/** A provider's history: one entry under its own subject, switched off by a person named by id. */
+const PROVIDER_HISTORY = {
+  items: [
+    {
+      at: "2019-03-04T09:00:00Z",
+      action: "setting",
+      actor_id: UNBROKEN,
+      subject_kind: "setting",
+      subject_id: `provider.${UNBROKEN}`,
+      details: { change: "switched_off" },
+    },
+  ],
+  next_cursor: null,
+  order: "newest",
+  actions: ["setting"],
+  subject_kinds: ["setting"],
+  actors: [UNBROKEN],
+};
+
 const MODELS_AND_HEALTH = {
-  "/api/v1/operate/models": {
-    start: "2019-02-25T09:00:00Z",
-    end: "2019-03-04T09:00:00Z",
-    tiers: [{ tier: "main", handles: UNBROKEN }],
-    lanes: [
-      { lane: "fast", requests: 3 },
-      { lane: "answer", requests: 7 },
-    ],
-    providers: [{ provider: UNBROKEN, description: UNBROKEN }],
-    unmeasured: [{ measure: UNBROKEN, because: UNBROKEN }],
-    fallbacks_fired: 4,
-  },
-  "/api/v1/models/providers": {
-    profile: "hosted",
-    providers: [
-      {
-        provider: UNBROKEN,
-        description: UNBROKEN,
-        hosted: true,
-        switched_on: false,
-        switched_by: UNBROKEN,
-        switched_at: "2019-03-04T09:00:00Z",
-        key_held: true,
-        credential: { slot: UNBROKEN, description: UNBROKEN, held: true, set_at: "2019-03-04T09:00:00Z" },
-      },
-    ],
-    rungs: [
-      {
-        rung_id: RUNG_ID,
-        tier: "main",
-        position: 0,
-        role: "primary",
-        deployment_id: UNBROKEN,
-        provider: UNBROKEN,
-        model: UNBROKEN,
-        enabled: true,
-        answers: false,
-        skipped_because: "switched_off",
-        told: "This provider is switched off on this screen, so nothing is sent to it.",
-        state: "closed",
-        measured: false,
-        unhealthy_because: null,
-        live_seen: 0,
-        live_failed: 0,
-        probes_seen: 2,
-        probes_failed: 1,
-        last_probe_at: "2019-03-04T09:00:00Z",
-        last_live_at: null,
-      },
-    ],
-    exhausted_tiers: ["main"],
-    editable: true,
-    profile_editable: true,
-    vault: "ready",
-    vault_told: "The secrets vault answered.",
-    tiers: [
-      { tier: "small", context_window: 128000, escalation_headroom: 0.8, configured: false },
-      { tier: "main", context_window: 50000, escalation_headroom: 0.5, configured: true },
-    ],
-    residency: [
-      {
-        id: "44444444-4444-4444-8444-444444444444",
-        scope: { clauses: [{ field: "department", op: "eq", value: UNBROKEN }] },
-        allowed_regions: [UNBROKEN],
-        on_prem_only: false,
-        note: UNBROKEN,
-        created_by: UNBROKEN,
-        created_at: "2019-03-04T09:00:00Z",
-      },
-    ],
-    depth_alerts: [
-      {
-        raised_at: "2019-03-04T09:00:00Z",
-        level: "warning",
-        tier: "main",
-        depth: 2,
-        served_by: UNBROKEN,
-        reason: UNBROKEN,
-        trace_id: UNBROKEN,
-      },
-    ],
-  },
-  "/api/v1/report/service-levels": {
-    start: "2019-02-25T09:00:00Z",
-    end: "2019-03-04T09:00:00Z",
-    lanes: [
-      {
-        lane: "answer",
-        objective_p95_ms: 8000,
-        objective_success_rate: 0.99,
-        p95_ms: 4100,
-        success_rate: 1,
-        requests: 7,
-        met: true,
-        shortfalls: [],
-      },
-    ],
-  },
-  "/api/v1/report/spend": {
-    dimension: "department",
-    built: true,
-    lines: [{ key: UNBROKEN, cost_minor: 700 }],
-    machine_included: false,
-    total_minor: 700,
-    as_of: "2019-03-04T09:00:00Z",
-    freshness: "live",
-    currency: "XXX",
-    time_zone: "UTC",
-  },
+  "/api/v1/models/providers": PROVIDERS_ANSWER,
   // One model priced and one not, so both the figures and the unpriced sentence are drawn.
   "/api/v1/models/prices": {
     currency: "SGD",
@@ -621,6 +777,13 @@ const MODELS_AND_HEALTH = {
       },
     ],
   },
+};
+
+/** One provider's page: the providers answer narrowed by the route, its figures and its history. */
+const PROVIDER_PAGE = {
+  "/api/v1/models/providers": PROVIDERS_ANSWER,
+  [`/api/v1/models/providers/${UNBROKEN}/stats`]: PROVIDER_STATS,
+  "/api/v1/audit": PROVIDER_HISTORY,
 };
 
 const DEPARTMENTS = {
@@ -1192,6 +1355,12 @@ const CONNECTORS_SCREEN = {
   key_blank: "Paste the key the source issued for this connection.",
 };
 
+/** The same screen with its one connection named for the source a page case opens, so the page
+ * draws what it draws for a connected source: its figures, its test and what the test found. */
+const XERO_CONNECTED = {
+  ...CONNECTORS_SCREEN,
+  connectors: CONNECTORS_SCREEN.connectors.map((one) => ({ ...one, name: "xero" })),
+};
 
 /** One background job as `brain.jobs_routes.JobView` sends it, every drawn value unbroken. */
 const JOB_ROW = {
@@ -1418,6 +1587,7 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     drawsValues: true,
     answers: {
       "/api/v1/routing/rungs": MATRIX,
+      "/api/v1/models/providers": PROVIDERS_ANSWER,
       "/api/v1/routing/changes": ROUTING_CHANGES,
       "/api/v1/routing/golden-questions": GOLDEN_QUESTIONS,
       "/api/v1/routing/golden-questions/askers": GOLDEN_ASKERS,
@@ -1429,8 +1599,10 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     drawsValues: true,
     answers: {
       "/api/v1/routing/rungs": MATRIX,
+      "/api/v1/models/providers": PROVIDERS_ANSWER,
       "/api/v1/routing/changes": ROUTING_CHANGES,
       "/api/v1/routing/golden-questions": GOLDEN_QUESTIONS,
+      "/api/v1/routing/golden-questions/askers": GOLDEN_ASKERS,
     },
   },
   "/classification": { address: "/classification", signedIn: true, drawsValues: false, answers: {} },
@@ -1492,6 +1664,43 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         next_cursor: null,
         total: null,
         truncated: false,
+      },
+    },
+  },
+  // One template: its name is the heading, what it asks for are chips that wrap, its instructions
+  // wrap anywhere, and the version route says whether it can be installed here.
+  "/agent-templates/:templateId": {
+    address: "/agent-templates/pricing_desk",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/agent-templates/pricing_desk": {
+        entry: {
+          template_id: "pricing_desk",
+          version: 2,
+          display_name: UNBROKEN,
+          summary: UNBROKEN,
+          published_by: UNBROKEN,
+          origin: "published",
+        },
+        persona: UNBROKEN,
+        tier: "main",
+        skills: [UNBROKEN],
+        connectors: [UNBROKEN],
+        tools: [UNBROKEN],
+        capabilities: [`read:${UNBROKEN}`],
+        leash: [{ target: UNBROKEN, rung: "shadow" }],
+        max_side_effect: "write",
+        golden_cases: 3,
+      },
+      "/api/v1/agent-templates/pricing_desk/versions/2": {
+        template_id: "pricing_desk",
+        version: 2,
+        display_name: UNBROKEN,
+        summary: null,
+        content_digest: "d".repeat(64),
+        starts: UNBROKEN,
+        unavailable: null,
       },
     },
   },
@@ -1608,25 +1817,50 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
       },
     },
   },
-  // The four govern screens. Every one of them draws an identifier from the API with nowhere to
-  // break: a subject key, a capability, a scope slug and a clause are all one token, and a
-  // capability is the longest of them. The people screen is mounted twice, once from the menu
-  // and once at a subject's own address, because the second draws a second list and a form.
+  // People: the directory of every person, and one person's page at its Overview and at the Access
+  // view, which asks the most routes. Every value is a token with nowhere to break.
   "/people": {
     address: "/people",
     signedIn: true,
     drawsValues: true,
-    answers: { "/api/v1/govern/people": PEOPLE, "/api/v1/govern/data-steward": NO_STEWARD },
+    answers: { "/api/v1/govern/directory": DIRECTORY, "/api/v1/govern/data-steward": NO_STEWARD },
   },
-  "/people/:subject": {
-    address: `/people/${encodeURIComponent(`principal:${UNBROKEN}`)}`,
+  "/people/:personId": {
+    address: "/people/p_1",
     signedIn: true,
     drawsValues: true,
     answers: {
-      "/api/v1/govern/people": PEOPLE,
-      "/api/v1/govern/scopes": SCOPES,
-      "/api/v1/govern/data-steward": NO_STEWARD,
-      "/api/v1/govern/packs": { packs: [{ slug: "helpdesk", label: UNBROKEN, capabilities: [UNBROKEN] }] },
+      "/api/v1/govern/directory/p_1": PERSON_DETAIL,
+      "/api/v1/agents": {
+        items: [{ agent_id: "quote-helper", display_name: UNBROKEN, owner_id: "p_1", state: "enabled" }],
+        next_cursor: null,
+        truncated: false,
+      },
+      "/api/v1/govern/staff_sources/transfers": { transfers: [] },
+    },
+  },
+  "/people/:personId/:view": {
+    address: "/people/p_1/access",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/govern/directory/p_1": PERSON_DETAIL,
+      "/api/v1/govern/roles/holders": {
+        items: [
+          {
+            id: "g-1",
+            principal_id: "p_1",
+            display_name: UNBROKEN,
+            role: "department_admin",
+            scope: { clauses: [{ field: "department", op: "eq", value: UNBROKEN }] },
+            deputy_of: null,
+            granted_by: "p_2",
+            granted_at: "2019-03-04T09:00:00Z",
+            not_after: null,
+          },
+        ],
+        editable: true,
+      },
     },
   },
   "/roles": {
@@ -1645,8 +1879,10 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         ],
         holders_are_not_recorded_yet: true,
       },
+      // The Approver flag and the synced roles carry an id only, so the page asks the directory for names.
+      "/api/v1/govern/directory": DIRECTORY,
       "/api/v1/govern/roles/holders": {
-        items: [{ id: "g-1", principal_id: UNBROKEN, role: "auditor", deputy_of: null, not_after: null }],
+        items: [{ id: "g-1", principal_id: UNBROKEN, display_name: UNBROKEN, role: "auditor", scope: null, deputy_of: null, not_after: null }],
         editable: true,
       },
       "/api/v1/govern/roles/misconfigurations": {
@@ -1691,7 +1927,21 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     address: "/scopes",
     signedIn: true,
     drawsValues: true,
-    answers: { "/api/v1/govern/scopes": SCOPES },
+    answers: { "/api/v1/govern/scopes": SCOPES, "/api/v1/govern/departments": DEPARTMENTS },
+  },
+  // Packs, with one pack whose capabilities and names are tokens, and the controls a writer is offered.
+  "/packs": {
+    address: "/packs",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/govern/packs": {
+        packs: [{ slug: UNBROKEN, label: UNBROKEN, capabilities: [UNBROKEN], version: 3 }],
+        may_write: true,
+        versioning: UNBROKEN,
+        retiring: UNBROKEN,
+      },
+    },
   },
   // Skills: the searchable library, one skill's Dashboard at its bare address with the figures
   // from the shared stats route, and its Profile, the view with every control on it.
@@ -1892,6 +2142,8 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
                 read_only_because: UNBROKEN,
                 applies: UNBROKEN,
                 read_by: ["brain.ops.object_store"],
+                without_saved: UNBROKEN,
+                without_saved_source: "environment",
               },
             ],
           },
@@ -2143,6 +2395,47 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
       },
     },
   },
+  // One tool, answered from the same list: the name is the heading, the note and the capability wrap.
+  "/tools/:name": {
+    address: "/tools/notes.read_note",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/tools": {
+        tools: [
+          {
+            name: "notes.read_note",
+            source: "notes",
+            description: UNBROKEN,
+            entity: "note",
+            capability: UNBROKEN,
+            effect: "irreversible",
+            side_effect: "write",
+            sensitive_effect: "deletion",
+            result_contract: "typed",
+            identity_mode: "delegated",
+            leash_at_most: "assisted",
+            registered: true,
+            off_for_install: {
+              department: null,
+              switched_off_by: UNBROKEN,
+              switched_off_at: "2019-03-04T09:00:00Z",
+              reason: UNBROKEN,
+            },
+            stopped_for: [
+              { department: "web", switched_off_by: UNBROKEN, switched_off_at: "2019-03-04T09:00:00Z", reason: null },
+            ],
+          },
+        ],
+        may_switch_install: true,
+        departments: ["web"],
+        reason_to_switch_on: 12,
+        a_switch_only_narrows: true,
+        the_asker_is_never_told: true,
+        every_change_is_in_the_audit_trail: true,
+      },
+    },
+  },
   "/connections": {
     address: "/connections",
     signedIn: true,
@@ -2212,8 +2505,9 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     drawsValues: true,
     answers: {
       "/api/v1/console/connectors/xero": CONNECTOR_SOURCE,
-      "/api/v1/connectors": CONNECTORS_SCREEN,
+      "/api/v1/connectors": XERO_CONNECTED,
       "/api/v1/console/connectors/xero/stats": CONNECTOR_STATS,
+      "/api/v1/console/connectors/xero/probe": CONNECTOR_PROBE,
     },
   },
   // The Profile, the view with the most on it: settings, the index's fields, what it reads live,
@@ -2224,7 +2518,37 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     drawsValues: true,
     answers: {
       "/api/v1/console/connectors/xero": CONNECTOR_SOURCE,
-      "/api/v1/connectors": CONNECTORS_SCREEN,
+      "/api/v1/connectors": XERO_CONNECTED,
+      "/api/v1/console/connectors/xero/probe": CONNECTOR_PROBE,
+    },
+  },
+  // Automations, the list of every automation a reader may see, on the page kit.
+  "/automations": {
+    address: "/automations",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/console/automations": { items: [AUTOMATION_ROW], next_cursor: null },
+    },
+  },
+  // One automation's Dashboard: the automation, with every change offered, and its figures.
+  "/automations/:automationId": {
+    address: "/automations/auto_one",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/console/automations/auto_one": AUTOMATION_DETAIL,
+      "/api/v1/console/automations/auto_one/stats": AUTOMATION_STATS,
+    },
+  },
+  // The Profile, the view with the most on it: the definition, the schedule, the reach at each run
+  // and the Advanced section's identifiers.
+  "/automations/:automationId/:view": {
+    address: "/automations/auto_one/profile",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/console/automations/auto_one": AUTOMATION_DETAIL,
     },
   },
   // Knowledge. The item reference is an identifier with no break in it, which is why the library
@@ -2443,10 +2767,10 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
       },
     },
   },
-  // Sessions and sign-in links. Every identifier is in the table, which scrolls, and the served
-  // sentences are outside it, where they must wrap. No control is pressed here: the confirmation
-  // panel is held to the same rules in `tests/sessions-page.test.tsx` and
-  // `tests/sign-in-links-page.test.tsx`.
+  // Sessions and sign-in links, on the page kit. Names and departments are in the table, which
+  // scrolls, and the served sentence about the last administrator is under it, where it must wrap.
+  // No control is pressed here: the confirmations and the link drawer are held in
+  // `tests/sessions-page.test.tsx` and `tests/sign-in-links-page.test.tsx`.
   "/sessions": {
     address: "/sessions",
     signedIn: true,
@@ -2493,6 +2817,31 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
       },
     },
   },
+  // One service account. The name is the heading and wraps; the capabilities are chips that wrap;
+  // the id and the key's handle are in Advanced.
+  "/service-accounts/:clientId": {
+    address: "/service-accounts/svc_one",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/govern/service-accounts/svc_one": {
+        client_id: "svc_one",
+        label: UNBROKEN,
+        ceiling: [`read:${UNBROKEN}`],
+        lapses_at: "2999-03-04T09:00:00Z",
+        created_at: "2019-03-04T09:00:00Z",
+        keys: [
+          {
+            handle: "hdl_one",
+            label: UNBROKEN,
+            issued_at: "2019-03-04T09:00:00Z",
+            lapses_at: "2999-03-04T09:00:00Z",
+          },
+        ],
+        not_held_now: [],
+      },
+    },
+  },
   // Audit. The actor is drawn twice, in the table and as an option in the Who filter, and the
   // option is the one outside anything that scrolls. The history card is not opened here; it is
   // the same table shape and is held in `tests/audit-page.test.tsx`.
@@ -2513,6 +2862,19 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     signedIn: true,
     drawsValues: true,
     answers: MODELS_AND_HEALTH,
+  },
+  // One provider's Dashboard and its Profile, whose key and terms forms are drawn for this reader.
+  "/models/:provider": {
+    address: `/models/${UNBROKEN}`,
+    signedIn: true,
+    drawsValues: true,
+    answers: PROVIDER_PAGE,
+  },
+  "/models/:provider/:view": {
+    address: `/models/${UNBROKEN}/profile`,
+    signedIn: true,
+    drawsValues: true,
+    answers: PROVIDER_PAGE,
   },
   // Questions and gaps. Nothing connected, so the one-row table is drawn, and one gap line, so the
   // second is. The sentence every asker receives arrives unbroken twice: inside the table, whose
@@ -2590,6 +2952,19 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
   // the confirmation panel is held to the same rules in `tests/govern-people-pages.test.tsx`.
   "/departments": {
     address: "/departments",
+    signedIn: true,
+    drawsValues: true,
+    answers: { "/api/v1/govern/departments": DEPARTMENTS },
+  },
+  // One department's page at its Overview, and at Scopes, which asks the scopes that name it.
+  "/departments/:slug": {
+    address: `/departments/${UNBROKEN}`,
+    signedIn: true,
+    drawsValues: true,
+    answers: { "/api/v1/govern/departments": DEPARTMENTS },
+  },
+  "/departments/:slug/:view": {
+    address: `/departments/${UNBROKEN}/scopes`,
     signedIn: true,
     drawsValues: true,
     answers: { "/api/v1/govern/departments": DEPARTMENTS, "/api/v1/govern/scopes": DEPARTMENT_SCOPES },

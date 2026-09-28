@@ -1,278 +1,198 @@
 /**
- * The template catalogue: that it is reachable, that it draws what the API sent, and that it
- * counts nothing.
+ * The template catalogue on the shared page kit: the list, one template's page, and installing a
+ * published version as a new agent.
  *
- * **Reachable means through the application's own route table.** The page is mounted on a
- * memory router over `routes` from `src/App.tsx`, signed in through the real session modules
- * and answered by a stand-in API, so a test passes only if the address resolves. A test that
- * rendered the component directly would pass with the route deleted, which is the state this
- * screen was in until now: the twenty-three manifests existed and no address reached them.
+ * **Reachable means through the application's own route table**, as the other module tests mount
+ * it, so a test passes only if the address resolves.
  *
- * **Every wire name is read off the route's declared response.** The reader and the route
- * drifting apart on a name renders a card with a fact silently missing and no test anywhere
- * red, which is `tests/agent-page.test.tsx`'s argument about the same seam.
+ * The failures worth testing: a count of installs appearing, a principal id in page text, an
+ * install sent without its confirmation or with a digest the page did not read, a built-in
+ * template offered an install it cannot have, and "coming soon" said of a route that has arrived.
  *
- * **The refusal is the API's own sentence.** A reader without the Skills and templates
- * screen's read is answered by `brain.agent_routes`, and this page renders the sentence and
- * the trace id and draws no list over it, because an empty gallery would read as "this
- * installation offers no templates" when nothing said so.
- *
- * Task ids: none
+ * Task ids: M27.8.6, M27.11.7, M27.16.1
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
-import { render, waitFor } from "@testing-library/react";
-import { describe, expect, test } from "vitest";
-import {
-  INSTALLING_IS_NOT_OFFERED_HERE,
-  INSTALLING_NEVER_WIDENS,
-  MORE_TEMPLATES,
-  NO_TEMPLATES,
-  originWords,
-  TEMPLATES_HEADING,
-  TEMPLATES_LEDE,
-  WHAT_A_TEMPLATE_CARRIES,
-  WHAT_A_TEMPLATE_CARRIES_HEADING,
-} from "../src/pages/AgentTemplates";
-import { readTemplates, TEMPLATES_API_PATH } from "../src/pages/agentTemplatesQuery";
-import { fakeIdentityProvider, loadConsole, signIn } from "./support/auth";
-import { declaredPropertyNames, declaredResponseSchema } from "./support/openapi";
-import { backendPublicMessages } from "./support/python";
-import { readRepoFile } from "./support/repo";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { beforeAll, describe, expect, test } from "vitest";
+import { NO_INSTALLABLE_VERSION } from "../src/pages/agent-templates/AgentTemplateDetailPage";
+import { ACT_LABELS, originWords, UNAVAILABLE } from "../src/pages/agent-templates/templateActions";
+import { NO_TEMPLATES } from "../src/pages/AgentTemplates";
+import { readTemplates } from "../src/pages/agentTemplatesQuery";
+import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
+import { apiDocument, declaredPropertyNames, declaredResponseSchema } from "./support/openapi";
+import { installRadixStubs } from "./support/radix";
 
 const CONSOLE_ORIGIN = "https://console.test";
-const GALLERY_ADDRESS = "/agent-templates";
-const GALLERY_API = `/api/v1${TEMPLATES_API_PATH}`;
-const GALLERY_ROUTE = "/api/v1/agent-templates";
+const DIGEST = "d".repeat(64);
+const PUBLISHER = "u_publisher_sentinel";
 
-interface Answer {
-  readonly status?: number;
-  readonly body: unknown;
-  readonly traceId?: string;
+beforeAll(async () => {
+  installRadixStubs();
+  await import("../src/pages/AgentTemplate");
+}, 60_000);
+
+function card(templateId: string, displayName: string, over: Record<string, unknown> = {}): Record<string, unknown> {
+  return { template_id: templateId, version: 2, display_name: displayName, summary: `${displayName} summary`, published_by: "system", origin: "built_in", ...over };
 }
 
-async function consoleAt(answer: Answer): Promise<HTMLElement> {
+function detail(over: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    entry: card("pricing_desk", "Pricing desk", { origin: "published", version: 3, published_by: PUBLISHER }),
+    persona: "PERSONA-SENTENCE",
+    tier: "main",
+    skills: ["quote_writer"],
+    connectors: ["xero"],
+    tools: ["xero.read_invoices"],
+    capabilities: ["read:invoice"],
+    leash: [{ target: "ticket.update_status", rung: "shadow" }],
+    max_side_effect: "write",
+    golden_cases: 4,
+    ...over,
+  };
+}
+
+const LIST = { items: [card("pricing_desk", "Pricing desk", { origin: "published" }), card("tester", "Tester")], next_cursor: null, total: null, truncated: false };
+
+async function consoleAt(path: string, gets: Readonly<Record<string, { status?: number; body: unknown }>> = {}): Promise<{ container: HTMLElement; idp: FakeIdp; router: ReturnType<typeof createMemoryRouter> }> {
+  const answers: Record<string, { status?: number; body: unknown }> = {
+    "/api/v1/agent-templates": { body: LIST },
+    "/api/v1/agent-templates/pricing_desk": { body: detail() },
+    "/api/v1/agent-templates/pricing_desk/versions/3": {
+      body: { template_id: "pricing_desk", version: 3, display_name: "Pricing desk", summary: null, content_digest: DIGEST, starts: "STARTS-SENTENCE", unavailable: null },
+    },
+    ...gets,
+  };
   const idp = fakeIdentityProvider({
-    api(url) {
-      if (new URL(url, CONSOLE_ORIGIN).pathname !== GALLERY_API) {
-        return null;
+    api(url, init) {
+      const pathname = new URL(url, CONSOLE_ORIGIN).pathname;
+      const reply = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+      if (init?.method === "POST") {
+        return reply({ agent: { agent_id: "pricing_desk_1", display_name: "Pricing desk", state: "disabled", owner_id: "u_admin", effective_hash: null, may_change: true, may_install: true, acts: [] }, leash: [] }, 201);
       }
-      return new Response(JSON.stringify(answer.body), {
-        status: answer.status ?? 200,
-        headers: {
-          "content-type": "application/json",
-          ...(answer.traceId ? { "x-trace-id": answer.traceId } : {}),
-        },
-      });
+      const answer = answers[pathname];
+      return answer === undefined ? null : reply(answer.body, answer.status ?? 200);
     },
   });
   const loaded = await loadConsole({ idp });
   await signIn(loaded);
   const { routes } = await import("../src/App");
-  const router = createMemoryRouter(routes, { initialEntries: [GALLERY_ADDRESS] });
+  const router = createMemoryRouter(routes, { initialEntries: [path] });
   const { container } = render(<RouterProvider router={router} />);
   await waitFor(() => {
-    if (!container.querySelector("h1, .notice")) {
-      throw new Error("the page has not arrived");
-    }
-    if (container.querySelector('p.note[role="status"]')) {
+    if (!container.querySelector("h1") || container.querySelector('[data-slot="loading-state"]')) {
       throw new Error("the page is still asking");
     }
   });
-  return container;
+  return { container, idp, router };
 }
 
-function card(templateId: string, displayName: string): Record<string, unknown> {
-  return {
-    template_id: templateId,
-    version: 2,
-    display_name: displayName,
-    summary: "Watches uptime, SSL and domain expiry across the estate.",
-    published_by: "system",
-    origin: "built_in",
-  };
+function posts(idp: FakeIdp): { path: string; body: unknown }[] {
+  return idp.calls
+    .filter((call) => call.init?.method === "POST" && new URL(call.url, CONSOLE_ORIGIN).pathname.startsWith("/api/"))
+    .map((call) => ({ path: new URL(call.url, CONSOLE_ORIGIN).pathname, body: JSON.parse(String(call.init?.body)) as unknown }));
 }
 
-function textOf(markup: string): string {
-  const holder = document.createElement("div");
-  holder.innerHTML = markup;
-  return holder.textContent ?? "";
+function outsideAdvanced(container: HTMLElement): string {
+  const copy = container.cloneNode(true) as HTMLElement;
+  copy.querySelectorAll('[data-slot="advanced"]').forEach((one) => {
+    one.remove();
+  });
+  return copy.textContent ?? "";
 }
 
-describe("where the catalogue is reachable", () => {
-  test("its own address renders the templates the API sent, in the order it sent them", async () => {
-    // What breaks if this is deleted: the catalogue with no way in, which is the state the
-    // owner found it in. Every refusal below is satisfied by a page that draws nothing, and
-    // this is the positive sibling for all of them.
-    const container = await consoleAt({
-      body: {
-        items: [card("site_health_sentinel", "Site Health Sentinel"), card("tester", "Tester")],
-      },
-    });
-
-    expect(container.querySelector("h1")?.textContent).toBe(TEMPLATES_HEADING);
-    expect([...container.querySelectorAll("ul.roster h2")].map((one) => one.textContent)).toEqual([
-      "Site Health Sentinel version 2",
-      "Tester version 2",
-    ]);
-    expect(container.textContent).toContain(originWords("built_in"));
-    expect(container.textContent).toContain(INSTALLING_IS_NOT_OFFERED_HERE);
-  });
-
-  test("the route the page asks is declared, and every name the reader takes is a name it sends", () => {
-    // What breaks if this is deleted: a reader and the route drifting apart on a name, which
-    // draws a card with a fact missing and nothing red. The set is exact, so an install count
-    // added to the route is a red test rather than a number nobody argued about.
-    const gallery = declaredResponseSchema(GALLERY_ROUTE, "get");
-    const items = declaredPropertyNames(gallery);
-
-    expect(items).toContain("items");
-    expect(items).toContain("truncated");
-  });
-
-  test("an empty catalogue is one sentence, and it has no number in it", async () => {
-    // What breaks if this is deleted: an empty gallery that explains why it is empty, which
-    // for this screen would be a statement about what this company has published.
-    const container = await consoleAt({ body: { items: [] } });
-    const markup = container.querySelector("article.page")?.innerHTML ?? "";
-
-    expect(markup).toContain(NO_TEMPLATES);
-    expect(textOf(markup).replace(INSTALLING_IS_NOT_OFFERED_HERE, "")).not.toMatch(/\d/);
-  });
-
-  test("a truncated catalogue says there is more, without a figure, and only when the API says exactly that", async () => {
-    // What breaks if this is deleted: "and 9 more", which is a count of rows beside a list
-    // the reader did not filter.
-    const container = await consoleAt({
-      body: { items: [card("tester", "Tester")], truncated: true },
-    });
-
-    expect(container.textContent).toContain(MORE_TEMPLATES);
-    for (const notTrue of [false, "true", 1, undefined]) {
-      expect(readTemplates({ items: [], truncated: notTrue })?.truncated).toBe(false);
+describe("what this module agrees with the API about", () => {
+  test("no act called coming soon has a route, and the gallery sends no install count", () => {
+    // What breaks if this is deleted: "coming soon" said about withdrawing after its route lands,
+    // or a count of installs added to the gallery, which counts agents the reader may not see.
+    const paths = Object.keys((apiDocument()["paths"] ?? {}) as Record<string, unknown>);
+    for (const [one, { retiredBy }] of Object.entries(UNAVAILABLE)) {
+      expect(paths.filter((path) => retiredBy.test(path)), one).toEqual([]);
     }
-  });
-
-  test("a refusal is the API's own sentence and its reference, with no catalogue drawn", async () => {
-    // What breaks if this is deleted: a page that explains a refusal in words of its own, or
-    // draws an empty list over one, which reads as "there are no templates" when what
-    // happened is that this reader may not open the screen.
-    const sentence = backendPublicMessages()["ABSENT"];
-    expect(sentence).toBeTruthy();
-
-    const container = await consoleAt({
-      status: 404,
-      body: { message: sentence },
-      traceId: "trace-gallery",
-    });
-
-    expect(container.querySelector(".notice__body")?.textContent).toBe(sentence);
-    expect(container.querySelector(".notice__trace code")?.textContent).toBe("trace-gallery");
-    expect(container.querySelector("ul.roster")).toBeNull();
-    expect(container.textContent).not.toContain(NO_TEMPLATES);
+    expect(UNAVAILABLE.withdraw.retiredBy.test("/api/v1/agent-templates/{template_id}/versions/{version}/withdraw")).toBe(true);
+    expect(paths).toContain("/api/v1/agent-templates/{template_id}");
+    const gallery = declaredPropertyNames(declaredResponseSchema("/api/v1/agent-templates", "get"));
+    expect(gallery.filter((name) => /count|installed/.test(name))).toEqual([]);
   });
 });
 
-describe("what an answer becomes", () => {
-  test("a card missing any of the five required fields is not drawn, and a repeat is dropped", () => {
-    // What breaks if this is deleted: a card with a name and no version, which is a template
-    // nothing could be pinned to, or two cards for one template whose keys collide.
-    const answer = readTemplates({
-      items: [
-        card("tester", "Tester"),
-        card("tester", "Tester again"),
-        { ...card("no_version", "No version"), version: null },
-        { ...card("zero_version", "Zero"), version: 0 },
-        { ...card("no_name", "  "), display_name: "  " },
-        { ...card("no_origin", "No origin"), origin: "" },
-        { ...card("no_publisher", "No publisher"), published_by: null },
-        "tester",
-        null,
-      ],
-    });
-
-    expect(answer?.cards.map((one) => one.templateId)).toEqual(["tester"]);
+describe("the catalogue", () => {
+  test("lists each template by name with where it came from, and no publisher id", async () => {
+    // What breaks if this is deleted: the gallery unreachable, or a principal id in page text.
+    const { container } = await consoleAt("/agent-templates");
+    const text = container.textContent ?? "";
+    expect(text).toContain("Pricing desk");
+    expect(text).toContain(originWords("published"));
+    expect(text).toContain(originWords("built_in"));
+    expect(text).not.toContain("system");
+    expect(container.querySelector("[data-unavailable]")?.textContent).toContain(ACT_LABELS.author);
   });
 
-  test("a summary that was withheld, null or empty is one card, with no sentence under the name", () => {
-    // What breaks if this is deleted: a card carrying an empty string as a summary, which
-    // hands the renderer something to draw a paragraph around.
-    for (const missing of [undefined, null, "", "   "]) {
-      const one = { ...card("tester", "Tester"), summary: missing };
-      expect(readTemplates({ items: [one] })?.cards[0]).toEqual({
-        templateId: "tester",
-        version: 2,
-        displayName: "Tester",
-        publishedBy: "system",
-        origin: "built_in",
-      });
-    }
-    expect(readTemplates({ items: [card("tester", "Tester")] })?.cards[0]?.summary).toBeTruthy();
-  });
-
-  test("a body that is not a gallery draws no list and composes no sentence about it", async () => {
-    // What breaks if this is deleted: a body from a different API drawn as an empty gallery,
-    // which is a claim about what this installation offers made on no evidence.
+  test("an empty catalogue is one sentence with no number, and a body that is not a gallery draws no list", async () => {
+    // What breaks if this is deleted: an empty gallery drawn from a body that said nothing.
+    const empty = await consoleAt("/agent-templates", { "/api/v1/agent-templates": { body: { items: [], next_cursor: null, total: null, truncated: false } } });
+    expect(empty.container.textContent).toContain(NO_TEMPLATES);
+    expect(empty.container.textContent).not.toMatch(/\d/);
     for (const unreadable of [null, [], {}, { items: "tester" }]) {
       expect(readTemplates(unreadable)).toBeNull();
     }
-    expect(readTemplates({ items: [] })).toEqual({ cards: [], truncated: false });
-
-    const container = await consoleAt({ body: {} });
-    expect(container.textContent).not.toContain(NO_TEMPLATES);
   });
 
-  test("an origin the console has no words for renders as itself rather than as a guess", () => {
-    // What breaks if this is deleted: a third origin arriving from a newer API and being
-    // drawn as one of the two this console knows, which would tell a person a template ships
-    // with the product when nobody said so.
-    expect(originWords("built_in")).not.toBe("built_in");
-    expect(originWords("published")).not.toBe("published");
+  test("a card missing a required field or repeated is not drawn, and an unknown origin renders as itself", () => {
+    // What breaks if this is deleted: a card with no version, which nothing could be pinned to.
+    const answer = readTemplates({
+      items: [card("tester", "Tester"), card("tester", "Again"), { ...card("nv", "No version"), version: null }, { ...card("no", "No origin"), origin: "" }],
+    });
+    expect(answer?.cards.map((one) => one.templateId)).toEqual(["tester"]);
     expect(originWords("something_else")).toBe("something_else");
   });
 });
 
-describe("the design's own words", () => {
-  /** SCREEN 5 of `docs/screens.html`, as a reader sees it: tags gone, entities read back. */
-  function screenFive(): string {
-    const page = readRepoFile("docs/screens.html");
-    const start = page.indexOf("SCREEN 5");
-    const end = page.indexOf("SCREEN 6");
-    const holder = document.createElement("div");
-    holder.innerHTML = page.slice(start, end);
-    return (holder.textContent ?? "").replace(/\s+/g, " ");
-  }
-
-  test("the heading, the lede, the panel and the closing sentence are SCREEN 5's wording", () => {
-    // What breaks if this is deleted: a gallery that drifts into words of its own, which is
-    // how the console came to be built without the design it was drawn from. Every string is
-    // compared with the design file rather than with itself, so a copy edited here and not
-    // there is a red test.
-    const design = screenFive();
-
-    expect(design).toContain(TEMPLATES_HEADING);
-    // The design says a role can be installed "in a minute", and this console offers no
-    // install at all, so that phrase is the one piece of the design's wording left out. The
-    // rest of the sentence is the design's, and is compared as such.
-    expect(TEMPLATES_LEDE.startsWith("A template is a role someone can install")).toBe(true);
-    expect(design).toContain(TEMPLATES_LEDE.slice(TEMPLATES_LEDE.indexOf(":") + 2));
-    expect(design).toContain(WHAT_A_TEMPLATE_CARRIES_HEADING);
-    for (const [label, value] of WHAT_A_TEMPLATE_CARRIES) {
-      expect(design, label).toContain(label);
-      expect(design, value).toContain(value);
+describe("one template's page", () => {
+  test("says what an install would ask for, with the publisher only in Advanced", async () => {
+    // What breaks if this is deleted: the page describing nothing an install carries, or a
+    // principal id in page text.
+    const { container } = await consoleAt("/agent-templates/pricing_desk");
+    const text = outsideAdvanced(container);
+    expect(container.querySelector("h1")?.textContent).toBe("Pricing desk");
+    for (const one of ["quote_writer", "xero", "xero.read_invoices", "read:invoice", "PERSONA-SENTENCE", "STARTS-SENTENCE"]) {
+      expect(text).toContain(one);
     }
-    expect(design).toContain(INSTALLING_NEVER_WIDENS);
+    expect(text).not.toContain(PUBLISHER);
+    expect(container.querySelector('[data-slot="advanced"]')?.textContent).toContain(PUBLISHER);
+    expect(container.querySelector("[data-unavailable]")?.textContent).toContain(ACT_LABELS.withdraw);
   });
 
-  test("the panel is drawn beside the catalogue, and beside a refusal too, because it names no template", async () => {
-    // What breaks if this is deleted: the panel quietly dropped from the page, which the
-    // wording test above cannot see because it reads constants. The refusal half is the
-    // sibling: product documentation is the same for every reader and discloses nothing.
-    const drawn = await consoleAt({ body: { items: [card("tester", "Tester")] } });
-    expect(drawn.textContent).toContain(WHAT_A_TEMPLATE_CARRIES_HEADING);
+  test("installing sends the digest the page read, only from its confirmation, and opens the new agent", async () => {
+    // What breaks if this is deleted: an install of a version the person did not see, or one sent
+    // from a single press.
+    const { idp, router } = await consoleAt("/agent-templates/pricing_desk");
 
-    const refused = await consoleAt({ status: 404, body: { message: "not here" } });
-    expect(refused.textContent).toContain(WHAT_A_TEMPLATE_CARRIES_HEADING);
-    expect(refused.querySelector("ul.roster")).toBeNull();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: ACT_LABELS.install }));
+    });
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog.textContent).toContain("STARTS-SENTENCE");
+    expect(posts(idp)).toEqual([]);
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: ACT_LABELS.install }));
+    });
+
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe("/agents/pricing_desk_1");
+    });
+    expect(posts(idp)).toEqual([
+      { path: "/api/v1/agent-templates/pricing_desk/versions/3/install", body: { expected_digest: DIGEST, for_department: false } },
+    ]);
+  });
+
+  test("a template with no installable version offers no install, in one sentence whatever the reason", async () => {
+    // What breaks if this is deleted: an install button on a built-in template, which cannot be
+    // installed, or a sentence telling a refused reader apart from a missing version.
+    const { container } = await consoleAt("/agent-templates/pricing_desk", {
+      "/api/v1/agent-templates/pricing_desk/versions/3": { status: 404, body: { message: "I could not find that.", trace_id: "T" } },
+    });
+    expect(container.textContent).toContain(NO_INSTALLABLE_VERSION);
+    expect(screen.queryByRole("button", { name: ACT_LABELS.install })).toBeNull();
   });
 });

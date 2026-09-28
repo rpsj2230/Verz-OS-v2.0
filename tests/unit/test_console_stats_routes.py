@@ -834,6 +834,40 @@ def test_the_channel_and_connector_statements_run_and_narrow_bindings_to_the_cal
     assert sorted(everyone) == [("u_admin",), ("u_narrow",)]
 
 
+def test_a_test_of_the_connection_is_not_counted_as_an_attempt_to_read_it(database: str) -> None:
+    """Run on PostgreSQL. A `probed` row (`0142`) is a test a person asked for, and the statement
+    the figures are read from leaves it out beside the read it follows. Delete this and every press
+    of Test connection is counted as an attempt, and a failed test as a failed read, on the source's
+    Dashboard (M27.15.8)."""
+    from tests.fixtures.scratch_postgres import sql
+
+    connection = uuid.uuid4()
+    sql(
+        database,
+        "INSERT INTO ops.connector_connection (id, connector, settings, digest, connected_by) "
+        "VALUES (%s, 'hubspot', '{}'::jsonb, %s, 'u_admin')",
+        connection,
+        "e" * 64,
+    )
+    for outcome, health, days in (("synced", "ok", 2), ("probed", "down", 1)):
+        sql(
+            database,
+            "INSERT INTO ops.connector_sync (connection_id, connector, started_at, finished_at, "
+            "outcome, health, next_attempt_at, detail) VALUES (%s, 'hubspot', %s, %s, %s, %s, "
+            "%s, 'said')",
+            connection,
+            NOW - timedelta(days=days),
+            NOW - timedelta(days=days),
+            outcome,
+            health,
+            NOW,
+        )
+
+    found = _rows(database, connector_attempts("hubspot", NOW - timedelta(days=30)))
+
+    assert [one[1] for one in found] == ["synced"]
+
+
 def test_the_live_read_statement_returns_this_sources_rows_and_the_readers_when_narrower(
     database: str,
 ) -> None:

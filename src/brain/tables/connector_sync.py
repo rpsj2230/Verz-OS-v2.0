@@ -23,8 +23,14 @@ saw the new one work. The id is a value and not a foreign key, for the rule
 connector table is not something another table's rows hang from, and a connection is never removed
 in any case, so there is nothing for the key to protect.
 
-**What a row may say is closed.** `outcome` is `synced`, `quota` or `failed`, `health` is the
-connector health vocabulary (`brain.connectors.contract.HealthState`) less the one state a run
+**A test of the connection is a row here too** (`0142`). A person pressing Test connection asks the
+worker for one call, and its row says `probed`, carries the health that call found and copies the
+schedule's figures from the attempt before it, so the screen's newest attempt is the test and the
+next scheduled read is exactly as late as it was. See
+`brain.ops.connector_sync.A_TEST_LEAVES_THE_SCHEDULE_AS_IT_FOUND_IT`.
+
+**What a row may say is closed.** `outcome` is `synced`, `quota`, `failed` or `probed`, `health` is
+the connector health vocabulary (`brain.connectors.contract.HealthState`) less the one state a run
 cannot produce, and `detail` is one of the constant sentences `brain.ops.connector_sync` writes.
 Nothing from a response body, a setting or a key can reach this table, because nothing that builds
 a row reads one: see `brain.ops.connector_sync.A_RUN_RECORD_CARRIES_NO_VALUE_FROM_THE_SOURCE`.
@@ -34,7 +40,7 @@ run wrote, which is a count of what this install now holds a copy of and never o
 may not see, the argument `brain.console.connector_trust.
 A_COUNT_OF_WHAT_IS_COPIED_IS_NOT_A_COUNT_OF_WHAT_IS_HIDDEN` makes about projected fields.
 
-Task ids: M42.6.5
+Task ids: M42.6.5, M27.15.8
 """
 
 from __future__ import annotations
@@ -62,7 +68,7 @@ from brain.tables.identity import one_of
 
 #: What an attempt ended as. See `brain.ops.connector_sync.SyncOutcome`, which these mirror and a
 #: test holds equal.
-OUTCOMES: Final[tuple[str, ...]] = ("failed", "quota", "synced")
+OUTCOMES: Final[tuple[str, ...]] = ("failed", "probed", "quota", "synced")
 
 #: What the source was judged to be after the attempt. `unconfigured` is absent on purpose: it is
 #: the state of a source nothing has tried, and a row here is a try.
@@ -117,7 +123,7 @@ class ConnectorSyncRow(Base):
             name="counts_are_not_negative",
         ),
         # A read to the end is the one outcome that clears the count, and a failure is the one
-        # that cannot leave it at zero. A quota refusal carries the count over unchanged.
+        # that cannot leave it at zero. A quota refusal and a test carry the count over unchanged.
         CheckConstraint(
             "(outcome <> 'synced' OR consecutive_failures = 0) "
             "AND (outcome <> 'failed' OR consecutive_failures > 0)",

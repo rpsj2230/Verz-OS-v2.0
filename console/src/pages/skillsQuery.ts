@@ -177,7 +177,7 @@ const NOTHING: SkillsPage = Object.freeze({
 /**
  * Read `brain.skill_routes.SkillsPage` out of a response body.
  *
- * **`total` and `next_cursor` stop here**, in the way `readPeoplePage` stops them. An unreadable
+ * **`total` and `next_cursor` stop here**, in the way `people/peopleQuery.readPeople` stops them. An unreadable
  * body yields an empty page offering nothing rather than throwing, which is `readMatrixPage`'s
  * choice and for its reason.
  */
