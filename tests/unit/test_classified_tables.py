@@ -940,15 +940,6 @@ def test_a_process_with_no_store_has_an_empty_lane() -> None:
     assert asyncio.run(classified_lane_of(Nothing())).readers == {}
 
 
-#: Why the one test below is expected to fail until the answer route is wired, in words.
-ASK_ROUTE_NOT_WIRED = (
-    "brain.api_routes.answer does not yet merge brain.ops.classification_store.classified_lane_of "
-    "into its rules, readers and policies; the K6 package names the four lines and the "
-    "integrator applies them, at which point this passes and strict xfail makes the landing "
-    "remove this marker"
-)
-
-
 #: What each asker holds on the answer route: a salesperson, and Finance.
 ASKERS: Mapping[str, tuple[str, ...]] = {
     "u_narrow": ("read:prices",),
@@ -963,7 +954,6 @@ class AskerGrants:
         return ents(*ASKERS.get(principal_id, ()), principal=principal_id)
 
 
-@pytest.mark.xfail(strict=True, reason=ASK_ROUTE_NOT_WIRED)
 def test_ask_over_http_answers_the_sell_price_and_leaves_the_cost_absent(
     memory: MemoryTables,
 ) -> None:
@@ -1071,7 +1061,7 @@ def test_the_models_and_the_migration_agree_on_every_width() -> None:
     assert width(stored, "title") == migration.TITLE_CHARS
     assert width(stored, "created_by") == migration.PRINCIPAL_ID_CHARS
     assert width(ClassifiedRecordRow.__table__, "entity") == migration.ENTITY_CHARS
-    assert migration.down_revision == "0108"
+    assert migration.down_revision == "0115"
 
 
 def test_both_tables_enable_row_level_security_and_neither_can_be_deleted_from() -> None:

@@ -186,6 +186,7 @@ from brain.knowledge.rows import (
     row_scope_for,
 )
 from brain.knowledge.search import KNOWLEDGE_READ
+from brain.ops.classification_store import classified_lane_of
 from brain.ops.denial_store import Denial, Denials, StoredDenials, record_beside
 from brain.ops.limit_store import StoreVerdict, ValkeyWindowStore, make_store
 from brain.ops.limits import (
@@ -1193,7 +1194,10 @@ async def answer(request: Request, recorder: Ingress, asked: Asked, ask: Questio
         # yields.
         raise Failed("no tool registry on this process")
 
-    rules = getattr(request.app.state, "fast_path_rules", ())
+    # Uploaded classified tables (Classification screen) join the fast lane beside the
+    # built-in rules, each column answered only to who may read it.
+    tables = await classified_lane_of(request.app.state)
+    rules = (*getattr(request.app.state, "fast_path_rules", ()), *tables.rules)
     sink = getattr(request.app.state, "trace_sink", None) or CountingTraceSink()
     # What a finished request owes, installed by `brain.app.lifespan` through
     # `request_recorders_for`. Empty on a process with no database, which has nowhere to hold
@@ -1230,7 +1234,7 @@ async def answer(request: Request, recorder: Ingress, asked: Asked, ask: Questio
     referral = await referred(request, asked, ask.question)
 
     address = from_web(ask.question, ask.agent)
-    policies = field_policies(registry)
+    policies = {**field_policies(registry), **tables.policies}
     # A referred question is looked up in no store and stored in none: the step is entered and
     # misses, as it does on a process with none, so the request row reads as any other's.
     caching = (
@@ -1281,7 +1285,7 @@ async def answer(request: Request, recorder: Ingress, asked: Asked, ask: Questio
             origin=origin,
             recorders=recorders,
             rules=rules,
-            readers=row_readers(registry),
+            readers={**row_readers(registry), **tables.readers},
             entitlement=reach,
             policies=policies,
             reachable_sources=sources,

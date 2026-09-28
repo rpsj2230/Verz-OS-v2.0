@@ -33,7 +33,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 
 revision = "0116"
 # The newest migration on origin/main when this was written.
-down_revision = "0108"
+down_revision = "0115"
 branch_labels = None
 depends_on = None
 
