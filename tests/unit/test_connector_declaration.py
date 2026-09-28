@@ -99,7 +99,7 @@ def test_every_registry_that_used_to_be_a_list_is_read_off_the_declarations() ->
     }
     assert dict(RECORDINGS) == {name: one.recorded for name, one in declared.items()}
     assert dict(read_backs()) == {name: one.read_back for name, one in declared.items()}
-    assert set(READINGS) == {"hubspot", "xero"}
+    assert set(READINGS) == {"freshdesk", "hubspot", "xero"}
 
 
 # ------------------------------------------------------------------ discovery

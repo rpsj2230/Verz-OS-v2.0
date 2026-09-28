@@ -73,11 +73,32 @@ reader, the fetched-at stamp and every interval are parameters, for the reason
 **This connector keeps a minimal index and reads every value live.** What it keeps of a
 ticket is its ids, status, priority, dates and subject line; the ticket's description, its
 conversation and its custom fields are read from Freshdesk when a question asks for them
-and are never stored, which the canary planted in a recorded ticket's note proves on every
-build. It is declared as `CONNECTOR` at the foot of this module
+and are never stored, which the canary planted in a recorded ticket's note and body proves
+on every build. It is declared as `CONNECTOR` at the foot of this module
 (`brain.connectors.declaration`).
 
-Task ids: M11.6.2
+**It is connected from the console with two settings and a key, and nothing on the server.**
+The helpdesk's address (`FreshdeskConnection.domain`, pinned as the connector's scope, so the
+key is only ever sent to that one helpdesk) and the department whose people may be granted its
+tickets (`FreshdeskConnection.department`). The worker then reads the list endpoint on
+`READING_INTERVAL` through `FreshdeskReading`, under the verified ceiling in
+`brain.ops.limits` and the source's own `Retry-After` and `X-RateLimit-Remaining`, and keeps
+each ticket's minimal index with the department on it.
+
+**The visibility rule is the department named at connect, not Freshdesk's groups.** The row
+plane can only evaluate an equality a kept row carries
+(`brain.ops.connector_sync.storable_predicate`), and one connection has one predicate, so a
+rule mapping each helpdesk group to a department cannot be stored today. A department is what
+every grant on an install is already scoped by, so a person granted `read:ticket` in that
+department reaches the tickets and a person in another does not. See
+`ONE_DEPARTMENT_READS_A_CONNECTED_HELPDESK`, which says what this narrows and why it is the
+owner's question rather than this module's decision.
+
+Rejected: the helpdesk itself as the predicate, as Xero pins its tenant. No grant on any
+install is scoped by a helpdesk, so every ticket would be reachable by the data steward and
+nobody else until somebody wrote a grant no screen can write.
+
+Task ids: M11.6.2, M11.9.6
 """
 
 from __future__ import annotations
@@ -88,9 +109,9 @@ import math
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
-from datetime import timedelta
+from datetime import datetime, timedelta
 from types import MappingProxyType
-from typing import Any, Final, Protocol
+from typing import Any, Final, Protocol, Self
 
 from brain.connectors.change_signal import ChangeSubscription, DeletionCheck
 from brain.connectors.contract import (
@@ -100,8 +121,17 @@ from brain.connectors.contract import (
     FetchRequest,
     TransportKind,
     assert_fetches_only,
+    assert_holds_no_credential,
 )
-from brain.connectors.declaration import ConnectorDeclaration, Recorded
+from brain.connectors.declaration import (
+    ConnectorDeclaration,
+    ConsoleForm,
+    KeyScheme,
+    PageReply,
+    Recorded,
+    Setting,
+    SettingRefusedError,
+)
 from brain.connectors.manifest import (
     ChangeSignal,
     ConnectorManifest,
@@ -111,11 +141,12 @@ from brain.connectors.manifest import (
     ProjectedField,
     ToolDeclaration,
 )
-from brain.connectors.projection import ProjectedValue
+from brain.connectors.projection import ProjectedRecord, ProjectedValue
 from brain.connectors.rest import OperationSpec, ParameterSpec, RestOperation
 from brain.connectors.throttle import CallOutcome, classify
 from brain.connectors.transports import FieldMapping, RestTransport, SourceRecord, normalise
 from brain.connectors.write_verification import ReadBack, Reading, unreadable
+from brain.core.department import SLUG_RE
 from brain.core.envelope import IdentityMode, TypedResult
 from brain.core.errors import Degraded
 from brain.core.projection import MAX_LABEL_CHARS
@@ -127,6 +158,8 @@ from brain.ops.limits import (
     SearchCompleteness,
     search_completeness,
 )
+from brain.ops.secrets import SecretRef
+from brain.tools.fetch import Resolver
 
 # ------------------------------------------------------------------ written-down reasons
 #: Why a page size is refused rather than sent and clamped.
@@ -201,6 +234,26 @@ A_REQUESTER_IS_A_JOIN_KEY_AND_NEVER_AN_ADDRESS = (
     "nothing at all for the same reason."
 )
 
+#: Why a connected helpdesk is read by one department, and what that narrows.
+ONE_DEPARTMENT_READS_A_CONNECTED_HELPDESK = (
+    "Freshdesk decides which agent sees a ticket by the group that owns it. The row plane can "
+    "only test an equality a kept row carries, and a connection has one visibility predicate, "
+    "so a rule sending each group to a different department cannot be stored. The connection "
+    "therefore names one department, every kept ticket carries it, and a person reaches the "
+    "tickets only through a grant of read:ticket in that department. A helpdesk shared by two "
+    "departments is read by the one named; a mapping per group is the owner's decision to "
+    "make, not this module's, and it would change the row plane rather than this connector."
+)
+
+#: Why the key is only ever sent to an address ending in the vendor's own domain.
+THE_KEY_GOES_ONLY_TO_A_FRESHDESK_ADDRESS = (
+    "The address typed at connect is where the worker sends the helpdesk's key, in a header "
+    "that is the key itself in base64. An address outside freshdesk.com would send it to "
+    "whoever answers there, and the private-address rule on the call cannot tell a mistyped "
+    "public host from the helpdesk. So the connection accepts one name under freshdesk.com, "
+    "which is the address Freshdesk documents for its API, and nothing else."
+)
+
 
 # ---------------------------------------------------------------------------- the names
 #: The connector's name, and the key `brain.ops.limits` records the verified ceiling and the
@@ -209,6 +262,9 @@ A_REQUESTER_IS_A_JOIN_KEY_AND_NEVER_AN_ADDRESS = (
 #: client's own name still has to point at this one or it runs against no measured limit at
 #: all. `manifest` below sets `ceiling` to exactly this.
 FRESHDESK: Final = "freshdesk"
+
+#: The same string under the name every connectable module's tests read it by.
+CONNECTOR_NAME: Final = FRESHDESK
 
 #: The entity kinds this connector returns. Both are names in the sense
 #: `brain.core.field_policy` means: a policy is looked up by this string, and a tag nothing
@@ -266,6 +322,33 @@ SUBSTITUTE_PARAMETER_RE: Final = re.compile(
     r"(^|_)(cache|cached|fallback|previous|prior|memo|memoised|snapshot|last_answer"
     r"|last_known|from_memory)(_|$)"
 )
+
+#: The one shape of helpdesk address a connection accepts: a single name under the vendor's
+#: domain, as its API documentation addresses every call. See
+#: `THE_KEY_GOES_ONLY_TO_A_FRESHDESK_ADDRESS`.
+HELPDESK_ADDRESS_RE: Final = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.freshdesk\.com")
+
+#: How often the worker reads a connected helpdesk into its index. A helpdesk moves within the
+#: hour, unlike a ledger, and a walk of the fifty pages a run may read is fifty calls: two
+#: hundred an hour at this interval, a thirtieth of the lowest plan's hourly allowance.
+READING_INTERVAL: Final = timedelta(minutes=15)
+
+#: The `updated_since` every reading sends. Without it the list endpoint returns only tickets
+#: created in the last thirty days, silently; with a date before any helpdesk existed it
+#: returns all of them, newest first (https://developers.freshdesk.com/api/#list_all_tickets).
+EVERY_TICKET_SINCE: Final = "2000-01-01T00:00:00Z"
+
+#: The ordering every reading asks for, which is also the vendor's default: newest first, so a
+#: run cut short at its page bound has indexed the tickets people are asking about, and a ticket
+#: created mid-walk shifts a row onto the next page to be read twice rather than skipped.
+LIST_ORDER: Final[tuple[tuple[str, str], ...]] = (
+    ("order_by", "created_at"),
+    ("order_type", "desc"),
+)
+
+#: The header Freshdesk sends on every answered call saying how many calls are left in the
+#: account's minute (https://developers.freshdesk.com/api/#ratelimit).
+REMAINING_HEADER: Final = "X-RateLimit-Remaining"
 
 
 # ------------------------------------------------------------------------ the endpoints
@@ -355,7 +438,13 @@ ENDPOINTS: Final[MappingProxyType[Endpoint, EndpointShape]] = MappingProxyType(
                 operation_id="listTickets",
                 method="get",
                 path="/api/v2/tickets",
-                parameters=(_query("page"), _query("per_page"), _query("updated_since")),
+                parameters=(
+                    _query("page"),
+                    _query("per_page"),
+                    _query("updated_since"),
+                    _query("order_by"),
+                    _query("order_type"),
+                ),
                 # The body is the array itself. A connector looking for `results` here finds
                 # nothing and reports an empty helpdesk, which is why the two endpoints carry
                 # their own specifications rather than sharing one.
@@ -624,15 +713,26 @@ def retry_hint(reply: Reply) -> float:
     rather than being half-understood, and the path is the long one: see
     `RETRY_AFTER_WHEN_UNSTATED`.
     """
+    stated = stated_retry(reply)
+    return RETRY_AFTER_WHEN_UNSTATED if stated is None else stated
+
+
+def stated_retry(reply: Reply) -> float | None:
+    """The wait the source stated, in seconds, or None when it stated nothing usable.
+
+    None rather than a guess, because the scheduled reading hands it to
+    `brain.connectors.throttle.retry_delay`, which owns the substitution for a source that said
+    nothing; `retry_hint` makes the same substitution for the question-time walk.
+    """
     stated = reply.header("Retry-After").strip()
     if not stated:
-        return RETRY_AFTER_WHEN_UNSTATED
+        return None
     try:
         seconds = float(stated)
     except ValueError:
-        return RETRY_AFTER_WHEN_UNSTATED
+        return None
     if seconds <= 0:
-        return RETRY_AFTER_WHEN_UNSTATED
+        return None
     return seconds
 
 
@@ -1097,6 +1197,63 @@ def operation_for(endpoint: Endpoint, *, domain: str) -> RestOperation:
     )
 
 
+# --------------------------------------------------------------------- the connection
+#: The two settings a connection is made with, named once for the form, the reading and tests.
+DOMAIN_SETTING: Final = "domain"
+DEPARTMENT_SETTING: Final = "department"
+
+
+@dataclass(frozen=True)
+class FreshdeskConnection:
+    """One helpdesk and the one department that reads it, decided at connect, and nothing else.
+
+    No client and no credential: `assert_holds_no_credential` runs on the class at construction,
+    as `xero.XeroConnection` does. Each refusal names its setting through `SettingRefusedError`,
+    so the Connectors screen marks the one that was wrong and shows that setting's sentence.
+    """
+
+    domain: str
+    department: str
+
+    def __post_init__(self) -> None:
+        assert_holds_no_credential(type(self))
+        if not HELPDESK_ADDRESS_RE.fullmatch(self.domain):
+            msg = (
+                f"{self.domain!r} is not one helpdesk address under freshdesk.com. "
+                f"{THE_KEY_GOES_ONLY_TO_A_FRESHDESK_ADDRESS}"
+            )
+            raise SettingRefusedError(msg, setting=DOMAIN_SETTING)
+        if not SLUG_RE.fullmatch(self.department):
+            msg = (
+                f"{self.department!r} is not a department's short name, so no grant could name "
+                f"it. {ONE_DEPARTMENT_READS_A_CONNECTED_HELPDESK}"
+            )
+            raise SettingRefusedError(msg, setting=DEPARTMENT_SETTING)
+        # Constructing the scope is the check that the pin narrows something, in
+        # ConnectorScope's words rather than a second opinion here.
+        self.scope()
+
+    @classmethod
+    def from_settings(cls, settings: Mapping[str, str]) -> Self:
+        """The connection a stored row's settings describe.
+
+        The address is lower-cased because a host name is not case-sensitive and the pin is
+        compared exactly; the department is not, because a department's name is exact.
+        """
+        return cls(
+            domain=settings[DOMAIN_SETTING].casefold(),
+            department=settings[DEPARTMENT_SETTING],
+        )
+
+    def scope(self) -> ConnectorScope:
+        """What this connector was connected to: one helpdesk, named."""
+        return ConnectorScope(resource_kind="helpdesk", selectors=(self.domain,))
+
+    def visibility(self) -> Scope:
+        """Who may be granted the kept tickets. See `ONE_DEPARTMENT_READS_A_CONNECTED_HELPDESK`."""
+        return Scope.department(self.department)
+
+
 # ---------------------------------------------------------------- the change subscription
 def subscription(*, notify_within: timedelta, reconcile_every: timedelta) -> ChangeSubscription:
     """How Freshdesk tells us a projected ticket moved, and how a deletion is ever learned.
@@ -1225,14 +1382,156 @@ def read_back_reading(operation: RestOperation, reply: Reply) -> Reading:
     return Reading(outcome=CallOutcome.OK, matched=len(rows), complete=True)
 
 
+class FreshdeskReading:
+    """A connected helpdesk's tickets, a page at a time, into the minimal index and nothing else.
+
+    The list endpoint rather than the search: the search stops at 300 records ever, and an index
+    that stopped there would be missing every ticket after the three hundredth with nothing to
+    say so. A method named after a module function calls that function, as
+    `xero.XeroReading`'s do: inside a method the bare name is this module's.
+    """
+
+    def entities(self) -> tuple[str, ...]:
+        return (TICKET,)
+
+    def refresh_interval(self) -> timedelta:
+        return READING_INTERVAL
+
+    def operation(
+        self, entity: str, *, settings: Mapping[str, str], resolver: Resolver
+    ) -> RestOperation:
+        # The address is checked against the resolver when each page is prepared, not here.
+        del resolver
+        self._assert_ticket(entity)
+        connection = FreshdeskConnection.from_settings(settings)
+        return operation_for(Endpoint.LIST_TICKETS, domain=connection.domain)
+
+    def key_scheme(self) -> KeyScheme:
+        return KeyScheme.BASIC_KEY_AS_USER
+
+    def first_page(self, entity: str) -> Mapping[str, str]:
+        self._assert_ticket(entity)
+        arguments = (("updated_since", EVERY_TICKET_SINCE), *LIST_ORDER)
+        return MappingProxyType(
+            first_page(Endpoint.LIST_TICKETS, arguments=arguments).as_arguments()
+        )
+
+    def next_page(
+        self, entity: str, asked: Mapping[str, str], body: Any, returned: int
+    ) -> Mapping[str, str] | None:
+        del body
+        self._assert_ticket(entity)
+        shape = shape_for(Endpoint.LIST_TICKETS)
+        paging = {shape.page_parameter, shape.page_size_parameter}
+        request = PageRequest(
+            endpoint=Endpoint.LIST_TICKETS,
+            page=int(asked[shape.page_parameter]),
+            page_size=int(asked[shape.page_size_parameter]),
+            arguments=tuple((name, value) for name, value in asked.items() if name not in paging),
+        )
+        following = next_page(request, rows_on_page=returned, rows_so_far=returned)
+        return None if following is None else MappingProxyType(following.as_arguments())
+
+    def call_headers(self, settings: Mapping[str, str]) -> Mapping[str, str]:
+        # Built for its refusal of an address outside the vendor's domain; it adds no header.
+        FreshdeskConnection.from_settings(settings)
+        return MappingProxyType({})
+
+    def interpret(
+        self, operation: RestOperation, *, status: int, body: Any, fetched_at: str
+    ) -> PageReply:
+        call = classify(status=status)
+        if call is not CallOutcome.OK:
+            return PageReply(call=call, rows=None)
+        return PageReply(call=call, rows=operation.records(body, fetched_at=fetched_at))
+
+    def retry_after(self, headers: Mapping[str, str]) -> float | None:
+        return stated_retry(Reply(status=0, headers=headers))
+
+    def allowance_spent(self, headers: Mapping[str, str]) -> bool:
+        stated = Reply(status=0, headers=headers).header(REMAINING_HEADER).strip()
+        try:
+            return int(stated) <= 0
+        except ValueError:
+            return False
+
+    def projected(
+        self, entity: str, row: Mapping[str, Any], *, seen_at: datetime
+    ) -> ProjectedRecord | None:
+        """One ticket's index entry, built from the declared names and never copied.
+
+        None for a row with no id, mirroring `transports.normalise`: a record that cannot be
+        named cannot be refreshed or matched to itself on the next read.
+        """
+        self._assert_ticket(entity)
+        raw_id = row.get("id")
+        if not isinstance(raw_id, str | int) or not str(raw_id).strip():
+            return None
+        return ProjectedRecord(
+            source=FRESHDESK,
+            entity=TICKET,
+            source_id=str(raw_id),
+            last_seen_at=seen_at,
+            fields=projected_fields(row),
+        )
+
+    @staticmethod
+    def _assert_ticket(entity: str) -> None:
+        if entity != TICKET:
+            msg = f"this reading keeps {TICKET!r} and was asked for {entity!r}"
+            raise ConnectorContractError(msg)
+
+
+def built_from_the_console(settings: Mapping[str, str], ref: SecretRef) -> ConnectorManifest:
+    """The manifest a connection made on the Connectors screen declares."""
+    connection = FreshdeskConnection.from_settings(settings)
+    return manifest(
+        domain=connection.domain,
+        credential=CredentialBinding(ref=ref),
+        visibility=connection.visibility(),
+    )
+
+
 CONNECTOR: Final = ConnectorDeclaration(
     name=FRESHDESK,
     label="Freshdesk",
-    not_from_the_console=(
-        "Its tickets are kept under a visibility rule saying which people may see which "
-        "helpdesk groups, written by somebody who has read how this company's groups map "
-        "to its departments. This screen has no way to write that rule yet, so it is "
-        "connected at the server."
+    console=ConsoleForm(
+        settings=(
+            Setting(
+                name=DOMAIN_SETTING,
+                label="Helpdesk address",
+                hint=(
+                    "The address ending in .freshdesk.com that your helpdesk was given, such as "
+                    "yourcompany.freshdesk.com, even if people reach it at a domain of your own. "
+                    "The key is only ever sent there."
+                ),
+                refused=(
+                    "That is not a Freshdesk helpdesk address. Type the name ending in "
+                    ".freshdesk.com, with no https:// in front and nothing after it."
+                ),
+            ),
+            Setting(
+                name=DEPARTMENT_SETTING,
+                label="Department that reads its tickets",
+                hint=(
+                    "The short name of the one department whose people may be granted this "
+                    "helpdesk's tickets, as the Departments page shows it. Everybody else, "
+                    "whatever they hold, is not shown them."
+                ),
+                refused=(
+                    "That is not a department's short name. Use lower-case letters, digits and "
+                    "underscores, exactly as the Departments page shows it."
+                ),
+            ),
+        ),
+        credential_label="The API key of the Freshdesk agent this system reads as",
+        credential_hint=(
+            "Sign in to Freshdesk as that agent, open Profile settings and copy Your API Key. Use "
+            "an agent key, never an administrator's: the key can do whatever its agent can, and "
+            "this system only reads. Choose an agent who sees the tickets it should answer about "
+            "and no more. Paste it as one piece. It is kept in the vault and never shown again."
+        ),
+        build=built_from_the_console,
     ),
     read_back=ReadBack(
         reading=read_back_reading,
@@ -1240,6 +1539,7 @@ CONNECTOR: Final = ConnectorDeclaration(
             "FRESH-200-search",
             "FRESH-429",
             "FRESH-200-search-full-page",
+            "FRESH-200-list",
             "FRESH-200-ticket",
             "FRESH-200-contact",
             "FRESH-401",
@@ -1247,4 +1547,5 @@ CONNECTOR: Final = ConnectorDeclaration(
         findings=(FRESHDESK_ABSENCE_IS_A_SHORT_PAGE,),
     ),
     recorded=Recorded(tested=True),
+    reading=FreshdeskReading(),
 )

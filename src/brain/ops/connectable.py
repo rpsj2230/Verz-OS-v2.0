@@ -12,9 +12,10 @@ the two lists are total over the shipped connectors by construction, and a conne
 Connectors screen by declaring itself, with no edit here.
 
 **A source is connectable from the console when its manifest is built from identifiers a person
-can type and one key they can paste**, and today that is two of the seven. Xero is pinned to one
-organisation and HubSpot to one account, and each connection class already refuses an identifier
-that narrows nothing. The other five need something this screen has no way to collect: a visibility
+can type and one key they can paste**, and today that is three of the seven. Xero is pinned to one
+organisation, HubSpot to one account and Freshdesk to one helpdesk and the one department that reads
+it, and each connection class already refuses an identifier that narrows nothing. The other four
+need something this screen has no way to collect: a visibility
 rule written by somebody who has read the source's own permission model, a declaration of which
 department a space or a folder belongs to, or a key file rather than a key. Each says which, and the
 screen shows the sentence rather than leaving the source out.
@@ -24,7 +25,9 @@ are checked for being given and for fitting, and then the manifest is built from
 of `*`, one with a space inside, or anything else `brain.connectors.contract.ConnectorScope`
 refuses is refused because the connection class refused it, and the person is told in this
 source's words what to type instead. A second grammar here would be a second place for "narrows
-nothing" to be subtly wrong, which is exactly the argument `XeroConnection.__post_init__` makes.
+nothing" to be subtly wrong, which is exactly the argument `XeroConnection.__post_init__` makes. A
+source asking for two settings says which one it refused
+(`brain.connectors.declaration.SettingRefusedError`), and only that one is marked.
 
 **The manifest's credential names the slot the key is kept in and the role that will read it**,
 `brain.ops.credentials.connector_key_slot` and `brain.ops.secrets.VaultRole.WORKER`. The binding is
@@ -34,7 +37,7 @@ Rejected: a `ConnectorRegistry` built from these at start. The registry is a run
 somebody installed; this is the product's list of what could be, and a registry holding every
 connectable source would read on the screen as every source connected.
 
-Task ids: M42.6.5, M11.1.6
+Task ids: M42.6.5, M11.1.6, M11.9.6
 """
 
 from __future__ import annotations
@@ -45,7 +48,7 @@ from types import MappingProxyType
 from typing import Final
 
 from brain.connectors.contract import ConnectorContractError
-from brain.connectors.declaration import Setting, shipped
+from brain.connectors.declaration import Setting, SettingRefusedError, shipped
 from brain.connectors.manifest import ConnectorManifest
 from brain.ops.credentials import connector_key_slot
 from brain.ops.secrets import SecretRef, VaultRole
@@ -203,10 +206,18 @@ def settings_problems(kind: Connectable, settings: Mapping[str, str]) -> tuple[S
         return tuple(found)
     try:
         kind.build(given(kind, settings), key_reference(kind.name))
+    except SettingRefusedError as refusal:
+        # A connector asking for more than one setting names the one it refused, so the person is
+        # told that setting's sentence and not asked to retype one that was right.
+        named = [one for one in kind.settings if one.name == refusal.setting]
+        return tuple(
+            SettingProblem(field=one.name, code="refused", message=one.refused)
+            for one in (named or kind.settings)
+        )
     except ConnectorContractError:
         # The connector's message is written for somebody reading the source and can quote what
-        # was typed; the person is told this source's sentence instead. Which setting it was is
-        # known for a source with one setting, which is every source listed today.
+        # was typed; the person is told this source's sentence instead. A refusal naming no
+        # setting marks every one, which is exact for a source with a single setting.
         return tuple(
             SettingProblem(field=one.name, code="refused", message=one.refused)
             for one in kind.settings

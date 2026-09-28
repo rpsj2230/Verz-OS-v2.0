@@ -506,6 +506,7 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.connectors.declaration:SourceReading.first_page": Repeat.READS,
         "brain.connectors.declaration:SourceReading.next_page": Repeat.READS,
         "brain.connectors.declaration:SourceReading.call_headers": Repeat.READS,
+        "brain.connectors.declaration:SourceReading.key_scheme": Repeat.READS,
         "brain.connectors.declaration:SourceReading.interpret": Repeat.READS,
         "brain.connectors.declaration:SourceReading.retry_after": Repeat.READS,
         "brain.connectors.declaration:SourceReading.allowance_spent": Repeat.READS,

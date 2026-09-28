@@ -99,10 +99,16 @@ matches nothing, for ever, and looks exactly like a source with no records in it
 
 ## `freshdesk`
 
-Your helpdesk. Pinned to one helpdesk account by its address.
+Your helpdesk. Pinned to one helpdesk account by its address, and connected from the Connectors
+screen with two settings and a key: the helpdesk's address, ending in `.freshdesk.com`, and the
+short name of the one department whose people may be granted its tickets. Nothing is done on the
+server. The worker then reads the ticket list every fifteen minutes and keeps each ticket's ids,
+status, priority, dates and subject, with that department on it; the body, the conversation and
+the custom fields are read live when a question needs them and never kept.
 
 **Create** an agent API key with read scope. Not an administrator key: an administrator key can
-change service levels and delete tickets.
+change service levels and delete tickets. The key sees what its agent sees, so choose an agent who
+sees the tickets this system should answer about and no more.
 
 **Know this before you rely on it.** Freshdesk's search returns at most three hundred records,
 ever. Not per page: a hard ceiling on the result set, and the three-hundredth record and the
@@ -113,7 +119,8 @@ answerable; the answer will tell you when it could not see the whole list.
 
 **What it does not narrow.** The key is account-wide and there is no per-group key to ask for,
 so pinning the account refuses a credential pointed at a different helpdesk and narrows nothing
-inside this one.
+inside this one. Inside this system, one department reads the whole helpdesk: a rule sending each
+Freshdesk group to a different department is not something a connection can hold yet.
 
 ## `google_drive`
 

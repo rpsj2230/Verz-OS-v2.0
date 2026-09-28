@@ -48,12 +48,13 @@ closures take. It carries no headers and no status, so a key cannot be sent thro
 cannot come back through it as anything but an exception, which is the collapse
 `xero.AN_UNREACHABLE_LEDGER_IS_NOT_AN_EMPTY_ONE` refuses.
 
-Task ids: M42.6.5, M31.3.2.3, M31.3.2.4, M11.9.1
+Task ids: M42.6.5, M31.3.2.3, M31.3.2.4, M11.9.1, M11.6.2
 """
 
 from __future__ import annotations
 
 import asyncio
+import base64
 import http.client
 import json
 import ssl
@@ -65,6 +66,7 @@ from urllib.parse import urlsplit
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from brain.connectors.declaration import KeyScheme
 from brain.connectors.projection import ProjectedRecord
 from brain.connectors.rest import MAX_RESPONSE_BYTES
 from brain.connectors.throttle import CallOutcome, classify
@@ -144,6 +146,22 @@ USER_AGENT: Final = "company-brain-connectors/1"
 
 class ConnectorKeyAbsentError(SecretsUnavailableError):
     """The vault answered and holds no key at this source's slot."""
+
+
+def authorization(scheme: KeyScheme, key: str) -> str:
+    """The one header value a source's key is sent in, in the shape its reading names.
+
+    Here and not on the reading, for `brain.connectors.declaration.
+    A_READING_NAMES_HOW_ITS_KEY_IS_SENT_AND_NEVER_HOLDS_IT`: this module already holds the key for
+    one request, and a reading never does. A `match` over a closed enumeration, so a scheme added
+    without a shape here fails mypy's exhaustiveness check rather than falling back to a bearer.
+    """
+    match scheme:
+        case KeyScheme.BEARER:
+            return f"Bearer {key}"
+        case KeyScheme.BASIC_KEY_AS_USER:
+            pair = base64.b64encode(f"{key}:X".encode()).decode("ascii")
+            return f"Basic {pair}"
 
 
 # ------------------------------------------------------------------------ the key
@@ -567,13 +585,15 @@ async def _read_under(
     headers = {
         **reading.call_headers(live.connection.settings),
         "Accept": "application/json",
-        "Authorization": f"Bearer {key}",
+        "Authorization": authorization(reading.key_scheme(), key),
     }
     limiter = LimiterState()
 
     for entity in reading.entities():
         try:
-            operation = reading.operation(entity, resolver=resolver)
+            operation = reading.operation(
+                entity, settings=live.connection.settings, resolver=resolver
+            )
         except UnsafeAddressError:
             # The specification's own server is checked when it is loaded, before any path is
             # built, so a source whose name answers inside the network is refused here first.

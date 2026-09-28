@@ -36,14 +36,21 @@ Rejected: one declaration per concern, each in the module that consumes it (a `R
 thing, so the rule that ties them (a scheduled reading needs a console form, because the connection
 row is where its settings come from) would have nowhere to be stated.
 
+**A reading is told its connection's settings when it builds its operation, and names how its key
+is presented.** Both were fixed for every source until Freshdesk, whose address is the helpdesk's
+own and whose key is sent as HTTP Basic rather than as a bearer token. The key still reaches one
+header in the worker's run and nowhere else: a reading names a `KeyScheme` and never sees the key.
+See `A_READING_NAMES_HOW_ITS_KEY_IS_SENT_AND_NEVER_HOLDS_IT`.
+
 Scope: domain logic. Nothing here opens a connection or reads a table; `shipped` imports the modules
 of one package, and that is all it does.
 
-Task ids: M11.1.1, M11.1.6, M11.9.1
+Task ids: M11.1.1, M11.1.6, M11.9.1, M11.6.2
 """
 
 from __future__ import annotations
 
+import enum
 import importlib
 import inspect
 import pkgutil
@@ -88,6 +95,16 @@ A_READING_NEEDS_A_CONNECTION_TO_READ: Final = (
     "no such row, so a reading declared for it is a reading nothing can ever start."
 )
 
+#: Why a reading declares a scheme rather than building the header itself.
+A_READING_NAMES_HOW_ITS_KEY_IS_SENT_AND_NEVER_HOLDS_IT: Final = (
+    "Sources take a key in different shapes: a bearer token, or HTTP Basic with the key as the "
+    "user name. A reading that built the header would be handed the key, and a reading is an "
+    "object a later edit can make keep it. So a reading names one of a closed set of schemes, "
+    "and the worker's run, which already holds the key for one request, is the only code that "
+    "writes it into a header. A new scheme is a new member here, reviewed where the key is "
+    "handled."
+)
+
 #: The name every connector module declares itself under.
 DECLARATION_ATTRIBUTE: Final = "CONNECTOR"
 
@@ -96,6 +113,30 @@ _NAME_RE: Final = re.compile(OBJECT_NAME_PATTERN)
 
 class DeclarationError(ConnectorContractError):
     """A connector declared itself in a shape the platform cannot hold. Raised at start-up."""
+
+
+class SettingRefusedError(ConnectorContractError):
+    """A connector refused one console setting, and says which.
+
+    A form asking for two settings cannot otherwise say which one was wrong: the console would mark
+    both, and a person would retype the one that was right. `brain.ops.connectable` shows only the
+    named setting's `refused` sentence, and never this message, which may quote what was typed.
+    """
+
+    def __init__(self, message: str, *, setting: str) -> None:
+        super().__init__(message)
+        self.setting = setting
+
+
+class KeyScheme(enum.StrEnum):
+    """How the worker's run presents a source's key. See
+    `A_READING_NAMES_HOW_ITS_KEY_IS_SENT_AND_NEVER_HOLDS_IT`."""
+
+    #: `Authorization: Bearer <key>`, which Xero and HubSpot take.
+    BEARER = "bearer"
+    #: HTTP Basic with the key as the user name and `X` as the password, which is how Freshdesk
+    #: documents its API key (https://developers.freshdesk.com/api/#authentication).
+    BASIC_KEY_AS_USER = "basic_key_as_user"
 
 
 # ---------------------------------------------------------------- connecting from the console
@@ -185,8 +226,14 @@ class SourceReading(Protocol):
         """How often a healthy source is read, which is the interval its freshness is judged by."""
         ...
 
-    def operation(self, entity: str, *, resolver: Resolver) -> RestOperation:
-        """The bound operation that lists one entity kind."""
+    def operation(
+        self, entity: str, *, settings: Mapping[str, str], resolver: Resolver
+    ) -> RestOperation:
+        """The bound operation that lists one entity kind, at the address the connection names."""
+        ...
+
+    def key_scheme(self) -> KeyScheme:
+        """How the worker's run sends this source's key. The reading never sees the key."""
         ...
 
     def first_page(self, entity: str) -> Mapping[str, str]:
