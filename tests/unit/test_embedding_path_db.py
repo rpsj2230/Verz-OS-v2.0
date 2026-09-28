@@ -51,7 +51,7 @@ from brain.knowledge.visibility import KnowledgeVisibility
 from brain.ops.queue import Job
 from brain.session import make_app_engine, make_application_sessions
 from brain.tables.gate import DepartmentRow
-from tests.fixtures.knowledge_items import a_person, a_reader
+from tests.fixtures.knowledge_items import a_person, a_reader, add_item_kind
 from tests.fixtures.retirable import has_pgvector, predecessor, retirable, revision_of
 from tests.fixtures.scratch_postgres import ROOT, drop, fresh, migrate, run, sql
 
@@ -94,6 +94,7 @@ def without_pgvector(database: str) -> Iterator[str]:
         migrate(database, "upgrade", "0015")
         migrate(database, "stamp", predecessor(ITEM_MIGRATION))
         migrate(database, "upgrade", revision_of(ITEM_MIGRATION))
+        add_item_kind(scratch)
         migrate(database, "stamp", predecessor(LAPSE_MIGRATION))
         migrate(database, "upgrade", revision_of(LAPSE_MIGRATION))
         metadata = sa.MetaData()

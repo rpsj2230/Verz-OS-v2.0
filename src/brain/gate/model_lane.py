@@ -63,17 +63,19 @@ who asked. A caller that brings an agent computes `E(caller) ∩ agent_ceiling` 
 `entitlement`; there is deliberately no second parameter here where a ceiling could be applied a
 second way.
 
-**A passage carries no department, so a field grant scoped to one reads no passage, and that
-fails closed.** The redactor evaluates a grant's scope against the record's own values, and a
-`KnowledgePassage` carries its document's reference and words and not the chunk's department,
-visibility or owner, which the search tested inside the query and did not return. So a
+**A passage carries the department, visibility and owner its item was stored with, so a field
+grant over one department reads that department's passages and no other's** (M7.7.1). The
+redactor evaluates a grant's scope against the record's own values, and until 2026-09-28 a
+`KnowledgePassage` carried its document's reference and words and nothing its scopes test, so a
 `read:knowledge.document` held over one department, which is how a pack assignment grants it,
-matches no passage and every passage is withheld; only a field grant whose scope tests nothing a
-passage lacks reads one. Widening the grant to fit was rejected, because a caller holding the body
-over one department and the plane over every department would then read every department's
-bodies. The repair is the passage carrying the fields its scopes test, and a decision about what a
-department's field grant means on a company-wide document, which is the document plane's to make.
-See `A_PASSAGE_CARRIES_NO_DEPARTMENT_SO_A_DEPARTMENT_SCOPED_FIELD_GRANT_READS_NONE`.
+matched no passage and every passage was withheld. `brain.knowledge.document_tools` now reads the
+three off the chunk row, and this policy classifies them under the body's own capability, so they
+reach the payload for whoever reads the words and never the prompt: `SHOWN_FIELDS` does not name
+them. Widening the grant to fit was rejected, because a caller holding the body over one
+department and the plane over every department would then read every department's bodies. A
+company or personal passage names no department, so a department-scoped field grant still reads
+none of those, which fails closed and is the decision left open. See
+`A_DEPARTMENT_SCOPED_FIELD_GRANT_READS_ITS_OWN_DEPARTMENTS_PASSAGES`.
 
 **The passage policy lives here because nothing redacted a passage before.** The document tools
 return `KnowledgePassage` records and no `FieldPolicy` named them, since the only callers so far
@@ -96,7 +98,7 @@ which walks the rung serving it before the agent's tier. **The call names what i
 the question, the passages and any skill descriptions, as `brain.models.disclosure` categories on
 every attempt row; a golden question asked by the matrix gate is recorded as that instead.
 
-Task ids: M3.9.3, M8.1.4, M9.2.1, M6.4.2, M5.4.1, M5.7.3, M5.6.4, M5.2.2, M5.5.1
+Task ids: M3.9.3, M8.1.4, M9.2.1, M6.4.2, M5.4.1, M5.7.3, M5.6.4, M5.2.2, M5.5.1, M7.7.1
 """
 
 from __future__ import annotations
@@ -182,14 +184,14 @@ THE_MODELS_WORDS_ARE_PROSE_AND_NEVER_A_CITATION_OR_A_FETCH: Final = (
     "either, so it has no address to offer."
 )
 
-#: Why a department-scoped field grant reads no passage today, and why it is not widened to fit.
-A_PASSAGE_CARRIES_NO_DEPARTMENT_SO_A_DEPARTMENT_SCOPED_FIELD_GRANT_READS_NONE: Final = (
-    "The redactor tests a field grant's scope against the record, and a passage carries no "
-    "department, visibility or owner, so a grant over one department matches no passage and the "
-    "passage is withheld. That is the safe direction. Treating any holding of the capability as "
-    "enough would let a caller who reads bodies in one department and the plane in all of them "
-    "read every department's bodies, so the grant is not widened; a passage carrying the fields "
-    "its scopes test is the repair."
+#: Why a department-scoped field grant reads its own department's passages and no other's.
+A_DEPARTMENT_SCOPED_FIELD_GRANT_READS_ITS_OWN_DEPARTMENTS_PASSAGES: Final = (
+    "The redactor tests a field grant's scope against the record, and a passage carries the "
+    "department, visibility and owner its item was stored with, so a grant over one department "
+    "matches that department's passages and withholds every other department's. Treating any "
+    "holding of the capability as enough was rejected, because a caller who reads bodies in one "
+    "department and the plane in all of them would then read every department's bodies. A "
+    "company or personal passage names no department and is read only by a grant testing none."
 )
 
 #: Why the prompt is bounded by bytes rather than by an estimate of tokens.
@@ -256,6 +258,18 @@ PASSAGE_POLICY: Final = FieldPolicy(
         ),
         FieldRule.of(
             KNOWLEDGE_ENTITY, "updated_at", "read:knowledge.updated_at", Classification.INTERNAL
+        ),
+        # Where the item was stored, which a field grant's scope is tested against (M7.7.1).
+        # Under the body's own capability: whoever may read the words may know where they live
+        # and who stewards them. Never shown to a model, because `SHOWN_FIELDS` does not name them.
+        FieldRule.of(
+            KNOWLEDGE_ENTITY, "department", "read:knowledge.document", Classification.INTERNAL
+        ),
+        FieldRule.of(
+            KNOWLEDGE_ENTITY, "visibility", "read:knowledge.document", Classification.INTERNAL
+        ),
+        FieldRule.of(
+            KNOWLEDGE_ENTITY, "owner_id", "read:knowledge.document", Classification.INTERNAL
         ),
     )
 )

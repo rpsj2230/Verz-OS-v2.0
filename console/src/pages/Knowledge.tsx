@@ -9,17 +9,24 @@
  * draws it. `knowledgeQuery.A_COLUMN_NOTHING_SENDS_IS_A_SENTENCE_AND_NEVER_A_BLANK_COLUMN` is the
  * rule.
  *
- * **What is drawn and what is not.** The library table has the design's Item and Visible to
- * columns, which are the two facts `brain.console.govern_estate.library_rows` puts on a row. The
+ * **What is drawn and what is not.** The library table has the design's Item, Type and Visible to
+ * columns, which are the three facts `brain.console.govern_estate.library_rows` puts on a row; an
+ * item added before kinds were recorded says so in its Type cell rather than drawing it blank. The
  * Items and Company-wide figures are counts of those rows. The coverage card lists the
  * departments the rows may be grouped by when `departments_represented` allows it and says why
  * it does not when it does not. The Fresh and Never retrieved figures, the coverage bars, and the
  * Dept, Type, Owner, Verified, Review due and Used 30d columns are each a sentence, because
  * `brain.estate_routes` says nothing on this install measures them.
  *
- * **Three controls from the design are absent and say so.** Upload and Export inventory are
- * writes nothing on the server offers, and the Review due chip filters on a date the API does not
- * send. The search, the level filter, the order and "Show more" are requests the route answers over
+ * **Upload is the Add a document card** (M7.6.3). It asks the API what this person may add and
+ * where, and draws a form only from that answer: the kinds they may choose, the departments they
+ * may add to, whether their own level is offered, and the types and sizes the door takes. A file is
+ * judged against those before it is sent, sent raw with its name in a header, and the answer is the
+ * API's own sentence, whether it was added or why it was not, parse failures included (M7.2.5).
+ * Somebody who may add nothing is told so in one sentence and shown no form.
+ *
+ * **Two controls from the design are absent and say so.** Export inventory is a write nothing on
+ * the server offers, and the Review due chip filters on a date the API does not send. The search, the level filter, the order and "Show more" are requests the route answers over
  * the items this reader may know exist, without narrowing what it loads, so its truncation flag
  * stays a fact about the install rather than a count of what matched.
  *
@@ -30,21 +37,35 @@
  * Imported statically rather than split, which is `Roles.tsx`' rule: it mounts neither heavy
  * library and imports no stylesheet of its own.
  *
- * Task ids: M27.7.20, M27.8.6
+ * Task ids: M27.7.20, M27.8.6, M7.6.3, M7.6.1, M7.2.5
  */
 
+import { useState, type FormEvent } from "react";
+import { request } from "../api/client";
+import type { ApiFailure } from "../api/errors";
+import { useResource } from "../api/useResource";
 import { ListControls, NOTHING_MATCHES, ShowMore } from "../components/ListControls";
 import { narrows } from "../components/listing";
 import { useListing } from "../components/useListing";
 import { Chip } from "../ui/Chip";
 import {
+  acceptOf,
+  addedSentence,
   atLevel,
   KNOWLEDGE_API_PATH,
+  kindWord,
   LIBRARY_FILTERS,
   LIBRARY_SORTS,
   readKnowledgePage,
+  readUploaded,
+  readUploadOptions,
+  typeOf,
+  UPLOAD_OPTIONS_API_PATH,
+  uploadPath,
   type LibraryRow,
   type Level,
+  type UploadLevel,
+  type UploadOptions,
 } from "./knowledgeQuery";
 import { FailureNotice } from "../ui/FailureNotice";
 
@@ -80,11 +101,11 @@ export const NOT_MEASURED =
 
 /** What is said in place of the Dept, Type, Owner, Verified, Review due and Used 30d columns. */
 export const ONLY_EXISTENCE_AND_REACH =
-  "This screen shows that an item exists and how widely it reaches, and nothing more. The " +
-  "department and the owner are the two halves of an item's visibility rule, which this screen " +
-  "does not show on a row; the title and who verified it say more than that an item exists; and " +
-  "no document type or retrieval count is recorded. So the design's Dept, Type, Owner, Verified, " +
-  "Review due and Used 30d columns are not drawn.";
+  "This screen shows that an item exists, what kind it is and how widely it reaches, and nothing " +
+  "more. The department and the owner are the two halves of an item's visibility rule, which this " +
+  "screen does not show on a row; the title and who verified it say more than that an item exists; " +
+  "and no retrieval count is recorded. So the design's Dept, Owner, Verified, Review due and Used " +
+  "30d columns are not drawn.";
 
 /** What is said in place of the grouping, when this reader may not be shown it. */
 export const GROUPING_WITHHELD =
@@ -95,12 +116,261 @@ export const GROUPING_WITHHELD =
 /** A grouping that is allowed and holds no department. */
 export const NO_DEPARTMENTS = "No item on this page sits in a department.";
 
-/** What is said in place of the Upload, Export inventory and Review due controls. */
+/** What is said in place of the Export inventory and Review due controls. */
 export const CONTROLS_NOT_OFFERED =
-  "There is no Upload control: nothing on this install accepts a document from the console yet. " +
   "There is no Export inventory control: an export is recorded on the Exports screen, and " +
   "nothing here writes that record. There is no Review due filter: the review date is not sent " +
   "to this screen.";
+
+// ------------------------------------------------------------------ adding a document (M7.6.3)
+
+/** The card's heading and its form's accessible name. */
+export const ADD_HEADING = "Add a document";
+
+/** Under the heading: what adding does, and what it never does. */
+export const ADD_LEDE =
+  "A plain text, Markdown, PDF or Word document is read here and answered from straight away. It " +
+  "is added to one department or to you only; making it company-wide is a promotion somebody " +
+  "approves, and this form never does it.";
+
+/** What somebody who may add nothing is told. About their own reach, and nobody else's. */
+export const ADD_NOT_OFFERED = "Adding documents is not offered to you.";
+
+/** A body the console could not read as the options. */
+export const ADD_UNREADABLE = "The API did not say what may be added, so no form is drawn.";
+
+/** What the page says while the options are being asked for. */
+export const ASKING_WHAT_MAY_BE_ADDED = "Asking what you may add.";
+
+/** What the press says while the file is on its way. */
+export const ADDING = "Adding the document.";
+
+export const ADD_LABEL = "Add to knowledge";
+export const FILE_LABEL = "Document";
+export const KIND_LABEL = "Kind";
+export const LEVEL_LABEL = "Visible to";
+export const DEPARTMENT_LABEL = "Department";
+export const ONE_DEPARTMENT = "One department";
+export const ONLY_ME = "You only";
+
+/** Said beside a field left empty, or a file this form can already tell will be refused. */
+export const ADD_PROBLEMS = {
+  file: "Choose the document to add.",
+  type: "Choose a plain text, Markdown, PDF or Word document; this file is none of those.",
+  size: "This file is larger than this install accepts for its type.",
+  kind: "Choose what kind of document this is.",
+  department: "Choose the department it is for.",
+} as const;
+type AddProblem = keyof typeof ADD_PROBLEMS;
+
+/** The inputs the API may name a problem against, so a refusal is not listed twice. */
+const ADD_FIELDS = ["file", "kind", "level", "department"];
+
+export interface AddDraft {
+  readonly file: File | null;
+  readonly kind: string;
+  readonly level: UploadLevel;
+  readonly department: string;
+}
+
+/** What is wrong with a draft before it is sent, judged against what the API offered. */
+export function addProblems(draft: AddDraft, options: UploadOptions): AddProblem[] {
+  const found: AddProblem[] = [];
+  if (draft.file === null) {
+    found.push("file");
+  } else {
+    const type = typeOf(draft.file.name, options.types);
+    if (type === null) {
+      found.push("type");
+    } else if (draft.file.size > type.maxBytes) {
+      found.push("size");
+    }
+  }
+  if (draft.kind === "") {
+    found.push("kind");
+  }
+  if (draft.level === "department" && draft.department === "") {
+    found.push("department");
+  }
+  return found;
+}
+
+function AddForm({ options, onAdded }: { readonly options: UploadOptions; readonly onAdded: () => void }) {
+  const levels: UploadLevel[] = [
+    ...(options.departments.length > 0 ? (["department"] as const) : []),
+    ...(options.personal ? (["personal"] as const) : []),
+  ];
+  const [draft, setDraft] = useState<AddDraft>({
+    file: null,
+    kind: "",
+    level: levels[0] ?? "department",
+    department: options.departments.length === 1 ? (options.departments[0] ?? "") : "",
+  });
+  const [problems, setProblems] = useState<readonly AddProblem[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  const [said, setSaid] = useState("");
+
+  if (levels.length === 0) {
+    return <p className="note">{ADD_NOT_OFFERED}</p>;
+  }
+
+  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const found = addProblems(draft, options);
+    setProblems(found);
+    setSaid("");
+    const file = draft.file;
+    const type = file === null ? null : typeOf(file.name, options.types);
+    if (found.length > 0 || file === null || type === null) {
+      return;
+    }
+    setBusy(true);
+    void (async () => {
+      const result = await request<unknown>(uploadPath(draft.kind, draft.level, draft.department), {
+        method: "POST",
+        file: { body: file, type: type.mediaType, name: file.name },
+      });
+      setBusy(false);
+      if (!result.ok) {
+        setFailure(result.failure);
+        return;
+      }
+      setFailure(null);
+      const added = readUploaded(result.data);
+      setSaid(added === null ? "" : addedSentence(added));
+      onAdded();
+    })();
+  };
+
+  return (
+    <>
+      {failure === null ? null : <FailureNotice failure={failure} fields={ADD_FIELDS} />}
+      {said === "" ? null : (
+        <p className="note" role="status">
+          {said}
+        </p>
+      )}
+      {busy ? (
+        <p className="note" role="status">
+          {ADDING}
+        </p>
+      ) : null}
+      <form className="form" aria-label={ADD_HEADING} onSubmit={onSubmit} noValidate>
+        <label className="control-label">
+          {FILE_LABEL}{" "}
+          <input
+            className="form-control"
+            type="file"
+            name="file"
+            accept={acceptOf(options.types)}
+            onChange={(event) => setDraft({ ...draft, file: event.target.files?.[0] ?? null })}
+          />
+        </label>
+        {(["file", "type", "size"] as const).map((one) =>
+          problems.includes(one) ? (
+            <p key={one} className="note">
+              {ADD_PROBLEMS[one]}
+            </p>
+          ) : null,
+        )}
+        <label className="control-label">
+          {KIND_LABEL}{" "}
+          <select
+            className="form-control"
+            name="kind"
+            value={draft.kind}
+            onChange={(event) => setDraft({ ...draft, kind: event.target.value })}
+          >
+            <option value="">Choose one</option>
+            {options.kinds.map((one) => (
+              <option key={one.value} value={one.value}>
+                {one.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {problems.includes("kind") ? <p className="note">{ADD_PROBLEMS.kind}</p> : null}
+        <label className="control-label">
+          {LEVEL_LABEL}{" "}
+          <select
+            className="form-control"
+            name="level"
+            value={draft.level}
+            onChange={(event) =>
+              setDraft({ ...draft, level: event.target.value === "personal" ? "personal" : "department" })
+            }
+          >
+            {levels.map((one) => (
+              <option key={one} value={one}>
+                {one === "department" ? ONE_DEPARTMENT : ONLY_ME}
+              </option>
+            ))}
+          </select>
+        </label>
+        {draft.level === "department" ? (
+          <label className="control-label">
+            {DEPARTMENT_LABEL}{" "}
+            <select
+              className="form-control"
+              name="department"
+              value={draft.department}
+              onChange={(event) => setDraft({ ...draft, department: event.target.value })}
+            >
+              <option value="">Choose one</option>
+              {options.departments.map((one) => (
+                <option key={one} value={one}>
+                  {one}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        {problems.includes("department") ? <p className="note">{ADD_PROBLEMS.department}</p> : null}
+        <p className="note">
+          Found by {options.foundBy}. Checked before it is read by the {options.checkedBy}.
+        </p>
+        <div className="form-actions">
+          <button type="submit" className="button" disabled={busy}>
+            {ADD_LABEL}
+          </button>
+        </div>
+      </form>
+    </>
+  );
+}
+
+function AddDocument({ onAdded }: { readonly onAdded: () => void }) {
+  const offered = useResource<unknown>(UPLOAD_OPTIONS_API_PATH);
+  let inside;
+  if (offered.busy) {
+    inside = (
+      <p className="note" role="status">
+        {ASKING_WHAT_MAY_BE_ADDED}
+      </p>
+    );
+  } else if (offered.failure !== null) {
+    // A 404 is the answer for somebody who may add nothing, and it is theirs to be told plainly;
+    // a session missing a second factor is told so by the notice, which offers the way out.
+    inside =
+      offered.failure.status === 404 && !offered.failure.secondFactorNeeded ? (
+        <p className="note">{ADD_NOT_OFFERED}</p>
+      ) : (
+        <FailureNotice failure={offered.failure} />
+      );
+  } else {
+    const options = readUploadOptions(offered.data);
+    inside =
+      options === null ? <p className="note">{ADD_UNREADABLE}</p> : <AddForm options={options} onAdded={onAdded} />;
+  }
+  return (
+    <section className="card">
+      <h2>{ADD_HEADING}</h2>
+      <p className="note">{ADD_LEDE}</p>
+      {inside}
+    </section>
+  );
+}
 
 /** What the company view adds over a department's, as the design lists it, in true sentences. */
 export const DEPARTMENT_ADMIN_SEES = "Only the items in their own scope.";
@@ -171,8 +441,8 @@ function Figures({
   );
 }
 
-function KnowledgeAnswerView() {
-  const listing = useListing<LibraryRow>(KNOWLEDGE_API_PATH, { choices: LIBRARY_FILTERS });
+function KnowledgeAnswerView({ version }: { readonly version: number }) {
+  const listing = useListing<LibraryRow>(KNOWLEDGE_API_PATH, { choices: LIBRARY_FILTERS, version });
 
   if (listing.body === null) {
     if (listing.failure) {
@@ -187,10 +457,11 @@ function KnowledgeAnswerView() {
 
   const page = readKnowledgePage(listing.body);
   const rows = page.items;
-  const choices = LIBRARY_FILTERS.map((choice) => ({
-    ...choice,
-    describe: (value: string) => LEVEL_WORDS[value as Level] ?? value,
-  }));
+  const choices = LIBRARY_FILTERS.map((choice) =>
+    choice.describe === undefined
+      ? { ...choice, describe: (value: string) => LEVEL_WORDS[value as Level] ?? value }
+      : choice,
+  );
 
   return (
     <>
@@ -289,6 +560,7 @@ function KnowledgeAnswerView() {
                 <thead>
                   <tr>
                     <th scope="col">Item</th>
+                    <th scope="col">Type</th>
                     <th scope="col">Visible to</th>
                   </tr>
                 </thead>
@@ -298,6 +570,7 @@ function KnowledgeAnswerView() {
                       <td>
                         <code>{row.item_id}</code>
                       </td>
+                      <td>{kindWord(row.kind)}</td>
                       <td>
                         <code>{LEVEL_WORDS[row.level as Level]}</code>
                       </td>
@@ -318,11 +591,14 @@ function KnowledgeAnswerView() {
 }
 
 export function Knowledge() {
+  // Moved after a document is added, so the library asks again and shows it.
+  const [version, setVersion] = useState(0);
   return (
     <article className="page">
       <h1>{KNOWLEDGE_HEADING}</h1>
       <p className="lede">{KNOWLEDGE_LEDE}</p>
-      <KnowledgeAnswerView />
+      <AddDocument onAdded={() => setVersion((was) => was + 1)} />
+      <KnowledgeAnswerView version={version} />
     </article>
   );
 }

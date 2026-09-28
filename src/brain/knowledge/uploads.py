@@ -37,30 +37,48 @@ configured next to it, in the same way `admission.SHED_ORDER` is derived from `C
 and the refusal is `RefusalKind.CAPACITY` from the existing taxonomy rather than a new word.
 See `INGESTION_CANNOT_BE_PROMOTED_OUT_OF_BATCH` for the half of this that yields.
 
-What is not here: an HTTP route. M7.1.1 says "upload endpoint", and what is written is the
-endpoint's decisions and the shape it hands on; `brain.api` owns routes and is not this
-change. A route that called `receive_upload` and then `scan_for_parsing` would be four lines,
-and it is honest to say those four lines do not exist yet rather than to claim the leaf whole.
+**The route is `brain.knowledge_routes`, and the text path it takes is here** (M7.6.3). The body
+is read by `read_arriving`, the same running ceiling as `read_within` over a stream that arrives
+asynchronously, then admitted by `admit_upload`, scanned and parsed by
+`brain.knowledge.text_path` through `scan_for_parsing` and `parse_scanned`, and made an item by
+`read_for_text_path`. Four things are decided on the way, each in one function:
 
-Task ids: M7.1.1, M7.1.2, M7.1.4, M7.1.5
+- **Where it is placed** is `placement_for_upload`: at one department the uploader may add to, or
+  at their own personal level, and never company-wide, which is a promotion with an approver and
+  a review date. The level asked for is stored or refused, never silently narrowed. See
+  `AN_UPLOAD_IS_PLACED_WHERE_ITS_UPLOADER_MAY_ADD_AND_NEVER_WIDER`.
+- **Its kind** is the one the uploader chose, refused when the content contradicts it; see
+  `brain.knowledge.kinds`.
+- **Its identity** is a digest of the bytes, the owner and the place, and never the filename.
+  See `AN_UPLOAD_IS_NAMED_BY_WHAT_IT_IS_AND_WHERE_IT_WENT`.
+- **Its state** is published at the level it was placed, because nothing about a department
+  document needs a second person to reach its own department; widening it does, and that is
+  M7.4.4's path.
+
+Task ids: M7.1.1, M7.1.2, M7.1.4, M7.1.5, M7.4.3, M7.6.3, M7.2.5
 """
 
 from __future__ import annotations
 
+import hashlib
 import string
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import AsyncIterable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import PurePosixPath
 from types import MappingProxyType
 from typing import Final
 from urllib.parse import urlsplit
 
 from brain.core.lane import Lane
 from brain.gate.context import TrafficClass
+from brain.knowledge.chunking import Block, BlockKind
 from brain.knowledge.ingest import (
     AdmittedUpload,
     IngestRefused,
     MediaType,
+    ParseCause,
+    ParseFailure,
     QueueDecision,
     QueueLimits,
     admit_to_queue,
@@ -72,7 +90,24 @@ from brain.knowledge.ingest import (
     # name `brain.knowledge.ingest` and the function has one home rather than two.
     ceiling_for,
 )
-from brain.knowledge.scanning import ScannedContent
+from brain.knowledge.item import KnowledgeItem, KnowledgeState
+from brain.knowledge.kinds import KnowledgeKind, assert_kind_holds, assert_uploadable
+from brain.knowledge.scanning import (
+    Parser,
+    ScannedContent,
+    Scanner,
+    parse_scanned,
+    scan_for_parsing,
+)
+from brain.knowledge.search import TITLE_CHARS, Reach
+from brain.knowledge.text_path import (
+    TABLES_ARE_VISIBLE,
+    TEXT_PATH_TYPES,
+    StructuralCheck,
+    TextPathParser,
+    joined,
+)
+from brain.knowledge.visibility import KnowledgeVisibility, Visibility, VisibilityError
 from brain.ops.admission import (
     AdmissionDecision,
     AdmissionRequest,
@@ -130,6 +165,26 @@ THE_KEY_IS_THE_DIGEST_AND_NOT_THE_NAME = (
     "the filename. The extension is left off for the reason the door refuses to trust it: the "
     "extension is a claim, and a claim we declined to believe has no business in an "
     "object name."
+)
+
+#: Why an upload is stored at the level asked for, and only where its uploader may add.
+AN_UPLOAD_IS_PLACED_WHERE_ITS_UPLOADER_MAY_ADD_AND_NEVER_WIDER = (
+    "An upload is placed at one department its uploader holds admin:knowledge over, or at their "
+    "own personal level, and never company-wide: widening to everybody is a promotion with an "
+    "approver and a review date, and a form field that did it would put the whole gate in "
+    "whoever last used the form. The level asked for is stored or refused, never quietly "
+    "narrowed, because an uploader told nothing believes their department can read something "
+    "only they can. A department nobody may add to, or one that does not exist, is refused in "
+    "the same words, so the refusal is not a way to ask which departments exist."
+)
+
+#: Why an item's id is a digest and not the filename.
+AN_UPLOAD_IS_NAMED_BY_WHAT_IT_IS_AND_WHERE_IT_WENT = (
+    "An item id is quoted in citations, in the library and in the ledger, none of which inherit "
+    "the document's reach, so it is not the filename, for THE_KEY_IS_THE_DIGEST_AND_NOT_THE_NAME's "
+    "reason. It is a digest of the bytes, the owner, the level and the department, so sending "
+    "the same file to the same place again replaces that item rather than adding a second copy, "
+    "and the same file placed somewhere else is a different item rather than one moved there."
 )
 
 #: Why ingestion has no priority of its own and cannot be given one.
@@ -619,3 +674,165 @@ def admit_ingestion(
         capacity=capacity,
         queue=queue,
     )
+
+
+# ------------------------------------------------------ the text path (M7.6.3, M7.4.3)
+#: What an uploaded item's id begins with, so a library row says where it came from.
+UPLOAD_ID_PREFIX: Final = "upload."
+
+#: How much of the digest names an upload. Forty hex characters, 160 bits, leaves the id and
+#: every chunk id cut from it far inside the reference grammar's 128 characters.
+UPLOAD_DIGEST_CHARS: Final = 40
+
+
+class UploadNotOffered(Exception):  # noqa: N818 - a refusal, named like the ones beside it
+    """The uploader may not add a document at the place asked for, or at all.
+
+    A separate type from `VisibilityError` because the route answers it differently: this is a
+    question about the uploader's grants and is answered as absent, in the words every other
+    refusal of that kind uses, so it never says which departments exist or which one refused.
+    """
+
+
+async def read_arriving(chunks: AsyncIterable[bytes], *, ceiling: int) -> bytes:
+    """`read_within` over a body that arrives asynchronously, with the same running ceiling.
+
+    The route reads the request stream with this, so the second of the door's three checks
+    holds for an upload over HTTP as it does for one handed over whole.
+    """
+    buffer = bytearray()
+    async for chunk in chunks:
+        buffer += chunk
+        if len(buffer) > ceiling:
+            msg = (
+                f"this upload passed {ceiling} bytes while it was still arriving, so the rest "
+                "was not read; the declared length said otherwise"
+            )
+            raise IngestRefused(msg)
+    return bytes(buffer)
+
+
+def text_path_type(declared_type: str) -> MediaType:
+    """The declared type, refused before a byte is read when this path cannot read it.
+
+    The door's own allowlist first, so a type nothing accepts is refused in the door's words.
+    Then this path's four, because an image or a spreadsheet needs the layout service or OCR,
+    and reading a fifty megabyte file only to say so wastes the transfer.
+    """
+    media_type = accepted_type(declared_type)
+    if media_type not in TEXT_PATH_TYPES:
+        msg = (
+            f"{media_type.value} is not read from the console on this install; plain text, "
+            "Markdown, PDF and Word documents are"
+        )
+        raise IngestRefused(msg)
+    return media_type
+
+
+def placement_for_upload(
+    level: Visibility,
+    *,
+    department: str,
+    owner_id: str,
+    may_add: Reach | None,
+    reads_knowledge: bool,
+) -> KnowledgeVisibility:
+    """Where an upload is stored (M7.4.3), or a refusal saying it may not be stored there.
+
+    See `AN_UPLOAD_IS_PLACED_WHERE_ITS_UPLOADER_MAY_ADD_AND_NEVER_WIDER`.
+    `may_add` is `brain.knowledge.search.reach_for` over `KNOWLEDGE_UPLOAD` and the live
+    department registry, so the departments in it are exactly the ones this uploader may add to
+    that exist. A personal upload by somebody who reads no knowledge is refused, because nobody,
+    the uploader included, could ever be answered from it.
+    """
+    if may_add is None or may_add.principal_id != owner_id:
+        msg = "adding knowledge is not offered to this person"
+        raise UploadNotOffered(msg)
+    match level:
+        case Visibility.COMPANY:
+            msg = (
+                "an upload is not placed company-wide; it is added to one department and "
+                "widened afterwards by a promotion, which has an approver and a review date"
+            )
+            raise VisibilityError(msg)
+        case Visibility.DEPARTMENT:
+            if department not in may_add.departments:
+                msg = "adding knowledge there is not offered to this person"
+                raise UploadNotOffered(msg)
+            return KnowledgeVisibility.of_department(department, owner_id=owner_id)
+        case Visibility.PERSONAL:
+            if not reads_knowledge:
+                msg = (
+                    "a document at your own level would be read by nobody, because you hold no "
+                    "read of the knowledge layer; add it to a department instead"
+                )
+                raise VisibilityError(msg)
+            return KnowledgeVisibility.personal(owner_id)
+
+
+def upload_title(filename: str) -> str:
+    """What the item is called: the filename without its extension, as the uploader named it."""
+    stem = PurePosixPath(filename).stem.strip() or filename.strip()
+    return stem[:TITLE_CHARS]
+
+
+def upload_item_id(upload: AdmittedUpload, placement: KnowledgeVisibility, owner_id: str) -> str:
+    """The item's id. See `AN_UPLOAD_IS_NAMED_BY_WHAT_IT_IS_AND_WHERE_IT_WENT`."""
+    parts = (upload.digest, owner_id, placement.level.value, placement.department)
+    digest = hashlib.sha256(chr(10).join(parts).encode("utf-8")).hexdigest()
+    return UPLOAD_ID_PREFIX + digest[:UPLOAD_DIGEST_CHARS]
+
+
+@dataclass(frozen=True)
+class ReadUpload:
+    """An upload read into an item, and the blocks its parser laid it out as."""
+
+    item: KnowledgeItem
+    blocks: tuple[Block, ...]
+
+
+def read_for_text_path(
+    received: ReceivedUpload,
+    *,
+    kind: KnowledgeKind,
+    placement: KnowledgeVisibility,
+    owner_id: str,
+    scanner: Scanner | None = None,
+    parser: Parser | None = None,
+    budget_bytes: int | None = None,
+) -> ReadUpload | ParseFailure:
+    """Scan, parse and name one received upload, or say why it could not be read (M7.6.3).
+
+    The kind is asked first, because an approved solution is refused whatever the file holds.
+    `scan_for_parsing` raises for a file the scan refuses and `parse_scanned` returns a
+    `ParseFailure` naming the cause for one that would not read; both are the uploader's to be
+    told. The kind is asked again of what the parser found, which is the pricing-note rule.
+    """
+    assert_uploadable(kind)
+    media_type = received.upload.media_type
+    if media_type not in TEXT_PATH_TYPES:
+        return ParseFailure(
+            cause=ParseCause.UNSUPPORTED,
+            media_type=media_type,
+            filename=received.upload.filename,
+            detail="stage:admit",
+        )
+    scanned = scan_for_parsing(received.upload, received.body, scanner=scanner or StructuralCheck())
+    parsed = parse_scanned(scanned, parser=parser or TextPathParser(), budget_bytes=budget_bytes)
+    if isinstance(parsed, ParseFailure):
+        return parsed
+    assert_kind_holds(
+        kind,
+        holds_a_table=any(block.kind is BlockKind.TABLE for block in parsed.blocks),
+        tables_are_visible=TABLES_ARE_VISIBLE[media_type],
+    )
+    item = KnowledgeItem(
+        item_id=upload_item_id(received.upload, placement, owner_id),
+        content=joined(parsed.blocks),
+        title=upload_title(received.upload.filename),
+        visibility=placement,
+        owner_id=owner_id,
+        state=KnowledgeState.PUBLISHED,
+        kind=kind,
+    )
+    return ReadUpload(item=item, blocks=parsed.blocks)

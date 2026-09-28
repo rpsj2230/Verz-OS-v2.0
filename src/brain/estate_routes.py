@@ -23,13 +23,14 @@ running install calls it until the answer lane does, so on most installs both st
 and neither says so with a flag any more: an empty review over a store that exists is an install
 where nothing has been learnt, which is now a fact the tables establish.
 
-**The library shows two facts per item, because the decision admits two.** `LibraryRow` is an
-item's reference and its visibility level, and `brain.console.govern_estate.
+**The library shows three facts per item, because the decision admits three.** `LibraryRow` is
+an item's reference, its kind and its visibility level, and `brain.console.govern_estate.
 A_VISIBILITY_PREDICATE_NAMES_A_DEPARTMENT_AND_AN_OWNER` is why the department and the owner are
 not on it: they are the two halves of the predicate. The screen is registered on the existence
-plane, so the title and the verification are not on it either. SCREEN 7 draws eight columns and
-this answers two; `only_existence_and_reach_are_shown` is that fact on the response. See
-`A_LIBRARY_ROW_SAYS_AN_ITEM_EXISTS_AND_HOW_WIDELY_IT_REACHES`.
+plane, so the title and the verification are not on it either; the kind is one word from a closed
+list a person chose (M7.6.1), which `0115`'s library read returns. SCREEN 7 draws
+eight columns and this answers three; `only_existence_and_reach_are_shown` is that fact on the
+response. See `A_LIBRARY_ROW_SAYS_AN_ITEM_EXISTS_AND_HOW_WIDELY_IT_REACHES`.
 
 **Freshness and use are not measured here, and the reason is the row rather than a choice.**
 SCREEN 7's Fresh figure and its coverage bars are `brain.console.operate.coverage`, which
@@ -80,7 +81,7 @@ one without.
 **Nothing here computes a reach.** There is no `.intersect(` in this module.
 `brain.console.workspace.intersections_in` is run over this source by its test.
 
-Task ids: M27.7.20, M27.7.21, M27.7.22, M27.8.6
+Task ids: M27.7.20, M27.7.21, M27.7.22, M27.8.6, M7.6.1
 """
 
 from __future__ import annotations
@@ -126,6 +127,7 @@ from brain.console.workspace import Basis
 from brain.core.entitlement import Capability
 from brain.core.errors import Absent, Failed
 from brain.core.scope import Scope
+from brain.knowledge.kinds import KnowledgeKind
 from brain.knowledge.visibility import KnowledgeVisibility, Visibility
 from brain.listing import Column, ListAsked, Listing
 from brain.memory.correction import Correction, Supersession
@@ -158,12 +160,13 @@ log = structlog.get_logger()
 #: Why a library row is two facts when the design draws eight columns.
 A_LIBRARY_ROW_SAYS_AN_ITEM_EXISTS_AND_HOW_WIDELY_IT_REACHES: Final = (
     "SCREEN 7 of docs/screens.html lists Item, Dept, Type, Visible to, Owner, Verified, Review "
-    "due and Used 30d. brain.console.govern_estate.LibraryRow carries the item's reference and "
-    "its visibility level, and nothing else: the department and the owner are the two halves of "
-    "the visibility predicate, which that module refuses to put on a row, and the Library screen "
-    "is registered on the existence plane, which says a document is there and never what it "
-    "says or who vouched for it. A route adding the title or the owner would be a second answer "
-    "to what this screen may show, so the response says which facts are withheld instead."
+    "due and Used 30d. brain.console.govern_estate.LibraryRow carries the item's reference, its "
+    "kind and its visibility level, and nothing else: the department and the owner are the two "
+    "halves of the visibility predicate, which that module refuses to put on a row, and the "
+    "Library screen is registered on the existence plane, which says a document is there and "
+    "never what it says or who vouched for it. The kind is the design's Type, one word from a "
+    "closed list. A route adding the title or the owner would be a second answer to what this "
+    "screen may show, so the response says which facts are withheld instead."
 )
 
 #: Why the freshness and use figures on SCREEN 7 have no source here.
@@ -267,7 +270,7 @@ UNDO_SAYS: Final[Mapping[Correction, str]] = MappingProxyType(
 class LibraryRowView(BaseModel):
     """One item on the library: that it exists, and how widely it reaches.
 
-    `brain.console.govern_estate.LibraryRow`, copied field by field, and no third field. See
+    `brain.console.govern_estate.LibraryRow`, copied field by field, and no fourth field. See
     `A_LIBRARY_ROW_SAYS_AN_ITEM_EXISTS_AND_HOW_WIDELY_IT_REACHES`.
     """
 
@@ -275,6 +278,8 @@ class LibraryRowView(BaseModel):
 
     item_id: str
     level: Visibility
+    #: The kind the item was added as, or null for one added before kinds were recorded.
+    kind: KnowledgeKind | None = None
 
 
 class LibraryPage(Page[LibraryRowView]):
@@ -461,19 +466,22 @@ THE_LIBRARY_IS_READ_PAST_THE_CORPUS_POLICY: Final = (
     "list the Knowledge library never sets, so selecting from the table as the application role "
     "saw company items only, and the screen said it listed every retrievable item. Who may be "
     "told an item exists is brain.console.govern_estate.library_rows, decided in Python by where "
-    "the item sits. know.library_items returns what that decision needs and no title."
+    "the item sits. know.library_items_with_kind returns what that decision needs, the kind, and "
+    "no title."
 )
 
-#: The columns `know.library_items` returns, typed as `know.item` declares them.
+#: The columns `know.library_items_with_kind` returns, typed as `know.item` declares them.
 _PLACE_COLUMNS: Final = (
     column("item_id", String),
     column("owner_id", String),
     column("visibility", String),
     column("department", String),
+    # The kind, which `0115`'s function returns beside the four `0069`'s did (M7.6.1).
+    column("kind", String),
 )
 
 
-def retrievable_items(limit: int) -> Select[tuple[str, str, str, str | None]]:
+def retrievable_items(limit: int) -> Select[tuple[str, str, str, str | None, str | None]]:
     """Every item the system can draw on, in reference order, at most `limit` of them.
 
     `RETRIEVABLE_STATES` rather than every row, because the screen is "every document the
@@ -482,14 +490,17 @@ def retrievable_items(limit: int) -> Select[tuple[str, str, str, str | None]]:
     permission one: nothing a reader holds changes it. Ordered, so two readings of an unchanged
     table are the same page and the rows that fall off a full load are always the same ones.
 
-    **Read through `know.library_items`, and not from `know.item`.** The table's policy is the
-    corpus's reach, and this load runs with no principal and no department list set, so it saw
-    company items and nothing else while the screen said it listed every item. The function is
-    `0069`'s, returns the four columns an item is placed by and never its title, and applies the
-    state list, the order and the bound itself. See `THE_LIBRARY_IS_READ_PAST_THE_CORPUS_POLICY`.
+    **Read through `know.library_items_with_kind`, and not from `know.item`.** The table's policy
+    is the corpus's reach, and this load runs with no principal and no department list set, so it
+    saw company items and nothing else while the screen said it listed every item. The function is
+    `0115`'s copy of `0069`'s, returns the four columns an item is placed by and its kind and never
+    its title, and applies the state list, the order and the bound itself. See
+    `THE_LIBRARY_IS_READ_PAST_THE_CORPUS_POLICY`.
     """
-    items = func.know.library_items(limit).table_valued(*_PLACE_COLUMNS, name="item")
-    return select(items.c.item_id, items.c.owner_id, items.c.visibility, items.c.department)
+    items = func.know.library_items_with_kind(limit).table_valued(*_PLACE_COLUMNS, name="item")
+    return select(
+        items.c.item_id, items.c.owner_id, items.c.visibility, items.c.department, items.c.kind
+    )
 
 
 def stated_about(subject_id: str, limit: int) -> Select[tuple[PersistentMemoryRow]]:
@@ -533,6 +544,9 @@ class ItemPlace(Protocol):
     @property
     def department(self) -> str | None: ...
 
+    @property
+    def kind(self) -> str | None: ...
+
 
 def placed_item(row: ItemPlace) -> Placed[LibraryItem]:
     """One stored item, as the pair `library_rows` narrows.
@@ -553,7 +567,11 @@ def placed_item(row: ItemPlace) -> Placed[LibraryItem]:
         department=row.department or "",
     )
     return Placed(
-        record=LibraryItem(item_id=row.item_id, visibility=visibility),
+        record=LibraryItem(
+            item_id=row.item_id,
+            visibility=visibility,
+            kind=KnowledgeKind(row.kind) if row.kind else None,
+        ),
         where={"department": row.department} if row.department else NOWHERE,
     )
 
@@ -852,12 +870,13 @@ def _not_answerable(what: str) -> Absent:
     return Absent(f"the {what} screen is not answerable for this caller")
 
 
-#: What the Knowledge screen may search, filter and order by: the two facts a row carries.
+#: What the Knowledge screen may search, filter and order by: the three facts a row carries.
 LIBRARY: Final[Listing[LibraryRowView]] = Listing(
     name="library",
     columns=(
         Column("item_id", lambda row: row.item_id, search=True, sort=True),
         Column("level", lambda row: row.level.value, filter=True, sort=True),
+        Column("kind", lambda row: row.kind.value if row.kind else "", filter=True, sort=True),
     ),
     key=lambda row: row.item_id,
     order="item_id",
@@ -899,7 +918,7 @@ async def library(request: Request, asked: Asked, listed: LibraryQuery) -> Libra
 
     page = plan.page(
         [
-            LibraryRowView(item_id=one.item_id, level=one.level)
+            LibraryRowView(item_id=one.item_id, level=one.level, kind=one.kind)
             for one in library_rows(items, asked.reach, asked.now)
         ]
     )

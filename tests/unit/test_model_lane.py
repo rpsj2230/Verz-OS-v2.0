@@ -48,7 +48,7 @@ from brain.gate.effort import settings_for
 from brain.gate.fast_lane import FastPathRule
 from brain.gate.finish import Finished, Origin
 from brain.gate.model_lane import (
-    A_PASSAGE_CARRIES_NO_DEPARTMENT_SO_A_DEPARTMENT_SCOPED_FIELD_GRANT_READS_NONE,
+    A_DEPARTMENT_SCOPED_FIELD_GRANT_READS_ITS_OWN_DEPARTMENTS_PASSAGES,
     PASSAGE_POLICY,
     PASSAGES_SHOWN,
     PREFIX,
@@ -658,20 +658,12 @@ def test_the_search_tool_asks_for_the_passages_the_lane_shows_at_the_callers_rea
     assert (reach, at) == (CALLER, NOW)
 
 
-def test_a_field_grant_over_one_department_reads_no_passage_and_asks_no_model() -> None:
-    """**A stated limit, asserted so the day it is repaired a test says so.** A caller holding the
-    plane and every passage field over their own department, which is how a pack assignment grants
-    them, is withheld every passage, because a passage carries no department for the scope to
-    test. It fails closed: the nothing-retrieved abstention, and no model is called.
-
-    Delete this and the limit lives only in a docstring, and a change that quietly widened a
-    department's field grant to fit a passage would pass every other test here. See
-    `A_PASSAGE_CARRIES_NO_DEPARTMENT_SO_A_DEPARTMENT_SCOPED_FIELD_GRANT_READS_NONE`."""
-    web = Scope.department("web")
-    departmental = EntitlementSet(
+def departmental(department: str) -> EntitlementSet:
+    """The plane and every passage field over one department, as a pack assignment grants them."""
+    return EntitlementSet(
         principal_id="p_joiner",
         grants=tuple(
-            Grant(capability=Capability(value=one), scope=web)
+            Grant(capability=Capability(value=one), scope=Scope.department(department))
             for one in (
                 "read:knowledge",
                 "read:knowledge.document",
@@ -681,12 +673,57 @@ def test_a_field_grant_over_one_department_reads_no_passage_and_asks_no_model() 
             )
         ),
     )
-    run = ask(search=Passages(VISIBLE), entitlement=departmental)
+
+
+#: A passage of a web department document, carrying the place its item was stored at (M7.7.1).
+WEB_PASSAGE = KnowledgePassage(
+    entity=KNOWLEDGE_ENTITY,
+    id="c_webhandover_1",
+    document_id="upload.webhandover",
+    title="Site handover",
+    document="A site is handed over only after the client signs the TEALHANDOVER checklist.",
+    updated_at="2999-01-01T00:00:00+00:00",
+    department="web",
+    visibility="department",
+    owner_id="u_uploader",
+)
+
+
+def test_a_department_field_grant_reads_its_departments_passage_and_a_model_is_asked() -> None:
+    """**The repair of a stated limit** (M7.7.1). A caller holding the plane and every passage
+    field over their own department, which is how a pack assignment grants them, is shown a
+    passage of that department's document, because the passage carries the department its item
+    was stored with and the scope has something to test. The model is asked, and the words reach
+    it; the department, visibility and owner do not, because the prompt shows only `SHOWN_FIELDS`.
+
+    Delete this and a passage can lose its department again, every department reader is withheld
+    every passage, and the sibling below is satisfied by a lane that reads nothing. See
+    `A_DEPARTMENT_SCOPED_FIELD_GRANT_READS_ITS_OWN_DEPARTMENTS_PASSAGES`."""
+    run = ask(search=Passages(WEB_PASSAGE), entitlement=departmental("web"))
+
+    assert run.answered is not None and run.answered.abstention is None
+    (request,) = run.sent
+    user = "\n".join(message.content for message in request.messages)
+    assert "TEALHANDOVER" in user
+    assert "u_uploader" not in user
+    assert A_DEPARTMENT_SCOPED_FIELD_GRANT_READS_ITS_OWN_DEPARTMENTS_PASSAGES
+
+
+def test_a_field_grant_over_one_department_reads_no_passage_of_another_and_asks_no_model() -> None:
+    """The same passage, asked by somebody whose grants are over another department: withheld,
+    the nothing-retrieved abstention, and no model called, which is exactly what a passage that
+    never existed produces (DENIED and ABSENT are one event).
+
+    Delete this and the positive case above is satisfied by a passage policy that ignores the
+    department, so a grant over sales reads web's bodies."""
+    run = ask(search=Passages(WEB_PASSAGE), entitlement=departmental("sales"))
+    nothing = ask(search=Passages(), entitlement=departmental("sales"))
 
     assert run.answered is not None and run.answered.abstention is not None
     assert run.answered.abstention.reason is AbstentionReason.NOTHING_RETRIEVED
     assert run.sent == []
-    assert A_PASSAGE_CARRIES_NO_DEPARTMENT_SO_A_DEPARTMENT_SCOPED_FIELD_GRANT_READS_NONE
+    assert nothing.answered is not None and nothing.answered.abstention is not None
+    assert events(run.answered) == events(nothing.answered)
 
 
 def test_the_passage_policy_asks_for_the_capabilities_a_joiner_is_already_given() -> None:

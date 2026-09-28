@@ -35,7 +35,7 @@ person doing nothing, so stewardship is per object.
 The record here is the domain shape only. No SQLAlchemy model and no migration is written
 in this package, the same division `brain.core.department` draws for its own table shapes.
 
-Task ids: M7.4.1, M7.4.5, M7.4.6, M7.4.7
+Task ids: M7.4.1, M7.4.5, M7.4.6, M7.4.7, M7.6.1
 """
 
 from __future__ import annotations
@@ -49,6 +49,7 @@ from typing import Final, Protocol, Self
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from brain.core.scope import Scope
+from brain.knowledge.kinds import KnowledgeKind
 from brain.knowledge.visibility import (
     KnowledgeVisibility,
     Visibility,
@@ -127,6 +128,11 @@ class KnowledgeItem(BaseModel):
     review_by: datetime | None = None
     #: The item this one replaced, if any. Set by `supersede` and by nothing else.
     supersedes: str = Field(default="", max_length=128)
+    #: What kind of thing this is, from `brain.knowledge.kinds`' closed list (M7.6.1). Chosen by
+    #: the person adding it, and required by the upload door. None only on an item written by a
+    #: path that predates kinds or chooses none, which is the connector leg; a default of some
+    #: real kind was rejected, because it would be a classification nobody made.
+    kind: KnowledgeKind | None = None
 
     @field_validator("verified_at", "review_by")
     @classmethod

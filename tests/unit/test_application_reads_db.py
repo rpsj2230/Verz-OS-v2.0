@@ -32,6 +32,8 @@ MIGRATION = (
     Path(__file__).resolve().parents[2] / "migrations" / "versions" / "0069_application_reads.py"
 )
 
+KIND_MIGRATION = MIGRATION.parent / "0115_knowledge_item_kind.py"
+
 #: Rows written as the database owner: a company item, a department draft, a personal item, and an
 #: archived one no read may return.
 ITEMS: tuple[tuple[str, str, str, str | None, str], ...] = (
@@ -40,6 +42,14 @@ ITEMS: tuple[tuple[str, str, str, str | None, str], ...] = (
     ("kb.personal", "u_b", "personal", None, "published"),
     ("kb.retired", "u_b", "company", None, "archived"),
 )
+
+
+def kind_migration() -> ModuleType:
+    spec = importlib.util.spec_from_file_location("migration_0115", KIND_MIGRATION)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def the_migration() -> ModuleType:
@@ -65,6 +75,10 @@ def built(database: str, *, through_0069: bool) -> Iterator[str]:
         if through_0069:
             migrate(database, "stamp", the_migration().down_revision)
             migrate(database, "upgrade", "0069")
+            # `0115` adds the kind and replaces the library read with one returning it (M7.6.1).
+            kind = kind_migration()
+            migrate(database, "stamp", kind.down_revision)
+            migrate(database, "upgrade", kind.revision)
         sql(scratch, "INSERT INTO ops.control_run (name) VALUES ('canary_run')")
         for item_id, owner, visibility, department, state in ITEMS:
             sql(
@@ -156,11 +170,11 @@ def test_the_library_reads_every_retrievable_item_the_policy_withholds_and_never
             await bound.dispose()
 
     columns, *rows = run(lambda: load(10))
-    assert columns == (("item_id", "owner_id", "visibility", "department"),)
+    assert columns == (("item_id", "owner_id", "visibility", "department", "kind"),)
     assert rows == [
-        ("kb.company", "u_c", "company", None),
-        ("kb.draft", "u_a", "department", "web"),
-        ("kb.personal", "u_b", "personal", None),
+        ("kb.company", "u_c", "company", None, None),
+        ("kb.draft", "u_a", "department", "web", None),
+        ("kb.personal", "u_b", "personal", None, None),
     ]
     _, *bounded = run(lambda: load(2))
     assert [row[0] for row in bounded] == ["kb.company", "kb.draft"]
