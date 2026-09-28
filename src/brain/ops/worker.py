@@ -133,7 +133,9 @@ worker runs `run_schedule` beside its shards: every tick asks `due_now` which co
 takes each one's advisory lock, runs it in a thread through `start_control`, and records the
 start and the finish in `ops.control_run`, including a failure with its reason. Every interval is
 the registry's. A control with no runner is left to `runner_gaps` to report, and the parse worker
-does not tick at all; see `THE_SCHEDULE_RUNS_IN_THE_GENERAL_WORKER_AND_NOWHERE_ELSE`.
+does not tick at all; see `THE_SCHEDULE_RUNS_IN_THE_GENERAL_WORKER_AND_NOWHERE_ELSE`. After each
+tick it makes any test of a connection a person asked for on the Connectors page
+(`brain.ops.connector_probe_run.tick_probes`), because only this process reads a source's key.
 
 Not claimed: M32.4.1.4, and the reason has narrowed again. The process starts now, lays out one
 driver worker per shard at the declared concurrency and has been watched fetching and running a
@@ -195,6 +197,7 @@ from brain.ops.connections import (
     WORKER_QUEUE_CONNECTIONS,
     client_named,
 )
+from brain.ops.connector_probe_run import tick_probes
 from brain.ops.heartbeat import beat, heartbeat_path, ready
 from brain.ops.inference import inference_gaps
 from brain.ops.inference_client import make_client
@@ -1362,7 +1365,9 @@ async def run_schedule(
     `THE_WORKER_HOLDS_WHAT_WAS_SAVED_BEFORE_EVERY_TICK`. A reload that fails is printed and the
     tick runs on what was already held. A failed run is printed with its reason as well as
     recorded. A tick that raises is printed and the next is tried; see
-    `A_TICK_THAT_CANNOT_REACH_THE_DATABASE_IS_REPORTED_AND_THE_NEXT_ONE_TRIED`.
+    `A_TICK_THAT_CANNOT_REACH_THE_DATABASE_IS_REPORTED_AND_THE_NEXT_ONE_TRIED`. After the tick,
+    `tick_probes` makes the connection tests people asked for, and a pass that raises is printed
+    and the next tick tried, for the same reason.
     Cancellation is not an `Exception` and is not caught, so stopping the worker stops this.
     """
     while True:
@@ -1389,6 +1394,14 @@ async def run_schedule(
             for one in ticked:
                 if one.ticked is Ticked.FAILED:
                     print(f"  ! control {one.name} failed: {one.detail}", file=sys.stderr)
+        try:
+            await tick_probes(sessions, now=now, database_url=database_url)
+        except Exception as exc:
+            print(
+                f"  ! the connection tests asked for could not be made at {now.isoformat()}: "
+                f"{describe(exc)}",
+                file=sys.stderr,
+            )
         await sleep(max(0.0, (next_tick(now=now) - clock()).total_seconds()))
 
 

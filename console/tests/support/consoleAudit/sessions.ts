@@ -8,13 +8,16 @@
  */
 
 import { END_SESSION_API_PATH, END_SESSIONS_API_PATH } from "../../../src/pages/sessionsQuery";
+import { LINK_API_PATH, UNLINK_API_PATH } from "../../../src/pages/signInLinksQuery";
 import { at, type Proofs, t, type WriteRoute } from "../auditClaims";
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
-  "src/pages/Sessions.tsx END_SESSION_API_PATH": [at("POST /api/v1/govern/sessions/end", "END_SESSION_API_PATH", END_SESSION_API_PATH)],
-  "src/pages/Sessions.tsx END_SESSIONS_API_PATH": [
+  "src/pages/sessions/SessionsPage.tsx END_SESSION_API_PATH": [at("POST /api/v1/govern/sessions/end", "END_SESSION_API_PATH", END_SESSION_API_PATH)],
+  "src/pages/sessions/SessionsPage.tsx END_SESSIONS_API_PATH": [
     at("POST /api/v1/govern/sessions/end-several", "END_SESSIONS_API_PATH", END_SESSIONS_API_PATH),
   ],
+  "src/pages/sessions/SignInLinksPage.tsx LINK_API_PATH": [at("POST /api/v1/sign-ins", "LINK_API_PATH", LINK_API_PATH)],
+  "src/pages/sessions/SignInLinksPage.tsx UNLINK_API_PATH": [at("POST /api/v1/govern/sign-ins/unlink", "UNLINK_API_PATH", UNLINK_API_PATH)],
 };
 
 export const PROOFS: Readonly<Record<string, Proofs>> = {

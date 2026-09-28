@@ -48,6 +48,13 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         accounts: UNBROKEN,
         staleness: null,
       },
+      "/api/v1/me/channels": {
+        channels: [
+          { channel: "lark", bound: true, bound_at: "2019-03-01T09:00:00Z", may_bind: true },
+          { channel: "webhook", bound: false, bound_at: null, may_bind: true },
+        ],
+        told: UNBROKEN,
+      },
     },
   },
 };

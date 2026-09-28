@@ -155,7 +155,17 @@ the ones that did not. A list of who was refused is a list of who does not exist
 the grant, which is `A_CONSTRAINT_VIOLATION_IS_A_FACT_ABOUT_SOMEBODY_ELSE` handed over by name.
 See `A_GRANT_TO_SEVERAL_IS_ALL_OR_NOTHING_AND_ITS_REFUSAL_NAMES_NOBODY`.
 
-Task ids: M27.7.3, M27.7.4, M27.7.5, M27.7.6, M27.7.7, M27.8.6, M27.11.2
+**A capability held through a pack is refused with a sentence naming the pack, to a reader already
+shown it** (M27.15.20). Removing one capability of a pack on its own is impossible, because the
+pack's capabilities are one assignment, so the removal route used to answer it with the ordinary
+refusal and the person pressing it was left guessing. The sentence is said only when the caller
+would be shown that capability on that person's row, which is `govern.people` over the expanded
+assignment: the People screen's read over where the person sits and the vocabulary's grant. That
+reader is shown the pack on the person's page already, so the sentence adds nothing they were not
+told; anybody else is answered exactly as before. See
+`A_CAPABILITY_FROM_A_PACK_IS_NAMED_ONLY_TO_A_READER_ALREADY_SHOWN_IT`.
+
+Task ids: M27.7.3, M27.7.4, M27.7.5, M27.7.6, M27.7.7, M27.8.6, M27.11.2, M27.15.20
 """
 
 from __future__ import annotations
@@ -195,7 +205,7 @@ from brain.console.scoped_authority import (
 )
 from brain.console.screens import screen
 from brain.core.department import ScopeRecord
-from brain.core.entitlement import CAPABILITY_RE, Capability
+from brain.core.entitlement import CAPABILITY_RE, Capability, EntitlementSet
 from brain.core.errors import Absent, Failed
 from brain.core.scope import Scope
 from brain.core.scope_sql import PredicateRefusedError
@@ -300,6 +310,17 @@ A_DEEP_LINK_RESOLVED_AGAINST_THE_PAGE_CANNOT_BE_AN_ORACLE: Final = (
     "sentence about this page, written from rows the reader was already shown."
 )
 
+#: Why a removal refused because the capability came with a pack may name the pack.
+A_CAPABILITY_FROM_A_PACK_IS_NAMED_ONLY_TO_A_READER_ALREADY_SHOWN_IT: Final = (
+    "A capability somebody holds through a pack has no grant row of its own, so it cannot be "
+    "removed on its own, and the refusal says which pack it came with so the person pressing "
+    "remove knows to remove the pack. It says so only when govern.people would show the caller "
+    "that capability on that person's row, which is the People screen's read over where they sit "
+    "and the vocabulary's grant, because that reader is already shown the pack on the person's "
+    "page. For anybody else the refusal is the ordinary one, since which of somebody's "
+    "capabilities came through a pack is a fact about their access."
+)
+
 #: Why the removal route offers one decision and not both of a review round's.
 ONLY_THE_HALF_OF_A_ROUND_THAT_HAS_A_ROW_TO_WRITE: Final = (
     "brain.console.govern.Decision has two members and this route accepts one. A KEEP is a "
@@ -364,6 +385,11 @@ MAX_DEPARTMENTS: Final = 500
 #: declares, restated so a body over it is a 422 naming the field rather than a `ValidationError`
 #: from inside the model arriving as a 500. `test_govern_routes.py` holds the two together.
 REASON_CHARS: Final = 500
+
+#: How many of a person's packs carrying one capability a refused removal reads to name one. A bound
+#: on the load: the sentence names the first, and a person holds the same capability through two
+#: packs rarely enough that naming the first is the whole of what the sentence needs.
+MAX_PACKS_NAMED: Final = 20
 
 #: How much of a pack's description becomes its label when a stored pack is read as a
 #: `CapabilityPack`. `CapabilityPack.label` is bounded at this and `gate.capability_pack.
@@ -918,6 +944,42 @@ def one_live_grant(
     )
 
 
+def pack_holdings(
+    principal_id: str, capability: str
+) -> Select[tuple[CapabilityPackAssignmentRow, CapabilityPackRow, str | None]]:
+    """A person's live assignments of live packs carrying exactly this capability.
+
+    The shape `live_assignments` reads, so `placed_assignment` and `govern.people` judge it. Exact
+    on the capability, as `one_live_grant` is: a pack carrying `read:client.*` does not hold
+    `read:client.name` back from a removal, it simply is not the grant that was asked about.
+    """
+    return (
+        select(
+            CapabilityPackAssignmentRow,
+            CapabilityPackRow,
+            PrincipalRow.primary_department,
+        )
+        .join(
+            CapabilityPackRow,
+            (CapabilityPackRow.id == CapabilityPackAssignmentRow.pack_id)
+            & (CapabilityPackRow.deleted_at.is_(None)),
+        )
+        .join(
+            PrincipalRow,
+            (PrincipalRow.id == CapabilityPackAssignmentRow.principal_id)
+            & (PrincipalRow.deleted_at.is_(None)),
+            isouter=True,
+        )
+        .where(
+            CapabilityPackAssignmentRow.principal_id == principal_id,
+            CapabilityPackAssignmentRow.deleted_at.is_(None),
+            CapabilityPackRow.capabilities.contains([capability]),
+        )
+        .order_by(CapabilityPackRow.name)
+        .limit(MAX_PACKS_NAMED)
+    )
+
+
 def add_grant(proposed: SubjectGrant, principal_id: str | None = None) -> Insert:
     """The INSERT for one grant, naming only what the row holds.
 
@@ -1067,6 +1129,39 @@ def placed_assignment(
     )
     where = {} if department is None else {"department": department}
     return tuple(Placed(record=one, where=where) for one in expand(bundle, assignment))
+
+
+def pack_shown(
+    held: Sequence[tuple[CapabilityPackAssignmentRow, CapabilityPackRow, str | None]],
+    capability: str,
+    reach: EntitlementSet,
+    now: datetime,
+) -> str | None:
+    """The label, or else the slug, of the first pack this reader is shown `capability` through.
+
+    `govern.people` over each expanded assignment, so the answer is None unless the People screen
+    would put that capability on that person's row for this reader. See
+    `A_CAPABILITY_FROM_A_PACK_IS_NAMED_ONLY_TO_A_READER_ALREADY_SHOWN_IT`.
+    """
+    for row, pack, department in held:
+        try:
+            placed = placed_assignment(row, pack, department)
+        except (ValueError, PredicateRefusedError):
+            log.warning("pack assignment does not construct", pack=pack.name)
+            continue
+        if any(capability in one.capabilities for one in people(placed, reach, now)):
+            label = pack.description[:PACK_LABEL_CHARS].strip()
+            return label or pack.name
+    return None
+
+
+def held_through_a_pack(capability: str, pack: str) -> Absent:
+    """The refusal naming the pack, said only after `pack_shown` found one this reader is shown."""
+    sentence = (
+        f"{capability} is held through the {pack} pack, so it cannot be removed on its own; "
+        "remove the pack instead"
+    )
+    return Absent(sentence, public_message=f"Nothing was changed: {sentence}.")
 
 
 def principal_named(principal_id: str | None) -> str:
@@ -1574,14 +1669,14 @@ async def remove_grant(request: Request, body: GrantRemoval, asked: Asked) -> Gr
     keyed on one would be a write nothing in a browser could reach. The pair is also what
     `brain.identity.packs.revoke_capability` matches on.
 
-    **A capability that arrived through a pack is not removable here, and is refused in the
-    same words as everything else.** There is no grant row for it: `packs.expand` produces the
-    grants an assignment means without writing any, so the row this looks for is genuinely not
-    there. Removing it is removing the assignment, which takes away every other capability in
-    the pack at the same time, and that is a different act somebody should perform deliberately
-    rather than discover. It is a real gap on this screen and it is named rather than papered
-    over; the refusal is the ordinary one because saying "that one came from a pack" would tell
-    a caller which of somebody else's capabilities did.
+    **A capability that arrived through a pack is not removable here.** There is no grant row for
+    it: `packs.expand` produces the grants an assignment means without writing any, so the row
+    this looks for is genuinely not there. Removing it is removing the assignment, which takes
+    away every other capability in the pack at the same time, and that is a different act
+    somebody should perform deliberately rather than discover. Since M27.15.20 the refusal names
+    the pack to a caller the People screen already shows that capability on that person's row,
+    and is the ordinary one for everybody else: see
+    `A_CAPABILITY_FROM_A_PACK_IS_NAMED_ONLY_TO_A_READER_ALREADY_SHOWN_IT`.
 
     `govern.certify` is the decision and it is not restated here. It asks `may_certify`, which
     is three questions: the review authority against the row the grant sits in, the review
@@ -1608,8 +1703,21 @@ async def remove_grant(request: Request, body: GrantRemoval, asked: Asked) -> Gr
             )
         ).all()
         if not found:
+            named: str | None = None
+            if body.principal_id is not None:
+                held = (
+                    await session.execute(pack_holdings(body.principal_id, body.capability))
+                ).all()
+                named = pack_shown(
+                    [(one, pack, where) for one, pack, where in held],
+                    body.capability,
+                    asked.reach,
+                    asked.now,
+                )
             await session.rollback()
             log.info("grant not there", principal=asked.caller.principal.id)
+            if named is not None:
+                raise held_through_a_pack(body.capability, named)
             raise _no_grant_here()
         row, department = found[0]
         try:

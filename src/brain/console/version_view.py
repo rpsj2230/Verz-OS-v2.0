@@ -667,8 +667,9 @@ ANSWERS: Final[Mapping[Standing, Answer]] = MappingProxyType(
                 "because this product asks nothing outside your network unless you switch it on."
             ),
             what_to_do=(
-                "Check the published list of releases by hand, or set BRAIN_RELEASE_CHECK to "
-                "true so this install looks for itself whenever this page is opened."
+                "Check the published list of releases by hand, or switch on Look for newer "
+                "releases on Features (or set BRAIN_RELEASE_CHECK to true in the environment "
+                "file) so this install looks for itself whenever this page is opened."
             ),
         ),
         Standing.NOT_LOOKED_YET: Answer(

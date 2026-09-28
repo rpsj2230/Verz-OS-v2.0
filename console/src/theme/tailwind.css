@@ -33,11 +33,12 @@
  * glob, `pages/*` then everything below it, reads every such directory and none of the old pages,
  * which sit in `pages/` itself, so a module that moves to the kit edits no line here: a directory
  * under `pages/` is a kit module by being there. `@source "../pages"` would not do: it reads the
- * old pages too, 194 more files, and changes the compiled sheet.
+ * old pages too (211 more files on 2026-09-29), and any word in them that names a utility becomes
+ * a rule that outranks the old sheets.
  * `tests/tailwind-foundation.test.ts` compiles this file the way the build does and asserts that
  * no class name in an old sheet or an old page comes out as a utility.
  *
- * Task ids: M27.10.2, M27.10.4
+ * Task ids: M27.10.2, M27.10.4, M27.16.1
  */
 
 @layer theme, base, legacy, components, utilities;

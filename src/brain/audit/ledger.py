@@ -134,6 +134,8 @@ SUBJECT_KINDS = frozenset(
         "breach",
         # A halt or a resume, since 2026-09-28. See HALT below.
         "halt",
+        # A capability pack created, versioned or retired, since 2026-09-28. See PACK below.
+        "pack",
     }
 )
 
@@ -647,6 +649,27 @@ class AuditAction(enum.StrEnum):
     #: unarchived it or moved its audience. Which is in the details, and never the steward.
     #: Written by `0137`'s trigger on `agent.agent`; a hand-over is AGENT_OWNER's.
     AGENT = "agent"
+    #: A chat identity was bound to a person, or a binding was taken away: by the person sending
+    #: the one-time code they minted, by the person or an administrator unbinding it, or by a
+    #: rebind from a new account retiring the old one. Which, and the channel, are in the details,
+    #: never the identity. Written by `0118`'s trigger on `auth.principal_identity` for every
+    #: channel but the console, whose rows are sign-in links and recorded as `sign_in` (M10.3.4).
+    #:
+    #: **A member of its own, because `0047` refused to file a chat binding under `sign_in`**:
+    #: "who gave this account a way in as her" is asked of the identity provider's accounts, and
+    #: filling it with Lark and Slack rows buries the answer. `setting`, which `0114` uses for a
+    #: channel's switch, is a knob and has no person in its subject, and "which chat accounts
+    #: were answered as her, and who allowed it" is asked of the person. Fifteen characters.
+    CHANNEL_BINDING = "channel_binding"
+    #: A capability pack was created, versioned or retired. Which is in the details, with the
+    #: version a creation or a versioning left. Written by `0141`'s trigger on
+    #: `gate.capability_pack` under the pack's own subject, `pack:<name>`. Four characters.
+    #: **Not GRANT**, which a pack *assignment* is recorded under and must stay: "what did this
+    #: person gain" is answered from GRANT alone, and a change to what a pack means is a change to
+    #: every holder at once rather than to one person, so filling GRANT with it would break the
+    #: query GRANT exists to serve, which is `COMPOSE_CHANGE`'s argument against GRANT one member
+    #: along (M27.15.24).
+    PACK = "pack"
 
 
 # --------------------------------------------------------------------- redaction

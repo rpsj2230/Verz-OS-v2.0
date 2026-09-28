@@ -82,12 +82,13 @@ export function declaredRoutes(document: Record<string, unknown>): string[] {
 
 /** The route template a concrete path was asked of, or null. */
 export function templateOf(document: Record<string, unknown>, path: string): string | null {
-  for (const route of Object.keys(document["paths"] as Record<string, unknown>)) {
-    if (new RegExp(`^${route.replace(/\{[^}]+\}/g, "[^/]+")}$`).test(path)) {
-      return route;
-    }
-  }
-  return null;
+  // The most specific template wins, as it does in the router: `/service-accounts/keys` is the
+  // literal route and not `/service-accounts/{client_id}` with an id of "keys".
+  const matching = Object.keys(document["paths"] as Record<string, unknown>).filter((route) =>
+    new RegExp(`^${route.replace(/\{[^}]+\}/g, "[^/]+")}$`).test(path),
+  );
+  const parameters = (route: string) => (route.match(/\{/g) ?? []).length;
+  return [...matching].sort((a, b) => parameters(a) - parameters(b))[0] ?? null;
 }
 
 // ---------------------------------------------------------------------------- the judgement
@@ -118,11 +119,12 @@ const ONCE_BY_THE_WIZARD =
 /** Every area of the standard, keyed by the standard's own words. */
 export const AREAS: Readonly<Record<string, Area>> = {
   "People, roles, permissions and access control": {
-    screens: ["/people", "/people/:subject", "/roles", "/capabilities", "/scopes", "/access_review", "/elevation", "/sessions", "/sign-in-links", "/staff_sources", "/access-requests", "/service-accounts"],
+    screens: ["/people", "/people/:personId", "/people/:personId/:view", "/roles", "/capabilities", "/scopes", "/packs", "/access_review", "/elevation", "/sessions", "/sign-in-links", "/staff_sources", "/access-requests", "/service-accounts", "/service-accounts/:clientId"],
     routes: [
       "/api/v1/me",
       "/api/v1/console/navigation",
       "/api/v1/govern/people",
+      "/api/v1/govern/directory*",
       "/api/v1/govern/roles",
       "/api/v1/govern/capabilities",
       "/api/v1/govern/scopes",
@@ -181,12 +183,16 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
     gaps: [
       {
-        what: "A pack cannot be assigned or withdrawn, and a capability that arrived through a pack cannot be removed.",
-        because: "No route writes gate.capability_pack_assignment. brain.govern_routes.remove_grant refuses a pack's capability in the ordinary words, because withdrawing it removes every other capability in the pack.",
+        what: "Capabilities are read and never changed, and what a role grants is not edited.",
+        because: "The capability registry is declared by the product's tools and connected sources, and a role grants nothing, so there is nothing to edit.",
       },
       {
-        what: "Roles, capabilities and scopes are read and never changed.",
-        because: "No route writes gate.scope or the role and capability registries; they are declared by the product and by migrations.",
+        what: "What a run through an agent reaches for somebody else is not previewed on their Access view.",
+        leaf: "M27.15.61",
+      },
+      {
+        what: "GET /api/v1/govern/people, the grant-holder listing, is read by no screen since People lists every person from the directory.",
+        because: "It is kept for any client of the API that reads grant holders by subject; the People list and each person's Grants view read GET /api/v1/govern/directory and its detail, which carry the same holdings with their scope and lapse.",
       },
       {
         what: "A break-glass notice to the standing Super Admins is shown on their Elevation screen and is not sent by email or chat, and nobody is told when somebody only asks.",
@@ -201,7 +207,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "Departments, teams and client configuration": {
-    screens: ["/departments", "/department"],
+    screens: ["/departments", "/departments/:slug", "/departments/:slug/:view", "/department"],
     routes: ["/api/v1/govern/departments*"],
     tables: ["gate.department", "gate.team", "gate.team_membership", "gate.department_lead"],
     installation: ["INSTALL_COMPANY_NAME", "INSTALL_PRODUCT_NAME", "INSTALL_LOGO_URL", "INSTALL_ACCENT_COLOUR"],
@@ -225,11 +231,13 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "AI providers, models and the routing between them": {
-    screens: ["/models", "/routing", "/routing/:rungId"],
+    screens: ["/models", "/models/:provider", "/models/:provider/:view", "/routing", "/routing/:rungId"],
     routes: [
       "/api/v1/operate/models",
       "/api/v1/models/providers*",
       "/api/v1/models/profile",
+      "/api/v1/models/prices",
+      "/api/v1/routing/export",
       "/api/v1/routing/rungs*",
       "/api/v1/routing/changes",
       "/api/v1/routing/golden-questions*",
@@ -249,15 +257,15 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
     installation: ["INSTALL_MODEL_PROFILE", "INSTALL_MODEL_ENDPOINT", "INSTALL_EMBEDDING_DIMENSIONS"],
     gaps: [
-      {
-        what: "A provider's terms and an added provider's retirement are logged and not on the audit ledger: the ledger's action list gains no provider entry in this release.",
-        leaf: "M5.6.4",
-      },
       { what: "The model endpoint cannot be changed after setup.", because: ONCE_BY_THE_WIZARD },
+      {
+        what: "A provider's page shows no cost: cost is kept per request, whose calls can reach more than one provider, so it is left out rather than drawn as nought, and the Spend report shows it by model.",
+        because: "brain.ops.usage_store writes one cost row per request with its model and no provider, and the spend rows are read under the spend grant, which a reader of the models screen need not hold.",
+      },
     ],
   },
   "Agents and their configuration, including templates": {
-    screens: ["/agents", "/agents/:agentId", "/agents/:agentId/:tab", "/agent-templates", "/approvals", "/approvals/:suspensionId"],
+    screens: ["/agents", "/agents/:agentId", "/agents/:agentId/:tab", "/agent-templates", "/agent-templates/:templateId", "/approvals", "/approvals/:suspensionId"],
     routes: [
       "/api/v1/agents",
       "/api/v1/agents/{agent_id}/workspace",
@@ -271,6 +279,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/agents/{agent_id}/duplicate",
       "/api/v1/console/agents/{agent_id}/stats",
       "/api/v1/agent-templates",
+      "/api/v1/agent-templates/{template_id}",
       "/api/v1/agent-templates/{template_id}/versions/{version}*",
       "/api/v1/approvals*",
     ],
@@ -295,14 +304,18 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "Skills and tools": {
-    screens: ["/skills", "/skills/:name", "/tools"],
+    screens: ["/skills", "/skills/:name", "/skills/:name/:view", "/tools", "/tools/:name"],
     routes: [
       "/api/v1/skills",
+      "/api/v1/skills/library",
       "/api/v1/skills/imports",
       "/api/v1/skills/{digest}/versions",
       "/api/v1/skills/{digest}/categories",
       "/api/v1/skills/{digest}/review",
       "/api/v1/skills/{digest}/assignments",
+      "/api/v1/skills/{digest}/retirement",
+      "/api/v1/skills/{digest}/reinstatement",
+      "/api/v1/skills/{digest}/detachments",
       "/api/v1/console/skills/{skill_name}/stats",
       "/api/v1/tools",
       "/api/v1/tools/{name}/switch",
@@ -314,12 +327,15 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "agent.tool_definition",
       "agent.tool_switch",
       "agent.skill_category",
+      "agent.skill_invocation",
+      "agent.skill_retirement",
+      "agent.skill_detachment",
     ],
     installation: ["INSTALL_ACCEPTANCE_SKILL_SOURCE"],
     gaps: [
       {
-        what: "A skill cannot be removed from an agent from the console, only replaced by another version of it.",
-        because: "brain.console.agent_tabs.detach decides a removal and no route performs one; brain.skill_routes assigns and replaces.",
+        what: "A skill cannot be tried out through an agent in practice mode before it is assigned.",
+        because: "docs/admin-console-architecture.md 4.2 tests a skill through an agent that holds it, rehearsed at SHADOW, and no route runs a rehearsal; the Profile draws it inert with pages/skills/skillActions.ts' sentence.",
       },
       {
         what: "A skill that declares scripts cannot be added.",
@@ -328,19 +344,33 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "Workflows and automations": {
-    screens: ["/agents/:agentId/:tab"],
+    screens: ["/agents/:agentId/:tab", "/automations", "/automations/:automationId", "/automations/:automationId/:view"],
     routes: [
       "/api/v1/agents/{agent_id}/automation-templates*",
       "/api/v1/agents/{agent_id}/automations",
       "/api/v1/agents/{agent_id}/automations/{automation_id}/start",
       "/api/v1/agents/{agent_id}/automations/{automation_id}/stop",
+      "/api/v1/console/automations*",
+      "/api/v1/automations/{automation_id}/*",
     ],
-    tables: ["agent.automation", "agent.automation_run", "agent.automation_schedule", "gate.automation_owner"],
+    tables: [
+      "agent.automation",
+      "agent.automation_run",
+      "agent.automation_schedule",
+      "agent.automation_change",
+      "gate.automation_owner",
+    ],
     installation: [],
     gaps: [
       {
-        what: "An installed automation cannot be changed or removed, only started and stopped.",
-        because: "brain.automation_schedule_routes starts and stops one and brain.console.agent_automations.remove decides a removal that no route performs; 0067 grants an update of the next run alone.",
+        what: "A removed automation cannot be brought back, and installing the same outcome again for the same agent and person is refused.",
+        because:
+          "A removal is a final row in agent.automation_change (brain.console.automations.A_REMOVAL_IS_FINAL_AND_KEEPS_ITS_HISTORY) and 0055's one-install-per-agent-template-and-person constraint still reads the removed install; the page draws Bring back as not available yet.",
+      },
+      {
+        what: "An automation registered to call the tool route with its own credential (gate.automation_owner) is not listed or adoptable on a screen.",
+        because:
+          "Nothing on an install writes that registration yet: brain.ops.automation_owner_store.StoredAutomations.put has no caller, so there is no row to list; its adopt is kept for when one exists.",
       },
       {
         what: "Three of the four automation templates cannot be started on any install.",
@@ -349,22 +379,26 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "Connectors and third-party integrations": {
-    screens: ["/connectors", "/connectors/:connector", "/connectors/:connector/:view"],
+    screens: ["/connectors", "/connectors/:connector", "/connectors/:connector/:view", "/channels"],
     routes: [
       "/api/v1/connectors",
       "/api/v1/connectors/{connector}/disconnect",
       "/api/v1/connectors/{connector}/edit",
       "/api/v1/connectors/{connector}/key",
+      "/api/v1/connectors/{connector}/probe",
       "/api/v1/console/connectors",
       "/api/v1/console/connectors/{connector}",
       "/api/v1/console/connectors/{connector}/export",
+      "/api/v1/console/connectors/{connector}/probe",
       "/api/v1/connectors/lark-app",
       "/api/v1/connectors/lark-app/test",
       "/api/v1/channels*",
+      "/api/v1/me/channels*",
       "/api/v1/console/connectors/{connector}/stats",
       "/api/v1/console/channels/{name}/stats",
     ],
     tables: [
+      "auth.binding_code",
       "ops.channel",
       "ops.channel_delivery",
       "ops.connector_connection",
@@ -381,10 +415,6 @@ export const AREAS: Readonly<Record<string, Area>> = {
         what: "A connected source is read and kept, and no question is answered from what is kept.",
         because:
           "No row tool is registered for a connected source's records: brain.tools.startup.classification_for is keyed on the entity alone and Xero and HubSpot both project contact, which that module records as the limit to change first. brain.ops.connector_admin.WHAT_CONNECTING_A_SOURCE_STARTS says so in the connect confirmation.",
-      },
-      {
-        what: "A connection cannot be tested from the console yet: only the worker reads a source's key, and a successful probe has no outcome ops.connector_sync can hold without claiming a full read.",
-        leaf: "M27.15.8",
       },
       {
         what: "HubSpot can be connected and is not read.",
@@ -405,11 +435,6 @@ export const AREAS: Readonly<Record<string, Area>> = {
         what: "A Lark account is linked to a person with a one-time code only once the binding store is wired.",
         because:
           "The chat channel receives, verifies and answers Lark's events at /api/v1/channels/lark/events, and offers a code sent in a direct message to brain.channels.inbound.ChatBinder; the store that mints the code in a web session and keeps the binding is the channel binding package's, and until it is wired every sender is answered as unbound, brain.channels.inbound.NOBODY_IS_BOUND_UNTIL_A_BINDING_IS_KEPT.",
-      },
-      {
-        what: "A channel's record, switch, test message and deliveries have routes and no screen.",
-        because:
-          "The Channels screen is drawn over brain.channel_routes by the channels screen package, which follows this one; until then a channel is set up and proved through those routes, each change is in the audit ledger under setting:channel.<channel>, and the deliveries route lists every refusal without its content.",
       },
     ],
   },
@@ -559,7 +584,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "Scheduled jobs and background work": {
-    screens: ["/jobs", "/runs"],
+    screens: ["/jobs", "/jobs/:name", "/jobs/:name/:view", "/runs"],
     routes: ["/api/v1/jobs*", "/api/v1/operate/runs"],
     tables: ["ops.control_run", "ops.operation", "ops.acceptance_result"],
     installation: [],
@@ -585,7 +610,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
   },
   "Logs and errors": {
     screens: ["/errors", "/logs"],
-    routes: ["/api/v1/errors", "/api/v1/logs"],
+    routes: ["/api/v1/errors", "/api/v1/logs*"],
     tables: ["obs.application_log"],
     installation: [],
     gaps: [
@@ -675,8 +700,9 @@ export const NOT_ADMINISTERED: Readonly<Record<string, string>> = {
 /**
  * **Each module holds its own writes, and this file collects them.** The writes a module's screens
  * send, the reads they make only once somebody acts, and the proofs of each write route live in
- * `consoleAudit/<module>.ts`, named as the module's page cases are in `support/pageCases.ts`, and an
- * eager `import.meta.glob` reads every such file. Until 2026-09-29 the three were one object each
+ * `consoleAudit/<module>.ts`, named for the module's kit directory under `src/pages` (for a page not
+ * yet moved to the kit, the first segment of its address), and an eager `import.meta.glob` reads
+ * every such file. Until 2026-09-29 the three were one object each
  * here, so every console change that sent a write appended to the same lines as every other, and
  * two of them conflicted whatever they built. A write route two modules reach keeps its proofs in
  * one of them. A key two files both hold is refused as they are read, which the one object literal

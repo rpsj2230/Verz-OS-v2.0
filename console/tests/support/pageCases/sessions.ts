@@ -32,10 +32,10 @@ const SESSIONS = {
 };
 
 export const PAGES: Readonly<Record<string, PageCase>> = {
-  // Sessions and sign-in links. Every identifier is in the table, which scrolls, and the served
-  // sentences are outside it, where they must wrap. No control is pressed here: the confirmation
-  // panel is held to the same rules in `tests/sessions-page.test.tsx` and
-  // `tests/sign-in-links-page.test.tsx`.
+  // Sessions and sign-in links, on the page kit. Names and departments are in the table, which
+  // scrolls, and the served sentence about the last administrator is under it, where it must wrap.
+  // No control is pressed here: the confirmations and the link drawer are held in
+  // `tests/sessions-page.test.tsx` and `tests/sign-in-links-page.test.tsx`.
   "/sessions": {
     address: "/sessions",
     signedIn: true,

@@ -38,7 +38,7 @@ const STAFF_SOURCES = {
 
 /**
  * One guide for connecting a staff source, whose title, steps and help are unbreakable tokens.
- * The form is drawn, because the reader may connect, so the forms test opens it.
+ * The reader may connect; the form is in a drawer, which `tests/staff-sources-page.test.tsx` opens.
  */
 const STAFF_SOURCE_GUIDES = {
   guides: [

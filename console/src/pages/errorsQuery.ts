@@ -26,12 +26,10 @@ export type ErrorsBody = components["schemas"]["ErrorsPage"];
 export const ERRORS_API_PATH = "/errors";
 export const ERRORS_PATH = "/errors";
 export const ERRORS_LABEL = "Errors";
-export const ERRORS_CRUMB = "Operate › Errors";
 export const ERRORS_LEDE =
-  "Scheduled jobs that failed and questions that failed or degraded, newest first. A person told " +
-  "that something went wrong is shown a reference, and it is the reference listed here.";
+  "Jobs that failed and questions that failed or degraded, newest first. The reference is the one a person was shown.";
 
-export const READING_ERRORS = "Reading the failures.";
+export const READING_ERRORS = "Loading the failures.";
 export const THE_BRAIN_COULD_NOT_BE_REACHED = "The Brain could not be reached";
 export const UNREADABLE_ANSWER =
   "The API answered in a shape this console does not read, so no failure is listed. The console " +
@@ -39,30 +37,23 @@ export const UNREADABLE_ANSWER =
 
 export const JOBS_HEADING = "Failed scheduled jobs";
 export const JOBS_CAPTION = "Scheduled jobs whose run failed, newest first";
-export const NO_JOB_FAILURES = "No scheduled job this screen can show you failed in this window.";
+export const NO_JOB_FAILURES = "No job failed in this window";
+export const NO_JOB_FAILURES_MORE = "A job's failed run appears here with its kind of failure.";
 export const REQUESTS_HEADING = "Failed questions";
 export const REQUESTS_CAPTION = "Questions that failed or degraded, newest first";
-export const NO_REQUEST_FAILURES =
-  "No question this screen can show you failed or degraded in this window.";
-export const FULL_LIST =
-  "This list came back full, so there were more failures in this window than it shows. Choose a " +
-  "shorter window to see the rest.";
-export const LOG_HEADING = "What this screen cannot show";
-export const PROCESS_LOG_IS_NOT_KEPT =
-  "The application's own log is written to its container's standard output on the server and is " +
-  "not kept anywhere this console can read, so it is not shown here.";
-export const LOG_IS_ON_THE_LOGS_SCREEN =
-  "The application's own warnings and errors, with every value taken out, are on the Logs screen.";
-export const LOGS_LINK = "Open the Logs screen";
-export const FAILURE_MESSAGES_STAY_ON_THE_SERVER =
-  "A failed job's message is kept in its run record on the server and not shown here, because a " +
-  "message can quote a value.";
+export const NO_REQUEST_FAILURES = "No question failed in this window";
+export const NO_REQUEST_FAILURES_MORE = "A question that failed or degraded appears here with its reference.";
+export const FULL_LIST = "This list came back full: choose a shorter window to see the rest.";
+export const PROCESS_LOG_IS_NOT_KEPT = "The application's own log is not kept where this console can read it.";
+export const LOG_IS_ON_THE_LOGS_SCREEN = "The application's warnings and errors are on the Logs page.";
+export const LOGS_LINK = "Open Logs";
+export const FAILURE_MESSAGES_STAY_ON_THE_SERVER = "A failure is shown by its kind; its message stays on the server.";
 
 /** The windows offered, in hours. The API's own bound is four weeks. */
 export const WINDOWS: readonly { readonly hours: number; readonly label: string }[] = [
-  { hours: 24, label: "The last day" },
-  { hours: 24 * 7, label: "The last week" },
-  { hours: 24 * 28, label: "The last four weeks" },
+  { hours: 24, label: "Last 24 hours" },
+  { hours: 24 * 7, label: "Last 7 days" },
+  { hours: 24 * 28, label: "Last 4 weeks" },
 ];
 
 export const DEFAULT_HOURS = 24 * 7;

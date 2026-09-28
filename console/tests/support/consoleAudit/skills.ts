@@ -10,7 +10,10 @@
 import {
   assignPath,
   categoriesPath,
+  detachPath,
   IMPORT_PATH,
+  reinstatementPath,
+  retirementPath,
   reviewPath,
   SKILLS_API_PATH,
   versionsPath,
@@ -18,19 +21,26 @@ import {
 import { at, type Proofs, t, type WriteRoute } from "../auditClaims";
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
-  "src/pages/Skills.tsx SKILLS_API_PATH": [at("POST /api/v1/skills", "SKILLS_API_PATH", SKILLS_API_PATH)],
-  "src/pages/Skills.tsx IMPORT_PATH": [at("POST /api/v1/skills/imports", "IMPORT_PATH", IMPORT_PATH)],
-  "src/pages/Skills.tsx versionsPath(one.digest)": [
+  "src/pages/skills/SkillForms.tsx SKILLS_API_PATH": [at("POST /api/v1/skills", "SKILLS_API_PATH", SKILLS_API_PATH)],
+  "src/pages/skills/SkillForms.tsx IMPORT_PATH": [at("POST /api/v1/skills/imports", "IMPORT_PATH", IMPORT_PATH)],
+  "src/pages/skills/SkillForms.tsx versionsPath(one.digest)": [
     at("POST /api/v1/skills/{digest}/versions", "versionsPath", versionsPath("d".repeat(64))),
   ],
-  "src/pages/Skills.tsx categoriesPath(one.digest)": [
+  "src/pages/skills/SkillForms.tsx categoriesPath(one.digest)": [
     at("POST /api/v1/skills/{digest}/categories", "categoriesPath", categoriesPath("d".repeat(64))),
   ],
-  "src/pages/Skills.tsx reviewPath(one.digest)": [
+  "src/pages/skills/SkillProfile.tsx reviewPath(one.digest)": [
     at("POST /api/v1/skills/{digest}/review", "reviewPath", reviewPath("d".repeat(64))),
   ],
-  "src/pages/Skills.tsx assignPath(one.digest)": [
+  "src/pages/skills/SkillForms.tsx assignPath(one.digest)": [
     at("POST /api/v1/skills/{digest}/assignments", "assignPath", assignPath("d".repeat(64))),
+  ],
+  "src/pages/skills/SkillProfile.tsx retired ? reinstatementPath(one.digest) : retirementPath(one.digest)": [
+    at("POST /api/v1/skills/{digest}/reinstatement", "reinstatementPath", reinstatementPath("d".repeat(64))),
+    at("POST /api/v1/skills/{digest}/retirement", "retirementPath", retirementPath("d".repeat(64))),
+  ],
+  "src/pages/skills/SkillProfile.tsx detachPath(pin.digest)": [
+    at("POST /api/v1/skills/{digest}/detachments", "detachPath", detachPath("d".repeat(64))),
   ],
 };
 
@@ -64,5 +74,20 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: t("test_skill_routes", "test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_assigned_to_an_agent"),
     audit: t("test_skill_store", "test_the_database_refuses_an_unsaid_self_decision_and_an_assignment_nobody_approved", true),
     behaviour: t("test_skill_routes", "test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_assigned_to_an_agent"),
+  },
+  "POST /api/v1/skills/{digest}/retirement": {
+    row: t("test_skill_lifecycle", "test_a_detachment_and_a_retirement_each_write_rows_and_entries_through_the_store", true),
+    audit: t("test_skill_lifecycle", "test_a_detachment_and_a_retirement_each_write_rows_and_entries_through_the_store", true),
+    behaviour: t("test_skill_lifecycle", "test_a_retired_version_is_refused_to_new_agents_and_its_holders_are_listed_not_detached"),
+  },
+  "POST /api/v1/skills/{digest}/reinstatement": {
+    row: t("test_skill_lifecycle", "test_a_detachment_and_a_retirement_each_write_rows_and_entries_through_the_store", true),
+    audit: t("test_skill_lifecycle", "test_a_detachment_and_a_retirement_each_write_rows_and_entries_through_the_store", true),
+    behaviour: t("test_skill_lifecycle", "test_a_retired_version_is_refused_to_new_agents_and_its_holders_are_listed_not_detached"),
+  },
+  "POST /api/v1/skills/{digest}/detachments": {
+    row: t("test_skill_lifecycle", "test_a_detachment_and_a_retirement_each_write_rows_and_entries_through_the_store", true),
+    audit: t("test_skill_lifecycle", "test_a_detachment_and_a_retirement_each_write_rows_and_entries_through_the_store", true),
+    behaviour: t("test_skill_lifecycle", "test_a_detached_skill_is_gone_from_the_agent_and_its_assignment_is_no_longer_in_force"),
   },
 };

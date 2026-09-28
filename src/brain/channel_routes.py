@@ -57,7 +57,9 @@ person.** A chat vendor posts again after a few seconds of silence, so a message
 a conversation is answered 200 once claimed and its reply is made after the response, recorded in
 the channel's deliveries like any other (`A_CHAT_IS_ACKNOWLEDGED_BEFORE_IT_IS_ANSWERED`). The reply
 is `brain.chat_answer.ChatAnswerer`'s on any process with a gate, and a code sent by an unbound
-sender is offered to `app.state.channel_binder` once the binding store sets one.
+sender is offered to `brain.ops.binding_store.StoredBinder` on any process with a database, which
+binds it once against `auth.binding_code` and keeps the binding in `auth.principal_identity`
+(CH2); `bindings_of` reads the same table.
 
 Task ids: M10.2.1, M10.6.1, M10.6.3, M10.3.3, M10.4.5, M3.2.2, M10.2.6, M1.8.5
 """
@@ -108,6 +110,7 @@ from brain.db import libpq_conninfo
 from brain.gate.context import Channel
 from brain.gate.resolve import EntitlementStore
 from brain.install_routes import settings_of
+from brain.ops.binding_store import StoredBinder, StoredBindings
 from brain.ops.channel_store import (
     ChannelRecord,
     ChannelRecords,
@@ -528,9 +531,13 @@ def ledger_of(request: Request) -> LedgerRunner:
 
 
 def bindings_of(request: Request) -> ChannelBindings:
-    """`app.state.channel_bindings` once the binding table is wired, `NoBindingsYet` until then."""
-    found = getattr(request.app.state, "channel_bindings", None)
-    return found if found is not None else NoBindingsYet()
+    """`app.state.channel_bindings` when a test put one there, `auth.principal_identity` through
+    `brain.ops.binding_store.StoredBindings` otherwise, and `NoBindingsYet` with no database."""
+    found: ChannelBindings | None = getattr(request.app.state, "channel_bindings", None)
+    if found is not None:
+        return found
+    sessions = sessions_of(request)
+    return NoBindingsYet() if sessions is None else StoredBindings(sessions)
 
 
 def answerer_of(request: Request) -> ChannelAnswerer | None:
@@ -551,12 +558,17 @@ def answerer_of(request: Request) -> ChannelAnswerer | None:
 
 
 def binder_of(request: Request) -> ChatBinder | None:
-    """`app.state.channel_binder` once the binding store is wired (CH2's), None until then.
+    """`app.state.channel_binder` when a test put one there, the stored codes and bindings
+    otherwise, for this request's trace, and None with no database.
 
     None takes no message as a code, so an unbound sender is prompted, which is
-    `NOBODY_IS_BOUND_UNTIL_A_BINDING_IS_KEPT`'s direction."""
+    `NOBODY_IS_BOUND_UNTIL_A_BINDING_IS_KEPT`'s direction. The trace is read now, while the request
+    is being handled, because a chat's reply is made after the response has gone."""
     found: ChatBinder | None = getattr(request.app.state, "channel_binder", None)
-    return found
+    if found is not None:
+        return found
+    sessions = sessions_of(request)
+    return None if sessions is None else StoredBinder(sessions, trace_id=trace_of_request())
 
 
 class _NoReach:

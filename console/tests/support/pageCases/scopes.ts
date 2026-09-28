@@ -5,13 +5,30 @@
  * Task ids: none
  */
 
-import { type PageCase, SCOPES } from "../pageFixtures";
+import { DEPARTMENTS, type PageCase, UNBROKEN } from "../pageFixtures";
+
+/** One scope, whose slug and whose clause value are both unbreakable tokens. */
+const SCOPES = {
+  items: [
+    {
+      slug: UNBROKEN,
+      label: UNBROKEN,
+      is_department: true,
+      scope: { clauses: [{ field: "department", op: "eq", value: UNBROKEN }] },
+    },
+  ],
+  next_cursor: null,
+  total: null,
+  truncated: false,
+  departments: [UNBROKEN],
+  staleness: null,
+};
 
 export const PAGES: Readonly<Record<string, PageCase>> = {
   "/scopes": {
     address: "/scopes",
     signedIn: true,
     drawsValues: true,
-    answers: { "/api/v1/govern/scopes": SCOPES },
+    answers: { "/api/v1/govern/scopes": SCOPES, "/api/v1/govern/departments": DEPARTMENTS },
   },
 };

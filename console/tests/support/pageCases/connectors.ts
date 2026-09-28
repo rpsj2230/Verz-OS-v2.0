@@ -16,6 +16,8 @@ const CONNECTOR_STATS = {
   last_read_to_the_end: "2019-03-04T09:30:00Z",
   consecutive_failures: 0,
   index_ids: 1234,
+  live_read_basis: "everyone",
+  last_live_read: "2019-03-04T09:00:00Z",
   at_least: false,
   periods: ["7d", "30d"].map((range) => ({
     range,
@@ -25,8 +27,9 @@ const CONNECTOR_STATS = {
     read_to_the_end: 22,
     failures: 2,
     quota_waits: 0,
+    live_reads: 5,
   })),
-  unrecorded: [{ figure: "live_reads", why: UNBROKEN }],
+  unrecorded: [],
 };
 
 /** One source on the Connectors list, every drawn value the unbroken token. */
@@ -68,6 +71,18 @@ const CONNECTOR_SOURCE = {
   skills: [{ name: UNBROKEN, version: "1.0.0", state: "approved" }],
   confirm_edit: UNBROKEN,
   confirm_key: UNBROKEN,
+};
+
+/** A source's newest connection test, as `brain.connector_routes.ConnectorProbeView` sends it. */
+const CONNECTOR_PROBE = {
+  connector: "xero",
+  requested_at: "2019-03-04T10:00:00Z",
+  pending: false,
+  verdict: "failed",
+  tested_at: "2019-03-04T10:00:40Z",
+  health: "down",
+  said: UNBROKEN,
+  confirm: UNBROKEN,
 };
 
 /** The Connectors screen's own read, which the list's connect drawer and a source's page use. */
@@ -136,6 +151,13 @@ const CONNECTORS_SCREEN = {
   key_blank: "Paste the key the source issued for this connection.",
 };
 
+/** The same screen with its one connection named for the source a page case opens, so the page
+ * draws what it draws for a connected source: its figures, its test and what the test found. */
+const XERO_CONNECTED = {
+  ...CONNECTORS_SCREEN,
+  connectors: CONNECTORS_SCREEN.connectors.map((one) => ({ ...one, name: "xero" })),
+};
+
 export const PAGES: Readonly<Record<string, PageCase>> = {
   // Connectors, the list of every source on the page kit: the list route, each connected row's
   // figures from the shared stats route, and the Connectors screen's own read, which the connect
@@ -186,8 +208,9 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     drawsValues: true,
     answers: {
       "/api/v1/console/connectors/xero": CONNECTOR_SOURCE,
-      "/api/v1/connectors": CONNECTORS_SCREEN,
+      "/api/v1/connectors": XERO_CONNECTED,
       "/api/v1/console/connectors/xero/stats": CONNECTOR_STATS,
+      "/api/v1/console/connectors/xero/probe": CONNECTOR_PROBE,
     },
   },
   // The Profile, the view with the most on it: settings, the index's fields, what it reads live,
@@ -198,7 +221,8 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     drawsValues: true,
     answers: {
       "/api/v1/console/connectors/xero": CONNECTOR_SOURCE,
-      "/api/v1/connectors": CONNECTORS_SCREEN,
+      "/api/v1/connectors": XERO_CONNECTED,
+      "/api/v1/console/connectors/xero/probe": CONNECTOR_PROBE,
     },
   },
 };

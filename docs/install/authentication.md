@@ -374,6 +374,7 @@ everything, written by first run and recorded in the ledger. They come in three 
 | `read:audit.halt` | reading how the system is run |
 | `read:audit.leash` | reading how the system is run |
 | `read:audit.legal_hold` | reading how the system is run |
+| `read:audit.pack` | reading how the system is run |
 | `read:audit.principal` | reading how the system is run |
 | `read:audit.retention` | reading how the system is run |
 | `read:audit.routing` | reading how the system is run |

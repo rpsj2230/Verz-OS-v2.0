@@ -175,7 +175,8 @@ GOVERN_GRANTS: dict[str, tuple[Grant, ...]] = {
     # Everything, company-wide, including the authority to write a grant and the one capability
     # these tests grant. Deliberately not `read:invoice.total`, so that the grant row sitting in
     # finance is one they may see and may not decide: `may_certify`'s third question needs
-    # somebody holding the round and not the capability, and this is them.
+    # somebody holding the round and not the capability, and this is them. `read:ticket` so a
+    # direct grant of it beside a pack carrying it is theirs to remove.
     "u_admin": (
         _grant("read:grant", WHOLE),
         _grant("read:role", WHOLE),
@@ -183,6 +184,7 @@ GOVERN_GRANTS: dict[str, tuple[Grant, ...]] = {
         _grant("read:scope", WHOLE),
         _grant(REACH_AUTHORITY.value, WHOLE),
         _grant(GRANTED, WHOLE),
+        _grant("read:ticket", WHOLE),
         _configuration(),
     ),
     # The same person narrowed to one department. What they are answered less of is the
@@ -195,6 +197,15 @@ GOVERN_GRANTS: dict[str, tuple[Grant, ...]] = {
         _grant(REACH_AUTHORITY.value, IN_MAINTENANCE),
         _grant(GRANTED, IN_MAINTENANCE),
         _configuration(IN_MAINTENANCE),
+    ),
+    # `u_admin` without the vocabulary's read: sees and governs everybody, and may not be told
+    # which capabilities anybody holds. The removal's named refusal is withheld from them.
+    "u_admin_only": (
+        _grant("read:grant", WHOLE),
+        _grant(REACH_AUTHORITY.value, WHOLE),
+        _grant(GRANTED, WHOLE),
+        _grant("read:ticket", WHOLE),
+        _configuration(),
     ),
 }
 
@@ -1400,19 +1411,16 @@ def test_a_grant_that_is_not_there_is_the_same_refusal_as_one_out_of_reach(
     assert absent.json()["message"] == out_of_reach.json()["message"] == Absent.public_message
 
 
-def test_a_capability_that_came_from_a_pack_is_not_removable_here(
+def test_a_capability_held_through_a_pack_is_refused_with_a_sentence_naming_the_pack(
     client: TestClient, executed: Executed
 ) -> None:
-    """The gap this screen has, asserted so that it is a decision rather than a surprise.
+    """M27.15.20. A pack's capability is on the People screen and there is no grant row behind it,
+    so it cannot be removed on its own, and a reader the People screen shows it to is told which
+    pack it came with, so they know to remove the pack. Nothing is written.
 
-    A pack's capability is on the People screen and there is no grant row behind it, so the
-    removal finds nothing and refuses in the ordinary words. That is the right refusal and not
-    a bug: removing it means removing the assignment, which takes away everything else in the
-    pack at the same time, and the refusal says nothing about which of a subject's capabilities
-    arrived that way, because that would be a fact about somebody else's access.
-
-    Delete this and somebody makes the removal fall back to the assignment table, helpfully,
-    and one click takes away eleven capabilities the person clicking was shown one of."""
+    Delete this and the person pressing remove is told "I could not find that" about a capability
+    the screen in front of them shows, or somebody makes the removal fall back to the assignment
+    table, helpfully, and one click takes away every capability in the pack."""
     executed.assignments = [(assignment_row(principal_id="u_1", pack=PACK), PACK, MAINTENANCE)]
     executed.grants = []
     executed.retired = (FAR_OFF,)
@@ -1422,8 +1430,58 @@ def test_a_capability_that_came_from_a_pack_is_not_removable_here(
 
     assert "read:ticket" in shown[0]["capabilities"]
     assert refused.status_code == 404
-    assert refused.json()["message"] == Absent.public_message
+    assert refused.json()["message"] == (
+        "Nothing was changed: read:ticket is held through the what a maintenance engineer needs "
+        "to do the job pack, so it cannot be removed on its own; remove the pack instead."
+    )
     assert executed.committed == 0
+    assert [one for one in executed.statements if one.startswith("UPDATE")] == []
+    assert any(
+        "capability_pack.capabilities @> ARRAY['read:ticket']" in one for one in executed.statements
+    )
+
+
+def test_a_reader_not_shown_the_capability_gets_the_ordinary_refusal_about_a_pack(
+    client: TestClient, executed: Executed
+) -> None:
+    """The sentence is said only where the People screen would show that capability on that
+    person's row. `u_admin_only` governs everybody and may not name capabilities; `u_elsewhere`
+    names them only in maintenance and the holder sits in finance. Both are answered exactly as a
+    capability nobody holds is.
+
+    Delete this and the refusal tells somebody which of another person's capabilities came through
+    a pack, which the vocabulary's grant or the People screen's read over that person withheld."""
+    finance_assignment = assignment_row(principal_id="u_2", pack=PACK)
+    executed.grants = []
+    executed.assignments = [(finance_assignment, PACK, FINANCE)]
+    elsewhere = remove(client, "u_elsewhere", principal_id="u_2", capability="read:ticket")
+    executed.assignments = [(assignment_row(principal_id="u_1", pack=PACK), PACK, MAINTENANCE)]
+    blind = remove(client, "u_admin_only", principal_id="u_1", capability="read:ticket")
+    executed.assignments = []
+    nobody = remove(client, "u_admin", principal_id="u_1", capability="read:ticket")
+
+    assert {(one.status_code, one.json()["message"]) for one in (elsewhere, blind, nobody)} == {
+        (404, Absent.public_message)
+    }
+    assert executed.committed == 0
+
+
+def test_a_direct_grant_beside_a_pack_carrying_the_same_capability_is_still_removed(
+    client: TestClient, executed: Executed
+) -> None:
+    """The positive case beside the named refusal. Delete this and a route that names the pack
+    whenever one carries the capability refuses to remove a real direct grant the person also
+    holds, which leaves the grant in force with a sentence blaming the pack."""
+    direct = grant_row(principal_id="u_1", capability="read:ticket")
+    executed.grants = [(direct, MAINTENANCE)]
+    executed.assignments = [(assignment_row(principal_id="u_1", pack=PACK), PACK, MAINTENANCE)]
+    executed.retired = (FAR_OFF,)
+
+    removed = remove(client, "u_admin", principal_id="u_1", capability="read:ticket")
+
+    assert removed.status_code == 200, removed.text
+    assert removed.json()["capability"] == "read:ticket"
+    assert executed.committed == 1
 
 
 def test_a_caller_who_may_not_review_never_reaches_the_database(

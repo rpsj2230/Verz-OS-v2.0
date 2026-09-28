@@ -226,8 +226,8 @@ class Memory:
         self.rows.append(row)
         return row
 
-    async def holders(self, limit: int) -> list[tuple[RoleGrantRow, str | None]]:
-        return [(one, "web") for one in self.rows]
+    async def holders(self, limit: int) -> list[tuple[RoleGrantRow, str | None, str | None]]:
+        return [(one, "web", f"Person {one.principal_id}") for one in self.rows]
 
     async def one(self, grant_id: uuid.UUID) -> RoleGrantRow | None:
         return next((one for one in self.rows if one.id == grant_id), None)
@@ -312,6 +312,21 @@ def test_an_administrator_appoints_a_super_admin_and_the_screen_lists_them(
         ("u_2", "super_admin")
     ]
     assert listed["editable"] is True
+
+
+def test_a_holder_the_screen_shows_is_named_from_their_principal_row(
+    client: TestClient, memory: Memory
+) -> None:
+    """The Roles page names people rather than printing ids. Delete this and the name can be
+    dropped between the store and the row, or read from a join that is not the holder's own."""
+    memory.add(role("u_2"))
+    listed = client.get(f"{API}/govern/roles/holders", headers=headers("u_admin")).json()
+    assert [(one["principal_id"], one["display_name"]) for one in listed["items"]] == [
+        ("u_2", "Person u_2")
+    ]
+    statement = str(role_store.live_role_grants(10).compile(compile_kwargs={"literal_binds": True}))
+    assert "auth.principal.display_name" in statement
+    assert "LEFT OUTER JOIN auth.principal" in statement
 
 
 def test_a_role_needing_a_scope_is_refused_without_one(client: TestClient, memory: Memory) -> None:

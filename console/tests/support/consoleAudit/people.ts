@@ -8,18 +8,34 @@
  */
 
 import { STEWARD_API_PATH } from "../../../src/pages/dataStewardQuery";
-import { DISABLE_API_PATH, ENABLE_API_PATH } from "../../../src/pages/governPeopleQuery";
 import {
+  DISABLE_API_PATH,
+  ENABLE_API_PATH,
+  LEAD_API_PATH,
+  MEMBERSHIP_API_PATH,
+  REVIEW_DECISION_API_PATH,
+} from "../../../src/pages/governPeopleQuery";
+import {
+  DIRECTORY_API_PATH,
   GRANTS_API_PATH,
   PACK_ASSIGNMENT_API_PATH,
   REMOVAL_API_PATH,
   SEVERAL_GRANTS_API_PATH,
-} from "../../../src/pages/governQuery";
+  transferApiPath as personTransferApiPath,
+} from "../../../src/pages/people/peopleQuery";
+import { END_SESSION_API_PATH, END_SESSIONS_API_PATH } from "../../../src/pages/sessionsQuery";
+import { LINK_API_PATH, UNLINK_API_PATH } from "../../../src/pages/signInLinksQuery";
 import { at, audited, type Proofs, t, type WriteRoute } from "../auditClaims";
 
 const GRANTS_PRESSED = audited("test_a_grant_written_and_removed_from_the_people_screen_reaches_row_ledger_and_reach");
 
 const SEVERAL_PRESSED = audited("test_a_grant_to_several_is_written_for_everybody_or_for_nobody_against_postgresql");
+
+const PERSON_ADDED_BY_HAND = t(
+  "test_directory_routes",
+  "test_a_person_added_by_hand_is_recorded_and_then_listed_with_what_they_hold",
+  true,
+);
 
 const DISABLE_REACHES_THE_ROW_THE_LEDGER_AND_THE_TOKEN = t(
   "test_principal_state",
@@ -28,24 +44,52 @@ const DISABLE_REACHES_THE_ROW_THE_LEDGER_AND_THE_TOKEN = t(
 );
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
-  "src/pages/People.tsx REMOVAL_API_PATH": [at("POST /api/v1/govern/grants/removal", "REMOVAL_API_PATH", REMOVAL_API_PATH)],
-  "src/pages/People.tsx GRANTS_API_PATH": [at("POST /api/v1/govern/grants", "GRANTS_API_PATH", GRANTS_API_PATH)],
-  "src/pages/People.tsx SEVERAL_GRANTS_API_PATH": [
+  "src/pages/people/PersonPlacements.tsx MEMBERSHIP_API_PATH": [
+    at("POST /api/v1/govern/departments/membership", "MEMBERSHIP_API_PATH", MEMBERSHIP_API_PATH),
+  ],
+  "src/pages/people/PersonPlacements.tsx LEAD_API_PATH": [
+    at("POST /api/v1/govern/departments/lead", "LEAD_API_PATH", LEAD_API_PATH),
+  ],
+  "src/pages/people/PersonGrants.tsx REMOVAL_API_PATH": [at("POST /api/v1/govern/grants/removal", "REMOVAL_API_PATH", REMOVAL_API_PATH)],
+  "src/pages/people/PersonGrants.tsx REVIEW_DECISION_API_PATH": [
+    at("POST /api/v1/govern/access-review/decision", "REVIEW_DECISION_API_PATH", REVIEW_DECISION_API_PATH),
+  ],
+  "src/pages/people/GrantDrawers.tsx GRANTS_API_PATH": [at("POST /api/v1/govern/grants", "GRANTS_API_PATH", GRANTS_API_PATH)],
+  "src/pages/people/GrantDrawers.tsx SEVERAL_GRANTS_API_PATH": [
     at("POST /api/v1/govern/grants/several", "SEVERAL_GRANTS_API_PATH", SEVERAL_GRANTS_API_PATH),
   ],
-  "src/pages/People.tsx disable ? DISABLE_API_PATH : ENABLE_API_PATH": [
+  "src/pages/people/GrantDrawers.tsx PACK_ASSIGNMENT_API_PATH": [
+    at("POST /api/v1/govern/packs/assignment", "PACK_ASSIGNMENT_API_PATH", PACK_ASSIGNMENT_API_PATH),
+  ],
+  "src/pages/people/GrantDrawers.tsx DIRECTORY_API_PATH": [at("POST /api/v1/govern/directory", "DIRECTORY_API_PATH", DIRECTORY_API_PATH)],
+  "src/pages/people/PersonDetailPage.tsx disable ? DISABLE_API_PATH : ENABLE_API_PATH": [
     at("POST /api/v1/govern/people/disable", "DISABLE_API_PATH", DISABLE_API_PATH),
     at("POST /api/v1/govern/people/enable", "ENABLE_API_PATH", ENABLE_API_PATH),
+  ],
+  "src/pages/people/PersonOverview.tsx transferApiPath(waiting.agentId)": [
+    at("POST /api/v1/govern/staff_sources/transfers/{agent_id}", "transferApiPath", personTransferApiPath("a_quotes")),
+  ],
+  "src/pages/people/PersonSessions.tsx LINK_API_PATH": [at("POST /api/v1/sign-ins", "LINK_API_PATH", LINK_API_PATH)],
+  "src/pages/people/PersonSessions.tsx END_SESSION_API_PATH": [
+    at("POST /api/v1/govern/sessions/end", "END_SESSION_API_PATH", END_SESSION_API_PATH),
+  ],
+  "src/pages/people/PersonSessions.tsx END_SESSIONS_API_PATH": [
+    at("POST /api/v1/govern/sessions/end-several", "END_SESSIONS_API_PATH", END_SESSIONS_API_PATH),
+  ],
+  "src/pages/people/PersonSessions.tsx UNLINK_API_PATH": [
+    at("POST /api/v1/govern/sign-ins/unlink", "UNLINK_API_PATH", UNLINK_API_PATH),
   ],
   "src/components/DataStewardCard.tsx STEWARD_API_PATH": [
     at("POST /api/v1/govern/data-steward", "STEWARD_API_PATH", STEWARD_API_PATH),
   ],
-  "src/pages/People.tsx PACK_ASSIGNMENT_API_PATH": [
-    at("POST /api/v1/govern/packs/assignment", "PACK_ASSIGNMENT_API_PATH", PACK_ASSIGNMENT_API_PATH),
-  ],
 };
 
 export const PROOFS: Readonly<Record<string, Proofs>> = {
+  "POST /api/v1/govern/directory": {
+    row: PERSON_ADDED_BY_HAND,
+    audit: PERSON_ADDED_BY_HAND,
+    behaviour: PERSON_ADDED_BY_HAND,
+  },
   "POST /api/v1/govern/people/disable": {
     row: DISABLE_REACHES_THE_ROW_THE_LEDGER_AND_THE_TOKEN,
     audit: DISABLE_REACHES_THE_ROW_THE_LEDGER_AND_THE_TOKEN,
@@ -85,6 +129,16 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
       "test_a_steward_named_at_setup_grants_a_source_s_read_on_and_the_administrator_cannot",
       true,
     ),
+  },
+  "POST /api/v1/sign-ins": {
+    row: t("test_sign_in_binding", "test_binding_the_same_subject_twice_writes_one_row", true),
+    audit: t("test_sign_in_routes", "test_an_administrators_binding_is_in_the_ledger_naming_them_their_reach_and_the_request", true),
+    behaviour: t("test_sign_in_binding", "test_a_valid_token_is_refused_until_its_subject_is_bound_and_accepted_after", true),
+  },
+  "POST /api/v1/govern/sign-ins/unlink": {
+    row: t("test_sign_in_links", "test_an_unlink_retires_the_link_names_who_did_it_and_the_account_is_refused_after", true),
+    audit: t("test_sign_in_links", "test_an_unlink_retires_the_link_names_who_did_it_and_the_account_is_refused_after", true),
+    behaviour: t("test_sign_in_links", "test_an_unlink_retires_the_link_names_who_did_it_and_the_account_is_refused_after", true),
   },
   "POST /api/v1/govern/packs/assignment": {
     row: t("test_govern_pack_routes", "test_an_assignment_reaches_the_row_the_ledger_and_the_resolver", true),

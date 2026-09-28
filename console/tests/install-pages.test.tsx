@@ -82,7 +82,7 @@ async function pageAnswering(
     </MemoryRouter>,
   );
   await waitFor(() => {
-    if (container.querySelector(".note[role='status']")) {
+    if (container.querySelector(".note[role='status'], [data-slot='loading-state']")) {
       throw new Error("still loading");
     }
     if (!container.querySelector("h1")) {
@@ -103,9 +103,6 @@ async function pageComponent(module: string, name: string): Promise<() => JSX.El
   const modules: Record<string, () => Promise<Record<string, unknown>>> = {
     Install: () => import("../src/pages/Install"),
     Updates: () => import("../src/pages/Updates"),
-    Recovery: () => import("../src/pages/Recovery"),
-    Limits: () => import("../src/pages/Limits"),
-    Capacity: () => import("../src/pages/Capacity"),
   };
   const loader = modules[module];
   if (loader === undefined) {
@@ -120,7 +117,7 @@ async function pageComponent(module: string, name: string): Promise<() => JSX.El
 
 /** The value shown beside one label, or null when the row is not on the page. */
 function valueBeside(container: HTMLElement, label: string): string | null {
-  for (const row of container.querySelectorAll(".fields__row")) {
+  for (const row of container.querySelectorAll(".fields__row, [data-slot='fact']")) {
     if (row.querySelector("dt")?.textContent === label) {
       return row.querySelector("dd")?.textContent ?? "";
     }
@@ -187,9 +184,15 @@ describe("what these pages agree with the API about", () => {
       "src/pages/installQuery.ts",
       "src/pages/Install.tsx",
       "src/pages/Updates.tsx",
+      "src/pages/install/InstallPage.tsx",
+      "src/pages/install/UpdatesPage.tsx",
+      "src/pages/install/InstallFacts.tsx",
       "src/pages/Recovery.tsx",
       "src/pages/Limits.tsx",
       "src/pages/Capacity.tsx",
+      "src/pages/operations/RecoveryPage.tsx",
+      "src/pages/operations/LimitsPage.tsx",
+      "src/pages/operations/CapacityPage.tsx",
       "src/components/Facts.tsx",
     ];
     for (const source of sources) {
@@ -241,7 +244,7 @@ describe("this install", () => {
       facts: [UNKNOWN],
     });
 
-    const row = [...container.querySelectorAll(".fields__row")].find(
+    const row = [...container.querySelectorAll("[data-slot='fact']")].find(
       (one) => one.querySelector("dt")?.textContent === "migration level",
     );
     const cell = row?.querySelector("dd");
@@ -250,9 +253,8 @@ describe("this install", () => {
     // The chip carrying the source word and the sentence, and nothing else. Asserted as the
     // absence of a value element rather than as the absence of the characters a placeholder is
     // usually spelled with, because the list of ways to write one is open and the structure is
-    // not: `Facts` renders the value in a bare span and renders no span at all when there is
-    // none.
-    expect(cell?.querySelector("span:not(.chip)")).toBeNull();
+    // not: `InstallFacts` marks the value and draws no value element when there is none.
+    expect(cell?.querySelector("[data-slot='fact-value']")).toBeNull();
     expect(cell?.textContent).toBe(`${UNKNOWN.source}${UNKNOWN.because}`);
   });
 });
@@ -324,8 +326,8 @@ describe("version and updates", () => {
     };
     const container = await pageAnswering("Updates", "Updates", "/install/updates", told);
 
-    expect(valueBeside(container, "newest release")).toBe("v1.4.0");
-    expect(valueBeside(container, "said by")).toBe(sentinel("who-said-so"));
+    expect(valueBeside(container, "Newest release")).toBe("v1.4.0");
+    expect(valueBeside(container, "Said by")).toBe(sentinel("who-said-so"));
   });
 
   test("a named release is what is running, with the commit beside it under its own label", async () => {
@@ -338,8 +340,8 @@ describe("version and updates", () => {
     };
     const container = await pageAnswering("Updates", "Updates", "/install/updates", named);
 
-    expect(valueBeside(container, "release")).toBe("v1.4.0");
-    expect(valueBeside(container, "commit")).toBe(sentinel("commit"));
+    expect(valueBeside(container, "Release")).toBe("v1.4.0");
+    expect(valueBeside(container, "Commit")).toBe(sentinel("commit"));
     expect(container.textContent).not.toContain(NO_RELEASE_NAMED);
   });
 
@@ -349,10 +351,10 @@ describe("version and updates", () => {
     // the page has in that state.
     const container = await pageAnswering("Updates", "Updates", "/install/updates", PANEL);
 
-    expect(valueBeside(container, "release")).toBe(
+    expect(valueBeside(container, "Release")).toBe(
       `${NO_RELEASE_NAMED}${PANEL.running.cannot_say}`,
     );
-    expect(valueBeside(container, "commit")).toBe(sentinel("commit"));
+    expect(valueBeside(container, "Commit")).toBe(sentinel("commit"));
   });
 
   test("an image that reported no commit draws no commit row rather than an empty one", async () => {
@@ -362,8 +364,8 @@ describe("version and updates", () => {
     const uncommitted = { ...PANEL, running: { ...PANEL.running, commit: "" } };
     const container = await pageAnswering("Updates", "Updates", "/install/updates", uncommitted);
 
-    expect(valueBeside(container, "commit")).toBeNull();
-    expect(valueBeside(container, "release")).toContain(NO_RELEASE_NAMED);
+    expect(valueBeside(container, "Commit")).toBeNull();
+    expect(valueBeside(container, "Release")).toContain(NO_RELEASE_NAMED);
   });
 
   test("a newer release is named with a link to its notes that tells the release host nothing", async () => {
@@ -382,7 +384,7 @@ describe("version and updates", () => {
     const container = await pageAnswering("Updates", "Updates", "/install/updates", behind);
 
     expect(container.textContent).toContain("newer release available");
-    expect(valueBeside(container, "newest release")).toBe("v1.5.0");
+    expect(valueBeside(container, "Newest release")).toBe("v1.5.0");
     const link = [...container.querySelectorAll("a")].find(
       (one) => one.textContent === READ_ITS_NOTES,
     );
@@ -403,15 +405,15 @@ describe("version and updates", () => {
     };
     const container = await pageAnswering("Updates", "Updates", "/install/updates", unlinked);
 
-    expect(valueBeside(container, "newest release")).toBe("v1.5.0");
-    expect(valueBeside(container, "notes")).toBeNull();
+    expect(valueBeside(container, "Newest release")).toBe("v1.5.0");
+    expect(valueBeside(container, "Notes")).toBeNull();
     expect(container.textContent).not.toContain(READ_ITS_NOTES);
   });
 
-  test("a look that has not finished shows the API's instruction and neither a release nor a failure", async () => {
+  test("a look that has not finished shows the API's instruction once and neither a release nor a failure", async () => {
     // What breaks if this is deleted: the first load after a start, which is the load everybody
     // sees, draws an empty card or a stale answer where the page should say to come back in a
-    // minute, and that sentence is the API's rather than one this console composes.
+    // minute, or says it twice; the sentence is the API's rather than one this console composes.
     const waiting = {
       ...PANEL,
       running: { ...PANEL.running, tag: "v1.4.0", cannot_say: "" },
@@ -421,15 +423,12 @@ describe("version and updates", () => {
       what_to_do: sentinel("come-back-in-a-minute"),
     };
     const container = await pageAnswering("Updates", "Updates", "/install/updates", waiting);
-    const card = [...container.querySelectorAll("section.card")].find(
-      (one) => one.querySelector("h2")?.textContent === "The newest published release",
-    );
+    const headings = [...container.querySelectorAll("h2")].map((one) => one.textContent);
 
     expect(container.textContent).toContain("not checked yet");
-    expect(card?.textContent).toBe(
-      `The newest published release${sentinel("come-back-in-a-minute")}`,
-    );
-    expect(valueBeside(container, "newest release")).toBeNull();
+    expect((container.textContent ?? "").split(sentinel("come-back-in-a-minute"))).toHaveLength(2);
+    expect(headings).not.toContain("The newest published release");
+    expect(valueBeside(container, "Newest release")).toBeNull();
   });
 
   test("a check that failed shows the reason it failed, in the API's words", async () => {
@@ -450,7 +449,7 @@ describe("version and updates", () => {
     expect(container.textContent).toContain("check failed");
     expect(container.textContent).toContain("the release list could not be reached");
     expect(container.textContent).toContain(sentinel("timed-out"));
-    expect(valueBeside(container, "newest release")).toBeNull();
+    expect(valueBeside(container, "Newest release")).toBeNull();
   });
 
   test("each deploy is listed with its time, commit, outcome and the tasks its release carried", async () => {
@@ -531,312 +530,8 @@ describe("version and updates", () => {
   });
 });
 
-// --- backup and recovery ----------------------------------------------------------------------
-
-describe("backup and recovery", () => {
-  const COPY = {
-    coverage: "database",
-    facts: [
-      {
-        name: "database: newest copy reaches",
-        source: "unknown",
-        value: "",
-        because: sentinel("never-copied"),
-      },
-    ],
-    within_objective: false,
-    objective_seconds: 3600,
-  };
-  const PANEL = {
-    panel: {
-      profile: "standard",
-      copies: [COPY, { ...COPY, coverage: "object store" }],
-      last_verified: {
-        name: "last verified restore",
-        source: "unknown",
-        value: "",
-        because: sentinel("never-verified"),
-      },
-      measured_rto_seconds: null,
-      assurance: "never verified",
-      says: sentinel("assurance-says"),
-      what_to_do: sentinel("assurance-do"),
-      drill_is_due: true,
-      unreadable: [],
-    },
-    unread: "",
-  };
-
-  test("an install nothing looked at says nobody looked and draws no panel", async () => {
-    // What breaks if this is deleted: the page falls back to an empty panel, which renders as an
-    // install whose backups have never run. That is an alarming word for a fact nobody
-    // established, and it would be believed. The assertion is the absence of the coverage rows,
-    // not the presence of a sentence, because a sentence above an empty panel is still a panel.
-    const container = await pageAnswering("Recovery", "Recovery", "/install/recovery", {
-      panel: null,
-      unread: sentinel("nobody-looked"),
-    });
-
-    expect(container.textContent).toContain(sentinel("nobody-looked"));
-    expect(container.querySelectorAll(".fields__row")).toHaveLength(0);
-  });
-
-  test("every coverage the API sent gets a row, including one nothing has copied", async () => {
-    // What breaks if this is deleted: a page filters out the coverages with no copy, and a
-    // reader who counts three rows on a healthy install and two here has been told about the
-    // missing one by subtraction. The verdict and the field this screen is named after are both
-    // asserted, because they are the two things a reader looks at before deciding.
-    const container = await pageAnswering("Recovery", "Recovery", "/install/recovery", PANEL);
-
-    expect(container.textContent).toContain("database");
-    expect(container.textContent).toContain("object store");
-    expect(container.textContent).toContain(PANEL.panel.assurance);
-    expect(container.textContent).toContain(PANEL.panel.says);
-    expect(valueBeside(container, "last verified restore")).toContain(sentinel("never-verified"));
-  });
-
-  test("an unreadable record is named rather than counted", async () => {
-    // What breaks if this is deleted: the page says how many records could not be read, and a
-    // reader who is told a number cannot go and look at any of them. The run that falls over is
-    // the run whose record is truncated, so the missing one is the one most likely to matter.
-    const container = await pageAnswering("Recovery", "Recovery", "/install/recovery", {
-      ...PANEL,
-      panel: {
-        ...PANEL.panel,
-        unreadable: [{ where: sentinel("the-file"), why: sentinel("the-reason") }],
-      },
-    });
-
-    expect(container.textContent).toContain(sentinel("the-file"));
-    expect(container.textContent).toContain(sentinel("the-reason"));
-  });
-
-  test("a restore time nobody measured has no row where one would be", async () => {
-    // What breaks if this is deleted: a null becomes a zero or a dash beside "the last verified
-    // restore took", which is a measurement of a restore that never happened, on the panel whose
-    // whole subject is telling those two apart.
-    const container = await pageAnswering("Recovery", "Recovery", "/install/recovery", PANEL);
-
-    expect(valueBeside(container, "the last verified restore took")).toBeNull();
-    expect(valueBeside(container, "a rehearsal is owed")).toBe("true");
-  });
-
-  test("how to rehearse is drawn when nothing looked, and no control claims to run one", async () => {
-    // What breaks if this is deleted: the rehearsal card drops off the unread shape, which is the
-    // shape every install has today, and a reader of that state loses the one thing they can act
-    // on; or a button appears beside it, which is a drill control that runs nothing. M30.3.9 asks
-    // for one-click, and `brain.install_routes.NO_CONTROL_HERE_RUNS_A_REHEARSAL` is why it is not.
-    const container = await pageAnswering("Recovery", "Recovery", "/install/recovery", {
-      panel: null,
-      unread: sentinel("nobody-looked"),
-      rehearsal: {
-        every_days: 7,
-        copies_kept_days: 35,
-        promised_recovery_seconds: 7200,
-        manifest_ends: ".manifest.json",
-        record_ends: ".drill.json",
-        no_control_here: sentinel("no-control"),
-      },
-    });
-
-    expect(container.textContent).toContain(sentinel("nobody-looked"));
-    expect(container.textContent).toContain(sentinel("no-control"));
-    expect(valueBeside(container, "a rehearsal is owed every")).toBe("7 days");
-    expect(valueBeside(container, "the recovery time this profile promises")).toBe("7200s");
-    expect(valueBeside(container, "a rehearsal's record is named ending")).toBe(".drill.json");
-    expect(container.querySelectorAll("button, form")).toHaveLength(0);
-  });
-});
-
-// --- rate limits ------------------------------------------------------------------------------
-
-describe("rate limits", () => {
-  const CEILINGS = [{ name: sentinel("xero"), per_day: 5000, raisable: true, derived: true }];
-
-  test("an empty throttling list and an absent one are drawn differently", async () => {
-    // What breaks if this is deleted: the two collapse, and the page renders "nothing on this
-    // process looked" as "nobody is being throttled". Both draw no rows, so nothing else in this
-    // file would notice, and the direction of the mistake is the reassuring one during an
-    // incident. The empty case is also the answer a department-scoped reader gets.
-    const empty = await pageAnswering("Limits", "Limits", "/install/limits", {
-      ceilings: CEILINGS,
-      throttled: [],
-      unread: "",
-    });
-    const absent = await pageAnswering("Limits", "Limits", "/install/limits", {
-      ceilings: CEILINGS,
-      throttled: null,
-      unread: sentinel("nothing-enumerates"),
-    });
-
-    const { NOBODY_IS_BEHIND_A_CEILING } = await import("../src/pages/Limits");
-    expect(empty.textContent).toContain(NOBODY_IS_BEHIND_A_CEILING);
-    expect(empty.textContent).not.toContain(sentinel("nothing-enumerates"));
-    expect(absent.textContent).toContain(sentinel("nothing-enumerates"));
-    expect(absent.textContent).not.toContain(NOBODY_IS_BEHIND_A_CEILING);
-  });
-
-  test("a throttled row shows what the API sent and no count of refused requests", async () => {
-    // What breaks if this is deleted: somebody adds a refusals column, which is a number beside
-    // a person's name describing how their afternoon is going. The assertion is over the cells
-    // in the row rather than over the page, so an extra column fails here rather than being
-    // invisible among the prose.
-    const container = await pageAnswering("Limits", "Limits", "/install/limits", {
-      ceilings: CEILINGS,
-      throttled: [
-        { scope: "principal", subject: sentinel("who"), limit: 60, retry_after_seconds: 12 },
-      ],
-      unread: "",
-    });
-
-    const rows = [...container.querySelectorAll("tbody tr")];
-    const throttleRow = rows.find((row) => row.textContent?.includes(sentinel("who")));
-    expect(throttleRow?.querySelectorAll("td")).toHaveLength(THROTTLE_COLUMNS.length);
-    expect(container.textContent).toContain(sentinel("who"));
-  });
-
-  test("both tables sit inside a scrolling container", async () => {
-    // What breaks if this is deleted: a row of identifiers takes the document sideways on a
-    // phone, and what goes off the edge is the navigation rather than the table.
-    // `.grid__table` sets `overflow-wrap: normal` so a column is not split mid-word, which only
-    // works when something else is taking the overflow. `tests/phone-width.test.tsx` cannot
-    // reach the state below because a notice never stops looking like a page that is still
-    // asking, so the structural half is asserted here.
-    const container = await pageAnswering("Limits", "Limits", "/install/limits", {
-      ceilings: CEILINGS,
-      throttled: [
-        { scope: "principal", subject: sentinel("who"), limit: 60, retry_after_seconds: 12 },
-      ],
-      unread: "",
-    });
-
-    const tables = [...container.querySelectorAll("table")];
-    expect(tables).toHaveLength(2);
-    for (const table of tables) {
-      expect(table.parentElement?.className).toBe("grid__scroll");
-    }
-  });
-
-  const WINDOWS = [
-    {
-      scope: "principal",
-      applies_to: sentinel("each-person"),
-      period: "minute",
-      limit: 30,
-      window_seconds: 60,
-      raisable: true,
-      when_unreachable: sentinel("lets-through"),
-    },
-  ];
-
-  test("the windows are listed with what each does when the store is down", async () => {
-    // What breaks if this is deleted: the screen goes back to listing only the source ceilings,
-    // which say nothing about the window a person is refused at, and the one fact that decides
-    // what an outage does to a question is a footnote nobody reads.
-    const container = await pageAnswering("Limits", "Limits", "/install/limits", {
-      ceilings: CEILINGS,
-      windows: WINDOWS,
-      throttled: [],
-      unread: "",
-    });
-
-    const row = [...container.querySelectorAll("tbody tr")].find((one) =>
-      one.textContent?.includes(sentinel("each-person")),
-    );
-    expect(row?.querySelectorAll("td")).toHaveLength(WINDOW_COLUMNS.length);
-    expect(row?.textContent).toContain(sentinel("lets-through"));
-    for (const table of container.querySelectorAll("table")) {
-      expect(table.parentElement?.className).toBe("grid__scroll");
-    }
-  });
-
-  test("somebody asking far more than usual is shown by band and never by a count", async () => {
-    // What breaks if this is deleted: a count column is added beside a person's name, which is a
-    // report about their day. The row's cells are counted against the columns, so a column the
-    // API did not send cannot appear, and the absent and empty lists are told apart as the
-    // throttling list's are.
-    const listed = await pageAnswering("Limits", "Limits", "/install/limits", {
-      ceilings: CEILINGS,
-      throttled: [],
-      unread: "",
-      unusual: [{ subject: sentinel("busy"), band: "extreme", said: sentinel("far-more") }],
-      unusual_unread: "",
-    });
-    const empty = await pageAnswering("Limits", "Limits", "/install/limits", {
-      ceilings: CEILINGS,
-      throttled: [],
-      unread: "",
-      unusual: [],
-      unusual_unread: "",
-    });
-    const absent = await pageAnswering("Limits", "Limits", "/install/limits", {
-      ceilings: CEILINGS,
-      throttled: [],
-      unread: "",
-      unusual: null,
-      unusual_unread: sentinel("nothing-counted"),
-    });
-
-    const { NOBODY_IS_UNUSUAL } = await import("../src/pages/Limits");
-    const row = [...listed.querySelectorAll("tbody tr")].find((one) =>
-      one.textContent?.includes(sentinel("busy")),
-    );
-    expect(row?.querySelectorAll("td")).toHaveLength(UNUSUAL_COLUMNS.length);
-    expect(row?.textContent).toContain(sentinel("far-more"));
-    expect(empty.textContent).toContain(NOBODY_IS_UNUSUAL);
-    expect(absent.textContent).toContain(sentinel("nothing-counted"));
-    expect(absent.textContent).not.toContain(NOBODY_IS_UNUSUAL);
-  });
-});
-
-// --- capacity ---------------------------------------------------------------------------------
-
-describe("capacity", () => {
-  const BODY = {
-    memory: {
-      profile: "standard",
-      host_total_mib: 16000,
-      declared_mib: 4000,
-      deployed_mib: null,
-      breaches: [sentinel("breach")],
-      unbudgeted: [sentinel("unbudgeted")],
-    },
-    connections: [{ database: sentinel("primary"), admissible: 100, demand: 60, headroom: 40 }],
-  };
-
-  test("a deployed figure nobody measured has no row where one would be", async () => {
-    // What breaks if this is deleted: the row is drawn as zero, or as a copy of the declared
-    // figure. The second is worse: two numbers equal by construction read as agreement between
-    // independent measurements, and agreement is exactly what somebody opens this screen to
-    // check.
-    const container = await pageAnswering("Capacity", "Capacity", "/install/capacity", BODY);
-
-    expect(valueBeside(container, "reserved by the compose files")).toBeNull();
-    expect(valueBeside(container, "declared by this profile")).toBe("4000 MiB");
-  });
-
-  test("a budget finding is drawn in the API's own words", async () => {
-    // What breaks if this is deleted: the page rewords a breach, which puts the arithmetic's
-    // conclusion in two places, or reduces the findings to a count, which drops the only useful
-    // half of a breach, which is which component it is about.
-    const container = await pageAnswering("Capacity", "Capacity", "/install/capacity", BODY);
-
-    expect(container.textContent).toContain(sentinel("breach"));
-    expect(container.textContent).toContain(sentinel("unbudgeted"));
-  });
-
-  test("the connection table shows every database the API sent", async () => {
-    // What breaks if this is deleted: a database is dropped from the screen whose whole subject
-    // is whether this deployment is about to run out of connections.
-    const container = await pageAnswering("Capacity", "Capacity", "/install/capacity", BODY);
-
-    expect(container.textContent).toContain(sentinel("primary"));
-    const rows = [...container.querySelectorAll("tbody tr")];
-    expect(rows).toHaveLength(BODY.connections.length);
-  });
-});
-
-// --- getting to them without a mouse ----------------------------------------------------------
+// Backup and recovery, rate limits and capacity are rebuilt on the page kit and held in
+// `tests/operations-pages.test.tsx`.
 
 describe("reaching the install screens from the keyboard", () => {
   test("every install screen is a native link in the shell, in the menu or in its module's tabs", async () => {

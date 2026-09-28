@@ -244,7 +244,7 @@ describe("what Tailwind generates", () => {
   test("the one glob reads every file of every kit module and not one old page", async () => {
     // What breaks if this is deleted: the glob is what replaced a line per module, so a glob that
     // stopped one level down, or one widened to `pages` itself, would pass the test above. Widened,
-    // it reads the 194 old page files and generates a utility for every word in them; narrowed, a
+    // it reads every old page file and generates a utility for every word in them; narrowed, a
     // kit module's classes compile to nothing and its page draws unstyled. So the files the scanner
     // actually read are compared with the files on disk.
     const read = new Set((await compileLayer()).files.map((one) => relative(CONSOLE_ROOT, one).split("\\").join("/")));

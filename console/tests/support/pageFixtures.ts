@@ -52,20 +52,29 @@ export const MATRIX = {
   editable: true,
 };
 
-/** One scope, whose slug and whose clause value are both unbreakable tokens. */
-export const SCOPES = {
-  items: [
-    {
-      slug: UNBROKEN,
-      label: UNBROKEN,
-      is_department: true,
-      scope: { clauses: [{ field: "department", op: "eq", value: UNBROKEN }] },
-    },
-  ],
+/** One person as the directory sends one, every value an unbreakable token. */
+export const PERSON = {
+  principal_id: "p_1",
+  display_name: UNBROKEN,
+  department: UNBROKEN,
+  department_name: UNBROKEN,
+  employment: "contractor",
+  standing: "live",
+  second_factor: false,
+  last_signed_in_at: "2019-03-04T09:00:00Z",
+  packs: [UNBROKEN],
+};
+
+/** One page of the directory: every person, grant or none. */
+export const DIRECTORY = {
+  items: [PERSON],
   next_cursor: null,
-  total: null,
   truncated: false,
-  departments: [UNBROKEN],
+  editable: true,
+  may_disable: true,
+  may_add: true,
+  adding: UNBROKEN,
+  disabling: UNBROKEN,
   staleness: null,
 };
 
@@ -95,4 +104,138 @@ export const AUDIT = {
   actions: ["grant"],
   subject_kinds: ["principal"],
   actors: [UNBROKEN],
+};
+
+/**
+ * The providers answer every page of the Models and routing module reads: one provider whose slug,
+ * description, model, deployment and vault slot are tokens with nowhere to break. It is editable,
+ * names a credential and carries a registry row, a last test and what it was sent, so every control,
+ * the key form and the terms form are drawn. The slug is the provider page's address too.
+ */
+export const PROVIDERS_PLAN = {
+  profile: "hosted",
+  providers: [
+    {
+      listed: 0,
+      provider: UNBROKEN,
+      description: UNBROKEN,
+      hosted: true,
+      switched_on: false,
+      switched_by: UNBROKEN,
+      switched_at: "2019-03-04T09:00:00Z",
+      key_held: true,
+      credential: { slot: UNBROKEN, description: UNBROKEN, held: true, set_at: "2019-03-04T09:00:00Z" },
+      registered: {
+        label: UNBROKEN,
+        kind: "openai_compatible",
+        base_url: `https://${UNBROKEN}.example`,
+        models: [UNBROKEN],
+        processing_region: UNBROKEN,
+        residency_class: "region_pinned",
+        storage_location: UNBROKEN,
+        retention_terms: UNBROKEN,
+        training_terms: UNBROKEN,
+        agreement_url: null,
+        lane_overrides: [{ lane: "answer", timeout_seconds: 10, attempts: null }],
+      },
+      disclosed: [{ category: "question", told: UNBROKEN, attempts: 3 }],
+      last_check: { answered: false, outcome: "timeout", model: UNBROKEN, at: "2019-03-04T09:00:00Z" },
+    },
+  ],
+  rungs: [
+    {
+      rung_id: RUNG_ID,
+      tier: "main",
+      position: 0,
+      role: "primary",
+      deployment_id: UNBROKEN,
+      provider: UNBROKEN,
+      model: UNBROKEN,
+      enabled: true,
+      answers: false,
+      skipped_because: "switched_off",
+      told: "This provider is switched off on this screen, so nothing is sent to it.",
+      state: "closed",
+      measured: false,
+      unhealthy_because: null,
+      live_seen: 0,
+      live_failed: 0,
+      probes_seen: 2,
+      probes_failed: 1,
+      last_probe_at: "2019-03-04T09:00:00Z",
+      last_live_at: null,
+    },
+  ],
+  exhausted_tiers: ["main"],
+  editable: true,
+  profile_editable: true,
+  vault: "ready",
+  vault_told: "The secrets vault answered.",
+  tiers: [
+    { tier: "small", context_window: 128000, escalation_headroom: 0.8, configured: false },
+    { tier: "main", context_window: 50000, escalation_headroom: 0.5, configured: true },
+  ],
+  residency: [
+    {
+      id: "44444444-4444-4444-8444-444444444444",
+      scope: { clauses: [{ field: "department", op: "eq", value: UNBROKEN }] },
+      allowed_regions: [UNBROKEN],
+      on_prem_only: false,
+      note: UNBROKEN,
+      created_by: UNBROKEN,
+      created_at: "2019-03-04T09:00:00Z",
+    },
+  ],
+  depth_alerts: [
+    {
+      raised_at: "2019-03-04T09:00:00Z",
+      level: "warning",
+      tier: "main",
+      depth: 2,
+      served_by: UNBROKEN,
+      reason: UNBROKEN,
+      trace_id: UNBROKEN,
+    },
+  ],
+  next_cursor: null,
+};
+
+/** The same answer with its list page: the list route answers every provider as `items` too. */
+export const PROVIDERS_ANSWER = { ...PROVIDERS_PLAN, items: PROVIDERS_PLAN.providers };
+
+export const DEPARTMENTS = {
+  items: [
+    {
+      slug: UNBROKEN,
+      name: UNBROKEN,
+      teams: [
+        {
+          slug: UNBROKEN,
+          name: UNBROKEN,
+          members: [{ principal_id: `${UNBROKEN}1`, display_name: UNBROKEN, disabled: false }],
+        },
+      ],
+      members: [
+        { principal_id: UNBROKEN, display_name: UNBROKEN, disabled: true },
+        { principal_id: `${UNBROKEN}2`, display_name: UNBROKEN, disabled: false },
+      ],
+      lead: { principal_id: `${UNBROKEN}1`, display_name: UNBROKEN, disabled: false },
+      shapeable: true,
+    },
+  ],
+  next_cursor: null,
+  unplaced: [{ principal_id: `${UNBROKEN}0`, display_name: UNBROKEN, disabled: false, department: UNBROKEN }],
+  truncated: true,
+  may_organise: true,
+  may_found: true,
+  may_draw_scopes: true,
+  staleness: null,
+  teams: UNBROKEN,
+  leads: UNBROKEN,
+  counted: UNBROKEN,
+  organising: UNBROKEN,
+  shaping: UNBROKEN,
+  retiring_department: UNBROKEN,
+  retiring_team: UNBROKEN,
+  retiring_scope: UNBROKEN,
 };

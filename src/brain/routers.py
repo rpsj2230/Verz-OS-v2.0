@@ -92,6 +92,15 @@ from brain.automation_routes import router as automation_router
 # recomputed on the server, and a row whose trigger writes the ledger entry.
 from brain.automation_schedule_routes import router as automation_schedule_router
 
+# The Automations module: every automation a reader may see, one automation's page and
+# figures, and the confirmed pause, resume, schedule change, removal and adoption.
+from brain.automations_routes import router as automations_router
+
+# Binding a chat account with a one-time code minted in My workspace, unbinding it, and the
+# Channels screen's bindings and health behind the channel's own authority. See
+# `brain.binding_routes`.
+from brain.binding_routes import router as binding_router
+
 # Channels: the one address every vendor posts a message to, which takes no caller and proves
 # the signature, and each channel's record, switch, test message and deliveries behind the
 # connector authority over `<channel>_channel`. See `brain.channel_routes`.
@@ -120,8 +129,8 @@ from brain.compliance_routes import router as compliance_router
 # yet is served beside the list. See `brain.connector_routes`.
 from brain.connector_routes import router as connector_router
 
-# The landing screen's figure row: how the last seven days' requests ended, at the reader's
-# basis. See `brain.console_overview_figures_routes`.
+# The landing screen's figure row: how the last seven days' requests ended and what they cost,
+# each at the reader's basis. See `brain.console_overview_figures_routes`.
 from brain.console_overview_figures_routes import router as console_overview_figures_router
 from brain.console_overview_routes import router as console_overview_router
 
@@ -146,6 +155,10 @@ from brain.data_steward_routes import router as data_steward_router
 # audit trail export, recorded in the ledger before the document is handed over. See
 # `brain.data_transfer_routes`.
 from brain.data_transfer_routes import router as data_transfer_router
+
+# Every person this install knows, one person's page, and a person added by hand where no staff
+# list is read (M27.11.2, M27.15.19). See `brain.directory_routes`.
+from brain.directory_routes import router as directory_router
 
 # What the Retention screen needs beside the report: who may act, what each act does in the
 # words a confirmation shows, the export log, and the erasure queue with its one write, which

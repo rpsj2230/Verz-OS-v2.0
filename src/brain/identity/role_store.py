@@ -21,7 +21,7 @@ import uuid
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Final, Protocol, runtime_checkable
+from typing import Any, Final, Protocol, cast, runtime_checkable
 
 from sqlalchemy import Select, func, insert, null, select, text, update
 from sqlalchemy.exc import DBAPIError, IntegrityError
@@ -70,10 +70,17 @@ def role_grant_of(row: RoleGrantRow) -> RoleGrant:
     )
 
 
-def live_role_grants(limit: int) -> Select[tuple[RoleGrantRow, str | None]]:
-    """Every live role grant and the department its holder sits in."""
-    return (
-        select(RoleGrantRow, PrincipalRow.primary_department)
+def live_role_grants(limit: int) -> Select[tuple[RoleGrantRow, str | None, str | None]]:
+    """Every live role grant, the department its holder sits in, and the holder's name.
+
+    The name rides the same outer join as the department, so a holder whose principal row is gone
+    arrives with neither, and the Roles screen names a holder only where one is recorded.
+    """
+    # `cast` at the library boundary: the outer join makes `display_name` nullable, which the
+    # column's own type, declared for the table, cannot say.
+    return cast(
+        "Select[tuple[RoleGrantRow, str | None, str | None]]",
+        select(RoleGrantRow, PrincipalRow.primary_department, PrincipalRow.display_name)
         .join(
             PrincipalRow,
             (PrincipalRow.id == RoleGrantRow.principal_id) & (PrincipalRow.deleted_at.is_(None)),
@@ -81,7 +88,7 @@ def live_role_grants(limit: int) -> Select[tuple[RoleGrantRow, str | None]]:
         )
         .where(RoleGrantRow.deleted_at.is_(None))
         .order_by(RoleGrantRow.role, RoleGrantRow.principal_id)
-        .limit(limit)
+        .limit(limit),
     )
 
 
@@ -142,7 +149,7 @@ class _RefusedError(Exception):
 class RoleRecords(Protocol):
     """What the Roles routes need of the store, so a test can hand them one without a server."""
 
-    async def holders(self, limit: int) -> list[tuple[RoleGrantRow, str | None]]: ...
+    async def holders(self, limit: int) -> list[tuple[RoleGrantRow, str | None, str | None]]: ...
 
     async def one(self, grant_id: uuid.UUID) -> RoleGrantRow | None: ...
 
@@ -177,9 +184,12 @@ class StoredRoles:
             await session.execute(statement)
         await session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": ROLE_LOCK})
 
-    async def holders(self, limit: int) -> list[tuple[RoleGrantRow, str | None]]:
+    async def holders(self, limit: int) -> list[tuple[RoleGrantRow, str | None, str | None]]:
         async with self.sessions() as session:
-            return [(row, dept) for row, dept in (await session.execute(live_role_grants(limit)))]
+            return [
+                (row, dept, name)
+                for row, dept, name in (await session.execute(live_role_grants(limit)))
+            ]
 
     async def one(self, grant_id: uuid.UUID) -> RoleGrantRow | None:
         async with self.sessions() as session:

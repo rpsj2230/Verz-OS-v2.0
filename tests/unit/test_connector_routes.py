@@ -18,7 +18,7 @@ no outside system.
 everything the run logged rather than over a named field.** A test naming the field would go green
 the moment somebody added a different one.
 
-Task ids: M42.6.5
+Task ids: M42.6.5, M27.15.8
 """
 
 from __future__ import annotations
@@ -44,6 +44,8 @@ from brain.connector_routes import (
     EDIT_PATH,
     EXPORT_PATH,
     KEY_PATH,
+    PROBE_PATH,
+    PROBE_STATE_PATH,
     SOURCE_PATH,
     SOURCES_PATH,
     ConnectorsView,
@@ -81,6 +83,12 @@ from brain.ops.connector_admin import (
     TOLD,
     VAULT_SAYS,
     WHAT_CONNECTING_A_SOURCE_STARTS,
+)
+from brain.ops.connector_probe import (
+    TEST_WAITING,
+    TESTING_A_SOURCE,
+    ProbeRecord,
+    ProbeStatus,
 )
 from brain.ops.connector_recordings import recorded_in_words
 from brain.ops.connector_store import (
@@ -1279,3 +1287,125 @@ def test_a_replaced_key_is_a_credential_write_and_changes_no_connection(
     attach(app, records, None)
     assert post(client, "u_admin", key_path("xero"), {"credential": KEY}).status_code == 409
     assert len(vault.written) == 1
+
+
+# ------------------------------------------------------------------ testing a connection
+
+
+class Probes:
+    """`brain.ops.connector_sync_store.ConnectorProbes` in memory, noting every press."""
+
+    def __init__(self) -> None:
+        self.asks: list[tuple[str, datetime, str]] = []
+        self.last: ProbeRecord | None = None
+
+    async def ask(
+        self, connector: str, *, at: datetime, by: str, trace_id: str, ent_hash: str
+    ) -> None:
+        self.asks.append((connector, at, by))
+
+    async def status(self, connector: str) -> ProbeStatus:
+        asked = [one[1] for one in self.asks if one[0] == connector]
+        return ProbeStatus(requested_at=asked[-1] if asked else None, last=self.last)
+
+
+def probe_path(name: str) -> str:
+    return API_PREFIX + PROBE_PATH.replace("{connector}", name)
+
+
+def probe_state_path(name: str) -> str:
+    return API_PREFIX + PROBE_STATE_PATH.replace("{connector}", name)
+
+
+def test_an_administrator_asks_for_a_test_and_is_told_it_waits_for_the_worker(
+    app: FastAPI, client: TestClient
+) -> None:
+    """**The console's half of M27.15.8.** A press by somebody who may manage the source writes the
+    request under their name and answers that the worker has it, with the words the confirmation
+    agreed to. Delete this and the button writes nothing the worker reads, or writes it as
+    nobody."""
+    probes = Probes()
+    attach(app, Records((a_connection("xero"),)), held_vault())
+    app.state.connector_probes = probes
+    answered = post(client, "u_admin", probe_path("xero"))
+
+    assert answered.status_code == 200, answered.text
+    body = answered.json()
+    assert (body["pending"], body["verdict"], body["said"]) == (True, None, TEST_WAITING)
+    assert body["confirm"] == TESTING_A_SOURCE
+    assert [(one[0], one[2]) for one in probes.asks] == [("xero", "u_admin")]
+    assert "u_admin" not in answered.text
+
+
+def test_a_test_is_refused_before_anything_is_asked_when_it_should_be(
+    app: FastAPI, client: TestClient
+) -> None:
+    """A caller who may not manage the source, a source not connected and a name that is not a
+    source are the one refusal; a source whose plan refuses it is a problem in the plan's own words.
+    Nothing is asked by any of them. Delete this and a reader can spend a source's allowance, or a
+    test waits for ever on a source the worker will never call."""
+    probes = Probes()
+    attach(app, Records((a_connection("xero"), a_connection("hubspot"))), held_vault())
+    app.state.connector_probes = probes
+    for refused in (
+        post(client, "u_wide", probe_path("xero")),
+        post(client, "u_narrow", probe_path("hubspot")),
+        post(client, "u_admin", probe_path("freshdesk")),
+        post(client, "u_admin", probe_path("lark-app")),
+    ):
+        assert (refused.status_code, without_trace(refused)) == (
+            404,
+            {"message": Absent.public_message},
+        )
+    unverified = post(client, "u_admin", probe_path("hubspot"))
+
+    assert unverified.status_code == 422
+    assert [(one["code"], one["message"]) for one in unverified.json()["problems"]] == [
+        ("not_testable", NO_VERIFIED_CEILING)
+    ]
+    assert probes.asks == []
+
+
+def test_how_a_test_went_is_read_by_a_reader_of_the_source_and_by_nobody_else(
+    app: FastAPI, client: TestClient
+) -> None:
+    """The finding is the source's health, so a reader of the screen told of the connection reads
+    it; a reader it is hidden from is answered as for a source nobody connected. Delete this and a
+    test's finding is hidden from the people the page is for, or tells somebody a source exists."""
+    probes = Probes()
+    probes.last = ProbeRecord(
+        started_at=LONG_AGO, finished_at=LONG_AGO, health="down", detail=KEY_DECLINED
+    )
+    attach(app, Records((a_connection("xero"), a_connection("hubspot"))), held_vault())
+    app.state.connector_probes = probes
+    wide = read(client, "u_wide", probe_state_path("xero"))
+
+    assert wide.status_code == 200, wide.text
+    assert (wide.json()["verdict"], wide.json()["health"], wide.json()["said"]) == (
+        "failed",
+        "down",
+        KEY_DECLINED,
+    )
+    hidden = read(client, "u_narrow", probe_state_path("hubspot"))
+    nobody = read(client, "u_wide", probe_state_path("freshdesk"))
+    outside = read(client, "u_none", probe_state_path("xero"))
+    for refused in (hidden, nobody, outside):
+        assert (refused.status_code, without_trace(refused)) == (
+            404,
+            {"message": Absent.public_message},
+        )
+
+
+def test_the_test_route_leaves_connect_larks_own_test_to_connect_lark() -> None:
+    """Connect Lark's router answers `POST /connectors/lark-app/test` and is registered after this
+    one, so a route here matching that address would answer it first. Delete this and the next
+    rename of the probe path to `/test` breaks Connect Lark's test with every connector test
+    green."""
+    from starlette.routing import Match
+
+    from brain.connector_routes import router
+
+    scope = {"type": "http", "path": f"{API_PREFIX}/connectors/lark-app/test", "method": "POST"}
+    assert [one for one in router.routes if one.matches(scope)[0] is not Match.NONE] == []
+    probing = {"type": "http", "path": probe_path("xero"), "method": "POST"}
+    assert [one for one in router.routes if one.matches(probing)[0] is Match.FULL]

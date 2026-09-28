@@ -13,8 +13,8 @@ import { at, audited, type Proofs, type WriteRoute } from "../auditClaims";
 const INSTRUCTIONS_PRESSED = audited("test_an_instruction_edit_and_its_give_back_reach_the_install_the_ledger_and_the_prompt");
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
-  "src/pages/Prompts.tsx editPath(asked.row.agent_id)": [at("POST /api/v1/govern/prompts/{agent_id}", "editPath", editPath("quote-helper"))],
-  "src/pages/Prompts.tsx giveBackPath(asked.row.agent_id)": [
+  "src/pages/prompts/PromptsPage.tsx editPath(asked.row.agent_id)": [at("POST /api/v1/govern/prompts/{agent_id}", "editPath", editPath("quote-helper"))],
+  "src/pages/prompts/PromptsPage.tsx giveBackPath(asked.row.agent_id)": [
     at("POST /api/v1/govern/prompts/{agent_id}/give-back", "giveBackPath", giveBackPath("quote-helper")),
   ],
 };

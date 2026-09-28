@@ -6,7 +6,7 @@ Driven through the real application with the table held in memory. The stub answ
 statement by the columns it selects and records it, so a refusal can be shown to have been made
 before any statement was built, and the search can be read off the statement's own parameters.
 
-Task ids: M27.8.14, M27.8.6
+Task ids: M27.8.14, M27.8.6, M27.15.48
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from brain.api import API_PREFIX
 from brain.console.reads import Plane, plane_capability
 from brain.core.entitlement import Grant
 from brain.core.scope import Scope
-from brain.log_routes import LOG_AUTHORITY, MAX_WINDOW
+from brain.log_routes import EXPORT_COLUMNS, EXPORT_ROWS, LOG_AUTHORITY, MAX_WINDOW
 from brain.ops.log_store import ENTRY_COLUMNS, cursor_of, position_of
 from tests.fixtures.console_http import Stub, console_client, get
 from tests.fixtures.setting_rows import Result, Row
@@ -262,3 +262,57 @@ def test_a_cursor_is_the_position_it_was_made_from() -> None:
     assert position_of(cursor_of(at, 7)) == (at, 7)
     with pytest.raises(ValueError):
         position_of("7")
+
+
+# ------------------------------------------------------------------ the export (M27.15.48)
+EXPORT = f"{LOGS}/export"
+
+
+def test_the_holder_of_the_log_exports_what_the_search_finds_as_csv_with_no_count(
+    served: tuple[TestClient, Stub], table: Table
+) -> None:
+    """The positive case: every row the screen would page through, in the screen's columns, the
+    fields as name and value, and nothing that counts anything.
+
+    Delete this and every refusal below is satisfied by an export nobody can take."""
+    client, _ = served
+    answer = get(client, "u_admin", f"{EXPORT}?level=warning&event=request")
+
+    assert answer.status_code == 200, answer.text
+    body = answer.json()
+    lines = body["document"].split("\r\n")
+    assert lines[0] == ",".join(EXPORT_COLUMNS)
+    assert len([one for one in lines[1:] if one]) == len(table.rows)
+    assert "detail=[masked:str/small]; outcome=denied" in lines[1]
+    assert body["cut_off"] is False
+    assert body["filename"].endswith(".csv")
+    assert "count" not in str(sorted(body))
+    asked = table.asked[-1].compile().params
+    assert asked["level_1"] == "warning"
+    assert asked["param_1"] == EXPORT_ROWS + 1
+
+
+@pytest.mark.parametrize("pid", ["u_wide", "u_elsewhere", "u_narrow", "u_none"])
+def test_an_export_is_refused_exactly_as_the_screen_is_and_before_any_statement(
+    served: tuple[TestClient, Stub], table: Table, pid: str
+) -> None:
+    """Delete this and the export becomes a second way into a log its reader may not open."""
+    client, _ = served
+    refused = get(client, pid, EXPORT)
+
+    assert refused.status_code == 404
+    assert refused.json()["message"] == get(client, pid, LOGS).json()["message"]
+    assert table.asked == []
+
+
+def test_an_exported_cell_that_starts_like_a_formula_opens_as_text(
+    served: tuple[TestClient, Stub], table: Table
+) -> None:
+    """Delete this and an event name beginning with an equals sign runs as a formula in the
+    spreadsheet an administrator opens the export in."""
+    client, _ = served
+    formula = list(table.rows[0])
+    formula[4] = "=HYPERLINK(1)"
+    table.rows = [Row(tuple(formula))]
+    document = get(client, "u_admin", EXPORT).json()["document"]
+    assert "'=HYPERLINK(1)" in document

@@ -275,9 +275,9 @@ def _one(label: str, to: str, key: str = "") -> Entry:
 #:
 #: The labels are the design's, and `brain.ops.console_design` compares them with SCREEN 1 of
 #: `docs/screens.html` on every traceability run, so a label spelled any other way is reported as
-#: a gap. A module the map names and nothing builds yet (approvals and autonomy, automations,
-#: channels, system health, stop) has no entry, because an entry that opens a page saying "not
-#: built" is clutter the owner asked to be rid of.
+#: a gap. A module the map names and nothing builds yet (approvals and autonomy, system health,
+#: stop) has no entry, because an entry that opens a page saying "not built" is clutter the owner
+#: asked to be rid of.
 #:
 #: Left out on purpose, and reachable by address: Requirement checks (`/requirement-checks`),
 #: which records what a person saw on this install against the product's own requirements
@@ -298,6 +298,8 @@ COMPANY_NAVIGATION: Final[tuple[Section, ...]] = (
                     Page(label="Roles", to="/roles", key="roles"),
                     Page(label="Capabilities", to="/capabilities", key="capabilities"),
                     Page(label="Scopes", to="/scopes", key="scopes"),
+                    # A pack's contents are capability names, so it opens on the vocabulary's read.
+                    Page(label="Packs", to="/packs", key="capabilities"),
                 ),
             ),
             Entry(
@@ -336,6 +338,7 @@ COMPANY_NAVIGATION: Final[tuple[Section, ...]] = (
                     Page(label="Tools", to="/tools"),
                 ),
             ),
+            _one("Automations", "/automations"),
             Entry(
                 label="Models and routing",
                 pages=(
@@ -364,6 +367,8 @@ COMPANY_NAVIGATION: Final[tuple[Section, ...]] = (
     Section(
         group=ModuleGroup.CHANNELS,
         entries=(
+            # E1 of the map: each chat surface's set-up, switch, health and bound people.
+            _one("Channels", "/channels"),
             _one("Webhooks", "/webhooks"),
             Entry(
                 label="Notifications and email",

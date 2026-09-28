@@ -29,6 +29,7 @@ Task ids: M39.6.1.4, M39.6.1.5, M39.6.2.2, M38.2.2.5
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime
 from typing import Final, Protocol, runtime_checkable
 
@@ -59,6 +60,7 @@ from brain.console.automation_schedule import (
     shown_start,
     shown_stop,
 )
+from brain.console.automations import ChangeKind
 from brain.core.errors import Absent, Failed
 from brain.ops.automation_run import PausedBecause, RunRecord
 from brain.ops.automation_run_store import Listed, StoredAutomationSchedules
@@ -110,7 +112,16 @@ STOPPED_BECAUSE: Final = {
         "Paused because the person it runs as, through this agent, can no longer read what it "
         "reads."
     ),
+    ChangeKind.PAUSED.value: "Paused by a person.",
+    ChangeKind.ADOPTED.value: "Adopted, and waiting for somebody else to start it.",
+    ChangeKind.REMOVED.value: "Removed. It never runs again.",
 }
+
+#: What a paused automation whose person has gone says instead of a start.
+ADOPT_IT_FIRST: Final = (
+    "The person it runs as is no longer here, so it cannot be started until somebody adopts it "
+    "on the Automations page."
+)
 
 #: The words a 409 carries.
 UNCONFIRMED: Final = "unconfirmed"
@@ -253,6 +264,8 @@ def automation_view(listed: Listed, agent: AgentRecord, asked: Asking) -> Automa
     template = template_by_id(listed.template_id)
     if template is None:
         return None
+    cadence = listed.cadence or template.cadence
+    live = listed.owner_live(asked.now)
     shown = history(
         one,
         [run.as_history() for run in listed.runs],
@@ -264,11 +277,14 @@ def automation_view(listed: Listed, agent: AgentRecord, asked: Asking) -> Automa
         (run for run in listed.runs if shown.last is not None and run.finished_at == shown.last.at),
         None,
     )
-    start = shown_start(one, template.cadence, now=asked.now)
-    startable = start.becomes is not None and may_start(
-        one, asked.reach, agent=agent, becomes=start.becomes, now=asked.now
+    start = shown_start(one, cadence, now=asked.now)
+    startable = (
+        not listed.removed
+        and live
+        and start.becomes is not None
+        and may_start(one, asked.reach, agent=agent, becomes=start.becomes, now=asked.now)
     )
-    stoppable = may_stop(one, asked.reach, now=asked.now)
+    stoppable = not listed.removed and may_stop(one, asked.reach, now=asked.now)
     paused_because = None
     if one.paused:
         paused_because = (
@@ -276,19 +292,22 @@ def automation_view(listed: Listed, agent: AgentRecord, asked: Asking) -> Automa
             if listed.stopped_because in (None, STARTED)
             else STOPPED_BECAUSE.get(listed.stopped_because or "", NEVER_STARTED)
         )
+    cannot_start = None
+    if one.paused and not listed.removed:
+        cannot_start = ADOPT_IT_FIRST if not live else cannot_start_because(one, agent, asked.now)
     return AutomationView(
         automation_id=one.automation_id,
         name=one.name,
         runs_as=one.runs_as.id,
         runs_as_name=one.runs_as.display_name,
-        schedule=template.cadence.words(),
+        schedule=cadence.words(),
         next_run_at=one.next_run_at,
         paused_because=paused_because,
         last_run=None if last is None else run_view(last, asked),
         start_confirmation=start.confirmation if startable else None,
         start_becomes=start.becomes if startable else None,
-        stop_confirmation=shown_stop(one, template.cadence).confirmation if stoppable else None,
-        cannot_start=cannot_start_because(one, agent, asked.now) if one.paused else None,
+        stop_confirmation=shown_stop(one, cadence).confirmation if stoppable else None,
+        cannot_start=cannot_start,
     )
 
 
@@ -328,17 +347,22 @@ async def _change(
     if listed is None or template is None:
         raise _not_here("automation", asked)
     one = listed.automation
+    cadence = listed.cadence or template.cadence
+    if listed.removed:
+        raise _not_here("removed", asked)
     shown: ScheduleShown
     if starting:
-        shown = shown_start(one, template.cadence, now=asked.now)
-        if shown.becomes is None or not may_start(
-            one, asked.reach, agent=agent, becomes=shown.becomes, now=asked.now
+        shown = shown_start(one, cadence, now=asked.now)
+        if (
+            shown.becomes is None
+            or not listed.owner_live(asked.now)
+            or not may_start(one, asked.reach, agent=agent, becomes=shown.becomes, now=asked.now)
         ):
             raise _not_here("start", asked)
     else:
         if not may_stop(one, asked.reach, now=asked.now):
             raise _not_here("stop", asked)
-        shown = shown_stop(one, template.cadence)
+        shown = shown_stop(one, cadence)
     try:
         change = changed(shown, confirmation=body.confirmation, guards=listed.guards)
     except NotConfirmedError:
@@ -355,12 +379,10 @@ async def _change(
         return _not_changed(MOVED, IT_MOVED)
     after = change.after
     assert after is not None
-    moved = Listed(
+    moved = replace(
+        listed,
         automation=after,
-        template_id=listed.template_id,
-        guards=listed.guards,
         stopped_because=STARTED if starting else PausedBecause.STOPPED.value,
-        runs=listed.runs,
     )
     view = automation_view(moved, agent, asked)
     return JSONResponse(

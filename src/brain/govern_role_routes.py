@@ -81,6 +81,9 @@ class HolderView(BaseModel):
 
     id: str
     principal_id: str
+    #: The holder's name, read with the row; null when their principal row is not there. Carried
+    #: only on a row `role_holders` already showed, so it names nobody the screen did not.
+    display_name: str | None = None
     role: str
     scope: dict[str, Any] | None
     deputy_of: str | None
@@ -165,10 +168,11 @@ def role_records_of(request: Request) -> RoleRecords:
     return StoredRoles(factory)
 
 
-def holder_view(row: Any) -> HolderView:
+def holder_view(row: Any, display_name: str | None = None) -> HolderView:
     return HolderView(
         id=str(row.id),
         principal_id=row.principal_id,
+        display_name=display_name,
         role=row.role,
         scope=row.scope,
         deputy_of=row.deputy_of,
@@ -209,7 +213,8 @@ async def holders(request: Request, asked: Asked) -> Holders:
         raise Absent(f"the {ROLES_SCREEN} screen is not answerable for this caller")
     rows = await role_records_of(request).holders(MAX_HOLDERS)
     placed: list[tuple[Any, Placed[RoleGrant]]] = []
-    for row, department in rows:
+    names: dict[int, str | None] = {}
+    for row, department, name in rows:
         try:
             record = role_grant_of(row)
         except ValueError:
@@ -217,9 +222,12 @@ async def holders(request: Request, asked: Asked) -> Holders:
             continue
         where = {} if department is None else {"department": department}
         placed.append((row, Placed(record=record, where=where)))
+        names[id(row)] = name
     shown = {id(one) for one in role_holders([p for _, p in placed], asked.reach, asked.now)}
     return Holders(
-        items=tuple(holder_view(row) for row, one in placed if id(one) in shown),
+        items=tuple(
+            holder_view(row, names.get(id(row))) for row, one in placed if id(one) in shown
+        ),
         editable=asked.reach.scope_for(REACH_AUTHORITY, asked.now) is not None,
     )
 

@@ -6,7 +6,7 @@
  * Task ids: none
  */
 
-import { MATRIX, type PageCase, RUNG_ID, UNBROKEN } from "../pageFixtures";
+import { MATRIX, type PageCase, PROVIDERS_ANSWER, RUNG_ID, UNBROKEN } from "../pageFixtures";
 
 /**
  * The matrix gate's two answers on the Routing screen: one held change with its failing case, and
@@ -53,6 +53,7 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     drawsValues: true,
     answers: {
       "/api/v1/routing/rungs": MATRIX,
+      "/api/v1/models/providers": PROVIDERS_ANSWER,
       "/api/v1/routing/changes": ROUTING_CHANGES,
       "/api/v1/routing/golden-questions": GOLDEN_QUESTIONS,
       "/api/v1/routing/golden-questions/askers": GOLDEN_ASKERS,
@@ -64,8 +65,10 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     drawsValues: true,
     answers: {
       "/api/v1/routing/rungs": MATRIX,
+      "/api/v1/models/providers": PROVIDERS_ANSWER,
       "/api/v1/routing/changes": ROUTING_CHANGES,
       "/api/v1/routing/golden-questions": GOLDEN_QUESTIONS,
+      "/api/v1/routing/golden-questions/askers": GOLDEN_ASKERS,
     },
   },
 };

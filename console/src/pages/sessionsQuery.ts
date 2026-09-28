@@ -1,30 +1,16 @@
 /**
- * What the Sessions screen asks the API for, what it may send, and what its filters may offer. No
- * React.
+ * What the Sessions page asks the API for, what its two writes send, and the words it builds from
+ * the answers. No React.
  *
- * **This screen sits beside People and grants in Govern, which is where `docs/screens.html` SCREEN
- * 10 puts what happens to a person's sign-ins.** The design draws a leaver's line as "sessions
- * killed, tokens rotated" under the organisation tree; the registry's Sessions screen is that
- * sentence made into a list with the control on it.
+ * **Who may see or end a session is the server's decision.** The listing is `brain.console.govern.
+ * open_sessions`' answer and `endable` is `may_end`'s, both computed per request; this module only
+ * decides whether a control is drawn, and the route decides again when it is pressed. Several
+ * sessions are ended by one request that the route runs as that many single endings, answering
+ * each one's outcome, and a session that was not ended is said the same way whatever the reason.
  *
- * **Nothing here decides who may see or end a session.** The listing is `brain.console.govern.
- * open_sessions`' answer and `endable` is `may_end`'s, both computed on the server per request;
- * this module reads them and decides only what a control looks like. A session this reader may
- * not end has no button, and the route refuses the end whatever the page drew.
+ * **No number about the rows.** The answer carries no total and the page draws none.
  *
- * **The list is searched, filtered, ordered and paged by the route** (`brain.listing`, over the
- * sessions the reader may see), and a filter offers only the values on rows already drawn. See
- * `components/listing.ts`' `A_FILTER_OFFERS_ONLY_WHAT_WAS_SHOWN`.
- *
- * **Several sessions are ended by one confirmed request that ends each of them alone.** The route
- * runs the single ending once per session and answers each one's outcome, and the page says, per
- * session, whether it was ended. A session that was not ended is said the same way whatever the
- * reason, because the route answers it the same way.
- *
- * **No number about the rows.** `readSessionsPage` drops nothing because the answer carries no
- * total, and the page renders no count of sessions, including of the ones ticked.
- *
- * Task ids: M27.7.10, M27.8.6
+ * Task ids: M27.7.10, M27.8.6, M27.16.1
  */
 
 import type { components } from "../api/schema";
@@ -35,7 +21,7 @@ export type SessionRow = components["schemas"]["SessionView"];
 /** One session's outcome in a bulk ending, as `brain.session_routes.SessionOutcome` sends it. */
 export type SessionOutcome = components["schemas"]["SessionOutcome"];
 
-/** Where the API keeps this screen and its controls. */
+/** Where the API keeps this page and its controls. */
 export const SESSIONS_API_PATH = "/govern/sessions";
 export const END_SESSION_API_PATH = "/govern/sessions/end";
 export const END_SESSIONS_API_PATH = "/govern/sessions/end-several";
@@ -49,6 +35,7 @@ export const MOST_ENDED_AT_ONCE = 50;
 /** One page of sessions, as this console holds it. */
 export interface SessionsPage {
   readonly sessions: readonly SessionRow[];
+  /** The route's load came back full. Never how much more there is. */
   readonly truncated: boolean;
   /** What ending a session does, in the API's words. */
   readonly ending: string;
@@ -63,7 +50,43 @@ const NO_SESSIONS: SessionsPage = Object.freeze({
   appears: "",
 });
 
-/** Read `brain.session_routes.SessionsPage` out of a response body. */
+function text(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+/**
+ * One row out of the answer, or null. Carried only with its id, a name and both instants, and
+ * with the three flags read as true only when the API said true, so a missing `endable` never
+ * draws a control.
+ */
+function readSession(item: unknown): SessionRow | null {
+  if (typeof item !== "object" || item === null || Array.isArray(item)) {
+    return null;
+  }
+  // A cast at the boundary: every field is read back through a type check below.
+  const entry = item as Readonly<Record<string, unknown>>;
+  const id = text(entry["session_id"]);
+  const name = text(entry["display_name"]);
+  const signedIn = text(entry["signed_in_at"]);
+  const lapses = text(entry["lapses_at"]);
+  if (id === "" || name === "" || signedIn === "" || lapses === "") {
+    return null;
+  }
+  const department = entry["department"];
+  return {
+    session_id: id,
+    principal_id: text(entry["principal_id"]),
+    display_name: name,
+    department: typeof department === "string" && department !== "" ? department : null,
+    second_factor: entry["second_factor"] === true,
+    signed_in_at: signedIn,
+    lapses_at: lapses,
+    yours: entry["yours"] === true,
+    endable: entry["endable"] === true,
+  };
+}
+
+/** Read `brain.session_routes.SessionsPage` out of a response body. Each session once, in order. */
 export function readSessionsPage(payload: unknown): SessionsPage {
   if (typeof payload !== "object" || payload === null) {
     return NO_SESSIONS;
@@ -77,11 +100,20 @@ export function readSessionsPage(payload: unknown): SessionsPage {
   if (!Array.isArray(body.items)) {
     return NO_SESSIONS;
   }
+  const seen = new Set<string>();
+  const sessions: SessionRow[] = [];
+  for (const item of body.items as readonly unknown[]) {
+    const row = readSession(item);
+    if (row !== null && !seen.has(row.session_id)) {
+      seen.add(row.session_id);
+      sessions.push(row);
+    }
+  }
   return {
-    sessions: body.items as SessionRow[],
+    sessions,
     truncated: body.truncated === true,
-    ending: typeof body.ending === "string" ? body.ending : "",
-    appears: typeof body.appears === "string" ? body.appears : "",
+    ending: text(body.ending),
+    appears: text(body.appears),
   };
 }
 
@@ -112,12 +144,26 @@ export function readOutcomes(payload: unknown): readonly SessionOutcome[] {
   return Array.isArray(outcomes) ? (outcomes as SessionOutcome[]) : [];
 }
 
-/** Whether a row may be ticked for a bulk ending: the API said it may be ended, and it is not yours. */
+/** The instant a single ending was recorded, or null when the answer carried none. */
+export function readEndedAt(payload: unknown): string | null {
+  if (typeof payload !== "object" || payload === null) {
+    return null;
+  }
+  const ended = (payload as { ended_at?: unknown }).ended_at;
+  return typeof ended === "string" && ended !== "" ? ended : null;
+}
+
+/** Whether a row may be ended from this page: the API said it may be, and it is not yours. */
 export function tickable(row: SessionRow): boolean {
   return row.endable && !row.yours;
 }
 
-/** The filters the Sessions route declares that this screen offers. */
+/** Whether a second factor was shown for the session, in words. */
+export function factorWords(row: SessionRow): string {
+  return row.second_factor ? "Yes" : "No";
+}
+
+/** The filters the Sessions route declares that this page offers, over values on rows drawn. */
 export const SESSION_FILTERS: readonly FilterChoice<SessionRow>[] = [
   {
     column: "department",
@@ -131,19 +177,19 @@ export const SESSION_FILTERS: readonly FilterChoice<SessionRow>[] = [
     label: "Second factor",
     everything: "With or without",
     read: (row) => row.second_factor,
-    describe: (value) => (value === "true" ? "Shown" : "Not shown"),
+    describe: (value) => (value === "true" ? "Yes" : "No"),
   },
 ];
 
-/** The orders this screen offers, as the route spells them. Empty is the route's own. */
+/** The orders this page offers, as the route spells them. Empty is the route's own. */
 export const SESSION_SORTS: readonly SortChoice[] = [
-  { value: "", label: "Most recent sign-in first" },
-  { value: "display_name", label: "By name" },
-  { value: "department", label: "By department" },
-  { value: "lapses_at", label: "Soonest to end first" },
+  { value: "", label: "Newest sign-in first" },
+  { value: "display_name", label: "Name" },
+  { value: "department", label: "Department" },
+  { value: "lapses_at", label: "Ending soonest first" },
 ];
 
-/** An instant, as the rows show it. */
+/** An instant, as the rows show it. Other pages borrow it. */
 export function when(value: string): string {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
@@ -165,9 +211,15 @@ export function endQuestion(row: SessionRow): string {
 /** The question the bulk confirmation asks. Names no figure: the list under it names each one. */
 export const END_SELECTED_QUESTION = "End each of these sessions?";
 
-/** What the bulk confirmation lists for one session: whose, from when, and what happens to it. */
+/** What the bulk confirmation lists for one session: whose, and from when. */
 export function endingLine(row: SessionRow): string {
-  return `${row.display_name}'s session from ${when(row.signed_in_at)} is refused from its next request.`;
+  return `${row.display_name}, signed in ${when(row.signed_in_at)}`;
+}
+
+/** What a single ending says once it is done: whose, and the instant the database recorded. */
+export function endedSentence(row: SessionRow, endedAt: string | null): string {
+  const at = endedAt === null ? "" : ` at ${when(endedAt)}`;
+  return `${row.display_name}'s session was ended${at}. The next request made with it is refused.`;
 }
 
 /** What the page says about one session after a bulk ending. */

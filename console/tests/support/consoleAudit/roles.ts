@@ -14,6 +14,12 @@ import {
   GROUP_RULES_API_PATH,
   ROLE_REMOVAL_API_PATH,
 } from "../../../src/pages/governQuery";
+import {
+  PACK_COPY_API_PATH,
+  PACK_RETIREMENT_API_PATH,
+  PACK_VERSION_API_PATH,
+  PACKS_API_PATH,
+} from "../../../src/pages/roles/PacksPage";
 import { at, type Proofs, t, type WriteRoute } from "../auditClaims";
 
 const GROUP_RULES_PRESSED = t(
@@ -28,27 +34,51 @@ const ROLES_PRESSED = t(
   true,
 );
 
+const PACK_WRITE_REACHES_EVERYTHING = t(
+  "test_govern_pack_routes",
+  "test_each_pack_write_reaches_its_row_one_ledger_entry_and_every_holder",
+  true,
+);
+
+const PACK_WRITTEN: Proofs = {
+  row: PACK_WRITE_REACHES_EVERYTHING,
+  audit: PACK_WRITE_REACHES_EVERYTHING,
+  behaviour: PACK_WRITE_REACHES_EVERYTHING,
+};
+
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
-  "src/pages/RoleControls.tsx path": [
+  "src/pages/roles/RoleDrawers.tsx APPOINTMENT_API_PATH": [
     at("POST /api/v1/govern/roles/appointment", "APPOINTMENT_API_PATH", APPOINTMENT_API_PATH),
-    at("POST /api/v1/govern/roles/deputy", "DEPUTY_API_PATH", DEPUTY_API_PATH),
   ],
-  "src/pages/GroupRules.tsx GROUP_RULES_API_PATH": [
+  "src/pages/roles/RoleDrawers.tsx DEPUTY_API_PATH": [at("POST /api/v1/govern/roles/deputy", "DEPUTY_API_PATH", DEPUTY_API_PATH)],
+  "src/pages/roles/RoleDrawers.tsx GROUP_RULES_API_PATH": [
     at("POST /api/v1/govern/roles/group-rules", "GROUP_RULES_API_PATH", GROUP_RULES_API_PATH),
   ],
-  "src/pages/GroupRules.tsx GROUP_RULE_RETIREMENT_API_PATH": [
+  "src/pages/roles/RoleDrawers.tsx GROUP_RULE_RETIREMENT_API_PATH": [
     at(
       "POST /api/v1/govern/roles/group-rules/retirement",
       "GROUP_RULE_RETIREMENT_API_PATH",
       GROUP_RULE_RETIREMENT_API_PATH,
     ),
   ],
-  "src/pages/RoleControls.tsx ROLE_REMOVAL_API_PATH": [
+  "src/pages/roles/RoleDrawers.tsx ROLE_REMOVAL_API_PATH": [
     at("POST /api/v1/govern/roles/removal", "ROLE_REMOVAL_API_PATH", ROLE_REMOVAL_API_PATH),
+  ],
+  "src/pages/roles/PacksPage.tsx PACKS_API_PATH": [at("POST /api/v1/govern/packs", "PACKS_API_PATH", PACKS_API_PATH)],
+  "src/pages/roles/PacksPage.tsx PACK_VERSION_API_PATH": [
+    at("POST /api/v1/govern/packs/version", "PACK_VERSION_API_PATH", PACK_VERSION_API_PATH),
+  ],
+  "src/pages/roles/PacksPage.tsx PACK_COPY_API_PATH": [at("POST /api/v1/govern/packs/copy", "PACK_COPY_API_PATH", PACK_COPY_API_PATH)],
+  "src/pages/roles/PacksPage.tsx PACK_RETIREMENT_API_PATH": [
+    at("POST /api/v1/govern/packs/retirement", "PACK_RETIREMENT_API_PATH", PACK_RETIREMENT_API_PATH),
   ],
 };
 
 export const PROOFS: Readonly<Record<string, Proofs>> = {
+  "POST /api/v1/govern/packs": PACK_WRITTEN,
+  "POST /api/v1/govern/packs/version": PACK_WRITTEN,
+  "POST /api/v1/govern/packs/copy": PACK_WRITTEN,
+  "POST /api/v1/govern/packs/retirement": PACK_WRITTEN,
   "POST /api/v1/govern/roles/appointment": {
     row: ROLES_PRESSED,
     audit: ROLES_PRESSED,

@@ -273,6 +273,10 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
     moves what a run may reach, which is why none is GRANT or LEASH_CHANGE, and what the agent is
     told is INSTRUCTIONS.
 
+    `pack` records a capability pack created, versioned or retired, written by `0141`'s trigger on
+    `gate.capability_pack` under the pack's own subject. A pack's assignment stays GRANT: a change
+    to the pack changes every holder at once and names nobody, which is why it is not GRANT.
+
     Note that the document's "deny" and "revoke" are one item and two members here. A deny
     is a request refused at runtime, a revoke is a grant taken away by an administrator;
     they differ by orders of magnitude in frequency and they answer different questions.
@@ -310,6 +314,8 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
         "agent taken on by a new owner": AuditAction.AGENT_OWNER,
         "install or part of it stopped, or resumed": AuditAction.HALT,
         "agent created, switched, archived or published": AuditAction.AGENT,
+        "chat identity bound to a person or unbound": AuditAction.CHANNEL_BINDING,
+        "pack created, versioned or retired": AuditAction.PACK,
     }
     assert set(required.values()) == set(AuditAction)
     assert {action.value for action in AuditAction} == {
@@ -345,6 +351,8 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
         "agent_owner",
         "halt",
         "agent",
+        "channel_binding",
+        "pack",
     }
     # Every value fits the column, which is `VARCHAR(16)`. This is not decoration: the two
     # other names considered for the eighth member were `attachment_change` at seventeen

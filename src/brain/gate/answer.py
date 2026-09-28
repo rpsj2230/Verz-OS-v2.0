@@ -138,8 +138,16 @@ vouched for it, and `brain.gate.provenance.provenance_for` had no caller. Now th
 current, and an answer nothing stands behind is refused by `abstain_if_uncited` before it is
 written.
 
+**The source a question read is noted by the same wrapper that counts the reads (M27.1.5).** A
+reader is registered under its source and entity, so the wrapper knows which source each call is
+for without reading what came back, and the ledger's `connector` names it: one source, or none
+when a request read none or several (`ONE_SOURCE_OR_NONE`). An uploaded table is read under its
+own source name, `tables`, which names no connector. The skills the model step offered reach
+`Finished` the same way, from the step's own call rather than from anything the model said.
+
 Task ids: M30.5.2, M21.3.4, M3.9.3, M4.4.4, M2.2.4, M3.1.2, M3.6.3, M11.9.2, M11.5.1, M11.5.5
 Task ids: M15.4.2, M8.1.3, M8.2.1, M11.4.9
+Task ids: M27.1.5, M27.15.9
 """
 
 from __future__ import annotations
@@ -179,7 +187,15 @@ from brain.gate.fast_lane import (
     respond,
     unserved_match,
 )
-from brain.gate.finish import Finished, FrontRecord, Origin, RequestRecorder, attributable, finish
+from brain.gate.finish import (
+    Finished,
+    FrontRecord,
+    Origin,
+    RequestRecorder,
+    SkillUse,
+    attributable,
+    finish,
+)
 from brain.gate.live_records import LiveRecords, PartialRead
 from brain.gate.model_lane import ModelLane, draft
 from brain.gate.provenance import (
@@ -252,6 +268,14 @@ A_LIVE_VALUE_IS_NOT_KEPT_FOR_THE_NEXT_ASKER: Final = (
     "another name. So a live answer is shown and not kept."
 )
 
+#: Why a request that read two sources names neither.
+ONE_SOURCE_OR_NONE: Final = (
+    "The ledger row has one connector column. A request whose readers read one source names it, "
+    "which is what a connector's page counts as a question that read it; a request that read "
+    "two would file one source's read under the other if it named either, so it names none, as "
+    "a request answered by two models names no model."
+)
+
 #: The lane a request that called no model is recorded under. See the constant above.
 LANE: Final = Lane.FAST
 
@@ -260,16 +284,22 @@ MODEL_LANE: Final = Lane.ANSWER
 
 
 class ToolCalls:
-    """How many reader calls one request has started, counted by wrapping the readers.
+    """How many reader calls one request has started, and from which sources, by wrapping them.
 
     One instance per request, made inside `answer_lane`, so a count cannot leak from one
-    request into the next. See `brain.gate.finish.A_TOOL_CALL_IS_COUNTED_WHEN_IT_STARTS`.
+    request into the next. See `brain.gate.finish.A_TOOL_CALL_IS_COUNTED_WHEN_IT_STARTS`. The
+    source is the first half of the key a reader is registered under, noted as the call starts,
+    for the ledger's `connector` (M27.1.5); the skills are what the model step offered (M27.15.9).
     """
 
     def __init__(self) -> None:
         self.started = 0
         #: Source calls made live for this request, which also moves it to the answer lane.
         self.live = 0
+        #: Every source a reader was called for. A name each, never a record.
+        self.sources: set[str] = set()
+        #: The skills the model step offered to a model, by digest. Empty until it offers any.
+        self.skills: tuple[SkillUse, ...] = ()
 
     def read_live(self, calls: int) -> None:
         """Count the live reads of one refresh, as calls started and as live reads."""
@@ -280,13 +310,22 @@ class ToolCalls:
         """Count one call that is about to start and is not a row read, such as a passage search."""
         self.started += 1
 
+    def use(self, skills: tuple[SkillUse, ...]) -> None:
+        """The model step is about to send these skills' cards; see `model_lane.draft`."""
+        self.skills = skills
+
+    @property
+    def connector(self) -> str | None:
+        """The one source read, or None for none or several. See `ONE_SOURCE_OR_NONE`."""
+        return next(iter(self.sources)) if len(self.sources) == 1 else None
+
     def counting(
         self, readers: Mapping[tuple[str, str], RowReader]
     ) -> Mapping[tuple[str, str], RowReader]:
         """The same readers under the same keys, each counting a call before it makes it."""
-        return {pair: self._counted(reader) for pair, reader in readers.items()}
+        return {pair: self._counted(pair[0], reader) for pair, reader in readers.items()}
 
-    def _counted(self, reader: RowReader) -> RowReader:
+    def _counted(self, source: str, reader: RowReader) -> RowReader:
         def call(
             request: RowRequest,
             *,
@@ -295,6 +334,7 @@ class ToolCalls:
         ) -> Awaitable[TypedResult[RowRecord]]:
             # Counted before the call, so a read that raises is still a read that started.
             self.started += 1
+            self.sources.add(source)
             return reader(request, entitlement=entitlement, now=now)
 
         return call
@@ -487,6 +527,9 @@ async def answer_lane(
                 else model.agent.record.agent_id,
                 # Where the executor routed the model call, as it decided it (M3.6.3).
                 route=meter.route(),
+                # The skills the model step offered (M27.15.9) and the one source read (M27.1.5).
+                skills=calls.skills,
+                connector=calls.connector,
             ),
         )
 
@@ -781,6 +824,7 @@ async def _answered_by_model(
         searching=calls.start,
         entering=None if recorder is None else recorder.enter,
         horizons=horizons,
+        using=calls.use,
     )
     frames.append(stream.step(Progress.READING))
     if drafted.asked:

@@ -214,7 +214,7 @@ describe("reading the answer", () => {
     expect(company?.console).toBe("company");
     expect(company?.groups.map((one) => one.key)).toEqual(COMPANY_CONSOLE.sections.map((one) => one.group));
     const roles = company?.groups.flatMap((one) => one.sections).find((one) => one.label === "Roles and permissions");
-    expect(roles?.tabs.map((one) => one.to)).toEqual(["/roles", "/capabilities", "/scopes"]);
+    expect(roles?.tabs.map((one) => one.to)).toEqual(["/roles", "/capabilities", "/scopes", "/packs"]);
 
     const broken = departmentConsole();
     (broken.sections as unknown[]).push({ group: "platform", heading: "Platform", entries: [{ label: "No address", tabs: [] }] });

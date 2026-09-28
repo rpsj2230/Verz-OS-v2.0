@@ -9,9 +9,7 @@
 
 import {
   ADD_TEAM_API_PATH,
-  DISABLE_API_PATH,
   DRAW_SCOPE_API_PATH,
-  ENABLE_API_PATH,
   FOUND_API_PATH,
   LEAD_API_PATH,
   MEMBERSHIP_API_PATH,
@@ -21,6 +19,7 @@ import {
   RETIRE_SCOPE_API_PATH,
   RETIRE_TEAM_API_PATH,
 } from "../../../src/pages/governPeopleQuery";
+import { RENAME_SCOPE_API_PATH } from "../../../src/pages/departments/departmentsQuery";
 import { at, type Proof, type Proofs, t, type WriteRoute } from "../auditClaims";
 
 const PLACEMENT_REACHES_THE_ROW_THE_LEDGER_AND_THE_PAGE = t(
@@ -58,19 +57,36 @@ function structure(behaviour: Proof): Proofs {
 }
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
-  "src/pages/Departments.tsx asked.path": [
-    at("POST /api/v1/govern/departments/membership", "MEMBERSHIP_API_PATH", MEMBERSHIP_API_PATH),
-    at("POST /api/v1/govern/departments/lead", "LEAD_API_PATH", LEAD_API_PATH),
-    at("POST /api/v1/govern/departments", "FOUND_API_PATH", FOUND_API_PATH),
-    at("POST /api/v1/govern/departments/rename", "RENAME_DEPARTMENT_API_PATH", RENAME_DEPARTMENT_API_PATH),
-    at("POST /api/v1/govern/departments/retirement", "RETIRE_DEPARTMENT_API_PATH", RETIRE_DEPARTMENT_API_PATH),
+  "src/pages/departments/StructureDrawers.tsx FOUND_API_PATH": [at("POST /api/v1/govern/departments", "FOUND_API_PATH", FOUND_API_PATH)],
+  "src/pages/departments/StructureDrawers.tsx ADD_TEAM_API_PATH": [
     at("POST /api/v1/govern/departments/team", "ADD_TEAM_API_PATH", ADD_TEAM_API_PATH),
-    at("POST /api/v1/govern/departments/team/rename", "RENAME_TEAM_API_PATH", RENAME_TEAM_API_PATH),
-    at("POST /api/v1/govern/departments/team/retirement", "RETIRE_TEAM_API_PATH", RETIRE_TEAM_API_PATH),
+  ],
+  "src/pages/departments/StructureDrawers.tsx DRAW_SCOPE_API_PATH": [
     at("POST /api/v1/govern/departments/scopes", "DRAW_SCOPE_API_PATH", DRAW_SCOPE_API_PATH),
+  ],
+  "src/pages/departments/StructureDrawers.tsx RENAME_DEPARTMENT_API_PATH": [
+    at("POST /api/v1/govern/departments/rename", "RENAME_DEPARTMENT_API_PATH", RENAME_DEPARTMENT_API_PATH),
+  ],
+  "src/pages/departments/StructureDrawers.tsx RENAME_TEAM_API_PATH": [
+    at("POST /api/v1/govern/departments/team/rename", "RENAME_TEAM_API_PATH", RENAME_TEAM_API_PATH),
+  ],
+  "src/pages/departments/StructureDrawers.tsx RENAME_SCOPE_API_PATH": [
+    at("POST /api/v1/govern/departments/scopes/rename", "RENAME_SCOPE_API_PATH", RENAME_SCOPE_API_PATH),
+  ],
+  "src/pages/departments/StructureDrawers.tsx RETIRE_DEPARTMENT_API_PATH": [
+    at("POST /api/v1/govern/departments/retirement", "RETIRE_DEPARTMENT_API_PATH", RETIRE_DEPARTMENT_API_PATH),
+  ],
+  "src/pages/departments/StructureDrawers.tsx RETIRE_TEAM_API_PATH": [
+    at("POST /api/v1/govern/departments/team/retirement", "RETIRE_TEAM_API_PATH", RETIRE_TEAM_API_PATH),
+  ],
+  "src/pages/departments/StructureDrawers.tsx RETIRE_SCOPE_API_PATH": [
     at("POST /api/v1/govern/departments/scopes/retirement", "RETIRE_SCOPE_API_PATH", RETIRE_SCOPE_API_PATH),
-    at("POST /api/v1/govern/people/disable", "DISABLE_API_PATH", DISABLE_API_PATH),
-    at("POST /api/v1/govern/people/enable", "ENABLE_API_PATH", ENABLE_API_PATH),
+  ],
+  "src/pages/departments/StructureDrawers.tsx MEMBERSHIP_API_PATH": [
+    at("POST /api/v1/govern/departments/membership", "MEMBERSHIP_API_PATH", MEMBERSHIP_API_PATH),
+  ],
+  "src/pages/departments/StructureDrawers.tsx LEAD_API_PATH": [
+    at("POST /api/v1/govern/departments/lead", "LEAD_API_PATH", LEAD_API_PATH),
   ],
 };
 
@@ -93,4 +109,9 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
   "POST /api/v1/govern/departments/team/retirement": structure(THE_STRUCTURE_CHANGES_AS_ASKED),
   "POST /api/v1/govern/departments/scopes": structure(A_NEW_SCOPE_IS_GRANTABLE),
   "POST /api/v1/govern/departments/scopes/retirement": structure(THE_STRUCTURE_CHANGES_AS_ASKED),
+  "POST /api/v1/govern/departments/scopes/rename": {
+    row: t("test_organisation_structure", "test_a_scope_renamed_writes_its_label_and_one_ledger_entry_saying_renamed", true),
+    audit: t("test_organisation_structure", "test_a_scope_renamed_writes_its_label_and_one_ledger_entry_saying_renamed", true),
+    behaviour: t("test_organisation_structure", "test_a_scope_is_renamed_by_its_label_by_whoever_could_have_drawn_it"),
+  },
 };

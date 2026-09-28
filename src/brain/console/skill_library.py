@@ -77,10 +77,19 @@ and after anyway and refuses a difference, because the cost of the check is one 
 failure it names is the one this platform exists to prevent. See
 `A_SKILL_NEVER_WIDENS_AN_AGENT_PAST_ITS_CALLER`.
 
+**A version is retired, and a skill detached, by adding a row (W2.8, M27.15.55, M27.15.56).**
+`retiring` refuses a retirement that would change nothing, and a retired version is refused a new
+assignment while every agent running it keeps it and is listed (`holding`) for somebody to detach.
+`detachment` is `assignment`'s mirror: the agent's skills written without the skill, through
+`brain.console.agent_tabs.detach`, with the authority compared before and after. What is assigned
+now is derived, never stored: `current_assignments` over the assignment and detachment rows. See
+`A_RETIRED_VERSION_IS_KEPT_AND_ONLY_REFUSED_TO_NEW_AGENTS` and
+`A_DETACHMENT_IS_A_ROW_AND_THE_CURRENT_ASSIGNMENTS_ARE_WHAT_NO_ROW_ENDED`.
+
 Scope: domain logic. Nothing here opens a connection or reads a clock; rows, the registry and the
 instant arrive as arguments.
 
-Task ids: M42.6.4, M12.2.2, M12.2.3, M12.2.4, M12.2.6, M12.3.2, M12.4.6, M12.4.13
+Task ids: M42.6.4, M12.2.2, M12.2.3, M12.2.4, M12.2.6, M12.3.2, M12.4.6, M12.4.13, M27.15.55
 """
 
 from __future__ import annotations
@@ -117,8 +126,8 @@ from brain.tools.skills import (
     ImportedSkill,
     Skill,
     SkillError,
+    SkillPin,
     SkillSource,
-    SkillState,
     SourceKind,
     required_capabilities,
     safe_archive_member,
@@ -191,6 +200,25 @@ A_SKILL_IS_RECORDED_UNDER_THE_NAME_A_READER_FOLDS_IT_TO: Final = (
     "folded name names one skill."
 )
 
+#: Why retiring a version refuses new agents and touches none it is already on (M27.15.56).
+A_RETIRED_VERSION_IS_KEPT_AND_ONLY_REFUSED_TO_NEW_AGENTS: Final = (
+    "Retiring a version adds a row saying so and changes nothing else. The version stays in the "
+    "library with its words readable, every agent already running it keeps running it, and only a "
+    "new assignment of it is refused. The agents still holding it are listed to the person who "
+    "retired it, to detach one at a time, because taking a skill off a live agent as a side effect "
+    "of a library act would be a change to that agent nobody decided. Reinstating is a later row, "
+    "and the newest row for a version is its state."
+)
+
+#: Why a detachment is a row beside the manifest change, and what is current (M27.15.55).
+A_DETACHMENT_IS_A_ROW_AND_THE_CURRENT_ASSIGNMENTS_ARE_WHAT_NO_ROW_ENDED: Final = (
+    "Detaching writes the agent's skills without the skill, which is what a run reads, and adds a "
+    "row naming the assignment it ended, in one transaction. No assignment row is ever changed: "
+    "the current assignments are those no detachment names and no later assignment of the same "
+    "skill to the same agent replaced, so the history of who ran what, and when it stopped, is "
+    "every row there is."
+)
+
 #: Why a refusal to add a skill says what to do.
 A_PACKAGE_REFUSAL_SAYS_WHAT_TO_CHANGE: Final = (
     "The person adding a skill holds the authority to add it and is looking at the package, so "
@@ -221,6 +249,7 @@ SKILLS_PATH: Final = "skills"
 #: Why an assignment reached the ledger, as `AuditRecorder.compose_change` records a reason.
 ASSIGN_REASON: Final = "skill_assign"
 REPLACE_REASON: Final = "skill_replace"
+DETACH_REASON: Final = "skill_detach"
 
 #: The largest package, in bytes, arrived or unpacked. A skill is a page of instructions.
 MAX_PACKAGE_BYTES: Final = 256 * 1024
@@ -811,17 +840,16 @@ def queue_entries(library: Sequence[LibrarySkill], now: datetime) -> tuple[Place
 
     `brain.tools.review.pending` builds each entry, so what counts as waiting and what counts as an
     edit are that module's answers; it is asked one skill at a time because it keys a submission
-    time by name, and two waiting versions of one skill would otherwise share one. An edit is
-    diffed against the newest approved version of the same name. Placed at `NOWHERE`, because a
+    time by name, and two waiting versions of one skill would otherwise share one. An entry is
+    diffed against `compared_with`, the version its reviewer is shown it against: the newest
+    approved one added before it, and otherwise the version it was edited from. Until 2026-09-28
+    only an approved version was a baseline, so an edit of a version still waiting read as a first
+    submission and the queue said "0 of them edits" beside one. Placed at `NOWHERE`, because a
     skill belongs to no department. See `may_read_library`.
     """
-    approved: dict[str, LibrarySkill] = {}
-    for one in sorted(library, key=lambda item: item.submitted_at):
-        if one.imported.state is SkillState.APPROVED:
-            approved[one.name] = one
     entries: list[QueueEntry] = []
     for one in library:
-        previous = approved.get(one.name)
+        previous = compared_with(one, library)
         entries.extend(
             pending(
                 (one.imported,),
@@ -834,6 +862,90 @@ def queue_entries(library: Sequence[LibrarySkill], now: datetime) -> tuple[Place
         Placed(record=entry, where=NOWHERE)
         for entry in sorted(entries, key=lambda entry: entry.waiting_since)
     )
+
+
+# --------------------------------------------------------- retiring a version (M27.15.56)
+@dataclass(frozen=True)
+class Retirement:
+    """Whether one version is retired now, and who said so when. The newest row for its digest."""
+
+    digest: str
+    retired: bool
+    set_by: str
+    at: datetime
+
+
+def retired_digests(retirements: Mapping[str, Retirement]) -> frozenset[str]:
+    """The versions retired now: those whose newest row says so. A version with no row is not."""
+    return frozenset(digest for digest, one in retirements.items() if one.retired)
+
+
+def retiring(one: LibrarySkill, *, retire: bool, current: Retirement | None) -> None:
+    """Refuse a retirement that would change nothing, saying why; otherwise return.
+
+    Retiring a retired version, or reinstating one that is not retired, would add a row and a
+    ledger entry saying something happened that did not. See
+    `A_RETIRED_VERSION_IS_KEPT_AND_ONLY_REFUSED_TO_NEW_AGENTS`.
+    """
+    retired = current is not None and current.retired
+    if retire and retired:
+        raise SkillLibraryError(f"nothing was retired: {one.name} {one.imported.skill.version} is")
+    if not retire and not retired:
+        raise SkillLibraryError(
+            f"nothing was reinstated: {one.name} {one.imported.skill.version} is not retired"
+        )
+
+
+def holding(digest: str, pins: Iterable[SkillPin]) -> tuple[str, ...]:
+    """The agents among these pins still running these bytes, in id order, each once.
+
+    Asked of the pins of agents the reader may already see and nothing wider, so a retirement's
+    answer never names an agent the roster would not list, and never counts the rest.
+    """
+    return tuple(sorted({pin.agent_id for pin in pins if pin.digest == digest}))
+
+
+# ------------------------------------------------------- current assignments (M27.15.55)
+@dataclass(frozen=True)
+class AssignmentRecord:
+    """One assignment row, as the history holds it."""
+
+    assignment_id: str
+    agent_id: str
+    skill_name: str
+    digest: str
+    assigned_by: str
+    at: datetime
+
+
+@dataclass(frozen=True)
+class DetachmentRecord:
+    """One detachment row: the assignment it ended, when there was one."""
+
+    assignment_id: str | None
+    agent_id: str
+    skill_name: str
+    digest: str
+    detached_by: str
+    at: datetime
+
+
+def current_assignments(
+    assignments: Iterable[AssignmentRecord], detachments: Iterable[DetachmentRecord]
+) -> tuple[AssignmentRecord, ...]:
+    """The assignments still in force: no detachment names them and none later replaced them.
+
+    Per agent and skill name the newest assignment is the only candidate, because a later one of
+    the same skill to the same agent is a replacement, `0056`'s `replaces_digest`; it is current
+    unless a detachment names it. Derived from the rows and never stored, so no row is updated to
+    say an assignment ended. See
+    `A_DETACHMENT_IS_A_ROW_AND_THE_CURRENT_ASSIGNMENTS_ARE_WHAT_NO_ROW_ENDED`.
+    """
+    ended = {one.assignment_id for one in detachments if one.assignment_id is not None}
+    newest: dict[tuple[str, str], AssignmentRecord] = {}
+    for one in sorted(assignments, key=lambda row: (row.at, row.assignment_id)):
+        newest[(one.agent_id, one.skill_name)] = one
+    return tuple(one for _key, one in sorted(newest.items()) if one.assignment_id not in ended)
 
 
 # ------------------------------------------------------------------ what a skill may reach
@@ -1021,6 +1133,77 @@ def assignment(
         digest=one.digest,
         replaces_digest=replaces,
         assigned_by=by.principal_id,
+        instance=changed,
+        effective_document=dict(after.document),
+        effective_hash=after.config_hash,
+    )
+
+
+# ---------------------------------------------------------------------- detaching a skill
+@dataclass(frozen=True)
+class Detachment:
+    """One skill off one agent: the install to write, and what the row records."""
+
+    agent_id: str
+    skill_name: str
+    #: The bytes the agent ran, which the row records.
+    digest: str
+    detached_by: str
+    instance: TemplateInstance
+    effective_document: Mapping[str, JsonValue]
+    effective_hash: str
+
+
+def detachment(
+    one: LibrarySkill,
+    *,
+    record: AgentRecord,
+    signed: SignedManifest,
+    instance: TemplateInstance,
+    by: EntitlementSet,
+    recorder: AuditRecorder,
+    now: datetime,
+) -> Detachment:
+    """Take one skill off one agent through `detach`, or refuse saying why.
+
+    The version asked for must be the one the agent runs: detaching bytes an agent does not run
+    would record a change that did not happen, and an agent running another version of the skill is
+    told so rather than having that other version removed. Then the install is `set_field` on
+    `skills` with the skill left out, materialised again, and the authority compared before and
+    after, `assignment`'s check, for its reason. See
+    `A_DETACHMENT_IS_A_ROW_AND_THE_CURRENT_ASSIGNMENTS_ARE_WHAT_NO_ROW_ENDED`.
+    """
+    before = materialise(signed, instance, audience=record.audience)
+    composition = pins_on(signed, instance, record)
+    same = [pin for pin in composition.attached_to(Part.SKILLS) if pin.ref == one.name]
+    if not same:
+        raise SkillLibraryError(
+            f"nothing was detached: {record.display_name} does not run {one.name}"
+        )
+    if all(pin.version != one.digest for pin in same):
+        raise SkillLibraryError(
+            f"nothing was detached: {record.display_name} runs another version of {one.name}"
+        )
+    detached = detach(
+        composition, Part.SKILLS, one.name, recorder=recorder, reason_code=DETACH_REASON
+    )
+    skills: list[JsonValue] = [
+        {"name": pin.ref, "digest": pin.version}
+        for pin in sorted(
+            detached.composition.attached_to(Part.SKILLS), key=lambda pin: (pin.ref, pin.version)
+        )
+    ]
+    changed = set_field(instance, SKILLS_PATH, skills, by=by.principal_id, at=now)
+    after = materialise(signed, changed, audience=record.audience)
+    if moved_authority(before.record, after.record):
+        raise SkillLibraryError(
+            f"nothing was detached: {A_SKILL_NEVER_WIDENS_AN_AGENT_PAST_ITS_CALLER}"
+        )
+    return Detachment(
+        agent_id=record.agent_id,
+        skill_name=one.name,
+        digest=one.digest,
+        detached_by=by.principal_id,
         instance=changed,
         effective_document=dict(after.document),
         effective_hash=after.config_hash,

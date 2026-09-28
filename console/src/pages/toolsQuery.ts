@@ -8,11 +8,10 @@
  * throws a switch only through the API, which decides who may throw which one from the reader's
  * own `admin:tool` grant.
  *
- * **`docs/screens.html` draws no Tools screen**, so this is drawn in the register of the Features
- * screen: a card per tool, and the facts about what a switch is said in words under them, each a
- * field on the answer so the sentence leaves the page in the commit that makes it false.
+ * **`docs/screens.html` draws no Tools screen**, so it takes the kit's list and detail shape: a table
+ * of every tool, and a page per tool with its switches (`tools/`).
  *
- * Task ids: M12.1.1, M12.1.3, M12.1.4, M12.3.8, M12.4.3
+ * Task ids: M12.1.1, M12.1.3, M12.1.4, M12.3.8, M12.4.3, M27.16.1
  */
 
 import type { components } from "../api/schema";
@@ -28,10 +27,8 @@ export const TOOLS_API_PATH = "/tools";
 export const TOOLS_PATH = "/tools";
 
 export const TOOLS_LABEL = "Tools";
-export const TOOLS_CRUMB = "Govern › Tools";
 export const TOOLS_LEDE =
-  "Every tool an agent, a workflow or an automation can call on this install: what a person must " +
-  "hold for it to be offered, and what it does. A tool switched off here is refused at every call.";
+  "Every tool agents and automations can call here, and whether it is switched on. A tool switched off is refused at every call.";
 
 export const READING_TOOLS = "Reading the tools this install offers.";
 export const NO_TOOLS = "This install registers no tool yet.";

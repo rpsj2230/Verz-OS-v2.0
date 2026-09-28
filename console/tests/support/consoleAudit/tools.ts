@@ -13,7 +13,7 @@ import { at, type Proofs, t, type WriteRoute } from "../auditClaims";
 const TOOLS_PRESSED = t("test_tool_routes", "test_switching_through_the_routes_reaches_the_row_the_ledger_and_every_call", true);
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
-  "src/pages/Tools.tsx switchPath(choice.tool)": [
+  "src/pages/tools/ToolDetailPage.tsx switchPath(choice.tool)": [
     at("POST /api/v1/tools/{name}/switch", "switchPath", toolSwitchPath("notes.read_note")),
   ],
 };

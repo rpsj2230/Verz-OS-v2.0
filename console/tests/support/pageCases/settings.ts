@@ -34,6 +34,8 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
                 read_only_because: UNBROKEN,
                 applies: UNBROKEN,
                 read_by: ["brain.ops.object_store"],
+                without_saved: UNBROKEN,
+                without_saved_source: "environment",
               },
             ],
           },

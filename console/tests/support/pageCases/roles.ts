@@ -5,7 +5,7 @@
  * Task ids: none
  */
 
-import { type PageCase, UNBROKEN } from "../pageFixtures";
+import { DIRECTORY, type PageCase, UNBROKEN } from "../pageFixtures";
 
 export const PAGES: Readonly<Record<string, PageCase>> = {
   "/roles": {
@@ -24,8 +24,10 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         ],
         holders_are_not_recorded_yet: true,
       },
+      // The Approver flag and the synced roles carry an id only, so the page asks the directory for names.
+      "/api/v1/govern/directory": DIRECTORY,
       "/api/v1/govern/roles/holders": {
-        items: [{ id: "g-1", principal_id: UNBROKEN, role: "auditor", deputy_of: null, not_after: null }],
+        items: [{ id: "g-1", principal_id: UNBROKEN, display_name: UNBROKEN, role: "auditor", scope: null, deputy_of: null, not_after: null }],
         editable: true,
       },
       "/api/v1/govern/roles/misconfigurations": {

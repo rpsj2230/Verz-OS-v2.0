@@ -29,17 +29,23 @@ const A_RETIRED_KEY_IS_NOT_FOUND = t(
   true,
 );
 
+const A_REVOCATION_AND_A_RETIREMENT_ARE_RECORDED = t(
+  "test_service_account_audit",
+  "test_a_revoked_key_and_a_retired_account_each_leave_one_entry_naming_the_owner",
+  true,
+);
+
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
-  "src/pages/ServiceAccounts.tsx SERVICE_ACCOUNTS_API_PATH": [
+  "src/pages/service-accounts/AccountActs.tsx SERVICE_ACCOUNTS_API_PATH": [
     at("POST /api/v1/govern/service-accounts", "SERVICE_ACCOUNTS_API_PATH", SERVICE_ACCOUNTS_API_PATH),
   ],
-  "src/pages/ServiceAccounts.tsx ISSUE_KEY_API_PATH": [
+  "src/pages/service-accounts/AccountActs.tsx ISSUE_KEY_API_PATH": [
     at("POST /api/v1/govern/service-accounts/keys", "ISSUE_KEY_API_PATH", ISSUE_KEY_API_PATH),
   ],
-  "src/pages/ServiceAccounts.tsx REVOKE_KEY_API_PATH": [
+  "src/pages/service-accounts/AccountActs.tsx REVOKE_KEY_API_PATH": [
     at("POST /api/v1/govern/service-accounts/keys/revoke", "REVOKE_KEY_API_PATH", REVOKE_KEY_API_PATH),
   ],
-  "src/pages/ServiceAccounts.tsx RETIRE_ACCOUNT_API_PATH": [
+  "src/pages/service-accounts/AccountActs.tsx RETIRE_ACCOUNT_API_PATH": [
     at("POST /api/v1/govern/service-accounts/retire", "RETIRE_ACCOUNT_API_PATH", RETIRE_ACCOUNT_API_PATH),
   ],
 };
@@ -57,16 +63,12 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
   },
   "POST /api/v1/govern/service-accounts/keys/revoke": {
     row: A_RETIRED_KEY_IS_NOT_FOUND,
-    audit: {
-      none: "Revoking a key sets its deleted_at and records no credential write, so brain.identity.service_account_store.revoke_key leaves no ledger entry naming who revoked it.",
-    },
+    audit: A_REVOCATION_AND_A_RETIREMENT_ARE_RECORDED,
     behaviour: A_RETIRED_KEY_IS_NOT_FOUND,
   },
   "POST /api/v1/govern/service-accounts/retire": {
     row: A_RETIRED_KEY_IS_NOT_FOUND,
-    audit: {
-      none: "Retiring an account sets deleted_at on it and its keys and records no credential write, so brain.identity.service_account_store.retire leaves no ledger entry naming who retired it.",
-    },
+    audit: A_REVOCATION_AND_A_RETIREMENT_ARE_RECORDED,
     behaviour: A_RETIRED_KEY_IS_NOT_FOUND,
   },
 };

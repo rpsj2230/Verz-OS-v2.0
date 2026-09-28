@@ -68,43 +68,33 @@ export const LIVE_RUNS_API_PATH = "/operate/runs";
 export const LIVE_RUNS_PATH = "/runs";
 
 /** The heading, in the design's own words from the Operate menu. */
-export const LIVE_RUNS_LABEL = "Live runs";
+export const LIVE_RUNS_LABEL = "Runs and queue";
 
 /** Under the heading. */
-export const LIVE_RUNS_LEDE =
-  "What the install is running now and what is owed a run, with what each one keeps true.";
+export const LIVE_RUNS_LEDE = "What the install is running now, and which jobs are owed a run.";
 
 /** The two tables' headings and captions. */
 export const RUNNING_HEADING = "Running now";
 export const WAITING_HEADING = "Waiting";
-export const RUNNING_CAPTION = "Scheduled controls that have started and not finished";
-export const WAITING_CAPTION = "Scheduled controls owed a run and not yet started";
-export const CANNOT_SHOW_HEADING = "What this screen cannot show";
+export const RUNNING_CAPTION = "Jobs running now";
+export const WAITING_CAPTION = "Jobs owed a run and not started";
+export const LOADING_RUNS = "Loading what is running.";
 
 /** An empty list, whichever reason it is empty for. Says nothing about grants or other rows. */
-export const NOTHING_RUNNING = "Nothing this screen can show you is running.";
-export const NOTHING_WAITING = "Nothing this screen can show you is waiting for a run.";
+export const NOTHING_RUNNING = "Nothing is running";
+export const NOTHING_RUNNING_MORE = "A job appears here while the worker is running it.";
+export const NOTHING_WAITING = "Nothing is waiting";
+export const NOTHING_WAITING_MORE = "A job appears here when it is owed a run and has not started.";
 
 /** The three things the answer says it cannot show, each in words a person can act on. */
 export const REQUESTS_IN_FLIGHT_ARE_NOT_RECORDED =
-  "Questions being answered and agents at work are not listed, for any agent or any person. " +
-  "The platform records a request when it finishes, so the Service levels screen shows it " +
-  "afterwards, and nothing records a model call while it is being made.";
-export const QUEUE_IS_NOT_READABLE =
-  "Jobs waiting in the queue are not listed. The queue's own tables are closed to the " +
-  "application on purpose, so this screen cannot read them; what is listed as waiting is the " +
-  "schedule's own record of which controls are owed a run.";
-export const NO_RUN_CAN_BE_STOPPED =
-  "A run cannot be stopped from this screen, because nothing in the platform can stop one once " +
-  "it has started. A run that has gone on too long is marked below, and the process holding it " +
-  "has to be dealt with on the server.";
+  "Questions and agent runs are listed on Service levels once they finish, not while they run.";
+export const QUEUE_IS_NOT_READABLE = "Waiting is the schedule's own record; the queue's tables are not read.";
+export const NO_RUN_CAN_BE_STOPPED = "A run that has started cannot be stopped here.";
 
 /** Beside a run that began longer ago than the scheduler's own line for asking about it. */
 export function stalledNote(stalledAfterSeconds: number): string {
-  return (
-    `Started over ${durationWords(stalledAfterSeconds)} ago and has not recorded finishing: it ` +
-    "is still going, or the process running it stopped."
-  );
+  return `Started over ${durationWords(stalledAfterSeconds)} ago: still going, or its process stopped.`;
 }
 
 /** The mode column. The API's flag, in words. */

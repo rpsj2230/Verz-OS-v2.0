@@ -44,7 +44,6 @@ from brain.ops.acceptance import (
     registered,
     served,
 )
-from brain.ops.acceptance_checks_chat import BINDING_A_CHAT_ACCOUNT_IS_NOT_DEPLOYED
 from brain.ops.acceptance_run import Harness
 from brain.settings import settings_from
 from tests.unit.test_limit_store import FakeClient
@@ -484,9 +483,10 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """**The run as the worker makes it, against PostgreSQL at head.** Twice: every check that can
-    be asked without a cache passes both times, the limits check says it was not run, the two
-    Lark checks needing a bound person say so until the events route reads chat bindings, the skill
-    import says this install names no public skill, which is the declared default, and after
+    be asked without a cache passes both times, including the two Lark checks needing a bound
+    person now that the events route reads chat bindings (0118); the limits check says it was not
+    run, the skill import says this install names no public skill, which is the declared default,
+    and after
     both runs every table a check wrote to holds what it held before, while the result rows are
     there, one run each, keyed by the commit. Delete this and a check that commits, or one
     that cannot pass on a real schema, reaches the owner's server first."""
@@ -510,17 +510,12 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         assert (first.name, first.outcome) == (second.name, second.outcome)
     outcomes = {one.name: (one.outcome, one.reason) for one in waited[1]}
     assert outcomes.pop("asking_past_a_window_is_refused_with_a_retry_hint")[0] == NOT_RUN
-    for needs_a_binding in (
-        "a_person_bound_in_lark_is_given_their_web_answer_directly",
-        "a_lark_group_hears_its_floor_and_the_asker_reads_the_rest_alone",
-    ):
-        assert outcomes.pop(needs_a_binding) == (NOT_RUN, BINDING_A_CHAT_ACCOUNT_IS_NOT_DEPLOYED)
     assert outcomes.pop("a_skill_is_imported_from_a_github_commit_and_from_an_address") == (
         NOT_RUN,
         "this install names no public skill to import, so no import from GitHub was asked",
     )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
-    assert len(outcomes) == 9
+    assert len(outcomes) == 11
     assert after == before
     assert runs == [(2,)] and len(recorded) == 26
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
@@ -541,12 +536,15 @@ def test_a_reserved_department_in_use_stops_the_run_before_it_writes() -> None:
             "INSERT INTO auth.principal (id, kind, employment, display_name, primary_department)"
             " VALUES ('u_real', 'human', 'staff', 'A real person', 'acceptance_a')",
         )
+        # Counted after the setup: since 0141 inserting a person writes its own audit entry, and
+        # what this proves is that the run adds none.
+        before = sql(url, "SELECT count(*) FROM obs.audit_entry")
         _, results = run_on(url, INSTALL)
-        entries = sql(url, "SELECT count(*) FROM obs.audit_entry")
+        after = sql(url, "SELECT count(*) FROM obs.audit_entry")
 
     assert {one.outcome for one in results} == {NOT_RUN}
     assert all(one.reason.startswith("If a person on this install") for one in results)
-    assert entries == [(0,)]
+    assert after == before
 
 
 @pytest.mark.needs_db

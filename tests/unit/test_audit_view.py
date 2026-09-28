@@ -41,6 +41,7 @@ from brain.audit.record import (
     ApprovalVerdict,
     AuditRecorder,
     BreachChange,
+    ChannelBindingChange,
     ConnectorChange,
     DenyReason,
     ElevationChange,
@@ -50,6 +51,7 @@ from brain.audit.record import (
     LegalHoldChange,
     MemoryChange,
     OrganisationChange,
+    PackChange,
     PrincipalStateChange,
     RetentionChange,
     RoutingChange,
@@ -399,6 +401,12 @@ CALLS: dict[str, dict[str, object]] = {
         "act": HaltAct.HALT,
         "scope": HaltScope.EVERYTHING,
     },
+    "channel_binding": {
+        "principal_id": "u_weiling",
+        "channel": "lark",
+        "change": ChannelBindingChange.BOUND,
+    },
+    "pack": {"name": "helpdesk", "change": PackChange.VERSIONED, "version": 2},
     "certification": {
         "grant_id": "1f0e6a4c-2b8d-4f7a-9c1e-5d3b2a7f8e90",
         "decision": ReviewDecision.KEEP,

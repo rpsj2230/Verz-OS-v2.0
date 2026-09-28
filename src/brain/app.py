@@ -135,6 +135,7 @@ from brain.ops.starter_store import furnish as furnish_install
 from brain.ops.telemetry_store import TelemetryRecorder
 from brain.ops.tool_store import SessionSwitchSource, record_catalogue
 from brain.ops.trace_sink import CountingTraceSink
+from brain.ops.usage_store import UsageRecorder
 from brain.ops.vault_renewal import keep_renewing, renewer_at_start
 from brain.ops.webhook_admin import signing_secrets_at_start
 from brain.readiness import (
@@ -831,11 +832,13 @@ def request_recorders_for(
     if sessions is None:
         return ()
     # The sensitive read recorder last: it raises on a failed write, and the measurements before
-    # it catch their own. See `brain.ops.sensitive_read_store`.
+    # it catch their own. See `brain.ops.sensitive_read_store`. The usage recorder writes a
+    # request's cost and its skill uses (M27.12.5, M27.15.9), and catches its own failures.
     return (
         QuestionRecorder(sessions),
         TelemetryRecorder(sessions),
         GapRecorder(sessions),
+        UsageRecorder(sessions),
         SensitiveReadRecorder(sessions),
     )
 

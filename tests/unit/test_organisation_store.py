@@ -275,9 +275,14 @@ def placements(chain: list[AuditEntry]) -> list[AuditEntry]:
     """The entries about where somebody sits, which are filed under the person.
 
     Since `0086` the seeded scopes, departments and team are recorded too, under `department:` and
-    `scope:` and as the database role that inserted them; these tests are about the placements.
+    `scope:` and as the database role that inserted them, and since `0141` so is each seeded
+    person's creation, under the person as `principal_state`; these tests are about the placements.
     """
-    return [one for one in chain if one.subject.startswith("principal:")]
+    return [
+        one
+        for one in chain
+        if one.subject.startswith("principal:") and one.action.value == "organisation"
+    ]
 
 
 def placing(reach: EntitlementSet, department: str = "web") -> Any:
@@ -406,7 +411,14 @@ def test_placing_and_appointing_reach_the_rows_the_ledger_and_the_departments_pa
         ("principal:u_wei", "u_admin", {"change": "left", "team": "web.design"}),
         ("principal:u_new", "u_admin", {"change": "stood_down", "department": "web"}),
     ]
-    assert {one.action.value for one in chain} == {"organisation"}
+    # Since `0141` the four seeded people's creations are recorded too, and nothing else is.
+    assert {one.action.value for one in chain} == {"organisation", "principal_state"}
+    assert sorted(one.subject for one in chain if one.action.value == "principal_state") == [
+        "principal:u_gone",
+        "principal:u_grace",
+        "principal:u_new",
+        "principal:u_wei",
+    ]
     assert AuditChain(chain).verify() is None
 
 

@@ -331,7 +331,8 @@ A page is two files and a line of Python, and it edits neither `src/App.tsx` nor
    goes in `tests/support/pageFixtures.ts`. `tests/support/pageCases.ts` collects every such file
    with an eager `import.meta.glob`, as the route registry does, and refuses a case filed under
    another module's name or held by two files.
-5. Its writes in `tests/support/consoleAudit/<module>.ts`, named the same way, exporting
+5. Its writes in `tests/support/consoleAudit/<module>.ts`, named for the page's kit directory
+   (`src/pages/<module>/`; for a page not yet on the kit, its address's first segment), exporting
    `WRITE_ROUTES`, the `PROOFS` of each route they reach and any `READ_AFTER_AN_ACTION`, with the
    helpers (`at`, `t`) and proofs two modules cite in `tests/support/auditClaims.ts`;
    `tests/support/consoleAudit.ts` collects them by glob too. Its screens, routes and tables are

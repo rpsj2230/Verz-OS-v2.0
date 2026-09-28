@@ -65,3 +65,9 @@ export const SETTINGS_PRESSED = audited("test_a_feature_switch_and_each_job_cont
 export const A_SETTING_ENTRY_NO_TEST_FOLLOWS: Proof = {
   none: "The write is an ops.setting row, which migration 0059's trigger records as a setting entry naming the key, the change and the writer, and no test follows this route's write to that entry.",
 };
+
+export const A_BINDING_CHANGE_IS_AUDITED = t(
+  "test_channel_binding",
+  "test_each_bind_rebind_and_unbind_leaves_its_entry_and_the_chain_verifies",
+  true,
+);
