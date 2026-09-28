@@ -333,7 +333,10 @@ class ModelCalls:
         self._claims: dict[str, datetime] = {}
 
     def trying(
-        self, change: Callable[[tuple[LadderRung, ...]], tuple[LadderRung, ...]]
+        self,
+        change: Callable[[tuple[LadderRung, ...]], tuple[LadderRung, ...]],
+        *,
+        attempts: AttemptLog | None = None,
     ) -> ModelCalls:
         """This executor planning from a changed copy of the ladder, for the matrix gate (M5.6.2).
 
@@ -341,10 +344,14 @@ class ModelCalls:
         rungs a plan reads differ, so a trial is the call a person's question would make after
         the change, and nothing about the live ladder moves. Its outcomes feed the rings like any
         call's; its depth raises no alert, because it describes a change not yet taking traffic.
+
+        `attempts` replaces the attempt log for a trial whose rung has no row to name: the
+        Models screen's check of a provider no step names yet, whose attempt row would be a
+        foreign key to nothing. The meter and the ledger still see the call.
         """
         return ModelCalls(
             ladder=_TrialLadder(self._ladder, change),
-            attempts=self._attempts,
+            attempts=self._attempts if attempts is None else attempts,
             drivers=self._drivers,
             profile=self._profile,
             held=self._held,

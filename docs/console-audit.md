@@ -9,10 +9,10 @@ What an administrator would need to manage, read out of the schema, the routes a
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
 - 102 tables, from `brain.db.Base.metadata`.
 - 27 installation values, from `brain.install.INSTALLATION`.
-- 209 routes under `/api/v1` and `/setup`, from the API's internal document.
+- 210 routes under `/api/v1` and `/setup`, from the API's internal document.
 - 73 console addresses, from the route table in `console/src/App.tsx`.
 - 82 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 100 routes.
-- 37 gaps recorded, and 28 routes no screen calls.
+- 36 gaps recorded, and 28 routes no screen calls.
 
 ## Area by area
 
@@ -128,7 +128,6 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `POST /setup/staff-source/trial` | `/first-run` |
 | `PUT /api/v1/install/settings/{name}` | `/settings` |
 
-- **Gap.** Languages, currency and time zone cannot be changed after setup. Recorded: Set by the first-run wizard, which saves them to ops.setting, and no route changes one afterwards; changing one today is editing the server's environment file or the row by hand.
 - **Gap.** Limits and budgets are read and never changed. Recorded: No route writes ops.budget_version or a ceiling; a limit is a release today.
 
 ### AI providers, models and the routing between them
@@ -144,6 +143,7 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `GET /api/v1/operate/models` | `/models` |
 | `GET /api/v1/routing/changes` | `/routing`, `/routing/:rungId` |
 | `GET /api/v1/routing/golden-questions` | `/routing`, `/routing/:rungId` |
+| `GET /api/v1/routing/golden-questions/askers` | `/routing` |
 | `GET /api/v1/routing/rungs` | `/agents/:agentId`, `/routing`, `/routing/:rungId` |
 | `PATCH /api/v1/routing/rungs/{rung_id}` | `/routing`, `/routing/:rungId` |
 | `POST /api/v1/models/providers` | `/models` |

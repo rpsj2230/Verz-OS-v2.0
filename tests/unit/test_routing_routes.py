@@ -59,9 +59,10 @@ from brain.routing_routes import (
     apply_edit,
     live_rungs,
 )
-from brain.tables.model_registry import RoutingChangeRow
+from brain.tables.model_registry import GoldenQuestionRow, RoutingChangeRow
 from brain.tables.routing import RoutingRungRow
 from tests.fixtures.http_client import Response
+from tests.fixtures.scratch_postgres import engine, modelled, run, sql
 from tests.unit.test_api_routes import (
     Directory,
     Keys,
@@ -1063,3 +1064,101 @@ def test_a_retired_golden_question_is_marked_retired_and_asked_no_more(
     assert "deleted_at=statement_timestamp()" in sql.replace(" ", "")
     assert "deleted_at IS NULL" in sql
     assert question_id in update.compile().params.values()
+
+
+def test_the_people_a_golden_question_may_be_asked_as_are_listed_by_name_to_a_matrix_writer(
+    client: TestClient, executed: Executed, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The owner's form names a person, not a principal id: a matrix writer over everything is
+    answered each person's id and name and nothing else about them, and an editor scoped to one
+    department is refused in the matrix's own words.
+
+    Delete this and the golden question form goes back to asking for a principal id, which no
+    owner knows, so no install ever records the golden question every change waits on."""
+    executed.principals = (("u_nadia", "Nadia Tan"), ("u_omar", "Omar Lee"))
+    # The write over one department only, as the scoped editor above holds it.
+    monkeypatch.setitem(
+        MATRIX_GRANTS,
+        "u_prefix",
+        (_grant(MATRIX_READ.value, WHOLE), _grant(MATRIX_WRITE.value, ELSEWHERE)),
+    )
+    admin = {"authorization": f"Bearer {token_for('u_admin', claims=SECOND_FACTOR)}"}
+    scoped = {"authorization": f"Bearer {token_for('u_prefix', claims=SECOND_FACTOR)}"}
+
+    answered = client.get(f"{API_PREFIX}/routing/golden-questions/askers", headers=admin)
+    refused = client.get(f"{API_PREFIX}/routing/golden-questions/askers", headers=scoped)
+
+    assert answered.status_code == 200
+    assert answered.json() == {
+        "items": [{"id": "u_nadia", "name": "Nadia Tan"}, {"id": "u_omar", "name": "Omar Lee"}],
+        "truncated": False,
+    }
+    assert refused.status_code == 404
+    assert (
+        refused.json()["message"]
+        == client.get(f"{API_PREFIX}/routing/changes", headers=scoped).json()["message"]
+    )
+
+
+def test_each_golden_question_is_listed_with_the_name_of_the_person_it_is_asked_as(
+    client: TestClient, executed: Executed
+) -> None:
+    """Delete this and the golden questions table shows principal ids, which is the column the
+    owner could not read."""
+    question = GoldenQuestionRow(
+        id=uuid.uuid4(),
+        question="how many days of leave are left",
+        asked_as="u_nadia",
+        expect="answer",
+        created_by="u_admin",
+    )
+    executed.others = (question,)
+    executed.principals = (("u_nadia", "Nadia Tan"),)
+    admin = {"authorization": f"Bearer {token_for('u_admin', claims=SECOND_FACTOR)}"}
+
+    (listed,) = client.get(f"{API_PREFIX}/routing/golden-questions", headers=admin).json()["items"]
+
+    assert (listed["asked_as"], listed["asked_as_name"]) == ("u_nadia", "Nadia Tan")
+
+
+def test_the_picker_lists_live_enabled_people_by_name_and_no_service_account() -> None:
+    """Against a real server: a disabled person, a retired person and a service account are left
+    out, the rest come back ordered by name, and a retired person has no name on the list of
+    questions asked as them.
+
+    Delete this and the picker can offer a person who left, whose reach is nothing, so a golden
+    question asked as them is answered by nobody and holds every change for ever."""
+    with modelled("brain_test_routing_routes_askers", ("auth.principal",)) as url:
+        for pid, kind, employment, name in (
+            ("u_zoe", "human", "staff", "Zoe Ng"),
+            ("u_adam", "human", "staff", "Adam Koh"),
+            ("u_left", "human", "staff", "Left Already"),
+            ("u_off", "human", "staff", "Switched Off"),
+            ("svc_sync", "service", "service", "Directory sync"),
+        ):
+            sql(
+                url,
+                "INSERT INTO auth.principal (id, kind, employment, display_name) "
+                "VALUES (%s, %s, %s, %s)",
+                pid,
+                kind,
+                employment,
+                name,
+            )
+        sql(url, "UPDATE auth.principal SET deleted_at = now() WHERE id = 'u_left'")
+        sql(url, "UPDATE auth.principal SET disabled_at = now() WHERE id = 'u_off'")
+        bound = engine(url)
+
+        async def read() -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
+            async with async_sessionmaker(bound)() as session:
+                listed = (await session.execute(routing_routes.askers(10))).all()
+                named = (await session.execute(routing_routes.names_of({"u_zoe", "u_left"}))).all()
+            return [tuple(one) for one in listed], [tuple(one) for one in named]
+
+        try:
+            listed, named = run(read)
+        finally:
+            run(bound.dispose)
+
+    assert listed == [("u_adam", "Adam Koh"), ("u_zoe", "Zoe Ng")]
+    assert named == [("u_zoe", "Zoe Ng")]

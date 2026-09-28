@@ -28,6 +28,8 @@ from brain.models.default_ladder import (
     LadderWritten,
     default_chain,
     default_ladder,
+    default_model,
+    default_rung,
     provider_at_setup,
     provider_at_start,
     reconcile,
@@ -349,3 +351,31 @@ def test_what_the_writer_found_is_what_a_start_reports() -> None:
 
     assert outcome is LadderWritten.EMPTIED
     assert writer.asked == [(LOCAL_PROVIDER, GRANTED_BY, "startup.reconcile.d")]
+
+
+@pytest.mark.parametrize("provider", sorted(DEFAULT_MODELS))
+def test_one_default_step_carries_exactly_the_numbers_the_default_ladder_writes(
+    provider: str,
+) -> None:
+    """`default_rung` is what the Models screen's check sends a provider no step names through,
+    and `default_ladder` is built from it, so the two cannot drift into two sets of numbers.
+
+    Delete this and the check of a provider with no step can run at numbers no default step would
+    carry, so a provider that passes the check can time out once it is given a step."""
+    for step in default_ladder(provider):
+        assert default_rung(provider, step.tier, step.model) == step
+
+
+def test_the_model_a_check_uses_is_the_products_default_then_the_registrys_first_then_none() -> (
+    None
+):
+    """The product's own name for its first default level wins, a provider added from the console
+    is checked with the first model its row lists, and one naming none has no default at all.
+
+    Delete this and a check can be sent to a model nobody named, or skip the product's default
+    for whatever the registry happens to list first."""
+    assert (
+        default_model("openai", ("some-other-model",)) == DEFAULT_MODELS["openai"][DEFAULT_TIERS[0]]
+    )
+    assert default_model("acme_llm", ("", "acme-1", "acme-2")) == "acme-1"
+    assert default_model("acme_llm") is None

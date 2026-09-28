@@ -43,7 +43,13 @@
  *
  * **The cost is written in the install's currency and zone**, which the spend report carries
  * (`brain.report_routes.A_FIGURE_SAYS_ITS_CURRENCY_AND_ITS_CLOCK`), as "SGD 288.00" and "6 Mar
- * 2019, 16:00", and never in the browser's zone.
+ * 2019, 16:00", and never in the browser's zone. An install that chose no currency is shown the
+ * amount alone with a link to where it is set, never the code meaning none (found on the owner's
+ * install on 2026-09-28 as "XXX 0.00").
+ *
+ * **Plain words only** (the owner, 2026-09-28): Simple, Medium, Complex, step, provider, model. No
+ * rung, ladder, tier, lane or slot is drawn anywhere on the screen, Advanced included, and
+ * `tests/models-page.test.tsx` reads the whole rendered page for them.
  *
  * **Each card is loaded, failed or answered on its own.** A reader may hold the models screen and
  * not the usage grant, and the cost card then carries the API's refusal while the providers and
@@ -115,6 +121,7 @@ import {
   SEND_THE_TEST,
   spendShares,
   spendThisMonthApiPath,
+  stepNumber,
   switchBody,
   switchConsequence,
   SWITCHED_OFF,
@@ -136,7 +143,9 @@ import {
   type StepMarker,
 } from "./modelsQuery";
 import { milliseconds, readServiceLevels, SERVICE_LEVELS_API_PATH } from "./serviceLevelsQuery";
+import { SETTINGS_LABEL, SETTINGS_PATH } from "./settingsQuery";
 import {
+  currencyNotSetHint,
   freshnessInZone,
   moneyWords,
   readSpendReport,
@@ -239,6 +248,7 @@ function StatusPill({ status }: { readonly status: ProviderStatus }): ReactEleme
     case "working":
       return <Badge label={status.label} tone="positive" />;
     case "resting":
+    case "key_refused":
       return <Badge label={status.label} tone="caution" />;
     case "off":
     case "no_key":
@@ -256,6 +266,7 @@ function MarkerPill({ marker }: { readonly marker: StepMarker }): ReactElement {
     case "resting":
     case "no_key":
     case "cannot_call":
+    case "key_refused":
       return <Badge label={marker.label} tone="caution" />;
     case "paused":
     case "turned_off":
@@ -683,9 +694,15 @@ function CostThisMonth({ spend }: { readonly spend: Resource<unknown> }) {
             return <p className="note">{SPEND_NOT_BUILT}</p>;
           }
           const shares = spendShares(report);
+          const unset = currencyNotSetHint(report.currency);
           return (
             <>
               <p className="figure">{moneyWords(report.total_minor, report.currency)}</p>
+              {unset === null ? null : (
+                <p className="note">
+                  {unset} <Link to={SETTINGS_PATH}>{SETTINGS_LABEL}</Link>
+                </p>
+              )}
               <p className="note">{freshnessInZone(report)}</p>
               {shares.length === 0 ? (
                 <p className="note">{NO_SPEND_THIS_MONTH}</p>
@@ -827,20 +844,20 @@ function StepHealth({ body }: { readonly body: ProvidersBody }) {
             <thead>
               <tr>
                 <th scope="col">Level</th>
-                <th scope="col">Position</th>
+                <th scope="col">Step</th>
                 <th scope="col">Model</th>
                 <th scope="col">Provider</th>
                 <th scope="col">Answers now</th>
                 <th scope="col">Health</th>
                 <th scope="col">Recent calls</th>
-                <th scope="col">Probes</th>
+                <th scope="col">Background checks</th>
               </tr>
             </thead>
             <tbody>
               {body.rungs.map((step) => (
                 <tr key={step.rung_id}>
                   <td>{levelName(step.tier)}</td>
-                  <td>{String(step.position)}</td>
+                  <td>{String(stepNumber(step, body.rungs))}</td>
                   <td>
                     <code>{step.model}</code>
                   </td>

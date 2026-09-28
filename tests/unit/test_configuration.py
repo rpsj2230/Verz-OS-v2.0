@@ -16,20 +16,27 @@ from pathlib import Path
 import pytest
 
 from brain.console.configuration import (
-    EDITABLE_GROUPS,
-    GROUP_ORDER,
+    EDITABLE_SETTINGS,
+    LABELS,
     READ_BY,
+    READ_ONLY_BECAUSE,
+    SECTION_OF,
+    SECTION_ORDER,
+    SECTION_TITLES,
+    Section,
     Source,
-    branding_problem,
     findings,
+    normalised,
     profile_told,
     realm_of,
     resolved,
     rows,
+    setting_problem,
     shown,
 )
-from brain.install import BY_NAME, INSTALLATION, Belongs, InstallError, hold_saved, value_of
+from brain.install import BY_NAME, INSTALLATION, InstallError, hold_saved, value_of
 from brain.knowledge.search import BUILT_VECTOR_STORES
+from brain.locale import currency, time_zone
 from brain.models.assembly import HOSTED_PROFILE, LOCAL_PROFILE
 
 ISSUER = "https://id.northwind.example/realms/northwind"
@@ -79,7 +86,12 @@ def test_every_declared_setting_is_on_the_screen_once_identity_included() -> Non
     drawn = rows(env={}, saved={})
 
     assert sorted(one.name for one in drawn) == sorted(BY_NAME)
-    assert {one.group for one in drawn} == set(Belongs) == set(GROUP_ORDER)
+    assert set(SECTION_OF) == set(BY_NAME) == set(LABELS)
+    assert {one.section for one in drawn} == set(Section) == set(SECTION_ORDER)
+    assert set(SECTION_TITLES) == set(Section)
+    assert [one.section for one in drawn] == sorted(
+        (one.section for one in drawn), key=SECTION_ORDER.index
+    )
     issuer = next(one for one in drawn if one.name == "INSTALL_OIDC_ISSUER")
     assert (issuer.value, issuer.source, issuer.editable) == ("", Source.MISSING, False)
 
@@ -111,19 +123,42 @@ def test_an_address_is_shown_without_anything_that_could_carry_a_credential() ->
     assert drawn["INSTALL_OBJECT_STORE_URL"] == "http://seaweedfs:8333"
 
 
-def test_only_branding_is_editable_and_every_row_says_when_a_change_applies() -> None:
-    """A saved value applies on this process at once and elsewhere after a restart; a value from
-    the file or the default applies after a restart. Delete this and an identity setting can be
-    offered for editing from a browser, or a row can stop saying a restart is needed."""
+#: Settings that would lock everybody out or lose track of the company's data if changed from a
+#: browser, which the owner's brief of 2026-09-28 names as staying read only.
+MUST_STAY_READ_ONLY = frozenset(
+    {
+        "INSTALL_OIDC_ISSUER",
+        "INSTALL_OIDC_REALM",
+        "INSTALL_OIDC_CLIENT_ID",
+        "INSTALL_OIDC_REDIRECT_URIS",
+        "INSTALL_OBJECT_STORE_URL",
+        "INSTALL_VECTOR_STORE",
+        "INSTALL_EMBEDDING_DIMENSIONS",
+    }
+)
+
+
+def test_every_setting_is_changed_here_or_says_why_not_and_every_row_says_when_it_applies() -> None:
+    """Every setting is either changed on this screen or carries a one-line reason, never both
+    and never neither; the ones that would break sign-in or data are never changed here; the
+    currency, the time zone and the branding are. A value saved here says it reaches this server
+    at once and the worker within a minute; a value from the file says a restart.
+
+    Delete this and an issuer can be offered for editing from a browser, a setting can be
+    read only with nothing saying why, or a row can stop saying when a change takes effect."""
     drawn = rows(env={"INSTALL_OIDC_ISSUER": ISSUER}, saved={"INSTALL_COMPANY_NAME": "Northwind"})
 
-    assert (
-        {one.group for one in drawn if one.editable} == set(EDITABLE_GROUPS) == {Belongs.BRANDING}
-    )
+    assert EDITABLE_SETTINGS.isdisjoint(READ_ONLY_BECAUSE)
+    assert EDITABLE_SETTINGS | set(READ_ONLY_BECAUSE) == set(BY_NAME)
+    assert set(READ_ONLY_BECAUSE) >= MUST_STAY_READ_ONLY
+    assert {"INSTALL_CURRENCY", "INSTALL_TIME_ZONE", "INSTALL_COMPANY_NAME"} <= EDITABLE_SETTINGS
+    for one in drawn:
+        assert one.editable == (one.read_only_because == ""), one.name
     company = next(one for one in drawn if one.name == "INSTALL_COMPANY_NAME")
     issuer = next(one for one in drawn if one.name == "INSTALL_OIDC_ISSUER")
-    assert "restarts" in company.applies and "next page" in company.applies
+    assert "worker" in company.applies and "next page" in company.applies
     assert "restarts" in issuer.applies and "next page" not in issuer.applies
+    assert "installer" in issuer.read_only_because
 
 
 def test_every_setting_names_a_module_that_actually_reads_it() -> None:
@@ -186,12 +221,20 @@ def test_the_profile_sentence_follows_the_router_rule_on_where_text_may_go() -> 
         ("INSTALL_LOGO_URL", "/icon.svg"),
         ("INSTALL_ACCENT_COLOUR", "#1f7a5c"),
         ("INSTALL_SENDER_ADDRESS", "no-reply@northwind.example"),
+        ("INSTALL_LOCALES", "en"),
+        ("INSTALL_LOCALES", "zh-Hans, en"),
+        ("INSTALL_CURRENCY", "SGD"),
+        ("INSTALL_CURRENCY", " sgd "),
+        ("INSTALL_TIME_ZONE", "Asia/Singapore"),
+        ("INSTALL_TIME_ZONE", "UTC"),
+        ("INSTALL_MODEL_PROFILE", "hosted"),
+        ("INSTALL_MODEL_PROFILE", "local"),
     ],
 )
-def test_a_sensible_branding_value_may_be_saved(name: str, value: str) -> None:
+def test_a_sensible_value_may_be_saved(name: str, value: str) -> None:
     """The positive sibling of every refusal below. Delete this and a check refusing everything
-    passes them all, and no install can change its own name."""
-    assert branding_problem(name, value) == ""
+    passes them all, and no install can change its own name or its currency."""
+    assert setting_problem(name, value) == ""
 
 
 @pytest.mark.parametrize(
@@ -207,13 +250,45 @@ def test_a_sensible_branding_value_may_be_saved(name: str, value: str) -> None:
         ("INSTALL_ACCENT_COLOUR", "green"),
         ("INSTALL_SENDER_ADDRESS", "not an address"),
         ("INSTALL_OIDC_ISSUER", ISSUER),
+        ("INSTALL_OIDC_REDIRECT_URIS", "https://console.northwind.example/"),
         ("INSTALL_OBJECT_STORE_URL", "https://objects.northwind.example"),
+        ("INSTALL_EMBEDDING_DIMENSIONS", "768"),
+        ("INSTALL_MODEL_ENDPOINT", "http://inference-server:8080"),
+        ("INSTALL_LARK_USES", "knowledge_wiki"),
+        ("INSTALL_STAFF_SOURCE", "spreadsheet"),
         ("INSTALL_NOT_DECLARED", "anything"),
+        ("INSTALL_LOCALES", "fr"),
+        ("INSTALL_LOCALES", " , "),
+        ("INSTALL_CURRENCY", "XXX"),
+        ("INSTALL_CURRENCY", "dollars"),
+        ("INSTALL_CURRENCY", "S$"),
+        ("INSTALL_TIME_ZONE", "Mars/Olympus"),
+        ("INSTALL_TIME_ZONE", "/etc/passwd"),
+        ("INSTALL_TIME_ZONE", "../UTC"),
+        ("INSTALL_MODEL_PROFILE", "online"),
     ],
 )
-def test_a_branding_value_that_would_draw_wrong_or_a_setting_not_changed_here_is_refused(
+def test_a_value_that_would_draw_wrong_or_a_setting_not_changed_here_is_refused(
     name: str, value: str
 ) -> None:
     """Each refusal is a sentence saying what to type instead. Delete this and an identity setting
-    can be saved from a browser, or a `javascript:` logo lands in the header's image source."""
-    assert branding_problem(name, value) != ""
+    can be saved from a browser, a `javascript:` logo lands in the header's image source, or the
+    currency is saved as the code meaning none."""
+    assert setting_problem(name, value) != ""
+
+
+def test_a_saved_currency_is_capitals_and_is_what_the_money_figures_are_rendered_in() -> None:
+    """The owner types sgd and Asia/Singapore; the saved values are what `brain.locale` hands every
+    money figure and timestamp. Delete this and a lower-case code is saved, which the locale reader
+    refuses, and every cost falls back to no currency."""
+    assert normalised("INSTALL_CURRENCY", " sgd ") == "SGD"
+    assert normalised("INSTALL_COMPANY_NAME", " sgd ") == "sgd"
+    hold_saved(
+        {
+            "INSTALL_CURRENCY": normalised("INSTALL_CURRENCY", "sgd"),
+            "INSTALL_TIME_ZONE": normalised("INSTALL_TIME_ZONE", " Asia/Singapore "),
+        }
+    )
+
+    assert currency() == "SGD"
+    assert time_zone().key == "Asia/Singapore"

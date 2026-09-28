@@ -400,10 +400,12 @@ INSTALLATION: Final[tuple[Setting, ...]] = (
         name="INSTALL_CURRENCY",
         belongs=Belongs.LOCALE,
         meaning=(
-            "The ISO 4217 code money figures are rendered in. XXX is the code meaning no "
-            "currency, so an install that has not chosen one shows something visibly unset "
-            "rather than a figure that reads correctly in the wrong currency."
+            "The three-letter ISO 4217 code money figures are rendered in, such as SGD. Until one "
+            "is chosen, an amount is shown with no currency rather than in one nobody chose. "
+            "Changed on Install, Settings."
         ),
+        # XXX, the ISO 4217 code meaning no currency: visibly unset in a file, and never drawn
+        # on a screen, which shows the amount alone (console/src/pages/spendQuery.ts).
         default="XXX",
     ),
     Setting(
@@ -411,8 +413,9 @@ INSTALLATION: Final[tuple[Setting, ...]] = (
         belongs=Belongs.LOCALE,
         meaning=(
             "The IANA zone a timestamp is rendered in for a reader with no zone of their "
-            "own. UTC by default because it is nobody's local time, so a wrong rendering is "
-            "visibly wrong rather than out by an hour on some days of the year."
+            "own, such as Asia/Singapore. UTC by default because it is nobody's local time, so a "
+            "wrong rendering is visibly wrong rather than out by an hour on some days of the "
+            "year. Changed on Install, Settings."
         ),
         default="UTC",
     ),

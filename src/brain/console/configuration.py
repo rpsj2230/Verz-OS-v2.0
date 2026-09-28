@@ -21,16 +21,24 @@ a person, set in the environment file, or the product's default. The order is no
 `resolved` asks the two sources the same way `value_of` does and a test holds the two to the same
 answer for every setting.
 
-**Only branding is changed from this screen, and the reason differs per group.** Identity: an
-issuer or redirect changed from a browser is a sign-in that fails for everybody including the
-person who changed it, with no browser left to change it back, so it is set where the realm is.
-Models: whether text may leave the install at all is the profile, chosen by the wizard and since
-2026-09-28 on the Models screen (`brain.provider_routes.choose_profile`), and each hosted provider
-is the Models screen's switch; a second writer of either here is the drift
-`brain.install.ONE_READER_OR_TWO_DEFAULTS` names.
-Storage: moving the object store's address moves where every file is read from while every key
-still names the old one. Locale is outside the task this screen was built for and stays the
-wizard's. See `ONLY_BRANDING_IS_CHANGED_HERE`.
+**Every setting that is safe to change while the install runs is changed here, and the rest say
+why not on their own row** (since 2026-09-28; until then only branding was, and the owner opened
+Install, Settings to find nothing he could change). Safe means a wrong value is visible and
+recoverable from this same screen: the company's name and branding, the languages, the currency
+and the time zone, and where answers are made. Each is checked by the setting's own rule before
+it is saved (`setting_problem`), confirmed in the console, saved by the wizard's writer inside the
+audit attribution, and held by this process at once. Not safe, and read only here with the reason
+drawn on the row (`READ_ONLY_BECAUSE`): sign-in (an issuer, realm, client or redirect changed from
+a browser signs nobody in, including the person who changed it, with no browser left to change it
+back), the staff list and Lark (each has its own screen, which checks the source can be read or
+keeps the credential first), the model server's address (every document's text is posted there),
+and where files and embeddings are kept (every stored key, vector and width still names the old
+place). See `WHAT_IS_CHANGED_HERE_AND_WHAT_IS_NOT`.
+
+**The screen is grouped by what a setting is for, not by who hands it over on install day.**
+`brain.install.Belongs` is the second and stays the declaration's; `Section` is the first, in
+the owner's words (Company and branding; Language, money and time; Models; Knowledge and search;
+Sign-in; Staff list; Files and storage; Lark), and a test holds every setting to exactly one.
 
 **When a change takes effect is said per row, and it is decided by where the value lives.** A value
 in the environment file is read when a process starts, so a change to it needs a restart, always.
@@ -58,13 +66,15 @@ import enum
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Final
 from urllib.parse import urlsplit, urlunsplit
+from zoneinfo import ZoneInfo
 
 from brain.install import BY_NAME, INSTALLATION, Belongs, Setting, saved_values
 from brain.knowledge.search import vector_store_refusal
-from brain.locale import LocaleError, accent_set
-from brain.models.assembly import local_only
+from brain.locale import CURRENCY_PATTERN, SHIPPED_TAGS, LocaleError, accent_set, rules_for
+from brain.models.assembly import HOSTED_PROFILE, LOCAL_PROFILE, MODEL_PROFILES, local_only
 from brain.models.default_ladder import LOCAL_COMPLETION_MODEL
 from brain.ops.inference import SERVED_MODELS
 from brain.ops.realm_import import brokered
@@ -87,12 +97,13 @@ A_URL_IS_SHOWN_WITHOUT_ANYTHING_THAT_COULD_BE_A_CREDENTIAL: Final = (
     "The scheme, host, port and path are what an administrator needs to recognise the value."
 )
 
-#: Why only branding is editable here.
-ONLY_BRANDING_IS_CHANGED_HERE: Final = (
-    "Branding is changed here because a wrong logo is visible and harmless. The identity provider "
-    "is not, because a wrong issuer signs nobody in, including whoever changed it. The model "
-    "profile decides where text may go and each provider is switched on the Models screen. The "
-    "storage location is not, because every stored file's key still names the old place."
+#: What this screen changes and what it does not. Drawn at the foot of the screen.
+WHAT_IS_CHANGED_HERE_AND_WHAT_IS_NOT: Final = (
+    "Settings that are safe to change while the install runs are changed here: each is checked "
+    "before it is saved and the change is recorded with who made it. Sign-in, the staff list, "
+    "Lark, the model server's address and where files and embeddings are kept are not, because a "
+    "wrong value there locks everybody out or loses track of the company's data; each row says "
+    "where it is changed instead."
 )
 
 #: Why each setting names its readers.
@@ -114,6 +125,13 @@ A_SAVED_VALUE_APPLIES_AT_ONCE_HERE_AND_ON_RESTART_ELSEWHERE: Final = (
     "application process uses it after it restarts."
 )
 
+#: Said on every row this screen changes: where a saved value reaches, and how soon. The worker
+#: reloads the saved values before every schedule tick (`install_settings.refresh_changed`).
+A_VALUE_SAVED_HERE_APPLIES_HERE_AT_ONCE_IN_THE_WORKER_WITHIN_A_MINUTE: Final = (
+    "Saved here, a change applies from the next page on this server, in the background worker "
+    "within a minute, and in any other server process after it restarts."
+)
+
 #: Added to the profile sentence when the local profile is chosen and nothing local can answer.
 LOCAL_PROFILE_HAS_NO_MODEL_THAT_ANSWERS: Final = (
     "The inference server this release ships serves no model that writes an answer, so "
@@ -131,50 +149,182 @@ A_REQUIRED_SETTING_NOBODY_SUPPLIED: Final = (
 #: The longest branding value accepted, the setup wizard's own ceiling on one answer.
 MAX_BRANDING_CHARS: Final = 200
 
-#: The groups in the order the screen draws them.
-GROUP_ORDER: Final[tuple[Belongs, ...]] = (
-    Belongs.BRANDING,
-    Belongs.IDENTITY,
-    Belongs.MODELS,
-    Belongs.STORAGE,
-    Belongs.LOCALE,
-    Belongs.CONNECTORS,
+#: The declared code meaning no currency, which the screen never offers as a choice: an install
+#: that has chosen none shows an amount with no code (see `console/src/pages/spendQuery.ts`).
+UNSET_CURRENCY: Final = BY_NAME["INSTALL_CURRENCY"].default
+
+
+class Section(enum.StrEnum):
+    """What a setting is for, which is how the screen groups it. See the module docstring."""
+
+    COMPANY = "company"
+    LOCALE = "locale"
+    MODELS = "models"
+    KNOWLEDGE = "knowledge"
+    SIGN_IN = "sign_in"
+    STAFF = "staff"
+    FILES = "files"
+    LARK = "lark"
+
+
+#: The sections in the order the screen draws them: what an owner changes first, first.
+SECTION_ORDER: Final[tuple[Section, ...]] = tuple(Section)
+
+#: What each section is called on the screen.
+SECTION_TITLES: Final[Mapping[Section, str]] = MappingProxyType(
+    {
+        Section.COMPANY: "Company and branding",
+        Section.LOCALE: "Language, money and time",
+        Section.MODELS: "Models",
+        Section.KNOWLEDGE: "Knowledge and search",
+        Section.SIGN_IN: "Sign-in",
+        Section.STAFF: "Staff list",
+        Section.FILES: "Files and storage",
+        Section.LARK: "Lark",
+    }
 )
 
-#: What each group is called on the screen.
-GROUP_TITLES: Final[Mapping[Belongs, str]] = {
-    Belongs.BRANDING: "Branding",
-    Belongs.IDENTITY: "Identity provider",
-    Belongs.MODELS: "Models and providers",
-    Belongs.STORAGE: "Storage locations",
-    Belongs.LOCALE: "Language, currency and time zone",
-    Belongs.CONNECTORS: "Connected applications",
-}
+#: The section each setting is drawn in. A test holds every declared setting to exactly one.
+SECTION_OF: Final[Mapping[str, Section]] = MappingProxyType(
+    {
+        "INSTALL_COMPANY_NAME": Section.COMPANY,
+        "INSTALL_PRODUCT_NAME": Section.COMPANY,
+        "INSTALL_LOGO_URL": Section.COMPANY,
+        "INSTALL_ACCENT_COLOUR": Section.COMPANY,
+        "INSTALL_SENDER_ADDRESS": Section.COMPANY,
+        "INSTALL_LOCALES": Section.LOCALE,
+        "INSTALL_CURRENCY": Section.LOCALE,
+        "INSTALL_TIME_ZONE": Section.LOCALE,
+        "INSTALL_MODEL_PROFILE": Section.MODELS,
+        "INSTALL_MODEL_ENDPOINT": Section.MODELS,
+        "INSTALL_EMBEDDING_DIMENSIONS": Section.KNOWLEDGE,
+        "INSTALL_EMBEDDING_REVISION": Section.KNOWLEDGE,
+        "INSTALL_VECTOR_STORE": Section.KNOWLEDGE,
+        "INSTALL_OIDC_ISSUER": Section.SIGN_IN,
+        "INSTALL_OIDC_REALM": Section.SIGN_IN,
+        "INSTALL_OIDC_CLIENT_ID": Section.SIGN_IN,
+        "INSTALL_OIDC_REDIRECT_URIS": Section.SIGN_IN,
+        "INSTALL_BROKERED_DIRECTORY": Section.SIGN_IN,
+        "INSTALL_BROKERED_CLIENT_ID": Section.SIGN_IN,
+        "INSTALL_STAFF_SOURCE": Section.STAFF,
+        "INSTALL_STAFF_SOURCE_LOCATION": Section.STAFF,
+        "INSTALL_OBJECT_STORE_URL": Section.FILES,
+        "INSTALL_OBJECT_STORE_PREFIX": Section.FILES,
+        "INSTALL_OBJECT_STORE_BACKEND": Section.FILES,
+        "INSTALL_LARK_USES": Section.LARK,
+        "INSTALL_LARK_PLATFORM": Section.LARK,
+        "INSTALL_LARK_BASE": Section.LARK,
+    }
+)
 
-#: Where a group that is not changed here is changed instead, in the console's own words.
-CHANGED_ELSEWHERE: Final[Mapping[Belongs, str]] = {
-    Belongs.IDENTITY: (
-        "Set by the installer where the realm is created, or in the environment file, then a "
-        "restart. A wrong issuer or redirect signs nobody in, including whoever changed it."
-    ),
-    Belongs.MODELS: (
-        "Each hosted provider is switched on or off, and the profile is chosen as Where answers "
-        "are made, on the Models and health screen. The endpoint and the embedding figures are "
-        "set in the setup wizard or the environment file, then a restart."
-    ),
-    Belongs.STORAGE: (
-        "Set in the environment file, then a restart. Moving the store does not move the files "
-        "already in it, and every stored key still names the old place."
-    ),
-    Belongs.LOCALE: "Set in the setup wizard or the environment file, then a restart.",
-    Belongs.CONNECTORS: (
-        "Set by the Connect Lark flow on the Connectors screen, which keeps the app's credential "
-        "in the vault first and switches each use on only after that."
-    ),
-}
+#: Each setting as a person calls it. The variable's name is drawn beside it, small, for support.
+LABELS: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        "INSTALL_COMPANY_NAME": "Company name",
+        "INSTALL_PRODUCT_NAME": "What the company calls this system",
+        "INSTALL_LOGO_URL": "Logo address",
+        "INSTALL_ACCENT_COLOUR": "Accent colour",
+        "INSTALL_SENDER_ADDRESS": "Address notifications come from",
+        "INSTALL_LOCALES": "Languages offered",
+        "INSTALL_CURRENCY": "Currency",
+        "INSTALL_TIME_ZONE": "Time zone",
+        "INSTALL_MODEL_PROFILE": "Where answers are made",
+        "INSTALL_MODEL_ENDPOINT": "Model server address",
+        "INSTALL_EMBEDDING_DIMENSIONS": "Search index width",
+        "INSTALL_EMBEDDING_REVISION": "Search model version",
+        "INSTALL_VECTOR_STORE": "Where the search index is kept",
+        "INSTALL_OIDC_ISSUER": "Sign-in address",
+        "INSTALL_OIDC_REALM": "Sign-in realm",
+        "INSTALL_OIDC_CLIENT_ID": "Console's sign-in name",
+        "INSTALL_OIDC_REDIRECT_URIS": "Addresses sign-in returns to",
+        "INSTALL_BROKERED_DIRECTORY": "Company directory used for sign-in",
+        "INSTALL_BROKERED_CLIENT_ID": "App registered with that directory",
+        "INSTALL_STAFF_SOURCE": "Where the staff list comes from",
+        "INSTALL_STAFF_SOURCE_LOCATION": "Where that staff list is",
+        "INSTALL_OBJECT_STORE_URL": "File store address",
+        "INSTALL_OBJECT_STORE_PREFIX": "Folder in the file store",
+        "INSTALL_OBJECT_STORE_BACKEND": "Kind of file store",
+        "INSTALL_LARK_USES": "What Lark is used for",
+        "INSTALL_LARK_PLATFORM": "Lark or Feishu",
+        "INSTALL_LARK_BASE": "Lark Base that is read",
+    }
+)
 
-#: The groups whose values this screen writes. See `ONLY_BRANDING_IS_CHANGED_HERE`.
-EDITABLE_GROUPS: Final[frozenset[Belongs]] = frozenset({Belongs.BRANDING})
+#: The settings this screen writes. See `WHAT_IS_CHANGED_HERE_AND_WHAT_IS_NOT`.
+EDITABLE_SETTINGS: Final[frozenset[str]] = frozenset(
+    {
+        "INSTALL_COMPANY_NAME",
+        "INSTALL_PRODUCT_NAME",
+        "INSTALL_LOGO_URL",
+        "INSTALL_ACCENT_COLOUR",
+        "INSTALL_SENDER_ADDRESS",
+        "INSTALL_LOCALES",
+        "INSTALL_CURRENCY",
+        "INSTALL_TIME_ZONE",
+        "INSTALL_MODEL_PROFILE",
+    }
+)
+
+_INSTALLER: Final = "Changed only with the installer, then a restart: "
+_ENVIRONMENT_FILE: Final = "Set in the environment file, then a restart: "
+_LARK: Final = (
+    "Changed with Connect Lark on Connectors, which keeps the app's key in the vault before "
+    "anything is switched on."
+)
+_STORE: Final = "every stored file still names the old place, so changing it loses track of them."
+
+#: Why each setting this screen does not write is read only, in one line an owner can act on. A
+#: test holds this and `EDITABLE_SETTINGS` to the declaration: every setting is one or the other.
+READ_ONLY_BECAUSE: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        "INSTALL_OIDC_ISSUER": f"{_INSTALLER}a wrong value signs nobody in, including you.",
+        "INSTALL_OIDC_REALM": (
+            f"{_INSTALLER}the realm is created under this name, and another is a realm nobody "
+            "signs in to."
+        ),
+        "INSTALL_OIDC_CLIENT_ID": (
+            f"{_INSTALLER}the console signs in under this name, and another is refused."
+        ),
+        "INSTALL_OIDC_REDIRECT_URIS": (
+            f"{_INSTALLER}sign-in returns only to these addresses, and a wrong one strands "
+            "people after they sign in."
+        ),
+        "INSTALL_BROKERED_DIRECTORY": (
+            f"{_INSTALLER}the sign-in service is set up from it, and the two must change together."
+        ),
+        "INSTALL_BROKERED_CLIENT_ID": (
+            f"{_INSTALLER}the sign-in service is set up from it, and the two must change together."
+        ),
+        "INSTALL_STAFF_SOURCE": (
+            "Changed on Staff sources, which checks the list can be read before it is used."
+        ),
+        "INSTALL_STAFF_SOURCE_LOCATION": (
+            "Changed on Staff sources, which checks the list can be read before it is used."
+        ),
+        "INSTALL_MODEL_ENDPOINT": (
+            f"{_ENVIRONMENT_FILE}every document's text is sent here, so it is set with the server "
+            "and the private network that keeps that text inside the company."
+        ),
+        "INSTALL_EMBEDDING_DIMENSIONS": (
+            f"{_ENVIRONMENT_FILE}it is fixed once the first document is stored, and changing it "
+            "means indexing every document again."
+        ),
+        "INSTALL_EMBEDDING_REVISION": (
+            f"{_ENVIRONMENT_FILE}it must name the version the model server holds, and a wrong one "
+            "stops new documents being indexed."
+        ),
+        "INSTALL_VECTOR_STORE": (
+            f"{_ENVIRONMENT_FILE}changing it points search at a store that holds none of the "
+            "company's documents."
+        ),
+        "INSTALL_OBJECT_STORE_URL": f"{_ENVIRONMENT_FILE}{_STORE}",
+        "INSTALL_OBJECT_STORE_PREFIX": f"{_ENVIRONMENT_FILE}{_STORE}",
+        "INSTALL_OBJECT_STORE_BACKEND": f"{_ENVIRONMENT_FILE}{_STORE}",
+        "INSTALL_LARK_USES": _LARK,
+        "INSTALL_LARK_PLATFORM": _LARK,
+        "INSTALL_LARK_BASE": _LARK,
+    }
+)
 
 #: Every module that reads each setting, as a dotted path. Held to each module's source by a test,
 #: in both directions: the name is in that module, and no setting names no reader.
@@ -295,6 +445,12 @@ class Row:
     editable: bool
     applies: str
     read_by: tuple[str, ...]
+    #: What the setting is for, which is where the screen draws it.
+    section: Section = Section.COMPANY
+    #: The setting as a person calls it.
+    label: str = ""
+    #: Why this screen does not change it, in one line. Empty for a setting it changes.
+    read_only_because: str = ""
 
 
 def row_for(
@@ -302,8 +458,11 @@ def row_for(
 ) -> Row:
     """One declared setting, resolved and shown."""
     found = resolved(one.name, env, saved)
+    editable = one.name in EDITABLE_SETTINGS
     if found.source is Source.MISSING:
         applies = A_REQUIRED_SETTING_NOBODY_SUPPLIED
+    elif editable:
+        applies = A_VALUE_SAVED_HERE_APPLIES_HERE_AT_ONCE_IN_THE_WORKER_WITHIN_A_MINUTE
     elif found.source is Source.SAVED:
         applies = A_SAVED_VALUE_APPLIES_AT_ONCE_HERE_AND_ON_RESTART_ELSEWHERE
     else:
@@ -316,21 +475,24 @@ def row_for(
         source=found.source,
         default=one.default,
         required=one.required,
-        editable=one.belongs in EDITABLE_GROUPS,
+        editable=editable,
         applies=applies,
         read_by=READ_BY.get(one.name, ()),
+        section=SECTION_OF[one.name],
+        label=LABELS[one.name],
+        read_only_because="" if editable else READ_ONLY_BECAUSE[one.name],
     )
 
 
 def rows(
     env: Mapping[str, str] | None = None, saved: Mapping[str, str] | None = None
 ) -> tuple[Row, ...]:
-    """Every declared setting, grouped in `GROUP_ORDER`, declaration order inside a group."""
+    """Every declared setting, in `SECTION_ORDER`, declaration order inside a section."""
     return tuple(
         row_for(one, env, saved)
-        for group in GROUP_ORDER
+        for section in SECTION_ORDER
         for one in INSTALLATION
-        if one.belongs is group
+        if SECTION_OF[one.name] is section
     )
 
 
@@ -408,14 +570,16 @@ def local_model_answers() -> bool:
 # ---------------------------------------------------------------------------- the edits
 
 
-def branding_problem(name: str, value: str) -> str:
-    """What is wrong with a branding value somebody typed, or empty when it may be saved.
+def setting_problem(name: str, value: str) -> str:
+    """What is wrong with a value somebody typed for a setting, or empty when it may be saved.
 
-    A sentence rather than a code, because this screen is English only today, like every other
-    administration screen, and the sentence says what to type instead.
+    Each setting is judged by its own rule, and one that is not changed on this screen is refused
+    with the same sentence whatever it is. A sentence rather than a code, because this screen is
+    English only today, like every other administration screen, and the sentence says what to
+    type instead.
     """
     declared = BY_NAME.get(name)
-    if declared is None or declared.belongs not in EDITABLE_GROUPS:
+    if declared is None or name not in EDITABLE_SETTINGS:
         return f"{name} is not changed on this screen."
     written = value.strip()
     if not written:
@@ -434,6 +598,52 @@ def branding_problem(name: str, value: str) -> str:
         return ""
     if name == "INSTALL_SENDER_ADDRESS":
         return _address_problem(written)
+    if name == "INSTALL_LOCALES":
+        return _locales_problem(written)
+    if name == "INSTALL_CURRENCY":
+        return _currency_problem(written)
+    if name == "INSTALL_TIME_ZONE":
+        return _zone_problem(written)
+    if name == "INSTALL_MODEL_PROFILE" and written not in MODEL_PROFILES:
+        return (
+            f"Choose {LOCAL_PROFILE}, to keep answers on this server, or {HOSTED_PROFILE}, to "
+            "allow online providers."
+        )
+    return ""
+
+
+def normalised(name: str, value: str) -> str:
+    """The value as it is saved: trimmed, and a currency code in capitals, as ISO 4217 writes it."""
+    written = value.strip()
+    return written.upper() if name == "INSTALL_CURRENCY" else written
+
+
+def _locales_problem(value: str) -> str:
+    shipped = ", ".join(SHIPPED_TAGS)
+    tags = [one.strip() for one in value.split(",") if one.strip()]
+    try:
+        for one in tags:
+            rules_for(one)
+    except LocaleError:
+        tags = []
+    if not tags:
+        return f"Use language tags this product ships, separated by commas: {shipped}."
+    return ""
+
+
+def _currency_problem(value: str) -> str:
+    code = value.strip().upper()
+    if not CURRENCY_PATTERN.match(code) or code == UNSET_CURRENCY:
+        return "Type the currency's three-letter code, like SGD, USD or EUR."
+    return ""
+
+
+def _zone_problem(value: str) -> str:
+    try:
+        ZoneInfo(value.strip())
+    except (KeyError, ValueError, OSError):
+        # `zoneinfo`'s three ways of saying the same thing, as `brain.locale.time_zone` reads them.
+        return "Type a time zone name, like Asia/Singapore or Europe/London."
     return ""
 
 
