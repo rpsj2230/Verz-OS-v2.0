@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-28T18:47:12.587189+00:00",
-  "commit": "93203310",
-  "commit_subject": "Every agent, skill, connector and channel has a stats address, and the console has an overview",
+  "generated_at": "2026-09-28T18:53:09.347177+00:00",
+  "commit": "62390ee1",
+  "commit_subject": "Credentials is a kit module: every vault slot the install declares is listed, has a page, and is set or replaced from it",
   "total": 1576,
   "done": 362,
   "percent": 23.0,
