@@ -1,10 +1,12 @@
 """Every recording, replayed through the connector it belongs to, and every declaration covered.
 
-`tests/fixtures/cassettes.py` says what each recording is an example of and what the
-connector's own code must conclude from it. This file is where that is checked, and it is the
-check that made "tested against recorded responses" a property rather than a word: until it
-existed, the contract invariant asked only whether a connector's test file mentioned the
-cassettes, and `test_google_drive.py` satisfied it by saying none existed.
+`tests/fixtures/cassettes/` says what each recording is an example of and what the
+connector's own code must conclude from it, one file per source, and each file carries the
+replay that drives its recordings through that connector's own code. This file is where that
+is checked, and it is the check that made "tested against recorded responses" a property
+rather than a word: until it existed, the contract invariant asked only whether a connector's
+test file mentioned the cassettes, and `test_google_drive.py` satisfied it by saying none
+existed.
 
 **A replay calls the connector's own functions and nothing of this file's.** Each one hands a
 recording to the reader, interpreter, walk or projection the connector ships, and reads the
@@ -22,383 +24,61 @@ the reason each cannot be recorded.
 What this does not prove is that a vendor answers this way today. Every recording is a
 documented shape, and `test_no_recording_claims_a_live_read_it_does_not_date` holds that.
 
-Task ids: M0.6.5, M38.4.1.1
+Task ids: M0.6.5, M38.4.1.1, M38.4.1.2
 """
 
 from __future__ import annotations
 
-import pkgutil
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
-from datetime import UTC, datetime
-from typing import Any
+from datetime import datetime
 
 import pytest
 
-import brain.connectors
-from brain.connectors import freshdesk, google_drive, hubspot, laravel, lark_base, lark_wiki, xero
-from brain.connectors.contract import ConnectorContractError, FetchRequest
+from brain.connectors import laravel, lark_base, lark_wiki
+from brain.connectors.contract import ConnectorContractError
+from brain.connectors.declaration import shipped
 from brain.connectors.manifest import ConnectorManifest
-from brain.connectors.projection import ProjectedRecord
-from brain.connectors.throttle import CallOutcome
-from brain.ops.connector_recordings import RECORDINGS
-from brain.ops.connector_sync import HubSpotReading, XeroReading
+from brain.ops.connector_recordings import RECORDINGS, recorded_in_words
 from tests.fixtures.cassettes import (
     CASSETTES,
-    DRIVE_FOLDER,
-    LARAVEL_RECORDED_CAP,
-    WIKI_SPACE,
+    FETCHED_AT,
+    FILES,
     Cassette,
     Expect,
     Kind,
     Origin,
-    Protocol,
+    Replayed,
     Source,
 )
-from tests.invariants.test_cassettes import NOT_A_CONNECTOR
+from tests.fixtures.cassettes.lark_base import replay as _replay_lark_base
 
-FETCHED_AT = "2026-09-06T09:00:00+00:00"
-#: Pinned well away from any wall clock: nothing here is about the present.
-SEEN_AT = datetime(2019, 6, 1, 12, 0, tzinfo=UTC)
-
-
-@dataclass(frozen=True)
-class Replayed:
-    """What the connector's own code concluded, and how many rows it kept as projected records."""
-
-    outcome: Expect
-    kept: tuple[ProjectedRecord, ...] = ()
-
-    @property
-    def projected(self) -> int:
-        return len(self.kept)
-
-
-def _unreachable_or_quota(call_outcome: CallOutcome) -> Expect:
-    return Expect.RATE_LIMITED if call_outcome is CallOutcome.QUOTA else Expect.UNREACHABLE
-
-
-# ------------------------------------------------------------------------------ Xero
-def _replay_xero(recorded: Cassette) -> Replayed:
-    from tests.unit.test_xero import Resolver
-
-    entity = recorded.projects or (
-        xero.ENTITY_CONTACT if "Contacts" in recorded.request else xero.ENTITY_INVOICE
-    )
-    operation = xero.operation_for(entity, resolver=Resolver())
-    reply = xero.interpret(
-        operation, status=recorded.status, body=recorded.body, fetched_at=FETCHED_AT
-    )
-    if reply.outcome is xero.XeroOutcome.REFUSED:
-        return Replayed(Expect.REFUSED)
-    if reply.outcome is xero.XeroOutcome.UNREACHABLE:
-        return Replayed(_unreachable_or_quota(reply.call))
-    assert reply.rows is not None
-    rows = [record.model_dump() for record in reply.rows.records]
-    kept = [xero.projected_record(entity, row, last_seen_at=SEEN_AT) for row in rows]
-    projected = tuple(one for one in kept if one is not None) if recorded.projects else ()
-    if not rows:
-        return Replayed(Expect.ABSENT)
-    following = XeroReading().next_page(entity, {"page": "1"}, recorded.body, len(rows))
-    return Replayed(Expect.MORE_TO_READ if following else Expect.ANSWERED, projected)
-
-
-# --------------------------------------------------------------------------- HubSpot
-def _hubspot_entity(recorded: Cassette) -> str:
-    if "/associations/" in recorded.request:
-        return hubspot.ENTITY_ASSOCIATION
-    for fragment, entity in (
-        ("/contacts", hubspot.ENTITY_CONTACT),
-        ("/deals", hubspot.ENTITY_DEAL),
-    ):
-        if fragment in recorded.request:
-            return entity
-    return hubspot.ENTITY_CLIENT
-
-
-def _replay_hubspot(recorded: Cassette) -> Replayed:
-    from tests.unit.test_hubspot import Resolver
-
-    entity = _hubspot_entity(recorded)
-    operation = hubspot.operation_for(entity, resolver=Resolver())
-    reply = hubspot.interpret(
-        operation, status=recorded.status, body=recorded.body, fetched_at=FETCHED_AT
-    )
-    if reply.outcome is hubspot.HubSpotOutcome.REFUSED:
-        return Replayed(Expect.REFUSED)
-    if reply.outcome is hubspot.HubSpotOutcome.UNREACHABLE:
-        return Replayed(_unreachable_or_quota(reply.call))
-    assert reply.rows is not None
-    rows = [record.model_dump() for record in reply.rows.records]
-    if not rows:
-        return Replayed(Expect.ABSENT)
-    if entity == hubspot.ENTITY_ASSOCIATION:
-        edges = hubspot.association_edges(
-            from_entity=hubspot.ENTITY_CLIENT, from_id="88", to_entity="contact", rows=tuple(rows)
-        )
-        return Replayed(Expect.ANSWERED if edges else Expect.ABSENT)
-    kept = [hubspot.projected_record(entity, row, last_seen_at=SEEN_AT) for row in rows]
-    projected = tuple(one for one in kept if one is not None)
-    following = HubSpotReading().next_page(entity, {}, recorded.body, len(rows))
-    return Replayed(Expect.MORE_TO_READ if following else Expect.ANSWERED, projected)
-
-
-# ------------------------------------------------------------------------- Freshdesk
-def _freshdesk_endpoint(recorded: Cassette) -> freshdesk.Endpoint:
-    if "/search/" in recorded.request:
-        return freshdesk.Endpoint.SEARCH_TICKETS
-    if "/contacts/" in recorded.request:
-        return freshdesk.Endpoint.GET_CONTACT
-    if "/tickets/" in recorded.request:
-        return freshdesk.Endpoint.GET_TICKET
-    return freshdesk.Endpoint.LIST_TICKETS
-
-
-def _replay_freshdesk(recorded: Cassette) -> Replayed:
-    from tests.unit.test_freshdesk import DOMAIN
-
-    endpoint = _freshdesk_endpoint(recorded)
-    reply = freshdesk.Reply(status=recorded.status, headers=recorded.headers, body=recorded.body)
-    try:
-        freshdesk.assert_answered(reply)
-    except freshdesk.FreshdeskRefusedError:
-        return Replayed(Expect.REFUSED)
-    except freshdesk.FreshdeskUnreachableError as failed:
-        return Replayed(_unreachable_or_quota(failed.call_outcome))
-    rows = freshdesk.operation_for(endpoint, domain=DOMAIN).project(reply.body)
-    if not rows:
-        return Replayed(Expect.ABSENT)
-    projected = tuple(
-        ProjectedRecord(
-            source=freshdesk.FRESHDESK,
-            entity=freshdesk.TICKET,
-            source_id=str(row["id"]),
-            last_seen_at=SEEN_AT,
-            fields=freshdesk.projected_fields(row),
-        )
-        for row in (rows if recorded.projects else ())
-    )
-    following = freshdesk.next_page(
-        freshdesk.first_page(endpoint), rows_on_page=len(rows), rows_so_far=len(rows)
-    )
-    return Replayed(Expect.MORE_TO_READ if following else Expect.ANSWERED, projected)
-
-
-# ------------------------------------------------------------------------- Lark Base
-@dataclass
-class _OneReply:
-    reply: Any
-
-    def read(self, cursor: object) -> Any:
-        del cursor
-        return self.reply
-
-
-def _replay_lark_base(recorded: Cassette) -> Replayed:
-    from tests.unit.test_lark_base import a_table, list_operation, single_operation
-
-    table = a_table()
-    reader = _OneReply(
-        lark_base.LarkReply(status=recorded.status, headers=recorded.headers, body=recorded.body)
-    )
-    single = recorded.kind is Kind.READ
-    try:
-        if single:
-            cursor = lark_base.PageCursor(
-                endpoint=lark_base.Endpoint.GET_RECORD, record_id="recSNM0447"
-            )
-            row, _ = lark_base.read_record(
-                single_operation(), reader, cursor, budget=lark_base.fair_share_budget()
-            )
-            rows: tuple[Mapping[str, Any], ...] = (row,)
-            more = False
-        else:
-            rows, envelope = lark_base.read_page(list_operation(), reader, lark_base.first_cursor())
-            more = envelope.has_more
-    except lark_base.LarkBaseRefusedError:
-        return Replayed(Expect.REFUSED)
-    except lark_base.LarkBaseUnreachableError as failed:
-        return Replayed(_unreachable_or_quota(failed.call_outcome))
-    if not rows:
-        return Replayed(Expect.ABSENT)
-    projected = tuple(table.projected_record(row, last_seen_at=SEEN_AT) for row in rows)
-    return Replayed(Expect.MORE_TO_READ if more else Expect.ANSWERED, projected)
-
-
-# ------------------------------------------------------------------------- Lark Wiki
-@dataclass
-class _WikiReader:
-    reply: lark_wiki.LarkReply
-
-    def list_nodes(self, request: lark_wiki.NodeListRequest) -> lark_wiki.LarkReply:
-        del request
-        return self.reply
-
-    def read_node(self, request: lark_wiki.NodeReadRequest) -> lark_wiki.LarkReply:
-        del request
-        return self.reply
-
-
-def _replay_lark_wiki(recorded: Cassette) -> Replayed:
-    reader = _WikiReader(lark_wiki.LarkReply(status=recorded.status, body=recorded.body))
-    try:
-        if "/nodes" in recorded.request:
-            listing = lark_wiki.walk_nodes(reader, space_id=WIKI_SPACE, max_pages=1)
-            if not listing.nodes:
-                return Replayed(Expect.ABSENT)
-            return Replayed(Expect.ANSWERED if listing.complete else Expect.MORE_TO_READ)
-        fetch = lark_wiki.page_fetch(lark_wiki.operation_for(), reader, fetched_at=FETCHED_AT)
-        result = fetch(
-            FetchRequest(
-                entity=lark_wiki.WIKI_PAGE, filters=(("token", "wikcnKQ1k3pcuo5uSK4t8Vabcef"),)
-            )
-        )
-    except lark_wiki.LarkWikiRefusedError:
-        return Replayed(Expect.REFUSED)
-    except lark_wiki.LarkWikiUnreachableError as failed:
-        return Replayed(_unreachable_or_quota(failed.call_outcome))
-    return Replayed(Expect.ANSWERED if result.records else Expect.ABSENT)
-
-
-# ---------------------------------------------------------------------- Google Drive
-def _drive_connection() -> google_drive.DriveConnection:
-    from tests.unit.test_google_drive import a_connection
-
-    return a_connection(folder_id=DRIVE_FOLDER)
-
-
-@dataclass
-class _DriveReader:
-    reply: google_drive.Reply
-
-    def read(self, request: google_drive.ListingRequest) -> google_drive.Reply:
-        del request
-        return self.reply
-
-
-def _replay_google_drive(recorded: Cassette) -> Replayed:
-    connection = _drive_connection()
-    reply = google_drive.Reply(status=recorded.status, headers=recorded.headers, body=recorded.body)
-    listing = "/files?" in recorded.request or recorded.request.endswith("/files")
-    try:
-        if listing:
-            rows, cursor = google_drive.read_page(
-                google_drive.operation_for(google_drive.Endpoint.LIST_FILES),
-                _DriveReader(reply),
-                google_drive.first_page(connection),
-            )
-            for row in rows:
-                google_drive.assert_row_is_in_the_folder(connection, row)
-        else:
-            google_drive.assert_answered(reply)
-            rows = google_drive.operation_for(google_drive.Endpoint.GET_FILE).project(reply.body)
-            cursor = ""
-    except google_drive.DriveNotFoundError:
-        return Replayed(Expect.NOT_FOUND)
-    except google_drive.DriveRefusedError:
-        return Replayed(Expect.REFUSED)
-    except google_drive.DriveUnreachableError as failed:
-        return Replayed(_unreachable_or_quota(failed.call_outcome))
-    if not rows:
-        return Replayed(Expect.ABSENT)
-    # No function in the connector reads a permission array out of a response, so no sharing
-    # state has a producer to replay; see `PROJECTION_NOT_REPLAYABLE`. What is replayed is the
-    # refusal: a row whose sharing nobody determined is not kept.
-    for row in rows:
-        with pytest.raises(google_drive.DriveError):
-            google_drive.projected_fields(
-                row,
-                connection=connection,
-                sharing=google_drive.classify_sharing(None, domain="verz.com"),
-            )
-    return Replayed(Expect.MORE_TO_READ if cursor else Expect.ANSWERED)
-
-
-# --------------------------------------------------------------------------- Laravel
-def _replay_laravel(recorded: Cassette) -> Replayed:
-    from tests.unit.test_laravel import connection
-
-    entity = laravel.ENTITY_USER if "v_users" in recorded.request else laravel.ENTITY_CLIENT
-    read = laravel.read_plan(connection(), entity)
-    assert read.plan.limit == LARAVEL_RECORDED_CAP, "the recording's cap is not the replay's"
-    body = recorded.body
-    if recorded.protocol is Protocol.HTTP:
-        view = laravel.ViewReply(app_status=recorded.status)
-    elif "errno" in body:
-        view = laravel.ViewReply(fault=laravel.fault_for_mysql_error(body["errno"]))
-    else:
-        view = laravel.ViewReply(rows=tuple(body["rows"]))
-    reply = laravel.interpret(read, view, fetched_at=FETCHED_AT)
-    if reply.outcome is laravel.LaravelOutcome.REFUSED:
-        return Replayed(Expect.REFUSED)
-    if reply.outcome is laravel.LaravelOutcome.UNREACHABLE:
-        return Replayed(_unreachable_or_quota(reply.call))
-    assert reply.rows is not None
-    rows = [record.model_dump() for record in reply.rows.records]
-    if not rows:
-        return Replayed(Expect.ABSENT)
-    kept = [laravel.projected_record(entity, row, last_seen_at=SEEN_AT) for row in rows]
-    projected = tuple(one for one in kept if one is not None)
-    more = reply.call is CallOutcome.TRUNCATED
-    return Replayed(Expect.MORE_TO_READ if more else Expect.ANSWERED, projected)
-
-
-#: One replay per connector module. `tests/invariants/test_cassettes.py` refuses a connector
-#: that has none, so a new connector joins by existing and fails until it is replayed.
+#: One replay per connector, read off each source's cassette file. A connector joins by having one.
 REPLAYS: Mapping[str, Callable[[Cassette], Replayed]] = {
-    "xero": _replay_xero,
-    "hubspot": _replay_hubspot,
-    "freshdesk": _replay_freshdesk,
-    "lark_base": _replay_lark_base,
-    "lark_wiki": _replay_lark_wiki,
-    "google_drive": _replay_google_drive,
-    "laravel": _replay_laravel,
+    name: file.replay for name, file in FILES.items()
 }
 
 
 def _manifests() -> dict[str, ConnectorManifest]:
-    """Every connector's manifest, built by its own test file's builder."""
-    from tests.unit import (
-        test_freshdesk,
-        test_google_drive,
-        test_hubspot,
-        test_laravel,
-        test_lark_base,
-        test_lark_wiki,
-        test_xero,
-    )
-
-    return {
-        "xero": test_xero.manifest(),
-        "hubspot": test_hubspot.manifest(),
-        "freshdesk": test_freshdesk.a_manifest(),
-        "lark_base": test_lark_base.a_manifest(),
-        "lark_wiki": test_lark_wiki.a_manifest(),
-        "google_drive": test_google_drive.a_manifest(),
-        "laravel": test_laravel.manifest(),
-    }
+    """Every connector's manifest, built by the builder its cassette file names."""
+    return {name: file.manifest() for name, file in FILES.items()}
 
 
 #: Connectors whose tools are named after a table a deployment chooses, so a recording names
 #: the table as `{entity}`.
-NAMED_AFTER_THE_TABLE = frozenset({"lark_base"})
+NAMED_AFTER_THE_TABLE = frozenset(
+    name for name, file in FILES.items() if file.tools_named_after_the_table
+)
 
 #: Kinds a connector need not have, and why each cannot be recorded for it.
 NOT_RECORDABLE: Mapping[tuple[str, Kind], str] = {
-    ("laravel", Kind.RATE_LIMIT): (
-        "a database read through views has no rate limiter; "
-        "laravel.THERE_IS_NO_MEASURED_CEILING_HERE"
-    ),
+    (name, kind): why for name, file in FILES.items() for kind, why in file.not_recordable.items()
 }
 
 #: Projections whose positive path no documented shape can replay, and why.
 PROJECTION_NOT_REPLAYABLE: Mapping[tuple[str, str], str] = {
-    ("google_drive", "file"): (
-        "a file is kept only with a sharing state, which is reduced from the permissions Drive "
-        "returns; the connector has no function reading them out of a response, and Google's "
-        "documentation does not say whether a user grant carries the domain that reduction "
-        "needs, so only a live capture can settle it"
-    ),
+    (name, entity): why
+    for name, file in FILES.items()
+    for entity, why in file.projection_not_replayable.items()
 }
 
 
@@ -414,11 +94,7 @@ def _declared(name: str, manifest: ConnectorManifest) -> tuple[set[str], set[str
 
 
 def _connector_names() -> set[str]:
-    return {
-        info.name
-        for info in pkgutil.iter_modules(brain.connectors.__path__)
-        if info.name not in NOT_A_CONNECTOR
-    }
+    return set(shipped())
 
 
 ANSWERING = frozenset({Kind.LIST, Kind.READ, Kind.PAGINATION})
@@ -434,13 +110,13 @@ def test_every_recording_replays_to_what_it_says_through_its_own_connector(
 
     Delete this and a recording can say a 429 is a rate limit while the connector reads it as
     an empty table, with every other test green."""
-    replayed = REPLAYS[recorded.source.value](recorded)
+    replayed = REPLAYS[recorded.source](recorded)
 
     assert replayed.outcome is recorded.expect, (
         f"{recorded.cid}: the connector concluded {replayed.outcome}, the recording says "
         f"{recorded.expect}"
     )
-    replayable = (recorded.source.value, recorded.projects) not in PROJECTION_NOT_REPLAYABLE
+    replayable = (recorded.source, recorded.projects) not in PROJECTION_NOT_REPLAYABLE
     if recorded.projects and recorded.expect in ANSWERED and replayable:
         assert replayed.projected > 0, f"{recorded.cid} feeds a projection and kept nothing"
     leaked = [
@@ -458,7 +134,7 @@ def test_the_replay_tells_a_refusal_from_an_absence_and_an_outage() -> None:
 
     Delete this and every replay can collapse to ANSWERED with the parametrised test failing
     only for the recordings somebody happens to read."""
-    reached = {REPLAYS[c.source.value](c).outcome for c in CASSETTES}
+    reached = {REPLAYS[c.source](c).outcome for c in CASSETTES}
     assert {
         Expect.ANSWERED,
         Expect.ABSENT,
@@ -484,7 +160,7 @@ def test_every_declared_tool_is_answered_by_a_recording(name: str) -> None:
 
     Delete this and a fourth HubSpot tool ships described as tested."""
     tools, _ = _declared(name, _manifests()[name])
-    recorded = [c for c in CASSETTES if c.source.value == name]
+    recorded = [c for c in CASSETTES if c.source == name]
     answered = {
         tool for c in recorded if c.kind in ANSWERING and c.expect in ANSWERED for tool in c.tools
     }
@@ -503,9 +179,7 @@ def test_every_declared_projection_is_fed_by_a_recording(name: str) -> None:
     having been kept from anything the vendor sends."""
     _, projections = _declared(name, _manifests()[name])
     fed = {
-        c.projects
-        for c in CASSETTES
-        if c.source.value == name and c.projects and c.expect in ANSWERED
+        c.projects for c in CASSETTES if c.source == name and c.projects and c.expect in ANSWERED
     }
     missing = projections - fed
     assert not missing, f"{name} projects {missing} and no recording feeds it"
@@ -517,7 +191,7 @@ def test_every_connector_has_a_page_a_rate_limit_and_an_error(name: str) -> None
     connector unless `NOT_RECORDABLE` says why it cannot happen.
 
     Delete this and a connector can be recorded answering and never failing."""
-    kinds = {c.kind for c in CASSETTES if c.source.value == name}
+    kinds = {c.kind for c in CASSETTES if c.source == name}
     for required in (Kind.PAGINATION, Kind.RATE_LIMIT, Kind.ERROR):
         if (name, required) in NOT_RECORDABLE:
             assert required not in kinds, (
@@ -563,15 +237,16 @@ def test_the_console_record_of_recordings_agrees_with_the_corpus() -> None:
     its recordings are deleted."""
     assert set(RECORDINGS) == set(REPLAYS)
     for name, said in RECORDINGS.items():
-        recorded = [c for c in CASSETTES if c.source.value == name]
+        recorded = [c for c in CASSETTES if c.source == name]
         assert said.tested is bool(recorded)
         assert said.live_capture is any(c.origin is Origin.LIVE_CAPTURE for c in recorded)
         gaps = tuple(
             sorted(why for (who, _), why in PROJECTION_NOT_REPLAYABLE.items() if who == name)
         )
         assert said.not_replayed == gaps
-        assert ("live account" in said.sentence()) and (
-            "not answers captured from a live account" in said.sentence()
+        words = recorded_in_words(name)
+        assert ("live account" in words) and (
+            "not answers captured from a live account" in words
         ) is not said.live_capture
 
 
@@ -593,7 +268,7 @@ def test_a_documented_wiki_node_carries_no_member_setting_and_is_withheld() -> N
     assert node.restriction is lark_wiki.NodeRestriction.UNDETERMINED
     with pytest.raises(lark_wiki.PageWithheldError):
         lark_wiki.admit_page(node, spaces=lark_wiki.declarations_by_space(SPACES))
-    assert "has_member_setting" in RECORDINGS["lark_wiki"].sentence()
+    assert "has_member_setting" in recorded_in_words("lark_wiki")
 
 
 def test_lark_documents_its_wait_in_a_header_the_connectors_do_not_read() -> None:
@@ -648,10 +323,12 @@ def test_a_withdrawn_view_is_never_an_empty_one_when_replayed() -> None:
 
 
 def test_a_recording_for_a_connector_that_is_not_one_is_refused() -> None:
-    """Every recording's source is a connector module, so no recording sits unreplayed.
+    """Every cassette file is named after a shipped connector, so no recording sits unreplayed.
+    The legacy `Source` names are held to the same set, so one cannot outlive its connector.
 
-    Delete this and a `Source` member can outlive its connector."""
-    assert {s.value for s in Source} == _connector_names()
+    Delete this and a cassette file can outlive its connector, replayed through nothing."""
+    assert set(FILES) == _connector_names()
+    assert {one.value for one in Source} <= _connector_names()
 
 
 def test_a_contract_error_in_a_replay_is_not_swallowed() -> None:
@@ -661,7 +338,7 @@ def test_a_contract_error_in_a_replay_is_not_swallowed() -> None:
     Delete this and a replay that caught everything would pass every recording."""
     broken = Cassette(
         cid="LARK-broken",
-        source=Source.LARK_BASE,
+        source="lark_base",
         request="GET /open-apis/bitable/v1/apps/{app}/tables/{tbl}/records",
         status=200,
         body={"code": 0, "data": {"items": []}},

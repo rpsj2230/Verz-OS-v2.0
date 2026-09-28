@@ -1413,7 +1413,7 @@ def test_the_recordings_are_documented_shapes_and_read_through_this_connectors_r
 
     Delete this and the next reader cannot tell that this connector is documented rather than
     recorded live, which is the one thing about it they most need to know."""
-    drive = [c for c in CASSETTES if c.source.value == GOOGLE_DRIVE]
+    drive = [c for c in CASSETTES if c.source == GOOGLE_DRIVE]
     assert drive
     assert all(c.origin is Origin.DOCUMENTED_SHAPE and not c.captured_at for c in drive)
 

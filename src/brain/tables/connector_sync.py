@@ -94,7 +94,8 @@ class ConnectorSyncRow(Base):
     outcome: Mapped[str] = mapped_column(String(16), nullable=False)
     #: One of `HEALTH_STATES`.
     health: Mapped[str] = mapped_column(String(16), nullable=False)
-    #: Projected records written, and documents handed to the corpus, by this attempt.
+    #: Projected records written by this attempt. `documents` counted rows handed to the corpus
+    #: until 2026-09-28, when that leg was removed; it is written as zero since.
     records: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     documents: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     #: How many attempts in a row have failed, this one included. Zero after a read to the end.

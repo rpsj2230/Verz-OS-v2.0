@@ -159,7 +159,9 @@ def attempt_row(connection_id: uuid.UUID, attempt: Attempt) -> Insert:
         outcome=attempt.outcome.value,
         health=attempt.health.value,
         records=attempt.records,
-        documents=attempt.documents,
+        # A sync hands nothing to the corpus since 2026-09-28 (connector_sync.A_SYNC_KEEPS_NO_BODY);
+        # the column keeps the rows written before, and a migration may drop it.
+        documents=0,
         consecutive_failures=attempt.consecutive_failures,
         next_attempt_at=attempt.next_attempt_at,
         detail=attempt.detail,

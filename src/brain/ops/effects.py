@@ -497,17 +497,16 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # a source this connection may only read, and the screen reads the attempts; none changes
         # anything anywhere, so a repeat is a second read. The writes a run makes go through
         # `brain.ops.connector_sync_store`'s statements in this system's own database.
-        "brain.ops.connector_sync:SourceReading.entities": Repeat.READS,
-        "brain.ops.connector_sync:SourceReading.refresh_interval": Repeat.READS,
-        "brain.ops.connector_sync:SourceReading.operation": Repeat.READS,
-        "brain.ops.connector_sync:SourceReading.first_page": Repeat.READS,
-        "brain.ops.connector_sync:SourceReading.next_page": Repeat.READS,
-        "brain.ops.connector_sync:SourceReading.call_headers": Repeat.READS,
-        "brain.ops.connector_sync:SourceReading.interpret": Repeat.READS,
-        "brain.ops.connector_sync:SourceReading.retry_after": Repeat.READS,
-        "brain.ops.connector_sync:SourceReading.allowance_spent": Repeat.READS,
-        "brain.ops.connector_sync:SourceReading.projected": Repeat.READS,
-        "brain.ops.connector_sync:SourceReading.document": Repeat.READS,
+        "brain.connectors.declaration:SourceReading.entities": Repeat.READS,
+        "brain.connectors.declaration:SourceReading.refresh_interval": Repeat.READS,
+        "brain.connectors.declaration:SourceReading.operation": Repeat.READS,
+        "brain.connectors.declaration:SourceReading.first_page": Repeat.READS,
+        "brain.connectors.declaration:SourceReading.next_page": Repeat.READS,
+        "brain.connectors.declaration:SourceReading.call_headers": Repeat.READS,
+        "brain.connectors.declaration:SourceReading.interpret": Repeat.READS,
+        "brain.connectors.declaration:SourceReading.retry_after": Repeat.READS,
+        "brain.connectors.declaration:SourceReading.allowance_spent": Repeat.READS,
+        "brain.connectors.declaration:SourceReading.projected": Repeat.READS,
         # A run's vault lease (0093): a child token minted per attempt that expires at its own
         # TTL, read through once and revoked at the attempt's end, where a second revoke finds it
         # gone. See `brain.ops.connector_lease`.

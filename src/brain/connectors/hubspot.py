@@ -113,6 +113,13 @@ Scope: domain logic. Nothing here opens a connection, resolves a name, reads a c
 a credential. The resolver, the fetcher and `fetched_at` are all parameters, and
 `assert_holds_no_credential` runs on the connection at construction.
 
+**This connector keeps a minimal index and reads every value live.** What it keeps of a
+company, a contact and a deal is their ids, names, owners, stages and dates
+(`PROJECTED_FIELDS`); an amount, an email address or a phone number is read from HubSpot
+when a question asks for it and is never stored, which the canary planted in the recorded
+deal amount proves on every build. It is declared as `CONNECTOR` at the foot of this
+module (`brain.connectors.declaration`).
+
 Task ids: M11.6.6
 """
 
@@ -139,6 +146,13 @@ from brain.connectors.contract import (
     assert_fetches_only,
     assert_holds_no_credential,
 )
+from brain.connectors.declaration import (
+    ConnectorDeclaration,
+    ConsoleForm,
+    PageReply,
+    Recorded,
+    Setting,
+)
 from brain.connectors.federation import (
     FEDERATION_TIMEOUT_MS,
     FailureReason,
@@ -160,6 +174,7 @@ from brain.connectors.projection import ProjectedRecord, ProjectedValue, Refresh
 from brain.connectors.rest import ID_TARGET, RestOperation, RestSpec, load_spec
 from brain.connectors.throttle import CallOutcome, ceiling_for, classify, retry_delay
 from brain.connectors.transports import FieldMapping, RestTransport, SourceRecord
+from brain.connectors.write_verification import ReadBack, classified_reading
 from brain.core.envelope import IdentityMode, SideEffect, TypedResult
 from brain.core.field_policy import Classification, FieldPolicy, FieldRule
 from brain.core.projection import ProjectionRefusedError
@@ -1748,3 +1763,120 @@ def health(reply: HubSpotReply | None, *, checked_at: datetime) -> ConnectorHeal
         checked_at=checked_at,
         detail=reply.detail,
     )
+
+
+# ------------------------------------------------------------------ what this connector declares
+#: Why HubSpot's one recorded absence is weaker evidence than it looks.
+HUBSPOT_THE_ONLY_RECORDED_ABSENCE: Final = (
+    "HUBSPOT-200-empty is the only genuine absence in the recorded corpus, and it is a reply "
+    "from the search endpoint, so it is subject to "
+    "A_SEARCH_THAT_LAGS_A_WRITE_MANUFACTURES_AN_ABSENCE. The recorded rate limit and "
+    "authentication failure both read as not having looked."
+)
+
+
+class HubSpotReading:
+    """HubSpot's companies, contacts and deals, cursor by cursor, into the minimal index.
+
+    A method named after a module function calls that function, as `xero.XeroReading`'s do.
+
+    Not read on any install today, because `brain.ops.connector_sync.plan_for` stops at the
+    missing verified ceiling. It is here so the day the ceiling is recorded the source is read
+    with no other change, which is the edit `A_CEILING_NOBODY_VERIFIED_IS_NOT_A_CEILING` says
+    should be the only one.
+    """
+
+    def entities(self) -> tuple[str, ...]:
+        return tuple(sorted(PROJECTED_FIELDS))
+
+    def refresh_interval(self) -> timedelta:
+        return CURSOR_POLL_INTERVAL
+
+    def operation(self, entity: str, *, resolver: Resolver) -> RestOperation:
+        return operation_for(entity, resolver=resolver)
+
+    def first_page(self, entity: str) -> Mapping[str, str]:
+        return MappingProxyType(dict(default_arguments(entity)))
+
+    def next_page(
+        self, entity: str, asked: Mapping[str, str], body: Any, returned: int
+    ) -> Mapping[str, str] | None:
+        del entity, returned
+        paging = body.get("paging") if isinstance(body, Mapping) else None
+        following = paging.get("next") if isinstance(paging, Mapping) else None
+        cursor = following.get("after") if isinstance(following, Mapping) else None
+        if not isinstance(cursor, str) or not cursor.strip():
+            return None
+        return MappingProxyType({**asked, CURSOR_PARAMETER: cursor})
+
+    def call_headers(self, settings: Mapping[str, str]) -> Mapping[str, str]:
+        # Built for its refusal of a portal that narrows nothing; it contributes no header.
+        HubSpotConnection(portal_id=settings["portal_id"])
+        return MappingProxyType({})
+
+    def interpret(
+        self, operation: RestOperation, *, status: int, body: Any, fetched_at: str
+    ) -> PageReply:
+        reply = interpret(operation, status=status, body=body, fetched_at=fetched_at)
+        return PageReply(call=reply.call, rows=reply.rows)
+
+    def retry_after(self, headers: Mapping[str, str]) -> float | None:
+        return retry_after(headers)
+
+    def allowance_spent(self, headers: Mapping[str, str]) -> bool:
+        del headers
+        return False
+
+    def projected(
+        self, entity: str, row: Mapping[str, Any], *, seen_at: datetime
+    ) -> ProjectedRecord | None:
+        return projected_record(entity, row, last_seen_at=seen_at)
+
+
+def built_from_the_console(settings: Mapping[str, str], ref: SecretRef) -> ConnectorManifest:
+    """The manifest a connection made on the Connectors screen declares."""
+    return hubspot_manifest(HubSpotConnection(portal_id=settings["portal_id"]), ref=ref)
+
+
+CONNECTOR: Final = ConnectorDeclaration(
+    name=CONNECTOR_NAME,
+    label="HubSpot",
+    console=ConsoleForm(
+        settings=(
+            Setting(
+                name="portal_id",
+                label="Account id",
+                hint=(
+                    "The HubSpot account id this connection reads, as HubSpot shows it in the "
+                    "account's settings. A connection reads one account and no other."
+                ),
+                refused=(
+                    "HubSpot would not recognise that as one account. Paste the account id "
+                    "exactly as HubSpot shows it, with no spaces, and not a word such as all."
+                ),
+            ),
+        ),
+        credential_label="The access token of a private app",
+        credential_hint=(
+            "Give the private app crm.objects.contacts.read and crm.objects.deals.read, and "
+            "no write scope or anything touching settings. Paste its token as one piece. It "
+            "is kept in the vault and never shown again."
+        ),
+        build=built_from_the_console,
+    ),
+    read_back=ReadBack(
+        reading=classified_reading,
+        recorded=(
+            "HUBSPOT-200-empty",
+            "HUBSPOT-200-companies-page",
+            "HUBSPOT-200-contacts",
+            "HUBSPOT-200-deals",
+            "HUBSPOT-200-associations",
+            "HUBSPOT-429",
+            "HUBSPOT-401",
+        ),
+        findings=(HUBSPOT_THE_ONLY_RECORDED_ABSENCE,),
+    ),
+    recorded=Recorded(tested=True),
+    reading=HubSpotReading(),
+)

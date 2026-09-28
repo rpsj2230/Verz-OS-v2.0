@@ -70,6 +70,13 @@ Scope: domain logic. Nothing here opens a socket, resolves a name or reads a clo
 reader, the fetched-at stamp and every interval are parameters, for the reason
 `brain.models.routing.CircuitBreaker` gives about `now`.
 
+**This connector keeps a minimal index and reads every value live.** What it keeps of a
+ticket is its ids, status, priority, dates and subject line; the ticket's description, its
+conversation and its custom fields are read from Freshdesk when a question asks for them
+and are never stored, which the canary planted in a recorded ticket's note proves on every
+build. It is declared as `CONNECTOR` at the foot of this module
+(`brain.connectors.declaration`).
+
 Task ids: M11.6.2
 """
 
@@ -94,6 +101,7 @@ from brain.connectors.contract import (
     TransportKind,
     assert_fetches_only,
 )
+from brain.connectors.declaration import ConnectorDeclaration, Recorded
 from brain.connectors.manifest import (
     ChangeSignal,
     ConnectorManifest,
@@ -107,6 +115,7 @@ from brain.connectors.projection import ProjectedValue
 from brain.connectors.rest import OperationSpec, ParameterSpec, RestOperation
 from brain.connectors.throttle import CallOutcome, classify
 from brain.connectors.transports import FieldMapping, RestTransport, SourceRecord, normalise
+from brain.connectors.write_verification import ReadBack, Reading, unreadable
 from brain.core.envelope import IdentityMode, TypedResult
 from brain.core.errors import Degraded
 from brain.core.projection import MAX_LABEL_CHARS
@@ -1189,3 +1198,53 @@ def manifest(
         projections=(ticket_projection(visibility=visibility),),
         ceiling=FRESHDESK,
     )
+
+
+# ------------------------------------------------------------------ what this connector declares
+#: Why an answered Freshdesk page is a complete look.
+FRESHDESK_ABSENCE_IS_A_SHORT_PAGE: Final = (
+    "A Freshdesk page carries no has_more, so the only end signal is a page shorter than "
+    "the size asked for. An answered page with no rows is shorter than any size, which is why "
+    "it is the one complete empty reading this connector can give. Its search endpoint is "
+    "subject to A_SEARCH_THAT_LAGS_A_WRITE_MANUFACTURES_AN_ABSENCE."
+)
+
+
+def read_back_reading(operation: RestOperation, reply: Reply) -> Reading:
+    """One Freshdesk page, refused or projected in `read_page`'s order.
+
+    See `FRESHDESK_ABSENCE_IS_A_SHORT_PAGE` for why an answered page is complete.
+    """
+    try:
+        assert_answered(reply)
+        rows = operation.project(reply.body)
+    except (FreshdeskUnreachableError, FreshdeskRefusedError) as failure:
+        return Reading(outcome=failure.call_outcome, matched=0, complete=False)
+    except ConnectorContractError:
+        return unreadable()
+    return Reading(outcome=CallOutcome.OK, matched=len(rows), complete=True)
+
+
+CONNECTOR: Final = ConnectorDeclaration(
+    name=FRESHDESK,
+    label="Freshdesk",
+    not_from_the_console=(
+        "Its tickets are kept under a visibility rule saying which people may see which "
+        "helpdesk groups, written by somebody who has read how this company's groups map "
+        "to its departments. This screen has no way to write that rule yet, so it is "
+        "connected at the server."
+    ),
+    read_back=ReadBack(
+        reading=read_back_reading,
+        recorded=(
+            "FRESH-200-search",
+            "FRESH-429",
+            "FRESH-200-search-full-page",
+            "FRESH-200-ticket",
+            "FRESH-200-contact",
+            "FRESH-401",
+        ),
+        findings=(FRESHDESK_ABSENCE_IS_A_SHORT_PAGE,),
+    ),
+    recorded=Recorded(tested=True),
+)

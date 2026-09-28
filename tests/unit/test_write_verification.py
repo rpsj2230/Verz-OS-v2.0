@@ -3,28 +3,29 @@
 Three families. The verdict is tested over the whole outcome vocabulary rather than at chosen
 points, because the property is "exactly one combination is absent" and a list of examples
 cannot say "exactly". Each connector's reading is driven from the recorded exchanges in
-`tests/fixtures/cassettes.py` in that connector's own reply value, and every connector has an
+`tests/fixtures/cassettes/` in that connector's own reply value, and every connector has an
 absent case sitting beside its refusals, so a reading that answers INCONCLUSIVE for
 everything fails as surely as one that answers ABSENT for a 429. And discovery is tested
 against a second, independent list of connectors, so a connector added without an entry
 fails by existing.
 
 Every connector has recordings now, and every one is a documented shape rather than a live
-capture; `tests/fixtures/cassettes.py` says which page each was written to.
+capture; each file under `tests/fixtures/cassettes/` says which page each was written to.
+
+Each connector's reading is declared in its own module, on its `CONNECTOR`, and the table these
+tests drive is `brain.connectors.declaration.read_backs()`, read off those declarations.
 
 Task ids: M17.3.3
 """
 
 from __future__ import annotations
 
-import pkgutil
 import types
 from collections.abc import Callable, Mapping
 from typing import Any
 
 import pytest
 
-import brain.connectors
 from brain.connectors import (
     freshdesk,
     google_drive,
@@ -37,13 +38,13 @@ from brain.connectors import (
     xero,
 )
 from brain.connectors.contract import AccessMode, CredentialBinding
+from brain.connectors.declaration import read_backs, shipped
 from brain.connectors.lark_base import FieldBinding, FieldKind, LarkBaseTable
 from brain.connectors.manifest import ConnectorManifest, FieldShape, HotUse
 from brain.connectors.throttle import CallOutcome
 from brain.connectors.write_verification import (
     NO_READ_BACK_PATH,
     NOTHING_IS_RECORDED,
-    READ_BACKS,
     ReadBack,
     Reading,
     ReadingError,
@@ -62,8 +63,10 @@ from brain.ops.idempotency import (
     verify,
 )
 from brain.ops.secrets import SecretRef, VaultRole
-from tests.fixtures.cassettes import CASSETTES, Cassette, Kind, Protocol, Source, for_source
-from tests.invariants.test_cassettes import NOT_A_CONNECTOR
+from tests.fixtures.cassettes import CASSETTES, FILES, Cassette, Kind, Protocol, for_source
+
+#: Every shipped connector's read-back, as the declarations state it.
+READ_BACKS = read_backs()
 
 #: A read time pinned far outside any plausible wall clock, because nothing here is about the
 #: present and a fixture with a near date is a clock that goes off.
@@ -396,9 +399,9 @@ def test_every_recording_of_a_source_is_named_by_that_connectors_read_back() -> 
 
     Delete this and a new recorded failure, say a Xero 503, could be left out of `recorded`
     and never driven through the reading at all."""
-    for source in Source:
+    for source in FILES:
         recorded = {c.cid for c in for_source(source)}
-        assert recorded <= set(READ_BACKS[source.value].recorded), source
+        assert recorded <= set(READ_BACKS[source].recorded), source
 
 
 def test_xero_reads_an_empty_ledger_as_absent_and_an_unfinished_or_failed_one_as_not() -> None:
@@ -553,7 +556,7 @@ def test_an_entry_resting_on_no_recording_is_the_one_that_says_so() -> None:
 
     Delete this and a recording added for a source would leave its entry still claiming there
     is none, or an entry for a recorded source could claim the same."""
-    recorded_sources = {source.value for source in Source}
+    recorded_sources = set(FILES)
     for name, entry in READ_BACKS.items():
         says_none = NOTHING_IS_RECORDED in entry.findings
         has_none = name not in recorded_sources and not entry.recorded
@@ -569,8 +572,7 @@ def test_the_drive_entry_states_that_a_not_found_cannot_prove_absence() -> None:
     with pytest.raises(google_drive.DriveNotFoundError):
         google_drive.assert_answered(google_drive.Reply(status=404, body={"error": {"code": 404}}))
     assert (
-        write_verification.DRIVE_A_NOT_FOUND_CANNOT_PROVE_ABSENCE
-        in READ_BACKS["google_drive"].findings
+        google_drive.DRIVE_A_NOT_FOUND_CANNOT_PROVE_ABSENCE in READ_BACKS["google_drive"].findings
     )
 
 
@@ -581,21 +583,18 @@ def test_every_connector_the_package_holds_is_stated_in_the_read_back_table() ->
 
     Delete this and a new connector's operations could be left with no way out of UNKNOWN,
     found only when a crash leaves one there."""
-    assert read_back_gaps(connectors()) == ()
+    assert read_back_gaps(connectors(), READ_BACKS) == ()
 
 
-def test_discovery_agrees_with_the_cassette_contracts_own_list_of_connectors() -> None:
+def test_discovery_agrees_with_the_declarations_about_which_modules_are_connectors() -> None:
     """Two derivations of "which modules are connectors" that must agree: this module's, from
-    whether a module builds a manifest, and the cassette contract's, from a named exclusion
-    list. Delete this and a connector whose factory lost its return annotation silently
-    leaves discovery, and the gate above passes over it."""
-    listed = {
-        info.name
-        for info in pkgutil.iter_modules(brain.connectors.__path__)
-        if info.name not in NOT_A_CONNECTOR
-    }
-    assert set(connectors()) == listed
-    assert len(listed) >= 7, f"only {sorted(listed)} were found, so this compared almost nothing"
+    whether a module builds a manifest, and the declarations', from which modules state a
+    `CONNECTOR`. Delete this and a connector whose factory lost its return annotation silently
+    leaves discovery, and the gate above passes over it; or a module that builds a manifest and
+    declares nothing is never read back."""
+    declared = set(shipped())
+    assert set(connectors()) == declared
+    assert len(declared) >= 7, f"only {sorted(declared)} were found, so this compared nothing"
 
 
 def test_a_connector_with_no_entry_is_a_gap() -> None:

@@ -11,7 +11,8 @@ for the split CLAUDE.md names: nothing that decides policy owns a client.
 `plan_for` asks them in order and stops at the first that refuses, and each refusal is a sentence
 the Connectors screen shows rather than a source quietly left out:
 
-- this release has a reading for the source (`READINGS`);
+- this release has a reading for the source (`READINGS`, read off each connector's own
+  `CONNECTOR` declaration at start-up, so a new source is read with no edit here);
 - the manifest its stored settings build today is the one agreed to at connect, which is
   `brain.connectors.registry.reconnect`'s pin applied to a scheduled read: a release that changed
   what a connector declares waits for a person, it is not read under a declaration nobody accepted;
@@ -33,12 +34,15 @@ an equality can be stored this way: a prefix or a set is a predicate over many v
 holds one, so a manifest declaring one is not read at all rather than read into rows no predicate
 can reach.
 
-**A document is handed to the corpus with the owner and the visibility its reading gave it, and the
-owner's reach decides whether it is indexed.** `brain.knowledge.chunk_store.ingest_document`
-resolves the owner's grants and refuses a document its owner cannot reach; a refusal here withholds
-that one document and says so in one sentence with no count. Neither console-connectable source
-produces documents, so no install exercises this leg today: see
-`NO_CONNECTABLE_SOURCE_YIELDS_A_DOCUMENT`.
+**What a sync keeps is the source's minimal index and nothing else, and it is checked at the
+write.** The owner's rule is that connectors never bulk-sync
+(`brain.connectors.declaration.CONNECTORS_NEVER_BULK_SYNC`): ids, names, dates, status and the few
+fields a manifest names, with every value read live at question time. `kept_fields` holds each row
+to its manifest with `brain.connectors.minimal_index.assert_minimal_index` before the page is
+written, so a connector whose code keeps a field its manifest never declared is refused at the
+write rather than found in the table. Until 2026-09-28 a reading could also hand each row to the
+corpus as a document, embedded into `know.chunk`; that was a bulk sync of bodies, and it was
+removed rather than left unfed. See `A_SYNC_KEEPS_NO_BODY`.
 
 **A failure makes the next attempt later and marks the source unhealthy after the third in a row.**
 `after_attempt` is the whole rule and `A_FAILING_SOURCE_IS_ASKED_LESS_OFTEN_AND_AT_LEAST_DAILY`
@@ -55,7 +59,7 @@ every run. It would quarantine a connection in memory that the next run rebuilds
 so the quarantine would last one run, and it would add a second in-memory opinion about whether a
 source is connected beside the table that already says so.
 
-Task ids: M42.6.5
+Task ids: M42.6.5, M11.9.1, M11.4.1
 """
 
 from __future__ import annotations
@@ -65,23 +69,21 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from types import MappingProxyType
-from typing import Any, Final, Protocol
+from typing import Final
 
-from brain.connectors import hubspot, xero
 from brain.connectors.contract import ConnectorContractError, HealthState
+from brain.connectors.declaration import PageReply as PageReply
+from brain.connectors.declaration import SourceReading as SourceReading
+from brain.connectors.declaration import shipped
 from brain.connectors.manifest import ConnectorManifest, manifest_digest
+from brain.connectors.minimal_index import MinimalIndexError, StoredRow, assert_minimal_index
 from brain.connectors.projection import MISSED_REFRESHES_BEFORE_STALE, ProjectedRecord
-from brain.connectors.rest import RestOperation
 from brain.connectors.throttle import CallOutcome, UnmeasuredSourceError, limits_for, retry_delay
-from brain.connectors.transports import SourceRecord
-from brain.core.envelope import TypedResult
 from brain.core.scope import Op, Scope
-from brain.knowledge.item import KnowledgeItem
 from brain.ops.connectable import NotConnectableError, manifest_for
 from brain.ops.connector_lease import LeaseOutcome
 from brain.ops.connector_store import Connection
 from brain.ops.limits import Limit
-from brain.tools.fetch import Resolver
 
 # ------------------------------------------------------------------ written-down reasons
 
@@ -145,14 +147,14 @@ A_SYNC_RETIRES_NOTHING: Final = (
     "first, as brain.ops.schedule does for the retention sweep."
 )
 
-#: Why the document leg exists with nothing to feed it today.
-NO_CONNECTABLE_SOURCE_YIELDS_A_DOCUMENT: Final = (
-    "Xero and HubSpot, the two sources the console can connect, keep records and no documents. The "
-    "sources whose items are documents, Lark Wiki and Google Drive, are connected with a steward "
-    "and a department declaration the console cannot collect, and brain.ops.connectable says so "
-    "for each. The leg is in the one loop every reading goes through so that the day one of them "
-    "is connectable its documents reach the corpus through the owner's reach, rather than through "
-    "a second loop written for documents that nobody holds against the first."
+#: Why a sync hands nothing to the corpus.
+A_SYNC_KEEPS_NO_BODY: Final = (
+    "A scheduled read keeps each record's minimal index in proj.record and nothing else. It once "
+    "also handed a reading's rows to the corpus as documents, where they were chunked and "
+    "embedded: a copy of every body the source held, refreshed on a timer, which is the bulk sync "
+    "the owner has ruled out twice. A document from a connected source is found by its indexed "
+    "title and id and read live when a question needs it; `docs/needs-rupash.md` item 99 asks the "
+    "owner to confirm that for Drive and Wiki bodies, and this is its recommended answer."
 )
 
 # -------------------------------------------------------------------------- the numbers
@@ -213,10 +215,6 @@ READ_BUT_CUT_SHORT: Final = (
     "Read as far as one run reads, which was not the end; the next run reads it again from the "
     "start."
 )
-DOCUMENTS_WITHHELD: Final = (
-    "Read to the end. One or more documents were not indexed, because the person answerable for "
-    "them reaches no part of the document plane."
-)
 SOURCE_ALLOWANCE_REFUSED: Final = (
     "The source's call allowance refused the read. It is tried again once the source said it would "
     "have room."
@@ -275,6 +273,12 @@ class ConnectorSyncError(Exception):
     """A reading produced something this store cannot keep. Raised before anything is written."""
 
 
+INDEX_EXCEEDED: Final = (
+    "A record read from this source holds a field its declaration does not name, so nothing from "
+    "that answer was kept."
+)
+
+
 # ------------------------------------------------------------------------- what is kept
 
 
@@ -303,7 +307,6 @@ class Attempt:
     outcome: SyncOutcome
     health: HealthState
     records: int
-    documents: int
     consecutive_failures: int
     next_attempt_at: datetime
     detail: str
@@ -364,202 +367,37 @@ def stored_fields(record: ProjectedRecord, visibility: Scope) -> dict[str, Store
     }
 
 
+def kept_fields(record: ProjectedRecord, manifest: ConnectorManifest) -> dict[str, StoredValue]:
+    """`stored_fields` for a record of this manifest, held to its minimal index before it is kept.
+
+    The entity's projection is the manifest's, so a record of an entity the manifest does not
+    project is refused, and the fields `stored_fields` lays out are checked by
+    `assert_minimal_index`: declared, pointer-shaped, the predicate's value, and no longer than a
+    label. A refusal carries `INDEX_EXCEEDED` and never the row, for
+    `A_RUN_RECORD_CARRIES_NO_VALUE_FROM_THE_SOURCE`.
+    """
+    projection = manifest.projection_for(record.entity)
+    if projection is None:
+        raise ConnectorSyncError(INDEX_EXCEEDED)
+    fields = stored_fields(record, projection.visibility)
+    row = StoredRow(
+        source=record.source, entity=record.entity, source_id=record.source_id, fields=fields
+    )
+    try:
+        assert_minimal_index(manifest, (row,))
+    except MinimalIndexError as exceeded:
+        raise ConnectorSyncError(INDEX_EXCEEDED) from exceeded
+    return fields
+
+
 # ------------------------------------------------------------------------- the readings
 
 
-@dataclass(frozen=True)
-class PageReply:
-    """One page, as the connector's own `interpret` read it: the call's outcome and any rows."""
-
-    call: CallOutcome
-    rows: TypedResult[SourceRecord] | None
-
-
-class SourceReading(Protocol):
-    """How the worker reads one source page by page. One per connector this release reads.
-
-    Everything a reading does is a connector's own function called with the right arguments: the
-    operation, the paging parameters, the one header a connection contributes, the interpretation
-    of a response and the projection of a row. A reading decides nothing about who may see a row,
-    which is the manifest's predicate and the reader's grant, and holds no key.
-    """
-
-    def entities(self) -> tuple[str, ...]:
-        """Every entity kind the source projects, in the order a run reads them."""
-        ...
-
-    def refresh_interval(self) -> timedelta:
-        """How often a healthy source is read, which is the interval its freshness is judged by."""
-        ...
-
-    def operation(self, entity: str, *, resolver: Resolver) -> RestOperation:
-        """The bound operation that lists one entity kind."""
-        ...
-
-    def first_page(self, entity: str) -> Mapping[str, str]:
-        """The arguments of the first page of one entity kind."""
-        ...
-
-    def next_page(
-        self, entity: str, asked: Mapping[str, str], body: Any, returned: int
-    ) -> Mapping[str, str] | None:
-        """The arguments of the page after this one, or None when this was the last."""
-        ...
-
-    def call_headers(self, settings: Mapping[str, str]) -> Mapping[str, str]:
-        """The headers the connection contributes to a call. Never `Authorization`."""
-        ...
-
-    def interpret(
-        self, operation: RestOperation, *, status: int, body: Any, fetched_at: str
-    ) -> PageReply:
-        """One answered call, as the connector's own `interpret` classifies it."""
-        ...
-
-    def retry_after(self, headers: Mapping[str, str]) -> float | None:
-        """What the source asked to wait, or None when it said nothing."""
-        ...
-
-    def allowance_spent(self, headers: Mapping[str, str]) -> bool:
-        """Whether the source said its allowance is spent, on an answer that was not a refusal."""
-        ...
-
-    def projected(
-        self, entity: str, row: Mapping[str, Any], *, seen_at: datetime
-    ) -> ProjectedRecord | None:
-        """The record kept for one row, or None for a row with nothing to keep."""
-        ...
-
-    def document(
-        self, entity: str, row: Mapping[str, Any], *, seen_at: datetime
-    ) -> KnowledgeItem | None:
-        """The document one row is, with its owner and visibility, or None for a row that is not."""
-        ...
-
-
-def _reply(outcome: CallOutcome, rows: TypedResult[SourceRecord] | None) -> PageReply:
-    return PageReply(call=outcome, rows=rows)
-
-
-#: Xero's page size, fixed by the vendor. A page holding fewer is the last.
-XERO_PAGE_SIZE: Final = 100
-
-
-class XeroReading:
-    """Xero's invoices and contacts, a page at a time, as `brain.connectors.xero` reads them."""
-
-    def entities(self) -> tuple[str, ...]:
-        return (xero.ENTITY_INVOICE, xero.ENTITY_CONTACT)
-
-    def refresh_interval(self) -> timedelta:
-        return xero.RECONCILIATION_INTERVAL
-
-    def operation(self, entity: str, *, resolver: Resolver) -> RestOperation:
-        return xero.operation_for(entity, resolver=resolver)
-
-    def first_page(self, entity: str) -> Mapping[str, str]:
-        del entity
-        return MappingProxyType({"page": "1"})
-
-    def next_page(
-        self, entity: str, asked: Mapping[str, str], body: Any, returned: int
-    ) -> Mapping[str, str] | None:
-        del entity, body
-        if returned < XERO_PAGE_SIZE:
-            return None
-        return MappingProxyType({**asked, "page": str(int(asked["page"]) + 1)})
-
-    def call_headers(self, settings: Mapping[str, str]) -> Mapping[str, str]:
-        return xero.XeroConnection(tenant_id=settings["tenant_id"]).call_headers()
-
-    def interpret(
-        self, operation: RestOperation, *, status: int, body: Any, fetched_at: str
-    ) -> PageReply:
-        reply = xero.interpret(operation, status=status, body=body, fetched_at=fetched_at)
-        return _reply(reply.call, reply.rows)
-
-    def retry_after(self, headers: Mapping[str, str]) -> float | None:
-        return xero.retry_after(headers)
-
-    def allowance_spent(self, headers: Mapping[str, str]) -> bool:
-        return xero.day_remaining(headers) == 0
-
-    def projected(
-        self, entity: str, row: Mapping[str, Any], *, seen_at: datetime
-    ) -> ProjectedRecord | None:
-        return xero.projected_record(entity, row, last_seen_at=seen_at)
-
-    def document(
-        self, entity: str, row: Mapping[str, Any], *, seen_at: datetime
-    ) -> KnowledgeItem | None:
-        del entity, row, seen_at
-        return None
-
-
-class HubSpotReading:
-    """HubSpot's clients, contacts and deals, cursor by cursor, as its connector reads them.
-
-    Not read on any install today, because `plan_for` stops at the missing verified ceiling. It is
-    here so the day the ceiling is recorded the source is read with no other change, which is the
-    edit `hubspot.A_CEILING_NOBODY_VERIFIED_IS_NOT_A_CEILING` says should be the only one.
-    """
-
-    def entities(self) -> tuple[str, ...]:
-        return tuple(sorted(hubspot.PROJECTED_FIELDS))
-
-    def refresh_interval(self) -> timedelta:
-        return hubspot.CURSOR_POLL_INTERVAL
-
-    def operation(self, entity: str, *, resolver: Resolver) -> RestOperation:
-        return hubspot.operation_for(entity, resolver=resolver)
-
-    def first_page(self, entity: str) -> Mapping[str, str]:
-        return MappingProxyType(dict(hubspot.default_arguments(entity)))
-
-    def next_page(
-        self, entity: str, asked: Mapping[str, str], body: Any, returned: int
-    ) -> Mapping[str, str] | None:
-        del entity, returned
-        paging = body.get("paging") if isinstance(body, Mapping) else None
-        following = paging.get("next") if isinstance(paging, Mapping) else None
-        cursor = following.get("after") if isinstance(following, Mapping) else None
-        if not isinstance(cursor, str) or not cursor.strip():
-            return None
-        return MappingProxyType({**asked, hubspot.CURSOR_PARAMETER: cursor})
-
-    def call_headers(self, settings: Mapping[str, str]) -> Mapping[str, str]:
-        # Built for its refusal of a portal that narrows nothing; it contributes no header.
-        hubspot.HubSpotConnection(portal_id=settings["portal_id"])
-        return MappingProxyType({})
-
-    def interpret(
-        self, operation: RestOperation, *, status: int, body: Any, fetched_at: str
-    ) -> PageReply:
-        reply = hubspot.interpret(operation, status=status, body=body, fetched_at=fetched_at)
-        return _reply(reply.call, reply.rows)
-
-    def retry_after(self, headers: Mapping[str, str]) -> float | None:
-        return hubspot.retry_after(headers)
-
-    def allowance_spent(self, headers: Mapping[str, str]) -> bool:
-        del headers
-        return False
-
-    def projected(
-        self, entity: str, row: Mapping[str, Any], *, seen_at: datetime
-    ) -> ProjectedRecord | None:
-        return hubspot.projected_record(entity, row, last_seen_at=seen_at)
-
-    def document(
-        self, entity: str, row: Mapping[str, Any], *, seen_at: datetime
-    ) -> KnowledgeItem | None:
-        del entity, row, seen_at
-        return None
-
-
-#: Every source this release reads on a schedule, by connector name.
+#: Every source this release reads on a schedule, by connector name, read off each connector's
+#: `CONNECTOR` declaration at start-up. `PageReply` and `SourceReading` are
+#: `brain.connectors.declaration`'s, named here for the modules that read them from this one.
 READINGS: Final[Mapping[str, SourceReading]] = MappingProxyType(
-    {xero.CONNECTOR_NAME: XeroReading(), hubspot.CONNECTOR_NAME: HubSpotReading()}
+    {name: one.reading for name, one in shipped().items() if one.reading is not None}
 )
 
 
@@ -643,7 +481,6 @@ def after_attempt(
     call: CallOutcome | None = None,
     retry_after_seconds: float | None = None,
     records: int = 0,
-    documents: int = 0,
     cut_short: bool = False,
 ) -> Attempt:
     """The row one attempt leaves: its health, the failures in a row, and when to try again.
@@ -678,7 +515,6 @@ def after_attempt(
         outcome=outcome,
         health=health,
         records=records,
-        documents=documents,
         consecutive_failures=failures,
         next_attempt_at=finished_at + wait,
         detail=detail,
