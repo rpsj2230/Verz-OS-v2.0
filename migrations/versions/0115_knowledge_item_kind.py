@@ -59,7 +59,7 @@ from alembic import op
 
 revision = "0115"
 # The newest migration on origin/main when this was written.
-down_revision = "0113"
+down_revision = "0114"
 branch_labels = None
 depends_on = None
 
