@@ -195,6 +195,7 @@ services:
     environment:
       QUEUE_URL: postgresql+psycopg://brain:${POSTGRES_PASSWORD}@pgbouncer-session:5432/brain
       DATABASE_URL: postgresql+psycopg://brain:${POSTGRES_PASSWORD}@pgbouncer:5432/brain
+      VALKEY_URL: redis://cache:6379/0
       BRAIN_CHECKPOINTER_URL: postgresql+psycopg://brain:${POSTGRES_PASSWORD}@pgbouncer-session:5432/brain
       BRAIN_WORKER_SLOTS_HUMAN_INTERACTIVE: '0'
       BRAIN_WORKER_SLOTS_HUMAN_ASYNC: '4'
@@ -266,6 +267,7 @@ services:
       BRAIN_WORKER_COMPONENT: brain-parse-worker
       QUEUE_URL: postgresql+psycopg://brain:${POSTGRES_PASSWORD}@pgbouncer-session:5432/brain
       DATABASE_URL: postgresql+psycopg://brain:${POSTGRES_PASSWORD}@pgbouncer:5432/brain
+      VALKEY_URL: redis://cache:6379/0
       BRAIN_WORKER_SLOTS_HUMAN_INTERACTIVE: '0'
       BRAIN_WORKER_SLOTS_HUMAN_ASYNC: '0'
       BRAIN_WORKER_SLOTS_AUTOMATION: '0'
