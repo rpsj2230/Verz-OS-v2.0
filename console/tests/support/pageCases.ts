@@ -19,6 +19,7 @@ import { CALLBACK_PATH, SIGNED_OUT_PATH } from "../../src/auth/constants";
 import { RETURN_PATH as STAFF_LIST_RETURN_PATH } from "../../src/setup/staffList";
 import { FIRST_RUN_PATH } from "../../src/setup/wizard";
 import { NAVIGATION_ADDRESS, departmentConsole } from "./navigation";
+import { readConsoleFile } from "./repo";
 
 /** A value with nowhere to break, which is what an identifier from the API usually is. */
 export const UNBROKEN = `UNBROKEN${"x".repeat(72)}`;
@@ -1264,6 +1265,52 @@ const JOB_RUNS = {
   truncated: false,
 };
 
+/** A draft's id, as `brain.agent_builder_routes` mints one. */
+export const DRAFT_ID = "44444444-4444-4444-8444-444444444444";
+
+/** One draft on the drafts list, as `AgentDraftSummary` sends it. */
+const DRAFT_SUMMARY = {
+  draft_id: DRAFT_ID,
+  agent_id: "quote_helper_ab12cd",
+  name: UNBROKEN,
+  kind: "new",
+  state: "waiting",
+  revision: 2,
+  saved_at: "2019-03-04T09:00:00Z",
+};
+
+/** One draft, as `AgentDraftView` sends it, with the widest values its steps draw. */
+const DRAFT_VIEW = {
+  ...DRAFT_SUMMARY,
+  document: {
+    identity: {
+      template_id: "quote_helper_ab12cd",
+      version: 1,
+      published_by: UNBROKEN,
+      display_name: UNBROKEN,
+      summary: UNBROKEN,
+    },
+    persona: UNBROKEN,
+    tier: "main",
+    skills: [],
+    authority: { scope: { clauses: [] }, capabilities: [], allowed_tools: [], required_tools: [] },
+    connectors: [],
+    guardrails: { max_side_effect: "none", leash: [] },
+    golden_set: [],
+    placeholders: [],
+  },
+  problems: [UNBROKEN],
+  acts: [{ revision: 2, act: "checked", at: "2019-03-04T09:00:00Z" }],
+  yours: true,
+  waiting_on_you: false,
+  widened: [UNBROKEN],
+  drawable_tools: [UNBROKEN],
+  publish_unavailable: null,
+};
+
+/** The builder's form, which `tests/unit/test_builder_form.py` holds equal to the API's. */
+const BUILDER_FORM: unknown = JSON.parse(readConsoleFile("tests/fixtures/manifest-form.json"));
+
 export const PAGES: Readonly<Record<string, PageCase>> = {
   // The Overview, SCREEN 1: the health strip and Needs you from the overview route, the figure row
   // from the figures route, the roster and the Connectors list, and the audit log's newest page.
@@ -1545,7 +1592,46 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     address: "/approvals",
     signedIn: true,
     drawsValues: true,
-    answers: { "/api/v1/approvals": { items: [card("sus_1")], next_cursor: null, truncated: false } },
+    answers: {
+      "/api/v1/approvals": { items: [card("sus_1")], next_cursor: null, truncated: false },
+      // The agent publishes waiting for this reader as the second person, drawn below the cards.
+      "/api/v1/agent-drafts": { items: [], waiting_for_you: [DRAFT_SUMMARY] },
+    },
+  },
+  // New agent: start from scratch, or from a template the gallery offers.
+  "/agents/new": {
+    address: "/agents/new",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/agent-templates": {
+        items: [{ template_id: UNBROKEN, version: 1, display_name: UNBROKEN, summary: UNBROKEN, published_by: UNBROKEN, origin: "built_in" }],
+        next_cursor: null,
+        total: null,
+        truncated: false,
+      },
+    },
+  },
+  // The reader's drafts and the publishes waiting for them.
+  "/agents/drafts": {
+    address: "/agents/drafts",
+    signedIn: true,
+    drawsValues: true,
+    answers: { "/api/v1/agent-drafts": { items: [DRAFT_SUMMARY], waiting_for_you: [DRAFT_SUMMARY] } },
+  },
+  // One draft's Write step, the one with the most on it: the builder's whole form.
+  "/agents/drafts/:draftId": {
+    address: `/agents/drafts/${DRAFT_ID}`,
+    signedIn: true,
+    drawsValues: true,
+    answers: { [`/api/v1/agent-drafts/${DRAFT_ID}`]: DRAFT_VIEW, "/api/v1/builder/form": BUILDER_FORM },
+  },
+  // Its Publish step, with the audience choice and the history.
+  "/agents/drafts/:draftId/:step": {
+    address: `/agents/drafts/${DRAFT_ID}/publish`,
+    signedIn: true,
+    drawsValues: true,
+    answers: { [`/api/v1/agent-drafts/${DRAFT_ID}`]: DRAFT_VIEW },
   },
   "/approvals/:suspensionId": {
     address: "/approvals/sus_1",

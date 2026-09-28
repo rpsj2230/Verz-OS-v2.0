@@ -131,6 +131,7 @@ import { CONNECTORS_API_PATH, disconnectApiPath } from "../../src/pages/connecto
 import { editApiPath, exportApiPath, keyApiPath } from "../../src/pages/connectors/connectorSources";
 import { LARK_API_PATH, LARK_TEST_API_PATH } from "../../src/pages/larkConnectQuery";
 import { agentMoveApiPath } from "../../src/pages/agentLifecycleQuery";
+import { DRAFTS_API_PATH, draftActApiPath, editAsDraftApiPath } from "../../src/pages/agents/agentDraftsQuery";
 import { credentialPath } from "../../src/components/ProviderKeyForm";
 import { credentialApiPath } from "../../src/pages/credentials/credentialRows";
 import { REGISTER_API_PATH, secretApiPath, switchOffApiPath } from "../../src/pages/webhooksQuery";
@@ -397,7 +398,18 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "Agents and their configuration, including templates": {
-    screens: ["/agents", "/agents/:agentId", "/agents/:agentId/:tab", "/agent-templates", "/approvals", "/approvals/:suspensionId"],
+    screens: [
+      "/agents",
+      "/agents/:agentId",
+      "/agents/:agentId/:tab",
+      "/agent-templates",
+      "/approvals",
+      "/approvals/:suspensionId",
+      "/agents/new",
+      "/agents/drafts",
+      "/agents/drafts/:draftId",
+      "/agents/drafts/:draftId/:step",
+    ],
     routes: [
       "/api/v1/agents",
       "/api/v1/agents/{agent_id}/workspace",
@@ -413,6 +425,9 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/agent-templates",
       "/api/v1/agent-templates/{template_id}/versions/{version}*",
       "/api/v1/approvals*",
+      "/api/v1/agents/{agent_id}/drafts",
+      "/api/v1/agent-drafts*",
+      "/api/v1/builder/form",
     ],
     tables: [
       "agent.agent",
@@ -421,12 +436,19 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "agent.upgrade_decline",
       "agent.browser_envelope",
       "gate.suspension",
+      "agent.manifest_draft",
+      "agent.manifest_revision",
+      "agent.manifest_act",
     ],
     installation: [],
     gaps: [
       {
-        what: "An agent cannot be created from scratch, and its manifest, leash and procedure cannot be edited.",
-        because: "components/ManifestForm.tsx and components/ProcedureCanvas.tsx are built and tested and rendered by no registered page, and no route writes a template version from the console.",
+        what: "A draft is written, checked and rehearsed on every install, and published only where the install holds a template signing key.",
+        because: "brain.agent_builder_routes signs a published draft with the key brain.agent_lifecycle_routes installs with, and no setting holds one yet (brain.ops.starter_store.NO_TEMPLATE_IS_SIGNED_BEFORE_THE_INSTALL_HOLDS_A_KEY_OF_ITS_OWN); publishing says so rather than signing with a weaker key.",
+      },
+      {
+        what: "A rung above Shadow cannot be published from a draft, and a rehearsal does not ask its test questions.",
+        because: "brain.builder.agent_drafts.A_RUNG_IS_RAISED_WITH_EVIDENCE_AND_NEVER_BY_A_DRAFT, and no model answers for an agent yet (brain.agent_builder_routes.A_REHEARSAL_RUNS_NO_MODEL_YET).",
       },
       {
         what: "A published template version cannot be installed from the console.",
@@ -1171,6 +1193,19 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
       automationStopApiPath("quote-helper", "auto_one"),
     ),
   ],
+  "src/pages/agents/DraftStart.tsx DRAFTS_API_PATH": [at("POST /api/v1/agent-drafts", "DRAFTS_API_PATH", DRAFTS_API_PATH)],
+  "src/pages/agents/DraftStart.tsx editAsDraftApiPath(from.agentId)": [
+    at("POST /api/v1/agents/{agent_id}/drafts", "editAsDraftApiPath", editAsDraftApiPath("quote-helper")),
+  ],
+  "src/pages/agents/DraftPage.tsx draftActApiPath(draftId, verb)": [
+    at("POST /api/v1/agent-drafts/{draft_id}/revisions", "draftActApiPath", draftActApiPath("d-1", "revisions")),
+    at("POST /api/v1/agent-drafts/{draft_id}/check", "draftActApiPath", draftActApiPath("d-1", "check")),
+    at("POST /api/v1/agent-drafts/{draft_id}/rehearse", "draftActApiPath", draftActApiPath("d-1", "rehearse")),
+    at("POST /api/v1/agent-drafts/{draft_id}/procedure", "draftActApiPath", draftActApiPath("d-1", "procedure")),
+    at("POST /api/v1/agent-drafts/{draft_id}/publish", "draftActApiPath", draftActApiPath("d-1", "publish")),
+    at("POST /api/v1/agent-drafts/{draft_id}/approve", "draftActApiPath", draftActApiPath("d-1", "approve")),
+    at("POST /api/v1/agent-drafts/{draft_id}/decline", "draftActApiPath", draftActApiPath("d-1", "decline")),
+  ],
   "src/pages/agents/LifecycleActs.tsx path": [
     at("POST /api/v1/agents/{agent_id}/enable", "agentMoveApiPath", agentMoveApiPath("quote-helper", "enable")),
     at("POST /api/v1/agents/{agent_id}/disable", "agentMoveApiPath", agentMoveApiPath("quote-helper", "disable")),
@@ -1274,6 +1309,19 @@ const SETTINGS_PRESSED = audited("test_a_feature_switch_and_each_job_control_rea
 const LIFECYCLE_PRESSED = t(
   "test_agent_lifecycle_store",
   "test_each_move_pressed_reaches_its_row_and_one_ledger_entry_naming_the_person",
+  true,
+);
+/** A new agent drafted, saved, checked, asked for, approved and published over HTTP against PostgreSQL. */
+const DRAFT_APPROVED_PRESSED = t(
+  "test_agent_draft_store",
+  "test_a_new_agent_is_drafted_approved_by_a_second_person_and_every_step_is_on_the_ledger",
+  true,
+);
+/** An agent edited as a draft and published as the next version of its own template, against PostgreSQL. */
+const DRAFT_EDIT_PRESSED = t("test_agent_draft_store", "test_an_edit_published_is_the_next_version_of_the_agents_own_template", true);
+const DRAFT_DECLINED_PRESSED = t(
+  "test_agent_draft_store",
+  "test_a_publish_sent_back_is_one_row_and_one_entry_and_makes_no_agent",
   true,
 );
 const TOOLS_PRESSED = t("test_tool_routes", "test_switching_through_the_routes_reaches_the_row_the_ledger_and_every_call", true);
@@ -2104,6 +2152,51 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: t("test_skill_routes", "test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_assigned_to_an_agent"),
     audit: t("test_skill_store", "test_the_database_refuses_an_unsaid_self_decision_and_an_assignment_nobody_approved", true),
     behaviour: t("test_skill_routes", "test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_assigned_to_an_agent"),
+  },
+  "POST /api/v1/agent-drafts": {
+    row: DRAFT_APPROVED_PRESSED,
+    audit: DRAFT_APPROVED_PRESSED,
+    behaviour: t("test_agent_builder_routes", "test_a_new_draft_starts_from_the_blank_template_under_an_id_minted_for_it"),
+  },
+  "POST /api/v1/agents/{agent_id}/drafts": {
+    row: DRAFT_EDIT_PRESSED,
+    audit: DRAFT_EDIT_PRESSED,
+    behaviour: t("test_agent_builder_routes", "test_an_edit_starts_from_the_agent_as_it_is_and_an_instruction_change_publishes_at_once"),
+  },
+  "POST /api/v1/agent-drafts/{draft_id}/revisions": {
+    row: DRAFT_APPROVED_PRESSED,
+    audit: DRAFT_APPROVED_PRESSED,
+    behaviour: t("test_agent_builder_routes", "test_a_save_is_a_new_revision_and_a_save_from_an_older_one_is_refused"),
+  },
+  "POST /api/v1/agent-drafts/{draft_id}/check": {
+    row: DRAFT_APPROVED_PRESSED,
+    audit: DRAFT_APPROVED_PRESSED,
+    behaviour: t("test_agent_builder_routes", "test_a_check_that_passes_is_recorded_and_a_publish_needs_one"),
+  },
+  "POST /api/v1/agent-drafts/{draft_id}/rehearse": {
+    row: { notApplicable: "A rehearsal writes no row: it runs the draft through the gate at Shadow, carries nothing out and keeps nothing." },
+    audit: { notApplicable: "A rehearsal changes nothing, so there is nothing for the ledger to record." },
+    behaviour: t("test_agent_builder_routes", "test_a_rehearsal_says_what_it_did_not_do_and_carries_no_row"),
+  },
+  "POST /api/v1/agent-drafts/{draft_id}/procedure": {
+    row: { notApplicable: "Drawing a procedure keeps nothing: the server answers the skill document, and it enters the library only through the Skills page's own import and review." },
+    audit: { notApplicable: "Nothing is written, so there is nothing for the ledger to record." },
+    behaviour: t("test_agent_builder_routes", "test_a_procedure_over_the_drafts_own_tools_becomes_a_skill_and_another_tool_is_refused"),
+  },
+  "POST /api/v1/agent-drafts/{draft_id}/publish": {
+    row: DRAFT_EDIT_PRESSED,
+    audit: DRAFT_EDIT_PRESSED,
+    behaviour: t("test_agent_builder_routes", "test_a_new_agent_reaching_nothing_publishes_on_its_authors_word_switched_off_at_shadow"),
+  },
+  "POST /api/v1/agent-drafts/{draft_id}/approve": {
+    row: DRAFT_APPROVED_PRESSED,
+    audit: DRAFT_APPROVED_PRESSED,
+    behaviour: t("test_agent_builder_routes", "test_a_new_agent_that_reaches_anything_waits_for_a_second_person_who_is_not_its_author"),
+  },
+  "POST /api/v1/agent-drafts/{draft_id}/decline": {
+    row: DRAFT_DECLINED_PRESSED,
+    audit: DRAFT_DECLINED_PRESSED,
+    behaviour: t("test_agent_builder_routes", "test_a_publish_sent_back_publishes_nothing_and_returns_to_its_author"),
   },
   "POST /api/v1/agents/{agent_id}/enable": {
     row: LIFECYCLE_PRESSED,

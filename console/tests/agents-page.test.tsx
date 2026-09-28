@@ -26,7 +26,9 @@ import { agentAddress, NO_AGENTS, ROSTER_HEADING } from "../src/pages/Agents";
 import { readRoster } from "../src/pages/agentsQuery";
 import { UNAVAILABLE } from "../src/pages/agents/agentActions";
 import { ACT_DONE, MAY_NOT_CHANGE, TYPED_MISSING } from "../src/pages/agentLifecycleQuery";
-import { NOT_AVAILABLE, readAgentRows } from "../src/pages/agents/AgentsPage";
+import { DRAFTS_LINK, NOT_AVAILABLE, readAgentRows } from "../src/pages/agents/AgentsPage";
+import { DRAFTS_ADDRESS, NEW_AGENT_ADDRESS } from "../src/pages/agents/agentDraftsQuery";
+import { NEW_AGENT_HEADING } from "../src/pages/agents/NewAgentPage";
 import { agentStatsApiPath } from "../src/pages/agents/agentStats";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { COMPANY_CONSOLE, NAVIGATION_ADDRESS, departmentConsole } from "./support/navigation";
@@ -254,23 +256,25 @@ describe("the list", () => {
     expect(paths.sort()).toEqual([ROSTER_API, `/api/v1${agentStatsApiPath("quote_helper")}`].sort());
   });
 
-  test("New agent is inert with its reason, because no route makes an agent", async () => {
-    // What breaks if this is deleted: a New agent button that opens nothing, which is fake
-    // functionality, or one hidden, which says the product has no such act. The reason is the one
-    // sentence `agentActions.ts` gives, and pressing the control changes neither the address nor
-    // anything asked of the API.
-    const { container, router, idp } = await consoleAt(ROSTER_ADDRESS, {
+  test("New agent opens the guided start, and Drafts the drafts list", async () => {
+    // What breaks if this is deleted: a New agent control that opens nothing, which is fake
+    // functionality now that a draft can be started, or one that leads somewhere the route table does
+    // not resolve. Pressed through the real route table, it lands on the page that starts a draft.
+    const { container, router } = await consoleAt(ROSTER_ADDRESS, {
       [ROSTER_API]: { body: { items: [{ ...entry("quote_helper", "Quote Helper"), state: "enabled" }] } },
+      "/api/v1/agent-templates": { body: { items: [], next_cursor: null, truncated: false } },
     });
-    const create = [...container.querySelectorAll<HTMLButtonElement>(`[${UNAVAILABLE_MARK}]`)].find((one) => one.textContent?.includes("New agent"));
-    expect(create).toBeDefined();
-    expect(create?.getAttribute("aria-disabled")).toBe("true");
-    expect(document.getElementById(create?.getAttribute("aria-describedby") ?? "")?.textContent).toBe(UNAVAILABLE.create.reason);
+    expect([...container.querySelectorAll(`[${UNAVAILABLE_MARK}]`)].some((one) => one.textContent?.includes("New agent"))).toBe(false);
+    const drafts = [...container.querySelectorAll<HTMLAnchorElement>("a")].find((one) => one.getAttribute("href") === DRAFTS_ADDRESS);
+    expect(drafts?.textContent).toBe(DRAFTS_LINK);
+    const create = [...container.querySelectorAll<HTMLAnchorElement>("a")].find((one) => one.getAttribute("href") === NEW_AGENT_ADDRESS);
+    expect(create?.textContent).toContain("New agent");
 
-    const before = idp.urls.length;
-    fireEvent.click(create as HTMLButtonElement);
-    expect(router.state.location.pathname).toBe(ROSTER_ADDRESS);
-    expect(idp.urls.slice(before).filter((url) => !url.includes("/stats"))).toEqual([]);
+    fireEvent.click(create as HTMLAnchorElement);
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe(NEW_AGENT_ADDRESS);
+      expect(container.querySelector("h1")?.textContent).toBe(NEW_AGENT_HEADING);
+    });
   });
 });
 
@@ -486,7 +490,7 @@ describe("what an entry becomes", () => {
     }
     // The positive sibling: the pattern shape does match the paths it is written for.
     expect(UNAVAILABLE.leash.retiredBy.test("/api/v1/agents/{agent_id}/leash")).toBe(true);
-    expect(UNAVAILABLE.create.retiredBy.test("/api/v1/agents/drafts")).toBe(true);
+    expect(UNAVAILABLE.level.retiredBy.test("/api/v1/agents/{agent_id}/audience")).toBe(true);
   });
 });
 

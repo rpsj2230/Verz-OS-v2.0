@@ -55,6 +55,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from brain.acceptance_routes import router as acceptance_router
 from brain.access_request_routes import router as access_request_router
 from brain.agent_about_routes import router as agent_about_router
+from brain.agent_builder_routes import router as agent_builder_router
 from brain.agent_lifecycle_routes import router as agent_lifecycle_router
 from brain.agent_model_routes import router as agent_model_router
 from brain.agent_routes import every_agent, record_of
@@ -1474,6 +1475,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # `brain.console_overview_routes`.
     app.include_router(console_stats_router)
     app.include_router(console_overview_router)
+    # New agent and Edit as a draft: the builder's form, drafts saved as revisions, checked,
+    # rehearsed and published, and the second person a wider publish waits for. See
+    # `brain.agent_builder_routes`.
+    app.include_router(agent_builder_router)
 
     @app.get("/health/live", response_model=Health, tags=["health"])
     async def live() -> Health:

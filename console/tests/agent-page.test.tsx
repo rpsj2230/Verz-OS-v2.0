@@ -508,7 +508,13 @@ describe("the Profile", () => {
     // `agentActions.ts`, and pressing any of them leaves the address and the requests as they were.
     const mounted = await consoleAt("/agents/quote-helper/profile", agentAnswers("quote-helper", body()));
     const inert = [...mounted.container.querySelectorAll<HTMLButtonElement>(`[${UNAVAILABLE_MARK}]`)];
-    expect(inert.length).toBeGreaterThanOrEqual(6);
+    // Five since 2026-09-29: adding a source and changing permissions start a draft of the agent
+    // now, so they are live buttons and not among these.
+    expect(inert.length).toBeGreaterThanOrEqual(5);
+    const permissions = [...mounted.container.querySelectorAll<HTMLButtonElement>("button")].find(
+      (one) => one.textContent === "Change permissions",
+    );
+    expect(permissions?.hasAttribute(UNAVAILABLE_MARK)).toBe(false);
     const reasons = new Set(Object.values(UNAVAILABLE).map((one) => one.reason));
     for (const control of inert) {
       expect(control.getAttribute("aria-disabled")).toBe("true");

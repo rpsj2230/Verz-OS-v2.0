@@ -115,6 +115,9 @@ const OVERVIEW_CARDS: Readonly<Record<string, string>> = {
   // paged, searched, filtered and ordered on /skills.
   "/skills/:name": "/skills",
   "/skills/:name/:view": "/skills",
+  // New agent offers the gallery's first page as the templates a draft can start from, and links
+  // to the gallery, which pages, searches and filters the same route.
+  "/agents/new": "/agent-templates",
 };
 const AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST =
   "This screen is an overview, and the list it borrows is one card on it with a link to the screen " +
@@ -128,6 +131,10 @@ const A_SKILL_IS_DECIDED_FROM_ITS_OWN_BYTES =
   "Every write on a skill is about one version or one agent: a review approves exactly the bytes a " +
   "reviewer read, a retirement names the agents still running that version for somebody to detach, " +
   "and a detachment ends one assignment, so there is no act that applies to several rows at once.";
+
+const A_DRAFT_STARTS_FROM_ONE_TEMPLATE =
+  "A draft is started from one template and is its author's own, so there is no act that starts " +
+  "one from several templates at once.";
 
 const A_CONNECTION_CHANGES_ONE_SOURCE_AT_A_TIME =
   "There is at most one live connection per source, and every act on one (connect, edit, replace the " +
@@ -199,6 +206,13 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
   "/agents": { bulk: READ_ONLY },
   "/connectors": { bulk: A_CONNECTION_CHANGES_ONE_SOURCE_AT_A_TIME },
   "/agent-templates": { bulk: READ_ONLY },
+  "/agents/new": {
+    page: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    search: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    filter: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    sort: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    bulk: A_DRAFT_STARTS_FROM_ONE_TEMPLATE,
+  },
   "/approvals": { bulk: AN_APPROVAL_IS_DECIDED_FROM_ITS_OWN_CARD },
   "/adoption": { bulk: READ_ONLY },
   "/people": { bulk: A_GRANT_IS_REMOVED_BY_REVIEW_IN_BULK },
