@@ -32,12 +32,31 @@ because derivation is a relationship between the columns of one table and not a 
 field in the system has. It compiles down to ordinary `FieldRule`s, so the redactor stays the
 single place a field-level decision is made.
 
-Task ids: M7.5.1, M7.5.2
+**The compiled rule carries the derivation, and until 2026-09-28 it did not.**
+`ColumnRule.as_field_rule` dropped `derived_from`, so the policy a classification compiled to
+held no derivation: the redactor's own closure never fired for a column classification, and
+`FieldPolicy.epoch`, which has digested derivations since 2026-09-21, could not see one.
+Dropping the derivation on `cost` changed what every caller short of the cost capability sees
+and left the epoch identical, so the answer cache keyed on it would have gone on serving rows
+closed under the old rule. See `A_DERIVATION_IS_PART_OF_THE_POLICY_IT_COMPILES_TO`.
+
+**A table somebody uploads is classified by marks, not by capabilities.** An administrator
+says of each column whether it is open, restricted or derived, and `marked` turns that into
+a `ColumnRule`: an open column needs only the grant on the table, `read:<table>`, so everyone
+permitted the table reads it; a restricted column needs its own grant,
+`read:<table>.<column>`; a derived one is restricted and names the columns it can be worked
+out from. The capability is computed rather than typed because a typed one is where a
+column meant to be restricted ends up governed by the table grant through a slip of the
+keyboard, and the review would only see a capability change with no direction.
+
+Task ids: M7.5.1, M7.5.2, M7.5.3
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+import enum
+import re
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Final
@@ -45,6 +64,16 @@ from typing import Any, Final
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.field_policy import Classification, FieldPolicy, FieldRule
 from brain.core.redaction import compute_mask, render_lock
+
+#: Why `as_field_rule` carries the derivation into the rule it compiles to.
+A_DERIVATION_IS_PART_OF_THE_POLICY_IT_COMPILES_TO: Final = (
+    "A classification reaches the rest of the system as a FieldPolicy: the redactor masks with "
+    "it and the answer cache keys on its epoch. A derivation left out of the compiled rule is "
+    "invisible to both, so the redactor never closes over it and dropping one leaves the epoch "
+    "where it was, while every caller short of the derived column now sees an input that "
+    "reconstructs it. The derivation is therefore compiled in with the capability and the "
+    "classification, and the epoch moves when it does."
+)
 
 
 class ColumnClassificationError(Exception):
@@ -81,16 +110,19 @@ class ColumnRule:
             raise ColumnClassificationError(msg)
 
     def as_field_rule(self, entity: str) -> FieldRule:
-        """The ordinary field rule this column compiles to.
+        """The ordinary field rule this column compiles to, derivation included.
 
         `FieldRule` validates that the capability is a read, so a column governed by a write
-        capability is refused here without this module restating the reason.
+        capability is refused here without this module restating the reason. The derivation
+        is sorted because it is a set, and a frozenset's order is a property of the hashes in
+        it: see `A_DERIVATION_IS_PART_OF_THE_POLICY_IT_COMPILES_TO`.
         """
         return FieldRule(
             entity=entity,
             field=self.column,
             required_capability=self.required_capability,
             classification=self.classification,
+            derived_from=tuple(sorted(self.derived_from)),
         )
 
 
@@ -295,3 +327,168 @@ PRICE_LIST: Final = TableClassification(
         ),
     ),
 )
+
+
+# ----------------------------------------------- a table somebody uploaded (M7.5.3)
+
+
+class ColumnAccess(enum.StrEnum):
+    """What an administrator says about one column of a table they uploaded.
+
+    Three words rather than a capability and a sensitivity level, because these are the three
+    decisions a person classifying a price list is actually making, and each one fixes the
+    other two fields. `marked` is the one translation from a word to a rule.
+    """
+
+    #: Everyone permitted the table reads it: the column needs only `read:<table>`.
+    OPEN = "open"
+    #: Only a person holding the column's own grant, `read:<table>.<column>`, reads it.
+    RESTRICTED = "restricted"
+    #: Restricted, and it can be worked out from the columns it names, so seeing all of those
+    #: withholds the most sensitive of them. See `close_over_derivations`.
+    DERIVED = "derived"
+
+
+#: The sensitivity an open column is recorded at, and a restricted or derived one.
+#:
+#: Fixed by the mark rather than chosen beside it. The level decides which input the closure
+#: withholds when a derivation has to be broken (`_most_sensitive`), so an open column ranked
+#: above a restricted one would have the closure take the sell price and leave the cost.
+OPEN_SENSITIVITY: Final = Classification.INTERNAL
+RESTRICTED_SENSITIVITY: Final = Classification.CONFIDENTIAL
+
+#: The words a column name is built from, and how long one may be. A column is a field name to
+#: every layer below (`brain.core.field_policy.NAME_PATTERN`), and 60 characters is the entity
+#: width, which is far past any heading a spreadsheet carries.
+_NOT_A_NAME_CHARACTER: Final = re.compile(r"[^a-z0-9]+")
+MAX_COLUMN_NAME_CHARS: Final = 60
+
+#: Names the row plane reads as a record's tag rather than as a field. A column by either name
+#: would overwrite the tag and the redactor would drop the record whole (`RowTool` refuses the
+#: same two for the same reason).
+RESERVED_COLUMN_NAMES: Final = frozenset({"entity", "id"})
+
+
+def table_capability(entity: str) -> Capability:
+    """`read:<table>`: the grant that admits a row of this table, and every open column of it.
+
+    The same string `brain.knowledge.rows.entity_capability` builds, which a test holds equal;
+    it is not imported from there because that module imports this one.
+    """
+    return Capability(value=f"read:{entity}")
+
+
+def column_capability(entity: str, column: str) -> Capability:
+    """`read:<table>.<column>`: the grant a restricted or derived column needs of its own."""
+    return Capability(value=f"read:{entity}.{column}")
+
+
+def marked(
+    entity: str, column: str, access: ColumnAccess, derived_from: Iterable[str] = ()
+) -> ColumnRule:
+    """The rule one mark stands for.
+
+    A derived column must name what it is derived from and nothing else may. An open column
+    with a derivation would be a rule the closure never consults, because an open column is
+    never withheld from anybody who reaches the table, and a derivation that never fires reads
+    as a control while being a comment. A derived column with none is a restricted column with
+    a misleading word on it.
+    """
+    inputs = frozenset(derived_from)
+    if access is ColumnAccess.DERIVED and not inputs:
+        msg = f"{column!r} is marked derived and names no column it is derived from"
+        raise ColumnClassificationError(msg)
+    if access is not ColumnAccess.DERIVED and inputs:
+        msg = (
+            f"{column!r} is marked {access.value} and names columns it is derived from; only "
+            "a derived column names its inputs"
+        )
+        raise ColumnClassificationError(msg)
+    if access is ColumnAccess.OPEN:
+        return ColumnRule(
+            column=column,
+            required_capability=table_capability(entity),
+            classification=OPEN_SENSITIVITY,
+        )
+    return ColumnRule(
+        column=column,
+        required_capability=column_capability(entity, column),
+        classification=RESTRICTED_SENSITIVITY,
+        derived_from=inputs,
+    )
+
+
+def access_of(entity: str, rule: ColumnRule) -> ColumnAccess | None:
+    """The mark a rule was made from, or None for a rule no mark describes.
+
+    None is a built-in classification's rule: `PRICE_LIST` gives the sell price a grant of its
+    own, so it is neither open (the table grant) nor restricted in the uploaded sense. Reported
+    as None rather than as the nearest word, because a nearest word on a policy screen is a
+    statement about who may see a column that is not true.
+    """
+    if rule == marked(entity, rule.column, ColumnAccess.OPEN):
+        return ColumnAccess.OPEN
+    if not rule.derived_from and rule == marked(entity, rule.column, ColumnAccess.RESTRICTED):
+        return ColumnAccess.RESTRICTED
+    if rule.derived_from and rule == marked(
+        entity, rule.column, ColumnAccess.DERIVED, rule.derived_from
+    ):
+        return ColumnAccess.DERIVED
+    return None
+
+
+def column_name_for(heading: str) -> str:
+    """The field name a spreadsheet heading becomes: `Sell Price (SGD)` is `sell_price_sgd`.
+
+    Lowercase words joined by underscores, because every layer below reads a column as a field
+    name and nothing else. Refuses rather than inventing one: a heading with no letters in it,
+    one that starts with a digit, a reserved name, or one past the width. An invented name is a
+    column nobody recognises on the classification screen, which is where they decide who sees
+    it.
+    """
+    name = _NOT_A_NAME_CHARACTER.sub("_", heading.strip().casefold()).strip("_")
+    if not name:
+        msg = f"the heading {heading!r} has no letters or digits to name a column with"
+        raise ColumnClassificationError(msg)
+    if not name[0].isalpha():
+        msg = f"the heading {heading!r} starts with a digit; a column name starts with a letter"
+        raise ColumnClassificationError(msg)
+    if len(name) > MAX_COLUMN_NAME_CHARS:
+        msg = f"the heading {heading!r} is longer than {MAX_COLUMN_NAME_CHARS} characters"
+        raise ColumnClassificationError(msg)
+    if name in RESERVED_COLUMN_NAMES:
+        msg = (
+            f"the heading {heading!r} would be the column {name!r}, which every record already "
+            "uses for its own tag; rename that heading"
+        )
+        raise ColumnClassificationError(msg)
+    return name
+
+
+def first_classification(entity: str, columns: Sequence[str]) -> TableClassification:
+    """How a freshly uploaded table's columns start, before anybody marks one.
+
+    **Every column starts restricted**, which is default-deny arriving at upload: nobody reads a
+    column of a new table until an administrator opens it, so an upload can never be the act
+    that widens anything.
+
+    The one exception is a column `PRICE_LIST` already classifies, which starts with the mark
+    that classification gives it: the sell price, the name and the SKU open, and the cost and
+    the margin derived from the columns of theirs this table also carries. That is what the
+    shipped price list is for (see its own comment), and a derivation whose inputs are not all
+    here starts restricted instead, because a derivation naming a missing column refuses to
+    load.
+    """
+    rules: list[ColumnRule] = []
+    present = set(columns)
+    for column in columns:
+        known = PRICE_LIST.rule_for(column)
+        if known is None:
+            rules.append(marked(entity, column, ColumnAccess.RESTRICTED))
+        elif known.derived_from and known.derived_from <= present:
+            rules.append(marked(entity, column, ColumnAccess.DERIVED, known.derived_from))
+        elif known.derived_from or known.classification.rank > OPEN_SENSITIVITY.rank:
+            rules.append(marked(entity, column, ColumnAccess.RESTRICTED))
+        else:
+            rules.append(marked(entity, column, ColumnAccess.OPEN))
+    return TableClassification(entity=entity, rules=tuple(rules))

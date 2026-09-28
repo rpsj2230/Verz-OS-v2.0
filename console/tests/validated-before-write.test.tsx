@@ -53,9 +53,12 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
     { pattern: "/audit", index: 0, writes: false },
     { pattern: "/audit", index: 1, writes: true },
   ],
+  // The naming form, then one column's editor (a rule, or a mark for an uploaded table); and on
+  // the page with nothing named, the naming form and then the upload.
   "src/pages/Classification.tsx": [
     { pattern: "/classification/:entity/:column", index: 0, writes: false },
     { pattern: "/classification/:entity/:column", index: 1, writes: true },
+    { pattern: "/classification", index: 1, writes: true },
   ],
   "src/pages/DataTransfer.tsx": [{ pattern: "/import-export", index: 0, writes: true }],
   // Index 0 on every page drawing a long list is `components/ListControls.tsx`' search form, which
@@ -218,7 +221,11 @@ describe("a form that writes is judged before it sends", () => {
     );
     expect([...Object.keys(FORMS), ...Object.keys(JUDGED_ELSEWHERE)].sort()).toEqual([...holding].sort());
     for (const [file, forms] of Object.entries(FORMS)) {
-      const opened = new Set(forms.map((one) => `${one.opener ?? ""}#${String(one.index)}`));
+      // Keyed by the page as well: the same index on two pages is two forms, which the
+      // classification screen has since its upload was drawn where nothing is named.
+      const opened = new Set(
+        forms.map((one) => `${one.pattern} ${one.opener ?? ""}#${String(one.index)}`),
+      );
       expect(opened.size, `${file} names one form twice`).toBe(forms.length);
       expect(forms.length, `${file} writes ${String(formsWrittenIn(file))} forms`).toBe(formsWrittenIn(file));
     }

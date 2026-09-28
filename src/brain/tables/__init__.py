@@ -60,6 +60,7 @@ from brain.tables.browsing import BrowserEnvelopeRow
 from brain.tables.budget import BudgetVersionRow
 from brain.tables.channel_event import ChannelEventRow
 from brain.tables.chat import ConversationRow, MessageRole, MessageRow
+from brain.tables.classified_table import ClassifiedRecordRow, ClassifiedTableRow
 from brain.tables.compliance import BreachCaseRow, SensitiveReferralRow
 from brain.tables.config import SettingRow, SettingType
 from brain.tables.connector_connection import ConnectorConnectionRow
@@ -342,6 +343,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     "ops.provider_health",
     "ops.chain_depth_alert",
     "ops.residency_constraint",
+    # 0116_classified_tables. A row points at its table, so the table comes first.
+    "know.classified_table",
+    "know.classified_row",
 )
 
 __all__ = [
@@ -368,6 +372,8 @@ __all__ = [
     "CapabilityRegistryRow",
     "ChainDepthAlertRow",
     "ChannelEventRow",
+    "ClassifiedRecordRow",
+    "ClassifiedTableRow",
     "ConnectorConnectionRow",
     "ConnectorSyncRow",
     "ControlRunRow",

@@ -153,6 +153,11 @@ RECIPES: Final[dict[str, Recipe]] = {
             " VALUES ('rr_parent_{n}', 'described', ARRAY['read:price_list'])",
         ),
     ),
+    "know.classified_table": Recipe(
+        "INSERT INTO know.classified_table (entity, title, key_column, columns, created_by,"
+        " updated_by) VALUES ('rr_table_{n}', 'Prices', 'name', '[]', 'u_admin', 'u_admin')",
+        "entity = 'rr_table_{n}'",
+    ),
     "gate.field_policy": Recipe(
         "INSERT INTO gate.field_policy (entity, field, required_capability, classification)"
         " VALUES ('client', 'field_{n}', 'read:client.name', 'internal')",

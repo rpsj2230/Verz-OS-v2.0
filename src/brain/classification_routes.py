@@ -1,4 +1,4 @@
-"""One document's column classification over HTTP, and a review of a change to one column.
+"""One table's column classification over HTTP: read it, review a change, upload and apply.
 
 `brain.knowledge.columns` closed M7.5.1 and M7.5.2: a `TableClassification` is one entity,
 a `ColumnRule` per column, and the derivations between them, and `project_row` narrows a
@@ -40,13 +40,26 @@ exactly when a review would be answered, and it is still presentation: the revie
 both capabilities again and refuses whatever the flag said. See
 `AN_EDITABLE_FLAG_DECIDES_WHAT_IS_DRAWN_AND_NOTHING_ELSE`.
 
-**Nothing here writes anything, and there is nowhere for it to write.** A
-`TableClassification` is a constant in `brain.knowledge.columns` compiled into the process.
-There is no `field_classification` table, no migration that creates one, and therefore no
-audit row for a change to one: `brain.audit.ledger` records what it is given and it is given
-nothing from here. Saying that plainly is the point of saying it at all. The review is the
-half of an editor that can exist honestly today, and it is the half worth having first,
-because it is the half that names a widening before somebody makes it.
+**A built-in classification is still a constant, and a review stores nothing.** `PRICE_LIST`
+and a source's own entities are compiled into the process, so a change to one of them is a
+source edit and a deploy, and reviewing one writes nothing. See
+`A_REVIEW_STORES_NOTHING_AND_NO_AUDIT_ROW_IS_WRITTEN`.
+
+**An uploaded table's classification is stored, and a mark applied to it is written and
+ledgered (M7.5.3, M7.7.3).** An administrator uploads a price list as a CSV or an XLSX file,
+it becomes `know.classified_table` and its rows, and each column is marked open, restricted
+or derived (`brain.knowledge.columns.ColumnAccess`). A mark is reviewed exactly as a rule is,
+through the same comparison, and applying it replaces the stored classification in one
+statement whose ledger entry `0116`'s trigger writes under the administrator's name. See
+`AN_APPLIED_MARK_IS_STORED_AND_LEDGERED`. Ask reads the stored tables on the next question,
+through `brain.ops.classification_store.classified_lane_of`.
+
+**An upload never widens anything, and a name the product classifies cannot be uploaded.**
+Every column of a new table starts restricted unless `PRICE_LIST` already gives it a mark (see
+`brain.knowledge.columns.first_classification`), and a second upload keeps the marks that
+stand. The product's own entities are refused as names because `classification_for` is keyed
+on the entity alone, and two classifications for one entity is the ambiguity its docstring
+says it cannot survive.
 
 **What a review answers is what the proposal does, including that it would not load.** A
 classification that raises on construction leaves the previous one in place while a person
@@ -62,17 +75,15 @@ syntactic one compares two rules for one column. The closure one runs
 column and reports which columns such a caller would newly reach, which is the check that
 names `margin` when somebody drops the derivation on `cost`.
 
-**Found while building this: the policy epoch does not move when a derivation changes.**
-Two causes, and only the first is closed. `FieldPolicy.epoch` did not digest
-`FieldRule.derived_from` until 2026-09-21. `ColumnRule.as_field_rule` still drops
-`derived_from`, so the policy a classification compiles to carries no derivation and its
-epoch cannot see one. Dropping the derivation on `cost` therefore changes what every caller
-short of the cost capability sees and leaves the epoch identical, and the answer cache would
-keep serving rows computed under the old closure. Two epochs are proof that a proposal is a
-change and never proof that it is not, which is what `epoch_after` says about itself below,
-and it is why `widens` is computed from the rules rather than from the digests.
-`test_a_dropped_derivation_is_a_change_the_epoch_does_not_record` holds the gap where
-somebody will see it.
+**The policy epoch moves when a derivation changes, and it did not until 2026-09-28.** Two
+causes, both now closed: `FieldPolicy.epoch` did not digest `FieldRule.derived_from` until
+2026-09-21, and `ColumnRule.as_field_rule` dropped `derived_from` until this module's change,
+so the policy a classification compiled to carried no derivation. Dropping the derivation on
+`cost` changed what every caller short of the cost capability sees and left the epoch
+identical, and the answer cache would have kept serving rows closed under the old rule.
+`test_a_dropped_derivation_moves_the_epoch` holds it now. `widens` is still computed from the
+rules rather than from the digests, because two digests that differ say something changed and
+never which way.
 
 **The closure check is bounded at callers short of one column, and that bound is real.**
 Every subset of the columns is the honest question and it is exponential. One missing column
@@ -98,30 +109,47 @@ keeps the rule everywhere; a classification is answered whole to every caller wh
 it at all, so there is nothing here for a count to disclose, and that is a fact about this
 collection rather than a licence to start counting.
 
-Task ids: M7.5.3
+Task ids: M7.5.1, M7.5.2, M7.5.3, M7.7.3
 """
 
 from __future__ import annotations
 
+import base64
+import binascii
 import enum
+import re
 from typing import Annotated, Final
 
 import structlog
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from brain.api import API_PREFIX, COMMON_RESPONSES
-from brain.api_routes import Asked
+from brain.api_routes import Asked, Asking
+from brain.attribution import trace_of_request
 from brain.core.entitlement import CAPABILITY_RE, Capability
-from brain.core.errors import Absent
+from brain.core.envelope import OBJECT_NAME_PATTERN
+from brain.core.errors import Absent, Failed
 from brain.core.field_policy import Classification
+from brain.knowledge.classified_rows import StoredTable, next_upload
 from brain.knowledge.columns import (
+    ColumnAccess,
     ColumnClassificationError,
     ColumnRule,
     TableClassification,
+    access_of,
     close_over_derivations,
+    column_name_for,
+    marked,
 )
-from brain.tools.startup import classification_for
+from brain.knowledge.table_file import MAX_TABLE_FILE_BYTES, TableFileError, read_table_file
+from brain.ops.classification_store import (
+    ClassifiedTables,
+    ClassifiedTableStoreError,
+    Writer,
+    classified_tables_of,
+)
+from brain.tools.startup import classification_for, every_row_classification
 
 log = structlog.get_logger()
 
@@ -150,13 +178,22 @@ AN_EDITABLE_FLAG_DECIDES_WHAT_IS_DRAWN_AND_NOTHING_ELSE: Final = (
 
 #: Why a review changes nothing, and what does not exist as a result.
 A_REVIEW_STORES_NOTHING_AND_NO_AUDIT_ROW_IS_WRITTEN: Final = (
-    "A TableClassification is a constant compiled into this process. There is no table "
-    "holding one, no migration that creates such a table, and therefore no audit row when "
-    "somebody proposes a change: brain.audit.ledger is never called from here and this "
-    "module opens no session. A review reads two classifications, compares them and "
-    "answers. Applying the change is a source edit and a deploy. Anything on a screen "
-    "reading as a save would be describing a mechanism that does not exist, which is worse "
-    "than the gap it hides, because a person would stop checking."
+    "A review reads two classifications, compares them and answers, and writes nothing: no "
+    "row and no audit entry. For a built-in classification, compiled into this process, "
+    "applying the change is a source edit and a deploy, and anything on a screen reading as a "
+    "save would be describing a mechanism that does not exist, which is worse than the gap it "
+    "hides, because a person would stop checking. An uploaded table's column is changed by "
+    "applying a mark, which is a separate request: see AN_APPLIED_MARK_IS_STORED_AND_LEDGERED."
+)
+
+#: Why applying a mark is its own request, and what it leaves behind.
+AN_APPLIED_MARK_IS_STORED_AND_LEDGERED: Final = (
+    "Applying a mark to an uploaded table's column replaces the table's stored classification "
+    "whole, in one statement, and 0116's trigger appends a ledger entry naming the "
+    "administrator, their reach and the request. It is a PUT of its own rather than a flag on "
+    "the review, so a review can never be the thing that changed who may see a column, and the "
+    "answer to it carries the same verdict a review would have given, so the widening is named "
+    "in the response that made it as well as in the one that proposed it."
 )
 
 #: Why a classification is answered whole rather than narrowed to the caller.
@@ -197,6 +234,22 @@ MAX_DERIVED_FROM: Final = 64
 #: layer and quote the caller's own submitted rule, so there is nothing here to leak; the
 #: bound exists because a pydantic message over a large body is long enough to fill a screen.
 MAX_REFUSAL_CHARS: Final = 300
+
+#: The longest an uploaded file may be once base64-encoded: four characters per three bytes.
+MAX_UPLOAD_CHARS: Final = 4 * ((MAX_TABLE_FILE_BYTES + 2) // 3)
+
+#: A table's title and a file's name, bounded as `know.classified_table.title` is.
+MAX_TITLE_CHARS: Final = 200
+
+#: The widest a table's name may be, as `know.classified_table.entity` is.
+MAX_ENTITY_CHARS: Final = 60
+
+_ENTITY_RE: Final = re.compile(OBJECT_NAME_PATTERN)
+
+#: What an administrator is told when the name they chose is one the product classifies.
+A_NAME_THE_PRODUCT_CLASSIFIES: Final = (
+    "that name is a classification this product ships with; choose another name for the table"
+)
 
 
 # ------------------------------------------------------------------------ the shapes
@@ -271,6 +324,9 @@ class ColumnView(BaseModel):
     #: Sorted, so two identical classifications answer identically. `ColumnRule` holds a
     #: frozenset, whose iteration order is a property of the hashes in it.
     derived_from: list[str]
+    #: The mark an uploaded table's column carries, or None: a built-in classification's
+    #: rules were not made from marks. See `brain.knowledge.columns.access_of`.
+    access: ColumnAccess | None = None
 
 
 class ClassificationView(BaseModel):
@@ -293,6 +349,12 @@ class ClassificationView(BaseModel):
     #: Whether this caller may have a change reviewed. Presentation only. See
     #: `AN_EDITABLE_FLAG_DECIDES_WHAT_IS_DRAWN_AND_NOTHING_ELSE`.
     editable: bool
+    #: Whether this is an uploaded table's classification, so a mark can be applied to it.
+    stored: bool = False
+    #: The administrator's name for an uploaded table, and the column a question names a row
+    #: by. Empty for a built-in classification.
+    title: str = ""
+    key_column: str = ""
 
 
 class ColumnEdit(BaseModel):
@@ -327,6 +389,23 @@ class ColumnEdit(BaseModel):
     derived_from: Annotated[list[str], Field(max_length=MAX_DERIVED_FROM)]
 
 
+class ColumnMark(BaseModel):
+    """What an administrator says about one column of a table they uploaded.
+
+    The mark and, for a derived column, the columns it is derived from. Nothing else: the
+    capability and the sensitivity follow from the mark (`brain.knowledge.columns.marked`),
+    and a body that could carry either would let a column marked restricted be governed by the
+    table grant through a slip nobody reviewed. Every field is required, for `ColumnEdit`'s
+    reason: an absent derivation is a thing nobody did, and an empty list is a thing somebody
+    wrote.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    access: ColumnAccess
+    derived_from: Annotated[list[str], Field(max_length=MAX_DERIVED_FROM)]
+
+
 class ReviewView(BaseModel):
     """What one proposed rule would do, decided here.
 
@@ -354,11 +433,10 @@ class ReviewView(BaseModel):
     exposed: list[str] = []
     #: The epoch of the classification that stands, and of the proposed one.
     #:
-    #: Two digests that differ are proof that a proposal is a change. Two that agree are not
-    #: proof that it is not: the compiled policy carries no `derived_from`, so dropping a
-    #: derivation moves nothing here while changing what every caller short of a column
-    #: sees. See the module docstring. Nothing in this response is derived from these two,
-    #: for that reason.
+    #: The digest the answer cache is keyed on. It covers the capability, the sensitivity
+    #: and the derivation of every column, so a proposal that changes any of them has two
+    #: epochs that differ. Nothing in this response is derived from them: they say that a
+    #: rule changed and never whether the change widens.
     epoch_now: str = ""
     epoch_after: str = ""
 
@@ -366,7 +444,9 @@ class ReviewView(BaseModel):
 # -------------------------------------------------------------------- the comparison
 
 
-def view_of(classification: TableClassification, *, editable: bool) -> ClassificationView:
+def view_of(
+    classification: TableClassification, *, editable: bool, stored: StoredTable | None = None
+) -> ClassificationView:
     """One classification, copied field by field.
 
     Written out rather than built from `dataclasses.asdict`, for the reason
@@ -385,12 +465,16 @@ def view_of(classification: TableClassification, *, editable: bool) -> Classific
                 required_capability=rule.required_capability.value,
                 classification=rule.classification,
                 derived_from=sorted(rule.derived_from),
+                access=None if stored is None else access_of(classification.entity, rule),
             )
             for name in classification.columns()
             if (rule := classification.rule_for(name)) is not None
         ],
         epoch=classification.policy().epoch(),
         editable=editable,
+        stored=stored is not None,
+        title="" if stored is None else stored.title,
+        key_column="" if stored is None else stored.key_column,
     )
 
 
@@ -506,15 +590,31 @@ def review(entity: str, column: str, edit: ColumnEdit) -> ReviewView:
         # function directly, and the one thing this module must never do is answer a
         # comparison against a classification it does not have.
         raise _no_classification_here()
+    return review_against(current, column, edit)
 
+
+def review_against(
+    current: TableClassification, column: str, edit: ColumnEdit | ColumnMark
+) -> ReviewView:
+    """What a proposed rule or mark does to one column of the classification that stands.
+
+    One comparison for both bodies, so a mark on an uploaded table and a rule on a built-in
+    one are judged by the same arithmetic. A mark becomes its rule through `marked` inside the
+    same `try` that builds a rule, so a derived mark naming no input is a classification that
+    would not load, reported in the columns layer's own words.
+    """
+    entity = current.entity
     epoch_now = current.policy().epoch()
     try:
-        rule = ColumnRule(
-            column=column,
-            required_capability=Capability(value=edit.required_capability),
-            classification=edit.classification,
-            derived_from=frozenset(edit.derived_from),
-        )
+        if isinstance(edit, ColumnMark):
+            rule = marked(entity, column, edit.access, edit.derived_from)
+        else:
+            rule = ColumnRule(
+                column=column,
+                required_capability=Capability(value=edit.required_capability),
+                classification=edit.classification,
+                derived_from=frozenset(edit.derived_from),
+            )
         after = replacing(current, rule)
         # The policy is built here rather than at the end, because this is where `FieldRule`
         # checks that the column is a name and that the capability is a read, and both are
@@ -559,31 +659,85 @@ def _no_classification_here() -> Absent:
 router = APIRouter(prefix=API_PREFIX, tags=["classification"])
 
 
+async def _resolved(
+    request: Request, entity: str
+) -> tuple[TableClassification, StoredTable | None] | None:
+    """The classification governing this entity: an uploaded table's, else a built-in one.
+
+    Uploaded first, and the two can never both answer, because an upload under a name the
+    product classifies is refused. A name that is not a name is not looked up, so a path
+    segment never reaches a query it could not match anyway.
+    """
+    tables = classified_tables_of(request.app.state)
+    if tables is not None and _ENTITY_RE.match(entity):
+        stored = await tables.table(entity)
+        if stored is not None:
+            return stored.classification, stored
+    built_in = classification_for(entity)
+    return None if built_in is None else (built_in, None)
+
+
+def _writer(asked: Asking) -> Writer:
+    """The caller the gate resolved, their live reach and the request's trace, for the ledger.
+
+    `brain.attribution.of_request`'s three values, taken from the request in the same way: the
+    caller is the only actor a request has, so there is no argument here that could name another.
+    """
+    return Writer(
+        actor_id=asked.caller.principal.id,
+        ent_hash=asked.reach.ent_hash(),
+        trace_id=trace_of_request(),
+    )
+
+
+def _may_change(asked: Asking) -> bool:
+    """Both capabilities, which every route that reviews or writes requires alike."""
+    return asked.reach.holds(CLASSIFICATION_READ, asked.now) and asked.reach.holds(
+        CLASSIFICATION_WRITE, asked.now
+    )
+
+
+def _tables_or_fault(request: Request) -> ClassifiedTables:
+    """Where uploaded tables are kept, or a process-level fault on a process with no database.
+
+    `Failed` rather than `Absent`, for `brain.routing_routes._require_sessions`'s reason: an
+    instance with no pool is broken rather than empty, and only a caller already holding both
+    capabilities reaches this line.
+    """
+    tables = classified_tables_of(request.app.state)
+    if tables is None:
+        raise Failed("no database on this process")
+    return tables
+
+
 @router.get(
     "/classifications/{entity}", response_model=ClassificationView, responses=COMMON_RESPONSES
 )
-async def classification(entity: str, asked: Asked) -> ClassificationView:
-    """Every column of one document's classification, and what it takes to see each.
+async def classification(request: Request, entity: str, asked: Asked) -> ClassificationView:
+    """Every column of one table's classification, and what it takes to see each.
 
     The capability first and the entity second, which reads as the ordering property
     `brain.routing_routes.rungs` has and is not one. What makes the two refusals one refusal
     here is that both raise `_no_classification_here`, so the answer is identical whichever
-    check fires and swapping the two lines changes no response. The order is kept because it
-    is the order that stays correct the day this route grows a second thing to look at, and
-    because `classification_for` reading a module constant rather than a database is a fact
-    about today rather than a guarantee. It is not the thing under test, and saying so is
-    cheaper than a test that would pass with either arrangement.
+    check fires and swapping the two lines changes no response. The order is kept because the
+    entity is now looked up in a database for an uploaded table, and a lookup made before the
+    capability is checked is a query a stranger can time.
     """
     if not asked.reach.holds(CLASSIFICATION_READ, asked.now):
         log.info("classification not answerable", principal=asked.caller.principal.id)
         raise _no_classification_here()
 
-    found = classification_for(entity)
+    found = await _resolved(request, entity)
     if found is None:
         log.info("classification not found", entity=entity)
         raise _no_classification_here()
 
-    return view_of(found, editable=asked.reach.holds(CLASSIFICATION_WRITE, asked.now))
+    classification, stored = found
+    return view_of(
+        classification,
+        editable=asked.reach.holds(CLASSIFICATION_WRITE, asked.now),
+        stored=stored,
+    )
 
 
 @router.post(
@@ -591,7 +745,9 @@ async def classification(entity: str, asked: Asked) -> ClassificationView:
     response_model=ReviewView,
     responses=COMMON_RESPONSES,
 )
-async def review_column(entity: str, column: str, edit: ColumnEdit, asked: Asked) -> ReviewView:
+async def review_column(
+    request: Request, entity: str, column: str, edit: ColumnEdit, asked: Asked
+) -> ReviewView:
     """What a proposed rule for one column would do. Nothing is stored.
 
     Both capabilities, and the same refusal for either. A caller who may read a
@@ -601,15 +757,226 @@ async def review_column(entity: str, column: str, edit: ColumnEdit, asked: Asked
     The entity is checked after the capabilities and produces the same refusal again, so a
     caller cannot use a proposal to find out what this installation classifies.
     """
-    if not (
-        asked.reach.holds(CLASSIFICATION_READ, asked.now)
-        and asked.reach.holds(CLASSIFICATION_WRITE, asked.now)
-    ):
+    if not _may_change(asked):
         log.info("classification not reviewable", principal=asked.caller.principal.id)
         raise _no_classification_here()
 
-    if classification_for(entity) is None:
+    found = await _resolved(request, entity)
+    if found is None:
         log.info("classification not found", entity=entity)
         raise _no_classification_here()
 
-    return review(entity, column, edit)
+    return review_against(found[0], column, edit)
+
+
+# --------------------------------------------------------- an uploaded table (M7.5.3)
+
+
+class MarkApplied(BaseModel):
+    """What applying a mark did: whether it was written, the verdict, and the table after.
+
+    `applied` is false exactly when the review says the proposal would not load, or names a
+    column the table does not carry, and then nothing was written and `classification` is the
+    one that stands.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    applied: bool
+    review: ReviewView
+    classification: ClassificationView
+
+
+class TableUpload(BaseModel):
+    """One file to hold as a classified table, and what to call it.
+
+    The file travels as base64 inside JSON rather than as a multipart form, because this
+    application carries no multipart parser and a price list is small; the bound is
+    `MAX_TABLE_FILE_BYTES` once decoded. `key_column` is the heading a question names a row
+    by, as the file spells it; absent, the table keeps the one it had, or takes its first
+    column. The entity is the address, for `ColumnEdit`'s reason.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    title: Annotated[str, Field(min_length=1, max_length=MAX_TITLE_CHARS)]
+    filename: Annotated[str, Field(min_length=1, max_length=MAX_TITLE_CHARS)]
+    content_base64: Annotated[str, Field(min_length=1, max_length=MAX_UPLOAD_CHARS)]
+    key_column: Annotated[str, Field(max_length=MAX_TITLE_CHARS)] | None = None
+
+
+class TableUploaded(BaseModel):
+    """What an upload did: the classification it produced, or why nothing was stored.
+
+    A refusal is an answer rather than an error status, for the reason `would_not_load` is:
+    the person holding the file needs the sentence saying which heading or which row is
+    wrong, and a 422 about a body would hand them the request's shape instead.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    refused: str = ""
+    classification: ClassificationView | None = None
+
+
+def _in_place(current: TableClassification, rule: ColumnRule) -> TableClassification:
+    """The classification with this rule where the old one was, so the upload's order stands."""
+    return TableClassification(
+        entity=current.entity,
+        rules=tuple(rule if old.column == rule.column else old for old in current.rules),
+    )
+
+
+def _upload_refusal(entity: str) -> str:
+    """Why this name cannot be an uploaded table's, or empty."""
+    if not _ENTITY_RE.match(entity) or len(entity) > MAX_ENTITY_CHARS:
+        return (
+            "a table's name is lowercase letters, digits and underscores, starting with a "
+            f"letter, at most {MAX_ENTITY_CHARS} characters"
+        )
+    if any(known.entity == entity for known in every_row_classification()):
+        return A_NAME_THE_PRODUCT_CLASSIFIES
+    return ""
+
+
+@router.put(
+    "/classifications/{entity}/table", response_model=TableUploaded, responses=COMMON_RESPONSES
+)
+async def upload_table(
+    request: Request, entity: str, body: TableUpload, asked: Asked
+) -> TableUploaded:
+    """Hold a CSV or an XLSX price list as this table's rows, and answer its classification.
+
+    Both capabilities, refused as every other route here refuses. A first upload classifies
+    every column restricted unless `PRICE_LIST` already marks it; a later one keeps the marks
+    that stand and moves Ask to the new rows in the same transaction. See
+    `brain.knowledge.classified_rows.next_upload`.
+    """
+    if not _may_change(asked):
+        log.info("classification not uploadable", principal=asked.caller.principal.id)
+        raise _no_classification_here()
+    tables = _tables_or_fault(request)
+
+    refused = _upload_refusal(entity)
+    if refused:
+        return TableUploaded(refused=refused)
+    try:
+        content = base64.b64decode(body.content_base64, validate=True)
+    except (binascii.Error, ValueError):
+        return TableUploaded(refused="the file did not arrive intact; choose it again")
+    try:
+        parsed = read_table_file(body.filename, content)
+    except TableFileError as exc:
+        return TableUploaded(refused=str(exc)[:MAX_REFUSAL_CHARS])
+
+    key: str | None = None
+    if body.key_column:
+        try:
+            key = column_name_for(body.key_column)
+        except ColumnClassificationError as exc:
+            return TableUploaded(refused=str(exc)[:MAX_REFUSAL_CHARS])
+        if key not in parsed.columns:
+            return TableUploaded(refused="no heading in the file is the key column named")
+
+    existing = await tables.table(entity)
+    try:
+        table = next_upload(
+            existing,
+            entity=entity,
+            title=body.title.strip(),
+            key_column=key,
+            columns=parsed.columns,
+        )
+        stored = await tables.upload(table, parsed.rows, writer=_writer(asked))
+    except (ColumnClassificationError, ClassifiedTableStoreError) as exc:
+        return TableUploaded(refused=str(exc)[:MAX_REFUSAL_CHARS])
+
+    log.info("classified table uploaded", entity=entity, version=stored.version)
+    return TableUploaded(
+        classification=view_of(stored.classification, editable=True, stored=stored)
+    )
+
+
+@router.post(
+    "/classifications/{entity}/columns/{column}/marks/review",
+    response_model=ReviewView,
+    responses=COMMON_RESPONSES,
+)
+async def review_mark(
+    request: Request, entity: str, column: str, mark: ColumnMark, asked: Asked
+) -> ReviewView:
+    """What marking one column of an uploaded table would do. Nothing is stored.
+
+    Only an uploaded table takes a mark; a built-in classification is refused as an absent
+    one is, because its rules were never marks and the console never offers it.
+    """
+    if not _may_change(asked):
+        log.info("mark not reviewable", principal=asked.caller.principal.id)
+        raise _no_classification_here()
+    stored = await _stored_or_absent(request, entity)
+    return _mark_review(stored, column, mark)
+
+
+@router.put(
+    "/classifications/{entity}/columns/{column}/marks",
+    response_model=MarkApplied,
+    responses=COMMON_RESPONSES,
+)
+async def apply_mark(
+    request: Request, entity: str, column: str, mark: ColumnMark, asked: Asked
+) -> MarkApplied:
+    """Mark one column of an uploaded table, and store the classification that makes.
+
+    The review is computed first and returned with the result, so the response that made a
+    widening names it. See `AN_APPLIED_MARK_IS_STORED_AND_LEDGERED`.
+    """
+    if not _may_change(asked):
+        log.info("mark not appliable", principal=asked.caller.principal.id)
+        raise _no_classification_here()
+    tables = _tables_or_fault(request)
+    stored = await _stored_or_absent(request, entity)
+    verdict = _mark_review(stored, column, mark)
+    if verdict.would_not_load:
+        return MarkApplied(
+            applied=False,
+            review=verdict,
+            classification=view_of(stored.classification, editable=True, stored=stored),
+        )
+    after = _in_place(stored.classification, marked(entity, column, mark.access, mark.derived_from))
+    written = await tables.classify(entity, after, writer=_writer(asked))
+    if written is None:
+        # Retired between the read and the write. The same refusal an absent table gets.
+        raise _no_classification_here()
+    log.info("classified table marked", entity=entity, widens=verdict.widens)
+    return MarkApplied(
+        applied=True,
+        review=verdict,
+        classification=view_of(written.classification, editable=True, stored=written),
+    )
+
+
+async def _stored_or_absent(request: Request, entity: str) -> StoredTable:
+    """The uploaded table with this name, or the one refusal this router makes."""
+    tables = _tables_or_fault(request)
+    stored = await tables.table(entity) if _ENTITY_RE.match(entity) else None
+    if stored is None:
+        log.info("classified table not found", entity=entity)
+        raise _no_classification_here()
+    return stored
+
+
+def _mark_review(stored: StoredTable, column: str, mark: ColumnMark) -> ReviewView:
+    """The review of one mark, refusing a column the upload did not carry.
+
+    A mark can only describe a column that has values under it. Marking a name the file did
+    not have would classify a column with no rows, and the review would call it an addition
+    and a widening of something that does not exist.
+    """
+    if stored.classification.rule_for(column) is None:
+        return ReviewView(
+            entity=stored.entity,
+            column=column,
+            would_not_load="no column of this table has that name",
+            epoch_now=stored.classification.policy().epoch(),
+        )
+    return review_against(stored.classification, column, mark)

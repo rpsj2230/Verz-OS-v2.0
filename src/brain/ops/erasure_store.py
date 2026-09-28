@@ -284,6 +284,11 @@ THROUGH: Final[Mapping[str, Through]] = MappingProxyType(
 #: Tables in a PostgreSQL store no row of which is a person's own. See `AN_ACTOR_IS_NOT_AN_OWNER`.
 ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
     {
+        # An uploaded table and its rows (`0116`): a price list is the company's, and the people
+        # named on the table row are the administrators who uploaded and marked it, actors and not
+        # owners.
+        "know.classified_table",
+        "know.classified_row",
         # A provider's call and probe outcomes, per deployment: about a provider, not a person.
         "ops.provider_health",
         # A question that fell past its tier's primary: a trace id, tier and depth, no person.
