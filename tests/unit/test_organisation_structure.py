@@ -417,12 +417,17 @@ def test_the_migration_audits_the_three_tables_widens_the_grammar_and_grants_not
         ) in upgrade
         assert f"DROP TRIGGER {table}_is_audited ON gate.{table}" in downgrade
         assert f"DROP FUNCTION {function}()" in downgrade
-    # `0104` widened the grammar again for `breach`, so this migration's grammar is the one that
-    # replaced, and the model's is the one that replaced it.
+    # `0104` widened the grammar again for `breach` and `0136` for `halt`, so this migration's
+    # grammar is the one `0104` replaced, `0104`'s is the one `0136` replaced, and the model's is
+    # `0136`'s. `0137` leaves the subject grammar alone.
     later = migration_module(MIGRATION.with_name("0104_compliance_record_and_decision_entries.py"))
+    latest = migration_module(MIGRATION.with_name("0136_ops_halt.py"))
     assert squash(f"CHECK ({migration.WIDENED_SUBJECTS})") in upgrade
     assert squash(migration.WIDENED_SUBJECTS) == squash(later.NARROWER_SUBJECTS)
-    assert squash(later.WIDENED_SUBJECTS) == squash(f"subject ~ '{SUBJECT_PATTERN}'")
+    assert squash(later.WIDENED_SUBJECTS) == squash(latest.NARROWER_SUBJECTS)
+    assert squash(latest.WIDENED_SUBJECTS) == squash(f"subject ~ '{SUBJECT_PATTERN}'")
+    lifecycle = MIGRATION.with_name("0137_agent_lifecycle_audit.py")
+    assert "subject_grammar" not in squash(rendered("upgrade", lifecycle))
     assert squash(f"CHECK ({migration.NARROWER_SUBJECTS}) NOT VALID") in downgrade
     assert "GRANT" not in upgrade
     assert migration.TABLES == ()
