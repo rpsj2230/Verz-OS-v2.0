@@ -64,7 +64,12 @@
   .mark{width:27px;height:24px;flex:none;display:block;object-fit:contain}
   .brandtxt{font-size:13.5px;font-weight:600;color:var(--ink);line-height:1.15;font-family:var(--brandfont)}
   .brandtxt small{display:block;font-family:var(--mono);font-size:9px;color:var(--dim);font-weight:400;letter-spacing:.07em}
-  .navsec{font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);padding:11px 14px 4px}
+  .navsec{font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);padding:11px 14px 4px;display:flex;justify-content:space-between}
+  /* A group folds; the one holding the page is open. Every entry stays in the markup. */
+  .navgrp .navsec::after{content:"\25B8";font-size:8px}
+  .navgrp.open .navsec::after{content:"\25BE"}
+  .navgrp.shut .navitem{display:none}
+  .navgrp .navitem{padding-left:22px}
   .navitem{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 14px;font-size:13px;color:var(--body)}
   .navitem.on{background:var(--acc-wash);color:var(--acc-text);font-weight:600;box-shadow:inset 3px 0 0 var(--brand)}
   .navitem .badge{font-family:var(--mono);font-size:9.5px;background:var(--crit-w);color:var(--crit);padding:1px 5px;border-radius:2px;font-weight:600}
@@ -273,29 +278,84 @@
     <span class="who">Super Admin</span>
   </div>
   <p class="scrjob">Answers one question at a glance: <em>is the brain healthy, and is anything waiting on me?</em> Everything filters by department and person, which is the whole point of company-level oversight. Note what is <em>not</em> here: no document contents, no field values. Existence and configuration are governed by role; content is governed by entitlement.</p>
+  <p class="scrjob">The menu is the nine module groups of the console plan, one entry per module, with a module's several pages as tabs above the page. Use, the reader's own work, comes first because it is drawn before the server has said which console this is. Groups fold, and the one holding the page is open. No number is drawn beside an entry: a count belongs on the Dashboard's <em>Needs you</em>, governed by its own grant. On a phone the menu is a drawer behind a visible Menu button, the first control after the skip link.</p>
 
   <div class="frame">
     <div class="chrome"><div class="dots"><i></i><i></i><i></i></div><div class="url">brain.verzdesign.com/admin</div></div>
     <div class="app">
       <div class="nav">
         <div class="brand"><img class="mark" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADEAAAArCAYAAADR0WDhAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAAyBpVFh0WE1MOmNvbS5hZG9iZS54bXAAAAAAADw/eHBhY2tldCBiZWdpbj0i77u/IiBpZD0iVzVNME1wQ2VoaUh6cmVTek5UY3prYzlkIj8+IDx4OnhtcG1ldGEgeG1sbnM6eD0iYWRvYmU6bnM6bWV0YS8iIHg6eG1wdGs9IkFkb2JlIFhNUCBDb3JlIDUuMC1jMDYwIDYxLjEzNDc3NywgMjAxMC8wMi8xMi0xNzozMjowMCAgICAgICAgIj4gPHJkZjpSREYgeG1sbnM6cmRmPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5LzAyLzIyLXJkZi1zeW50YXgtbnMjIj4gPHJkZjpEZXNjcmlwdGlvbiByZGY6YWJvdXQ9IiIgeG1sbnM6eG1wPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvIiB4bWxuczp4bXBNTT0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wL21tLyIgeG1sbnM6c3RSZWY9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9zVHlwZS9SZXNvdXJjZVJlZiMiIHhtcDpDcmVhdG9yVG9vbD0iQWRvYmUgUGhvdG9zaG9wIENTNSBXaW5kb3dzIiB4bXBNTTpJbnN0YW5jZUlEPSJ4bXAuaWlkOkJDMjlEMzgwRkZGQjExRTdBNDE2OEVGNzI2NDE3NjBEIiB4bXBNTTpEb2N1bWVudElEPSJ4bXAuZGlkOkJDMjlEMzgxRkZGQjExRTdBNDE2OEVGNzI2NDE3NjBEIj4gPHhtcE1NOkRlcml2ZWRGcm9tIHN0UmVmOmluc3RhbmNlSUQ9InhtcC5paWQ6QkMyOUQzN0VGRkZCMTFFN0E0MTY4RUY3MjY0MTc2MEQiIHN0UmVmOmRvY3VtZW50SUQ9InhtcC5kaWQ6QkMyOUQzN0ZGRkZCMTFFN0E0MTY4RUY3MjY0MTc2MEQiLz4gPC9yZGY6RGVzY3JpcHRpb24+IDwvcmRmOlJERj4gPC94OnhtcG1ldGE+IDw/eHBhY2tldCBlbmQ9InIiPz5dK3lzAAAD8ElEQVR42tRYW0hUQRie3T2mi+56SRGMzLSLhBkIGUQZRIZ0oxv0XGhmBUmaoGh21dDQiiJCrd56iEyCeii7WG8RYWYUpqk9ZUJeMsnbbt/UGMNpd87Zc2l3Bz7+PTP/mTPffGe+mbOWlAVJjwghG0gQllCbhRQsD++ygMQQrqOCjUB2YuhkRaZz3DHH8k3CdQ1QFSyDT46USNVq50BqtBSPyzlAPlUiDD/eA0mBPPiIEAspyogY2J5ij7UQYmPVLxzVL7OsPf19P3FREqiDx4DJ7kX20cc7Y0d3pNjjOQJuoHA253eBIs8R1gYSgbS5IVM1a5yDCeG2BA/NN6DCPvpD4iopq1c8MX+VmDArqVzl6F83LzQRl54IjAFlvFqEU+M6wl5B/x+AAmASGDfp3bfi1bkF+1wiSCuDCtWzF5K8kb6CgMPLzamAHevomVkqfC/NzEcQEegD6vkKG38xNDI8FhMV5VLY/FYi5xpyXSYQiES4C4QL0vZDhQ6+wuoh6QLQK+iEztIhk4SoBOIE7dRSb8sr/yGBV2UCoVjpYVg/cQarQCfnsCDlr6UqkmBEmhHaBB3SY8opg1U4D4QI2m9ChdeqSXCW6xa050GNdINUyEbYKkrhLVU1CajRjtAk6JiaQqkBBKhD1imknYUKX3wmwUo5mwV5mWCHxlwDhKCWmiZo72VmI5xNrwU2+gN2Ok1Pvlx1C7ANSt1B+5ROFaKZpdoFablQoVPUj6TiWRfZbNGDYiEG32qwpcYI2ttAoFnNIVGxYAEnI3wGgWkDLXUpQqdgIqmpZIBEu1JfapSgi/yTCRtbncLzm9QQULOwzTof5SBsUrDUcrX9Wf1AQJIf4LxY6oDaPiUDB0edLo+uHQzggSD1IDsNa7ZUTQtbBYEshEvACjaIVBCZ9JBHnagbiBZ0t0uNIxmmBAY1H6EW2MNVLwSOsHp5OaFAoM1XApqVYK9OGTt2eNqoRoHFGNBX7p5lCB2CDdbFLPWNr+PRtLDxoBmELMFO6wROy+rqFU4IjVoI6HWno8CM6LiA2U9nKmxG2CjIpcpV6PlbR8+auIpwQJDyBMhhO7Pou7kEKtRqHYfefeI4MCJoXw80KxDoYecz4hcSmL1BFV94WxTai3k7drvdPsOIHfsy8FHjvU9BoEXvAHSTYLNYrOFWl7cP//9OghG5h+Drd0aj/P8jv5JQabmGWappJDCrbxEaVKaf4XfzQFJi1nKHFXK69VqqqSSY5Z5USCvydMINJCVouQJ0eWlrZSZAApoEBjnFFrm8zHipD0glKJH7CA9l1Q1s8QcHCQ+WO8IWPQkqEpj1dwjnyJ8/3Y6xRW9K+SXAAAhYSe/BcO5cAAAAAElFTkSuQmCC" alt=""><div class="brandtxt">Verz Brain<small>SUPER ADMIN</small></div></div>
-        <div class="navsec">Operate</div>
-        <div class="navitem on">Overview</div>
-        <div class="navitem">Live runs</div>
-        <div class="navitem">Models &amp; health<span class="badge">1</span></div>
+        <div class="navgrp shut">
+        <div class="navsec">Use</div>
+        <div class="navitem">Ask</div>
+        <div class="navitem">My workspace</div>
+        <div class="navitem">My approvals</div>
+        <div class="navitem">Records</div>
+        <div class="navitem">Access requests</div>
+        <div class="navitem">Referred to me</div>
+        </div>
+        <div class="navgrp open">
+        <div class="navsec">Home</div>
+        <div class="navitem on">Dashboard</div>
+        </div>
+        <div class="navgrp shut">
+        <div class="navsec">People and access</div>
+        <div class="navitem">People</div>
+        <div class="navitem">Departments &amp; teams</div>
+        <div class="navitem">Roles &amp; permissions</div>
+        <div class="navitem">Access reviews &amp; elevation</div>
+        <div class="navitem">Sign-in, directory &amp; sessions</div>
+        </div>
+        <div class="navgrp shut">
+        <div class="navsec">Agents and AI</div>
+        <div class="navitem">Agents</div>
+        <div class="navitem">Agent templates</div>
+        <div class="navitem">Skills &amp; tools</div>
+        <div class="navitem">Models &amp; routing</div>
+        </div>
+        <div class="navgrp shut">
+        <div class="navsec">Knowledge and data</div>
         <div class="navitem">Connectors</div>
-        <div class="navsec">Govern</div>
-        <div class="navitem">People &amp; grants</div>
-        <div class="navitem">Scopes</div>
-        <div class="navitem">Agents &amp; leashes<span class="badge q">3</span></div>
-        <div class="navitem">Skills &amp; templates<span class="badge q">7</span></div>
-        <div class="navitem">Knowledge<span class="badge q">12</span></div>
-        <div class="navitem">Learning<span class="badge q">3</span></div>
-        <div class="navitem">Audit</div>
-        <div class="navsec">Report</div>
-        <div class="navitem">Questions &amp; gaps</div>
+        <div class="navitem">Knowledge</div>
+        <div class="navitem">Learning &amp; memory</div>
+        <div class="navitem">Fields &amp; records</div>
+        <div class="navitem">Artifacts</div>
+        </div>
+        <div class="navgrp shut">
+        <div class="navsec">Channels and notifications</div>
+        <div class="navitem">Webhooks</div>
+        <div class="navitem">Notifications &amp; email</div>
+        </div>
+        <div class="navgrp shut">
+        <div class="navsec">Operations</div>
+        <div class="navitem">Runs &amp; queue</div>
+        <div class="navitem">Background jobs</div>
+        <div class="navitem">Logs &amp; errors</div>
+        </div>
+        <div class="navgrp shut">
+        <div class="navsec">Governance</div>
+        <div class="navitem">Audit log</div>
+        <div class="navitem">Retention, legal holds &amp; erasure</div>
+        <div class="navitem">Import &amp; export</div>
+        <div class="navitem">Compliance</div>
+        </div>
+        <div class="navgrp shut">
+        <div class="navsec">Reports</div>
         <div class="navitem">Usage &amp; cost</div>
+        <div class="navitem">Questions &amp; gaps</div>
         <div class="navitem">Quality &amp; canaries</div>
+        <div class="navitem">Service levels</div>
+        </div>
+        <div class="navgrp shut">
+        <div class="navsec">Platform</div>
+        <div class="navitem">Settings</div>
+        <div class="navitem">Features &amp; plugins</div>
+        <div class="navitem">Limits, budgets &amp; capacity</div>
+        <div class="navitem">Secrets &amp; credentials</div>
+        <div class="navitem">Storage</div>
+        <div class="navitem">Backup &amp; recovery</div>
+        <div class="navitem">Version &amp; updates</div>
+        </div>
       </div>
 
       <div class="main">
@@ -367,25 +427,54 @@
     <span class="who">Department Admin &middot; Maintenance</span>
   </div>
   <p class="scrjob">The same shape as the Super Admin view, bounded to one scope - deliberately, so there is one console to learn and one to build. What differs is the work: this person runs review queues and sets leashes. The leash matrix is the screen's centre of gravity, because it is where autonomy is actually granted.</p>
+  <p class="scrjob">Its menu is the company console's groups narrowed to what this person holds in their department, served by the API; a group with nothing left in it is not drawn, and Platform, whose subject is the server, never is.</p>
 
   <div class="frame">
     <div class="chrome"><div class="dots"><i></i><i></i><i></i></div><div class="url">brain.verzdesign.com/dept/maintenance</div></div>
     <div class="app">
       <div class="nav">
         <div class="brand"><img class="mark" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADEAAAArCAYAAADR0WDhAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAAyBpVFh0WE1MOmNvbS5hZG9iZS54bXAAAAAAADw/eHBhY2tldCBiZWdpbj0i77u/IiBpZD0iVzVNME1wQ2VoaUh6cmVTek5UY3prYzlkIj8+IDx4OnhtcG1ldGEgeG1sbnM6eD0iYWRvYmU6bnM6bWV0YS8iIHg6eG1wdGs9IkFkb2JlIFhNUCBDb3JlIDUuMC1jMDYwIDYxLjEzNDc3NywgMjAxMC8wMi8xMi0xNzozMjowMCAgICAgICAgIj4gPHJkZjpSREYgeG1sbnM6cmRmPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5LzAyLzIyLXJkZi1zeW50YXgtbnMjIj4gPHJkZjpEZXNjcmlwdGlvbiByZGY6YWJvdXQ9IiIgeG1sbnM6eG1wPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvIiB4bWxuczp4bXBNTT0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wL21tLyIgeG1sbnM6c3RSZWY9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9zVHlwZS9SZXNvdXJjZVJlZiMiIHhtcDpDcmVhdG9yVG9vbD0iQWRvYmUgUGhvdG9zaG9wIENTNSBXaW5kb3dzIiB4bXBNTTpJbnN0YW5jZUlEPSJ4bXAuaWlkOkJDMjlEMzgwRkZGQjExRTdBNDE2OEVGNzI2NDE3NjBEIiB4bXBNTTpEb2N1bWVudElEPSJ4bXAuZGlkOkJDMjlEMzgxRkZGQjExRTdBNDE2OEVGNzI2NDE3NjBEIj4gPHhtcE1NOkRlcml2ZWRGcm9tIHN0UmVmOmluc3RhbmNlSUQ9InhtcC5paWQ6QkMyOUQzN0VGRkZCMTFFN0E0MTY4RUY3MjY0MTc2MEQiIHN0UmVmOmRvY3VtZW50SUQ9InhtcC5kaWQ6QkMyOUQzN0ZGRkZCMTFFN0E0MTY4RUY3MjY0MTc2MEQiLz4gPC9yZGY6RGVzY3JpcHRpb24+IDwvcmRmOlJERj4gPC94OnhtcG1ldGE+IDw/eHBhY2tldCBlbmQ9InIiPz5dK3lzAAAD8ElEQVR42tRYW0hUQRie3T2mi+56SRGMzLSLhBkIGUQZRIZ0oxv0XGhmBUmaoGh21dDQiiJCrd56iEyCeii7WG8RYWYUpqk9ZUJeMsnbbt/UGMNpd87Zc2l3Bz7+PTP/mTPffGe+mbOWlAVJjwghG0gQllCbhRQsD++ygMQQrqOCjUB2YuhkRaZz3DHH8k3CdQ1QFSyDT46USNVq50BqtBSPyzlAPlUiDD/eA0mBPPiIEAspyogY2J5ij7UQYmPVLxzVL7OsPf19P3FREqiDx4DJ7kX20cc7Y0d3pNjjOQJuoHA253eBIs8R1gYSgbS5IVM1a5yDCeG2BA/NN6DCPvpD4iopq1c8MX+VmDArqVzl6F83LzQRl54IjAFlvFqEU+M6wl5B/x+AAmASGDfp3bfi1bkF+1wiSCuDCtWzF5K8kb6CgMPLzamAHevomVkqfC/NzEcQEegD6vkKG38xNDI8FhMV5VLY/FYi5xpyXSYQiES4C4QL0vZDhQ6+wuoh6QLQK+iEztIhk4SoBOIE7dRSb8sr/yGBV2UCoVjpYVg/cQarQCfnsCDlr6UqkmBEmhHaBB3SY8opg1U4D4QI2m9ChdeqSXCW6xa050GNdINUyEbYKkrhLVU1CajRjtAk6JiaQqkBBKhD1imknYUKX3wmwUo5mwV5mWCHxlwDhKCWmiZo72VmI5xNrwU2+gN2Ok1Pvlx1C7ANSt1B+5ROFaKZpdoFablQoVPUj6TiWRfZbNGDYiEG32qwpcYI2ttAoFnNIVGxYAEnI3wGgWkDLXUpQqdgIqmpZIBEu1JfapSgi/yTCRtbncLzm9QQULOwzTof5SBsUrDUcrX9Wf1AQJIf4LxY6oDaPiUDB0edLo+uHQzggSD1IDsNa7ZUTQtbBYEshEvACjaIVBCZ9JBHnagbiBZ0t0uNIxmmBAY1H6EW2MNVLwSOsHp5OaFAoM1XApqVYK9OGTt2eNqoRoHFGNBX7p5lCB2CDdbFLPWNr+PRtLDxoBmELMFO6wROy+rqFU4IjVoI6HWno8CM6LiA2U9nKmxG2CjIpcpV6PlbR8+auIpwQJDyBMhhO7Pou7kEKtRqHYfefeI4MCJoXw80KxDoYecz4hcSmL1BFV94WxTai3k7drvdPsOIHfsy8FHjvU9BoEXvAHSTYLNYrOFWl7cP//9OghG5h+Drd0aj/P8jv5JQabmGWappJDCrbxEaVKaf4XfzQFJi1nKHFXK69VqqqSSY5Z5USCvydMINJCVouQJ0eWlrZSZAApoEBjnFFrm8zHipD0glKJH7CA9l1Q1s8QcHCQ+WO8IWPQkqEpj1dwjnyJ8/3Y6xRW9K+SXAAAhYSe/BcO5cAAAAAElFTkSuQmCC" alt=""><div class="brandtxt">Verz Brain<small>MAINTENANCE</small></div></div>
-        <div class="navsec">Operate</div>
+        <div class="navgrp shut">
+        <div class="navsec">Use</div>
+        <div class="navitem">Ask</div>
+        <div class="navitem">My workspace</div>
+        <div class="navitem">My approvals</div>
+        <div class="navitem">Records</div>
+        <div class="navitem">Access requests</div>
+        <div class="navitem">Referred to me</div>
+        </div>
+        <div class="navgrp open">
+        <div class="navsec">Home</div>
         <div class="navitem on">Department</div>
-        <div class="navitem">Live runs</div>
+        </div>
+        <div class="navgrp shut">
+        <div class="navsec">People and access</div>
+        <div class="navitem">People</div>
+        </div>
+        <div class="navgrp shut">
+        <div class="navsec">Agents and AI</div>
+        <div class="navitem">Agents</div>
+        <div class="navitem">Skills &amp; tools</div>
+        </div>
+        <div class="navgrp shut">
+        <div class="navsec">Knowledge and data</div>
         <div class="navitem">Connectors</div>
-        <div class="navsec">Govern</div>
-        <div class="navitem">People &amp; grants</div>
-        <div class="navitem">Agents &amp; leashes<span class="badge q">2</span></div>
-        <div class="navitem">Knowledge<span class="badge q">4</span></div>
-        <div class="navitem">Skills<span class="badge q">3</span></div>
-        <div class="navitem">Learning<span class="badge q">11</span></div>
-        <div class="navsec">Report</div>
-        <div class="navitem">Gaps</div>
-        <div class="navitem">Usage</div>
+        <div class="navitem">Knowledge</div>
+        <div class="navitem">Learning &amp; memory</div>
+        </div>
+        <div class="navgrp shut">
+        <div class="navsec">Operations</div>
+        <div class="navitem">Runs &amp; queue</div>
+        </div>
+        <div class="navgrp shut">
+        <div class="navsec">Governance</div>
+        <div class="navitem">Audit log</div>
+        </div>
+        <div class="navgrp shut">
+        <div class="navsec">Reports</div>
+        <div class="navitem">Questions &amp; gaps</div>
+        <div class="navitem">Usage &amp; cost</div>
+        </div>
       </div>
 
       <div class="main">

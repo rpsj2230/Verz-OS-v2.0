@@ -17,13 +17,16 @@
  * write route has a row, an audit entry and a behaviour, each a Python test that is found by name in
  * its file or a reason there is none.
  *
- * **Current.** The rendered document must equal `docs/console-audit.md`. With `WRITE_CONSOLE_AUDIT=1`
- * in the environment the file is written instead, which is how it is regenerated.
+ * **Current.** Every rendered file must equal its file in `docs/console-audit/`, and nothing else may
+ * sit there. With `WRITE_CONSOLE_AUDIT=1` in the environment the files are written instead, and a
+ * file nothing renders any more is removed, which is how they are regenerated. One file per area
+ * rather than one document since 2026-09-28, so that two console changes meet in the audit only
+ * when they touch the same area: see `renderAudit`.
  *
- * Task ids: M27.8.1, M27.8.17
+ * Task ids: M27.8.1, M27.8.17, M27.10.1
  */
 
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { apiDocument } from "./support/openapi";
@@ -31,6 +34,8 @@ import { PAGES } from "./support/pageCases";
 import { REPO_ROOT, readConsoleFile, readRepoFile } from "./support/repo";
 import {
   AREAS,
+  AUDIT_DIRECTORY,
+  AUDIT_INDEX,
   NOT_ADMINISTERED,
   PROOFS,
   READ_AFTER_AN_ACTION,
@@ -46,16 +51,23 @@ import {
 import { consoleSourcePaths } from "./support/typescript";
 import { everyWrite } from "./support/writes";
 
-const DOCUMENT = "docs/console-audit.md";
-
-/** Every address the route table registers, read from `App.tsx`, with the page file drawing it. */
+/**
+ * Every address the route table registers, read from `App.tsx` and every page's route file, with
+ * the page file drawing it.
+ */
 function screens(): Map<string, string> {
-  const app = readConsoleFile("src/App.tsx");
+  const tables = [
+    readConsoleFile("src/App.tsx"),
+    ...consoleSourcePaths("src/pages")
+      .filter((one) => one.endsWith(".route.tsx"))
+      .map((one) => readConsoleFile(one)),
+  ];
+  const app = tables.join("\n");
   const fileOf = new Map<string, string>();
-  for (const found of app.matchAll(/import \{ (\w+) \} from "\.\/pages\/(\w+)";/g)) {
+  for (const found of app.matchAll(/import \{ (\w+) \} from "\.\/(?:pages\/)?(\w+)";/g)) {
     fileOf.set(found[1] as string, `src/pages/${found[2] as string}.tsx`);
   }
-  for (const found of app.matchAll(/const (\w+) = lazy\([^;]*?import\("\.\/pages\/(\w+)"\)/gs)) {
+  for (const found of app.matchAll(/const (\w+) = lazy\([^;]*?import\("\.\/(?:pages\/)?(\w+)"\)/gs)) {
     fileOf.set(found[1] as string, `src/pages/${found[2] as string}.tsx`);
   }
   const constants: Record<string, string> = { CALLBACK_PATH: "/auth/callback", SIGNED_OUT_PATH: "/signed-out", FIRST_RUN_PATH: "/first-run", STAFF_LIST_RETURN_PATH: "/first-run/staff-list" };
@@ -253,16 +265,42 @@ describe("the console audit", () => {
     }
   }, 60_000);
 
-  test("docs/console-audit.md is what the code says today", () => {
-    // What breaks if this is deleted: the document goes stale the day after it is written, which is
-    // the reason it is generated at all.
+  test("docs/console-audit/ is what the code says today, file by file, and holds nothing else", () => {
+    // What breaks if this is deleted: the files go stale the day after they are written, which is
+    // the reason they are generated at all, and a file for an area that was renamed stays behind
+    // and is served beside its successor.
     const rendered = renderAudit(measure());
-    const path = join(REPO_ROOT, ...DOCUMENT.split("/"));
+    const directory = join(REPO_ROOT, ...AUDIT_DIRECTORY.split("/"));
     if (process.env["WRITE_CONSOLE_AUDIT"] === "1") {
-      writeFileSync(path, rendered, "utf8");
+      mkdirSync(directory, { recursive: true });
+      for (const name of readdirSync(directory)) {
+        if (!(name in rendered)) {
+          rmSync(join(directory, name));
+        }
+      }
+      for (const [name, text] of Object.entries(rendered)) {
+        writeFileSync(join(directory, name), text, "utf8");
+      }
     }
-    expect(existsSync(path), `${DOCUMENT} has not been generated`).toBe(true);
-    expect(readFileSync(path, "utf8").replace(/\r\n/g, "\n")).toBe(rendered);
-    expect(rendered).not.toContain(String.fromCharCode(0x2014));
+    expect(existsSync(join(directory, AUDIT_INDEX)), `${AUDIT_DIRECTORY} has not been generated`).toBe(true);
+    expect(readdirSync(directory).sort()).toEqual(Object.keys(rendered).sort());
+    for (const [name, text] of Object.entries(rendered)) {
+      expect(readFileSync(join(directory, name), "utf8").replace(/\r\n/g, "\n"), name).toBe(text);
+      expect(text, name).not.toContain(String.fromCharCode(0x2014));
+    }
+  }, 60_000);
+
+  test("the files carry every area and every write, so splitting them dropped nothing", () => {
+    // What breaks if this is deleted: an area or a write route that no file renders, which reads as
+    // an audit with nothing to say about it rather than one that never looked.
+    const rendered = renderAudit(measure());
+    const all = Object.values(rendered).join("\n");
+    for (const name of Object.keys(AREAS)) {
+      expect(all, name).toContain(`### ${name}`);
+    }
+    for (const route of Object.keys(PROOFS)) {
+      expect(all, route).toContain(`| \`${route}\` |`);
+    }
+    expect(Object.keys(rendered)).toHaveLength(Object.keys(AREAS).length + 2);
   }, 60_000);
 });

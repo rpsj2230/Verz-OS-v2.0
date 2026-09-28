@@ -18,21 +18,15 @@
  * `/auth/callback`, which means sign-in completes at the identity provider and then lands
  * on a page that does not exist. The README says this again where a deployer will see it.
  *
- * **The records route is loaded on demand, and this is the one place that decision is
- * expressed.** It is the only route that mounts the table library and the form library, and
- * those weigh 608 kB against an application of 267 kB. Loaded eagerly they are in the first
- * response for everybody, including a person who only ever opens the overview, and the
- * download happens before the sign-in redirect has even been decided. A static import here
- * is therefore the change that undoes the split: `tests/bundle-split.test.ts` walks the
- * static import graph from `main.tsx` and fails when either library is reachable without a
- * dynamic import. The measurement is in the README.
- *
- * Rejected: splitting every route. `Overview` and `NotFound` reach nothing the shell does
- * not already reach, so a chunk for either buys a round trip and saves no bytes. A split is
- * worth what it removes from the entry, and these remove nothing.
+ * **Every page's routes are declared in the page's own route file**, `src/pages/<Page>.route.tsx`,
+ * and `routes/registry.ts` collects them. This file holds only what sits outside the shell and the
+ * not-found page, so adding a page edits nothing here. Until 2026-09-28 every route was a line in
+ * this table, every pull request that added a page edited it, and two of them jammed on it on the
+ * same day. Whether a page is loaded on demand is decided in its route file, for the reason the
+ * records route's file gives: `tests/bundle-split.test.ts` walks the static graph through the
+ * registry into every route file.
  */
 
-import { lazy } from "react";
 import {
   createBrowserRouter,
   Link,
@@ -44,135 +38,13 @@ import { RequireSession } from "./auth/RequireSession";
 import { CallbackRoute, SignedOutRoute } from "./auth/routes";
 import { configProblems } from "./config";
 import { Shell } from "./layout/Shell";
-import { Adoption } from "./pages/Adoption";
-import { Agents } from "./pages/Agents";
-import { AgentTemplates } from "./pages/AgentTemplates";
-import { Ask } from "./pages/Ask";
-import { Capabilities } from "./pages/Capabilities";
-import { Capacity } from "./pages/Capacity";
-import { Connectors } from "./pages/Connectors";
-import { Department } from "./pages/Department";
-import { Errors } from "./pages/Errors";
-import { Features } from "./pages/Features";
-import { Jobs } from "./pages/Jobs";
-import { Logs } from "./pages/Logs";
-import { Prompts } from "./pages/Prompts";
-import { Roles } from "./pages/Roles";
-import { Scopes } from "./pages/Scopes";
-import { Skills } from "./pages/Skills";
-import { Artifacts } from "./pages/Artifacts";
-import { MyWorkspace } from "./pages/MyWorkspace";
-import { Retention } from "./pages/Retention";
-import { AccessReview } from "./pages/AccessReview";
-import { Departments } from "./pages/Departments";
-import { Elevation } from "./pages/Elevation";
-import { Subscribers } from "./pages/Subscribers";
-import { Quality } from "./pages/Quality";
-import { Questions } from "./pages/Questions";
-import { Usage } from "./pages/Usage";
-import { LiveRuns } from "./pages/LiveRuns";
-import { Models } from "./pages/Models";
-import { Audit } from "./pages/Audit";
-import { Sessions } from "./pages/Sessions";
-import { SignInLinks } from "./pages/SignInLinks";
-import { Knowledge } from "./pages/Knowledge";
-import { Learning } from "./pages/Learning";
-import { Memory } from "./pages/Memory";
-import { StaffSources } from "./pages/StaffSources";
-import { Install } from "./pages/Install";
-import { Limits } from "./pages/Limits";
-import { Recovery } from "./pages/Recovery";
-import { Updates } from "./pages/Updates";
-import { ServiceLevels } from "./pages/ServiceLevels";
-import { Spend } from "./pages/Spend";
 import { NotFound } from "./pages/NotFound";
 import { FirstRun } from "./pages/FirstRun";
 import { StaffListSignedIn } from "./pages/StaffListSignedIn";
-import { Overview } from "./pages/Overview";
-import { DataTransfer } from "./pages/DataTransfer";
-import { Settings } from "./pages/Settings";
-import { Storage } from "./pages/Storage";
-import { Vault } from "./pages/Vault";
-import { RequirementChecks } from "./pages/RequirementChecks";
-import { Webhooks } from "./pages/Webhooks";
-import { Notifications } from "./pages/Notifications";
-import { Compliance } from "./pages/Compliance";
-import { Referrals } from "./pages/Referrals";
+import { PAGE_ROUTES } from "./routes/registry";
 import { RETURN_PATH as STAFF_LIST_RETURN_PATH } from "./setup/staffList";
 import { FIRST_RUN_PATH } from "./setup/wizard";
 import { Notice } from "./ui/Notice";
-import { AccessRequests } from "./pages/AccessRequests";
-import { Tools } from "./pages/Tools";
-
-/**
- * The records screen, fetched when somebody asks for it.
- *
- * Written as a dynamic import with a named export rather than a default one, because every
- * module in this console exports by name and a single default export here would be the one
- * exception a reader has to notice. `Shell` supplies the boundary this suspends against, so
- * the frame and the navigation paint before the chunk arrives: a menu that waited for a
- * page's code would be a menu whose contents depended on a network request, which is the
- * shape the navigation is not allowed to have.
- */
-const Records = lazy(async () => ({ default: (await import("./pages/Records")).Records }));
-
-/**
- * The routing matrix, fetched when somebody asks for it, for the same reason and by the same
- * measurement.
- *
- * It mounts the same two libraries the records screen does, so an eager import here would
- * undo the split whatever `Records` did: the chunk would simply arrive through this module
- * instead. `tests/bundle-split.test.ts` walks the static graph from `main.tsx` and does not
- * care which route reached the library.
- */
-const Matrix = lazy(async () => ({ default: (await import("./pages/Matrix")).Matrix }));
-
-/**
- * The classification screen, fetched when somebody asks for it, and split for the same
- * measurement again.
- *
- * It mounts the same two libraries, so an eager import here would undo the split whatever
- * the other two routes did: the chunk would simply arrive through this module instead.
- * `tests/bundle-split.test.ts` walks the static graph from `main.tsx` and does not care
- * which route reached the library.
- */
-const Classification = lazy(async () => ({
-  default: (await import("./pages/Classification")).Classification,
-}));
-
-/**
- * One agent's workspace, fetched when somebody opens an agent.
- *
- * Split for a smaller reason than the three above, and the reason is written in the stylesheet
- * rather than here. It mounts neither heavy library, so an eager import would not triple the
- * entry; what it would do is put the workspace's three components and `agent-workspace.css` in
- * the first response for everybody, and that sheet is imported by the components precisely so
- * that somebody who never opens an agent does not download it. `tests/agent-page.test.tsx`
- * walks the static graph from `main.tsx` and fails when either is reachable from it.
- */
-const Agent = lazy(async () => ({ default: (await import("./pages/Agent")).Agent }));
-
-/**
- * The approvals page, fetched when somebody opens it, for the workspace's reason: it imports
- * `approvals.css`, and a person who never opens approvals should not download it.
- */
-const Approvals = lazy(async () => ({
-  default: (await import("./pages/Approvals")).Approvals,
-}));
-
-/**
- * The people and grants page, fetched when somebody asks for it.
- *
- * It mounts the form library to write a grant, so an eager import here would put `@rjsf/core`
- * and the ajv validator back in the entry chunk for everybody, which is the measurement the
- * records and matrix routes are split for. `tests/bundle-split.test.ts` walks the static graph
- * from `main.tsx` and does not care which route reached the library.
- *
- * The other three Govern pages are imported statically below. None of them mounts a heavy
- * library or a stylesheet of its own, so a chunk for any of them would buy a round trip and
- * save no bytes, which is this file's rule for `Overview` and `Agents`.
- */
-const People = lazy(async () => ({ default: (await import("./pages/People")).People }));
 
 /**
  * Shown when a page throws while rendering.
@@ -241,217 +113,10 @@ export const routes: RouteObject[] = [
       </RequireSession>
     ),
     errorElement: <RouteError />,
+    // Every page's own routes, from its route file, then the console's own not-found page for an
+    // address no page declares.
     children: [
-      { index: true, element: <Overview /> },
-      // Department, SCREEN 2's overview, which a department's console offers where the company's
-      // offers Overview. One path and no parameter: the department is the reader's own grants,
-      // decided by the API, so there is no segment that could name somebody else's. The registry
-      // key it opens is the overview, which the index route above already routes. Eager, for
-      // `Roles`' reason. See `pages/Department.tsx`.
-      { path: "department", element: <Department /> },
-      // Live runs, SCREEN 1's second Operate item. One path and no parameter: a run is a row
-      // with nothing to open, and the path is the screen's key in `brain.console.screens`, which
-      // is what `brain.ops.console_screens.routed_screen_keys` matches. Eager rather than split,
-      // for the install screens' reason: it mounts neither heavy library and no stylesheet.
-      { path: "runs", element: <LiveRuns /> },
-      // Scheduled jobs: every job the worker's schedule starts, how it last went, and pause,
-      // resume and run now as rows the worker's tick reads. See `brain.jobs_routes`.
-      { path: "jobs", element: <Jobs /> },
-      // Errors: failed jobs by kind and failed questions by reference, and a sentence saying the
-      // process log is kept nowhere the console can read. See `brain.error_routes`.
-      { path: "errors", element: <Errors /> },
-      // Logs: the warnings and errors the application kept, redacted on their way in, searched by
-      // event name, level and period, and paged. See `brain.log_routes`.
-      { path: "logs", element: <Logs /> },
-      // Models and health, SCREEN 11. One path and no parameter, at the screen's key. Its Edit
-      // routing action is a link to `routing` below, where the chain's numbers are edited behind
-      // the matrix's own grant, rather than a second editor here. Eager, for the same reason.
-      { path: "models", element: <Models /> },
-      // One path and no parameter, which is the whole of what this route has to get right. A
-      // question is not a segment and not a query: it is the most sensitive value in the
-      // request and it travels in a POST body, so there is no address here that could carry
-      // one and no history entry that could keep one. Eager rather than split, because the
-      // page mounts neither heavy library and imports no stylesheet of its own.
-      { path: "ask", element: <Ask /> },
-      // My workspace, SCREEN 12, at the address the design draws for it. One path and no
-      // parameter, because the page is about the person asking and `brain.mine_routes` takes
-      // nothing that could name anybody else. See `pages/MyWorkspace.tsx`.
-      { path: "me", element: <MyWorkspace /> },
-      // Two paths and one component. The entity is a path segment rather than a query
-      // parameter because it is what the screen is about, and the same screen with none
-      // named is where somebody arrives from the menu: it has the form and no grid, because
-      // there is no question to ask yet.
-      { path: "records", element: <Records /> },
-      { path: "records/:entity", element: <Records /> },
-      // Two paths and one component again. The rung being edited is a path segment because
-      // it is what the screen is about, and the same screen with none named is the matrix on
-      // its own: it has the grid and no form, because no rung has been opened.
-      { path: "routing", element: <Matrix /> },
-      // Connectors, which `docs/screens.html` SCREEN 9 puts in Operate beside the overview,
-      // live runs and models. One path and no parameter: a source has no sub-object here, and
-      // the path is the screen's key in `brain.console.screens`. Eager rather than split, for
-      // the install screens' reason: it mounts neither heavy library and no stylesheet.
-      { path: "connectors", element: <Connectors /> },
-      // Webhooks, under Operate beside Connectors: who outside the company is told when something
-      // happens here, and registering, replacing a secret and switching off as confirmed writes.
-      // One path and no parameter: a subscriber is changed from the listing rather than opened.
-      // Eager rather than split: it mounts neither heavy library and no stylesheet of its own.
-      { path: "webhooks", element: <Webhooks /> },
-      // Notifications and email, under Operate beside Webhooks: who this install tells what, the
-      // switch that stops a notice, and the email relay with its password and a test message,
-      // each a confirmed write. One path and no parameter. Eager for the same reason.
-      { path: "notifications", element: <Notifications /> },
-      // Storage, under Install: the buckets, each one's retention and why, and where the store
-      // is. One path, no parameter, no control. Eager for the same reason.
-      { path: "storage", element: <Storage /> },
-      // Settings, under Install: every installation value with where it came from, and branding
-      // saved. One path and no parameter. Eager for the same reason.
-      { path: "settings", element: <Settings /> },
-      // Secrets vault, under Install beside Storage: the seal, every slot, each connected source's
-      // run-token leases and the vault's audit log shipping. One path, no parameter, no control.
-      { path: "vault", element: <Vault /> },
-      // Requirement checks, under Install: the register by area and what a person saw on this install.
-      { path: "requirement-checks", element: <RequirementChecks /> },
-      // Import and export, under Govern after Audit: what can move and the audit trail export,
-      // taken as a confirmed write. One path and no parameter. Eager for the same reason.
-      { path: "import-export", element: <DataTransfer /> },
-      { path: "routing/:rungId", element: <Matrix /> },
-      // Three paths and one component. The document is a path segment because it is what
-      // the screen is about, the column is one because it is which rule is being argued
-      // about, and the bare path is where somebody arrives from the menu: it has the form
-      // and no grid, because no document has been named. There is no route that lists the
-      // classified documents, so naming one is how a person gets anywhere at all.
-      { path: "classification", element: <Classification /> },
-      { path: "classification/:entity", element: <Classification /> },
-      { path: "classification/:entity/:column", element: <Classification /> },
-      // The roster, which is where the workspace's way back lands. A different component
-      // from the workspace rather than a third path on it, because it is a listing and the
-      // workspace is one agent, and the rules for the two differ: see `pages/agentsQuery.ts`.
-      { path: "agents", element: <Agents /> },
-      // The catalogue, at an address of its own rather than under `agents/`, because an agent
-      // slug is a path segment there and a template is not an agent: `agents/templates` would
-      // be the workspace of an agent called templates on the day somebody names one that.
-      { path: "agent-templates", element: <AgentTemplates /> },
-      // Prompts: the house rules every agent opens with, shown and never editable, and each
-      // agent's own instructions, edited as a local change to its template. See
-      // `brain.prompt_routes`.
-      { path: "prompts", element: <Prompts /> },
-      // Two paths and one component, at the address `brain.console.workspace.deep_link`
-      // spells: an agent, and one tab of it. The bare agent opens the first tab its strip
-      // holds, and so does a tab the strip does not hold, because `resolve` gives those one
-      // answer.
-      { path: "agents/:agentId", element: <Agent /> },
-      { path: "agents/:agentId/:tab", element: <Agent /> },
-      // The queue, and one approval on its own, which is where a link from a chat lands.
-      { path: "approvals", element: <Approvals /> },
-      { path: "approvals/:suspensionId", element: <Approvals /> },
-      // The five install screens. One path each and no parameter on any of them, because none
-      // of them has a sub-object to open: `brain.install_routes` gives the same argument for
-      // its own addresses. Each path is the screen's key in `brain.console.screens`, which is
-      // what `brain.ops.console_screens.routed_screen_keys` matches the registry against, so a
-      // prettier address would take these off that list while leaving them reachable. Eager
-      // rather than split: each mounts neither heavy library and imports no stylesheet of its
-      // own, so a chunk for any of them would buy a round trip and save no bytes.
-      { path: "install", element: <Install /> },
-      { path: "updates", element: <Updates /> },
-      { path: "recovery", element: <Recovery /> },
-      { path: "limits", element: <Limits /> },
-      { path: "connections", element: <Capacity /> },
-      // Features: which genuinely new features this install has switched on, and the switch.
-      // See `brain.feature_routes`.
-      { path: "features", element: <Features /> },
-      // The design's own Report section, SCREEN 1 of `docs/screens.html`: Questions and gaps,
-      // Usage and cost, and Quality and canaries, in that order. Each path is the screen's key in
-      // `brain.console.screens`, which `brain.ops.console_screens.routed_screen_keys` matches the
-      // registry against. One path each and no parameter: the usage window is a control on the
-      // page, and the other two have nothing on them a person opens. Eager rather than split, for
-      // `Roles`' reason: none mounts a heavy library or a stylesheet of its own.
-      { path: "questions", element: <Questions /> },
-      { path: "usage", element: <Usage /> },
-      { path: "quality", element: <Quality /> },
-      // The three Report screens. One path each and no parameter on any of them: each is a
-      // reading of a window, the window is the request rather than the address, and there is
-      // nothing on these pages a person could open. Eager rather than split, because none of
-      // the three mounts a heavy library or a stylesheet of its own.
-      { path: "service-levels", element: <ServiceLevels /> },
-      { path: "spend", element: <Spend /> },
-      { path: "adoption", element: <Adoption /> },
-      // The four Govern screens. Two paths and one component for People, at the address one
-      // subject's page has: the bare path is where somebody arrives from the menu and the
-      // segment is the subject key, resolved against the page rather than against a route of
-      // its own. See `pages/People.tsx`. The other three are one path each, because there is
-      // nothing on them a person opens: a role, a capability and a scope are each shown whole.
-      { path: "people", element: <People /> },
-      { path: "people/:subject", element: <People /> },
-      // Departments and teams, the Organisation card of SCREEN 10 at full width. One path: a
-      // department is shown whole, and a person's row links to their page under `people/`. Eager,
-      // for `Roles`' reason. See `pages/Departments.tsx`.
-      { path: "departments", element: <Departments /> },
-      // Access review, at the screen's own key in `brain.console.screens`, so
-      // `brain.ops.console_screens.routed_screen_keys` matches this address. One path: a decision
-      // is a confirmed control on a row, not a page. Eager. See `pages/AccessReview.tsx`.
-      { path: "access_review", element: <AccessReview /> },
-      // Elevation requests: the break-glass landing and the rules, and a sentence where the list
-      // would be, because no install stores a session yet. Eager. See `pages/Elevation.tsx`.
-      { path: "elevation", element: <Elevation /> },
-      // Subscribers and notifications: who is told what, and how one stops. Eager. See
-      // `pages/Subscribers.tsx`.
-      { path: "subscribers", element: <Subscribers /> },
-      // Staff sources, at the screen's own key so `brain.ops.console_screens.routed_screen_keys`
-      // matches this address against the registry. One path and no parameter: a source is shown
-      // whole, and the trial is a request this page makes rather than a thing somebody opens.
-      { path: "staff_sources", element: <StaffSources /> },
-      // Sessions and sign-in links, beside People in Govern, which is where `docs/screens.html`
-      // SCREEN 10 puts what happens to a person's sign-ins. One path each and no parameter: a
-      // session and a link are each ended or unlinked from the listing rather than opened. The
-      // sessions path is the screen's key in `brain.console.screens`, so
-      // `brain.ops.console_screens.routed_screen_keys` matches it; sign-in links have no registry
-      // key, and the page cites `brain.console.sign_in_links` instead.
-      { path: "sessions", element: <Sessions /> },
-      { path: "sign-in-links", element: <SignInLinks /> },
-      // Audit, the last item of Govern in `docs/screens.html`. One path, with its filters and an
-      // open subject's history as query parameters of the address rather than path segments, so
-      // a colleague can be sent the view and the back button undoes a filter. The path is the
-      // screen's key in `brain.console.screens`.
-      { path: "audit", element: <Audit /> },
-      { path: "roles", element: <Roles /> },
-      // Skills, SCREEN 6 of `docs/screens.html`. Two paths and one component, at the address
-      // one skill's page has: the bare path is where somebody arrives from the menu and the
-      // segment is the skill's name, resolved against the page rather than against a route of
-      // its own. See `pages/Skills.tsx`. Eager rather than split, for `Roles`' reason.
-      { path: "skills", element: <Skills /> },
-      { path: "skills/:name", element: <Skills /> },
-      // Knowledge, SCREEN 7 of `docs/screens.html`, at the screen's own key in
-      // `brain.console.screens` so `brain.ops.console_screens.routed_screen_keys` matches this
-      // address. One path: an item has no page of its own, because this screen says an item
-      // exists and how widely it reaches and nothing more. Eager, for `Roles`' reason.
-      { path: "library", element: <Knowledge /> },
-      // Learning, SCREEN 8. One path: the review is one page and a learning has no address.
-      { path: "learning", element: <Learning /> },
-      // Memory, read one person at a time. The bare path asks for a reference and the segment is
-      // that person's memory, resolved by the API and never listed. A Govern screen rather than a
-      // tab inside an agent, although SCREEN 13 draws it there: see `pages/Memory.tsx`.
-      { path: "memory", element: <Memory /> },
-      { path: "memory/:subject", element: <Memory /> },
-      // Artifacts, at the screen's key in `brain.console.screens` so
-      // `brain.ops.console_screens.routed_screen_keys` matches this address. One path: an artifact
-      // has no page of its own, and on every install today the screen is a sentence saying nothing
-      // records one. See `pages/Artifacts.tsx`. Eager, for `Roles`' reason.
-      { path: "artifacts", element: <Artifacts /> },
-      // Retention and erasure, at the screen's key. One path: the report, the release, the legal
-      // holds, the windows and the two unrecorded lists are one page. See `pages/Retention.tsx`.
-      { path: "retention", element: <Retention /> },
-      { path: "capabilities", element: <Capabilities /> },
-      { path: "scopes", element: <Scopes /> },
-      { path: "access-requests", element: <AccessRequests /> },
-      // Compliance: sensitive-topic routing, the processing register and breach cases, one page
-      // because one authority (admin:compliance) answers all three. See `pages/Compliance.tsx`.
-      { path: "compliance", element: <Compliance /> },
-      // Referred to me: the caller's own referrals, read by the person named and needing no grant.
-      { path: "referrals", element: <Referrals /> },
-      // Tools: every tool with what it needs and does, and the switch that stops one for the
-      // install or a department. One path: a tool is shown whole. See `pages/Tools.tsx`.
-      { path: "tools", element: <Tools /> },
+      ...PAGE_ROUTES,
       { path: "*", element: <NotFound /> },
     ],
   },

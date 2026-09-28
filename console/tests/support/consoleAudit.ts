@@ -8,7 +8,7 @@
  * the day it is written. So the four lists are read, never typed: the areas from the standard's own
  * bullets, the tables and installation values from `src/api/generated/inventory.json` (which
  * `scripts/export-openapi.py` writes from `brain.db.Base.metadata` and `brain.install.INSTALLATION`),
- * the routes from the API's internal document, and the screens from the route table.
+ * the routes from the API's internal document, and the screens from the route files.
  *
  * **What is typed is the judgement, and every judgement is checked for coverage.** Which area a
  * table, a route, a value or a screen belongs to is not something the code can say, so it is written
@@ -210,7 +210,7 @@ export interface Gap {
 }
 
 export interface Area {
-  /** Addresses in `App.tsx` that serve it. */
+  /** Console addresses, from the route files and `App.tsx`, that serve it. */
   readonly screens: readonly string[];
   /** Routes, as `METHOD path` or a path meaning every method; a trailing `*` matches a prefix. */
   readonly routes: readonly string[];
@@ -1883,60 +1883,144 @@ function cellSafe(text: string): string {
   return text.replace(/\|/g, "/");
 }
 
-/** The whole document, deterministically. */
-export function renderAudit(measured: Measured): string {
-  const lines: string[] = [];
-  const areaNames = Object.keys(AREAS);
-  const gapCount = areaNames.reduce((sum, name) => sum + (AREAS[name]?.gaps.length ?? 0), 0);
-  const unreached = measured.routes.filter(
-    (route) => (measured.readBy[route] ?? []).length === 0 && (measured.writtenBy[route] ?? []).length === 0,
-  );
-  const writeRoutes = Object.keys(PROOFS).sort();
-  const proved = writeRoutes.filter((route) => {
-    const one = PROOFS[route];
-    return one !== undefined && [one.row, one.audit, one.behaviour].every((proof) => !("none" in proof));
-  });
-  const withoutDatabase = proved.filter((route) => {
-    const one = PROOFS[route];
-    return one !== undefined && [one.row, one.audit, one.behaviour].every((proof) => !("test" in proof) || !proof.database);
-  });
+/** The directory the audit is written to, relative to the repository. */
+export const AUDIT_DIRECTORY = "docs/console-audit";
 
-  lines.push("# The console audit");
-  lines.push("");
-  lines.push(
-    "What an administrator would need to manage, read out of the schema, the routes and the installation values, compared with what the console serves, screen by screen, with every gap either linked to its open leaf or recorded with its reason. It is the audit `docs/admin-console.md` asks for before the console is called done.",
-  );
-  lines.push("");
-  lines.push(
-    "**This page is generated and must not be edited by hand.** `console/tests/console-audit.test.ts` renders it from `console/tests/support/consoleAudit.ts` and fails when this file differs. To regenerate it after a change, run `npm run api:generate` and then `WRITE_CONSOLE_AUDIT=1 npx vitest run tests/console-audit.test.ts` in `console/`.",
-  );
-  lines.push("");
-  lines.push("## What was measured");
-  lines.push("");
-  lines.push(`- ${String(areaNames.length)} areas, the bullets of \`docs/admin-console.md\` in its order.`);
-  lines.push(`- ${String(measured.tables.length)} tables, from \`brain.db.Base.metadata\`.`);
-  lines.push(`- ${String(measured.installation.length)} installation values, from \`brain.install.INSTALLATION\`.`);
-  lines.push(`- ${String(measured.routes.length)} routes under \`/api/v1\` and \`/setup\`, from the API's internal document.`);
-  lines.push(`- ${String(measured.screens.length)} console addresses, from the route table in \`console/src/App.tsx\`.`);
-  lines.push(
-    `- ${String(measured.writeCount)} calls in the console that send a write, from \`console/tests/support/writes.ts\`, reaching ${String(writeRoutes.length)} routes.`,
-  );
-  lines.push(`- ${String(gapCount)} gaps recorded, and ${String(unreached.length)} routes no screen calls.`);
-  lines.push("");
+/** The file every other file of the audit is read after, and the one that names them. */
+export const AUDIT_INDEX = "README.md";
 
-  lines.push("## Area by area");
-  lines.push("");
-  for (const name of areaNames) {
-    const area = AREAS[name];
-    if (area === undefined) {
+/** The file holding what is not administered here, which sorts after every area's file. */
+export const NOT_ADMINISTERED_FILE = "not-administered.md";
+
+/**
+ * An area's file name: its place in the standard, then its words. The number is the standard's
+ * order, so the served page reads in that order, and the words are there so a diff says which area
+ * changed without opening the file.
+ */
+export function areaFile(name: string, at: number): string {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .split("-")
+    .slice(0, 6)
+    .join("-");
+  return `${String(at + 1).padStart(2, "0")}-${slug}.md`;
+}
+
+/** Whether a write route's three proofs are each proved or not applicable. */
+function provedWhole(route: string): boolean {
+  const one = PROOFS[route];
+  return one !== undefined && [one.row, one.audit, one.behaviour].every((proof) => !("none" in proof));
+}
+
+/** The table of writes, for the routes given, in route order. */
+function writeTable(routes: readonly string[], measured: Measured): string[] {
+  const lines = ["| Write | Called by | Row | Audit entry | Behaviour |", "| --- | --- | --- | --- | --- |"];
+  for (const route of [...routes].sort()) {
+    const one = PROOFS[route];
+    if (one === undefined) {
       continue;
     }
+    const callers = (measured.writtenBy[route] ?? []).map(code).join(", ");
+    lines.push(
+      `| ${code(route)} | ${callers || "**no screen**"} | ${cellSafe(proofCell(one.row))} | ${cellSafe(proofCell(one.audit))} | ${cellSafe(proofCell(one.behaviour))} |`,
+    );
+  }
+  return lines;
+}
+
+/**
+ * The audit, deterministically, as one file per area plus an index and the list of what is not
+ * administered here, keyed by file name inside `AUDIT_DIRECTORY`.
+ *
+ * **Why files and not one document.** Every console change moves some figure in the audit, and
+ * until 2026-09-28 every figure was in one file: the totals at its head moved with every route,
+ * page and write anybody added, so any two console pull requests changed the same lines of the
+ * same file and the second always conflicted with the first. Split by area, a change touches the
+ * file of the area it belongs to, and the index carries no figure that moves with a change. What
+ * is checked is unchanged: every table, route, value and address is still claimed by an area or
+ * excused, every file is compared with what this renders, and a file nothing renders is refused.
+ * Rejected: generating the document in CI and serving it from the build, because the page is
+ * served by the API from the repository (`/build/console-audit`), and a document that exists only
+ * in a build is one the owner cannot read on the commit he is looking at.
+ */
+export function renderAudit(measured: Measured): Record<string, string> {
+  const areaNames = Object.keys(AREAS);
+  const files: Record<string, string> = {};
+  const index: string[] = [];
+
+  index.push("# The console audit");
+  index.push("");
+  index.push(
+    "What an administrator would need to manage, read out of the schema, the routes and the installation values, compared with what the console serves, screen by screen, with every gap either linked to its open leaf or recorded with its reason. It is the audit `docs/admin-console.md` asks for before the console is called done.",
+  );
+  index.push("");
+  index.push(
+    "**These files are generated and must not be edited by hand.** `console/tests/console-audit.test.ts` renders them from `console/tests/support/consoleAudit.ts` and fails when any file here differs, or when a file here is one it did not render. To regenerate them after a change, run `npm run api:generate` and then `WRITE_CONSOLE_AUDIT=1 npx vitest run tests/console-audit.test.ts` in `console/`. The page at `/build/console-audit` is this file followed by every other file here in name order.",
+  );
+  index.push("");
+  index.push(
+    "**One file per area, so two changes to the console meet only when they touch the same area.** Each area's file carries its own figures, and this index carries none that a change could move.",
+  );
+  index.push("");
+  index.push("## What was measured");
+  index.push("");
+  index.push("- The areas: the bullets of `docs/admin-console.md`, in its order, one file each.");
+  index.push("- The tables, from `brain.db.Base.metadata`.");
+  index.push("- The installation values, from `brain.install.INSTALLATION`.");
+  index.push("- The routes under `/api/v1` and `/setup`, from the API's internal document.");
+  index.push("- The console addresses, from every page's route file, `console/src/pages/*.route.tsx`, and `console/src/App.tsx`.");
+  index.push("- The calls in the console that send a write, from `console/tests/support/writes.ts`, each followed to its routes.");
+  index.push("");
+  index.push("## The rules every screen is held to");
+  index.push("");
+  index.push(
+    "- **Loading, empty, unreachable and failed** are four different sentences on every registered address: `console/tests/screen-states.test.tsx`, with the addresses excused and why in `console/tests/support/screenStateRules.tsx`.",
+  );
+  index.push(
+    "- **A destructive write is confirmed**, and the confirmation names what and says what will happen: `console/tests/destructive-confirmed.test.ts`, with the writes that are not destructive and why.",
+  );
+  index.push(
+    "- **A form that writes is judged before it sends**, and a blank one says what to fill in: `console/tests/validated-before-write.test.tsx`.",
+  );
+  index.push(
+    "- **Long lists page, search, filter and sort** through one convention, `brain.listing`, over the rows the reader may see, and a filter offers only values on rows drawn: `console/tests/long-lists.test.tsx` measures every long list against its route and records what each does not offer with its reason. Ending several sessions and deciding several review holdings are bulk acts, each item decided by the single act's own check.",
+  );
+  index.push(
+    "- **Every write the console sends is followed to the system** (leaf `M27.8.17`): to the row it writes, to the audit entry it leaves, and to the behaviour it changes, each a named Python test or a reason there is none. Each area's file lists its own writes. A test marked database runs against a scratch Postgres, which CI provides.",
+  );
+  index.push("");
+  index.push("## Area by area");
+  index.push("");
+  areaNames.forEach((name, at) => {
+    index.push(`- [${name}](${areaFile(name, at)})`);
+  });
+  index.push(`- [Not administered here](${NOT_ADMINISTERED_FILE})`);
+  index.push("");
+  files[AUDIT_INDEX] = index.join("\n");
+
+  const claimedWrites = new Set<string>();
+  areaNames.forEach((name, at) => {
+    const area = AREAS[name];
+    if (area === undefined) {
+      return;
+    }
+    const lines: string[] = [];
     const routes = measured.routes.filter((route) => area.routes.some((claim) => claims(claim, route)));
+    const unreached = routes.filter(
+      (route) => (measured.readBy[route] ?? []).length === 0 && (measured.writtenBy[route] ?? []).length === 0,
+    );
+    const writes = Object.keys(PROOFS).filter((route) => area.routes.some((claim) => claims(claim, route)));
+    writes.forEach((route) => claimedWrites.add(route));
     lines.push(`### ${name}`);
     lines.push("");
     lines.push(`- **Screens:** ${area.screens.length === 0 ? "none" : area.screens.map(code).join(", ")}`);
     lines.push(`- **Tables:** ${area.tables.length === 0 ? "none" : area.tables.map(code).join(", ")}`);
     lines.push(`- **Installation values:** ${area.installation.length === 0 ? "none" : area.installation.map(code).join(", ")}`);
+    lines.push(
+      `- **Measured here:** ${String(routes.length)} routes, ${String(unreached.length)} called by no screen; ${String(writes.length)} write routes, ${String(writes.filter(provedWhole).length)} with all three proofs; ${String(area.gaps.length)} gaps.`,
+    );
     lines.push("");
     if (routes.length > 0) {
       lines.push("| Route | Called by |");
@@ -1955,51 +2039,31 @@ export function renderAudit(measured: Measured): string {
       }
     }
     lines.push("");
-  }
-
-  lines.push("## Not administered here");
-  lines.push("");
-  lines.push("| What | Why it is not a gap |");
-  lines.push("| --- | --- |");
-  for (const [what, why] of Object.entries(NOT_ADMINISTERED).sort(([a], [b]) => a.localeCompare(b))) {
-    lines.push(`| ${code(what)} | ${cellSafe(why)} |`);
-  }
-  lines.push("");
-
-  lines.push("## Every write the console sends, followed to the system");
-  lines.push("");
-  lines.push(
-    `Leaf \`M27.8.17\`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. ${String(proved.length)} of ${String(writeRoutes.length)} write routes have all three proved or not applicable, ${String(withoutDatabase.length)} of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.`,
-  );
-  lines.push("");
-  lines.push("| Write | Called by | Row | Audit entry | Behaviour |");
-  lines.push("| --- | --- | --- | --- | --- |");
-  for (const route of writeRoutes) {
-    const one = PROOFS[route];
-    if (one === undefined) {
-      continue;
+    if (writes.length > 0) {
+      lines.push("**Every write to this area, followed to the system.**");
+      lines.push("");
+      lines.push(...writeTable(writes, measured));
+      lines.push("");
     }
-    const callers = (measured.writtenBy[route] ?? []).map(code).join(", ");
-    lines.push(
-      `| ${code(route)} | ${callers || "**no screen**"} | ${cellSafe(proofCell(one.row))} | ${cellSafe(proofCell(one.audit))} | ${cellSafe(proofCell(one.behaviour))} |`,
-    );
-  }
-  lines.push("");
+    files[areaFile(name, at)] = lines.join("\n");
+  });
 
-  lines.push("## The rules every screen is held to");
-  lines.push("");
-  lines.push(
-    "- **Loading, empty, unreachable and failed** are four different sentences on every registered address: `console/tests/screen-states.test.tsx`, with the addresses excused and why in `console/tests/support/screenStateRules.tsx`.",
-  );
-  lines.push(
-    "- **A destructive write is confirmed**, and the confirmation names what and says what will happen: `console/tests/destructive-confirmed.test.ts`, with the writes that are not destructive and why.",
-  );
-  lines.push(
-    "- **A form that writes is judged before it sends**, and a blank one says what to fill in: `console/tests/validated-before-write.test.tsx`.",
-  );
-  lines.push(
-    "- **Long lists page, search, filter and sort** through one convention, `brain.listing`, over the rows the reader may see, and a filter offers only values on rows drawn: `console/tests/long-lists.test.tsx` measures every long list against its route and records what each does not offer with its reason. Ending several sessions and deciding several review holdings are bulk acts, each item decided by the single act's own check.",
-  );
-  lines.push("");
-  return `${lines.join("\n")}`;
+  const excused: string[] = [];
+  excused.push("## Not administered here");
+  excused.push("");
+  excused.push("| What | Why it is not a gap |");
+  excused.push("| --- | --- |");
+  for (const [what, why] of Object.entries(NOT_ADMINISTERED).sort(([a], [b]) => a.localeCompare(b))) {
+    excused.push(`| ${code(what)} | ${cellSafe(why)} |`);
+  }
+  excused.push("");
+  const unclaimed = Object.keys(PROOFS).filter((route) => !claimedWrites.has(route));
+  if (unclaimed.length > 0) {
+    excused.push("**Every write to a route no area claims, followed to the system.**");
+    excused.push("");
+    excused.push(...writeTable(unclaimed, measured));
+    excused.push("");
+  }
+  files[NOT_ADMINISTERED_FILE] = excused.join("\n");
+  return files;
 }

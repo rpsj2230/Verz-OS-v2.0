@@ -11,8 +11,10 @@ otherwise for as long as nothing asked.
 the thing that goes stale.** A module says which screen it serves by binding itself to the
 registry in a module-level constant: `SPEND_OF_OTHERS_SCREEN`, `SCOPES_SCREEN`, `SCREEN_KEY`,
 `THE_SCREEN`. That idiom is already this package's own and `brain.console.govern` argues for it
-by name. The route table says which screens exist in a browser: `console/src/App.tsx` exports
-`routes`, and a route names a path and an element. A screen key is in the browser when a route
+by name. The route table says which screens exist in a browser: each page declares its routes in its own
+file, `console/src/pages/<Page>.route.tsx`, which `console/src/routes/registry.ts` collects, and
+`console/src/App.tsx` holds the few routes outside the shell. A route names a path and an
+element. A screen key is in the browser when a route
 path or a route element names it. Nothing in either list is typed out here.
 
 **A `screen("limits")` call inside a function is a borrow and not a declaration**, which is the
@@ -122,9 +124,9 @@ NOT_A_READ: Final[frozenset[str]] = frozenset({"__init__", "reads", "screens"})
 SCREEN_DECLARATION_SUFFIX: Final = "_SCREEN"
 SCREEN_DECLARATION_NAMES: Final[frozenset[str]] = frozenset({"SCREEN_KEY", "THE_SCREEN"})
 
-#: The route table, as `console/src/App.tsx` writes it. Parsed rather than imported, because
-#: this is Python reading TypeScript and there is no third option that does not involve
-#: running a bundler inside a sweep.
+#: The route table, as the route files and `console/src/App.tsx` write it. Parsed rather than
+#: imported, because this is Python reading TypeScript and there is no third option that does
+#: not involve running a bundler inside a sweep.
 _ROUTE_PATH_RE: Final = re.compile(r'path:\s*"([^"]*)"')
 _ROUTE_ELEMENT_RE: Final = re.compile(r"element:\s*[(\s]*<([A-Za-z][A-Za-z0-9_]*)")
 #: How a page names the read it serves, which is the only way one declares it today.
@@ -220,7 +222,7 @@ class Unopenable:
         if self.declares:
             return (
                 f"brain.console.{self.module} declares {', '.join(self.declares)} and no "
-                "route in console/src/App.tsx serves any of them"
+                "route in console/src serves any of them"
             )
         return (
             f"brain.console.{self.module} declares no screen key, so no route could reach it "
@@ -299,7 +301,7 @@ def _string_literals(node: ast.expr) -> tuple[str, ...]:
 
 
 def routed_screen_keys(route_table: str, keys: Iterable[str] | None = None) -> frozenset[str]:
-    """The screen keys the browser's route table reaches, read out of `App.tsx`.
+    """The screen keys the browser's route table reaches, read out of the route files.
 
     Two ways a route names a screen and both are needed. Most routes name it in the path, and
     the overview names it in the element: it is the index route, so it has no path at all, and
@@ -395,15 +397,21 @@ def exemption_gaps(
     return tuple(gaps)
 
 
+#: Where each page declares its own routes, relative to the console's source.
+ROUTE_FILES: Final = "pages/*.route.tsx"
+
+
 def _route_table(console_root: Path) -> str:
     """The route table's source, or nothing at all when the console is not present.
 
-    An empty string rather than a failure, because an install that ships the API without the
-    browser console is a supported shape and a sweep that cannot run there is a sweep that
-    gets removed. With no route table nothing is routed, which is the honest answer.
+    `App.tsx` and every page's route file, joined, because since 2026-09-28 a page declares its
+    route in its own file and `App.tsx` holds only the routes outside the shell. An empty string
+    rather than a failure, because an install that ships the API without the browser console is
+    a supported shape and a sweep that cannot run there is a sweep that gets removed. With no
+    route table nothing is routed, which is the honest answer.
     """
-    table = console_root / "App.tsx"
-    return table.read_text(encoding="utf-8") if table.is_file() else ""
+    tables = [console_root / "App.tsx", *sorted(console_root.glob(ROUTE_FILES))]
+    return "\n".join(one.read_text(encoding="utf-8") for one in tables if one.is_file())
 
 
 def report_lines(

@@ -1,0 +1,51 @@
+### Backup and recovery
+
+- **Screens:** `/recovery`, `/retention`, `/compliance`, `/referrals`
+- **Tables:** `ops.retention_release`, `ops.retention_report`, `obs.legal_hold`, `ops.erasure_request`, `ops.breach_case`, `ops.sensitive_referral`
+- **Installation values:** none
+- **Measured here:** 22 routes, 0 called by no screen; 13 write routes, 12 with all three proofs; 1 gaps.
+
+| Route | Called by |
+| --- | --- |
+| `GET /api/v1/govern/compliance/breaches` | `/compliance` |
+| `GET /api/v1/govern/compliance/register` | `/compliance` |
+| `GET /api/v1/govern/compliance/topics` | `/compliance` |
+| `GET /api/v1/govern/erasures` | `/retention` |
+| `GET /api/v1/govern/retention` | `/retention` |
+| `GET /api/v1/govern/retention/controls` | `/retention` |
+| `GET /api/v1/govern/retention/exports` | `/retention` |
+| `GET /api/v1/install/recovery` | `/recovery` |
+| `GET /api/v1/me/referrals` | `/referrals` |
+| `POST /api/v1/govern/compliance/breaches` | `/compliance` |
+| `POST /api/v1/govern/compliance/breaches/{case_id}/assessment` | `/compliance` |
+| `POST /api/v1/govern/compliance/breaches/{case_id}/close` | `/compliance` |
+| `POST /api/v1/govern/compliance/breaches/{case_id}/commission` | `/compliance` |
+| `POST /api/v1/govern/compliance/breaches/{case_id}/exception` | `/compliance` |
+| `POST /api/v1/govern/compliance/breaches/{case_id}/individuals` | `/compliance` |
+| `POST /api/v1/govern/erasures` | `/retention` |
+| `POST /api/v1/govern/legal-holds` | `/retention` |
+| `POST /api/v1/govern/legal-holds/lift` | `/retention` |
+| `POST /api/v1/govern/retention/release` | `/retention` |
+| `POST /api/v1/govern/retention/withdrawal` | `/retention` |
+| `POST /api/v1/me/referrals/{referral_id}/handled` | `/referrals` |
+| `PUT /api/v1/govern/compliance/topics/{topic}` | `/compliance` |
+
+- **Gap.** A recovery drill cannot be started, and a restore cannot be verified, from the console. Open leaf `M30.3.9`.
+
+**Every write to this area, followed to the system.**
+
+| Write | Called by | Row | Audit entry | Behaviour |
+| --- | --- | --- | --- | --- |
+| `POST /api/v1/govern/compliance/breaches` | `/compliance` | `test_each_breach_step_writes_its_column_and_one_breach_entry_in_the_same_transaction` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_each_breach_step_writes_its_column_and_one_breach_entry_in_the_same_transaction` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_a_case_shows_its_clock_from_the_awareness_and_its_findings` in `tests/unit/test_compliance_routes.py` |
+| `POST /api/v1/govern/compliance/breaches/{case_id}/assessment` | `/compliance` | `test_each_breach_step_writes_its_column_and_one_breach_entry_in_the_same_transaction` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_each_breach_step_writes_its_column_and_one_breach_entry_in_the_same_transaction` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_a_case_shows_its_clock_from_the_awareness_and_its_findings` in `tests/unit/test_compliance_routes.py` |
+| `POST /api/v1/govern/compliance/breaches/{case_id}/close` | `/compliance` | `test_each_breach_step_writes_its_column_and_one_breach_entry_in_the_same_transaction` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_each_breach_step_writes_its_column_and_one_breach_entry_in_the_same_transaction` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_a_case_shows_its_clock_from_the_awareness_and_its_findings` in `tests/unit/test_compliance_routes.py` |
+| `POST /api/v1/govern/compliance/breaches/{case_id}/commission` | `/compliance` | `test_each_breach_step_writes_its_column_and_one_breach_entry_in_the_same_transaction` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_each_breach_step_writes_its_column_and_one_breach_entry_in_the_same_transaction` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_a_case_shows_its_clock_from_the_awareness_and_its_findings` in `tests/unit/test_compliance_routes.py` |
+| `POST /api/v1/govern/compliance/breaches/{case_id}/exception` | `/compliance` | `test_each_breach_step_writes_its_column_and_one_breach_entry_in_the_same_transaction` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_each_breach_step_writes_its_column_and_one_breach_entry_in_the_same_transaction` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_a_case_shows_its_clock_from_the_awareness_and_its_findings` in `tests/unit/test_compliance_routes.py` |
+| `POST /api/v1/govern/compliance/breaches/{case_id}/individuals` | `/compliance` | `test_each_breach_step_writes_its_column_and_one_breach_entry_in_the_same_transaction` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_each_breach_step_writes_its_column_and_one_breach_entry_in_the_same_transaction` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_a_case_shows_its_clock_from_the_awareness_and_its_findings` in `tests/unit/test_compliance_routes.py` |
+| `POST /api/v1/govern/erasures` | `/retention` | `test_a_request_is_filed_in_the_sessions_own_name_once_per_open_person_and_never_finished` in `tests/unit/test_erasure_store.py` (database, in CI) | `test_a_request_is_filed_in_the_sessions_own_name_once_per_open_person_and_never_finished` in `tests/unit/test_erasure_store.py` (database, in CI) | `test_the_queue_carries_a_request_out_and_writes_what_each_store_did_and_what_it_could_not` in `tests/unit/test_erasure_store.py` (database, in CI) |
+| `POST /api/v1/govern/legal-holds` | `/retention` | `test_a_hold_is_placed_lifted_once_and_kept` in `tests/unit/test_retention_store.py` (database, in CI) | `test_each_retention_write_the_console_makes_appends_one_entry_naming_its_own_actor` in `tests/unit/test_retention_audit.py` (database, in CI) | `test_a_hold_placed_through_the_store_keeps_its_rows_from_the_sweep_and_lifted_releases_them` in `tests/unit/test_console_control_audit.py` (database, in CI) |
+| `POST /api/v1/govern/legal-holds/lift` | `/retention` | `test_a_hold_is_placed_lifted_once_and_kept` in `tests/unit/test_retention_store.py` (database, in CI) | `test_each_retention_write_the_console_makes_appends_one_entry_naming_its_own_actor` in `tests/unit/test_retention_audit.py` (database, in CI) | `test_a_hold_placed_through_the_store_keeps_its_rows_from_the_sweep_and_lifted_releases_them` in `tests/unit/test_console_control_audit.py` (database, in CI) |
+| `POST /api/v1/govern/retention/release` | `/retention` | `test_a_release_names_the_newest_report_and_is_withdrawn_by_being_marked` in `tests/unit/test_retention_store.py` (database, in CI) | `test_each_retention_write_the_console_makes_appends_one_entry_naming_its_own_actor` in `tests/unit/test_retention_audit.py` (database, in CI) | `test_a_released_sweep_is_started_to_act_and_a_withdrawn_one_to_report` in `tests/unit/test_worker_schedule.py` (database, in CI) |
+| `POST /api/v1/govern/retention/withdrawal` | `/retention` | `test_a_release_names_the_newest_report_and_is_withdrawn_by_being_marked` in `tests/unit/test_retention_store.py` (database, in CI) | `test_each_retention_write_the_console_makes_appends_one_entry_naming_its_own_actor` in `tests/unit/test_retention_audit.py` (database, in CI) | `test_a_released_sweep_is_started_to_act_and_a_withdrawn_one_to_report` in `tests/unit/test_worker_schedule.py` (database, in CI) |
+| `POST /api/v1/me/referrals/{referral_id}/handled` | `/referrals` | `test_a_referral_is_filed_without_content_and_read_only_by_its_person` in `tests/unit/test_compliance_store.py` (database, in CI) | **None.** Marking a referral handled writes handled_at and handled_by on its row and no ledger entry: an entry that only a sensitive question writes is the disclosure brain.audit.compliance.intercept argues against. | `test_a_referral_marked_handled_is_shown_handled` in `tests/unit/test_compliance_routes.py` |
+| `PUT /api/v1/govern/compliance/topics/{topic}` | `/compliance` | `test_naming_a_person_writes_one_route_row_and_a_setting_entry_without_the_value` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_naming_a_person_writes_one_route_row_and_a_setting_entry_without_the_value` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_a_sensitive_question_is_routed_to_the_person_named_for_its_topic` in `tests/unit/test_compliance_routes.py` |

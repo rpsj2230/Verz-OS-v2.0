@@ -286,6 +286,67 @@ export interface ImportGraph {
 }
 
 /**
+ * The files an eager `import.meta.glob` in one module pulls in, which the bundler writes out as
+ * static imports.
+ *
+ * **Followed because it is a static import in everything but spelling.** The route registry
+ * (`src/routes/registry.ts`) collects every page's route file with
+ * `import.meta.glob(..., { eager: true })`, and Vite compiles that into one static import per
+ * matching file. A walker that read only import statements would stop at the registry and report
+ * a graph with no page in it, so every check below would pass however heavy a route file's
+ * imports were. A glob without `eager` is a set of dynamic imports and is a split point like any
+ * other `import()`, so it is not followed.
+ *
+ * Only the shape the console writes is understood: a string pattern whose last segment may hold
+ * `*`. Anything else throws, for `resolveRelative`'s reason.
+ */
+function eagerGlobs(source: ts.SourceFile, fromFile: string): string[] {
+  const found: string[] = [];
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isCallExpression(node) &&
+      node.expression.getText(source) === "import.meta.glob" &&
+      node.arguments.length >= 2
+    ) {
+      const [pattern, options] = node.arguments;
+      const eager =
+        options !== undefined &&
+        ts.isObjectLiteralExpression(options) &&
+        options.properties.some(
+          (one) =>
+            ts.isPropertyAssignment(one) &&
+            one.name.getText(source) === "eager" &&
+            one.initializer.kind === ts.SyntaxKind.TrueKeyword,
+        );
+      if (eager) {
+        if (pattern === undefined || !ts.isStringLiteral(pattern)) {
+          throw new Error(`${fromFile} globs something other than one string, which this walker cannot expand.`);
+        }
+        const at = pattern.text.lastIndexOf("/");
+        const directory = resolve(CONSOLE_ROOT, dirname(fromFile), pattern.text.slice(0, at));
+        const wildcard = pattern.text
+          .slice(at + 1)
+          .split("*")
+          .map((part) => part.replace(/[.+?^$()|[\]\\{}]/g, "\\$&"))
+          .join("[^/]*");
+        const name = new RegExp("^" + wildcard + "$");
+        const matched = readdirSync(directory)
+          .filter((one) => name.test(one))
+          .sort()
+          .map((one) => relative(CONSOLE_ROOT, join(directory, one)).split("\\").join("/"));
+        if (matched.length === 0) {
+          throw new Error(`${fromFile} globs ${pattern.text}, which matches nothing on disk.`);
+        }
+        found.push(...matched);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return found;
+}
+
+/**
  * What an entry module pulls in through static imports only.
  *
  * **`import()` expressions are deliberately not followed**, because they are the split
@@ -343,6 +404,9 @@ export function staticImportGraph(entry: string): ImportGraph {
       } else {
         packages.add(packageOf(specifier));
       }
+    }
+    for (const found of eagerGlobs(source, path)) {
+      visit(found);
     }
   };
 
