@@ -910,6 +910,32 @@ CONTROLS: Final[tuple[Control, ...]] = (
         severity=Severity.RAISED,
         invoked_by=Invocation.IN_PROCESS,
     ),
+    Control(
+        name="acceptance_run",
+        # Added on 2026-09-28 with `ops.acceptance_result`, and started by the worker's schedule
+        # from the day it was registered. The run is what the schedule calls; `owed` is what
+        # decides whether the commit this process serves has been checked, or a person asked.
+        symbols=(
+            "brain.ops.acceptance_run:run_acceptance_now",
+            "brain.ops.acceptance:owed",
+        ),
+        guards=(
+            "that every task proved on the install goes on being proved after each deploy: the "
+            "install acceptance checks run once per newly deployed commit, as a labelled test "
+            "department whose writes are rolled back, and record passed, failed or not run"
+        ),
+        lost_silently=(
+            "The last recorded results keep standing for a commit that is no longer the one "
+            "serving. The Install page goes on saying passed, for a release nobody checked, and "
+            "the first sign is a task closed on a result that described the previous build."
+        ),
+        # Five minutes, restated rather than imported: `brain.ops.acceptance_run` imports the
+        # tables, which import this registry for the control-run name constraint.
+        every=_FIVE_MINUTELY,
+        cadence_from="brain.ops.acceptance_run:RUN_EVERY",
+        severity=Severity.RAISED,
+        invoked_by=Invocation.IN_PROCESS,
+    ),
 )
 
 

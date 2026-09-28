@@ -334,13 +334,12 @@
    "area": "Multi-agent",
    "requirement": "The orchestrator runs a single loop by default; the model proposes subtasks, an arithmetic fan-out gate decides whether to run them in parallel, and parallel results are merged only after schema validation.",
    "leaves": [
-    "M18.1.1",
+    "M18.5.3",
     "M18.1.3",
     "M18.2.2",
     "M18.2.3",
     "M18.2.4",
-    "M18.4.1",
-    "M18.5.3"
+    "M18.4.1"
    ],
    "proof": [
     "M18.6.1"
@@ -518,7 +517,7 @@
     "M27.3.12",
     "M27.3.13",
     "M27.3.18",
-    "M27.4.1",
+    "M27.7.18",
     "M27.7.14",
     "M27.7.19",
     "M27.10.1"
@@ -1911,7 +1910,6 @@
     "M14.3.6",
     "M14.4.1",
     "M14.4.2",
-    "M14.4.3",
     "M14.4.4",
     "M14.4.5",
     "M14.8.1"
@@ -2626,11 +2624,10 @@
    "area": "Learning",
    "requirement": "Fast-path rules and procedural shortcuts that use only tools the agent already holds are first computed in shadow beside the real answer and not used.",
    "leaves": [
-    "M16.3.3",
+    "M16.7.3",
     "M16.3.4",
     "M39.4.2.3",
-    "M6.1.1",
-    "M16.7.3"
+    "M6.1.1"
    ],
    "proof": [
     "M16.7.8"
@@ -3310,7 +3307,7 @@
     "M39.4.2.2",
     "M39.4.2.3",
     "M39.4.2.4",
-    "M39.4.2.5",
+    "M16.7.13",
     "M27.7.21",
     "M28.4.1",
     "M16.7.3"
@@ -3845,7 +3842,6 @@
    "area": "Learning",
    "requirement": "Questions the system could not answer are collected and reported as knowledge gaps.",
    "leaves": [
-    "M27.4.1",
     "M27.7.18",
     "M34.2.2.3",
     "M13.5.23",
@@ -3909,7 +3905,6 @@
     "M14.3.5",
     "M14.3.6",
     "M14.4.1",
-    "M14.4.3",
     "M14.8.1"
    ],
    "proof": [
@@ -4137,7 +4132,7 @@
    "area": "Multi-agent",
    "requirement": "A task is decomposed into subtasks run by several agents in parallel and merged into one result.",
    "leaves": [
-    "M18.1.1",
+    "M18.5.3",
     "M18.1.2",
     "M18.1.3",
     "M18.2.1",
@@ -4149,7 +4144,6 @@
     "M18.4.3",
     "M18.5.1",
     "M18.5.2",
-    "M18.5.3",
     "M18.6.1"
    ],
    "proof": [
@@ -4943,12 +4937,11 @@
    "area": "Multi-agent",
    "requirement": "A large task can be split into subtasks that run across several agents in parallel and are merged into one answer.",
    "leaves": [
-    "M18.1.1",
+    "M18.5.3",
     "M18.4.1",
     "M18.4.3",
     "M18.5.1",
     "M18.5.2",
-    "M18.5.3",
     "M18.6.1"
    ],
    "proof": [
@@ -5764,11 +5757,10 @@
    "area": "Console",
    "requirement": "The Report screens show questions and gaps, usage and cost, and quality and canaries.",
    "leaves": [
-    "M27.4.1",
+    "M27.7.18",
     "M27.7.14",
     "M27.7.15",
-    "M27.7.19",
-    "M27.7.18"
+    "M27.7.19"
    ],
    "proof": [
     "M27.14.7"
@@ -6981,8 +6973,7 @@
    "requirement": "Each user has a daily and monthly allowance set by their Department Admin, with a fair-share cap so one person cannot drain the department.",
    "leaves": [
     "M21.1.3",
-    "M33.3.1.5",
-    "M40.2.1.3"
+    "M33.3.1.5"
    ],
    "proof": [
     "M21.4.3"
@@ -7325,7 +7316,6 @@
    "leaves": [
     "M30.5.1",
     "M30.5.2",
-    "M30.5.3",
     "M27.7.16",
     "M36.2.4.3",
     "M30.6.2"
@@ -7392,9 +7382,8 @@
    "requirement": "The single box is the default, and a split into an application-and-browser host and a database-and-object-store host is designed now and built on a trigger with no application change.",
    "leaves": [
     "M36.1.4.1",
-    "M36.1.4.2",
-    "M36.1.4.3",
-    "M30.4.9"
+    "M30.4.9",
+    "M36.1.4.3"
    ],
    "proof": [
     "M30.6.7"
@@ -7654,7 +7643,7 @@
    "leaves": [
     "M25.3.1",
     "M25.3.2",
-    "M40.4.2.2",
+    "M33.3.1.3",
     "M25.4.2"
    ],
    "proof": [
@@ -8970,7 +8959,6 @@
     "M18.5.1",
     "M18.5.2",
     "M18.5.3",
-    "M18.1.1",
     "M18.1.2",
     "M18.6.1"
    ],
@@ -9554,7 +9542,6 @@
    "area": "Harness",
    "requirement": "The harness decomposes tasks into subtasks.",
    "leaves": [
-    "M18.1.1",
     "M18.5.3",
     "M18.1.2",
     "M18.6.1"
@@ -10227,7 +10214,7 @@
    "leaves": [
     "M16.6.8",
     "M39.4.2.1",
-    "M39.4.2.5"
+    "M16.7.13"
    ],
    "proof": [
     "M27.14.2",
@@ -10752,9 +10739,8 @@
    "leaves": [
     "M30.5.1",
     "M30.5.2",
-    "M30.5.3",
-    "M6.3.1",
     "M27.7.16",
+    "M6.3.1",
     "M30.6.2"
    ],
    "proof": [
@@ -10807,7 +10793,7 @@
    "leaves": [
     "M27.2.1",
     "M27.7.3",
-    "M27.4.1",
+    "M27.7.18",
     "M27.8.1"
    ],
    "proof": [
@@ -11117,7 +11103,7 @@
    "leaves": [
     "M30.5.1",
     "M30.5.2",
-    "M30.5.3",
+    "M27.7.16",
     "M30.6.2",
     "M30.6.3"
    ],
@@ -13512,7 +13498,6 @@
    "requirement": "A knowledge owner can see the questions the system could not answer, including ones searched in a connected, readable corpus where nothing was found, so missing company knowledge is found.",
    "leaves": [
     "M27.7.18",
-    "M27.4.1",
     "M34.2.2.3",
     "M33.2.1.4",
     "M13.5.23",
@@ -14987,7 +14972,7 @@
    "area": "Observability",
    "requirement": "The Service levels screen shows each lane's measured latency and success rate from real requests on the install against its objective.",
    "leaves": [
-    "M30.5.3",
+    "M27.7.16",
     "M30.5.2",
     "M30.6.9"
    ],
@@ -15678,7 +15663,7 @@
     "M27.11.13",
     "M39.3.1.1",
     "M39.3.1.3",
-    "M13.8.16"
+    "M13.8.19"
    ],
    "proof": [
     "M27.14.2"
@@ -15692,7 +15677,6 @@
    "requirement": "Each agent has a learning switch that pauses memory formation and learning for that agent.",
    "leaves": [
     "M27.11.14",
-    "M39.4.2.5",
     "M16.7.13"
    ],
    "proof": [
@@ -15922,7 +15906,7 @@
     "M39.4.2.4",
     "M39.4.1.4",
     "M27.7.21",
-    "M16.3.3",
+    "M16.7.3",
     "M16.3.5",
     "M16.7.14"
    ],
@@ -16240,7 +16224,6 @@
     "M14.3.5",
     "M14.4.1",
     "M14.4.2",
-    "M14.4.3",
     "M14.4.4",
     "M14.8.3"
    ],
@@ -16698,7 +16681,7 @@
    "leaves": [
     "M27.12.2",
     "M27.11.9",
-    "M27.15.59"
+    "M27.15.8"
    ],
    "proof": [
     "M27.14.3"
@@ -18126,7 +18109,7 @@
    "leaves": [
     "M27.11.14",
     "M39.4.2.1",
-    "M39.4.2.5",
+    "M16.7.13",
     "M16.6.5"
    ],
    "proof": [

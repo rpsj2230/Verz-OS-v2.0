@@ -154,6 +154,72 @@ const ACTS = {
     text: "Import from the console: knowledge upload, a skill from a repository, a template document",
     why: "Merged into M12.2.2, which asks for the same outcome: Import from GitHub with a pinned commit Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101).",
   },
+  "M27.15.59": {
+    kind: "DECIDED",
+    gate: false,
+    text: "Test connection on a connector's page runs one throttled probe, records it, and shows success or failure without any business record",
+    why: "Merged into M27.15.8, which asks for the same outcome: An administrator tests a connector from the console, and the test makes one probe under the connector's throttle, records the result on its health and returns no business rows Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101).",
+  },
+  "M13.8.16": {
+    kind: "DECIDED",
+    gate: false,
+    text: "An agent's audience can list named people and several departments, and adding one lets them find the agent without widening what any run reaches.",
+    why: "Merged into M13.8.19, which asks for the same outcome: An agent's audience can name several departments and individual people beside its level, and each added person or department gains discovery only, never reach Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101).",
+  },
+  "M36.1.4.2": {
+    kind: "DECIDED",
+    gate: false,
+    text: "Rehearsed without an application change",
+    why: "Merged into M30.4.9, which asks for the same outcome: Two-box split rehearsed without application change Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101).",
+  },
+  "M40.4.2.2": {
+    kind: "DECIDED",
+    gate: false,
+    text: "My conversation history with export",
+    why: "Merged into M33.3.1.3, which asks for the same outcome: Their own conversation history and export Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101).",
+  },
+  "M40.2.1.3": {
+    kind: "DECIDED",
+    gate: false,
+    text: "Personal budget consumed against the personal cap",
+    why: "Merged into M33.3.1.5, which asks for the same outcome: Their own usage against allowance Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101).",
+  },
+  "M14.4.3": {
+    kind: "DECIDED",
+    gate: false,
+    text: "Weight export to the online table",
+    why: "Merged into M14.3.5, which asks for the same outcome: Weight table exported from offline calibration Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101).",
+  },
+  "M16.3.3": {
+    kind: "DECIDED",
+    gate: false,
+    text: "Tier two shadow then review: fast-path rules and procedural shortcuts are computed in shadow beside the real answer and offered to a named reviewer with their evidence, never promoted by themselves",
+    why: "Merged into M16.7.3, which asks for the same outcome: A learned rule or shortcut that has agreed with real answers in shadow is offered to a named reviewer with its evidence and takes effect only after that person approves it, and the approval is recorded Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101).",
+  },
+  "M39.4.2.5": {
+    kind: "DECIDED",
+    gate: false,
+    text: "A single control to freeze all learning for this agent during an incident",
+    why: "Merged into M16.7.13, which asks for the same outcome: Pausing learning on one agent stops memory formation and learning proposals from that agent's runs, and the pause can only narrow what is learned. Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101).",
+  },
+  "M30.5.3": {
+    kind: "DECIDED",
+    gate: false,
+    text: "Dashboard against target",
+    why: "Merged into M27.7.16, which asks for the same outcome: Service levels: what was promised, what was measured, and where the gap is Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101).",
+  },
+  "M27.4.1": {
+    kind: "DECIDED",
+    gate: false,
+    text: "Questions and gaps",
+    why: "Merged into M27.7.18, which asks for the same outcome: Questions and gaps: the questions no connected source or knowledge could answer, including those answered with nothing found, by department and the source or knowledge that would have, shown only to people who administer that department Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101).",
+  },
+  "M18.1.1": {
+    kind: "DECIDED",
+    gate: false,
+    text: "Planner proposing subtasks and data dependencies",
+    why: "Merged into M18.5.3, which asks for the same outcome: A planner step asks a model for subtasks and their dependencies, and its proposal passes the existing proposal checks before any child runs Owner approved merging these duplicates on 2026-09-28 (needs-rupash 101).",
+  },
   // -------------------------------------------------------- M29.1 plugin interfaces, decided
   //
   // Needs Rupash item 58, answered Option B on 2026-09-16. `brain.plugins.points` is the
