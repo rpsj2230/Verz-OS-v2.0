@@ -11,7 +11,9 @@
  * **Nothing is drawn as nought unless something counted it.** A figure the API lists as not
  * recorded reads "Not recorded yet" with the API's reason on hover and focus, and a figure nothing
  * sent is not drawn at all. A queue the reader may not act on was never sent, so it is absent and
- * never "0". See `kit/KpiStrip.tsx` and `brain.console.needs_you`.
+ * never "0". See `kit/KpiStrip.tsx` and `brain.console.needs_you`. The week's cost is drawn in the
+ * install's currency when the route sent one, with whose cost it is beneath, and otherwise as "Not
+ * recorded yet" with the route's reason, such as no model having a price yet.
  *
  * **Identifiers are in Advanced and nowhere else.** The audit feed says what was done and to what
  * kind of thing, and links to the entry's history, whose address carries the identifier; the
@@ -64,6 +66,7 @@ import {
   activityWords,
   basisWords,
   connectedSources,
+  costWords,
   partIsReady,
   partWords,
   queueLabel,
@@ -256,9 +259,16 @@ function FigureRow({
         ),
     });
   }
-  const cost = read === null ? undefined : whyOf(read.notRecorded, "cost");
-  if (cost !== undefined) {
-    cards.push({ key: "cost", node: <StatCard label={COST_LABEL} unrecordedWhy={cost} /> });
+  if (read?.cost !== undefined) {
+    cards.push({
+      key: "cost",
+      node: <StatCard label={COST_LABEL} value={costWords(read.cost)} sub={basisWords(read.cost.basis)} />,
+    });
+  } else {
+    const unrecorded = read === null ? undefined : whyOf(read.notRecorded, "cost");
+    if (unrecorded !== undefined) {
+      cards.push({ key: "cost", node: <StatCard label={COST_LABEL} unrecordedWhy={unrecorded} /> });
+    }
   }
 
   if (!busy && failure === null && cards.length === 0) {

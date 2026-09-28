@@ -14,6 +14,13 @@
  * yet", never nought.** Every reader here returns `undefined` or `null` for a body it cannot read,
  * and the page then draws no card rather than a zero. `kit/KpiStrip.tsx` draws the sentence.
  *
+ * **The week's cost is kept only with the currency it is in.** The route sends `cost_minor` and
+ * `currency` together, or neither with a `not_recorded` sentence saying why (spend recording off,
+ * or no model priced in the install's currency). A sum with no currency beside it is no figure
+ * here, because whole minor units in a currency nobody named read as whichever the reader assumes.
+ * `cost_basis` is whose cost it is, which can be narrower than `basis`: money is the Budget
+ * screen's to show, and questions the Usage screen's.
+ *
  * **A queue the reader may not act on was never sent, so it is never drawn.** The route leaves it
  * out rather than sending it as nought, and this file adds no list of queues to fill the gap: a
  * line reading "Access review 0" to somebody who may not open access review says the queue exists
@@ -89,11 +96,20 @@ export interface OverviewAnswer {
 /** The figure row's own answer, from the generated schema. */
 export type FiguresBody = components["schemas"]["OverviewFiguresView"];
 
+/** The week's cost as this console holds it: whole minor units, their currency, and whose. */
+export interface WeekCost {
+  readonly minor: number;
+  readonly currency: string;
+  readonly basis: string;
+}
+
 /** The figure row as this console holds it. */
 export interface Figures {
   readonly basis: string;
   readonly answered: number;
   readonly nothingReturned: number;
+  /** Absent when the route sent no cost, or a cost without its currency or its basis. */
+  readonly cost?: WeekCost;
   readonly notRecorded: readonly NotRecorded[];
 }
 
@@ -182,6 +198,14 @@ export function readOverview(payload: unknown): OverviewAnswer | null {
   };
 }
 
+/** The week's cost out of a response body, or `undefined` unless its sum, currency and basis all came. */
+function readWeekCost(body: Fields | null): WeekCost | undefined {
+  const minor = count(body?.["cost_minor"]);
+  const currency = text(body?.["currency"]);
+  const basis = text(body?.["cost_basis"]);
+  return minor === undefined || currency === undefined || basis === undefined ? undefined : { minor, currency, basis };
+}
+
 /** The figure row out of a response body, or `null` when a figure is not a count. */
 export function readFigures(payload: unknown): Figures | null {
   const body = fieldsOf(payload);
@@ -191,7 +215,14 @@ export function readFigures(payload: unknown): Figures | null {
   if (basis === undefined || answered === undefined || nothingReturned === undefined) {
     return null;
   }
-  return { basis, answered, nothingReturned, notRecorded: readNotRecorded(body?.["not_recorded"]) };
+  const cost = readWeekCost(body);
+  return {
+    basis,
+    answered,
+    nothingReturned,
+    ...(cost === undefined ? {} : { cost }),
+    notRecorded: readNotRecorded(body?.["not_recorded"]),
+  };
 }
 
 /** A count of rows a list route sent, and whether it sent a full page with more behind it. */
@@ -329,6 +360,12 @@ export const HEALTH_FIGURES: Readonly<Record<string, string>> = Object.freeze({
 /** Whose requests the figures are over, in words. */
 export function basisWords(basis: string): string {
   return basis === "everyone" ? "everyone's requests" : "your requests only";
+}
+
+/** A week's cost in its currency, as "SGD 1,284.50": whole minor units as hundredths, grouped. */
+export function costWords(cost: WeekCost): string {
+  const amount = (cost.minor / 100).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `${cost.currency} ${amount}`;
 }
 
 /** How the subject of an audit entry is named in a sentence. Never its identifier. */

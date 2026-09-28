@@ -1460,8 +1460,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # The document a citation on Ask links to, its passages at the reader's reach through the
     # handler and policy the answer used. See `brain.cited_document_routes`.
     app.include_router(cited_document_router)
-    # The landing screen's figure row: how the last seven days' requests ended, at the reader's
-    # basis. See `brain.console_overview_figures_routes`.
+    # The landing screen's figure row: how the last seven days' requests ended and what they cost,
+    # each at the reader's basis. See `brain.console_overview_figures_routes`.
     app.include_router(console_overview_figures_router)
     # Binding a chat account with a one-time code minted in My workspace, unbinding it, and the
     # Channels screen's bindings and health behind the channel's own authority. See

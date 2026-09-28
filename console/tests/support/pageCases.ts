@@ -1160,8 +1160,8 @@ const CONNECTORS_SCREEN = {
 export const PAGES: Readonly<Record<string, PageCase>> = {
   // The Overview, SCREEN 1: the health strip and Needs you from the overview route, the figure row
   // from the figures route, the roster and the Connectors list, and the audit log's newest page.
-  // Every drawn value the API sent is the unbroken token: a part's name, a queue's name, and the
-  // signed-in person's name and identifiers in Advanced.
+  // Every drawn value the API sent is the unbroken token: a part's name, a queue's name, the week's
+  // cost's currency, and the signed-in person's name and identifiers in Advanced.
   "/": {
     address: "/",
     signedIn: true,
@@ -1201,7 +1201,10 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         basis: "everyone",
         answered: 1847,
         nothing_returned: 312,
-        not_recorded: [{ figure: "cost", why: UNBROKEN }],
+        cost_basis: "everyone",
+        cost_minor: 128450,
+        currency: UNBROKEN,
+        not_recorded: [],
       },
       "/api/v1/agents": {
         items: [{ agent_id: "quote-helper", display_name: UNBROKEN, owner_id: UNBROKEN, state: "enabled" }],
