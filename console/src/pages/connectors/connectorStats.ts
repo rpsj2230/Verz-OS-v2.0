@@ -53,7 +53,8 @@ export interface ConnectorStats {
   readonly consecutiveFailures?: number;
   /** The ids this install keeps of the source that the reader's own scope admits. */
   readonly indexIds?: number;
-  readonly truncated: boolean;
+  /** The attempts were read to their bound, so the figures are at least these. */
+  readonly atLeast: boolean;
   readonly periods: readonly ConnectorPeriod[];
   readonly unrecorded: readonly Unrecorded[];
 }
@@ -138,7 +139,7 @@ export function readConnectorStats(payload: unknown): ConnectorStats | null {
     ...(lastReadToTheEnd === undefined ? {} : { lastReadToTheEnd }),
     ...(consecutiveFailures === undefined ? {} : { consecutiveFailures }),
     ...(indexIds === undefined ? {} : { indexIds }),
-    truncated: fields["truncated"] === true,
+    atLeast: fields["at_least"] === true,
     periods,
     unrecorded,
   };

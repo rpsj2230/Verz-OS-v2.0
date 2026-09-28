@@ -35,19 +35,7 @@ export const RUNG_ID = "11111111-1111-4111-8111-111111111111";
  * package serves, so it is answered here in the shape that package was briefed with, and listed so
  * the document check knows it is expected rather than a typo. Delete the entry when the route lands.
  */
-export const AWAITED_ROUTES: Readonly<Record<string, string>> = {
-  "/api/v1/console/agents/{id}/stats":
-    "The per-entity stats route is built in parallel by the stats package (brain.console_stats_routes, " +
-    "on its own branch); the agent pages code against its declared shape and draw the failed state " +
-    "until it answers.",
-  "/api/v1/console/connectors/{connector}/stats":
-    "The same stats package serves a source's figures; the Connectors list and a source's Dashboard " +
-    "code against ConnectorStatsView and draw the failed state until it answers.",
-  "/api/v1/console/overview":
-    "The landing screen's health strip and Needs you are served by the stats package " +
-    "(brain.console_overview_routes, PR #165); the Overview codes against OverviewView and leaves both " +
-    "blocks out, as for any 404, until it answers.",
-};
+export const AWAITED_ROUTES: Readonly<Record<string, string>> = {};
 
 /** One source's figures as `brain.console_stats_routes.ConnectorStatsView` sends them. */
 const CONNECTOR_STATS = {
@@ -57,7 +45,7 @@ const CONNECTOR_STATS = {
   last_read_to_the_end: "2019-03-04T09:30:00Z",
   consecutive_failures: 0,
   index_ids: 1234,
-  truncated: false,
+  at_least: false,
   periods: ["7d", "30d"].map((range) => ({
     range,
     since: "2019-02-02T00:00:00Z",
@@ -125,7 +113,7 @@ const AGENT_STATS = {
   cost_basis: "everyone",
   currency: "SGD",
   last_active: "2019-03-04T09:42:00Z",
-  truncated: false,
+  at_least: false,
   periods: ["7d", "30d"].map((range) => ({
     range,
     since: "2019-02-02T00:00:00Z",
@@ -1070,8 +1058,10 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
             { name: "cache", state: "not_configured", gates: false },
             { name: UNBROKEN, state: "ready", gates: false },
           ],
+          halts: [{ scope: "department", target: UNBROKEN, since: "2019-03-04T11:30:00Z" }],
+          halts_known: true,
           worker_last_seen: "2019-03-04T11:58:00Z",
-          unrecorded: [{ figure: "halts", why: UNBROKEN }],
+          unrecorded: [{ figure: "budget_stops", why: UNBROKEN }],
         },
         needs_you: [
           { queue: "approvals", waiting: 3, at_least: false, opens: "/approvals" },
@@ -1240,7 +1230,7 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         next_cursor: null,
         truncated: false,
       },
-      // Each row's figures, from the shared stats route. See `AWAITED_ROUTES`.
+      // Each row's figures, from the shared stats route, `brain.console_stats_routes`.
       "/api/v1/console/agents/quote-helper/stats": AGENT_STATS,
     },
   },

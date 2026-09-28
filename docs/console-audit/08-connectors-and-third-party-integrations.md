@@ -3,7 +3,7 @@
 - **Screens:** `/connectors`, `/connectors/:connector`, `/connectors/:connector/:view`
 - **Tables:** `ops.channel`, `ops.channel_delivery`, `ops.connector_connection`, `ops.connector_sync`, `proj.record`, `er.alias`, `er.canonical`, `er.identifier`, `er.link`
 - **Installation values:** `INSTALL_LARK_USES`, `INSTALL_LARK_PLATFORM`, `INSTALL_LARK_BASE`
-- **Measured here:** 17 routes, 6 called by no screen; 6 write routes, 5 with all three proofs; 7 gaps.
+- **Measured here:** 19 routes, 7 called by no screen; 6 write routes, 5 with all three proofs; 7 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -11,9 +11,11 @@
 | `GET /api/v1/channels/{name}/deliveries` | **no screen** |
 | `GET /api/v1/connectors` | `/`, `/connectors`, `/connectors/:connector`, `/connectors/:connector/:view` |
 | `GET /api/v1/connectors/lark-app` | `/connectors` |
+| `GET /api/v1/console/channels/{name}/stats` | **no screen** |
 | `GET /api/v1/console/connectors` | `/connectors` |
 | `GET /api/v1/console/connectors/{connector}` | `/connectors/:connector`, `/connectors/:connector/:view` |
 | `GET /api/v1/console/connectors/{connector}/export` | `/connectors/:connector` |
+| `GET /api/v1/console/connectors/{connector}/stats` | `/connectors`, `/connectors/:connector` |
 | `POST /api/v1/channels/{name}/events` | **no screen** |
 | `POST /api/v1/channels/{name}/switch` | **no screen** |
 | `POST /api/v1/channels/{name}/test` | **no screen** |
