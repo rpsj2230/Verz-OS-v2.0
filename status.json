@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-28T10:42:23.791791+00:00",
-  "commit": "4adb02e",
-  "commit_subject": "Wave 1's build work is landed and ready for testing, and Wave 2's first batch is in progress",
+  "generated_at": "2026-09-28T11:27:52.677855+00:00",
+  "commit": "c57a512",
+  "commit_subject": "Migration 0115 follows 0114, the channel record main landed first",
   "total": 1595,
   "done": 329,
   "percent": 20.6,
