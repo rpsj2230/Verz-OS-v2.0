@@ -377,9 +377,9 @@ export const DEPARTMENT_SORTS: readonly SortChoice[] = [
   { value: "slug", label: "By short name" },
 ];
 
-/** The People and grants address for one person, where their entitlement is. */
+/** One person's page, where their grants and access are. */
 export function personAddress(principalId: string): string {
-  return `/people/${encodeURIComponent(`principal:${principalId}`)}`;
+  return `/people/${encodeURIComponent(principalId)}`;
 }
 
 // ------------------------------------------------------------------ elevation

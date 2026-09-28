@@ -279,13 +279,79 @@ const AGENT_AUTOMATIONS = {
   result_rule: UNBROKEN,
 };
 
-/** One page of people, whose subject key and capability are both unbreakable tokens. */
-const PEOPLE = {
-  items: [{ subject: `principal:${UNBROKEN}`, capabilities: [UNBROKEN] }],
+/** One person as the directory sends one, every value an unbreakable token. */
+const PERSON = {
+  principal_id: "p_1",
+  display_name: UNBROKEN,
+  department: UNBROKEN,
+  department_name: UNBROKEN,
+  employment: "contractor",
+  standing: "live",
+  second_factor: false,
+  last_signed_in_at: "2019-03-04T09:00:00Z",
+  packs: [UNBROKEN],
+};
+
+/** One page of the directory: every person, grant or none. */
+const DIRECTORY = {
+  items: [PERSON],
   next_cursor: null,
-  total: null,
   truncated: false,
   editable: true,
+  may_disable: true,
+  may_add: true,
+  adding: UNBROKEN,
+  disabling: UNBROKEN,
+  staleness: null,
+};
+
+/** One person's page: a direct grant and a pack, a team and a lead, and every sentence served. */
+const PERSON_DETAIL = {
+  person: PERSON,
+  placements: {
+    department: { slug: UNBROKEN, name: UNBROKEN },
+    teams: [{ department: UNBROKEN, slug: UNBROKEN, name: UNBROKEN }],
+    leads: [{ slug: UNBROKEN, name: UNBROKEN }],
+  },
+  held: [
+    {
+      kind: "grant",
+      row_id: "11111111-1111-4111-8111-000000000001",
+      capabilities: [UNBROKEN],
+      pack: null,
+      pack_label: null,
+      pack_version: null,
+      scope: { clauses: [{ field: "department", op: "eq", value: UNBROKEN }] },
+      scope_slug: UNBROKEN,
+      scope_label: UNBROKEN,
+      granted_by: "p_2",
+      granted_by_name: UNBROKEN,
+      reason: UNBROKEN,
+      granted_at: "2019-03-04T09:00:00Z",
+      not_after: "2999-03-04T09:00:00Z",
+    },
+    {
+      kind: "pack",
+      row_id: "11111111-1111-4111-8111-000000000002",
+      capabilities: [UNBROKEN],
+      pack: UNBROKEN,
+      pack_label: UNBROKEN,
+      pack_version: 2,
+      scope: { clauses: [{ field: "department", op: "eq", value: UNBROKEN }] },
+      scope_slug: null,
+      scope_label: null,
+      granted_by: "p_2",
+      granted_by_name: null,
+      reason: UNBROKEN,
+      granted_at: "2019-03-04T09:00:00Z",
+      not_after: null,
+    },
+  ],
+  editable: true,
+  may_disable: true,
+  may_organise: true,
+  disabling: UNBROKEN,
+  from_a_pack: UNBROKEN,
   staleness: null,
 };
 
@@ -1417,25 +1483,50 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
       },
     },
   },
-  // The four govern screens. Every one of them draws an identifier from the API with nowhere to
-  // break: a subject key, a capability, a scope slug and a clause are all one token, and a
-  // capability is the longest of them. The people screen is mounted twice, once from the menu
-  // and once at a subject's own address, because the second draws a second list and a form.
+  // People: the directory of every person, and one person's page at its Overview and at the Access
+  // view, which asks the most routes. Every value is a token with nowhere to break.
   "/people": {
     address: "/people",
     signedIn: true,
     drawsValues: true,
-    answers: { "/api/v1/govern/people": PEOPLE, "/api/v1/govern/data-steward": NO_STEWARD },
+    answers: { "/api/v1/govern/directory": DIRECTORY, "/api/v1/govern/data-steward": NO_STEWARD },
   },
-  "/people/:subject": {
-    address: `/people/${encodeURIComponent(`principal:${UNBROKEN}`)}`,
+  "/people/:personId": {
+    address: "/people/p_1",
     signedIn: true,
     drawsValues: true,
     answers: {
-      "/api/v1/govern/people": PEOPLE,
-      "/api/v1/govern/scopes": SCOPES,
-      "/api/v1/govern/data-steward": NO_STEWARD,
-      "/api/v1/govern/packs": { packs: [{ slug: "helpdesk", label: UNBROKEN, capabilities: [UNBROKEN] }] },
+      "/api/v1/govern/directory/p_1": PERSON_DETAIL,
+      "/api/v1/agents": {
+        items: [{ agent_id: "quote-helper", display_name: UNBROKEN, owner_id: "p_1", state: "enabled" }],
+        next_cursor: null,
+        truncated: false,
+      },
+      "/api/v1/govern/staff_sources/transfers": { transfers: [] },
+    },
+  },
+  "/people/:personId/:view": {
+    address: "/people/p_1/access",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/govern/directory/p_1": PERSON_DETAIL,
+      "/api/v1/govern/roles/holders": {
+        items: [
+          {
+            id: "g-1",
+            principal_id: "p_1",
+            display_name: UNBROKEN,
+            role: "department_admin",
+            scope: { clauses: [{ field: "department", op: "eq", value: UNBROKEN }] },
+            deputy_of: null,
+            granted_by: "p_2",
+            granted_at: "2019-03-04T09:00:00Z",
+            not_after: null,
+          },
+        ],
+        editable: true,
+      },
     },
   },
   "/roles": {
@@ -1454,8 +1545,10 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         ],
         holders_are_not_recorded_yet: true,
       },
+      // The Approver flag and the synced roles carry an id only, so the page asks the directory for names.
+      "/api/v1/govern/directory": DIRECTORY,
       "/api/v1/govern/roles/holders": {
-        items: [{ id: "g-1", principal_id: UNBROKEN, role: "auditor", deputy_of: null, not_after: null }],
+        items: [{ id: "g-1", principal_id: UNBROKEN, display_name: UNBROKEN, role: "auditor", scope: null, deputy_of: null, not_after: null }],
         editable: true,
       },
       "/api/v1/govern/roles/misconfigurations": {
@@ -1500,7 +1593,21 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     address: "/scopes",
     signedIn: true,
     drawsValues: true,
-    answers: { "/api/v1/govern/scopes": SCOPES },
+    answers: { "/api/v1/govern/scopes": SCOPES, "/api/v1/govern/departments": DEPARTMENTS },
+  },
+  // Packs, with one pack whose capabilities and names are tokens, and the controls a writer is offered.
+  "/packs": {
+    address: "/packs",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/govern/packs": {
+        packs: [{ slug: UNBROKEN, label: UNBROKEN, capabilities: [UNBROKEN], version: 3 }],
+        may_write: true,
+        versioning: UNBROKEN,
+        retiring: UNBROKEN,
+      },
+    },
   },
   // Skills, mounted twice for the people screen's reason: once from the menu and once at one
   // skill's own address, because the second draws a second list under the open skill.
@@ -2373,6 +2480,19 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
   // the confirmation panel is held to the same rules in `tests/govern-people-pages.test.tsx`.
   "/departments": {
     address: "/departments",
+    signedIn: true,
+    drawsValues: true,
+    answers: { "/api/v1/govern/departments": DEPARTMENTS },
+  },
+  // One department's page at its Overview, and at Scopes, which asks the scopes that name it.
+  "/departments/:slug": {
+    address: `/departments/${UNBROKEN}`,
+    signedIn: true,
+    drawsValues: true,
+    answers: { "/api/v1/govern/departments": DEPARTMENTS },
+  },
+  "/departments/:slug/:view": {
+    address: `/departments/${UNBROKEN}/scopes`,
     signedIn: true,
     drawsValues: true,
     answers: { "/api/v1/govern/departments": DEPARTMENTS, "/api/v1/govern/scopes": DEPARTMENT_SCOPES },

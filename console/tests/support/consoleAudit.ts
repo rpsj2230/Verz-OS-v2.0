@@ -79,14 +79,25 @@ import {
 import {
   APPOINTMENT_API_PATH,
   DEPUTY_API_PATH,
-  GRANTS_API_PATH,
   GROUP_RULES_API_PATH,
   GROUP_RULE_RETIREMENT_API_PATH,
+  ROLE_REMOVAL_API_PATH,
+} from "../../src/pages/governQuery";
+import {
+  DIRECTORY_API_PATH,
+  GRANTS_API_PATH,
   PACK_ASSIGNMENT_API_PATH,
   REMOVAL_API_PATH,
-  ROLE_REMOVAL_API_PATH,
   SEVERAL_GRANTS_API_PATH,
-} from "../../src/pages/governQuery";
+  transferApiPath as personTransferApiPath,
+} from "../../src/pages/people/peopleQuery";
+import { RENAME_SCOPE_API_PATH } from "../../src/pages/departments/departmentsQuery";
+import {
+  PACKS_API_PATH,
+  PACK_COPY_API_PATH,
+  PACK_RETIREMENT_API_PATH,
+  PACK_VERSION_API_PATH,
+} from "../../src/pages/roles/PacksPage";
 import { actionPath } from "../../src/pages/jobsQuery";
 import { rungApiPath } from "../../src/pages/matrixQuery";
 import { ADD_RUNG_API_PATH, GOLDEN_API_PATH, retireGoldenApiPath } from "../../src/pages/matrixGateQuery";
@@ -245,11 +256,12 @@ const ONCE_BY_THE_WIZARD =
 /** Every area of the standard, keyed by the standard's own words. */
 export const AREAS: Readonly<Record<string, Area>> = {
   "People, roles, permissions and access control": {
-    screens: ["/people", "/people/:subject", "/roles", "/capabilities", "/scopes", "/access_review", "/elevation", "/sessions", "/sign-in-links", "/staff_sources", "/access-requests", "/service-accounts"],
+    screens: ["/people", "/people/:personId", "/people/:personId/:view", "/roles", "/capabilities", "/scopes", "/packs", "/access_review", "/elevation", "/sessions", "/sign-in-links", "/staff_sources", "/access-requests", "/service-accounts"],
     routes: [
       "/api/v1/me",
       "/api/v1/console/navigation",
       "/api/v1/govern/people",
+      "/api/v1/govern/directory*",
       "/api/v1/govern/roles",
       "/api/v1/govern/capabilities",
       "/api/v1/govern/scopes",
@@ -308,12 +320,16 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
     gaps: [
       {
-        what: "A pack cannot be assigned or withdrawn, and a capability that arrived through a pack cannot be removed.",
-        because: "No route writes gate.capability_pack_assignment. brain.govern_routes.remove_grant refuses a pack's capability in the ordinary words, because withdrawing it removes every other capability in the pack.",
+        what: "Capabilities are read and never changed, and what a role grants is not edited.",
+        because: "The capability registry is declared by the product's tools and connected sources, and a role grants nothing, so there is nothing to edit.",
       },
       {
-        what: "Roles, capabilities and scopes are read and never changed.",
-        because: "No route writes gate.scope or the role and capability registries; they are declared by the product and by migrations.",
+        what: "What a run through an agent reaches for somebody else is not previewed on their Access view.",
+        leaf: "M27.15.61",
+      },
+      {
+        what: "GET /api/v1/govern/people, the grant-holder listing, is read by no screen since People lists every person from the directory.",
+        because: "It is kept for any client of the API that reads grant holders by subject; the People list and each person's Grants view read GET /api/v1/govern/directory and its detail, which carry the same holdings with their scope and lapse.",
       },
       {
         what: "A break-glass notice to the standing Super Admins is shown on their Elevation screen and is not sent by email or chat, and nobody is told when somebody only asks.",
@@ -328,7 +344,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "Departments, teams and client configuration": {
-    screens: ["/departments", "/department"],
+    screens: ["/departments", "/departments/:slug", "/departments/:slug/:view", "/department"],
     routes: ["/api/v1/govern/departments*"],
     tables: ["gate.department", "gate.team", "gate.team_membership", "gate.department_lead"],
     installation: ["INSTALL_COMPANY_NAME", "INSTALL_PRODUCT_NAME", "INSTALL_LOGO_URL", "INSTALL_ACCENT_COLOUR"],
@@ -860,19 +876,42 @@ function at(route: string, spelled: string, built: string, versioned = true): Wr
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/Learning.tsx UNDO_API_PATH": [at("POST /api/v1/govern/learning/undo", "UNDO_API_PATH", UNDO_API_PATH)],
-  "src/pages/Departments.tsx asked.path": [
-    at("POST /api/v1/govern/departments/membership", "MEMBERSHIP_API_PATH", MEMBERSHIP_API_PATH),
-    at("POST /api/v1/govern/departments/lead", "LEAD_API_PATH", LEAD_API_PATH),
-    at("POST /api/v1/govern/departments", "FOUND_API_PATH", FOUND_API_PATH),
-    at("POST /api/v1/govern/departments/rename", "RENAME_DEPARTMENT_API_PATH", RENAME_DEPARTMENT_API_PATH),
-    at("POST /api/v1/govern/departments/retirement", "RETIRE_DEPARTMENT_API_PATH", RETIRE_DEPARTMENT_API_PATH),
+  "src/pages/departments/StructureDrawers.tsx FOUND_API_PATH": [at("POST /api/v1/govern/departments", "FOUND_API_PATH", FOUND_API_PATH)],
+  "src/pages/departments/StructureDrawers.tsx ADD_TEAM_API_PATH": [
     at("POST /api/v1/govern/departments/team", "ADD_TEAM_API_PATH", ADD_TEAM_API_PATH),
-    at("POST /api/v1/govern/departments/team/rename", "RENAME_TEAM_API_PATH", RENAME_TEAM_API_PATH),
-    at("POST /api/v1/govern/departments/team/retirement", "RETIRE_TEAM_API_PATH", RETIRE_TEAM_API_PATH),
+  ],
+  "src/pages/departments/StructureDrawers.tsx DRAW_SCOPE_API_PATH": [
     at("POST /api/v1/govern/departments/scopes", "DRAW_SCOPE_API_PATH", DRAW_SCOPE_API_PATH),
+  ],
+  "src/pages/departments/StructureDrawers.tsx RENAME_DEPARTMENT_API_PATH": [
+    at("POST /api/v1/govern/departments/rename", "RENAME_DEPARTMENT_API_PATH", RENAME_DEPARTMENT_API_PATH),
+  ],
+  "src/pages/departments/StructureDrawers.tsx RENAME_TEAM_API_PATH": [
+    at("POST /api/v1/govern/departments/team/rename", "RENAME_TEAM_API_PATH", RENAME_TEAM_API_PATH),
+  ],
+  "src/pages/departments/StructureDrawers.tsx RENAME_SCOPE_API_PATH": [
+    at("POST /api/v1/govern/departments/scopes/rename", "RENAME_SCOPE_API_PATH", RENAME_SCOPE_API_PATH),
+  ],
+  "src/pages/departments/StructureDrawers.tsx RETIRE_DEPARTMENT_API_PATH": [
+    at("POST /api/v1/govern/departments/retirement", "RETIRE_DEPARTMENT_API_PATH", RETIRE_DEPARTMENT_API_PATH),
+  ],
+  "src/pages/departments/StructureDrawers.tsx RETIRE_TEAM_API_PATH": [
+    at("POST /api/v1/govern/departments/team/retirement", "RETIRE_TEAM_API_PATH", RETIRE_TEAM_API_PATH),
+  ],
+  "src/pages/departments/StructureDrawers.tsx RETIRE_SCOPE_API_PATH": [
     at("POST /api/v1/govern/departments/scopes/retirement", "RETIRE_SCOPE_API_PATH", RETIRE_SCOPE_API_PATH),
-    at("POST /api/v1/govern/people/disable", "DISABLE_API_PATH", DISABLE_API_PATH),
-    at("POST /api/v1/govern/people/enable", "ENABLE_API_PATH", ENABLE_API_PATH),
+  ],
+  "src/pages/departments/StructureDrawers.tsx MEMBERSHIP_API_PATH": [
+    at("POST /api/v1/govern/departments/membership", "MEMBERSHIP_API_PATH", MEMBERSHIP_API_PATH),
+  ],
+  "src/pages/departments/StructureDrawers.tsx LEAD_API_PATH": [
+    at("POST /api/v1/govern/departments/lead", "LEAD_API_PATH", LEAD_API_PATH),
+  ],
+  "src/pages/people/PersonPlacements.tsx MEMBERSHIP_API_PATH": [
+    at("POST /api/v1/govern/departments/membership", "MEMBERSHIP_API_PATH", MEMBERSHIP_API_PATH),
+  ],
+  "src/pages/people/PersonPlacements.tsx LEAD_API_PATH": [
+    at("POST /api/v1/govern/departments/lead", "LEAD_API_PATH", LEAD_API_PATH),
   ],
   "src/pages/Elevation.tsx ELEVATION_REQUESTS_API_PATH": [
     at("POST /api/v1/govern/elevation/requests", "ELEVATION_REQUESTS_API_PATH", ELEVATION_REQUESTS_API_PATH),
@@ -1039,14 +1078,34 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/Models.tsx providerCheckApiPath(pending.provider)": [
     at("POST /api/v1/models/providers/{provider}/check", "providerCheckApiPath", providerCheckApiPath("anthropic")),
   ],
-  "src/pages/People.tsx REMOVAL_API_PATH": [at("POST /api/v1/govern/grants/removal", "REMOVAL_API_PATH", REMOVAL_API_PATH)],
-  "src/pages/People.tsx GRANTS_API_PATH": [at("POST /api/v1/govern/grants", "GRANTS_API_PATH", GRANTS_API_PATH)],
-  "src/pages/People.tsx SEVERAL_GRANTS_API_PATH": [
+  "src/pages/people/PersonGrants.tsx REMOVAL_API_PATH": [at("POST /api/v1/govern/grants/removal", "REMOVAL_API_PATH", REMOVAL_API_PATH)],
+  "src/pages/people/PersonGrants.tsx REVIEW_DECISION_API_PATH": [
+    at("POST /api/v1/govern/access-review/decision", "REVIEW_DECISION_API_PATH", REVIEW_DECISION_API_PATH),
+  ],
+  "src/pages/people/GrantDrawers.tsx GRANTS_API_PATH": [at("POST /api/v1/govern/grants", "GRANTS_API_PATH", GRANTS_API_PATH)],
+  "src/pages/people/GrantDrawers.tsx SEVERAL_GRANTS_API_PATH": [
     at("POST /api/v1/govern/grants/several", "SEVERAL_GRANTS_API_PATH", SEVERAL_GRANTS_API_PATH),
   ],
-  "src/pages/People.tsx disable ? DISABLE_API_PATH : ENABLE_API_PATH": [
+  "src/pages/people/GrantDrawers.tsx PACK_ASSIGNMENT_API_PATH": [
+    at("POST /api/v1/govern/packs/assignment", "PACK_ASSIGNMENT_API_PATH", PACK_ASSIGNMENT_API_PATH),
+  ],
+  "src/pages/people/GrantDrawers.tsx DIRECTORY_API_PATH": [at("POST /api/v1/govern/directory", "DIRECTORY_API_PATH", DIRECTORY_API_PATH)],
+  "src/pages/people/PersonDetailPage.tsx disable ? DISABLE_API_PATH : ENABLE_API_PATH": [
     at("POST /api/v1/govern/people/disable", "DISABLE_API_PATH", DISABLE_API_PATH),
     at("POST /api/v1/govern/people/enable", "ENABLE_API_PATH", ENABLE_API_PATH),
+  ],
+  "src/pages/people/PersonOverview.tsx transferApiPath(waiting.agentId)": [
+    at("POST /api/v1/govern/staff_sources/transfers/{agent_id}", "transferApiPath", personTransferApiPath("a_quotes")),
+  ],
+  "src/pages/people/PersonSessions.tsx LINK_API_PATH": [at("POST /api/v1/sign-ins", "LINK_API_PATH", LINK_API_PATH)],
+  "src/pages/people/PersonSessions.tsx END_SESSION_API_PATH": [
+    at("POST /api/v1/govern/sessions/end", "END_SESSION_API_PATH", END_SESSION_API_PATH),
+  ],
+  "src/pages/people/PersonSessions.tsx END_SESSIONS_API_PATH": [
+    at("POST /api/v1/govern/sessions/end-several", "END_SESSIONS_API_PATH", END_SESSIONS_API_PATH),
+  ],
+  "src/pages/people/PersonSessions.tsx UNLINK_API_PATH": [
+    at("POST /api/v1/govern/sign-ins/unlink", "UNLINK_API_PATH", UNLINK_API_PATH),
   ],
   "src/components/DataStewardCard.tsx STEWARD_API_PATH": [
     at("POST /api/v1/govern/data-steward", "STEWARD_API_PATH", STEWARD_API_PATH),
@@ -1135,25 +1194,30 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
     at("POST /api/v1/agents/{agent_id}/transfer", "agentMoveApiPath", agentMoveApiPath("quote-helper", "transfer")),
     at("POST /api/v1/agents/{agent_id}/duplicate", "agentMoveApiPath", agentMoveApiPath("quote-helper", "duplicate")),
   ],
-  "src/pages/RoleControls.tsx path": [
+  "src/pages/roles/RoleDrawers.tsx APPOINTMENT_API_PATH": [
     at("POST /api/v1/govern/roles/appointment", "APPOINTMENT_API_PATH", APPOINTMENT_API_PATH),
-    at("POST /api/v1/govern/roles/deputy", "DEPUTY_API_PATH", DEPUTY_API_PATH),
   ],
-  "src/pages/GroupRules.tsx GROUP_RULES_API_PATH": [
+  "src/pages/roles/RoleDrawers.tsx DEPUTY_API_PATH": [at("POST /api/v1/govern/roles/deputy", "DEPUTY_API_PATH", DEPUTY_API_PATH)],
+  "src/pages/roles/RoleDrawers.tsx GROUP_RULES_API_PATH": [
     at("POST /api/v1/govern/roles/group-rules", "GROUP_RULES_API_PATH", GROUP_RULES_API_PATH),
   ],
-  "src/pages/GroupRules.tsx GROUP_RULE_RETIREMENT_API_PATH": [
+  "src/pages/roles/RoleDrawers.tsx GROUP_RULE_RETIREMENT_API_PATH": [
     at(
       "POST /api/v1/govern/roles/group-rules/retirement",
       "GROUP_RULE_RETIREMENT_API_PATH",
       GROUP_RULE_RETIREMENT_API_PATH,
     ),
   ],
-  "src/pages/RoleControls.tsx ROLE_REMOVAL_API_PATH": [
+  "src/pages/roles/RoleDrawers.tsx ROLE_REMOVAL_API_PATH": [
     at("POST /api/v1/govern/roles/removal", "ROLE_REMOVAL_API_PATH", ROLE_REMOVAL_API_PATH),
   ],
-  "src/pages/People.tsx PACK_ASSIGNMENT_API_PATH": [
-    at("POST /api/v1/govern/packs/assignment", "PACK_ASSIGNMENT_API_PATH", PACK_ASSIGNMENT_API_PATH),
+  "src/pages/roles/PacksPage.tsx PACKS_API_PATH": [at("POST /api/v1/govern/packs", "PACKS_API_PATH", PACKS_API_PATH)],
+  "src/pages/roles/PacksPage.tsx PACK_VERSION_API_PATH": [
+    at("POST /api/v1/govern/packs/version", "PACK_VERSION_API_PATH", PACK_VERSION_API_PATH),
+  ],
+  "src/pages/roles/PacksPage.tsx PACK_COPY_API_PATH": [at("POST /api/v1/govern/packs/copy", "PACK_COPY_API_PATH", PACK_COPY_API_PATH)],
+  "src/pages/roles/PacksPage.tsx PACK_RETIREMENT_API_PATH": [
+    at("POST /api/v1/govern/packs/retirement", "PACK_RETIREMENT_API_PATH", PACK_RETIREMENT_API_PATH),
   ],
   "src/pages/Audit.tsx VERIFICATION_API_PATH": [
     at("POST /api/v1/audit/verification", "VERIFICATION_API_PATH", VERIFICATION_API_PATH),
@@ -1326,6 +1390,21 @@ const THE_STRUCTURE_CHANGES_AS_ASKED = t(
   "test_organisation_structure",
   "test_an_administrator_creates_renames_and_retires_departments_teams_and_scopes",
 );
+const PERSON_ADDED_BY_HAND = t(
+  "test_directory_routes",
+  "test_a_person_added_by_hand_is_recorded_and_then_listed_with_what_they_hold",
+  true,
+);
+const PACK_WRITE_REACHES_EVERYTHING = t(
+  "test_govern_pack_routes",
+  "test_each_pack_write_reaches_its_row_one_ledger_entry_and_every_holder",
+  true,
+);
+const PACK_WRITTEN: Proofs = {
+  row: PACK_WRITE_REACHES_EVERYTHING,
+  audit: PACK_WRITE_REACHES_EVERYTHING,
+  behaviour: PACK_WRITE_REACHES_EVERYTHING,
+};
 function structure(behaviour: Proof): Proofs {
   return { row: STRUCTURE_REACHES_THE_ROWS_AND_THE_LEDGER, audit: STRUCTURE_REACHES_THE_ROWS_AND_THE_LEDGER, behaviour };
 }
@@ -1422,6 +1501,20 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
   "POST /api/v1/govern/departments/team/retirement": structure(THE_STRUCTURE_CHANGES_AS_ASKED),
   "POST /api/v1/govern/departments/scopes": structure(A_NEW_SCOPE_IS_GRANTABLE),
   "POST /api/v1/govern/departments/scopes/retirement": structure(THE_STRUCTURE_CHANGES_AS_ASKED),
+  "POST /api/v1/govern/departments/scopes/rename": {
+    row: t("test_organisation_structure", "test_a_scope_renamed_writes_its_label_and_one_ledger_entry_saying_renamed", true),
+    audit: t("test_organisation_structure", "test_a_scope_renamed_writes_its_label_and_one_ledger_entry_saying_renamed", true),
+    behaviour: t("test_organisation_structure", "test_a_scope_is_renamed_by_its_label_by_whoever_could_have_drawn_it"),
+  },
+  "POST /api/v1/govern/directory": {
+    row: PERSON_ADDED_BY_HAND,
+    audit: PERSON_ADDED_BY_HAND,
+    behaviour: PERSON_ADDED_BY_HAND,
+  },
+  "POST /api/v1/govern/packs": PACK_WRITTEN,
+  "POST /api/v1/govern/packs/version": PACK_WRITTEN,
+  "POST /api/v1/govern/packs/copy": PACK_WRITTEN,
+  "POST /api/v1/govern/packs/retirement": PACK_WRITTEN,
   "POST /api/v1/govern/people/disable": {
     row: DISABLE_REACHES_THE_ROW_THE_LEDGER_AND_THE_TOKEN,
     audit: DISABLE_REACHES_THE_ROW_THE_LEDGER_AND_THE_TOKEN,

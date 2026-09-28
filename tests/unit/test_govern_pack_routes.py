@@ -5,7 +5,11 @@ the pattern `tests/unit/test_govern_routes.py` argues for, and through PostgreSQ
 places an assignment must reach: the row, the `grant` entry `0003`'s trigger writes, and what the
 resolver then returns. The database half skips without a server and runs in CI.
 
-Task ids: M1.4.3, M1.4.8, M1.8.4
+Pack writes (M27.15.24) are driven over a stub of their own, with the signed-in people chosen by
+`tests.fixtures.console_http`, and on PostgreSQL through the routes to the rows, the `pack` entries
+`0141`'s trigger writes and what the resolver then gives a holder.
+
+Task ids: M1.4.3, M1.4.8, M1.8.4, M27.15.24
 """
 
 from __future__ import annotations
@@ -13,6 +17,7 @@ from __future__ import annotations
 import json
 import uuid
 from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from typing import Any
 
@@ -25,28 +30,48 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.api import API_PREFIX
 from brain.app import Settings, create_app
+from brain.audit.ledger import AuditAction, AuditChain
+from brain.audit.record import PACK_VERSION_PREFIX, AuditRecorder, PackChange
 from brain.console.govern import Placed, approver_misconfigurations
 from brain.console.reads import Plane, plane_capability
 from brain.console.scoped_authority import REACH_AUTHORITY
 from brain.core.entitlement import Capability, EntitlementSet, Grant
+from brain.core.errors import Absent
 from brain.core.scope import Clause, Op, Scope
-from brain.govern_pack_routes import MISMATCH_SENTENCES, add_assignment, approver_holders
+from brain.govern_pack_routes import (
+    A_NEW_VERSION_CHANGES_WHAT_EVERY_HOLDER_HOLDS,
+    A_PACK_NAME_IS_TAKEN,
+    A_PACK_SOMEBODY_HOLDS_IS_NOT_RETIRED,
+    MISMATCH_SENTENCES,
+    NOT_A_REGISTERED_CAPABILITY,
+    add_assignment,
+    approver_holders,
+    held_by_somebody,
+    retiring_pack,
+    versioning_pack,
+)
+from brain.govern_people_routes import IT_CHANGED_SINCE_YOU_OPENED_IT
 from brain.identity.packs import PackAssignment, SubjectGrant
 from brain.identity.roles import RoleMismatchKind, mismatches_between
 from brain.identity.teams import PrincipalSubject
+from brain.ops.migration_policy import check_file
 from brain.session import make_session_factory
-from brain.tables.audit import ACTOR_SETTING
+from brain.tables.audit import ACTOR_SETTING, SUBJECT_PATTERN
 from brain.tables.gate import (
     CapabilityGrantRow,
     CapabilityPackAssignmentRow,
     CapabilityPackRow,
     ScopeRow,
 )
+from brain.tables.identity import one_of
+from tests.fixtures.console_http import gate_wiring, headers
 from tests.fixtures.http_client import Response
+from tests.fixtures.retirable import has_pgvector, retirable
 from tests.fixtures.scratch_postgres import run, sql
 from tests.unit.test_api_routes import Directory, Keys, NoCache, Versions, token_for, verifier
 from tests.unit.test_automation_owner_store import app_engine
 from tests.unit.test_review_store import entries, through_0052
+from tests.unit.test_tables import VERSIONS, migration_module, rendered, squash
 
 PACKS_PATH = f"{API_PREFIX}/govern/packs"
 ASSIGN_PATH = f"{API_PREFIX}/govern/packs/assignment"
@@ -113,6 +138,7 @@ def pack_row(capabilities: Sequence[str] = PACK_CAPABILITIES) -> CapabilityPackR
         name="helpdesk",
         description="what somebody on the help desk needs",
         capabilities=list(capabilities),
+        version=1,
     )
     row.created_at = LONG_AGO
     row.deleted_at = None
@@ -428,10 +454,11 @@ def test_the_pack_catalogue_is_answered_under_the_vocabulary_grant_only(
             "slug": "helpdesk",
             "label": "what somebody on the help desk needs",
             "capabilities": list(PACK_CAPABILITIES),
+            "version": 1,
         }
     ]
     before = len(recorded.statements)
-    assert get(client, PACKS_PATH, "u_wide").json() == {"packs": []}
+    assert get(client, PACKS_PATH, "u_wide").json()["packs"] == []
     assert len(recorded.statements) == before
 
 
@@ -603,3 +630,614 @@ def test_an_appointed_approver_counts_until_the_appointment_lapses(
     assert [(one["principal_id"], one["kind"]) for one in answered.json()["items"]] == [
         ("u_appointed", "role_without_capability")
     ]
+
+
+# ------------------------------------------------------------ writing packs (M27.15.24)
+
+PACK_VERSION_PATH = f"{API_PREFIX}/govern/packs/version"
+PACK_COPY_PATH = f"{API_PREFIX}/govern/packs/copy"
+PACK_RETIREMENT_PATH = f"{API_PREFIX}/govern/packs/retirement"
+LABEL_MIGRATION = VERSIONS / "0141_packs_people_and_scope_labels_audited.py"
+
+#: Who may write what, signed in through `tests.fixtures.console_http`. `u_admin` holds the pack
+#: authority and every capability over everything and may name capabilities; `u_prefix` the
+#: same without the vocabulary's read; `u_narrow` the authority and one of the two capabilities;
+#: `u_elsewhere` everything, in maintenance only; `u_wide` the vocabulary and no authority.
+WRITERS: dict[str, tuple[Grant, ...]] = {
+    "u_admin": (
+        _grant(REACH_AUTHORITY.value),
+        *(_grant(one) for one in PACK_CAPABILITIES),
+        _grant("read:invoice"),
+        _grant("read:capability"),
+        _grant(plane_capability(Plane.CONFIGURATION).value),
+    ),
+    "u_prefix": (
+        _grant(REACH_AUTHORITY.value),
+        *(_grant(one) for one in PACK_CAPABILITIES),
+        _grant("read:invoice"),
+    ),
+    "u_narrow": (
+        _grant(REACH_AUTHORITY.value),
+        _grant("read:ticket"),
+        _grant("read:invoice"),
+        _grant("read:capability"),
+        _grant(plane_capability(Plane.CONFIGURATION).value),
+    ),
+    "u_elsewhere": (
+        _grant(REACH_AUTHORITY.value, IN_MAINTENANCE),
+        *(_grant(one, IN_MAINTENANCE) for one in PACK_CAPABILITIES),
+        _grant("read:capability", IN_MAINTENANCE),
+        _grant(plane_capability(Plane.CONFIGURATION).value),
+    ),
+    "u_wide": (
+        _grant("read:capability"),
+        _grant(plane_capability(Plane.CONFIGURATION).value),
+    ),
+    "u_none": (),
+}
+
+
+class Rows:
+    """What a statement answers, in the shapes the pack writes read."""
+
+    def __init__(self, rows: Sequence[Any]) -> None:
+        self._rows = tuple(rows)
+
+    def scalars(self) -> Rows:
+        return Rows([row[0] if isinstance(row, tuple) else row for row in self._rows])
+
+    def all(self) -> tuple[Any, ...]:
+        return self._rows
+
+    def first(self) -> Any:
+        return self._rows[0] if self._rows else None
+
+    def one(self) -> Any:
+        assert len(self._rows) == 1
+        return self._rows[0]
+
+    def one_or_none(self) -> Any:
+        return self._rows[0] if self._rows else None
+
+    def scalar_one_or_none(self) -> Any:
+        found = self.first()
+        return found[0] if isinstance(found, tuple) else found
+
+
+def named_pack(name: str, capabilities: Sequence[str] = PACK_CAPABILITIES) -> CapabilityPackRow:
+    row = pack_row(capabilities)
+    row.id = uuid.uuid5(uuid.NAMESPACE_URL, name)
+    row.name = name
+    return row
+
+
+class Book:
+    """The packs, the registry and the assignments a write reads, and everything it ran."""
+
+    def __init__(self) -> None:
+        self.packs: dict[str, CapabilityPackRow] = {"helpdesk": pack_row()}
+        self.registry: set[str] = {*PACK_CAPABILITIES, "read:invoice"}
+        #: Whether a live assignment of the pack being retired exists.
+        self.held = False
+        #: Whether the guarded update finds its row at the expected version.
+        self.update_lands = True
+        #: Whether the insert meets the partial unique index on a live name.
+        self.taken_on_insert = False
+        self.statements: list[str] = []
+        self.commits = 0
+        self.rollbacks = 0
+
+    def answer(self, statement: Any) -> Rows:
+        text = str(statement)
+        if "set_config" in text:
+            return Rows([])
+        if text.startswith("INSERT INTO gate.capability_pack "):
+            if self.taken_on_insert:
+                raise IntegrityError("insert", None, Exception("uq_capability_pack_name_live"))
+            return Rows([(1, LONG_AGO)])
+        if text.startswith("UPDATE gate.capability_pack "):
+            return Rows([(2, LONG_AGO)] if self.update_lands else [])
+        if "FROM gate.capability_registry" in text:
+            return Rows([(one,) for one in sorted(self.registry)])
+        if "FROM gate.capability_pack_assignment" in text:
+            return Rows([(uuid.uuid4(),)] if self.held else [])
+        if "FROM gate.capability_pack" in text:
+            params = statement.compile().params
+            if "name_1" not in params:
+                return Rows(list(self.packs.values()))
+            found = self.packs.get(str(params["name_1"]))
+            return Rows([] if found is None else [found])
+        msg = f"no stub answers {text}"
+        raise AssertionError(msg)
+
+
+_BOOK = Book()
+
+
+class BookSession(AsyncSession):
+    async def execute(self, statement: Any, *args: Any, **kwargs: Any) -> Any:
+        try:
+            _BOOK.statements.append(str(statement.compile(compile_kwargs={"literal_binds": True})))
+        except Exception:
+            _BOOK.statements.append(str(statement))
+        return _BOOK.answer(statement)
+
+    async def commit(self) -> None:
+        _BOOK.commits += 1
+
+    async def rollback(self) -> None:
+        _BOOK.rollbacks += 1
+
+    async def close(self) -> None:
+        return None
+
+
+@pytest.fixture
+def book() -> Iterator[Book]:
+    global _BOOK
+    _BOOK = Book()
+    yield _BOOK
+
+
+@pytest.fixture
+def writer(book: Book) -> Iterator[TestClient]:
+    app: FastAPI = create_app(Settings(env="development"))
+    with TestClient(app, raise_server_exceptions=False) as c:
+        app.state.gate = gate_wiring(WRITERS)
+        app.state.db_sessions = async_sessionmaker(class_=BookSession)
+        app.state.console_reads = None
+        yield c
+
+
+def write(c: TestClient, pid: str, path: str, body: Mapping[str, object]) -> Response:
+    response: Response = c.post(path, json=dict(body), headers=headers(pid))
+    return response
+
+
+def creating(slug: str = "billing", *capabilities: str) -> dict[str, object]:
+    return {
+        "slug": slug,
+        "label": "what somebody in billing needs",
+        "capabilities": list(capabilities or ("read:ticket", "read:invoice")),
+    }
+
+
+def versioning(expected: int = 1, *capabilities: str) -> dict[str, object]:
+    return {
+        "slug": "helpdesk",
+        "expected_version": expected,
+        "label": "what the help desk needs now",
+        "capabilities": list(capabilities or (*PACK_CAPABILITIES, "read:invoice")),
+    }
+
+
+COPYING: dict[str, object] = {"slug": "helpdesk", "new_slug": "helpdesk_two", "label": "Second"}
+RETIRING: dict[str, object] = {"slug": "helpdesk", "expected_version": 1}
+
+
+def writes(book: Book) -> list[str]:
+    return [one for one in book.statements if one.startswith(("INSERT", "UPDATE"))]
+
+
+def answer_of(one: Response) -> tuple[int, str]:
+    return one.status_code, str(one.json()["message"])
+
+
+def said(message: str) -> tuple[int, str]:
+    return 404, f"Nothing was changed: {message}."
+
+
+def test_a_writer_holding_everything_creates_versions_copies_and_retires_a_pack(
+    writer: TestClient, book: Book
+) -> None:
+    """M27.15.24's four writes, the positive case every refusal below needs. Delete this and a set
+    of routes that refuses everybody passes the whole section, or the change words are crossed, or
+    a write is sent before the writer is named to the transaction."""
+    answers = [
+        write(writer, "u_admin", PACKS_PATH, creating()),
+        write(writer, "u_admin", PACK_VERSION_PATH, versioning()),
+        write(writer, "u_admin", PACK_COPY_PATH, COPYING),
+        write(writer, "u_admin", PACK_RETIREMENT_PATH, RETIRING),
+    ]
+
+    assert [one.status_code for one in answers] == [201, 200, 201, 200], [
+        one.text for one in answers
+    ]
+    assert [(one.json()["slug"], one.json()["change"]) for one in answers] == [
+        ("billing", "created"),
+        ("helpdesk", "versioned"),
+        ("helpdesk_two", "copied"),
+        ("helpdesk", "retired"),
+    ]
+    assert [one.json()["version"] for one in answers[:3]] == [1, 2, 1]
+    assert book.commits == 4
+    named = [i for i, one in enumerate(book.statements) if ACTOR_SETTING in one]
+    written = [i for i, one in enumerate(book.statements) if one.startswith(("INSERT", "UPDATE"))]
+    assert len(named) == len(written) == 4
+    assert all(before < after for before, after in zip(named, written, strict=True))
+    assert all("'u_admin'" in book.statements[i] for i in named)
+
+
+def test_a_writer_short_of_one_capability_is_refused_every_write_that_bundles_it(
+    writer: TestClient, book: Book
+) -> None:
+    """Nobody bundles what they could not grant alone. `u_narrow` holds the authority, `read:ticket`
+    and `read:invoice` everywhere and not `write:ticket`: creating a pack carrying it is refused
+    before the database, versioning `helpdesk` is refused even to a body leaving `write:ticket` out,
+    because taking it from every holder is a decision only somebody holding it may make, and copying
+    `helpdesk` is refused because the copy carries it. A pack of what they do hold is created.
+
+    Delete this and a pack is where a capability its writer could not grant hides."""
+    create = write(writer, "u_narrow", PACKS_PATH, creating("billing", "write:ticket"))
+    reached_before_database = list(book.statements)
+    version = write(writer, "u_narrow", PACK_VERSION_PATH, versioning(1, "read:ticket"))
+    copy = write(writer, "u_narrow", PACK_COPY_PATH, COPYING)
+    allowed = write(writer, "u_narrow", PACKS_PATH, creating("billing", "read:ticket"))
+
+    assert {answer_of(one) for one in (create, version, copy)} == {(404, Absent.public_message)}
+    assert reached_before_database == []
+    assert allowed.status_code == 201, allowed.text
+    assert len(writes(book)) == 1
+    assert book.commits == 1
+
+
+def test_a_writer_who_cannot_write_packs_is_refused_before_the_database(
+    writer: TestClient, book: Book
+) -> None:
+    """The ordering every govern write keeps, and one refusal for each of the four writes. Delete
+    this and a caller holding the authority in one department, or none, can tell a process with a
+    database from one without, or learn which pack names exist."""
+    for pid in ("u_elsewhere", "u_wide", "u_none"):
+        for path, body in (
+            (PACKS_PATH, creating()),
+            (PACK_VERSION_PATH, versioning()),
+            (PACK_COPY_PATH, COPYING),
+            (PACK_RETIREMENT_PATH, RETIRING),
+        ):
+            answered = write(writer, pid, path, body)
+            assert answer_of(answered) == (404, Absent.public_message), (pid, path)
+    assert book.statements == []
+
+
+def test_a_pack_that_is_not_there_is_the_ordinary_refusal(writer: TestClient, book: Book) -> None:
+    """Delete this and versioning, copying or retiring a pack that does not exist is answered
+    differently from one the caller may not write, which lists the packs one POST at a time."""
+    gone = {"slug": "nothing_here"}
+    answers = [
+        write(writer, "u_admin", PACK_VERSION_PATH, {**versioning(), **gone}),
+        write(writer, "u_admin", PACK_COPY_PATH, {**COPYING, **gone}),
+        write(writer, "u_admin", PACK_RETIREMENT_PATH, {**RETIRING, **gone}),
+    ]
+
+    assert {answer_of(one) for one in answers} == {(404, Absent.public_message)}
+    assert writes(book) == []
+
+
+def test_every_readable_refusal_is_a_sentence_a_pack_writer_can_act_on(
+    writer: TestClient, book: Book
+) -> None:
+    """A taken short name, a version that moved since the page was opened, a pack somebody still
+    holds, and a capability the registry does not hold, each said in a sentence to a writer holding
+    the pack authority, and the last only to a writer who may also name capabilities.
+
+    Delete this and each of those answers "I could not find that", which a person governing every
+    pack can do nothing with, or the registry's contents are read back to a writer the Capabilities
+    screen would refuse."""
+    book.packs["billing"] = named_pack("billing")
+    taken = write(writer, "u_admin", PACKS_PATH, creating("helpdesk"))
+    copied_onto = write(writer, "u_admin", PACK_COPY_PATH, {**COPYING, "new_slug": "billing"})
+    moved = write(writer, "u_admin", PACK_VERSION_PATH, versioning(3))
+    moved_retire = write(
+        writer, "u_admin", PACK_RETIREMENT_PATH, {**RETIRING, "expected_version": 3}
+    )
+    book.held = True
+    held = write(writer, "u_admin", PACK_RETIREMENT_PATH, RETIRING)
+    book.registry.discard("read:invoice")
+    unregistered = write(writer, "u_admin", PACKS_PATH, creating("fresh"))
+    unregistered_blind = write(writer, "u_prefix", PACKS_PATH, creating("fresh"))
+    book.registry.add("read:invoice")
+    book.taken_on_insert = True
+    raced = write(writer, "u_admin", PACKS_PATH, creating("fresh"))
+
+    assert answer_of(taken) == answer_of(copied_onto) == answer_of(raced)
+    assert answer_of(taken) == said(A_PACK_NAME_IS_TAKEN)
+    assert answer_of(moved) == answer_of(moved_retire) == said(IT_CHANGED_SINCE_YOU_OPENED_IT)
+    assert answer_of(held) == said(A_PACK_SOMEBODY_HOLDS_IS_NOT_RETIRED)
+    assert answer_of(unregistered) == said(
+        NOT_A_REGISTERED_CAPABILITY.format(capability="read:invoice")
+    )
+    assert answer_of(unregistered_blind) == (404, Absent.public_message)
+    assert book.commits == 0
+    assert [one for one in writes(book) if one.startswith("UPDATE")] == []
+
+
+def test_the_retirement_refusal_names_nobody_and_counts_nothing() -> None:
+    """Delete this and the sentence grows a holder's name or how many hold the pack, or the
+    statement behind it counts them, which is a fact about people the pack authority does not make
+    the writer's to read."""
+    assert not any(one.isdigit() for one in A_PACK_SOMEBODY_HOLDS_IS_NOT_RETIRED)
+    compiled = str(held_by_somebody(pack_row()).compile(compile_kwargs={"literal_binds": True}))
+    assert "LIMIT 1" in compiled
+    assert "count(" not in compiled.lower()
+    assert "capability_pack_assignment.not_after > statement_timestamp()" in compiled
+
+
+def test_a_versioning_that_leaves_the_pack_as_it_is_is_a_422(
+    writer: TestClient, book: Book
+) -> None:
+    """Delete this and a press that changes nothing raises the version and writes a ledger entry
+    saying every holder's pack changed when it did not."""
+    same = {
+        "slug": "helpdesk",
+        "expected_version": 1,
+        "label": "what somebody on the help desk needs",
+        "capabilities": list(reversed(PACK_CAPABILITIES)),
+    }
+    answered = write(writer, "u_admin", PACK_VERSION_PATH, same)
+    changed = write(writer, "u_admin", PACK_VERSION_PATH, {**same, "label": "a new label"})
+
+    assert answered.status_code == 422
+    assert changed.status_code == 200, changed.text
+    assert len(writes(book)) == 1
+
+
+def test_a_body_the_types_refuse_is_a_422_that_reaches_no_database(
+    writer: TestClient, book: Book
+) -> None:
+    """Delete this and a capability named twice, a malformed capability, an empty pack, a copy onto
+    its own name, a version of nought, a blank label or a body naming its own writer reaches the
+    database, where it is a constraint error or a row nothing can read."""
+    bodies: list[tuple[str, Mapping[str, object]]] = [
+        (PACKS_PATH, {**creating(), "capabilities": ["read:ticket", "read:ticket"]}),
+        (PACKS_PATH, {**creating(), "capabilities": ["not a capability"]}),
+        (PACKS_PATH, {**creating(), "capabilities": []}),
+        (PACKS_PATH, {**creating(), "label": "   "}),
+        (PACKS_PATH, {**creating(), "granted_by": "u_other"}),
+        (PACKS_PATH, {**creating(), "slug": "Bad-Slug"}),
+        (PACK_COPY_PATH, {**COPYING, "new_slug": "helpdesk"}),
+        (PACK_VERSION_PATH, {**versioning(), "expected_version": 0}),
+        (PACK_RETIREMENT_PATH, {**RETIRING, "expected_version": 0}),
+    ]
+    answers = [write(writer, "u_admin", path, body) for path, body in bodies]
+
+    assert [one.status_code for one in answers] == [422] * len(bodies)
+    assert book.statements == []
+
+
+def test_the_catalogue_carries_each_version_and_whether_this_reader_may_write(
+    writer: TestClient, book: Book
+) -> None:
+    """Presentation, held anyway. Delete this and the page cannot send the version a versioning
+    names, or offers the writes to somebody every press refuses, or drops the two sentences."""
+    admin = writer.get(PACKS_PATH, headers=headers("u_admin")).json()
+    reader = writer.get(PACKS_PATH, headers=headers("u_wide")).json()
+    blind = writer.get(PACKS_PATH, headers=headers("u_prefix")).json()
+
+    assert [(one["slug"], one["version"]) for one in admin["packs"]] == [("helpdesk", 1)]
+    assert (admin["may_write"], reader["may_write"], blind["may_write"]) == (True, False, True)
+    assert blind["packs"] == []
+    assert admin["versioning"] == A_NEW_VERSION_CHANGES_WHAT_EVERY_HOLDER_HOLDS
+    assert admin["retiring"] == f"{A_PACK_SOMEBODY_HOLDS_IS_NOT_RETIRED}."
+
+
+def test_a_version_is_the_same_row_updated_and_never_a_new_row() -> None:
+    """`A_VERSION_IS_THE_SAME_PACK_MOVED_IN_PLACE`, as the statement. Delete this and a versioning
+    can be rewritten as an insert beside a retirement, which strands every assignment on the old row
+    and takes the pack away from all its holders the moment it is improved."""
+    pack = pack_row()
+    compiled = versioning_pack(pack, 1, "new label", ["read:ticket"]).compile()
+    rendered_update = str(compiled)
+
+    assert rendered_update.startswith("UPDATE gate.capability_pack SET")
+    assert "version=(gate.capability_pack.version + " in rendered_update
+    assert "WHERE gate.capability_pack.id = " in rendered_update
+    assert "gate.capability_pack.deleted_at IS NULL" in rendered_update
+    assert compiled.params["id_1"] == pack.id
+    assert compiled.params["version_1"] == 1
+    assert "deleted_at=" not in rendered_update
+    assert "deleted_at=statement_timestamp()" in str(retiring_pack(pack, 1).compile())
+
+
+def test_the_trigger_and_the_recorder_write_a_packs_version_the_same_way() -> None:
+    """Delete this and the prefix a deployed database writes and the one `AuditRecorder.pack`
+    writes can come apart, or the version be written as a bare number the ledger refuses to load,
+    or the recorder accept a retirement at a version or a creation at none."""
+
+    def recorder() -> AuditRecorder:
+        return AuditRecorder(
+            AuditChain(),
+            actor_id="u_admin",
+            ent_hash="0" * 32,
+            trace_id="t",
+            clock=lambda: LONG_AGO,
+        )
+
+    migration = migration_module(LABEL_MIGRATION)
+    entry = recorder().pack(name="helpdesk", change=PackChange.VERSIONED, version=3)
+    retired = recorder().pack(name="helpdesk", change=PackChange.RETIRED)
+
+    assert migration.PACK_VERSION_PREFIX == PACK_VERSION_PREFIX
+    assert (entry.subject, entry.details) == (
+        "pack:helpdesk",
+        {"change": "versioned", "version": "v3"},
+    )
+    assert retired.details == {"change": "retired"}
+    body = squash(migration.PACK_TRIGGER_FUNCTION)
+    assert "jsonb_build_object('version', 'v' || NEW.version::text)" in body
+    assert "v_seq, v_at, v_actor, 'pack', v_subject, v_ent_hash," in body
+    assert "OLD.capabilities IS DISTINCT FROM NEW.capabilities" in body
+    assert "OLD.description IS DISTINCT FROM NEW.description" in body
+    wrong: list[dict[str, Any]] = [
+        {"change": PackChange.CREATED},
+        {"change": PackChange.RETIRED, "version": 2},
+        {"change": PackChange.VERSIONED, "version": 0},
+    ]
+    for one in wrong:
+        with pytest.raises(ValueError):
+            recorder().pack(name="helpdesk", **one)
+
+
+def test_the_migration_adds_the_version_the_triggers_and_both_vocabularies_and_grants_nothing() -> (
+    None
+):
+    """Rendered, not read off the file. Delete this and the column can arrive without its default,
+    so the migration fails on a populated table; a trigger can be written and never created; the
+    action or the subject grammar can be widened in a constant nobody executes; or the downgrade
+    can narrow either without `NOT VALID` and fail on every install that used the release."""
+    migration = migration_module(LABEL_MIGRATION)
+    upgrade = squash(rendered("upgrade", LABEL_MIGRATION))
+    downgrade = squash(rendered("downgrade", LABEL_MIGRATION))
+    # The lists in the database when this lands: `0137`'s actions and `0136`'s subject grammar.
+    earlier = migration_module(VERSIONS / "0137_agent_lifecycle_audit.py")
+    halted = migration_module(VERSIONS / "0136_ops_halt.py")
+
+    assert (
+        "ALTER TABLE gate.capability_pack ADD COLUMN version INTEGER DEFAULT 1 NOT NULL "
+        "CONSTRAINT ck_capability_pack_version_at_least_one CHECK (version >= 1)"
+    ) in upgrade
+    assert (
+        "CREATE TRIGGER capability_pack_is_audited AFTER INSERT OR UPDATE ON gate.capability_pack "
+        "FOR EACH ROW EXECUTE FUNCTION gate.record_pack_change()"
+    ) in upgrade
+    assert (
+        "CREATE TRIGGER principal_creation_is_audited AFTER INSERT ON auth.principal "
+        "FOR EACH ROW EXECUTE FUNCTION auth.record_principal_created()"
+    ) in upgrade
+    assert squash(f"CHECK ({migration.WIDENED_ACTIONS})") in upgrade
+    assert squash(f"CHECK ({migration.WIDENED_SUBJECTS})") in upgrade
+    assert squash(f"CHECK ({migration.NARROWER_ACTIONS}) NOT VALID") in downgrade
+    assert squash(f"CHECK ({migration.NARROWER_SUBJECTS}) NOT VALID") in downgrade
+    assert "ALTER TABLE gate.capability_pack DROP COLUMN version" in downgrade
+    assert "DROP TRIGGER capability_pack_is_audited ON gate.capability_pack" in downgrade
+    assert "DROP TRIGGER principal_creation_is_audited ON auth.principal" in downgrade
+    assert "GRANT" not in upgrade
+    assert squash(migration.NARROWER_ACTIONS) == squash(earlier.WIDENED_ACTIONS)
+    assert squash(migration.NARROWER_SUBJECTS) == squash(halted.WIDENED_SUBJECTS)
+    assert migration.down_revision == earlier.revision
+    assert squash(migration.WIDENED_ACTIONS) == squash(one_of("action", AuditAction))
+    assert squash(migration.WIDENED_SUBJECTS) == squash(f"subject ~ '{SUBJECT_PATTERN}'")
+    assert check_file(LABEL_MIGRATION) == []
+
+
+# ----------------------------------------------------------------- against a database
+
+
+@contextmanager
+def through_0141(database: str) -> Iterator[str]:
+    """A database migrated to head, which with pgvector, as CI has, runs `0141` for real."""
+    with retirable(database) as url:
+        if not has_pgvector(url):
+            pytest.skip("0141 sits on the whole chain, which runs only where pgvector is")
+        yield url
+
+
+def test_each_pack_write_reaches_its_row_one_ledger_entry_and_every_holder() -> None:
+    """**M27.15.24 on PostgreSQL, through the application's own routes.** A pack is created,
+    assigned to a person, versioned, copied, refused retirement while held, and retired once the
+    assignment is removed. The rows hold exactly that; the ledger holds one `pack` entry per write,
+    each naming the writer with the request's reach digest and trace and the version a creation or
+    a versioning left, and nothing for the refused press; and the resolver gives the holder exactly
+    the new version's capabilities without anybody being granted anything again. The chain
+    verifies.
+
+    Delete this and a write can reach its row and not the ledger, be recorded under the database
+    role, record a version the row does not hold, or a versioning can leave its holders at the old
+    bundle. **Skips without a server.**"""
+    with through_0141("brain_pack_writes") as url:
+        for capability in ("read:ticket", "write:ticket", "read:invoice"):
+            sql(
+                url,
+                "INSERT INTO gate.capability_registry (capability, description)"
+                " VALUES (%s, 'what it reaches')",
+                capability,
+            )
+        sql(
+            url,
+            "INSERT INTO auth.principal (id, kind, employment, display_name, primary_department)"
+            " VALUES ('u_holder', 'human', 'staff', 'Holder', 'maintenance')",
+        )
+        sql(
+            url,
+            "INSERT INTO gate.scope (slug, predicate)"
+            " VALUES ('maintenance', '{\"department\": \"maintenance\"}')",
+        )
+        before = len(entries(url, "pack"))
+
+        async def go(client: Any) -> list[tuple[int, dict[str, Any]]]:
+            done: list[tuple[int, dict[str, Any]]] = []
+            for path, body in (
+                (PACKS_PATH, {**creating("billing", "read:ticket"), "label": "Billing"}),
+                (
+                    ASSIGN_PATH,
+                    {
+                        "principal_id": "u_holder",
+                        "pack_slug": "billing",
+                        "scope_slug": "maintenance",
+                        "reason": "joined billing",
+                    },
+                ),
+                (
+                    PACK_VERSION_PATH,
+                    {
+                        "slug": "billing",
+                        "expected_version": 1,
+                        "label": "Billing, with invoices",
+                        "capabilities": ["read:ticket", "read:invoice"],
+                    },
+                ),
+                (PACK_COPY_PATH, {"slug": "billing", "new_slug": "billing_two", "label": "Two"}),
+                (PACK_RETIREMENT_PATH, {"slug": "billing", "expected_version": 2}),
+            ):
+                answer = await client.post(path, json=body, headers=headers("u_admin"))
+                done.append((answer.status_code, answer.json()))
+            return done
+
+        from tests.unit.test_console_control_audit import pressed
+
+        pressed_first = pressed(url, WRITERS, go)
+        holder = sql(url, "SELECT gate.resolve_entitlements('u_holder', now())")
+        sql(
+            url,
+            "UPDATE gate.capability_pack_assignment SET deleted_at = statement_timestamp()"
+            " WHERE principal_id = 'u_holder'",
+        )
+
+        async def retire(client: Any) -> tuple[int, dict[str, Any]]:
+            answer = await client.post(
+                PACK_RETIREMENT_PATH,
+                json={"slug": "billing", "expected_version": 2},
+                headers=headers("u_admin"),
+            )
+            return answer.status_code, answer.json()
+
+        retired = pressed(url, WRITERS, retire)
+        packs = sql(
+            url,
+            "SELECT name, description, capabilities, version, deleted_at IS NOT NULL"
+            " FROM gate.capability_pack ORDER BY name",
+        )
+        found = entries(url, "pack")[before:]
+        chain = sql(url, "SELECT count(*) FROM obs.audit_entry")
+
+    statuses = [status for status, _ in pressed_first]
+    refused = pressed_first[-1][1]
+    assert statuses == [201, 201, 200, 201, 404], pressed_first
+    assert refused["message"] == f"Nothing was changed: {A_PACK_SOMEBODY_HOLDS_IS_NOT_RETIRED}."
+    assert retired[0] == 200, retired
+    assert (retired[1]["change"], retired[1]["version"]) == ("retired", 2)
+    assert packs == [
+        ("billing", "Billing, with invoices", ["read:ticket", "read:invoice"], 2, True),
+        ("billing_two", "Two", ["read:ticket", "read:invoice"], 1, False),
+    ]
+    assert [(one.actor_id, one.subject, dict(one.details)) for one in found] == [
+        ("u_admin", "pack:billing", {"change": "created", "version": "v1"}),
+        ("u_admin", "pack:billing", {"change": "versioned", "version": "v2"}),
+        ("u_admin", "pack:billing_two", {"change": "created", "version": "v1"}),
+        ("u_admin", "pack:billing", {"change": "retired"}),
+    ]
+    assert all(one.ent_hash != "0" * 32 for one in found)
+    assert not [one for one in found if one.trace_id.startswith("tx.")]
+    held = {one["capability"]["value"] for one in holder[0][0]["grants"]}
+    assert {"read:ticket", "read:invoice"} <= held
+    assert "write:ticket" not in held
+    assert chain[0][0] > len(found)

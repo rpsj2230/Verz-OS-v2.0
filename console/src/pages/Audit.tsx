@@ -272,7 +272,7 @@ function Rows({
                   {row.actor_id}
                 </Link>
               </td>
-              <td>{phraseFor(row.action)}</td>
+              <td>{phraseFor(row.action, row.details)}</td>
               <td>
                 <Link to={historyAddress(search, row.subject_kind, row.subject_id)}>
                   {subjectLabel(row.subject_kind, row.subject_id)}
@@ -397,7 +397,7 @@ function History({
                 <tr key={`${event.at}-${event.action}-${event.actor_id}`}>
                   <td>{when(event.at)}</td>
                   <td>{event.actor_id}</td>
-                  <td>{phraseFor(event.action)}</td>
+                  <td>{phraseFor(event.action, event.details)}</td>
                   <td>
                     <Details details={event.details} />
                   </td>
