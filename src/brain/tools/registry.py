@@ -32,22 +32,57 @@ where ours are the only ones there are.
 *Two tools sharing a name resolve by import order*, and which one runs is decided by
 whichever module happened to be imported second.
 
-Scope: this is domain logic. Nothing here opens a connection, reads a table or calls a
-model. `tool_definition` is a table somebody else owns; what is here is the type and the
-rules that govern it.
+**A tool switched off is refused at the door every call already walks through (M12.4.3).**
+Every caller in this tree reaches a handler by `get(name).handler`: the records route, the
+answer lane's row readers and passage search, and a workflow's piece call. So the handler a
+registration stores is a guard, and the guard asks the switch source at the moment of the call.
+Not at `get`: `brain.app` builds the passage search once at startup and holds its handler for
+the life of the process, so a check made at lookup would have been made once, before anybody
+could switch anything. The guard is installed at registration, so no path to a handler skips
+it, and the source is attached afterwards by `govern`, so the order `brain.app` wires things in
+cannot open a gap. See `THE_SWITCH_IS_ASKED_AT_THE_CALL_AND_NOT_AT_THE_LOOKUP`.
 
-Task ids: M12.1.1, M12.1.2, M12.1.3, M12.1.4, M12.1.5
+**A switch only ever narrows.** There is a stop and there is no start: the switch table holds
+the tools somebody switched off, for the install or for one department's people, and switching
+a tool back on retires its stop. Nothing a department's administrator writes can reopen what
+the install closed, because no row says a tool is on. It is not an entitlement and takes no
+part in `EntitlementSet`: reach is decided before the call and a switch then refuses calls
+inside it, which is `brain.ops.halt`'s position for the same reason. See
+`A_SWITCH_ONLY_EVER_NARROWS`.
+
+**The person asking is never told which switch.** The refusal is `Denied`, whose sentence is
+the one every refusal carries; the switch, who threw it and when are in the detail, which goes
+to the log an administrator reads and never into a response. See
+`THE_ASKER_IS_NEVER_TOLD_WHICH_SWITCH`.
+
+**A tool whose name says it does something the owner named as sensitive must declare it
+(M12.3.8).** M3.8.5 gave a definition a way to say a person approves every call, and nothing
+asked any tool to use it. What a declaration buys is `brain.gate.leash.effective_tier`'s cap:
+such a call is prepared, suspended and run only after a person approves that exact action,
+whatever rung its leash entry or a promotion gives it. See
+`A_TOOL_WHOSE_NAME_SAYS_IT_ACTS_SENSITIVELY_MUST_DECLARE_IT`.
+
+Scope: this is domain logic. Nothing here opens a connection, reads a table or calls a model.
+The switches arrive through `SwitchSource`, which `brain.ops.tool_store` implements over
+`agent.tool_switch`, and `agent.tool_definition` is that module's to write.
+
+Task ids: M12.1.1, M12.1.2, M12.1.3, M12.1.4, M12.1.5, M12.3.8, M12.4.3
 """
 
 from __future__ import annotations
 
 import enum
+import functools
+import inspect
 import re
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
-from typing import Final, Self, assert_never
+from datetime import datetime
+from typing import Final, Protocol, Self, assert_never
 
-from brain.core.entitlement import Capability
+import structlog
+
+from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.envelope import (
     OBJECT_NAME_PATTERN,
     TOOL_NAME_PATTERN,
@@ -55,9 +90,13 @@ from brain.core.envelope import (
     SideEffect,
     ToolDefinition,
 )
+from brain.core.errors import Denied
 from brain.core.redaction import OPAQUE_CAPABILITY, assert_tool_returns_typed_result
 from brain.core.scope import Scope
 from brain.gate.injection import AutonomyTier
+from brain.gate.leash import SENSITIVE_EFFECT_RUNG, Leash, LeashEntry
+
+log = structlog.get_logger()
 
 # --------------------------------------------------------------------- grammars
 
@@ -275,6 +314,179 @@ def assert_object_not_reserved(definition: ToolDefinition) -> None:
         raise ToolRegistrationError(msg)
 
 
+# ---------------------------------------------- the owner's sensitive effects (M12.3.8)
+
+
+class SensitiveEffect(enum.StrEnum):
+    """The seven effects the owner named as needing a person's approval every time.
+
+    Closed, one member per effect he named, so "which tools can do this" is a question about a
+    column rather than a reading of descriptions. A tool declares at most one: a tool that does
+    two of these things is two tools, because an approver is shown one prepared action and
+    approves one thing.
+    """
+
+    CLIENT_MESSAGE = "client_message"
+    QUOTATION = "quotation"
+    DNS_OR_HOSTING = "dns_or_hosting"
+    FINANCIAL_RECORD = "financial_record"
+    DELETION = "deletion"
+    PUBLICATION = "publication"
+    PRODUCTION_CHANGE = "production_change"
+
+
+def sensitive_words(effect: SensitiveEffect) -> frozenset[str]:
+    """The words in a tool's name that say it has this effect.
+
+    A name is read as its words split on the dot and the underscore, source included, so
+    `dns.update_record` and `wordpress.update_plugin` are both read. Exhaustive by `match`, so
+    an eighth effect cannot be added without somebody writing down how a name says it.
+    """
+    match effect:
+        case SensitiveEffect.CLIENT_MESSAGE:
+            return frozenset({"send", "email", "reply", "forward", "notify", "sms", "whatsapp"})
+        case SensitiveEffect.QUOTATION:
+            return frozenset({"quotation", "quotations", "quote", "quotes"})
+        case SensitiveEffect.DNS_OR_HOSTING:
+            return frozenset(
+                {
+                    "dns",
+                    "domain",
+                    "domains",
+                    "nameserver",
+                    "nameservers",
+                    "zone",
+                    "hosting",
+                    "cname",
+                    "mx",
+                    "ssl",
+                    "certificate",
+                }
+            )
+        case SensitiveEffect.FINANCIAL_RECORD:
+            return frozenset(
+                {
+                    "invoice",
+                    "invoices",
+                    "payment",
+                    "payments",
+                    "pay",
+                    "bill",
+                    "bills",
+                    "ledger",
+                    "journal",
+                    "expense",
+                    "expenses",
+                    "refund",
+                    "payroll",
+                    "credit",
+                    "void",
+                    "reconcile",
+                }
+            )
+        case SensitiveEffect.DELETION:
+            return frozenset(
+                {"delete", "remove", "purge", "erase", "destroy", "drop", "wipe", "truncate"}
+            )
+        case SensitiveEffect.PUBLICATION:
+            return frozenset({"publish", "unpublish", "post", "posts"})
+        case SensitiveEffect.PRODUCTION_CHANGE:
+            return frozenset(
+                {
+                    "deploy",
+                    "release",
+                    "restart",
+                    "rollback",
+                    "reboot",
+                    "migrate",
+                    "provision",
+                    "production",
+                    "prod",
+                    "server",
+                    "servers",
+                    "plugin",
+                    "plugins",
+                    "theme",
+                    "themes",
+                }
+            )
+        case _:
+            assert_never(effect)
+
+
+#: The side effects nothing leaves the building through, so the vocabulary is not asked about
+#: them: a read changes nothing, and a draft is the prepared action itself, whose sending or
+#: saving is what a person approves.
+NOTHING_LEAVES: Final[frozenset[SideEffect]] = frozenset({SideEffect.NONE, SideEffect.DRAFT})
+
+#: Why a tool's name can refuse its registration.
+A_TOOL_WHOSE_NAME_SAYS_IT_ACTS_SENSITIVELY_MUST_DECLARE_IT: Final = (
+    "M3.8.5 gave a tool a way to declare that a person approves every call to it, and nothing "
+    "asked any tool to use it: a tool called drive.delete_file registered as an ordinary write "
+    "would run at whatever rung its leash held, Autonomous included. The name is the one thing "
+    "every registration carries and every reviewer reads, so a tool that changes something and "
+    "whose name says it sends a client a message, issues a quotation, changes DNS or hosting, "
+    "changes a financial record, deletes, publishes or changes a production system is refused "
+    "until it declares a sensitive effect. The vocabulary errs wide: a word it reads wrongly "
+    "costs an author one flag, and a word it misses is an approval nobody asks for."
+)
+
+
+def sensitive_effects_named_by(name: str) -> frozenset[SensitiveEffect]:
+    """The sensitive effects a tool's name reads as, from its words. Empty for most tools."""
+    words = frozenset(re.split(r"[._]", name))
+    return frozenset(effect for effect in SensitiveEffect if words & sensitive_words(effect))
+
+
+def assert_sensitive_effect_declared(
+    definition: ToolDefinition, named: SensitiveEffect | None
+) -> None:
+    """Every tool with one of the owner's sensitive effects declares it, and a declaration is kept.
+
+    Three refusals and they close different doors. A named effect on a definition that does not
+    declare a sensitive effect is an approval the gate never asks for, because
+    `brain.gate.leash.effective_tier` reads the definition and not this registration. A
+    definition flagged sensitive with no effect named leaves the approver and the Tools screen
+    unable to say which of the owner's effects a call has. And a tool that changes something and
+    whose name reads as one of them must declare it: see
+    `A_TOOL_WHOSE_NAME_SAYS_IT_ACTS_SENSITIVELY_MUST_DECLARE_IT`.
+
+    A send or money tool declares a sensitive effect by its kind, so it passes without a flag,
+    and naming which effect it has is then optional rather than required: `invoice.send_reminder`
+    is a client message by its name and sensitive by its kind, and asking it to say so twice
+    would be a rule with no failure behind it.
+    """
+    if named is not None and definition.side_effect is SideEffect.NONE:
+        msg = (
+            f"tool {definition.name!r} names the sensitive effect {named.value!r} and has no side "
+            "effect; a tool that only reads cannot do what the name says it does"
+        )
+        raise ToolRegistrationError(msg)
+    if named is not None and not definition.declares_sensitive_effect():
+        msg = (
+            f"tool {definition.name!r} names the sensitive effect {named.value!r} and its "
+            "definition does not declare one; the leash reads the definition, so the approval "
+            "this promises would never be asked for"
+        )
+        raise ToolRegistrationError(msg)
+    if definition.sensitive and named is None:
+        msg = (
+            f"tool {definition.name!r} is declared sensitive and names no effect; an approver and "
+            "the Tools screen are told which of the owner's sensitive effects a call has"
+        )
+        raise ToolRegistrationError(msg)
+    if definition.side_effect in NOTHING_LEAVES:
+        return
+    read = sensitive_effects_named_by(definition.name)
+    if read and not definition.declares_sensitive_effect():
+        msg = (
+            f"tool {definition.name!r} is named as a tool with the sensitive effect "
+            f"{sorted(one.value for one in read)} and declares none; a person approves every "
+            "such call only when the definition says so"
+        )
+        raise ToolRegistrationError(msg)
+
+
 # ------------------------------------------------------- side effect to leash (M12.1.3)
 
 
@@ -319,6 +531,179 @@ def rung_ceiling(rung: AutonomyTier, effect: SideEffect) -> AutonomyTier:
     return min(rung, default_rung(effect))
 
 
+def leash_ceiling(definition: ToolDefinition) -> AutonomyTier:
+    """The highest rung a leash entry on this tool keeps once `ToolRegistry.tighten` reads it.
+
+    `default_rung` of its side effect, and no higher than `brain.gate.leash.SENSITIVE_EFFECT_RUNG`
+    for a tool declaring a sensitive effect, which is the cap `effective_tier` puts on such a
+    call at the gate. Imported rather than restated, so the rung the Tools screen shows and the
+    rung the gate applies are one number.
+    """
+    rung = default_rung(definition.side_effect)
+    if definition.declares_sensitive_effect():
+        return min(rung, SENSITIVE_EFFECT_RUNG)
+    return rung
+
+
+class EffectClass(enum.StrEnum):
+    """The three words the Tools screen uses for what a tool does to the world.
+
+    Three rather than `SideEffect`'s five, because a person reading the catalogue is asking
+    whether a tool can change anything and whether a change can be taken back. IRREVERSIBLE is
+    `ToolDefinition.declares_sensitive_effect`, the same reading the leash caps at Assisted, so
+    the word on the screen and the rule at the gate are one reading of one declaration.
+    """
+
+    READ = "read"
+    WRITE = "write"
+    IRREVERSIBLE = "irreversible"
+
+
+def effect_class(definition: ToolDefinition) -> EffectClass:
+    """Read, write or irreversible, asked strictest first so a contradiction reads as the worse."""
+    if definition.declares_sensitive_effect():
+        return EffectClass.IRREVERSIBLE
+    if definition.side_effect is SideEffect.NONE:
+        return EffectClass.READ
+    return EffectClass.WRITE
+
+
+# ----------------------------------------------------------------- the switch (M12.4.3)
+
+
+class SwitchScope(enum.StrEnum):
+    """Where a stop applies: every call on the install, or the calls of one department's people."""
+
+    INSTALL = "install"
+    DEPARTMENT = "department"
+
+
+@dataclass(frozen=True)
+class Switch:
+    """One stop on one tool, as the switch table holds it."""
+
+    switch_id: str
+    tool: str
+    #: None for the whole install; otherwise the department whose people's calls are refused.
+    department: str | None
+    switched_off_by: str
+    switched_off_at: datetime
+
+    @property
+    def scope(self) -> SwitchScope:
+        return SwitchScope.INSTALL if self.department is None else SwitchScope.DEPARTMENT
+
+    def described(self) -> str:
+        """The switch in the words an administrator's trace carries. Never a response body."""
+        where = "the install" if self.department is None else f"department {self.department!r}"
+        return (
+            f"tool {self.tool!r} is switched off for {where} by {self.switched_off_by} at "
+            f"{self.switched_off_at.isoformat()} (switch {self.switch_id})"
+        )
+
+
+class SwitchSource(Protocol):
+    """Whatever says, at the moment of a call, whether a stop applies to it.
+
+    Handed the caller's principal id, or None where the call carried no reach, and answering the
+    widest stop that applies: the install's before a department's. A protocol for the reason
+    `brain.knowledge.rows.RowSource` is one: the rule is here and the table is not.
+    """
+
+    async def stop_for(self, tool: str, principal_id: str | None) -> Switch | None: ...
+
+
+#: Why a switch cannot widen anything, and why a table of stops is not a deny list.
+A_SWITCH_ONLY_EVER_NARROWS: Final = (
+    "Agent reach only narrows, and a switch is written so that it cannot do anything else. The "
+    "table holds stops and nothing but stops: a tool switched off for the install, or stopped "
+    "for one department's people. Switching a tool back on retires its stop, and there is no "
+    "row that says a tool is on, so nothing a department administrator writes can reopen what "
+    "the install closed. It takes no part in EntitlementSet, which stays additive with no deny "
+    "list: reach is decided first and a switch then refuses calls inside it, as a halt does."
+)
+
+#: Why the check is made when the handler runs and not when it is looked up.
+THE_SWITCH_IS_ASKED_AT_THE_CALL_AND_NOT_AT_THE_LOOKUP: Final = (
+    "brain.app builds the answer lane's passage search once at startup and keeps its handler "
+    "for the life of the process, and a workflow's caller looks a handler up once per step. A "
+    "switch consulted at lookup would therefore be consulted once, before anybody could throw "
+    "it, for exactly the calls a person is most likely to be making. So the guard is the "
+    "handler, installed at registration, and it asks the source every time it runs."
+)
+
+#: Why the person asking is told nothing about the switch.
+THE_ASKER_IS_NEVER_TOLD_WHICH_SWITCH: Final = (
+    "The refusal a switched-off tool gives is Denied, and its sentence is the one every refusal "
+    "carries, so a person cannot tell a switch from a tool they may not use or a record that is "
+    "not there. The administrator's trace names the tool and whether the stop was the install's "
+    "or a department's, and the exception's detail names the switch, who threw it and when; "
+    "neither is ever a response body, because a response that named a switch would tell a "
+    "department which of its tools somebody had decided it should not have."
+)
+
+#: Why a switch nobody could read refuses the call.
+AN_UNREADABLE_SWITCH_REFUSES_THE_CALL: Final = (
+    "If the switch table cannot be read, nobody can say whether an administrator switched this "
+    "tool off, and carrying on would ignore a stop during whatever made the table unreachable. "
+    "brain.ops.model_service decides the same for a provider switch nobody could read."
+)
+
+
+class ToolSwitchedOffError(Denied):
+    """A call refused because its tool is switched off, for the install or the caller's department.
+
+    `Denied`, so a response carries the sentence every refusal carries and a call site that
+    already passes `BrainError` through turns it into the same answer as any other refusal. See
+    `THE_ASKER_IS_NEVER_TOLD_WHICH_SWITCH`. `switch` is None when the switches could not be read.
+    """
+
+    def __init__(self, tool: str, switch: Switch | None) -> None:
+        self.tool = tool
+        self.switch = switch
+        detail = (
+            switch.described()
+            if switch is not None
+            else f"the switches for tool {tool!r} could not be read, so the call was refused"
+        )
+        super().__init__(detail)
+
+
+def caller_of(args: tuple[object, ...], kwargs: Mapping[str, object]) -> str | None:
+    """The principal a handler is being called for, read off the reach it was handed, or None.
+
+    Every handler in this tree is called with `entitlement=`; a positional reach is read too.
+    None is a call nobody can place in a department, which `SwitchSource.stop_for` answers with
+    any stop on the tool at all.
+    """
+    for value in (kwargs.get("entitlement"), *args, *kwargs.values()):
+        if isinstance(value, EntitlementSet):
+            return value.principal_id
+    return None
+
+
+async def _checked_call(
+    name: str,
+    handler: Callable[..., object],
+    source: SwitchSource,
+    args: tuple[object, ...],
+    kwargs: dict[str, object],
+) -> object:
+    """Ask the source, refuse on a stop or on no answer, and otherwise run the handler."""
+    try:
+        stop = await source.stop_for(name, caller_of(args, kwargs))
+    except Exception as exc:
+        # Broad on purpose: whatever the driver raised, the answer is the same. See
+        # `AN_UNREADABLE_SWITCH_REFUSES_THE_CALL`.
+        log.warning("tool switch could not be read", tool=name, error=type(exc).__name__)
+        raise ToolSwitchedOffError(name, None) from exc
+    if stop is not None:
+        log.warning("tool call refused by a switch", tool=name, control=stop.scope.value)
+        raise ToolSwitchedOffError(name, stop)
+    answered = handler(*args, **kwargs)
+    return await answered if inspect.isawaitable(answered) else answered
+
+
 # ----------------------------------------------------------------- the registration
 
 
@@ -340,10 +725,22 @@ class RegisteredTool:
     capability: Capability
     result_contract: ResultContract = ResultContract.TYPED
     scope: Scope | None = None
+    #: Which of the owner's sensitive effects this tool has, where it named one (M12.3.8).
+    sensitive_effect: SensitiveEffect | None = None
 
     @property
     def name(self) -> str:
         return self.definition.name
+
+    @property
+    def effect(self) -> EffectClass:
+        """Read, write or irreversible, as the Tools screen says it."""
+        return effect_class(self.definition)
+
+    @property
+    def leash_ceiling(self) -> AutonomyTier:
+        """The highest rung a leash entry on this tool keeps. See `leash_ceiling`."""
+        return leash_ceiling(self.definition)
 
     @property
     def object_name(self) -> str:
@@ -374,6 +771,8 @@ class ToolRegistry:
 
     _tools: dict[str, RegisteredTool] = field(default_factory=dict)
     _frozen: bool = False
+    #: Asked at every call once `govern` has attached it. See `A_SWITCH_ONLY_EVER_NARROWS`.
+    _switches: SwitchSource | None = None
 
     # ------------------------------------------------------------------ registering
     def register(
@@ -383,6 +782,7 @@ class ToolRegistry:
         *,
         result_contract: ResultContract = ResultContract.TYPED,
         scope: Scope | None = None,
+        sensitive_effect: SensitiveEffect | None = None,
     ) -> RegisteredTool:
         """Check a tool against every rule in this module, then record it.
 
@@ -427,6 +827,7 @@ class ToolRegistry:
         assert_object_not_reserved(definition)
         capability = capability_for(definition)
         assert_effect_matches_capability(definition, capability)
+        assert_sensitive_effect_declared(definition, sensitive_effect)
         assert_service_tool_is_scoped(definition, scope)
         assert_result_contract(definition, capability, result_contract)
         # Last, because it is the only check that inspects something other than the
@@ -435,13 +836,82 @@ class ToolRegistry:
 
         registered = RegisteredTool(
             definition=definition,
-            handler=handler,
+            # The guard, never the handler itself, so no path to a handler skips the switch.
+            # See `THE_SWITCH_IS_ASKED_AT_THE_CALL_AND_NOT_AT_THE_LOOKUP`.
+            handler=self._guarded(definition.name, handler),
             capability=capability,
             result_contract=result_contract,
             scope=scope,
+            sensitive_effect=sensitive_effect,
         )
         self._tools[definition.name] = registered
         return registered
+
+    def _guarded(self, name: str, handler: Callable[..., object]) -> Callable[..., object]:
+        """The handler behind the switch: unchanged until `govern`, and asked every call after.
+
+        Wrapped with `functools.wraps`, so a caller reading the handler's signature and hints,
+        as `brain.automation_routes` does to find its request model, reads the tool's own. With
+        no source it returns whatever the handler returns, a coroutine or a value, exactly as
+        before; with one it returns a coroutine, which every caller already awaits through
+        `inspect.isawaitable` because the registry has always held handlers of both kinds.
+        """
+
+        @functools.wraps(handler)
+        def guarded(*args: object, **kwargs: object) -> object:
+            source = self._switches
+            if source is None:
+                return handler(*args, **kwargs)
+            return _checked_call(name, handler, source, args, kwargs)
+
+        return guarded
+
+    # --------------------------------------------------------------- the switch (M12.4.3)
+    def govern(self, source: SwitchSource) -> Self:
+        """Attach the switch source every call is asked against from now on.
+
+        Allowed on a frozen registry, because a switch only narrows and a registry that could
+        not be governed after its checks ran would have to be governed before them, by whoever
+        builds it, which is the one module this may not change. Refused a second time: a second
+        source would replace the first, and replacing the source is the one way to make a switch
+        stop refusing without anybody switching it on.
+        """
+        if self._switches is not None:
+            msg = (
+                "the tool registry is already governed by a switch source; replacing it would "
+                "lift every stop without anybody switching a tool back on"
+            )
+            raise ToolRegistrationError(msg)
+        self._switches = source
+        return self
+
+    @property
+    def is_governed(self) -> bool:
+        return self._switches is not None
+
+    # ------------------------------------------------------ the default leash (M12.1.3)
+    def tighten(self, leash: Leash) -> Leash:
+        """The leash with every entry on a registered tool held to that tool's leash ceiling.
+
+        `min`, the only shape in which a side effect may touch a leash (`rung_ceiling`), so a
+        rung only ever falls. An entry whose target no tool here carries is kept as written:
+        `Leash.rung_for` answers SHADOW for whatever matches nothing anyway.
+        """
+        return Leash(
+            entries=tuple(
+                LeashEntry(
+                    agent_id=entry.agent_id,
+                    target=entry.target,
+                    scope=entry.scope,
+                    rung=(
+                        min(entry.rung, self._tools[entry.target].leash_ceiling)
+                        if entry.target in self._tools
+                        else entry.rung
+                    ),
+                )
+                for entry in leash.entries
+            )
+        )
 
     # --------------------------------------------------------------------- reading
     def get(self, name: str) -> RegisteredTool:
