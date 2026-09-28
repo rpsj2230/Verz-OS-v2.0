@@ -35,7 +35,7 @@ from types import MappingProxyType
 import pytest
 
 from brain.console.reads import ConsoleRead, Plane, plane_capability
-from brain.console.screens import SCREENS, Axis, Group, Screen
+from brain.console.screens import SCREENS, Axis, Group, ModuleGroup, Screen
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.core.scope import Scope
@@ -211,6 +211,7 @@ def governance_screen(key: str, *, capability: str, tool: str = "console.made_up
         key=key,
         title="Made up",
         group=Group.GOVERN,
+        module_group=ModuleGroup.GOVERNANCE,
         read=ConsoleRead(
             screen=key,
             tool=tool,

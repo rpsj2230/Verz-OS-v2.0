@@ -19,13 +19,14 @@
  * `support/cascade.ts` gives them is which declaration wins for a rendered element when the
  * queries a 360 pixel screen matches are applied and the others are not. The declarations
  * asserted are the ones that decided the measurement: whether a value may wrap and whether a
- * token may break, whether the navigation stacks above the page, and how tall a link is. If a
+ * token may break, whether the Menu button is there and first, and how tall a link is. If a
  * browser stopped honouring one of them these tests would not notice, and if a font's metrics
  * made a page wider they would not notice either. That residue is what the measurement is for,
  * and it was not committed as a test because it needs a browser this suite does not have.
  *
  * **Every registered page, not a list of the ones somebody remembered.** The patterns are read
- * out of the route table, and a route with no entry here fails the first test. That is how a
+ * out of the route table, which since 2026-09-28 is every page's own route file collected by
+ * `src/routes/registry.ts`, and a route with no entry here fails the first test. That is how a
  * page added next month gets a phone case on the day it is added rather than on the day
  * somebody opens it on a phone. The cases themselves live in `support/pageCases.ts`, because
  * `tests/screen-states.test.tsx` mounts the same pages with the same answers.
@@ -38,8 +39,10 @@
  */
 
 import { createMemoryRouter, RouterProvider, type RouteObject } from "react-router-dom";
-import { render, waitFor } from "@testing-library/react";
-import { beforeAll, describe, expect, test } from "vitest";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeAll, describe, expect, test, vi } from "vitest";
+import { SIDEBAR_MENU_LABEL } from "../src/components/ui/sidebar";
+import { OWN_WORK } from "../src/routes/registry";
 import { fakeIdentityProvider, loadConsole, signIn } from "./support/auth";
 import {
   CONSOLE_SHEETS,
@@ -53,6 +56,8 @@ import {
 import { parseCss } from "./support/css";
 import { PAGES, UNBROKEN } from "./support/pageCases";
 import { COMPANY_CONSOLE, NAVIGATION_ADDRESS, departmentConsole } from "./support/navigation";
+import { installRadixStubs } from "./support/radix";
+import { compileLayer, compiledPixels, compiledRules } from "./support/tailwind";
 import { readConsoleFile } from "./support/repo";
 
 const CONSOLE_ORIGIN = "https://console.test";
@@ -67,12 +72,31 @@ const TAP_TARGET_PX = 44;
 const SHELL_PATTERNS = Object.keys(PAGES).filter((pattern) => PAGES[pattern]?.signedIn);
 const VALUE_PATTERNS = Object.keys(PAGES).filter((pattern) => PAGES[pattern]?.drawsValues);
 
+/** The stylesheet Tailwind compiles for the shell's class names, compiled once. */
+let COMPILED = "";
+
 /** Every split page is transformed once, before anything is timed. */
 beforeAll(async () => {
+  installRadixStubs();
+  COMPILED = (await compileLayer()).css;
   await import("../src/pages/Records");
   await import("../src/pages/Agent");
   await import("../src/pages/Approvals");
 }, 120_000);
+
+/** The window's width, which is what the sidebar reads to decide between a drawer and a column. */
+function setWidth(width: number): void {
+  vi.stubGlobal("innerWidth", width);
+  window.dispatchEvent(new Event("resize"));
+}
+
+/** Every entry the menu offers for a page's case: the reader's own work, then the served groups. */
+function menuFor(pattern: string): string[] {
+  const served = (pattern === "/department" ? departmentConsole(UNBROKEN) : COMPANY_CONSOLE).sections as {
+    entries: { to: string }[];
+  }[];
+  return [...OWN_WORK.sections.map((one) => one.to), ...served.flatMap((one) => one.entries.map((entry) => entry.to))];
+}
 
 /** Every leaf pattern in a route table, spelled from the root. */
 function patternsOf(routes: readonly RouteObject[], parent = ""): string[] {
@@ -270,45 +294,66 @@ describe("every registered page at a phone's width", () => {
   });
 
   test.each(SHELL_PATTERNS)(
-    "%s puts the whole navigation above the page, every link a thumb tall",
+    "%s puts a visible Menu button first, before the page, and nothing of the menu beside it",
     async (pattern) => {
-      // What breaks if this is deleted: a 240 pixel sidebar beside 120 pixels of page, a menu
-      // hidden on a phone with nothing to open it, or links a cursor can hit and a thumb cannot.
-      // The navigation must precede the page, must not be hidden, must stack above it rather
-      // than beside it, and must list every section the route table has, which is every
-      // pattern under the shell without a parameter.
+      // What breaks if this is deleted: a 240 pixel sidebar beside 120 pixels of page, or a menu
+      // hidden on a phone with nothing to open it. Below the sidebar's breakpoint the menu is a
+      // drawer, so the Menu button is the only way to any section: it must be the first control
+      // after the skip link, precede the page, and never be hidden by the frame's own sheet. The
+      // drawer's contents are held in the test after this one.
+      setWidth(PHONE_PX);
       const container = await mount(pattern);
-      const body = container.querySelector(".shell__body");
-      const nav = container.querySelector("nav.shell__nav");
       const main = container.querySelector("main");
-      expect(body).not.toBeNull();
-      expect(nav).not.toBeNull();
+      const menu = container.querySelector('header button[data-sidebar="trigger"]');
       expect(main).not.toBeNull();
+      expect(menu?.textContent).toBe(SIDEBAR_MENU_LABEL);
+      expect(document.querySelector('nav[aria-label="Sections"]')).toBeNull();
 
-      expect(declared(body as Element, "flex-direction", RULES, PHONE_PX)).toBe("column");
-      expect((nav as Element).compareDocumentPosition(main as Element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      for (let at: Element | null = nav; at !== null; at = at.parentElement) {
+      const focusable = [...container.querySelectorAll("a[href], button, input, select, textarea")];
+      expect(focusable[0]?.getAttribute("href")).toBe("#main");
+      expect(focusable[1]).toBe(menu);
+      expect((menu as Element).compareDocumentPosition(main as Element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      for (let at: Element | null = menu; at !== null; at = at.parentElement) {
         expect(declared(at, "display", RULES, PHONE_PX), named(at)).not.toBe("none");
         expect(declared(at, "visibility", RULES, PHONE_PX), named(at)).not.toBe("hidden");
       }
+      const height = declared(menu as Element, "min-height", compiledRules(COMPILED), PHONE_PX);
+      expect(compiledPixels(height, COMPILED)).toBeGreaterThanOrEqual(TAP_TARGET_PX);
+    },
+  );
 
-      // The company console lists every section the route table has except Department, which is
-      // the department console's overview; the Department case is mounted as a department admin,
-      // so its menu is the one the API sent for that console, followed by the reader's own work.
-      const links = [...(nav as Element).querySelectorAll("a")];
-      const everySection = SHELL_PATTERNS.filter((one) => !one.includes(":") && !one.includes("*"));
-      const departments = departmentConsole(UNBROKEN).sections as { entries: { to: string }[] }[];
-      const ownWork = ["/ask", "/me", "/approvals", "/records", "/access-requests", "/referrals"];
-      const sections =
-        pattern === "/department"
-          ? [...departments.flatMap((one) => one.entries.map((entry) => entry.to)), ...ownWork]
-          : everySection.filter((one) => one !== "/department");
-      expect(links.map((link) => link.getAttribute("href")).sort()).toEqual([...sections].sort());
+  test.each(["/", "/department"])(
+    "at %s the Menu button opens a drawer holding every entry a thumb tall, and closing it gives focus back",
+    async (pattern) => {
+      // What breaks if this is deleted: a Menu button that opens nothing, a drawer missing the
+      // groups the API sent, links a cursor can hit and a thumb cannot, or focus left on the page's
+      // body when the drawer closes. The company console and a department's are both opened,
+      // because they are different answers.
+      setWidth(PHONE_PX);
+      const container = await mount(pattern);
+      const menu = container.querySelector('header button[data-sidebar="trigger"]') as HTMLElement;
+      menu.focus();
+      await act(async () => {
+        fireEvent.click(menu);
+      });
+
+      const drawer = await screen.findByRole("dialog", { name: SIDEBAR_MENU_LABEL });
+      const links = [...drawer.querySelectorAll('nav[aria-label="Sections"] a')];
+      expect(links.map((link) => link.getAttribute("href")).sort()).toEqual(menuFor(pattern).sort());
       for (const link of links) {
-        const height = pixels(resolved(declared(link, "min-height", RULES, PHONE_PX)));
-        expect(height ?? 0, link.getAttribute("href") ?? "").toBeGreaterThanOrEqual(TAP_TARGET_PX);
-        expect(declared(link, "display", RULES, PHONE_PX)).toMatch(/^(block|flex|inline-flex|inline-block)$/);
+        const height = declared(link, "min-height", compiledRules(COMPILED), PHONE_PX);
+        expect(compiledPixels(height, COMPILED) ?? 0, link.getAttribute("href") ?? "").toBeGreaterThanOrEqual(TAP_TARGET_PX);
       }
+      for (const toggle of drawer.querySelectorAll("nav h2 button")) {
+        expect(toggle.getAttribute("aria-expanded")).toMatch(/^(true|false)$/);
+      }
+      expect(menu.getAttribute("aria-expanded")).toBe("true");
+
+      await act(async () => {
+        fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+      });
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      expect(document.activeElement).toBe(menu);
     },
   );
 
@@ -347,18 +392,22 @@ describe("every registered page at a phone's width", () => {
 
   test("a wider screen still gets the sidebar and the label column, so the phone rules are a base and not the whole", async () => {
     // What breaks if this is deleted: every assertion above is satisfied by deleting the
-    // desktop layout, or by a reader that ignores media queries. At 1280 pixels the shell is a
-    // row with a sidebar of the token's width and the label column is back, and at 360 neither
-    // is, which also proves the cascade reader applies a query only where it matches.
+    // desktop layout, or by a reader that ignores media queries. At 1280 pixels the sidebar is in
+    // the page beside it, drawn only from the `md` breakpoint up, and the label column is back;
+    // at 360 neither is, which also proves the cascade reader applies a query only where it
+    // matches.
+    setWidth(WIDE_PX);
     const container = await mount("/");
-    const body = container.querySelector(".shell__body") as Element;
-    const nav = container.querySelector("nav.shell__nav") as Element;
+    const sidebar = container.querySelector('[data-slot="sidebar"]') as Element;
+    const nav = container.querySelector('nav[aria-label="Sections"]') as Element;
     const row = container.querySelector(".fields__row") as Element;
     const label = row.querySelector("dt") as Element;
+    const compiled = compiledRules(COMPILED);
 
-    expect(declared(body, "flex-direction", RULES, WIDE_PX)).toBe("row");
-    expect(pixels(resolved(declared(nav, "width", RULES, WIDE_PX)))).toBeGreaterThan(PHONE_PX / 2);
-    expect(declared(nav, "width", RULES, PHONE_PX)).toBeUndefined();
+    expect(sidebar.contains(nav)).toBe(true);
+    expect(nav.compareDocumentPosition(container.querySelector("main") as Element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(declared(sidebar, "display", compiled, WIDE_PX)).toBe("block");
+    expect(declared(sidebar, "display", compiled, PHONE_PX)).toBe("none");
     expect(declared(row, "flex-direction", RULES, WIDE_PX)).toBe("row");
     expect(declared(row, "flex-direction", RULES, PHONE_PX)).toBe("column");
     expect(pixels(resolved(declared(label, "width", RULES, WIDE_PX)))).toBeGreaterThan(0);

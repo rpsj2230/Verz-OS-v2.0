@@ -120,7 +120,7 @@ export const CAPACITY_API_PATH = "/install/capacity";
 // own shape: none of these screens has a sub-object, so a path segment would be an address for
 // something that does not exist. Each address is the screen's key in `brain.console.screens`,
 // because `brain.ops.console_screens.routed_screen_keys` reads the first path segment out of
-// `App.tsx` and matches it against the registry. A prettier address would take these screens
+// the route files and matches it against the registry. A prettier address would take these screens
 // off that list while leaving them reachable, which is the one failure that check exists to
 // prevent arriving from the direction that looks like a tidy-up.
 
@@ -137,7 +137,7 @@ export const INSTALL_SECTIONS: readonly { readonly to: string; readonly label: s
   { to: RECOVERY_PATH, label: "Backup and recovery" },
   { to: LIMITS_PATH, label: "Rate limits" },
   { to: CAPACITY_PATH, label: "Capacity" },
-  { to: "/features", label: "Features" },
+  { to: "/features", label: "Features and plugins" },
 ];
 
 // ------------------------------------------------------------------------ reading a fact

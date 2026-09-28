@@ -839,37 +839,42 @@ describe("capacity", () => {
 // --- getting to them without a mouse ----------------------------------------------------------
 
 describe("reaching the install screens from the keyboard", () => {
-  test("every install screen is a native link in the shell's navigation", async () => {
+  test("every install screen is a native link in the shell, in the menu or in its module's tabs", async () => {
     // What breaks if this is deleted: a section is added as a div with a click handler, which is
     // focusable by nothing and announced as nothing, and looks identical in review to the person
     // who wrote it. `scripts/check-boundaries.mjs` refuses the source pattern; this asks the
     // rendered question, which is what actually takes focus. The install screens are on the
     // company console only, so the stand-in API gives that console; a department's offers none,
-    // which `tests/department-console.test.tsx` holds.
+    // which `tests/department-console.test.tsx` holds. Since 2026-09-28 a module of several pages
+    // is one menu entry with its pages as tabs, so This install is a tab of Version and updates and
+    // Capacity a tab of Limits, budgets and capacity; each is opened and its link found where the
+    // shell draws it.
     const idp = fakeIdentityProvider({ api: (url) => answerNavigation(url, COMPANY_CONSOLE) });
     await signIn(await loadConsole({ idp }));
     const { Shell } = await import("../src/layout/Shell");
-    const { container } = render(
-      <MemoryRouter initialEntries={["/"]}>
-        <Shell />
-      </MemoryRouter>,
-    );
-    await waitFor(() => {
-      if (container.querySelector('nav [role="status"]')) {
-        throw new Error("the menu has not been answered yet");
-      }
-    });
-
-    const nav = container.querySelector("nav");
-    const links = [...(nav?.querySelectorAll("a") ?? [])];
-    const addresses = links.map((link) => link.getAttribute("href"));
 
     for (const section of INSTALL_SECTIONS) {
-      const found = links.find((link) => link.getAttribute("href") === section.to);
-      expect(addresses, `${section.to} is not in the navigation`).toContain(section.to);
-      expect(found?.tagName).toBe("A");
-      expect(found?.textContent).toBe(section.label);
-      expect(found?.getAttribute("tabindex")).toBeNull();
+      const { container, unmount } = render(
+        <MemoryRouter initialEntries={[section.to]}>
+          <Shell />
+        </MemoryRouter>,
+      );
+      await waitFor(() => {
+        if (container.querySelector('nav [role="status"]')) {
+          throw new Error("the menu has not been answered yet");
+        }
+      });
+
+      const links = [...container.querySelectorAll('nav[aria-label="Sections"] a, main nav a')];
+      const found = links.filter((link) => link.getAttribute("href") === section.to);
+      expect(found.length, `${section.to} is not in the menu or its module's tabs`).toBeGreaterThan(0);
+      for (const link of found) {
+        expect(link.tagName).toBe("A");
+        expect(link.getAttribute("tabindex")).toBeNull();
+      }
+      // The label is the module's in the menu and the page's in the tabs; one of them is the page's.
+      expect(found.map((link) => link.textContent)).toContain(section.label);
+      unmount();
     }
   });
 
