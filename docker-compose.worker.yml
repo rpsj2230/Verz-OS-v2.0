@@ -123,6 +123,11 @@ services:
       # The application's connection, through the pooler like everything else. The worker
       # makes ordinary queries on it, and reads it here so the two can be compared.
       DATABASE_URL: postgresql+psycopg://brain:${POSTGRES_PASSWORD}@pgbouncer:5432/brain
+      # The application's cache, at the address the application is given. The denial digest
+      # keeps its alerts there for the Notifications screen, and the install's acceptance
+      # checks ask it for a limit window. Until 2026-09-28 this line was missing: the digest
+      # refused every run and the limit check reported "not run", and nothing else said so.
+      VALKEY_URL: redis://cache:6379/0
       # Where a durable graph's saved state would go. Session mode for a different reason from
       # the queue's: the saver prepares statements server-side, and a pooler in transaction mode
       # hands the next statement to a backend that never saw the prepare. A session pooler keeps
