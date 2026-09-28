@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-28T21:37:15.388010+00:00",
-  "commit": "46cee2b3",
-  "commit_subject": "Knowledge is a kit module: every document you can open, its own page, and verify, replace or hand over from there (#177)",
+  "generated_at": "2026-09-28T21:45:21.302374+00:00",
+  "commit": "603be1f2",
+  "commit_subject": "Channels, Webhooks, Notifications and Subscribers are rebuilt on the page kit, and the relay can be removed (#183)",
   "total": 1576,
   "done": 370,
   "percent": 23.5,
