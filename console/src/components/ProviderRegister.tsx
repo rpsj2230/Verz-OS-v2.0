@@ -33,6 +33,7 @@ import {
   KEEP_PROVIDER,
   KEEP_TERMS,
   laneOverrides,
+  laneWords,
   modelNames,
   NOT_RECORDED,
   NOTHING_SENT,
@@ -112,7 +113,7 @@ function Terms({ row }: { readonly row: RegisterRow }) {
       </div>
       {terms.lane_overrides.map((one) => (
         <div className="fields__row" key={one.lane}>
-          <dt>{one.lane} lane</dt>
+          <dt>{laneWords(one.lane)}</dt>
           <dd>
             {one.timeout_seconds === null ? "" : `${String(one.timeout_seconds)} s timeout `}
             {one.attempts === null ? "" : `${String(one.attempts)} attempts`}
@@ -133,6 +134,9 @@ export function ProviderRegister({
   readonly onWritten: (plan: unknown) => void;
 }) {
   const [pending, setPending] = useState<Pending | null>(null);
+  // Every control is named by its label through `htmlFor` and an id, as on the Routing screen.
+  // Fixed ids, one register per page: two mounts draw the same markup, which the tests compare.
+  const field = (name: string) => `provider-register-${name}`;
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
   const [said, setSaid] = useState<string | null>(null);
@@ -380,9 +384,10 @@ export function ProviderRegister({
           {editing === null ? null : (
             <form className="form" aria-label={`Terms for ${editing}`} onSubmit={askTerms}>
               <h3>Terms for {editing}</h3>
-              <label className="control-label">
+              <label className="control-label" htmlFor={field("processing_region")}>
                 Processing region{" "}
                 <input
+                  id={field("processing_region")}
                   className="form-control"
                   type="text"
                   name="processing_region"
@@ -394,9 +399,10 @@ export function ProviderRegister({
                 />
               </label>
               <FieldProblems problems={termsProblems} form={TERMS_FORM} names="processing_region" />
-              <label className="control-label">
+              <label className="control-label" htmlFor={field("residency_class")}>
                 Residency{" "}
                 <select
+                  id={field("residency_class")}
                   className="form-control"
                   name="residency_class"
                   value={residency}
@@ -412,9 +418,10 @@ export function ProviderRegister({
                   ))}
                 </select>
               </label>
-              <label className="control-label">
+              <label className="control-label" htmlFor={field("storage_location")}>
                 Where it is stored{" "}
                 <input
+                  id={field("storage_location")}
                   className="form-control"
                   type="text"
                   name="storage_location"
@@ -424,9 +431,10 @@ export function ProviderRegister({
                   }}
                 />
               </label>
-              <label className="control-label">
+              <label className="control-label" htmlFor={field("retention_terms")}>
                 Retention terms{" "}
                 <textarea
+                  id={field("retention_terms")}
                   className="form-control"
                   name="retention_terms"
                   value={retention}
@@ -435,9 +443,10 @@ export function ProviderRegister({
                   }}
                 />
               </label>
-              <label className="control-label">
+              <label className="control-label" htmlFor={field("training_terms")}>
                 Training terms{" "}
                 <textarea
+                  id={field("training_terms")}
                   className="form-control"
                   name="training_terms"
                   value={training}
@@ -446,9 +455,10 @@ export function ProviderRegister({
                   }}
                 />
               </label>
-              <label className="control-label">
+              <label className="control-label" htmlFor={field("agreement_url")}>
                 Signed agreement (https link){" "}
                 <input
+                  id={field("agreement_url")}
                   className="form-control"
                   type="url"
                   name="agreement_url"
@@ -460,9 +470,10 @@ export function ProviderRegister({
                 />
               </label>
               <FieldProblems problems={termsProblems} form={TERMS_FORM} names="terms" />
-              <label className="control-label">
-                Answer lane timeout in seconds (blank keeps each rung's own){" "}
+              <label className="control-label" htmlFor={field("lane_timeout")}>
+                Seconds to wait on a question a person is waiting for (blank keeps each step's own){" "}
                 <input
+                  id={field("lane_timeout")}
                   className="form-control"
                   type="number"
                   name="lane_timeout"
@@ -474,9 +485,10 @@ export function ProviderRegister({
                   }}
                 />
               </label>
-              <label className="control-label">
-                Answer lane attempts (blank keeps each rung's own){" "}
+              <label className="control-label" htmlFor={field("lane_attempts")}>
+                Attempts on a question a person is waiting for (blank keeps each step's own){" "}
                 <input
+                  id={field("lane_attempts")}
                   className="form-control"
                   type="number"
                   name="lane_attempts"
@@ -509,9 +521,10 @@ export function ProviderRegister({
             <form className="form" aria-label={ADD_PROVIDER_HEADING} onSubmit={askAdd}>
               <h3>{ADD_PROVIDER_HEADING}</h3>
               <p className="note">{ADD_PROVIDER_NOTE}</p>
-              <label className="control-label">
+              <label className="control-label" htmlFor={field("slug")}>
                 Short name{" "}
                 <input
+                  id={field("slug")}
                   className="form-control"
                   type="text"
                   name="slug"
@@ -523,9 +536,10 @@ export function ProviderRegister({
                 />
               </label>
               <FieldProblems problems={addProblems} form={ADD_FORM} names="slug" />
-              <label className="control-label">
+              <label className="control-label" htmlFor={field("label")}>
                 What it is{" "}
                 <input
+                  id={field("label")}
                   className="form-control"
                   type="text"
                   name="label"
@@ -537,9 +551,10 @@ export function ProviderRegister({
                 />
               </label>
               <FieldProblems problems={addProblems} form={ADD_FORM} names="label" />
-              <label className="control-label">
+              <label className="control-label" htmlFor={field("base_url")}>
                 Address (https){" "}
                 <input
+                  id={field("base_url")}
                   className="form-control"
                   type="url"
                   name="base_url"
@@ -551,9 +566,10 @@ export function ProviderRegister({
                 />
               </label>
               <FieldProblems problems={addProblems} form={ADD_FORM} names={["base_url", "provider"]} />
-              <label className="control-label">
+              <label className="control-label" htmlFor={field("models")}>
                 Model names, one per line{" "}
                 <textarea
+                  id={field("models")}
                   className="form-control"
                   name="models"
                   value={models}
@@ -564,9 +580,10 @@ export function ProviderRegister({
                 />
               </label>
               <FieldProblems problems={addProblems} form={ADD_FORM} names="models" />
-              <label className="control-label">
+              <label className="control-label" htmlFor={field("key")}>
                 Key{" "}
                 <input
+                  id={field("key")}
                   className="form-control"
                   type="text"
                   name="key"

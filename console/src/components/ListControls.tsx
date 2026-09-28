@@ -49,6 +49,12 @@ export function ListControls<Row>({
   searchHint,
 }: ListControlsProps<Row>) {
   const { question, ask, offered } = listing;
+  // Each control is inside its label and also named by it through `htmlFor` and an id, with a
+  // `name`: an audit on the owner's install on 2026-09-28 read these controls as unnamed, and a
+  // label that both wraps and points leaves no tool a way to miss the association. The ids are
+  // made from the form's own label rather than `useId`, so two mounts of one screen draw the same
+  // markup, which several tests compare byte for byte.
+  const ids = `list-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
   const set = (next: Partial<ListQuestion>) => {
     ask({ ...question, ...next });
   };
@@ -65,9 +71,11 @@ export function ListControls<Row>({
         event.preventDefault();
       }}
     >
-      <label className="control-label">
+      <label className="control-label" htmlFor={`${ids}-search`}>
         {SEARCH_LABEL}{" "}
         <input
+          id={`${ids}-search`}
+          name="search"
           type="search"
           className="form-control"
           value={question.search}
@@ -83,9 +91,15 @@ export function ListControls<Row>({
         const values = offered[choice.column] ?? [];
         const shown = chosen === "" || values.includes(chosen) ? values : [...values, chosen];
         return (
-          <label key={choice.column} className="control-label">
+          <label key={choice.column} className="control-label" htmlFor={`${ids}-filter-${choice.column}`}>
             {choice.label}{" "}
-            <select className="form-control" value={chosen} onChange={filter(choice.column)}>
+            <select
+              id={`${ids}-filter-${choice.column}`}
+              name={choice.column}
+              className="form-control"
+              value={chosen}
+              onChange={filter(choice.column)}
+            >
               <option value="">{choice.everything}</option>
               {shown.map((value) => (
                 <option key={value} value={value}>
@@ -97,9 +111,11 @@ export function ListControls<Row>({
         );
       })}
       {sorts.length === 0 ? null : (
-        <label className="control-label">
+        <label className="control-label" htmlFor={`${ids}-sort`}>
           {SORT_LABEL}{" "}
           <select
+            id={`${ids}-sort`}
+            name="sort"
             className="form-control"
             value={question.sort}
             onChange={(event) => {

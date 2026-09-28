@@ -1,6 +1,7 @@
 /**
- * The Models screen's routing settings: each tier's window and headroom, the residency constraints
- * attached to scopes, and the chain-depth alerts of the last day.
+ * The Models screen's routing settings: each level's size limit and headroom, the rules on where a
+ * question may be processed, and the fallback alerts of the last day. Plain words and every input
+ * named by its label (`htmlFor`), for the owner's reasons of 2026-09-28.
  *
  * `routingSettingsQuery.ts` holds the arguments. Like `ProviderRegister.tsx` it reads nothing of
  * its own: it is handed the providers answer the health card holds, and every write answers with
@@ -19,6 +20,7 @@ import { FailureNotice } from "../ui/FailureNotice";
 import { FieldProblems, problemAttributes } from "../ui/FieldProblems";
 import {
   ADD_RESIDENCY,
+  alertSentence,
   ALERTS_CAPTION,
   ALERTS_HEADING,
   ALERTS_LEDE,
@@ -54,6 +56,7 @@ import {
   SAVE_NUMBERS,
   scopeWords,
   SET_HERE,
+  severityWords,
   tierApiPath,
   tierAsked,
   tierConsequence,
@@ -64,6 +67,7 @@ import {
   type ResidencySetting,
   type TierAsked,
 } from "../pages/routingSettingsQuery";
+import { levelName } from "../pages/modelsQuery";
 
 const TIER_FORM = "tier";
 const RESIDENCY_FORM = "residency";
@@ -133,6 +137,8 @@ export function RoutingSettings({
   const [residencyBlank, setResidencyBlank] = useState<FieldProblem[]>([]);
 
   const settings = readRoutingSettings(data);
+  // Fixed ids, one card per page: two mounts draw the same markup, which the tests compare.
+  const field = (name: string) => `routing-settings-${name}`;
   const tierProblems = [...tierBlank, ...(failure?.problems ?? [])];
   const residencyProblems = [...residencyBlank, ...(failure?.problems ?? [])];
 
@@ -221,8 +227,8 @@ export function RoutingSettings({
           <caption className="grid__caption">{TIERS_CAPTION}</caption>
           <thead>
             <tr>
-              <th scope="col">Tier</th>
-              <th scope="col">Window</th>
+              <th scope="col">Level</th>
+              <th scope="col">Size limit</th>
               <th scope="col">Moves up past</th>
               <th scope="col">Set by</th>
               {settings.editable ? <th scope="col">Actions</th> : null}
@@ -231,9 +237,7 @@ export function RoutingSettings({
           <tbody>
             {settings.tiers.map((row) => (
               <tr key={row.tier}>
-                <td>
-                  <code>{row.tier}</code>
-                </td>
+                <td>{levelName(row.tier)}</td>
                 <td>{String(row.context_window)} tokens</td>
                 <td>{headroomWords(row.escalation_headroom)}</td>
                 <td>{row.configured ? SET_HERE : PRODUCT_DEFAULT}</td>
@@ -243,7 +247,7 @@ export function RoutingSettings({
                       type="button"
                       className="button"
                       disabled={busy}
-                      aria-label={`${EDIT_NUMBERS}: ${row.tier}`}
+                      aria-label={`${EDIT_NUMBERS}: ${levelName(row.tier)}`}
                       onClick={() => {
                         setEditing(row.tier);
                         setTokens(String(row.context_window));
@@ -261,7 +265,7 @@ export function RoutingSettings({
                           type="button"
                           className="button"
                           disabled={busy}
-                          aria-label={`${RESET_TIER}: ${row.tier}`}
+                          aria-label={`${RESET_TIER}: ${levelName(row.tier)}`}
                           onClick={() => {
                             setFailure(null);
                             setPending({ kind: "reset", tier: row.tier });
@@ -280,36 +284,38 @@ export function RoutingSettings({
       </div>
 
       {editing === null ? null : (
-        <form className="form" aria-label={`Numbers for the ${editing} tier`} onSubmit={askTier}>
-          <h3>Numbers for the {editing} tier</h3>
-          <label className="control-label">
-            Window, in tokens{" "}
-            <input
-              className="form-control"
-              type="number"
-              name="context_window"
-              value={tokens}
-              {...problemAttributes(tierProblems, TIER_FORM, "context_window")}
-              onChange={(event) => {
-                setTokens(event.target.value);
-              }}
-            />
+        <form className="form" aria-label={`Numbers for the ${levelName(editing)} level`} onSubmit={askTier}>
+          <h3>Numbers for the {levelName(editing)} level</h3>
+          <label className="control-label" htmlFor={field("context_window")}>
+            Size limit, in tokens
           </label>
+          <input
+            id={field("context_window")}
+            className="form-control"
+            type="number"
+            name="context_window"
+            value={tokens}
+            {...problemAttributes(tierProblems, TIER_FORM, "context_window")}
+            onChange={(event) => {
+              setTokens(event.target.value);
+            }}
+          />
           <FieldProblems problems={tierProblems} form={TIER_FORM} names="context_window" />
-          <label className="control-label">
-            Move up past this share of the window, from 0.1 to 1 (blank for the product default){" "}
-            <input
-              className="form-control"
-              type="number"
-              step="0.05"
-              name="escalation_headroom"
-              value={headroom}
-              {...problemAttributes(tierProblems, TIER_FORM, "escalation_headroom")}
-              onChange={(event) => {
-                setHeadroom(event.target.value);
-              }}
-            />
+          <label className="control-label" htmlFor={field("escalation_headroom")}>
+            Move up a level past this share of the size limit, from 0.1 to 1 (blank for the product default)
           </label>
+          <input
+            id={field("escalation_headroom")}
+            className="form-control"
+            type="number"
+            step="0.05"
+            name="escalation_headroom"
+            value={headroom}
+            {...problemAttributes(tierProblems, TIER_FORM, "escalation_headroom")}
+            onChange={(event) => {
+              setHeadroom(event.target.value);
+            }}
+          />
           <FieldProblems problems={tierProblems} form={TIER_FORM} names="escalation_headroom" />
           <p>
             <button type="submit" className="button" disabled={busy}>
@@ -369,24 +375,26 @@ export function RoutingSettings({
       )}
 
       {settings.editable ? (
-        <form className="form" aria-label="Add a residency constraint" onSubmit={askResidency}>
-          <h3>Add a residency constraint</h3>
-          <label className="control-label">
-            Department{" "}
-            <input
-              className="form-control"
-              type="text"
-              name="department"
-              value={department}
-              disabled={wholeCompany}
-              {...problemAttributes(residencyProblems, RESIDENCY_FORM, "scope")}
-              onChange={(event) => {
-                setDepartment(event.target.value);
-              }}
-            />
+        <form className="form" aria-label="Add a rule on where questions may be processed" onSubmit={askResidency}>
+          <h3>Add a rule on where questions may be processed</h3>
+          <label className="control-label" htmlFor={field("department")}>
+            Department
           </label>
-          <label className="control-label">
+          <input
+            id={field("department")}
+            className="form-control"
+            type="text"
+            name="department"
+            value={department}
+            disabled={wholeCompany}
+            {...problemAttributes(residencyProblems, RESIDENCY_FORM, "scope")}
+            onChange={(event) => {
+              setDepartment(event.target.value);
+            }}
+          />
+          <label className="control-label" htmlFor={field("whole_company")}>
             <input
+              id={field("whole_company")}
               type="checkbox"
               name="whole_company"
               checked={wholeCompany}
@@ -397,21 +405,23 @@ export function RoutingSettings({
             The whole company
           </label>
           <FieldProblems problems={residencyProblems} form={RESIDENCY_FORM} names="scope" />
-          <label className="control-label">
-            Allowed regions, separated by commas{" "}
-            <input
-              className="form-control"
-              type="text"
-              name="allowed_regions"
-              value={regions}
-              {...problemAttributes(residencyProblems, RESIDENCY_FORM, "allowed_regions")}
-              onChange={(event) => {
-                setRegions(event.target.value);
-              }}
-            />
+          <label className="control-label" htmlFor={field("allowed_regions")}>
+            Allowed regions, separated by commas
           </label>
-          <label className="control-label">
+          <input
+            id={field("allowed_regions")}
+            className="form-control"
+            type="text"
+            name="allowed_regions"
+            value={regions}
+            {...problemAttributes(residencyProblems, RESIDENCY_FORM, "allowed_regions")}
+            onChange={(event) => {
+              setRegions(event.target.value);
+            }}
+          />
+          <label className="control-label" htmlFor={field("on_prem_only")}>
             <input
+              id={field("on_prem_only")}
               type="checkbox"
               name="on_prem_only"
               checked={onPrem}
@@ -422,19 +432,20 @@ export function RoutingSettings({
             On the company&apos;s own hardware only
           </label>
           <FieldProblems problems={residencyProblems} form={RESIDENCY_FORM} names="allowed_regions" />
-          <label className="control-label">
-            Note{" "}
-            <input
-              className="form-control"
-              type="text"
-              name="note"
-              maxLength={500}
-              value={note}
-              onChange={(event) => {
-                setNote(event.target.value);
-              }}
-            />
+          <label className="control-label" htmlFor={field("note")}>
+            Note
           </label>
+          <input
+            id={field("note")}
+            className="form-control"
+            type="text"
+            name="note"
+            maxLength={500}
+            value={note}
+            onChange={(event) => {
+              setNote(event.target.value);
+            }}
+          />
           <p>
             <button type="submit" className="button" disabled={busy}>
               {ADD_RESIDENCY}
@@ -454,9 +465,9 @@ export function RoutingSettings({
             <thead>
               <tr>
                 <th scope="col">Raised</th>
+                <th scope="col">Severity</th>
                 <th scope="col">Level</th>
-                <th scope="col">Tier</th>
-                <th scope="col">Depth</th>
+                <th scope="col">Tries</th>
                 <th scope="col">What happened</th>
                 <th scope="col">Reference</th>
               </tr>
@@ -465,12 +476,10 @@ export function RoutingSettings({
               {settings.alerts.map((row) => (
                 <tr key={`${row.trace_id}-${row.tier}-${row.raised_at}`}>
                   <td>{row.raised_at}</td>
-                  <td>{row.level}</td>
-                  <td>
-                    <code>{row.tier}</code>
-                  </td>
+                  <td>{severityWords(row.level)}</td>
+                  <td>{levelName(row.tier)}</td>
                   <td>{String(row.depth)}</td>
-                  <td>{row.reason}</td>
+                  <td>{alertSentence(row)}</td>
                   <td>
                     <code>{row.trace_id}</code>
                   </td>

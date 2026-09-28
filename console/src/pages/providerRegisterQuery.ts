@@ -180,7 +180,7 @@ export function termsConsequence(provider: string, asked: TermsAsked): string {
   return (
     `${provider} will be recorded as processing in ${asked.processing_region} ` +
     `(${asked.residency_class.replace("_", " ")}). A region-pinned provider can answer questions ` +
-    "that must stay in that region; the lane overrides apply from the next call."
+    "that must stay in that region; the timeout and attempts apply from the next call."
   );
 }
 
@@ -189,8 +189,8 @@ export function retireQuestion(provider: string): string {
 }
 
 export const RETIRE_CONSEQUENCE =
-  "Its rungs are left out of the chain from the next call, as a provider this install cannot " +
-  "reach. Its key stays in the vault until it is replaced.";
+  "Its steps are left out of the failover matrix from the next call, as a provider this install " +
+  "cannot reach. Its key stays in the vault until it is replaced.";
 
 export function addQuestion(asked: AddAsked): string {
   return `Add ${asked.label} (${asked.slug}) at ${asked.base_url}?`;
@@ -198,7 +198,7 @@ export function addQuestion(asked: AddAsked): string {
 
 export const ADD_CONSEQUENCE =
   "Its key is written to the secrets vault first and the provider is listed here. It takes no " +
-  "question until a rung names one of its models, which the Routing screen adds through the matrix gate.";
+  "question until a step uses one of its models, which the Routing screen adds once the step passes its checks.";
 
 // ------------------------------------------------------------------------------ the forms
 
@@ -230,7 +230,19 @@ export function modelNames(typed: string): string[] {
     .filter((one) => one !== "");
 }
 
-/** The answer lane's override as typed: blank leaves the rung's own numbers. */
+/** What each kind of work a provider's own numbers apply to is called on the screen. */
+export const LANE_WORDS: Readonly<Record<string, string>> = Object.freeze({
+  answer: "Questions a person is waiting for",
+  task: "Background tasks",
+  fast: "Answers without a model",
+});
+
+/** One kind of work in words, or the API's own word for one this console has not heard of. */
+export function laneWords(lane: string): string {
+  return LANE_WORDS[lane] ?? lane;
+}
+
+/** The override for questions a person waits on, as typed: blank leaves the step's own numbers. */
 export function laneOverrides(timeout: string, attempts: string): TermsAsked["lane_overrides"] {
   const answer: { timeout_seconds?: number; attempts?: number } = {};
   if (timeout.trim() !== "") {

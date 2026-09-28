@@ -251,6 +251,25 @@ def recent_attempts(since: datetime) -> Select[tuple[str, datetime | None, str |
     )
 
 
+def recent_statuses(since: datetime) -> Select[tuple[str, datetime | None, int | None]]:
+    """Every attempt that finished since `since`, with its deployment and the provider's status.
+
+    For the Models screen's key refusals (`brain.provider_routes.refused_keys`), in finishing
+    order so the last row per deployment is its latest word. The replay does not need the
+    status, because a refused key is not ill health; the screen does, because it is not health.
+    """
+    return (
+        select(
+            RoutingRungRow.deployment_id, ModelAttemptRow.finished_at, ModelAttemptRow.status_code
+        )
+        .join(RoutingRungRow, RoutingRungRow.id == ModelAttemptRow.rung_id)
+        .where(ModelAttemptRow.finished_at.is_not(None))
+        .where(ModelAttemptRow.finished_at >= since)
+        .order_by(ModelAttemptRow.finished_at)
+        .limit(MAX_ATTEMPTS_REPLAYED)
+    )
+
+
 def attempt_started(
     trace_id: str,
     rung_id: str,

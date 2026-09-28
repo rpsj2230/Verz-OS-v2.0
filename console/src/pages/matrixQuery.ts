@@ -32,6 +32,13 @@
  * never as a count, because the rule this console keeps is about what a screen may render
  * rather than about which endpoint happens to make a number harmless.
  *
+ * **Plain words, and no id in the table** (the owner, 2026-09-28). The columns are headed as a
+ * person reads them (Level, Step, Role, Provider, Model), a level is Simple, Medium or Complex, a
+ * role and a provider are said in words, and the two ids (the deployment and the row) are not
+ * columns: they are `DETAIL_FIELDS`, drawn under Advanced in the open step's editor, where support
+ * asks for them. Nothing the API sends is dropped: a test holds the columns and the details
+ * together to `RungView`'s fields.
+ *
  * **The bounds in the edit form are the route's own bounds.** A form offering a number the
  * API refuses spends a round trip producing a 422, whose body is `HTTPValidationError` and
  * not `ErrorBody`, and which therefore reaches a person as "Something went wrong." The four
@@ -43,7 +50,8 @@
 
 import type { RJSFSchema, UiSchema } from "@rjsf/utils";
 import type { ReactNode } from "react";
-import { chipCell, valueCell } from "../components/cells";
+import { valueCell } from "../components/cells";
+import { levelName, providerName, roleWords } from "./modelsQuery";
 import { scopeLines } from "./scopeText";
 import type { GridColumn } from "../components/DataTable";
 import type { components } from "../api/schema";
@@ -95,18 +103,28 @@ export const MATRIX_API_PATH = "/routing/rungs";
  */
 export const CHAIN_PAGE_SIZE = 200;
 
-/** The filters the matrix route declares that the Routing screen offers, over rungs drawn. */
+/** The filters the matrix route declares that the Routing screen offers, over steps drawn. */
 export const MATRIX_FILTERS: readonly FilterChoice<RungRow>[] = [
-  { column: "tier", label: "Tier", everything: "Every tier", read: (row) => row.tier },
-  { column: "provider", label: "Provider", everything: "Every provider", read: (row) => row.provider },
+  { column: "tier", label: "Level", everything: "Every level", read: (row) => row.tier, describe: levelName },
+  {
+    column: "provider",
+    label: "Provider",
+    everything: "Every provider",
+    read: (row) => row.provider,
+    describe: (value) => providerName(value),
+  },
   {
     column: "enabled",
-    label: "Switched",
-    everything: "On or off",
+    label: "In use",
+    everything: "In use or paused",
     read: (row) => row.enabled,
-    describe: (value) => (value === "true" ? "On" : "Off"),
+    describe: (value) => (value === "true" ? IN_USE : PAUSED_WORDS),
   },
 ];
+
+/** A step that is used, and one paused on this screen, in words. */
+export const IN_USE = "In use";
+export const PAUSED_WORDS = "Paused";
 
 /** The console address for the matrix, and for the matrix with one rung open. */
 export const MATRIX_PATH = "/routing";
@@ -198,48 +216,75 @@ export function rungById(rungs: readonly RungRow[], rungId: string): RungRow | n
 export { clauseText, scopeLines } from "./scopeText";
 
 /**
- * How each column of a rung is rendered.
+ * How each column of a step is rendered, and what it is headed.
  *
- * A list rather than twelve column definitions, so that "every field the API sends about a
- * rung reaches the screen" is a property a test can hold against `brain.routing_routes.
- * RungView` rather than something somebody checks by eye. `tests/matrix-page.test.tsx`
- * reads the model's field names out of the Python source and fails in either direction: a
- * field added there and not here would arrive and be dropped silently, which is the failure
- * nobody notices.
+ * A list rather than column definitions written out, so that "every field the API sends about a
+ * step reaches the screen" is a property a test can hold against `brain.routing_routes.RungView`:
+ * `tests/matrix-page.test.tsx` reads the model's field names out of the Python source and holds
+ * them to these columns and `DETAIL_FIELDS` together, in both directions.
  *
- * `chip` says the value is a short word from a closed vocabulary. It carries no colour and
- * no severity, so nothing here can decide that a disabled rung is alarming; `enabled` is a
- * plain value for exactly that reason, rendered as the API's own `true` or `false`.
+ * The heading is a person's word since 2026-09-28 (until then it was the API's field name, which
+ * the owner read as jargon), and each value is drawn in words: a level by its name, a step by its
+ * number from 1, a role and a provider as the Models screen says them. `enabled` carries no colour
+ * and no severity, so nothing here decides that a paused step is alarming.
  */
 export const MATRIX_COLUMNS: readonly {
   readonly name: keyof RungRow;
-  readonly as: "value" | "chip" | "scope";
+  readonly header: string;
+  readonly as: "value" | "level" | "step" | "role" | "provider" | "enabled" | "scope";
 }[] = [
-  { name: "tier", as: "chip" },
-  { name: "position", as: "value" },
-  { name: "role", as: "chip" },
-  { name: "provider", as: "chip" },
-  { name: "model", as: "value" },
-  { name: "deployment_id", as: "value" },
-  { name: "scope", as: "scope" },
-  { name: "attempts", as: "value" },
-  { name: "timeout_seconds", as: "value" },
-  { name: "max_concurrency", as: "value" },
-  { name: "enabled", as: "value" },
-  { name: "id", as: "value" },
+  { name: "tier", header: "Level", as: "level" },
+  { name: "position", header: "Step", as: "step" },
+  { name: "role", header: "Role", as: "role" },
+  { name: "provider", header: "Provider", as: "provider" },
+  { name: "model", header: "Model", as: "value" },
+  { name: "scope", header: "Limited to", as: "scope" },
+  { name: "attempts", header: "Attempts", as: "value" },
+  { name: "timeout_seconds", header: "Seconds to wait", as: "value" },
+  { name: "max_concurrency", header: "Calls at once", as: "value" },
+  { name: "enabled", header: "In use", as: "enabled" },
 ];
 
 /**
- * The id of the column carrying the edit control.
+ * The fields the API sends that are ids rather than anything a person reads: shown under Advanced
+ * in the open step's editor, where a support conversation asks for them, and never as a column.
+ */
+export const DETAIL_FIELDS: readonly { readonly name: keyof RungRow; readonly label: string }[] = [
+  { name: "deployment_id", label: "Deployment id" },
+  { name: "id", label: "Step id" },
+];
+
+/**
+ * The id of the column carrying the edit control, and its heading.
  *
- * Not a field of `RungView`, and named here so the test that compares the grid's columns
- * with the model's fields can account for exactly one that is not one. A column with a
- * field's name would be an edit control masquerading as data.
+ * Not a field of `RungView`, and named here so the test that compares the grid's columns with
+ * the model's fields can account for exactly one that is not one. A column with a field's name
+ * would be an edit control masquerading as data.
  */
 export const EDIT_COLUMN = "edit";
+export const EDIT_HEADER = "Edit";
 
-/** What the edit column's cell is given: the rung's id, and a renderer supplied by the page. */
+/** What the edit column's cell is given: the step's id, and a renderer supplied by the page. */
 export type EditCell = (rungId: string) => ReactNode;
+
+/** A step's number within its level, from 1: its position is where the level starts counting at 0. */
+export function stepWords(position: unknown): string {
+  return typeof position === "number" ? String(position + 1) : "";
+}
+
+function wordsCell(words: (value: unknown) => string) {
+  return (context: { getValue: () => unknown }) => words(context.getValue());
+}
+
+const CELLS = {
+  value: valueCell,
+  level: wordsCell((value) => (typeof value === "string" ? levelName(value) : "")),
+  step: wordsCell(stepWords),
+  role: wordsCell((value) => (typeof value === "string" ? roleWords(value) : "")),
+  provider: wordsCell((value) => (typeof value === "string" ? providerName(value) : "")),
+  enabled: wordsCell((value) => (value === true ? IN_USE : value === false ? PAUSED_WORDS : "")),
+  scope: scopeCell,
+} as const;
 
 /**
  * The grid's columns, given whether this caller may change anything.
@@ -248,10 +293,6 @@ export type EditCell = (rungId: string) => ReactNode;
  * request changes, nothing about the other columns changes, and no row is withheld: see
  * `A_HIDDEN_EDITOR_IS_NOT_A_REFUSAL`.
  *
- * The header is the API's own field name, unchanged, for the reason `recordsQuery.ts` gives:
- * the API owns the vocabulary, and a console renaming `max_concurrency` to "Concurrency"
- * would show a word no constraint, no docstring and no support conversation uses.
- *
  * No column carries `meta.filterLabel`. The matrix route declares `limit` and nothing else,
  * and a filter box whose parameter no route declares is discarded by FastAPI without a word,
  * leaving a person reading unfiltered rows as the matching ones.
@@ -259,12 +300,12 @@ export type EditCell = (rungId: string) => ReactNode;
 export function matrixColumns(editable: boolean, editCell: EditCell): GridColumn<RungRow>[] {
   const columns: GridColumn<RungRow>[] = MATRIX_COLUMNS.map((column) => ({
     id: column.name,
-    header: column.name,
+    header: column.header,
     // `accessorFn` rather than `accessorKey`, for the reason the records grid gives: a key
     // is a path expression to the table library, so a field named `a.b` would silently read
     // a nested object that is not there.
     accessorFn: (rung: RungRow) => rung[column.name],
-    cell: column.as === "chip" ? chipCell : column.as === "scope" ? scopeCell : valueCell,
+    cell: CELLS[column.as],
   }));
   if (!editable) {
     return columns;
@@ -273,7 +314,7 @@ export function matrixColumns(editable: boolean, editCell: EditCell): GridColumn
     ...columns,
     {
       id: EDIT_COLUMN,
-      header: EDIT_COLUMN,
+      header: EDIT_HEADER,
       accessorFn: (rung: RungRow) => rung.id,
       cell: (context: { getValue: () => unknown }) => {
         const rungId = context.getValue();
@@ -329,29 +370,29 @@ export const RUNG_EDIT_SCHEMA: RJSFSchema = Object.freeze<RJSFSchema>({
   properties: {
     attempts: {
       type: "integer",
-      title: "attempts",
+      title: "Attempts",
       minimum: MIN_ATTEMPTS,
       maximum: MAX_SMALLINT,
     },
     timeout_seconds: {
       type: "number",
-      title: "timeout_seconds",
+      title: "Seconds to wait for an answer",
       exclusiveMinimum: 0,
       maximum: MAX_TIMEOUT_SECONDS,
     },
     max_concurrency: {
       type: "integer",
-      title: "max_concurrency",
+      title: "Calls at once, at most",
       minimum: MIN_CONCURRENCY,
       maximum: MAX_SMALLINT,
     },
-    enabled: { type: "boolean", title: "enabled" },
+    enabled: { type: "boolean", title: "In use" },
   },
 });
 
 /** Presentation only. The submit text is the sentence, so the button says what it does. */
 export const RUNG_EDIT_UI: UiSchema = Object.freeze<UiSchema>({
-  "ui:submitButtonOptions": { submitText: "Save this rung" },
+  "ui:submitButtonOptions": { submitText: "Save this step" },
 });
 
 /** What one rung's form starts from. The four values the API answered, and nothing else. */

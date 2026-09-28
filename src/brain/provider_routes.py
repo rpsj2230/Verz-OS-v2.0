@@ -47,6 +47,27 @@ sentence is a fact an administrator needs; that it answered, which deployment an
 and what it cost, are. It is recorded on the metadata ledger and not as a question, because it is
 not one. See `A_CHECK_IS_A_REQUEST_AND_NOT_A_PROBE`.
 
+**A provider no step names is checked through its default model, not refused** (found on the
+owner's install on 2026-09-28: Test on OpenAI, whose key he had just saved, answered that nothing
+named it and told him to add a step). The question a Test answers is whether the key works, and a
+key is worth knowing about before anybody builds a step on it. So the check plans from a copy of
+the ladder with one step added, the provider's own default model at the first default level
+(`brain.models.default_ladder.default_rung`, the numbers a default step carries), through
+`ModelCalls.trying`: the switch, the profile, the key and the breaker are asked exactly as for a
+step, the meter and the ledger row are the caller's as for any check, and only the attempt row is
+not written, because it would name a step that does not exist. The answer says which model was
+used and that it was the default. See `A_KEY_IS_CHECKED_BEFORE_ANY_STEP_USES_IT`.
+
+**A refused key is said, and is never drawn as a working provider.** A 401 or 403 stops the chain
+and is not ill health (`brain.models.evidence.ONLY_THE_PROVIDERS_OWN_FAILURE_IS_ILL_HEALTH`), so
+the breaker stays closed and, measured, drew "working" beside a provider that had just refused the
+key. The check names it (`key_refused`), and the read marks each step whose latest attempt in the
+evidence window was refused that way, so the screen says so instead of calling it healthy. See
+`A_REFUSED_KEY_IS_NOT_A_HEALTHY_PROVIDER`.
+
+**Everything a person can be shown here is in plain words**: the owner's (step, level, provider,
+model), never rung, ladder, tier, lane or slot, and a test reads every sentence for them.
+
 **Each provider is shown with its registry row and what it has been sent** (M5.6.4): the
 processing region, the retention and training terms, the agreement link and the lane overrides
 from `ops.model_provider`, and per category of data the number of attempts that carried it, from
@@ -85,7 +106,9 @@ Task ids: M27.8.8, M27.2.3, M5.6.4, M5.7.1, M5.7.2, M5.2.2, M5.4.3, M5.4.8, M5.5
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime, timedelta
+from types import MappingProxyType
 from typing import Any, Final, Literal
 
 import structlog
@@ -105,11 +128,20 @@ from brain.core.lane import Lane
 from brain.credential_routes import SlotView, credentials_of, listing, may_manage
 from brain.gate.finish import Finished, ModelCallOutcome, Origin, RequestRecorder, finish
 from brain.install import hold_saved
-from brain.models.assembly import HOSTED_PROFILE, LOCAL_PROFILE, TOLD, RungSkip, local_only
+from brain.models.assembly import (
+    HOSTED_PROFILE,
+    LOCAL_PROFILE,
+    TOLD,
+    LadderRung,
+    RungSkip,
+    local_only,
+)
 from brain.models.calls import ModelCalls, Planned, chain_of
+from brain.models.default_ladder import DEFAULT_TIERS, default_model, default_rung
 from brain.models.disclosure import TOLD as CATEGORY_TOLD
 from brain.models.disclosure import DataCategory
-from brain.models.driver import DriverMessage, ProviderUnavailable, Role
+from brain.models.driver import DriverFailure, DriverMessage, ProviderUnavailable, Role
+from brain.models.evidence import EVIDENCE_WINDOW
 from brain.models.metering import Meter
 from brain.models.registry import ProviderKind, ProviderRecord
 from brain.models.routing import TIER_LADDER, BreakerState, FallbackTrigger, NoCompliantRoute, Tier
@@ -122,8 +154,10 @@ from brain.ops.install_settings import load, save
 from brain.ops.model_service import (
     KNOWN_PROVIDERS,
     ModelService,
+    NoAttempts,
     disclosure_counts,
     disclosures,
+    recent_statuses,
     switch_provider,
     switch_states,
 )
@@ -164,6 +198,23 @@ A_CHECK_IS_A_REQUEST_AND_NOT_A_PROBE: Final = (
     "it is not a question, so the question count never sees it."
 )
 
+#: Why a provider with a key and no step is still checked.
+A_KEY_IS_CHECKED_BEFORE_ANY_STEP_USES_IT: Final = (
+    "Test answers whether a provider takes this install's key and answers, and that is worth "
+    "knowing before a step is built on it. A provider no step names is sent the same one "
+    "sentence through its default model, planned as a step would be, so the switch, the "
+    "profile, the key and the breaker still decide, and the answer names the model it used."
+)
+
+#: Why a 401 or 403 is shown as a refused key rather than as health.
+A_REFUSED_KEY_IS_NOT_A_HEALTHY_PROVIDER: Final = (
+    "A provider that refuses the key has answered, so the breaker, which counts only the "
+    "provider's own failures, stays closed and the step reads as measured. Drawn from the "
+    "breaker alone that is a working provider, and it is one no question can reach. So the "
+    "check says the key was refused, and a step whose latest attempt was refused that way is "
+    "marked, whatever its breaker says."
+)
+
 #: Why the profile is saved as an installation setting from this screen rather than switched.
 WHERE_ANSWERS_ARE_MADE_IS_AN_INSTALLATION_SETTING_AND_NOT_A_SWITCH: Final = (
     "The profile decides whether a question's text may leave the server at all, for every "
@@ -191,34 +242,73 @@ CHECK_MAX_OUTPUT_TOKENS: Final = 16
 #: been acted on or is a pattern the provider health figures already show.
 ALERT_WINDOW: Final = timedelta(hours=24)
 
-#: What an administrator is told about a check that did not answer, by the failure it ended on.
-CHECK_TOLD: Final = {
-    "answered": "The provider answered.",
-    "no_rung": (
-        "No rung on the routing ladder names this provider, so there is nothing to check. Add a "
-        "rung for it, then check again."
-    ),
-    "out_of_rotation": (
-        "Every rung naming this provider is out of rotation on the Routing screen, so nothing "
-        "would send it a question. Put a rung back in rotation, then check again."
-    ),
-    "stopped": (
-        "The provider refused the request. Check that its key is valid and that the model the "
-        "rung names exists on the provider's account."
-    ),
-    "refused": "The model declined the check sentence on content grounds.",
-    FallbackTrigger.CONNECTION_ERROR.value: "The provider could not be reached from this server.",
-    FallbackTrigger.TIMEOUT.value: "The provider did not answer inside the rung's timeout.",
-    FallbackTrigger.RATE_LIMITED.value: (
-        "The provider asked for fewer requests. Wait a minute and check again."
-    ),
-    FallbackTrigger.PROVIDER_ERROR.value: "The provider reported a fault on its side.",
-    FallbackTrigger.CIRCUIT_OPEN.value: (
-        "Recent calls to this provider failed, so its rungs are resting. Check again once the "
-        "cooldown shown beside them has passed."
-    ),
-    FallbackTrigger.CONTEXT_EXCEEDED.value: "The check did not fit the model's window.",
-}
+#: The provider statuses that mean it refused the key rather than the request: 401, the key is not
+#: one it knows, and 403, the key is not allowed what was asked. See
+#: `A_REFUSED_KEY_IS_NOT_A_HEALTHY_PROVIDER`.
+KEY_REFUSED_STATUSES: Final[frozenset[int]] = frozenset({401, 403})
+
+#: The level a provider no step names is checked at: the first level a default ladder fills.
+CHECK_LEVEL: Final[Tier] = DEFAULT_TIERS[0]
+
+#: The id the check's one added step carries. It names no row, and its attempt row is not written.
+UNLADDERED_RUNG_ID: Final = "provider-check"
+
+#: What an administrator is told about a check, by how it ended. Plain words: see the module
+#: docstring. An answer is told with its model by `answered_told`; this entry is its fallback.
+CHECK_TOLD: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        "answered": "The provider answered.",
+        "no_model": (
+            "No step on the failover matrix uses this provider, and this product has no default "
+            "model for it to test with. Add a step for one of its models on the Routing screen, "
+            "then test again."
+        ),
+        "out_of_rotation": (
+            "Every step that uses this provider is paused on the Routing screen, so nothing "
+            "would be sent to it. Turn one of its steps back on, then test again."
+        ),
+        "key_refused": (
+            "The provider refused the key. Replace the key for this provider with a current one "
+            "that may use this model, then test again."
+        ),
+        "stopped": (
+            "The provider turned the request down. Check that the model tested is available on "
+            "the provider's account."
+        ),
+        "refused": "The model declined the test sentence on content grounds.",
+        FallbackTrigger.CONNECTION_ERROR.value: (
+            "The provider could not be reached from this server."
+        ),
+        FallbackTrigger.TIMEOUT.value: "The provider did not answer in time.",
+        FallbackTrigger.RATE_LIMITED.value: (
+            "The provider asked for fewer requests. Wait a minute and test again."
+        ),
+        FallbackTrigger.PROVIDER_ERROR.value: "The provider reported a fault on its side.",
+        FallbackTrigger.CIRCUIT_OPEN.value: (
+            "Recent calls to this provider failed, so it is resting. Test again in a few "
+            "minutes, once its rest has passed."
+        ),
+        FallbackTrigger.CONTEXT_EXCEEDED.value: "The test did not fit the model's limit.",
+    }
+)
+
+
+def answered_told(model: str, *, default_model: bool) -> str:
+    """What a check that answered says: which model answered, and whether it was the default."""
+    if default_model:
+        return (
+            f"The provider answered, using {model}. No step on the failover matrix uses this "
+            "provider yet, so the test used its default model."
+        )
+    return f"The provider answered, using {model}."
+
+
+def default_model_told(told: str, model: str) -> str:
+    """A check's sentence, with the default model it was sent to named after it."""
+    return (
+        f"{told} The test used {model}, this provider's default model, because no step on the "
+        "failover matrix uses it yet."
+    )
 
 
 # ------------------------------------------------------------------------ the shapes
@@ -315,6 +405,9 @@ class RungStateView(BaseModel):
     #: When the prober last claimed a probe of it, and when live traffic last reached it.
     last_probe_at: datetime | None = None
     last_live_at: datetime | None = None
+    #: Its latest attempt in the evidence window was refused as a key (401 or 403). See
+    #: `A_REFUSED_KEY_IS_NOT_A_HEALTHY_PROVIDER`.
+    key_refused: bool = False
 
 
 class RoutingTierView(BaseModel):
@@ -406,16 +499,21 @@ class CheckView(BaseModel):
 
     provider: str
     answered: bool
-    #: `answered`, a `RungSkip`, a fallback trigger, `stopped`, `out_of_rotation` or `no_rung`.
+    #: `answered`, a `RungSkip`, a fallback trigger, `key_refused`, `stopped`, `refused`,
+    #: `out_of_rotation` or `no_model`.
     outcome: str
     told: str
     served_by: str | None
+    #: The model that answered, or on the default path the model the check was sent to.
     model: str | None
     tokens_in: int | None
     tokens_out: int | None
     #: The provider's HTTP status on a failure that had one.
     status: int | None
     trace_id: str
+    #: No step names the provider, so the check was planned through its default model. See
+    #: `A_KEY_IS_CHECKED_BEFORE_ANY_STEP_USES_IT`.
+    default_model: bool = False
 
 
 # ------------------------------------------------------------------------ the decisions
@@ -494,12 +592,14 @@ def providers_view(
     residency: list[ResidencyConstraintView] | None = None,
     alerts: list[ChainDepthAlertView] | None = None,
     profile_editable: bool = False,
+    refused: frozenset[str] = frozenset(),
 ) -> ProvidersView:
     """The plan and the switch rows, as one reader may be shown them.
 
     `vault` is None unless the reader may manage credentials; see the module docstring.
     `disclosed` is the attempts per provider and category of data (M5.6.4). `residency` and
     `alerts` are read beside the plan, because the plan carries constraints without their ids.
+    `refused` is the deployments whose latest attempt the provider refused as a key.
     """
     rings = {one.deployment_id: one for one in plan.state.rings}
     described = {one.slug: one.description for one in PROVIDER_SLOTS}
@@ -562,6 +662,7 @@ def providers_view(
                 probes_failed=0 if stored is None else sum(1 for p in stored.probe if not p.ok),
                 last_probe_at=None if stored is None else stored.last_probe_at,
                 last_live_at=None if stored is None else stored.last_live_at,
+                key_refused=row.deployment_id in refused,
             )
         )
     return ProvidersView(
@@ -591,6 +692,50 @@ def check_tier(plan: Planned, provider: str) -> Tier | None:
         if any(one.deployment.enabled for one in chain.rungs_for(tier)):
             return tier
     return None
+
+
+def refused_keys(rows: Iterable[tuple[str, datetime | None, int | None]]) -> frozenset[str]:
+    """The deployments whose latest finished attempt was refused as a key, from rows in order.
+
+    The latest word per deployment and not any word, so a key replaced and answered since is not
+    still marked refused. Rows arrive in finishing order (`model_service.recent_statuses`).
+    """
+    latest: dict[str, int | None] = {}
+    for deployment, finished_at, status in rows:
+        if finished_at is not None:
+            latest[deployment] = status
+    return frozenset(one for one, status in latest.items() if status in KEY_REFUSED_STATUSES)
+
+
+def names_the_provider(plan: Planned, provider: str) -> bool:
+    """Whether any live step names this provider, answering or left out."""
+    return any(one.provider == provider for one in plan.state.rungs)
+
+
+def unladdered_rung(plan: Planned, provider: str) -> LadderRung | None:
+    """The one step a check adds for a provider no step names: its default model, or None.
+
+    At `CHECK_LEVEL` with the numbers a default step carries (`default_ladder.default_rung`), so
+    the call is the one a default step would make. None when the product names no default model
+    and the provider's registry row lists none. See `A_KEY_IS_CHECKED_BEFORE_ANY_STEP_USES_IT`.
+    """
+    record = next((one for one in plan.state.providers if one.slug == provider), None)
+    model = default_model(provider, () if record is None else record.models)
+    if model is None:
+        return None
+    step = default_rung(provider, CHECK_LEVEL, model)
+    return LadderRung(
+        rung_id=UNLADDERED_RUNG_ID,
+        tier=step.tier,
+        position=step.position,
+        deployment_id=step.deployment_id,
+        provider=step.provider,
+        model=step.model,
+        attempts=step.attempts,
+        timeout_seconds=step.timeout_seconds,
+        max_concurrency=step.max_concurrency,
+        enabled=True,
+    )
 
 
 # ------------------------------------------------------------------------- the wiring
@@ -688,6 +833,24 @@ async def _alerts(request: Request, now: datetime) -> list[ChainDepthAlertView]:
     ]
 
 
+async def _refused(request: Request, now: datetime) -> frozenset[str]:
+    """The deployments whose latest attempt was refused as a key. Empty without a database."""
+    factory = _sessions(request)
+    if factory is None:
+        return frozenset()
+    try:
+        async with factory() as session:
+            rows = (await session.execute(recent_statuses(now - EVIDENCE_WINDOW))).all()
+    except Exception as exc:
+        # Statuses that cannot be read are not a refusal; the screen marks nothing.
+        log.warning("models.statuses_unreadable", error=type(exc).__name__)
+        return frozenset()
+    return refused_keys(
+        (str(deployment), finished, None if status is None else int(status))
+        for deployment, finished, status in rows
+    )
+
+
 async def _vault_for(
     request: Request, reach: EntitlementSet, now: datetime
 ) -> tuple[VaultState, dict[str, SlotView]] | None:
@@ -721,6 +884,7 @@ async def _view(request: Request, asked: Asked, calls: ModelCalls) -> ProvidersV
         residency=await _residency(request),
         alerts=await _alerts(request, asked.now),
         profile_editable=may_configure(asked.reach, asked.now),
+        refused=await _refused(request, asked.now),
     )
 
 
@@ -800,7 +964,8 @@ async def choose_profile(request: Request, body: ProfileAsked, asked: Asked) -> 
     "/models/providers/{provider}/check", response_model=CheckView, responses=COMMON_RESPONSES
 )
 async def check(request: Request, provider: str, asked: Asked) -> CheckView:
-    """Send one fixed sentence through this provider's first answering rung, metered."""
+    """Send one fixed sentence through this provider, metered: its first answering step, or its
+    default model when no step names it. See `A_KEY_IS_CHECKED_BEFORE_ANY_STEP_USES_IT`."""
     if not may_switch(asked.reach, asked.now):
         log.info("provider check refused", principal=asked.caller.principal.id)
         raise _not_answerable()
@@ -812,8 +977,22 @@ async def check(request: Request, provider: str, asked: Asked) -> CheckView:
     trace_id = _trace_id()
     origin = Origin(trace_id=trace_id, principal=asked.caller.principal, channel=asked.channel)
     meter = Meter()
+    added = None if names_the_provider(plan, provider) else unladdered_rung(plan, provider)
+    if added is not None:
+        # A copy of the ladder with the one step added, planned as a step would be. Its attempt
+        # row would name no step, so none is written; the meter and the ledger row still are.
+        calls = calls.trying(lambda rungs: (*rungs, added), attempts=NoAttempts())
+        plan = await calls.planned()
     tier = check_tier(plan, provider)
-    view = await _checked(calls, plan, provider, tier, meter=meter, trace_id=trace_id)
+    view = await _checked(
+        calls,
+        plan,
+        provider,
+        tier,
+        meter=meter,
+        trace_id=trace_id,
+        default=None if added is None else added.model,
+    )
     recorders: tuple[RequestRecorder, ...] = tuple(
         one
         for one in getattr(request.app.state, "request_recorders", ())
@@ -836,9 +1015,25 @@ async def check(request: Request, provider: str, asked: Asked) -> CheckView:
         "provider checked",
         provider=provider,
         outcome=view.outcome,
+        default_model=view.default_model,
         principal=asked.caller.principal.id,
     )
     return view
+
+
+def failure_outcome(failure: DriverFailure) -> str:
+    """How a check that failed ended, in the check's vocabulary.
+
+    A content refusal first, because it carries no trigger and is the model's word rather than
+    the provider's; then a refused key, by the provider's status; then the fallback trigger, or
+    `stopped` for a failure that stopped the chain with none.
+    """
+    if failure.refused:
+        return "refused"
+    if failure.status in KEY_REFUSED_STATUSES:
+        return "key_refused"
+    trigger = failure.trigger
+    return "stopped" if trigger is None else trigger.value
 
 
 async def _checked(
@@ -849,17 +1044,29 @@ async def _checked(
     *,
     meter: Meter,
     trace_id: str,
+    default: str | None = None,
 ) -> CheckView:
-    """The call and how it ended, in the check's vocabulary. Never raises a provider failure."""
+    """The call and how it ended, in the check's vocabulary. Never raises a provider failure.
+
+    `default` is the default model when no step names the provider, and every sentence then
+    names it.
+    """
     if tier is None:
         reasons = [one.reason for one in plan.assembly.skipped if one.rung.provider == provider]
         if reasons:
             return _unanswered(
-                provider, reasons[0].value, TOLD[reasons[0]], status=None, trace_id=trace_id
+                provider,
+                reasons[0].value,
+                TOLD[reasons[0]],
+                status=None,
+                trace_id=trace_id,
+                default=default,
             )
         named = any(one.provider == provider for one in plan.assembly.answering)
-        outcome = "out_of_rotation" if named else "no_rung"
-        return _unanswered(provider, outcome, CHECK_TOLD[outcome], status=None, trace_id=trace_id)
+        outcome = "out_of_rotation" if named else "no_model"
+        return _unanswered(
+            provider, outcome, CHECK_TOLD[outcome], status=None, trace_id=trace_id, default=default
+        )
     try:
         response = await calls.complete(
             (DriverMessage(role=Role.USER, content=CHECK_PROMPT),),
@@ -872,43 +1079,55 @@ async def _checked(
             categories=(DataCategory.CHECK_SENTENCE,),
         )
     except ProviderUnavailable as failed:
-        trigger = failed.failure.trigger
-        outcome = "stopped" if trigger is None else trigger.value
-        if failed.failure.refused:
-            outcome = "refused"
+        outcome = failure_outcome(failed.failure)
         return _unanswered(
-            provider, outcome, CHECK_TOLD[outcome], status=failed.failure.status, trace_id=trace_id
+            provider,
+            outcome,
+            CHECK_TOLD[outcome],
+            status=failed.failure.status,
+            trace_id=trace_id,
+            default=default,
         )
     except NoCompliantRoute:
-        # Every rung of this provider was resting behind an open breaker when the call planned.
+        # Every step of this provider was resting behind an open breaker when the call planned.
         outcome = FallbackTrigger.CIRCUIT_OPEN.value
-        return _unanswered(provider, outcome, CHECK_TOLD[outcome], status=None, trace_id=trace_id)
+        return _unanswered(
+            provider, outcome, CHECK_TOLD[outcome], status=None, trace_id=trace_id, default=default
+        )
     return CheckView(
         provider=provider,
         answered=True,
         outcome="answered",
-        told=CHECK_TOLD["answered"],
+        told=answered_told(response.model, default_model=default is not None),
         served_by=response.deployment_id,
         model=response.model,
         tokens_in=response.usage.input_tokens,
         tokens_out=response.usage.output_tokens,
         status=None,
         trace_id=trace_id,
+        default_model=default is not None,
     )
 
 
 def _unanswered(
-    provider: str, outcome: str, told: str, *, status: int | None, trace_id: str
+    provider: str,
+    outcome: str,
+    told: str,
+    *,
+    status: int | None,
+    trace_id: str,
+    default: str | None = None,
 ) -> CheckView:
     return CheckView(
         provider=provider,
         answered=False,
         outcome=outcome,
-        told=told,
+        told=told if default is None else default_model_told(told, default),
         served_by=None,
-        model=None,
+        model=default,
         tokens_in=None,
         tokens_out=None,
         status=status,
         trace_id=trace_id,
+        default_model=default is not None,
     )

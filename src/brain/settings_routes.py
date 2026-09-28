@@ -23,10 +23,12 @@ this process serves draws the new name. Another application process reads it whe
 starts, and the row says so. See
 `brain.ops.install_settings.A_SAVED_SETTING_IS_NOT_A_MESSAGE_TO_ANOTHER_WORKER`.
 
-**Only branding is written, and a refusal says why in the product's words.** A name that is not a
-declared setting and a setting in another group are refused with the same sentence
-`brain.console.configuration.branding_problem` gives, which names no value this install holds:
-the declared names are product text, identical on every install.
+**Every setting safe to change while the install runs is written, each by its own rule, and a
+refusal says why in the product's words** (branding alone until 2026-09-28). A name that is not a
+declared setting and a setting this screen does not change are refused with the same sentence
+`brain.console.configuration.setting_problem` gives, which names no value this install holds: the
+declared names are product text, identical on every install. The console confirms each save
+before sending it; this route judges it whatever the console did.
 
 **The starter set is shown with the one thing it does not furnish, stated exactly.** Roles, the
 starter pack and the company scope are furnished at every start by `brain.ops.starter_store`. The
@@ -58,17 +60,16 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from brain.api import API_PREFIX, COMMON_RESPONSES, ErrorBody
 from brain.api_routes import Asked
 from brain.console.configuration import (
-    CHANGED_ELSEWHERE,
-    EDITABLE_GROUPS,
-    GROUP_ORDER,
-    GROUP_TITLES,
-    ONLY_BRANDING_IS_CHANGED_HERE,
+    SECTION_ORDER,
+    SECTION_TITLES,
     THE_SCREEN_SHOWS_NO_CREDENTIAL,
+    WHAT_IS_CHANGED_HERE_AND_WHAT_IS_NOT,
     Row,
-    branding_problem,
     findings,
+    normalised,
     profile_told,
     rows,
+    setting_problem,
 )
 from brain.console.govern import NOWHERE, _in_reach
 from brain.core.entitlement import Capability, EntitlementSet
@@ -122,6 +123,8 @@ class SettingRowView(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     name: str
+    #: The setting as a person calls it; `name` is the variable, drawn beside it for support.
+    label: str
     meaning: str
     value: str
     #: `saved`, `environment`, `default` or `missing`.
@@ -129,6 +132,8 @@ class SettingRowView(BaseModel):
     default: str
     required: bool
     editable: bool
+    #: Why this screen does not change it, in one line. Empty for a setting it changes.
+    read_only_because: str
     #: When a change to this value takes effect, in a sentence.
     applies: str
     #: The modules that read it, as dotted paths.
@@ -136,15 +141,15 @@ class SettingRowView(BaseModel):
 
 
 class SettingGroupView(BaseModel):
-    """One group of settings, whether this screen changes it, and where it is changed if not."""
+    """One section of settings, by what they are for, and whether any of them is changed here."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
+    #: A `brain.console.configuration.Section` value.
     group: str
     title: str
+    #: Whether any setting in it is changed on this screen. Each row says so for itself.
     editable: bool
-    #: Where a value in this group is changed instead, or empty for a group changed here.
-    changed_elsewhere: str
     settings: list[SettingRowView]
 
 
@@ -244,7 +249,7 @@ class SettingsPage(BaseModel):
 
 
 class SaveAsked(BaseModel):
-    """One branding value. Required, so what is saved is what the person typed."""
+    """One setting's value. Required, so what is saved is what the person typed."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -257,12 +262,14 @@ class SaveAsked(BaseModel):
 def row_view(one: Row) -> SettingRowView:
     return SettingRowView(
         name=one.name,
+        label=one.label,
         meaning=one.meaning,
         value=one.value,
         source=one.source.value,
         default=one.default,
         required=one.required,
         editable=one.editable,
+        read_only_because=one.read_only_because,
         applies=one.applies,
         read_by=list(one.read_by),
     )
@@ -277,13 +284,12 @@ def settings_page(*, furnished: bool | None, saved: dict[str, str] | None = None
     resolved_rows = rows(saved=saved)
     groups = [
         SettingGroupView(
-            group=group.value,
-            title=GROUP_TITLES[group],
-            editable=group in EDITABLE_GROUPS,
-            changed_elsewhere=CHANGED_ELSEWHERE.get(group, ""),
-            settings=[row_view(one) for one in resolved_rows if one.group is group],
+            group=section.value,
+            title=SECTION_TITLES[section],
+            editable=any(one.editable for one in resolved_rows if one.section is section),
+            settings=[row_view(one) for one in resolved_rows if one.section is section],
         )
-        for group in GROUP_ORDER
+        for section in SECTION_ORDER
     ]
     return SettingsPage(
         groups=groups,
@@ -299,7 +305,7 @@ def settings_page(*, furnished: bool | None, saved: dict[str, str] | None = None
             agents_told=STANDARD_AGENTS_WAIT_FOR_THE_SIGNING_KEY,
         ),
         credentials=THE_SCREEN_SHOWS_NO_CREDENTIAL,
-        editable_because=ONLY_BRANDING_IS_CHANGED_HERE,
+        editable_because=WHAT_IS_CHANGED_HERE_AND_WHAT_IS_NOT,
         leaving=leaving_view(realm=value_of("INSTALL_OIDC_REALM", saved=saved)),
     )
 
@@ -350,7 +356,7 @@ async def settings(request: Request, asked: Asked) -> SettingsPage:
 
 @router.put(f"{SETTINGS_PATH}/{{name}}", response_model=SettingsPage, responses=COMMON_RESPONSES)
 async def save_setting(request: Request, name: str, body: SaveAsked, asked: Asked) -> JSONResponse:
-    """Save one branding value, hold it for this process, and answer with the screen as it now is.
+    """Save one setting, hold it for this process, and answer with the screen as it now is.
 
     The authority, then the name and value, then the write, and the order is the property: a caller
     without the authority is refused before the name is looked at, and a value that would be
@@ -359,7 +365,7 @@ async def save_setting(request: Request, name: str, body: SaveAsked, asked: Aske
     if not may_configure(asked.reach, asked.now):
         log.info("setting save refused", principal=asked.caller.principal.id)
         raise _not_answerable()
-    problem = branding_problem(name, body.value)
+    problem = setting_problem(name, body.value)
     if problem:
         told = ErrorBody(message=problem, trace_id=_trace_id())
         return JSONResponse(status_code=422, content=told.model_dump())
@@ -370,7 +376,9 @@ async def save_setting(request: Request, name: str, body: SaveAsked, asked: Aske
             trace_id=_trace_id(),
         ):
             await session.execute(statement)
-        await save(session, {name: body.value.strip()}, updated_by=asked.caller.principal.id)
+        await save(
+            session, {name: normalised(name, body.value)}, updated_by=asked.caller.principal.id
+        )
         saved = await load(session)
         furnished = await _furnished(session)
         await session.commit()

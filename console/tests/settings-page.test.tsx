@@ -11,8 +11,11 @@ import { fireEvent, waitFor } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
 import {
   BY_WORDS,
+  KEEP_SETTING,
   LEAVING_HEADING,
+  NOT_SET_YET,
   SAVE,
+  SAVE_CHANGE,
   SAVED,
   SETTINGS_API_PATH,
   SETTINGS_PATH,
@@ -30,12 +33,14 @@ const ROUTES = "src/brain/settings_routes.py";
 function row(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     name: "INSTALL_COMPANY_NAME",
+    label: "Company name",
     meaning: "MEANING-SENTENCE",
     value: "Northwind Trading",
     source: "saved",
     default: "Your Company",
     required: false,
     editable: true,
+    read_only_because: "",
     applies: "APPLIES-SENTENCE",
     read_by: ["brain.console_static"],
     ...overrides,
@@ -46,25 +51,33 @@ function page(company: string = "Northwind Trading"): Record<string, unknown> {
   return {
     groups: [
       {
-        group: "branding",
-        title: "Branding",
+        group: "company",
+        title: "Company and branding",
         editable: true,
-        changed_elsewhere: "",
         settings: [row({ value: company })],
       },
       {
-        group: "identity",
-        title: "Identity provider",
+        group: "locale",
+        title: "Language, money and time",
+        editable: true,
+        settings: [
+          row({ name: "INSTALL_CURRENCY", label: "Currency", value: "XXX", source: "default", default: "XXX" }),
+        ],
+      },
+      {
+        group: "sign_in",
+        title: "Sign-in",
         editable: false,
-        changed_elsewhere: "ELSEWHERE-SENTENCE",
         settings: [
           row({
             name: "INSTALL_OIDC_ISSUER",
+            label: "Sign-in address",
             value: "",
             source: "missing",
             default: "",
             required: true,
             editable: false,
+            read_only_because: "READ-ONLY-SENTENCE",
           }),
         ],
       },
@@ -117,7 +130,8 @@ describe("what the Settings screen draws", () => {
     expect(text).toContain("INSTALL_OIDC_ISSUER");
     expect(text).toContain(SOURCE_WORDS.missing);
     expect(text).toContain(SOURCE_WORDS.saved);
-    expect(text).toContain("ELSEWHERE-SENTENCE");
+    expect(text).toContain("READ-ONLY-SENTENCE");
+    expect(text).toContain("Sign-in address");
     expect(text).toContain("FINDING-SENTENCE");
     expect(text).toContain("AGENTS-SENTENCE");
     expect(text).toContain("CREDENTIALS-SENTENCE");
@@ -181,6 +195,13 @@ describe("saving branding", () => {
     const input = container.querySelector('input[name="INSTALL_COMPANY_NAME"]') as HTMLInputElement;
     fireEvent.change(input, { target: { value: "Contoso" } });
     fireEvent.click(button(container, SAVE));
+    // Nothing is sent until the confirmation is pressed, and keeping it sends nothing.
+    expect(sent.filter((one) => one.method === "PUT")).toEqual([]);
+    expect(container.querySelector(".confirm")?.textContent).toContain('Company name becomes "Contoso".');
+    fireEvent.click(button(container, KEEP_SETTING));
+    expect(sent.filter((one) => one.method === "PUT")).toEqual([]);
+    fireEvent.click(button(container, SAVE));
+    fireEvent.click(button(container, SAVE_CHANGE));
 
     await waitFor(() => {
       expect(container.textContent).toContain(SAVED);
@@ -189,5 +210,29 @@ describe("saving branding", () => {
     expect((container.querySelector('input[name="INSTALL_COMPANY_NAME"]') as HTMLInputElement).value).toBe(
       "Contoso Ltd",
     );
+  });
+});
+
+describe("the currency and time zone", () => {
+  test("a currency nobody chose is never drawn as its code: the field starts empty with an example, and it is saved from its confirmation", async () => {
+    // What breaks if this is deleted: the owner reads XXX on the screen where he is meant to set
+    // the currency, which is the code he took for a fault on the Models screen.
+    const SAVE_CURRENCY = `PUT /api/v1${SETTINGS_API_PATH}/INSTALL_CURRENCY`;
+    const { container, sent } = await settingsPage({
+      [READ]: () => json(page()),
+      [SAVE_CURRENCY]: () => json(page()),
+    });
+
+    expect(container.textContent).not.toContain("XXX");
+    const input = container.querySelector('input[name="INSTALL_CURRENCY"]') as HTMLInputElement;
+    expect(input.value).toBe("");
+    expect(input.placeholder).toContain("SGD");
+    fireEvent.change(input, { target: { value: "sgd" } });
+    fireEvent.click(button(container, `${SAVE}: Currency`));
+    fireEvent.click(button(container, SAVE_CHANGE));
+    await waitFor(() => {
+      expect(sent.filter((one) => one.method === "PUT").map((one) => one.body)).toEqual([{ value: "sgd" }]);
+    });
+    expect(NOT_SET_YET).not.toContain("XXX");
   });
 });

@@ -1,4 +1,4 @@
-"""The Settings screen over HTTP: who may open it, what it shows, and branding saved end to end.
+"""The Settings screen over HTTP: who may open it, what it shows, and a setting saved end to end.
 
 Driven through the real application with `ops.setting` held in memory: `tests.fixtures.setting_rows`
 answers the furnishing record's namespace read, and `InstallRows` below answers the two statements
@@ -23,12 +23,14 @@ from sqlalchemy.sql.dml import Insert
 from sqlalchemy.sql.selectable import Select
 
 from brain.api import API_PREFIX
+from brain.console.configuration import EDITABLE_SETTINGS, SECTION_ORDER
 from brain.console_static import CONSOLE_CONFIG_GLOBAL, CONSOLE_CONFIG_PATH
 from brain.core.entitlement import Capability, Grant
 from brain.core.scope import Scope
 from brain.identity.first_administrator import ADMINISTRATION
 from brain.identity.roles import Role
-from brain.install import BY_NAME, INSTALLATION, hold_saved
+from brain.install import INSTALLATION, hold_saved
+from brain.locale import currency, time_zone
 from brain.ops.handover import Residue
 from brain.ops.retention import BACKUP_RETENTION_DAYS, Store, facts_for
 from brain.ops.starter_store import (
@@ -145,16 +147,16 @@ def test_the_screen_shows_every_setting_grouped_with_its_source_and_the_starter_
     body = answer.json()
     names = [row["name"] for group in body["groups"] for row in group["settings"]]
     assert sorted(names) == sorted(one.name for one in INSTALLATION)
-    assert [group["group"] for group in body["groups"]] == [
-        "branding",
-        "identity",
-        "models",
-        "storage",
+    assert [group["group"] for group in body["groups"]] == [one.value for one in SECTION_ORDER]
+    assert {group["group"] for group in body["groups"] if group["editable"]} == {
+        "company",
         "locale",
-        "connectors",
-    ]
-    assert {group["group"] for group in body["groups"] if group["editable"]} == {"branding"}
-    assert all(group["changed_elsewhere"] for group in body["groups"] if not group["editable"])
+        "models",
+    }
+    settings = [row for group in body["groups"] for row in group["settings"]]
+    assert all(row["label"] for row in settings)
+    assert all(bool(row["read_only_because"]) != row["editable"] for row in settings)
+    assert sorted(row["name"] for row in settings if row["editable"]) == sorted(EDITABLE_SETTINGS)
     starter = body["starter"]
     assert starter["roles"] == [one.value for one in Role] and len(starter["roles"]) == 6
     assert starter["scopes"] == ["company"] and starter["furnished"] is True
@@ -222,11 +224,43 @@ def test_saving_a_company_name_writes_its_row_and_the_console_header_draws_it_ne
     assert served_config["brand"]["companyName"] == "Northwind Trading"
 
 
+def test_saving_the_currency_and_time_zone_writes_both_rows_and_money_reads_them_at_once(
+    served: tuple[TestClient, Stub], installed: InstallRows
+) -> None:
+    """The owner's case: an install left at no currency and UTC gets SGD and Asia/Singapore from
+    Install, Settings, each written in capitals or as typed, attributed, and read by the locale
+    readers the money figures use from the next request on this process.
+
+    Delete this and the currency and zone go back to being changeable only in a file on the server,
+    and the cost card goes on reading "no currency"."""
+    client, stub = served
+    first = put(client, "u_admin", "INSTALL_CURRENCY", "sgd")
+    second = put(client, "u_admin", "INSTALL_TIME_ZONE", "Asia/Singapore")
+
+    assert (first.status_code, second.status_code) == (200, 200), (first.text, second.text)
+    assert [(one["key"], one["value"]) for one in installed.writes] == [
+        ("install.currency", "SGD"),
+        ("install.time_zone", "Asia/Singapore"),
+    ]
+    assert stub.commits == 2
+    assert ("brain.actor_id", "u_admin") in stub.attributions
+    assert currency() == "SGD"
+    assert time_zone().key == "Asia/Singapore"
+    locale = next(group for group in second.json()["groups"] if group["group"] == "locale")
+    shown = {row["name"]: (row["value"], row["source"]) for row in locale["settings"]}
+    assert shown["INSTALL_CURRENCY"] == ("SGD", "saved")
+    assert shown["INSTALL_TIME_ZONE"] == ("Asia/Singapore", "saved")
+
+
 @pytest.mark.parametrize(
     ("name", "value"),
     [
         ("INSTALL_OIDC_ISSUER", "https://id.northwind.example/realms/brain"),
+        ("INSTALL_OBJECT_STORE_URL", "https://objects.northwind.example"),
+        ("INSTALL_EMBEDDING_DIMENSIONS", "768"),
         ("INSTALL_ACCENT_COLOUR", "green"),
+        ("INSTALL_CURRENCY", "XXX"),
+        ("INSTALL_TIME_ZONE", "Mars/Olympus"),
         ("INSTALL_NOT_DECLARED", "x"),
     ],
 )
@@ -242,4 +276,3 @@ def test_a_value_this_screen_does_not_change_or_would_draw_wrong_is_refused_and_
     assert answer.status_code == 422
     assert answer.json()["message"]
     assert installed.writes == [] and stub.commits == 0
-    assert BY_NAME.get(name) is None or name == "INSTALL_ACCENT_COLOUR" or not BY_NAME[name].default

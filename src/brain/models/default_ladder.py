@@ -61,7 +61,7 @@ Task ids: M27.8.8, M5.3.1
 from __future__ import annotations
 
 import enum
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Final, Protocol, runtime_checkable
@@ -223,24 +223,42 @@ def default_ladder(provider: str) -> tuple[DefaultRung, ...]:
     if models is None:
         msg = f"{provider!r} has no default ladder; these do: {list(DEFAULT_MODELS)}"
         raise ValueError(msg)
-    seed = seed_chain()
-    rungs: list[DefaultRung] = []
-    for tier in DEFAULT_TIERS:
-        primary = seed.rungs_for(tier)[0]
-        rungs.append(
-            DefaultRung(
-                tier=tier,
-                deployment_id=f"{provider}-{tier.value}",
-                provider=provider,
-                model=models[tier],
-                attempts=primary.attempts,
-                timeout_seconds=primary.timeout_seconds,
-                max_concurrency=(
-                    LOCAL_CONCURRENCY if provider == LOCAL_PROVIDER else primary.max_concurrency
-                ),
-            )
-        )
-    return tuple(rungs)
+    return tuple(default_rung(provider, tier, models[tier]) for tier in DEFAULT_TIERS)
+
+
+def default_rung(provider: str, tier: Tier, model: str) -> DefaultRung:
+    """One default row: `seed_chain`'s primary numbers for `tier`, naming `provider` and `model`.
+
+    Split out of `default_ladder` on 2026-09-28 so the Models screen's provider check can send
+    through a provider no step names yet with exactly the numbers a default step would carry
+    (`brain.provider_routes.unladdered_rung`), rather than a third set of numbers for one call.
+    """
+    primary = seed_chain().rungs_for(tier)[0]
+    return DefaultRung(
+        tier=tier,
+        deployment_id=f"{provider}-{tier.value}",
+        provider=provider,
+        model=model,
+        attempts=primary.attempts,
+        timeout_seconds=primary.timeout_seconds,
+        max_concurrency=(
+            LOCAL_CONCURRENCY if provider == LOCAL_PROVIDER else primary.max_concurrency
+        ),
+    )
+
+
+def default_model(provider: str, registered: Sequence[str] = ()) -> str | None:
+    """The model a provider is checked with when no step names it, or None when there is none.
+
+    The product's own name for its first default level where it has one (`DEFAULT_MODELS`), and
+    otherwise the first model the provider's registry row lists, which is how a provider added
+    from the console names its models. None for a provider with neither, because a check sent to
+    a model nobody named would test a guess.
+    """
+    known = DEFAULT_MODELS.get(provider)
+    if known is not None:
+        return known[DEFAULT_TIERS[0]]
+    return next((one for one in registered if one.strip()), None)
 
 
 def default_chain(provider: str) -> RoutingChain:
