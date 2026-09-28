@@ -24,7 +24,15 @@
  *
  * **No number about the rows.** No reader here keeps a total, and no screen renders a count.
  *
- * Task ids: M27.7.4, M27.7.8, M27.7.9, M27.7.12, M27.8.6
+ * **The structure's eight writes are bodies the routes declare, and the blanks are said first.**
+ * Creating, renaming and retiring a department or a team, and drawing and retiring a scope, each
+ * sends exactly the keys `brain.govern_people_routes` declares, with a rename and a retirement
+ * carrying the name or predicate the page showed, so a row changed since is refused rather than
+ * overwritten. A blank field is answered here before anything is sent; a value of the wrong shape
+ * is the API's to judge in its own sentences. The short name is never in a rename's body: see
+ * `A_SHORT_NAME_IS_NEVER_CHANGED`.
+ *
+ * Task ids: M27.7.4, M27.7.8, M27.7.9, M27.7.12, M27.8.6, M27.11.1, M27.15.22
  */
 
 import type { components } from "../api/schema";
@@ -57,6 +65,15 @@ export const REVIEW_API_PATH = "/govern/access-review";
 export const REVIEW_DECISION_API_PATH = "/govern/access-review/decision";
 export const REVIEW_DECISIONS_API_PATH = "/govern/access-review/decisions";
 export const SUBSCRIBERS_API_PATH = "/govern/subscribers";
+/** The structure: creating, renaming and retiring departments, teams and scopes (M27.11.1). */
+export const FOUND_API_PATH = DEPARTMENTS_API_PATH;
+export const RENAME_DEPARTMENT_API_PATH = "/govern/departments/rename";
+export const RETIRE_DEPARTMENT_API_PATH = "/govern/departments/retirement";
+export const ADD_TEAM_API_PATH = "/govern/departments/team";
+export const RENAME_TEAM_API_PATH = "/govern/departments/team/rename";
+export const RETIRE_TEAM_API_PATH = "/govern/departments/team/retirement";
+export const DRAW_SCOPE_API_PATH = "/govern/departments/scopes";
+export const RETIRE_SCOPE_API_PATH = "/govern/departments/scopes/retirement";
 /** Disabling a person's sign-in and enabling it again. `brain.principal_state_routes`. */
 export const DISABLE_API_PATH = "/govern/people/disable";
 export const ENABLE_API_PATH = "/govern/people/enable";
@@ -99,11 +116,20 @@ export interface Organisation {
   readonly mayDisable: boolean;
   /** What disabling somebody does and does not do, in the API's words, for its confirmation. */
   readonly disabling: string;
+  /** Whether this reader may create and retire departments. Presentation only. */
+  readonly mayFound: boolean;
+  /** Whether this reader holds the authority over scopes anywhere. Presentation only. */
+  readonly mayDrawScopes: boolean;
   /** The sentences about what the page shows and who may change it, in the API's words. */
   readonly teams: string;
   readonly leads: string;
   readonly counted: string;
   readonly organising: string;
+  readonly shaping: string;
+  /** What each retirement does and does not do, in the API's words, for its confirmation. */
+  readonly retiringDepartment: string;
+  readonly retiringTeam: string;
+  readonly retiringScope: string;
 }
 
 const NO_ORGANISATION: Organisation = Object.freeze({
@@ -113,10 +139,16 @@ const NO_ORGANISATION: Organisation = Object.freeze({
   mayOrganise: false,
   mayDisable: false,
   disabling: "",
+  mayFound: false,
+  mayDrawScopes: false,
   teams: "",
   leads: "",
   counted: "",
   organising: "",
+  shaping: "",
+  retiringDepartment: "",
+  retiringTeam: "",
+  retiringScope: "",
 });
 
 /** Read `brain.govern_people_routes.OrganisationPage` out of a response body. */
@@ -131,11 +163,136 @@ export function readOrganisation(payload: unknown): Organisation {
     mayOrganise: payload.may_organise === true,
     mayDisable: payload.may_disable === true,
     disabling: text(payload.disabling),
+    mayFound: payload.may_found === true,
+    mayDrawScopes: payload.may_draw_scopes === true,
     teams: text(payload.teams),
     leads: text(payload.leads),
     counted: text(payload.counted),
     organising: text(payload.organising),
+    shaping: text(payload.shaping),
+    retiringDepartment: text(payload.retiring_department),
+    retiringTeam: text(payload.retiring_team),
+    retiringScope: text(payload.retiring_scope),
   };
+}
+
+// ------------------------------------------------------------------ the structure (M27.11.1)
+
+/** Written down because an editable short name is the obvious next feature request. */
+export const A_SHORT_NAME_IS_NEVER_CHANGED =
+  "A rename sends the name and never the short name. The short name is the value every grant's " +
+  "scope carries and every team's path begins with, so changing it would move grants nobody " +
+  "decided to move; the route's body has no key for it and refuses one.";
+
+/** The bodies, exactly as the routes declare them. */
+export type FoundingBody = components["schemas"]["DepartmentFounding"];
+export type DepartmentRenamingBody = components["schemas"]["DepartmentRenaming"];
+export type DepartmentRetirementBody = components["schemas"]["DepartmentRetirement"];
+export type TeamAddingBody = components["schemas"]["TeamAdding"];
+export type TeamRenamingBody = components["schemas"]["TeamRenaming"];
+export type TeamRetirementBody = components["schemas"]["TeamRetirement"];
+export type ScopeDrawingBody = components["schemas"]["ScopeDrawing"];
+export type ScopeRetirementBody = components["schemas"]["ScopeRetirement"];
+export type StructureBody =
+  | FoundingBody
+  | DepartmentRenamingBody
+  | DepartmentRetirementBody
+  | TeamAddingBody
+  | TeamRenamingBody
+  | TeamRetirementBody
+  | ScopeDrawingBody
+  | ScopeRetirementBody;
+
+/** What a blank field in a structure form is answered with, before anything is sent. */
+export const STRUCTURE_BLANKS = Object.freeze({
+  slug:
+    "Give it a short name: lower-case letters and digits, words joined by an underscore, such as " +
+    "web_design. It cannot be changed later.",
+  name: "Give it a name people will read.",
+  label: "Give the scope a name people will read.",
+  departments: "Tick at least one department for the scope to reach.",
+  rename: "Type the new name first; nothing has been sent.",
+  same: "That is the name it already has; nothing has been sent.",
+});
+
+/** The blank fields of a creation, as sentences, in the form's order. Shape is the API's. */
+export function creationBlanks(slug: string, name: string): readonly string[] {
+  return [
+    ...(slug.trim() === "" ? [STRUCTURE_BLANKS.slug] : []),
+    ...(name.trim() === "" ? [STRUCTURE_BLANKS.name] : []),
+  ];
+}
+
+/** What a rename typed blank or unchanged is answered with, or null when it may be asked. */
+export function renamingBlank(current: string, typed: string): string | null {
+  if (typed.trim() === "") {
+    return STRUCTURE_BLANKS.rename;
+  }
+  return typed.trim() === current ? STRUCTURE_BLANKS.same : null;
+}
+
+/** The blank fields of a scope drawn, as sentences, in the form's order. */
+export function drawingBlanks(slug: string, label: string, departments: readonly string[]): readonly string[] {
+  return [
+    ...(slug.trim() === "" ? [STRUCTURE_BLANKS.slug] : []),
+    ...(label.trim() === "" ? [STRUCTURE_BLANKS.label] : []),
+    ...(departments.length === 0 ? [STRUCTURE_BLANKS.departments] : []),
+  ];
+}
+
+/** A scope over the departments ticked, and over one team of a single department when chosen. */
+export function drawingBody(
+  slug: string,
+  label: string,
+  departments: readonly string[],
+  team: string,
+): ScopeDrawingBody {
+  const body: ScopeDrawingBody = { slug: slug.trim(), label: label.trim(), departments: [...departments] };
+  return departments.length === 1 && team !== "" ? { ...body, team } : body;
+}
+
+/** The questions each confirmation asks, naming the thing and its short name. */
+export function foundQuestion(name: string, slug: string): string {
+  return `Create the department ${name}, short name ${slug}?`;
+}
+
+export function renameQuestion(kind: "department" | "team", current: string, name: string): string {
+  return `Rename the ${kind} ${current} to ${name}?`;
+}
+
+export function retireQuestion(kind: "department" | "team" | "scope", name: string): string {
+  return `Retire the ${kind} ${name}?`;
+}
+
+export function addTeamQuestion(department: string, name: string, slug: string): string {
+  return `Create the team ${name}, short name ${slug}, in ${department}?`;
+}
+
+export function drawQuestion(label: string, slug: string): string {
+  return `Draw the scope ${label}, short name ${slug}?`;
+}
+
+/** What a creation does, for its confirmation. The API has no sentence for these, so they are said here. */
+export const FOUNDING_DOES =
+  "The department is created with a scope of its own under the same short name, so a grant can " +
+  "be written over it on People and grants straight away. The short name cannot be changed later.";
+export const ADDING_A_TEAM_DOES =
+  "The team is created in this department with nobody in it. It confers nothing: placing somebody " +
+  "in it changes nobody's access. Its short name cannot be changed later.";
+export const RENAMING_DOES =
+  "Only the name people read changes. The short name stays, so every grant written over it stays " +
+  "exactly as it is.";
+export const DRAWING_DOES =
+  "The scope reaches the rows of the departments ticked, or of the one team chosen, and nothing " +
+  "else. A grant can then be written over it on People and grants. Its short name cannot be changed later.";
+
+/**
+ * Whether the page offers to retire a scope: not a department's own and not the company-wide one,
+ * which has no clauses. Presentation only: the route refuses both with a sentence whatever this drew.
+ */
+export function offersRetirement(row: components["schemas"]["ScopeView"]): boolean {
+  const clauses = (row.scope as { clauses?: unknown }).clauses;
+  return !row.is_department && Array.isArray(clauses) && clauses.length > 0;
 }
 
 /** The body of a placement, as `MembershipChange` declares it. Four keys and no fifth. */

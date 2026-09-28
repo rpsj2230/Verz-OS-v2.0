@@ -9,10 +9,10 @@ What an administrator would need to manage, read out of the schema, the routes a
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
 - 102 tables, from `brain.db.Base.metadata`.
 - 27 installation values, from `brain.install.INSTALLATION`.
-- 210 routes under `/api/v1` and `/setup`, from the API's internal document.
+- 209 routes under `/api/v1` and `/setup`, from the API's internal document.
 - 73 console addresses, from the route table in `console/src/App.tsx`.
-- 84 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 101 routes.
-- 36 gaps recorded, and 28 routes no screen calls.
+- 82 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 108 routes.
+- 36 gaps recorded, and 20 routes no screen calls.
 
 ## Area by area
 
@@ -37,7 +37,7 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `GET /api/v1/govern/roles/group-rules` | `/roles` |
 | `GET /api/v1/govern/roles/holders` | `/roles` |
 | `GET /api/v1/govern/roles/misconfigurations` | `/roles` |
-| `GET /api/v1/govern/scopes` | `/people/:subject`, `/scopes` |
+| `GET /api/v1/govern/scopes` | `/departments`, `/people/:subject`, `/scopes` |
 | `GET /api/v1/govern/service-accounts` | **no screen** |
 | `GET /api/v1/govern/sessions` | `/sessions` |
 | `GET /api/v1/govern/sign-ins` | `/sign-in-links` |
@@ -56,10 +56,9 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `POST /api/v1/govern/elevation/requests/{request_id}/decision` | `/elevation` |
 | `POST /api/v1/govern/grants` | `/people`, `/people/:subject` |
 | `POST /api/v1/govern/grants/removal` | `/people`, `/people/:subject` |
-| `POST /api/v1/govern/grants/several` | `/people`, `/people/:subject` |
 | `POST /api/v1/govern/packs/assignment` | `/people`, `/people/:subject` |
-| `POST /api/v1/govern/people/disable` | `/departments`, `/people`, `/people/:subject` |
-| `POST /api/v1/govern/people/enable` | `/departments`, `/people`, `/people/:subject` |
+| `POST /api/v1/govern/people/disable` | `/departments` |
+| `POST /api/v1/govern/people/enable` | `/departments` |
 | `POST /api/v1/govern/roles/appointment` | **no screen** |
 | `POST /api/v1/govern/roles/deputy` | **no screen** |
 | `POST /api/v1/govern/roles/group-rules` | **no screen** |
@@ -80,6 +79,7 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `POST /api/v1/sign-ins` | `/sign-in-links` |
 | `PUT /api/v1/govern/staff_sources/credential` | `/staff_sources` |
 
+- **Gap.** A grant written from People and grants cannot be given an expiry, and the screen says so beside the form. Recorded: Buildable today: POST /api/v1/govern/grants takes not_after and the form's proposal schema has no field for it. It is left to the change reworking member grants, which is in progress beside this one and owns that form.
 - **Gap.** A pack cannot be assigned or withdrawn, and a capability that arrived through a pack cannot be removed. Recorded: No route writes gate.capability_pack_assignment. brain.govern_routes.remove_grant refuses a pack's capability in the ordinary words, because withdrawing it removes every other capability in the pack.
 - **Gap.** Roles, capabilities and scopes are read and never changed. Recorded: No route writes gate.scope or the role and capability registries; they are declared by the product and by migrations.
 - **Gap.** A break-glass notice to the standing Super Admins is shown on their Elevation screen and is not sent by email or chat, and nobody is told when somebody only asks. Recorded: Nothing records a Super Admin's email address or chat identity for a notice to be sent to: auth.principal holds no address and principal_identity holds digests. The notice is written in the approval's transaction to gate.break_glass_notice and read by its recipient; a request is not an elevation until it is approved.
@@ -95,18 +95,17 @@ What an administrator would need to manage, read out of the schema, the routes a
 | Route | Called by |
 | --- | --- |
 | `GET /api/v1/govern/departments` | `/departments` |
-| `POST /api/v1/govern/departments` | **no screen** |
+| `POST /api/v1/govern/departments` | `/departments` |
 | `POST /api/v1/govern/departments/lead` | `/departments` |
 | `POST /api/v1/govern/departments/membership` | `/departments` |
-| `POST /api/v1/govern/departments/rename` | **no screen** |
-| `POST /api/v1/govern/departments/retirement` | **no screen** |
-| `POST /api/v1/govern/departments/scopes` | **no screen** |
-| `POST /api/v1/govern/departments/scopes/retirement` | **no screen** |
-| `POST /api/v1/govern/departments/team` | **no screen** |
-| `POST /api/v1/govern/departments/team/rename` | **no screen** |
-| `POST /api/v1/govern/departments/team/retirement` | **no screen** |
+| `POST /api/v1/govern/departments/rename` | `/departments` |
+| `POST /api/v1/govern/departments/retirement` | `/departments` |
+| `POST /api/v1/govern/departments/scopes` | `/departments` |
+| `POST /api/v1/govern/departments/scopes/retirement` | `/departments` |
+| `POST /api/v1/govern/departments/team` | `/departments` |
+| `POST /api/v1/govern/departments/team/rename` | `/departments` |
+| `POST /api/v1/govern/departments/team/retirement` | `/departments` |
 
-- **Gap.** A department, a team or a scope cannot yet be created, renamed or retired from this screen. Recorded: brain.govern_people_routes serves the eight writes, audited by 0086's triggers, and Departments.tsx does not call them yet; the screen places people in the teams that are there and leads the departments that are there.
 - **Gap.** Nothing applies the staff list's teams and leads on a schedule. Recorded: brain.identity.organisation_sync plans them and brain.identity.organisation_store applies a plan, and no job runs either. The nightly staff sync (brain.ops.staff_sync_run, since 2026-09-21) applies the roster's people and marks leavers, and not its teams or leads.
 
 ### System settings and application configuration
@@ -508,7 +507,7 @@ No gap recorded.
 
 ## Every write the console sends, followed to the system
 
-Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 83 of 101 write routes have all three proved or not applicable, 14 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
+Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 90 of 108 write routes have all three proved or not applicable, 14 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
 
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
@@ -536,20 +535,27 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /api/v1/govern/compliance/breaches/{case_id}/exception` | `/compliance` | `test_each_breach_step_writes_its_column_and_one_breach_entry_in_the_same_transaction` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_each_breach_step_writes_its_column_and_one_breach_entry_in_the_same_transaction` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_a_case_shows_its_clock_from_the_awareness_and_its_findings` in `tests/unit/test_compliance_routes.py` |
 | `POST /api/v1/govern/compliance/breaches/{case_id}/individuals` | `/compliance` | `test_each_breach_step_writes_its_column_and_one_breach_entry_in_the_same_transaction` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_each_breach_step_writes_its_column_and_one_breach_entry_in_the_same_transaction` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_a_case_shows_its_clock_from_the_awareness_and_its_findings` in `tests/unit/test_compliance_routes.py` |
 | `POST /api/v1/govern/data-steward` | `/people`, `/people/:subject` | `test_an_administrator_names_themselves_steward_over_http_once_and_is_told_why_not_twice` in `tests/unit/test_data_steward_routes.py` (database, in CI) | `test_every_steward_grant_leaves_a_ledger_entry_naming_who_made_it` in `tests/unit/test_data_steward.py` (database, in CI) | `test_a_steward_named_at_setup_grants_a_source_s_read_on_and_the_administrator_cannot` in `tests/unit/test_data_steward.py` (database, in CI) |
+| `POST /api/v1/govern/departments` | `/departments` | `test_each_change_writes_its_rows_and_one_ledger_entry_per_row_naming_the_actor` in `tests/unit/test_organisation_structure.py` (database, in CI) | `test_each_change_writes_its_rows_and_one_ledger_entry_per_row_naming_the_actor` in `tests/unit/test_organisation_structure.py` (database, in CI) | `test_a_grant_over_a_newly_drawn_scope_is_written_through_the_grant_route` in `tests/unit/test_organisation_structure.py` (database, in CI) |
 | `POST /api/v1/govern/departments/lead` | `/departments` | `test_placing_and_appointing_reach_the_rows_the_ledger_and_the_departments_page` in `tests/unit/test_organisation_store.py` (database, in CI) | `test_placing_and_appointing_reach_the_rows_the_ledger_and_the_departments_page` in `tests/unit/test_organisation_store.py` (database, in CI) | `test_placing_and_appointing_reach_the_rows_the_ledger_and_the_departments_page` in `tests/unit/test_organisation_store.py` (database, in CI) |
 | `POST /api/v1/govern/departments/membership` | `/departments` | `test_placing_and_appointing_reach_the_rows_the_ledger_and_the_departments_page` in `tests/unit/test_organisation_store.py` (database, in CI) | `test_placing_and_appointing_reach_the_rows_the_ledger_and_the_departments_page` in `tests/unit/test_organisation_store.py` (database, in CI) | `test_placing_and_appointing_reach_the_rows_the_ledger_and_the_departments_page` in `tests/unit/test_organisation_store.py` (database, in CI) |
+| `POST /api/v1/govern/departments/rename` | `/departments` | `test_each_change_writes_its_rows_and_one_ledger_entry_per_row_naming_the_actor` in `tests/unit/test_organisation_structure.py` (database, in CI) | `test_each_change_writes_its_rows_and_one_ledger_entry_per_row_naming_the_actor` in `tests/unit/test_organisation_structure.py` (database, in CI) | `test_an_administrator_creates_renames_and_retires_departments_teams_and_scopes` in `tests/unit/test_organisation_structure.py` |
+| `POST /api/v1/govern/departments/retirement` | `/departments` | `test_each_change_writes_its_rows_and_one_ledger_entry_per_row_naming_the_actor` in `tests/unit/test_organisation_structure.py` (database, in CI) | `test_each_change_writes_its_rows_and_one_ledger_entry_per_row_naming_the_actor` in `tests/unit/test_organisation_structure.py` (database, in CI) | `test_a_department_is_retired_only_once_its_live_grants_move_and_then_refuses_new_ones` in `tests/unit/test_organisation_structure.py` (database, in CI) |
+| `POST /api/v1/govern/departments/scopes` | `/departments` | `test_each_change_writes_its_rows_and_one_ledger_entry_per_row_naming_the_actor` in `tests/unit/test_organisation_structure.py` (database, in CI) | `test_each_change_writes_its_rows_and_one_ledger_entry_per_row_naming_the_actor` in `tests/unit/test_organisation_structure.py` (database, in CI) | `test_a_grant_over_a_newly_drawn_scope_is_written_through_the_grant_route` in `tests/unit/test_organisation_structure.py` (database, in CI) |
+| `POST /api/v1/govern/departments/scopes/retirement` | `/departments` | `test_each_change_writes_its_rows_and_one_ledger_entry_per_row_naming_the_actor` in `tests/unit/test_organisation_structure.py` (database, in CI) | `test_each_change_writes_its_rows_and_one_ledger_entry_per_row_naming_the_actor` in `tests/unit/test_organisation_structure.py` (database, in CI) | `test_an_administrator_creates_renames_and_retires_departments_teams_and_scopes` in `tests/unit/test_organisation_structure.py` |
+| `POST /api/v1/govern/departments/team` | `/departments` | `test_each_change_writes_its_rows_and_one_ledger_entry_per_row_naming_the_actor` in `tests/unit/test_organisation_structure.py` (database, in CI) | `test_each_change_writes_its_rows_and_one_ledger_entry_per_row_naming_the_actor` in `tests/unit/test_organisation_structure.py` (database, in CI) | `test_an_administrator_creates_renames_and_retires_departments_teams_and_scopes` in `tests/unit/test_organisation_structure.py` |
+| `POST /api/v1/govern/departments/team/rename` | `/departments` | `test_each_change_writes_its_rows_and_one_ledger_entry_per_row_naming_the_actor` in `tests/unit/test_organisation_structure.py` (database, in CI) | `test_each_change_writes_its_rows_and_one_ledger_entry_per_row_naming_the_actor` in `tests/unit/test_organisation_structure.py` (database, in CI) | `test_an_administrator_creates_renames_and_retires_departments_teams_and_scopes` in `tests/unit/test_organisation_structure.py` |
+| `POST /api/v1/govern/departments/team/retirement` | `/departments` | `test_each_change_writes_its_rows_and_one_ledger_entry_per_row_naming_the_actor` in `tests/unit/test_organisation_structure.py` (database, in CI) | `test_each_change_writes_its_rows_and_one_ledger_entry_per_row_naming_the_actor` in `tests/unit/test_organisation_structure.py` (database, in CI) | `test_an_administrator_creates_renames_and_retires_departments_teams_and_scopes` in `tests/unit/test_organisation_structure.py` |
 | `POST /api/v1/govern/elevation/requests` | `/elevation` | `test_an_approved_elevation_widens_the_requester_and_after_its_lapse_it_does_not` in `tests/unit/test_elevation_store.py` (database, in CI) | `test_an_approved_elevation_widens_the_requester_and_after_its_lapse_it_does_not` in `tests/unit/test_elevation_store.py` (database, in CI) | `test_an_approved_elevation_widens_the_requester_and_after_its_lapse_it_does_not` in `tests/unit/test_elevation_store.py` (database, in CI) |
 | `POST /api/v1/govern/elevation/requests/{request_id}/decision` | `/elevation` | `test_an_approved_elevation_widens_the_requester_and_after_its_lapse_it_does_not` in `tests/unit/test_elevation_store.py` (database, in CI) | `test_an_approved_elevation_widens_the_requester_and_after_its_lapse_it_does_not` in `tests/unit/test_elevation_store.py` (database, in CI) | `test_an_approved_elevation_widens_the_requester_and_after_its_lapse_it_does_not` in `tests/unit/test_elevation_store.py` (database, in CI) |
 | `POST /api/v1/govern/erasures` | `/retention` | `test_a_request_is_filed_in_the_sessions_own_name_once_per_open_person_and_never_finished` in `tests/unit/test_erasure_store.py` (database, in CI) | `test_a_request_is_filed_in_the_sessions_own_name_once_per_open_person_and_never_finished` in `tests/unit/test_erasure_store.py` (database, in CI) | `test_the_queue_carries_a_request_out_and_writes_what_each_store_did_and_what_it_could_not` in `tests/unit/test_erasure_store.py` (database, in CI) |
 | `POST /api/v1/govern/grants` | `/people`, `/people/:subject` | `test_a_grant_written_and_removed_from_the_people_screen_reaches_row_ledger_and_reach` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_grant_written_and_removed_from_the_people_screen_reaches_row_ledger_and_reach` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_grant_written_and_removed_from_the_people_screen_reaches_row_ledger_and_reach` in `tests/unit/test_console_control_audit.py` (database, in CI) |
 | `POST /api/v1/govern/grants/removal` | `/people`, `/people/:subject` | `test_a_grant_written_and_removed_from_the_people_screen_reaches_row_ledger_and_reach` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_grant_written_and_removed_from_the_people_screen_reaches_row_ledger_and_reach` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_grant_written_and_removed_from_the_people_screen_reaches_row_ledger_and_reach` in `tests/unit/test_console_control_audit.py` (database, in CI) |
-| `POST /api/v1/govern/grants/several` | `/people`, `/people/:subject` | `test_a_grant_to_several_is_written_for_everybody_or_for_nobody_against_postgresql` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_grant_written_and_removed_from_the_people_screen_reaches_row_ledger_and_reach` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_grant_to_several_is_written_for_everybody_or_for_nobody_against_postgresql` in `tests/unit/test_console_control_audit.py` (database, in CI) |
 | `POST /api/v1/govern/learning/undo` | `/learning` | `test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next` in `tests/unit/test_memory_store.py` (database, in CI) | `test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next` in `tests/unit/test_memory_store.py` (database, in CI) | `test_an_undo_writes_the_correction_and_the_next_reading_no_longer_recalls_the_learning` in `tests/unit/test_estate_routes.py` |
 | `POST /api/v1/govern/legal-holds` | `/retention` | `test_a_hold_is_placed_lifted_once_and_kept` in `tests/unit/test_retention_store.py` (database, in CI) | `test_each_retention_write_the_console_makes_appends_one_entry_naming_its_own_actor` in `tests/unit/test_retention_audit.py` (database, in CI) | `test_a_hold_placed_through_the_store_keeps_its_rows_from_the_sweep_and_lifted_releases_them` in `tests/unit/test_console_control_audit.py` (database, in CI) |
 | `POST /api/v1/govern/legal-holds/lift` | `/retention` | `test_a_hold_is_placed_lifted_once_and_kept` in `tests/unit/test_retention_store.py` (database, in CI) | `test_each_retention_write_the_console_makes_appends_one_entry_naming_its_own_actor` in `tests/unit/test_retention_audit.py` (database, in CI) | `test_a_hold_placed_through_the_store_keeps_its_rows_from_the_sweep_and_lifted_releases_them` in `tests/unit/test_console_control_audit.py` (database, in CI) |
 | `POST /api/v1/govern/packs/assignment` | `/people`, `/people/:subject` | `test_an_assignment_reaches_the_row_the_ledger_and_the_resolver` in `tests/unit/test_govern_pack_routes.py` (database, in CI) | `test_an_assignment_reaches_the_row_the_ledger_and_the_resolver` in `tests/unit/test_govern_pack_routes.py` (database, in CI) | `test_an_assignment_reaches_the_row_the_ledger_and_the_resolver` in `tests/unit/test_govern_pack_routes.py` (database, in CI) |
-| `POST /api/v1/govern/people/disable` | `/departments`, `/people`, `/people/:subject` | `test_a_disable_ends_the_session_refuses_the_token_and_an_enable_returns_the_grants` in `tests/unit/test_principal_state.py` (database, in CI) | `test_a_disable_ends_the_session_refuses_the_token_and_an_enable_returns_the_grants` in `tests/unit/test_principal_state.py` (database, in CI) | `test_a_disable_ends_the_session_refuses_the_token_and_an_enable_returns_the_grants` in `tests/unit/test_principal_state.py` (database, in CI) |
-| `POST /api/v1/govern/people/enable` | `/departments`, `/people`, `/people/:subject` | `test_a_disable_ends_the_session_refuses_the_token_and_an_enable_returns_the_grants` in `tests/unit/test_principal_state.py` (database, in CI) | `test_a_disable_ends_the_session_refuses_the_token_and_an_enable_returns_the_grants` in `tests/unit/test_principal_state.py` (database, in CI) | `test_a_disable_ends_the_session_refuses_the_token_and_an_enable_returns_the_grants` in `tests/unit/test_principal_state.py` (database, in CI) |
+| `POST /api/v1/govern/people/disable` | `/departments` | `test_a_disable_ends_the_session_refuses_the_token_and_an_enable_returns_the_grants` in `tests/unit/test_principal_state.py` (database, in CI) | `test_a_disable_ends_the_session_refuses_the_token_and_an_enable_returns_the_grants` in `tests/unit/test_principal_state.py` (database, in CI) | `test_a_disable_ends_the_session_refuses_the_token_and_an_enable_returns_the_grants` in `tests/unit/test_principal_state.py` (database, in CI) |
+| `POST /api/v1/govern/people/enable` | `/departments` | `test_a_disable_ends_the_session_refuses_the_token_and_an_enable_returns_the_grants` in `tests/unit/test_principal_state.py` (database, in CI) | `test_a_disable_ends_the_session_refuses_the_token_and_an_enable_returns_the_grants` in `tests/unit/test_principal_state.py` (database, in CI) | `test_a_disable_ends_the_session_refuses_the_token_and_an_enable_returns_the_grants` in `tests/unit/test_principal_state.py` (database, in CI) |
 | `POST /api/v1/govern/prompts/{agent_id}` | `/prompts` | `test_an_instruction_edit_and_its_give_back_reach_the_install_the_ledger_and_the_prompt` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_an_instruction_edit_and_its_give_back_reach_the_install_the_ledger_and_the_prompt` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_an_instruction_edit_and_its_give_back_reach_the_install_the_ledger_and_the_prompt` in `tests/unit/test_console_control_audit.py` (database, in CI) |
 | `POST /api/v1/govern/prompts/{agent_id}/give-back` | `/prompts` | `test_an_instruction_edit_and_its_give_back_reach_the_install_the_ledger_and_the_prompt` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_an_instruction_edit_and_its_give_back_reach_the_install_the_ledger_and_the_prompt` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_an_instruction_edit_and_its_give_back_reach_the_install_the_ledger_and_the_prompt` in `tests/unit/test_console_control_audit.py` (database, in CI) |
 | `POST /api/v1/govern/retention/release` | `/retention` | `test_a_release_names_the_newest_report_and_is_withdrawn_by_being_marked` in `tests/unit/test_retention_store.py` (database, in CI) | `test_each_retention_write_the_console_makes_appends_one_entry_naming_its_own_actor` in `tests/unit/test_retention_audit.py` (database, in CI) | `test_a_released_sweep_is_started_to_act_and_a_withdrawn_one_to_report` in `tests/unit/test_worker_schedule.py` (database, in CI) |

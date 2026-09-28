@@ -77,7 +77,7 @@ single decision's store call, its lock, its `may` and its trigger, with its own 
 the order asked. Elevations are not decided in bulk. See
 `AN_ELEVATION_IS_DECIDED_ON_ITS_OWN_REASON`.
 
-Task ids: M27.7.4, M27.7.8, M27.7.9, M27.7.12, M27.8.6, M1.2.3, M1.2.5
+Task ids: M27.7.4, M27.7.8, M27.7.9, M27.7.12, M27.8.6, M1.2.3, M1.2.5, M27.15.22
 """
 
 from __future__ import annotations
@@ -114,9 +114,9 @@ from brain.console.elevation import (
 from brain.console.global_surfaces import GOVERNANCE_CONTROL
 from brain.console.govern import Decision, GovernError, Placed, certify, recertifiable
 from brain.console.organisation import (
+    A_DEPARTMENT_UNDER_LIVE_GRANTS_IS_NOT_RETIRED,
     A_DEPARTMENTS_OWN_SCOPE_GOES_WITH_ITS_DEPARTMENT,
     A_RETIRED_DEPARTMENT_IS_NAMED_BY_NO_LIVE_SCOPE,
-    A_RETIRED_DEPARTMENT_LEAVES_EVERY_GRANT_ALREADY_WRITTEN_IN_FORCE,
     A_RETIRED_SCOPE_TAKES_NO_GRANT_AWAY,
     A_RETIRED_TEAM_CHANGES_NOBODYS_ACCESS,
     COMPANY_ID,
@@ -132,6 +132,7 @@ from brain.console.organisation import (
     Team,
     drawn,
     founded,
+    holds_retirement_back,
     may_appoint,
     may_draw_scope,
     may_found_or_retire_departments,
@@ -407,10 +408,10 @@ class OrganisationPage(BaseModel):
     counted: str = NOTHING_HERE_IS_COUNTED
     organising: str = ORGANISING_IS_THE_GRANT_AUTHORITY
     shaping: str = SHAPING_IS_ITS_OWN_AUTHORITY
-    #: What retiring a department does to scopes and to grants, for its confirmation.
+    #: What retiring a department does to scopes and waits for in grants, for its confirmation.
     retiring_department: str = (
         f"{A_RETIRED_DEPARTMENT_IS_NAMED_BY_NO_LIVE_SCOPE} "
-        f"{A_RETIRED_DEPARTMENT_LEAVES_EVERY_GRANT_ALREADY_WRITTEN_IN_FORCE}"
+        f"{A_DEPARTMENT_UNDER_LIVE_GRANTS_IS_NOT_RETIRED}"
     )
     retiring_team: str = A_RETIRED_TEAM_CHANGES_NOBODYS_ACCESS
     retiring_scope: str = A_RETIRED_SCOPE_TAKES_NO_GRANT_AWAY
@@ -1502,6 +1503,8 @@ def _structured(
             raise _said(THE_COMPANY_WIDE_SCOPE_IS_NEVER_RETIRED.rstrip("."))
         case StructureRefusal.DEPARTMENTS_OWN_SCOPE:
             raise _said(A_DEPARTMENTS_OWN_SCOPE_GOES_WITH_ITS_DEPARTMENT.rstrip("."))
+        case StructureRefusal.LIVE_GRANTS:
+            raise _said(A_DEPARTMENT_UNDER_LIVE_GRANTS_IS_NOT_RETIRED.rstrip("."))
         case StructureRefusal.NOT_WRITABLE:
             raise _not_organisable_here()
 
@@ -1569,11 +1572,13 @@ async def rename_department(
 async def retire_department(
     request: Request, body: DepartmentRetirement, asked: Asked
 ) -> StructureChanged:
-    """Retire a department, its teams and every live scope that names it. Grants stay.
+    """Retire a department, its teams and every live scope that names it, once no live grant does.
 
     See `brain.console.organisation.A_RETIRED_DEPARTMENT_IS_NAMED_BY_NO_LIVE_SCOPE` and
-    `A_RETIRED_DEPARTMENT_LEAVES_EVERY_GRANT_ALREADY_WRITTEN_IN_FORCE`. Which scopes go with it is
-    `retired_with`, asked by the store about each live scope under its lock.
+    `A_DEPARTMENT_UNDER_LIVE_GRANTS_IS_NOT_RETIRED`. Which scopes go with it is `retired_with` and
+    which grants hold it back is `holds_retirement_back`, both asked by the store under its lock.
+    The refusal is one sentence naming no grant and no figure, for
+    `THE_GRANTS_HOLDING_A_RETIREMENT_BACK_ARE_NEVER_NAMED`'s reason.
     """
     _founding_refused(asked)
     slug = body.slug
@@ -1581,8 +1586,11 @@ async def retire_department(
     def takes(scope_slug: str, record: ScopeRecord | None, defining: str) -> bool:
         return retired_with(scope_slug, record, department=slug, defining=defining)
 
+    def holds(scope: Scope | None) -> bool:
+        return holds_retirement_back(scope, department=slug)
+
     outcome = await structure_records_of(request).retire_department(
-        slug=slug, expected_name=body.expected_name, takes=takes, by=_by(asked)
+        slug=slug, expected_name=body.expected_name, takes=takes, holds=holds, by=_by(asked)
     )
     return _structured(outcome, asked, kind="department", slug=slug, change="retired")
 
