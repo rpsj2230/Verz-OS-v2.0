@@ -50,8 +50,11 @@ what it takes to see one; both route modules argue that each is a statement abou
 is set up, and neither answers a row of anybody's data. See
 `TWO_PAGES_OUTSIDE_THE_REGISTRY_READ_HOW_THE_SYSTEM_IS_SET_UP`.
 
-**One `approve:` capability is granted, `approve:grant`, and `approve:action` is not.** Letting a
-reach into the system is how an install gets its second person: the People screen's grant write,
+**Two `approve:` capabilities are granted, `approve:grant` and, since 2026-09-28,
+`approve:knowledge.visibility`, and `approve:action` is not.** The second is the Super Admin's
+approval of a document for the whole company, which nobody could otherwise ever hold; see
+`A_SUPER_ADMIN_DECIDES_WHAT_THE_WHOLE_COMPANY_READS`. The first, letting a
+reach into the system, is how an install gets its second person: the People screen's grant write,
 the Access review and elevation are all behind it, so a first administrator without it is an
 install on which nobody can ever grant anybody anything from the console. Approving a suspended
 action is different in kind: it lets an agent carry out an act over the company's data, whose
@@ -218,6 +221,17 @@ THE_FIRST_ADMINISTRATOR_LETS_THE_SECOND_PERSON_IN: Final = (
     "a self-grant the console reports loudly. approve:action is not granted: it lets an agent "
     "act over data the first administrator cannot read, and approvals belong to whoever a "
     "department makes its approver."
+)
+
+#: Why the first administrator approves a document for the whole company, and not an agent's act.
+A_SUPER_ADMIN_DECIDES_WHAT_THE_WHOLE_COMPANY_READS: Final = (
+    "Company knowledge is set by a Super Admin, or proposed by a department and approved by a Super "
+    "Admin, which is the owner's requirement. approve:knowledge.visibility is that approval, and "
+    "until 2026-09-28 nobody on an install held it and nobody could be granted it, because a grant "
+    "is bounded by what its writer holds: every promotion would wait on the Approvals screen for "
+    "ever. It decides who may read one document, which is a decision over people's reach like "
+    "approve:grant and unlike approve:action, which lets an agent act over data. The card names "
+    "the document and never shows its text."
 )
 
 #: Why a read the principal already holds does not refuse the appointment, when an administration
@@ -399,9 +413,11 @@ AUDIT_KINDS_WITHHELD: Final[dict[str, str]] = {
     ),
 }
 
-#: The decisions over other people's reach a first administrator holds, over everything. One, on
-#: purpose. See `THE_FIRST_ADMINISTRATOR_LETS_THE_SECOND_PERSON_IN`.
-GOVERNANCE: Final[tuple[str, ...]] = ("approve:grant",)
+#: The decisions over other people's reach a first administrator holds, over everything. Two, on
+#: purpose: letting a person in, and letting the whole company read a document. See
+#: `THE_FIRST_ADMINISTRATOR_LETS_THE_SECOND_PERSON_IN` and
+#: `A_SUPER_ADMIN_DECIDES_WHAT_THE_WHOLE_COMPANY_READS`.
+GOVERNANCE: Final[tuple[str, ...]] = ("approve:grant", "approve:knowledge.visibility")
 
 #: Everything a first administrator is granted at appointment, and what reconciliation grants an
 #: administrator appointed before part of it existed.

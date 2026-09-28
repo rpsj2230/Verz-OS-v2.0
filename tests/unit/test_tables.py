@@ -130,6 +130,7 @@ MIGRATION_COMPLIANCE = VERSIONS / "0104_compliance_record_and_decision_entries.p
 MIGRATION_GROUP_ROLE_RULE = VERSIONS / "0109_group_role_rule.py"
 MIGRATION_MODEL_HEALTH = VERSIONS / "0108_provider_health_and_residency.py"
 MIGRATION_CHANNEL = VERSIONS / "0114_channel_record_and_delivery.py"
+MIGRATION_KNOWLEDGE_LIFECYCLE = VERSIONS / "0120_knowledge_lifecycle.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -356,6 +357,8 @@ MODEL_HEALTH_TABLES: tuple[str, ...] = (
 )
 #: And the two 0114 adds: each channel's record, and every delivery in or out without its content.
 CHANNEL_TABLES: tuple[str, ...] = ("ops.channel", "ops.channel_delivery")
+#: And the two 0120 adds: what a steward is asked, and a solution waiting for a named person.
+KNOWLEDGE_LIFECYCLE_TABLES: tuple[str, ...] = ("know.steward_task", "know.solution")
 
 SENSITIVE_READ_TABLES: tuple[str, ...] = ("ops.sensitive_read",)
 
@@ -417,6 +420,7 @@ ALL_TABLES = (
     + GROUP_ROLE_RULE_TABLES
     + MODEL_HEALTH_TABLES
     + CHANNEL_TABLES
+    + KNOWLEDGE_LIFECYCLE_TABLES
 )
 
 
@@ -1190,6 +1194,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert model_health.TABLES == MODEL_HEALTH_TABLES
     channel = migration_module(MIGRATION_CHANNEL)
     assert channel.TABLES == CHANNEL_TABLES
+    knowledge_lifecycle = migration_module(MIGRATION_KNOWLEDGE_LIFECYCLE)
+    assert knowledge_lifecycle.TABLES == KNOWLEDGE_LIFECYCLE_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1269,6 +1275,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(group_role_rule.TABLES)
         + tuple(model_health.TABLES)
         + tuple(channel.TABLES)
+        + tuple(knowledge_lifecycle.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1329,6 +1336,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(group_role_rule.TABLES),
         set(model_health.TABLES),
         set(channel.TABLES),
+        set(knowledge_lifecycle.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

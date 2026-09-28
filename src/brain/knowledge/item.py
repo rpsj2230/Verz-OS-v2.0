@@ -22,6 +22,17 @@ department SOP to the whole company is a matter of uploading version two with a 
 level, and every control in `brain.knowledge.visibility` is bypassed by the ordinary
 mechanism people use every week.
 
+**And not a move either, since 2026-09-28.** The level alone was the check until then, so a
+version two of web's SOP placed in finance's department was "not wider" and was accepted: the
+same level, a different audience, and finance reading what replaced web's document. A successor
+now reaches nobody its predecessor did not, which is a question about the audience and not the
+level. See `A_NEW_VERSION_REACHES_NOBODY_THE_OLD_ONE_DID_NOT`.
+
+**The rules read a record, not a document.** `assert_supersedable` and `badge` take the fields
+they read through two protocols, `Superseding` and `Vouched`, because the stored row in
+`know.item` carries no text and a lifecycle route replacing a stored document holds that row
+and nothing else. `KnowledgeItem` satisfies both unchanged, so there is one rule for both.
+
 **The badge states what is on file and never argues with it.** An item nobody has verified
 renders as unverified rather than as wrong. The two are different, and a badge that treated
 them the same would train people to ignore it on the day it mattered.
@@ -201,30 +212,53 @@ class KnowledgeItem(BaseModel):
 
 # --------------------------------------------------------- supersession (M7.4.5)
 
+#: Why a successor may not move to another audience at the same level.
+A_NEW_VERSION_REACHES_NOBODY_THE_OLD_ONE_DID_NOT: Final = (
+    "A new version replaces a document for the people who read it. Placed in another "
+    "department at the same level, it is not wider and it is not the same audience either: the "
+    "other department reads what replaced a document it never saw, and the one that relied on "
+    "it loses it without anybody deciding that. A personal document handed to another person's "
+    "personal level is the same move. So a successor reaches nobody its predecessor did not, "
+    "and a document that belongs somewhere else is added there as a new document."
+)
 
-def supersede(
-    predecessor: KnowledgeItem, successor: KnowledgeItem
-) -> tuple[KnowledgeItem, KnowledgeItem]:
-    """Replace one item with another, and return both.
 
-    Both, always, and that is the point of the signature. A function that returned only the
-    successor would leave the caller to remember to write the predecessor back, and the
-    forgotten write leaves two live items saying different things with nothing recording
-    which is current.
+class Superseding(Protocol):
+    """What the supersession rule reads of an item: which one, its state and its place.
 
-    Three refusals:
+    `KnowledgeItem` satisfies it, and so does a stored row, which holds no text. See the module
+    docstring on why the rules read a record.
+    """
+
+    @property
+    def item_id(self) -> str: ...
+
+    @property
+    def state(self) -> KnowledgeState: ...
+
+    @property
+    def visibility(self) -> KnowledgeVisibility: ...
+
+
+def assert_supersedable(predecessor: Superseding, successor: Superseding) -> None:
+    """Refuse a replacement that would loop, fork or widen. Four refusals, and each has been
+    the whole failure somewhere.
 
     An item cannot supersede itself, which is a loop nothing resolves and reads in the
     console as a document that replaced itself.
 
     An already-superseded item cannot be superseded again. Version three must replace
     version two, not version one, or two successors both claim to be current and retrieval
-    returns whichever the index reached first.
+    returns whichever the index reached first. An archived one neither: it was withdrawn with
+    nothing replacing it, and a successor would bring it back without anybody deciding to.
 
     A successor may never be wider than what it replaces. Without this line, the whole of
     `brain.knowledge.visibility` is optional: upload version two of the department SOP at
     company visibility and it is published, with no proposal, no approver and no review
     date. Narrowing is allowed, because showing the item to fewer people needs no gate.
+
+    And a successor at the same level stays with the same audience. See
+    `A_NEW_VERSION_REACHES_NOBODY_THE_OLD_ONE_DID_NOT`.
     """
     if predecessor.item_id == successor.item_id:
         msg = f"{predecessor.item_id!r} cannot supersede itself"
@@ -235,12 +269,43 @@ def supersede(
             "current one, or two versions both claim to be current"
         )
         raise KnowledgeError(msg)
-    if is_wider(successor.visibility.level, predecessor.visibility.level):
+    if predecessor.state is KnowledgeState.ARCHIVED:
         msg = (
-            f"{successor.item_id!r} is {successor.visibility.level} and replaces something "
-            f"{predecessor.visibility.level}; supersession is not the promotion path"
+            f"{predecessor.item_id!r} was withdrawn with nothing replacing it; a successor "
+            "would bring it back, which is a new document and not a new version"
+        )
+        raise KnowledgeError(msg)
+    before, after = predecessor.visibility, successor.visibility
+    if is_wider(after.level, before.level):
+        msg = (
+            f"{successor.item_id!r} is {after.level} and replaces something "
+            f"{before.level}; supersession is not the promotion path"
         )
         raise VisibilityError(msg)
+    moved = after.level is before.level and (
+        (after.level is Visibility.DEPARTMENT and after.department != before.department)
+        or (after.level is Visibility.PERSONAL and after.owner_id != before.owner_id)
+    )
+    if moved:
+        msg = (
+            f"{successor.item_id!r} would reach other people than {predecessor.item_id!r} "
+            f"did. {A_NEW_VERSION_REACHES_NOBODY_THE_OLD_ONE_DID_NOT}"
+        )
+        raise VisibilityError(msg)
+
+
+def supersede(
+    predecessor: KnowledgeItem, successor: KnowledgeItem
+) -> tuple[KnowledgeItem, KnowledgeItem]:
+    """Replace one item with another, and return both.
+
+    Both, always, and that is the point of the signature. A function that returned only the
+    successor would leave the caller to remember to write the predecessor back, and the
+    forgotten write leaves two live items saying different things with nothing recording
+    which is current. The refusals are `assert_supersedable`'s, which a store replacing a
+    stored document asks as well, so there is one rule.
+    """
+    assert_supersedable(predecessor, successor)
     return (
         predecessor.model_copy(update={"state": KnowledgeState.SUPERSEDED}),
         successor.model_copy(update={"supersedes": predecessor.item_id}),
@@ -390,7 +455,26 @@ class VerificationBadge:
         return template.format(who=self.verified_by, when=self.verified_at.date().isoformat())
 
 
-def badge(item: KnowledgeItem, *, now: datetime) -> VerificationBadge:
+class Vouched(Protocol):
+    """What the badge reads of an item: its state and its verification, and never its text.
+
+    `KnowledgeItem` satisfies it, and so does a stored row. See the module docstring.
+    """
+
+    @property
+    def state(self) -> KnowledgeState: ...
+
+    @property
+    def verified_by(self) -> str: ...
+
+    @property
+    def verified_at(self) -> datetime | None: ...
+
+    @property
+    def review_by(self) -> datetime | None: ...
+
+
+def badge(item: Vouched, *, now: datetime) -> VerificationBadge:
     """The badge for one item, as of `now`.
 
     Superseded is checked before verification, because a replaced item that was verified
