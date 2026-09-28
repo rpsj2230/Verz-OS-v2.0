@@ -195,7 +195,12 @@ SCHEDULE_CONTROL: Final = Feature(
         "Jobs run on their schedule and nothing can be paused or run from the console. A job "
         "paused while this was on stays paused and can still be resumed."
     ),
-    read_by=("brain.jobs_routes:jobs", "brain.jobs_routes:pause_job", "brain.jobs_routes:run_job"),
+    read_by=(
+        "brain.jobs_routes:jobs",
+        "brain.jobs_routes:job_detail",
+        "brain.jobs_routes:pause_job",
+        "brain.jobs_routes:run_job",
+    ),
 )
 
 #: Every feature this product can switch on, in the order the screen lists them.

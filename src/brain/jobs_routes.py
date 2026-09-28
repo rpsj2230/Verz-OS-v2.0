@@ -51,28 +51,42 @@ queued run that no worker has fetched, because the queue's tables are refused to
 and what is not controlled is a run already in progress, because nothing can stop one. Run now
 here replaces the shell's enqueue for every purpose the shell had.
 
-Task ids: M27.8.13
+**One job has a page of its own, and its past runs are a list (M27.15.47).** `GET /jobs/{name}`
+is the list's own row read the same way, so a job the reader could not be shown is the same 404
+as a name nothing registers, plus that job's figures over seven and thirty days counted from its
+own run records. `GET /jobs/{name}/runs` is the run record itself, newest first, on
+`brain.listing`: a run is shown by its kind of failure and its report exactly as the list shows
+the last one. The load is the newest `RUN_HISTORY_LOAD` runs of that one job, never narrowed by
+the question, and `truncated` says the load came back full. Rejected: an offset page over the
+table, for `brain.api`'s reason, and a history across every job, which would be a second Errors
+screen. A job with no runner says so on its row (`needs`); a pause is an `ops.setting` row, so
+it outlives a restart of either process, which is the rest of the leaf.
+
+Task ids: M27.8.13, M27.15.47
 """
 
 from __future__ import annotations
 
 import re
+import uuid
 from collections.abc import Mapping, Sequence
-from datetime import datetime
-from typing import Final
+from datetime import datetime, timedelta
+from typing import Annotated, Final
 
 import structlog
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import Select, select
+from sqlalchemy import Select, and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from brain.agent_routes import steward_names
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked, Asking
 from brain.console.govern import NOWHERE, _in_reach
 from brain.console.operate import QUEUE_SCREEN, may_watch_unattended
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.errors import Absent, Failed
+from brain.listing import Column, ListAsked, Listing
 from brain.ops.controls import Control
 from brain.ops.features import SCHEDULE_CONTROL, is_on
 from brain.ops.jobs import JobState
@@ -197,6 +211,8 @@ class JobsPage(BaseModel):
     #: A pause or a request shows its last change on its row, and every change is an entry in the
     #: audit trail, from `0059`'s trigger.
     every_change_is_in_the_audit_trail: bool = True
+    #: Display names by principal id for the people named on the rows. Missing where none is known.
+    people: dict[str, str] = {}
 
 
 class JobChanged(BaseModel):
@@ -209,6 +225,98 @@ class JobChanged(BaseModel):
     run_requested_at: datetime | None
     changed_by: str
     changed_at: datetime
+
+
+#: How many of one job's newest runs its history reads. A job ticking every minute fills this in
+#: about eight hours, which is the stretch somebody reads a history for; older runs stay in the
+#: table and `truncated` says the load stopped here.
+RUN_HISTORY_LOAD: Final = 500
+
+#: A run with a start and no finish: still going, or its process died. Not one of `OUTCOMES`,
+#: because the table stores it as null, and a filter needs a word to match.
+UNFINISHED: Final = "unfinished"
+
+#: The windows a job's figures are counted over, as the stats routes spell a range.
+JOB_PERIODS: Final[tuple[tuple[str, timedelta], ...]] = (
+    ("7d", timedelta(days=7)),
+    ("30d", timedelta(days=30)),
+)
+
+
+class JobPeriodView(BaseModel):
+    """How one job's runs went over one window. Counts of its own runs, which the reader may see."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    range: str
+    since: datetime
+    started: int
+    succeeded: int
+    failed: int
+    #: Reached in report-only mode and declined to act. Not a success; see `OUTCOMES`.
+    reported_only: int
+
+
+class JobDetail(BaseModel):
+    """One job whole: its row as the list shows it, what is lost if it stops, and its figures."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    as_of: datetime
+    job: JobView
+    #: The registry's `lost_silently` sentence: what stops being true, and why nothing else says.
+    lost_silently: str
+    controls_switched_on: bool
+    may_control: bool
+    periods: list[JobPeriodView]
+    no_run_can_be_stopped: bool = True
+    every_change_is_in_the_audit_trail: bool = True
+    #: Display names by principal id for the people named on the row. Missing where none is known.
+    people: dict[str, str] = {}
+
+
+class JobRunView(BaseModel):
+    """One past run of one job, shown as the list shows a last run."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    run_id: str
+    started_at: datetime
+    finished_at: datetime | None
+    #: `ok`, `failed`, `refused`, or `unfinished` for a run with no finish.
+    outcome: str
+    report_only: bool
+    #: The runner's sentence for a run that finished ok or refused.
+    report: str | None
+    #: The exception type of a failed run. Never its message.
+    failure_kind: str | None
+
+
+class JobRunsPage(BaseModel):
+    """One page of one job's past runs, newest first unless asked otherwise. No count."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    items: list[JobRunView]
+    next_cursor: str | None
+    #: The newest `RUN_HISTORY_LOAD` runs were read and there were more; older ones are not listed.
+    truncated: bool
+
+
+#: What a job's history may search, filter and order by: the fields a run shows.
+RUNS: Final[Listing[JobRunView]] = Listing(
+    name="job-runs",
+    columns=(
+        Column("started_at", lambda row: row.started_at, sort=True),
+        Column("finished_at", lambda row: row.finished_at, sort=True),
+        Column("outcome", lambda row: row.outcome, filter=True, sort=True),
+        Column("report", lambda row: row.report, search=True),
+        Column("failure_kind", lambda row: row.failure_kind, search=True, filter=True),
+    ),
+    key=lambda row: row.run_id,
+    order="-started_at",
+)
+RunsQuery = Annotated[ListAsked, Depends(RUNS.query())]
 
 
 # ---------------------------------------------------------------- the statements
@@ -228,6 +336,54 @@ def last_run_of_each_control() -> Select[LastRun]:
         )
         .order_by(ControlRunRow.name, ControlRunRow.started_at.desc())
         .distinct(ControlRunRow.name)
+    )
+
+
+#: One past run as the history reads it: id, start, finish, outcome, report-only and detail.
+PastRun = tuple[uuid.UUID, datetime, datetime | None, str | None, bool, str | None]
+
+
+def runs_of(name: str) -> Select[PastRun]:
+    """One job's newest runs, one past `RUN_HISTORY_LOAD` so a full load can be told apart."""
+    return (
+        select(
+            ControlRunRow.id,
+            ControlRunRow.started_at,
+            ControlRunRow.finished_at,
+            ControlRunRow.outcome,
+            ControlRunRow.report_only,
+            ControlRunRow.detail,
+        )
+        .where(ControlRunRow.name == name)
+        .order_by(ControlRunRow.started_at.desc(), ControlRunRow.id)
+        .limit(RUN_HISTORY_LOAD + 1)
+    )
+
+
+def figures_of(name: str, now: datetime) -> Select[tuple[int, ...]]:
+    """One row counting one job's runs in each of `JOB_PERIODS`, by how they ended.
+
+    Counted in the database with a filter per figure, so no run is carried to be counted, and
+    labelled `<figure>_<range>` so the projection reads them by name.
+    """
+    columns = []
+    for range_, span in JOB_PERIODS:
+        inside = ControlRunRow.started_at >= now - span
+        columns += [
+            func.count().filter(inside).label(f"started_{range_}"),
+            func.count()
+            .filter(and_(inside, ControlRunRow.outcome == "ok"))
+            .label(f"succeeded_{range_}"),
+            func.count()
+            .filter(and_(inside, ControlRunRow.outcome == "failed"))
+            .label(f"failed_{range_}"),
+            func.count()
+            .filter(and_(inside, ControlRunRow.outcome == "refused"))
+            .label(f"reported_only_{range_}"),
+        ]
+    longest = max(span for _, span in JOB_PERIODS)
+    return select(*columns).where(
+        ControlRunRow.name == name, ControlRunRow.started_at >= now - longest
     )
 
 
@@ -312,6 +468,56 @@ def jobs_for(
     ]
 
 
+def actors_named(views: Sequence[JobView]) -> list[str]:
+    """The principals the rows name as having paused or asked for a run, once each, in order."""
+    return sorted(
+        {
+            one
+            for view in views
+            for one in (view.pause_changed_by, view.run_requested_by)
+            if one is not None
+        }
+    )
+
+
+def run_view(row: PastRun) -> JobRunView:
+    """One past run, from its record. A failure by its kind, a report only for ok or refused."""
+    run_id, started, finished, outcome, report_only, detail = row
+    return JobRunView(
+        run_id=str(run_id),
+        started_at=started,
+        finished_at=finished,
+        outcome=outcome or UNFINISHED,
+        report_only=report_only,
+        report=detail if outcome in {"ok", "refused"} else None,
+        failure_kind=failure_kind(detail) if outcome == "failed" else None,
+    )
+
+
+def _count(counted: Mapping[str, object], label: str) -> int:
+    """One figure off the counting row. A count is an integer; anything else is a fault."""
+    found = counted[label]
+    if not isinstance(found, int):
+        msg = f"the figure {label} did not come back as a count"
+        raise Failed(msg)
+    return found
+
+
+def periods_from(counted: Mapping[str, object], now: datetime) -> list[JobPeriodView]:
+    """The figures row, read back by the labels `figures_of` gave it."""
+    return [
+        JobPeriodView(
+            range=range_,
+            since=now - span,
+            started=_count(counted, f"started_{range_}"),
+            succeeded=_count(counted, f"succeeded_{range_}"),
+            failed=_count(counted, f"failed_{range_}"),
+            reported_only=_count(counted, f"reported_only_{range_}"),
+        )
+        for range_, span in JOB_PERIODS
+    ]
+
+
 # ------------------------------------------------------------------------ the wiring
 def _require_sessions(request: Request) -> async_sessionmaker[AsyncSession]:
     factory = sessions_of(request)
@@ -376,9 +582,7 @@ async def jobs(request: Request, asked: Asked) -> JobsPage:
         pauses = await pause_states(session)
         requests = await request_states(session)
         switched_on = await is_on(session, SCHEDULE_CONTROL)
-    return JobsPage(
-        as_of=asked.now,
-        jobs=jobs_for(
+        shown = jobs_for(
             asked.reach,
             asked.now,
             runs=runs,
@@ -386,9 +590,14 @@ async def jobs(request: Request, asked: Asked) -> JobsPage:
             pauses=pauses,
             requests=requests,
             released=released,
-        ),
+        )
+        people = await steward_names(session, actors_named(shown))
+    return JobsPage(
+        as_of=asked.now,
+        jobs=shown,
         controls_switched_on=switched_on,
         may_control=may_control(asked.reach, asked.now),
+        people=people,
     )
 
 
@@ -461,4 +670,79 @@ async def run_job(request: Request, name: str, asked: Asked) -> JobChanged:
         run_requested_at=requested,
         changed_by=asked.caller.principal.id,
         changed_at=asked.now,
+    )
+
+
+# ------------------------------------------------------------------ one job's page (M27.15.47)
+def _not_shown() -> Absent:
+    """The one answer for a job this reader may not see and a name nothing registers."""
+    return Absent(f"that {JOBS_SCREEN} entry is not answerable for this caller")
+
+
+def _visible_control(name: str, asked: Asking) -> Control:
+    """The registered, schedulable job this reader may see, or the one 404 for anything else.
+
+    Decided before the database, so a hidden job and a missing one are refused identically on
+    an install with a pool and on one without.
+    """
+    found = next((one for one in schedulable() if one.name == name), None)
+    if found is None or not may_see_job(name, asked.reach, asked.now):
+        raise _not_shown()
+    return found
+
+
+@router.get("/jobs/{name}", response_model=JobDetail, responses=COMMON_RESPONSES)
+async def job_detail(request: Request, name: str, asked: Asked) -> JobDetail:
+    """One job: its row as the list shows it, what is lost if it stops, and its run figures."""
+    found = _visible_control(name, asked)
+    factory = _require_sessions(request)
+    async with factory() as session:
+        runs = [row._tuple() for row in (await session.execute(last_run_of_each_control())).all()]
+        successes = await last_successes(session)
+        released = await released_controls(session, now=asked.now)
+        pauses = await pause_states(session)
+        requests = await request_states(session)
+        switched_on = await is_on(session, SCHEDULE_CONTROL)
+        figures = (await session.execute(figures_of(name, asked.now))).mappings().one()
+        counted = {str(key): value for key, value in figures.items()}
+        shown = jobs_for(
+            asked.reach,
+            asked.now,
+            runs=runs,
+            successes=successes,
+            pauses=pauses,
+            requests=requests,
+            released=released,
+        )
+        view = next((one for one in shown if one.control == name), None)
+        if view is None:
+            raise _not_shown()
+        people = await steward_names(session, actors_named([view]))
+    return JobDetail(
+        as_of=asked.now,
+        job=view,
+        lost_silently=found.lost_silently,
+        controls_switched_on=switched_on,
+        may_control=may_control(asked.reach, asked.now),
+        periods=periods_from(counted, asked.now),
+        people=people,
+    )
+
+
+@router.get("/jobs/{name}/runs", response_model=JobRunsPage, responses=COMMON_RESPONSES)
+async def job_runs(request: Request, name: str, asked: Asked, listed: RunsQuery) -> JobRunsPage:
+    """One job's past runs, newest first, searchable by report and failure kind, and paged.
+
+    The job's read first, then the question checked, then the load, which is the same whatever
+    the question: see `brain.listing.THE_LOAD_IS_NEVER_NARROWED_BY_THE_QUERY`.
+    """
+    _visible_control(name, asked)
+    plan = RUNS.plan(listed, reader=asked.caller.principal.id)
+    async with _require_sessions(request)() as session:
+        loaded = [row._tuple() for row in (await session.execute(runs_of(name))).all()]
+    page = plan.page([run_view(one) for one in loaded[:RUN_HISTORY_LOAD]])
+    return JobRunsPage(
+        items=list(page.items),
+        next_cursor=page.next_cursor,
+        truncated=len(loaded) > RUN_HISTORY_LOAD,
     )

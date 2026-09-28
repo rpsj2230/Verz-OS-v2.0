@@ -69,6 +69,7 @@
 @source "../pages/connectors";
 @source "../pages/overview";
 @source "../pages/credentials";
+@source "../pages/operations";
 @source not inline("grid");
 
 /*

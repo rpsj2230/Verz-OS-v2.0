@@ -1,84 +1,93 @@
 /**
- * What the Scheduled jobs screen asks for and says. No React.
+ * What the Background jobs pages ask for and say. No React.
  *
- * `brain.jobs_routes` answers every job the worker's schedule starts, how each last went, and
- * what a person has done to it, and takes three controls: pause, resume and run now. Each is a
- * row the worker's tick reads (`brain.ops.schedule_control`), so the sentences below say what the
- * worker will do and when, rather than that something happened.
- *
- * **`docs/screens.html` draws Live runs in the Operate menu and no jobs screen**, so this sits
- * directly under Live runs and is drawn in its register: a table, and the facts the table cannot
- * carry said in words beneath it.
+ * `brain.jobs_routes` answers every job the worker's schedule starts and how each last went, one
+ * job whole with its run figures, and one job's past runs, and takes three controls: pause, resume
+ * and run now. Each control is a row the worker's tick reads (`brain.ops.schedule_control`), so the
+ * sentences below say what the worker will do and when, rather than that something happened.
  *
  * **A failed run is shown by its kind.** The API sends the exception's type and never its message,
- * because a message can quote a value, and the page says the message is kept on the server.
+ * because a message can quote a value.
  *
- * **Nothing here decides who may see or control a job.** `may_control` and
- * `controls_switched_on` only decide whether buttons are drawn; each control asks again.
+ * **A person is named, never shown as a principal id.** The API sends display names beside the rows
+ * that name somebody; an id with no name is said as "somebody", and the id stays out of the text.
  *
- * Task ids: M27.8.13
+ * **Nothing here decides who may see or control a job.** `may_control` and `controls_switched_on`
+ * only decide whether a control is drawn; each control asks again.
+ *
+ * Task ids: M27.8.13, M27.15.47
  */
 
 import type { components } from "../api/schema";
-import { durationWords } from "./liveRunsQuery";
+import { durationWords, jobName } from "./operations/parts";
 
 export type JobsBody = components["schemas"]["JobsPage"];
 export type JobRow = components["schemas"]["JobView"];
+export type JobDetailBody = components["schemas"]["JobDetail"];
+export type JobPeriod = components["schemas"]["JobPeriodView"];
+export type JobRun = components["schemas"]["JobRunView"];
 
 export const JOBS_API_PATH = "/jobs";
 export const JOBS_PATH = "/jobs";
-export const JOBS_LABEL = "Scheduled jobs";
-export const JOBS_CRUMB = "Operate › Scheduled jobs";
-export const JOBS_LEDE =
-  "Every job the worker runs on a schedule, how it last went, and the controls to pause one or " +
-  "run one now.";
+export const JOBS_LABEL = "Background jobs";
+export const JOBS_LEDE = "Every job the worker runs on a schedule, how it last went, and what has been done to it.";
 
-export const READING_JOBS = "Reading the schedule.";
-export const NO_JOBS = "There is no scheduled job this screen can show you.";
-export const THE_BRAIN_COULD_NOT_BE_REACHED = "The Brain could not be reached";
-export const UNREADABLE_ANSWER =
-  "The API answered in a shape this console does not read, so no job is listed. The console and " +
-  "the API are probably from different releases.";
-export const JOBS_CAPTION = "Scheduled jobs, how each last went, and what has been done to it";
+export const READING_JOBS = "Loading the schedule.";
+export const NO_JOBS = "No background jobs to show";
+export const NO_JOBS_MORE = "A job appears here once the worker's schedule starts it and it is offered to you.";
+export const JOBS_CAPTION = "Background jobs";
 
 export const PAUSE = "Pause";
 export const RESUME = "Resume";
 export const RUN_NOW = "Run now";
 export const KEEP_IT = "Leave it as it is";
 
-export const NEVER_RUN = "Has not run on this install.";
-export const STILL_GOING = "Started and has not recorded finishing.";
+export const NEVER_RUN = "Not run yet";
+export const STILL_GOING = "Started, not finished";
 export const NEVER_SUCCEEDED = "Never";
-export const MESSAGE_KEPT_ON_THE_SERVER =
-  "The failure's message is kept in the run record on the server and is not shown here, because " +
-  "a message can quote a value.";
+export const ON_SCHEDULE = "On schedule";
+export const SOMEBODY = "somebody";
 
 export const CONTROLS_SWITCHED_OFF =
-  "Pausing a job and running one now are switched off on this install. An administrator switches " +
-  "them on under Install, Features. A paused job can still be resumed.";
-export const CANNOT_HEADING = "What this screen cannot do";
-export const NO_RUN_CAN_BE_STOPPED =
-  "A run that has started cannot be stopped from here, because nothing in the platform can stop " +
-  "one. Pausing a job stops the schedule starting it again.";
-export const EVERY_CHANGE_IS_IN_THE_AUDIT_TRAIL =
-  "A pause and a request to run show who made them last and when. Every pause, resume and run " +
-  "request, and who made it, is kept in the audit trail.";
+  "Pausing a job and running one now are switched off on this install; they are switched on under Features. A paused job can still be resumed.";
+export const NO_RUN_CAN_BE_STOPPED = "A run that has started cannot be stopped here; pausing stops the schedule starting it again.";
+export const EVERY_CHANGE_IS_IN_THE_AUDIT_TRAIL = "Every pause, resume and run request is kept in the audit log with who made it.";
+export const MESSAGE_KEPT_ON_THE_SERVER = "A failure is shown by its kind; its message stays on the server.";
 
-/** The outcome words, from `brain.tables.schedule.OUTCOMES`. */
+/** The outcome words, from `brain.tables.schedule.OUTCOMES`, and the history's own word for a run with no finish. */
 export const OUTCOME_WORDS: Readonly<Record<string, string>> = {
   ok: "Finished",
   failed: "Failed",
-  refused: "Reported only",
+  refused: "Report only",
+  unfinished: "Not finished",
 };
 
+export function outcomeWords(outcome: string): string {
+  return OUTCOME_WORDS[outcome] ?? outcome;
+}
+
+/** Where one job's page is, and its two other views. */
+export function jobAddress(control: string, view?: string): string {
+  const base = `${JOBS_PATH}/${encodeURIComponent(control)}`;
+  return view === undefined ? base : `${base}/${view}`;
+}
+
+export function jobApiPath(control: string): string {
+  return `${JOBS_API_PATH}/${encodeURIComponent(control)}`;
+}
+
+export function jobRunsApiPath(control: string): string {
+  return `${jobApiPath(control)}/runs`;
+}
+
 export function pausePath(name: string): string {
-  return `${JOBS_API_PATH}/${encodeURIComponent(name)}/pause`;
+  return `${jobApiPath(name)}/pause`;
 }
 export function resumePath(name: string): string {
-  return `${JOBS_API_PATH}/${encodeURIComponent(name)}/resume`;
+  return `${jobApiPath(name)}/resume`;
 }
 export function runPath(name: string): string {
-  return `${JOBS_API_PATH}/${encodeURIComponent(name)}/run`;
+  return `${jobApiPath(name)}/run`;
 }
 
 export type JobAction = "pause" | "resume" | "run";
@@ -93,29 +102,38 @@ export function actionPath(action: JobAction, name: string): string {
   return action === "pause" ? pausePath(name) : action === "resume" ? resumePath(name) : runPath(name);
 }
 
+/** The controls a row offers, in the order they are drawn. Presentation only: each asks again. */
+export function actionsFor(row: JobRow, switchedOn: boolean, mayControl: boolean): JobAction[] {
+  if (!mayControl) {
+    return [];
+  }
+  const actions: JobAction[] = [];
+  if (row.paused) {
+    actions.push("resume");
+  } else if (switchedOn && row.runnable) {
+    actions.push("pause");
+  }
+  if (switchedOn && row.runnable) {
+    actions.push("run");
+  }
+  return actions;
+}
+
 export function actionQuestion(action: JobAction, row: JobRow): string {
-  return action === "pause"
-    ? `Pause ${row.control}?`
-    : action === "resume"
-      ? `Resume ${row.control}?`
-      : `Run ${row.control} now?`;
+  const name = jobName(row.control);
+  return action === "pause" ? `Pause ${name}?` : action === "resume" ? `Resume ${name}?` : `Run ${name} now?`;
 }
 
 /** What happens, to what, including what stops holding while a job is paused. */
 export function actionConsequence(action: JobAction, row: JobRow): string {
+  const name = jobName(row.control);
   if (action === "pause") {
-    return (
-      `The worker stops starting ${row.control} from its next tick. It stays owed and its lateness ` +
-      `keeps growing until it is resumed. While it is paused, this is not being kept true: ${row.keeps_true}`
-    );
+    return `The worker stops starting ${name} from its next tick, until it is resumed. While it is paused, this is not kept true: ${row.keeps_true}`;
   }
   if (action === "resume") {
-    return `The worker starts ${row.control} again the next time it is owed a run.`;
+    return `The worker starts ${name} again the next time it is owed a run.`;
   }
-  return (
-    `The worker starts ${row.control} on its next tick, through the same lock and the same run ` +
-    "record as a scheduled run, whether or not it is paused."
-  );
+  return `The worker starts ${name} on its next tick, whether or not it is paused.`;
 }
 
 /** Anything further this case has to say. */
@@ -127,14 +145,23 @@ export function actionWarning(action: JobAction, row: JobRow): string | undefine
 }
 
 export function doneSentence(action: JobAction, row: JobRow): string {
+  const name = jobName(row.control);
   return action === "pause"
-    ? `${row.control} is paused. The worker will not start it again until it is resumed.`
+    ? `${name} is paused. The worker will not start it again until it is resumed.`
     : action === "resume"
-      ? `${row.control} is resumed.`
-      : `${row.control} will be started on the worker's next tick.`;
+      ? `${name} is resumed.`
+      : `${name} will be started on the worker's next tick.`;
 }
 
-/** The last run, in words. */
+/** A person the API named, by their display name, or "somebody" when no name came with the id. */
+export function personWords(id: string | null | undefined, people: Readonly<Record<string, string>> | undefined): string {
+  if (id === null || id === undefined) {
+    return SOMEBODY;
+  }
+  return people?.[id] ?? SOMEBODY;
+}
+
+/** The last run, in words: its outcome and its report or its kind of failure. */
 export function lastRunWords(row: JobRow): string {
   if (row.last_started_at === null || row.last_started_at === undefined) {
     return NEVER_RUN;
@@ -142,31 +169,48 @@ export function lastRunWords(row: JobRow): string {
   if (row.last_outcome === null || row.last_outcome === undefined) {
     return STILL_GOING;
   }
-  const word = OUTCOME_WORDS[row.last_outcome] ?? row.last_outcome;
+  const word = outcomeWords(row.last_outcome);
   if (row.last_outcome === "failed") {
     return row.last_failure_kind ? `${word}: ${row.last_failure_kind}` : word;
   }
-  return row.last_report ? `${word}: ${row.last_report}` : word;
+  return word;
 }
 
-/** The state column, in words. Paused first, because it is the one a person did. */
-export function stateWords(row: JobRow): string[] {
-  const words: string[] = [];
+/** How often a job runs, in words. */
+export function everyWords(seconds: number): string {
+  return `Every ${durationWords(seconds)}`;
+}
+
+/** The state words for a row, paused first because it is the one a person did. */
+export interface StateWord {
+  readonly word: string;
+  readonly tone: "ok" | "warn" | "crit" | "plain";
+}
+
+export function stateWords(row: JobRow): StateWord[] {
+  const words: StateWord[] = [];
   if (row.paused) {
-    words.push(`Paused by ${row.pause_changed_by ?? "somebody"}`);
+    words.push({ word: "Paused", tone: "warn" });
+  }
+  if (!row.runnable) {
+    words.push({ word: "Cannot start yet", tone: "plain" });
   }
   if (row.run_pending) {
-    words.push(`Run asked for by ${row.run_requested_by ?? "somebody"}`);
+    words.push({ word: "Run asked for", tone: "plain" });
   }
   if (row.owed) {
-    words.push(
-      row.late_by_seconds ? `Owed, late by ${durationWords(row.late_by_seconds)}` : "Owed a run now",
-    );
+    words.push({
+      word: row.late_by_seconds ? `Late by ${durationWords(row.late_by_seconds)}` : "Owed a run",
+      tone: "warn",
+    });
   }
   if (row.report_only) {
-    words.push("Report only");
+    words.push({ word: "Report only", tone: "plain" });
   }
-  return words.length === 0 ? ["On schedule"] : words;
+  if (row.last_outcome === "failed") {
+    words.push({ word: "Last run failed", tone: "crit" });
+  }
+  return words.length === 0 ? [{ word: ON_SCHEDULE, tone: "ok" }] : words;
 }
 
 export function readJobs(payload: unknown): JobsBody | null {
@@ -178,4 +222,20 @@ export function readJobs(payload: unknown): JobsBody | null {
     return null;
   }
   return payload as JobsBody;
+}
+
+export function readJobDetail(payload: unknown): JobDetailBody | null {
+  if (typeof payload !== "object" || payload === null) {
+    return null;
+  }
+  const body = payload as { job?: unknown; periods?: unknown };
+  if (typeof body.job !== "object" || body.job === null || !Array.isArray(body.periods)) {
+    return null;
+  }
+  return payload as JobDetailBody;
+}
+
+/** One window's figures, or undefined when the API sent none for it. */
+export function periodOf(body: JobDetailBody, range: string): JobPeriod | undefined {
+  return body.periods.find((one) => one.range === range);
 }
