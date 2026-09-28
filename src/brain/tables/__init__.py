@@ -125,7 +125,13 @@ from brain.tables.routing import ModelAttemptRow, RoutingRungRow, RoutingTierRow
 from brain.tables.schedule import ControlRunRow
 from brain.tables.sensitive_read import SensitiveReadRow
 from brain.tables.service_account import ApiKeyRow, ServiceAccountRow
-from brain.tables.skill import SkillAssignmentRow, SkillReviewRow, SkillRow
+from brain.tables.skill import (
+    SkillAssignmentRow,
+    SkillDetachmentRow,
+    SkillRetirementRow,
+    SkillReviewRow,
+    SkillRow,
+)
 from brain.tables.skill_invocation import SkillInvocationRow
 from brain.tables.spend import ReportRefreshRow, SpendActualRow
 from brain.tables.staff import StaffMemberRow, StaffSyncRunRow
@@ -377,6 +383,10 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0138_skill_invocation. Points at nothing: a use names its skill by digest and its agent and
     # request by value, and outlives all three.
     "agent.skill_invocation",
+    # 0139_skill_retirement_and_detachment. A retirement points at the skill it retires and a
+    # detachment at the assignment it ends, so both follow them; the people are values.
+    "agent.skill_retirement",
+    "agent.skill_detachment",
 )
 
 __all__ = [
@@ -471,7 +481,9 @@ __all__ = [
     "SettingRow",
     "SettingType",
     "SkillAssignmentRow",
+    "SkillDetachmentRow",
     "SkillInvocationRow",
+    "SkillRetirementRow",
     "SkillReviewRow",
     "SkillRow",
     "SolutionRow",
