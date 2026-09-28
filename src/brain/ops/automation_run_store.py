@@ -39,7 +39,7 @@ Task ids: M39.6.2.1, M39.6.2.3, M38.2.2.5
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Final
@@ -51,13 +51,16 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.agent_routes import one_agent, record_of
 from brain.agents.model import AgentRecord
-from brain.console.agent_automations import Automation, SchedulerChange
-from brain.console.automation_gallery import template_by_id
+from brain.console.agent_automations import Automation, AutomationSurfaceError, SchedulerChange
+from brain.console.automation_gallery import Cadence, template_by_id
+from brain.console.automations import Change, ChangeKind, Folded, folded, shown
 from brain.console.questions_view import gap_lines
 from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.gate.entitlement_store import StoredEntitlements
 from brain.gate.resolve import EntitlementStore
-from brain.identity.principal_store import StoredPrincipals
+from brain.identity.principal_store import COLUMNS as PRINCIPAL_COLUMNS
+from brain.identity.principal_store import StoredPrincipals, readable
+from brain.ops.automation_change_store import changes_by_automation, record_change, removed_ids
 from brain.ops.automation_owner import PrincipalRecords
 from brain.ops.automation_owner_store import PRINCIPAL_SETTING
 from brain.ops.automation_run import (
@@ -80,6 +83,7 @@ from brain.ops.question_gap_store import gaps_between
 from brain.session import make_app_engine, make_session_factory
 from brain.tables.agent_automation import AgentAutomationRow
 from brain.tables.audit import ENT_HASH_SETTING, TRACE_ID_SETTING
+from brain.tables.automation_change import RESUMED, AutomationChangeRow
 from brain.tables.automation_run import STARTED, AutomationRunRow, AutomationScheduleRow
 from brain.tables.identity import PrincipalRow
 
@@ -110,31 +114,52 @@ def owed_ids(now: datetime, limit: int) -> Select[tuple[str]]:
     """
     return (
         select(AgentAutomationRow.automation_id)
-        .where(AgentAutomationRow.next_run_at.is_not(None), AgentAutomationRow.next_run_at <= now)
+        .where(
+            AgentAutomationRow.next_run_at.is_not(None),
+            AgentAutomationRow.next_run_at <= now,
+            AgentAutomationRow.automation_id.not_in(removed_ids()),
+        )
         .order_by(AgentAutomationRow.next_run_at, AgentAutomationRow.automation_id)
         .limit(limit)
     )
 
 
 def claim(automation_id: str, now: datetime) -> Select[tuple[AgentAutomationRow]]:
-    """One automation, locked, if it is still due and no other worker holds it."""
+    """One automation, locked, if it is still due, not removed, and no other worker holds it."""
     return (
         select(AgentAutomationRow)
         .where(
             AgentAutomationRow.automation_id == automation_id,
             AgentAutomationRow.next_run_at.is_not(None),
             AgentAutomationRow.next_run_at <= now,
+            AgentAutomationRow.automation_id.not_in(removed_ids()),
         )
         .with_for_update(skip_locked=True)
     )
 
 
 def last_started(automation_id: str) -> Select[tuple[datetime]]:
-    """When this automation was last started from the console, or null."""
-    return select(func.max(AutomationScheduleRow.at)).where(
-        AutomationScheduleRow.automation_id == automation_id,
-        AutomationScheduleRow.reason == STARTED,
+    """When this automation was last started or resumed from the console, or null.
+
+    `greatest` because PostgreSQL's ignores a null, so either half alone is the answer.
+    """
+    started = (
+        select(func.max(AutomationScheduleRow.at))
+        .where(
+            AutomationScheduleRow.automation_id == automation_id,
+            AutomationScheduleRow.reason == STARTED,
+        )
+        .scalar_subquery()
     )
+    resumed = (
+        select(func.max(AutomationChangeRow.at))
+        .where(
+            AutomationChangeRow.automation_id == automation_id,
+            AutomationChangeRow.kind == RESUMED,
+        )
+        .scalar_subquery()
+    )
+    return select(func.greatest(started, resumed))
 
 
 def outcomes_since(automation_id: str, since: datetime | None, limit: int) -> Select[tuple[str]]:
@@ -277,13 +302,16 @@ async def run_one(
         row = (await session.execute(claim(automation_id, now))).scalar_one_or_none()
         if row is None or row.next_run_at is None:
             return None
-        owner = await principals.live_principal(row.runs_as_id)
+        template = template_by_id(row.template_id)
+        now_is = await _folded(session, row, None if template is None else template.cadence)
+        owner_id = now_is.owner_id
+        owner = await principals.live_principal(owner_id)
         try:
             automation = Automation(
                 automation_id=row.automation_id,
                 agent_id=row.agent_id,
                 name=row.name,
-                runs_as=owner if owner is not None else _stand_in(row.runs_as_id),
+                runs_as=owner if owner is not None else _stand_in(owner_id),
                 task=row.task,
                 next_run_at=row.next_run_at,
             )
@@ -296,7 +324,6 @@ async def run_one(
             return None
         agent_row = (await session.execute(one_agent(row.agent_id))).scalar_one_or_none()
         agent: AgentRecord | None = None if agent_row is None else record_of(agent_row)
-        template = template_by_id(row.template_id)
         decided: Admitted | PausedBecause
         if template is None:
             decided = PausedBecause.TASK_UNBUILT
@@ -304,7 +331,7 @@ async def run_one(
             decided = admitted_run(
                 automation,
                 owner=owner,
-                owner_entitlements=await entitlements.load(row.runs_as_id, now),
+                owner_entitlements=await entitlements.load(owner_id, now),
                 agent=agent,
                 now=now,
             )
@@ -339,7 +366,7 @@ async def run_one(
             run_id=run_id(row.automation_id, row.next_run_at),
             automation_id=row.automation_id,
             agent_id=row.agent_id,
-            principal_id=row.runs_as_id,
+            principal_id=owner_id,
             due_at=row.next_run_at,
             started_at=now,
             finished_at=now,
@@ -360,8 +387,8 @@ async def run_one(
             outcome=outcome,
             refused_because=refused,
             failures_before=failures_in_a_row(before),
-            cadence=None if template is None else template.cadence,
-            owner_id=row.runs_as_id if agent is None else agent.audience.owner_id,
+            cadence=None if template is None else now_is.cadence,
+            owner_id=owner_id if agent is None else agent.audience.owner_id,
             guards=row.guards,
             at=now,
         )
@@ -457,13 +484,33 @@ def run_automations_now(
 #: How many of an automation's newest runs the Automations tab reads.
 RUNS_SHOWN: Final = 5
 
+#: How many of an automation's newest runs its own page reads: a month of a daily cadence twice.
+RUNS_ON_ITS_PAGE: Final = 60
+
+#: How many automations the module's list loads. An install has one per agent, template and
+#: person, so this is far above any real install and bounds the read rather than the answer.
+AUTOMATIONS_LOADED: Final = 500
+
+#: The change kinds that say why an automation has no next run. A schedule change does not: a
+#: paused automation rescheduled is paused for the reason it was paused before.
+_STOPS: Final[frozenset[ChangeKind]] = frozenset(
+    {ChangeKind.PAUSED, ChangeKind.RESUMED, ChangeKind.REMOVED, ChangeKind.ADOPTED}
+)
+
 
 @dataclass(frozen=True)
 class Listed:
-    """One of an agent's automations as the Automations tab reads it.
+    """One automation as the console reads it: the install with its changes folded over it.
 
-    `stopped_because` is the reason on the newest schedule row when the automation has no next run,
-    and None both for one that is running and for one that was installed and never started.
+    `stopped_because` is the reason on the newest schedule row or stopping change when the
+    automation has no next run, and None both for one that is running and for one that was
+    installed and never started. `runs_as` on the automation is the folded owner.
+
+    `owner_gone` and `owner_until` are what the directory holds about that owner: gone when the
+    record is disabled, deleted or unreadable, and the end of their engagement otherwise. The
+    defaults describe a person who is here, which is what a stand-in built by a test means; the
+    runner reads the directory itself at every run and refuses one whose owner has gone, so the
+    console's reading of these two decides only which controls are offered.
     """
 
     automation: Automation
@@ -472,26 +519,88 @@ class Listed:
     stopped_because: str | None
     #: Newest first.
     runs: tuple[RunRecord, ...]
+    #: The folded cadence, or None for the template's own.
+    cadence: Cadence | None = None
+    removed: bool = False
+    #: The folded owner's name in the directory, or None when the directory does not hold them.
+    owner_name: str | None = None
+    owner_gone: bool = False
+    owner_until: datetime | None = None
+    #: Oldest first.
+    changes: tuple[Change, ...] = ()
+    #: Who installed it, and as whom it first ran.
+    installed_by: str = ""
+    installed_as: str = ""
+    installed_at: datetime | None = None
+
+    def owner_live(self, now: datetime) -> bool:
+        """Whether the person it runs as is here at `now`."""
+        return not self.owner_gone and (self.owner_until is None or now < self.owner_until)
 
 
-def automations_of_agent(agent_id: str) -> Select[tuple[AgentAutomationRow, str]]:
-    """One agent's automations, each with the name the directory holds for whom it runs as."""
+@dataclass(frozen=True)
+class ScheduleEntry:
+    """One row of `agent.automation_schedule`: a start, a stop or a pause, by whom and when."""
+
+    reason: str
+    changed_by: str
+    at: datetime
+    next_run_at: datetime | None
+
+
+@dataclass(frozen=True)
+class Detailed:
+    """One automation for its own page: as listed, with its schedule rows and everybody's names."""
+
+    listed: Listed
+    #: Oldest first.
+    schedule: tuple[ScheduleEntry, ...]
+    #: The display name of every person the page names, by id. An id the directory does not hold
+    #: is absent, and the page says so rather than printing the id.
+    names: Mapping[str, str]
+
+
+def automations_of_agent(agent_id: str) -> Select[tuple[AgentAutomationRow]]:
+    """One agent's automations."""
     return (
-        select(AgentAutomationRow, PrincipalRow.display_name)
-        .outerjoin(PrincipalRow, PrincipalRow.id == AgentAutomationRow.runs_as_id)
+        select(AgentAutomationRow)
         .where(AgentAutomationRow.agent_id == agent_id)
         .order_by(AgentAutomationRow.automation_id)
     )
 
 
-def newest_schedule_reason(automation_id: str) -> Select[tuple[str]]:
-    """The reason on this automation's newest schedule row."""
+def every_automation(limit: int) -> Select[tuple[AgentAutomationRow]]:
+    """Every automation on this install, bounded. Who may see which is decided after, per agent."""
+    return select(AgentAutomationRow).order_by(AgentAutomationRow.automation_id).limit(limit)
+
+
+def one_automation(automation_id: str) -> Select[tuple[AgentAutomationRow]]:
+    """One automation by id."""
+    return select(AgentAutomationRow).where(AgentAutomationRow.automation_id == automation_id)
+
+
+def newest_schedule_reason(automation_id: str) -> Select[tuple[str, datetime]]:
+    """The reason on this automation's newest schedule row, and when."""
     return (
-        select(AutomationScheduleRow.reason)
+        select(AutomationScheduleRow.reason, AutomationScheduleRow.at)
         .where(AutomationScheduleRow.automation_id == automation_id)
         .order_by(AutomationScheduleRow.at.desc(), AutomationScheduleRow.id)
         .limit(1)
     )
+
+
+def schedule_rows_of(automation_id: str) -> Select[tuple[AutomationScheduleRow]]:
+    """Every schedule row of this automation, oldest first."""
+    return (
+        select(AutomationScheduleRow)
+        .where(AutomationScheduleRow.automation_id == automation_id)
+        .order_by(AutomationScheduleRow.at, AutomationScheduleRow.id)
+    )
+
+
+def owners_of(principal_ids: Iterable[str]) -> Select[Any]:
+    """The directory's record of these people, as `brain.identity.principal_store` reads one."""
+    return select(*PRINCIPAL_COLUMNS).where(PrincipalRow.id.in_(sorted(set(principal_ids))))
 
 
 def newest_runs(automation_id: str, limit: int) -> Select[tuple[AutomationRunRow]]:
@@ -529,7 +638,8 @@ def moving(change: SchedulerChange) -> Any:
     """The next run a change leaves, written only where the automation still has the one shown.
 
     `IS NOT DISTINCT FROM` because the one shown is null for a start, and `=` is never true of a
-    null, so a start would write nothing.
+    null, so a start would write nothing. Never on a removed automation, whatever it shows, so a
+    start from an agent's page cannot bring back what the module removed.
     """
     before, after = change.before, change.after
     assert after is not None  # a start and a stop both leave the automation; a removal is not here
@@ -538,59 +648,208 @@ def moving(change: SchedulerChange) -> Any:
         .where(
             AgentAutomationRow.automation_id == before.automation_id,
             AgentAutomationRow.next_run_at.is_not_distinct_from(before.next_run_at),
+            AgentAutomationRow.automation_id.not_in(removed_ids()),
         )
         .values(next_run_at=after.next_run_at, updated_at=func.now())
         .returning(AgentAutomationRow.automation_id)
     )
 
 
+async def _folded(
+    session: AsyncSession, row: AgentAutomationRow, template_cadence: Cadence | None
+) -> Folded:
+    """This install with its changes folded over it, read in the caller's transaction."""
+    changes = await changes_by_automation(session, (row.automation_id,))
+    return folded(
+        installed_as=row.runs_as_id,
+        template_cadence=template_cadence,
+        changes=changes.get(row.automation_id, ()),
+    )
+
+
+def _cadence_of(row: AgentAutomationRow) -> Cadence | None:
+    template = template_by_id(row.template_id)
+    return None if template is None else template.cadence
+
+
+def _why_stopped(
+    newest_schedule: tuple[str, datetime] | None, changes: Sequence[Change]
+) -> str | None:
+    """The newer of the newest schedule row and the newest change that stopped or started it."""
+    stops = [one for one in changes if one.kind in _STOPS]
+    change = stops[-1] if stops else None
+    if change is not None and (newest_schedule is None or change.at >= newest_schedule[1]):
+        return change.kind.value
+    return None if newest_schedule is None else newest_schedule[0]
+
+
+async def _listed(
+    session: AsyncSession, rows: Sequence[AgentAutomationRow], runs_limit: int
+) -> tuple[Listed, ...]:
+    """These installs as the console reads them, in one transaction."""
+    changes = await changes_by_automation(session, (row.automation_id for row in rows))
+    foldeds = {
+        row.automation_id: folded(
+            installed_as=row.runs_as_id,
+            template_cadence=_cadence_of(row),
+            changes=changes.get(row.automation_id, ()),
+        )
+        for row in rows
+    }
+    owners = {
+        record["id"]: record
+        for record in (
+            await session.execute(owners_of(one.owner_id for one in foldeds.values()))
+        ).mappings()
+    }
+    found: list[Listed] = []
+    for row in rows:
+        now_is = foldeds[row.automation_id]
+        record = owners.get(now_is.owner_id)
+        principal = None if record is None else readable(dict(record))
+        try:
+            automation = Automation(
+                automation_id=row.automation_id,
+                agent_id=row.agent_id,
+                name=row.name,
+                runs_as=_stand_in(
+                    now_is.owner_id, None if record is None else record["display_name"]
+                ),
+                task=row.task,
+                next_run_at=row.next_run_at,
+            )
+        except (ValueError, AutomationSurfaceError) as exc:
+            log.warning(
+                "automation row does not construct",
+                automation=row.automation_id,
+                error=type(exc).__name__,
+            )
+            continue
+        reason = None
+        if row.next_run_at is None:
+            newest = (
+                await session.execute(newest_schedule_reason(row.automation_id))
+            ).one_or_none()
+            reason = _why_stopped(
+                None if newest is None else (newest[0], newest[1]), now_is.changes
+            )
+        runs = (await session.execute(newest_runs(row.automation_id, runs_limit))).scalars().all()
+        found.append(
+            Listed(
+                automation=automation,
+                template_id=row.template_id,
+                guards=row.guards,
+                stopped_because=reason,
+                runs=tuple(one for one in map(record_of_run, runs) if one is not None),
+                cadence=now_is.cadence,
+                removed=now_is.removed,
+                owner_name=None if record is None else record["display_name"],
+                owner_gone=principal is None,
+                owner_until=None if principal is None else principal.not_after,
+                changes=now_is.changes,
+                installed_by=row.installed_by,
+                installed_as=row.runs_as_id,
+                installed_at=row.created_at,
+            )
+        )
+    return tuple(found)
+
+
 class StoredAutomationSchedules:
-    """`brain.automation_schedule_routes.AutomationSchedules` over this install's database."""
+    """`brain.automation_schedule_routes.AutomationSchedules` and `brain.automations_routes.
+    AutomationDirectory` over this install's database."""
 
     def __init__(self, sessions: async_sessionmaker[AsyncSession]) -> None:
         self._sessions = sessions
 
     async def listed(self, agent_id: str) -> tuple[Listed, ...]:
-        found: list[Listed] = []
         async with self._sessions() as session, session.begin():
-            rows = (await session.execute(automations_of_agent(agent_id))).all()
-            for row, display_name in rows:
-                try:
-                    automation = Automation(
-                        automation_id=row.automation_id,
-                        agent_id=row.agent_id,
-                        name=row.name,
-                        runs_as=_stand_in(row.runs_as_id, display_name),
-                        task=row.task,
-                        next_run_at=row.next_run_at,
-                    )
-                except ValueError as exc:
-                    log.warning(
-                        "automation row does not construct",
-                        automation=row.automation_id,
-                        error=type(exc).__name__,
-                    )
-                    continue
-                reason = None
-                if row.next_run_at is None:
-                    reason = (
-                        await session.execute(newest_schedule_reason(row.automation_id))
-                    ).scalar_one_or_none()
-                runs = (
-                    (await session.execute(newest_runs(row.automation_id, RUNS_SHOWN)))
-                    .scalars()
-                    .all()
+            rows = (await session.execute(automations_of_agent(agent_id))).scalars().all()
+            return await _listed(session, rows, RUNS_SHOWN)
+
+    async def every(self) -> tuple[Listed, ...]:
+        """Every automation on this install, bounded, each with its newest run. Who may see which
+        is the route's question, one agent at a time."""
+        async with self._sessions() as session, session.begin():
+            rows = (await session.execute(every_automation(AUTOMATIONS_LOADED))).scalars().all()
+            return await _listed(session, rows, 1)
+
+    async def one(self, automation_id: str) -> Detailed | None:
+        """One automation for its own page, or None when there is no such automation."""
+        async with self._sessions() as session, session.begin():
+            rows = (await session.execute(one_automation(automation_id))).scalars().all()
+            found = await _listed(session, rows, RUNS_ON_ITS_PAGE)
+            if not found:
+                return None
+            [listed] = found
+            schedule = tuple(
+                ScheduleEntry(
+                    reason=one.reason,
+                    changed_by=one.changed_by,
+                    at=one.at,
+                    next_run_at=one.next_run_at,
                 )
-                found.append(
-                    Listed(
-                        automation=automation,
-                        template_id=row.template_id,
-                        guards=row.guards,
-                        stopped_because=reason,
-                        runs=tuple(one for one in map(record_of_run, runs) if one is not None),
-                    )
+                for one in (await session.execute(schedule_rows_of(automation_id))).scalars()
+            )
+            people = {
+                listed.automation.runs_as.id,
+                listed.installed_by,
+                listed.installed_as,
+                *(one.changed_by for one in listed.changes),
+                *(one.changed_by for one in schedule),
+                *(one.principal_id for one in listed.runs),
+            }
+            names = {
+                record["id"]: record["display_name"]
+                for record in (await session.execute(owners_of(people))).mappings()
+            }
+        return Detailed(listed=listed, schedule=schedule, names=names)
+
+    async def apply(
+        self,
+        automation_id: str,
+        change: Change,
+        *,
+        expect: str,
+        ent_hash: str,
+        trace_id: str,
+    ) -> bool:
+        """Write one change and move the next run it leaves, or nothing.
+
+        The automation is locked and folded again inside the transaction, and the change is
+        written only when that fold is still the one the reader confirmed (`expect`, the digest
+        `brain.console.automations.shown` makes). False otherwise: somebody else's change or a run
+        arrived first, nothing is written, and the route says to look again. The runner holds the
+        same lock for the length of a run, so a change waits for a run rather than racing it.
+        """
+        async with self._sessions() as session, session.begin():
+            await session.execute(_set_config(PRINCIPAL_SETTING, change.changed_by))
+            await session.execute(_set_config(TRACE_ID_SETTING, trace_id))
+            await session.execute(_set_config(ENT_HASH_SETTING, ent_hash))
+            row = (
+                await session.execute(one_automation(automation_id).with_for_update())
+            ).scalar_one_or_none()
+            if row is None:
+                return False
+            now_is = await _folded(session, row, _cadence_of(row))
+            try:
+                automation = Automation(
+                    automation_id=row.automation_id,
+                    agent_id=row.agent_id,
+                    name=row.name,
+                    runs_as=_stand_in(now_is.owner_id),
+                    task=row.task,
+                    next_run_at=row.next_run_at,
                 )
-        return tuple(found)
+            except (ValueError, AutomationSurfaceError):
+                return False
+            if shown(automation, cadence=now_is.cadence, removed=now_is.removed) != expect:
+                return False
+            await session.execute(rescheduling(row.automation_id, change.next_run_at))
+            await record_change(
+                session, automation_id=row.automation_id, agent_id=row.agent_id, change=change
+            )
+        return True
 
     async def change(
         self,

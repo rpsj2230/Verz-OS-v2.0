@@ -40,6 +40,8 @@ export interface CompiledLayer {
   readonly css: string;
   /** Every class-name candidate the scanner found in the `@source` directories. */
   readonly candidates: readonly string[];
+  /** Every file the scanner read, as an absolute path. */
+  readonly files: readonly string[];
   /** The directories Tailwind was told to read, as the compiler resolved them. */
   readonly sources: readonly { base: string; pattern: string; negated: boolean }[];
   /** Whether automatic source detection is off, which `source(none)` asks for. */
@@ -60,6 +62,7 @@ export async function compileLayer(source: string = readFileSync(ENTRY_PATH, "ut
   return {
     css: optimize(built, { minify: false }).code,
     candidates,
+    files: scanner.files,
     sources,
     detectionOff: compiler.root === "none",
   };

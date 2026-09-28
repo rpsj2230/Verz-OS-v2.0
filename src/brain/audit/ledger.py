@@ -134,6 +134,8 @@ SUBJECT_KINDS = frozenset(
         "breach",
         # A halt or a resume, since 2026-09-28. See HALT below.
         "halt",
+        # A capability pack created, versioned or retired, since 2026-09-28. See PACK below.
+        "pack",
     }
 )
 
@@ -659,6 +661,15 @@ class AuditAction(enum.StrEnum):
     #: channel's switch, is a knob and has no person in its subject, and "which chat accounts
     #: were answered as her, and who allowed it" is asked of the person. Fifteen characters.
     CHANNEL_BINDING = "channel_binding"
+    #: A capability pack was created, versioned or retired. Which is in the details, with the
+    #: version a creation or a versioning left. Written by `0141`'s trigger on
+    #: `gate.capability_pack` under the pack's own subject, `pack:<name>`. Four characters.
+    #: **Not GRANT**, which a pack *assignment* is recorded under and must stay: "what did this
+    #: person gain" is answered from GRANT alone, and a change to what a pack means is a change to
+    #: every holder at once rather than to one person, so filling GRANT with it would break the
+    #: query GRANT exists to serve, which is `COMPOSE_CHANGE`'s argument against GRANT one member
+    #: along (M27.15.24).
+    PACK = "pack"
 
 
 # --------------------------------------------------------------------- redaction

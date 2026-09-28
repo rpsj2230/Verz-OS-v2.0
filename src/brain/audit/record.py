@@ -37,7 +37,8 @@ typing are imported under `TYPE_CHECKING` only, so the audit package stays under
 layers that record into it and a future import of this module from `brain.gate` cannot
 produce a cycle.
 
-Task ids: M24.1.3, M24.1.4, M42.6.5, M27.7.21, M27.7.4, M27.7.8, M27.11.1, M24.2.4
+Task ids: M24.1.3, M24.1.4, M42.6.5, M27.7.21, M27.7.4, M27.7.8, M27.11.1, M24.2.4, M27.11.5
+Task ids: M27.15.19, M27.15.24
 """
 
 from __future__ import annotations
@@ -180,13 +181,21 @@ ACTION_BY_METHOD: Final[Mapping[str, AuditAction]] = MappingProxyType(
         "halt": AuditAction.HALT,
         "agent": AuditAction.AGENT,
         "channel_binding": AuditAction.CHANNEL_BINDING,
+        "pack": AuditAction.PACK,
     }
 )
 
 
 class PrincipalStateChange(enum.StrEnum):
-    """What happened to a person's sign-in. The two values `0095b`'s trigger writes."""
+    """What happened to a person's standing: created, disabled, or enabled again.
 
+    `DISABLED` and `ENABLED` are the two values `0095b`'s trigger writes on a change of
+    `disabled_at`. `CREATED` is the value `0141`'s trigger writes on every insert into
+    `auth.principal`, whoever made it: the console's hand-added person, the first administrator,
+    the staff sync and a statement typed at a prompt alike (M27.15.19).
+    """
+
+    CREATED = "created"
     DISABLED = "disabled"
     ENABLED = "enabled"
 
@@ -297,6 +306,20 @@ class SkillChange(enum.StrEnum):
     REINSTATED = "reinstated"
 
 
+class CredentialChange(enum.StrEnum):
+    """What happened to a service account's credential, beyond a write. The two words `0148`'s
+    triggers write when a row of `auth.api_key` or `auth.service_account` is retired.
+
+    A write (an account registered, a key issued) carries no change at all, as `0054` records it,
+    so these are only the two ways a credential stops working. A retired account retires its keys
+    in the same transaction, so one retirement is a `key_revoked` per live key and then one
+    `account_retired`, each true on its own.
+    """
+
+    KEY_REVOKED = "key_revoked"
+    ACCOUNT_RETIRED = "account_retired"
+
+
 class ConnectorChange(enum.StrEnum):
     """What happened to a connected source. The two values `0057`'s trigger writes."""
 
@@ -315,6 +338,20 @@ class SettingChange(enum.StrEnum):
     SWITCHED_ON = "switched_on"
     SWITCHED_OFF = "switched_off"
     SET = "set"
+    RETIRED = "retired"
+
+
+class ProviderRegistryChange(enum.StrEnum):
+    """What happened to a provider's registry row. The three words `0140`'s trigger writes (M5.6.4).
+
+    Recorded under `setting`, on the provider's own subject `setting:provider.<slug>`, which is
+    where its switch is recorded, so everything that happened to one provider is one subject. Its
+    own words rather than `SettingChange`'s, because a registry row is registered and its terms
+    change, where a setting is switched or set, and `0059`'s trigger is held to that enum exactly.
+    """
+
+    REGISTERED = "registered"
+    CHANGED = "changed"
     RETIRED = "retired"
 
 
@@ -371,7 +408,8 @@ class OrganisationChange(enum.StrEnum):
     the values `0086`'s triggers write about a department, a team or a scope: `RENAMED` is the name
     column moving, which is the one change the console makes to a live row; `CHANGED` is any other
     column moving, which only a statement typed by hand does, and names the columns; `RETIRED` is
-    `deleted_at` being set. A scope has no name the console changes, so a scope is never renamed.
+    `deleted_at` being set. A scope's name is its `label`, and since `0141` the console renames one,
+    so a move of a scope's label is `RENAMED` too and never `CHANGED` (M27.11.1).
     """
 
     JOINED = "joined"
@@ -426,6 +464,32 @@ class HaltAct(enum.StrEnum):
 
     HALT = "halt"
     RESUME = "resume"
+
+
+class PackChange(enum.StrEnum):
+    """What happened to a capability pack. The three values `0141`'s trigger writes (M27.15.24).
+
+    `VERSIONED` is its capabilities or its label moving in place, which is what every holder of
+    the pack then holds at once; `RETIRED` is `deleted_at` being set. A copy is a creation of the
+    new pack, so it has no word of its own here: the ledger records what the row became, and the
+    route answers the caller in the word they pressed.
+    """
+
+    CREATED = "created"
+    VERSIONED = "versioned"
+    RETIRED = "retired"
+
+
+#: The changes whose entry carries the version the pack was left at. A retirement carries none,
+#: because a retired pack is at no version anybody can hold.
+VERSIONED_PACK_CHANGES: Final[frozenset[PackChange]] = frozenset(
+    {PackChange.CREATED, PackChange.VERSIONED}
+)
+
+#: The prefix a pack's version carries in the ledger. The ledger admits a detail value only when it
+#: is a name, a capability or a digest, and a bare number is a value, so `3` would be stored as the
+#: marker; `v3` is a name. `0141`'s trigger writes the same prefix, and a test holds the two to one.
+PACK_VERSION_PREFIX: Final = "v"
 
 
 class ElevationChange(enum.StrEnum):
@@ -898,20 +962,37 @@ class AuditRecorder:
             details["pack"] = pack
         return self._write(AuditAction.CERTIFICATION, subject("grant", grant_id), details)
 
-    def credential(self, *, slot: str) -> AuditEntry:
-        """Record that a credential was written into a vault slot.
+    def credential(
+        self,
+        *,
+        slot: str,
+        change: CredentialChange | None = None,
+        actor_inferred: bool = False,
+    ) -> AuditEntry:
+        """Record that a credential was written into a slot, or that one was taken away.
 
         The entry a deployed database keeps is written by `0054`'s trigger on
         `ops.credential_write`, for the reason `session_end` gives about `0050`, and a test holds
         this entry's subject and details to the trigger's. **There is no parameter for the value,
-        and no details at all**: the slot is the subject, the actor and the time are the entry's
-        own, and what is left of a write once the value is taken out is nothing. A length, a
-        prefix or a fingerprint would each be part of the secret, which
+        and a write has no details at all**: the slot is the subject, the actor and the time are
+        the entry's own, and what is left of a write once the value is taken out is nothing. A
+        length, a prefix or a fingerprint would each be part of the secret, which
         `brain.credential_routes` argues against for a response body and is truer of the table
         kept longest. The subject id is `credential_subject_id`'s.
+
+        A service account's key revoked or the account retired is `change`, which `0148`'s
+        triggers write under the same subject, so one account's history is one subject. One
+        method rather than a second, because `ACTION_BY_METHOD` pins one method per action; the
+        two added parameters are an enumeration and a flag, so neither can carry a value.
+        `actor_inferred` is the detail the trigger adds when nobody named the actor.
         """
+        details: dict[str, object] = {}
+        if change is not None:
+            details["change"] = change.value
+        if actor_inferred:
+            details["actor"] = INFERRED_ACTOR
         return self._write(
-            AuditAction.CREDENTIAL, subject("credential", credential_subject_id(slot)), {}
+            AuditAction.CREDENTIAL, subject("credential", credential_subject_id(slot)), details
         )
 
     def vault_access(
@@ -934,11 +1015,12 @@ class AuditRecorder:
         )
 
     def principal_state(self, *, principal_id: str, change: PrincipalStateChange) -> AuditEntry:
-        """Record that a person was disabled, or enabled again (M1.2.3).
+        """Record that a person was created, disabled, or enabled again (M1.2.3, M27.15.19).
 
         Written in a deployed database by `0095b`'s trigger on `auth.principal`, one entry per
-        change of `disabled_at` between set and unset, and held to these details by a test. The
-        subject is the person, so they read it among the entries about them.
+        change of `disabled_at` between set and unset, and by `0141`'s on every insert, and held to
+        these details by a test. The subject is the person, so they read it among the entries about
+        them, and their creation is the first of those.
         """
         return self._write(
             AuditAction.PRINCIPAL_STATE,
@@ -1055,17 +1137,35 @@ class AuditRecorder:
             AuditAction.CONNECTOR, subject("connector", connector), {"change": change.value}
         )
 
-    def setting(self, *, key: str, change: SettingChange) -> AuditEntry:
-        """Record that a row of `ops.setting` was switched, set or retired (M27.8.17).
+    def setting(
+        self,
+        *,
+        key: str,
+        change: SettingChange | ProviderRegistryChange,
+        fields: Sequence[str] = (),
+    ) -> AuditEntry:
+        """Record that a row of `ops.setting` was switched, set or retired (M27.8.17), or that a
+        provider's registry row was registered, changed or retired (M5.6.4).
 
-        Written in a deployed database by `0059`'s trigger on `ops.setting`, and held to this
-        method's details by a test. The subject is the key, so a feature switch, a job's pause and
-        a wizard's answer each have a subject of their own and everything that happened to one knob
-        is one subject. The actor is the row's `updated_by`, which every writer of the table sets.
-        **There is no parameter for the value**: a boolean is recorded by its direction, which is
-        all a boolean has, and anything else is `SET`, for the reason `SettingChange` gives.
+        Written in a deployed database by `0059`'s trigger on `ops.setting` and `0140`'s on
+        `ops.model_provider`, and held to this method's details by tests. The subject is the key,
+        so a feature switch, a job's pause and a wizard's answer each have a subject of their own
+        and everything that happened to one knob is one subject; a provider's registry row is
+        recorded under `provider.<slug>`, its switch's key. The actor is the row's `updated_by`,
+        which every writer of both tables sets. **There is no parameter for the value**: a boolean
+        is recorded by its direction, which is all a boolean has, and anything else is `SET`, for
+        the reason `SettingChange` gives. `fields` names the registry columns that moved on a
+        change and is refused on every other word, as `routing` refuses it.
         """
-        return self._write(AuditAction.SETTING, subject("setting", key), {"change": change.value})
+        if (change is ProviderRegistryChange.CHANGED) != bool(fields):
+            msg = (
+                "a changed registry row names the columns that moved, and every other change "
+                f"names none; this is {change.value} with fields={list(fields)!r}"
+            )
+            raise ValueError(msg)
+        details: dict[str, object] = {"change": change.value}
+        _with_names(details, "fields", fields)
+        return self._write(AuditAction.SETTING, subject("setting", key), details)
 
     def routing(
         self,
@@ -1191,8 +1291,9 @@ class AuditRecorder:
         department and each of its teams, whose path rides in `team`, or `scope` for a scope, and
         never both. `fields` names the columns a hand-typed change moved, and only on a change, for
         `routing`'s reason; `actor_inferred` is the trigger's mark for a statement nobody named an
-        actor for. A scope has no teams and is never renamed. **Never a name, a label or a
-        predicate**: the row keeps them, and a name is whatever somebody typed.
+        actor for. A scope has no teams; since `0141` its label moving is a rename, as a
+        department's name moving is. **Never a name, a label or a predicate**: the row keeps them,
+        and a name is whatever somebody typed.
 
         One method for both, because the ledger holds one member for both and the recorder is held
         to one method per member. Held to both triggers' details by tests.
@@ -1242,8 +1343,8 @@ class AuditRecorder:
                 f"this names principal={principal_id!r}, department={department!r}, scope={scope!r}"
             )
             raise ValueError(msg)
-        if scope and (team or change is OrganisationChange.RENAMED):
-            msg = f"a scope has no teams and is never renamed; this is {change.value} team={team!r}"
+        if scope and team:
+            msg = f"a scope has no teams; this is {change.value} team={team!r}"
             raise ValueError(msg)
         if (change is OrganisationChange.CHANGED) != bool(fields):
             msg = (
@@ -1259,6 +1360,34 @@ class AuditRecorder:
             details["actor"] = INFERRED_ACTOR
         kind, slug = ("department", department) if department else ("scope", scope)
         return self._write(AuditAction.ORGANISATION, subject(kind, slug), details)
+
+    def pack(self, *, name: str, change: PackChange, version: int | None = None) -> AuditEntry:
+        """Record that a capability pack was created, versioned or retired (M27.15.24).
+
+        Written in a deployed database by `0141`'s trigger on `gate.capability_pack`, on the insert,
+        on an update moving its capabilities or its label, and on the update setting `deleted_at`,
+        and held to these details by a test. The subject is the pack's name, so every version of
+        one bundle is one subject. **Never the capabilities or the label**: the row keeps them, and
+        the version names which state of the row the entry was about, as a skill's digest does.
+
+        `version` is required on a creation and a versioning and refused on a retirement, because an
+        entry that names no version for the first two cannot say what the holders now hold, and one
+        naming a version for the last says a retired pack is at a version somebody can hold.
+        """
+        versioned = change in VERSIONED_PACK_CHANGES
+        if versioned != (version is not None):
+            msg = (
+                "a created or versioned pack names the version it was left at, and a retired one "
+                f"names none; this is {change.value} with version={version!r}"
+            )
+            raise ValueError(msg)
+        details: dict[str, object] = {"change": change.value}
+        if version is not None:
+            if version < 1:
+                msg = f"a pack's version starts at one, and {version} is not a version"
+                raise ValueError(msg)
+            details["version"] = f"{PACK_VERSION_PREFIX}{version}"
+        return self._write(AuditAction.PACK, subject("pack", name), details)
 
     def breach(self, *, case_id: str, change: BreachChange) -> AuditEntry:
         """Record that a breach case moved: opened, assessed, notified, excused or closed (M24.2.4).

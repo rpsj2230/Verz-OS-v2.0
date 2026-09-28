@@ -139,6 +139,7 @@ MIGRATION_ACCEPTANCE = VERSIONS / "0133_acceptance_result.py"
 MIGRATION_HALT = VERSIONS / "0136_ops_halt.py"
 MIGRATION_BINDING_CODE = VERSIONS / "0118_channel_binding_codes.py"
 MIGRATION_SKILL_LIFECYCLE = VERSIONS / "0139_skill_retirement_and_detachment.py"
+MIGRATION_AUTOMATION_CHANGE = VERSIONS / "0145_automation_change.py"
 MIGRATION_MANIFEST_DRAFT = VERSIONS / "0149_agent_manifest_draft.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
@@ -395,6 +396,8 @@ TOOL_CATALOGUE_TABLES: tuple[str, ...] = ("agent.tool_definition", "agent.tool_s
 ACCEPTANCE_TABLES: tuple[str, ...] = ("ops.acceptance_result",)
 #: And the one 0136 adds: every stop and every resume, one row per act.
 HALT_TABLES: tuple[str, ...] = ("ops.halt",)
+#: And the one 0145 adds: every pause, resume, reschedule, removal and adoption of an automation.
+AUTOMATION_CHANGE_TABLES: tuple[str, ...] = ("agent.automation_change",)
 
 ALL_TABLES = (
     CORE_TABLES
@@ -461,6 +464,7 @@ ALL_TABLES = (
     + BINDING_CODE_TABLES
     + SKILL_INVOCATION_TABLES
     + SKILL_LIFECYCLE_TABLES
+    + AUTOMATION_CHANGE_TABLES
     + MANIFEST_DRAFT_TABLES
 )
 
@@ -1278,6 +1282,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert binding_code.TABLES == BINDING_CODE_TABLES
     skill_lifecycle = migration_module(MIGRATION_SKILL_LIFECYCLE)
     assert skill_lifecycle.TABLES == SKILL_LIFECYCLE_TABLES
+    automation_change = migration_module(MIGRATION_AUTOMATION_CHANGE)
+    assert automation_change.TABLES == AUTOMATION_CHANGE_TABLES
     manifest_draft = migration_module(MIGRATION_MANIFEST_DRAFT)
     assert manifest_draft.TABLES == MANIFEST_DRAFT_TABLES
     assert core.TABLES == CORE_TABLES
@@ -1368,6 +1374,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(binding_code.TABLES)
         + tuple(skill_invocation.TABLES)
         + tuple(skill_lifecycle.TABLES)
+        + tuple(automation_change.TABLES)
         + tuple(manifest_draft.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
@@ -1438,6 +1445,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(binding_code.TABLES),
         set(skill_invocation.TABLES),
         set(skill_lifecycle.TABLES),
+        set(automation_change.TABLES),
         set(manifest_draft.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)

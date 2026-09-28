@@ -34,9 +34,13 @@ search cannot match a field the row does not show.
 
 **Every refusal over somebody else's account is the one 404.** An account another person owns, a
 retired one and one that never existed are not found, for the reason every control in this console
-gives.
+gives, and that holds for the one-account read the console's detail page opens as for every write.
 
-Task ids: M1.1.7, M1.8.2, M27.15.26
+**A revocation and a retirement reach the ledger, attributed to the person who pressed them**
+(since `0148`), under the account's credential subject beside its registration and its keys. The
+routes hand the store the request's reach and trace, and the store sets them before it retires.
+
+Task ids: M1.1.7, M1.8.2, M27.15.26, M27.11.5
 """
 
 from __future__ import annotations
@@ -271,9 +275,15 @@ class ServiceAccountStore(Protocol):
         trace_id: str,
     ) -> IssuedKey | None: ...
 
-    async def revoke_key(self, handle: str, *, owner: str) -> bool: ...
+    async def owned_one(self, client_id: str, owner: str) -> AccountListed | None: ...
 
-    async def retire(self, client_id: str, *, owner: str) -> bool: ...
+    async def revoke_key(
+        self, handle: str, *, owner: str, ent_hash: str = "", trace_id: str = ""
+    ) -> bool: ...
+
+    async def retire(
+        self, client_id: str, *, owner: str, ent_hash: str = "", trace_id: str = ""
+    ) -> bool: ...
 
 
 def store_of(request: Request) -> ServiceAccountStore:
@@ -363,6 +373,18 @@ async def accounts_page(
     return AccountsPage(items=list(page.items), next_cursor=page.next_cursor, truncated=full)
 
 
+@router.get(
+    "/govern/service-accounts/{client_id}", response_model=AccountView, responses=COMMON_RESPONSES
+)
+async def account_page(request: Request, client_id: str, asked: Asked) -> AccountView:
+    """One of the caller's live accounts with its live keys, for its page. The one 404 otherwise."""
+    _require_authority(asked)
+    found = await store_of(request).owned_one(client_id, asked.caller.principal_id)
+    if found is None:
+        raise _not_here()
+    return account_view(found, asked)
+
+
 @router.post(
     "/govern/service-accounts",
     response_model=AccountView,
@@ -443,7 +465,13 @@ async def issue_key(request: Request, body: KeyAsked, asked: Asked) -> JSONRespo
 async def revoke_key(request: Request, body: KeyRevocation, asked: Asked) -> Done:
     """Retire one key of the caller's; it is refused from its next use."""
     _require_authority(asked)
-    if not await store_of(request).revoke_key(body.handle, owner=asked.caller.principal_id):
+    revoked = await store_of(request).revoke_key(
+        body.handle,
+        owner=asked.caller.principal_id,
+        ent_hash=asked.reach.ent_hash(),
+        trace_id=_trace_id(),
+    )
+    if not revoked:
         raise _not_here()
     return Done(told="The key is revoked and is refused from its next use.")
 
@@ -452,6 +480,12 @@ async def revoke_key(request: Request, body: KeyRevocation, asked: Asked) -> Don
 async def retire_account(request: Request, body: AccountRetirement, asked: Asked) -> Done:
     """Retire one of the caller's accounts and every key it has."""
     _require_authority(asked)
-    if not await store_of(request).retire(body.client_id, owner=asked.caller.principal_id):
+    retired = await store_of(request).retire(
+        body.client_id,
+        owner=asked.caller.principal_id,
+        ent_hash=asked.reach.ent_hash(),
+        trace_id=_trace_id(),
+    )
+    if not retired:
         raise _not_here()
     return Done(told="The account and all its keys are retired and refused from their next use.")

@@ -190,6 +190,7 @@ describe("the navigation", () => {
       "/roles",
       "/capabilities",
       "/scopes",
+      "/packs",
     ]);
     expect(tabs?.querySelector('a[aria-current="page"]')?.textContent).toBe("Capabilities");
   });

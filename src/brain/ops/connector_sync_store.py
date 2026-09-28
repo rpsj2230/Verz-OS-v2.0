@@ -23,9 +23,15 @@ somebody erased would fail every sync of its source for good.
 
 **The screen's read is one statement over live connections**, newest attempt first per connection
 and the last read to the end beside it, so a connection disconnected and connected again shows the
-new connection's history and none of the old one's.
+new connection's history and none of the old one's. A test a person asked for is an attempt too
+(`0142`), so the newest attempt is the test when one is newer, which is how a test's finding
+reaches the source's health; see `brain.ops.connector_probe`.
 
-Task ids: M42.6.5, M31.3.2.3, M31.3.2.4
+**A test is asked for by a row in `ops.setting` and answered by a row here.** `StoredProbes` writes
+the first in the attribution the ledger's trigger reads, and reads both back for the page; the
+worker's statements over the second are `probe_targets` and `probe_starts`.
+
+Task ids: M42.6.5, M31.3.2.3, M31.3.2.4, M27.15.8
 """
 
 from __future__ import annotations
@@ -44,8 +50,18 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from brain.connectors.contract import HealthState
 from brain.connectors.projection import ProjectedRecord
 from brain.ops.connector_lease import LeaseOutcome
+from brain.ops.connector_probe import (
+    REQUEST_NAMESPACE,
+    ProbeRecord,
+    ProbeStatus,
+    ProbeTarget,
+    request_probe,
+    requests_in,
+)
 from brain.ops.connector_store import Connection, every_live
 from brain.ops.connector_sync import Attempt, StoredValue, SyncOutcome, SyncState
+from brain.ops.setting_store import read_namespace, values_under
+from brain.tables.audit import attributed_to
 from brain.tables.connector_connection import ConnectorConnectionRow
 from brain.tables.connector_sync import ConnectorSyncRow
 from brain.tables.projection import ProjectedRecordRow
@@ -298,3 +314,122 @@ class StoredLeaseCounts:
         async with self._sessions() as session, session.begin():
             rows = (await session.execute(lease_tallies(since))).all()
         return fold_tallies([(str(a), str(b), int(c)) for a, b, c in rows])
+
+
+# ---------------------------------------------------------------------- the tests
+
+
+def probe_targets() -> Select[Any]:
+    """Every live connection, with when a test of it last started, or null when none has."""
+    tested = (
+        select(
+            ConnectorSyncRow.connection_id,
+            func.max(ConnectorSyncRow.started_at).label("last_probe_started"),
+        )
+        .where(ConnectorSyncRow.outcome == SyncOutcome.PROBED.value)
+        .group_by(ConnectorSyncRow.connection_id)
+        .subquery("tested")
+    )
+    return (
+        select(ConnectorConnectionRow.connector, tested.c.last_probe_started)
+        .outerjoin(tested, tested.c.connection_id == ConnectorConnectionRow.id)
+        .where(ConnectorConnectionRow.disconnected_at.is_(None))
+        .order_by(ConnectorConnectionRow.connector)
+    )
+
+
+def probe_starts(connection_id: uuid.UUID, since: datetime) -> Select[Any]:
+    """When each test of this connection since `since` started, oldest first."""
+    return (
+        select(ConnectorSyncRow.started_at)
+        .where(
+            ConnectorSyncRow.connection_id == connection_id,
+            ConnectorSyncRow.outcome == SyncOutcome.PROBED.value,
+            ConnectorSyncRow.started_at >= since,
+        )
+        .order_by(ConnectorSyncRow.started_at)
+    )
+
+
+def latest_probe(connector: str) -> Select[Any]:
+    """The newest test of this source's live connection, if it has been tested."""
+    return (
+        select(
+            ConnectorSyncRow.started_at,
+            ConnectorSyncRow.finished_at,
+            ConnectorSyncRow.health,
+            ConnectorSyncRow.detail,
+        )
+        .join(
+            ConnectorConnectionRow,
+            and_(
+                ConnectorConnectionRow.id == ConnectorSyncRow.connection_id,
+                ConnectorConnectionRow.disconnected_at.is_(None),
+            ),
+        )
+        .where(
+            ConnectorConnectionRow.connector == connector,
+            ConnectorSyncRow.outcome == SyncOutcome.PROBED.value,
+        )
+        .order_by(ConnectorSyncRow.started_at.desc())
+        .limit(1)
+    )
+
+
+async def read_probe_targets(session: AsyncSession) -> tuple[ProbeTarget, ...]:
+    """`probe_targets`, as the worker's rule takes it."""
+    rows = (await session.execute(probe_targets())).all()
+    return tuple(ProbeTarget(connector=str(name), last_probe_started=last) for name, last in rows)
+
+
+async def read_probe_starts(
+    session: AsyncSession, connection_id: uuid.UUID, since: datetime
+) -> tuple[datetime, ...]:
+    """`probe_starts`, as instants."""
+    return tuple((await session.execute(probe_starts(connection_id, since))).scalars().all())
+
+
+@runtime_checkable
+class ConnectorProbes(Protocol):
+    """What the Connectors page needs to ask for a test and to see how it went."""
+
+    async def ask(
+        self, connector: str, *, at: datetime, by: str, trace_id: str, ent_hash: str
+    ) -> None:
+        """Ask for one test of this source, recorded on the ledger as `by`'s."""
+        ...
+
+    async def status(self, connector: str) -> ProbeStatus:
+        """Whether a test of this source waits for the worker, and what the newest one found."""
+        ...
+
+
+class StoredProbes:
+    """`ConnectorProbes` over this install's database, as the application role."""
+
+    def __init__(self, sessions: async_sessionmaker[AsyncSession]) -> None:
+        self._sessions = sessions
+
+    async def ask(
+        self, connector: str, *, at: datetime, by: str, trace_id: str, ent_hash: str
+    ) -> None:
+        async with self._sessions() as session, session.begin():
+            for statement in attributed_to(actor_id=by, ent_hash=ent_hash, trace_id=trace_id):
+                await session.execute(statement)
+            await request_probe(session, connector, at=at, by=by)
+
+    async def status(self, connector: str) -> ProbeStatus:
+        async with self._sessions() as session, session.begin():
+            states = values_under(
+                await read_namespace(session, REQUEST_NAMESPACE), REQUEST_NAMESPACE
+            )
+            asked = requests_in({connector: states[connector]} if connector in states else {})
+            row = (await session.execute(latest_probe(connector))).first()
+        last = (
+            None
+            if row is None
+            else ProbeRecord(
+                started_at=row[0], finished_at=row[1], health=str(row[2]), detail=str(row[3])
+            )
+        )
+        return ProbeStatus(requested_at=asked.get(connector), last=last)

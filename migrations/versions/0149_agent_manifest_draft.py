@@ -31,8 +31,8 @@ added and neither audit grammar changes.
 **The downgrade drops the three tables and their functions**, and their ledger entries stay, because
 nothing may delete one: `0056`'s reason.
 
-Written over 0139, the newest on origin/main when it was written; the coordinator re-points it at
-whichever migration is newest when it lands.
+Written over 0139 and re-pointed over 0148, the newest on origin/main when it landed. It restates
+neither audit grammar: `publish` and the `agent` subject kind are in every list the chain leaves.
 
 Task ids: M27.11.6, M27.15.29
 """
@@ -44,7 +44,7 @@ from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB
 
 revision = "0149"
-down_revision = "0139"
+down_revision = "0148"
 branch_labels = None
 depends_on = None
 

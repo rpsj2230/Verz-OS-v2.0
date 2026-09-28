@@ -164,6 +164,19 @@ def authorization(scheme: KeyScheme, key: str) -> str:
             return f"Basic {pair}"
 
 
+def call_headers(reading: SourceReading, settings: Mapping[str, str], key: str) -> dict[str, str]:
+    """Every header one call to a source carries: the connection's own, JSON, and the key.
+
+    One function for a scheduled read and a test (`brain.ops.connector_probe_run`), so the two
+    calls a source sees from this install cannot come to differ in what they send.
+    """
+    return {
+        **reading.call_headers(settings),
+        "Accept": "application/json",
+        "Authorization": authorization(reading.key_scheme(), key),
+    }
+
+
 # ------------------------------------------------------------------------ the key
 
 
@@ -582,11 +595,7 @@ async def _read_under(
         key = lease.key()
     except SecretsUnavailableError as unavailable:
         return finish(SyncOutcome.FAILED, key_detail(unavailable))
-    headers = {
-        **reading.call_headers(live.connection.settings),
-        "Accept": "application/json",
-        "Authorization": authorization(reading.key_scheme(), key),
-    }
+    headers = call_headers(reading, live.connection.settings, key)
     limiter = LimiterState()
 
     for entity in reading.entities():

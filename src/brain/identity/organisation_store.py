@@ -33,10 +33,11 @@ decided by the route's callables and never here: a store that knew a taken scope
 would be a second answer to who may know a scope exists.
 
 **The expected state is part of every write that changes a live row.** A rename and a retirement
-carry the name, or for a scope the predicate, the caller was shown, and a row that no longer has it
-is refused as changed since, so a retirement confirmed against one department cannot land on a
-department renamed or retired and created again in the meantime. Creating something expects nothing
-of that name to be live, which is the name-taken refusal and the partial unique index behind it.
+carry the name, or for a scope the label or the predicate, the caller was shown, and a row that no
+longer has it is refused as changed since, so a retirement confirmed against one department cannot
+land on a department renamed or retired and created again in the meantime. Creating something
+expects nothing of that name to be live, which is the name-taken refusal and the partial unique
+index behind it.
 
 **A retirement is stamped by its own statement**, for
 `brain.identity.sign_in_binding.A_RETIREMENT_IS_STAMPED_BY_ITS_OWN_STATEMENT`'s reason: `0045`'s
@@ -51,6 +52,12 @@ clause, read after the department and its scopes are locked, each asked `holds` 
 one answering yes refuses the retirement with `LIVE_GRANTS`, and the store says nothing more,
 because which grant and how many is not the caller's to learn. A grant written in the instant
 between that read and the commit is the state every retirement left before this read existed.
+
+**A scope is renamed by its label and never by its predicate** (M27.11.1). `rename_scope` moves the
+label and nothing else, so no grant written over the scope reaches a different row afterwards: every
+grant carries its own copy of the predicate, and the label is what a person reads. The route's
+question is asked about the stored predicate under the row's lock, before the label is compared, so
+"it changed since you opened it" is said only to a caller whose authority contains the scope.
 
 Task ids: M27.7.4, M27.11.1, M27.15.22
 """
@@ -304,6 +311,19 @@ class StructureRecords(Protocol):
 
         `judge` is asked about the scope and whether a live department names it as its own.
         """
+        ...
+
+    async def rename_scope(
+        self,
+        *,
+        slug: str,
+        expected_label: str,
+        label: str,
+        may: Callable[[ScopeRecord], bool],
+        by: Attribution,
+    ) -> Structured:
+        """Change a live scope's label, never its predicate, if `may` says so about the stored
+        scope and it still has the label the caller was shown."""
         ...
 
 
@@ -628,6 +648,16 @@ def retiring_scopes(slugs: Sequence[str]) -> ReturningUpdate[tuple[str]]:
         .where(ScopeRow.slug.in_(list(slugs)), ScopeRow.deleted_at.is_(None))
         .values(deleted_at=func.statement_timestamp())
         .returning(ScopeRow.slug)
+    )
+
+
+def renaming_scope(slug: str, label: str) -> ReturningUpdate[tuple[datetime]]:
+    """The label and nothing else, so a rename can never move the predicate every grant copied."""
+    return (
+        update(ScopeRow)
+        .where(ScopeRow.slug == slug, ScopeRow.deleted_at.is_(None))
+        .values(label=label)
+        .returning(ScopeRow.updated_at)
     )
 
 
@@ -1009,6 +1039,34 @@ class StoredOrganisation:
                 if retired is None:
                     raise _StructureRefusedError(StructureRefusal.NOT_WRITABLE)
                 return retired
+        except _StructureRefusedError as refused:
+            return refused.why
+
+    async def rename_scope(
+        self,
+        *,
+        slug: str,
+        expected_label: str,
+        label: str,
+        may: Callable[[ScopeRecord], bool],
+        by: Attribution,
+    ) -> Structured:
+        try:
+            async with self._sessions() as session, session.begin():
+                await self._attributed(
+                    session, actor=by.actor, ent_hash=by.ent_hash, trace_id=by.trace_id
+                )
+                row = (
+                    await session.execute(live_scope_named(slug).with_for_update())
+                ).scalar_one_or_none()
+                record = None if row is None else scope_record(row)
+                # Not there, a row the type refuses and a scope outside the caller's authority
+                # are one refusal, asked before the label so the sentence after it is theirs.
+                if row is None or record is None or not may(record):
+                    raise _StructureRefusedError(StructureRefusal.NOT_WRITABLE)
+                if row.label != expected_label:
+                    raise _StructureRefusedError(StructureRefusal.CHANGED_SINCE)
+                return (await session.execute(renaming_scope(slug, label))).scalar_one()
         except _StructureRefusedError as refused:
             return refused.why
 

@@ -82,7 +82,7 @@ async function pageAnswering(
     </MemoryRouter>,
   );
   await waitFor(() => {
-    if (container.querySelector(".note[role='status']")) {
+    if (container.querySelector(".note[role='status'], [data-slot='loading-state']")) {
       throw new Error("still loading");
     }
     if (!container.querySelector("h1")) {
@@ -117,7 +117,7 @@ async function pageComponent(module: string, name: string): Promise<() => JSX.El
 
 /** The value shown beside one label, or null when the row is not on the page. */
 function valueBeside(container: HTMLElement, label: string): string | null {
-  for (const row of container.querySelectorAll(".fields__row")) {
+  for (const row of container.querySelectorAll(".fields__row, [data-slot='fact']")) {
     if (row.querySelector("dt")?.textContent === label) {
       return row.querySelector("dd")?.textContent ?? "";
     }
@@ -184,6 +184,12 @@ describe("what these pages agree with the API about", () => {
       "src/pages/installQuery.ts",
       "src/pages/Install.tsx",
       "src/pages/Updates.tsx",
+      "src/pages/install/InstallPage.tsx",
+      "src/pages/install/UpdatesPage.tsx",
+      "src/pages/install/InstallFacts.tsx",
+      "src/pages/Recovery.tsx",
+      "src/pages/Limits.tsx",
+      "src/pages/Capacity.tsx",
       "src/pages/operations/RecoveryPage.tsx",
       "src/pages/operations/LimitsPage.tsx",
       "src/pages/operations/CapacityPage.tsx",
@@ -238,7 +244,7 @@ describe("this install", () => {
       facts: [UNKNOWN],
     });
 
-    const row = [...container.querySelectorAll(".fields__row")].find(
+    const row = [...container.querySelectorAll("[data-slot='fact']")].find(
       (one) => one.querySelector("dt")?.textContent === "migration level",
     );
     const cell = row?.querySelector("dd");
@@ -247,9 +253,8 @@ describe("this install", () => {
     // The chip carrying the source word and the sentence, and nothing else. Asserted as the
     // absence of a value element rather than as the absence of the characters a placeholder is
     // usually spelled with, because the list of ways to write one is open and the structure is
-    // not: `Facts` renders the value in a bare span and renders no span at all when there is
-    // none.
-    expect(cell?.querySelector("span:not(.chip)")).toBeNull();
+    // not: `InstallFacts` marks the value and draws no value element when there is none.
+    expect(cell?.querySelector("[data-slot='fact-value']")).toBeNull();
     expect(cell?.textContent).toBe(`${UNKNOWN.source}${UNKNOWN.because}`);
   });
 });
@@ -321,8 +326,8 @@ describe("version and updates", () => {
     };
     const container = await pageAnswering("Updates", "Updates", "/install/updates", told);
 
-    expect(valueBeside(container, "newest release")).toBe("v1.4.0");
-    expect(valueBeside(container, "said by")).toBe(sentinel("who-said-so"));
+    expect(valueBeside(container, "Newest release")).toBe("v1.4.0");
+    expect(valueBeside(container, "Said by")).toBe(sentinel("who-said-so"));
   });
 
   test("a named release is what is running, with the commit beside it under its own label", async () => {
@@ -335,8 +340,8 @@ describe("version and updates", () => {
     };
     const container = await pageAnswering("Updates", "Updates", "/install/updates", named);
 
-    expect(valueBeside(container, "release")).toBe("v1.4.0");
-    expect(valueBeside(container, "commit")).toBe(sentinel("commit"));
+    expect(valueBeside(container, "Release")).toBe("v1.4.0");
+    expect(valueBeside(container, "Commit")).toBe(sentinel("commit"));
     expect(container.textContent).not.toContain(NO_RELEASE_NAMED);
   });
 
@@ -346,10 +351,10 @@ describe("version and updates", () => {
     // the page has in that state.
     const container = await pageAnswering("Updates", "Updates", "/install/updates", PANEL);
 
-    expect(valueBeside(container, "release")).toBe(
+    expect(valueBeside(container, "Release")).toBe(
       `${NO_RELEASE_NAMED}${PANEL.running.cannot_say}`,
     );
-    expect(valueBeside(container, "commit")).toBe(sentinel("commit"));
+    expect(valueBeside(container, "Commit")).toBe(sentinel("commit"));
   });
 
   test("an image that reported no commit draws no commit row rather than an empty one", async () => {
@@ -359,8 +364,8 @@ describe("version and updates", () => {
     const uncommitted = { ...PANEL, running: { ...PANEL.running, commit: "" } };
     const container = await pageAnswering("Updates", "Updates", "/install/updates", uncommitted);
 
-    expect(valueBeside(container, "commit")).toBeNull();
-    expect(valueBeside(container, "release")).toContain(NO_RELEASE_NAMED);
+    expect(valueBeside(container, "Commit")).toBeNull();
+    expect(valueBeside(container, "Release")).toContain(NO_RELEASE_NAMED);
   });
 
   test("a newer release is named with a link to its notes that tells the release host nothing", async () => {
@@ -379,7 +384,7 @@ describe("version and updates", () => {
     const container = await pageAnswering("Updates", "Updates", "/install/updates", behind);
 
     expect(container.textContent).toContain("newer release available");
-    expect(valueBeside(container, "newest release")).toBe("v1.5.0");
+    expect(valueBeside(container, "Newest release")).toBe("v1.5.0");
     const link = [...container.querySelectorAll("a")].find(
       (one) => one.textContent === READ_ITS_NOTES,
     );
@@ -400,15 +405,15 @@ describe("version and updates", () => {
     };
     const container = await pageAnswering("Updates", "Updates", "/install/updates", unlinked);
 
-    expect(valueBeside(container, "newest release")).toBe("v1.5.0");
-    expect(valueBeside(container, "notes")).toBeNull();
+    expect(valueBeside(container, "Newest release")).toBe("v1.5.0");
+    expect(valueBeside(container, "Notes")).toBeNull();
     expect(container.textContent).not.toContain(READ_ITS_NOTES);
   });
 
-  test("a look that has not finished shows the API's instruction and neither a release nor a failure", async () => {
+  test("a look that has not finished shows the API's instruction once and neither a release nor a failure", async () => {
     // What breaks if this is deleted: the first load after a start, which is the load everybody
     // sees, draws an empty card or a stale answer where the page should say to come back in a
-    // minute, and that sentence is the API's rather than one this console composes.
+    // minute, or says it twice; the sentence is the API's rather than one this console composes.
     const waiting = {
       ...PANEL,
       running: { ...PANEL.running, tag: "v1.4.0", cannot_say: "" },
@@ -418,15 +423,12 @@ describe("version and updates", () => {
       what_to_do: sentinel("come-back-in-a-minute"),
     };
     const container = await pageAnswering("Updates", "Updates", "/install/updates", waiting);
-    const card = [...container.querySelectorAll("section.card")].find(
-      (one) => one.querySelector("h2")?.textContent === "The newest published release",
-    );
+    const headings = [...container.querySelectorAll("h2")].map((one) => one.textContent);
 
     expect(container.textContent).toContain("not checked yet");
-    expect(card?.textContent).toBe(
-      `The newest published release${sentinel("come-back-in-a-minute")}`,
-    );
-    expect(valueBeside(container, "newest release")).toBeNull();
+    expect((container.textContent ?? "").split(sentinel("come-back-in-a-minute"))).toHaveLength(2);
+    expect(headings).not.toContain("The newest published release");
+    expect(valueBeside(container, "Newest release")).toBeNull();
   });
 
   test("a check that failed shows the reason it failed, in the API's words", async () => {
@@ -447,7 +449,7 @@ describe("version and updates", () => {
     expect(container.textContent).toContain("check failed");
     expect(container.textContent).toContain("the release list could not be reached");
     expect(container.textContent).toContain(sentinel("timed-out"));
-    expect(valueBeside(container, "newest release")).toBeNull();
+    expect(valueBeside(container, "Newest release")).toBeNull();
   });
 
   test("each deploy is listed with its time, commit, outcome and the tasks its release carried", async () => {

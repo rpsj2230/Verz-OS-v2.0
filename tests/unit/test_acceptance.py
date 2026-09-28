@@ -536,12 +536,15 @@ def test_a_reserved_department_in_use_stops_the_run_before_it_writes() -> None:
             "INSERT INTO auth.principal (id, kind, employment, display_name, primary_department)"
             " VALUES ('u_real', 'human', 'staff', 'A real person', 'acceptance_a')",
         )
+        # Counted after the setup: since 0141 inserting a person writes its own audit entry, and
+        # what this proves is that the run adds none.
+        before = sql(url, "SELECT count(*) FROM obs.audit_entry")
         _, results = run_on(url, INSTALL)
-        entries = sql(url, "SELECT count(*) FROM obs.audit_entry")
+        after = sql(url, "SELECT count(*) FROM obs.audit_entry")
 
     assert {one.outcome for one in results} == {NOT_RUN}
     assert all(one.reason.startswith("If a person on this install") for one in results)
-    assert entries == [(0,)]
+    assert after == before
 
 
 @pytest.mark.needs_db

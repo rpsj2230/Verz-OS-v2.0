@@ -66,6 +66,7 @@ beforeAll(async () => {
   await import("../src/pages/Matrix");
   await import("../src/pages/Classification");
   await import("../src/pages/Agent");
+  await import("../src/pages/Provider");
   await import("../src/pages/Approvals");
   await import("../src/pages/People");
 }, 120_000);

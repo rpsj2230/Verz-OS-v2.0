@@ -284,6 +284,21 @@ def test_attempt_figures_keep_a_quota_wait_apart_from_a_failure() -> None:
     assert (month.attempts, month.failures) == (4, 2)
 
 
+def test_attempt_figures_count_no_test_of_the_connection() -> None:
+    """A test a person asked for is not a read: it adds to no attempt, failure or read to the end,
+    even when a caller hands one in. Delete this and pressing Test connection on a failing source
+    raises its failure count on the Dashboard (M27.15.8)."""
+    attempts = [
+        Attempt(at=NOW - timedelta(days=1), outcome=SyncOutcome.SYNCED),
+        Attempt(at=NOW - timedelta(days=1), outcome=SyncOutcome.PROBED),
+        Attempt(at=NOW - timedelta(days=2), outcome=SyncOutcome.PROBED),
+    ]
+
+    week = attempt_figures(attempts, since=WEEK_AGO, until=NOW)
+
+    assert (week.attempts, week.read_to_the_end, week.failures, week.quota_waits) == (1, 1, 0, 0)
+
+
 def test_delivery_figures_separate_what_was_received_sent_refused_and_unknown() -> None:
     """Delete this and an outbound message the vendor may have delivered is counted as failed,
     which invites a resend of a message that arrived."""

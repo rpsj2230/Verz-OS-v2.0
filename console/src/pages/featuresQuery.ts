@@ -26,10 +26,8 @@ export const FEATURES_API_PATH = "/install/features";
 export const FEATURES_PATH = "/features";
 
 export const FEATURES_LABEL = "Features";
-export const FEATURES_CRUMB = "Install › Features";
 export const FEATURES_LEDE =
-  "New features ship switched off on every install. Each one is listed with what switching it on " +
-  "does and what reads the switch, and an administrator turns it on here.";
+  "New features ship switched off on every install. Switch one on here once you have read what it does.";
 
 export const READING_FEATURES = "Reading which features are switched on.";
 /** An install that declares no feature to switch, which is a sentence rather than an empty page. */
@@ -44,20 +42,12 @@ export const OFF = "Off";
 export const SWITCH_ON = "Switch on";
 export const SWITCH_OFF = "Switch off";
 export const KEEP_IT = "Leave it as it is";
-export const NEVER_CHANGED = "Nobody has switched this on this install.";
-export const CANNOT_SWITCH_HEADING = "What this screen cannot switch";
+export const NEVER_CHANGED = "Never switched on this install.";
+export const NO_FEATURES_TITLE = "No features to switch";
 
-/** The three facts the answer carries about what is not a switch here. */
-export const COMPONENTS_ARE_CHOSEN_BY_THE_PROFILE =
-  "Optional components, such as local inference, the trace ledger and the background workers, are " +
-  "containers the install profile chooses on the server. The Install screen shows which ones this " +
-  "install runs; changing them is a change to the server, not a switch here.";
-export const PLUGINS_HAVE_NO_LOADER =
-  "Plugins are not switched here. The platform records a plugin's state, and nothing loads a " +
-  "plugin yet, so a switch for one would change nothing.";
-export const EVERY_CHANGE_IS_IN_THE_AUDIT_TRAIL =
-  "Each switch shows who last turned it and when. Every change, and who made it, is kept in the " +
-  "audit trail.";
+/** What is not a switch here, in one sentence, said while the API says both of its facts. */
+export const NOT_SWITCHED_HERE =
+  "Optional components are chosen by the install profile on the server, and plugins are not loaded yet, so neither is a switch here.";
 
 /** The API route one switch is posted to. */
 export function switchPath(name: string): string {

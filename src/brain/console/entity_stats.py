@@ -54,7 +54,7 @@ the reader may not see.
 Scope: domain logic. Nothing here opens a connection or reads a clock; `now` and the rows are
 parameters.
 
-Task ids: M27.15.9, M27.15.27, M27.15.33
+Task ids: M27.15.8, M27.15.9, M27.15.27, M27.15.33
 """
 
 from __future__ import annotations
@@ -384,8 +384,16 @@ class AttemptFigures:
 def attempt_figures(
     attempts: Iterable[Attempt], *, since: datetime, until: datetime
 ) -> AttemptFigures:
-    """What the worker's attempts came to inside one window."""
-    kept = [one for one in attempts if _within(one.at, since, until)]
+    """What the worker's attempts came to inside one window.
+
+    A test a person asked for (`SyncOutcome.PROBED`) is not a read and is not counted, here as in
+    the statement that fetches the attempts, so a caller handing one in cannot inflate the figures.
+    """
+    kept = [
+        one
+        for one in attempts
+        if one.outcome is not SyncOutcome.PROBED and _within(one.at, since, until)
+    ]
     return AttemptFigures(
         attempts=len(kept),
         read_to_the_end=sum(1 for one in kept if one.outcome is SyncOutcome.SYNCED),

@@ -30,6 +30,14 @@ declared setting and a setting this screen does not change are refused with the 
 declared names are product text, identical on every install. The console confirms each save
 before sending it; this route judges it whatever the console did.
 
+**A saved value is taken back with its own act, "return to default"** (needs-rupash gap (e),
+2026-09-29). Until then the only way back was to type the default, which saves a row equal to it
+and so goes on outranking the environment. The act retires the saved row through
+`brain.ops.install_settings.retire`, attributed as a save is, so `0059`'s trigger records `retired`
+against the person who pressed it; the setting then reads the environment's value or the declared
+default, and each row says in advance which (`without_saved`). It is offered for exactly the
+settings the screen changes, and refused with `setting_problem`'s sentence for any other name.
+
 **The starter set is shown with the one thing it does not furnish, stated exactly.** Roles, the
 starter pack and the company scope are furnished at every start by `brain.ops.starter_store`. The
 standard agents are not installed, because an agent is an install of a signed template and the
@@ -43,7 +51,7 @@ company's data. The screen shows what that command would export and remove, who 
 and how, and the retention that sets the certificate's backup date, so an owner can read the
 procedure before anybody runs it.
 
-Task ids: M41.1.4, M41.1.5, M41.1.6, M41.1.7, M41.2.6, M41.4.1
+Task ids: M41.1.4, M41.1.5, M41.1.6, M41.1.7, M41.2.6, M41.4.1, M27.12.7
 """
 
 from __future__ import annotations
@@ -65,6 +73,7 @@ from brain.console.configuration import (
     THE_SCREEN_SHOWS_NO_CREDENTIAL,
     WHAT_IS_CHANGED_HERE_AND_WHAT_IS_NOT,
     Row,
+    default_problem,
     findings,
     normalised,
     profile_told,
@@ -77,7 +86,7 @@ from brain.core.errors import Absent, Failed
 from brain.install import hold_saved, value_of
 from brain.ops.handover import Residue
 from brain.ops.handover_run import preview_steps
-from brain.ops.install_settings import load, save
+from brain.ops.install_settings import load, retire, save
 from brain.ops.retention import BACKUP_RETENTION_DAYS, facts_for
 from brain.ops.setting_store import read_namespace
 from brain.ops.starter import COMPANY_SCOPE, PACKS, agents, roles
@@ -98,6 +107,11 @@ SETTINGS_SCREEN: Final = "settings"
 
 #: Where the screen is read, and where one value is saved.
 SETTINGS_PATH: Final = "/install/settings"
+
+#: Said when there is no saved value to take away. Names the setting's own label only.
+NOTHING_SAVED_HERE: Final = (
+    "Nothing is saved for this setting on this screen, so it already reads its default."
+)
 
 #: Why the standard agents are not on a freshly furnished install. M13.8.10 is the leaf that
 #: mints the key they need.
@@ -138,6 +152,9 @@ class SettingRowView(BaseModel):
     applies: str
     #: The modules that read it, as dotted paths.
     read_by: list[str]
+    #: What it reads once the saved value is taken away, and where that comes from.
+    without_saved: str
+    without_saved_source: str
 
 
 class SettingGroupView(BaseModel):
@@ -272,6 +289,8 @@ def row_view(one: Row) -> SettingRowView:
         read_only_because=one.read_only_because,
         applies=one.applies,
         read_by=list(one.read_by),
+        without_saved=one.without_saved,
+        without_saved_source=one.without_saved_source.value,
     )
 
 
@@ -384,6 +403,47 @@ async def save_setting(request: Request, name: str, body: SaveAsked, asked: Aske
         await session.commit()
     hold_saved(saved)
     log.info("installation setting saved", setting=name, principal=asked.caller.principal.id)
+    page = settings_page(furnished=furnished, saved=saved)
+    return JSONResponse(status_code=200, content=page.model_dump(mode="json"))
+
+
+@router.post(
+    f"{SETTINGS_PATH}/{{name}}/default", response_model=SettingsPage, responses=COMMON_RESPONSES
+)
+async def return_to_default(request: Request, name: str, asked: Asked) -> JSONResponse:
+    """Take one setting's saved value away, so it reads the environment or its default again.
+
+    The authority, then the name, then the retirement, in `save_setting`'s order and for its
+    reason. A setting with nothing saved answers 409 and writes nothing.
+    """
+    if not may_configure(asked.reach, asked.now):
+        log.info("setting default refused", principal=asked.caller.principal.id)
+        raise _not_answerable()
+    problem = default_problem(name)
+    if problem:
+        told = ErrorBody(message=problem, trace_id=_trace_id())
+        return JSONResponse(status_code=422, content=told.model_dump())
+    async with _require_sessions(request)() as session:
+        for statement in attributed_to(
+            actor_id=asked.caller.principal.id,
+            ent_hash=asked.reach.ent_hash(),
+            trace_id=_trace_id(),
+        ):
+            await session.execute(statement)
+        retired = await retire(session, name, updated_by=asked.caller.principal.id)
+        if not retired:
+            await session.rollback()
+            told = ErrorBody(message=NOTHING_SAVED_HERE, trace_id=_trace_id())
+            return JSONResponse(status_code=409, content=told.model_dump())
+        saved = await load(session)
+        furnished = await _furnished(session)
+        await session.commit()
+    hold_saved(saved)
+    log.info(
+        "installation setting returned to default",
+        setting=name,
+        principal=asked.caller.principal.id,
+    )
     page = settings_page(furnished=furnished, saved=saved)
     return JSONResponse(status_code=200, content=page.model_dump(mode="json"))
 

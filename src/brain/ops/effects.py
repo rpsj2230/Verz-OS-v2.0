@@ -167,6 +167,12 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.automation_schedule_routes:AutomationSchedules.change": (
             Repeat.WRITES_THIS_SYSTEMS_DATABASE
         ),
+        # The Automations module: reads, and one change row plus the next run it leaves, written
+        # only while the automation still folds to what the reader confirmed, so a second press
+        # finds it already changed and writes nothing.
+        "brain.automations_routes:AutomationDirectory.every": Repeat.READS,
+        "brain.automations_routes:AutomationDirectory.one": Repeat.READS,
+        "brain.automations_routes:AutomationDirectory.apply": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         # The skill library: reads, and inserts into this system's own tables, where a second
         # import or decision is refused by the key and appends nothing, and an assignment writes
         # only when the install is the one it was decided about.
@@ -490,6 +496,9 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.identity.organisation_store:StructureRecords.retire_scope": (
             Repeat.WRITES_THIS_SYSTEMS_DATABASE
         ),
+        "brain.identity.organisation_store:StructureRecords.rename_scope": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
         # The Roles screen. An appointment is one row in one transaction and a repeat meets the
         # standing grant's partial unique index; a removal retires a live row and a repeat finds
         # none. The two reads write nothing.
@@ -594,6 +603,10 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.gate.live_records:PartialRead.notice": Repeat.READS,
         "brain.gate.live_records:PartialRead.trace_lines": Repeat.READS,
         "brain.ops.connector_sync_store:ConnectorSyncRecords.states": Repeat.READS,
+        # Asking for a test of a connection is one row in `ops.setting` a second press moves to a
+        # later instant; the worker makes one test for however many presses it finds.
+        "brain.ops.connector_sync_store:ConnectorProbes.ask": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.ops.connector_sync_store:ConnectorProbes.status": Repeat.READS,
         # A delivery is a request somebody else's server acts on, so every one is made inside
         # `issue_once` under a key per attempt, and the receiver's duty to drop a repeated event
         # id covers the one repeat the ledger cannot: a request that left and was never answered.
@@ -649,6 +662,7 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.identity.bearer:ServiceAccountDirectory.service_account_for_key": Repeat.READS,
         "brain.identity.bearer:ServiceAccountDirectory.live_owner": Repeat.READS,
         "brain.service_account_routes:ServiceAccountStore.owned": Repeat.READS,
+        "brain.service_account_routes:ServiceAccountStore.owned_one": Repeat.READS,
         "brain.service_account_routes:ServiceAccountStore.register": (
             Repeat.WRITES_THIS_SYSTEMS_DATABASE
         ),
