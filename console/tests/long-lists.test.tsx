@@ -81,6 +81,10 @@ const AN_UNLINK_LOCKS_A_PERSON_OUT =
   "Unlinking refuses every future request a person makes, and the last administrator's link is " +
   "refused with a sentence to act on. Several unlinks at once is how a mis-ticked row locks a " +
   "colleague out of the system, so each link is retired from its own row and confirmation.";
+const RETIRING_AN_ACCOUNT_STOPS_AN_INTEGRATION =
+  "Retiring an account or revoking a key stops an integration from its next request, and each " +
+  "confirmation names the one it stops. Several at once is how a mis-ticked row stops an integration " +
+  "nobody chose to stop, so each is retired or revoked from its own row.";
 const A_ROW_IS_A_DEPARTMENT_AND_A_PLACEMENT_NAMES_A_PERSON =
   "The rows of this list are departments. Placing somebody names a department, a team and a person, " +
   "and appointing a lead names one person for one department, so there is no act that applies to " +
@@ -147,6 +151,7 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
   "/library": { bulk: READ_ONLY },
   "/sessions": {},
   "/sign-in-links": { bulk: AN_UNLINK_LOCKS_A_PERSON_OUT },
+  "/service-accounts": { bulk: RETIRING_AN_ACCOUNT_STOPS_AN_INTEGRATION },
   "/audit": { bulk: READ_ONLY },
   "/departments": { bulk: A_ROW_IS_A_DEPARTMENT_AND_A_PLACEMENT_NAMES_A_PERSON },
   "/elevation": { bulk: AN_ELEVATION_IS_DECIDED_ON_ITS_OWN_REASON },

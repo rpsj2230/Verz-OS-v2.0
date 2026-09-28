@@ -112,6 +112,11 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
     { pattern: "/retention", index: 2, writes: true },
   ],
   "src/pages/SignInLinks.tsx": [{ pattern: "/sign-in-links", index: 1, writes: true }],
+  // Index 1 is the registration until an account's Issue a key opens its form above it.
+  "src/pages/ServiceAccounts.tsx": [
+    { pattern: "/service-accounts", index: 1, writes: true },
+    { pattern: "/service-accounts", opener: "Issue a key", index: 1, writes: true },
+  ],
   "src/pages/StaffSources.tsx": [{ pattern: "/staff_sources", index: 1, writes: true }],
   // The naming form, then the four forms of the one open case, then the form that opens a case.
   "src/pages/Compliance.tsx": [

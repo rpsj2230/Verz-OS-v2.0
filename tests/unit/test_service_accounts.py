@@ -585,6 +585,27 @@ def test_a_wildcard_or_a_repeated_capability_in_a_ceiling_is_refused(client: Tes
     assert twice.status_code == 422
 
 
+@pytest.mark.parametrize("capability", ["approve:action", "admin:credential"])
+def test_a_ceiling_naming_an_approve_or_admin_capability_is_refused_and_says_why(
+    client: TestClient, store: Store, capability: str
+) -> None:
+    """Delete this and an account can be registered with `admin:credential` in its ceiling, which
+    the API channel refuses on every request, so the ceiling an auditor reads claims a reach the
+    account never has. The refusal is before any store, in the route's own sentence."""
+    answer = client.post(
+        ACCOUNTS,
+        json=registration(ceiling=[READ_HOURS.value, capability]),
+        headers=auth("u_admin"),
+    )
+
+    assert answer.status_code == 422
+    problem = answer.json()["problems"][0]
+    assert problem["field"] == "ceiling"
+    assert problem["message"] == service_account_routes.AN_ACCOUNT_NEVER_CARRIES_APPROVE_OR_ADMIN
+    assert store.calls == []
+    assert {"approve", "admin"}.isdisjoint(service_account_routes.CEILING_VERBS)
+
+
 def test_a_key_is_answered_whole_once_and_the_listing_never_carries_it(
     client: TestClient, store: Store
 ) -> None:
@@ -603,6 +624,47 @@ def test_a_key_is_answered_whole_once_and_the_listing_never_carries_it(
     assert key.startswith("brn.")
     assert key not in listing.text
     assert key.split(".")[2] not in listing.text
+
+
+def test_the_listing_searches_filters_and_pages_only_the_callers_own_accounts(
+    client: TestClient, store: Store
+) -> None:
+    """Delete this and the Service accounts screen's search, capability filter and Show more can be
+    served by a route that ignores them, or pages over somebody else's accounts. The positive half
+    of the ownership refusals: the caller's two accounts are found and a third person's is not."""
+    client.post(ACCOUNTS, json=registration(client_id="svc_hours"), headers=auth("u_admin"))
+    client.post(
+        ACCOUNTS,
+        json=registration(client_id="svc_margin", label="Margins", ceiling=[READ_MARGIN.value]),
+        headers=auth("u_admin"),
+    )
+    store.listed["svc_other"] = AccountListed(
+        account=ServiceAccount(
+            client_id="svc_other",
+            subject="svc_other",
+            owner_principal_id="u_wide",
+            ceiling=(READ_HOURS,),
+            not_after=now() + timedelta(days=3),
+        ),
+        label="Margins",
+        created_at=now(),
+        keys=(),
+    )
+
+    searched = client.get(ACCOUNTS, params={"q": "margins"}, headers=auth("u_admin")).json()
+    narrowed = client.get(
+        ACCOUNTS, params={"filter": f"ceiling:{READ_HOURS.value}"}, headers=auth("u_admin")
+    ).json()
+    first = client.get(ACCOUNTS, params={"limit": 1}, headers=auth("u_admin")).json()
+    second = client.get(
+        ACCOUNTS, params={"limit": 1, "cursor": first["next_cursor"]}, headers=auth("u_admin")
+    ).json()
+
+    assert [one["client_id"] for one in searched["items"]] == ["svc_margin"]
+    assert [one["client_id"] for one in narrowed["items"]] == ["svc_hours"]
+    walked = [one["client_id"] for one in first["items"] + second["items"]]
+    assert sorted(walked) == ["svc_hours", "svc_margin"]
+    assert second["next_cursor"] is None
 
 
 def test_somebody_elses_account_is_not_found(client: TestClient, store: Store) -> None:

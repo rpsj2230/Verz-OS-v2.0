@@ -103,6 +103,7 @@ import { FIRST_RUN_PATH } from "./setup/wizard";
 import { Notice } from "./ui/Notice";
 import { AccessRequests } from "./pages/AccessRequests";
 import { Tools } from "./pages/Tools";
+import { ServiceAccounts } from "./pages/ServiceAccounts";
 
 /**
  * The records screen, fetched when somebody asks for it.
@@ -452,6 +453,9 @@ export const routes: RouteObject[] = [
       // Tools: every tool with what it needs and does, and the switch that stops one for the
       // install or a department. One path: a tool is shown whole. See `pages/Tools.tsx`.
       { path: "tools", element: <Tools /> },
+      // Service accounts: an integration registered, a key issued and shown once, a key revoked and
+      // the account retired, each the caller's own. One path: an account has no page of its own.
+      { path: "service-accounts", element: <ServiceAccounts /> },
       { path: "*", element: <NotFound /> },
     ],
   },

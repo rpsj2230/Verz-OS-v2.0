@@ -1865,6 +1865,40 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     drawsValues: true,
     answers: { "/api/v1/govern/sign-ins": SIGN_IN_LINKS },
   },
+  // Service accounts. The ids, capabilities and key handles sit in the two tables, which scroll; the
+  // API's two sentences under them wrap. No control is pressed here: the confirmations, the issue
+  // form and the key shown once are held in `tests/service-accounts-page.test.tsx`.
+  "/service-accounts": {
+    address: "/service-accounts",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/govern/service-accounts": {
+        items: [
+          {
+            client_id: UNBROKEN,
+            label: "",
+            ceiling: [`read:${UNBROKEN}`],
+            lapses_at: "2999-03-04T09:00:00Z",
+            created_at: "2019-03-04T09:00:00Z",
+            keys: [
+              {
+                handle: UNBROKEN,
+                label: "",
+                issued_at: "2019-03-04T09:00:00Z",
+                lapses_at: "2999-03-04T09:00:00Z",
+              },
+            ],
+            not_held_now: [],
+          },
+        ],
+        next_cursor: null,
+        truncated: false,
+        reach: "A service account acts at your reach, narrowed to the capabilities it lists.",
+        ownership: "A service account acts at its owner's reach, so only its owner may change it.",
+      },
+    },
+  },
   // Audit. The actor is drawn twice, in the table and as an option in the Who filter, and the
   // option is the one outside anything that scrolls. The history card is not opened here; it is
   // the same table shape and is held in `tests/audit-page.test.tsx`.
