@@ -14,7 +14,7 @@ Moonshot Kimi, as you decided. The routing, fallbacks, timeouts and cost limits 
 tested, but no key is held yet, so nothing can be proved on your install and nothing answers for
 real. Each key goes straight into the secrets vault; it is never shown again or written anywhere
 else. **Recommendation: add all four in one sitting,** about ten minutes. Unblocks M5.1.2, M5.7.1,
-M5.6.1 and M5.6.3.
+M5.6.1 and M5.6.3, and proves Wave 0's M31.3.2.5 (a replaced key is picked up without a redeploy).
 
 1. Get a key from each provider's website: Anthropic console (API keys), OpenAI platform (API
    keys), DeepSeek platform (API keys), Moonshot platform (API keys). Keep each one open.
@@ -25,6 +25,10 @@ M5.6.1 and M5.6.3.
    Repeat for each provider.
 4. Press **Check** on each provider.
 5. Tell me "keys added". I then confirm each one answers and record the checks.
+
+If **Save the key** says the vault refused it, stop there and tell me: the vault's rules then need
+reloading once, which takes three of your five unseal pieces (`ops/openbao/UNSEAL.md`, step 5), and
+I will send you the exact commands.
 
 ## 91. Checks only you can do on your install (about 45 minutes, one sitting)
 
@@ -39,7 +43,9 @@ need a model to answer. Tell me "checks done" and I close the tasks from your re
 
 1. Connect Lark as your staff source: **Govern > Staff sources**, choose **Lark**, and follow the
    steps on that screen from creating the Lark app onwards. When the first sync finishes, your
-   departments appear on **Govern > Departments and teams**. This also proves M1.6.5.
+   departments appear on **Govern > Departments and teams**. This also proves M1.6.5, and Wave 0's
+   M31.3.2.3 and M31.3.2.4: the first sync borrows its key from the vault for that run only and
+   hands it back at the end, which is the last thing Wave 0 needs from you.
 2. Pick two colleagues in two different Lark departments (or create two test accounts in Lark, one
    in each). In Keycloak, open your realm, **Users > Add user**, and create each with the same work
    email as in Lark. On **Credentials**, set a password with **Temporary** off.
