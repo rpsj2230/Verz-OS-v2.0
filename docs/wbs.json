@@ -234,7 +234,9 @@
     "When the staff sync marks a person as a leaver, every agent they own is stopped and listed for transfer on the console until a new owner accepts it, which starts it again at no wider reach than before and records the change of owner in the audit ledger (owner decision 2026-09-21: stop rather than keep running)",
     "A record's access view, showing who can see that record, opens only for someone who can already see it"
    ],
-   "leaf_waves": {},
+   "leaf_waves": {
+    "M1.8.5": 2
+   },
    "leaf_acts": {},
    "leaf_decided": {
     "M1.6.11": {
@@ -256,7 +258,7 @@
     },
     "M1.8.5": {
      "status": "BLOCKED",
-     "why": "the web part is the owner's sign-in check (needs-rupash 91, check 1); the chat part waits for Wave 2 (needs-rupash 97)",
+     "why": "moved to Wave 2 (needs-rupash 97): the web part is the owner's sign-in check (needs-rupash 91, check 1); the chat part needs Wave 2's Lark chat channel",
      "updated": "2026-09-28"
     },
     "M1.8.8": {
@@ -296,7 +298,9 @@
     "Department scoping is proved on an install: a department admin publishes an agent and adds a document at department reach, a member granted that department's knowledge is answered from its documents, a member of that department uses both on the web and in a chat channel, a member of another department can neither find nor reach either and is answered as if they did not exist, the department admin cannot grant, publish or widen beyond their department, a company-wide publication waits for a Super Admin, and the department halt stops only that department, with the checks recorded",
     "Every departments requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves"
    ],
-   "leaf_waves": {},
+   "leaf_waves": {
+    "M2.3.1": 2
+   },
    "leaf_acts": {},
    "leaf_decided": {
     "M2.1.2": {
@@ -320,7 +324,7 @@
    "leaf_progress": {
     "M2.3.1": {
      "status": "BLOCKED",
-     "why": "the owner's department checks on the install (needs-rupash 91, checks 2 and 3); the chat part waits for Wave 2 (needs-rupash 97)",
+     "why": "moved to Wave 2 (needs-rupash 97): the web part is the owner's department checks (needs-rupash 91, checks 2 and 3); the chat part needs Wave 2's Lark chat channel",
      "updated": "2026-09-28"
     },
     "M2.3.2": {
@@ -572,29 +576,24 @@
    },
    "act_groups": {},
    "leaf_progress": {
-    "M5.1.2": {
-     "status": "BLOCKED",
-     "why": "built (the key field, PR #87); proved when the first provider key is saved into the vault on the install (needs-rupash 85)",
-     "updated": "2026-09-28"
-    },
     "M5.6.1": {
      "status": "BLOCKED",
-     "why": "an answer through each provider on the install needs its key (needs-rupash 85)",
+     "why": "three keys are in the vault, but the install answers only from its own server until it is switched to online providers, and Moonshot has no key (needs-rupash 98)",
      "updated": "2026-09-28"
     },
     "M5.6.3": {
      "status": "BLOCKED",
-     "why": "a proved fallback needs at least two provider keys on the install (needs-rupash 85)",
+     "why": "a proved fallback needs two providers answering, which waits for the switch to online providers (needs-rupash 98)",
      "updated": "2026-09-28"
     },
     "M5.6.5": {
      "status": "BLOCKED",
-     "why": "the owner's models check on the install (needs-rupash 91, check 6), after the keys (needs-rupash 85)",
+     "why": "the owner's models check on the install (needs-rupash 91, check 6), after the switch to online providers (needs-rupash 98)",
      "updated": "2026-09-28"
     },
     "M5.7.1": {
      "status": "IN PROGRESS",
-     "why": "all four providers shown on Models and health with Add key, Test and Turn off; the answer on the install then waits for keys (needs-rupash 85)",
+     "why": "four providers on Models and health with Add key, Test and Turn off, plus a control to switch the install to online providers, which it has no way to do after setup",
      "updated": "2026-09-28"
     },
     "M5.7.3": {
@@ -3348,7 +3347,7 @@
     },
     "M31.3.2.5": {
      "status": "BLOCKED",
-     "why": "live since d6290cb; the proof is a provider key replaced on the install and loaded without a redeploy, which waits for the first key (needs-rupash 85)",
+     "why": "live since d6290cb; a DeepSeek key was replaced on the install on 28 Sep, and the proof is that provider answering with it without a redeploy, which waits for the switch to online providers (needs-rupash 98)",
      "updated": "2026-09-28"
     }
    }
@@ -4429,7 +4428,7 @@
     },
     "M38.2.2.2": {
      "status": "BLOCKED",
-     "why": "needs a provider key (needs-rupash 85) and then the owner's real-answer check (needs-rupash 91, check 5)",
+     "why": "needs a provider answering on the install (needs-rupash 98) and then the owner's real-answer check (needs-rupash 91, check 5)",
      "updated": "2026-09-28"
     }
    }

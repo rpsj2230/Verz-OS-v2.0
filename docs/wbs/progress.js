@@ -51,7 +51,7 @@ const PROGRESS = {
   },
   "M1.8.5": {
     status: "BLOCKED",
-    why: "the web part is the owner's sign-in check (needs-rupash 91, check 1); the chat part waits for Wave 2 (needs-rupash 97)",
+    why: "moved to Wave 2 (needs-rupash 97): the web part is the owner's sign-in check (needs-rupash 91, check 1); the chat part needs Wave 2's Lark chat channel",
     updated: "2026-09-28",
   },
   "M1.8.8": {
@@ -61,7 +61,7 @@ const PROGRESS = {
   },
   "M2.3.1": {
     status: "BLOCKED",
-    why: "the owner's department checks on the install (needs-rupash 91, checks 2 and 3); the chat part waits for Wave 2 (needs-rupash 97)",
+    why: "moved to Wave 2 (needs-rupash 97): the web part is the owner's department checks (needs-rupash 91, checks 2 and 3); the chat part needs Wave 2's Lark chat channel",
     updated: "2026-09-28",
   },
   "M2.3.2": {
@@ -106,7 +106,7 @@ const PROGRESS = {
   },
   "M31.3.2.5": {
     status: "BLOCKED",
-    why: "live since d6290cb; the proof is a provider key replaced on the install and loaded without a redeploy, which waits for the first key (needs-rupash 85)",
+    why: "live since d6290cb; a DeepSeek key was replaced on the install on 28 Sep, and the proof is that provider answering with it without a redeploy, which waits for the switch to online providers (needs-rupash 98)",
     updated: "2026-09-28",
   },
   "M38.2.1.1": {
@@ -116,7 +116,7 @@ const PROGRESS = {
   },
   "M38.2.2.2": {
     status: "BLOCKED",
-    why: "needs a provider key (needs-rupash 85) and then the owner's real-answer check (needs-rupash 91, check 5)",
+    why: "needs a provider answering on the install (needs-rupash 98) and then the owner's real-answer check (needs-rupash 91, check 5)",
     updated: "2026-09-28",
   },
   "M41.3.1": {
@@ -124,29 +124,24 @@ const PROGRESS = {
     why: "the first release tag is cut when Wave 0 is accepted (needs-rupash 77, decided); waits for M31.3.2.3 to M31.3.2.5",
     updated: "2026-09-28",
   },
-  "M5.1.2": {
-    status: "BLOCKED",
-    why: "built (the key field, PR #87); proved when the first provider key is saved into the vault on the install (needs-rupash 85)",
-    updated: "2026-09-28",
-  },
   "M5.6.1": {
     status: "BLOCKED",
-    why: "an answer through each provider on the install needs its key (needs-rupash 85)",
+    why: "three keys are in the vault, but the install answers only from its own server until it is switched to online providers, and Moonshot has no key (needs-rupash 98)",
     updated: "2026-09-28",
   },
   "M5.6.3": {
     status: "BLOCKED",
-    why: "a proved fallback needs at least two provider keys on the install (needs-rupash 85)",
+    why: "a proved fallback needs two providers answering, which waits for the switch to online providers (needs-rupash 98)",
     updated: "2026-09-28",
   },
   "M5.6.5": {
     status: "BLOCKED",
-    why: "the owner's models check on the install (needs-rupash 91, check 6), after the keys (needs-rupash 85)",
+    why: "the owner's models check on the install (needs-rupash 91, check 6), after the switch to online providers (needs-rupash 98)",
     updated: "2026-09-28",
   },
   "M5.7.1": {
     status: "IN PROGRESS",
-    why: "all four providers shown on Models and health with Add key, Test and Turn off; the answer on the install then waits for keys (needs-rupash 85)",
+    why: "four providers on Models and health with Add key, Test and Turn off, plus a control to switch the install to online providers, which it has no way to do after setup",
     updated: "2026-09-28",
   },
   "M5.7.3": {

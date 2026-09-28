@@ -41,6 +41,8 @@ module.exports = {
     "M3.2.2":2,
     // Sharing the provider's tool cache needs agents that call tools (Wave 3): owner, 2026-09-22, item 95.
     "M3.7.2":3,
+    // The chat halves of the sign-in and department checks need Wave 2's Lark chat channel: owner, 2026-09-28, item 97.
+    "M1.8.5":2, "M2.3.1":2,
     // "What is live after each wave" - each line is that wave's own exit criterion.
     "M38.2.2.2":1, "M38.2.2.3":2, "M38.2.2.4":3, "M38.2.2.5":4, "M38.2.2.6":5,
     // A smoke test needs a real person asking a real question, so the gate must exist.

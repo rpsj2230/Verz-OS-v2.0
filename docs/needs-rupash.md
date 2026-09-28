@@ -2,40 +2,17 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**3 items are open: 85, 91 and 97.** Item 85 (your AI provider keys) unblocks the most. Each
-says in plain terms what it is, what I recommend, and every step.
+**2 items are open: 91 and 98.** Item 98 (online providers and the Moonshot key) unblocks the
+most. Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
-
-## 85. Your four AI provider keys (the most useful thing you can do today)
-
-**In plain terms:** the Brain answers questions with Claude (Anthropic), OpenAI, DeepSeek and
-Moonshot Kimi, as you decided. The routing, fallbacks, timeouts and cost limits are built and
-tested, but no key is held yet, so nothing can be proved on your install and nothing answers for
-real. Each key goes straight into the secrets vault; it is never shown again or written anywhere
-else. **Recommendation: add all four in one sitting,** about ten minutes. Unblocks M5.1.2, M5.7.1,
-M5.6.1 and M5.6.3, and proves Wave 0's M31.3.2.5 (a replaced key is picked up without a redeploy).
-
-1. Get a key from each provider's website: Anthropic console (API keys), OpenAI platform (API
-   keys), DeepSeek platform (API keys), Moonshot platform (API keys). Keep each one open.
-2. Open the console (signed in) and go to **Models and health** in the left menu.
-3. Scroll to **Provider health**. Under the providers table is **Set a provider's key**. Choose
-   the provider, paste its key into **Key**, press **Save the key**, then **Save the key** again
-   in the box that asks you to confirm. The table's "In the vault" column then says a key is held.
-   Repeat for each provider.
-4. Press **Check** on each provider.
-5. Tell me "keys added". I then confirm each one answers and record the checks.
-
-If **Save the key** says the vault refused it, stop there and tell me: the vault's rules then need
-reloading once, which takes three of your five unseal pieces (`ops/openbao/UNSEAL.md`, step 5), and
-I will send you the exact commands.
 
 ## 91. Checks only you can do on your install (about 45 minutes, one sitting)
 
 **In plain terms:** some requirements are about how the Brain behaves for real people, so the proof
 is you trying each one and recording what you saw on **Install > Requirement checks** (open the
 area, choose the requirement, press **Record a check**, write what you did and saw, press **Record
-the check**). **Recommendation: do this after item 85 (at least the Claude key) and after
+the check**). **Recommendation: do this after item 98 and after
 connecting Lark,** because the department checks need your real departments and checks 5 and 6
 need a model to answer. Tell me "checks done" and I close the tasks from your records.
 
@@ -73,18 +50,38 @@ need a model to answer. Tell me "checks done" and I close the tasks from your re
    needs; try it and record it.
 
 The chat parts of checks 1 and 2 (binding a Lark identity with a code, the same reach in chat)
-cannot be done until Wave 2 builds the Lark chat channel; item 97 asks where they go.
+cannot be done until Wave 2 builds the Lark chat channel; both moved there with item 97.
 
-## 97. The chat parts of two install checks wait for Wave 2 (M1.8.5, M2.3.1)
+## 98. Two steps so your keys answer (about five minutes)
 
-**In plain terms:** the sign-in check (M1.8.5) and the department check (M2.3.1) each include a
-chat step: binding a Lark chat identity with a one-time code, and getting the same answers in chat
-as on the web. The Lark chat channel is built in Wave 2, so those steps cannot be tried yet, and
-the two tasks can never be finished in Wave 1. **Recommendation: move both tasks to Wave 2,** do
-their web steps in item 91 now, and finish the chat steps when the channel lands. Reply "move
-both chat checks".
+**In plain terms:** your Claude (Anthropic), OpenAI and DeepSeek keys reached the vault on 28 Sep.
+Two things still stop any question reaching them. First, the install is set to answer only from
+its own server ("local"), the safe default for a new install; your decision was online providers,
+and after setup the console had no control to change it. The rebuilt Models screen adds one, and I
+will tell you when it is live. Second, no Moonshot (Kimi) key reached the vault, and DeepSeek was
+saved twice 24 seconds apart, so the second paste may have been the Moonshot key saved under
+DeepSeek. **Recommendation: do all of it in one sitting once I say the new screen is live.**
+Unblocks M5.6.1, M5.6.3 and M5.7.1, and proves Wave 0's M31.3.2.5.
+
+1. Open the console (signed in) and go to **Models and health**.
+2. Under **Where answers are made**, choose **Online providers** and confirm.
+3. On the **Moonshot (Kimi)** row press **Add key**, paste the key from the Moonshot platform, save
+   and confirm.
+4. On the **DeepSeek** row press **Replace key**, paste the key from the DeepSeek platform, save and
+   confirm.
+5. Press **Test** on each of the four rows, then tell me "providers tested".
 
 # Answered
+
+## 97. The chat parts of two install checks move to Wave 2 - DECIDED 2026-09-28
+
+M1.8.5 (sign-in) and M2.3.1 (department scoping) moved to Wave 2, which builds the Lark chat
+channel their chat steps need. Their web steps stay in item 91.
+
+## 85. Your AI provider keys - DONE 2026-09-28 (three of four)
+
+The Anthropic, OpenAI and DeepSeek keys were saved into the vault from the console between 08:01
+and 08:03 UTC, which proves M5.1.2. No Moonshot key arrived; item 98 has the last steps.
 
 ## 96. Directory groups grant roles only - DECIDED 2026-09-22
 
