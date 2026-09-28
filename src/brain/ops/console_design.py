@@ -1,7 +1,7 @@
 """Whether the console a browser serves is the console `docs/screens.html` designs.
 
 **Written because it was not, and nobody noticed for a fortnight.** That file is the design of
-record: thirteen screens, each with the role it belongs to, the section it sits in and the
+record: fourteen screens, each with the role it belongs to, the section it sits in and the
 navigation around it. Screens were then built from the read modules alone, and on 2026-09-16
 the owner opened his own install, compared it with the page, and asked what the point of the
 design was. The honest answer was that nothing held anybody to it, so this does.
@@ -82,7 +82,7 @@ __all__ = [
 
 #: Why this reports rather than refuses.
 A_DESIGN_NOTHING_MEASURES_IS_A_PICTURE: Final = (
-    "docs/screens.html designs thirteen screens and their navigation, and until this module "
+    "docs/screens.html designs fourteen screens and their navigation, and until this module "
     "existed nothing compared it with the console anybody could open. A design nothing "
     "measures is a picture: it is read once, built from loosely, and quietly diverged from. "
     "This prints the distance on every run instead, because the console is red against the "
