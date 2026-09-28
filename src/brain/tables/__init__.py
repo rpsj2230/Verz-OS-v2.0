@@ -49,6 +49,8 @@ from brain.knowledge import search as _search  # noqa: F401
 from brain.tables.adoption import QuestionAskedRow
 from brain.tables.agent import AgentRow
 from brain.tables.audit import AuditEntryRow
+from brain.tables.automation import AutomationOwnerRow
+from brain.tables.browsing import BrowserEnvelopeRow
 from brain.tables.budget import BudgetVersionRow
 from brain.tables.chat import ConversationRow, MessageRole, MessageRow
 from brain.tables.config import SettingRow, SettingType
@@ -74,6 +76,7 @@ from brain.tables.identity import (
 )
 from brain.tables.knowledge import KnowledgeItemRow
 from brain.tables.memory import AdaptiveMemoryRow, PersistentMemoryRow
+from brain.tables.operation import OperationRow
 from brain.tables.outbox import OutboxDeliveryRow, OutboxEventRow, WebhookSubscriberRow
 from brain.tables.plugin import PluginInstallRow, PluginVersionRow
 from brain.tables.projection import ProjectedRecordRow
@@ -83,9 +86,11 @@ from brain.tables.resolution import (
     EntityIdentifierRow,
     EntityLinkRow,
 )
+from brain.tables.retention import LegalHoldRow, RetentionReleaseRow, RetentionReportRow
 from brain.tables.routing import ModelAttemptRow, RoutingRungRow, RoutingTierRow
 from brain.tables.schedule import ControlRunRow
 from brain.tables.spend import ReportRefreshRow, SpendActualRow
+from brain.tables.suspension import SuspensionRow
 from brain.tables.telemetry import RequestTelemetryRow
 from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
 from brain.tables.upgrade import UpgradeDeclineRow
@@ -192,6 +197,24 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0040_knowledge_item. Points at nothing: a chunk names its document by id and this row is
     # that document, and no key runs between them while neither of their writers exists.
     "know.item",
+    # 0041_browser_envelope. Points at nothing: the asker and the agent are values, so what a
+    # run was permitted outlives both.
+    "agent.browser_envelope",
+    # 0042_suspension. Points at nothing: the principal and the agent are values, so what a
+    # person was shown before something ran in somebody's name outlives both.
+    "gate.suspension",
+    # 0044_automation_owner. Points at nothing: the owner is a value, so what an automation
+    # ran as outlives the person, and an automation whose owner has gone stays to be adopted.
+    "gate.automation_owner",
+    # 0049_retention_enforcement. The release last, because it names the report a person read
+    # before releasing the sweep. A hold points at nothing: its subjects are values, so a hold
+    # outlives the people it holds data about.
+    "obs.legal_hold",
+    "ops.retention_report",
+    "ops.retention_release",
+    # 0051_operation_ledger. Points at nothing: the principal is a value and the key is a digest
+    # of the intent, so a record of an effect outlives everything it was about.
+    "ops.operation",
 )
 
 __all__ = [
@@ -199,6 +222,8 @@ __all__ = [
     "AdaptiveMemoryRow",
     "AgentRow",
     "AuditEntryRow",
+    "AutomationOwnerRow",
+    "BrowserEnvelopeRow",
     "BudgetVersionRow",
     "CanonicalEntityRow",
     "CapabilityGrantRow",
@@ -216,9 +241,11 @@ __all__ = [
     "FieldPolicyRow",
     "GrantsVersionRow",
     "KnowledgeItemRow",
+    "LegalHoldRow",
     "MessageRole",
     "MessageRow",
     "ModelAttemptRow",
+    "OperationRow",
     "OutboxDeliveryRow",
     "OutboxEventRow",
     "PersistentMemoryRow",
@@ -228,6 +255,8 @@ __all__ = [
     "PrincipalIdentityRow",
     "PrincipalRow",
     "ProjectedRecordRow",
+    "RetentionReleaseRow",
+    "RetentionReportRow",
     "QuestionAskedRow",
     "ReportRefreshRow",
     "RequestTelemetryRow",
@@ -238,6 +267,7 @@ __all__ = [
     "SettingRow",
     "SettingType",
     "SpendActualRow",
+    "SuspensionRow",
     "TeamRow",
     "TemplateInstanceRow",
     "TemplateVersionRow",

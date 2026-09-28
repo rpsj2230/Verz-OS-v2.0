@@ -39,6 +39,15 @@ an administrator pressing stop while one is halfway through a supplier portal me
 `stopped_now` is asked before every action, which is what "at its next safe point" means when
 the safe points are the actions.
 
+**A write needs a person's approval of the envelope, or a signed exception compiled into it.**
+`compile_policy` takes the approval beside the envelope and refuses one for another run or
+another digest outright, because that is a wiring fault or a forgery and neither should start
+a container. With no approval the policy still carries every step, and `authorise` refuses a
+write with `Refusal.WRITE_NOT_APPROVED` rather than `NOT_IN_ENVELOPE`: the step is in the
+envelope, nobody approved it, and the two want different people to look. A read never waits.
+`recheck` compiles the same policy from the same pair, so the control plane's second look
+applies the same rule. See `A_WRITE_NOBODY_APPROVED_IS_REFUSED_AT_THE_ACTION`.
+
 **What is not enforced, said rather than assumed.** A halt is asked with no axis, so only a
 halt on everything reaches a browser run. That is what M19.6.5 asks for and it is the whole
 of what is delivered: a halt scoped to one agent, one department or one person still stops no
@@ -48,7 +57,7 @@ admission. `enforcement_gaps` reports it rather than leaving an administrator to
 Scope: domain logic. Nothing here starts a container, and there is no container runtime in
 this repository to start. What is here is the decision such a runtime would ask for.
 
-Task ids: M19.3.1, M19.3.2, M19.3.3, M19.3.4, M19.3.6, M19.6.5
+Task ids: M19.3.1, M19.3.2, M19.3.3, M19.3.4, M19.3.6, M19.6.5, M19.7.2
 """
 
 from __future__ import annotations
@@ -58,6 +67,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, fields
 from typing import Any, Final, cast
 
+from brain.browsing.approval import EnvelopeApproval
 from brain.browsing.envelope import Envelope
 from brain.browsing.observation import Snapshot, is_current
 from brain.browsing.targets import Verb, is_write
@@ -101,6 +111,15 @@ A_HALTED_RUN_IS_STOPPED_RATHER_THAN_IN_BREACH: Final = (
 )
 
 
+#: Why an unapproved write is refused per action rather than stripped from the policy.
+A_WRITE_NOBODY_APPROVED_IS_REFUSED_AT_THE_ACTION: Final = (
+    "Stripping unapproved writes out of the policy would refuse them as not in the envelope, "
+    "which sends whoever reads the refusal to the planner when the plan was fine and the card "
+    "was never approved. Keeping the steps and refusing the write names the missing thing, "
+    "and a read in the same run still proceeds, which is the read-first order M19.7 asks for."
+)
+
+
 class EnforcementError(Exception):
     """A policy or an action was formed in a way that cannot be decided on."""
 
@@ -121,6 +140,7 @@ class Refusal(enum.StrEnum):
     STALE_SNAPSHOT = "stale_snapshot"
     UNKNOWN_REFERENCE = "unknown_reference"
     NOT_IN_ENVELOPE = "not_in_envelope"
+    WRITE_NOT_APPROVED = "write_not_approved"
     BUDGET_SPENT = "budget_spent"
 
 
@@ -140,6 +160,11 @@ class Policy:
     allowed: frozenset[tuple[str, Verb]]
     #: How many of each write verb the run may perform in total.
     budget: tuple[tuple[Verb, int], ...]
+    #: The envelope digest a person approved, or empty when nobody has. Only ever this
+    #: policy's own `envelope_digest`; the constructor refuses anything else.
+    approved_digest: str = ""
+    #: Write steps a signed surface exception compiled to run without approval.
+    unattended: frozenset[tuple[str, Verb]] = frozenset()
 
     def __post_init__(self) -> None:
         if not self.run_id.strip():
@@ -151,6 +176,16 @@ class Policy:
                 "was compiled from, which is the whole of the control plane's second check"
             )
             raise EnforcementError(msg)
+        if self.approved_digest and self.approved_digest != self.envelope_digest:
+            msg = (
+                f"policy for run {self.run_id!r} carries an approval of a different envelope, "
+                "which would let a person's yes to one set of writes start another"
+            )
+            raise EnforcementError(msg)
+
+    def may_write(self, surface: str, verb: Verb) -> bool:
+        """Whether a write here may proceed without waiting for anybody else."""
+        return (surface, verb) in self.unattended or self.approved_digest == self.envelope_digest
 
     def allowance(self, verb: Verb) -> int:
         for budgeted, count in self.budget:
@@ -162,7 +197,7 @@ class Policy:
         return (surface, verb) in self.allowed
 
 
-def compile_policy(envelope: Envelope) -> Policy:
+def compile_policy(envelope: Envelope, approval: EnvelopeApproval | None = None) -> Policy:
     """Turn a sealed envelope into the policy a container starts with.
 
     The only constructor anything should reach for, and it is a function rather than a
@@ -171,14 +206,29 @@ def compile_policy(envelope: Envelope) -> Policy:
 
     Called once, at container start. Nothing calls it again during a run and there is
     nowhere for a second call's result to go, because `Policy` is what the enforcer was
-    handed and it holds no reference to anything that could be re-read.
+    it holds no reference to anything that could be re-read.
+
+    `approval` is what `brain.browsing.approval.approved` returned for this envelope, or `None`.
+    One naming another run or another digest raises: it is not "no approval", it is somebody
+    else's approval arriving here, and a container must not start on it.
     """
+    digest = envelope.digest()
+    if approval is not None and (
+        approval.run_id != envelope.run_id or approval.envelope_digest != digest
+    ):
+        msg = (
+            f"the approval handed to run {envelope.run_id!r} was given for "
+            f"{approval.run_id!r} at another digest, so it approves some other set of writes"
+        )
+        raise EnforcementError(msg)
     return Policy(
         run_id=envelope.run_id,
-        envelope_digest=envelope.digest(),
+        envelope_digest=digest,
         origins=envelope.origins,
         allowed=frozenset((step.surface, step.verb) for step in envelope.steps),
         budget=envelope.budget,
+        approved_digest=digest if approval is not None else "",
+        unattended=frozenset(envelope.unattended),
     )
 
 
@@ -314,6 +364,8 @@ def authorise(
     if not policy.admits(action.surface, action.verb):
         return Enforcement(allowed=False, spend=spend, refusal=Refusal.NOT_IN_ENVELOPE)
     if is_write(action.verb):
+        if not policy.may_write(action.surface, action.verb):
+            return Enforcement(allowed=False, spend=spend, refusal=Refusal.WRITE_NOT_APPROVED)
         if spend.of(action.verb) >= policy.allowance(action.verb):
             return Enforcement(allowed=False, spend=spend, refusal=Refusal.BUDGET_SPENT)
         return Enforcement(allowed=True, spend=spend.plus(action.verb))
@@ -334,7 +386,11 @@ class ActionRecord:
     claimed_allowed: bool
 
 
-def recheck(envelope: Envelope, records: Sequence[ActionRecord]) -> tuple[str, ...]:
+def recheck(
+    envelope: Envelope,
+    records: Sequence[ActionRecord],
+    approval: EnvelopeApproval | None = None,
+) -> tuple[str, ...]:
     """Replay everything a container returned against the sealed envelope (M19.3.6).
 
     The second check, and what makes it worth having is not that the rules differ. They are
@@ -354,7 +410,7 @@ def recheck(envelope: Envelope, records: Sequence[ActionRecord]) -> tuple[str, .
     Returns findings rather than raising, in the shape `brain.ops.halt.halt_gaps` uses: a
     caller reviewing a finished run wants every disagreement, not the first one.
     """
-    policy = compile_policy(envelope)
+    policy = compile_policy(envelope, approval)
     findings: list[str] = []
     spend = Spend()
     last = 0
@@ -376,6 +432,8 @@ def recheck(envelope: Envelope, records: Sequence[ActionRecord]) -> tuple[str, .
             )
         last = max(last, action.sequence)
         if is_write(action.verb):
+            if not policy.may_write(action.surface, action.verb):
+                findings.append(f"{where} is a write nobody approved")
             spend = spend.plus(action.verb)
             if spend.of(action.verb) > policy.allowance(action.verb):
                 findings.append(

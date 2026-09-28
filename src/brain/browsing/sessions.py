@@ -16,13 +16,18 @@ other half, stopping a session that is already running, is in `brain.browsing.en
 because that is where the safe points are. Between them M19.6.5 is a switch with something on
 both sides of it, which is what `brain.ops.halt` means by its fifth lie.
 
-**Read-only is shipped first, and this module is where that claim is checkable.** M19.7.1 is
-a statement about ordering: the write capability does not exist yet. It did not exist before
-this package and it does not exist after it. `BROWSING_CAPABILITIES` holds one entry, its
-verb is `read`, `READ_SURFACE` declares `SideEffect.NONE`, and `capability_gaps` reports
-anything that would change either. The day somebody adds a write tool, the test that pins
-this goes red and closing M19.7.2 becomes a deliberate act rather than a side effect of
-adding a tool.
+**Read-only was shipped first, and the write arrived on purpose rather than by addition.**
+M19.7.1 was a statement about ordering, pinned by a test that failed the day a write tool
+appeared, so that closing M19.7.2 was a decision rather than a side effect. The write is now
+`ACT_ON_SURFACE`, and it is the only one: `capability_gaps` reports any other capability that
+is not a read and any other tool with a side effect, because every write has to pass through
+the approval `brain.browsing.enforcer.compile_policy` demands, and a second write tool would
+be a write that route does not know about.
+
+**The write tool declares SEND, the most any browser verb does.** `brain.browsing.envelope.
+side_effect_of` puts an upload at SEND because a document leaves the building, and one tool
+covers every write verb, so its declaration is the strongest of them. Declaring WRITE would let
+an agent ceiling whose `max_side_effect` stops short of SEND reach an upload.
 
 **No handler is registered here.** `READ_SURFACE` is a `ToolDefinition` and `register` takes
 the handler from its caller, because a handler would have to drive a browser and there is no
@@ -38,7 +43,7 @@ for us, and `brain.tools.registry.assert_service_tool_is_scoped` therefore requi
 predicate that narrows something. `surface_scope` is that predicate and it narrows to one
 declared target.
 
-Task ids: M19.6.1, M19.6.5, M19.7.1
+Task ids: M19.6.1, M19.6.5, M19.7.1, M19.7.2
 """
 
 from __future__ import annotations
@@ -63,13 +68,19 @@ from brain.ops.admission import (
 )
 from brain.ops.halt import NOTHING_HALTED, HaltState
 
-#: The one capability this package ships. Read, and nothing else, on purpose.
+#: Reading a declared surface.
 BROWSE_SURFACE: Final = Capability(value="read:browser_surface")
 
-#: Every capability browsing offers today. A tuple rather than a bare constant so that
-#: `capability_gaps` has something to iterate and a second one cannot be added without
+#: Acting on a declared surface. Held by whoever may perform or approve a browser write.
+ACT_ON_SURFACE_CAPABILITY: Final = Capability(value="write:browser_surface")
+
+#: Every capability browsing offers. A tuple rather than bare constants so that
+#: `capability_gaps` has something to iterate and a third one cannot be added without
 #: appearing in a list somebody reads.
-BROWSING_CAPABILITIES: Final[tuple[Capability, ...]] = (BROWSE_SURFACE,)
+BROWSING_CAPABILITIES: Final[tuple[Capability, ...]] = (BROWSE_SURFACE, ACT_ON_SURFACE_CAPABILITY)
+
+#: The row field a browser credential and a browser approval are both narrowed on.
+TARGET_FIELD: Final = "browser_target"
 
 #: Why there is no second tally of browser sessions.
 THE_BUDGET_IS_ALREADY_DECIDED_SOMEWHERE_ELSE: Final = (
@@ -81,13 +92,12 @@ THE_BUDGET_IS_ALREADY_DECIDED_SOMEWHERE_ELSE: Final = (
     "the same one."
 )
 
-#: Why the shipped capability is a read.
-SHIPPING_THE_READ_FIRST_IS_A_CLAIM_ABOUT_WHAT_DOES_NOT_EXIST: Final = (
-    "M19.7.1 is not satisfied by a read capability existing. It is satisfied by the write "
-    "capability not existing, which is a property of the whole repository rather than of "
-    "this file, and it stops being true the moment somebody adds a browser tool with a side "
-    "effect. So it is pinned by a test that fails on the addition rather than by a comment "
-    "asking for one, and the person adding the write closes M19.7.2 on purpose."
+#: Why there is exactly one write tool.
+EVERY_BROWSER_WRITE_GOES_THROUGH_THE_ONE_APPROVED_TOOL: Final = (
+    "A browser write reaches somebody else's system of record through a page that decides "
+    "what a click does. The approval that stands between the two is attached to one tool and "
+    "one capability, so a second write tool or capability would be a write the approval route "
+    "does not know exists, and it would ship looking exactly as reviewed as the first."
 )
 
 
@@ -107,6 +117,20 @@ class SurfaceReading(Entity):
     surface: str
     origin: str
     values: tuple[tuple[str, str], ...] = ()
+
+
+ACT_ON_SURFACE: Final = ToolDefinition(
+    name="browser.act_on_surface",
+    description=(
+        "Click, type, submit or upload on one declared surface of a browsing target, within an "
+        "envelope a person approved. Refused for any write the envelope did not approve."
+    ),
+    entity="browser_surface",
+    required_capability=ACT_ON_SURFACE_CAPABILITY.value,
+    side_effect=SideEffect.SEND,
+    identity_mode=IdentityMode.SERVICE,
+    source="browser",
+)
 
 
 READ_SURFACE: Final = ToolDefinition(
@@ -131,7 +155,7 @@ def surface_scope(target: Target) -> Scope:
     refused by the registry as firmly as no scope at all, which is the check this exists to
     satisfy honestly rather than to satisfy at all.
     """
-    return Scope(clauses=(Clause(field="browser_target", op=Op.EQ, value=target.name),))
+    return Scope(clauses=(Clause(field=TARGET_FIELD, op=Op.EQ, value=target.name),))
 
 
 def may_start(
@@ -154,8 +178,8 @@ def may_start(
 
     `key` is left empty and cannot be otherwise. `BROWSER_SESSIONS` is not in
     `admission.PER_CONNECTOR`, so an `AdmissionRequest` naming a domain raises rather than
-    being counted per domain. That is M19.6.2 and it is not delivered; see
-    `concurrency_gaps`.
+    being counted per domain. The per-domain and per-agent limits are asked beside this, in
+    `brain.browsing.concurrency.may_open`, which calls this first.
     """
     request = AdmissionRequest(
         trace_id=trace_id,
@@ -171,29 +195,32 @@ def capability_gaps(
     capabilities: Sequence[Capability] = (),
     definitions: Sequence[ToolDefinition] = (),
 ) -> tuple[str, ...]:
-    """Everything that would make "read-only shipped first" untrue (M19.7.1).
+    """Every browser capability or tool that could write outside the approved route.
 
-    Defaults to what this module ships and takes both sequences so a test can hand it a write
-    capability and prove the check is looking. An absence asserted against an empty scan is
+    A capability that is not a read and is not `ACT_ON_SURFACE_CAPABILITY`, and a tool with a
+    side effect that is not `ACT_ON_SURFACE`. See
+    `EVERY_BROWSER_WRITE_GOES_THROUGH_THE_ONE_APPROVED_TOOL`.
+
+    Defaults to what this module ships and takes both sequences so a test can hand it a second
+    write and prove the check is looking. An absence asserted against an empty scan is
     true for every state the source could be in, which is the trap
     `tests/invariants/test_single_implementation.py` records having fallen into itself.
     """
     subjects = tuple(capabilities) or BROWSING_CAPABILITIES
-    tools = tuple(definitions) or (READ_SURFACE,)
+    tools = tuple(definitions) or (READ_SURFACE, ACT_ON_SURFACE)
     gaps: list[str] = []
     for capability in subjects:
-        if capability.verb != "read":
+        if capability.verb != "read" and capability != ACT_ON_SURFACE_CAPABILITY:
             gaps.append(
-                f"browsing offers {capability.value}, whose verb is {capability.verb!r}; the "
-                "write capability was supposed not to exist yet, and M19.7.2 asks for it to "
-                "sit behind envelope approval that nothing here builds"
+                f"browsing offers {capability.value}, whose verb is {capability.verb!r}, and it "
+                "is not the one write capability envelope approval is attached to"
             )
     for definition in tools:
-        if definition.side_effect is not SideEffect.NONE:
+        if definition.side_effect is not SideEffect.NONE and definition.name != ACT_ON_SURFACE.name:
             gaps.append(
                 f"browsing tool {definition.name} declares side effect "
-                f"{definition.side_effect.value}, so a write ships without the assisted "
-                "ceiling and the signed per-surface exception M19.7.3 asks for"
+                f"{definition.side_effect.value} and is not {ACT_ON_SURFACE.name}, so its writes "
+                "reach no approval"
             )
     return tuple(gaps)
 
@@ -213,21 +240,14 @@ def write_verbs_offered(target: Target) -> tuple[Verb, ...]:
 
 
 def concurrency_gaps() -> tuple[str, ...]:
-    """Which of M19.6's limits are enforced and which are not, said rather than assumed.
+    """Which of M19.6's limits are not enforced, said rather than assumed.
 
-    The two that are missing are missing for the same structural reason and neither is fixed
-    by counting here. `AdmissionRequest` carries a resource, a lane, a traffic class and a
-    connector key, and `PER_CONNECTOR` holds only source calls, so there is nowhere to put a
-    domain and nowhere to put an agent. `brain.ops.halt.ENFORCED_AXES` records the identical
-    shape of gap about halts, from the other side.
+    The per-domain and per-agent limits are decided in `brain.browsing.concurrency`; what they
+    decide against is counted by nobody yet, because nothing holds a session open.
     """
     return (
-        "M19.6.2 asks for a per-domain concurrency limit and browser sessions are budgeted "
-        "once globally; expressing one means adding Resource.BROWSER_SESSIONS to "
-        "admission.PER_CONNECTOR and seeding a per-domain row, which changes a module the "
-        "whole request path runs through",
-        "M19.6.3 asks for a per-agent limit and an AdmissionRequest carries no agent, which "
-        "is the same axis brain.ops.halt.ENFORCED_AXES reports as unenforceable for halts",
+        "the per-domain and per-agent session counts brain.browsing.concurrency decides "
+        "against are filled by nothing, because there is no runner holding a session open",
         "M19.6.4 asks for memory and CPU caps per session, which are cgroup limits on a "
         "container runtime; nothing in this repository starts a container",
     )

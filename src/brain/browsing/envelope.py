@@ -40,15 +40,30 @@ read, so being told that their own step did not survive their own reach adds no 
 not have. What is never said is which capability was missing, because that names a permission
 the caller does not hold.
 
+**A signed surface exception is compiled in and sealed, and nothing else about autonomy is.**
+`unattended` holds the write steps a live `brain.browsing.autonomy.SurfaceException` lets run
+without envelope approval, decided here once from the exceptions and the instant the caller
+passes. It is in the digest, so an approval raised for an envelope that waited for a person does
+not match one compiled after somebody signed an exception, and the reverse.
+
+**The digest is a function beside the type rather than only a method on it.** A stored envelope
+is re-read in `brain.browsing.envelope_store` without the plan it was compiled from, and it has
+to re-derive the same fingerprint to notice a row edited after it was sealed. Two copies of the
+digest would be two answers to what was sealed, so `seal` is the one and `Envelope.digest` calls
+it.
+
 Task ids: M19.2.2
 """
 
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Final, assert_never
 
+from brain.browsing.autonomy import SurfaceException, runs_unattended
 from brain.browsing.planning import Plan, Step
 from brain.browsing.targets import Target, Verb, is_write
 from brain.core.entitlement import EntitlementSet
@@ -59,7 +74,7 @@ from brain.tools.registry import rung_ceiling
 #: What the digest is over. Versioned in the same shape `brain.gate.leash.DIGEST_SCHEMA` is,
 #: so that a change to what is sealed invalidates every previous digest loudly rather than
 #: producing the same string for a different meaning.
-DIGEST_SCHEMA: Final = "brain.browsing.envelope.v1"
+DIGEST_SCHEMA: Final = "brain.browsing.envelope.v2"
 
 #: Why this module filters a plan rather than intersecting a reach.
 COMPILATION_ONLY_REMOVES: Final = (
@@ -160,6 +175,10 @@ class Envelope:
     #: The rung each admitted verb runs at, after the ceiling and the side effect compose.
     tiers: tuple[tuple[Verb, AutonomyTier], ...]
     dropped: tuple[Dropped, ...] = ()
+    #: Write steps a signed surface exception lets run without envelope approval, as surface
+    #: and verb pairs. Empty unless an exception was live at compilation. See
+    #: `brain.browsing.autonomy`.
+    unattended: tuple[tuple[str, Verb], ...] = ()
 
     def __post_init__(self) -> None:
         if not self.run_id.strip():
@@ -179,6 +198,14 @@ class Envelope:
                     "is allowed"
                 )
                 raise EnvelopeError(msg)
+        for surface, verb in self.unattended:
+            if not is_write(verb) or not self.admits(surface, verb):
+                msg = (
+                    f"envelope for run {self.run_id!r} lets {verb.value} on {surface!r} run "
+                    "unattended, which is not a write step it admits; the set means writes "
+                    "nobody approved and anything else in it would read as one"
+                )
+                raise EnvelopeError(msg)
 
     def allowance(self, verb: Verb) -> int:
         """How many times this verb may be used. Zero for anything not budgeted."""
@@ -189,6 +216,18 @@ class Envelope:
 
     def admits(self, surface: str, verb: Verb) -> bool:
         return any(step.surface == surface and step.verb == verb for step in self.steps)
+
+    def awaits_approval(self) -> bool:
+        """Whether any write in this envelope waits for a person before the run starts.
+
+        A write compiled to run unattended does not; every other write does. An envelope with
+        no write at all does not either, and raising an approval for one would put a card in
+        front of a person asking them to approve reading.
+        """
+        return any(
+            step.is_write() and (step.surface, step.verb) not in self.unattended
+            for step in self.steps
+        )
 
     def tier(self, verb: Verb) -> AutonomyTier:
         """The rung this verb runs at, or SHADOW for one that is not in the envelope.
@@ -214,16 +253,43 @@ class Envelope:
         changing it changes nothing about what the run may do, so including it would void a
         policy for a reason that is not a difference in permissions.
         """
-        parts = [
-            DIGEST_SCHEMA,
-            self.run_id,
-            "|".join(sorted(self.origins)),
-            "|".join(f"{step.surface}:{step.verb.value}" for step in self.steps),
-            "|".join(f"{verb.value}={count}" for verb, count in self.budget),
-            "|".join(f"{verb.value}@{tier.value}" for verb, tier in self.tiers),
-        ]
-        joined = "\n".join(parts).encode("utf-8")
-        return hashlib.sha256(joined).hexdigest()
+        return seal(
+            run_id=self.run_id,
+            origins=self.origins,
+            steps=((step.surface, step.verb) for step in self.steps),
+            budget=self.budget,
+            tiers=self.tiers,
+            unattended=self.unattended,
+        )
+
+
+def seal(
+    *,
+    run_id: str,
+    origins: Iterable[str],
+    steps: Iterable[tuple[str, Verb]],
+    budget: Iterable[tuple[Verb, int]],
+    tiers: Iterable[tuple[Verb, AutonomyTier]],
+    unattended: Iterable[tuple[str, Verb]],
+) -> str:
+    """The fingerprint of what an envelope permits, from the permitted parts alone.
+
+    The one statement of the digest. `Envelope.digest` calls it and so does a stored envelope
+    re-reading its row, which has no plan to rebuild an `Envelope` from and must still arrive
+    at the same string. Steps keep their order, because the order is part of what was
+    approved; origins and the unattended set are sets and are sorted.
+    """
+    parts = [
+        DIGEST_SCHEMA,
+        run_id,
+        "|".join(sorted(origins)),
+        "|".join(f"{surface}:{verb.value}" for surface, verb in steps),
+        "|".join(f"{verb.value}={count}" for verb, count in budget),
+        "|".join(f"{verb.value}@{tier.value}" for verb, tier in tiers),
+        "|".join(sorted(f"{surface}:{verb.value}" for surface, verb in unattended)),
+    ]
+    joined = "\n".join(parts).encode("utf-8")
+    return hashlib.sha256(joined).hexdigest()
 
 
 def compile_envelope(
@@ -233,6 +299,8 @@ def compile_envelope(
     run_id: str,
     reach: EntitlementSet,
     ceiling: AutonomyTier,
+    exceptions: Sequence[SurfaceException] = (),
+    now: datetime | None = None,
 ) -> Envelope:
     """Narrow a plan to what this caller may do and this agent is trusted to do.
 
@@ -250,7 +318,18 @@ def compile_envelope(
     and mutating it away changed nothing any test could see. A second copy of a rule is a
     second place for it to be wrong, and the wrong copy is the one somebody edits, so it is
     the copy that is gone rather than the property.
+
+    `exceptions` are signed surface exceptions and `now` is the instant they are judged at.
+    Exceptions with no instant are refused rather than judged at the process clock, for the
+    reason CLAUDE.md records about `intersect`: an expiry decided at the wrong moment fails
+    permissive.
     """
+    if exceptions and now is None:
+        msg = (
+            f"run {run_id!r} was compiled with surface exceptions and no instant to judge "
+            "their expiry at"
+        )
+        raise EnvelopeError(msg)
     kept: list[Step] = []
     dropped: list[Dropped] = []
     for step in plan.steps:
@@ -303,6 +382,22 @@ def compile_envelope(
     budget = tuple(sorted(counts.items(), key=lambda pair: pair[0].value))
     verbs = sorted({step.verb for step in kept}, key=lambda verb: verb.value)
     tiers = tuple((verb, tier_for(verb, ceiling)) for verb in verbs)
+    unattended: tuple[tuple[str, Verb], ...] = ()
+    if now is not None:
+        unattended = tuple(
+            dict.fromkeys(
+                (step.surface, step.verb)
+                for step in kept
+                if runs_unattended(
+                    target,
+                    step.surface,
+                    step.verb,
+                    ceiling=ceiling,
+                    exceptions=exceptions,
+                    now=now,
+                )
+            )
+        )
     return Envelope(
         run_id=run_id,
         plan=plan,
@@ -311,6 +406,7 @@ def compile_envelope(
         budget=budget,
         tiers=tiers,
         dropped=tuple(dropped),
+        unattended=unattended,
     )
 
 

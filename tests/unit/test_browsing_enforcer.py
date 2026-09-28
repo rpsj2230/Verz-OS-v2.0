@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 
 import pytest
 
+from brain.browsing.approval import EnvelopeApproval
 from brain.browsing.enforcer import (
     Action,
     ActionRecord,
@@ -120,6 +121,19 @@ def action(**changes: object) -> Action:
     return Action(**fields)  # type: ignore[arg-type]
 
 
+def approval_of(sealed: Envelope) -> EnvelopeApproval:
+    """A person's approval of this envelope, as `brain.browsing.approval.approved` returns one.
+
+    Built directly because the approval route has its own file, `test_browsing_approval.py`;
+    what these tests are about is what a policy does once it holds one."""
+    return EnvelopeApproval(
+        run_id=sealed.run_id,
+        envelope_digest=sealed.digest(),
+        approved_by="u_approver",
+        approved_at=NOW,
+    )
+
+
 def decide(
     one: Action,
     *,
@@ -128,8 +142,10 @@ def decide(
     halts: HaltState = NOTHING_HALTED,
     sequence: int = 1,
     env: Envelope | None = None,
+    approved: bool = False,
 ) -> Enforcement:
-    policy = compile_policy(env or envelope())
+    sealed = env or envelope()
+    policy = compile_policy(sealed, approval_of(sealed) if approved else None)
     return authorise(
         policy,
         one,
@@ -382,7 +398,8 @@ def test_a_write_is_allowed_until_the_planned_count_is_spent() -> None:
     """M19.3.4, in both directions. The budget is the plan's own count.
 
     A refusal test alone would be satisfied by a budget of zero for everything, so the first
-    half of this is what proves a planned write can happen at all.
+    half of this is what proves a planned write can happen at all. The envelope is approved,
+    because an unapproved write is refused before its count is asked (M19.7.2).
 
     Delete this and a loop that submits twice where the plan submitted once is refused by
     nothing, and the second submission is the one that files a duplicate.
@@ -391,6 +408,7 @@ def test_a_write_is_allowed_until_the_planned_count_is_spent() -> None:
     first = decide(
         action(surface="filing", verb=Verb.SUBMIT, ref="n1"),
         env=sealed,
+        approved=True,
     )
 
     assert first.allowed
@@ -400,6 +418,7 @@ def test_a_write_is_allowed_until_the_planned_count_is_spent() -> None:
         action(surface="filing", verb=Verb.SUBMIT, ref="n1"),
         spend=first.spend,
         env=sealed,
+        approved=True,
     )
 
     assert second.refusal is Refusal.BUDGET_SPENT
@@ -709,6 +728,7 @@ def test_a_write_the_policy_admits_with_no_budget_row_is_refused() -> None:
         origins=sealed.origins,
         allowed=frozenset({("filing", Verb.SUBMIT)}),
         budget=(),
+        approved_digest=sealed.digest(),
     )
 
     verdict = authorise(
