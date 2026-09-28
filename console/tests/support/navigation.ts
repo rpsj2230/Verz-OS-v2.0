@@ -38,6 +38,7 @@ export function departmentConsole(department = "maintenance"): Record<string, un
           { key: "library", label: "Knowledge", to: "/library" },
           { key: "skills", label: "Skills", to: "/skills" },
           { key: "learning", label: "Learning", to: "/learning" },
+          { key: "audit", label: "Audit", to: "/audit" },
         ],
       },
       {

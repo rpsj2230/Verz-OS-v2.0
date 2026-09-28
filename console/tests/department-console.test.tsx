@@ -113,6 +113,7 @@ describe("the menu a department is given", () => {
       "/library",
       "/skills",
       "/learning",
+      "/audit",
       "/questions",
       "/usage",
       "/ask",
