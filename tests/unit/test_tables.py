@@ -127,6 +127,7 @@ MIGRATION_ROLE_GRANT = VERSIONS / "0102_role_grant_and_team_grants.py"
 MIGRATION_COMPLIANCE = VERSIONS / "0104_compliance_record_and_decision_entries.py"
 MIGRATION_GROUP_ROLE_RULE = VERSIONS / "0109_group_role_rule.py"
 MIGRATION_MODEL_HEALTH = VERSIONS / "0108_provider_health_and_residency.py"
+MIGRATION_TOOL_CATALOGUE = VERSIONS / "0117_tool_catalogue_and_switch.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -356,6 +357,9 @@ SENSITIVE_READ_TABLES: tuple[str, ...] = ("ops.sensitive_read",)
 
 REQUIREMENT_CHECK_TABLES: tuple[str, ...] = ("ops.requirement_check",)
 
+#: And the two 0117 adds: the tool catalogue and the stops on it.
+TOOL_CATALOGUE_TABLES: tuple[str, ...] = ("agent.tool_definition", "agent.tool_switch")
+
 ALL_TABLES = (
     CORE_TABLES
     + RESOLVER_TABLES
@@ -411,6 +415,7 @@ ALL_TABLES = (
     + COMPLIANCE_TABLES
     + GROUP_ROLE_RULE_TABLES
     + MODEL_HEALTH_TABLES
+    + TOOL_CATALOGUE_TABLES
 )
 
 
@@ -1182,6 +1187,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert group_role_rule.TABLES == GROUP_ROLE_RULE_TABLES
     model_health = migration_module(MIGRATION_MODEL_HEALTH)
     assert model_health.TABLES == MODEL_HEALTH_TABLES
+    tool_catalogue = migration_module(MIGRATION_TOOL_CATALOGUE)
+    assert tool_catalogue.TABLES == TOOL_CATALOGUE_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1260,6 +1267,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(compliance.TABLES)
         + tuple(group_role_rule.TABLES)
         + tuple(model_health.TABLES)
+        + tuple(tool_catalogue.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1319,6 +1327,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(compliance.TABLES),
         set(group_role_rule.TABLES),
         set(model_health.TABLES),
+        set(tool_catalogue.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

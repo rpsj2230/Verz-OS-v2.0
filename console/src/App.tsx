@@ -102,6 +102,7 @@ import { RETURN_PATH as STAFF_LIST_RETURN_PATH } from "./setup/staffList";
 import { FIRST_RUN_PATH } from "./setup/wizard";
 import { Notice } from "./ui/Notice";
 import { AccessRequests } from "./pages/AccessRequests";
+import { Tools } from "./pages/Tools";
 
 /**
  * The records screen, fetched when somebody asks for it.
@@ -448,6 +449,9 @@ export const routes: RouteObject[] = [
       { path: "compliance", element: <Compliance /> },
       // Referred to me: the caller's own referrals, read by the person named and needing no grant.
       { path: "referrals", element: <Referrals /> },
+      // Tools: every tool with what it needs and does, and the switch that stops one for the
+      // install or a department. One path: a tool is shown whole. See `pages/Tools.tsx`.
+      { path: "tools", element: <Tools /> },
       { path: "*", element: <NotFound /> },
     ],
   },

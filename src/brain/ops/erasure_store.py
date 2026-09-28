@@ -296,6 +296,10 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "agent.skill",
         "agent.skill_assignment",
         "agent.skill_review",
+        # A tool the install registers, and a stop on it (`0117`): who threw or lifted a switch is
+        # an actor, not an owner, and a stop is about a tool and a department, never a person.
+        "agent.tool_definition",
+        "agent.tool_switch",
         "agent.template_instance",
         "agent.template_version",
         "agent.upgrade_decline",
