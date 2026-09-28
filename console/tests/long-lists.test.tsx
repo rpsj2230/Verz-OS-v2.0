@@ -125,6 +125,10 @@ const A_CONNECTION_CHANGES_ONE_SOURCE_AT_A_TIME =
   "There is at most one live connection per source, and every act on one (connect, edit, replace the " +
   "key, disconnect) is confirmed in the API's words for that source, because each agrees to what one " +
   "source may read. docs/admin-console-architecture.md marks bulk as not applicable to connectors.";
+const AN_UNBINDING_IS_ONE_PERSONS_CHAT =
+  "Unbinding stops a chat account being answered as its person, at once, and is recorded against " +
+  "them; it is confirmed one person at a time so nobody's chat is taken away as a side effect of " +
+  "somebody else's.";
 
 /** What each long list does not offer, and why. Everything it does offer is read off the page. */
 /**
@@ -190,6 +194,7 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
   "/elevation": { bulk: AN_ELEVATION_IS_DECIDED_ON_ITS_OWN_REASON },
   "/access_review": {},
   "/access-requests": { bulk: READ_ONLY },
+  "/channels": { bulk: AN_UNBINDING_IS_ONE_PERSONS_CHAT },
 };
 
 /**

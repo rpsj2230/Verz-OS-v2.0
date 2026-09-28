@@ -60,19 +60,48 @@ authorised the binding, and the code should stop working at that moment rather t
 end of its ten minutes. The registry's not-before floor is what makes logout mean anything at
 all here, and it is the thing that survives a restart or a second replica.
 
+**The stored flow, since CH2: a code is kept, sent to the bot, and redeemed there.** Everything
+above was written with the nonce in hand at both ends, and on an install the two ends are a
+browser and a chat message minutes apart. `mint_code` keeps the code's digest in
+`auth.binding_code` beside the person and the sign-in it was shown in; `code_in` says whether a
+private message from a sender bound to nobody is a code, which `brain.channels.inbound.reply_for`
+asks through `brain.ops.binding_store.StoredBinder`; `redeem` spends it in one statement, asks
+`auth.session` whether that sign-in is still open, and hands the fresh binding and `settle` to the
+store, which writes it and retires the one it replaces in one transaction under a lock on the
+person and the channel. `0118`'s trigger records both in the audit ledger.
+
+**The row is found by a digest of what was presented, so a wrong value cannot burn a code.**
+`code_digest` is over the channel and the presented value alone, so the store finds a row only
+for a value that is the code, and "validate, then consume" holds by construction: there is no
+row a wrong value could spend. `nonce_digest` is kept for `NonceLedger`, whose callers hold the
+nonce and know whose it is; the store cannot, because the whole point is that the message does
+not say.
+
+**One answer for every code that does not bind.** A code nobody minted, one already used, one
+past its ten minutes, one minted for another channel, one whose sign-in has ended and one for an
+account already somebody else's all return None, and the chat answers every one of them with
+`brain.channels.inbound.CODE_REFUSED_TOLD`, whatever the reason. See
+`EVERY_CODE_THAT_DOES_NOT_BIND_IS_ONE_ANSWER`. The reason is logged by its shape for an operator,
+never with the code or the identity.
+
 Task ids: M10.3.1, M10.3.2, M10.3.4
 """
 
 from __future__ import annotations
 
+import enum
 import hashlib
-from collections.abc import Iterable, Mapping
+import re
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Final, Protocol
 
+import structlog
+
 from brain.gate.context import Channel
 from brain.gate.ingress import (
+    NONCE_BYTES,
     NONCE_TTL,
     Binding,
     BindingNonce,
@@ -82,6 +111,8 @@ from brain.gate.ingress import (
     mint_nonce,
 )
 from brain.identity.sessions import Session, SessionRegistry
+
+log = structlog.get_logger()
 
 #: Derived from `ingress.NONCE_TTL` rather than restated, so the two cannot drift. A
 #: consumption record shorter than the nonce's own life would let a replay through in the gap
@@ -250,6 +281,15 @@ def bind_once(
         )
         raise BindingRefusedError(msg)
 
+    return settle(fresh, existing)
+
+
+def settle(fresh: Binding, existing: Iterable[Binding]) -> BindingOutcome:
+    """What a validated binding does to the bindings already live: refused, or what it replaces.
+
+    Split out of `bind_once` so the stored flow asks the same two questions in the same order:
+    the store hands this the live rows it read under its lock, and writes what comes back.
+    """
     live = tuple(existing)
     taken = _bound_to_somebody_else(fresh, live)
     if taken is not None:
@@ -344,3 +384,228 @@ def would_replay(nonce: BindingNonce, consumed: Iterable[str]) -> bool:
     own idea of what used means.
     """
     return nonce_digest(nonce) in set(consumed)
+
+
+# ------------------------------------------------------------------ the stored flow (CH2)
+
+#: Why every code that does not bind gets one answer.
+EVERY_CODE_THAT_DOES_NOT_BIND_IS_ONE_ANSWER: Final = (
+    "A code nobody minted, one already used, one past its ten minutes, one whose sign-in has "
+    "ended and one for an account that is somebody else's all come back as one refusal, which the "
+    "chat answers with one sentence. Saying which would tell whoever holds the handset that a "
+    "code existed, that somebody used it, or that this account is bound to a person, and each of "
+    "those is a fact about somebody else."
+)
+
+#: Why only the newest code for a channel works.
+A_NEWER_CODE_ENDS_THE_OLDER_ONE: Final = (
+    "Minting a code for a channel shortens the life of every unused code the same person holds "
+    "for it to now, so the code on the screen is the only one that binds. A person who asks twice "
+    "has one code in circulation rather than two, and a code shown on a screen somebody walked "
+    "away from stops working the moment they ask for another."
+)
+
+#: The length of a code as `ingress.mint_nonce` makes one: `token_urlsafe(NONCE_BYTES)` is the
+#: unpadded base64 of that many bytes, four characters for every three, rounded up.
+CODE_CHARS: Final = -(-NONCE_BYTES * 4 // 3)
+
+#: A whole message that is one code: the URL-safe alphabet, exactly `CODE_CHARS` long.
+_CODE_RE: Final = re.compile(rf"[A-Za-z0-9_-]{{{CODE_CHARS}}}")
+
+
+def code_in(text: str) -> str | None:
+    """The code this message is, or None. A message that is one code and nothing else.
+
+    Only the whole message, stripped, and never a code found inside a sentence: a question that
+    happens to contain twenty-two letters and digits in a row is a question, and reading codes
+    out of prose would spend somebody's code on a sentence that quoted it.
+    """
+    candidate = text.strip()
+    return candidate if _CODE_RE.fullmatch(candidate) else None
+
+
+def code_digest(channel: Channel, presented: str) -> str:
+    """What `auth.binding_code` keeps, and finds a row by: the channel and the value, digested.
+
+    Over what was presented and nothing else, because the store has to find the row from the
+    message alone, which does not say whose code it is. Salted by the channel, so a code minted
+    for one channel is not found when it is sent on another. Length-prefixed for the usual reason.
+    """
+    parts = (channel.value, presented)
+    blob = "".join(f"{len(p)}:{p}" for p in parts)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+@dataclass(frozen=True)
+class ClaimedCode:
+    """A code the store has just spent, and what it was minted for. Returned once, to one caller."""
+
+    principal_id: str
+    session_id: str
+    minted_at: datetime
+    channel: Channel
+
+
+class BindingCodes(Protocol):
+    """Where codes are kept. `brain.ops.binding_store.StoredCodes` over `auth.binding_code`.
+
+    `claim` is the test-and-set `NonceLedger.consume` is, for the reason given there: there is no
+    way to ask whether a code is spent without spending it, so the racy check cannot be written.
+    """
+
+    async def keep(self, minted: SessionNonce, *, digest: str, expires_at: datetime) -> None:
+        """Keep one code's digest, and end every unused code this person holds for its channel."""
+        ...
+
+    async def claim(self, digest: str, *, now: datetime) -> ClaimedCode | None:
+        """Spend the unused, unexpired code with this digest and say whose it was, or None."""
+        ...
+
+
+class SignIns(Protocol):
+    """Whether a sign-in is still open. `brain.ops.binding_store.StoredSignIns`, `auth.session`."""
+
+    async def still_open(self, session_id: str, principal_id: str, *, now: datetime) -> bool:
+        """True when this session is this person's, not ended and not past its ceiling."""
+        ...
+
+
+@dataclass(frozen=True)
+class BoundPerson:
+    """One person bound on a channel, as an administrator's list shows them. No identity."""
+
+    principal_id: str
+    display_name: str
+    bound_at: datetime
+
+
+class BindingTable(Protocol):
+    """Where chat bindings are kept. `brain.ops.binding_store.StoredBindings`.
+
+    Decides nothing. `bind` is handed `settle` and calls it with the live rows it read under its
+    lock, so the decision is this module's and the transaction is the store's.
+    """
+
+    async def binding_for(self, channel: Channel, digest: str) -> Binding | None:
+        """The live binding for this identity digest on this channel, or None."""
+        ...
+
+    async def for_principal(self, principal_id: str) -> tuple[Binding, ...]:
+        """This person's live chat bindings, in channel order."""
+        ...
+
+    async def on_channel(
+        self, channel: Channel, *, limit: int
+    ) -> tuple[tuple[BoundPerson, ...], bool]:
+        """Who is bound on this channel, by name, and whether the load came back full."""
+        ...
+
+    async def bind(
+        self,
+        fresh: Binding,
+        *,
+        decide: Callable[[tuple[Binding, ...]], BindingOutcome],
+        trace_id: str,
+    ) -> BindingOutcome | None:
+        """Write `decide`'s outcome in one transaction, or None when a race left nothing to write.
+
+        `BindingRefusedError` from `decide` propagates and nothing is written.
+        """
+        ...
+
+    async def unbind(
+        self, principal_id: str, channel: Channel, *, actor: str, ent_hash: str, trace_id: str
+    ) -> tuple[Binding, ...]:
+        """Retire this person's bindings on this channel, attributed, and return them."""
+        ...
+
+
+class Refused(enum.StrEnum):
+    """Why a code did not bind, for an operator's log and never for the sender."""
+
+    UNKNOWN_USED_OR_EXPIRED = "unknown_used_or_expired"
+    SIGNED_OUT = "signed_out"
+    REFUSED = "refused"
+    RACED = "raced"
+
+
+async def mint_code(
+    session: Session,
+    channel: Channel,
+    *,
+    now: datetime,
+    codes: BindingCodes,
+) -> SessionNonce:
+    """Mint a code in this live sign-in and keep its digest; the value is returned once, to show.
+
+    `mint_for_session` decides, so the principal comes off the session and an expired session
+    mints nothing. The value is never kept: `keep` is handed its digest. See
+    `A_NEWER_CODE_ENDS_THE_OLDER_ONE` for what keeping it does to an older code.
+    """
+    if channel is Channel.CONSOLE:
+        msg = "the console is where a code is shown, not a chat a code binds"
+        raise BindingRefusedError(msg)
+    minted = mint_for_session(session, channel, now=now)
+    await codes.keep(
+        minted,
+        digest=code_digest(channel, minted.nonce.value),
+        expires_at=minted.nonce.minted_at + NONCE_TTL,
+    )
+    return minted
+
+
+async def redeem(
+    event: ChannelEvent,
+    presented: str,
+    *,
+    now: datetime,
+    codes: BindingCodes,
+    sign_ins: SignIns,
+    table: BindingTable,
+    trace_id: str,
+) -> BindingOutcome | None:
+    """Bind this message's sender with the code they presented, or None for every way it cannot.
+
+    `presented` is `code_in`'s answer about the message; only a sender bound to nobody, in a
+    conversation they alone read, is asked, and the caller has asked both. Spends the code first,
+    which cannot burn somebody else's (see the module docstring), then asks whether the sign-in
+    that minted it is still open, then `bind` validates the value, its age and its channel, and
+    the store writes `settle`'s outcome under its lock. See
+    `EVERY_CODE_THAT_DOES_NOT_BIND_IS_ONE_ANSWER` for why every None is one.
+    """
+    claimed = await codes.claim(code_digest(event.channel, presented), now=now)
+    if claimed is None:
+        _refused(event, Refused.UNKNOWN_USED_OR_EXPIRED)
+        return None
+    if not await sign_ins.still_open(claimed.session_id, claimed.principal_id, now=now):
+        _refused(event, Refused.SIGNED_OUT)
+        return None
+    nonce = BindingNonce(
+        value=presented,
+        principal_id=claimed.principal_id,
+        minted_at=claimed.minted_at,
+        channel=claimed.channel,
+    )
+    try:
+        fresh = bind(nonce, presented, event, now)
+        outcome = await table.bind(
+            fresh, decide=lambda live: settle(fresh, live), trace_id=trace_id
+        )
+    except BindingRefusedError:
+        _refused(event, Refused.REFUSED)
+        return None
+    if outcome is None:
+        _refused(event, Refused.RACED)
+        return None
+    log.info(
+        "channel.bound",
+        channel=event.channel.value,
+        principal=outcome.binding.principal_id,
+        replaced=outcome.revoked is not None,
+    )
+    return outcome
+
+
+def _refused(event: ChannelEvent, why: Refused) -> None:
+    """Log a code that did not bind by its shape. The caller answers None, the one answer."""
+    log.info("channel.code_refused", channel=event.channel.value, reason=why.value)

@@ -56,6 +56,7 @@ from brain.tables.artifact import ArtifactRow
 from brain.tables.audit import AuditEntryRow
 from brain.tables.automation import AutomationOwnerRow
 from brain.tables.automation_run import AutomationRunRow, AutomationScheduleRow
+from brain.tables.binding_code import BindingCodeRow
 from brain.tables.break_glass_notice import BreakGlassNoticeRow
 from brain.tables.browsing import BrowserEnvelopeRow
 from brain.tables.budget import BudgetVersionRow
@@ -369,6 +370,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     "ops.acceptance_result",
     # 0136_ops_halt. Points at nothing: a halt names its target by value, and outlives it.
     "ops.halt",
+    # 0118_channel_binding_codes. A code points at the person it binds; the session it was shown
+    # in is a value, so a code outlives the sign-in only as a row nobody can spend.
+    "auth.binding_code",
 )
 
 __all__ = [
@@ -385,6 +389,7 @@ __all__ = [
     "AutomationOwnerRow",
     "AutomationRunRow",
     "AutomationScheduleRow",
+    "BindingCodeRow",
     "BreachCaseRow",
     "BreakGlassNoticeRow",
     "BrowserEnvelopeRow",
