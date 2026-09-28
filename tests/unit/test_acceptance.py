@@ -93,13 +93,17 @@ def test_every_leaf_a_check_names_is_a_leaf_of_the_work_breakdown() -> None:
         assert set(one.leaves) <= leaves, one.name
 
 
-def test_the_suite_is_the_three_checks_this_release_ships_in_order() -> None:
-    """The coordinator's narrowed scope for this release: limits, channels, knowledge. Delete this
-    and a check can drop out of the suite with the page simply listing one fewer row."""
+def test_the_suite_is_the_checks_this_release_ships_in_order() -> None:
+    """The coordinator's narrowed scope for this release: limits, channels, knowledge, then the Lark
+    chat channel's three. Delete this and a check can drop out of the suite with the page simply
+    listing one fewer row."""
     assert [one.name for one in registered()] == [
         "asking_past_a_window_is_refused_with_a_retry_hint",
         "a_webhook_channel_receives_once_and_stops_both_ways",
         "documents_are_answered_in_their_department_only",
+        "a_lark_group_message_is_answered_only_when_it_names_the_bot",
+        "a_person_bound_in_lark_is_given_their_web_answer_directly",
+        "a_lark_group_hears_its_floor_and_the_asker_reads_the_rest_alone",
     ]
 
 
@@ -454,7 +458,7 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         "documents_are_answered_in_their_department_only"
     ] == PASSED
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 6
+    assert runs == [(2,)] and len(recorded) == 2 * len(waited[1])
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }

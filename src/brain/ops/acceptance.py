@@ -164,7 +164,7 @@ REASON_CHARS: Final = 240
 SENTENCE_CHARS: Final = 400
 
 #: The modules whose `@check` functions make up the suite, imported by `registered`.
-CHECK_MODULES: Final = ("brain.ops.acceptance_checks",)
+CHECK_MODULES: Final = ("brain.ops.acceptance_checks", "brain.ops.acceptance_checks_chat")
 
 
 class AcceptanceError(Exception):
