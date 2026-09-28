@@ -1,21 +1,23 @@
 /**
- * Setting a model provider's key from Models and health: pick the provider, paste its key, save.
+ * Adding or replacing one provider's key, on that provider's row of the Providers table.
  *
- * The write is `PUT /credentials/{slot}` (`brain.credential_routes`), which already existed with
- * nothing on any screen calling it for the four built-in providers: the table beside this said
- * whether a key was held and offered no way to hold one, so an owner told to "add the key on
- * Models and health" found no field. This is that field.
+ * The write is `PUT /credentials/{slot}` (`brain.credential_routes`). Until 2026-09-22 it was a
+ * separate card below the table with a provider picker, and the owner read the screen as too
+ * complicated: the key belongs to a provider, so the field opens on that provider's row from its
+ * Add key or Replace key button, and there is no second place to choose the provider from.
  *
- * **Drawn only for a reader the providers answer sent the vault's column to**, which is a reader who
- * holds `admin:credential` over everything; for anybody else the server would refuse the write, so
- * a form that could only fail is not drawn. The slot written is the one the server named in that
- * column, never one built here, so a provider added from the register is set the same way.
+ * **Drawn only for a row the providers answer sent the vault's column for**, which is a reader
+ * who holds `admin:credential` over everything; for anybody else the server would refuse the
+ * write, so a field that could only fail is not offered. The slot written is the one the server
+ * named on that row, never one built here, so a provider added from the register is set the same
+ * way as a built-in one.
  *
  * **The key is never in React.** `SecretField` holds it in the element and `take()` empties the
  * field in the same call that reads it, so the value exists in this page only for the request.
- * The answer names the slot, that it is held and when; it never carries the key.
+ * The answer names the slot, that it is held and when; it never carries the key, and the row
+ * closes the field once the key is kept, so nothing typed outlives the save.
  *
- * Task ids: M27.8.7, M5.1.2
+ * Task ids: M27.8.7, M5.1.2, M5.7.1
  */
 
 import { useState, type FormEvent } from "react";
@@ -24,30 +26,29 @@ import type { ApiFailure } from "../api/errors";
 import { ConfirmAction } from "./ConfirmAction";
 import { FailureNotice } from "../ui/FailureNotice";
 import { SecretField, useSecret } from "./ui/secret-field";
-import type { ProvidersBody } from "../pages/modelsQuery";
+import type { ProviderStateRow } from "../pages/modelsQuery";
 
-export const SET_A_KEY = "Set a provider's key";
-export const SET_A_KEY_INTRO =
-  "Choose the provider, paste the key its console gave you, and save. The key goes into this " +
-  "install's vault; it is never shown again, and saving a new one replaces the old one.";
-export const PROVIDER_LABEL = "Provider";
 export const KEY_LABEL = "Key";
+export const KEY_INTRO =
+  "Paste the key the provider's own console gave you. It goes into this install's vault and is " +
+  "never shown again.";
 export const SAVE_THE_KEY = "Save the key";
+export const CLOSE_THE_KEY = "Cancel";
 export const NOTHING_TYPED = "Paste the key first.";
 export const KEEP_THE_OLD_KEY = "Do not save";
 
-export function saveKeyQuestion(provider: string): string {
-  return `Save this key for ${provider}?`;
+export function saveKeyQuestion(name: string): string {
+  return `Save this key for ${name}?`;
 }
 
-export function saveKeyConsequence(provider: string, held: boolean): string {
+export function saveKeyConsequence(name: string, held: boolean): string {
   return held
-    ? `Every question sent to ${provider} uses this key from now on, and the key saved before is replaced. A wrong key stops ${provider} answering until a right one is saved.`
-    : `Every question sent to ${provider} uses this key from now on.`;
+    ? `Every question sent to ${name} uses this key from now on, and the key saved before is replaced. A wrong key stops ${name} answering until a right one is saved.`
+    : `Every question sent to ${name} uses this key from now on.`;
 }
 
-export function keySavedSentence(provider: string, told: string): string {
-  return `Key saved for ${provider}. ${told}`;
+export function keySavedSentence(name: string, told: string): string {
+  return `Key saved for ${name}. ${told}`;
 }
 
 export function credentialPath(slot: string): string {
@@ -67,29 +68,28 @@ function readKept(payload: unknown): Kept | null {
 }
 
 export function ProviderKeyForm({
-  body,
+  row,
+  name,
+  held,
   onSaved,
+  onClose,
 }: {
-  readonly body: ProvidersBody;
-  /** Called after a key is kept, so the page reads the providers again and the column updates. */
-  readonly onSaved: () => void;
+  /** The provider's row, whose `credential.slot` is where the key is written. */
+  readonly row: ProviderStateRow;
+  /** The provider as a person knows it. */
+  readonly name: string;
+  /** Whether a key is already held, so the confirmation says one is replaced. */
+  readonly held: boolean;
+  /** Called with the sentence to show once the key is kept; the row closes the field. */
+  readonly onSaved: (sentence: string) => void;
+  readonly onClose: () => void;
 }) {
-  const settable = body.providers.filter((one) => one.credential !== null);
   const secret = useSecret();
-  const [provider, setProvider] = useState<string>(settable[0]?.provider ?? "");
   const [typed, setTyped] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
-  const [saved, setSaved] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [asking, setAsking] = useState(false);
-
-  if (settable.length === 0) {
-    return null;
-  }
-
-  const chosen = settable.find((one) => one.provider === provider);
-  const held = chosen?.credential?.held === true;
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -98,15 +98,13 @@ export function ProviderKeyForm({
       return;
     }
     setProblem(null);
-    setSaved(null);
     setFailure(null);
     setAsking(true);
   };
 
   // Read only once the person has confirmed, so the key leaves the field for the request and no sooner.
   const save = () => {
-    const row = chosen;
-    if (row === undefined || row.credential === null) {
+    if (row.credential === null) {
       setAsking(false);
       return;
     }
@@ -127,50 +125,34 @@ export function ProviderKeyForm({
         return;
       }
       const kept = readKept(result.data);
-      setSaved(keySavedSentence(row.provider, kept === null ? "" : kept.told));
-      onSaved();
+      onSaved(keySavedSentence(name, kept === null ? "" : kept.told));
     })();
   };
 
   return (
-    <form className="card" aria-labelledby="models-set-key" onSubmit={onSubmit}>
-      <h3 id="models-set-key">{SET_A_KEY}</h3>
-      <p className="note">{SET_A_KEY_INTRO}</p>
-      <label>
-        {PROVIDER_LABEL}{" "}
-        <select
-          name="provider"
-          value={provider}
-          disabled={busy}
-          onChange={(event) => {
-            setProvider(event.target.value);
-          }}
-        >
-          {settable.map((one) => (
-            <option key={one.provider} value={one.provider}>
-              {one.provider}
-            </option>
-          ))}
-        </select>
-      </label>
+    <form className="form" aria-label={`Key for ${name}`} onSubmit={onSubmit}>
+      <p className="note">{KEY_INTRO}</p>
       <SecretField
         secret={secret}
-        label={KEY_LABEL}
+        label={`${KEY_LABEL} for ${name}`}
         stored={held}
         disabled={busy}
         invalid={problem !== null}
         onPresenceChange={setTyped}
       />
       {problem === null ? null : <p className="note">{problem}</p>}
-      <p>
+      <div className="form-actions">
         <button type="submit" className="button" disabled={busy || asking}>
           {SAVE_THE_KEY}
+        </button>{" "}
+        <button type="button" className="button" disabled={busy} onClick={onClose}>
+          {CLOSE_THE_KEY}
         </button>
-      </p>
+      </div>
       {!asking ? null : (
         <ConfirmAction
-          question={saveKeyQuestion(provider)}
-          consequence={saveKeyConsequence(provider, held)}
+          question={saveKeyQuestion(name)}
+          consequence={saveKeyConsequence(name, held)}
           confirmLabel={SAVE_THE_KEY}
           cancelLabel={KEEP_THE_OLD_KEY}
           busy={busy}
@@ -181,11 +163,6 @@ export function ProviderKeyForm({
             setAsking(false);
           }}
         />
-      )}
-      {saved === null ? null : (
-        <p className="note" role="status">
-          {saved}
-        </p>
       )}
       {failure === null ? null : <FailureNotice failure={failure} />}
     </form>

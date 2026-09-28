@@ -24,8 +24,9 @@ answer for every setting.
 **Only branding is changed from this screen, and the reason differs per group.** Identity: an
 issuer or redirect changed from a browser is a sign-in that fails for everybody including the
 person who changed it, with no browser left to change it back, so it is set where the realm is.
-Models: whether text may leave the install at all is the profile, chosen by the wizard, and each
-hosted provider is the Models screen's switch; a second writer of either is the drift
+Models: whether text may leave the install at all is the profile, chosen by the wizard and since
+2026-09-28 on the Models screen (`brain.provider_routes.choose_profile`), and each hosted provider
+is the Models screen's switch; a second writer of either here is the drift
 `brain.install.ONE_READER_OR_TWO_DEFAULTS` names.
 Storage: moving the object store's address moves where every file is read from while every key
 still names the old one. Locale is outside the task this screen was built for and stays the
@@ -157,9 +158,9 @@ CHANGED_ELSEWHERE: Final[Mapping[Belongs, str]] = {
         "restart. A wrong issuer or redirect signs nobody in, including whoever changed it."
     ),
     Belongs.MODELS: (
-        "Each hosted provider is switched on or off on the Models and health screen. The profile "
-        "is chosen in the setup wizard or the environment file, then a restart, and so are the "
-        "endpoint and the embedding figures."
+        "Each hosted provider is switched on or off, and the profile is chosen as Where answers "
+        "are made, on the Models and health screen. The endpoint and the embedding figures are "
+        "set in the setup wizard or the environment file, then a restart."
     ),
     Belongs.STORAGE: (
         "Set in the environment file, then a restart. Moving the store does not move the files "

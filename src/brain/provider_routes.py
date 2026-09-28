@@ -60,6 +60,20 @@ calls, from `ops.provider_health`; the residency constraints attached to scopes;
 alerts of the last day. They are edited through `brain.model_health_routes`, under the same write
 capability as a switch, and each answer is this view.
 
+**Where answers are made is chosen here too, by the super administrator** (M5.7.1). The install's
+model profile (`INSTALL_MODEL_PROFILE`: `local`, this server only, or `hosted`, online providers)
+is the consent for a question's text to leave the server at all, and until 2026-09-28 only the
+setup wizard could set it: an owner who chose nothing got `local`, saved keys, and every hosted
+step skipped, while `TOLD[LOCAL_PROFILE]` told him to change a setting no screen offered.
+`PUT /models/profile` writes it through `brain.ops.install_settings.save`, the wizard's own writer,
+attributed so `0059`'s trigger ledgers who changed it, and holds the saved values in this process
+at once. Only a holder of `admin:install_setting` over everything may, which is what a super
+administrator holds (a role implies no capability here: `brain.identity.roles.
+NO_ROLE_IMPLIES_A_CAPABILITY`). The process that saved it plans with it from the answer to the
+write; another process reads it when it next loads the saved values, which is
+`brain.ops.install_settings.A_SAVED_SETTING_IS_NOT_A_MESSAGE_TO_ANOTHER_WORKER` and is not
+closed here. See `WHERE_ANSWERS_ARE_MADE_IS_AN_INSTALLATION_SETTING_AND_NOT_A_SWITCH`.
+
 **Not written, and said.** A provider switch is an `ops.setting` row, so it keeps its last change
 on the row and `0059`'s trigger appends a `setting` entry for it:
 `brain.ops.setting_store.A_SWITCH_SHOWS_ITS_LAST_CHANGE_AND_THE_LEDGER_KEEPS_EVERY_ONE`. A rung is
@@ -72,7 +86,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime, timedelta
-from typing import Any, Final
+from typing import Any, Final, Literal
 
 import structlog
 from fastapi import APIRouter, Request
@@ -90,6 +104,7 @@ from brain.core.errors import Absent, Failed
 from brain.core.lane import Lane
 from brain.credential_routes import SlotView, credentials_of, listing, may_manage
 from brain.gate.finish import Finished, ModelCallOutcome, Origin, RequestRecorder, finish
+from brain.install import hold_saved
 from brain.models.assembly import HOSTED_PROFILE, LOCAL_PROFILE, TOLD, RungSkip, local_only
 from brain.models.calls import ModelCalls, Planned, chain_of
 from brain.models.disclosure import TOLD as CATEGORY_TOLD
@@ -103,6 +118,7 @@ from brain.models.wire import LOCAL_PROVIDER
 from brain.operate_routes import MODELS_SCREEN
 from brain.ops.credentials import TOLD as VAULT_TOLD
 from brain.ops.credentials import VaultState
+from brain.ops.install_settings import load, save
 from brain.ops.model_service import (
     KNOWN_PROVIDERS,
     ModelService,
@@ -115,6 +131,7 @@ from brain.ops.provider_health_store import live_constraints, recent_alerts
 from brain.ops.provider_keys import PROVIDER_SLOTS
 from brain.ops.telemetry_store import TelemetryRecorder
 from brain.routing_routes import MATRIX_WRITE
+from brain.settings_routes import may_configure
 
 log = structlog.get_logger()
 
@@ -147,7 +164,20 @@ A_CHECK_IS_A_REQUEST_AND_NOT_A_PROBE: Final = (
     "it is not a question, so the question count never sees it."
 )
 
+#: Why the profile is saved as an installation setting from this screen rather than switched.
+WHERE_ANSWERS_ARE_MADE_IS_AN_INSTALLATION_SETTING_AND_NOT_A_SWITCH: Final = (
+    "The profile decides whether a question's text may leave the server at all, for every "
+    "provider at once, so it is the installation value INSTALL_MODEL_PROFILE and not a provider "
+    "switch. It is saved by the wizard's own writer, read by the one reader value_of, ledgered as "
+    "a setting, and changed only by whoever holds admin:install_setting over everything. A "
+    "second store for it here would be a second answer to where text may go, and the one the "
+    "worker read would be the one nobody changed."
+)
+
 # ----------------------------------------------------------------- the figures
+
+#: The installation value a profile change saves.
+PROFILE_SETTING: Final = "INSTALL_MODEL_PROFILE"
 
 #: What a check sends. Fixed, so nothing about the install or a person reaches the provider, and
 #: short, so the call costs a handful of tokens.
@@ -349,6 +379,8 @@ class ProvidersView(BaseModel):
     residency: list[ResidencyConstraintView] = []
     #: The chain-depth alerts of the last `ALERT_WINDOW`, newest first.
     depth_alerts: list[ChainDepthAlertView] = []
+    #: Whether this reader may change where answers are made. Presentation only.
+    profile_editable: bool = False
 
 
 class ProviderSwitchAsked(BaseModel):
@@ -357,6 +389,14 @@ class ProviderSwitchAsked(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     on: bool
+
+
+class ProfileAsked(BaseModel):
+    """Where answers are made: `local`, this server only, or `hosted`, online providers."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    profile: Literal["local", "hosted"]
 
 
 class CheckView(BaseModel):
@@ -453,6 +493,7 @@ def providers_view(
     disclosed: dict[str, dict[DataCategory, int]] | None = None,
     residency: list[ResidencyConstraintView] | None = None,
     alerts: list[ChainDepthAlertView] | None = None,
+    profile_editable: bool = False,
 ) -> ProvidersView:
     """The plan and the switch rows, as one reader may be shown them.
 
@@ -534,6 +575,7 @@ def providers_view(
         tiers=tier_views(plan.tiers),
         residency=residency or [],
         depth_alerts=alerts or [],
+        profile_editable=profile_editable,
     )
 
 
@@ -678,6 +720,7 @@ async def _view(request: Request, asked: Asked, calls: ModelCalls) -> ProvidersV
         disclosed=await _disclosed(request),
         residency=await _residency(request),
         alerts=await _alerts(request, asked.now),
+        profile_editable=may_configure(asked.reach, asked.now),
     )
 
 
@@ -725,6 +768,31 @@ async def switch(
     log.info(
         "provider switched", provider=provider, on=body.on, principal=asked.caller.principal.id
     )
+    return await _view(request, asked, models_of(request).calls)
+
+
+@router.put("/models/profile", response_model=ProvidersView, responses=COMMON_RESPONSES)
+async def choose_profile(request: Request, body: ProfileAsked, asked: Asked) -> ProvidersView:
+    """Choose where answers are made, and answer with the plan the next call will make.
+
+    The authority first and the database second, as a switch does. The saved values are read back
+    in the same transaction and held for this process, so the plan this answers with is already
+    the new one. See `WHERE_ANSWERS_ARE_MADE_IS_AN_INSTALLATION_SETTING_AND_NOT_A_SWITCH`.
+    """
+    if not may_configure(asked.reach, asked.now):
+        log.info("model profile change refused", principal=asked.caller.principal.id)
+        raise _not_answerable()
+    factory = _sessions(request)
+    if factory is None:
+        raise Failed("no database on this process")
+    async with factory() as session:
+        # Who, at what reach, in which request, for the ledger entry the setting's trigger writes.
+        await attribute(session, asked)
+        await save(session, {PROFILE_SETTING: body.profile}, updated_by=asked.caller.principal.id)
+        saved = await load(session)
+        await session.commit()
+    hold_saved(saved)
+    log.info("model profile chosen", profile=body.profile, principal=asked.caller.principal.id)
     return await _view(request, asked, models_of(request).calls)
 
 

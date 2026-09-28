@@ -83,6 +83,8 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
     { pattern: "/models", index: 1, writes: true },
     { pattern: "/models", opener: "Edit numbers", index: 1, writes: true },
   ],
+  // A provider's key field opens on its row and is then the first form on the page, above the register's.
+  "src/components/ProviderKeyForm.tsx": [{ pattern: "/models", opener: "Replace key", index: 0, writes: true }],
   "src/components/AgentModelPin.tsx": [{ pattern: "/agents/:agentId", opener: "Profile", index: 0, writes: true }],
   "src/pages/Notifications.tsx": [
     { pattern: "/notifications", index: 0, writes: true },
@@ -128,11 +130,6 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
  * Checked, not trusted: an entry for a file that no longer holds both fails the first test.
  */
 const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
-  "src/components/ProviderKeyForm.tsx":
-    "Drawn only for a reader who may manage credentials, which no page case here is. A blank key " +
-    "sends nothing and says to paste one, which tests/models-page.test.tsx holds by pressing Save " +
-    "with the field empty, and the API judges a pasted key with problems_with before the vault is " +
-    "asked, which tests/unit/test_credential_routes.py holds.",
   "src/components/ConnectLark.tsx":
     "Its Test and Save buttons stay disabled until an App ID and an App Secret are typed, so a " +
     "blank form cannot be sent. What is typed is judged by the API before anything reaches Lark: " +

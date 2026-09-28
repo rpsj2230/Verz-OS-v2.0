@@ -443,6 +443,7 @@ const MODELS_AND_HEALTH = {
     ],
     exhausted_tiers: ["main"],
     editable: true,
+    profile_editable: true,
     vault: "ready",
     vault_told: "The secrets vault answered.",
     tiers: [
@@ -472,7 +473,6 @@ const MODELS_AND_HEALTH = {
       },
     ],
   },
-  "/api/v1/routing/rungs": MATRIX,
   "/api/v1/report/service-levels": {
     start: "2019-02-25T09:00:00Z",
     end: "2019-03-04T09:00:00Z",
@@ -1022,7 +1022,8 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     address: "/agents/quote-helper",
     signedIn: true,
     drawsValues: true,
-    answers: { "/api/v1/agents/quote-helper/workspace": WORKSPACE },
+    // The matrix too, which the Profile's model card draws the order a question tries from (M5.7.3).
+    answers: { "/api/v1/agents/quote-helper/workspace": WORKSPACE, "/api/v1/routing/rungs": MATRIX },
   },
   // The Automations tab, so the gallery and the installed automations it draws are held to a phone
   // as well as the workspace.

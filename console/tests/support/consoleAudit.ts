@@ -75,7 +75,7 @@ import {
   termsApiPath,
 } from "../../src/pages/providerRegisterQuery";
 import { modelPinApiPath } from "../../src/pages/agentModelPinQuery";
-import { providerCheckApiPath, providerSwitchApiPath } from "../../src/pages/modelsQuery";
+import { PROFILE_API_PATH, providerCheckApiPath, providerSwitchApiPath } from "../../src/pages/modelsQuery";
 import {
   RESIDENCY_API_PATH,
   residencyRetireApiPath,
@@ -323,6 +323,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
     routes: [
       "/api/v1/operate/models",
       "/api/v1/models/providers*",
+      "/api/v1/models/profile",
       "/api/v1/routing/rungs*",
       "/api/v1/routing/changes",
       "/api/v1/routing/golden-questions*",
@@ -346,8 +347,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
         what: "A provider's terms and an added provider's retirement are logged and not on the audit ledger: the ledger's action list gains no provider entry in this release.",
         leaf: "M5.6.4",
       },
-      { what: "A provider key cannot be written or replaced from a screen after setup.", leaf: "M27.8.8" },
-      { what: "The model profile and endpoint cannot be changed after setup.", because: ONCE_BY_THE_WIZARD },
+      { what: "The model endpoint cannot be changed after setup.", because: ONCE_BY_THE_WIZARD },
     ],
   },
   "Agents and their configuration, including templates": {
@@ -837,6 +837,7 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/Models.tsx providerSwitchApiPath(pending.provider)": [
     at("PUT /api/v1/models/providers/{provider}", "providerSwitchApiPath", providerSwitchApiPath("anthropic")),
   ],
+  "src/pages/Models.tsx PROFILE_API_PATH": [at("PUT /api/v1/models/profile", "PROFILE_API_PATH", PROFILE_API_PATH)],
   "src/pages/Models.tsx providerCheckApiPath(pending.provider)": [
     at("POST /api/v1/models/providers/{provider}/check", "providerCheckApiPath", providerCheckApiPath("anthropic")),
   ],
@@ -1376,6 +1377,13 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: t("test_model_service", "test_the_stores_read_the_ladder_write_attempts_by_id_and_keep_a_switch", true),
     audit: A_SETTING_ENTRY_NO_TEST_FOLLOWS,
     behaviour: t("test_provider_routes", "test_switching_a_provider_off_takes_its_rungs_out_of_the_next_plan_at_once"),
+  },
+  "PUT /api/v1/models/profile": {
+    row: t("test_provider_routes", "test_where_answers_are_made_is_saved_by_the_super_administrator_ledgered_and_planned_at_once"),
+    audit: {
+      none: "The route sets the audit attribution 0059's trigger reads, which the row test asserts over a stub; no scratch-Postgres test yet reads the ledger entry back.",
+    },
+    behaviour: t("test_provider_routes", "test_where_answers_are_made_is_saved_by_the_super_administrator_ledgered_and_planned_at_once"),
   },
   "POST /api/v1/models/providers/{provider}/check": {
     row: t("test_provider_routes", "test_a_check_is_one_metered_call_recorded_on_the_ledger_and_never_as_a_question"),
