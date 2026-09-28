@@ -76,6 +76,19 @@ A_DERIVATION_IS_PART_OF_THE_POLICY_IT_COMPILES_TO: Final = (
 )
 
 
+#: Why a derivation whose every input is open refuses to load.
+A_DERIVATION_FROM_OPEN_COLUMNS_PROTECTS_NOTHING: Final = (
+    "Everyone permitted the table reads an open column, so a column derived only from open "
+    "columns can be worked out by all of them, and the closure could keep it hidden only by "
+    "withholding one of the open inputs from everybody. It did exactly that until 2026-09-28: "
+    "opening the cost while the margin stayed derived from the sell price and the cost withheld "
+    "the sell price, the one column the company needs, because two open columns tie on "
+    "sensitivity and the tie is broken by name. Such a classification is refused, so an open "
+    "column is never withheld from anybody the table admits, and the administrator decides "
+    "which of the three to change."
+)
+
+
 class ColumnClassificationError(Exception):
     """A column classification that could not do what it says.
 
@@ -155,6 +168,21 @@ class TableClassification:
                 msg = (
                     f"{self.entity}.{rule.column} is declared as derived from {unknown}, "
                     f"which {'are' if len(unknown) > 1 else 'is'} not classified here"
+                )
+                raise ColumnClassificationError(msg)
+        # Spelled out rather than calling `table_capability`, which is declared further down
+        # and would not exist yet when `PRICE_LIST` is built at import.
+        table_grant = Capability(value=f"read:{self.entity}")
+        for rule in self.rules:
+            inputs = [self.rule_for(name) for name in sorted(rule.derived_from)]
+            if inputs and all(
+                one is not None and one.required_capability == table_grant for one in inputs
+            ):
+                # See `A_DERIVATION_FROM_OPEN_COLUMNS_PROTECTS_NOTHING`.
+                msg = (
+                    f"{self.entity}.{rule.column} is derived from {sorted(rule.derived_from)}, "
+                    "which are all open, so everybody the table admits can work it out; mark "
+                    "one of them restricted, or stop marking this column derived"
                 )
                 raise ColumnClassificationError(msg)
 
@@ -390,9 +418,10 @@ def marked(
 
     A derived column must name what it is derived from and nothing else may. An open column
     with a derivation would be a rule the closure never consults, because an open column is
-    never withheld from anybody who reaches the table, and a derivation that never fires reads
-    as a control while being a comment. A derived column with none is a restricted column with
-    a misleading word on it.
+    never withheld from anybody who reaches the table (`TableClassification` refuses the one
+    arrangement that would withhold it: see `A_DERIVATION_FROM_OPEN_COLUMNS_PROTECTS_NOTHING`),
+    and a derivation that never fires reads as a control while being a comment. A derived
+    column with none is a restricted column with a misleading word on it.
     """
     inputs = frozenset(derived_from)
     if access is ColumnAccess.DERIVED and not inputs:
