@@ -78,7 +78,7 @@ from datetime import datetime
 from typing import Any, Final, cast
 
 import sqlalchemy as sa
-from sqlalchemy import func
+from sqlalchemy import TextClause, func
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -490,8 +490,14 @@ async def ingest_document(
     env: Mapping[str, str] | None = None,
     bounds: ChunkBounds | None = None,
     blocks: Sequence[Block] | None = None,
+    attributed: Sequence[TextClause] = (),
 ) -> Job | None:
     """Write an admitted item to the corpus, commit, then hand its embedding job to the queue.
+
+    `attributed` is `brain.attribution.of_request` for a write a person makes, run first in the
+    transaction, so the ledger entry `0115`'s trigger appends for the item names that person, their
+    reach and the request. Empty for the connector leg, which has nobody present; the trigger then
+    names the owner and marks the actor inferred.
 
     `enqueue` is whatever carries a `Job` onto the queue, which is `brain.ops.queue.enqueue_job`
     bound to an app with the task registered. A parameter rather than an app, so the door that
@@ -503,6 +509,8 @@ async def ingest_document(
     """
     revision = embedding_revision(env)
     async with sessions() as session, session.begin():
+        for statement in attributed:
+            await session.execute(statement)
         reach = await reach_of(session, item.owner_id, now=now)
         if reach is None:
             msg = (

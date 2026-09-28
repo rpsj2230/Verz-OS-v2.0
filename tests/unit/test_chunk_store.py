@@ -64,6 +64,7 @@ from brain.knowledge.item import KnowledgeItem, KnowledgeState
 from brain.knowledge.search import KNOWLEDGE_READ, Reach, reach_predicate, session_settings
 from brain.knowledge.visibility import KnowledgeVisibility
 from brain.ops.queue import Job
+from brain.tables.audit import attributed_to
 
 POSTGRES = create_engine("postgresql+psycopg://", poolclass=NullPool).dialect
 
@@ -489,6 +490,34 @@ def test_a_document_is_committed_before_its_job_is_handed_to_the_queue() -> None
     told = rendered(session_settings(Reach(principal_id=OWNER)))
     assert rendered(database.asked[:2]) == told
     assert database.asked[2] is RESOLVE
+
+
+def test_a_persons_attribution_runs_first_in_the_transaction_that_writes_the_item() -> None:
+    """The ledger entry `0115`'s trigger appends for the item reads the actor, the reach digest
+    and the trace from the transaction. Delete this and the attribution can run in another
+    transaction, or after the write, and the Audit screen names the owner, inferred, for an
+    upload a person made."""
+    database = Database()
+    attribution = attributed_to(actor_id="u_uploader", ent_hash="a" * 32, trace_id="t-upload")
+
+    async def enqueue(job: Job) -> None:
+        return None
+
+    settle(
+        ingest_document(
+            sessions_over(database),
+            an_item(),
+            enqueue=enqueue,
+            now=NOW,
+            env={REVISION_SETTING: A_REVISION},
+            attributed=attribution,
+        )
+    )
+
+    assert database.events[0] == "begin"
+    assert tuple(database.asked[: len(attribution)]) == attribution
+    writes = [index for index, one in enumerate(database.asked) if isinstance(one, Insert)]
+    assert writes and min(writes) > len(attribution)
 
 
 def test_an_owner_who_reaches_nothing_now_has_nothing_written_or_queued() -> None:

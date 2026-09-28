@@ -21,12 +21,15 @@ Task ids: M7.6.3, M7.7.1, M7.6.1
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from datetime import UTC, datetime
 
 import psycopg
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from brain.audit.view import AuditFilter, AuditView
+from brain.audit_routes import StoredLedger, entry_from
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.envelope import TypedResult
 from brain.core.redaction import redact
@@ -42,6 +45,7 @@ from brain.knowledge.search import KNOWLEDGE_READ, KNOWLEDGE_UPLOAD
 from brain.knowledge.uploads import ReadUpload, ReceivedUpload, read_for_text_path
 from brain.knowledge.visibility import KnowledgeVisibility
 from brain.ops.queue import Job
+from brain.tables.audit import AuditEntryRow, attributed_to
 from tests.fixtures.documents import LINE
 from tests.fixtures.knowledge_items import a_person
 from tests.fixtures.retirable import has_pgvector
@@ -100,8 +104,13 @@ def uploaded(kind: KnowledgeKind = KnowledgeKind.SOP) -> ReadUpload:
     return read
 
 
+#: The reach digest and trace the upload below is attributed with, as the route's request would.
+UPLOAD_REACH = "b" * 32
+UPLOAD_TRACE = "t-knowledge-upload"
+
+
 def stored(url: str, read: ReadUpload) -> Job | None:
-    """`ingest_document` as the route's store calls it, on an install with no vector leg."""
+    """`ingest_document` as the route's store calls it, attributed, with no vector leg."""
 
     async def enqueue(job: Job) -> None:
         raise AssertionError("an install declaring no embedding revision queued a job")
@@ -115,6 +124,9 @@ def stored(url: str, read: ReadUpload) -> Job | None:
             now=datetime.now(tz=UTC),
             env={REVISION_SETTING: REVISION_UNSET},
             blocks=read.blocks,
+            attributed=attributed_to(
+                actor_id=ADMINISTRATOR, ent_hash=UPLOAD_REACH, trace_id=UPLOAD_TRACE
+            ),
         ),
     )
 
@@ -221,3 +233,55 @@ def test_the_library_read_returns_the_kind_an_item_was_added_as() -> None:
         rows = as_application(url, "SELECT item_id, kind FROM know.library_items_with_kind(10)")
 
     assert rows == [(read.item.item_id, "policy")]
+
+
+def test_an_upload_appends_one_ledger_entry_the_audit_screens_reader_finds() -> None:
+    """**Every change is audited, on a server.** `0115`'s trigger appends one `setting` entry for
+    the uploaded item, attributed to the administrator at the reach and trace the request set,
+    naming the item, its kind, its level and its department; read back through the Audit route's
+    own store and `AuditView`, a holder of `read:audit.setting` finds it and it carries no word of
+    the title or the text. Sending the same file again appends a second entry saying `replaced`.
+
+    Delete this and the trigger can stop firing, fire with placeholders, or carry the title, with
+    every stand-in test green. **Skips without pgvector**, because the trigger is `0115`'s and only
+    the full chain runs it."""
+    if not has_pgvector(admin_url()):
+        pytest.skip("head needs pgvector, which CI has")
+    with _database("brain_knowledge_upload_audit") as url:
+        people(url)
+        an_administrator(url)
+        read = uploaded(KnowledgeKind.SOP)
+        stored(url, read)
+        stored(url, read)
+
+        async def ledger(
+            sessions: async_sessionmaker[AsyncSession],
+        ) -> Sequence[AuditEntryRow]:
+            return await StoredLedger(sessions).window(
+                AuditFilter(subject_kinds=frozenset({"setting"})),
+                position=None,
+                newest_first=False,
+                limit=50,
+            )
+
+        rows = through(url, ledger)
+
+    entries = [one for one in (entry_from(row) for row in rows) if one is not None]
+    mine = [one for one in entries if one.subject == f"setting:knowledge_item.{read.item.item_id}"]
+    assert [(one.actor_id, one.ent_hash, one.trace_id) for one in mine] == [
+        (ADMINISTRATOR, UPLOAD_REACH, UPLOAD_TRACE)
+    ] * 2
+    assert [one.details["change"] for one in mine] == ["added", "replaced"]
+    assert {key: mine[0].details[key] for key in ("kind", "level", "department")} == {
+        "kind": "sop",
+        "level": "department",
+        "department": "web",
+    }
+    auditor = EntitlementSet(
+        principal_id="u_auditor",
+        grants=(Grant(capability=Capability(value="read:audit.setting"), scope=Scope()),),
+    )
+    page = AuditView(mine, reader=auditor, now=datetime.now(tz=UTC)).page()
+    assert len(page.rows) == 2
+    shown = repr(page.rows)
+    assert "TEALCHECK" not in shown and "Site handover" not in shown
