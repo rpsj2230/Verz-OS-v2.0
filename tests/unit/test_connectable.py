@@ -44,14 +44,25 @@ REPO: Final = Path(__file__).resolve().parents[2]
 SLOTS_DOC: Final = REPO / "ops" / "openbao" / "credential-slots.md"
 
 #: One identifier per connectable source, shaped as the source's own would be and naming nobody.
+#: It is the first setting each form asks for, and the one the source's scope is pinned to.
 IDENTIFIERS: Final = {
     "xero": "11111111-2222-3333-4444-555555555555",
     "hubspot": "12345678",
+    "freshdesk": "example.freshdesk.com",
 }
+
+#: The settings after the first, for a source whose form asks for more than one.
+FURTHER_SETTINGS: Final[dict[str, dict[str, str]]] = {"freshdesk": {"department": "support"}}
+
+#: A source's key that carries no scopes, and the kind of key its slot row asks for and refuses.
+#: A Freshdesk key is an agent's and can do whatever that agent can.
+KEY_KIND_WITHOUT_SCOPES: Final = {"freshdesk": ("agent", "admin")}
 
 
 def settings_for(name: str, value: str | None = None) -> dict[str, str]:
-    return {CONNECTABLE[name].settings[0].name: IDENTIFIERS[name] if value is None else value}
+    """Every setting a source asks for, the first replaced by `value` when one is given."""
+    first = IDENTIFIERS[name] if value is None else value
+    return {CONNECTABLE[name].settings[0].name: first, **FURTHER_SETTINGS.get(name, {})}
 
 
 def modules_that_build_a_manifest() -> set[str]:
@@ -108,12 +119,19 @@ def test_a_source_s_key_hint_asks_for_exactly_the_scopes_its_slot_row_asks_for(n
         for line in SLOTS_DOC.read_text(encoding="utf-8").splitlines()
         if line.startswith(f"| `connectors/creds/{name}`")
     )
-    requested = row.split("|")[3]
+    requested, refused = row.split("|")[3], row.split("|")[4]
     scopes = re.findall(r"`([a-z.]+)`", requested)
+    hint = CONNECTABLE[name].credential_hint
 
+    if name in KEY_KIND_WITHOUT_SCOPES:
+        asked_for, never = KEY_KIND_WITHOUT_SCOPES[name]
+        assert not scopes
+        assert asked_for in requested.lower() and never in refused.lower()
+        assert asked_for in hint.lower() and never in hint.lower()
+        return
     assert scopes
     for scope in scopes:
-        assert scope in CONNECTABLE[name].credential_hint
+        assert scope in hint
 
 
 def test_every_source_the_console_cannot_connect_says_why_in_words() -> None:
@@ -125,7 +143,7 @@ def test_every_source_the_console_cannot_connect_says_why_in_words() -> None:
         where = "Connect Lark" if one.name.startswith("lark_") else "connected at the server"
         assert where in one.why
     with pytest.raises(NotConnectableError):
-        connectable("freshdesk")
+        connectable("laravel")
     assert connectable("xero") is CONNECTABLE["xero"]
 
 
@@ -184,5 +202,7 @@ def test_the_blank_sentence_served_beside_the_form_is_the_one_the_judgement_answ
     serves. Delete this and the served sentence and the refusal can part, so the page says one thing
     before the confirmation and the API another after it."""
     for kind in CONNECTABLE.values():
-        [told] = [one for one in settings_problems(kind, {}) if one.code == "blank"]
-        assert told.message == blank_sentence(kind.settings[0])
+        told = [one for one in settings_problems(kind, {}) if one.code == "blank"]
+        assert [(one.field, one.message) for one in told] == [
+            (setting.name, blank_sentence(setting)) for setting in kind.settings
+        ]

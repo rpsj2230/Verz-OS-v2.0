@@ -103,7 +103,7 @@ def test_a_name_that_is_not_one_slot_segment_is_refused_even_to_the_widest_grant
 
 def test_a_source_the_console_cannot_connect_is_one_problem_and_nothing_else_is_judged() -> None:
     """Delete this and an unknown source reaches `settings_problems` with nothing to judge by."""
-    found = connection_problems("freshdesk", {"domain": "x"}, "")
+    found = connection_problems("laravel", {"host": "x"}, "")
 
     assert [(one.field, one.code) for one in found] == [(SOURCE_FIELD, "not_connectable")]
 

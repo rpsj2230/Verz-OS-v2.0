@@ -100,7 +100,11 @@ def a_connection(name: str = "xero", *, settings: Mapping[str, str] | None = Non
 
 
 def _settings(name: str) -> dict[str, str]:
-    return {"xero": {"tenant_id": TENANT}, "hubspot": {"portal_id": PORTAL}}[name]
+    return {
+        "xero": {"tenant_id": TENANT},
+        "hubspot": {"portal_id": PORTAL},
+        "freshdesk": {"domain": "example.freshdesk.com", "department": "support"},
+    }[name]
 
 
 def a_state(**changed: Any) -> SyncState:
@@ -534,7 +538,9 @@ def test_hubspots_reading_follows_the_cursor_it_is_given_and_reads_the_recorded_
     reading = READINGS["hubspot"]
     first = reading.first_page(hubspot.ENTITY_CLIENT)
     empty = recorded("HUBSPOT-200-empty")
-    operation = reading.operation(hubspot.ENTITY_CLIENT, resolver=Resolver())
+    operation = reading.operation(
+        hubspot.ENTITY_CLIENT, settings=_settings("hubspot"), resolver=Resolver()
+    )
     reply = reading.interpret(operation, status=empty.status, body=empty.body, fetched_at="now")
 
     assert dict(first) == dict(hubspot.default_arguments(hubspot.ENTITY_CLIENT))

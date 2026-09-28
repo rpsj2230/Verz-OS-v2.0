@@ -492,9 +492,9 @@ export const AREAS: Readonly<Record<string, Area>> = {
           "brain.ops.limits records no verified call ceiling for it and brain.connectors.throttle.limits_for refuses to invent one; its row carries brain.ops.connector_sync.NO_VERIFIED_CEILING.",
       },
       {
-        what: "Freshdesk, Google Drive and the Laravel views cannot be connected from a screen.",
+        what: "Google Drive and the Laravel views cannot be connected from a screen.",
         because:
-          "Each needs a visibility rule, a department declaration or a key file the form cannot collect, which brain.ops.connectable.NOT_FROM_THE_CONSOLE says for each.",
+          "Each needs a visibility rule, a department declaration with an answerable person, or a key file the form cannot collect, which brain.ops.connectable.NOT_FROM_THE_CONSOLE says for each. Freshdesk is connected from the screen with its address and the one department that reads it (brain.connectors.freshdesk.ONE_DEPARTMENT_READS_A_CONNECTED_HELPDESK).",
       },
       {
         what: "Connect Lark switches knowledge from Wiki and Base on, and no question is answered from Lark yet.",

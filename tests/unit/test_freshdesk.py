@@ -24,11 +24,18 @@ field, and a test here asserts it never survives the projection; `FRESH-429` car
 `Retry-After` the connector must read rather than guess. Neither could be arranged against a
 real helpdesk on demand, which is the point of recording them.
 
-Task ids: M11.6.2
+**A helpdesk connected from the console is read into its minimal index and nothing else.** The
+last section drives the console form and the worker's reading from `FRESH-200-list`, holds what
+the reading keeps to `brain.connectors.minimal_index.assert_minimal_index`, and plants a canary
+minted for the run in each ticket's note and body to prove neither is kept. The database half is
+`tests/unit/test_freshdesk_sync.py`.
+
+Task ids: M11.6.2, M11.9.6
 """
 
 from __future__ import annotations
 
+import base64
 import inspect
 from dataclasses import dataclass, is_dataclass
 from datetime import UTC, datetime, timedelta
@@ -36,6 +43,7 @@ from typing import Any
 
 import pytest
 
+from brain.connectors import hubspot, xero
 from brain.connectors.change_signal import DeletionCheck
 from brain.connectors.contract import (
     AccessMode,
@@ -45,17 +53,23 @@ from brain.connectors.contract import (
     assert_fetches_only,
     assert_holds_no_credential,
 )
+from brain.connectors.declaration import KeyScheme, SettingRefusedError
 from brain.connectors.freshdesk import (
+    CONNECTOR,
     CONTACT,
+    EVERY_TICKET_SINCE,
     FETCHED_LIVE_INSTEAD,
     FRESHDESK,
     LIST_MAX_PAGE_SIZE,
+    READING_INTERVAL,
     RETRY_AFTER_WHEN_UNSTATED,
     SEARCH_MAX_PAGES,
     SEARCH_PAGE_SIZE,
     TICKET,
     TICKET_FIELDS,
     Endpoint,
+    FreshdeskConnection,
+    FreshdeskReading,
     FreshdeskRefusedError,
     FreshdeskUnreachableError,
     PageRequest,
@@ -78,6 +92,13 @@ from brain.connectors.freshdesk import (
 )
 from brain.connectors.manifest import ChangeSignal, ManifestError, ProjectedEntity, failed_clauses
 from brain.connectors.manifest import projectability as clauses_for
+from brain.connectors.minimal_index import (
+    StoredRow,
+    assert_minimal_index,
+    fresh_canary,
+    planted,
+    sightings,
+)
 from brain.connectors.projection import ProjectedRecord
 from brain.connectors.rest import RestSpecError
 from brain.connectors.throttle import CallOutcome, ceiling_for, is_retryable
@@ -92,11 +113,17 @@ from brain.core.projection import (
 )
 from brain.core.scope import Clause, Op, Scope
 from brain.gate.provenance import Freshness
+from brain.ops.connectable import connectable, key_reference, manifest_for, settings_problems
+from brain.ops.connector_sync import kept_fields
+from brain.ops.connector_sync_run import authorization
 from brain.ops.limits import FRESHDESK_SEARCH_MAX_RECORDS
 from brain.ops.secrets import SecretRef, VaultRole
 from tests.fixtures.cassettes import CASSETTES, Cassette, Source, for_source
+from tests.fixtures.cassettes._types import SEEN_AT
 
-DOMAIN = "verz.freshdesk.com"
+DOMAIN = "example.freshdesk.com"
+#: The department a console connection names as the one that reads the helpdesk.
+DEPARTMENT = "support"
 FETCHED_AT = "2026-09-06T09:00:00+00:00"
 NOW = datetime(2026, 9, 6, 9, 0, tzinfo=UTC)
 
@@ -190,6 +217,27 @@ def a_manifest(**overrides: Any) -> Any:
     }
     settings.update(overrides)
     return manifest(**settings)
+
+
+class Public:
+    """A resolver that places every name on a public address, as the vendor's would be."""
+
+    def resolve(self, host: str) -> list[str]:
+        del host
+        return ["93.184.216.34"]
+
+
+PUBLIC = Public()
+
+
+def console_settings(**changed: str) -> dict[str, str]:
+    """What an administrator types on the Connectors screen to connect a helpdesk."""
+    return {"domain": DOMAIN, "department": DEPARTMENT, **changed}
+
+
+def a_console_manifest() -> Any:
+    """The manifest a console connection builds, with the key where the console keeps it."""
+    return manifest_for(FRESHDESK, console_settings())
 
 
 def search_operation() -> Any:
@@ -865,3 +913,284 @@ def test_the_recordings_this_connector_is_built_against_still_exist() -> None:
 
     assert {"FRESH-200-search", "FRESH-429"} <= recorded
     assert cassette("FRESH-429").headers["Retry-After"] == "60"
+
+
+# ------------------------------------------------------ connected from the console (M11.9.6)
+def test_a_helpdesk_is_connected_from_the_console_with_its_address_its_department_and_a_key() -> (
+    None
+):
+    """**The positive case, and the one M11.9.6 rests on.** The Connectors screen lists Freshdesk
+    with two settings, and what they build is pinned to that one helpdesk, keeps its tickets under
+    the department typed, runs against Freshdesk's verified ceiling and reads the key from the slot
+    the console wrote it to, read-only. Nothing is asked of the server.
+
+    Delete this and the form can build a manifest scoped to nothing, or visible to nobody, with
+    every refusal test below still green."""
+    form = connectable(FRESHDESK)
+    built = manifest_for(FRESHDESK, console_settings())
+
+    assert [one.name for one in form.settings] == ["domain", "department"]
+    assert CONNECTOR.console is not None and CONNECTOR.not_from_the_console == ""
+    assert built.scope.selectors == (DOMAIN,)
+    (projection,) = built.projections
+    assert projection.visibility == Scope.department(DEPARTMENT)
+    assert built.ceiling == FRESHDESK
+    assert ceiling_for(built).name == FRESHDESK
+    assert built.credential.ref == key_reference(FRESHDESK)
+    assert built.credential.mode is AccessMode.READ_ONLY
+    assert settings_problems(form, console_settings()) == ()
+
+
+@pytest.mark.parametrize(
+    "typed",
+    [
+        "helpdesk.example.com",
+        "example.freshdesk.com.elsewhere.test",
+        "https://example.freshdesk.com",
+        "example.freshdesk.com/",
+        "*.freshdesk.com",
+        "freshdesk.com",
+        "a.b.freshdesk.com",
+        "10.0.0.1",
+    ],
+)
+def test_a_key_is_only_ever_sent_to_one_address_under_freshdesk_com(typed: str) -> None:
+    """**A reach rule.** The address typed is where the worker sends the key, so anything but one
+    name under the vendor's domain is refused at connect, and the refusal names the address
+    setting. Delete this and a mistyped or hostile address receives the helpdesk's key in the
+    first header of the first run."""
+    with pytest.raises(SettingRefusedError) as refused:
+        FreshdeskConnection.from_settings(console_settings(domain=typed))
+
+    assert refused.value.setting == "domain"
+
+
+def test_the_address_is_matched_whatever_case_it_was_typed_in() -> None:
+    """The sibling of the refusal: a host name is not case-sensitive, so a capitalised paste is
+    the same helpdesk and is pinned in lower case. Delete this and a refusal that turned every
+    address away would pass the test above."""
+    connection = FreshdeskConnection.from_settings(console_settings(domain="Example.Freshdesk.com"))
+
+    assert connection.domain == DOMAIN
+    assert connection.scope().admits(DOMAIN)
+
+
+@pytest.mark.parametrize("typed", ["Support", "support team", "support-desk", "*", "_support"])
+def test_a_department_no_grant_could_name_is_refused(typed: str) -> None:
+    """**A permission rule.** The department is the visibility every kept ticket carries, and a
+    grant can only name a department's short name, so anything else would keep tickets no
+    person could ever be granted. Refused at connect, naming the department setting. Delete this
+    and a helpdesk connects, syncs and is silently unreadable."""
+    with pytest.raises(SettingRefusedError) as refused:
+        FreshdeskConnection.from_settings(console_settings(department=typed))
+
+    assert refused.value.setting == "department"
+
+
+def test_the_screen_marks_only_the_setting_the_connector_refused() -> None:
+    """A form with two settings has to say which was wrong. Each refusal marks its own setting
+    with that setting's sentence and leaves the other alone. Delete this and a wrong address is
+    reported against the department too, and the person retypes the one that was right."""
+    form = connectable(FRESHDESK)
+    sentences = {one.name: one.refused for one in form.settings}
+
+    (address,) = settings_problems(form, console_settings(domain="helpdesk.example.com"))
+    (department,) = settings_problems(form, console_settings(department="Support"))
+
+    assert (address.field, address.code, address.message) == (
+        "domain",
+        "refused",
+        sentences["domain"],
+    )
+    assert (department.field, department.code, department.message) == (
+        "department",
+        "refused",
+        sentences["department"],
+    )
+
+
+# ------------------------------------------------------------ the worker's reading
+def test_the_worker_reads_every_ticket_newest_first_a_hundred_to_a_page() -> None:
+    """The list endpoint, at the largest page it honours, asked for tickets updated since before
+    any helpdesk existed and newest first, at the address the connection names; a full page is
+    followed and a short one ends the walk. Delete this and the index holds only the last thirty
+    days (the endpoint's silent default), or the first page read as the whole helpdesk."""
+    reading = FreshdeskReading()
+    first = reading.first_page(TICKET)
+    operation = reading.operation(TICKET, settings=console_settings(), resolver=PUBLIC)
+
+    assert dict(first) == {
+        "page": "1",
+        "per_page": str(LIST_MAX_PAGE_SIZE),
+        "updated_since": EVERY_TICKET_SINCE,
+        "order_by": "created_at",
+        "order_type": "desc",
+    }
+    assert datetime.fromisoformat(EVERY_TICKET_SINCE) < datetime(2010, 1, 1, tzinfo=UTC)
+    assert operation.url_for(first).startswith(f"https://{DOMAIN}/api/v2/tickets?")
+    following = reading.next_page(TICKET, first, [], LIST_MAX_PAGE_SIZE)
+    assert following is not None
+    assert dict(following) == {**first, "page": "2"}
+    assert reading.next_page(TICKET, first, [], LIST_MAX_PAGE_SIZE - 1) is None
+    assert reading.entities() == (TICKET,)
+
+
+def test_a_reading_asked_for_anything_but_tickets_is_refused() -> None:
+    """The reading keeps tickets and nothing else; a contact is read live and never kept. Delete
+    this and a reading asked for contacts would list them into the index."""
+    reading = FreshdeskReading()
+
+    for call in (
+        lambda: reading.first_page(CONTACT),
+        lambda: reading.projected(CONTACT, {"id": 1}, seen_at=NOW),
+        lambda: reading.operation(CONTACT, settings=console_settings(), resolver=PUBLIC),
+    ):
+        with pytest.raises(ConnectorContractError):
+            call()
+
+
+def test_the_key_is_sent_as_the_pair_freshdesk_documents_and_never_by_the_reading() -> None:
+    """Freshdesk takes its API key as the user name of HTTP Basic with X as the password; Xero and
+    HubSpot take a bearer token. The reading names the scheme and adds no header of its own.
+    Delete this and every Freshdesk call is refused as unauthorised, or a reading starts writing
+    the key into a header it could keep."""
+    reading = FreshdeskReading()
+    header = authorization(reading.key_scheme(), "sentinel-key")
+
+    assert reading.key_scheme() is KeyScheme.BASIC_KEY_AS_USER
+    assert header == "Basic " + base64.b64encode(b"sentinel-key:X").decode("ascii")
+    assert dict(reading.call_headers(console_settings())) == {}
+    assert xero.XeroReading().key_scheme() is KeyScheme.BEARER
+    assert hubspot.HubSpotReading().key_scheme() is KeyScheme.BEARER
+    assert authorization(KeyScheme.BEARER, "sentinel-key") == "Bearer sentinel-key"
+
+
+def test_the_reading_waits_as_the_source_asked_and_stops_when_its_minute_is_spent() -> None:
+    """**The vendor's documented limit, read from its own headers.** A 429's `Retry-After` is the
+    wait, whatever case it arrives in, and a missing one is None so the throttle chooses the long
+    end; `X-RateLimit-Remaining` at zero on an answered page stops the run before the next call.
+    Driven by the recordings. Delete this and a run spends the client's minute on refusals it was
+    told about."""
+    reading = FreshdeskReading()
+    limited = cassette("FRESH-429").headers
+    listed = cassette("FRESH-200-list").headers
+
+    assert reading.retry_after(limited) == 60.0
+    assert reading.retry_after({"retry-after": "60"}) == 60.0
+    assert reading.retry_after({}) is None
+    assert reading.retry_after({"Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT"}) is None
+    assert reading.allowance_spent(listed) is False
+    assert reading.allowance_spent({**listed, "X-RateLimit-Remaining": "0"}) is True
+    assert reading.allowance_spent({"x-ratelimit-remaining": "0"}) is True
+    assert reading.allowance_spent({}) is False
+
+
+def test_a_refusal_and_an_outage_are_not_read_as_an_empty_page() -> None:
+    """The reading's interpretation keeps the three answers apart, from the recordings: a quota
+    refusal and a refused key carry no rows, and an answered page with none is an answer. Delete
+    this and a 429 is written as a helpdesk with no tickets."""
+    reading = FreshdeskReading()
+    operation = operation_for(Endpoint.LIST_TICKETS, domain=DOMAIN)
+
+    quota = reading.interpret(operation, status=429, body={}, fetched_at=FETCHED_AT)
+    refused = reading.interpret(
+        operation, status=401, body=cassette("FRESH-401").body, fetched_at=FETCHED_AT
+    )
+    empty = reading.interpret(operation, status=200, body=[], fetched_at=FETCHED_AT)
+
+    assert (quota.call, quota.rows) == (CallOutcome.QUOTA, None)
+    assert (refused.call, refused.rows) == (CallOutcome.REJECTED, None)
+    assert empty.call is CallOutcome.OK
+    assert empty.rows is not None and empty.rows.records == ()
+
+
+def kept_by_the_reading(body: Any) -> list[StoredRow]:
+    """What the worker would write for one answered list page: the reading's own interpretation
+    and index entry, then `kept_fields` against the console manifest, row by row."""
+    reading = FreshdeskReading()
+    built = a_console_manifest()
+    operation = reading.operation(TICKET, settings=console_settings(), resolver=PUBLIC)
+    reply = reading.interpret(operation, status=200, body=body, fetched_at=FETCHED_AT)
+    assert reply.rows is not None
+    kept: list[StoredRow] = []
+    for record in reply.rows.records:
+        projected = reading.projected(TICKET, record.model_dump(), seen_at=SEEN_AT)
+        assert projected is not None
+        kept.append(
+            StoredRow(
+                source=projected.source,
+                entity=projected.entity,
+                source_id=projected.source_id,
+                fields=kept_fields(projected, built),
+            )
+        )
+    return kept
+
+
+def with_bodies(body: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The recorded page as it arrives when `include=description` is asked for: each ticket with
+    its body, marked as a canary. The reading never asks for it; this is the vendor sending it
+    anyway, which a mapping that copied rows would keep."""
+    return [
+        {**row, "description": "CANARY-BODY-HTML", "description_text": "CANARY-BODY-TEXT"}
+        for row in body
+    ]
+
+
+def test_what_the_reading_keeps_is_its_minimal_index_and_no_ticket_body() -> None:
+    """**The owner's rule, from the connector's own code (M11.9.1 for Freshdesk).** A canary
+    minted for this run is planted in every recorded ticket's note and body on the page the worker
+    reads, and the page goes through the reading and `kept_fields` exactly as a sync would take
+    it. What is kept passes `assert_minimal_index` against the console manifest, carries the
+    department the connection named, and holds the canary nowhere: no body, no note.
+
+    Delete this and the reading can start keeping a ticket's body with every single-field test
+    green."""
+    canary = fresh_canary("FRESHDESK")
+    body = planted(with_bodies(cassette("FRESH-200-list").body), canary)
+
+    kept = kept_by_the_reading(body)
+
+    assert len(kept) == 2
+    assert_minimal_index(a_console_manifest(), kept)
+    assert sightings(canary, kept) == ()
+    assert sightings(canary, body), "the canary was planted nowhere, so this checked nothing"
+    for row in kept:
+        assert row.fields["department"] == DEPARTMENT
+        assert not {"description", "description_text", "custom_fields"} & set(row.fields)
+        assert set(row.fields) <= {*projected_field_names(), "department"}
+
+
+def test_the_harness_sees_a_canary_the_index_does_keep() -> None:
+    """**The positive sibling.** The same kind of string planted in a ticket's subject, which is an
+    index field, is found in what the reading keeps. Delete this and a `sightings` or a reading
+    that saw nothing would make the test above pass by default."""
+    canary = fresh_canary("SUBJECT")
+    body = [{**row, "subject": canary} for row in cassette("FRESH-200-list").body]
+
+    kept = kept_by_the_reading(body)
+
+    assert sightings(canary, kept)
+
+
+def test_a_kept_ticket_is_reached_through_its_department_and_no_other() -> None:
+    """**The reach rule on the kept row.** The row plane compiles a reader's grant scope over the
+    kept fields, so a department grant naming the connection's department matches every kept
+    ticket and one naming another department matches none. Delete this and the department could
+    be kept under a field no grant tests, and every ticket would be unreachable, or reachable by
+    any department."""
+    kept = kept_by_the_reading(cassette("FRESH-200-list").body)
+
+    assert kept
+    assert all(Scope.department(DEPARTMENT).matches(dict(row.fields)) for row in kept)
+    assert not any(Scope.department("finance").matches(dict(row.fields)) for row in kept)
+
+
+def test_a_connected_helpdesk_is_read_on_its_own_interval_under_the_verified_ceiling() -> None:
+    """The reading is declared, so the worker reads Freshdesk with no edit anywhere else, and its
+    interval is one the schedule's tick can keep. Delete this and a declaration that dropped its
+    reading leaves a connected helpdesk read by nothing."""
+    from brain.ops.connector_sync import CONTROL_EVERY, READINGS
+
+    assert READINGS[FRESHDESK] is CONNECTOR.reading
+    assert READING_INTERVAL >= CONTROL_EVERY * 3

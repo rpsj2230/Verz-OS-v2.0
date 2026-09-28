@@ -123,7 +123,11 @@ LONG_AGO: Final = datetime(2019, 1, 1, tzinfo=UTC)
 IDENTIFIERS: Final[Mapping[str, str]] = {
     "xero": "11111111-2222-3333-4444-555555555555",
     "hubspot": "12345678",
+    "freshdesk": "example.freshdesk.com",
 }
+
+#: The settings after the first that a source asks for, for the one source that asks for two.
+FURTHER_SETTINGS: Final[Mapping[str, Mapping[str, str]]] = {"freshdesk": {"department": "support"}}
 
 
 def _grant(capability: Any, scope: Scope) -> Grant:
@@ -184,7 +188,7 @@ def settings_for(name: str) -> dict[str, str]:
     """The settings a connectable source takes, and none for a source the console cannot connect."""
     if name not in CONNECTABLE:
         return {}
-    return {CONNECTABLE[name].settings[0].name: IDENTIFIERS[name]}
+    return {CONNECTABLE[name].settings[0].name: IDENTIFIERS[name], **FURTHER_SETTINGS.get(name, {})}
 
 
 def a_connection(
@@ -480,7 +484,7 @@ def test_every_connector_says_what_it_was_tested_against_apart_from_what_is_live
         NEVER_READ_LIVE,
     )
     assert wide["xero"]["last_read_live_at"] is None
-    assert narrow["hubspot"] == narrow["freshdesk"] | {
+    assert narrow["hubspot"] == narrow["laravel"] | {
         "name": "hubspot",
         "label": narrow["hubspot"]["label"],
         "recorded": recorded_in_words("hubspot"),
@@ -668,6 +672,7 @@ def test_the_authority_to_connect_is_a_fact_about_the_reader_and_narrows_nothing
     assert {one["name"]: one["may_connect"] for one in narrow["connectable"]} == {
         "xero": True,
         "hubspot": False,
+        "freshdesk": False,
     }
 
 
@@ -797,7 +802,7 @@ def test_a_caller_who_may_not_connect_this_source_is_refused_before_anything_is_
         post(client, "u_elsewhere", LISTING, connection_body()),
         post(client, "u_narrow", LISTING, connection_body("hubspot")),
         post(client, "u_none", LISTING, connection_body(settings={}, credential="")),
-        post(client, "u_narrow", LISTING, connection_body("freshdesk")),
+        post(client, "u_narrow", LISTING, connection_body("laravel")),
     ]
     for refused in refusals:
         assert (refused.status_code, without_trace(refused)) == (
@@ -833,7 +838,7 @@ def test_every_problem_with_a_connection_is_told_at_once_and_nothing_is_written(
     records, vault = Records(), Vault()
     attach(app, records, vault)
     both = post(client, "u_admin", LISTING, connection_body(settings={}, credential="one two"))
-    unknown = post(client, "u_admin", LISTING, connection_body("freshdesk"))
+    unknown = post(client, "u_admin", LISTING, connection_body("laravel"))
     refused = post(client, "u_admin", LISTING, connection_body(settings={"tenant_id": "*"}))
 
     assert both.status_code == unknown.status_code == refused.status_code == 422

@@ -1,6 +1,7 @@
-"""Freshdesk's recordings: a search at its 300 ceiling, a full page, a ticket, a contact, failures.
+"""Freshdesk's recordings: a search at its 300 ceiling, a full page, the list the worker reads, a
+ticket, a contact, and failures.
 
-A ticket's note carries a canary: the note is read live and never kept.
+A ticket's note and a ticket's body carry canaries: both are read live and never kept.
 
 Task ids: M38.4.1.1, M38.4.1.2
 """
@@ -11,7 +12,6 @@ from typing import Any, Final
 
 from brain.connectors import freshdesk
 from brain.connectors.manifest import ConnectorManifest
-from brain.connectors.projection import ProjectedRecord
 from tests.fixtures.cassettes._types import (
     DOCUMENTED,
     SEEN_AT,
@@ -111,6 +111,29 @@ CASSETTES: Final[tuple[Cassette, ...]] = (
         reference=FRESHDESK_DOC + "#filter_tickets",
     ),
     Cassette(
+        cid="FRESH-200-list",
+        source=SOURCE,
+        request="GET /api/v2/tickets?page=1&per_page=100&updated_since=2000-01-01T00:00:00Z"
+        "&order_by=created_at&order_type=desc",
+        status=200,
+        headers={
+            "X-RateLimit-Total": "3000",
+            "X-RateLimit-Remaining": "1838",
+            "X-RateLimit-Used-CurrentRequest": "1",
+        },
+        body=[_freshdesk_ticket(401), _freshdesk_ticket(402)],
+        why="The list the worker reads into the index: the array itself, no envelope, no has_more "
+        "and no total, so a page shorter than per_page is the only end. Without updated_since it "
+        "holds only tickets created in the last thirty days. No description arrives unless "
+        "include=description is asked for, and custom fields arrive whole, so the note is a "
+        "canary.",
+        kind=Kind.LIST,
+        projects="ticket",
+        expect=Expect.ANSWERED,
+        origin=DOCUMENTED,
+        reference=FRESHDESK_DOC + "#list_all_tickets",
+    ),
+    Cassette(
         cid="FRESH-200-ticket",
         source=SOURCE,
         request="GET /api/v2/tickets/88213",
@@ -119,8 +142,8 @@ CASSETTES: Final[tuple[Cassette, ...]] = (
         body={
             **_freshdesk_ticket(213),
             "requester_email": "someone@snm.example",
-            "description": "<div>Certificate expires Friday.</div>",
-            "description_text": "Certificate expires Friday.",
+            "description": "CANARY-TICKET-BODY-HTML",
+            "description_text": "CANARY-TICKET-BODY-TEXT",
             "type": "Incident",
             "source": 2,
             "fr_escalated": False,
@@ -128,7 +151,8 @@ CASSETTES: Final[tuple[Cassette, ...]] = (
             "tags": [],
         },
         why="One ticket by id: the object itself, no envelope. The body and address arrive "
-        "and are refused from the projection by different rules.",
+        "and are refused from the projection by different rules. The body is a canary, because "
+        "a ticket's body is exactly what the owner's rule says is read live and never kept.",
         kind=Kind.READ,
         tools=("freshdesk.read_ticket",),
         projects="ticket",
@@ -197,7 +221,8 @@ def _freshdesk_endpoint(recorded: Cassette) -> freshdesk.Endpoint:
 
 
 def replay(recorded: Cassette) -> Replayed:
-    """A recording through `freshdesk.assert_answered`, its operation and its paging."""
+    """A recording through `freshdesk.assert_answered`, its operation, the reading's index entry and
+    its paging."""
     from tests.unit.test_freshdesk import DOMAIN
 
     endpoint = _freshdesk_endpoint(recorded)
@@ -211,16 +236,12 @@ def replay(recorded: Cassette) -> Replayed:
     rows = freshdesk.operation_for(endpoint, domain=DOMAIN).project(reply.body)
     if not rows:
         return Replayed(Expect.ABSENT)
-    projected = tuple(
-        ProjectedRecord(
-            source=freshdesk.FRESHDESK,
-            entity=freshdesk.TICKET,
-            source_id=str(row["id"]),
-            last_seen_at=SEEN_AT,
-            fields=freshdesk.projected_fields(row),
-        )
+    reading = freshdesk.FreshdeskReading()
+    kept = (
+        reading.projected(freshdesk.TICKET, row, seen_at=SEEN_AT)
         for row in (rows if recorded.projects else ())
     )
+    projected = tuple(one for one in kept if one is not None)
     following = freshdesk.next_page(
         freshdesk.first_page(endpoint), rows_on_page=len(rows), rows_so_far=len(rows)
     )
@@ -228,9 +249,10 @@ def replay(recorded: Cassette) -> Replayed:
 
 
 def manifest() -> ConnectorManifest:
+    """The manifest a connection made on the Connectors screen builds, which is what ships."""
     from tests.unit import test_freshdesk
 
-    built: ConnectorManifest = test_freshdesk.a_manifest()
+    built: ConnectorManifest = test_freshdesk.a_console_manifest()
     return built
 
 

@@ -149,6 +149,7 @@ from brain.connectors.contract import (
 from brain.connectors.declaration import (
     ConnectorDeclaration,
     ConsoleForm,
+    KeyScheme,
     PageReply,
     Recorded,
     Setting,
@@ -1792,8 +1793,15 @@ class HubSpotReading:
     def refresh_interval(self) -> timedelta:
         return CURSOR_POLL_INTERVAL
 
-    def operation(self, entity: str, *, resolver: Resolver) -> RestOperation:
+    def operation(
+        self, entity: str, *, settings: Mapping[str, str], resolver: Resolver
+    ) -> RestOperation:
+        # One fixed address for every connection, so the settings name nothing here.
+        del settings
         return operation_for(entity, resolver=resolver)
+
+    def key_scheme(self) -> KeyScheme:
+        return KeyScheme.BEARER
 
     def first_page(self, entity: str) -> Mapping[str, str]:
         return MappingProxyType(dict(default_arguments(entity)))

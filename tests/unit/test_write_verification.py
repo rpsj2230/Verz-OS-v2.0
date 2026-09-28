@@ -227,6 +227,7 @@ EXPECTED: Mapping[tuple[str, str], Verification] = {
     ("hubspot", "HUBSPOT-429"): Verification.INCONCLUSIVE,
     ("hubspot", "HUBSPOT-401"): Verification.INCONCLUSIVE,
     ("freshdesk", "FRESH-200-search-full-page"): Verification.FOUND,
+    ("freshdesk", "FRESH-200-list"): Verification.INCONCLUSIVE,
     # The read-back reads a search page. A by-id object is not one, so it proves nothing there.
     ("freshdesk", "FRESH-200-ticket"): Verification.INCONCLUSIVE,
     ("freshdesk", "FRESH-200-contact"): Verification.INCONCLUSIVE,
