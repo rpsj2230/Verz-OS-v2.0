@@ -45,6 +45,8 @@ const CONNECTOR_STATS = {
   last_read_to_the_end: "2019-03-04T09:30:00Z",
   consecutive_failures: 0,
   index_ids: 1234,
+  live_read_basis: "everyone",
+  last_live_read: "2019-03-04T09:00:00Z",
   at_least: false,
   periods: ["7d", "30d"].map((range) => ({
     range,
@@ -54,8 +56,9 @@ const CONNECTOR_STATS = {
     read_to_the_end: 22,
     failures: 2,
     quota_waits: 0,
+    live_reads: 5,
   })),
-  unrecorded: [{ figure: "live_reads", why: UNBROKEN }],
+  unrecorded: [],
 };
 
 /** One source on the Connectors list, every drawn value the unbroken token. */
@@ -1004,16 +1007,17 @@ const SKILL_STATS = {
   agents_pinned: 2,
   pinned_versions: 1,
   versions: 3,
+  run_basis: "everyone",
+  last_used: "2019-03-04T09:00:00Z",
+  at_least: false,
   periods: ["7d", "30d"].map((range) => ({
     range,
     since: "2019-02-02T00:00:00Z",
     until: "2019-03-04T12:00:00Z",
     versions_added: 1,
+    runs: 6,
   })),
-  unrecorded: [
-    { figure: "runs_that_used_it", why: UNBROKEN },
-    { figure: "last_used", why: UNBROKEN },
-  ],
+  unrecorded: [],
 };
 
 /** Every registered route pattern, and what to mount for it. */

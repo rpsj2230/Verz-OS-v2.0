@@ -24,6 +24,7 @@ import { NOT_RECORDED, UNAVAILABLE_MARK } from "../src/components/kit";
 import { LIST_PAGE_SIZE } from "../src/components/listing";
 import { SKILLS_HEADING } from "../src/pages/Skills";
 import { HISTORY_ELSEWHERE } from "../src/pages/skills/SkillAbout";
+import { LAST_USED_LABEL, NOT_USED, RUNS_LABEL } from "../src/pages/skills/SkillDashboard";
 import { NO_SUCH_SKILL } from "../src/pages/skills/SkillDetailPage";
 import { PACKAGE_FORMAT } from "../src/pages/skills/SkillForms";
 import { RETIRE, REINSTATE, DETACH, APPROVE } from "../src/pages/skills/SkillProfile";
@@ -360,7 +361,7 @@ describe("one skill's page", () => {
           pinned_versions: 2,
           versions: 3,
           periods: [{ range: "30d", since: "2019-02-02T00:00:00Z", until: "2019-03-04T00:00:00Z", versions_added: 1 }],
-          unrecorded: [{ figure: "runs_that_used_it", why: "nothing writes one" }],
+          unrecorded: [{ figure: "runs", why: "nothing writes one" }],
         },
       },
     }));
@@ -372,6 +373,51 @@ describe("one skill's page", () => {
     expect(strip?.textContent).toContain("4");
     expect(strip?.textContent).toContain(NOT_RECORDED);
     expect([...(strip?.querySelectorAll("dd") ?? [])].map((one) => one.textContent)).not.toContain("0");
+  });
+
+  test("the Dashboard draws the runs that used the skill and its last use, with whose runs they are", async () => {
+    // What breaks if this is deleted: the route counts a skill's runs and the page still draws
+    // "Not recorded yet", or draws them unlabelled for a reader shown only their own runs, or a
+    // month with no run reads as a figure nothing records.
+    const answered = (lastUsed: string | null) =>
+      consoleAt(skillAddress(NAME), skillAnswers([version()], [PIN], {
+        [`GET ${API}/console/skills/${NAME}/stats`]: {
+          body: {
+            skill_name: NAME,
+            agents_pinned: 1,
+            pinned_versions: 1,
+            versions: 1,
+            run_basis: "own",
+            last_used: lastUsed,
+            at_least: false,
+            periods: ["7d", "30d"].map((range) => ({
+              range,
+              since: "2019-02-02T00:00:00Z",
+              until: "2019-03-04T00:00:00Z",
+              versions_added: 0,
+              runs: range === "30d" ? 271 : 3,
+            })),
+            unrecorded: [],
+          },
+        },
+      }));
+    const card = (container: HTMLElement, label: string) =>
+      [...container.querySelectorAll('[aria-label="This skill\'s figures"] [data-slot="stat-card"]')].find(
+        (one) => one.querySelector("dt")?.textContent === label,
+      );
+
+    const used = await answered("2019-03-03T09:00:00Z");
+    await waitFor(() => {
+      expect(card(used.container, RUNS_LABEL)?.querySelector("dd")?.textContent).toContain("271");
+    });
+    expect(card(used.container, RUNS_LABEL)?.textContent).toContain("your runs");
+    expect(card(used.container, LAST_USED_LABEL)?.textContent).not.toContain(NOT_RECORDED);
+    expect(card(used.container, LAST_USED_LABEL)?.textContent).toContain("Mar");
+
+    const unused = await answered(null);
+    await waitFor(() => {
+      expect(card(unused.container, LAST_USED_LABEL)?.textContent).toContain(NOT_USED);
+    });
   });
 
   test("the Profile names people and agents, and keeps identifiers in Advanced", async () => {

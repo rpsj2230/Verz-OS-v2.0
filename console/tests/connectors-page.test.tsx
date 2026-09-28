@@ -33,7 +33,7 @@ import {
   type Connectors,
 } from "../src/pages/connectorsQuery";
 import { ACT_LABELS, UNAVAILABLE } from "../src/pages/connectors/connectorActions";
-import { NOT_CONNECTED_TITLE } from "../src/pages/connectors/ConnectorDashboard";
+import { LAST_LIVE_READ_LABEL, LIVE_READS_LABEL, NO_LIVE_READ, NOT_CONNECTED_TITLE } from "../src/pages/connectors/ConnectorDashboard";
 import { NO_AGENT } from "../src/pages/connectors/ConnectorProfile";
 import { TESTING_WORDS, VERDICT_WORDS } from "../src/pages/connectors/connectorProbe";
 import { CHECK_AGAIN, NOT_NOW } from "../src/pages/connectors/TestConnection";
@@ -177,6 +177,8 @@ const XERO_STATS = {
   last_read_to_the_end: "2019-03-04T09:30:00Z",
   consecutive_failures: 0,
   index_ids: 1234,
+  live_read_basis: "own",
+  last_live_read: null,
   at_least: false,
   periods: ["7d", "30d"].map((range) => ({
     range,
@@ -186,8 +188,9 @@ const XERO_STATS = {
     read_to_the_end: 22,
     failures: 2,
     quota_waits: 0,
+    live_reads: range === "30d" ? 317 : 0,
   })),
-  unrecorded: [{ figure: "live_reads", why: sentinel("live-reads-why") }],
+  unrecorded: [],
 };
 
 const XERO_DETAIL = {
@@ -513,6 +516,11 @@ describe("one source's page", () => {
     const strip = container.querySelector('[data-slot="kpi-strip"][aria-label="This source\'s figures"]');
     expect(strip?.textContent).toContain("1,234 ids");
     expect(strip?.textContent).toContain("24");
+    const card = (label: string) =>
+      [...(strip?.querySelectorAll('[data-slot="stat-card"]') ?? [])].find((one) => one.querySelector("dt")?.textContent === label);
+    expect(card(LIVE_READS_LABEL)?.querySelector("dd")?.textContent).toContain("317");
+    expect(card(LIVE_READS_LABEL)?.textContent).toContain("your questions");
+    expect(card(LAST_LIVE_READ_LABEL)?.textContent).toContain(NO_LIVE_READ);
     expect(container.textContent).toContain(sentinel("reading"));
     expect(container.querySelectorAll(`[${UNAVAILABLE_MARK}]`).length).toBe(0);
     expect(screen.getByRole("button", { name: ACT_LABELS.test })).toBeTruthy();
