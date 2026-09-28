@@ -666,6 +666,38 @@ code {
   max-width: var(--content-max-width);
 }
 
+/*
+ * A citation's freshness and badge sit under the link in the body face, because they are
+ * sentences about the source and not identifiers. Muted, so the source reads first.
+ */
+.ask__evidence {
+  display: block;
+  font-family: var(--font-sans);
+  color: var(--text-muted);
+}
+
+.ask__sources li {
+  margin-bottom: var(--space-2);
+}
+
+/*
+ * The document a citation opens. The passage it cited is marked by a heavier border and a
+ * label in words, never by colour alone, and it keeps the line breaks it was stored with.
+ */
+.cited__passage--cited {
+  border: 2px solid var(--border-strong);
+}
+
+.cited__marker {
+  font-weight: 600;
+  font-size: var(--text-sm);
+}
+
+.cited__text {
+  white-space: pre-wrap;
+  max-width: var(--content-max-width);
+}
+
 /* ------------------------------------------------------------------ canvases */
 
 /*

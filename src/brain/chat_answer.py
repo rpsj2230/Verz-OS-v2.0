@@ -89,7 +89,7 @@ from brain.gate.context import Channel, open_trace
 from brain.gate.ingress import Binding, ChannelEvent, Unrecognised, identity_hash
 from brain.gate.model_lane import PASSAGE_POLICY
 from brain.gate.resolve import resolve
-from brain.gate.streaming import Event
+from brain.gate.streaming import Event, citation_text
 from brain.identity.principal_store import StoredPrincipals
 from brain.install import InstallError, value_of
 from brain.knowledge.document_tools import KNOWLEDGE_ENTITY
@@ -216,7 +216,8 @@ def chat_text(answered: Answered) -> str:
         if name == Event.TEXT.value:
             prose.append(data)
         elif name == Event.CITATION.value:
-            cited.append(data)
+            # The web's fields, read back into a sentence a chat can show (M8.1.1 to M8.1.3).
+            cited.append(citation_text(data))
         elif name == Event.ERROR.value:
             failed = data
     if failed:

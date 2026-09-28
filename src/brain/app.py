@@ -92,6 +92,7 @@ from brain.cache import (
 )
 from brain.channel_routes import router as channel_router
 from brain.channels.widget import allowed_origins
+from brain.cited_document_routes import router as cited_document_router
 from brain.classification_routes import router as classification_router
 from brain.compliance_routes import router as compliance_router
 from brain.connector_routes import router as connector_router
@@ -1445,6 +1446,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # The install acceptance checks' results for the commit this serves: passed, failed or not
     # run, public and read-only like deploy-checks. See `brain.acceptance_routes`.
     app.include_router(acceptance_router)
+    # The document a citation on Ask links to, its passages at the reader's reach through the
+    # handler and policy the answer used. See `brain.cited_document_routes`.
+    app.include_router(cited_document_router)
 
     @app.get("/health/live", response_model=Health, tags=["health"])
     async def live() -> Health:

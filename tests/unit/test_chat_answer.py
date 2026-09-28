@@ -39,6 +39,7 @@ from brain.core.principal import Principal
 from brain.gate.answer import Answered
 from brain.gate.context import Channel
 from brain.gate.ingress import UNRECOGNISED_PROMPT, Binding, ChannelEvent, identity_hash
+from brain.gate.streaming import citation_text
 from brain.ops.channel_store import channel_secret_ref
 from brain.tools.startup import build_registry
 from tests.fixtures.lark_events import (
@@ -225,17 +226,28 @@ def in_group(sender: str, text: str, ident: str, *, to_bot: bool = True) -> dict
     )
 
 
+#: A chat source line's read time, which is the instant of that read and differs between two.
+READ_TIME = re.compile(r", (?:read|updated) [^)]*\)")
+
+
 def undated(text: str) -> str:
-    """A citation without the instant it was read at, which differs between two reads."""
-    return re.sub(r", as of [^\n]+", "", text)
+    """Sources without the instant each was read at, so two reads of one record compare equal.
+
+    The freshness words stay: whether a read is current is structure, and when it happened is not.
+    """
+    return READ_TIME.sub(")", text)
 
 
 def web(c: TestClient, pid: str, text: str) -> tuple[list[str], list[str]]:
-    """What the web's Ask streamed this person: the prose chunks and the undated citations."""
+    """What the web's Ask streamed this person: the prose chunks and each citation as chat says it.
+
+    The citation frames are fields; `citation_text` is the one reading of them a chat channel uses,
+    so the web's sources are put in chat's words by the same function and then undated.
+    """
     events = decode(question(c, text, pid).text)
     return (
         [one.data for one in events if one.event == "text"],
-        [undated(one.data) for one in events if one.event == "citation"],
+        [undated(citation_text(one.data)) for one in events if one.event == "citation"],
     )
 
 
@@ -493,6 +505,45 @@ def test_the_chat_text_is_the_prose_then_the_sources_or_the_failure_alone() -> N
     )
     failed = (encode(Event.TEXT, "partial"), encode(Event.ERROR, "That did not work."))
     assert chat_text(Answered(frames=failed)) == "That did not work."
+
+
+def test_a_structured_citation_reaches_chat_as_a_sentence_and_never_as_its_fields() -> None:
+    """The web's citation frames are fields for the console to link. Chat reads them back into
+    what the source is, how fresh it is, when, and its badge, and prints no field name or brace.
+
+    Delete this and every chat answer ends in raw JSON lines, which is what shipped for one run."""
+    from brain.gate.streaming import Event, encode
+
+    record = {
+        "kind": "record",
+        "label": "price_list p_web_1: sell_price from local",
+        "freshness": "stale",
+        "freshness_text": "out of date",
+        "read_at": "2019-03-02T09:05:00+00:00",
+        "badge": "",
+    }
+    document = {
+        "kind": "document",
+        "label": "Handbook, section Leave from knowledge",
+        "freshness": "live",
+        "freshness_text": "current",
+        "read_at": "2019-02-20T09:00:00+08:00",
+        "badge": "verified",
+    }
+    undatable = {"kind": "record", "label": "x: y", "freshness_text": "read time not stated"}
+    frames = (
+        *(encode(Event.CITATION, json.dumps(one)) for one in (record, document, undatable)),
+        encode(Event.TEXT, "1200"),
+        encode(Event.DONE, ""),
+    )
+
+    text = chat_text(Answered(frames=frames))
+    assert text.splitlines()[3:] == [
+        "- price_list p_web_1: sell_price from local (out of date, read 02 Mar 2019 09:05 UTC)",
+        "- Handbook, section Leave from knowledge (current, updated 20 Feb 2019) [verified]",
+        "- x: y (read time not stated)",
+    ]
+    assert "{" not in text and "freshness" not in text
 
 
 def test_a_surface_with_no_private_message_posts_the_floor_and_offers_the_rest_as_a_link(
