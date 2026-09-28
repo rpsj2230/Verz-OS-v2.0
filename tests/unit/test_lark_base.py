@@ -34,13 +34,13 @@ page envelope, the millisecond timestamp and a canary in a column no binding nam
 `LARK-200-code-permission` is the 200 carrying 91403, which is the exchange that cannot be
 arranged on demand against a real tenant and is the one this connector is built around.
 
-Task ids: M11.6.3
+Task ids: M11.6.3, M11.9.4
 """
 
 from __future__ import annotations
 
 import inspect
-from dataclasses import dataclass, is_dataclass
+from dataclasses import dataclass, is_dataclass, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -72,6 +72,8 @@ from brain.connectors.lark_base import (
     TOTAL_UNSTATED,
     VIEW_FILTER,
     WAIT_WHEN_UNSTATED,
+    BaseField,
+    DiscoveredTable,
     Endpoint,
     FieldBinding,
     FieldKind,
@@ -83,10 +85,12 @@ from brain.connectors.lark_base import (
     MinuteBudget,
     PageCursor,
     Representation,
+    SchemaRequest,
     TableReading,
     arguments_for,
     assert_lark_answered,
     assert_reconciliation_is_affordable,
+    bindings_for,
     business_code,
     ceiling,
     decode_row,
@@ -94,13 +98,17 @@ from brain.connectors.lark_base import (
     envelope_of,
     fair_share_budget,
     fair_share_per_minute,
+    field_of,
     first_cursor,
     health,
     kind_facts,
+    kind_for,
     manifest,
     read_page,
     read_record,
     read_records,
+    read_table,
+    read_tables,
     records_fetch,
     spec_for,
     subscription,
@@ -116,6 +124,12 @@ from brain.connectors.manifest import (
     failed_clauses,
 )
 from brain.connectors.manifest import projectability as clauses_for
+from brain.connectors.minimal_index import (
+    assert_minimal_index,
+    fresh_canary,
+    planted,
+    sightings,
+)
 from brain.connectors.projection import ProjectedRecord
 from brain.connectors.rest import RestSpecError
 from brain.connectors.throttle import CallOutcome, ceiling_for, is_retryable
@@ -1737,3 +1751,275 @@ def test_the_recordings_this_connector_is_built_against_still_exist() -> None:
     assert cassette("LARK-200-code-permission").body["code"] == PERMISSION_DENIED_CODE
     assert cassette("LARK-200-records").body["data"]["has_more"] is True
     assert cassette("LARK-200-records").body["data"]["items"][0]["record_id"].startswith("rec")
+
+
+# ------------------------------------------- a Base read as a Base (M11.6.3, M11.9.4)
+@dataclass
+class SchemaReader:
+    """A schema reader scripted with one reply per call of each kind, recording each request."""
+
+    tables: list[LarkReply]
+    fields: list[LarkReply]
+    seen: list[SchemaRequest]
+
+    def __init__(
+        self, *, tables: list[LarkReply] | None = None, fields: list[LarkReply] | None = None
+    ) -> None:
+        self.tables = list(tables or [])
+        self.fields = list(fields or [])
+        self.seen = []
+
+    def list_tables(self, request: SchemaRequest) -> LarkReply:
+        self.seen.append(request)
+        return self.tables.pop(0)
+
+    def list_fields(self, request: SchemaRequest) -> LarkReply:
+        self.seen.append(request)
+        return self.fields.pop(0)
+
+
+def recorded_fields() -> tuple[BaseField, ...]:
+    return tuple(field_of(item) for item in cassette("LARK-200-fields").body["data"]["items"])
+
+
+def discovered_table() -> DiscoveredTable:
+    """The recorded table with its recorded fields, read through the schema reads."""
+    reader = SchemaReader(
+        tables=[reply_of("LARK-200-tables")], fields=[reply_of("LARK-200-fields")]
+    )
+    (listed,), budget = read_tables(reader, BASE_ID, budget=fair_share_budget())
+    table, _ = read_table(reader, BASE_ID, listed, budget=budget)
+    return table
+
+
+def test_every_classified_kind_is_found_by_its_lark_type_and_an_unknown_type_by_none() -> None:
+    """`kind_for` reads Lark's numeric type out of `KIND_FACTS` rather than a second table, so a
+    kind's number is stated once. A type nobody classified is None and is bound to nothing.
+    Delete this and a two-way table can drift, reading a person column as text."""
+    for facts in KIND_FACTS.values():
+        assert kind_for(facts.api_type) is facts.kind
+    for unclassified in (0, 21, 23, 1003, 1004, 3001):
+        assert kind_for(unclassified) is None
+
+
+def test_a_bases_own_fields_become_bindings_by_their_lark_type() -> None:
+    """**A Base is a Base, not a sheet (M11.6.3).** The recorded field listing, read through
+    `field_of`, becomes bindings by type: the primary text field is the one label the index
+    keeps, the modified time its one timestamp, the rest of what is readable is read live, and
+    the person and the link are bound to nothing. Delete this and a Base connected from the
+    console is read as a grid of untyped cells, which is how a person's email ends up kept."""
+    bindings = {binding.target: binding for binding in bindings_for(recorded_fields())}
+
+    assert set(bindings) == {
+        "client",
+        "status",
+        "hours_remaining",
+        "contract_value",
+        "renewal",
+        "last_modified",
+    }
+    assert bindings["client"].shape is FieldShape.LABEL
+    assert bindings["client"].uses == (HotUse.IDENTIFY,)
+    assert bindings["last_modified"].shape is FieldShape.TIMESTAMP
+    assert bindings["contract_value"].base_field == "Contract Value"
+    for live in ("status", "hours_remaining", "contract_value", "renewal"):
+        assert not bindings[live].is_projected, live
+    assert bindings["hours_remaining"].kind is FieldKind.NUMBER
+
+
+def test_a_primary_field_whose_name_is_on_the_denylist_is_read_live_and_never_kept() -> None:
+    """The label the index keeps is the primary field's, unless its name is one the permanent
+    denylist refuses: then it is read live like any other. Delete this and a Base whose first
+    column is Email has every address kept as the index's label, or the manifest refused."""
+    fields = (BaseField(field_id="fldMail0001", name="Email", api_type=1, is_primary=True),)
+
+    (binding,) = bindings_for(fields)
+
+    assert is_forbidden(binding.target)
+    assert not binding.is_projected
+
+
+def test_an_auto_number_primary_field_is_kept_as_the_identifier() -> None:
+    """The other primary shape: an auto number is the row's own sequence, kept as the one
+    identifier. Delete this and a Base keyed by number keeps nothing to name a row by."""
+    fields = (BaseField(field_id="fldAuto0001", name="Job No", api_type=1005, is_primary=True),)
+
+    (binding,) = bindings_for(fields)
+
+    assert binding.shape is FieldShape.IDENTIFIER
+
+
+def test_only_the_first_modified_time_is_kept_and_the_rest_are_read_live() -> None:
+    """One timestamp is enough to find a row by when it changed; a second is a second copy.
+    Delete this and every modified-time column is kept."""
+    fields = (
+        BaseField(field_id="fldEdit0001", name="Edited", api_type=1002),
+        BaseField(field_id="fldEdit0002", name="Edited again", api_type=1002),
+    )
+
+    first, second = bindings_for(fields)
+
+    assert first.is_projected
+    assert not second.is_projected
+
+
+def test_a_field_name_that_cannot_be_a_name_is_bound_under_its_id_and_never_twice() -> None:
+    """A field written in another script, or folding to a name another field took, is bound
+    under its own id, so no two fields share a target and none is lost. Delete this and the
+    second of two fields named alike silently overwrites the first."""
+    fields = (
+        BaseField(field_id="fldHans0001", name="客户", api_type=1),
+        BaseField(field_id="fldDupl0002", name="Contract value", api_type=1),
+        BaseField(field_id="fldDupl0003", name="Contract-Value", api_type=1),
+        BaseField(field_id="fldResv0004", name="ID", api_type=1),
+    )
+
+    targets = [binding.target for binding in bindings_for(fields)]
+
+    assert targets == ["fldhans0001", "contract_value", "flddupl0003", "fldresv0004"]
+    assert len(set(targets)) == len(targets)
+
+
+def test_a_field_listing_row_missing_what_makes_it_a_field_is_refused() -> None:
+    """A field with no id, no name or no numeric type cannot be bound honestly, and a boolean
+    where the type belongs is not a type. Delete this and such a row becomes a binding that
+    matches nothing and reads in a manifest as a field being read."""
+    good = cassette("LARK-200-fields").body["data"]["items"][0]
+    for broken in (
+        {**good, "field_id": "Client"},
+        {**good, "field_name": "  "},
+        {**good, "type": "1"},
+        {**good, "type": True},
+    ):
+        with pytest.raises(ConnectorContractError):
+            field_of(broken)
+    assert field_of(good).is_primary
+    assert not field_of({**good, "is_primary": "true"}).is_primary
+
+
+def test_a_connected_base_is_read_from_its_own_tables_and_fields_inside_the_budget() -> None:
+    """**No hand-written table (M11.9.4).** Connect Lark keeps the Base's token, and the Base
+    says the rest: its tables from the table listing and each table's fields from its field
+    listing, two calls from the question's budget. Delete this and a Base switched on from the
+    console has nothing to read until somebody writes its bindings on the server."""
+    reader = SchemaReader(
+        tables=[reply_of("LARK-200-tables")], fields=[reply_of("LARK-200-fields")]
+    )
+
+    (listed,), budget = read_tables(reader, BASE_ID, budget=fair_share_budget())
+    table, spent = read_table(reader, BASE_ID, listed, budget=budget)
+    built = table.table(BASE_ID)
+
+    assert listed.title == "Maintenance hours"
+    assert built is not None
+    assert built.selector == f"{BASE_ID}/{TABLE_ID}"
+    assert built.entity == f"lark_{TABLE_ID.lower()}"
+    assert spent.spent == 2
+    assert reader.seen == [
+        SchemaRequest(base_id=BASE_ID),
+        SchemaRequest(base_id=BASE_ID, table_id=TABLE_ID),
+    ]
+
+
+def test_a_schema_listing_is_followed_page_by_page_until_lark_says_there_is_no_more() -> None:
+    """The listings page by `page_token`, ended on `has_more` and never on a short page. Delete
+    this and a Base with more tables than one page is read as the first page of them."""
+    first = {
+        "code": 0,
+        "data": {
+            "has_more": True,
+            "page_token": "tblNEXT00001",
+            "items": [{"table_id": TABLE_ID, "name": "Hours"}],
+        },
+    }
+    second = {
+        "code": 0,
+        "data": {"has_more": False, "items": [{"table_id": SIBLING_TABLE_ID, "name": "Clients"}]},
+    }
+    reader = SchemaReader(
+        tables=[LarkReply(status=200, body=first), LarkReply(status=200, body=second)]
+    )
+
+    tables, spent = read_tables(reader, BASE_ID, budget=fair_share_budget())
+
+    assert [table.table_id for table in tables] == [TABLE_ID, SIBLING_TABLE_ID]
+    assert reader.seen[1].continuation == "tblNEXT00001"
+    assert spent.spent == 2
+
+
+def test_a_schema_read_refused_or_starved_is_never_an_empty_base() -> None:
+    """A 200 carrying a refusal is the bot not added to the Base, and an exhausted budget is our
+    arithmetic; neither is a Base with no tables. Delete this and both read as an empty Base."""
+    with pytest.raises(LarkBaseRefusedError):
+        read_tables(
+            SchemaReader(tables=[reply_of("LARK-200-code-permission")]),
+            BASE_ID,
+            budget=fair_share_budget(),
+        )
+    starved = SchemaReader(tables=[reply_of("LARK-200-tables")])
+    with pytest.raises(LarkBaseBudgetError):
+        read_tables(starved, BASE_ID, budget=MinuteBudget(allowance=1, spent=1))
+    assert starved.seen == []
+
+
+def test_a_discovered_table_is_named_by_its_id_and_never_by_its_title() -> None:
+    """**`A_DISCOVERED_TABLE_IS_NAMED_BY_ITS_ID`.** A table titled like a built-in entity is still
+    tagged by its own id, and renaming it changes nothing. Delete this and a table called
+    Price list is read under the built-in price list's field policy."""
+    fields = recorded_fields()
+    one = DiscoveredTable(table_id=TABLE_ID, title="price_list", fields=fields)
+    renamed = replace(one, title="Something else")
+
+    assert one.entity == renamed.entity == f"lark_{TABLE_ID.lower()}"
+    assert one.entity != "price_list"
+
+
+def test_a_table_with_no_readable_field_is_not_a_connection() -> None:
+    """A table of links and attachments has nothing that can become one honest value, so it is
+    not a connection, and the Base's other tables still are. Delete this and such a table is
+    either refused with the whole Base or connected with bindings that read nothing."""
+    unreadable = DiscoveredTable(
+        table_id=TABLE_ID,
+        title="Files",
+        fields=(
+            BaseField(field_id="fldFile0001", name="Drawings", api_type=17),
+            BaseField(field_id="fldLink0002", name="Projects", api_type=18),
+            BaseField(field_id="fldUnkn0003", name="Group", api_type=23),
+        ),
+    )
+
+    assert unreadable.table(BASE_ID) is None
+    assert DiscoveredTable(table_id=TABLE_ID, title="", fields=recorded_fields()).table(BASE_ID)
+
+
+def test_what_a_discovered_table_keeps_is_its_minimal_index_and_holds_no_canary() -> None:
+    """**C1's check and canary, over a table this connector discovered (M11.9.1, M11.8.2).** The
+    recorded page is replayed with a canary minted for this run planted in its contract value,
+    through the discovered table's own projection. What is kept passes `assert_minimal_index`
+    against the manifest the discovered table builds and holds no canary; the same page read
+    live does hold it, which is the positive case proving the harness can see. Delete this and
+    a discovered Base can keep a contract value with every hand-built table's test green."""
+    table = discovered_table().table(BASE_ID)
+    assert table is not None
+    installed = manifest(
+        table, host=HOST, credential=CredentialBinding(ref=READ_REF), visibility=VISIBILITY
+    )
+    canary = fresh_canary("base")
+    body = planted(cassette("LARK-200-records").body, canary)
+    rows = table.operation(Endpoint.LIST_RECORDS, host=HOST).project(body)
+
+    kept = tuple(table.projected_record(row, last_seen_at=NOW) for row in rows)
+    live = read_records(
+        table,
+        table.operation(Endpoint.LIST_RECORDS, host=HOST),
+        Reader(LarkReply(status=200, body=body)),
+        fetched_at=FETCHED_AT,
+        budget=fair_share_budget(),
+        limit=1,
+    )
+
+    assert kept
+    assert_minimal_index(installed, kept)
+    assert sightings(canary, kept) == ()
+    assert sightings(canary, live.result)
+    assert {field for record in kept for field in record.fields} <= {"client", "last_modified"}

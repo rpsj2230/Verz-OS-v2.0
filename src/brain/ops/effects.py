@@ -266,8 +266,12 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.connectors.google_drive:PageReader.read": Repeat.READS,
         "brain.connectors.laravel:ViewReader.rows": Repeat.READS,
         "brain.connectors.lark_base:RecordReader.read": Repeat.READS,
+        "brain.connectors.lark_base:SchemaReader.list_fields": Repeat.READS,
+        "brain.connectors.lark_base:SchemaReader.list_tables": Repeat.READS,
         "brain.connectors.lark_wiki:WikiReader.list_nodes": Repeat.READS,
         "brain.connectors.lark_wiki:WikiReader.read_node": Repeat.READS,
+        "brain.connectors.lark_wiki:WikiReader.read_permission": Repeat.READS,
+        "brain.connectors.lark_wiki:WikiReader.read_text": Repeat.READS,
         # A staff directory is searched read-only and unbound; unbinding twice leaves it unbound.
         "brain.connectors.ldap_directory:DirectoryConnection.search_page": Repeat.READS,
         "brain.connectors.ldap_directory:DirectoryConnection.close": (

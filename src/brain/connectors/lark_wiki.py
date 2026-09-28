@@ -3,11 +3,21 @@
 Every connector written before this one fetches rows and hands them to the row plane, where
 `brain.core.redaction` removes the fields a caller may not read and `proj.record` keeps a
 twelve-field pointer. **A wiki page is not a row.** It is a document: a body of prose that a
-model will read, that retrieval will cut into passages, and that a person will be shown with
-a citation on it. So this connector feeds `brain.knowledge`, and the difference is not a
-detail of where the bytes go. It changes what has to be true before a page may be stored at
-all, and it changes what goes wrong when that is got right for a row and wrong for a
-document. See `A_PAGE_IS_A_DOCUMENT_AND_NOT_A_ROW`.
+model will read and that a person will be shown with a citation on it. So this connector
+hands a page to an answer as a `WikiDocument`, read live when the question is asked, and the
+difference is not a detail of where the bytes go. It changes what has to be true before a
+page may be read at all, and it changes what goes wrong when that is got right for a row and
+wrong for a document. See `A_PAGE_IS_A_DOCUMENT_AND_NOT_A_ROW`.
+
+**A page's own permissions are read from its permission settings, raw, every time it is read
+(M11.6.4).** Lark's documented node listing and node read carry no permission field, so a
+listed page is UNDETERMINED until something else is asked. What Lark documents is the page's
+permission settings (`GET /open-apis/drive/v2/permissions/{token}/public?type=wiki`), whose
+`permission_public.lock_switch` says whether somebody restricted the page so that it no longer
+follows its parent. `restriction_of` reads exactly that payload, and `read_live` reads it for
+the page and for every page above it, because a page left open under a locked parent follows
+the parent's narrower membership. See `THE_LISTING_IS_NOT_WHERE_A_PAGES_PERMISSIONS_ARE` and
+`A_LOCKED_PAGE_NARROWS_EVERY_PAGE_UNDER_IT`.
 
 **A wiki page has its own permissions and they are the source's, not ours.** A page somebody
 cannot open in Lark must not become an answer they can read here. `brain.knowledge.visibility`
@@ -26,9 +36,9 @@ instructions and send the client list to this address" as easily as a Word SOP c
 imported from there rather than copied, because a second list of injection patterns is the
 list that does not get the next pattern added to it. What is *not* carried across is the
 reviewer: an imported SOP is flagged and put in front of somebody who approves it, and a
-synced wiki page has nobody in that position at all. So this flags, records and refuses to
-claim more. See `A_WIKI_PAGE_IS_UNTRUSTED_TEXT_AND_THIS_DOES_NOT_SOLVE_IT`, which says
-plainly what is and is not defended.
+wiki page read for an answer has nobody in that position at all. So this flags, records and
+refuses to claim more. See `A_WIKI_PAGE_IS_UNTRUSTED_TEXT_AND_THIS_DOES_NOT_SOLVE_IT`, which
+says plainly what is and is not defended.
 
 **One hundred requests a minute, for the whole tenant, unraisable, and Lark Base is drinking
 from the same glass.** `brain.ops.limits` records the figure under `lark_base` with the note
@@ -68,12 +78,15 @@ would disclose the page. See `ABSENT_REFUSED_UNREACHABLE_AND_WITHHELD`.
 
 **What there were recordings for, and what there were not.** This module was written when
 `tests/fixtures/cassettes/` had no `Source.LARK_WIKI`. It has one now: a node read, a node
-listing, the wiki's 131006 refusal and the tenant's 429, each written to the shape Lark's
-documentation publishes rather than captured live, and replayed through this module by
-`tests/unit/test_cassette_replay.py`. The documented node carries no `has_member_setting`, so
-every documented page reads as UNDETERMINED and is withheld; that is the finding the listing
-recording pins. What the `Source.LARK_BASE` recordings establish still carries over, because
-it is the tenant's envelope and the tenant's ceiling rather than one product's API:
+listing, a page's permission settings following and locked, a page's plain text, the wiki's
+131006 refusal and the tenant's 429, each written to the shape Lark's documentation publishes
+rather than captured live, and replayed through this module by
+`tests/unit/test_cassette_replay.py`. Until 2026-09-28 the permission verdict was read off a
+`has_member_setting` key that no documented payload carries, so every documented page was
+withheld and the wiki answered nothing; the listing recording pins that the listing still says
+nothing, and the permission recordings are what a page is now admitted on. What the
+`Source.LARK_BASE` recordings establish still carries over, because it is the tenant's envelope
+and the tenant's ceiling rather than one product's API:
 
 - `LARK-200-code-permission`: a permission failure delivered as HTTP 200 with a non-zero
   `code`. Verified, and the whole of `envelope_outcome`.
@@ -83,8 +96,8 @@ it is the tenant's envelope and the tenant's ceiling rather than one product's A
   and read from `brain.ops.limits` rather than restated here.
 
 What there is still no recording of, stated so nobody reads a test here as evidence: a node
-tree deeper than one page, a moved page, a per-node permission override, and anything captured
-from a live tenant. Every one of those is modelled from Lark's published documentation and
+tree deeper than one page, a moved page, and anything captured from a live tenant. Every one
+of those is modelled from Lark's published documentation and
 from what this estate already knows about the bot's `read`-only token, and every test below
 drives the model rather than the source. The page size of fifty is the documented maximum but
 no live capture confirms it, so it is the one *number* reaching an address that nothing live
@@ -120,19 +133,30 @@ the reason `brain.models.routing.CircuitBreaker` gives about its own.
 
 **This connector keeps a minimal index and reads every value live.** It projects nothing:
 its manifest declares no projection, so no page's title, id or text is kept by any
-scheduled reading. `WikiDocument.as_knowledge_item` can build a corpus item from a page
-and nothing hands one over: by the owner's rule a page's body is read live and never
-embedded, and titles and ids are what an index may hold (`docs/needs-rupash.md` item 99),
-so whoever wires the wiki's index owes that decision first. It is declared as `CONNECTOR`
-at the foot of this module (`brain.connectors.declaration`).
+scheduled reading, and its minimal index is empty. A question finds its pages with
+`find_pages`, which walks the declared spaces live and matches titles, and reads each with
+`read_live`, which reads the node, the permission settings along its ancestry and then its
+text, all inside the question's share of the tenant's minute. By the owner's rule a page's
+body is read live and never copied or embedded (`docs/needs-rupash.md` item 99), so the
+corpus item a page could once be turned into is gone rather than merely uncalled: this
+module builds no knowledge item and imports nothing that stores one. See
+`A_PAGE_IS_READ_LIVE_AND_NEVER_KEPT`. It is declared as `CONNECTOR` at the foot of this
+module (`brain.connectors.declaration`).
 
-Task ids: M11.6.4
+Rejected: keeping the titles in `proj.record` so a question matches an index instead of
+walking. A projection carries one visibility predicate, the wiki's reach is per space, and a
+company-wide space is the unrestricted predicate `ProjectedEntity` refuses outright, so the
+index would have held some spaces and silently not others. The walk costs calls from the
+question's budget instead, and a budget stop says the search was incomplete.
+
+Task ids: M11.6.4, M11.9.4
 """
 
 from __future__ import annotations
 
 import enum
 import re
+from collections import deque
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
@@ -153,6 +177,7 @@ from brain.connectors.contract import (
     assert_holds_no_credential,
 )
 from brain.connectors.declaration import ConnectorDeclaration, Recorded
+from brain.connectors.lark_base import MinuteBudget
 from brain.connectors.manifest import ChangeSignal, ConnectorManifest, ToolDeclaration
 from brain.connectors.rest import ID_TARGET, OperationSpec, ParameterSpec, RestOperation
 from brain.connectors.throttle import CallOutcome, classify
@@ -161,7 +186,6 @@ from brain.connectors.write_verification import ReadBack, Reading, unreadable
 from brain.core.envelope import IdentityMode, SideEffect, TypedResult
 from brain.core.errors import Degraded
 from brain.gate.provenance import FRESHNESS_TEXT, Freshness
-from brain.knowledge.item import KnowledgeItem, KnowledgeState
 from brain.knowledge.visibility import KnowledgeVisibility, Visibility
 from brain.tools.sop_import import (
     ADDRESSED_PATTERNS,
@@ -172,15 +196,14 @@ from brain.tools.sop_import import (
 )
 
 # ------------------------------------------------------------------ written-down reasons
-#: Why this connector feeds the knowledge plane instead of the row plane.
+#: Why a page reaches an answer as a document and never through the row plane.
 A_PAGE_IS_A_DOCUMENT_AND_NOT_A_ROW = (
     "A row is answered by returning fields, and the redactor removes the ones a caller may "
-    "not read. A document is answered by returning a passage, and the only thing that keeps "
-    "a passage inside its document's permissions is `brain.knowledge.chunking.Chunk`, which "
-    "cannot be constructed anywhere except `chunk_document` precisely so that guarantee is "
-    "structural. A wiki body arriving as a field on a SourceRecord would reach a reader "
-    "having never been chunked: no anchor, no citation that resolves, and no "
-    "DocumentPermissions travelling with the text. The projection would be wrong in the "
+    "not read. A page is answered by returning its text, and what keeps that text inside the "
+    "page's permissions is the reach it was admitted at travelling beside it, as one "
+    "WikiDocument that read_live builds once the permissions were read. A wiki body "
+    "arriving as a field on a SourceRecord would reach a reader field by field, with no "
+    "citation that resolves and no reach of its own. The projection would be wrong in the "
     "other direction too, because what a projected page could hold is its title and its "
     "path, and the path is the one thing that changes when the page does not."
 )
@@ -208,6 +231,48 @@ A_PAGE_WHOSE_PERMISSIONS_ARE_UNKNOWN_IS_WITHHELD = (
     "checked, and the resulting answer is fluent, cited and read by somebody who was never "
     "in the space. Withholding costs an answer nobody gets; inheriting costs one somebody "
     "should not have had, and only the second is invisible."
+)
+
+#: Why a page's own permissions come from its permission settings and never from a listing.
+THE_LISTING_IS_NOT_WHERE_A_PAGES_PERMISSIONS_ARE: Final = (
+    "Lark's documented node listing and node read carry no permission field at all, so a page "
+    "seen there has undetermined permissions until something else is asked. What Lark "
+    "documents for one page is its permission settings, read by the page's token with "
+    "type=wiki, and the setting that says whether the page still follows its parent is "
+    "permission_public.lock_switch: true once somebody restricted the page so it no longer "
+    "inherits, false while it does. So that payload is read, raw, and nothing in a listing is "
+    "trusted to say the same. Until 2026-09-28 the verdict was read off a has_member_setting "
+    "key no documentation names, so every documented page was withheld and the wiki answered "
+    "nothing while its tests stayed green."
+)
+
+#: Why a locked page narrows every page beneath it.
+A_LOCKED_PAGE_NARROWS_EVERY_PAGE_UNDER_IT: Final = (
+    "A page that follows its parent follows it all the way up, so its reach is the space's "
+    "only when every page above it follows too. A page left open under a locked parent takes "
+    "the parent's narrower membership, and reading the page's own settings alone would answer "
+    "from it at the space's reach to exactly the people the parent's lock excluded. So the "
+    "verdict is taken over the page and every ancestor, and one lock or one unknown anywhere "
+    "on that chain withholds the page."
+)
+
+#: Why a page's text is read when a question needs it and never kept.
+A_PAGE_IS_READ_LIVE_AND_NEVER_KEPT: Final = (
+    "The owner's rule (needs-rupash 99) is that Wiki text is searched live and never copied or "
+    "embedded. So a page is read when a question needs it: its node, the permission settings "
+    "along its ancestry, then its text, each a call against the tenant's minute and each "
+    "counted in the question's budget. What comes back is a WikiDocument handed to the answer "
+    "and nothing else. This module builds no knowledge item, writes no chunk and keeps no row, "
+    "and a page restricted since yesterday is read under today's settings."
+)
+
+#: Why a title match is a candidate for `read_live` and never something to show.
+A_TITLE_MATCH_IS_A_CANDIDATE_AND_NOT_AN_ANSWER: Final = (
+    "find_pages walks the declared spaces live and returns the pages whose titles hold the "
+    "question's words. Nothing has read those pages' own permissions yet, and a title is a "
+    "sentence out of somebody's wiki, so a match is handed to read_live and to nobody else. A "
+    "caller that showed a matched title before read_live admitted the page would confirm to "
+    "the asker that a page they may not open exists, which is the disclosure withholding is for."
 )
 
 #: What is and is not defended about text a model will read.
@@ -346,7 +411,7 @@ CEILING_NAME: Final = "lark_base"
 WIKI_PAGE: Final = "wiki_page"
 
 #: This connector's own version, which moves when anything in the manifest moves.
-VERSION: Final = "1.0.0"
+VERSION: Final = "1.1.0"
 
 #: What the field mapping names its specification. A reference and not a document, for the
 #: reason `brain.connectors.transports.RestTransport.spec_ref` gives.
@@ -397,11 +462,27 @@ MAX_NODE_PAGES: Final = 50
 #: is long rather than circular would otherwise be walked until it ran out of memory.
 MAX_TREE_DEPTH: Final = 12
 
-#: The key a node listing carries its own member settings under. Whether Lark's listing
-#: actually carries it is not verified by any recording here, and the guard is deliberately
-#: on the case that does not depend on that: absent, or present as anything other than a
-#: boolean, is UNDETERMINED and the page is withheld.
-MEMBER_SETTING_KEY: Final = "has_member_setting"
+#: The object Lark's permission settings reply carries a page's settings under, and the one
+#: setting read from it: whether the page was restricted so it no longer follows its parent.
+#: Absent, or anything other than a boolean, is UNDETERMINED and the page is withheld. See
+#: `THE_LISTING_IS_NOT_WHERE_A_PAGES_PERMISSIONS_ARE`.
+PERMISSION_KEY: Final = "permission_public"
+LOCK_KEY: Final = "lock_switch"
+
+#: The permission settings read for one wiki page, and the plain text of one docx document, as
+#: Lark documents them. Paths the reader builds its call from; `{token}` is the node token and
+#: `{document_id}` the document behind the node, which the listing calls `obj_token`.
+PERMISSION_PATH: Final = "/open-apis/drive/v2/permissions/{token}/public?type=wiki"
+TEXT_PATH: Final = "/open-apis/docx/v1/documents/{document_id}/raw_content"
+
+#: The one object type whose text this connector reads. A sheet, a Base, a mind map or a file
+#: hung in the tree has no plain text here and is withheld as not a document.
+DOCUMENT_TYPE: Final = "docx"
+
+#: How many title matches one question hands to `read_live`. Each read costs a node read, a
+#: permission read per level and a text read against a share of 25 calls, so five pages is
+#: about what one question's share can read and still say which it did not.
+MAX_MATCHES: Final = 5
 
 #: What a node token may look like. A document id is built from one and ends up inside a
 #: citation, so it is held to the reference grammar `brain.knowledge.chunking` accepts, for
@@ -414,18 +495,6 @@ TOKEN_RE: Final = re.compile(r"^[A-Za-z0-9_-]{1,80}$")
 CONTENT_TARGET_RE: Final = re.compile(
     r"(^|_)(content|body|text|html|markdown|md|blocks|raw|excerpt|snippet|summary)(_|$)"
 )
-
-#: What the state of a freshly synced page is. DRAFT, because nobody has vouched for it:
-#: `brain.knowledge.item` reserves PUBLISHED for something a person put their name to, and it
-#: refuses a company-visible published item with no verifier outright. A sync that published
-#: would be the system vouching for a document on the strength of having copied it.
-INITIAL_STATE: Final = KnowledgeState.DRAFT
-
-#: What becomes of a document whose page the source no longer lists. ARCHIVED and never
-#: SUPERSEDED: `KnowledgeState` draws that distinction because a superseded item tells an
-#: asker a successor exists, and a deleted wiki page has no successor. Both stop the document
-#: being re-chunked, since `chunk_document` refuses anything that is not retrievable.
-DELETED_STATE: Final = KnowledgeState.ARCHIVED
 
 # What a person is told, and what an operator is told, at different lengths on purpose. Each
 # is a constant: a detail assembled from a response body would put a page title, and
@@ -677,23 +746,23 @@ def items_of(payload: Mapping[str, Any]) -> tuple[Mapping[str, Any], ...]:
 class NodeRestriction(enum.StrEnum):
     """Whether a node's permissions are the space's, its own, or unknown.
 
-    Three, and the third is why this is an enum rather than a boolean. "The node has its own
-    member settings" and "the listing did not say" are different facts with different
-    remedies (a wider credential, against a vendor payload that changed), and both are
-    withheld. A boolean would force one of them into "inherits", which is the publication
+    Three, and the third is why this is an enum rather than a boolean. "The page was
+    restricted" and "its settings did not say" are different facts with different remedies
+    (a person opening the page to the space, against a vendor payload that changed), and both
+    are withheld. A boolean would force one of them into "inherits", which is the publication
     this connector exists to refuse. See `A_PAGE_WHOSE_PERMISSIONS_ARE_UNKNOWN_IS_WITHHELD`.
     """
 
     #: The node takes the space's reach. The only value that admits a page.
     INHERITS = "inherits"
-    #: The node carries its own member settings, which this credential cannot read.
+    #: The node, or a page above it, was restricted so it no longer follows its parent.
     OWN_PERMISSIONS = "own_permissions"
-    #: The listing said nothing usable. Not a claim that the node is unrestricted.
+    #: Nothing usable was read. Not a claim that the node is unrestricted.
     UNDETERMINED = "undetermined"
 
 
 class WithholdingReason(enum.StrEnum):
-    """Why one page was not stored. An operator's vocabulary, never an asker's.
+    """Why one page was not read. An operator's vocabulary, never an asker's.
 
     Closed, and every member names a different thing to do about it. There is deliberately no
     member meaning "some other reason": a page withheld for a reason nobody can act on is a
@@ -703,10 +772,13 @@ class WithholdingReason(enum.StrEnum):
 
     #: No `SpaceDeclaration` covers the space this page is in.
     SPACE_NOT_DECLARED = "space_not_declared"
-    #: The node has its own member settings and this credential cannot read them.
+    #: The node, or a page above it, was restricted so it no longer follows its parent.
     NODE_HAS_ITS_OWN_PERMISSIONS = "node_has_its_own_permissions"
-    #: The listing did not say what the node's permissions are.
+    #: The node's permission settings did not say whether it follows its parent.
     PERMISSIONS_UNDETERMINED = "permissions_undetermined"
+    #: The node is a sheet, a Base, a mind map or a file, which has no text this connector
+    #: reads; its own connector, where there is one, is where it is answered from.
+    NOT_A_DOCUMENT = "not_a_document"
 
 
 class PageWithheldError(LarkWikiError):
@@ -747,6 +819,8 @@ class WikiNode:
     parent_node_id: str = ""
     obj_type: str = ""
     has_child: bool = False
+    #: The document behind the node, which Lark calls `obj_token`; its text is read by this.
+    object_id: str = ""
 
     def __post_init__(self) -> None:
         if not TOKEN_RE.match(self.node_id):
@@ -758,6 +832,12 @@ class WikiNode:
             raise LarkWikiError(msg)
         if self.parent_node_id and not TOKEN_RE.match(self.parent_node_id):
             msg = f"parent token {self.parent_node_id!r} is not a token"
+            raise LarkWikiError(msg)
+        if self.object_id and not TOKEN_RE.match(self.object_id):
+            msg = (
+                f"document token {self.object_id!r} is not a token; it is put into an "
+                "address, so a slash or a brace would change which document is read"
+            )
             raise LarkWikiError(msg)
         if self.parent_node_id == self.node_id:
             msg = (
@@ -777,20 +857,48 @@ class WikiNode:
         return not self.parent_node_id
 
 
-def restriction_of(item: Mapping[str, Any]) -> NodeRestriction:
-    """What a listing says about one node's own permissions.
+def restriction_of(payload: Mapping[str, Any]) -> NodeRestriction:
+    """What one page's own permission settings say about following its parent, read raw.
 
-    The default is the refusal. A boolean `false` is the only value that admits a page, a
-    boolean `true` says the node has settings this credential cannot read, and everything
-    else, an absent key included, is UNDETERMINED. That last branch is the one worth having a
-    test for, because it is what an unverified assumption about a vendor payload produces:
-    the key is not there, and the safe reading is the one that does not publish.
+    `payload` is the `data` of Lark's permission settings reply for the page, exactly as it
+    arrived. The default is the refusal: a boolean `lock_switch` of false is the only value
+    that admits a page, true says somebody restricted the page so it no longer follows its
+    parent, and everything else, the settings object or the key absent, a string, a null, is
+    UNDETERMINED. See `THE_LISTING_IS_NOT_WHERE_A_PAGES_PERMISSIONS_ARE`.
     """
-    raw = item.get(MEMBER_SETTING_KEY)
+    settings = payload.get(PERMISSION_KEY)
+    if not isinstance(settings, Mapping):
+        return NodeRestriction.UNDETERMINED
+    raw = settings.get(LOCK_KEY)
     if raw is False:
         return NodeRestriction.INHERITS
     if raw is True:
         return NodeRestriction.OWN_PERMISSIONS
+    return NodeRestriction.UNDETERMINED
+
+
+def permission_of(reply: LarkReply) -> NodeRestriction:
+    """One permission settings reply as a verdict, refusing it first if it was not an answer.
+
+    A refusal is raised rather than read as UNDETERMINED, because the two go to different
+    people: a missing scope is somebody adding one, and a page that says nothing is Lark.
+    """
+    assert_answered(reply)
+    return restriction_of(reply.data)
+
+
+def restriction_along(verdicts: Iterable[NodeRestriction]) -> NodeRestriction:
+    """The page's reach over its whole ancestry: the space's only when every level follows.
+
+    A lock anywhere is OWN_PERMISSIONS, an unknown anywhere is UNDETERMINED, and an empty chain
+    is UNDETERMINED too, because nothing read is not the same as everything following. See
+    `A_LOCKED_PAGE_NARROWS_EVERY_PAGE_UNDER_IT`.
+    """
+    read = tuple(verdicts)
+    if NodeRestriction.OWN_PERMISSIONS in read:
+        return NodeRestriction.OWN_PERMISSIONS
+    if read and all(one is NodeRestriction.INHERITS for one in read):
+        return NodeRestriction.INHERITS
     return NodeRestriction.UNDETERMINED
 
 
@@ -800,6 +908,10 @@ def node_from(item: Mapping[str, Any], *, space_id: str) -> WikiNode:
     The space is the caller's rather than the row's, because a listing is asked for one space
     and a row claiming another is either a vendor change or a bug, and inheriting the row's
     would silently place a page under a declaration that was never meant for it.
+
+    **The restriction is always UNDETERMINED here, whatever the row carries.** A listing is
+    not where a page's permissions are (`THE_LISTING_IS_NOT_WHERE_A_PAGES_PERMISSIONS_ARE`), so
+    a row claiming a verdict is not believed, and `read_live` reads the settings instead.
     """
     token = item.get("node_token")
     if not isinstance(token, str):
@@ -811,14 +923,16 @@ def node_from(item: Mapping[str, Any], *, space_id: str) -> WikiNode:
     parent = item.get("parent_node_token")
     title = item.get("title")
     obj_type = item.get("obj_type")
+    document = item.get("obj_token")
     return WikiNode(
         node_id=token,
         space_id=space_id,
         title=title if isinstance(title, str) else "",
-        restriction=restriction_of(item),
+        restriction=NodeRestriction.UNDETERMINED,
         parent_node_id=parent if isinstance(parent, str) else "",
         obj_type=obj_type if isinstance(obj_type, str) else "",
         has_child=item.get("has_child") is True,
+        object_id=document if isinstance(document, str) else "",
     )
 
 
@@ -1074,15 +1188,15 @@ def admit_page(node: WikiNode, *, spaces: Mapping[str, SpaceDeclaration]) -> Adm
         raise PageWithheldError(msg, reason=WithholdingReason.SPACE_NOT_DECLARED)
     if node.restriction is NodeRestriction.OWN_PERMISSIONS:
         msg = (
-            f"node {node.node_id!r} carries its own member settings, which this "
-            "credential can see the existence of and not the contents of; inheriting the "
-            "space would widen the page to exactly the people its own settings exclude"
+            f"node {node.node_id!r}, or a page above it, was restricted so it no longer "
+            "follows its parent; inheriting the space would widen the page to exactly the "
+            "people that restriction excludes"
         )
         raise PageWithheldError(msg, reason=WithholdingReason.NODE_HAS_ITS_OWN_PERMISSIONS)
     if node.restriction is not NodeRestriction.INHERITS:
         msg = (
-            f"the listing said nothing usable about node {node.node_id!r}'s permissions, "
-            "and an absent answer is not the answer 'unrestricted'"
+            f"nothing usable was read about node {node.node_id!r}'s permissions, and an "
+            "absent answer is not the answer 'unrestricted'"
         )
         raise PageWithheldError(msg, reason=WithholdingReason.PERMISSIONS_UNDETERMINED)
     return AdmittedPage(node=node, visibility=declared.visibility, owner_id=declared.owner_id)
@@ -1242,11 +1356,38 @@ class WikiReader(Protocol):
     runs out of pages, and none of them can be arranged reliably against a real tenant. In
     production the implementation borrows a lease for the duration of the call; in tests it
     is scripted from the recordings.
+
+    `read_permission` asks for one page's permission settings at `PERMISSION_PATH` and
+    `read_text` for one document's plain text at `TEXT_PATH`, both by token and both reads.
     """
 
     def list_nodes(self, request: NodeListRequest) -> LarkReply: ...
 
     def read_node(self, request: NodeReadRequest) -> LarkReply: ...
+
+    def read_permission(self, request: NodeReadRequest) -> LarkReply: ...
+
+    def read_text(self, request: TextReadRequest) -> LarkReply: ...
+
+
+@dataclass(frozen=True)
+class TextReadRequest:
+    """One document's plain text, by the document token behind a wiki node.
+
+    Its own type rather than a `NodeReadRequest`, because the two tokens name different things:
+    a node token is where a page sits in the tree, and the document token is the page's body.
+    Reading the text by the node token would ask Lark for a document that does not exist.
+    """
+
+    object_id: str
+
+    def __post_init__(self) -> None:
+        if not TOKEN_RE.match(self.object_id):
+            msg = (
+                f"document token {self.object_id!r} is not a token this read can be built "
+                "from; it is put into an address, and an empty one names no document"
+            )
+            raise LarkWikiError(msg)
 
 
 @dataclass(frozen=True)
@@ -1385,10 +1526,11 @@ def _excerpt(line: str) -> str:
 class WikiDocument:
     """One admitted page, its text, its place in the tree, and what was noticed in it.
 
-    This is the value that crosses into `brain.knowledge`, and it is deliberately not a
-    `SourceRecord`. A record is redacted field by field and never chunked; a document is
-    chunked, and `chunk_document` is the only thing in this system that copies a document's
-    permissions onto a passage. See `A_PAGE_IS_A_DOCUMENT_AND_NOT_A_ROW`.
+    The value an answer is handed, built by `document_for` once `read_live` has read the
+    page's permissions, and deliberately not a `SourceRecord`: a record is redacted field by
+    field, and a page's text has to travel with the reach it was admitted at. See
+    `A_PAGE_IS_A_DOCUMENT_AND_NOT_A_ROW`. **Nothing here turns it into anything kept.** The
+    corpus item it once became is gone, by the owner's rule (`A_PAGE_IS_READ_LIVE_AND_NEVER_KEPT`).
     """
 
     page: AdmittedPage
@@ -1425,28 +1567,6 @@ class WikiDocument:
             for finding in self.findings
         )
 
-    def as_knowledge_item(self, *, state: KnowledgeState = INITIAL_STATE) -> KnowledgeItem:
-        """This page as the knowledge layer's own record.
-
-        The visibility is the space's and there is no argument here that could carry another
-        one, which is the structural half of `THE_SOURCES_VISIBILITY_IS_CARRIED_AND_NEVER_RESOLVED`.
-
-        `state` defaults to DRAFT and the default is the decision: nobody has vouched for a
-        synced page, and `KnowledgeItem` refuses a company-visible published item with no
-        verifier outright. That refusal is worth meeting rather than working around. A wiki
-        space declared at company level cannot be synced into a published item until a person
-        verifies it, which is the knowledge layer saying that company scope is the level
-        nobody double-checks, applied to a document that arrived by machine.
-        """
-        return KnowledgeItem(
-            item_id=self.item_id,
-            content=self.text,
-            title=self.title,
-            visibility=self.page.visibility,
-            owner_id=self.page.owner_id,
-            state=state,
-        )
-
 
 def document_for(page: AdmittedPage, *, text: str, index: Mapping[str, WikiNode]) -> WikiDocument:
     """One admitted page as a document, with its path and its findings computed here.
@@ -1464,16 +1584,222 @@ def document_for(page: AdmittedPage, *, text: str, index: Mapping[str, WikiNode]
     )
 
 
-def state_for_a_page_the_source_no_longer_lists() -> KnowledgeState:
-    """What a document becomes when its page has gone. ARCHIVED, never SUPERSEDED.
+# ------------------------------------------------ read when a question asks (M11.6.4, M11.9.4)
+def text_of(reply: LarkReply) -> str:
+    """One document's plain text, refusing a reply that was not an answer or carried none.
 
-    A function rather than a bare constant so the argument has somewhere to live and one call
-    site to read it from. `KnowledgeState` draws the distinction: a superseded item tells the
-    asker a newer version exists, and a deleted wiki page has no successor, so reporting one
-    would send somebody looking for a document that was never written. Both states stop the
-    document being re-chunked, because `chunk_document` refuses anything not retrievable.
+    A `content` that is not a string is a failure rather than an empty page: reading it as ""
+    would report a shape change as a page with nothing written on it.
     """
-    return DELETED_STATE
+    assert_answered(reply)
+    content = reply.data.get("content")
+    if not isinstance(content, str):
+        msg = (
+            "a document's plain text arrived with no content string; reading that as an empty "
+            "page would report a change in Lark's reply as a page nobody wrote anything on"
+        )
+        raise LarkWikiError(msg)
+    return content
+
+
+@dataclass(frozen=True)
+class LiveRead:
+    """One page read for a question, and what is left of the question's budget afterwards.
+
+    `document` is None for a page that was admitted and holds no text, which is an absence to
+    the asker and is told as one. The budget is returned rather than mutated, like every
+    other budget here, so a caller reading several pages carries it forward.
+    """
+
+    document: WikiDocument | None
+    budget: MinuteBudget
+
+
+def _node_read(
+    reader: WikiReader, node_id: str, budget: MinuteBudget
+) -> tuple[WikiNode, MinuteBudget]:
+    """One node by its token, as the node read describes it, and the budget after paying.
+
+    The space is the reply's own here, unlike `node_from` over a listing: a read by token is
+    not asked for a space, and `read_live` then refuses a space nobody declared before it
+    spends anything on permissions.
+    """
+    spent = budget.spend()
+    reply = reader.read_node(NodeReadRequest(node_id=node_id))
+    assert_answered(reply)
+    found = reply.data.get("node")
+    space = found.get("space_id") if isinstance(found, Mapping) else None
+    if not isinstance(found, Mapping) or not isinstance(space, str) or not space.strip():
+        msg = (
+            f"the read of node {node_id!r} carried no node naming its space; the space is "
+            "where a page's reach comes from, so a node without one cannot be admitted"
+        )
+        raise LarkWikiError(msg)
+    return node_from(found, space_id=space), spent
+
+
+def _ancestry(
+    reader: WikiReader, node: WikiNode, budget: MinuteBudget
+) -> tuple[tuple[WikiNode, ...], MinuteBudget]:
+    """The page and every page above it, read by token, bounded and cycle-checked.
+
+    Refusals are `path_of`'s three for the same reasons, plus one: an ancestor in another
+    space is a tree that disagrees with itself, and its settings would be judged against a
+    declaration that was never meant for it.
+    """
+    chain = [node]
+    seen = {node.node_id}
+    spent = budget
+    current = node
+    while not current.is_root:
+        if len(chain) > MAX_TREE_DEPTH:
+            msg = (
+                f"the ancestry of {node.node_id!r} is deeper than {MAX_TREE_DEPTH}; a chain "
+                "that long is a tree nobody navigates or a loop"
+            )
+            raise LarkWikiError(msg)
+        if current.parent_node_id in seen:
+            msg = (
+                f"the ancestry of {node.node_id!r} revisits {current.parent_node_id!r}; a tree "
+                "with a cycle in it is not a tree and walking it does not terminate"
+            )
+            raise LarkWikiError(msg)
+        parent, spent = _node_read(reader, current.parent_node_id, spent)
+        if parent.space_id != node.space_id:
+            msg = (
+                f"{node.node_id!r} is in space {node.space_id!r} and its ancestor "
+                f"{parent.node_id!r} in {parent.space_id!r}; a page's reach comes from one "
+                "space and a tree across two cannot say which"
+            )
+            raise LarkWikiError(msg)
+        seen.add(parent.node_id)
+        chain.append(parent)
+        current = parent
+    return tuple(chain), spent
+
+
+def read_live(
+    reader: WikiReader,
+    node_id: str,
+    *,
+    spaces: Mapping[str, SpaceDeclaration],
+    budget: MinuteBudget,
+) -> LiveRead:
+    """Read one page for a question: its node, its permissions along its ancestry, its text.
+
+    In that order, and the order is the rule. The space is checked before any permission is
+    read, so a page nobody declared costs one call; the permissions are read before the text,
+    so a withheld page's text never leaves Lark; and the settings are read page by page up
+    the tree and stop at the first that does not follow, since one lock or one unknown already
+    withholds the page. See `A_LOCKED_PAGE_NARROWS_EVERY_PAGE_UNDER_IT`.
+
+    Every call spends the question's budget first, so an exhausted budget refuses before
+    anything is asked (`lark_base.LarkBaseBudgetError`), and the tenant's minute is the one
+    Lark Base draws on (`ONE_TENANT_MINUTE_SHARED_WITH_LARK_BASE`). A withheld page raises
+    `PageWithheldError` with its reason, for an operator; to the asker it must read exactly
+    like a page that is not there (`ABSENT_REFUSED_UNREACHABLE_AND_WITHHELD`). Nothing read here
+    is kept: see `A_PAGE_IS_READ_LIVE_AND_NEVER_KEPT`.
+    """
+    node, spent = _node_read(reader, node_id, budget)
+    if node.space_id not in spaces:
+        msg = (
+            f"no declaration covers space {node.space_id!r}, so nothing says who may read its "
+            "pages, and nothing further is read about this one"
+        )
+        raise PageWithheldError(msg, reason=WithholdingReason.SPACE_NOT_DECLARED)
+    chain, spent = _ancestry(reader, node, spent)
+    verdicts: list[NodeRestriction] = []
+    for level in chain:
+        spent = spent.spend()
+        verdict = permission_of(reader.read_permission(NodeReadRequest(node_id=level.node_id)))
+        verdicts.append(verdict)
+        if verdict is not NodeRestriction.INHERITS:
+            # One lock or one unknown already withholds; reading the rest spends the minute.
+            break
+    page = admit_page(replace(node, restriction=restriction_along(verdicts)), spaces=spaces)
+    if node.obj_type != DOCUMENT_TYPE or not node.object_id:
+        msg = (
+            f"node {node.node_id!r} is a {node.obj_type or 'node with no object'}, which has "
+            "no text this connector reads"
+        )
+        raise PageWithheldError(msg, reason=WithholdingReason.NOT_A_DOCUMENT)
+    spent = spent.spend()
+    text = text_of(reader.read_text(TextReadRequest(object_id=node.object_id)))
+    if not text.strip():
+        return LiveRead(document=None, budget=spent)
+    return LiveRead(document=document_for(page, text=text, index=index_of(chain)), budget=spent)
+
+
+@dataclass(frozen=True)
+class PageSearch:
+    """The pages whose titles held the question's words, and whether every space was walked.
+
+    Candidates for `read_live` and for nobody else: see
+    `A_TITLE_MATCH_IS_A_CANDIDATE_AND_NOT_AN_ANSWER`. `complete` is false when the budget or
+    the match limit stopped the walk, so a caller can say the search did not reach everything.
+    """
+
+    matches: tuple[WikiNode, ...]
+    budget: MinuteBudget
+    complete: bool
+
+
+def find_pages(
+    reader: WikiReader,
+    *,
+    spaces: Mapping[str, SpaceDeclaration],
+    words: Sequence[str],
+    budget: MinuteBudget,
+    limit: int = MAX_MATCHES,
+) -> PageSearch:
+    """Walk the declared spaces live, level by level, and keep the pages whose titles match.
+
+    Only declared spaces are walked, so a space nobody decided about costs nothing and is
+    never searched. A match is a title holding any of the words, compared case-folded, which
+    serves a title written in any script without a tokenizer deciding what a word is.
+
+    **A search for no words is refused.** It would match every page, which is a listing of
+    the wiki's titles by another name, and `LARK_WIKI_TOOLS` declares no listing on purpose.
+    """
+    wanted = tuple(sorted({word.casefold().strip() for word in words if word.strip()}))
+    if not wanted:
+        msg = (
+            "a search with no words matches every page, which is a listing of the wiki's "
+            "titles by another name; a question's words are what a title is matched on"
+        )
+        raise LarkWikiError(msg)
+    if limit < 1:
+        msg = "a search that may return no page reads the wiki for nothing"
+        raise LarkWikiError(msg)
+    pending: deque[tuple[str, str]] = deque((space, "") for space in sorted(spaces))
+    walked: set[tuple[str, str]] = set()
+    matches: list[WikiNode] = []
+    spent = budget
+    while pending:
+        space, parent = pending.popleft()
+        if (space, parent) in walked:
+            continue
+        walked.add((space, parent))
+        request = NodeListRequest(space_id=space, parent_node_id=parent)
+        while True:
+            if spent.is_exhausted:
+                return PageSearch(matches=tuple(matches), budget=spent, complete=False)
+            spent = spent.spend()
+            reply = reader.list_nodes(request)
+            assert_answered(reply)
+            for item in items_of(reply.data):
+                node = node_from(item, space_id=space)
+                if any(word in node.title.casefold() for word in wanted):
+                    matches.append(node)
+                    if len(matches) >= limit:
+                        return PageSearch(matches=tuple(matches), budget=spent, complete=False)
+                if node.has_child:
+                    pending.append((space, node.node_id))
+            following = next_cursor(reply.data)
+            if following is None:
+                break
+            request = replace(request, cursor=following)
+    return PageSearch(matches=tuple(matches), budget=spent, complete=True)
 
 
 # ------------------------------------------------------- the live read (M11.1.1, M11.6.4)
@@ -1618,10 +1944,10 @@ def page_fetch(
 def subscription(*, notify_within: timedelta, reconcile_every: timedelta) -> ChangeSubscription:
     """How this connector learns that a page moved, changed or went (M11.4.6).
 
-    The subscription governs documents in the knowledge plane rather than rows in
-    `proj.record`, and the mechanism is the same because the failure is the same: a page
-    deleted at the source that nothing removes keeps answering questions, and a document does
-    it with a citation on it, which is worse than a stale row.
+    Nothing of a page is kept today (`A_PAGE_IS_READ_LIVE_AND_NEVER_KEPT`), so this declares
+    what an index of the wiki would owe rather than what one does: a page deleted at the
+    source that nothing removes keeps answering questions, and a document does it with a
+    citation on it, which is worse than a stale row.
 
     `UPDATED_SINCE` and not `WEBHOOK`. Lark can subscribe an application to wiki events, but
     only where somebody has configured that in the tenant's own developer console, so
@@ -1704,12 +2030,12 @@ def health(reply: LarkReply | None, *, checked_at: datetime) -> ConnectorHealth:
 # --------------------------------------------------------------------------- the manifest
 #: What the model reads when it decides whether this tool answers the question. Inside the
 #: pinned digest, and written to say the one thing that is true of this connector and of no
-#: other: what comes back is where a page is, not what it says, because what it says is in the
-#: knowledge layer with its permissions attached.
+#: other: what comes back is where a page is, not what it says, because what it says is read
+#: by `read_live` only after the page's own permissions have been read.
 READ_PAGE_DESCRIPTION: Final = (
     "Look up one Lark Wiki page by its node token: which space it is in, what it is called, "
     "where it sits in the tree and what kind of object it is. It does not return the page's "
-    "text; the text is in the knowledge layer, where it carries the space's own reach."
+    "text; the text is read live for an answer once the page's own permissions allow it."
 )
 
 #: The one tool this connector declares. There is deliberately no tool that lists a space.
@@ -1739,7 +2065,7 @@ def manifest(
     this package earns its keep by keeping a twelve-field pointer in `proj.record`. A wiki
     page has no such pointer to keep: what the fast lane would filter on is a title and a
     path, the path changes when the page does not, and the thing anybody actually wants is
-    the body, which is a document and belongs where documents are chunked. See
+    the body, which is a document and is read live by `read_live`, never kept. See
     `A_PAGE_IS_A_DOCUMENT_AND_NOT_A_ROW`.
 
     **`ceiling` is Lark Base's name and not this connector's.** That is the whole of
@@ -1853,15 +2179,18 @@ CONNECTOR: Final = ConnectorDeclaration(
             "LARK-WIKI-200-nodes-page",
             "LARK-WIKI-200-code-permission",
             "LARK-WIKI-429",
+            "LARK-WIKI-200-permission-follows",
+            "LARK-WIKI-200-permission-locked",
+            "LARK-WIKI-200-raw-content",
         ),
         findings=(LARK_WIKI_THE_CREDENTIAL_IS_READ_ONLY,),
     ),
     recorded=Recorded(
         tested=True,
         finding=(
-            "the documented node listing carries no has_member_setting, so every page "
-            "reads as having undetermined permissions and is withheld; until a live capture "
-            "shows the key, or the connector reads permissions another way, it stores no page"
+            "the documented node listing carries no permissions, so a listed page is answered "
+            "from only after its own permission settings and those of every page above it say "
+            "it still follows its space; a page restricted anywhere on that chain is withheld"
         ),
     ),
 )

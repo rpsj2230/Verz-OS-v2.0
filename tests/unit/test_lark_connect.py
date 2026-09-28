@@ -61,6 +61,7 @@ from brain.ops.lark_connect import (
     MEMBERS_SCOPE,
     MESSAGE_EVENT,
     USES,
+    WIKI_PERMISSION_SCOPE,
     Use,
     Verdict,
     base_token,
@@ -234,7 +235,8 @@ def test_each_use_asks_for_the_scopes_its_reader_was_written_against() -> None:
     names = {use: {one.name for one in USES[use].scopes} for use in Use}
     assert names[Use.STAFF_LIST] == set(LARK_SYNC_SCOPES.split())
     assert set(LARK_SCOPE_PURPOSE) == set(LARK_SYNC_SCOPES.split())
-    assert "docs:permission.member:retrieve" in names[Use.WIKI]
+    assert WIKI_PERMISSION_SCOPE in names[Use.WIKI]
+    assert "docs:permission.member:retrieve" not in names[Use.WIKI]
     assert set(SLOT_SCOPES["lark_wiki"].request) <= names[Use.WIKI]
     assert set(SLOT_SCOPES["lark_base"].request) <= names[Use.BASE]
     assert USES[Use.WIKI].slot == lark_wiki.LARK_WIKI
@@ -336,12 +338,14 @@ def test_a_scope_named_by_lark_that_the_use_does_not_need_is_not_passed_on(lark:
 
 
 def test_the_page_permission_scope_is_named_when_only_it_is_missing(lark: FakeLark) -> None:
-    """The listing works and the permission read is refused: the sentence names exactly
-    docs:permission.member:retrieve. Delete this and the scope item 81 was about goes unnamed."""
-    lark.refuse["/open-apis/drive/v1/permissions/"] = missing("docs:permission.member:retrieve")
+    """The listing works and the permission settings read is refused: the sentence names exactly
+    docs:permission.setting:read, the scope `lark_wiki.read_live` reads a page's lock with.
+    Delete this and the scope item 81 was about goes unnamed."""
+    lark.refuse["/open-apis/drive/v2/permissions/"] = missing("docs:permission.setting:read")
     (wiki, staff) = probe(lark, Use.STAFF_LIST, Use.WIKI).uses[::-1]
     assert wiki.verdict is Verdict.MISSING_SCOPE
-    assert wiki.missing == ("docs:permission.member:retrieve",)
+    assert wiki.missing == ("docs:permission.setting:read",)
+    assert WIKI_PERMISSION_SCOPE == "docs:permission.setting:read"
     assert staff.verdict is Verdict.WORKING
 
 
@@ -477,7 +481,7 @@ def test_the_guide_follows_the_uses_asked_about(client: TestClient) -> None:
     names = {one["name"] for one in staff.json()["scopes"]}
     assert names == set(LARK_SYNC_SCOPES.split())
     wiki = client.get(f"{API_PREFIX}{LARK_PATH}?uses=knowledge_wiki", headers=headers("u_narrow"))
-    assert "docs:permission.member:retrieve" in {one["name"] for one in wiki.json()["scopes"]}
+    assert "docs:permission.setting:read" in {one["name"] for one in wiki.json()["scopes"]}
     mine = {one["name"]: one["may_switch_on"] for one in wiki.json()["uses"]}
     assert mine == {
         "staff_list": False,

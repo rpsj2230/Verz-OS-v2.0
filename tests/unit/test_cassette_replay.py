@@ -30,6 +30,7 @@ Task ids: M0.6.5, M38.4.1.1, M38.4.1.2
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from dataclasses import replace
 from datetime import datetime
 
 import pytest
@@ -251,24 +252,39 @@ def test_the_console_record_of_recordings_agrees_with_the_corpus() -> None:
 
 
 # ------------------------------------------ what the documented shapes found about the code
-def test_a_documented_wiki_node_carries_no_member_setting_and_is_withheld() -> None:
-    """**A finding, pinned.** Lark's documented node listing has no `has_member_setting`, which
-    is the key `lark_wiki.restriction_of` reads, so every documented page is UNDETERMINED and
-    `admit_page` withholds it. That is the safe direction and it means the wiki reads nothing
-    until a live capture shows the key, or the connector learns another way to tell.
+def test_a_documented_wiki_page_is_admitted_on_its_settings_and_never_its_listing() -> None:
+    """**A finding, pinned.** Lark's documented node listing carries no permission field, so a
+    listed page is UNDETERMINED and `admit_page` withholds it; what admits it is its documented
+    permission settings saying `lock_switch` false, and a locked page stays withheld. Until
+    2026-09-28 the verdict came off an undocumented listing key and the wiki answered nothing.
 
-    Delete this and the day somebody defaults the missing key to "inherits" nothing notices."""
+    Delete this and the day somebody reads a verdict off the listing again nothing notices."""
     from tests.unit.test_lark_wiki import SPACES
 
     listing = next(c for c in CASSETTES if c.cid == "LARK-WIKI-200-nodes-page")
     item = listing.body["data"]["items"][0]
     node = lark_wiki.node_from(item, space_id=SPACES[0].space_id)
+    spaces = lark_wiki.declarations_by_space(SPACES)
 
-    assert lark_wiki.MEMBER_SETTING_KEY not in item
+    assert not {lark_wiki.PERMISSION_KEY, lark_wiki.LOCK_KEY} & set(item)
     assert node.restriction is lark_wiki.NodeRestriction.UNDETERMINED
     with pytest.raises(lark_wiki.PageWithheldError):
-        lark_wiki.admit_page(node, spaces=lark_wiki.declarations_by_space(SPACES))
-    assert "has_member_setting" in recorded_in_words("lark_wiki")
+        lark_wiki.admit_page(node, spaces=spaces)
+    for cid, admitted in (
+        ("LARK-WIKI-200-permission-follows", True),
+        ("LARK-WIKI-200-permission-locked", False),
+    ):
+        recorded = next(c for c in CASSETTES if c.cid == cid)
+        verdict = lark_wiki.permission_of(
+            lark_wiki.LarkReply(status=recorded.status, body=recorded.body)
+        )
+        judged = replace(node, restriction=verdict)
+        if admitted:
+            assert lark_wiki.admit_page(judged, spaces=spaces).node.node_id == node.node_id
+        else:
+            with pytest.raises(lark_wiki.PageWithheldError):
+                lark_wiki.admit_page(judged, spaces=spaces)
+    assert "carries no permissions" in recorded_in_words("lark_wiki")
 
 
 def test_lark_documents_its_wait_in_a_header_the_connectors_do_not_read() -> None:
