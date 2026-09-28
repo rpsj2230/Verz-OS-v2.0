@@ -391,8 +391,8 @@ export function profileBody(profile: string): { readonly profile: string } {
 
 // ------------------------------------------------------------------ the providers' statuses
 
-/** How a provider is doing, as one of six words, each with the pill's text. */
-export type ProviderStatusKind = "off" | "no_key" | "server_only" | "resting" | "unused" | "working";
+/** How a provider is doing, as one of seven words, each with the pill's text. */
+export type ProviderStatusKind = "off" | "no_key" | "server_only" | "key_refused" | "resting" | "unused" | "working";
 
 export interface ProviderStatus {
   readonly kind: ProviderStatusKind;
@@ -403,6 +403,7 @@ export const TURNED_OFF = "Turned off";
 export const NO_KEY = "No key";
 export const KEY_SAVED = "Key saved";
 export const SERVER_ONLY = "Not used: this server only";
+export const KEY_REFUSED = "Key refused by the provider";
 
 /**
  * One provider's status pill, from its switch, the key this server holds, where answers are made
@@ -414,6 +415,8 @@ export const SERVER_ONLY = "Not used: this server only";
  * answering steps has been called is "not used yet" and never "working", which is
  * `AN_UNCALLED_RUNG_IS_NOT_A_HEALTHY_ONE` said about the provider rather than the step.
  * The key is `key_held`, the fact that decides whether its steps answer, and not the vault's.
+ * A step whose latest call the provider refused as a key is never "working", whatever its
+ * breaker says (`brain.provider_routes.A_REFUSED_KEY_IS_NOT_A_HEALTHY_PROVIDER`).
  */
 export function providerStatus(
   row: ProviderStateRow,
@@ -430,6 +433,9 @@ export function providerStatus(
     return { kind: "server_only", label: SERVER_ONLY };
   }
   const answering = steps.filter((one) => one.provider === row.provider && one.enabled && one.answers);
+  if (answering.some((one) => one.key_refused === true)) {
+    return { kind: "key_refused", label: KEY_REFUSED };
+  }
   const [kind, words] = answering.some((one) => one.measured && one.state !== "closed")
     ? (["resting", "resting after errors"] as const)
     : answering.some((one) => one.measured)
@@ -523,8 +529,15 @@ export const ROLE_WORDS: Readonly<Record<string, string>> = Object.freeze({
 /** The role that is drawn as the default pill rather than as words. */
 export const DEFAULT_ROLE = "primary";
 
-/** Why a step does not answer the next call, as one of six words, each with its marker's text. */
-export type StepMarkerKind = "paused" | "turned_off" | "no_key" | "local_only" | "cannot_call" | "resting";
+/** Why a step does not answer the next call, as one of seven words, each with its marker's text. */
+export type StepMarkerKind =
+  | "paused"
+  | "turned_off"
+  | "no_key"
+  | "local_only"
+  | "cannot_call"
+  | "resting"
+  | "key_refused";
 
 export interface StepMarker {
   readonly kind: StepMarkerKind;
@@ -542,6 +555,7 @@ export const SKIPPED_MARKERS: Readonly<Record<string, StepMarker>> = Object.free
 
 export const PAUSED: StepMarker = Object.freeze({ kind: "paused", label: "paused on the routing screen" });
 export const RESTING_MARKER: StepMarker = Object.freeze({ kind: "resting", label: "resting after errors" });
+export const KEY_REFUSED_MARKER: StepMarker = Object.freeze({ kind: "key_refused", label: "key refused" });
 
 /**
  * The marker a step carries when it will not answer the next call, or null when it will.
@@ -555,6 +569,9 @@ export function stepMarker(step: RungStateRow): StepMarker | null {
   }
   if (!step.answers) {
     return SKIPPED_MARKERS[step.skipped_because ?? ""] ?? { kind: "cannot_call", label: "not answering" };
+  }
+  if (step.key_refused === true) {
+    return KEY_REFUSED_MARKER;
   }
   if (step.measured && step.state === "open") {
     return RESTING_MARKER;
@@ -630,6 +647,15 @@ export function matrixRows(body: ProvidersBody): MatrixRow[] {
   return rows;
 }
 
+/**
+ * A step's number within its level, from 1, in the order the level tries its steps: the Step
+ * column of the owner's matrix. Worked out from the positions rather than drawn as one, because a
+ * position is the ladder's index and a level whose first step was removed starts at 1, not 0.
+ */
+export function stepNumber(step: { readonly tier: string; readonly position: number }, steps: readonly { readonly tier: string; readonly position: number }[]): number {
+  return steps.filter((one) => one.tier === step.tier && one.position < step.position).length + 1;
+}
+
 /** A role in words; an unknown role keeps the API's own spelling. */
 export function roleWords(role: string): string {
   return ROLE_WORDS[role] ?? role;
@@ -668,6 +694,7 @@ export function answersWords(step: RungStateRow): string {
 export const NOT_ANSWERING = "Does not answer the next call.";
 
 export const NOT_CALLED_YET = "Not called yet, so there is no health to show";
+export const KEY_REFUSED_HEALTH = "The provider refused the key on the latest call";
 export const HEALTHY = "Healthy";
 export const RECOVERING = "Recovering: the next call to it is a test";
 export const RESTING = "Resting after failures";
@@ -687,6 +714,9 @@ export const UNHEALTHY_BECAUSE: Readonly<Record<string, string>> = Object.freeze
  * not called yet whatever state the API sends beside it.
  */
 export function healthWords(step: RungStateRow): string {
+  if (step.key_refused === true) {
+    return KEY_REFUSED_HEALTH;
+  }
   if (!step.measured) {
     return NOT_CALLED_YET;
   }
@@ -755,8 +785,9 @@ export function checkQuestion(name: string): string {
 /** What a test does. See `A_CHECK_SPENDS_TOKENS_SO_IT_IS_CONFIRMED`. */
 export function checkConsequence(name: string): string {
   return (
-    `This sends one short fixed sentence to ${name} through its first step that answers. It ` +
-    "costs a few tokens and is recorded under your name. The provider's reply is not shown."
+    `This sends one short fixed sentence to ${name}, through its first step that answers or, when ` +
+    "no step uses it yet, through its default model. It costs a few tokens and is recorded under " +
+    "your name. The provider's reply is not shown."
   );
 }
 
@@ -765,13 +796,12 @@ export function checkHeading(name: string): string {
   return `Test of ${name}`;
 }
 
-/** What answered a test and what it cost, as the API measured it. */
+/**
+ * What a test that answered cost, as the API measured it. Which model answered is the API's own
+ * sentence (`told`), and the deployment id is not drawn: the owner's screen names a model.
+ */
 export function checkServedSentence(check: CheckBody): string {
-  return (
-    `Answered by ${check.model ?? "a model the API did not name"} on ` +
-    `${check.served_by ?? "a deployment the API did not name"}, with ` +
-    `${String(check.tokens_in ?? 0)} tokens in and ${String(check.tokens_out ?? 0)} tokens out.`
-  );
+  return `It used ${String(check.tokens_in ?? 0)} tokens in and ${String(check.tokens_out ?? 0)} tokens out.`;
 }
 
 /** The provider's status on a test that failed with one. */

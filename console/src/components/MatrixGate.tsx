@@ -1,6 +1,6 @@
 /**
  * The Routing screen's half of the matrix gate: the changes it decided, the golden questions it
- * asks, and a rung added at the end of a tier.
+ * asks, and a step added at the end of a level.
  *
  * `matrixGateQuery.ts` holds the arguments. The two reads are made for every reader of the matrix,
  * and a reader the API refuses sees its refusal in its own words; the forms and buttons are drawn
@@ -8,19 +8,30 @@
  * `brain.routing_routes` without the matrix write over everything whatever this page drew.
  *
  * **Every write asks first.** Adding a golden question changes what every later change must pass,
- * retiring one removes a check, and adding a rung puts a provider on the chain if the gate passes
+ * retiring one removes a check, and adding a step puts a provider on the matrix if the checks pass
  * it, so each goes through `components/ConfirmAction.tsx` saying what happens and to what.
+ *
+ * **A held change says why and what to do, where it was made** (the owner, 2026-09-28): the reason
+ * in a sentence, what counts as an answered golden question, and the three steps that get a change
+ * through, with the raw cases and reasons kept under Details. `HeldExplanation` is that block, and
+ * the Routing page draws it above the matrix for a save it just made as well as here.
+ *
+ * **Every input is named by its label** through `htmlFor` and an id, and carries a `name`: the
+ * owner's audit on 2026-09-28 found the Add form's inputs had no accessible name.
  *
  * Task ids: M5.6.2, M5.7.2
  */
 
 import { useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { request } from "../api/client";
 import type { ApiFailure, FieldProblem } from "../api/errors";
-import { useResource } from "../api/useResource";
+import { useResource, type Resource } from "../api/useResource";
 import { ConfirmAction } from "./ConfirmAction";
 import { FailureNotice } from "../ui/FailureNotice";
 import { FieldProblems, problemAttributes } from "../ui/FieldProblems";
+import { KNOWLEDGE_PATH } from "../pages/knowledgeQuery";
+import { levelName } from "../pages/modelsQuery";
 import {
   ADD_GOLDEN,
   ADD_RUNG,
@@ -31,21 +42,35 @@ import {
   addRungConsequence,
   addRungQuestion,
   APPLIED,
+  ASKED_AS_LABEL,
+  askedAsWords,
+  ASKERS_API_PATH,
   blankGoldenProblems,
   blankRungProblems,
+  caseReasonWords,
+  caseWords,
   CHANGES_API_PATH,
+  CHOOSE_A_PERSON,
+  DETAILS,
   expectWords,
   GATE_HEADING,
   GATE_LEDE,
   GOLDEN_API_PATH,
+  GOLDEN_COUNTS_WHEN,
   GOLDEN_HEADING,
   GOLDEN_LEDE,
   HELD,
   heldSentence,
+  heldWhy,
+  HOW_TO_PASS,
   KEEP_GOLDEN,
   KEEP_LADDER,
+  MORE_PEOPLE,
+  needsGoldenSteps,
   NO_CHANGES,
   NO_GOLDEN,
+  NOBODY_LISTED,
+  readAskers,
   readChange,
   readChanges,
   readGolden,
@@ -53,6 +78,7 @@ import {
   RETIRE_GOLDEN_CONSEQUENCE,
   retireGoldenApiPath,
   retireGoldenQuestion,
+  STEPS_TO_PASS,
   TIERS,
   type ChangeRow,
   type GoldenAsked,
@@ -64,58 +90,129 @@ const GOLDEN_FORM = "golden";
 const RUNG_FORM = "add-rung";
 
 type Pending =
-  | { readonly kind: "golden"; readonly asked: GoldenAsked }
+  | { readonly kind: "golden"; readonly asked: GoldenAsked; readonly name: string }
   | { readonly kind: "retire"; readonly row: GoldenRow }
   | { readonly kind: "rung"; readonly asked: RungAsked };
 
-/** One decided change: applied, or held with the cases that held it. Never an answer. */
-export function ChangeDecided({ change }: { readonly change: ChangeRow }) {
+/**
+ * What counts as an answered golden question, and the three steps that get a change through.
+ * Drawn wherever a change can be held or is held, so the rule is never met without its way out.
+ */
+export function StepsToPass() {
+  return (
+    <div aria-label={HOW_TO_PASS}>
+      <p className="note">{GOLDEN_COUNTS_WHEN}</p>
+      <p className="note">{HOW_TO_PASS}</p>
+      <ol>
+        {STEPS_TO_PASS.map((step, index) => (
+          <li key={step}>
+            {index === 0 ? (
+              <>
+                {step} <Link to={KNOWLEDGE_PATH}>Open Knowledge</Link>
+              </>
+            ) : (
+              step
+            )}
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+/**
+ * Why a held change was held, in plain words, the steps when a golden question is what held it,
+ * and the raw cases and reasons under Details.
+ */
+export function HeldExplanation({
+  change,
+  golden = [],
+  goldenCount = null,
+}: {
+  readonly change: ChangeRow;
+  readonly golden?: readonly GoldenRow[];
+  /** How many golden questions are recorded now, or null where the page does not know. */
+  readonly goldenCount?: number | null;
+}) {
+  return (
+    <>
+      <p>{heldSentence(change)}</p>
+      <p>{heldWhy(change, goldenCount)}</p>
+      {change.failing.length === 0 ? null : (
+        <ul aria-label="What failed">
+          {change.failing.map((one) => (
+            <li key={one.case}>
+              {caseWords(one.case, golden)}: {caseReasonWords(one.reason)}
+            </li>
+          ))}
+        </ul>
+      )}
+      {needsGoldenSteps(change) ? <StepsToPass /> : null}
+      <details>
+        <summary>{DETAILS}</summary>
+        {change.reasons.map((reason) => (
+          <p key={reason} className="note">
+            {reason}
+          </p>
+        ))}
+        {change.failing.length === 0 ? null : (
+          <ul aria-label="Failing cases">
+            {change.failing.map((one) => (
+              <li key={one.case}>
+                <code>{one.case}</code>: {one.reason}
+              </li>
+            ))}
+          </ul>
+        )}
+      </details>
+    </>
+  );
+}
+
+/** One decided change: applied, or held with why and what to do. Never an answer. */
+export function ChangeDecided({
+  change,
+  golden = [],
+  goldenCount = null,
+}: {
+  readonly change: ChangeRow;
+  readonly golden?: readonly GoldenRow[];
+  readonly goldenCount?: number | null;
+}) {
   return (
     <div aria-label={`${change.status === "held" ? HELD : APPLIED} change`}>
       <p>
         <strong>{change.status === "held" ? HELD : APPLIED}</strong>{" "}
         <span className="note">
-          {change.kind === "add" ? "a new rung" : "a rung edit"}, by <code>{change.proposed_by}</code>
+          {change.kind === "add" ? "a new step" : "a change to a step"}, by <code>{change.proposed_by}</code>
         </span>
       </p>
-      {change.status === "held" ? (
-        <>
-          <p>{heldSentence(change)}</p>
-          {change.reasons.map((reason) => (
-            <p key={reason} className="note">
-              {reason}
-            </p>
-          ))}
-          {change.failing.length === 0 ? null : (
-            <ul aria-label="Failing cases">
-              {change.failing.map((one) => (
-                <li key={one.case}>
-                  <code>{one.case}</code>: {one.reason}
-                </li>
-              ))}
-            </ul>
-          )}
-        </>
-      ) : null}
+      {change.status === "held" ? <HeldExplanation change={change} golden={golden} goldenCount={goldenCount} /> : null}
     </div>
   );
 }
 
 export function MatrixGate({
   version,
+  golden,
   editable,
   onChanged,
 }: {
   readonly version: number;
+  /** The golden questions, read once by the page for this card and the held change above it. */
+  readonly golden: Resource<unknown>;
   readonly editable: boolean;
   readonly onChanged: () => void;
 }) {
   const changes = useResource<unknown>(CHANGES_API_PATH, version);
-  const golden = useResource<unknown>(GOLDEN_API_PATH, version);
+  // The people are asked for only where the form that lists them is drawn.
+  const askers = useResource<unknown>(editable ? ASKERS_API_PATH : null, version);
   const [pending, setPending] = useState<Pending | null>(null);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
   const [decided, setDecided] = useState<ChangeRow | null>(null);
+  // Fixed ids, one gate per page: two mounts draw the same markup, which the tests compare.
+  const field = (form: string, name: string) => `matrix-gate-${form}-${name}`;
 
   const [question, setQuestion] = useState("");
   const [askedAs, setAskedAs] = useState("");
@@ -132,6 +229,10 @@ export function MatrixGate({
 
   const goldenProblems = [...goldenBlank, ...(failure?.problems ?? [])];
   const rungProblems = [...rungBlank, ...(failure?.problems ?? [])];
+
+  const people = askers.data === null ? [] : readAskers(askers.data);
+  const peopleCut =
+    typeof askers.data === "object" && askers.data !== null && (askers.data as { truncated?: unknown }).truncated === true;
 
   const send = (asked: Pending) => {
     setBusy(true);
@@ -168,7 +269,12 @@ export function MatrixGate({
     if (found.length > 0) {
       return;
     }
-    setPending({ kind: "golden", asked: { question: question.trim(), asked_as: askedAs.trim(), expect } });
+    const chosen = people.find((one) => one.id === askedAs);
+    setPending({
+      kind: "golden",
+      asked: { question: question.trim(), asked_as: askedAs.trim(), expect },
+      name: chosen?.name ?? askedAs.trim(),
+    });
   };
 
   const askRung = (event: FormEvent<HTMLFormElement>) => {
@@ -194,6 +300,8 @@ export function MatrixGate({
 
   const changeRows = changes.data === null ? [] : readChanges(changes.data);
   const goldenRows = golden.data === null ? [] : readGolden(golden.data);
+  // Known only once the list has answered; until then a held change does not claim there are none.
+  const goldenCount = golden.data === null || golden.failure !== null ? null : goldenRows.length;
 
   return (
     <>
@@ -203,21 +311,21 @@ export function MatrixGate({
         {failure === null ? null : <FailureNotice failure={failure} />}
         {decided === null ? null : (
           <div role="status">
-            <ChangeDecided change={decided} />
+            <ChangeDecided change={decided} golden={goldenRows} goldenCount={goldenCount} />
           </div>
         )}
         {pending === null ? null : (
           <ConfirmAction
             question={
               pending.kind === "golden"
-                ? addGoldenQuestion(pending.asked)
+                ? addGoldenQuestion(pending.name)
                 : pending.kind === "retire"
                   ? retireGoldenQuestion(pending.row)
                   : addRungQuestion(pending.asked)
             }
             consequence={
               pending.kind === "golden"
-                ? addGoldenConsequence(pending.asked)
+                ? addGoldenConsequence(pending.asked, pending.name)
                 : pending.kind === "retire"
                   ? RETIRE_GOLDEN_CONSEQUENCE
                   : addRungConsequence(pending.asked)
@@ -241,7 +349,7 @@ export function MatrixGate({
           <ul aria-label="Recent changes">
             {changeRows.map((change) => (
               <li key={change.id}>
-                <ChangeDecided change={change} />
+                <ChangeDecided change={change} golden={goldenRows} goldenCount={goldenCount} />
               </li>
             ))}
           </ul>
@@ -254,11 +362,14 @@ export function MatrixGate({
         {golden.failure !== null ? (
           <FailureNotice failure={golden.failure} />
         ) : golden.busy ? null : goldenRows.length === 0 ? (
-          <p className="note">{NO_GOLDEN}</p>
+          <>
+            <p className="note">{NO_GOLDEN}</p>
+            <StepsToPass />
+          </>
         ) : (
           <div className="grid__scroll">
             <table className="grid__table">
-              <caption className="grid__caption">The golden questions a matrix change is asked</caption>
+              <caption className="grid__caption">The golden questions a change to the failover matrix is asked</caption>
               <thead>
                 <tr>
                   <th scope="col">Question</th>
@@ -271,25 +382,23 @@ export function MatrixGate({
                 {goldenRows.map((row) => (
                   <tr key={row.id}>
                     <td>{row.question}</td>
-                    <td>
-                      <code>{row.asked_as}</code>
-                    </td>
+                    <td>{askedAsWords(row)}</td>
                     <td>{expectWords(row.expect)}</td>
                     {!editable ? null : (
-                    <td>
-                      <button
-                        type="button"
-                        className="button"
-                        disabled={busy}
-                        aria-label={`${RETIRE_GOLDEN}: ${row.question}`}
-                        onClick={() => {
-                          setFailure(null);
-                          setPending({ kind: "retire", row });
-                        }}
-                      >
-                        {RETIRE_GOLDEN}
-                      </button>
-                    </td>
+                      <td>
+                        <button
+                          type="button"
+                          className="button"
+                          disabled={busy}
+                          aria-label={`${RETIRE_GOLDEN}: ${row.question}`}
+                          onClick={() => {
+                            setFailure(null);
+                            setPending({ kind: "retire", row });
+                          }}
+                        >
+                          {RETIRE_GOLDEN}
+                        </button>
+                      </td>
                     )}
                   </tr>
                 ))}
@@ -298,10 +407,12 @@ export function MatrixGate({
           </div>
         )}
         {!editable ? null : (
-        <form className="form" aria-label="Add a golden question" onSubmit={askGolden}>
-          <label className="control-label">
-            Question{" "}
+          <form className="form" aria-label="Add a golden question" onSubmit={askGolden}>
+            <label className="control-label" htmlFor={field(GOLDEN_FORM, "question")}>
+              Question
+            </label>
             <input
+              id={field(GOLDEN_FORM, "question")}
               className="form-control"
               type="text"
               name="question"
@@ -311,25 +422,38 @@ export function MatrixGate({
                 setQuestion(event.target.value);
               }}
             />
-          </label>
-          <FieldProblems problems={goldenProblems} form={GOLDEN_FORM} names="question" />
-          <label className="control-label">
-            Asked as (principal id){" "}
-            <input
+            <FieldProblems problems={goldenProblems} form={GOLDEN_FORM} names="question" />
+            <label className="control-label" htmlFor={field(GOLDEN_FORM, "asked_as")}>
+              {ASKED_AS_LABEL}
+            </label>
+            {askers.failure !== null ? <FailureNotice failure={askers.failure} /> : null}
+            <select
+              id={field(GOLDEN_FORM, "asked_as")}
               className="form-control"
-              type="text"
               name="asked_as"
               value={askedAs}
               {...problemAttributes(goldenProblems, GOLDEN_FORM, "asked_as")}
               onChange={(event) => {
                 setAskedAs(event.target.value);
               }}
-            />
-          </label>
-          <FieldProblems problems={goldenProblems} form={GOLDEN_FORM} names="asked_as" />
-          <label className="control-label">
-            It must be{" "}
+            >
+              <option value="">{CHOOSE_A_PERSON}</option>
+              {people.map((one) => (
+                <option key={one.id} value={one.id}>
+                  {one.name}
+                </option>
+              ))}
+            </select>
+            {!askers.busy && askers.failure === null && people.length === 0 ? (
+              <p className="note">{NOBODY_LISTED}</p>
+            ) : null}
+            {peopleCut ? <p className="note">{MORE_PEOPLE}</p> : null}
+            <FieldProblems problems={goldenProblems} form={GOLDEN_FORM} names="asked_as" />
+            <label className="control-label" htmlFor={field(GOLDEN_FORM, "expect")}>
+              It must be
+            </label>
             <select
+              id={field(GOLDEN_FORM, "expect")}
               className="form-control"
               name="expect"
               value={expect}
@@ -340,23 +464,24 @@ export function MatrixGate({
               <option value="answer">answered</option>
               <option value="refuse">refused</option>
             </select>
-          </label>
-          <div className="form-actions">
-            <button type="submit" className="button" disabled={busy}>
-              {ADD_GOLDEN}
-            </button>
-          </div>
-        </form>
+            <div className="form-actions">
+              <button type="submit" className="button" disabled={busy}>
+                {ADD_GOLDEN}
+              </button>
+            </div>
+          </form>
         )}
       </section>
 
       {!editable ? null : (
-      <section className="card" aria-labelledby="matrix-add-rung">
-        <h2 id="matrix-add-rung">{ADD_RUNG_HEADING}</h2>
-        <form className="form" aria-label={ADD_RUNG_HEADING} onSubmit={askRung}>
-          <label className="control-label">
-            Tier{" "}
+        <section className="card" aria-labelledby="matrix-add-rung">
+          <h2 id="matrix-add-rung">{ADD_RUNG_HEADING}</h2>
+          <form className="form" aria-label={ADD_RUNG_HEADING} onSubmit={askRung}>
+            <label className="control-label" htmlFor={field(RUNG_FORM, "tier")}>
+              Level
+            </label>
             <select
+              id={field(RUNG_FORM, "tier")}
               className="form-control"
               name="tier"
               value={tier}
@@ -367,14 +492,15 @@ export function MatrixGate({
             >
               {TIERS.map((one) => (
                 <option key={one} value={one}>
-                  {one}
+                  {levelName(one)}
                 </option>
               ))}
             </select>
-          </label>
-          <label className="control-label">
-            Provider{" "}
+            <label className="control-label" htmlFor={field(RUNG_FORM, "provider")}>
+              Provider
+            </label>
             <input
+              id={field(RUNG_FORM, "provider")}
               className="form-control"
               type="text"
               name="provider"
@@ -384,11 +510,12 @@ export function MatrixGate({
                 setProvider(event.target.value);
               }}
             />
-          </label>
-          <FieldProblems problems={rungProblems} form={RUNG_FORM} names="provider" />
-          <label className="control-label">
-            Model{" "}
+            <FieldProblems problems={rungProblems} form={RUNG_FORM} names="provider" />
+            <label className="control-label" htmlFor={field(RUNG_FORM, "model")}>
+              Model
+            </label>
             <input
+              id={field(RUNG_FORM, "model")}
               className="form-control"
               type="text"
               name="model"
@@ -398,11 +525,12 @@ export function MatrixGate({
                 setModel(event.target.value);
               }}
             />
-          </label>
-          <FieldProblems problems={rungProblems} form={RUNG_FORM} names="model" />
-          <label className="control-label">
-            Attempts{" "}
+            <FieldProblems problems={rungProblems} form={RUNG_FORM} names="model" />
+            <label className="control-label" htmlFor={field(RUNG_FORM, "attempts")}>
+              Attempts
+            </label>
             <input
+              id={field(RUNG_FORM, "attempts")}
               className="form-control"
               type="number"
               name="attempts"
@@ -413,11 +541,12 @@ export function MatrixGate({
                 setAttempts(event.target.value);
               }}
             />
-          </label>
-          <FieldProblems problems={rungProblems} form={RUNG_FORM} names="attempts" />
-          <label className="control-label">
-            Timeout in seconds{" "}
+            <FieldProblems problems={rungProblems} form={RUNG_FORM} names="attempts" />
+            <label className="control-label" htmlFor={field(RUNG_FORM, "timeout_seconds")}>
+              Seconds to wait for an answer
+            </label>
             <input
+              id={field(RUNG_FORM, "timeout_seconds")}
               className="form-control"
               type="number"
               name="timeout_seconds"
@@ -428,11 +557,12 @@ export function MatrixGate({
                 setTimeoutSeconds(event.target.value);
               }}
             />
-          </label>
-          <FieldProblems problems={rungProblems} form={RUNG_FORM} names="timeout_seconds" />
-          <label className="control-label">
-            At most at once{" "}
+            <FieldProblems problems={rungProblems} form={RUNG_FORM} names="timeout_seconds" />
+            <label className="control-label" htmlFor={field(RUNG_FORM, "max_concurrency")}>
+              Calls at once, at most
+            </label>
             <input
+              id={field(RUNG_FORM, "max_concurrency")}
               className="form-control"
               type="number"
               name="max_concurrency"
@@ -443,15 +573,14 @@ export function MatrixGate({
                 setConcurrency(event.target.value);
               }}
             />
-          </label>
-          <FieldProblems problems={rungProblems} form={RUNG_FORM} names="max_concurrency" />
-          <div className="form-actions">
-            <button type="submit" className="button" disabled={busy}>
-              {ADD_RUNG}
-            </button>
-          </div>
-        </form>
-      </section>
+            <FieldProblems problems={rungProblems} form={RUNG_FORM} names="max_concurrency" />
+            <div className="form-actions">
+              <button type="submit" className="button" disabled={busy}>
+                {ADD_RUNG}
+              </button>
+            </div>
+          </form>
+        </section>
       )}
     </>
   );

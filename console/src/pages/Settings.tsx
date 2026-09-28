@@ -1,9 +1,12 @@
 /**
  * Settings: every installation value with where it came from, and the branding fields saved here.
  *
- * One card per group in the API's order. Each row shows the value as the API sent it, where it came
- * from, when a change takes effect and which modules read it. Branding rows carry a field and a Save
- * button; every other group says, in the API's words, where it is changed instead.
+ * One card per section in the API's order, by what the settings are for. Each row is labelled as a
+ * person calls it, with the variable's name small beside it, where the value came from, when a
+ * change takes effect and which modules read it. A row the API marks editable carries a field and a
+ * Save button, and a save asks first through `components/ConfirmAction.tsx` saying what the value
+ * becomes and when it applies; every other row says, in the API's one line, why it is not changed
+ * here. The currency code meaning none is never drawn (`settingsQuery.shownValue`).
  *
  * **Nothing here decides who may read or save.** The route asks for `admin:install_setting` over
  * everything and refuses everybody else before it reads anything, so a reader who may not configure
@@ -23,14 +26,22 @@ import { useState } from "react";
 import { request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
 import { useResource } from "../api/useResource";
+import { ConfirmAction } from "../components/ConfirmAction";
 import { Chip } from "../ui/Chip";
 import { FailureNotice } from "../ui/FailureNotice";
 import {
+  CHOICES,
+  EXAMPLES,
   FINDINGS_HEADING,
+  KEEP_SETTING,
+  knownTimeZones,
   LEAVING_HEADING,
   READING_SETTINGS,
   SAVE,
+  SAVE_CHANGE,
   SAVED,
+  saveConsequence,
+  saveQuestion,
   SETTINGS_API_PATH,
   SETTINGS_CRUMB,
   SETTINGS_LABEL,
@@ -40,7 +51,10 @@ import {
   byWords,
   readSettings,
   savePath,
+  shownValue,
   sourceWords,
+  startingValue,
+  TIME_ZONE_SETTING,
   type SettingRow,
   type SettingsBody,
 } from "./settingsQuery";
@@ -52,48 +66,98 @@ function EditableValue({
   readonly row: SettingRow;
   readonly onSaved: (body: SettingsBody) => void;
 }) {
-  const [value, setValue] = useState(row.value);
+  const [value, setValue] = useState(startingValue(row));
+  const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
   const id = `setting-${row.name}`;
+  const suggestions = `${id}-suggestions`;
+  const choices = CHOICES[row.name];
+  const zones = row.name === TIME_ZONE_SETTING ? knownTimeZones() : [];
+
+  const save = () => {
+    setBusy(true);
+    void (async () => {
+      const result = await request<unknown>(savePath(row.name), { method: "PUT", body: { value } });
+      setBusy(false);
+      setAsking(false);
+      if (!result.ok) {
+        setFailure(result.failure);
+        return;
+      }
+      setFailure(null);
+      const body = readSettings(result.data);
+      if (body !== null) {
+        onSaved(body);
+      }
+    })();
+  };
 
   return (
     <form
       className="form-actions"
       onSubmit={(event) => {
         event.preventDefault();
-        setBusy(true);
-        void (async () => {
-          const result = await request<unknown>(savePath(row.name), { method: "PUT", body: { value } });
-          setBusy(false);
-          if (!result.ok) {
-            setFailure(result.failure);
-            return;
-          }
-          setFailure(null);
-          const body = readSettings(result.data);
-          if (body !== null) {
-            onSaved(body);
-          }
-        })();
+        setFailure(null);
+        setAsking(true);
       }}
     >
       <label htmlFor={id} className="visually-hidden">
-        {row.name}
+        {row.label}
       </label>
-      <input
-        id={id}
-        name={row.name}
-        className="form-control"
-        type="text"
-        value={value}
-        onChange={(event) => {
-          setValue(event.target.value);
-        }}
-      />
-      <button type="submit" className="button" disabled={busy} aria-label={`${SAVE}: ${row.name}`}>
+      {choices === undefined ? (
+        <input
+          id={id}
+          name={row.name}
+          className="form-control"
+          type="text"
+          value={value}
+          placeholder={EXAMPLES[row.name] === undefined ? undefined : `For example ${EXAMPLES[row.name] ?? ""}`}
+          list={zones.length === 0 ? undefined : suggestions}
+          onChange={(event) => {
+            setValue(event.target.value);
+          }}
+        />
+      ) : (
+        <select
+          id={id}
+          name={row.name}
+          className="form-control"
+          value={value}
+          onChange={(event) => {
+            setValue(event.target.value);
+          }}
+        >
+          {choices.map((one) => (
+            <option key={one.value} value={one.value}>
+              {one.label}
+            </option>
+          ))}
+        </select>
+      )}
+      {zones.length === 0 ? null : (
+        <datalist id={suggestions}>
+          {zones.map((one) => (
+            <option key={one} value={one} />
+          ))}
+        </datalist>
+      )}
+      <button type="submit" className="button" disabled={busy || asking} aria-label={`${SAVE}: ${row.label}`}>
         {SAVE}
       </button>
+      {asking ? (
+        <ConfirmAction
+          question={saveQuestion(row)}
+          consequence={saveConsequence(row, value)}
+          confirmLabel={SAVE_CHANGE}
+          cancelLabel={KEEP_SETTING}
+          busy={busy}
+          onConfirm={save}
+          onCancel={() => {
+            setAsking(false);
+          }}
+        />
+      ) : null}
       {failure === null ? null : <FailureNotice failure={failure} />}
     </form>
   );
@@ -113,19 +177,24 @@ function SettingsView({ body, onSaved }: { readonly body: SettingsBody; readonly
       {body.groups.map((group) => (
         <section className="card" key={group.group} aria-labelledby={`settings-${group.group}`}>
           <h2 id={`settings-${group.group}`}>{group.title}</h2>
-          {group.editable ? null : <p className="note">{group.changed_elsewhere}</p>}
           {group.group === "models" ? <p>{body.profile}</p> : null}
           {group.settings.map((row) => (
             <div key={row.name} className="setting-row">
               <h3>
-                <code>{row.name}</code> <Chip label={sourceWords(row.source)} />
+                {row.label} <Chip label={sourceWords(row.source)} />
               </h3>
+              <p className="note">
+                <code>{row.name}</code>
+              </p>
               {row.editable ? (
                 <EditableValue key={row.value} row={row} onSaved={onSaved} />
               ) : (
-                <p>
-                  <code>{row.value === "" ? sourceWords(row.source) : row.value}</code>
-                </p>
+                <>
+                  <p>
+                    <code>{shownValue(row)}</code>
+                  </p>
+                  <p className="note">{row.read_only_because}</p>
+                </>
               )}
               <p className="note">{row.meaning}</p>
               <p className="note">{row.applies}</p>

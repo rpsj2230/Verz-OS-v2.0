@@ -15,13 +15,18 @@
  * The scope is the clauses the API sent, rendered field by field, because a paraphrase written here
  * would be a second vocabulary for a structure that already has one.
  *
- * **An alert names a tier, a depth and the deployment that served, never a question**, which is the
- * API's rule and this module only draws it.
+ * **An alert names a level, a depth and the deployment that served, never a question**, which is
+ * the API's rule. Its sentence is written here from those fields (`alertSentence`) rather than
+ * drawn from the API's `reason`, which is the operator's log line and says tier and rung.
+ *
+ * **Plain words** (the owner, 2026-09-28): a tier is a level named Simple, Medium or Complex, a
+ * rung is a step, and a lane is said as what it is for. Nothing here draws the internal names.
  *
  * Task ids: M5.2.2, M5.5.1, M5.4.8, M5.4.3
  */
 
 import type { FieldProblem } from "../api/errors";
+import { levelName } from "./modelsQuery";
 
 export interface TierSetting {
   readonly tier: string;
@@ -197,7 +202,7 @@ export function tierAsked(window: string, headroom: string): TierAsked {
 /** A tier form with a blank window, as the problem a person is told beside it. */
 export function blankTierProblems(window: string): FieldProblem[] {
   return window.trim() === ""
-    ? [{ field: "context_window", code: "blank", message: "Say how many tokens this tier can hold." }]
+    ? [{ field: "context_window", code: "blank", message: "Say how many tokens this level can hold." }]
     : [];
 }
 
@@ -258,32 +263,32 @@ export function residencyAsked(
 
 // ------------------------------------------------------------------------------ the words
 
-export const ROUTING_SETTINGS_HEADING = "Routing settings";
+export const ROUTING_SETTINGS_HEADING = "How questions are routed";
 export const ROUTING_SETTINGS_LEDE =
-  "What decides which tier a question lands in and where it may be processed. Both take effect on " +
+  "What decides which level a question lands in and where it may be processed. Both take effect on " +
   "the next question, in every server process.";
-export const TIERS_CAPTION = "Each tier's window and the share of it past which a question moves up";
-export const RESIDENCY_HEADING = "Residency constraints";
+export const TIERS_CAPTION = "Each level's size limit and the share of it past which a question moves up a level";
+export const RESIDENCY_HEADING = "Where questions may be processed";
 export const RESIDENCY_LEDE =
-  "A constraint is attached to a scope. A question from anybody whose access reaches that scope is " +
-  "sent only to a model in an allowed region, and refused when there is none.";
-export const RESIDENCY_CAPTION = "Each residency constraint and the scope it is attached to";
-export const NO_RESIDENCY = "No residency constraint is set, so a question may go to any provider switched on.";
-export const ALERTS_HEADING = "Chain depth alerts";
+  "A rule applies to one department or to the whole company. A question from anybody whose access " +
+  "reaches it is sent only to a model in an allowed region, and refused when there is none.";
+export const RESIDENCY_CAPTION = "Each rule and who it applies to";
+export const NO_RESIDENCY = "No rule is set, so a question may go to any provider that is turned on.";
+export const ALERTS_HEADING = "Fallback alerts";
 export const ALERTS_LEDE =
-  "Raised when a question had to go past the first rung of its tier, whether or not it was answered: " +
-  "an answer from a fallback means the primary is failing while nobody complains.";
-export const ALERTS_CAPTION = "Chain depth alerts from the last day, newest first";
-export const NO_ALERTS = "No question went past its primary in the last day.";
+  "Raised when a question had to go past the first step of its level, whether or not it was " +
+  "answered: an answer from a later step means the first step is failing while nobody complains.";
+export const ALERTS_CAPTION = "Fallback alerts from the last day, newest first";
+export const NO_ALERTS = "No question went past the first step of its level in the last day.";
 export const EDIT_NUMBERS = "Edit numbers";
 export const SAVE_NUMBERS = "Save these numbers";
 export const KEEP_NUMBERS = "Keep the numbers as they are";
 export const RESET_TIER = "Use the product default";
-export const KEEP_TIER = "Keep this tier's setting";
-export const ADD_RESIDENCY = "Add this constraint";
+export const KEEP_TIER = "Keep this level's setting";
+export const ADD_RESIDENCY = "Add this rule";
 export const DO_NOT_ADD_RESIDENCY = "Do not add it";
 export const RETIRE_RESIDENCY = "Retire";
-export const KEEP_RESIDENCY = "Keep the constraint";
+export const KEEP_RESIDENCY = "Keep the rule";
 export const PRODUCT_DEFAULT = "product default";
 export const SET_HERE = "set here";
 export const EVERY_ROW = "the whole company";
@@ -313,26 +318,26 @@ export function headroomWords(fraction: number): string {
 }
 
 export function tierQuestion(tier: string): string {
-  return `Save the ${tier} tier's numbers?`;
+  return `Save the ${levelName(tier)} level's numbers?`;
 }
 
 export function tierConsequence(tier: string, asked: TierAsked): string {
   const headroom = asked.escalation_headroom === null ? "the product default" : headroomWords(asked.escalation_headroom);
   return (
-    `From the next question, the ${tier} tier holds ${String(asked.context_window)} tokens and a question ` +
-    `past ${headroom} of that moves to the next tier up. Every department's questions are routed by it.`
+    `From the next question, the ${levelName(tier)} level holds ${String(asked.context_window)} tokens and a ` +
+    `question past ${headroom} of that moves up to the next level. Every department's questions are routed by it.`
   );
 }
 
 export function resetQuestion(tier: string): string {
-  return `Put the ${tier} tier back to the product default?`;
+  return `Put the ${levelName(tier)} level back to the product default?`;
 }
 
 export const RESET_CONSEQUENCE =
-  "The tier's row is retired and the next question is routed by the numbers the product shipped with.";
+  "The level's own setting is retired and the next question is routed by the numbers the product shipped with.";
 
 export function residencyQuestion(asked: ResidencyAsked): string {
-  return `Attach a residency constraint to ${scopeWords(asked.scope.clauses)}?`;
+  return `Add a rule on where questions from ${scopeWords(asked.scope.clauses)} may be processed?`;
 }
 
 export function residencyConsequence(asked: ResidencyAsked): string {
@@ -345,19 +350,39 @@ export function residencyConsequence(asked: ResidencyAsked): string {
 }
 
 export function retireResidencyQuestion(row: ResidencySetting): string {
-  return `Retire the constraint on ${scopeWords(row.clauses)}?`;
+  return `Retire the rule on ${scopeWords(row.clauses)}?`;
 }
 
 export const RETIRE_RESIDENCY_CONSEQUENCE =
-  "Questions it held to its regions may go to any provider switched on from the next question. The " +
-  "constraint stays on record as retired.";
+  "Questions it held to its regions may go to any provider that is turned on from the next question. " +
+  "The rule stays on record as retired.";
 
-/** A rung's probes, in the words of `recentCalls`, or that none has been sent. */
+/** A step's background checks, in the words of `recentCalls`, or that none has been sent. */
 export function probeWords(probesSeen: number | undefined, probesFailed: number | undefined): string {
   const seen = probesSeen ?? 0;
   if (seen === 0) {
-    return "not probed yet";
+    return "not checked in the background yet";
   }
-  const noun = seen === 1 ? "probe" : "probes";
+  const noun = seen === 1 ? "background check" : "background checks";
   return `${String(seen)} ${noun}, ${String(probesFailed ?? 0)} failed`;
+}
+
+/** An alert's severity in words. */
+export function severityWords(level: string): string {
+  return level === "critical" ? "Urgent" : level === "warning" ? "Warning" : level;
+}
+
+/**
+ * What happened, in plain words, from the alert's fields: the same four cases
+ * `brain.models.health.assess_chain_depth` raises, said as levels, steps and tries.
+ */
+export function alertSentence(row: DepthAlert): string {
+  const level = levelName(row.tier);
+  if (row.served_by === null) {
+    return `A ${level} question ran out of steps without an answer, after ${String(row.depth)} tries.`;
+  }
+  if (row.depth > 1) {
+    return `A ${level} question was answered only on try ${String(row.depth)}, not by the level's first step.`;
+  }
+  return `A ${level} question was answered by the first step, but a later step is resting after failures, so the level has no fallback left.`;
 }

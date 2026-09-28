@@ -109,15 +109,31 @@ export function majorUnits(minor: number): string {
 }
 
 /**
- * Minor units with the currency the report names, as "SGD 288.00".
+ * The ISO 4217 code meaning no currency, which the report sends for an install that chose none
+ * (`brain.report_routes.UNSET_CURRENCY`, the declared default of `INSTALL_CURRENCY`).
+ */
+export const UNSET_CURRENCY = "XXX";
+
+/**
+ * Minor units with the currency the report names, as "SGD 288.00", or the amount alone when the
+ * install has chosen no currency.
  *
  * The code comes from the report (`brain.report_routes.A_FIGURE_SAYS_ITS_CURRENCY_AND_ITS_CLOCK`),
- * which is the install's own setting, so this asserts nothing `majorUnits` refuses to. An install
- * that chose none is sent `XXX`, and "XXX 288.00" is the visibly unset figure the setting asks for.
- * The ISO code rather than a symbol: "$" is a dozen currencies.
+ * which is the install's own setting, so this asserts nothing `majorUnits` refuses to. **The code
+ * meaning none is never drawn**: until 2026-09-28 an install that chose none read "XXX 0.00" on its
+ * Models screen, which the owner took for a fault. The amount stands alone and
+ * `currencyNotSetHint` says, beside it, where the currency is set. The ISO code rather than a
+ * symbol: "$" is a dozen currencies.
  */
 export function moneyWords(minor: number, currency: string): string {
-  return `${currency} ${majorUnits(minor)}`;
+  return currency === UNSET_CURRENCY || currency.trim() === "" ? majorUnits(minor) : `${currency} ${majorUnits(minor)}`;
+}
+
+/** Said beside an amount the report sent with no currency, or null when it names one. */
+export const CURRENCY_NOT_SET = "No currency is set yet, so the amount is shown without one. Set it on Install, Settings.";
+
+export function currencyNotSetHint(currency: string): string | null {
+  return currency === UNSET_CURRENCY || currency.trim() === "" ? CURRENCY_NOT_SET : null;
 }
 
 /**

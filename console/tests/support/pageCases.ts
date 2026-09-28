@@ -97,11 +97,15 @@ const GOLDEN_QUESTIONS = {
       id: "33333333-3333-4333-8333-333333333333",
       question: UNBROKEN,
       asked_as: UNBROKEN,
+      asked_as_name: UNBROKEN,
       expect: "refuse",
       created_by: UNBROKEN,
     },
   ],
 };
+
+/** The people a golden question may be asked as, whose one name is a token with nowhere to break. */
+const GOLDEN_ASKERS = { items: [{ id: "u_asker", name: UNBROKEN }], truncated: false };
 
 const CLASSIFICATION = {
   entity: "price_list",
@@ -951,6 +955,7 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
       "/api/v1/routing/rungs": MATRIX,
       "/api/v1/routing/changes": ROUTING_CHANGES,
       "/api/v1/routing/golden-questions": GOLDEN_QUESTIONS,
+      "/api/v1/routing/golden-questions/askers": GOLDEN_ASKERS,
     },
   },
   "/routing/:rungId": {
@@ -1368,19 +1373,20 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
       "/api/v1/install/settings": {
         groups: [
           {
-            group: "storage",
-            title: "Storage",
+            group: "files",
+            title: "Files and storage",
             editable: false,
-            changed_elsewhere: UNBROKEN,
             settings: [
               {
                 name: "INSTALL_OBJECT_STORE_URL",
+                label: UNBROKEN,
                 meaning: UNBROKEN,
                 value: UNBROKEN,
                 source: "environment",
                 default: "",
                 required: false,
                 editable: false,
+                read_only_because: UNBROKEN,
                 applies: UNBROKEN,
                 read_by: ["brain.ops.object_store"],
               },

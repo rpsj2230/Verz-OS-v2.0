@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import uuid
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
@@ -44,9 +45,13 @@ from brain.install import hold_saved, value_of
 from brain.models.adapter import Completion, SdkDriver, TransportStatusError
 from brain.models.assembly import HOSTED_PROFILE, LOCAL_PROFILE, TOLD, LadderRung, RungSkip
 from brain.models.calls import LadderState, ModelCalls
+from brain.models.default_ladder import DEFAULT_MODELS, LOCAL_COMPLETION_MODEL
+from brain.models.disclosure import TOLD as CATEGORY_TOLD
 from brain.models.driver import DriverRequest, ModelDriver
 from brain.models.evidence import Attempt
+from brain.models.registry import ProviderKind, ProviderRecord
 from brain.models.routing import Tier
+from brain.ops.credentials import TOLD as VAULT_TOLD
 from brain.ops.matrix_gate import GateVerdict
 from brain.ops.model_service import (
     PROVIDER_NAMESPACE,
@@ -60,8 +65,12 @@ from brain.provider_routes import (
     CHECK_MAX_OUTPUT_TOKENS,
     CHECK_PROMPT,
     CHECK_TOLD,
+    KEY_REFUSED_STATUSES,
     PROFILE_SETTING,
+    answered_told,
+    default_model_told,
     may_switch,
+    refused_keys,
 )
 from brain.routing_routes import MATRIX_WRITE
 from brain.settings_routes import INSTALL_SETTING_AUTHORITY
@@ -179,6 +188,8 @@ class Estate:
     #: The installation values saved under `install.`, by key: the value and who saved it.
     installed: dict[str, tuple[str, str]] = field(default_factory=dict)
     attempts: tuple[Attempt, ...] = ()
+    #: Providers added from the console, as the registry rows the ladder read carries.
+    providers: tuple[ProviderRecord, ...] = ()
     held: frozenset[str] = frozenset({"anthropic", "moonshot"})
     answers: dict[str, Completion | BaseException] = field(default_factory=dict)
     sent: list[DriverRequest] = field(default_factory=list)
@@ -193,7 +204,9 @@ class Estate:
             for key, (value, _by) in self.settings.items()
             if value is False
         )
-        return LadderState(rungs=self.rungs, switched_off=off, attempts=self.attempts)
+        return LadderState(
+            rungs=self.rungs, switched_off=off, attempts=self.attempts, providers=self.providers
+        )
 
     async def started(
         self,
@@ -640,7 +653,9 @@ def test_a_check_is_one_metered_call_recorded_on_the_ledger_and_never_as_a_quest
     view = checked.json()
     assert view["answered"] is True
     assert view["outcome"] == "answered"
-    assert view["told"] == CHECK_TOLD["answered"]
+    assert view["told"] == answered_told("claude-x", default_model=False)
+    assert "claude-x" in view["told"]
+    assert view["default_model"] is False
     assert (view["served_by"], view["model"]) == ("anthropic-main-0", "claude-x")
     assert (view["tokens_in"], view["tokens_out"]) == (12, 2)
     assert REPLY not in checked.text
@@ -680,15 +695,21 @@ def test_a_check_that_fails_says_how_in_the_checks_words_and_is_still_recorded(
 def test_a_check_with_nothing_to_call_says_why_and_calls_nothing(
     client: TestClient, estate: Estate
 ) -> None:
-    """A provider whose rungs are left out is told the assembly's own reason, and a provider on no
-    rung is told there is nothing to check.
+    """A provider whose steps are left out is told the assembly's own reason, and so is a provider
+    no step names whose default model cannot be called here: the install's own server, with no
+    address, is told so and which model the test would have used.
 
     Delete this and a check on a keyless provider reports a provider outage."""
     keyless = call(client, "POST", "u_wide", f"{PROVIDERS}/openai/check").json()
     nowhere = call(client, "POST", "u_wide", f"{PROVIDERS}/local/check").json()
 
     assert (keyless["outcome"], keyless["told"]) == (RungSkip.NO_KEY.value, TOLD[RungSkip.NO_KEY])
-    assert (nowhere["outcome"], nowhere["told"]) == ("no_rung", CHECK_TOLD["no_rung"])
+    assert keyless["default_model"] is False
+    assert nowhere["outcome"] == RungSkip.NO_INFERENCE_SERVER.value
+    assert nowhere["told"] == default_model_told(
+        TOLD[RungSkip.NO_INFERENCE_SERVER], LOCAL_COMPLETION_MODEL
+    )
+    assert (nowhere["default_model"], nowhere["model"]) == (True, LOCAL_COMPLETION_MODEL)
     assert estate.sent == []
     assert all(one.model_usage is None for one in estate.finished)
 
@@ -717,6 +738,182 @@ def test_a_check_is_refused_without_the_write_held_over_everything_and_sends_not
     assert refused.status_code == 404
     assert estate.sent == []
     assert estate.finished == []
+
+
+def test_a_provider_no_step_names_is_checked_through_its_default_model_and_says_which(
+    client: TestClient, estate: Estate
+) -> None:
+    """The owner's case on 2026-09-28: OpenAI holds a key and no step names it. The check is sent
+    to its default model, planned as a step would be, metered and on the ledger under the person
+    who pressed it, and says in words which model answered and that it was the default. No
+    attempt row is written, because it would name a step that does not exist.
+
+    Delete this and Test on a provider whose key was just saved answers that there is nothing to
+    check, which is what the owner was told."""
+    estate.rungs = (rung("anthropic"),)
+    estate.held = frozenset({"anthropic", "openai"})
+    default = DEFAULT_MODELS["openai"][Tier.MAIN]
+
+    checked = call(client, "POST", "u_wide", f"{PROVIDERS}/openai/check")
+
+    assert checked.status_code == 200
+    view = checked.json()
+    assert (view["answered"], view["outcome"], view["default_model"]) == (True, "answered", True)
+    (sent,) = estate.sent
+    assert sent.model == default
+    assert [one.content for one in sent.messages] == [CHECK_PROMPT]
+    assert view["model"] == default
+    assert view["told"] == answered_told(default, default_model=True)
+    assert default in view["told"]
+    assert REPLY not in checked.text
+    assert estate.attempt_rows == []
+    (finished,) = estate.finished
+    assert finished.origin.principal.id == "u_wide"
+    assert finished.model_usage is not None
+    assert finished.model_usage.calls == 1
+    assert estate.questions == []
+
+
+def test_a_provider_with_a_step_is_checked_through_the_step_and_not_its_default(
+    client: TestClient, estate: Estate
+) -> None:
+    """The sibling of the default path: a provider a step names is sent to that step's model.
+
+    Delete this and the default model can replace a step's own, so a Test reports a model the
+    failover matrix never sends a question to."""
+    estate.held = frozenset({"anthropic", "moonshot", "openai"})
+
+    view = call(client, "POST", "u_wide", f"{PROVIDERS}/openai/check").json()
+
+    (sent,) = estate.sent
+    assert sent.model == "openai-model"
+    assert view["default_model"] is False
+    assert [one[1] for one in estate.attempt_rows] == ["started", "ok"]
+
+
+def test_a_default_model_check_asks_the_switch_first_and_sends_nothing_when_it_is_off(
+    client: TestClient, estate: Estate
+) -> None:
+    """The added step is assembled like any other, so a provider switched off is not sent the
+    sentence, and the answer says it is off and which model would have been used.
+
+    Delete this and the default path becomes a way past the switch that exists to stop text
+    reaching a provider."""
+    estate.rungs = (rung("anthropic"),)
+    estate.held = frozenset({"anthropic", "openai"})
+    call(client, "PUT", "u_wide", f"{PROVIDERS}/openai", {"on": False})
+
+    view = call(client, "POST", "u_wide", f"{PROVIDERS}/openai/check").json()
+
+    assert view["outcome"] == RungSkip.SWITCHED_OFF.value
+    default = DEFAULT_MODELS["openai"][Tier.MAIN]
+    assert view["told"] == default_model_told(TOLD[RungSkip.SWITCHED_OFF], default)
+    assert estate.sent == []
+
+
+def test_an_added_provider_with_no_model_named_is_told_there_is_nothing_to_test_with(
+    client: TestClient, estate: Estate
+) -> None:
+    """A provider added from the console with no model listed has no default to test, and is
+    told to add a step rather than sent a guess.
+
+    Delete this and the no-model branch can send the check to a model nobody named."""
+    estate.providers = (
+        ProviderRecord(
+            slug="acme_llm",
+            kind=ProviderKind.OPENAI_COMPATIBLE,
+            label="Acme",
+            base_url="https://llm.example.test/v1",
+        ),
+    )
+
+    view = call(client, "POST", "u_wide", f"{PROVIDERS}/acme_llm/check").json()
+
+    assert (view["outcome"], view["told"]) == ("no_model", CHECK_TOLD["no_model"])
+    assert view["default_model"] is False
+    assert estate.sent == []
+
+
+@pytest.mark.parametrize("status", sorted(KEY_REFUSED_STATUSES))
+def test_a_refused_key_is_said_plainly_and_not_as_a_stopped_request(
+    client: TestClient, estate: Estate, status: int
+) -> None:
+    """A 401 or 403 is the provider refusing the key, and the answer says so in those words.
+
+    Delete this and a refused key reads as a request the provider turned down for some other
+    reason, and the administrator checks the model name instead of the key."""
+    estate.answers["anthropic"] = TransportStatusError(status)
+
+    view = call(client, "POST", "u_wide", f"{PROVIDERS}/anthropic/check").json()
+
+    assert (view["answered"], view["outcome"], view["status"]) == (False, "key_refused", status)
+    assert view["told"] == CHECK_TOLD["key_refused"]
+    assert "refused the key" in view["told"]
+
+
+def test_a_request_the_provider_turned_down_for_another_reason_is_not_a_refused_key(
+    client: TestClient, estate: Estate
+) -> None:
+    """The sibling: a 400 stops the chain and is not the key.
+
+    Delete this and every 4xx is reported as a bad key, which sends the administrator to replace
+    a key that works."""
+    estate.answers["anthropic"] = TransportStatusError(400)
+
+    view = call(client, "POST", "u_wide", f"{PROVIDERS}/anthropic/check").json()
+
+    assert (view["outcome"], view["status"]) == ("stopped", 400)
+    assert view["told"] == CHECK_TOLD["stopped"]
+
+
+def test_the_latest_word_per_step_decides_whether_its_key_was_refused() -> None:
+    """Built from rows as the statement returns them, in finishing order: a step refused and then
+    answered is not refused, a step refused last is, and an unfinished row says nothing.
+
+    Delete this and one refusal marks a step for as long as it is in the window, after the key
+    was replaced and answered."""
+    early = datetime(2019, 3, 4, 9, 0, tzinfo=UTC)
+    later = datetime(2019, 3, 4, 9, 5, tzinfo=UTC)
+    rows = [
+        ("refused-then-answered", early, 401),
+        ("refused-then-answered", later, None),
+        ("answered-then-refused", early, None),
+        ("answered-then-refused", later, 403),
+        ("turned-down", later, 400),
+        ("unfinished", None, 401),
+    ]
+
+    assert refused_keys(rows) == frozenset({"answered-then-refused"})
+
+
+#: The words the owner asked never to see on the Models screen or in a check's answer.
+JARGON = re.compile(r"\b(rungs?|ladders?|tiers?|lanes?|slots?)\b", re.IGNORECASE)
+
+#: A file path a sentence points an operator at, which is a name and not a word on the screen.
+PATH = re.compile(r"\S+/\S+")
+
+
+def test_no_sentence_a_check_or_the_providers_screen_can_show_uses_internal_jargon() -> None:
+    """Every sentence the check answers with and every reason a step is left out, including the
+    two built with a model's name, and the vault's and the data categories' sentences the screen
+    shows beside them.
+
+    Delete this and rung, ladder, tier, lane or slot can come back in the next sentence somebody
+    writes, which is what the owner found on 2026-09-28."""
+    sentences = [
+        *CHECK_TOLD.values(),
+        *TOLD.values(),
+        *VAULT_TOLD.values(),
+        *CATEGORY_TOLD.values(),
+        answered_told("gpt-5-mini", default_model=True),
+        answered_told("gpt-5-mini", default_model=False),
+        default_model_told(CHECK_TOLD["key_refused"], "gpt-5-mini"),
+    ]
+
+    found = [one for one in sentences if JARGON.search(PATH.sub("", one))]
+
+    assert sentences
+    assert found == []
 
 
 # ------------------------------------------------------------- a rung saved, then walked
@@ -803,3 +1000,69 @@ class _PassingGate:
 
     async def decide(self, change: object, *, now: object, new_rung_id: str) -> GateVerdict:
         return GateVerdict(may_apply=True, failing=(), reasons=(), quality_share=None)
+
+
+def test_a_step_whose_key_the_provider_refused_is_marked_until_a_later_call_answers(
+    estate: Estate,
+) -> None:
+    """End to end against a real server: a check the provider answers with 401 leaves an attempt
+    row with that status, the next read marks the step's key refused even though its breaker is
+    closed and measured, and a check that answers afterwards clears the mark.
+
+    Delete this and the screen goes back to drawing a provider that refuses the key as working,
+    because a refused key is not ill health and the breaker never moves for it."""
+    options = {"loop_factory": asyncio.SelectorEventLoop} if os.name == "nt" else None
+    with modelled("brain_test_provider_routes_key_refused", RUNG_TABLES) as url:
+        rung_id = str(uuid.uuid4())
+        sql(
+            url,
+            "INSERT INTO ops.routing_rung (id, tier, scope, position, role, deployment_id, "
+            "provider, model, attempts, timeout_seconds, max_concurrency, enabled) VALUES "
+            "(%s, 'main', '{}'::jsonb, 0, 'primary', 'anthropic-main-0', 'anthropic', "
+            "'anthropic-model', 1, 12, 4, true)",
+            rung_id,
+        )
+        bound = engine(url)
+        sessions = async_sessionmaker(bound, expire_on_commit=False)
+        app: FastAPI = create_app(Settings(env="development", database_url=""))
+        check = f"{PROVIDERS}/anthropic/check"
+        try:
+            with TestClient(app, raise_server_exceptions=False, backend_options=options) as c:
+                app.state.gate = _wiring()
+                app.state.db_sessions = sessions
+                app.state.console_reads = None
+                app.state.models.close()
+                app.state.models = ModelService(
+                    calls=ModelCalls(
+                        ladder=SessionLadder(sessions),
+                        attempts=SessionAttempts(sessions),
+                        drivers={
+                            "anthropic": SdkDriver(
+                                provider="anthropic", transport=estate.transport("anthropic")
+                            )
+                        },
+                        profile=lambda: HOSTED_PROFILE,
+                        held=lambda: frozenset({"anthropic"}),
+                        clock=lambda: datetime.now(UTC),
+                    ),
+                    client=httpx.Client(),
+                )
+                app.state.request_recorders = (Ledger(),)
+                estate.answers["anthropic"] = TransportStatusError(401)
+                refused = call(c, "POST", "u_wide", check).json()
+                while_refused = call(c, "GET", "u_wide", PROVIDERS).json()
+                estate.answers.pop("anthropic")
+                answered = call(c, "POST", "u_wide", check).json()
+                once_answered = call(c, "GET", "u_wide", PROVIDERS).json()
+        finally:
+            run(bound.dispose)
+
+        assert (refused["outcome"], answered["outcome"]) == ("key_refused", "answered")
+        (step,) = while_refused["rungs"]
+        assert (step["key_refused"], step["measured"], step["state"]) == (True, True, "closed")
+        (after,) = once_answered["rungs"]
+        assert after["key_refused"] is False
+        assert sql(url, "SELECT status_code FROM ops.model_attempt ORDER BY finished_at") == [
+            (401,),
+            (None,),
+        ]

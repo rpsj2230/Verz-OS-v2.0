@@ -47,6 +47,12 @@ and says so. **These writes need the matrix write held over everything**, becaus
 pass and fail on a golden question asked as another person is a fact about what that person's
 questions come back with, and a department-scoped editor must not be able to learn it.
 
+**A golden question is asked as a person chosen by name** (2026-09-28). The form listed nothing
+and asked for a principal id, which no owner knows; `GET /routing/golden-questions/askers` lists the
+live, enabled people the directory holds, by name, to the same matrix writer who may record a
+question as any of them, and the list names each question's person. See
+`A_PERSON_IS_CHOSEN_BY_NAME`.
+
 **A rung can be added at the end of a tier**, naming a provider this install can call and one of
 its models, which is how a provider added from the console (M5.7.2) takes traffic. Where a rung
 sits in the chain is otherwise still not editable here, for the reason below.
@@ -106,6 +112,7 @@ Task ids: M5.3.3, M27.8.6, M5.3.2, M5.6.2, M5.7.2
 from __future__ import annotations
 
 import uuid
+from collections.abc import Collection
 from datetime import datetime
 from typing import Annotated, Any, Final
 
@@ -120,6 +127,7 @@ from brain.api_routes import Asked
 from brain.console.read_replica import StalenessBanner
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.errors import Absent, Failed
+from brain.core.principal import PrincipalKind
 from brain.listing import Column, ListAsked, Listing
 from brain.models.registry import MODEL_NAME_PATTERN, SLUG_PATTERN
 from brain.models.routing import TIER_LADDER, RungRole, Tier
@@ -173,6 +181,14 @@ A_MATRIX_CHANGE_TAKES_TRAFFIC_ONLY_AFTER_THE_GATE_PASSES_IT: Final = (
     "ladder against the golden questions and the permission canaries, and applied only when "
     "nothing regressed; a held change keeps its failing cases where the Routing screen shows "
     "them."
+)
+
+#: Why a golden question's asker is chosen from a list of names.
+A_PERSON_IS_CHOSEN_BY_NAME: Final = (
+    "A golden question is asked as one person, and whether it is answered depends on what that "
+    "person may read. An owner knows his colleagues by name and not by principal id, so the form "
+    "lists the people the directory holds, by name, to whoever may already record a golden "
+    "question as any of them; it lists nothing about them but the name."
 )
 
 #: Why a boolean about the caller is on the response, and what it must never be used for.
@@ -419,6 +435,8 @@ class GoldenQuestionView(BaseModel):
     id: str
     question: str
     asked_as: str
+    #: The person it is asked as, by name, or null when the directory no longer holds them.
+    asked_as_name: str | None = None
     expect: GoldenExpectation
     created_by: str
 
@@ -429,6 +447,25 @@ class GoldenQuestionPage(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     items: list[GoldenQuestionView]
+
+
+class AskerView(BaseModel):
+    """One person a golden question may be asked as: the id the question stores, and a name."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    id: str
+    name: str
+
+
+class AskerPage(BaseModel):
+    """The people a golden question may be asked as, by name. See `A_PERSON_IS_CHOSEN_BY_NAME`."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    items: list[AskerView]
+    #: There are more people than the picker lists. Never how many more.
+    truncated: bool = False
 
 
 def may_govern(reach: EntitlementSet, now: datetime) -> bool:
@@ -625,6 +662,31 @@ def live_golden(limit: int) -> Select[tuple[GoldenQuestionRow]]:
     )
 
 
+def askers(limit: int) -> Select[tuple[str, str]]:
+    """The people a golden question may be asked as: live, enabled people, by name, bounded.
+
+    People only: a golden question is a person's question, and a service account's reach is a
+    machine's. The write still accepts any live principal id, so nothing a script sends changes.
+    """
+    return (
+        select(PrincipalRow.id, PrincipalRow.display_name)
+        .where(
+            PrincipalRow.deleted_at.is_(None),
+            PrincipalRow.disabled_at.is_(None),
+            PrincipalRow.kind == PrincipalKind.HUMAN.value,
+        )
+        .order_by(PrincipalRow.display_name, PrincipalRow.id)
+        .limit(limit)
+    )
+
+
+def names_of(ids: Collection[str]) -> Select[tuple[str, str]]:
+    """The names the directory holds for these principals, for the golden questions' list."""
+    return select(PrincipalRow.id, PrincipalRow.display_name).where(
+        PrincipalRow.id.in_(sorted(ids)), PrincipalRow.deleted_at.is_(None)
+    )
+
+
 def apply_edit(rung_id: uuid.UUID, edit: RungEdit) -> Update:
     """The UPDATE for one rung, naming only the four columns the edit carries.
 
@@ -702,6 +764,10 @@ NO_GATE_HERE: Final = (
 
 #: How many recent changes the Routing screen is shown.
 RECENT_CHANGES: Final = 20
+
+#: The most people the golden question form lists by name. A resource bound far above a company
+#: this product is sized for; past it the list says there are more, never how many.
+MAX_ASKERS: Final = 1000
 
 
 def gate_of(request: Request) -> MatrixGate | None:
@@ -964,17 +1030,41 @@ async def golden_questions(request: Request, asked: Asked) -> GoldenQuestionPage
     factory = _require_sessions(request)
     async with factory() as session:
         rows = (await session.execute(live_golden(MAX_GOLDEN_QUESTIONS))).scalars().all()
+        asked_as = {one.asked_as for one in rows}
+        named = (
+            {str(pid): str(name) for pid, name in (await session.execute(names_of(asked_as))).all()}
+            if asked_as
+            else {}
+        )
     return GoldenQuestionPage(
         items=[
             GoldenQuestionView(
                 id=str(one.id),
                 question=one.question,
                 asked_as=one.asked_as,
+                asked_as_name=named.get(one.asked_as),
                 expect=GoldenExpectation(one.expect),
                 created_by=one.created_by,
             )
             for one in rows
         ]
+    )
+
+
+@router.get(
+    "/routing/golden-questions/askers", response_model=AskerPage, responses=COMMON_RESPONSES
+)
+async def golden_askers(request: Request, asked: Asked) -> AskerPage:
+    """The people a golden question may be asked as, by name. See `A_PERSON_IS_CHOSEN_BY_NAME`."""
+    if not may_govern(asked.reach, asked.now):
+        log.info("golden askers not answerable", principal=asked.caller.principal.id)
+        raise _no_matrix_here()
+    factory = _require_sessions(request)
+    async with factory() as session:
+        rows = (await session.execute(askers(MAX_ASKERS))).all()
+    return AskerPage(
+        items=[AskerView(id=str(pid), name=str(name)) for pid, name in rows],
+        truncated=len(rows) >= MAX_ASKERS,
     )
 
 

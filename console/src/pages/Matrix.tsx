@@ -1,5 +1,6 @@
 /**
- * The routing matrix, and the editor for one rung of it.
+ * The routing matrix, and the editor for one step of it. Plain words since 2026-09-28: a level is
+ * Simple, Medium or Complex, a rung is a step, and no id is a column (see `matrixQuery.ts`).
  *
  * `brain.models.routing.RoutingChain` says why this screen exists: "In Postgres this is
  * `routing_rung`, editable from the console at runtime. Tier assignment changes roughly
@@ -51,6 +52,10 @@
  * M5.6.2 the PATCH answers the change as `ops.routing_change` recorded it: applied, or held because
  * a golden question or a permission canary regressed on the changed ladder. A held change is drawn
  * above the matrix with the cases that held it, from `components/MatrixGate.tsx`, and the rung keeps its numbers.
+ * **It says why it was held and the steps that get a change through** (add a document on Knowledge
+ * that the person can read, add a golden question about it asked as that person, save again),
+ * which is what a new install needs and what the screen did not say on 2026-09-28. The golden
+ * questions are read here, once, for both that explanation and the gate's own card.
  *
  * Task ids: M5.3.3, M27.8.4, M5.6.2
  */
@@ -59,13 +64,14 @@ import { useCallback, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
-import { useResource } from "../api/useResource";
+import { useResource, type Resource } from "../api/useResource";
 import { ListControls, NOTHING_MATCHES, ShowMore } from "../components/ListControls";
 import { narrows } from "../components/listing";
 import { useListing } from "../components/useListing";
 import { DataTable } from "../components/DataTable";
 import { SchemaForm } from "../components/SchemaForm";
 import {
+  DETAIL_FIELDS,
   editableDefaults,
   MATRIX_API_PATH,
   MATRIX_FILTERS,
@@ -77,13 +83,15 @@ import {
   rungAddress,
   rungApiPath,
   rungById,
+  stepWords,
   submittedEdit,
   type RungEdit,
   type RungRow,
 } from "./matrixQuery";
 import { ConfirmAction } from "../components/ConfirmAction";
 import { ChangeDecided, MatrixGate } from "../components/MatrixGate";
-import { readChange, type ChangeRow } from "./matrixGateQuery";
+import { GOLDEN_API_PATH, readChange, readGolden, type ChangeRow } from "./matrixGateQuery";
+import { levelName, providerName } from "./modelsQuery";
 
 /**
  * What is said when the page came back full.
@@ -92,7 +100,7 @@ import { readChange, type ChangeRow } from "./matrixGateQuery";
  * load came back full, which "Show more" cannot reach past, so the sentence says what is true
  * rather than offering an action that does not exist.
  */
-const THERE_IS_MORE = "This page came back full, so there are more rungs than it shows.";
+const THERE_IS_MORE = "This page came back full, so there are more steps than it shows.";
 
 /**
  * What is said when the address names a rung the page does not carry.
@@ -103,15 +111,18 @@ const THERE_IS_MORE = "This page came back full, so there are more rungs than it
  * this sentence to describe. The same sentence on a records screen would be a disclosure,
  * which is why it is written here rather than in a shared component.
  */
-const NO_SUCH_RUNG = "No rung on this page has that id.";
+const NO_SUCH_RUNG = "No step on this page matches that address.";
 
 /** The confirmation's two buttons. */
 export const SAVE_RUNG = "Save these numbers";
-export const KEEP_RUNG = "Keep the rung as it is";
+export const KEEP_RUNG = "Keep the step as it is";
 
-/** The question a save asks, naming the rung by its place in the matrix and what it runs. */
+/** The question a save asks, naming the step by its place in the matrix and what it runs. */
 export function saveRungQuestion(rung: RungRow): string {
-  return `Save new numbers to the ${rung.tier} tier's rung at position ${String(rung.position)} (${rung.provider} ${rung.model})?`;
+  return (
+    `Save new numbers for step ${stepWords(rung.position)} of the ${levelName(rung.tier)} level ` +
+    `(${providerName(rung.provider)} ${rung.model})?`
+  );
 }
 
 /**
@@ -125,11 +136,12 @@ export function saveRungQuestion(rung: RungRow): string {
  */
 export function saveRungConsequence(edit: RungEdit): string {
   return (
-    `The rung would hold ${String(edit.attempts)} attempt${edit.attempts === 1 ? "" : "s"}, ` +
-    `a ${String(edit.timeout_seconds)} second timeout and at most ${String(edit.max_concurrency)} at once, ` +
-    `and be switched ${edit.enabled ? "on" : "off"}. The change is run against the golden questions ` +
-    "and the permission canaries first: if nothing regresses the next question walks it, and if " +
-    "something does it is held with the failing cases shown and the rung keeps its numbers."
+    `The step would make ${String(edit.attempts)} attempt${edit.attempts === 1 ? "" : "s"}, ` +
+    `wait ${String(edit.timeout_seconds)} seconds for an answer and take at most ${String(edit.max_concurrency)} ` +
+    `calls at once, and be ${edit.enabled ? "in use" : "paused"}. The change is tried against the golden ` +
+    "questions and the permission checks first: if nothing gets worse the next question uses it, and if " +
+    "something does it is held with what failed and the step keeps its numbers. With no golden question " +
+    "answered yet, every change is held; the steps to add one are under Golden questions."
   );
 }
 
@@ -194,7 +206,7 @@ function RungEditor({
   return (
     <section className="card">
       <SchemaForm
-        caption={`Rung ${rung.tier} position ${String(rung.position)}`}
+        caption={`Step ${stepWords(rung.position)} of the ${levelName(rung.tier)} level`}
         schema={RUNG_EDIT_SCHEMA}
         uiSchema={RUNG_EDIT_UI}
         formData={editableDefaults(rung)}
@@ -217,6 +229,19 @@ function RungEditor({
           }}
         />
       )}
+      <details>
+        <summary>Advanced</summary>
+        <dl className="fields">
+          {DETAIL_FIELDS.map((one) => (
+            <div className="fields__row" key={one.name}>
+              <dt>{one.label}</dt>
+              <dd>
+                <code>{String(rung[one.name])}</code>
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </details>
     </section>
   );
 }
@@ -236,10 +261,12 @@ export const NONE_MATCH = NOTHING_MATCHES;
 function MatrixRows({
   openRungId,
   version,
+  golden,
   onSaved,
 }: {
   readonly openRungId: string | undefined;
   readonly version: number;
+  readonly golden: Resource<unknown>;
   readonly onSaved: (decided: ChangeRow | null) => void;
 }) {
   const listing = useListing<RungRow>(MATRIX_API_PATH, { choices: MATRIX_FILTERS, version });
@@ -261,7 +288,7 @@ function MatrixRows({
     <>
       <ListControls label={FILTERS_LABEL} listing={listing} choices={MATRIX_FILTERS} />
       <DataTable
-        caption="The routing matrix"
+        caption="The failover matrix: each level's steps, in the order a question tries them"
         columns={columns}
         rows={page.rungs}
         rowId={(rung) => rung.id}
@@ -296,6 +323,7 @@ function MatrixRows({
        */}
       <MatrixGate
         version={version}
+        golden={golden}
         editable={page.editable && openRungId === undefined}
         onChanged={() => {
           onSaved(null);
@@ -313,6 +341,9 @@ export function Matrix() {
   const [version, setVersion] = useState(0);
   // The last change a save on this page decided, drawn above the matrix when the gate held it.
   const [decided, setDecided] = useState<ChangeRow | null>(null);
+  const golden = useResource<unknown>(GOLDEN_API_PATH, version);
+  const goldenRows = golden.data === null ? [] : readGolden(golden.data);
+  const goldenCount = golden.data === null || golden.failure !== null ? null : goldenRows.length;
   const onSaved = useCallback((change: ChangeRow | null) => {
     if (change !== null) {
       setDecided(change);
@@ -322,18 +353,18 @@ export function Matrix() {
 
   return (
     <article className="page">
-      <h1>Routing matrix</h1>
+      <h1>Routing</h1>
       <p className="lede">
-        Which model handles a request, in what order, and what each rung is allowed to spend.
+        Which model answers each level of question, in what order, and how long each step may take.
       </p>
 
       {decided === null || decided.status !== "held" ? null : (
         <section className="card" role="status" aria-label="The change was held">
-          <ChangeDecided change={decided} />
+          <ChangeDecided change={decided} golden={goldenRows} goldenCount={goldenCount} />
         </section>
       )}
 
-      <MatrixRows openRungId={rungId} version={version} onSaved={onSaved} />
+      <MatrixRows openRungId={rungId} version={version} golden={golden} onSaved={onSaved} />
     </article>
   );
 }

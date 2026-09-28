@@ -56,8 +56,9 @@ A_GATE_THAT_ASKED_NOTHING_HAS_PASSED_NOTHING: Final = (
 
 #: What the held change says when there are no golden questions.
 NO_GOLDEN_QUESTIONS: Final = (
-    "no golden questions are recorded, so nothing checked that the changed ladder still answers. "
-    "Add golden questions on the Routing screen and save the change again."
+    "No golden questions are recorded yet, so nothing could check that questions are still "
+    "answered after this change. Add a golden question on the Routing screen, then save the "
+    "change again."
 )
 
 #: The case id every canary finding is recorded under, numbered.
