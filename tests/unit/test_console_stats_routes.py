@@ -43,8 +43,10 @@ from brain.console_stats_routes import (
     channel_bindings,
     channel_deliveries,
     connector_attempts,
+    connector_live_reads,
     index_ids,
     router,
+    skill_invocations,
 )
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.lane import Lane
@@ -78,7 +80,9 @@ def only(field: str, value: str) -> Scope:
 #: connector and every channel, and one entity of one source's rows. `u_narrow` holds each
 #: screen narrowed: skills in one department, one connector, one channel, and no usage, spend
 #: or people read. `u_none` holds nothing. `u_narrow` sits in web and `u_elsewhere` in finance,
-#: which is who a finance department's agent is visible to.
+#: which is who a finance department's agent is visible to. `u_wide` reads the whole skill
+#: library and every connector and no usage, so a skill's runs and a source's live reads are
+#: counted over their own requests alone.
 GRANTS: Mapping[str, tuple[Grant, ...]] = {
     "u_admin": (
         *PLANES,
@@ -97,6 +101,11 @@ GRANTS: Mapping[str, tuple[Grant, ...]] = {
     ),
     "u_none": (),
     "u_elsewhere": PLANES,
+    "u_wide": (
+        *PLANES,
+        Grant(capability=read("skills"), scope=EVERYWHERE),
+        Grant(capability=read("connectors"), scope=EVERYWHERE),
+    ),
 }
 
 NOW = datetime.now(UTC)
@@ -139,8 +148,26 @@ class Held:
             ("outbound", "refused", NOW - timedelta(days=8)),
         ]
         self.bound: list[str] = ["u_narrow", "u_admin", "u_elsewhere"]
+        #: (agent, principal, skill, used at): `agent.skill_invocation`. The hidden agent's run
+        #: is one nobody but finance may be counted over, and `other` is another skill.
+        self.uses: list[tuple[str, str, str, datetime]] = [
+            (AGENT, "u_admin", "triage", NOW - timedelta(days=1)),
+            (AGENT, "u_wide", "triage", NOW - timedelta(days=3)),
+            (AGENT, "u_elsewhere", "triage", NOW - timedelta(days=12)),
+            (HIDDEN_AGENT, "u_elsewhere", "triage", NOW - timedelta(hours=2)),
+            (AGENT, "u_admin", "other", NOW - timedelta(hours=1)),
+        ]
+        #: (source, principal, received at): request rows whose `connector` names a source.
+        self.reads: list[tuple[str, str, datetime]] = [
+            ("xero", "u_admin", NOW - timedelta(days=1)),
+            ("xero", "u_wide", NOW - timedelta(days=2)),
+            ("xero", "u_elsewhere", NOW - timedelta(days=9)),
+            ("hubspot", "u_admin", NOW - timedelta(hours=1)),
+        ]
         self.params: list[dict[str, Any]] = []
         self.counted: list[str] = []
+        self.asked_uses: list[dict[str, Any]] = []
+        self.asked_reads: list[dict[str, Any]] = []
 
     def answer(self, statement: Any) -> Result | None:
         if not isinstance(statement, Select):
@@ -154,6 +181,25 @@ class Held:
                 return Result(self.agents[key] for key in sorted(self.agents))
             wanted = str(statement.whereclause.right.value)
             return Result([self.agents[wanted]] if wanted in self.agents else [])
+        if columns == ["principal_id", "agent_id", "used_at"]:
+            principal = _bound(params, "principal_id")
+            agents = _bound(params, "agent_id")
+            self.asked_uses.append(dict(params))
+            return Result(
+                Row((who, agent, at))
+                for agent, who, skill, at in self.uses
+                if skill == _bound(params, "skill_name")
+                and agent in agents
+                and (principal is None or who == principal)
+            )
+        if columns == ["principal", "received_at"]:
+            principal = _bound(params, "principal")
+            self.asked_reads.append(dict(params))
+            return Result(
+                Row((who, at))
+                for source, who, at in self.reads
+                if source == _bound(params, "connector") and (principal is None or who == principal)
+            )
         if len(described) == 2 and columns[0] != "finished_at" and columns[0] != "direction":
             # The installs of the reader's agents. None is installed in these tests.
             return Result([])
@@ -386,10 +432,12 @@ def test_cost_is_not_recorded_rather_than_nought_until_a_run_writes_one(
 
 
 # ------------------------------------------------------------------------------ skills
-def test_a_reader_of_the_library_sees_a_skills_versions_and_arrivals(
+def test_a_reader_of_the_library_sees_a_skills_versions_arrivals_and_runs(
     served: tuple[TestClient, Stub],
 ) -> None:
-    """The positive case for skills, and that invocations are named as not recorded."""
+    """The positive case for skills: a reader of everybody's usage is counted over every run of
+    the skill by an agent they may see, and nothing is listed as unrecorded. Delete this and the
+    runs figure can be nought for everybody with every narrowing test below still green."""
     client, _ = served
     response = stats(client, "u_admin", "skills", "triage")
     assert response.status_code == 200, response.text
@@ -397,7 +445,43 @@ def test_a_reader_of_the_library_sees_a_skills_versions_and_arrivals(
 
     assert (body.agents_pinned, body.pinned_versions, body.versions) == (0, 0, 2)
     assert [one.versions_added for one in body.periods] == [1, 2]
-    assert {one.figure for one in body.unrecorded} == {"runs_that_used_it", "last_used"}
+    assert body.run_basis == "everyone"
+    assert [one.runs for one in body.periods] == [2, 3]
+    assert body.last_used is not None
+    assert abs(body.last_used - (NOW - timedelta(days=1))) < timedelta(seconds=1)
+    assert body.at_least is False
+    assert body.unrecorded == []
+
+
+def test_a_skills_runs_exclude_agents_the_reader_may_not_see_in_the_query(
+    served: tuple[TestClient, Stub], held: Held
+) -> None:
+    """The finance agent ran the skill two hours ago, and `u_admin` may not see that agent. Delete
+    this and a skill's page counts, and dates, runs by an agent the reader may not be told exists,
+    and the statement fetches them into this process to do it."""
+    client, _ = served
+    body = SkillStatsView.model_validate(stats(client, "u_admin", "skills", "triage").json())
+
+    assert [one.runs for one in body.periods] == [2, 3]
+    assert body.last_used is not None and body.last_used < NOW - timedelta(hours=12)
+    asked = held.asked_uses
+    assert asked and all(_bound(one, "agent_id") == [AGENT] for one in asked)
+
+
+def test_a_skills_runs_are_the_readers_own_when_they_may_not_read_usage_in_the_query(
+    served: tuple[TestClient, Stub], held: Held
+) -> None:
+    """`u_wide` reads the library and not usage. Delete this and a skill's page tells somebody
+    who may not read colleagues' usage how often colleagues ran it."""
+    client, _ = served
+    body = SkillStatsView.model_validate(stats(client, "u_wide", "skills", "triage").json())
+
+    assert body.run_basis == "own"
+    assert [one.runs for one in body.periods] == [1, 1]
+    assert body.last_used is not None
+    assert abs(body.last_used - (NOW - timedelta(days=3))) < timedelta(seconds=1)
+    assert held.asked_uses
+    assert all(_bound(one, "principal_id") == "u_wide" for one in held.asked_uses)
 
 
 @pytest.mark.parametrize("pid", ["u_narrow", "u_none"])
@@ -412,6 +496,18 @@ def test_a_skill_the_reader_may_not_be_told_of_is_the_404_a_missing_skill_gets(
     assert_same_refusal(
         stats(client, pid, "skills", "triage"), stats(client, "u_admin", "skills", "no_such_skill")
     )
+
+
+@pytest.mark.parametrize("pid", ["u_narrow", "u_none"])
+def test_a_skill_out_of_reach_reads_no_run_of_it(
+    served: tuple[TestClient, Stub], held: Held, pid: str
+) -> None:
+    """Delete this and a refused skill still costs a query over its runs, whose timing is the
+    difference the one 404 is there to remove."""
+    client, _ = served
+
+    assert stats(client, pid, "skills", "triage").status_code == 404
+    assert held.asked_uses == []
 
 
 # -------------------------------------------------------------------------- connectors
@@ -431,9 +527,40 @@ def test_a_reader_of_a_connector_sees_its_health_attempts_and_the_ids_their_scop
     week, month = body.periods
     assert (week.attempts, week.read_to_the_end, week.failures, week.quota_waits) == (2, 1, 1, 0)
     assert (month.attempts, month.quota_waits) == (3, 1)
-    assert {one.figure for one in body.unrecorded} == {"live_reads", "last_live_read"}
+    assert body.unrecorded == []
     contact = [sql for sql in held.counted if "FALSE" in sql]
     assert len(contact) == 1
+
+
+def test_a_reader_of_everybodys_usage_is_counted_over_every_live_read_of_the_source(
+    served: tuple[TestClient, Stub],
+) -> None:
+    """The positive case for live reads: three questions read xero, one of them nine days ago,
+    and hubspot's read is another source's. Delete this and a live-read count of nought for
+    everybody passes every narrowing test below."""
+    client, _ = served
+    body = ConnectorStatsView.model_validate(stats(client, "u_admin", "connectors", "xero").json())
+
+    assert body.live_read_basis == "everyone"
+    assert [one.live_reads for one in body.periods] == [2, 3]
+    assert body.last_live_read is not None
+    assert abs(body.last_live_read - (NOW - timedelta(days=1))) < timedelta(seconds=1)
+
+
+def test_a_reader_without_the_usage_read_is_counted_over_their_own_live_reads_in_the_query(
+    served: tuple[TestClient, Stub], held: Held
+) -> None:
+    """`u_wide` reads every connector and not usage. Delete this and a source's page tells
+    them how often colleagues' questions read it, and the statement fetches those rows to say so."""
+    client, _ = served
+    body = ConnectorStatsView.model_validate(stats(client, "u_wide", "connectors", "xero").json())
+
+    assert body.live_read_basis == "own"
+    assert [one.live_reads for one in body.periods] == [1, 1]
+    assert body.last_live_read is not None
+    assert abs(body.last_live_read - (NOW - timedelta(days=2))) < timedelta(seconds=1)
+    assert held.asked_reads
+    assert all(_bound(one, "principal") == "u_wide" for one in held.asked_reads)
 
 
 def test_a_connector_outside_the_readers_grant_is_the_404_an_unconnected_source_gets(
@@ -448,6 +575,7 @@ def test_a_connector_outside_the_readers_grant_is_the_404_an_unconnected_source_
     assert_same_refusal(hidden, missing)
     assert_same_refusal(stats(client, "u_none", "connectors", "xero"), missing)
     assert held.counted == []
+    assert held.asked_reads == []
     mine = ConnectorStatsView.model_validate(
         stats(client, "u_narrow", "connectors", "hubspot").json()
     )
@@ -535,10 +663,23 @@ def test_the_statements_bound_what_they_read_and_narrow_before_the_bound() -> No
     nothing = EntitlementSet(principal_id="u_none", grants=())
     assert "FALSE" in str(index_ids("xero", "invoice", nothing, NOW).compile())
 
+    reads_own = connector_live_reads("xero", NOW, basis=Basis.OWN, caller_id="u_narrow")
+    reads_all = connector_live_reads("xero", NOW, basis=Basis.EVERYONE, caller_id="u_narrow")
+    uses_own = skill_invocations("triage", [AGENT], NOW, basis=Basis.OWN, caller_id="u_narrow")
+    uses_all = skill_invocations("triage", [AGENT], NOW, basis=Basis.EVERYONE, caller_id="u")
+    assert "principal" in str(reads_own.whereclause)
+    assert "principal" not in str(reads_all.whereclause)
+    assert "principal_id" in str(uses_own.whereclause)
+    assert "principal_id" not in str(uses_all.whereclause)
+    assert "agent_id IN" in str(uses_all.whereclause)
+    assert reads_own.compile().params["param_1"] == MAX_ACTIVITY_ROWS
+    assert uses_own.compile().params["param_1"] == MAX_ACTIVITY_ROWS
+
 
 # ---------------------------------------------------------------------- the database
 DB_TABLES = (
     "obs.request_telemetry",
+    "agent.skill_invocation",
     "ops.connector_connection",
     "ops.connector_sync",
     "proj.record",
@@ -691,3 +832,78 @@ def test_the_channel_and_connector_statements_run_and_narrow_bindings_to_the_cal
     )
     assert own == [("u_narrow",)]
     assert sorted(everyone) == [("u_admin",), ("u_narrow",)]
+
+
+def test_the_live_read_statement_returns_this_sources_rows_and_the_readers_when_narrower(
+    database: str,
+) -> None:
+    """Run on PostgreSQL. Delete this and the live-read predicates, the source and the person, are
+    proved against a stub that reads them, and never against the server that has to apply them."""
+    from tests.fixtures.scratch_postgres import sql
+
+    for who, source, days in (
+        ("u_narrow", "hubspot", 1),
+        ("u_admin", "hubspot", 2),
+        ("u_narrow", "freshdesk", 1),
+        ("u_narrow", "hubspot", 40),
+    ):
+        sql(
+            database,
+            "INSERT INTO obs.request_telemetry (received_at, trace_id, traffic_class, principal, "
+            "entitlement_hash, lane, cache_hit, status, duration_ms, connector) VALUES "
+            "(%s, 't2', 'human_interactive', %s, %s, 'answer', false, 'answered', 10, %s)",
+            NOW - timedelta(days=days),
+            who,
+            "a" * 32,
+            source,
+        )
+    since = NOW - timedelta(days=30)
+
+    own = _rows(
+        database, connector_live_reads("hubspot", since, basis=Basis.OWN, caller_id="u_narrow")
+    )
+    everyone = _rows(
+        database,
+        connector_live_reads("hubspot", since, basis=Basis.EVERYONE, caller_id="u_narrow"),
+    )
+
+    assert [one[0] for one in own] == ["u_narrow"]
+    assert sorted(one[0] for one in everyone) == ["u_admin", "u_narrow"]
+
+
+def test_the_skill_run_statement_returns_visible_agents_rows_and_the_readers_when_narrower(
+    database: str,
+) -> None:
+    """Run on PostgreSQL. Delete this and the agent list and the person are proved against a stub,
+    and an `IN` the server reads differently, or an empty list it refuses, ships."""
+    from tests.fixtures.scratch_postgres import sql
+
+    for trace, agent, who, skill, days in (
+        ("s1", AGENT, "u_narrow", "triage", 1),
+        ("s2", AGENT, "u_admin", "triage", 2),
+        ("s3", HIDDEN_AGENT, "u_narrow", "triage", 1),
+        ("s4", AGENT, "u_narrow", "other", 1),
+        ("s5", AGENT, "u_narrow", "triage", 40),
+    ):
+        sql(
+            database,
+            "INSERT INTO agent.skill_invocation (trace_id, principal_id, agent_id, skill_name, "
+            "digest, used_at) VALUES (%s, %s, %s, %s, %s, %s)",
+            trace,
+            who,
+            agent,
+            skill,
+            "d" * 64,
+            NOW - timedelta(days=days),
+        )
+    since = NOW - timedelta(days=30)
+
+    def asked(agents: list[str], basis: Basis) -> list[tuple[Any, ...]]:
+        return _rows(
+            database, skill_invocations("triage", agents, since, basis=basis, caller_id="u_narrow")
+        )
+
+    assert [(one[0], one[1]) for one in asked([AGENT], Basis.OWN)] == [("u_narrow", AGENT)]
+    assert sorted(one[0] for one in asked([AGENT], Basis.EVERYONE)) == ["u_admin", "u_narrow"]
+    assert len(asked([AGENT, HIDDEN_AGENT], Basis.OWN)) == 2
+    assert asked([], Basis.EVERYONE) == []

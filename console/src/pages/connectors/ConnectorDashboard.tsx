@@ -3,9 +3,11 @@
  *
  * **The figures are the stats route's, and only what it sent** (`connectorStats.ts`): the worker's
  * health word, when it last read the source to the end, its attempts, failures and quota waits over
- * the chosen period, and how many ids of it this install keeps that the reader may read. While they
- * are on their way the strip says so; if the route fails the strip draws the API's sentence; a
- * figure the route did not send reads "Not recorded yet", never nought.
+ * the chosen period, how many ids of it this install keeps that the reader may read, and how many
+ * questions read it live and when last, labelled with whose questions they are. While they are on
+ * their way the strip says so; if the route fails the strip draws the API's sentence; a figure the
+ * route did not send reads "Not recorded yet", never nought, and no live read in the month reads
+ * as that.
  *
  * **Reading is the worker's own sentence.** What the last attempt came to, or why nothing reads the
  * source, is the `sync` sentence `GET /connectors` serves for the connection, drawn whole.
@@ -25,11 +27,18 @@ import { useResource } from "../../api/useResource";
 import { EmptyState, Fact, FactList, Note, SectionCard, StatCard, StatsStrip } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { cn } from "../../lib/utils";
-import { rangeWords } from "../agents/agentStats";
 import { when, type Connected } from "../connectorsQuery";
 import { ACT_LABELS } from "./connectorActions";
 import { dateWords, healthWords, type SourceDetail } from "./connectorSources";
-import { connectorPeriodOf, connectorStatsApiPath, FIRST_PERIOD, idsWords, readConnectorStats } from "./connectorStats";
+import { rangeWords, whenWords } from "../agents/agentStats";
+import {
+  connectorPeriodOf,
+  connectorStatsApiPath,
+  FIRST_PERIOD,
+  idsWords,
+  questionsWords,
+  readConnectorStats,
+} from "./connectorStats";
 
 export const FIGURES_LABEL = "This source's figures";
 export const PERIOD_LABEL = "Period the figures cover";
@@ -40,6 +49,9 @@ export const FAILURES_LABEL = "Failures";
 export const QUOTA_LABEL = "Quota waits";
 export const INDEX_LABEL = "Index size";
 export const INDEX_SUB = "ids kept, never values";
+export const LIVE_READS_LABEL = "Live reads";
+export const LAST_LIVE_READ_LABEL = "Last live read";
+export const NO_LIVE_READ = "None in 30 days";
 export const READING_HEADING = "Reading";
 export const NEXT_ATTEMPT = "Next attempt";
 export const NOT_CONNECTED_TITLE = "Not connected";
@@ -80,19 +92,24 @@ function Figures({ name }: { readonly name: string }) {
   const read = stats.data === null ? null : readConnectorStats(stats.data);
   const figures = connectorPeriodOf(read, period);
   const atLeast = read?.atLeast === true ? "at least" : undefined;
+  const whose = questionsWords(read?.liveReadBasis);
+  const readsSub = whose === undefined ? atLeast : atLeast === undefined ? whose : `${atLeast}, ${whose}`;
+  const lastLive = read?.lastLiveRead === null ? NO_LIVE_READ : whenWords(read?.lastLiveRead);
   return (
     <div className="flex min-w-0 flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="m-0 text-sm font-semibold text-ink">{FIGURES_LABEL}</h2>
         <PeriodSwitch period={period} onChange={setPeriod} />
       </div>
-      <StatsStrip label={FIGURES_LABEL} busy={stats.busy} failure={stats.failure} count={6}>
+      <StatsStrip label={FIGURES_LABEL} busy={stats.busy} failure={stats.failure} count={8}>
         <StatCard label={HEALTH_LABEL} value={read?.health === undefined ? undefined : healthWords(read.health)} />
         <StatCard label={LAST_READ_LABEL} value={dateWords(read?.lastReadToTheEnd)} />
         <StatCard label={ATTEMPTS_LABEL} value={count(figures?.attempts)} sub={atLeast} />
         <StatCard label={FAILURES_LABEL} value={count(figures?.failures)} sub={atLeast} />
         <StatCard label={QUOTA_LABEL} value={count(figures?.quotaWaits)} sub={atLeast} />
         <StatCard label={INDEX_LABEL} value={idsWords(read?.indexIds)} sub={INDEX_SUB} />
+        <StatCard label={LIVE_READS_LABEL} value={count(figures?.liveReads)} sub={readsSub} />
+        <StatCard label={LAST_LIVE_READ_LABEL} value={lastLive} sub={whose} />
       </StatsStrip>
     </div>
   );

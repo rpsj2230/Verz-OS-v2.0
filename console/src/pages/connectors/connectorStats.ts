@@ -5,12 +5,15 @@
  * stats package, PR #148). Its answer is `ConnectorStatsView`: the worker's newest health word,
  * when it last attempted the source and last read it to the end, the failures in a row, how many
  * ids of it this install keeps that the reader's own row scope admits (`index_ids`, never a value),
- * one set of attempt figures per period, and `unrecorded`, the figures nothing on the install
- * records, each with its reason.
+ * one set of attempt figures per period with the questions that read the source live
+ * (`live_reads`), whose questions those are (`live_read_basis`, `own` or `everyone`), the newest of
+ * them (`last_live_read`), and `unrecorded`, the figures nothing on the install records, each with
+ * its reason.
  *
  * **A figure nothing sent is "Not recorded yet", never nought.** `index_ids` is null when the
  * source's manifest cannot be built today, and a period's figure the route left out is absent here,
- * so the page draws the sentence. See `kit/KpiStrip.tsx`.
+ * so the page draws the sentence. See `kit/KpiStrip.tsx`. `last_live_read` sent as null is a
+ * different fact, no live read in the longest period, and is kept apart as `null`.
  *
  * **The index size is ids and nothing else.** It is a count of what this install keeps of a source
  * the reader may read, which is the minimal index the owner's rule allows, and never a count of
@@ -38,6 +41,8 @@ export interface ConnectorPeriod {
   readonly readToTheEnd?: number;
   readonly failures?: number;
   readonly quotaWaits?: number;
+  /** The questions that read the source live in this period, at `liveReadBasis`. */
+  readonly liveReads?: number;
 }
 
 export interface Unrecorded {
@@ -53,7 +58,11 @@ export interface ConnectorStats {
   readonly consecutiveFailures?: number;
   /** The ids this install keeps of the source that the reader's own scope admits. */
   readonly indexIds?: number;
-  /** The attempts were read to their bound, so the figures are at least these. */
+  /** Whose questions the live reads are: `own` or `everyone`. */
+  readonly liveReadBasis?: string;
+  /** The newest live read in the longest period; null when the route said there was none. */
+  readonly lastLiveRead?: string | null;
+  /** The attempts or the live reads were read to their bound, so the figures are at least these. */
   readonly atLeast: boolean;
   readonly periods: readonly ConnectorPeriod[];
   readonly unrecorded: readonly Unrecorded[];
@@ -96,12 +105,14 @@ function readPeriod(value: unknown): ConnectorPeriod | null {
   const readToTheEnd = counted(fields["read_to_the_end"]);
   const failures = counted(fields["failures"]);
   const quotaWaits = counted(fields["quota_waits"]);
+  const liveReads = counted(fields["live_reads"]);
   return {
     range,
     ...(attempts === undefined ? {} : { attempts }),
     ...(readToTheEnd === undefined ? {} : { readToTheEnd }),
     ...(failures === undefined ? {} : { failures }),
     ...(quotaWaits === undefined ? {} : { quotaWaits }),
+    ...(liveReads === undefined ? {} : { liveReads }),
   };
 }
 
@@ -133,12 +144,16 @@ export function readConnectorStats(payload: unknown): ConnectorStats | null {
   const lastReadToTheEnd = instant(fields["last_read_to_the_end"]);
   const consecutiveFailures = counted(fields["consecutive_failures"]);
   const indexIds = counted(fields["index_ids"]);
+  const liveReadBasis = said(fields["live_read_basis"]);
+  const lastLiveRead = fields["last_live_read"] === null ? null : instant(fields["last_live_read"]);
   return {
     ...(health === undefined ? {} : { health }),
     ...(lastAttempt === undefined ? {} : { lastAttempt }),
     ...(lastReadToTheEnd === undefined ? {} : { lastReadToTheEnd }),
     ...(consecutiveFailures === undefined ? {} : { consecutiveFailures }),
     ...(indexIds === undefined ? {} : { indexIds }),
+    ...(liveReadBasis === undefined ? {} : { liveReadBasis }),
+    ...(lastLiveRead === undefined ? {} : { lastLiveRead }),
     atLeast: fields["at_least"] === true,
     periods,
     unrecorded,
@@ -153,4 +168,9 @@ export function connectorPeriodOf(stats: ConnectorStats | null, range: string): 
 /** An index size as a page draws it: ids, grouped for reading. */
 export function idsWords(value: number | undefined): string | undefined {
   return value === undefined ? undefined : `${value.toLocaleString("en-GB")} ids`;
+}
+
+/** Whose questions the live reads are, in words: the route's two bases. */
+export function questionsWords(basis: string | undefined): string | undefined {
+  return basis === "own" ? "your questions" : basis === "everyone" ? "all questions" : undefined;
 }
