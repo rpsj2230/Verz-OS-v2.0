@@ -56,7 +56,10 @@ anything, and a test holds its fields to exactly three.
 Scope: domain logic. Nothing here renders, opens a connection or reads a clock; `now` is a
 parameter, as in every sibling in this package.
 
-Task ids: M27.7.29
+**One entry the design does not draw: Audit, under Govern.** See
+`A_HEAD_READS_THEIR_PEOPLES_ACTIVITY_FROM_THEIR_OWN_CONSOLE`.
+
+Task ids: M27.7.29, M1.8.3
 """
 
 from __future__ import annotations
@@ -74,6 +77,7 @@ from brain.core.entitlement import EntitlementSet
 from brain.core.scope import Op, Scope
 
 __all__ = [
+    "A_HEAD_READS_THEIR_PEOPLES_ACTIVITY_FROM_THEIR_OWN_CONSOLE",
     "DEPARTMENT_NAVIGATION",
     "WHICH_CONSOLE_IS_DECIDED_BY_THE_SCOPE_A_SCREEN_IS_HELD_IN",
     "ConsoleKind",
@@ -84,6 +88,15 @@ __all__ = [
     "departments_held",
     "held_across_the_install",
 ]
+
+#: Why the department console offers Audit, which SCREEN 2 does not draw.
+A_HEAD_READS_THEIR_PEOPLES_ACTIVITY_FROM_THEIR_OWN_CONSOLE: Final = (
+    "Needs Rupash item 48 was decided on 2026-09-09: a department head reads their department's "
+    "activity through audit grants over its people, which the staff sync writes. A head is given "
+    "the department console, and SCREEN 2 was drawn before that decision with no Audit item, so "
+    "the grants opened a screen no menu offered. The entry is Govern's last, as on the company "
+    "console, and is offered only to a reader the Activity screen's own read is permitted for."
+)
 
 #: Why the console a reader is given follows the scope of what they hold.
 WHICH_CONSOLE_IS_DECIDED_BY_THE_SCOPE_A_SCREEN_IS_HELD_IN: Final = (
@@ -163,6 +176,9 @@ DEPARTMENT_NAVIGATION: Final[tuple[Section, ...]] = (
             Entry(label="Knowledge", key="library", to="/library"),
             Entry(label="Skills", key="skills", to="/skills"),
             Entry(label="Learning", key="learning", to="/learning"),
+            # Not drawn in SCREEN 2, which predates item 48. See
+            # `A_HEAD_READS_THEIR_PEOPLES_ACTIVITY_FROM_THEIR_OWN_CONSOLE`.
+            Entry(label="Audit", key="audit", to="/audit"),
         ),
     ),
     Section(

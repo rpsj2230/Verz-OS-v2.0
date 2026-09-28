@@ -18,22 +18,25 @@ that matter most there are the two that go through a real `AuditView`, because t
 this answers is a page that is empty for every reader it exists for while every fixture that
 uses a company-wide grant passes over the top of it.
 
-Task ids: M1.6.12, M33.2.1.2
+Task ids: M1.6.12, M33.2.1.2, M1.8.3
 """
 
 from __future__ import annotations
 
 import ast
 import inspect
+import re
 from dataclasses import fields
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
-from brain.audit.ledger import SUBJECT_KINDS, AuditAction, AuditChain, AuditEntry
+from brain.audit.ledger import IDENTIFIER, SUBJECT_KINDS, AuditAction, AuditChain, AuditEntry
 from brain.audit.view import CAPABILITY_BY_KIND, AuditView
-from brain.core.entitlement import EntitlementSet, Grant
+from brain.console.reads import Plane, permitted, plane_capability
+from brain.console.screens import navigation, screen
+from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.scope import Clause, Op, Scope
 from brain.core.scope_sql import PredicateRefusedError, assert_conjunctive
 from brain.identity import staff_sync
@@ -54,6 +57,7 @@ from brain.identity.staff_sync import (
     AUDIT_CAPABILITIES_A_SYNC_MAY_WRITE,
     AUDIT_KIND_DECISIONS,
     AUDIT_PAGE_CAPABILITY,
+    AUDIT_PLANE_CAPABILITY,
     GRANT_LIFETIME,
     HEAD_AUDIT_SUBJECT_KINDS,
     ROSTER_PREFIX,
@@ -67,6 +71,7 @@ from brain.identity.staff_sync import (
     renewed,
 )
 from brain.identity.teams import PrincipalSubject
+from brain.tables.organisation import SYNC_ACTOR_PREFIX
 
 YESTERDAY = datetime(2026, 9, 6, 2, 0, tzinfo=UTC)
 NOW = datetime(2026, 9, 7, 2, 0, tzinfo=UTC)
@@ -586,7 +591,7 @@ def reach(
     complete: bool = True,
     asserts: frozenset[Asserts] | None = None,
     held: tuple[SubjectGrant, ...] = (),
-    department: str = "Maintenance",
+    department: str | tuple[str, ...] = "Maintenance",
     read_at: datetime = READ_AT,
 ) -> staff_sync.HeadAuditReach:
     source = Roster(
@@ -676,18 +681,134 @@ def test_a_head_reads_their_own_peoples_entries_and_nobody_elses() -> None:
     assert [row.actor_id for row in view.page().rows] == ["u_priya", "u_wei"]
 
 
-def test_a_heads_grants_carry_the_people_and_no_department_clause() -> None:
+#: The kinds that decide which entries a head reads, as opposed to the page and its plane.
+ROW_CAPABILITIES = frozenset(one.value for one in CAPABILITY_BY_KIND.values())
+
+
+def test_the_grants_that_decide_the_rows_carry_the_people_and_no_department_clause() -> None:
     """A permission that names the people it covers is what item 48 chose it for: it can be
-    read on a screen against the org chart. A department clause on the same row would be a
-    scope that reads as correct and admits nothing.
+    read on a screen against the org chart. A department clause on a row-deciding grant would
+    be a scope that reads as correct and admits nothing.
 
     Delete this and a later change can add a department clause beside the actor one, which by
     conjunction matches nothing at all, with the actor clause still sitting there looking
     right."""
-    for one in reach().to_insert:
+    kinds = [one for one in reach().to_insert if one.capability.value in ROW_CAPABILITIES]
+    assert len(kinds) == 3
+    for one in kinds:
         assert [clause.field for clause in one.scope.clauses] == ["actor_id"]
         assert [clause.op for clause in one.scope.clauses] == [Op.IN]
         assert [clause.value for clause in one.scope.clauses] == [("u_priya", "u_wei")]
+
+
+def test_the_page_and_its_plane_name_the_people_and_the_department_together() -> None:
+    """The two grants that open the screen confer no entry, so a department clause on them
+    admits nothing it should not; it is what puts them inside a plane an administrator gave
+    the head over their department. Delete this and the page can be written over the people
+    alone, which `permitted` refuses to a head whose plane names their department."""
+    screens = [one for one in reach().to_insert if one.capability.value not in ROW_CAPABILITIES]
+    assert sorted(one.capability.value for one in screens) == sorted(
+        [AUDIT_PAGE_CAPABILITY.value, AUDIT_PLANE_CAPABILITY.value]
+    )
+    for one in screens:
+        assert [(c.field, c.op, c.value) for c in one.scope.clauses] == [
+            ("actor_id", Op.IN, ("u_priya", "u_wei")),
+            ("department", Op.EQ, "maintenance"),
+        ]
+
+
+def test_the_plane_written_is_the_one_the_activity_screen_is_shown_on() -> None:
+    """Spelled in the identity package, which may not import the console, so held here to the
+    registry that decides it. Delete this and the plane can name a plane the screen is not on,
+    and every head's Activity screen is refused while the grant reads as correct."""
+    assert plane_capability(screen("audit").read.plane) == AUDIT_PLANE_CAPABILITY
+    assert screen("audit").read.requires == AUDIT_PAGE_CAPABILITY
+    assert AUDIT_PLANE_CAPABILITY.value in AUDIT_CAPABILITIES_A_SYNC_MAY_WRITE
+
+
+def a_plane(scope: Scope) -> Grant:
+    return Grant(capability=plane_capability(Plane.CONFIGURATION), scope=scope)
+
+
+def test_a_head_opens_the_activity_screen_with_or_without_a_plane_over_their_department() -> None:
+    """**The screen's own gate, asked the way `GET /audit` asks it.** A head holding nothing
+    else opens it through the plane the sync writes; a head an administrator gave the
+    configuration plane over their department opens it through that one, which the sync then
+    does not write. The page held over the people alone, which is what the sync wrote until
+    this, is refused both ways.
+
+    Delete this and the grants can read correctly and open no screen, which is where every head
+    stood: `permitted` refused them before the ledger was looked at."""
+    written = reach().to_insert
+    alone = EntitlementSet(principal_id="u_head", grants=tuple(one.as_grant() for one in written))
+    assert permitted(screen("audit").read, alone, READ_AT)
+
+    admins = EntitlementSet(
+        principal_id="u_head",
+        grants=(
+            *(one.as_grant() for one in written if one.capability != AUDIT_PLANE_CAPABILITY),
+            a_plane(Scope.department("maintenance")),
+        ),
+    )
+    assert permitted(screen("audit").read, admins, READ_AT)
+
+    people = Scope(clauses=(Clause(field="actor_id", op=Op.IN, value=("u_priya", "u_wei")),))
+    before = EntitlementSet(
+        principal_id="u_head",
+        grants=(
+            Grant(capability=AUDIT_PAGE_CAPABILITY, scope=people),
+            a_plane(Scope.department("maintenance")),
+        ),
+    )
+    assert not permitted(screen("audit").read, before, READ_AT)
+
+
+def test_the_plane_the_sync_writes_opens_no_screen_but_the_activity_one() -> None:
+    """The plane names the people and the department together, and a screen opens only when its
+    own capability is held inside that, which nothing but the page is. Delete this and the
+    plane can be widened to the department, and a head holding People and grants' read over
+    their department is handed that screen by a sync that was only asked for the audit trail."""
+    written = tuple(one.as_grant() for one in reach().to_insert)
+    grants = (
+        *written,
+        Grant(capability=Capability(value="read:grant"), scope=Scope.department("maintenance")),
+    )
+    head = EntitlementSet(principal_id="u_head", grants=grants)
+
+    assert [one.key for one in navigation(head, READ_AT)] == ["audit"]
+
+
+def test_the_grantor_is_an_actor_the_ledger_accepts() -> None:
+    """The grant trigger records `granted_by` as the entry's actor, and the ledger refuses an
+    actor outside `IDENTIFIER`. With a colon in it every grant this sync wrote was refused and
+    the rewrite rolled back on every install. Delete this and the prefix can go back to a colon
+    with every test over fakes green."""
+    assert ROSTER_PREFIX == SYNC_ACTOR_PREFIX
+    for source in DEFAULT_TRUST:
+        grantor = f"{ROSTER_PREFIX}{source}"
+        assert re.match(IDENTIFIER, grantor), grantor
+        AuditChain().append(
+            at=READ_AT,
+            actor_id=grantor,
+            action=AuditAction.GRANT,
+            subject="grant:g1",
+            ent_hash=ENT,
+            trace_id="t1",
+            details={"capability": "read:audit"},
+        )
+
+
+def test_a_head_of_two_departments_reads_the_people_of_both_in_one_reach() -> None:
+    """One reach over both, and a second run over it changes nothing. Delete this and a head of
+    two departments is written one department's people and then the other's every night, reads
+    whichever came last, and fills the ledger with a revocation and a grant per department."""
+    both = reach(department=("Maintenance", "Web"))
+    assert both.members == ("u_priya", "u_sam", "u_wei")
+    page = next(one for one in both.to_insert if one.capability == AUDIT_PAGE_CAPABILITY)
+    assert ("department", Op.IN, ("maintenance", "web")) in [
+        (c.field, c.op, c.value) for c in page.scope.clauses
+    ]
+    assert reach(department=("Maintenance", "Web"), held=both.to_insert).changes_nothing
 
 
 def test_every_one_of_the_eleven_audit_subject_kinds_has_been_decided_about() -> None:
@@ -764,6 +885,7 @@ def test_the_page_capability_and_the_kind_capabilities_are_written_together() ->
 
     assert held == {
         AUDIT_PAGE_CAPABILITY.value,
+        AUDIT_PLANE_CAPABILITY.value,
         "read:audit.agent",
         "read:audit.leash",
         "read:audit.principal",
@@ -782,7 +904,7 @@ def test_a_transfer_rewrites_the_reach_to_name_the_membership_that_is_left() -> 
     Delete this and a sync that only ever inserts passes, and a head goes on reading somebody
     who transferred out of their department for as long as the old grant sits there."""
     before = reach().to_insert
-    assert len(before) == 4
+    assert len(before) == 5
 
     after = reach(
         person("priya@example.com", department="Maintenance"),
@@ -793,9 +915,12 @@ def test_a_transfer_rewrites_the_reach_to_name_the_membership_that_is_left() -> 
     assert {one.capability.value for one in after.to_delete} == {
         one.capability.value for one in before
     }
-    assert [clause.value for one in after.to_insert for clause in one.scope.clauses] == [
-        ("u_priya",)
-    ] * 4
+    assert [
+        clause.value
+        for one in after.to_insert
+        for clause in one.scope.clauses
+        if clause.field == "actor_id"
+    ] == [("u_priya",)] * 5
     assert after.unchanged == ()
     assert not after.changes_nothing
     assert after.safe_to_apply
@@ -822,7 +947,7 @@ def test_a_run_over_an_unchanged_department_proposes_nothing_and_keeps_the_rows(
     assert again.changes_nothing
     assert again.to_insert == ()
     assert again.to_delete == ()
-    assert len(again.unchanged) == 4
+    assert len(again.unchanged) == 5
 
 
 def test_a_kind_taken_out_of_the_decision_list_is_deleted_from_whoever_holds_it() -> None:

@@ -75,7 +75,7 @@ id of every artefact they published and every break-glass session they opened. T
 per-kind capabilities exist is that those are different questions, and a wildcard is the
 answer somebody writes when nobody has decided.
 
-Task ids: M1.6.12, M33.2.1.2
+Task ids: M1.6.12, M33.2.1.2, M1.8.3
 """
 
 from __future__ import annotations
@@ -88,6 +88,7 @@ from typing import Final
 
 from brain.audit.ledger import SUBJECT_KINDS
 from brain.audit.view import AUDIT_NOUN, CAPABILITY_BY_KIND
+from brain.core.department import DEPARTMENT_FIELD
 from brain.core.entitlement import Capability
 from brain.core.scope import Clause, Op, Scope
 from brain.identity.directory import DirectoryAssertion, reconcile
@@ -676,22 +677,42 @@ THE_PAGE_AND_THE_ROWS_ARE_TWO_GRANTS: Final = (
     "The Activity screen requires read:audit and brain.audit.view asks read:audit.<kind> per "
     "entry. Neither capability covers the other, so a head holding only the kinds has rows "
     "and no menu entry, and a head holding only read:audit has a page showing them their own "
-    "entries and nothing else, which is correct and reads as broken. Both are written, with "
-    "one scope, so the two halves cannot be granted apart by this sync."
+    "entries and nothing else, which is correct and reads as broken. Both are written in one "
+    "run, so the two halves cannot be granted apart by this sync."
 )
 
 #: The page capability, built from the audit view's own noun rather than spelled here.
 AUDIT_PAGE_CAPABILITY: Final = Capability(value=f"read:{AUDIT_NOUN}")
 
-#: Every audit capability this sync could ever have written, for any decision about any kind.
+#: The console plane the Activity screen is shown on. Spelled here because the identity package
+#: must not import the console; `test_staff_sync.py` holds it to
+#: `plane_capability(screen("audit").read.plane)`, which is where it is decided.
+AUDIT_PLANE_CAPABILITY: Final = Capability(value="read:console.configuration")
+
+#: Why the sync writes the console plane beside the page, and why those two name the department.
+A_HEAD_OPENS_THE_PAGE_INSIDE_A_PLANE_THEY_ALREADY_HOLD_OR_THE_ONE_WRITTEN_FOR_IT: Final = (
+    "brain.console.reads.permitted opens a screen only when a console plane admitting it is held "
+    "over a scope containing the scope its own capability is held in. A head holding read:audit "
+    "over their people and no plane was refused by GET /audit, and so was a head holding the "
+    "configuration plane over their department, because a department does not contain a set of "
+    "people. So the page and a plane are written over the people and the department together. "
+    "That scope sits inside a plane an administrator gave the head over their department, and "
+    "inside the plane this sync writes when the head holds none, which names it exactly and so "
+    "opens no other screen. The kinds that decide the rows name the people alone, because a "
+    "department clause admits no audit entry."
+)
+
+#: Every capability this sync could ever have written, for any decision about any kind.
 #:
 #: Wider than what it writes today, on purpose. `to_delete` is computed against this set, so
 #: the day a kind is taken out of `AUDIT_KIND_DECISIONS` the grant that kind produced is
 #: deleted on the next run. Computed against only the current set, the removal would change
 #: what new heads receive and leave every existing head holding it for ever, which is the
-#: shape of a policy change that applies to nobody it was written about.
+#: shape of a policy change that applies to nobody it was written about. The plane is in it so
+#: a plane somebody else gave the head is loaded, and never written over.
 AUDIT_CAPABILITIES_A_SYNC_MAY_WRITE: Final[frozenset[str]] = frozenset(
-    {AUDIT_PAGE_CAPABILITY.value} | {cap.value for cap in CAPABILITY_BY_KIND.values()}
+    {AUDIT_PAGE_CAPABILITY.value, AUDIT_PLANE_CAPABILITY.value}
+    | {cap.value for cap in CAPABILITY_BY_KIND.values()}
 )
 
 #: The field an audit grant's scope is written against. See
@@ -706,9 +727,19 @@ AUDIT_CAPABILITIES_A_SYNC_MAY_WRITE: Final[frozenset[str]] = frozenset(
 ACTOR_FIELD: Final = "actor_id"
 
 #: What `granted_by` says on a grant this sync wrote. The source is appended, so a reviewer
-#: reading the grant table sees which roster asserted it. The same shape, and for the same
-#: reason, as `brain.identity.directory.ISSUER_PREFIX`.
-ROSTER_PREFIX: Final = "roster:"
+#: reading the grant table sees which roster asserted it. A literal equal to
+#: `brain.tables.organisation.SYNC_ACTOR_PREFIX`, which this module cannot import without a
+#: cycle; `test_staff_sync.py` holds the two equal. See `A_SYNCS_GRANTOR_IS_THE_LEDGERS_ACTOR`.
+ROSTER_PREFIX: Final = "roster."
+
+#: Why the grantor is spelled with a full stop and never a colon.
+A_SYNCS_GRANTOR_IS_THE_LEDGERS_ACTOR: Final = (
+    "The grant trigger records granted_by as the actor of the entry it appends when no person "
+    "is attributed, and obs.audit_entry refuses an actor outside brain.audit.ledger.IDENTIFIER, "
+    "which has no colon. Spelled roster:<source>, every grant this sync wrote was refused by the "
+    "ledger and the whole rewrite rolled back, on every install, with one warning in the "
+    "worker's log as the only trace. So it is the organisation sync's own prefix."
+)
 
 #: `SubjectGrant.granted_by` is `Field(max_length=128)`.
 GRANTED_BY_CHARS: Final = 128
@@ -825,7 +856,7 @@ class HeadAuditReach:
 def audit_reach_for_head(
     roster: Roster,
     *,
-    department: str,
+    department: str | tuple[str, ...],
     head_id: str,
     known: Mapping[str, str],
     read_at: datetime,
@@ -837,11 +868,17 @@ def audit_reach_for_head(
     which is the same argument `dry_run` and `assertions_from` take and is passed through
     rather than rebuilt. `held` is every capability grant the caller loaded for this head.
 
-    **Four grants, one scope.** `AUDIT_PAGE_CAPABILITY` and one per kind in
-    `HEAD_AUDIT_SUBJECT_KINDS`, each scoped to `actor_id IN (the members)`. See
-    `THE_PAGE_AND_THE_ROWS_ARE_TWO_GRANTS` for why the first is there and
-    `A_HEAD_READS_THE_GOVERNANCE_OF_THEIR_PEOPLE_AND_NOT_THEIR_WORK` for why the other three
-    are the three.
+    **Five grants.** One per kind in `HEAD_AUDIT_SUBJECT_KINDS`, scoped to
+    `actor_id IN (the members)`, which decide the rows; and `AUDIT_PAGE_CAPABILITY` and
+    `AUDIT_PLANE_CAPABILITY`, scoped to the members and the department, which open the screen.
+    See `THE_PAGE_AND_THE_ROWS_ARE_TWO_GRANTS`,
+    `A_HEAD_OPENS_THE_PAGE_INSIDE_A_PLANE_THEY_ALREADY_HOLD_OR_THE_ONE_WRITTEN_FOR_IT` and
+    `A_HEAD_READS_THE_GOVERNANCE_OF_THEIR_PEOPLE_AND_NOT_THEIR_WORK`.
+
+    **A head of several departments is one reach over all of them.** `department` is a tuple
+    then. Computed one department at a time, each run would write one department's people and
+    the next department's run would retire them, so the head read whichever came last and the
+    ledger took a revocation and a grant per department every night.
 
     **A person the source says has left is not in the list.** Item 48's own wording is that
     the grant is rewritten when somebody joins or leaves, and the alternative keeps a head
@@ -863,9 +900,11 @@ def audit_reach_for_head(
     at all, because the source cannot answer the question; a half-answered roster yields the
     members it did name, because that list is the diagnostic an operator needs.
     """
-    if not department.strip():
+    departments = (department,) if isinstance(department, str) else department
+    if not departments or not all(one.strip() for one in departments):
         msg = "an audit reach needs a department; over none it is the company's ledger"
         raise ValueError(msg)
+    label = ", ".join(departments)
     if not head_id.strip():
         msg = "an audit reach needs the head it is for; a blank id names nobody"
         raise ValueError(msg)
@@ -879,7 +918,7 @@ def audit_reach_for_head(
         )
         members: tuple[str, ...] = ()
     else:
-        members = _members_of(roster, department=department, known=known)
+        members = _members_of(roster, departments=departments, known=known)
 
     if not roster.may_remove():
         refusals.append(
@@ -901,7 +940,7 @@ def audit_reach_for_head(
         # refused is a plan somebody can apply, and the refusal would then be a note beside
         # the rows rather than a refusal.
         return HeadAuditReach(
-            department=department,
+            department=label,
             head_id=head_id,
             members=members,
             to_insert=(),
@@ -914,7 +953,7 @@ def audit_reach_for_head(
     wanted = _audit_grants(
         roster,
         subject=subject,
-        department=department,
+        departments=departments,
         members=members,
         read_at=read_at,
     )
@@ -922,7 +961,7 @@ def audit_reach_for_head(
     held_by_key = {_confers(row): row for row in mine}
 
     return HeadAuditReach(
-        department=department,
+        department=label,
         head_id=head_id,
         members=members,
         to_insert=tuple(
@@ -964,8 +1003,10 @@ def renewed(grant: SubjectGrant, *, read_at: datetime) -> SubjectGrant:
     )
 
 
-def _members_of(roster: Roster, *, department: str, known: Mapping[str, str]) -> tuple[str, ...]:
-    """The principals this roster places in this department, sorted and deduplicated.
+def _members_of(
+    roster: Roster, *, departments: tuple[str, ...], known: Mapping[str, str]
+) -> tuple[str, ...]:
+    """The principals this roster places in these departments, sorted and deduplicated.
 
     Casefolded on both sides, because `known` is keyed on a casefolded address and a
     department read out of a directory is whatever somebody typed into it.
@@ -974,12 +1015,12 @@ def _members_of(roster: Roster, *, department: str, known: Mapping[str, str]) ->
     a gap being swallowed: `dry_run.would_add` is where an unknown person is reported, and
     naming them here as well would be two answers to who is missing.
     """
-    wanted = department.casefold()
+    wanted = {one.casefold() for one in departments}
     found = {
         known[one.work_address.casefold()]
         for one in roster.people
         if one.active
-        and one.department.casefold() == wanted
+        and one.department.casefold() in wanted
         and one.work_address.casefold() in known
     }
     return tuple(sorted(found))
@@ -989,7 +1030,7 @@ def _audit_grants(
     roster: Roster,
     *,
     subject: PrincipalSubject,
-    department: str,
+    departments: tuple[str, ...],
     members: tuple[str, ...],
     read_at: datetime,
 ) -> tuple[SubjectGrant, ...]:
@@ -1016,22 +1057,33 @@ def _audit_grants(
         )
         raise StaffSourceError(msg)
 
-    scope = Scope(clauses=(Clause(field=ACTOR_FIELD, op=Op.IN, value=members),))
-    capabilities = (
-        AUDIT_PAGE_CAPABILITY,
-        *(CAPABILITY_BY_KIND[kind] for kind in HEAD_AUDIT_SUBJECT_KINDS),
+    people = Clause(field=ACTOR_FIELD, op=Op.IN, value=members)
+    slugs = tuple(sorted({one.strip().casefold() for one in departments}))
+    where = (
+        Clause(field=DEPARTMENT_FIELD, op=Op.EQ, value=slugs[0])
+        if len(slugs) == 1
+        else Clause(field=DEPARTMENT_FIELD, op=Op.IN, value=slugs)
     )
+    rows = Scope(clauses=(people,))
+    # See A_HEAD_OPENS_THE_PAGE_INSIDE_A_PLANE_THEY_ALREADY_HOLD_OR_THE_ONE_WRITTEN_FOR_IT.
+    screen = Scope(clauses=(people, where))
+    scoped = (
+        (AUDIT_PAGE_CAPABILITY, screen),
+        (AUDIT_PLANE_CAPABILITY, screen),
+        *((CAPABILITY_BY_KIND[kind], rows) for kind in HEAD_AUDIT_SUBJECT_KINDS),
+    )
+    reason = f"heads {', '.join(departments)}, whose people this roster names"
     return tuple(
         SubjectGrant(
             subject=subject,
             capability=capability,
             scope=scope,
             granted_by=granted_by,
-            reason=f"heads {department}, whose people this roster names",
+            reason=reason,
             granted_at=read_at,
             not_after=read_at + GRANT_LIFETIME,
         )
-        for capability in capabilities
+        for capability, scope in scoped
     )
 
 
