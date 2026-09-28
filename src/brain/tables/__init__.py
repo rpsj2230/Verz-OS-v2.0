@@ -86,6 +86,7 @@ from brain.tables.gate import (
     TeamRow,
 )
 from brain.tables.group_role_rule import GroupRoleRuleRow
+from brain.tables.halt import HaltRow
 from brain.tables.identity import (
     DirectoryRoleGrantRow,
     PrincipalIdentityRow,
@@ -366,6 +367,8 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     "know.solution",
     # 0133_acceptance_result. Points at nothing: the commit and the check are values.
     "ops.acceptance_result",
+    # 0136_ops_halt. Points at nothing: a halt names its target by value, and outlives it.
+    "ops.halt",
 )
 
 __all__ = [
@@ -419,6 +422,7 @@ __all__ = [
     "GoldenQuestionRow",
     "GrantsVersionRow",
     "GroupRoleRuleRow",
+    "HaltRow",
     "KnowledgeItemRow",
     "LearningRow",
     "LegalHoldRow",

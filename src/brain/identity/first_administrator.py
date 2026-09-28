@@ -352,6 +352,7 @@ OVERSIGHT: Final[tuple[str, ...]] = (
     "read:audit.department",
     "read:audit.erasure",
     "read:audit.grant",
+    "read:audit.halt",
     "read:audit.leash",
     "read:audit.legal_hold",
     "read:audit.principal",

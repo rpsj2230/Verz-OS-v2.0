@@ -132,6 +132,8 @@ SUBJECT_KINDS = frozenset(
         "scope",
         # A suspected personal-data breach, since 2026-09-21. See BREACH below.
         "breach",
+        # A halt or a resume, since 2026-09-28. See HALT below.
+        "halt",
     }
 )
 
@@ -606,6 +608,14 @@ class AuditAction(enum.StrEnum):
     #: carries: who answers for an agent is neither, and "who took over the agent that did this"
     #: is the question asked after it did something nobody expected (M1.8.9).
     AGENT_OWNER = "agent_owner"
+    #: Somebody stopped the install, or one department, agent, connector or person in it, or
+    #: resumed one. Which act and which scope are in the details, and never the target, which may
+    #: be a person's id, nor the reason, which is prose. Written by `0136`'s trigger on `ops.halt`,
+    #: one entry per row, so a stop pressed at three in the morning and the resume after it are
+    #: both on the record with who did each. Four characters. Not `setting`, which is a value an
+    #: administrator tunes: a halt is the one act here that is unilateral and refuses everything,
+    #: and "who stopped it and who started it again" is asked of it alone.
+    HALT = "halt"
 
 
 # --------------------------------------------------------------------- redaction
