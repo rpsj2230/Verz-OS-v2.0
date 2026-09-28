@@ -1,11 +1,10 @@
 /**
- * The Knowledge, Learning and Memory screens: what each draws, what each refuses to draw, and
- * what each says instead.
+ * The Learning and Memory screens: what each draws, what each refuses to draw, and what each says
+ * instead. The Knowledge screen was rebuilt on the page kit and is `tests/knowledge-page.test.tsx`'s.
  *
- * All three stand on a store that is empty on every install today, so the failures worth testing
- * are the ones that look like the design working. A Verified column blank on every row looks like
- * SCREEN 7 and says nobody verified anything; a figure of zero learnt looks like SCREEN 8 and says
- * the system learnt nothing; an Undo button looks like the design and is refused every time it is
+ * Both stand on a store that is empty on most installs today, so the failures worth testing are the
+ * ones that look like the design working. A figure of zero learnt looks like SCREEN 8 and says the
+ * system learnt nothing; an Undo button looks like the design and is refused every time it is
  * pressed. Each of those is asserted against over the rendered page.
  *
  * **What the API sends is compared with the Python models, not with this file's copy of them.**
@@ -17,29 +16,12 @@
  * route table and the navigation are wired by a separate change. The phone cases for these three
  * pages are written up for `tests/phone-width.test.tsx` beside that wiring.
  *
- * Task ids: M27.7.20, M27.7.21, M27.7.22
+ * Task ids: M27.7.21, M27.7.22
  */
 
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
-import { LIST_PAGE_SIZE } from "../src/components/listing";
-import {
-  CONTROLS_NOT_OFFERED,
-  GROUPING_WITHHELD,
-  Knowledge,
-  MORE_ITEMS,
-  NARROWS_THIS_PAGE,
-  NOT_MEASURED,
-  NO_ITEMS,
-  NO_MATCH,
-  ONLY_EXISTENCE_AND_REACH,
-} from "../src/pages/Knowledge";
-import {
-  KNOWLEDGE_API_PATH,
-  readKnowledgePage,
-  type LibraryRow,
-} from "../src/pages/knowledgeQuery";
 import {
   DECIDE_NOT_OFFERED,
   FIGURES_ARE_OF_WHAT_YOU_CAN_SEE,
@@ -86,24 +68,6 @@ const API = "/api/v1";
 /** A value that appears nowhere else, so a dropped one cannot be covered by another. */
 function sentinel(name: string): string {
   return `${name.toUpperCase()}-SENTINEL`;
-}
-
-function libraryBody(over: Record<string, unknown> = {}): Record<string, unknown> {
-  return {
-    items: [
-      { item_id: "doc-web-sentinel", level: "department", kind: "sop" },
-      { item_id: "doc-company-sentinel", level: "company" },
-      { item_id: "doc-mine-sentinel", level: "personal" },
-    ],
-    next_cursor: null,
-    total: null,
-    truncated: false,
-    departments: ["sales", "web"],
-    staleness: null,
-    only_existence_and_reach_are_shown: true,
-    freshness_and_use_are_not_measured: true,
-    ...over,
-  };
 }
 
 function learningBody(over: Record<string, unknown> = {}): Record<string, unknown> {
@@ -204,7 +168,6 @@ async function mount(address: string, idp: FakeIdp): Promise<HTMLElement> {
   const { container } = render(
     <MemoryRouter initialEntries={[address]}>
       <Routes>
-        <Route path="/library" element={<Knowledge />} />
         <Route path="/learning" element={<Learning />} />
         <Route path="/memory" element={<Memory />} />
         <Route path="/memory/:subject" element={<Memory />} />
@@ -254,135 +217,6 @@ function confirmPanel(container: HTMLElement): HTMLElement {
   }
   return found as HTMLElement;
 }
-
-// --- Knowledge -----------------------------------------------------------------------------------
-
-describe("the Knowledge screen", () => {
-  test("every field the API sends about the library is read", () => {
-    // What breaks if this is deleted: a field added to the page model arrives and is dropped by
-    // `readKnowledgePage`, which on this screen is a sentence about what the library cannot say
-    // that nobody sees. The names come out of the Python source.
-    const read = [
-      "truncated",
-      "departments",
-      "staleness",
-      "only_existence_and_reach_are_shown",
-      "freshness_and_use_are_not_measured",
-    ];
-
-    expect(backendModelFields(ROUTES, "LibraryPage").sort()).toEqual([...read].sort());
-    expect(backendModelFields(ROUTES, "LibraryRowView").sort()).toEqual(["item_id", "kind", "level"]);
-  });
-
-  test("the page asks for no more items than the route admits", () => {
-    // What breaks if this is deleted: every load of this screen becomes a 422, which reaches a
-    // person as the least useful sentence this console has. Read off the route's own parameter.
-    const limit = declaredParameterSchema(`${API}${KNOWLEDGE_API_PATH}`, "get", "limit");
-
-    expect(LIST_PAGE_SIZE).toBeLessThanOrEqual(limit["maximum"] as number);
-    expect(LIST_PAGE_SIZE).toBeGreaterThanOrEqual(limit["minimum"] as number);
-  });
-
-  test("draws every item with its level, and says in words which of the design's columns are absent", async () => {
-    // What breaks if this is deleted: the table can lose a row or a level, or grow Dept, Owner and
-    // Verified columns drawn blank, which read as a library nobody owns and nobody has verified.
-    const container = await mount("/library", answering(KNOWLEDGE_API_PATH, libraryBody()));
-
-    expect(headers(container)).toEqual(["Item", "Type", "Visible to"]);
-    for (const id of ["doc-web-sentinel", "doc-company-sentinel", "doc-mine-sentinel"]) {
-      expect(text(container)).toContain(id);
-    }
-    expect(text(container)).toContain(ONLY_EXISTENCE_AND_REACH);
-    expect(text(container)).toContain(NOT_MEASURED);
-    expect(text(container)).toContain(CONTROLS_NOT_OFFERED);
-    expect(text(container)).toContain(NARROWS_THIS_PAGE);
-  });
-
-  test("offers no Upload or Export control, and no button of any kind", async () => {
-    // What breaks if this is deleted: a control the design draws is added with nothing behind it,
-    // and a person pressing Upload is refused for a reason that reads as their own permissions.
-    const container = await mount("/library", answering(KNOWLEDGE_API_PATH, libraryBody()));
-
-    expect(container.querySelectorAll("button")).toHaveLength(0);
-  });
-
-  test("the counts are of the rows shown: three items, one of them company-wide, across two departments", async () => {
-    // What breaks if this is deleted: a figure computed from something other than the rows on the
-    // page, and the one available to compute it from is a total, which is the subtraction.
-    const container = await mount("/library", answering(KNOWLEDGE_API_PATH, libraryBody()));
-    const glance = container.querySelector('[aria-label="Knowledge at a glance"]');
-
-    expect(glance?.textContent).toContain("3items listed below, from 2 departments you can see");
-    expect(glance?.textContent).toContain("1listed below and visible to everyone");
-    expect(glance?.textContent ?? "").not.toMatch(/\bof\b/);
-  });
-
-  test("a withheld grouping is a sentence and a permitted one lists the departments", async () => {
-    // What breaks if this is deleted: null drawn as an empty list, which says the company has no
-    // departments with documents, or a short list drawn under a heading meaning all of them.
-    const withheld = await mount(
-      "/library",
-      answering(KNOWLEDGE_API_PATH, libraryBody({ departments: null })),
-    );
-    expect(text(withheld)).toContain(GROUPING_WITHHELD);
-    expect(text(withheld)).not.toContain("from 2 departments");
-
-    const listed = await mount("/library", answering(KNOWLEDGE_API_PATH, libraryBody()));
-    const names = [...listed.querySelectorAll('[aria-label="Departments with items you may know exist"] li')];
-    expect(names.map((one) => one.textContent)).toEqual(["sales", "web"]);
-  });
-
-  test("an empty library, a page with no match and a full page are three different sentences", async () => {
-    // What breaks if this is deleted: an empty library and a search matching nothing collapse into
-    // one sentence, and a full page stops saying that the search narrows only what it holds.
-    const empty = await mount("/library", answering(KNOWLEDGE_API_PATH, libraryBody({ items: [] })));
-    expect(text(empty)).toContain(NO_ITEMS);
-
-    // The stand-in answers a search with nothing, as the route would for a reference nobody holds.
-    const full = await mount(
-      "/library",
-      fakeIdentityProvider({
-        api(url) {
-          const asked = new URL(url, "https://console.test");
-          if (!asked.pathname.endsWith(`${API}${KNOWLEDGE_API_PATH}`)) {
-            return null;
-          }
-          const body = asked.searchParams.has("q") ? libraryBody({ items: [], truncated: true }) : libraryBody({ truncated: true });
-          return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
-        },
-      }),
-    );
-    expect(text(full)).toContain(MORE_ITEMS);
-    const search = full.querySelector('input[type="search"]') as HTMLInputElement;
-    fireEvent.change(search, { target: { value: "nothing-matches-this" } });
-    await waitFor(() => {
-      expect(text(full)).toContain(NO_MATCH);
-    });
-  });
-
-  test("a refusal is the API's own sentence and nothing else", async () => {
-    // What breaks if this is deleted: a 404 explained as a permission problem, which tells a caller
-    // the screen exists and they are not allowed it.
-    const container = await mount(
-      "/library",
-      answering(KNOWLEDGE_API_PATH, { message: sentinel("refusal"), trace_id: "t-1" }, 404),
-    );
-
-    expect(text(container)).toContain(sentinel("refusal"));
-    expect(container.querySelector("table")).toBeNull();
-  });
-
-  test("an unreadable body keeps both sentences about what the library cannot say", () => {
-    // What breaks if this is deleted: a response in an unexpected shape drops the sentences exactly
-    // when the console understands least, and the page draws an empty library with no explanation.
-    const page = readKnowledgePage("not a page");
-
-    expect(page.items).toEqual([]);
-    expect(page.onlyExistenceAndReachAreShown).toBe(true);
-    expect(page.freshnessAndUseAreNotMeasured).toBe(true);
-    expect(page.departments).toBeNull();
-  });
-});
 
 // --- Learning ------------------------------------------------------------------------------------
 

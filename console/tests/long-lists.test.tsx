@@ -122,11 +122,6 @@ const A_SKILL_IS_DECIDED_FROM_ITS_OWN_BYTES =
   "writes on this screen are a review, which approves exactly the bytes of one package after " +
   "reading its body, and an assignment of one approved skill to one agent.";
 
-const A_CONNECTION_CHANGES_ONE_SOURCE_AT_A_TIME =
-  "There is at most one live connection per source, and every act on one (connect, edit, replace the " +
-  "key, disconnect) is confirmed in the API's words for that source, because each agrees to what one " +
-  "source may read. docs/admin-console-architecture.md marks bulk as not applicable to connectors.";
-
 /** What each long list does not offer, and why. Everything it does offer is read off the page. */
 /**
  * The two lists read through a tool a model also calls, whose request has no position to page by:
@@ -179,8 +174,8 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
     bulk: READ_ONLY,
   },
   "/logs": { bulk: A_LOG_ROW_IS_READ_AND_NEVER_WRITTEN },
-  "/agents": { bulk: READ_ONLY },
-  "/connectors": { bulk: A_CONNECTION_CHANGES_ONE_SOURCE_AT_A_TIME },
+  "/agents": {},
+  "/connectors": {},
   "/agent-templates": { bulk: READ_ONLY },
   "/approvals": { bulk: AN_APPROVAL_IS_DECIDED_FROM_ITS_OWN_CARD },
   "/adoption": { bulk: READ_ONLY },
@@ -189,7 +184,7 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
   "/scopes": { bulk: READ_ONLY },
   "/skills": { bulk: A_SKILL_IS_DECIDED_FROM_ITS_OWN_BYTES },
   "/skills/:name": { bulk: A_SKILL_IS_DECIDED_FROM_ITS_OWN_BYTES },
-  "/library": { bulk: READ_ONLY },
+  "/library": {},
   "/sessions": {},
   "/sign-in-links": { bulk: AN_UNLINK_LOCKS_A_PERSON_OUT },
   "/service-accounts": { bulk: RETIRING_AN_ACCOUNT_STOPS_AN_INTEGRATION },
@@ -205,6 +200,11 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
  * rows, by page and label, and why offering them names nothing about what exists.
  */
 const CLOSED_VOCABULARIES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  "/library": {
+    Review:
+      "Due and not due are the product's own two words, the same in every install, and each row " +
+      "carries one of them, so offering the other names nothing about what exists.",
+  },
   "/audit": {
     When:
       "The periods are the console's own four windows, the same in every install, and a window " +
@@ -354,7 +354,11 @@ function offered(root: Element, paths: readonly string[]): Set<Capability> {
   ) {
     found.add("filter");
   }
-  if (root.querySelector('tbody input[type="checkbox"], .roster input[type="checkbox"]') !== null) {
+  // The kit's table ticks a row with the component layer's checkbox, a button carrying the role,
+  // and an older page with a native input; either is a selection an act is taken over. On a kit
+  // list that act is at least Export selected, so Agents and Connectors, whose writes are one row
+  // at a time, offer bulk as an export of the reader's own ticks.
+  if (root.querySelector('tbody input[type="checkbox"], tbody [role="checkbox"], .roster input[type="checkbox"]') !== null) {
     found.add("bulk");
   }
   return found;

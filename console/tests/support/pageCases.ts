@@ -139,6 +139,63 @@ const AGENT_STATS = {
   unrecorded: [{ figure: "model_cost", why: UNBROKEN }],
 };
 
+/** One document as `GET /knowledge/documents` and the detail route send it, every field filled. */
+const KNOWLEDGE_DOCUMENT = {
+  item_id: UNBROKEN,
+  title: UNBROKEN,
+  kind: "sop",
+  kind_label: "SOP",
+  level: "department",
+  department: UNBROKEN,
+  steward_id: UNBROKEN,
+  state: "published",
+  verification: "verified",
+  verified_by: UNBROKEN,
+  verified_at: "2019-03-01T09:00:00Z",
+  review_by: "2019-09-01T09:00:00Z",
+  due: false,
+  supersedes: null,
+  added_at: "2019-03-01T09:00:00Z",
+  you_steward: true,
+  solves: UNBROKEN,
+  promotion: { suspension_id: UNBROKEN, status: "waiting", expires_at: "2019-03-05T09:00:00Z" },
+  steward_name: UNBROKEN,
+  verified_by_name: UNBROKEN,
+};
+
+/** One document's page as `GET /knowledge/items/{id}` sends it, with every act offered. */
+const KNOWLEDGE_DETAIL = {
+  document: KNOWLEDGE_DOCUMENT,
+  versions: [
+    {
+      item_id: UNBROKEN,
+      title: UNBROKEN,
+      state: "published",
+      level: "department",
+      department: UNBROKEN,
+      added_at: "2019-03-01T09:00:00Z",
+      readable: true,
+    },
+  ],
+  offered: { verify: true, new_version: true, propose: true, hand_over: true },
+  promotion_waits: `Asking puts a card on the Approvals screen for ${UNBROKEN}.`,
+};
+
+/** The reader's own knowledge task, one that reports, about the document above. */
+const KNOWLEDGE_TASKS = {
+  items: [
+    {
+      task_id: UNBROKEN,
+      kind: "steward_named",
+      item_id: UNBROKEN,
+      says: `You are now the steward of ${UNBROKEN}.`,
+      opened_at: "2019-03-04T09:00:00Z",
+      due_at: null,
+      closable: true,
+    },
+  ],
+};
+
 export interface PageCase {
   /** The address mounted for this pattern. */
   readonly address: string;
@@ -1974,26 +2031,20 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
       "/api/v1/connectors": CONNECTORS_SCREEN,
     },
   },
-  // Knowledge. The item reference is an identifier with no break in it, which is why the library
-  // table sits in `.grid__scroll`; the department name is a chip outside the table and has to be
-  // able to wrap. `truncated` is true so the full-page sentence is drawn as well.
+  // Knowledge, on the kit: one document with every column filled, each value an unbroken token,
+  // which is what a title, a department or a steward's name is on a phone; the reader's options to
+  // add, and a task that reports.
   "/library": {
     address: "/library",
     signedIn: true,
     drawsValues: true,
     answers: {
-      "/api/v1/govern/library": {
-        items: [{ item_id: UNBROKEN, level: "department", kind: "sop" }],
+      "/api/v1/knowledge/documents": {
+        items: [KNOWLEDGE_DOCUMENT],
         next_cursor: null,
         total: null,
         truncated: true,
-        departments: [UNBROKEN],
-        staleness: null,
-        only_existence_and_reach_are_shown: true,
-        freshness_and_use_are_not_measured: true,
       },
-      // What this reader may add: the Add a document card's form is drawn from it, and the
-      // department is the unbroken value a select has to hold on a phone.
       "/api/v1/knowledge/uploads/options": {
         kinds: [{ value: "sop", label: "SOP" }],
         departments: [UNBROKEN],
@@ -2002,82 +2053,37 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         found_by: "text search",
         checked_by: "structural check (not an antivirus)",
       },
-      // The lifecycle cards: a task that reports, a document looked after with every act offered,
-      // and a solution waiting beside one captured. Each value is an unbroken token, which is what
-      // a title, a principal id or a department is on a phone.
-      "/api/v1/knowledge/tasks": {
-        items: [
-          {
-            task_id: UNBROKEN,
-            kind: "steward_named",
-            item_id: UNBROKEN,
-            says: `You are now the steward of ${UNBROKEN}.`,
-            opened_at: "2019-03-04T09:00:00Z",
-            due_at: null,
-            closable: true,
-          },
-        ],
-      },
-      "/api/v1/knowledge/items": {
-        items: [
-          {
-            item_id: UNBROKEN,
-            title: UNBROKEN,
-            kind: "sop",
-            kind_label: "SOP",
-            level: "department",
-            department: UNBROKEN,
-            steward_id: UNBROKEN,
-            state: "published",
-            verification: "verified",
-            verified_by: UNBROKEN,
-            verified_at: "2019-03-01T09:00:00Z",
-            review_by: "2019-09-01T09:00:00Z",
-            due: false,
-            supersedes: null,
-            added_at: "2019-03-01T09:00:00Z",
-            you_steward: true,
-            solves: null,
-            promotion: null,
-          },
-        ],
-        truncated: true,
-      },
-      [`/api/v1/knowledge/items/${UNBROKEN}`]: {
-        document: {
-          item_id: UNBROKEN,
-          title: UNBROKEN,
-          kind: "sop",
-          kind_label: "SOP",
-          level: "department",
-          department: UNBROKEN,
-          steward_id: UNBROKEN,
-          state: "published",
-          verification: "verified",
-          verified_by: UNBROKEN,
-          verified_at: "2019-03-01T09:00:00Z",
-          review_by: "2019-09-01T09:00:00Z",
-          due: false,
-          supersedes: null,
-          added_at: "2019-03-01T09:00:00Z",
-          you_steward: true,
-          solves: UNBROKEN,
-          promotion: { suspension_id: UNBROKEN, status: "waiting", expires_at: "2019-03-05T09:00:00Z" },
-        },
-        versions: [
-          {
-            item_id: UNBROKEN,
-            title: UNBROKEN,
-            state: "published",
-            level: "department",
-            department: UNBROKEN,
-            added_at: "2019-03-01T09:00:00Z",
-            readable: true,
-          },
-        ],
-        offered: { verify: true, new_version: true, propose: true, hand_over: true },
-        promotion_waits: `Asking puts a card on the Approvals screen for ${UNBROKEN}.`,
-      },
+      "/api/v1/knowledge/tasks": KNOWLEDGE_TASKS,
+    },
+  },
+  // One document's Dashboard: the record with every act offered, and the reader's task on it.
+  "/library/:itemId": {
+    address: `/library/${UNBROKEN}`,
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      [`/api/v1/knowledge/items/${UNBROKEN}`]: KNOWLEDGE_DETAIL,
+      "/api/v1/knowledge/tasks": KNOWLEDGE_TASKS,
+    },
+  },
+  // One document's Profile: its record, the text behind a press, and Advanced. The About view reads
+  // the history as well, which tests/knowledge-page.test.tsx draws.
+  "/library/:itemId/:view": {
+    address: `/library/${UNBROKEN}/profile`,
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      [`/api/v1/knowledge/items/${UNBROKEN}`]: KNOWLEDGE_DETAIL,
+      "/api/v1/knowledge/tasks": KNOWLEDGE_TASKS,
+    },
+  },
+  // Solutions: one waiting for this reader's decision beside one they captured, each value an
+  // unbroken token, and a department they may capture in.
+  "/solutions": {
+    address: "/solutions",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
       "/api/v1/knowledge/solutions": {
         waiting: [
           {
@@ -2092,6 +2098,8 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
             decided_by: null,
             decided_at: null,
             item_id: null,
+            captured_by_name: UNBROKEN,
+            decided_by_name: null,
           },
         ],
         yours: [
@@ -2107,6 +2115,8 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
             decided_by: UNBROKEN,
             decided_at: "2019-03-03T09:00:00Z",
             item_id: `${UNBROKEN}2`,
+            captured_by_name: UNBROKEN,
+            decided_by_name: UNBROKEN,
           },
         ],
         departments: [UNBROKEN],

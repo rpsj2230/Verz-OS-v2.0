@@ -73,24 +73,6 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
     { pattern: "/departments", opener: "Rename department", index: 1, writes: true },
   ],
   "src/pages/Elevation.tsx": [{ pattern: "/elevation", index: 0, writes: true }],
-  // The Add a document card sits above the library, so its form comes before the list's search.
-  "src/pages/Knowledge.tsx": [{ pattern: "/library", index: 0, writes: true }],
-  // After Add a document: a web page by its link, then many documents at once.
-  "src/pages/KnowledgeIntake.tsx": [
-    { pattern: "/library", index: 1, writes: true },
-    { pattern: "/library", index: 2, writes: true },
-  ],
-  // The lifecycle cards sit between the intake cards and the library. Opening a document draws
-  // its four acts' forms above the capture form, in the order the card lists them; unopened,
-  // the capture form and a solution's decision follow the two intake forms.
-  "src/components/KnowledgeLifecycle.tsx": [
-    { pattern: "/library", opener: "Open", index: 3, writes: true },
-    { pattern: "/library", opener: "Open", index: 4, writes: true },
-    { pattern: "/library", opener: "Open", index: 5, writes: true },
-    { pattern: "/library", opener: "Open", index: 6, writes: true },
-    { pattern: "/library", index: 3, writes: true },
-    { pattern: "/library", index: 4, writes: true },
-  ],
   "src/pages/AccessRequests.tsx": [{ pattern: "/access-requests", index: 0, writes: true }],
   "src/pages/Matrix.tsx": [{ pattern: "/routing/:rungId", index: 1, writes: true }],
   // After the matrix's own search form: the golden question, then the rung to add.
@@ -194,6 +176,18 @@ const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
     "The question form cannot be sent blank by a person: its only submit button is disabled until " +
     "askBody accepts the text, and the field's maxLength stops a question longer than the route " +
     "takes. The second test below holds the button disabled for an empty question.",
+  "src/pages/knowledge/addForms.tsx":
+    "Every form here is drawn in a drawer from the Add menu, which renders outside the page's main " +
+    "landmark where these cases look. tests/knowledge-page.test.tsx submits each one blank and holds " +
+    "that nothing is sent and each says what to fill in, the file forms naming types and sizes first.",
+  "src/pages/knowledge/actForms.tsx":
+    "Every form here is drawn in a drawer from a document's header, outside the page's main landmark " +
+    "where these cases look. tests/knowledge-page.test.tsx submits each one blank or with a past date " +
+    "and holds that nothing is sent and each says what to fill in before anything is confirmed.",
+  "src/pages/knowledge/SolutionsPage.tsx":
+    "The capture form is drawn in a drawer outside the page's main landmark, and a decision's form is " +
+    "one per waiting solution. tests/knowledge-page.test.tsx submits the capture blank and a decision " +
+    "with no review date, and holds that nothing is sent and each says what to fill in.",
   "src/pages/FirstRun.tsx":
     "The wizard's step forms move between steps and send nothing. Its one write is the review " +
     "screen's button after every step, and the API's problems are drawn beside the fields they " +

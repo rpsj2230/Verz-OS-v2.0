@@ -20,11 +20,18 @@ steward in the transaction the rows are written in, and `0120`'s `know.supersede
 the predecessor against that same reach. The actor's attribution stays set, so the ledger names who
 did it and the row names who answers for it.
 
-Task ids: M7.4.4, M7.4.5, M7.4.6, M7.6.2, M7.7.2
+**The Knowledge list and a document's history read two things past the policy, and judge nothing.**
+`documents` adds every version a live document replaced, through `0120`'s `know.item_versions`, and
+`ledger_entries` reads the entries `0120`'s trigger wrote about a chain. The route asks
+`Authority.may_see` of every version and leaves every actor out of a history, so nothing read here
+reaches a reader the detail route would not already answer.
+
+Task ids: M7.4.4, M7.4.5, M7.4.6, M7.6.2, M7.7.2, M27.15.40
 """
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -202,6 +209,99 @@ async def live_items(session: AsyncSession, *, limit: int = MAX_ITEMS) -> tuple[
         {"limit": limit},
     )
     return tuple(stored_item(row) for row in rows.mappings())
+
+
+#: Every earlier version of these live documents, read past the policy through `0120`'s history
+#: read. A live document has no later version, so its chain is itself and what it replaced.
+EARLIER_VERSIONS: Final = (
+    "SELECT v.item_id, v.title, v.owner_id, v.visibility, v.department, v.state, v.kind, "
+    "v.verified_by, v.verified_at, v.review_by, v.supersedes, v.created_at "
+    "FROM unnest(CAST(:ids AS character varying[])) AS live(item_id) "
+    "CROSS JOIN LATERAL know.item_versions(live.item_id) AS v"
+)
+
+
+async def documents(
+    session: AsyncSession, *, limit: int = MAX_ITEMS
+) -> tuple[tuple[StoredItem, ...], bool]:
+    """The live documents the policy admits at this reach, and every version each replaced.
+
+    Answers the versions once each, live first by title, and whether the live load came back
+    full. The earlier versions are read past the policy, as a history is, and nothing here judges
+    who may see which: the caller asks `Authority.may_see` of every one, as the history route does.
+    """
+    live = await live_items(session, limit=limit)
+    replaced = [one.item_id for one in live if one.supersedes]
+    earlier: tuple[StoredItem, ...] = ()
+    if replaced:
+        rows = await session.execute(text(EARLIER_VERSIONS), {"ids": replaced})
+        earlier = tuple(stored_item(row) for row in rows.mappings())
+    kept: dict[str, StoredItem] = {}
+    for one in (*live, *earlier):
+        kept.setdefault(one.item_id, one)
+    return tuple(kept.values()), len(live) >= limit
+
+
+async def names_of(session: AsyncSession, principal_ids: Iterable[str]) -> dict[str, str]:
+    """Display names by principal id, for the people a page names, asking nothing for nobody."""
+    wanted = sorted({one for one in principal_ids if one})
+    if not wanted:
+        return {}
+    rows = await session.execute(
+        text("SELECT id, display_name FROM auth.principal WHERE id = ANY(:ids)"), {"ids": wanted}
+    )
+    return {row["id"]: row["display_name"] for row in rows.mappings() if row["display_name"]}
+
+
+#: `0120`'s subject prefix for a document's ledger entries, and the longest id recorded as itself;
+#: a longer one is recorded as its sha256. Held equal to the migration's by a test.
+ITEM_SUBJECT_PREFIX: Final = "setting:knowledge_item."
+ITEM_SUBJECT_ID_CHARS: Final = 128 - len("knowledge_item.")
+
+#: The most ledger entries one history is read from, oldest first. A resource bound.
+MAX_HISTORY: Final = 500
+
+
+def item_subject(item_id: str) -> str:
+    """The ledger subject `0120`'s trigger records one document's writes under."""
+    if len(item_id) <= ITEM_SUBJECT_ID_CHARS:
+        return f"{ITEM_SUBJECT_PREFIX}{item_id}"
+    return f"{ITEM_SUBJECT_PREFIX}{hashlib.sha256(item_id.encode('utf-8')).hexdigest()}"
+
+
+@dataclass(frozen=True)
+class LedgerEntry:
+    """One ledger entry about one version: when, by whom, and the details the trigger wrote."""
+
+    item_id: str
+    at: datetime
+    actor_id: str
+    details: Mapping[str, object]
+
+
+async def ledger_entries(
+    session: AsyncSession, item_ids: Sequence[str], *, limit: int = MAX_HISTORY
+) -> tuple[LedgerEntry, ...]:
+    """Every ledger entry about these versions, in the order they were written, at most `limit`."""
+    subjects = {item_subject(one): one for one in item_ids}
+    if not subjects:
+        return ()
+    rows = await session.execute(
+        text(
+            "SELECT subject, at, actor_id, details FROM obs.audit_entry "
+            "WHERE subject = ANY(:subjects) ORDER BY seq LIMIT :limit"
+        ),
+        {"subjects": sorted(subjects), "limit": limit},
+    )
+    return tuple(
+        LedgerEntry(
+            item_id=subjects[row["subject"]],
+            at=row["at"],
+            actor_id=row["actor_id"],
+            details=row["details"] if isinstance(row["details"], Mapping) else {},
+        )
+        for row in rows.mappings()
+    )
 
 
 async def versions(session: AsyncSession, item_id: str) -> tuple[StoredItem, ...]:
