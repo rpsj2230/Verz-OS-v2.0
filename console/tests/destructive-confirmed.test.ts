@@ -62,6 +62,14 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "Adding a document writes a new item. The same file sent again to the same place is the same item " +
     "with the same text, because its reference is a digest of the bytes, the owner and the place, which " +
     "tests/unit/test_knowledge_upload.py holds, so nothing existing is ended or removed.",
+  "src/pages/KnowledgeIntake.tsx LINKS_API_PATH":
+    "Adding a page by its link writes a new item, and the same page added again to the same place is " +
+    "the same item, because its reference is a digest of the bytes, the owner and the place, which " +
+    "tests/unit/test_link_intake.py holds, so nothing existing is ended or removed.",
+  "src/pages/KnowledgeIntake.tsx queuedPath(place.kind, place.level, place.department)":
+    "Queueing a file keeps it and a ticket for the worker; the item it becomes is named by a digest " +
+    "of the bytes, the owner and the place, as an upload is, which tests/unit/test_ingest_queue.py " +
+    "holds, so nothing existing is ended or removed.",
   "src/pages/Ask.tsx ANSWER_API_PATH":
     "Asking a question changes nothing an administrator manages: the answer is computed for the " +
     "reader and nothing they hold is ended or replaced.",

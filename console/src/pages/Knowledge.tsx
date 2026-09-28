@@ -68,6 +68,7 @@ import {
   type UploadOptions,
 } from "./knowledgeQuery";
 import { FailureNotice } from "../ui/FailureNotice";
+import { KnowledgeIntake } from "./KnowledgeIntake";
 
 /** The design's own label for this screen, which the navigation and this heading share. */
 export const KNOWLEDGE_HEADING = "Knowledge";
@@ -598,6 +599,7 @@ export function Knowledge() {
       <h1>{KNOWLEDGE_HEADING}</h1>
       <p className="lede">{KNOWLEDGE_LEDE}</p>
       <AddDocument onAdded={() => setVersion((was) => was + 1)} />
+      <KnowledgeIntake onAdded={() => setVersion((was) => was + 1)} />
       <KnowledgeAnswerView version={version} />
     </article>
   );
