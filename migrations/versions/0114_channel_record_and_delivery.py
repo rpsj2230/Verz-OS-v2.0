@@ -12,9 +12,25 @@ direction, outcome, a reason from a closed list and the vendor's status. **SELEC
 UPDATE or DELETE**, for `0093`'s reason: what happened to a delivery is a fact once it is written,
 and a later attempt is its own row.
 
-**The downgrade** drops both tables, which forgets every channel's record (each channel then
-refuses to receive or send, which is the behaviour before this release: nothing received) and every
-delivery row. Nothing else refers to either table.
+**Every change to a channel's record is written to the audit ledger, from the database.** A
+trigger on `ops.channel` appends a `setting` entry under `setting:channel.<channel>`, with the
+actor the row's own `updated_by` names and the reach and trace the route set on the transaction
+(`brain.tables.audit.attributed_to`), exactly as `0059`'s trigger records a row of `ops.setting`:
+`set` when the tenant was written, `switched_on` or `switched_off` when the switch moved, and
+nothing for a save that changed neither. The details are the change word alone, never the tenant
+and never anything of the secret, whose replacement is recorded under `credential` by `0054`'s
+trigger on `ops.credential_write`. `setting` rather than a new member: the action list and the
+subject grammar are superseded by whichever migration lands last, and a channel's switch is a
+switch, which `brain.audit.record.SettingChange` already has the words for. See
+`brain.audit.record.AuditRecorder.setting`, which the trigger is held to.
+
+**The append is `0003`'s, one more copy of that block**, for the reason `0047` gives against
+editing a function every grant in production goes through.
+
+**The downgrade** drops the trigger, its function and both tables, which forgets every channel's
+record (each channel then refuses to receive or send, which is the behaviour before this release:
+nothing received) and every delivery row. The ledger keeps every entry already appended. Nothing
+else refers to either table.
 
 Task ids: M10.6.1, M10.6.3
 """
@@ -100,6 +116,84 @@ RLS: tuple[str, ...] = (
     """,
 )
 
+#: The words the trigger appends: `brain.audit.record.SettingChange`'s, less `retired`, because a
+#: channel is switched off and never retired.
+CHANNEL_TRIGGER_FUNCTION = """
+CREATE FUNCTION ops.record_channel_change() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+    v_subject text := 'setting:channel.' || NEW.channel;
+    v_changes text[] := ARRAY[]::text[];
+    v_details jsonb;
+    v_seq bigint;
+    v_prev text;
+    v_entry text;
+    v_at timestamptz := now();
+    v_ent_hash text;
+    v_trace text;
+    v_written integer;
+BEGIN
+    IF TG_OP = 'INSERT' OR OLD.tenant IS DISTINCT FROM NEW.tenant THEN
+        v_changes := v_changes || 'set'::text;
+    END IF;
+    IF TG_OP = 'INSERT' OR OLD.enabled IS DISTINCT FROM NEW.enabled THEN
+        IF NEW.enabled THEN
+            v_changes := v_changes || 'switched_on'::text;
+        ELSE
+            v_changes := v_changes || 'switched_off'::text;
+        END IF;
+    END IF;
+
+    FOR i IN 1 .. COALESCE(array_length(v_changes, 1), 0) LOOP
+        v_details := jsonb_build_object('change', v_changes[i]);
+        -- The append, as 0003's gate.record_entitlement_change and every trigger since write it.
+        PERFORM pg_advisory_xact_lock(8274419004);
+        SELECT COALESCE(max(e.seq) + 1, 0) INTO v_seq FROM obs.audit_entry e;
+        SELECT COALESCE(
+            (SELECT e.entry_hash FROM obs.audit_entry e ORDER BY e.seq DESC LIMIT 1),
+            repeat('0', 64)
+        ) INTO v_prev;
+        v_ent_hash := COALESCE(
+            NULLIF(current_setting('brain.ent_hash', true), ''), repeat('0', 32)
+        );
+        v_trace := COALESCE(
+            NULLIF(current_setting('brain.trace_id', true), ''),
+            'tx.' || pg_current_xact_id()::text
+        );
+        v_entry := obs.audit_entry_hash(
+            v_seq, v_at, NEW.updated_by, 'setting', v_subject, v_ent_hash,
+            v_trace, v_details, v_prev
+        );
+
+        MERGE INTO obs.audit_entry AS t
+        USING (SELECT v_seq AS seq) AS s
+           ON t.seq = s.seq
+        WHEN NOT MATCHED THEN
+            INSERT (seq, at, actor_id, action, subject, ent_hash, trace_id,
+                    details, prev_hash, entry_hash)
+            VALUES (v_seq, v_at, NEW.updated_by, 'setting', v_subject,
+                    v_ent_hash, v_trace, v_details, v_prev, v_entry);
+
+        GET DIAGNOSTICS v_written = ROW_COUNT;
+        IF v_written <> 1 THEN
+            RAISE EXCEPTION USING
+                MESSAGE = 'the ledger already holds seq ' || v_seq
+                          || '; the audit entry was not appended',
+                ERRCODE = 'restrict_violation',
+                HINT = 'an append that is discarded silently is the failure this refuses';
+        END IF;
+    END LOOP;
+    RETURN NULL;
+END;
+$$
+"""
+
+CHANNEL_TRIGGER = """
+CREATE TRIGGER channel_is_audited
+    AFTER INSERT OR UPDATE ON ops.channel
+    FOR EACH ROW EXECUTE FUNCTION ops.record_channel_change()
+"""
+
 
 def upgrade() -> None:
     assert all(APP_ROLE in statement for statement in GRANTS)
@@ -166,9 +260,13 @@ def upgrade() -> None:
         op.execute(statement)
     for statement in RLS:
         op.execute(statement)
+    op.execute(CHANNEL_TRIGGER_FUNCTION)
+    op.execute(CHANNEL_TRIGGER)
 
 
 def downgrade() -> None:
+    op.execute("DROP TRIGGER channel_is_audited ON ops.channel")
+    op.execute("DROP FUNCTION ops.record_channel_change()")
     # The index, the policies and the grants go with the tables.
     op.drop_table("channel_delivery", schema="ops")
     op.drop_table("channel", schema="ops")

@@ -27,9 +27,9 @@ built from a subscriber id, times and sentences. Whether a secret is held is rea
 metadata per subscriber and says held, not held, or not known with the vault's state.
 
 **What the screen cannot do is served beside it**, for `brain.skill_routes`' reason: the day a
-fact changes, its sentence changes in the same commit. No channel receives a webhook, and each
-channel's check is listed with how far it has got; an automation's inbound credential is listed
-nowhere.
+fact changes, its sentence changes in the same commit. Which channels this release receives is
+said once, from the channels' own wires, and each channel's check is listed with how far it has
+got; an automation's inbound credential is listed nowhere.
 
 **Delivery is said in two parts: how it works, and what the dispatch last did.** The first is a
 sentence with the code's own figures in it. The second is read from the schedule's record of the
@@ -67,7 +67,6 @@ from brain.ops.outbox import EventKind, Subscriber, may_manage
 from brain.ops.webhook_admin import (
     AN_AUTOMATION_CALLS_IN_WITH_ITS_OWN_CREDENTIAL,
     MINIMUM_SIGNING_SECRET_CHARS,
-    NO_CHANNEL_RECEIVES_A_WEBHOOK,
     REGISTERING_A_SUBSCRIBER,
     REPLACING_A_SIGNING_KEY,
     SWITCHING_A_SUBSCRIBER_OFF,
@@ -79,6 +78,7 @@ from brain.ops.webhook_admin import (
     SigningSecretsUnavailableError,
     event_kinds,
     how_delivery_works,
+    receiving_told,
     registration_problems,
     secret_problems,
     signing_secret_ref,
@@ -362,7 +362,7 @@ def _inbound() -> InboundView:
             )
             for one in INBOUND
         ],
-        channels_told=NO_CHANNEL_RECEIVES_A_WEBHOOK,
+        channels_told=receiving_told(),
         automation_path=f"{API_PREFIX}{TOOL_CALL_PATH}",
         automation_told=AN_AUTOMATION_CALLS_IN_WITH_ITS_OWN_CREDENTIAL,
     )

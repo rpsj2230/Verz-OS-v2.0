@@ -7,12 +7,12 @@ What an administrator would need to manage, read out of the schema, the routes a
 ## What was measured
 
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
-- 95 tables, from `brain.db.Base.metadata`.
+- 97 tables, from `brain.db.Base.metadata`.
 - 27 installation values, from `brain.install.INSTALLATION`.
-- 193 routes under `/api/v1` and `/setup`, from the API's internal document.
+- 198 routes under `/api/v1` and `/setup`, from the API's internal document.
 - 72 console addresses, from the route table in `console/src/App.tsx`.
-- 75 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 92 routes.
-- 36 gaps recorded, and 22 routes no screen calls.
+- 74 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 91 routes.
+- 38 gaps recorded, and 28 routes no screen calls.
 
 ## Area by area
 
@@ -144,7 +144,7 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `GET /api/v1/operate/models` | `/models` |
 | `GET /api/v1/routing/changes` | `/routing`, `/routing/:rungId` |
 | `GET /api/v1/routing/golden-questions` | `/routing`, `/routing/:rungId` |
-| `GET /api/v1/routing/rungs` | `/agents/:agentId`, `/routing`, `/routing/:rungId` |
+| `GET /api/v1/routing/rungs` | `/models`, `/routing`, `/routing/:rungId` |
 | `PATCH /api/v1/routing/rungs/{rung_id}` | `/routing`, `/routing/:rungId` |
 | `POST /api/v1/models/providers` | `/models` |
 | `POST /api/v1/models/providers/{provider}/check` | `/models` |
@@ -155,13 +155,13 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `POST /api/v1/routing/golden-questions` | `/routing`, `/routing/:rungId` |
 | `POST /api/v1/routing/golden-questions/{question_id}/retire` | `/routing`, `/routing/:rungId` |
 | `POST /api/v1/routing/rungs` | `/routing`, `/routing/:rungId` |
-| `PUT /api/v1/models/profile` | `/models` |
 | `PUT /api/v1/models/providers/{provider}` | `/models` |
 | `PUT /api/v1/models/providers/{provider}/terms` | `/models` |
 | `PUT /api/v1/models/tiers/{tier}` | `/models` |
 
 - **Gap.** A provider's terms and an added provider's retirement are logged and not on the audit ledger: the ledger's action list gains no provider entry in this release. Open leaf `M5.6.4`.
-- **Gap.** The model endpoint cannot be changed after setup. Recorded: Set by the first-run wizard, which saves them to ops.setting, and no route changes one afterwards; changing one today is editing the server's environment file or the row by hand.
+- **Gap.** A provider key cannot be written or replaced from a screen after setup. Open leaf `M27.8.8`.
+- **Gap.** The model profile and endpoint cannot be changed after setup. Recorded: Set by the first-run wizard, which saves them to ops.setting, and no route changes one afterwards; changing one today is editing the server's environment file or the row by hand.
 
 ### Agents and their configuration, including templates
 
@@ -220,23 +220,30 @@ What an administrator would need to manage, read out of the schema, the routes a
 ### Connectors and third-party integrations
 
 - **Screens:** `/connectors`
-- **Tables:** `ops.connector_connection`, `ops.connector_sync`, `proj.record`, `er.alias`, `er.canonical`, `er.identifier`, `er.link`
+- **Tables:** `ops.channel`, `ops.channel_delivery`, `ops.connector_connection`, `ops.connector_sync`, `proj.record`, `er.alias`, `er.canonical`, `er.identifier`, `er.link`
 - **Installation values:** `INSTALL_LARK_USES`, `INSTALL_LARK_PLATFORM`, `INSTALL_LARK_BASE`
 
 | Route | Called by |
 | --- | --- |
+| `GET /api/v1/channels` | **no screen** |
+| `GET /api/v1/channels/{name}/deliveries` | **no screen** |
 | `GET /api/v1/connectors` | `/connectors` |
 | `GET /api/v1/connectors/lark-app` | `/connectors` |
+| `POST /api/v1/channels/{name}/events` | **no screen** |
+| `POST /api/v1/channels/{name}/switch` | **no screen** |
+| `POST /api/v1/channels/{name}/test` | **no screen** |
 | `POST /api/v1/connectors` | `/connectors` |
 | `POST /api/v1/connectors/lark-app` | `/connectors` |
 | `POST /api/v1/connectors/lark-app/test` | `/connectors` |
 | `POST /api/v1/connectors/{connector}/disconnect` | `/connectors` |
+| `PUT /api/v1/channels/{name}` | **no screen** |
 
 - **Gap.** A connected source is read and kept, and no question is answered from what is kept. Recorded: No row tool is registered for a connected source's records: brain.tools.startup.classification_for is keyed on the entity alone and Xero and HubSpot both project contact, which that module records as the limit to change first. brain.ops.connector_admin.WHAT_CONNECTING_A_SOURCE_STARTS says so on the screen.
 - **Gap.** HubSpot can be connected and is not read. Recorded: brain.ops.limits records no verified call ceiling for it and brain.connectors.throttle.limits_for refuses to invent one; its row carries brain.ops.connector_sync.NO_VERIFIED_CEILING.
 - **Gap.** Freshdesk, Google Drive and the Laravel views cannot be connected from a screen. Recorded: Each needs a visibility rule, a department declaration or a key file the form cannot collect, which brain.ops.connectable.NOT_FROM_THE_CONSOLE says for each.
 - **Gap.** Connect Lark switches knowledge from Wiki and Base on, and no question is answered from Lark yet. Recorded: The Lark knowledge connector that keeps the minimal index and reads pages and records live is still to be built over the settings Connect Lark writes; brain.ops.lark_connect.KNOWLEDGE_IS_SWITCHED_ON_AND_NOTHING_IS_COPIED says so on the screen.
-- **Gap.** The Lark chat channel is set up and tested and does not yet receive Lark's events. Recorded: No channel in this release receives a webhook, so there is no address for Lark's Events and callbacks page to verify; brain.ops.lark_connect.THE_CHANNEL_RECEIVER_IS_NOT_BUILT_YET says so in the steps.
+- **Gap.** The Lark chat channel is set up and tested and does not yet receive Lark's events. Recorded: This release receives only the company's own signed webhook at /api/v1/channels/{name}/events, and Lark's receiver is still to be built, so Lark's Events and callbacks page has nothing to verify; brain.ops.lark_connect.THE_CHANNEL_RECEIVER_IS_NOT_BUILT_YET says so in the steps.
+- **Gap.** A channel's record, switch, test message and deliveries have routes and no screen. Recorded: The Channels screen is drawn over brain.channel_routes by the channels screen package, which follows this one; until then a channel is set up and proved through those routes, each change is in the audit ledger under setting:channel.<channel>, and the deliveries route lists every refusal without its content.
 
 ### API keys, credentials and secrets, held in the vault and never displayed
 
@@ -344,7 +351,7 @@ No gap recorded.
 | `POST /api/v1/webhooks/subscribers/{subscriber_id}/secret` | `/webhooks` |
 | `POST /api/v1/webhooks/subscribers/{subscriber_id}/switch-off` | `/webhooks` |
 
-- **Gap.** No platform's webhook is received. Recorded: No route receives one, and the WhatsApp and Lark checks are not written; the Webhooks screen lists each channel's check from brain.ops.inbound_webhooks.
+- **Gap.** No vendor platform's webhook is received, only the company's own signed webhook. Recorded: Only brain.channels.webhook has a wire in this release, and the WhatsApp and Lark checks are not written; the Webhooks screen names the channels received from brain.ops.inbound_webhooks.receiving and lists each channel's check.
 
 ### Scheduled jobs and background work
 
@@ -491,7 +498,7 @@ No gap recorded.
 
 ## Every write the console sends, followed to the system
 
-Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 74 of 92 write routes have all three proved or not applicable, 13 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
+Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 74 of 91 write routes have all three proved or not applicable, 13 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
 
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
@@ -583,7 +590,6 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `PUT /api/v1/govern/compliance/topics/{topic}` | `/compliance` | `test_naming_a_person_writes_one_route_row_and_a_setting_entry_without_the_value` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_naming_a_person_writes_one_route_row_and_a_setting_entry_without_the_value` in `tests/unit/test_compliance_store.py` (database, in CI) | `test_a_sensitive_question_is_routed_to_the_person_named_for_its_topic` in `tests/unit/test_compliance_routes.py` |
 | `PUT /api/v1/govern/staff_sources/credential` | `/staff_sources` | `test_the_credential_is_replaced_into_its_slot_recorded_and_never_sent_back` in `tests/unit/test_staff_sync_routes.py` | `test_a_credential_write_appends_exactly_the_entry_the_recorder_writes_and_the_chain_holds` in `tests/unit/test_credential_writes.py` (database, in CI) | `test_a_scheduled_run_reads_lark_with_the_kept_credential_and_applies_the_plan` in `tests/unit/test_staff_sync_run.py` |
 | `PUT /api/v1/install/settings/{name}` | `/settings` | `test_saving_a_company_name_writes_its_row_and_the_console_header_draws_it_next` in `tests/unit/test_settings_routes.py` | **None.** The route sets the audit attribution 0059's trigger reads, which BRANDING_SAVED asserts over a stub; no scratch-Postgres test yet reads the ledger entry back. | `test_saving_a_company_name_writes_its_row_and_the_console_header_draws_it_next` in `tests/unit/test_settings_routes.py` |
-| `PUT /api/v1/models/profile` | `/models` | `test_where_answers_are_made_is_saved_by_the_super_administrator_ledgered_and_planned_at_once` in `tests/unit/test_provider_routes.py` | **None.** The route sets the audit attribution 0059's trigger reads, which the row test asserts over a stub; no scratch-Postgres test yet reads the ledger entry back. | `test_where_answers_are_made_is_saved_by_the_super_administrator_ledgered_and_planned_at_once` in `tests/unit/test_provider_routes.py` |
 | `PUT /api/v1/models/providers/{provider}` | `/models` | `test_the_stores_read_the_ladder_write_attempts_by_id_and_keep_a_switch` in `tests/unit/test_model_service.py` (database, in CI) | **None.** The write is an ops.setting row, which migration 0059's trigger records as a setting entry naming the key, the change and the writer, and no test follows this route's write to that entry. | `test_switching_a_provider_off_takes_its_rungs_out_of_the_next_plan_at_once` in `tests/unit/test_provider_routes.py` |
 | `PUT /api/v1/models/providers/{provider}/terms` | `/models` | `test_terms_recorded_for_a_built_in_provider_write_its_first_registry_row` in `tests/unit/test_provider_registry_routes.py` | **None.** A provider's terms are logged and not written to the audit ledger in this release. Leaf `M5.6.4`. | `test_a_constrained_call_skips_an_undocumented_rung_for_the_documented_one_behind_it` in `tests/unit/test_model_calls.py` |
 | `PUT /api/v1/models/tiers/{tier}` | `/models` | `test_a_tier_rule_is_written_as_the_window_and_only_the_keys_the_router_reads` in `tests/unit/test_model_health_routes.py` | **None.** A tier's numbers are logged and not written to the audit ledger in this release. Leaf `M5.2.2`. | `test_a_request_is_classified_against_the_tier_table_the_ladder_read` in `tests/unit/test_model_calls.py` |
