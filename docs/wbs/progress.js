@@ -219,11 +219,6 @@ const PROGRESS = {
     why: "Wave 2 batch 2, connector registries and the minimal index (C1), under the owner's rule that connectors never bulk-sync",
     updated: "2026-09-28",
   },
-  "M11.9.1": {
-    status: "IN PROGRESS",
-    why: "Wave 2 batch 2, connector registries and the minimal index (C1), under the owner's rule that connectors never bulk-sync",
-    updated: "2026-09-28",
-  },
   "M12.1.1": {
     status: "IN PROGRESS",
     why: "tool catalogue and switch (T1): lands after PR #107 (migration 0117 follows 0116)",
@@ -339,11 +334,6 @@ const PROGRESS = {
     why: "the hourly denial digest runs in the worker (PR #101, merged): proved when a repeatedly refused colleague produces a notice on the install",
     updated: "2026-09-28",
   },
-  "M23.2.3": {
-    status: "READY FOR TESTING",
-    why: "rate limits live (PR #101, merged): proved when a person asking past the window on the install gets the 429 and Ask says when to ask again",
-    updated: "2026-09-28",
-  },
   "M24.3.4": {
     status: "BLOCKED",
     why: "the owner's audit check on the install (needs-rupash 91, check 4)",
@@ -432,11 +422,6 @@ const PROGRESS = {
   "M5.7.1": {
     status: "READY FOR TESTING",
     why: "Models and health shows all four providers with Add key, Test and Turn off (PR #100); proved when each answers on the install (needs-rupash 98)",
-    updated: "2026-09-28",
-  },
-  "M5.7.3": {
-    status: "BLOCKED",
-    why: "built (PR #100): the agent page shows a pinned model as step 1 with the level's steps behind it; proving it needs an agent, which Wave 3 creates (needs-rupash 100)",
     updated: "2026-09-28",
   },
   "M7.1.1": {
@@ -550,11 +535,6 @@ const PROGRESS = {
     updated: "2026-09-28",
   },
   "M8.1.2": {
-    status: "IN PROGRESS",
-    why: "Wave 2 batch 2, citations, freshness and abstention on Ask (R2)",
-    updated: "2026-09-28",
-  },
-  "M8.1.3": {
     status: "IN PROGRESS",
     why: "Wave 2 batch 2, citations, freshness and abstention on Ask (R2)",
     updated: "2026-09-28",

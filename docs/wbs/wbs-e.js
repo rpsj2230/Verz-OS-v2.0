@@ -8,7 +8,7 @@ module.exports = [
  ]},
  {n:"Deploy at the end of every wave",s:[
    {n:"Wave close ritual",k:["Record the deployed commit at the end of each wave; release tags are cut only for client installs","Run the full invariant suite against staging","Deploy to production","Smoke test: one real question answered end to end by a real person","Restore drill from wave three onward","Wave report generated automatically from the closed task ids"]},
-   {n:"What is live after each wave",k:["W0: nothing user-facing, but the pipeline itself deploys and is provably working","W1: a person asks in the console and gets a permission-correct answer from seeded data","W2: the same question answered in Lark, against connector cassettes","W3: agents installed from templates, answering with knowledge and memory","W4: automations running, approvals landing in Lark","W5: real connector credentials wired, browser tasks, go-live"]}
+   {n:"What is live after each wave",k:["W0: nothing user-facing, but the pipeline itself deploys and is provably working","W1: a person asks in the console and gets a permission-correct answer from seeded data","W2: a real question answered live in Lark from a connected source","W3: agents installed from templates, answering with knowledge and memory","W4: automations running, approvals landing in Lark","W5: real connector credentials wired, browser tasks, go-live"]}
  ]},
  {n:"Live progress, generated not typed",s:[
    {n:"Status from git",k:["CI step parsing every commit message for task ids","Status file written to the repository on each merge to main","Task marked done only when its branch merges and CI is green, never by hand","Percentage, per-wave and per-module progress computed from that file"]},

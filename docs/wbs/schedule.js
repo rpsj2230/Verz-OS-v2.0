@@ -1,5 +1,6 @@
 // ONE PHASE. Everything ships. 7 waves; wave six is the independent install proof only.
-// Connectors are CODED against cassettes in-wave; real credentials are wired at go-live (W5).
+// Connectors are built against recorded vendor payloads and proved live on the install in the
+// wave that builds them (owner, 2026-09-28, item 100): done means working on the install.
 module.exports = {
   START:"2026-09-08", TRACK_CAP:10, LEAVES_PER_TRACK_DAY:14, INTEGRATION_DAYS:1,
   // modules large enough to run as two or three concurrent tracks
@@ -43,6 +44,9 @@ module.exports = {
     "M3.7.2":3,
     // The chat halves of the sign-in and department checks need Wave 2's Lark chat channel: owner, 2026-09-28, item 97.
     "M1.8.5":2, "M2.3.1":2,
+    // Proved with an agent, which Wave 3 creates: owner, 2026-09-28, item 100. Their Wave 2 parts
+    // are built in Wave 2 and the task closes when the agent half is proved.
+    "M11.9.3":3, "M11.9.4":3, "M11.9.5":3, "M11.9.6":3, "M11.9.7":3, "M11.9.8":3, "M11.9.9":3, "M11.9.10":3, "M11.9.11":3, "M11.9.12":3, "M11.9.13":3, "M11.9.14":3, "M11.8.8":3, "M10.7.3":3, "M12.2.5":3, "M12.2.7":3, "M12.2.8":3, "M12.3.3":3, "M12.4.8":3, "M12.4.10":3, "M8.2.4":3, "M8.3.5":3, "M11.8.10":3, "M12.4.2":3, "M5.7.3":3,
     // "What is live after each wave" - each line is that wave's own exit criterion.
     "M38.2.2.2":1, "M38.2.2.3":2, "M38.2.2.4":3, "M38.2.2.5":4, "M38.2.2.6":5,
     // A smoke test needs a real person asking a real question, so the gate must exist.
