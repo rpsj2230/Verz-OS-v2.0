@@ -20,6 +20,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.sql.selectable import Select
 
 from brain.api import API_PREFIX
 from brain.core.entitlement import Grant
@@ -31,7 +32,9 @@ from brain.notification_routes import (
     NOT_CONFIGURED,
     NOTIFICATION_AUTHORITY,
     NOTIFICATIONS_PATH,
+    NOTHING_TO_REMOVE,
     PASSWORD_PATH,
+    REMOVAL_PATH,
     THE_ALERT_STORE_DID_NOT_ANSWER,
     TRIAL_PATH,
 )
@@ -54,12 +57,13 @@ from tests.fixtures.console_http import Stub, console_client, get, post
 from tests.fixtures.fake_alert_valkey import FakeAlertValkey
 from tests.fixtures.fake_relay import LOOPBACK, fake_relay
 from tests.fixtures.operation_ledger import MemoryLedger
-from tests.fixtures.setting_rows import SettingRows
+from tests.fixtures.setting_rows import Result, Row, SettingRows
 
 PAGE = f"{API_PREFIX}{NOTIFICATIONS_PATH}"
 RELAY = f"{API_PREFIX}{EMAIL_PATH}"
 PASSWORD = f"{API_PREFIX}{PASSWORD_PATH}"
 TRIAL = f"{API_PREFIX}{TRIAL_PATH}"
+REMOVAL = f"{API_PREFIX}{REMOVAL_PATH}"
 SECRET = "relay-PASSWORD-SENTINEL-0123456789"
 WRITTEN = datetime(2019, 3, 4, 9, 0, 5, tzinfo=UTC)
 
@@ -68,6 +72,20 @@ GRANTS = {
     "u_narrow": (Grant(capability=NOTIFICATION_AUTHORITY, scope=Scope.department("web")),),
     "u_none": (),
 }
+
+
+#: The directory's names, as `brain.routing_routes.names_of` reads them.
+NAMES = {"u_admin": "Ada Admin", "u_colleague": "Col League"}
+
+
+def names(statement: Any) -> Result | None:
+    """The names a `names_of` select asks for, or None for any other statement."""
+    if not isinstance(statement, Select):
+        return None
+    if [one["name"] for one in statement.column_descriptions] != ["id", "display_name"]:
+        return None
+    asked = statement.compile().params["id_1"]
+    return Result(Row((pid, NAMES[pid])) for pid in sorted(asked) if pid in NAMES)
 
 
 def notice_path(kind: str) -> str:
@@ -121,6 +139,7 @@ def settings() -> SettingRows:
 def served(settings: SettingRows) -> Iterator[tuple[TestClient, Stub]]:
     with console_client(GRANTS) as (client, stub):
         stub.answerers.append(settings.answer)
+        stub.answerers.append(names)
         yield client, stub
 
 
@@ -160,6 +179,7 @@ def test_a_caller_without_the_authority_over_everything_is_refused_before_the_da
                 (RELAY, relay_body()),
                 (PASSWORD, {"password": SECRET}),
                 (TRIAL, {"to": "someone@example.com"}),
+                (REMOVAL, {}),
             ):
                 refused = post(client, pid, path, body)
                 answers.append((refused.status_code, refused.json()["message"]))
@@ -306,6 +326,66 @@ def test_a_relay_is_saved_as_five_rows_with_its_writer_and_read_back_configured(
         587,
         "u_admin",
     )
+
+
+def test_removing_the_relay_retires_its_rows_names_who_did_and_the_next_read_is_unconfigured(
+    served: tuple[TestClient, Stub], settings: SettingRows
+) -> None:
+    """**Removed by retirement, attributed.** The five rows leave the live set naming the person
+    who removed them, the transaction carries their attribution for `0059`'s `retired` entries,
+    the answer and the next read say no relay is configured, and the password is not touched.
+
+    Delete this and a removal can report success while the relay keeps sending, or leave rows
+    retired by nobody the ledger can name."""
+    client, stub = served
+    vault = Vault(held=True)
+    attach(client, vault)
+    assert post(client, "u_admin", RELAY, relay_body()).status_code == 200
+    stub.attributions.clear()
+
+    removed = post(client, "u_admin", REMOVAL, {})
+    assert removed.status_code == 200, removed.text
+    assert removed.json()["configured"] is False and removed.json()["host"] is None
+    assert {one["key"] for one in settings.retired} == {
+        f"mail.{name}" for name in ("host", "port", "security", "sender", "username")
+    }
+    assert {one["updated_by"] for one in settings.retired} == {"u_admin"}
+    assert stub.commits == 2
+    assert stub.attributions[0] == (ACTOR_SETTING, "u_admin")
+    assert get(client, "u_admin", PAGE).json()["email"]["configured"] is False
+    assert vault.value == SECRET and vault.written == []
+
+
+def test_a_removal_with_nothing_saved_is_a_conflict_that_retires_nothing(
+    served: tuple[TestClient, Stub], settings: SettingRows
+) -> None:
+    """Delete this and removing a relay nobody saved answers 200, which reads as a change."""
+    client, stub = served
+    attach(client, Vault())
+    refused = post(client, "u_admin", REMOVAL, {})
+    assert refused.status_code == 409
+    assert refused.json()["message"] == NOTHING_TO_REMOVE
+    assert settings.retired == [] and stub.commits == 0
+
+
+def test_the_page_names_the_people_it_mentions_and_asks_for_nobody_else(
+    served: tuple[TestClient, Stub], settings: SettingRows
+) -> None:
+    """**Names, never ids on the page.** Whoever switched a notice or saved the relay is named from
+    the directory, and the lookup asks for exactly the people the page mentions.
+
+    Delete this and the console draws a principal id where a person's name belongs."""
+    client, stub = served
+    attach(client, Vault())
+    assert post(client, "u_admin", notice_path("reverification_request"), {"on": False}).status_code == 200
+    body = get(client, "u_admin", PAGE).json()
+    assert body["people"] == {"u_admin": "Ada Admin"}
+    asked = [
+        one.compile().params["id_1"]
+        for one in stub.statements
+        if isinstance(one, Select) and "display_name" in [c["name"] for c in one.column_descriptions]
+    ]
+    assert asked[-1] == ["u_admin"]
 
 
 def test_a_bad_relay_is_told_every_problem_by_field_and_nothing_is_written(

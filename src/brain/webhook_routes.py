@@ -40,6 +40,11 @@ by its exception's type and never its message, for `brain.jobs_routes`' reason, 
 failure whose message is this product's own sentence: a worker with no vault. See
 `dispatcher_told`.
 
+**People are named from the directory, never shown by id.** `people` holds a display name for
+whoever registered a subscriber or changed one, read only for a reader who may manage them, so
+the console draws a name and keeps each id for its Advanced section. A process with no database
+names nobody rather than failing the screen.
+
 Task ids: M27.8.12
 """
 
@@ -94,7 +99,7 @@ from brain.ops.webhook_store import (
     WebhookRecords,
 )
 from brain.ops.wiring import components_for
-from brain.routing_routes import sessions_of
+from brain.routing_routes import names_of, sessions_of
 from brain.tables.webhook_change import WebhookChange
 
 log = structlog.get_logger()
@@ -258,6 +263,8 @@ class WebhooksView(BaseModel):
     replacing: str
     switching_off: str
     secret_minimum: int
+    #: Display names by principal id for everybody `subscribers` names. See the module docstring.
+    people: dict[str, str] = {}
 
 
 class RegistrationAsked(BaseModel):
@@ -430,6 +437,7 @@ def _page(
     subscribers: list[WebhookSubscriberView],
     found: tuple[str, ...],
     dispatcher: DispatcherView | None = None,
+    people: dict[str, str] | None = None,
 ) -> WebhooksView:
     return WebhooksView(
         manageable=manageable,
@@ -445,7 +453,18 @@ def _page(
         replacing=REPLACING_A_SIGNING_KEY,
         switching_off=SWITCHING_A_SUBSCRIBER_OFF,
         secret_minimum=MINIMUM_SIGNING_SECRET_CHARS,
+        people=people or {},
     )
+
+
+async def people_of(request: Request, ids: set[str]) -> dict[str, str]:
+    """The directory's names for these principals, or none on a process with no database."""
+    sessions = sessions_of(request)
+    if sessions is None or not ids:
+        return {}
+    async with sessions() as session:
+        found = (await session.execute(names_of(ids))).all()
+    return {str(pid): str(name) for pid, name in found}
 
 
 def secrets_held(
@@ -535,6 +554,10 @@ async def webhooks(request: Request, asked: Asked) -> WebhooksView:
         dispatcher=dispatcher_view(
             await records.dispatcher(),
             runs_here=runs_the_dispatch(settings_of(request).profile),
+        ),
+        people=await people_of(
+            request,
+            {one.created_by for one in views} | {c.changed_by for one in views for c in one.changes},
         ),
     )
 
