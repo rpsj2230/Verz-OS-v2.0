@@ -312,6 +312,7 @@ export const ACTION_PHRASES: Readonly<Record<string, string>> = Object.freeze({
   agent: "created, enabled, disabled, archived or published",
   // A stop on the install or on one department, agent, connector or person, or its resume (0136).
   halt: "stopped or resumed work under",
+  channel_binding: "bound or unbound a chat account of",
 });
 
 /** The phrase for an action, or its code when the vocabulary has outgrown this console. */

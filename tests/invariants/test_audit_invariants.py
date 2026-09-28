@@ -310,6 +310,7 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
         "agent taken on by a new owner": AuditAction.AGENT_OWNER,
         "install or part of it stopped, or resumed": AuditAction.HALT,
         "agent created, switched, archived or published": AuditAction.AGENT,
+        "chat identity bound to a person or unbound": AuditAction.CHANNEL_BINDING,
     }
     assert set(required.values()) == set(AuditAction)
     assert {action.value for action in AuditAction} == {
@@ -345,6 +346,7 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
         "agent_owner",
         "halt",
         "agent",
+        "channel_binding",
     }
     # Every value fits the column, which is `VARCHAR(16)`. This is not decoration: the two
     # other names considered for the eighth member were `attachment_change` at seventeen

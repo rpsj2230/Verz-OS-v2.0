@@ -32,8 +32,9 @@ delivery is still being answered is a redelivery, and one message is answered on
 **A sender bound to nobody is told how to bind and nothing else (M10.3.3).** `reply_for` looks the
 sender up by `brain.gate.ingress.identity_hash`, never by the raw identity, and a sender with no
 binding is sent `brain.gate.ingress.Unrecognised`'s prompt: the same words whether the identity was
-never seen, is known and unbound, or was unbound this morning, and no entitlement at all. Until the
-binding table exists (CH2's) nobody is bound, and `NoBindingsYet` says so rather than guessing.
+never seen, is known and unbound, or was unbound this morning, and no entitlement at all. On a
+process with no database nobody is bound, and `NoBindingsYet` says so rather than guessing; with
+one, `brain.ops.binding_store.StoredBindings` answers from `auth.principal_identity`.
 
 **A chat addresses an agent with a mention that opens the message (M3.9.8).**
 `brain.gate.addressing.from_mention` takes a leading `@agent_id` off the question, and only a
@@ -98,9 +99,9 @@ A_REQUEST_IS_REFUSED_BEFORE_ITS_BODY_IS_READ: Final = (
     "exists to refuse them, and a parser is where a crafted body does its work."
 )
 
-#: Why nobody is bound before the binding table exists.
+#: Why nobody is bound on a process with nowhere to keep a binding.
 NOBODY_IS_BOUND_UNTIL_A_BINDING_IS_KEPT: Final = (
-    "No table holds a channel binding in this release, so no sender is bound to anybody and "
+    "A process with no database keeps no channel binding, so no sender is bound to anybody and "
     "every sender is answered as unrecognised. That is the narrow direction: a sender who should "
     "have been answered is told how to bind, and nobody is answered as somebody they are not."
 )
@@ -220,9 +221,9 @@ class ChatBinder(Protocol):
     """Where a chat identity is bound with a single-use code minted in a web session.
 
     The receiving side of M1.8.5 and M10.3.1: this package hands over the event and what the
-    sender typed, and the store that keeps bindings (CH2's) decides whether it is a code, redeems
-    it once through `brain.channels.binding.bind_once` and keeps the binding. Nothing here knows
-    a code's shape, so the two cannot disagree about it.
+    sender typed, and the store that keeps bindings (CH2's `brain.ops.binding_store.StoredBinder`)
+    decides whether it is a code, redeems it once through `brain.channels.binding.redeem` and keeps
+    the binding. Nothing here knows a code's shape, so the two cannot disagree about it.
     """
 
     async def redeem(self, event: ChannelEvent, text: str, *, now: datetime) -> Redeemed:
