@@ -70,6 +70,16 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
   "src/pages/Elevation.tsx": [{ pattern: "/elevation", index: 0, writes: true }],
   // The Add a document card sits above the library, so its form comes before the list's search.
   "src/pages/Knowledge.tsx": [{ pattern: "/library", index: 0, writes: true }],
+  // The lifecycle cards sit between the Add a document card and the library. Opening a document
+  // draws its four acts' forms above the capture form, in the order the card lists them.
+  "src/components/KnowledgeLifecycle.tsx": [
+    { pattern: "/library", opener: "Open", index: 1, writes: true },
+    { pattern: "/library", opener: "Open", index: 2, writes: true },
+    { pattern: "/library", opener: "Open", index: 3, writes: true },
+    { pattern: "/library", opener: "Open", index: 4, writes: true },
+    { pattern: "/library", index: 1, writes: true },
+    { pattern: "/library", index: 2, writes: true },
+  ],
   "src/pages/AccessRequests.tsx": [{ pattern: "/access-requests", index: 0, writes: true }],
   "src/pages/Matrix.tsx": [{ pattern: "/routing/:rungId", index: 1, writes: true }],
   // After the matrix's own search form: the golden question, then the rung to add.

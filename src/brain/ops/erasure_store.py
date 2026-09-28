@@ -241,6 +241,10 @@ SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
         "gate.team_membership": "principal_id",
         "know.chunk": "owner_id",
         "know.item": "owner_id",
+        # A solution a person captured, in their words, and a task addressed to a person (`0120`).
+        # `0120` grants no way for a row to leave, so an erasure keeps these and reports them kept.
+        "know.solution": "captured_by",
+        "know.steward_task": "principal_id",
         "mem.adaptive": "principal_id",
         "mem.persistent": "principal_id",
         "obs.request_telemetry": "principal",

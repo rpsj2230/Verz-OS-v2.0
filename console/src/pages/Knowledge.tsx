@@ -25,6 +25,12 @@
  * API's own sentence, whether it was added or why it was not, parse failures included (M7.2.5).
  * Somebody who may add nothing is told so in one sentence and shown no form.
  *
+ * **What happens to a document after it is added is three cards from `components/KnowledgeLifecycle.tsx`**
+ * (M7.4.4, M7.4.5, M7.4.6, M7.6.2, M7.7.2): the tasks the database opened for this person, the
+ * documents they look after with the four acts on each, and captured solutions waiting for a named
+ * person. They sit between adding a document and the library, and a write in any of them asks the
+ * library and the other cards again, so what changed is drawn everywhere at once.
+ *
  * **Two controls from the design are absent and say so.** Export inventory is a write nothing on
  * the server offers, and the Review due chip filters on a date the API does not send. The search, the level filter, the order and "Show more" are requests the route answers over
  * the items this reader may know exist, without narrowing what it loads, so its truncation flag
@@ -37,7 +43,7 @@
  * Imported statically rather than split, which is `Roles.tsx`' rule: it mounts neither heavy
  * library and imports no stylesheet of its own.
  *
- * Task ids: M27.7.20, M27.8.6, M7.6.3, M7.6.1, M7.2.5
+ * Task ids: M27.7.20, M27.8.6, M7.6.3, M7.6.1, M7.2.5, M7.4.4, M7.4.5, M7.6.2
  */
 
 import { useState, type FormEvent } from "react";
@@ -68,6 +74,7 @@ import {
   type UploadOptions,
 } from "./knowledgeQuery";
 import { FailureNotice } from "../ui/FailureNotice";
+import { KnowledgeTasks, LookedAfterCard, SolutionsCard } from "../components/KnowledgeLifecycle";
 
 /** The design's own label for this screen, which the navigation and this heading share. */
 export const KNOWLEDGE_HEADING = "Knowledge";
@@ -375,8 +382,8 @@ function AddDocument({ onAdded }: { readonly onAdded: () => void }) {
 /** What the company view adds over a department's, as the design lists it, in true sentences. */
 export const DEPARTMENT_ADMIN_SEES = "Only the items in their own scope.";
 export const PROMOTION_NOT_HERE =
-  "Not offered here. Promoting an item to the whole company is a change a person decides, and " +
-  "this screen records no decision.";
+  "Asked for from a document you look after, above, and decided on the Approvals screen by " +
+  "somebody who may approve it. This list records no decision itself.";
 export const CONTENTS_NOT_OPENED =
   "Not opened from this screen. It says an item exists and how widely it reaches, never what " +
   "the item says.";
@@ -591,13 +598,17 @@ function KnowledgeAnswerView({ version }: { readonly version: number }) {
 }
 
 export function Knowledge() {
-  // Moved after a document is added, so the library asks again and shows it.
+  // Moved after a document is added or anything is done to one, so every card asks again.
   const [version, setVersion] = useState(0);
+  const changed = () => setVersion((was) => was + 1);
   return (
     <article className="page">
       <h1>{KNOWLEDGE_HEADING}</h1>
       <p className="lede">{KNOWLEDGE_LEDE}</p>
-      <AddDocument onAdded={() => setVersion((was) => was + 1)} />
+      <AddDocument onAdded={changed} />
+      <KnowledgeTasks version={version} onChanged={changed} />
+      <LookedAfterCard version={version} onChanged={changed} />
+      <SolutionsCard version={version} onChanged={changed} />
       <KnowledgeAnswerView version={version} />
     </article>
   );

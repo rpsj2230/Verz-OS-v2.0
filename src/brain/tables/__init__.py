@@ -93,6 +93,7 @@ from brain.tables.identity import (
     one_of,
 )
 from brain.tables.knowledge import KnowledgeItemRow
+from brain.tables.knowledge_lifecycle import SolutionRow, StewardTaskRow
 from brain.tables.learning import CorrectionRow, LearningRow
 from brain.tables.memory import AdaptiveMemoryRow, PersistentMemoryRow
 from brain.tables.model_health import (
@@ -358,6 +359,10 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0121_skill_sources_versions_and_categories. Points at nothing: a name is not unique in
     # `agent.skill`, and the person who set the categories is a value.
     "agent.skill_category",
+    # 0120_knowledge_lifecycle. A task names its document by value, and a solution the document it
+    # became, so neither points at anything: two writers, neither of which may order the other.
+    "know.steward_task",
+    "know.solution",
 )
 
 __all__ = [
@@ -451,9 +456,11 @@ __all__ = [
     "SkillAssignmentRow",
     "SkillReviewRow",
     "SkillRow",
+    "SolutionRow",
     "SpendActualRow",
     "StaffMemberRow",
     "StaffSyncRunRow",
+    "StewardTaskRow",
     "SuspensionRow",
     "TeamMembershipRow",
     "TeamRow",

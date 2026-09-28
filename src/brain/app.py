@@ -138,6 +138,7 @@ from brain.install import InstallError, installed_name, value_of
 from brain.install_routes import router as install_router
 from brain.jobs_routes import router as jobs_router
 from brain.knowledge.row_store import SessionRowSource
+from brain.knowledge_lifecycle_routes import router as knowledge_lifecycle_router
 from brain.knowledge_routes import router as knowledge_router
 from brain.lark_connect_routes import router as lark_connect_router
 from brain.log_routes import router as log_router
@@ -1433,6 +1434,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # The Tools screen: every tool with what it needs and does, and the switch that stops one for
     # the install or one department's people, behind `admin:tool`. See `brain.tool_routes`.
     app.include_router(tool_router)
+    # A stored document verified, handed over, replaced and proposed for the whole company, the
+    # tasks each opens and captured solutions decided. See `brain.knowledge_lifecycle_routes`.
+    app.include_router(knowledge_lifecycle_router)
 
     @app.get("/health/live", response_model=Health, tags=["health"])
     async def live() -> Health:
