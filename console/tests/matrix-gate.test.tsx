@@ -10,7 +10,19 @@
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
-import { ADD_RUNG, GOLDEN_HEADING, HELD, NO_GOLDEN } from "../src/pages/matrixGateQuery";
+import {
+  ADD_GOLDEN,
+  ADD_RUNG,
+  ADD_RUNG_HEADING,
+  CHOOSE_A_PERSON,
+  GOLDEN_COUNTS_WHEN,
+  GOLDEN_HEADING,
+  HELD,
+  NO_GOLDEN,
+  STEPS_TO_PASS,
+  caseReasonWords,
+  heldWhy,
+} from "../src/pages/matrixGateQuery";
 import { SAVE_RUNG } from "../src/pages/Matrix";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 
@@ -61,12 +73,26 @@ const HELD_CHANGE = {
   rung: null,
 };
 
+const PEOPLE = {
+  items: [
+    { id: "u_nadia", name: "Nadia Tan" },
+    { id: "u_omar", name: "Omar Lee" },
+  ],
+  truncated: false,
+};
+
 async function routingAt(path: string, golden: unknown[] = []): Promise<{ container: HTMLElement; idp: FakeIdp }> {
   const idp = fakeIdentityProvider({
     api(url, init) {
       const method = init?.method ?? "GET";
       if (url.includes("/api/v1/routing/changes")) {
         return json({ items: [] });
+      }
+      if (url.includes("/api/v1/routing/golden-questions/askers")) {
+        return json(PEOPLE);
+      }
+      if (url.includes("/api/v1/routing/golden-questions") && method === "POST") {
+        return json({ items: golden });
       }
       if (url.includes("/api/v1/routing/golden-questions")) {
         return json({ items: golden });
@@ -149,7 +175,7 @@ describe("the matrix gate on the Routing screen", () => {
     // What breaks if this is deleted: the add form's submit posts directly, and a rung reaches the
     // gate, and possibly the chain, from one press nobody confirmed.
     const { container, idp } = await routingAt("/routing");
-    const form = container.querySelector('form[aria-label="Add a rung"]') as HTMLFormElement;
+    const form = container.querySelector(`form[aria-label="${ADD_RUNG_HEADING}"]`) as HTMLFormElement;
     fireEvent.change(form.querySelector('input[name="provider"]') as HTMLElement, { target: { value: "deepseek" } });
     fireEvent.change(form.querySelector('input[name="model"]') as HTMLElement, { target: { value: "deepseek-chat" } });
     fireEvent.submit(form);
@@ -176,5 +202,102 @@ describe("the matrix gate on the Routing screen", () => {
       timeout_seconds: 20,
       max_concurrency: 4,
     });
+  });
+
+  test("a change held with no golden questions says why and the steps to get one through, where it was saved", async () => {
+    // What breaks if this is deleted: a new install saves a change, sees Held and a sentence about
+    // a floor, and has nothing on the screen saying that a document and a golden question asked as
+    // a person who can read it are what every change waits on, which is where the owner was.
+    const { container } = await routingAt(`/routing/${RUNG_ID}`);
+    fireEvent.click(container.querySelector(".form button[type=submit]") as HTMLElement);
+    await waitFor(() => {
+      button(container, SAVE_RUNG);
+    });
+    fireEvent.click(button(container, SAVE_RUNG));
+    await waitFor(() => {
+      if (!container.querySelector('[aria-label="The change was held"]')) {
+        throw new Error("the held change is not drawn");
+      }
+    });
+
+    const held = container.querySelector('[aria-label="The change was held"]');
+    const words = held?.textContent ?? "";
+    expect(words).toContain(GOLDEN_COUNTS_WHEN);
+    for (const step of STEPS_TO_PASS) {
+      expect(words).toContain(step);
+    }
+    expect(held?.querySelector('a[href="/library"]')).not.toBeNull();
+    // The API's case ids and reasons are kept, under Details, and said in plain words above it.
+    expect(words).toContain(caseReasonWords("did not answer: absent"));
+  });
+
+  test("why a change was held is the permission check, the golden question, or there being none, in that order", () => {
+    // What breaks if this is deleted: a held change blames the golden questions when a permission
+    // check found a leak, or says there are none when one exists and was not answered.
+    const base = { id: "c", kind: "edit", status: "held", rung_id: null, reasons: [], quality_share: null, proposed_by: "u", decided_at: "" } as const;
+    expect(heldWhy({ ...base, failing: [{ case: "canary-1", reason: "x" }, { case: "q", reason: "did not answer: x" }] }, 1)).toContain("permission check");
+    expect(heldWhy({ ...base, failing: [{ case: "q", reason: "answered a question it must refuse" }] }, 1)).toContain("must be refused");
+    expect(heldWhy({ ...base, failing: [{ case: "q", reason: "did not answer: nothing retrieved" }] }, 1)).toContain("was not answered");
+    expect(heldWhy({ ...base, failing: [] }, 0)).toContain("no golden questions yet");
+    // A withheld record and an absent one are one sentence, never two.
+    expect(caseReasonWords("did not answer: not entitled")).toBe(caseReasonWords("did not answer: nothing retrieved"));
+  });
+
+  test("a golden question is asked as a person chosen by name, and the id the API stores is what is sent", async () => {
+    // What breaks if this is deleted: the form goes back to asking for a principal id, which no
+    // owner knows, so the golden question every change waits on is never recorded.
+    const { container, idp } = await routingAt("/routing");
+    const form = container.querySelector('form[aria-label="Add a golden question"]') as HTMLFormElement;
+    await waitFor(() => {
+      if (form.querySelectorAll('select[name="asked_as"] option').length < 3) {
+        throw new Error("the people have not arrived");
+      }
+    });
+    const options = [...form.querySelectorAll('select[name="asked_as"] option')].map((one) => one.textContent);
+    expect(options).toEqual([CHOOSE_A_PERSON, "Nadia Tan", "Omar Lee"]);
+    expect(form.querySelector('input[name="asked_as"]')).toBeNull();
+
+    fireEvent.change(form.querySelector('input[name="question"]') as HTMLElement, { target: { value: "How many days of leave do I have?" } });
+    fireEvent.change(form.querySelector('select[name="asked_as"]') as HTMLElement, { target: { value: "u_nadia" } });
+    fireEvent.submit(form);
+    expect(container.querySelector(".confirm")?.textContent).toContain("Nadia Tan");
+    const confirm = [...container.querySelectorAll(".confirm button")].find((one) => one.textContent === ADD_GOLDEN);
+    fireEvent.click(confirm as HTMLElement);
+    await waitFor(() => {
+      if (writes(idp).length === 0) {
+        throw new Error("nothing sent");
+      }
+    });
+    expect(writes(idp)[0]?.body).toEqual({ question: "How many days of leave do I have?", asked_as: "u_nadia", expect: "answer" });
+  });
+
+  test("every control on the Routing screen is named by its label and carries a name", async () => {
+    // What breaks if this is deleted: the owner's audit on 2026-09-28 again finds the Add form's
+    // inputs with no accessible name. Each control is found by its label element, both the label's
+    // for attribute and the control's labels list, which is what an assistive tool reads.
+    const { container } = await routingAt("/routing");
+    // The screen itself, not the shell around it, whose theme switch is another screen's concern.
+    const screen = container.querySelector("article.page") as HTMLElement;
+    const controls = [...screen.querySelectorAll<HTMLInputElement | HTMLSelectElement>("input, select, textarea")];
+
+    expect(controls.length).toBeGreaterThan(8);
+    for (const control of controls) {
+      const labels = [...(control.labels ?? [])];
+      expect(labels.length, control.outerHTML).toBeGreaterThan(0);
+      expect(labels.some((one) => (one.textContent ?? "").trim() !== ""), control.outerHTML).toBe(true);
+      expect(control.getAttribute("name"), control.outerHTML).not.toBeNull();
+      expect(container.querySelector(`label[for="${control.id}"]`), control.outerHTML).not.toBeNull();
+    }
+  });
+
+  test("no rung, ladder, tier, lane or slot is drawn on the Routing screen", async () => {
+    // What breaks if this is deleted: the owner's plain Routing screen grows internal words again.
+    const { container } = await routingAt("/routing", [
+      { id: "g-1", question: "How many days of leave do I have?", asked_as: "u_nadia", asked_as_name: "Nadia Tan", expect: "answer", created_by: "u_admin" },
+    ]);
+
+    expect(container.textContent).toContain("Nadia Tan");
+    expect(container.textContent).not.toMatch(/\b(rungs?|ladders?|tiers?|lanes?|slots?)\b/i);
+    expect(container.textContent).not.toMatch(/\b(small|heavy)\b/);
   });
 });

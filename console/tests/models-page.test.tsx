@@ -32,6 +32,7 @@ import {
   SAVE_NUMBERS,
   SET_HERE,
   TIERS_CAPTION,
+  alertSentence,
   residencyConsequence,
   tierConsequence,
 } from "../src/pages/routingSettingsQuery";
@@ -66,6 +67,9 @@ import {
   exhaustedSentence,
   HEALTHY,
   healthWords,
+  KEY_REFUSED,
+  KEY_REFUSED_HEALTH,
+  KEY_REFUSED_MARKER,
   HOURS_PARAMETER,
   KEEP_IT_AS_IT_IS,
   LEVEL_NAMES,
@@ -91,6 +95,7 @@ import {
   spendShares,
   spendThisMonthApiPath,
   STEP_PAUSED,
+  stepMarker,
   switchConsequence,
   switchedSentence,
   switchQuestion,
@@ -116,7 +121,8 @@ import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./suppo
 import { declaredParameterNames, declaredParameterSchema, declaredQueryParameters } from "./support/openapi";
 import { backendEnumMembers, backendModelFields } from "./support/python";
 import { readRepoFile } from "./support/repo";
-import { instantWords, moneyWords } from "../src/pages/spendQuery";
+import { CURRENCY_NOT_SET, instantWords, moneyWords } from "../src/pages/spendQuery";
+import { SETTINGS_PATH } from "../src/pages/settingsQuery";
 import { everyWrite } from "./support/writes";
 
 const CONSOLE_ORIGIN = "https://console.test";
@@ -195,6 +201,7 @@ function liveRung(tier: string, position: number, model: string, extra: Record<s
     probes_failed: 1,
     last_probe_at: "2019-03-06T08:59:00Z",
     last_live_at: "2019-03-06T08:00:00Z",
+    key_refused: false,
     ...extra,
   } as RungStateRow;
 }
@@ -303,6 +310,7 @@ function check(overrides: Record<string, unknown> = {}): Record<string, unknown>
     tokens_out: 2,
     status: null,
     trace_id: "CHECK-TRACE-SENTINEL",
+    default_model: false,
     ...overrides,
   };
 }
@@ -697,7 +705,8 @@ describe("the providers", () => {
     });
     expect(posts()).toEqual([{ method: "POST", path: `${PROVIDERS}/anthropic/check`, body: null }]);
     const outcome = container.querySelector(`[aria-label="Test of ${ANTHROPIC}"]`)?.textContent ?? "";
-    expect(outcome).toContain("claude-sonnet-5-deployment");
+    // The model is named in the API's own sentence; the deployment id is never drawn.
+    expect(outcome).not.toContain("claude-sonnet-5-deployment");
     expect(outcome).toContain("14 tokens in and 2 tokens out");
     expect(outcome).toContain("CHECK-TRACE-SENTINEL");
   });
@@ -724,7 +733,7 @@ describe("the providers", () => {
     });
     const outcome = container.querySelector(`[aria-label="Test of ${ANTHROPIC}"]`)?.textContent ?? "";
     expect(outcome).toContain(checkStatusSentence(401));
-    expect(outcome).not.toContain("Answered by");
+    expect(outcome).not.toContain("tokens in");
   });
 
   test("every write on the screen is reached only through a confirmation in the source, with the methods its routes declare", () => {
@@ -893,7 +902,14 @@ describe("cost this month", () => {
     expect(card(container, "models-cost").textContent).not.toContain("2019-03-06T08:00:00Z");
 
     const unset = await modelsPage({ ...EVERY_ANSWER, [SPEND]: () => json({ ...SPENT, currency: "XXX", time_zone: "UTC" }) });
-    expect(card(unset.container, "models-cost").querySelector(".figure")?.textContent).toBe("XXX 288.00");
+    // Never the code meaning none: the amount alone, and where the currency is set, beside it.
+    const unsetCard = card(unset.container, "models-cost");
+    expect(unsetCard.querySelector(".figure")?.textContent).toBe("288.00");
+    expect(unsetCard.textContent).not.toContain("XXX");
+    expect(unsetCard.textContent).toContain(CURRENCY_NOT_SET);
+    expect(unsetCard.querySelector(`a[href="${SETTINGS_PATH}"]`)).not.toBeNull();
+    expect(card(container, "models-cost").textContent).not.toContain(CURRENCY_NOT_SET);
+    expect(moneyWords(28_800, "XXX")).toBe("288.00");
     expect(card(unset.container, "models-cost").textContent).toContain("live, as of 6 Mar 2019, 08:00");
     expect(instantWords("2019-03-06T08:00:00Z", "Nowhere/Atlantis")).toBe("2019-03-06T08:00:00Z");
     expect(instantWords("not a time", "UTC")).toBe("not a time");
@@ -972,7 +988,10 @@ describe("advanced", () => {
     expect(rows["claude-opus-5"]?.[4]).toBe(STEP_PAUSED);
     expect(rows["local-8b"]?.[5]).toBe(`${RESTING}: ${UNHEALTHY_BECAUSE["timeout"] ?? ""}`);
     expect(rows["local-8b"]?.[6]).toBe("1 recent call, 1 failed");
-    expect(rows["claude-sonnet-5"]?.[7]).toBe("3 probes, 1 failed");
+    expect(rows["claude-sonnet-5"]?.[7]).toBe("3 background checks, 1 failed");
+    // The step column counts from 1 within the level, whatever the stored position.
+    expect(rows["claude-sonnet-5"]?.[1]).toBe("1");
+    expect(rows["claude-haiku-5"]?.[1]).toBe("2");
     expect(healthWords(liveRung("main", 0, "m", { measured: false, state: "open" }))).toBe(NOT_CALLED_YET);
     expect(tableRows(container, PROVIDER_DETAILS_CAPTION)[1]?.[2]).toContain("Switched off by u_admin at");
   });
@@ -983,14 +1002,28 @@ describe("advanced", () => {
     const { container } = await modelsPage(EVERY_ANSWER);
 
     expect(tableRows(container, TIERS_CAPTION).map((row) => row.slice(0, 4))).toEqual([
-      ["small", "128000 tokens", "80%", PRODUCT_DEFAULT],
-      ["main", "50000 tokens", "50%", SET_HERE],
-      ["heavy", "200000 tokens", "80%", PRODUCT_DEFAULT],
+      ["Simple", "128000 tokens", "80%", PRODUCT_DEFAULT],
+      ["Medium", "50000 tokens", "50%", SET_HERE],
+      ["Complex", "200000 tokens", "80%", PRODUCT_DEFAULT],
     ]);
     expect(tableRows(container, RESIDENCY_CAPTION)[0]?.slice(0, 3)).toEqual(["department eq finance", "eu-west-1", "NOTE-SENTINEL"]);
-    expect(tableRows(container, ALERTS_CAPTION)[0]?.slice(1, 5)).toEqual(["warning", "main", "2", "REASON-SENTINEL"]);
-    expect(container.querySelector(`button[aria-label="${RESET_TIER}: main"]`)).not.toBeNull();
-    expect(container.querySelector(`button[aria-label="${RESET_TIER}: small"]`)).toBeNull();
+    // The API's reason is the operator's log line; the screen says what happened in plain words.
+    const alert = tableRows(container, ALERTS_CAPTION)[0];
+    expect(alert?.slice(1, 4)).toEqual(["Warning", "Medium", "2"]);
+    expect(alert?.[4]).toBe(
+      alertSentence({
+        raised_at: "",
+        level: "warning",
+        tier: "main",
+        depth: 2,
+        served_by: "gpt-5-deployment",
+        reason: "",
+        trace_id: "",
+      }),
+    );
+    expect(container.textContent).not.toContain("REASON-SENTINEL");
+    expect(container.querySelector(`button[aria-label="${RESET_TIER}: Medium"]`)).not.toBeNull();
+    expect(container.querySelector(`button[aria-label="${RESET_TIER}: Simple"]`)).toBeNull();
   });
 
   test("a level's numbers are sent only from their confirmation, as PUT, and the page is the plan it answers with", async () => {
@@ -1000,8 +1033,8 @@ describe("advanced", () => {
     const { container, sent } = await modelsPage({ ...EVERY_ANSWER, ["PUT /api/v1/models/tiers/small"]: () => json(after) });
     const puts = () => sent.filter((one) => one.method === "PUT");
 
-    fireEvent.click(button(container, `${EDIT_NUMBERS}: small`));
-    const form = container.querySelector<HTMLFormElement>('form[aria-label="Numbers for the small tier"]');
+    fireEvent.click(button(container, `${EDIT_NUMBERS}: Simple`));
+    const form = container.querySelector<HTMLFormElement>('form[aria-label="Numbers for the Simple level"]');
     fireEvent.change(form?.querySelector('input[name="context_window"]') as HTMLInputElement, { target: { value: "64000" } });
     fireEvent.change(form?.querySelector('input[name="escalation_headroom"]') as HTMLInputElement, { target: { value: "0.6" } });
     fireEvent.submit(form as HTMLFormElement);
@@ -1032,7 +1065,7 @@ describe("advanced", () => {
     });
     const posts = () => sent.filter((one) => one.method === "POST");
 
-    const form = container.querySelector<HTMLFormElement>('form[aria-label="Add a residency constraint"]');
+    const form = container.querySelector<HTMLFormElement>('form[aria-label="Add a rule on where questions may be processed"]');
     fireEvent.change(form?.querySelector('input[name="department"]') as HTMLInputElement, { target: { value: "legal" } });
     fireEvent.change(form?.querySelector('input[name="allowed_regions"]') as HTMLInputElement, {
       target: { value: "eu-west-1, eu-central-1" },
@@ -1068,6 +1101,46 @@ describe("advanced", () => {
       ["POST", "RESIDENCY_API_PATH", true],
       ["POST", "residencyRetireApiPath(asked.row.id)", true],
     ]);
+  });
+});
+
+describe("plain words and a refused key", () => {
+  test("a step whose latest call the provider refused as a key marks the provider and the step, never working or healthy", async () => {
+    // What breaks if this is deleted: a provider that refuses its key drawn as "Key saved, working",
+    // because a refused key does not open the breaker, which is what the owner's install showed.
+    const refused = STEPS.map((one) => (one.model === "claude-sonnet-5" ? { ...one, key_refused: true } : one));
+    const { container } = await modelsPage({ ...EVERY_ANSWER, [PROVIDERS]: () => json(providers({ rungs: refused })) });
+
+    const status = tableRows(container, PROVIDERS_CAPTION).find((row) => row[0] === ANTHROPIC)?.[1] ?? "";
+    expect(status).toContain(KEY_REFUSED);
+    expect(status).not.toContain("working");
+    const rows = Object.fromEntries(tableRows(container, STEPS_CAPTION).map((row) => [row[2], row]));
+    expect(rows["claude-sonnet-5"]?.[5]).toBe(KEY_REFUSED_HEALTH);
+    expect(stepMarker({ ...(STEPS[1] as RungStateRow), key_refused: true })).toEqual(KEY_REFUSED_MARKER);
+    expect(stepMarker(STEPS[1] as RungStateRow)).toBeNull();
+    const row = provider("anthropic") as unknown as ProviderStateRow;
+    expect(providerStatus(row, [liveRung("main", 0, "m", { key_refused: true })]).kind).toBe("key_refused");
+    expect(providerStatus(row, [liveRung("main", 0, "m")]).kind).toBe("working");
+  });
+
+  test("no rung, ladder, tier, lane or slot is drawn anywhere on the screen, Advanced included", async () => {
+    // What breaks if this is deleted: the owner's plain screen (2026-09-28: Simple, Medium, Complex,
+    // step, provider, model) grows internal words again in the next sentence somebody writes. The
+    // whole rendered page is read, Advanced and every closed section included, with a test's
+    // outcome and a held level drawn.
+    const { container } = await modelsPage({
+      ...EVERY_ANSWER,
+      [`POST ${PROVIDERS}/anthropic/check`]: () => json(check()),
+    });
+    fireEvent.click(button(container, `${TEST}: ${ANTHROPIC}`));
+    fireEvent.click(confirmButton(container, SEND_THE_TEST));
+    await waitFor(() => {
+      expect(container.textContent).toContain("CHECK-TOLD-SENTINEL");
+    });
+
+    const words = container.textContent ?? "";
+    expect(words).not.toMatch(/\b(rungs?|ladders?|tiers?|lanes?|slots?)\b/i);
+    expect(words).not.toMatch(/\b(small|heavy)\b/);
   });
 });
 

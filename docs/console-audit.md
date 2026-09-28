@@ -7,12 +7,12 @@ What an administrator would need to manage, read out of the schema, the routes a
 ## What was measured
 
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
-- 104 tables, from `brain.db.Base.metadata`.
+- 102 tables, from `brain.db.Base.metadata`.
 - 27 installation values, from `brain.install.INSTALLATION`.
-- 221 routes under `/api/v1` and `/setup`, from the API's internal document.
+- 210 routes under `/api/v1` and `/setup`, from the API's internal document.
 - 73 console addresses, from the route table in `console/src/App.tsx`.
-- 89 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 107 routes.
-- 37 gaps recorded, and 28 routes no screen calls.
+- 82 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 100 routes.
+- 36 gaps recorded, and 28 routes no screen calls.
 
 ## Area by area
 
@@ -128,7 +128,6 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `POST /setup/staff-source/trial` | `/first-run` |
 | `PUT /api/v1/install/settings/{name}` | `/settings` |
 
-- **Gap.** Languages, currency and time zone cannot be changed after setup. Recorded: Set by the first-run wizard, which saves them to ops.setting, and no route changes one afterwards; changing one today is editing the server's environment file or the row by hand.
 - **Gap.** Limits and budgets are read and never changed. Recorded: No route writes ops.budget_version or a ceiling; a limit is a release today.
 
 ### AI providers, models and the routing between them
@@ -144,6 +143,7 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `GET /api/v1/operate/models` | `/models` |
 | `GET /api/v1/routing/changes` | `/routing`, `/routing/:rungId` |
 | `GET /api/v1/routing/golden-questions` | `/routing`, `/routing/:rungId` |
+| `GET /api/v1/routing/golden-questions/askers` | `/routing` |
 | `GET /api/v1/routing/rungs` | `/agents/:agentId`, `/routing`, `/routing/:rungId` |
 | `PATCH /api/v1/routing/rungs/{rung_id}` | `/routing`, `/routing/:rungId` |
 | `POST /api/v1/models/providers` | `/models` |
@@ -266,7 +266,7 @@ No gap recorded.
 ### Knowledge bases, documents and data sources
 
 - **Screens:** `/library`, `/learning`, `/memory`, `/memory/:subject`, `/records`, `/records/:entity`, `/classification`, `/classification/:entity`, `/classification/:entity/:column`, `/artifacts`
-- **Tables:** `know.item`, `know.chunk`, `know.steward_task`, `know.solution`, `mem.adaptive`, `mem.persistent`, `mem.learning`, `mem.correction`, `gate.fast_path_rule`, `gate.field_policy`, `agent.artifact`, `know.classified_table`, `know.classified_row`
+- **Tables:** `know.item`, `know.chunk`, `mem.adaptive`, `mem.persistent`, `mem.learning`, `mem.correction`, `gate.fast_path_rule`, `gate.field_policy`, `agent.artifact`, `know.classified_table`, `know.classified_row`
 - **Installation values:** `INSTALL_VECTOR_STORE`, `INSTALL_EMBEDDING_REVISION`
 
 | Route | Called by |
@@ -276,24 +276,12 @@ No gap recorded.
 | `GET /api/v1/govern/learning` | `/learning` |
 | `GET /api/v1/govern/library` | `/library` |
 | `GET /api/v1/govern/memory` | `/memory/:subject` |
-| `GET /api/v1/knowledge/items` | `/library` |
-| `GET /api/v1/knowledge/items/{item_id}` | `/library` |
-| `GET /api/v1/knowledge/items/{item_id}/passages` | `/library` |
-| `GET /api/v1/knowledge/solutions` | `/library` |
-| `GET /api/v1/knowledge/tasks` | `/library` |
 | `GET /api/v1/knowledge/uploads/options` | `/library` |
 | `GET /api/v1/records/{entity}` | `/records/:entity` |
 | `GET /api/v1/records/{entity}/access` | **no screen** |
 | `POST /api/v1/classifications/{entity}/columns/{column}/marks/review` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` |
 | `POST /api/v1/classifications/{entity}/columns/{column}/review` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` |
 | `POST /api/v1/govern/learning/undo` | `/learning` |
-| `POST /api/v1/knowledge/items/{item_id}/promotion` | `/library` |
-| `POST /api/v1/knowledge/items/{item_id}/steward` | `/library` |
-| `POST /api/v1/knowledge/items/{item_id}/verification` | `/library` |
-| `POST /api/v1/knowledge/items/{item_id}/versions` | `/library` |
-| `POST /api/v1/knowledge/solutions` | `/library` |
-| `POST /api/v1/knowledge/solutions/{solution_id}/decision` | `/library` |
-| `POST /api/v1/knowledge/tasks/{task_id}/done` | `/library` |
 | `POST /api/v1/knowledge/uploads` | `/library` |
 | `PUT /api/v1/classifications/{entity}/columns/{column}/marks` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` |
 | `PUT /api/v1/classifications/{entity}/table` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` |
@@ -520,7 +508,7 @@ No gap recorded.
 
 ## Every write the console sends, followed to the system
 
-Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 89 of 107 write routes have all three proved or not applicable, 14 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
+Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 82 of 100 write routes have all three proved or not applicable, 14 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
 
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
@@ -582,13 +570,6 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /api/v1/jobs/{name}/pause` | `/jobs` | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_job_paused_from_the_screen_is_left_unstarted_by_the_next_tick_and_resumed_is_started` in `tests/unit/test_console_controls_reach_behaviour.py` |
 | `POST /api/v1/jobs/{name}/resume` | `/jobs` | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_job_paused_from_the_screen_is_left_unstarted_by_the_next_tick_and_resumed_is_started` in `tests/unit/test_console_controls_reach_behaviour.py` |
 | `POST /api/v1/jobs/{name}/run` | `/jobs` | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_run_asked_for_from_the_screen_is_started_by_the_next_tick_even_while_paused` in `tests/unit/test_console_controls_reach_behaviour.py` |
-| `POST /api/v1/knowledge/items/{item_id}/promotion` | `/library` | `test_a_promotion_waits_on_the_approvals_screen_and_is_applied_when_a_super_admin_approves` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | `test_a_promotion_waits_on_the_approvals_screen_and_is_applied_when_a_super_admin_approves` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | `test_a_promotion_waits_on_the_approvals_screen_and_is_applied_when_a_super_admin_approves` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) |
-| `POST /api/v1/knowledge/items/{item_id}/steward` | `/library` | `test_a_steward_is_handed_over_to_somebody_who_reaches_it_and_is_told` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | `test_a_steward_is_handed_over_to_somebody_who_reaches_it_and_is_told` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | `test_a_steward_is_handed_over_to_somebody_who_reaches_it_and_is_told` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) |
-| `POST /api/v1/knowledge/items/{item_id}/verification` | `/library` | `test_a_document_due_for_review_opens_a_task_for_its_steward_which_verifying_closes` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | `test_a_newer_version_supersedes_the_older_which_stays_readable_and_answers_use_the_newer` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | `test_a_document_due_for_review_opens_a_task_for_its_steward_which_verifying_closes` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) |
-| `POST /api/v1/knowledge/items/{item_id}/versions` | `/library` | `test_a_newer_version_supersedes_the_older_which_stays_readable_and_answers_use_the_newer` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | `test_a_newer_version_supersedes_the_older_which_stays_readable_and_answers_use_the_newer` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | `test_a_newer_version_supersedes_the_older_which_stays_readable_and_answers_use_the_newer` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) |
-| `POST /api/v1/knowledge/solutions` | `/library` | `test_a_captured_solution_becomes_knowledge_only_when_somebody_else_approves_it` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | `test_a_captured_solution_becomes_knowledge_only_when_somebody_else_approves_it` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | `test_a_captured_solution_becomes_knowledge_only_when_somebody_else_approves_it` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) |
-| `POST /api/v1/knowledge/solutions/{solution_id}/decision` | `/library` | `test_a_captured_solution_becomes_knowledge_only_when_somebody_else_approves_it` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | `test_a_captured_solution_becomes_knowledge_only_when_somebody_else_approves_it` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | `test_a_captured_solution_becomes_knowledge_only_when_somebody_else_approves_it` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) |
-| `POST /api/v1/knowledge/tasks/{task_id}/done` | `/library` | `test_a_steward_is_handed_over_to_somebody_who_reaches_it_and_is_told` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | Not applicable: Marking a task read closes a notice in the reader's own list and changes nothing anybody holds; what it reports was recorded when it happened. | `test_a_steward_is_handed_over_to_somebody_who_reaches_it_and_is_told` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) |
 | `POST /api/v1/knowledge/uploads` | `/library` | `test_an_administrators_upload_is_found_by_its_department_by_text_and_by_nobody_else` in `tests/unit/test_knowledge_upload_db.py` (database, in CI) | `test_an_upload_appends_one_ledger_entry_the_audit_screens_reader_finds` in `tests/unit/test_knowledge_upload_db.py` (database, in CI) | `test_a_markdown_file_is_added_to_a_department_as_its_uploader` in `tests/unit/test_knowledge_routes.py` |
 | `POST /api/v1/me/referrals/{referral_id}/handled` | `/referrals` | `test_a_referral_is_filed_without_content_and_read_only_by_its_person` in `tests/unit/test_compliance_store.py` (database, in CI) | **None.** Marking a referral handled writes handled_at and handled_by on its row and no ledger entry: an entry that only a sensitive question writes is the disclosure brain.audit.compliance.intercept argues against. | `test_a_referral_marked_handled_is_shown_handled` in `tests/unit/test_compliance_routes.py` |
 | `POST /api/v1/models/providers` | `/models` | `test_an_added_provider_has_its_key_kept_in_its_own_slot_before_its_row_is_written` in `tests/unit/test_provider_registry_routes.py` | `test_a_key_set_from_the_console_is_recorded_as_its_setter_with_their_reach_and_trace` in `tests/unit/test_credential_routes.py` | `test_a_provider_added_from_the_console_answers_through_the_ladder_with_no_release` in `tests/unit/test_model_calls.py` |

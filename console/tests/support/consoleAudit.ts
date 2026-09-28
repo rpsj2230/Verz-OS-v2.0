@@ -335,7 +335,6 @@ export const AREAS: Readonly<Record<string, Area>> = {
     tables: ["ops.setting", "ops.budget_version"],
     installation: ["INSTALL_LOCALES", "INSTALL_CURRENCY", "INSTALL_TIME_ZONE"],
     gaps: [
-      { what: "Languages, currency and time zone cannot be changed after setup.", because: ONCE_BY_THE_WIZARD },
       {
         what: "Limits and budgets are read and never changed.",
         because: "No route writes ops.budget_version or a ceiling; a limit is a release today.",

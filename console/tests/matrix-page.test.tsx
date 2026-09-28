@@ -33,7 +33,9 @@ import { beforeAll, describe, expect, test } from "vitest";
 import { LIST_PAGE_SIZE, NO_QUESTION, listPath } from "../src/components/listing";
 import {
   clauseText,
+  DETAIL_FIELDS,
   EDIT_COLUMN,
+  EDIT_HEADER,
   editableDefaults,
   MATRIX_COLUMNS,
   CHAIN_PAGE_SIZE,
@@ -49,7 +51,7 @@ import {
   submittedEdit,
   type RungRow,
 } from "../src/pages/matrixQuery";
-import { NO_SUCH_RUNG, SAVE_RUNG, THERE_IS_MORE } from "../src/pages/Matrix";
+import { NO_SUCH_RUNG, SAVE_RUNG, saveRungQuestion, THERE_IS_MORE } from "../src/pages/Matrix";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { declaredParameterSchema, declaredQueryParameters, declaredRequestBodySchema } from "./support/openapi";
 import { backendRoutingRungColumns, backendRungEditFields, backendRungViewFields } from "./support/python";
@@ -292,9 +294,9 @@ describe("the guard in the browser", () => {
     });
 
     expect(hidden.container.querySelector(".form:not(.list-controls)")).toBeNull();
-    expect(headings(hidden.container)).not.toContain(EDIT_COLUMN);
+    expect(headings(hidden.container)).not.toContain(EDIT_HEADER);
     expect(shown.container.querySelector(".form:not(.list-controls)")).not.toBeNull();
-    expect(headings(shown.container)).toContain(EDIT_COLUMN);
+    expect(headings(shown.container)).toContain(EDIT_HEADER);
   });
 
   test("a caller who may not edit is told nothing about why the editor is absent", async () => {
@@ -383,16 +385,35 @@ describe("the role a trigger derives", () => {
 });
 
 describe("what the screen shows", () => {
-  test("every field the API sends about a rung reaches the screen", async () => {
+  test("every field the API sends about a rung reaches the screen, as a column or under Advanced", async () => {
     // What breaks if this is deleted: a field arrives and is dropped in silence. No route
-    // sends a schema for this screen, so the columns are a list somebody wrote, and the only
-    // thing keeping it in step with the response model is this. Asserted in both directions:
-    // a column naming a field the model does not have would render an empty column headed
-    // with a word from nowhere.
+    // sends a schema for this screen, so the columns and the details are lists somebody wrote,
+    // and the only thing keeping them in step with the response model is this. Asserted in both
+    // directions, and with the two ids kept out of the table, which is where the owner found them.
     const declared = backendRungViewFields();
-    const rendered = MATRIX_COLUMNS.map((column) => String(column.name));
+    const columns = MATRIX_COLUMNS.map((column) => String(column.name));
+    const details = DETAIL_FIELDS.map((one) => String(one.name));
 
-    expect([...rendered].sort()).toEqual([...declared].sort());
+    expect([...columns, ...details].sort()).toEqual([...declared].sort());
+    expect(columns).not.toContain("id");
+    expect(columns).not.toContain("deployment_id");
+  });
+
+  test("the table is headed and filled in plain words, and the ids are under Advanced in the open step", async () => {
+    // What breaks if this is deleted: the Routing screen goes back to the API's field names, tier
+    // values and deployment ids, which the owner called jargon on 2026-09-28.
+    const { container } = await consoleAt("/routing/11111111-1111-4111-8111-111111111111", {
+      matrix: page([rung()], { editable: true }),
+    });
+
+    expect(headings(container)).toEqual([...MATRIX_COLUMNS.map((column) => column.header), EDIT_HEADER]);
+    const cells = [...(container.querySelectorAll(".grid__table tbody tr td") ?? [])].map((cell) => cell.textContent);
+    expect(cells.slice(0, 5)).toEqual(["Medium", "1", "default", "Anthropic (Claude)", "claude-sonnet-5"]);
+    expect(container.querySelector(".grid__table")?.textContent).not.toContain("anthropic-sonnet-global");
+    const advanced = [...container.querySelectorAll("details")].find((one) => one.querySelector("summary")?.textContent === "Advanced");
+    expect(advanced?.textContent).toContain("anthropic-sonnet-global");
+    expect(advanced?.textContent).toContain("11111111-1111-4111-8111-111111111111");
+    expect(container.textContent).not.toMatch(/\b(rungs?|ladders?|tiers?|lanes?|slots?)\b/i);
   });
 
   test("the grid adds one column that is not a field, and only for an editor", async () => {
@@ -519,7 +540,8 @@ describe("saving one rung", () => {
     });
     // The submit asks first; nothing is sent until the confirmation is pressed.
     expect(writes(idp)).toHaveLength(0);
-    expect(container.querySelector(".confirm")?.textContent).toContain("rung at position 0");
+    expect(container.querySelector(".confirm")?.textContent).toContain(saveRungQuestion(rung()));
+    expect(saveRungQuestion(rung())).toContain("step 1 of the Medium level");
     await confirmSave(container);
     await waitFor(() => expect(writes(idp)).toHaveLength(1));
 

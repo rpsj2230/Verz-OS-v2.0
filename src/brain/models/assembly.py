@@ -116,7 +116,9 @@ class RungSkip(enum.StrEnum):
     NO_KEY = "no_key"
 
 
-#: What an administrator is told for each reason, in words that say what to do.
+#: What an administrator is told for each reason, in words that say what to do. Plain words the
+#: owner uses on the Models and health screen (Simple, Medium, Complex, step, provider, model):
+#: since 2026-09-28 none of them says rung, ladder, tier, lane or slot, and a test holds that.
 TOLD: Final[Mapping[RungSkip, str]] = MappingProxyType(
     {
         RungSkip.LOCAL_PROFILE: (
@@ -125,20 +127,20 @@ TOLD: Final[Mapping[RungSkip, str]] = MappingProxyType(
             "Models and health screen, to allow it."
         ),
         RungSkip.SWITCHED_OFF: (
-            "This provider is switched off on this screen, so nothing is sent to it. Switch it "
-            "on to use this rung."
+            "This provider is turned off on the Models and health screen, so nothing is sent "
+            "to it. Turn it on to use this step."
         ),
         RungSkip.NO_TRANSPORT: (
-            "This product cannot call the provider this rung names. Point the rung at a "
-            "provider listed on this screen."
+            "This product cannot call the provider this step names. Choose a provider listed on "
+            "the Models and health screen for this step."
         ),
         RungSkip.NO_INFERENCE_SERVER: (
-            "This rung names the install's own inference server, and no usable address for it "
-            "is configured. Set INSTALL_MODEL_ENDPOINT to the server's address."
+            "This step uses the install's own model server, and no usable address for it is "
+            "set. Set INSTALL_MODEL_ENDPOINT to the server's address on Install, Settings."
         ),
         RungSkip.NO_KEY: (
-            "No key for this provider is held by the server process that answered. Put one in "
-            "on the credentials screen; other server processes pick it up within a minute."
+            "This server holds no key for this provider. Add one with Add key on the Models and "
+            "health screen; every server process picks it up within a minute."
         ),
     }
 )
