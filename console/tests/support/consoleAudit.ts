@@ -49,7 +49,10 @@ import {
 import {
   assignPath,
   categoriesPath,
+  detachPath,
   IMPORT_PATH,
+  reinstatementPath,
+  retirementPath,
   reviewPath,
   SKILLS_API_PATH,
   versionsPath,
@@ -407,14 +410,18 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "Skills and tools": {
-    screens: ["/skills", "/skills/:name", "/tools"],
+    screens: ["/skills", "/skills/:name", "/skills/:name/:view", "/tools"],
     routes: [
       "/api/v1/skills",
+      "/api/v1/skills/library",
       "/api/v1/skills/imports",
       "/api/v1/skills/{digest}/versions",
       "/api/v1/skills/{digest}/categories",
       "/api/v1/skills/{digest}/review",
       "/api/v1/skills/{digest}/assignments",
+      "/api/v1/skills/{digest}/retirement",
+      "/api/v1/skills/{digest}/reinstatement",
+      "/api/v1/skills/{digest}/detachments",
       "/api/v1/tools",
       "/api/v1/tools/{name}/switch",
     ],
@@ -425,12 +432,14 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "agent.tool_definition",
       "agent.tool_switch",
       "agent.skill_category",
+      "agent.skill_retirement",
+      "agent.skill_detachment",
     ],
     installation: [],
     gaps: [
       {
-        what: "A skill cannot be removed from an agent from the console, only replaced by another version of it.",
-        because: "brain.console.agent_tabs.detach decides a removal and no route performs one; brain.skill_routes assigns and replaces.",
+        what: "A skill cannot be tried out through an agent in practice mode before it is assigned.",
+        because: "docs/admin-console-architecture.md 4.2 tests a skill through an agent that holds it, rehearsed at SHADOW, and no route runs a rehearsal; the Profile draws it inert with pages/skills/skillActions.ts' sentence.",
       },
       {
         what: "A skill that declares scripts cannot be added.",
@@ -1042,19 +1051,26 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/Notifications.tsx TRIAL_API_PATH": [
     at("POST /api/v1/notifications/relay/test", "TRIAL_API_PATH", RELAY_TRIAL_API_PATH),
   ],
-  "src/pages/Skills.tsx SKILLS_API_PATH": [at("POST /api/v1/skills", "SKILLS_API_PATH", SKILLS_API_PATH)],
-  "src/pages/Skills.tsx IMPORT_PATH": [at("POST /api/v1/skills/imports", "IMPORT_PATH", IMPORT_PATH)],
-  "src/pages/Skills.tsx versionsPath(one.digest)": [
+  "src/pages/skills/SkillForms.tsx SKILLS_API_PATH": [at("POST /api/v1/skills", "SKILLS_API_PATH", SKILLS_API_PATH)],
+  "src/pages/skills/SkillForms.tsx IMPORT_PATH": [at("POST /api/v1/skills/imports", "IMPORT_PATH", IMPORT_PATH)],
+  "src/pages/skills/SkillForms.tsx versionsPath(one.digest)": [
     at("POST /api/v1/skills/{digest}/versions", "versionsPath", versionsPath("d".repeat(64))),
   ],
-  "src/pages/Skills.tsx categoriesPath(one.digest)": [
+  "src/pages/skills/SkillForms.tsx categoriesPath(one.digest)": [
     at("POST /api/v1/skills/{digest}/categories", "categoriesPath", categoriesPath("d".repeat(64))),
   ],
-  "src/pages/Skills.tsx reviewPath(one.digest)": [
+  "src/pages/skills/SkillProfile.tsx reviewPath(one.digest)": [
     at("POST /api/v1/skills/{digest}/review", "reviewPath", reviewPath("d".repeat(64))),
   ],
-  "src/pages/Skills.tsx assignPath(one.digest)": [
+  "src/pages/skills/SkillForms.tsx assignPath(one.digest)": [
     at("POST /api/v1/skills/{digest}/assignments", "assignPath", assignPath("d".repeat(64))),
+  ],
+  "src/pages/skills/SkillProfile.tsx retired ? reinstatementPath(one.digest) : retirementPath(one.digest)": [
+    at("POST /api/v1/skills/{digest}/reinstatement", "reinstatementPath", reinstatementPath("d".repeat(64))),
+    at("POST /api/v1/skills/{digest}/retirement", "retirementPath", retirementPath("d".repeat(64))),
+  ],
+  "src/pages/skills/SkillProfile.tsx detachPath(pin.digest)": [
+    at("POST /api/v1/skills/{digest}/detachments", "detachPath", detachPath("d".repeat(64))),
   ],
   "src/pages/Connectors.tsx disconnectApiPath(row.name)": [
     at("POST /api/v1/connectors/{connector}/disconnect", "disconnectApiPath", disconnectApiPath("xero")),
@@ -1914,6 +1930,21 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: t("test_skill_routes", "test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_assigned_to_an_agent"),
     audit: t("test_skill_store", "test_the_database_refuses_an_unsaid_self_decision_and_an_assignment_nobody_approved", true),
     behaviour: t("test_skill_routes", "test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_assigned_to_an_agent"),
+  },
+  "POST /api/v1/skills/{digest}/retirement": {
+    row: t("test_skill_lifecycle", "test_a_detachment_and_a_retirement_each_write_rows_and_entries_through_the_store", true),
+    audit: t("test_skill_lifecycle", "test_a_detachment_and_a_retirement_each_write_rows_and_entries_through_the_store", true),
+    behaviour: t("test_skill_lifecycle", "test_a_retired_version_is_refused_to_new_agents_and_its_holders_are_listed_not_detached"),
+  },
+  "POST /api/v1/skills/{digest}/reinstatement": {
+    row: t("test_skill_lifecycle", "test_a_detachment_and_a_retirement_each_write_rows_and_entries_through_the_store", true),
+    audit: t("test_skill_lifecycle", "test_a_detachment_and_a_retirement_each_write_rows_and_entries_through_the_store", true),
+    behaviour: t("test_skill_lifecycle", "test_a_retired_version_is_refused_to_new_agents_and_its_holders_are_listed_not_detached"),
+  },
+  "POST /api/v1/skills/{digest}/detachments": {
+    row: t("test_skill_lifecycle", "test_a_detachment_and_a_retirement_each_write_rows_and_entries_through_the_store", true),
+    audit: t("test_skill_lifecycle", "test_a_detachment_and_a_retirement_each_write_rows_and_entries_through_the_store", true),
+    behaviour: t("test_skill_lifecycle", "test_a_detached_skill_is_gone_from_the_agent_and_its_assignment_is_no_longer_in_force"),
   },
   "POST /api/v1/agents/{agent_id}/automations": {
     row: t("test_automation_gallery_routes", "test_one_confirmed_request_writes_the_automation_its_registry_entry_and_its_audit_context"),

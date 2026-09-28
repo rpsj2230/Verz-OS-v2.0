@@ -1,216 +1,94 @@
 /**
- * The Skills screen: the library, what a skill is trusted to reach, the queue, and the three
- * writes, asserted over the rendered page and over what was sent.
+ * The Skills module on the shared page kit: the searchable library, one skill's Dashboard, Profile
+ * and About, and every act on a skill, asserted over the rendered page and over what was sent.
  *
- * **Every control is drawn from a flag the API sent**, so the refusals worth testing are the
- * controls that must not be drawn: an Add form for a reader who may not add, an Approve button on
- * a skill the reader added, an Assign form for a skill nobody approved. Each has a sibling where
- * the flag is true and the control is there, because a page drawing no controls would pass every
- * refusal.
+ * **Reachable means through the application's own route table.** Every test mounts `routes` from
+ * `src/App.tsx` on a memory router, signed in through the real session modules and answered by a
+ * stand-in API, so a test passes only if the address resolves.
  *
- * **Nothing around the listings may count anything.** The listings are filtered per caller, so a
- * number is the subtraction `CLAUDE.md` forbids. The queue's counts are the exception and they are
- * the API's own.
+ * **Every control is drawn from what the API sent, and every one that changes something is
+ * confirmed before it sends.** So the refusals worth testing are the controls that must not be drawn
+ * (Add for a reader who may not add) and the writes that must not go before the confirmation; each
+ * has a sibling where the control is drawn and the write goes.
  *
- * **The route's bounds and the request bodies are read out of the API's own document**, and the
- * one figure copied from Python, the largest package, is read out of the Python source.
+ * **The shapes are the API's.** Every field the page reads is compared with the Python model that
+ * sends it, and every path it sends to with the API document.
  *
- * **The real route table is mounted**, which is `routing.test.tsx`'s rule: the skill name is a
- * path segment, so the route is half of what is under test.
- *
- * Task ids: M42.6.4, M12.2.2, M12.2.3, M12.2.6, M12.3.2, M12.4.6, M12.4.13
+ * Task ids: M27.16.1, M27.11.8, M27.15.55, M27.15.56, M42.6.4, M12.2.2, M12.3.2, M12.4.13
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
-import { fireEvent, render, waitFor } from "@testing-library/react";
-import { describe, expect, test } from "vitest";
+import { fireEvent, render, waitFor, within } from "@testing-library/react";
+import { beforeAll, describe, expect, test } from "vitest";
+import { NOT_RECORDED, UNAVAILABLE_MARK } from "../src/components/kit";
 import { LIST_PAGE_SIZE } from "../src/components/listing";
+import { SKILLS_HEADING } from "../src/pages/Skills";
+import { HISTORY_ELSEWHERE } from "../src/pages/skills/SkillAbout";
+import { NO_SUCH_SKILL } from "../src/pages/skills/SkillDetailPage";
+import { PACKAGE_FORMAT } from "../src/pages/skills/SkillForms";
+import { RETIRE, REINSTATE, DETACH, APPROVE } from "../src/pages/skills/SkillProfile";
+import { queueWords, readLibraryRows } from "../src/pages/skills/SkillsPage";
+import { REVIEW_PILL, UNAVAILABLE } from "../src/pages/skills/skillActions";
+import { readHistory, readSkillDetail } from "../src/pages/skills/skillDetailQuery";
 import {
-  A_SKILL_HAS_NO_REACH_OF_ITS_OWN,
-  ADD,
-  ADD_HEADING,
-  APPROVE,
-  ASSIGN,
-  CHIPS_LABEL,
-  EDIT,
-  EVERY_CATEGORY,
-  FROM_ADDRESS,
-  IMPORT,
-  IMPORT_HEADING,
-  SAVE_VERSION,
-  SET_CATEGORIES,
-  DRIFT_IS_PINNED_BY_DESIGN,
-  NO_DRIFT,
-  NO_LIBRARY,
-  NO_SKILLS,
-  NO_SUCH_SKILL,
-  NOT_ON_THIS_INSTALL,
-  NOTHING_IS_WAITING,
-  PASTE_LABEL,
-  REJECT,
-  queueCount,
-} from "../src/pages/Skills";
-import {
-  CATEGORY_COLUMN,
-  IMPORT_PATH,
+  detachPath,
+  LIBRARY_API_PATH,
   MAX_PACKAGE_BYTES,
-  REVIEW_WORDS,
-  addressImport,
-  categoriesPath,
-  categoriesTyped,
-  importProblem,
-  repositoryImport,
-  versionsPath,
-  assignedSentence,
-  assignPath,
-  base64Of,
-  chosen,
-  driftingRows,
-  packageProblem,
-  pasted,
-  readSkillsPage,
+  reinstatementPath,
+  retirementPath,
   reviewPath,
   skillAddress,
-  skillIn,
-  skillApiPath,
-  type SkillLibraryRow,
 } from "../src/pages/skillsQuery";
-import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
-import {
-  declaredParameterSchema,
-  declaredQueryParameters,
-  declaredRequestBodySchema,
-  declaredPropertyNames,
-} from "./support/openapi";
+import { fakeIdentityProvider, loadConsole, signIn } from "./support/auth";
+import { apiDocument, declaredParameterSchema, declaredPropertyNames, declaredRequestBodySchema, declaredQueryParameters } from "./support/openapi";
 import { backendEnumMembers, backendModelFields } from "./support/python";
+import { installRadixStubs } from "./support/radix";
 import { extractOne, readRepoFile } from "./support/repo";
 
-const API = "/api/v1";
-const SKILLS_OPERATION = `${API}/skills`;
 const CONSOLE_ORIGIN = "https://console.test";
-const DIGEST_ONE = "a".repeat(64);
-const DIGEST_TWO = "b".repeat(64);
+const API = "/api/v1";
 const ROUTES = "src/brain/skill_routes.py";
+const DIGEST = "a".repeat(64);
+const OLDER = "b".repeat(64);
+const NAME = "hosting-expiry";
 
-interface QueueRow {
-  name: string;
-  digest: string;
-  waiting_since: string;
-  changed: string[];
-  stale: boolean;
+beforeAll(async () => {
+  installRadixStubs();
+  await import("../src/pages/Skill");
+}, 60_000);
+
+interface Answer {
+  readonly status?: number;
+  readonly body: unknown;
 }
-
-/** One library row in the shape `brain.skill_routes.LibrarySkillView` serialises. */
-function librarySkill(overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  return {
-    digest: DIGEST_ONE,
-    name: "hosting-expiry",
-    version: "1.0.0",
-    description: "Use when a client asks whether their domain is close to renewal",
-    source: "upload",
-    source_location: "SKILL.md",
-    submitted_by: "u_importer",
-    submitted_at: "2019-03-04T09:00:00Z",
-    review: "pending",
-    reviewer: null,
-    reviewed_at: null,
-    tools: [
-      { name: "crm.read_client", capability: "read:client.name" },
-      { name: "erp.read_invoice", capability: null },
-    ],
-    capabilities: ["read:client.name"],
-    unregistered_tools: ["erp.read_invoice"],
-    body: "BODY-OF-THE-SKILL",
-    reviewable: false,
-    assignable: false,
-    source_commit: null,
-    source_path: null,
-    edited_from: null,
-    self_decided: false,
-    categories: [],
-    diff: null,
-    markdown: null,
-    editable: false,
-    ...overrides,
-  };
-}
-
-/** One page in the shape `brain.skill_routes.SkillsPage` serialises. */
-function skillsPage(
-  items: {
-    name: string;
-    pinned_by: { agent_id: string; digest: string }[];
-    versions_differ?: boolean;
-    categories?: string[];
-  }[],
-  extra: {
-    queue?: QueueRow[];
-    truncated?: boolean;
-    library?: Record<string, unknown>[];
-    agents?: { agent_id: string; display_name: string }[];
-    may_add?: boolean;
-    categories?: string[];
-  } = {},
-): Record<string, unknown> {
-  const queue = extra.queue ?? [];
-  return {
-    items: items.map((one) => ({
-      name: one.name,
-      pinned_by: one.pinned_by,
-      versions_differ: one.versions_differ ?? false,
-      categories: one.categories ?? [],
-    })),
-    next_cursor: null,
-    total: null,
-    truncated: extra.truncated ?? false,
-    queue: {
-      entries: queue,
-      waiting: queue.length,
-      edits: queue.filter((one) => one.changed.length > 0).length,
-      stale: queue.filter((one) => one.stale).length,
-    },
-    library: extra.library ?? [],
-    library_truncated: false,
-    agents: extra.agents ?? [],
-    may_add: extra.may_add ?? false,
-    registry_is_absent: false,
-    categories: extra.categories ?? [],
-  };
-}
-
-type Answer = (body: unknown) => Response;
 
 interface Sent {
   readonly method: string;
   readonly path: string;
+  readonly query: string;
   readonly body: unknown;
 }
 
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json" },
-  });
-}
+type Answers = Readonly<Record<string, Answer | ((body: unknown) => Answer)>>;
 
 /** Mount the application's own route table at one address, answering `METHOD /api/v1/...`. */
-async function consoleAt(
-  path: string,
-  answers: Record<string, Answer>,
-): Promise<{ container: HTMLElement; idp: FakeIdp; sent: Sent[] }> {
+async function consoleAt(path: string, answers: Answers): Promise<{ container: HTMLElement; sent: Sent[] }> {
   const sent: Sent[] = [];
   const idp = fakeIdentityProvider({
     api(url, init) {
       const parsed = new URL(url, CONSOLE_ORIGIN);
       const method = (init?.method ?? "GET").toUpperCase();
-      const answer = answers[`${method} ${parsed.pathname}`];
-      if (answer === undefined) {
+      const found = answers[`${method} ${parsed.pathname}`];
+      if (found === undefined) {
         return null;
       }
-      const body: unknown =
-        typeof init?.body === "string" && init.body !== "" ? JSON.parse(init.body) : null;
-      sent.push({ method, path: parsed.pathname, body });
-      return answer(body);
+      const body: unknown = typeof init?.body === "string" && init.body !== "" ? JSON.parse(init.body) : null;
+      sent.push({ method, path: parsed.pathname, query: parsed.search, body });
+      const answer = typeof found === "function" ? found(body) : found;
+      return new Response(JSON.stringify(answer.body), {
+        status: answer.status ?? 200,
+        headers: { "content-type": "application/json" },
+      });
     },
   });
   const loaded = await loadConsole({ idp });
@@ -219,819 +97,408 @@ async function consoleAt(
   const router = createMemoryRouter(routes, { initialEntries: [path] });
   const { container } = render(<RouterProvider router={router} />);
   await settled(container);
-  return { container, idp, sent };
+  return { container, sent };
 }
 
 async function settled(container: HTMLElement): Promise<void> {
   await waitFor(() => {
-    if (container.querySelector("h1") === null || container.textContent?.includes("Loading.")) {
-      throw new Error("the page has no answer yet");
+    if (!container.querySelector("h1")) {
+      throw new Error("the page has not arrived");
+    }
+  });
+  await waitFor(() => {
+    if (container.querySelector('[data-slot="loading-state"]')) {
+      throw new Error("the page is still asking");
     }
   });
 }
 
-/** A page answering one listing whatever is asked. */
-function listing(body: unknown): Record<string, Answer> {
-  return { [`GET ${SKILLS_OPERATION}`]: () => json(body) };
+/** One version as `brain.skill_routes.LibrarySkillView` serialises it. */
+function version(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    digest: DIGEST,
+    name: NAME,
+    version: "1.1.0",
+    description: "Use when a client asks whether their domain is close to renewal",
+    source: "upload",
+    source_location: "SKILL.md",
+    submitted_by: "u_importer",
+    submitted_at: "2019-03-05T09:00:00Z",
+    review: "approved",
+    reviewer: "u_reviewer",
+    reviewed_at: "2019-03-05T10:00:00Z",
+    tools: [{ name: "crm.read_client", capability: "read:client.name" }],
+    capabilities: ["read:client.name"],
+    unregistered_tools: [],
+    body: "Look up the domain, then open a ticket.",
+    reviewable: false,
+    assignable: true,
+    source_commit: null,
+    source_path: null,
+    edited_from: null,
+    self_decided: false,
+    categories: ["hosting"],
+    diff: null,
+    markdown: "---\nname: hosting-expiry\n---\n",
+    editable: true,
+    retired: false,
+    retired_at: null,
+    retired_by: null,
+    retirable: true,
+    submitted_by_name: "Iris Importer",
+    reviewer_name: "Rex Reviewer",
+    ...overrides,
+  };
 }
 
-/** The button whose accessible name starts with `label`, inside the page. */
-function button(container: HTMLElement, label: string): HTMLButtonElement {
-  const found = [...container.querySelectorAll(".page button")].find((one) =>
-    (one.getAttribute("aria-label") ?? one.textContent ?? "").startsWith(label),
+/** The Skills page's answer, as `brain.skill_routes.SkillsPage` serialises it. */
+function skillsPage(library: Record<string, unknown>[], pins: Record<string, unknown>[] = []): Record<string, unknown> {
+  return {
+    items: pins.length === 0 ? [] : [{ name: NAME, pinned_by: pins, versions_differ: false, categories: ["hosting"] }],
+    next_cursor: null,
+    total: null,
+    truncated: false,
+    queue: { entries: [], waiting: 0, edits: 0, stale: 0 },
+    library,
+    library_truncated: false,
+    agents: [{ agent_id: "company_desk", display_name: "Company Desk" }],
+    may_add: true,
+    registry_is_absent: false,
+    categories: ["hosting"],
+  };
+}
+
+const PIN = {
+  agent_id: "company_desk",
+  digest: DIGEST,
+  display_name: "Company Desk",
+  assigned_at: "2019-03-06T09:00:00Z",
+  assigned_by: "Alex Admin",
+};
+
+/** The library listing, as `brain.skill_routes.SkillLibraryPage` serialises it. */
+function libraryPage(rows: Record<string, unknown>[], extra: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    items: rows,
+    next_cursor: null,
+    total: null,
+    queue: { entries: [], waiting: 2, edits: 1, stale: 0 },
+    library_truncated: false,
+    truncated: false,
+    may_add: true,
+    categories: ["hosting", "billing"],
+    ...extra,
+  };
+}
+
+function row(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    digest: DIGEST,
+    name: NAME,
+    version: "1.1.0",
+    description: "Use when a client asks whether their domain is close to renewal",
+    review: "approved",
+    retired: false,
+    categories: ["hosting"],
+    agents_running: 3,
+    source: "upload",
+    submitted_at: "2019-03-05T09:00:00Z",
+    ...overrides,
+  };
+}
+
+function pressed(label: string, root: ParentNode = document.body): HTMLButtonElement {
+  const found = [...root.querySelectorAll<HTMLButtonElement>("button")].find(
+    (one) => one.textContent?.trim() === label || (one.getAttribute("aria-label") ?? "").startsWith(label),
   );
   if (found === undefined) {
-    throw new Error(`no button named ${label}`);
+    throw new Error(`No button named ${label}.`);
   }
-  return found as HTMLButtonElement;
+  fireEvent.click(found);
+  return found;
 }
 
-/** The confirmation's button with exactly this text. */
-function confirmButton(container: HTMLElement, label: string): HTMLButtonElement {
-  const found = [...container.querySelectorAll(".confirm button")].find(
-    (one) => one.textContent === label,
-  );
-  if (found === undefined) {
-    throw new Error(`no confirmation button ${label}`);
+function dialog(): HTMLElement {
+  const found = document.querySelector<HTMLElement>('[data-slot="confirm-dialog"]');
+  if (found === null) {
+    throw new Error("No confirmation is open.");
   }
-  return found as HTMLButtonElement;
+  return found;
 }
 
-/** Every digit the page rendered, so a count outside the queue is a failure. */
-function digitsOn(container: HTMLElement): string[] {
-  return (container.querySelector(".page")?.textContent ?? "").match(/\d+/g) ?? [];
-}
+// ------------------------------------------------------------------------ what it asks and sends
 
-describe("what the skills screen asks for and sends", () => {
-  test("the listing sends only a query parameter the route declares", async () => {
-    // What breaks if this is deleted: a parameter the API ignores, read as the page it asked for.
-    const declared = new Set(declaredQueryParameters(SKILLS_OPERATION, "get"));
-    const { idp } = await consoleAt("/skills", listing(skillsPage([])));
+describe("what the Skills module asks for and sends", () => {
+  test("the list asks the library route with parameters it declares and a page size it answers", async () => {
+    // What breaks if this is deleted: a parameter the API ignores, read as the narrowing it asked for.
+    const declared = new Set(declaredQueryParameters(`${API}${LIBRARY_API_PATH}`, "get"));
+    const limit = declaredParameterSchema(`${API}${LIBRARY_API_PATH}`, "get", "limit");
+    const { sent } = await consoleAt("/skills", { [`GET ${API}${LIBRARY_API_PATH}`]: { body: libraryPage([row()]) } });
 
-    const asked = idp.urls
-      .filter((url) => url.includes(SKILLS_OPERATION))
-      .flatMap((url) => [...new URL(url, CONSOLE_ORIGIN).searchParams.keys()]);
-
+    const asked = sent.filter((one) => one.path === `${API}${LIBRARY_API_PATH}`);
     expect(asked.length).toBeGreaterThan(0);
-    expect(asked.filter((name) => !declared.has(name))).toEqual([]);
-  });
-
-  test("the page size this console asks for is one the route will answer", () => {
-    // What breaks if this is deleted: every load of this screen becomes a 422.
-    const limit = declaredParameterSchema(SKILLS_OPERATION, "get", "limit");
-
+    expect([...new URLSearchParams(asked[0]?.query).keys()].filter((name) => !declared.has(name))).toEqual([]);
     expect(LIST_PAGE_SIZE).toBeLessThanOrEqual(limit["maximum"] as number);
-    expect(LIST_PAGE_SIZE).toBeGreaterThanOrEqual(limit["minimum"] as number);
-    expect(skillApiPath("hosting-expiry")).toBe("/skills?limit=1&filter=name%3Ahosting-expiry");
   });
 
-  test("the bodies this console sends are the ones the three writes declare", () => {
-    // What breaks if this is deleted: a renamed field in a request the API refuses with a 422
-    // that reaches a person as "Something went wrong" every time they press Add or Assign.
-    const add = declaredPropertyNames(declaredRequestBodySchema(SKILLS_OPERATION, "post"));
-    const review = declaredPropertyNames(
-      declaredRequestBodySchema(`${SKILLS_OPERATION}/{digest}/review`, "post"),
-    );
-    const assign = declaredPropertyNames(
-      declaredRequestBodySchema(`${SKILLS_OPERATION}/{digest}/assignments`, "post"),
-    );
-
-    expect(Object.keys(pasted("x")).sort()).toEqual([...add].sort());
-    expect(review).toEqual(["decision"]);
-    expect(assign).toEqual(["agent_id"]);
-    expect(reviewPath(DIGEST_ONE)).toBe(`/skills/${DIGEST_ONE}/review`);
-    expect(assignPath(DIGEST_ONE)).toBe(`/skills/${DIGEST_ONE}/assignments`);
-  });
-
-  test("every field the page reads is a field the route declares", () => {
+  test("every field the pages read is a field the routes declare", () => {
     // What breaks if this is deleted: a renamed field the page goes on reading as empty.
-    expect(Object.keys(librarySkill()).sort()).toEqual(
-      backendModelFields(ROUTES, "LibrarySkillView").sort(),
-    );
-    const page = Object.keys(skillsPage([])).filter((key) => !["items", "next_cursor", "total"].includes(key));
-    expect(page.sort()).toEqual(backendModelFields(ROUTES, "SkillsPage").sort());
+    expect(Object.keys(version()).sort()).toEqual(backendModelFields(ROUTES, "LibrarySkillView").sort());
+    expect(Object.keys(row()).sort()).toEqual(backendModelFields(ROUTES, "SkillVersionRowView").sort());
+    expect(Object.keys(readLibraryRows({ items: [row()] })[0] ?? {}).sort()).toEqual(Object.keys(row()).sort());
+    expect(Object.keys(PIN).sort()).toEqual(backendModelFields(ROUTES, "SkillPinView").sort());
+    expect(declaredPropertyNames(declaredRequestBodySchema(`${API}/skills/{digest}/detachments`, "post"))).toEqual(["agent_id"]);
+    expect(detachPath(DIGEST)).toBe(`/skills/${DIGEST}/detachments`);
+    expect(retirementPath(DIGEST)).toBe(`/skills/${DIGEST}/retirement`);
+    expect(reinstatementPath(DIGEST)).toBe(`/skills/${DIGEST}/reinstatement`);
   });
 
-  test("the largest package is the API's figure and every review state has words", () => {
-    // What breaks if this is deleted: a package this console lets through that the API refuses,
-    // or a review state drawn as its code.
-    const python = readRepoFile("src/brain/console/skill_library.py");
-    const kibibytes = extractOne(
-      python,
-      /^MAX_PACKAGE_BYTES: Final = (\d+) \* 1024$/m,
-      "the package bound",
-    );
-
+  test("the largest package is the API's figure and every review state has a pill", () => {
+    // What breaks if this is deleted: a package the form lets through that the API refuses, or a
+    // state drawn as its code.
+    const kibibytes = extractOne(readRepoFile("src/brain/console/skill_library.py"), /^MAX_PACKAGE_BYTES: Final = (\d+) \* 1024$/m, "the bound");
     expect(Number(kibibytes) * 1024).toBe(MAX_PACKAGE_BYTES);
-    expect(Object.keys(REVIEW_WORDS).sort()).toEqual(
-      Object.values(backendEnumMembers("src/brain/console/agent_tabs.py", "Review")).sort(),
-    );
+    expect(Object.keys(REVIEW_PILL).sort()).toEqual(Object.values(backendEnumMembers("src/brain/console/agent_tabs.py", "Review")).sort());
   });
 
-  test("an address this screen builds always stays inside the console", () => {
-    // What breaks if this is deleted: an open redirect through a skill name the API sent.
-    const hostile = ["\\\\evil.example", "//evil.example", "/\\evil.example", "http://evil.example", ".."];
+  test("no act the pages call coming soon has a route in the API document", () => {
+    // What breaks if this is deleted: "coming soon" said about an act that has arrived. The positive
+    // sibling is that the pattern matches the path it is written for.
+    const paths = Object.keys((apiDocument()["paths"] ?? {}) as Record<string, unknown>);
+    for (const [act, { retiredBy }] of Object.entries(UNAVAILABLE)) {
+      expect(paths.filter((path) => retiredBy.test(path)), act).toEqual([]);
+    }
+    expect(UNAVAILABLE.tryOut.retiredBy.test("/api/v1/skills/{digest}/rehearsal")).toBe(true);
+  });
 
-    for (const name of hostile) {
-      const address = skillAddress(name);
-      expect(address.startsWith("/skills/")).toBe(true);
-      expect(address.includes("evil.example") && !address.includes("%")).toBe(false);
+  test("an address this module builds stays inside the console", () => {
+    // What breaks if this is deleted: an open redirect through a skill name the API sent.
+    for (const name of ["\\\\evil.example", "//evil.example", "http://evil.example"]) {
+      expect(skillAddress(name).startsWith("/skills/")).toBe(true);
+      expect(skillAddress(name).includes("//")).toBe(false);
     }
   });
 });
 
-describe("adding a skill", () => {
-  test("is offered only to a reader who may add, and nothing is offered to one who may not", async () => {
-    // What breaks if this is deleted: an Add form whose every press is refused, or no form for the
-    // administrator the API said may add.
-    const offered = await consoleAt("/skills", listing(skillsPage([], { may_add: true })));
-    const withheld = await consoleAt("/skills", listing(skillsPage([], { library: [librarySkill()] })));
+// --------------------------------------------------------------------------------- the list
 
-    expect(offered.container.querySelector(`form[aria-label="${ADD_HEADING}"]`)).not.toBeNull();
-    const page = withheld.container.querySelector(".page") as HTMLElement;
-    expect(page.querySelectorAll("button")).toHaveLength(0);
-    // No form but the search every list draws.
-    expect(page.querySelector('form:not([role="search"])')).toBeNull();
+describe("the library list", () => {
+  test("draws each version with its state, categories and agents, and the queue's own words", async () => {
+    // What breaks if this is deleted: the list drawing nothing and every refusal below passing.
+    const { container } = await consoleAt("/skills", {
+      [`GET ${API}${LIBRARY_API_PATH}`]: { body: libraryPage([row(), row({ digest: OLDER, version: "1.0.0", review: "pending", retired: true, agents_running: 0 })]) },
+    });
+
+    expect(container.querySelector("h1")?.textContent).toBe(SKILLS_HEADING);
+    const table = container.querySelector('[data-slot="entity-table"]');
+    expect(table?.textContent).toContain("1.1.0");
+    expect(table?.textContent).toContain("Waiting for review");
+    expect(table?.textContent).toContain("Retired");
+    expect(container.textContent).toContain(queueWords(2, 1, 0));
+    expect(queueWords(2, 1, 0)).toContain("1 of them an edit");
+    expect(container.textContent).not.toMatch(/\bof \d+\b/);
   });
 
-  test("a paste is checked before it is sent, sent as text, and the page says so and reads again", async () => {
-    // What breaks if this is deleted: an empty or oversized package sent to be refused, a paste
-    // sent in a shape the route does not take, or a page that goes on drawing the old library.
-    let library: Record<string, unknown>[] = [];
+  test("a state filter and a category chip each ask the route again with that filter", async () => {
+    // What breaks if this is deleted: a filter applied in the browser over whatever arrived.
+    const { container, sent } = await consoleAt("/skills", { [`GET ${API}${LIBRARY_API_PATH}`]: { body: libraryPage([row()]) } });
+
+    pressed("billing", container);
+    await waitFor(() => {
+      expect(sent.some((one) => new URLSearchParams(one.query).getAll("filter").includes("categories:billing"))).toBe(true);
+    });
+    const state = [...container.querySelectorAll("select")].find((one) => one.labels?.[0]?.textContent === "State");
+    fireEvent.change(state as HTMLSelectElement, { target: { value: "approved" } });
+    await waitFor(() => {
+      expect(sent.some((one) => new URLSearchParams(one.query).getAll("filter").includes("review:approved"))).toBe(true);
+    });
+  });
+
+  test("adding is offered only to a reader who may add, says its format first and posts a checked paste", async () => {
+    // What breaks if this is deleted: an Add button every press of which is refused, or a form
+    // that says what it accepts only after refusing it.
+    const refused = await consoleAt("/skills", { [`GET ${API}${LIBRARY_API_PATH}`]: { body: libraryPage([row()], { may_add: false }) } });
+    expect([...refused.container.querySelectorAll("button")].some((one) => one.textContent?.includes("Add a skill"))).toBe(false);
+    refused.container.remove();
+
     const { container, sent } = await consoleAt("/skills", {
-      [`GET ${SKILLS_OPERATION}`]: () => json(skillsPage([], { may_add: true, library })),
-      [`POST ${SKILLS_OPERATION}`]: () => {
-        library = [librarySkill()];
-        return json(librarySkill(), 201);
-      },
+      [`GET ${API}${LIBRARY_API_PATH}`]: { body: libraryPage([row()]) },
+      [`POST ${API}/skills`]: { status: 201, body: version({ review: "pending" }) },
     });
-
-    const field = container.querySelector("#skills-paste") as HTMLTextAreaElement;
-    expect(container.querySelector("label[for=skills-paste]")?.textContent).toBe(PASTE_LABEL);
-    expect(button(container, ADD).disabled).toBe(true);
-    fireEvent.change(field, { target: { value: "x".repeat(MAX_PACKAGE_BYTES + 1) } });
-    expect(container.textContent).toContain("at most 256 KB");
-    expect(button(container, ADD).disabled).toBe(true);
-
-    fireEvent.change(field, { target: { value: "---\nname: hosting-expiry\n---\n" } });
-    fireEvent.click(button(container, ADD));
-
+    pressed("Add a skill", container);
     await waitFor(() => {
-      expect(container.textContent).toContain("was added and is waiting for review");
+      expect(document.body.textContent).toContain(PACKAGE_FORMAT);
     });
-    await settled(container);
-    expect(sent.filter((one) => one.method === "POST").map((one) => one.body)).toEqual([
-      { file_name: "SKILL.md", content: "---\nname: hosting-expiry\n---\n", encoding: "text", categories: [] },
-    ]);
-    // Waited for: the library is read again after the sentence is drawn, and under a loaded run
-    // the second answer can land a tick after the page has settled on the first.
+    const add = [...document.querySelectorAll<HTMLButtonElement>("button")].find((one) => one.textContent === "Add to the library");
+    expect(add?.disabled).toBe(true);
+    fireEvent.change(document.getElementById("skills-paste") as HTMLTextAreaElement, { target: { value: "---\nname: x\n---\n" } });
+    expect(add?.disabled).toBe(false);
+    fireEvent.click(add as HTMLButtonElement);
     await waitFor(() => {
-      expect(container.querySelector('[aria-label="Skills in the library"]')?.textContent).toContain(
-        "hosting-expiry",
-      );
+      expect(sent.some((one) => one.method === "POST" && one.path === `${API}/skills`)).toBe(true);
     });
-    expect(sent.filter((one) => one.method === "GET").length).toBe(2);
-  });
-
-  test("a refusal is said in the API's words and the page is not read again", async () => {
-    // What breaks if this is deleted: the reason a package was refused replaced by a generic
-    // sentence, a refused write drawn as though it had worked, or the refusal drawn without the
-    // reference that finds it in the server's log. It is drawn in the add card, by the one failure
-    // notice, rather than as an alert above the page.
-    const { container, sent } = await consoleAt("/skills", {
-      [`GET ${SKILLS_OPERATION}`]: () => json(skillsPage([], { may_add: true })),
-      [`POST ${SKILLS_OPERATION}`]: () =>
-        json({ message: "this skill was not added: it declares scripts", trace_id: "t" }, 404),
-    });
-
-    fireEvent.change(container.querySelector("#skills-paste") as HTMLTextAreaElement, {
-      target: { value: "---\nname: x\n---\n" },
-    });
-    fireEvent.click(button(container, ADD));
-
-    const card = container.querySelector('[aria-labelledby="skills-add"]') as HTMLElement;
     await waitFor(() => {
-      expect(card.querySelector(".notice__body > p")?.textContent).toBe(
-        "this skill was not added: it declares scripts",
-      );
-    });
-    expect(card.querySelector(".notice__trace code")?.textContent).toBe("t");
-    expect(container.textContent).not.toContain("was added and is waiting for review");
-    expect(sent.filter((one) => one.method === "GET").length).toBe(1);
-  });
-
-  test("a chosen zip is sent as base64 under its own name and a SKILL.md as text", () => {
-    // What breaks if this is deleted: an archive's bytes mangled by being read as text, which the
-    // API cannot open, or a SKILL.md sent as base64 the parser reads as nonsense.
-    const bytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0xff]);
-
-    expect(chosen("hosting.zip", bytes)).toEqual({
-      file_name: "hosting.zip",
-      content: base64Of(bytes),
-      encoding: "base64",
-      categories: [],
-    });
-    expect(chosen("SKILL.md", new TextEncoder().encode("---\n"), ["seo"])).toEqual({
-      file_name: "SKILL.md",
-      content: "---\n",
-      encoding: "text",
-      categories: ["seo"],
-    });
-    expect(packageProblem(null)).not.toBeNull();
-    expect(packageProblem(pasted("---"))).toBeNull();
-  });
-});
-
-describe("what a skill is trusted to reach, and deciding about it", () => {
-  test("an open skill lists each tool with what it requires and a tool this install lacks as such", async () => {
-    // What breaks if this is deleted: the reach SCREEN 6 asks for is not on the screen, or a tool
-    // nothing registers is drawn as a tool requiring nothing.
-    const { container } = await consoleAt(
-      skillAddress("hosting-expiry"),
-      listing(skillsPage([], { library: [librarySkill()] })),
-    );
-
-    const reach = container.querySelector('[aria-label="Tools this skill names"]')?.textContent ?? "";
-    expect(reach).toContain("crm.read_client");
-    expect(reach).toContain("read:client.name");
-    expect(reach).toContain(`erp.read_invoice ${NOT_ON_THIS_INSTALL}`);
-    expect(container.textContent).toContain(A_SKILL_HAS_NO_REACH_OF_ITS_OWN);
-    expect(container.textContent).toContain(REVIEW_WORDS["pending"]);
-  });
-
-  test("the instructions are drawn only when the API sent them", async () => {
-    // What breaks if this is deleted: the page drawing a body the API withheld, from somewhere else.
-    const sent = await consoleAt(skillAddress("hosting-expiry"), listing(skillsPage([], { library: [librarySkill()] })));
-    const withheld = await consoleAt(
-      skillAddress("hosting-expiry"),
-      listing(skillsPage([], { library: [librarySkill({ body: null })] })),
-    );
-
-    expect(sent.container.textContent).toContain("BODY-OF-THE-SKILL");
-    expect(withheld.container.querySelector("details")).toBeNull();
-  });
-
-  test("approve is offered only where the API says the reader may decide, is confirmed, posted and read again", async () => {
-    // What breaks if this is deleted: an Approve button on a skill its reader added, which is
-    // refused every time, or an approval sent without the confirmation saying what it does.
-    let review = "pending";
-    const refused = await consoleAt(
-      skillAddress("hosting-expiry"),
-      listing(skillsPage([], { library: [librarySkill()] })),
-    );
-    const { container, sent } = await consoleAt(skillAddress("hosting-expiry"), {
-      [`GET ${SKILLS_OPERATION}`]: () =>
-        json(skillsPage([], { library: [librarySkill({ review, reviewable: review === "pending" })] })),
-      [`POST ${SKILLS_OPERATION}/${DIGEST_ONE}/review`]: () => {
-        review = "approved";
-        return json(librarySkill({ review, reviewer: "u_reviewer", reviewed_at: "2019-03-05T09:00:00Z" }));
-      },
-    });
-
-    expect(() => button(refused.container, APPROVE)).toThrow();
-    expect(button(container, REJECT)).toBeDefined();
-    fireEvent.click(button(container, APPROVE));
-    expect(container.querySelector(".confirm")?.textContent).toContain("added by u_importer");
-    fireEvent.click(confirmButton(container, APPROVE));
-
-    await waitFor(() => {
-      expect(container.textContent).toContain("hosting-expiry 1.0.0 is approved.");
-    });
-    await settled(container);
-    expect(sent.filter((one) => one.method === "POST").map((one) => one.body)).toEqual([
-      { decision: "approve" },
-    ]);
-    // Waited for rather than asserted at once: the page reads the skill again after the POST,
-    // and until that answer is drawn the button from the pending state is still on screen. On a
-    // loaded CI runner that gap was long enough to fail this line (ece82dc), with nothing wrong.
-    // The paste test above waits for the same kind of re-read.
-    await waitFor(() => {
-      expect(() => button(container, APPROVE)).toThrow();
+      expect(sent.filter((one) => one.path === `${API}${LIBRARY_API_PATH}`).length).toBeGreaterThan(1);
     });
   });
 });
 
-describe("assigning a skill", () => {
-  test("is offered only for an approved skill, with the agents the API listed, confirmed with the agent named", async () => {
-    // What breaks if this is deleted: an Assign form beside a skill nobody approved, an agent
-    // offered that the API did not list, or an assignment sent to an agent the person did not
-    // read the name of.
-    const agents = [
-      { agent_id: "company_desk", display_name: "Company Desk" },
-      { agent_id: "web_desk", display_name: "Web Desk" },
-    ];
-    const pending = await consoleAt(
-      skillAddress("hosting-expiry"),
-      listing(skillsPage([], { library: [librarySkill({ assignable: false })], agents })),
-    );
-    const { container, sent } = await consoleAt(skillAddress("hosting-expiry"), {
-      [`GET ${SKILLS_OPERATION}`]: () =>
-        json(
-          skillsPage([], {
-            library: [librarySkill({ review: "approved", reviewer: "u_reviewer", assignable: true })],
-            agents,
-          }),
-        ),
-      [`POST ${SKILLS_OPERATION}/${DIGEST_ONE}/assignments`]: () =>
-        json(
-          {
-            agent_id: "web_desk",
-            skill_name: "hosting-expiry",
-            digest: DIGEST_ONE,
-            replaced_digest: null,
-            reach: ["crm.read_client"],
-            effective_hash: DIGEST_TWO,
-          },
-          201,
-        ),
-    });
+// ------------------------------------------------------------------------------- one skill
 
-    expect(() => button(pending.container, ASSIGN)).toThrow();
-    // The assign choice, and not the list's own filters.
-    const choices = [...container.querySelectorAll("select")].filter((one) => one.closest('form[role="search"]') === null);
-    const options = choices.flatMap((one) => [...one.querySelectorAll("option")]).map((one) => one.textContent);
-    expect(options).toEqual(["Company Desk", "Web Desk"]);
-    fireEvent.change(choices[0] as HTMLSelectElement, {
-      target: { value: "web_desk" },
-    });
-    fireEvent.click(button(container, ASSIGN));
-    expect(container.querySelector(".confirm")?.textContent).toContain("Assign hosting-expiry 1.0.0 to Web Desk?");
-    fireEvent.click(confirmButton(container, ASSIGN));
+function skillAnswers(library: Record<string, unknown>[], pins: Record<string, unknown>[], more: Answers = {}): Answers {
+  return { [`GET ${API}/skills`]: { body: skillsPage(library, pins) }, ...more };
+}
 
-    await waitFor(() => {
-      expect(container.textContent).toContain(
-        "hosting-expiry was assigned to Web Desk. Through that agent it can use, for you: crm.read_client.",
-      );
-    });
-    expect(sent.filter((one) => one.method === "POST").map((one) => one.body)).toEqual([
-      { agent_id: "web_desk" },
-    ]);
-  });
-
-  test("an assignment that reaches nothing says so rather than listing nothing", () => {
-    // What breaks if this is deleted: an empty reach drawn as a sentence ending in a colon, which
-    // reads as a list that failed to load.
-    expect(
-      assignedSentence(
-        {
-          agent_id: "web_desk",
-          skill_name: "hosting-expiry",
-          digest: DIGEST_ONE,
-          replaced_digest: null,
-          reach: [],
-          effective_hash: DIGEST_TWO,
+describe("one skill's page", () => {
+  test("the Dashboard draws the stats route's figures and says an unrecorded figure is not recorded", async () => {
+    // What breaks if this is deleted: a run count drawn as nought where nothing counts runs.
+    const { container } = await consoleAt(skillAddress(NAME), skillAnswers([version()], [PIN], {
+      [`GET ${API}/console/skills/${NAME}/stats`]: {
+        body: {
+          skill_name: NAME,
+          agents_pinned: 4,
+          pinned_versions: 2,
+          versions: 3,
+          periods: [{ range: "30d", since: "2019-02-02T00:00:00Z", until: "2019-03-04T00:00:00Z", versions_added: 1 }],
+          unrecorded: [{ figure: "runs_that_used_it", why: "nothing writes one" }],
         },
-        undefined,
-      ),
-    ).toContain("none of the tools it names");
-  });
-});
+      },
+    }));
 
-describe("what the skills screen shows beside the library", () => {
-  test("a skill in use is drawn with every agent pinned to it and the bytes each one runs", async () => {
-    // What breaks if this is deleted: every refusal here is satisfied by a page that renders nothing.
+    await waitFor(() => {
+      expect(container.querySelector('[data-slot="stats-strip"], [data-slot="kpi-strip"][aria-label="This skill\'s figures"]')).not.toBeNull();
+    });
+    const strip = container.querySelector('[aria-label="This skill\'s figures"]');
+    expect(strip?.textContent).toContain("4");
+    expect(strip?.textContent).toContain(NOT_RECORDED);
+    expect([...(strip?.querySelectorAll("dd") ?? [])].map((one) => one.textContent)).not.toContain("0");
+  });
+
+  test("the Profile names people and agents, and keeps identifiers in Advanced", async () => {
+    // What breaks if this is deleted: principal ids back on the page where names belong.
+    const { container } = await consoleAt(`${skillAddress(NAME)}/profile`, skillAnswers([version()], [PIN]));
+
+    const page = container.querySelector('[data-slot="skill-profile"]') as HTMLElement;
+    expect(page.textContent).toContain("Iris Importer");
+    expect(page.textContent).toContain("Company Desk");
+    const advanced = page.querySelector('[data-slot="advanced"]') as HTMLElement;
+    const outside = page.textContent?.replace(advanced.textContent ?? "", "") ?? "";
+    expect(outside).not.toContain("u_importer");
+    expect(outside).not.toContain(DIGEST);
+    expect(advanced.textContent).toContain("u_importer");
+    expect(page.querySelector(`[${UNAVAILABLE_MARK}]`)?.getAttribute("aria-describedby")).not.toBeNull();
+  });
+
+  test("retiring is confirmed, then posted, and the agents still running it are named", async () => {
+    // What breaks if this is deleted: a retirement sent on one press, or one that says nothing
+    // about the agents that keep running the version (M27.15.56).
+    const { container, sent } = await consoleAt(`${skillAddress(NAME)}/profile`, skillAnswers([version()], [PIN], {
+      [`POST ${API}/skills/${DIGEST}/retirement`]: {
+        body: { digest: DIGEST, name: NAME, version: "1.1.0", retired: true, holding: [{ agent_id: "company_desk", display_name: "Company Desk" }] },
+      },
+    }));
+
+    pressed(RETIRE, container);
+    expect(sent.some((one) => one.method === "POST")).toBe(false);
+    fireEvent.click(within(dialog()).getByText(RETIRE));
+    await waitFor(() => {
+      expect(sent.some((one) => one.method === "POST" && one.path === `${API}/skills/${DIGEST}/retirement`)).toBe(true);
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("Still running it until you detach it: Company Desk");
+    });
+  });
+
+  test("a retired version offers reinstating and no assignment", async () => {
+    // What breaks if this is deleted: a retired version still offered to new agents on the page.
     const { container } = await consoleAt(
-      "/skills",
-      listing(
-        skillsPage([
-          {
-            name: "hosting-expiry",
-            pinned_by: [
-              { agent_id: "company-desk", digest: DIGEST_ONE },
-              { agent_id: "web-helper", digest: DIGEST_ONE },
-            ],
-          },
-        ]),
-      ),
+      `${skillAddress(NAME)}/profile`,
+      skillAnswers([version({ retired: true, assignable: false, retired_by: "Alex Admin", retired_at: "2019-03-07T09:00:00Z" })], [PIN]),
     );
 
-    const inUse = container.querySelector('[aria-label="Skills in use"]')?.textContent ?? "";
-    expect(inUse).toContain("hosting-expiry");
-    expect(inUse).toContain("company-desk");
-    expect(inUse).toContain("web-helper");
-    expect(inUse).toContain(DIGEST_ONE);
+    expect([...container.querySelectorAll("button")].some((one) => one.textContent === REINSTATE)).toBe(true);
+    expect([...container.querySelectorAll("button")].some((one) => one.textContent === RETIRE)).toBe(false);
+    expect(container.querySelector('form[aria-label^="Assign"]')).toBeNull();
+    expect(container.textContent).toContain("Alex Admin");
   });
 
-  test("an empty library and nothing in use each say one sentence", async () => {
-    // What breaks if this is deleted: two sentences for "this company has none" and "you may see
-    // none", whose difference is a fact about what this reader was not shown.
-    const { container } = await consoleAt("/skills", listing(skillsPage([])));
+  test("detaching from an agent is confirmed with the agent named, then posted with that agent", async () => {
+    // What breaks if this is deleted: a skill taken off a live agent on one press (M27.15.55).
+    const { container, sent } = await consoleAt(`${skillAddress(NAME)}/profile`, skillAnswers([version()], [PIN], {
+      [`POST ${API}/skills/${DIGEST}/detachments`]: {
+        status: 201,
+        body: { agent_id: "company_desk", skill_name: NAME, digest: DIGEST, effective_hash: "h" },
+      },
+    }));
 
-    expect(container.textContent).toContain(NO_LIBRARY);
-    expect(container.textContent).toContain(NO_SKILLS);
-    expect(container.textContent).toContain(NOTHING_IS_WAITING);
+    pressed(`${DETACH} ${NAME} from Company Desk`, container);
+    expect(dialog().textContent).toContain("Detach hosting-expiry from Company Desk?");
+    fireEvent.click(within(dialog()).getByText(DETACH));
+    await waitFor(() => {
+      expect(sent.find((one) => one.path === `${API}/skills/${DIGEST}/detachments`)?.body).toEqual({ agent_id: "company_desk" });
+    });
+    await waitFor(() => {
+      expect(sent.filter((one) => one.method === "GET" && one.path === `${API}/skills`).length).toBeGreaterThan(1);
+    });
   });
 
-  test("nothing outside the review queue is a number", async () => {
-    // What breaks if this is deleted: a heading saying how many skills there are, which on a
-    // listing filtered per caller tells a reader how many they were not shown.
-    const { container } = await consoleAt(
-      "/skills",
-      listing(
-        skillsPage([{ name: "hosting-expiry", pinned_by: [{ agent_id: "a", digest: DIGEST_ONE }] }], {
-          truncated: true,
-        }),
-      ),
-    );
+  test("approving is offered only where the API says, and is confirmed before it is posted", async () => {
+    // What breaks if this is deleted: a decision sent on one press, or buttons every press of which
+    // is refused.
+    const shut = await consoleAt(`${skillAddress(NAME)}/profile`, skillAnswers([version({ review: "pending", reviewable: false })], []));
+    expect([...shut.container.querySelectorAll("button")].some((one) => one.textContent === APPROVE)).toBe(false);
+    shut.container.remove();
 
-    expect(digitsOn(container)).toEqual([]);
+    const { container, sent } = await consoleAt(`${skillAddress(NAME)}/profile`, skillAnswers([version({ review: "pending", reviewable: true, assignable: false })], [], {
+      [`POST ${API}${reviewPath(DIGEST)}`]: { body: version({ review: "approved" }) },
+    }));
+    pressed(`${APPROVE} ${NAME}`, container);
+    expect(sent.some((one) => one.method === "POST")).toBe(false);
+    fireEvent.click(within(dialog()).getByText(APPROVE));
+    await waitFor(() => {
+      expect(sent.find((one) => one.method === "POST")?.body).toEqual({ decision: "approve" });
+    });
   });
 
-  test("a queue entry is listed with the counts computed over exactly those entries", async () => {
-    // What breaks if this is deleted: the counts and the list stop being one answer.
-    const { container } = await consoleAt(
-      "/skills",
-      listing(
-        skillsPage([], {
-          queue: [
-            {
-              name: "xero-reconciliation",
-              digest: DIGEST_TWO,
-              waiting_since: "2019-03-04T09:00:00Z",
-              changed: ["body"],
-              stale: true,
-            },
-          ],
-        }),
-      ),
-    );
+  test("the About view reads the history from the ledger, and says where it is kept when refused", async () => {
+    // What breaks if this is deleted: a history composed by the page rather than read from the
+    // ledger, or a refusal drawn as an empty history.
+    const ledger = {
+      items: [
+        { at: "2019-03-06T09:00:00Z", action: "skill", actor_id: "u_reviewer", subject_kind: "skill", subject_id: NAME, details: { change: "retired", digest: DIGEST } },
+        { at: "2019-03-05T09:00:00Z", action: "skill", actor_id: "u_importer", subject_kind: "skill", subject_id: "hosting-expiry-two", details: { change: "imported", digest: OLDER } },
+      ],
+      next_cursor: null,
+      order: "newest",
+      actions: [],
+      subject_kinds: [],
+      actors: [],
+    };
+    const assigned = { ...ledger, items: [{ at: "2019-03-07T09:00:00Z", action: "compose_change", actor_id: "u_x", subject_kind: "agent", subject_id: "company_desk", details: { part: "skills", reference: "hosting_expiry", direction: "detached", reason_code: "skill_detach" } }] };
+    const { container } = await consoleAt(`${skillAddress(NAME)}/about`, skillAnswers([version()], [PIN], {
+      [`GET ${API}/audit`]: (body) => ({ body: body === null ? ledger : ledger }),
+    }));
+    await waitFor(() => {
+      expect(container.textContent).toContain("Retired: version 1.1.0 by Rex Reviewer");
+    });
+    expect(container.textContent).not.toContain("hosting-expiry-two");
 
-    expect(container.textContent).toContain("xero-reconciliation");
-    expect(container.textContent).toContain(queueCount(1, 1, 1));
-    expect(container.textContent).not.toContain(NOTHING_IS_WAITING);
+    const detail = readSkillDetail(skillsPage([version()], [PIN]), NAME);
+    const lines = readHistory([], assigned.items as never, detail as NonNullable<typeof detail>);
+    expect(lines.map((one) => one.words)).toEqual(["Detached from Company Desk"]);
+
+    const refused = await consoleAt(`${skillAddress(NAME)}/about`, skillAnswers([version()], [PIN], {
+      [`GET ${API}/audit`]: { status: 404, body: { message: "the audit screen is not answerable for this caller" } },
+    }));
+    await waitFor(() => {
+      expect(refused.container.textContent).toContain(HISTORY_ELSEWHERE);
+    });
   });
 
-  test("two agents on different bytes of one skill are listed as drift, and matching ones are not", async () => {
-    // What breaks if this is deleted: the drift card goes quiet.
-    const drifting = await consoleAt(
-      "/skills",
-      listing(
-        skillsPage([
-          {
-            name: "hosting-expiry",
-            pinned_by: [
-              { agent_id: "a", digest: DIGEST_ONE },
-              { agent_id: "b", digest: DIGEST_TWO },
-            ],
-            versions_differ: true,
-          },
-        ]),
-      ),
-    );
-    const steady = await consoleAt(
-      "/skills",
-      listing(skillsPage([{ name: "hosting-expiry", pinned_by: [{ agent_id: "a", digest: DIGEST_ONE }] }])),
-    );
-
-    expect(drifting.container.querySelector('[aria-label="Skills whose agents run different bytes"]')).not.toBeNull();
-    expect(drifting.container.textContent).toContain(DRIFT_IS_PINNED_BY_DESIGN);
-    expect(steady.container.textContent).toContain(NO_DRIFT);
-  });
-
-  test("a deep link to a skill this page does not carry says so about the page", async () => {
-    // What breaks if this is deleted: the sentence becomes about the company, which is the oracle a
-    // deep link resolved against the page exists to avoid.
-    const { container } = await consoleAt(
-      skillAddress("quote-format"),
-      listing(skillsPage([{ name: "hosting-expiry", pinned_by: [{ agent_id: "a", digest: DIGEST_ONE }] }])),
-    );
+  test("a skill nothing here names draws one sentence, whichever the reason", async () => {
+    // What breaks if this is deleted: a hidden skill told apart from a missing one.
+    const { container } = await consoleAt(skillAddress("nobody-sees-this"), skillAnswers([version()], [PIN]));
 
     expect(container.textContent).toContain(NO_SUCH_SKILL);
-    expect(container.textContent).not.toMatch(/does not exist|not found|never imported/i);
-  });
-
-  test("an open skill draws its own pins and asks the listing once more, for its own name only", async () => {
-    // What breaks if this is deleted: the deep link asking something other than its own row, or
-    // finding its pins only when the skill happens to sit on the first page of the list.
-    const rows = skillsPage([
-      { name: "hosting-expiry", pinned_by: [{ agent_id: "company-desk", digest: DIGEST_ONE }] },
-    ]);
-    const open = await consoleAt(skillAddress("hosting-expiry"), listing(rows));
-    const bare = await consoleAt("/skills", listing(rows));
-
-    const asked = (idp: FakeIdp) =>
-      idp.urls
-        .filter((url) => url.includes(SKILLS_OPERATION))
-        .map((url) => new URL(url, CONSOLE_ORIGIN).pathname + new URL(url, CONSOLE_ORIGIN).search);
-
-    expect(asked(open.idp).sort()).toEqual([...asked(bare.idp), `/api/v1${skillApiPath("hosting-expiry")}`].sort());
-    expect(open.container.querySelector('section.card[aria-label="hosting-expiry"]')?.textContent).toContain(
-      "company-desk",
-    );
-    expect(bare.container.querySelector('section.card[aria-label="hosting-expiry"]')).toBeNull();
-  });
-});
-
-describe("what the query module does with a body", () => {
-  test("a body that is not a page is an empty page offering nothing", () => {
-    // What breaks if this is deleted: an unreadable answer draws an Add form whose every press is
-    // refused, because the console understood least exactly where it offered most.
-    const page = readSkillsPage({ unexpected: true });
-
-    expect(page.skills).toEqual([]);
-    expect(page.library).toEqual([]);
-    expect(page.mayAdd).toBe(false);
-    expect(page.agents).toEqual([]);
-  });
-
-  test("the total and the cursor have no path from the payload to a renderer", () => {
-    // What breaks if this is deleted: `total` reaches a component and a footer counts rows.
-    const page = readSkillsPage(
-      skillsPage([{ name: "a-skill", pinned_by: [{ agent_id: "a", digest: DIGEST_ONE }] }]),
-    );
-
-    expect(Object.keys(page).sort()).toEqual(
-      [
-        "agents",
-        "edits",
-        "library",
-        "libraryTruncated",
-        "mayAdd",
-        "queue",
-        "registryIsAbsent",
-        "skills",
-        "stale",
-        "truncated",
-        "waiting",
-        "categories",
-      ].sort(),
-    );
-  });
-
-  test("a skill is found on the page by its exact name and never by a prefix", () => {
-    // What breaks if this is deleted: `/skills/hosting` opens `hosting-expiry`.
-    const rows = [
-      { name: "hosting-expiry", pinned_by: [], versions_differ: false },
-      { name: "hosting", pinned_by: [], versions_differ: false },
-    ] as unknown as SkillLibraryRow[];
-
-    expect(skillIn(rows, "hosting")?.name).toBe("hosting");
-    expect(skillIn(rows, "hosting-exp")).toBeNull();
-  });
-
-  test("drift is the rows the API marked and never a comparison this console made", () => {
-    // What breaks if this is deleted: the console decides drift over rows it may not have all of.
-    const rows = [
-      { name: "a-skill", pinned_by: [], versions_differ: true },
-      { name: "b-skill", pinned_by: [], versions_differ: false },
-    ] as unknown as SkillLibraryRow[];
-
-    expect(driftingRows(rows).map((one) => one.name)).toEqual(["a-skill"]);
-  });
-});
-
-describe("importing, editing and filing a skill", () => {
-  const COMMIT = "0123456789abcdef0123456789abcdef01234567";
-
-  test("the bodies an import, an edit and a category change send are the ones the routes declare", () => {
-    // What breaks if this is deleted: a renamed field in one of the three new writes, refused with
-    // a 422 that reaches a person as "Something went wrong" every time they press Import or Save.
-    const imported = declaredPropertyNames(declaredRequestBodySchema(`${SKILLS_OPERATION}/imports`, "post"));
-    const edit = declaredPropertyNames(
-      declaredRequestBodySchema(`${SKILLS_OPERATION}/{digest}/versions`, "post"),
-    );
-    const filed = declaredPropertyNames(
-      declaredRequestBodySchema(`${SKILLS_OPERATION}/{digest}/categories`, "post"),
-    );
-
-    expect(Object.keys(repositoryImport("o/r", COMMIT, "")).sort()).toEqual([...imported].sort());
-    expect(Object.keys(addressImport("https://x")).sort()).toEqual([...imported].sort());
-    expect(edit).toEqual(["content"]);
-    expect(filed).toEqual(["categories"]);
-    expect(IMPORT_PATH).toBe("/skills/imports");
-    expect(versionsPath(DIGEST_ONE)).toBe(`/skills/${DIGEST_ONE}/versions`);
-    expect(categoriesPath(DIGEST_ONE)).toBe(`/skills/${DIGEST_ONE}/categories`);
-  });
-
-  test("an import names a repository and a whole commit, or an https address, before it is sent", () => {
-    // What breaks if this is deleted: a branch name sent to be refused after a round trip, or an
-    // import button that stays disabled for a well-formed commit.
-    expect(importProblem(repositoryImport("owner/repo", COMMIT, "skills/x"))).toBeNull();
-    expect(importProblem(repositoryImport("owner/repo", "main", ""))).toContain("forty-character");
-    expect(importProblem(repositoryImport("not a repo", COMMIT, ""))).toContain("owner/repository");
-    expect(importProblem(addressImport("https://raw.githubusercontent.com/o/r/main/SKILL.md"))).toBeNull();
-    expect(importProblem(addressImport("http://example.com/SKILL.md"))).toContain("https");
-    expect(categoriesTyped(" SEO, Web maintenance ,, ")).toEqual(["SEO", "Web maintenance"]);
-  });
-
-  test("an administrator imports from a repository at a commit and the page says it is waiting", async () => {
-    // What breaks if this is deleted: the import form the owner asked for is not on the screen, or
-    // it sends a body the route does not take, or the page goes on drawing the old library.
-    let library: Record<string, unknown>[] = [];
-    const { container, sent } = await consoleAt("/skills", {
-      [`GET ${SKILLS_OPERATION}`]: () => json(skillsPage([], { may_add: true, library })),
-      [`POST ${SKILLS_OPERATION}/imports`]: () => {
-        library = [librarySkill({ source: "github", source_commit: COMMIT })];
-        return json(librarySkill({ source: "github" }), 201);
-      },
-    });
-
-    const form = container.querySelector(`form[aria-label="${IMPORT_HEADING}"]`) as HTMLFormElement;
-    expect(form).not.toBeNull();
-    fireEvent.change(form.querySelector("#skills-repository") as HTMLInputElement, {
-      target: { value: "example-org/agent-skills" },
-    });
-    fireEvent.change(form.querySelector("#skills-commit") as HTMLInputElement, { target: { value: "main" } });
-    expect(button(container, IMPORT).disabled).toBe(true);
-    expect(form.textContent).toContain("forty-character");
-    fireEvent.change(form.querySelector("#skills-commit") as HTMLInputElement, { target: { value: COMMIT } });
-    fireEvent.change(form.querySelector("#skills-folder") as HTMLInputElement, {
-      target: { value: "skills/hosting-expiry" },
-    });
-    fireEvent.change(form.querySelector("#skills-import-categories") as HTMLInputElement, {
-      target: { value: "hosting, seo" },
-    });
-    fireEvent.click(button(container, IMPORT));
-
-    await waitFor(() => {
-      expect(container.textContent).toContain("was added and is waiting for review");
-    });
-    expect(sent.filter((one) => one.method === "POST").map((one) => one.body)).toEqual([
-      {
-        kind: "github",
-        repository: "example-org/agent-skills",
-        commit: COMMIT,
-        path: "skills/hosting-expiry",
-        url: "",
-        categories: ["hosting", "seo"],
-      },
-    ]);
-  });
-
-  test("an import from an address sends the address and says the API's refusal in its own words", async () => {
-    // What breaks if this is deleted: the address import sends a repository body, or a host the API
-    // refused is drawn as though it had worked.
-    const { container, sent } = await consoleAt("/skills", {
-      [`GET ${SKILLS_OPERATION}`]: () => json(skillsPage([], { may_add: true })),
-      [`POST ${SKILLS_OPERATION}/imports`]: () =>
-        json({ message: "this skill was not added: 'example.com' is not a host a skill is imported from", trace_id: "t" }, 404),
-    });
-    const form = container.querySelector(`form[aria-label="${IMPORT_HEADING}"]`) as HTMLFormElement;
-    const address = [...form.querySelectorAll("label")].find((one) => one.textContent?.includes(FROM_ADDRESS));
-
-    fireEvent.click(address?.querySelector("input") as HTMLInputElement);
-    fireEvent.change(form.querySelector("#skills-address") as HTMLInputElement, {
-      target: { value: "https://example.com/SKILL.md" },
-    });
-    fireEvent.click(button(container, IMPORT));
-
-    const card = container.querySelector('[aria-labelledby="skills-import"]') as HTMLElement;
-    await waitFor(() => {
-      expect(card.querySelector(".notice__body > p")?.textContent).toContain("not a host a skill is imported from");
-    });
-    expect(sent.filter((one) => one.method === "POST").map((one) => one.body)).toEqual([
-      { kind: "url", repository: "", commit: "", path: "", url: "https://example.com/SKILL.md", categories: [] },
-    ]);
-  });
-
-  test("an edit starts from the API's text, is saved as a new version, and is offered only where the API says", async () => {
-    // What breaks if this is deleted: an edit box that starts empty or from text that is not the
-    // skill, an edit offered to a reader who may not make one, or an edit sent somewhere other than
-    // a new version.
-    const markdown = "---\nname: hosting-expiry\nversion: 1.0.0\n---\nLook up the domain.\n";
-    const readOnly = await consoleAt(
-      skillAddress("hosting-expiry"),
-      listing(skillsPage([], { library: [librarySkill()] })),
-    );
-    const { container, sent } = await consoleAt(skillAddress("hosting-expiry"), {
-      [`GET ${SKILLS_OPERATION}`]: () =>
-        json(skillsPage([], { library: [librarySkill({ editable: true, markdown })] })),
-      [`POST ${SKILLS_OPERATION}/${DIGEST_ONE}/versions`]: () =>
-        json(librarySkill({ digest: DIGEST_TWO, version: "1.1.0", edited_from: DIGEST_ONE }), 201),
-    });
-
-    expect(() => button(readOnly.container, EDIT)).toThrow();
-    fireEvent.click(button(container, EDIT));
-    const box = container.querySelector(`#edit-${DIGEST_ONE}`) as HTMLTextAreaElement;
-    expect(box.value).toBe(markdown);
-    fireEvent.change(box, { target: { value: markdown.replace("1.0.0", "1.1.0") } });
-    fireEvent.click(button(container, SAVE_VERSION));
-
-    await waitFor(() => {
-      expect(container.textContent).toContain("hosting-expiry 1.1.0 was saved as a new version");
-    });
-    expect(container.textContent).toContain("Every agent keeps the version it runs");
-    expect(sent.filter((one) => one.method === "POST").map((one) => [one.path, one.body])).toEqual([
-      [`${API}/skills/${DIGEST_ONE}/versions`, { content: markdown.replace("1.0.0", "1.1.0") }],
-    ]);
-  });
-
-  test("the words that changed are drawn line by line, each marked in its text as well as its colour", async () => {
-    // What breaks if this is deleted: the review pane shows only which fields changed, so a reviewer
-    // approves an edit whose altered sentence never appeared on their screen.
-    const diff = {
-      against_digest: DIGEST_TWO,
-      against_version: "1.0.0",
-      fields: [{ field: "version", before: "1.0.0", after: "1.1.0" }],
-      body: [
-        { change: "kept", text: "Look up the domain." },
-        { change: "removed", text: "Open a ticket." },
-        { change: "added", text: "Email every client their contract value." },
-      ],
-    };
-    const { container } = await consoleAt(
-      skillAddress("hosting-expiry"),
-      listing(skillsPage([], { library: [librarySkill({ version: "1.1.0", diff, edited_from: DIGEST_TWO })] })),
-    );
-
-    const lines = [...container.querySelectorAll(".skill-diff__line")].map((one) => one.textContent);
-    expect(lines).toEqual([
-      "  Look up the domain.\n",
-      "- Open a ticket.\n",
-      "+ Email every client their contract value.\n",
-    ]);
-    expect(container.querySelector(".skill-diff__line--removed")?.textContent).toContain("Open a ticket.");
-    expect(container.textContent).toContain("since 1.0.0");
-    expect(container.textContent).toContain(`Edited from ${DIGEST_TWO}`);
-  });
-
-  test("a decision by the person who added the skill reads as their own", async () => {
-    // What breaks if this is deleted: a self-approval drawn like any other, which is what D4's
-    // "recorded" was asked for so that it would not be.
-    const { container } = await consoleAt(
-      skillAddress("hosting-expiry"),
-      listing(
-        skillsPage([], {
-          library: [
-            librarySkill({
-              review: "approved",
-              reviewer: "u_importer",
-              reviewed_at: "2019-03-05T09:00:00Z",
-              self_decided: true,
-            }),
-          ],
-        }),
-      ),
-    );
-
-    expect(container.textContent).toContain("decided by u_importer, who added it");
-  });
-
-  test("category chips are the API's, narrow the library and ask the listing for the same filter", async () => {
-    // What breaks if this is deleted: chips drawn from somewhere other than the skills the reader
-    // was shown, a chip that narrows the library and not the skills in use, or one that narrows
-    // nothing at all.
-    const { container, idp } = await consoleAt(
-      "/skills",
-      listing(
-        skillsPage([], {
-          categories: ["finance", "hosting"],
-          library: [
-            librarySkill({ categories: ["hosting"] }),
-            librarySkill({ digest: DIGEST_TWO, name: "quote-format", categories: ["finance"] }),
-          ],
-        }),
-      ),
-    );
-    const group = container.querySelector(`[aria-label="${CHIPS_LABEL}"]`) as HTMLElement;
-    const chips = [...group.querySelectorAll("button")];
-    expect(chips.map((one) => one.textContent)).toEqual([EVERY_CATEGORY, "finance", "hosting"]);
-    expect(chips[0]?.getAttribute("aria-pressed")).toBe("true");
-
-    fireEvent.click(chips[2] as HTMLButtonElement);
-
-    await waitFor(() => {
-      const library = container.querySelector('[aria-label="Skills in the library"]')?.textContent ?? "";
-      expect(library).toContain("hosting-expiry");
-      expect(library).not.toContain("quote-format");
-    });
-    expect(
-      idp.urls.some((url) =>
-        new URL(url, CONSOLE_ORIGIN).searchParams.getAll("filter").includes(`${CATEGORY_COLUMN}:hosting`),
-      ),
-    ).toBe(true);
-    const pressed = [...container.querySelectorAll(`[aria-label="${CHIPS_LABEL}"] button`)].find(
-      (one) => one.getAttribute("aria-pressed") === "true",
-    );
-    expect(pressed?.textContent).toBe("hosting");
-  });
-
-  test("categories are set on a skill by a reader who may edit it, and nothing is drawn for one who may not", async () => {
-    // What breaks if this is deleted: a category control whose every press is refused, or categories
-    // sent unsplit so the API files a skill under "hosting, seo".
-    const readOnly = await consoleAt(
-      skillAddress("hosting-expiry"),
-      listing(skillsPage([], { library: [librarySkill({ categories: ["hosting"] })] })),
-    );
-    const { container, sent } = await consoleAt(skillAddress("hosting-expiry"), {
-      [`GET ${SKILLS_OPERATION}`]: () =>
-        json(skillsPage([], { library: [librarySkill({ editable: true, categories: ["hosting"] })] })),
-      [`POST ${SKILLS_OPERATION}/${DIGEST_ONE}/categories`]: () =>
-        json({ name: "hosting-expiry", categories: ["hosting", "seo"] }),
-    });
-
-    expect(() => button(readOnly.container, SET_CATEGORIES)).toThrow();
-    expect(readOnly.container.querySelector(".chip")?.textContent).toBe("hosting");
-    fireEvent.change(container.querySelector(`#categories-${DIGEST_ONE}`) as HTMLInputElement, {
-      target: { value: "hosting, SEO" },
-    });
-    fireEvent.click(button(container, SET_CATEGORIES));
-
-    await waitFor(() => {
-      expect(container.textContent).toContain("hosting-expiry is filed under hosting, seo.");
-    });
-    expect(sent.filter((one) => one.method === "POST").map((one) => one.body)).toEqual([
-      { categories: ["hosting", "SEO"] },
-    ]);
   });
 });

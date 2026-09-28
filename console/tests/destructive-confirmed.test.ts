@@ -116,19 +116,19 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
   "src/pages/People.tsx GRANTS_API_PATH":
     "Writes a new grant. Entitlements are additive only, a grant replaces nothing, and taking one " +
     "back is the removal beside it, which is confirmed.",
-  "src/pages/Skills.tsx SKILLS_API_PATH":
+  "src/pages/skills/SkillForms.tsx SKILLS_API_PATH":
     "Adds a skill to the library undecided. A second import of the same bytes is refused by the " +
     "table's key rather than written over, so nothing existing is replaced, and the skill reaches no " +
     "agent until somebody approves it and an administrator assigns it, both of which are confirmed.",
-  "src/pages/Skills.tsx IMPORT_PATH":
+  "src/pages/skills/SkillForms.tsx IMPORT_PATH":
     "Imports a skill from a repository commit or an address into the library undecided, exactly as " +
     "an added package is: the same bytes twice are refused by the key, nothing existing is replaced, " +
     "and it reaches no agent until it is approved and assigned, both of which are confirmed.",
-  "src/pages/Skills.tsx versionsPath(one.digest)":
+  "src/pages/skills/SkillForms.tsx versionsPath(one.digest)":
     "Saves an edit as a new, undecided version beside the one it came from, which is never changed; " +
     "every agent keeps the version it runs, which tests/unit/test_skill_routes.py holds, so nothing " +
     "existing is ended or replaced.",
-  "src/pages/Skills.tsx categoriesPath(one.digest)":
+  "src/pages/skills/SkillForms.tsx categoriesPath(one.digest)":
     "Sets the labels a skill is filed under. The previous labels are shown in the box before the " +
     "press and can be typed back, the change is a new row that edits none, and a label reaches no " +
     "agent and changes no procedure.",

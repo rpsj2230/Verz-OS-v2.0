@@ -29,6 +29,7 @@ import hashlib
 import inspect
 from collections.abc import Iterator, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -60,7 +61,11 @@ from brain.console.skill_library import (
     REVIEW_AUTHORITY,
     SKILL_AUTHORITY,
     Assignment,
+    AssignmentRecord,
+    Detachment,
+    DetachmentRecord,
     LibrarySkill,
+    Retirement,
     added,
     decided,
     read_package,
@@ -79,16 +84,20 @@ from brain.skill_routes import (
     AgentChoiceView,
     AssignedView,
     CategoriesView,
+    DetachedView,
     DiffLineView,
     FieldChangeView,
     FoundAgent,
     LibrarySkillView,
     QueueEntryView,
+    RetirementView,
     SkillDiffView,
+    SkillLibraryPage,
     SkillPinView,
     SkillQueueView,
     SkillRow,
     SkillsPage,
+    SkillVersionRowView,
     ToolReachView,
     bounded_agents,
     catalogue,
@@ -98,6 +107,7 @@ from brain.skill_routes import (
     submitted,
 )
 from brain.tables.agent import AgentRow
+from brain.tables.identity import PrincipalRow
 from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
 from brain.tools.review import STALE_AFTER, QueueEntry
 from brain.tools.skills import (
@@ -299,6 +309,8 @@ class Stored:
         self.agents: dict[str, AgentRow] = {}
         self.installs: dict[str, tuple[TemplateInstanceRow, TemplateVersionRow]] = {}
         self.statements: list[Any] = []
+        #: The directory's display names, by principal id, which the pages name people by.
+        self.people: dict[str, str] = {}
         self.library = Library(self)
         #: GitHub, as `tests/fixtures/skill_sources.py` records it. Nothing here reaches a host.
         self.fetcher = github()
@@ -321,6 +333,73 @@ class Library:
         self.assigned: list[Assignment] = []
         #: Every categories row written, oldest first, as the table keeps them.
         self.filed: list[tuple[str, tuple[str, ...], str]] = []
+        #: Every retirement row, every assignment and detachment row, oldest first (`0139`).
+        self.retired: list[Retirement] = []
+        self.records: list[AssignmentRecord] = []
+        self.detachments: list[DetachmentRecord] = []
+        self.detached: list[Detachment] = []
+
+    async def retirements(self, digests: Sequence[str]) -> Mapping[str, Retirement]:
+        self.calls.append("retirements")
+        newest: dict[str, Retirement] = {}
+        for one in self.retired:
+            if one.digest in digests:
+                newest[one.digest] = one
+        return newest
+
+    async def retire(
+        self, digest: str, *, retired: bool, by: str, ent_hash: str, trace_id: str
+    ) -> None:
+        self.calls.append("retire")
+        self.retired.append(Retirement(digest=digest, retired=retired, set_by=by, at=NOW))
+
+    def _write_install(self, made: Assignment | Detachment) -> None:
+        instance_row, _ = self.stored.installs[made.agent_id]
+        instance_row.overlay = dict(made.instance.overlay)
+        instance_row.field_owners = {
+            path: owner.model_dump(mode="json")
+            for path, owner in made.instance.overlay_owners.items()
+        }
+        instance_row.effective_document = dict(made.effective_document)
+        instance_row.effective_hash = made.effective_hash
+
+    async def detach(
+        self, made: Detachment, *, expected_hash: str, ent_hash: str, trace_id: str
+    ) -> bool:
+        self.calls.append("detach")
+        instance_row, _ = self.stored.installs[made.agent_id]
+        if instance_row.effective_hash != expected_hash:
+            return False
+        ended = {one.assignment_id for one in self.detachments}
+        open_ones = [
+            one
+            for one in self.records
+            if (one.agent_id, one.skill_name, one.digest)
+            == (made.agent_id, made.skill_name, made.digest)
+            and one.assignment_id not in ended
+        ]
+        self._write_install(made)
+        self.detachments.append(
+            DetachmentRecord(
+                assignment_id=open_ones[-1].assignment_id if open_ones else None,
+                agent_id=made.agent_id,
+                skill_name=made.skill_name,
+                digest=made.digest,
+                detached_by=made.detached_by,
+                at=NOW + timedelta(minutes=len(self.records) + len(self.detachments)),
+            )
+        )
+        self.detached.append(made)
+        return True
+
+    async def assignment_history(
+        self, names: Sequence[str]
+    ) -> tuple[tuple[AssignmentRecord, ...], tuple[DetachmentRecord, ...]]:
+        self.calls.append("history")
+        return (
+            tuple(one for one in self.records if one.skill_name in names),
+            tuple(one for one in self.detachments if one.skill_name in names),
+        )
 
     async def categories(self, names: Sequence[str]) -> Mapping[str, tuple[str, ...]]:
         self.calls.append("categories")
@@ -365,14 +444,18 @@ class Library:
         instance_row, _ = self.stored.installs[made.agent_id]
         if instance_row.effective_hash != expected_hash:
             return False
-        instance_row.overlay = dict(made.instance.overlay)
-        instance_row.field_owners = {
-            path: owner.model_dump(mode="json")
-            for path, owner in made.instance.overlay_owners.items()
-        }
-        instance_row.effective_document = dict(made.effective_document)
-        instance_row.effective_hash = made.effective_hash
+        self._write_install(made)
         self.assigned.append(made)
+        self.records.append(
+            AssignmentRecord(
+                assignment_id=f"assignment-{len(self.records)}",
+                agent_id=made.agent_id,
+                skill_name=made.skill_name,
+                digest=made.digest,
+                assigned_by=made.assigned_by,
+                at=NOW + timedelta(minutes=len(self.records) + len(self.detachments)),
+            )
+        )
         return True
 
 
@@ -422,6 +505,15 @@ class StubSession(AsyncSession):
             asked = set(statement.whereclause.right.value)
             return StubResult(
                 [_STORED.installs[key] for key in sorted(asked & set(_STORED.installs))]
+            )
+        if statement.column_descriptions[0].get("entity") is PrincipalRow:
+            named = set(statement.whereclause.right.value)
+            return StubResult(
+                [
+                    SimpleNamespace(id=key, display_name=value)
+                    for key, value in sorted(_STORED.people.items())
+                    if key in named
+                ]
             )
         return StubResult([_STORED.agents[key] for key in sorted(_STORED.agents)])
 
@@ -478,6 +570,11 @@ def names(response: Response) -> list[str]:
     return [one["name"] for one in response.json()["items"]]
 
 
+def pinned(row: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """A row's pins as the agent and the bytes, which is what most tests here are about."""
+    return [{"agent_id": one["agent_id"], "digest": one["digest"]} for one in row["pinned_by"]]
+
+
 # ------------------------------------------------------------------- the catalogue
 
 
@@ -508,9 +605,14 @@ def test_the_catalogue_lists_every_skill_the_callers_agents_are_pinned_to(
     assert response.status_code == 200, response.text
     assert names(response) == ["hosting-expiry", "quote-format"]
     first = response.json()["items"][0]
-    assert first["pinned_by"] == [
+    assert pinned(first) == [
         {"agent_id": "company_desk", "digest": DIGEST_ONE},
         {"agent_id": "web_helper", "digest": DIGEST_ONE},
+    ]
+    # Named for the page; nothing assigned these from the library, so nobody and no time.
+    assert [(one["display_name"], one["assigned_at"]) for one in first["pinned_by"]] == [
+        ("Company Desk", None),
+        ("Web Helper", None),
     ]
     assert first["versions_differ"] is False
 
@@ -913,25 +1015,30 @@ def test_a_queue_entry_carries_no_body_and_no_reviewer() -> None:
 # --------------------------------------------------------------- what it will not say
 
 
-def test_the_writes_are_six_posts_and_no_read_answers_one_skill_by_name(
+def test_the_writes_are_nine_posts_and_no_read_answers_one_skill_by_name(
     client: TestClient,
 ) -> None:
-    """Under `/skills` there is one GET, which takes no path parameter, and six POSTs: add a
+    """Under `/skills` there are two GETs, neither taking a path parameter, and nine POSTs: add a
     package, import from a repository or an address, save an edit as a version, set categories,
-    decide about one, and assign one. Read off the application's own document.
+    decide about one, assign one, retire and reinstate a version, and detach one from an agent.
+    Read off the application's own document.
 
-    Delete this and a seventh write, an approval folded into an import say, or a GET answering one
+    Delete this and a tenth write, an approval folded into an import say, or a GET answering one
     skill by name, can arrive without anybody arguing for it."""
     paths = client.app.openapi()["paths"]  # type: ignore[attr-defined]
     mine = {path: set(operations) for path, operations in paths.items() if path.startswith(SKILLS)}
 
     assert mine == {
         SKILLS: {"get", "post"},
+        f"{SKILLS}/library": {"get"},
         f"{SKILLS}/imports": {"post"},
         f"{SKILLS}/{{digest}}/versions": {"post"},
         f"{SKILLS}/{{digest}}/categories": {"post"},
         f"{SKILLS}/{{digest}}/review": {"post"},
         f"{SKILLS}/{{digest}}/assignments": {"post"},
+        f"{SKILLS}/{{digest}}/retirement": {"post"},
+        f"{SKILLS}/{{digest}}/reinstatement": {"post"},
+        f"{SKILLS}/{{digest}}/detachments": {"post"},
     }
     assert [path for path, methods in mine.items() if "get" in methods and "{" in path] == []
 
@@ -978,6 +1085,10 @@ def test_no_answer_carries_a_count_of_what_the_reader_was_not_shown(
         FieldChangeView,
         DiffLineView,
         CategoriesView,
+        SkillVersionRowView,
+        SkillLibraryPage,
+        RetirementView,
+        DetachedView,
     )
     assert hidden_count_fields(views) == ()
     assert body["total"] is None
@@ -1212,7 +1323,15 @@ def test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_ass
     assert after["items"] == [
         {
             "name": "hosting-expiry",
-            "pinned_by": [{"agent_id": "company_desk", "digest": digest}],
+            "pinned_by": [
+                {
+                    "agent_id": "company_desk",
+                    "digest": digest,
+                    "display_name": "Company Desk",
+                    "assigned_at": "2019-03-06T09:00:00Z",
+                    "assigned_by": None,
+                }
+            ],
             "versions_differ": False,
             "categories": [],
         }
@@ -1642,7 +1761,7 @@ def test_an_edit_waits_for_review_as_a_new_version_while_the_agent_keeps_its_pin
         ("added", "Look up the domain, then call the client."),
     ]
     page = get(client, "u_admin").json()
-    assert page["items"][0]["pinned_by"] == [{"agent_id": "company_desk", "digest": first}]
+    assert pinned(page["items"][0]) == [{"agent_id": "company_desk", "digest": first}]
     old = next(one for one in page["library"] if one["digest"] == first)
     assert (old["review"], old["body"]) == ("approved", "Look up the domain, then open a ticket.")
     assert [(one["digest"], one["changed"]) for one in page["queue"]["entries"]] == [
@@ -1654,7 +1773,7 @@ def test_an_edit_waits_for_review_as_a_new_version_while_the_agent_keeps_its_pin
         client, "u_admin", f"{SKILLS}/{second['digest']}/assignments", {"agent_id": "company_desk"}
     )
     assert moved.json()["replaced_digest"] == first
-    assert get(client, "u_admin").json()["items"][0]["pinned_by"] == [
+    assert pinned(get(client, "u_admin").json()["items"][0]) == [
         {"agent_id": "company_desk", "digest": second["digest"]}
     ]
 

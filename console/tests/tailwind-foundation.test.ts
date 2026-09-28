@@ -57,7 +57,7 @@ function declaredLayerOrder(): string[] {
 }
 
 /** The directories the component layer added, whose class names are meant to be utilities. */
-const COMPONENT_LAYER_DIRECTORIES = ["src/components/ui", "src/components/kit", "src/pages/agents", "src/hooks", "src/lib", "src/layout"];
+const COMPONENT_LAYER_DIRECTORIES = ["src/components/ui", "src/components/kit", "src/pages/agents", "src/pages/skills", "src/hooks", "src/lib", "src/layout"];
 
 /**
  * Every class name an old page can carry: the old sheets' class selectors, and every word of every
@@ -209,6 +209,7 @@ describe("what Tailwind generates", () => {
       "../layout",
       "../components/kit",
       "../pages/agents",
+      "../pages/skills",
     ]);
     expect(layer.candidates).toContain("bg-primary");
   });
