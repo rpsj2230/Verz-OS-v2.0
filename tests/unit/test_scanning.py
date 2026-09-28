@@ -27,6 +27,7 @@ from brain.knowledge.ingest import (
     MediaType,
     ParseCause,
     ParseFailure,
+    ScanCause,
     ScanResult,
     ScanVerdict,
     admit_upload,
@@ -173,8 +174,11 @@ def test_a_scanner_cannot_choose_the_digest_its_verdict_is_bound_to() -> None:
     """The binding between a verdict and the bytes is the whole of `assert_clean`, and it is
     worth nothing if the component that picks the verdict also picks the digest it is compared
     against. Adding a digest field to `ScanReport` would turn that comparison into a value
-    being compared with itself, and no behavioural test would notice."""
-    assert {f.name for f in dataclasses.fields(ScanReport)} == {"verdict", "scanner"}
+    being compared with itself, and no behavioural test would notice. The cause joined the two
+    in M7.1.3, and it is a member of a closed enum rather than a string, so it is not the field
+    a signature name or a line of the file could travel through either."""
+    assert {f.name for f in dataclasses.fields(ScanReport)} == {"verdict", "scanner", "cause"}
+    assert get_type_hints(ScanReport)["cause"] == ScanCause | None
 
 
 # ------------------------------------------------------ the parse failure (M7.2.5)

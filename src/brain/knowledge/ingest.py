@@ -90,6 +90,9 @@ class MediaType(enum.StrEnum):
     PLAIN = "text/plain"
     PNG = "image/png"
     JPEG = "image/jpeg"
+    #: A web page, which only a link brings in. Text by its bytes like Markdown, and read by
+    #: `brain.knowledge.web_page` rather than by the text path, because its markup is not words.
+    HTML = "text/html"
 
 
 @dataclass(frozen=True)
@@ -119,6 +122,9 @@ TYPE_LIMITS: Final[dict[MediaType, TypeLimit]] = {
     MediaType.PLAIN: TypeLimit(Container.TEXT, 5 * 1024 * 1024),
     MediaType.PNG: TypeLimit(Container.PNG, 10 * 1024 * 1024),
     MediaType.JPEG: TypeLimit(Container.JPEG, 10 * 1024 * 1024),
+    # Five megabytes of markup is a page far past anything a person reads as one; a bigger answer
+    # is an export or an archive dressed as a page, and its words would be the smaller part of it.
+    MediaType.HTML: TypeLimit(Container.TEXT, 5 * 1024 * 1024),
 }
 
 
@@ -258,6 +264,107 @@ class ScanVerdict(enum.StrEnum):
     UNSCANNABLE = "unscannable"
 
 
+class ScanCause(enum.StrEnum):
+    """Why a scanner refused a file or reached no verdict, as a word from a closed list.
+
+    The uploader is told this, and it is a closed list for `ParseCause`'s reason: each member is
+    a different thing for them to do, and a scanner contributes one member rather than a sentence,
+    because a scanner's own words are vendor prose that names signatures and file internals and
+    travels into logs and chat clients. `SCAN_CAUSE_TEXT` holds what each one means.
+    """
+
+    #: An antivirus recognised the bytes as malware.
+    MALWARE_SIGNATURE = "malware_signature"
+    #: A Word document carrying a macro project.
+    MACROS = "macros"
+    #: An archive that expands past any document's size, or into more parts than one holds.
+    EXPANDS_WITHOUT_BOUND = "expands_without_bound"
+    #: A part of an Office file declaring XML entities.
+    XML_ENTITIES = "xml_entities"
+    #: A PDF carrying script, a launch action, an embedded file or rich media.
+    ACTIVE_CONTENT = "active_content"
+    #: A part nothing can look inside because it is encrypted.
+    ENCRYPTED_PART = "encrypted_part"
+    #: Text that is not UTF-8, or that holds a byte no text contains.
+    NOT_READABLE_TEXT = "not_readable_text"
+    #: A container the check could not open at all.
+    UNOPENABLE = "unopenable"
+    #: A kind of file the check cannot look into.
+    NOT_CHECKABLE = "not_checkable"
+    #: Larger than the antivirus is set to read.
+    TOO_LARGE_TO_SCAN = "too_large_to_scan"
+    #: The antivirus this install is set to use did not answer.
+    SCANNER_UNREACHABLE = "scanner_unreachable"
+    #: The antivirus answered with an error rather than a verdict.
+    SCANNER_FAILED = "scanner_failed"
+    #: The install names a scanner that is not set up.
+    SCANNER_NOT_SET_UP = "scanner_not_set_up"
+    #: A scanner this product did not write refused without a cause.
+    UNSTATED = "unstated"
+
+
+#: What each scan cause means and what to do. Every member has an entry, asserted by a test: a
+#: cause without wording renders as a refusal that names nothing, which is what the cause is for.
+SCAN_CAUSE_TEXT: Final[dict[ScanCause, str]] = {
+    ScanCause.MALWARE_SIGNATURE: (
+        "the antivirus recognised it as malware, so it was neither read nor kept. Check it with "
+        "whoever sent it before opening it anywhere else."
+    ),
+    ScanCause.MACROS: (
+        "it carries macros, which a document added to knowledge has no use for. Save it again as "
+        "a Word document without macros and upload that."
+    ),
+    ScanCause.EXPANDS_WITHOUT_BOUND: (
+        "it unpacks to far more than any document holds, which is how a file is built to exhaust "
+        "whatever reads it. Save it again from the application it came from and upload that."
+    ),
+    ScanCause.XML_ENTITIES: (
+        "one of its parts declares XML entities, which an ordinary Word document never does. Save "
+        "it again from Word and upload that."
+    ),
+    ScanCause.ACTIVE_CONTENT: (
+        "it carries script, an action that launches something, an embedded file or rich media. "
+        "Print it to a new PDF, which keeps the words and drops those, and upload that."
+    ),
+    ScanCause.ENCRYPTED_PART: (
+        "part of it is encrypted, so nothing could look inside it. Upload a copy with the "
+        "password removed."
+    ),
+    ScanCause.NOT_READABLE_TEXT: (
+        "it is not readable text: it is not UTF-8, or it holds bytes no text contains. Save it "
+        "as UTF-8 text and upload it again."
+    ),
+    ScanCause.UNOPENABLE: (
+        "it could not be opened to be checked, so it is damaged or not what it says it is. "
+        "Re-export it from the application it came from and upload it again."
+    ),
+    ScanCause.NOT_CHECKABLE: (
+        "it is a kind of file this check cannot look into. Upload a plain text, Markdown, PDF or "
+        "Word copy of it."
+    ),
+    ScanCause.TOO_LARGE_TO_SCAN: (
+        "it is larger than the antivirus is set to read, and unscanned is not clean. Split it "
+        "into smaller documents, or ask an administrator to raise the antivirus's limit."
+    ),
+    ScanCause.SCANNER_UNREACHABLE: (
+        "the antivirus this install is set to use did not answer, so nothing was read. Nothing "
+        "is wrong with the file; an administrator checks the antivirus is running."
+    ),
+    ScanCause.SCANNER_FAILED: (
+        "the antivirus answered with an error rather than a verdict. Send it again shortly; if "
+        "it fails again, an administrator checks the antivirus."
+    ),
+    ScanCause.SCANNER_NOT_SET_UP: (
+        "this install is set to use an antivirus that is not set up, so nothing can be scanned. "
+        "An administrator sets its address, or sets the scanner back to the structural check."
+    ),
+    ScanCause.UNSTATED: (
+        "the scanner refused it without saying why. An administrator can see which scanner "
+        "refused it."
+    ),
+}
+
+
 @dataclass(frozen=True)
 class ScanResult:
     """A verdict bound to the bytes it was reached about.
@@ -265,12 +372,21 @@ class ScanResult:
     The digest is what makes the binding real. A verdict recorded against a filename or an
     upload id can be reused after the content behind it changes, which turns a clean scan of
     version one into a clean scan of version two. A verdict recorded against a digest cannot.
+
+    `cause` is None for a clean verdict and says why for any other; a verdict with no cause is
+    told as `ScanCause.UNSTATED`, so the refusal still names something the uploader can act on.
     """
 
     digest: str
     verdict: ScanVerdict
     scanner: str
     detail: str = ""
+    cause: ScanCause | None = None
+
+    @property
+    def told(self) -> str:
+        """What the uploader reads about a verdict that was not clean."""
+        return SCAN_CAUSE_TEXT[self.cause or ScanCause.UNSTATED]
 
 
 def assert_clean(upload: AdmittedUpload, scan: ScanResult) -> None:
@@ -286,6 +402,9 @@ def assert_clean(upload: AdmittedUpload, scan: ScanResult) -> None:
     Unscannable is refused, which does. Treating "the scanner could not read it" as permission
     to parse means every file crafted to defeat a scanner is also a file that skips it, and
     the parser is exactly what such a file is aimed at.
+
+    Both refusals name the cause (M7.1.3), because the person told chose the file and "refused"
+    alone sends them to re-upload the same bytes; see `SCAN_CAUSE_TEXT`.
     """
     if scan.digest != upload.digest:
         msg = (
@@ -294,12 +413,12 @@ def assert_clean(upload: AdmittedUpload, scan: ScanResult) -> None:
         )
         raise IngestRefused(msg)
     if scan.verdict is ScanVerdict.INFECTED:
-        msg = f"{upload.filename!r} was refused by {scan.scanner}"
+        msg = f"{upload.filename!r} was refused by {scan.scanner}: {scan.told}"
         raise IngestRefused(msg)
     if scan.verdict is not ScanVerdict.CLEAN:
         msg = (
             f"{upload.filename!r} could not be scanned by {scan.scanner}, and unscanned is "
-            "not clean; the parser is what an unscannable file is aimed at"
+            f"not clean: {scan.told}"
         )
         raise IngestRefused(msg)
 
@@ -393,6 +512,10 @@ class ParseCause(enum.StrEnum):
     #: this cause is produced that path has already run and answered badly. Added with
     #: `brain.knowledge.parse_ocr`, which is the only place that reaches it.
     ILLEGIBLE = "illegible"
+    #: A web page whose words arrive only once a browser runs its scripts, so the page as it was
+    #: fetched holds none. Separate from `NO_TEXT_LAYER`, whose remedy is the scanned-document
+    #: path; this one's is a browser. Only `brain.knowledge.web_page` reaches it.
+    SCRIPTED_PAGE = "scripted_page"
     TIMED_OUT = "timed_out"
     #: The parse worker hit its memory ceiling. Named separately from a timeout because the
     #: remedy differs: a smaller document, not a second attempt.
@@ -423,6 +546,10 @@ CAUSE_TEXT: Final[dict[ParseCause, str]] = {
     ParseCause.ILLEGIBLE: (
         "the file is a scan and too little of it could be read to be worth searching. "
         "Upload a clearer scan, or a copy that has text in it rather than a photograph."
+    ),
+    ParseCause.SCRIPTED_PAGE: (
+        "the page holds no words until a browser runs its scripts, and a link is read as it "
+        "arrives. Open it in a browser, save or print it as a PDF, and upload that."
     ),
     ParseCause.TIMED_OUT: (
         "the file took longer to read than the parser is allowed. Upload it again, and if it "

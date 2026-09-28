@@ -83,8 +83,9 @@ from brain.knowledge.ingest import (
 )
 from brain.knowledge.item import KnowledgeItem
 from brain.knowledge.kinds import KIND_LABELS, KindError, KnowledgeKind, uploadable_kinds
+from brain.knowledge.scanners import checked_by
 from brain.knowledge.search import KNOWLEDGE_READ, KNOWLEDGE_UPLOAD, Reach, SearchError, reach_for
-from brain.knowledge.text_path import STRUCTURAL_CHECK, TEXT_PATH_TYPES
+from brain.knowledge.text_path import TEXT_PATH_TYPES
 from brain.knowledge.uploads import (
     ReadUpload,
     ReceivedUpload,
@@ -335,7 +336,8 @@ async def upload_options(request: Request, asked: Asked) -> UploadOptionsView:
             if media_type in TEXT_PATH_TYPES
         ],
         found_by=FOUND_BY_TEXT if embedding_revision() is None else FOUND_BY_TEXT_AND_MEANING,
-        checked_by=STRUCTURAL_CHECK,
+        # The install's own scanner, so the page names ClamAV when it is chosen (M7.1.3).
+        checked_by=checked_by(),
     )
 
 

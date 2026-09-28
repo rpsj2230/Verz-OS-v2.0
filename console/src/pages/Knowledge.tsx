@@ -75,6 +75,7 @@ import {
 } from "./knowledgeQuery";
 import { FailureNotice } from "../ui/FailureNotice";
 import { KnowledgeTasks, LookedAfterCard, SolutionsCard } from "../components/KnowledgeLifecycle";
+import { KnowledgeIntake } from "./KnowledgeIntake";
 
 /** The design's own label for this screen, which the navigation and this heading share. */
 export const KNOWLEDGE_HEADING = "Knowledge";
@@ -606,6 +607,7 @@ export function Knowledge() {
       <h1>{KNOWLEDGE_HEADING}</h1>
       <p className="lede">{KNOWLEDGE_LEDE}</p>
       <AddDocument onAdded={changed} />
+      <KnowledgeIntake onAdded={changed} />
       <KnowledgeTasks version={version} onChanged={changed} />
       <LookedAfterCard version={version} onChanged={changed} />
       <SolutionsCard version={version} onChanged={changed} />
