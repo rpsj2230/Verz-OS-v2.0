@@ -38,7 +38,7 @@ connector was missing.
 
 Scope: reads values and returns values. Nothing here opens a connection or writes anything.
 
-Task ids: M27.11.9, M27.15.39, M27.15.58, M11.7.7, M11.2.1, M11.2.4
+Task ids: M27.11.9, M27.15.39, M27.15.58, M11.7.7, M11.2.1, M11.2.4, M27.15.8
 """
 
 from __future__ import annotations
@@ -64,7 +64,7 @@ from brain.core.entitlement import EntitlementSet
 from brain.core.scope import Op
 from brain.ops.connector_admin import may_connect_source
 from brain.ops.connector_store import Connection
-from brain.ops.connector_sync import READINGS, SyncOutcome, SyncState
+from brain.ops.connector_sync import READINGS, ProbeVerdict, SyncOutcome, SyncState, verdict_of
 from brain.ops.lark_connect import USES, Use
 from brain.tools.registry import ToolRegistry
 
@@ -171,11 +171,16 @@ def status_of(connected: bool, state: SyncState | None) -> SourceStatus:
 
     A quota wait is not a failure, for
     `brain.connectors.throttle.A_QUOTA_REFUSAL_IS_NOT_ILL_HEALTH`'s reason: the source asked to be
-    read later and will be.
+    read later and will be. A test a person asked for is the newest attempt when it is newer, and
+    one that did not work is failing as a failed read is; one that made no call says nothing new.
     """
     if not connected:
         return SourceStatus.NOT_CONNECTED
-    if state is not None and state.outcome is SyncOutcome.FAILED:
+    if state is None:
+        return SourceStatus.CONNECTED
+    if state.outcome is SyncOutcome.FAILED:
+        return SourceStatus.FAILING
+    if state.outcome is SyncOutcome.PROBED and verdict_of(state.detail) is ProbeVerdict.FAILED:
         return SourceStatus.FAILING
     return SourceStatus.CONNECTED
 

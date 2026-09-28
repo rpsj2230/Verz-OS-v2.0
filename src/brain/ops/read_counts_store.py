@@ -5,7 +5,10 @@ register shows the newest per source, which is one `DISTINCT ON` over that table
 else: no source is read to count it, and no index is scanned, for the owner's minimal-index rule.
 `brain.ops.processing_register` decides what the counts mean; this owns the query.
 
-Task ids: M24.2.3
+**A test of a connection is not a read and is left out** (`0142`): it keeps no record, so the
+newest test would otherwise tell the register a source had last been read as nought records.
+
+Task ids: M24.2.3, M27.15.8
 """
 
 from __future__ import annotations
@@ -16,6 +19,7 @@ from typing import Protocol, runtime_checkable
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from brain.ops.connector_sync import SyncOutcome
 from brain.ops.processing_register import ReadCounts
 from brain.tables.connector_sync import ConnectorSyncRow
 
@@ -42,6 +46,7 @@ class StoredReadCounts:
                     ConnectorSyncRow.documents,
                     ConnectorSyncRow.finished_at,
                 )
+                .where(ConnectorSyncRow.outcome != SyncOutcome.PROBED.value)
                 .distinct(ConnectorSyncRow.connector)
                 .order_by(ConnectorSyncRow.connector, ConnectorSyncRow.finished_at.desc())
             )

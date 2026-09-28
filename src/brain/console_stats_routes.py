@@ -54,7 +54,7 @@ through `brain.knowledge.search.reach_for` over each item's visibility, and a pe
 figure (retrievals, citations) has no table recording it, so the page would be a 404 rule and
 nothing to show.
 
-Task ids: M27.15.27, M27.15.33
+Task ids: M27.15.27, M27.15.33, M27.15.8
 """
 
 from __future__ import annotations
@@ -337,7 +337,9 @@ def connector_attempts(connector: str, since: datetime) -> Select[tuple[datetime
     """The live connection's finished attempts since an instant, newest first and bounded.
 
     Joined on the live connection rather than read by name, because `ops.connector_sync` names
-    the connection and a source connected again is a new one whose history starts afresh.
+    the connection and a source connected again is a new one whose history starts afresh. A test
+    a person asked for (`probed`, `0142`) is not an attempt to read the source and is left out, so
+    it counts toward no attempt, failure or read, and never uses up the bound.
     """
     return (
         select(ConnectorSyncRow.finished_at, ConnectorSyncRow.outcome)
@@ -349,6 +351,7 @@ def connector_attempts(connector: str, since: datetime) -> Select[tuple[datetime
             ),
         )
         .where(ConnectorSyncRow.connector == connector, ConnectorSyncRow.finished_at >= since)
+        .where(ConnectorSyncRow.outcome != SyncOutcome.PROBED.value)
         .order_by(ConnectorSyncRow.finished_at.desc())
         .limit(MAX_ACTIVITY_ROWS)
     )

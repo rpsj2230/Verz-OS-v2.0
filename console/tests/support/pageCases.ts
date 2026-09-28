@@ -99,6 +99,18 @@ const CONNECTOR_SOURCE = {
   confirm_key: UNBROKEN,
 };
 
+/** A source's newest connection test, as `brain.connector_routes.ConnectorProbeView` sends it. */
+const CONNECTOR_PROBE = {
+  connector: "xero",
+  requested_at: "2019-03-04T10:00:00Z",
+  pending: false,
+  verdict: "failed",
+  tested_at: "2019-03-04T10:00:40Z",
+  health: "down",
+  said: UNBROKEN,
+  confirm: UNBROKEN,
+};
+
 /** Whether an address is one of `AWAITED_ROUTES`. */
 export function awaited(path: string): boolean {
   return Object.keys(AWAITED_ROUTES).some((route) =>
@@ -1269,6 +1281,13 @@ const CONNECTORS_SCREEN = {
   key_blank: "Paste the key the source issued for this connection.",
 };
 
+/** The same screen with its one connection named for the source a page case opens, so the page
+ * draws what it draws for a connected source: its figures, its test and what the test found. */
+const XERO_CONNECTED = {
+  ...CONNECTORS_SCREEN,
+  connectors: CONNECTORS_SCREEN.connectors.map((one) => ({ ...one, name: "xero" })),
+};
+
 export const PAGES: Readonly<Record<string, PageCase>> = {
   // The Overview, SCREEN 1: the health strip and Needs you from the overview route, the figure row
   // from the figures route, the roster and the Connectors list, and the audit log's newest page.
@@ -2244,8 +2263,9 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     drawsValues: true,
     answers: {
       "/api/v1/console/connectors/xero": CONNECTOR_SOURCE,
-      "/api/v1/connectors": CONNECTORS_SCREEN,
+      "/api/v1/connectors": XERO_CONNECTED,
       "/api/v1/console/connectors/xero/stats": CONNECTOR_STATS,
+      "/api/v1/console/connectors/xero/probe": CONNECTOR_PROBE,
     },
   },
   // The Profile, the view with the most on it: settings, the index's fields, what it reads live,
@@ -2256,7 +2276,8 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     drawsValues: true,
     answers: {
       "/api/v1/console/connectors/xero": CONNECTOR_SOURCE,
-      "/api/v1/connectors": CONNECTORS_SCREEN,
+      "/api/v1/connectors": XERO_CONNECTED,
+      "/api/v1/console/connectors/xero/probe": CONNECTOR_PROBE,
     },
   },
   // Knowledge. The item reference is an identifier with no break in it, which is why the library

@@ -72,13 +72,23 @@ a key is a credential write through `brain.ops.credentials.Credentials.keep`, re
 ledger by its own trigger, and leaves the connection alone. A source with no live connection is the
 one refusal for both, for a caller who may manage it and so can see the list.
 
+**Testing a connection is asked for here and made by the worker.** Only the worker reads a source's
+key, so `POST /connectors/{connector}/probe` writes the asking down (`brain.ops.connector_probe`)
+under the authority an edit asks, and the worker makes one call on its next pass and records what it
+found on the source's health. `GET /console/connectors/{connector}/probe` is whether that is still
+waiting and what the newest test found, for a reader the source's page is for. A source whose plan
+refuses it (no verified ceiling, a declaration nobody agreed to) is refused before anything is
+asked, with the plan's own sentence. The write is at `/probe` rather than `/test` because Connect
+Lark's router, registered after this one, answers `POST /connectors/lark-app/test`, and a
+`/connectors/{connector}/test` here would answer it first.
+
 Rejected, and kept from the first version of this module: building a registry out of the manifest
 builders in `brain.connectors` at start. Each takes the identifiers of one company's install, so a
 module calling them with values of its own would be this repository holding a client's
 configuration. The identifiers arrive from the person connecting the source, and are kept in that
 install's database.
 
-Task ids: M42.6.5, M27.9.9, M38.4.1.1, M27.11.9, M27.15.39, M27.15.58, M11.7.7, M11.2.6
+Task ids: M42.6.5, M27.9.9, M38.4.1.1, M27.11.9, M27.15.39, M27.15.58, M11.7.7, M11.2.6, M27.15.8
 """
 
 from __future__ import annotations
@@ -181,6 +191,7 @@ from brain.ops.connector_admin import (
     key_problems,
     may_connect_source,
 )
+from brain.ops.connector_probe import TESTING_A_SOURCE, ProbeStatus, untestable
 from brain.ops.connector_recordings import recorded_in_words
 from brain.ops.connector_store import (
     Connection,
@@ -191,8 +202,13 @@ from brain.ops.connector_store import (
     NotConnectedError,
     StoredConnections,
 )
-from brain.ops.connector_sync import SyncState
-from brain.ops.connector_sync_store import ConnectorSyncRecords, StoredSyncStates
+from brain.ops.connector_sync import ProbeVerdict, SyncState
+from brain.ops.connector_sync_store import (
+    ConnectorProbes,
+    ConnectorSyncRecords,
+    StoredProbes,
+    StoredSyncStates,
+)
 from brain.ops.credentials import (
     MAX_CREDENTIAL_CHARS,
     CredentialProblemError,
@@ -225,6 +241,9 @@ KEY_PATH: Final = CONNECTORS_PATH + "/{connector}/key"
 SOURCES_PATH: Final = "/console/connectors"
 SOURCE_PATH: Final = SOURCES_PATH + "/{connector}"
 EXPORT_PATH: Final = SOURCE_PATH + "/export"
+#: Asking for a test, beside the other writes, and reading how it went, beside the other reads.
+PROBE_PATH: Final = CONNECTORS_PATH + "/{connector}/probe"
+PROBE_STATE_PATH: Final = SOURCE_PATH + "/probe"
 
 #: The Install setting Connect Lark saves its switched-on uses under.
 LARK_USES_SETTING: Final = "INSTALL_LARK_USES"
@@ -676,6 +695,31 @@ class ConnectorExportView(BaseModel):
     ceiling: str
     recorded: str
     history: list[ConnectorHistoryView]
+
+
+class ConnectorProbeView(BaseModel):
+    """Whether a test of one connection waits for the worker, and what the newest test found.
+
+    Never a key, and never anything the source sent: a test's finding is its health word and one
+    of `brain.ops.connector_sync`'s constant sentences. No principal id: who asked is the ledger's.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    connector: str
+    #: When a test was last asked for, or null when none has been.
+    requested_at: datetime | None
+    #: True while no test has started since it was asked for.
+    pending: bool
+    #: What the newest test found, or null when the connection was never tested.
+    verdict: ProbeVerdict | None
+    #: When the newest test finished, and the health word it left.
+    tested_at: datetime | None
+    health: str | None
+    #: The sentence to show: waiting, the newest test's own, or not tested yet.
+    said: str
+    #: What pressing Test connection agrees to.
+    confirm: str
 
 
 def trust_view(one: TrustRow) -> TrustView:
@@ -1472,4 +1516,82 @@ async def replace_key(
     answered = ConnectorKeyReplacedView(
         connector=connector, key_written_at=kept.set_at, told=KEY_REPLACED
     )
+    return JSONResponse(status_code=200, content=answered.model_dump(mode="json"))
+
+
+# ------------------------------------------------------------------ testing a connection
+
+
+def probes_of(request: Request) -> ConnectorProbes | None:
+    """What `app.state.connector_probes` holds, or the database, or None without one."""
+    found = getattr(request.app.state, "connector_probes", None)
+    if isinstance(found, ConnectorProbes):
+        return found
+    sessions = sessions_of(request)
+    return None if sessions is None else StoredProbes(sessions)
+
+
+def probe_view(connector: str, status: ProbeStatus) -> ConnectorProbeView:
+    """One source's test, from what the store read. Decides nothing about who may see it."""
+    return ConnectorProbeView(
+        connector=connector,
+        requested_at=status.requested_at,
+        pending=status.pending,
+        verdict=status.verdict,
+        tested_at=None if status.last is None else status.last.finished_at,
+        health=None if status.last is None else status.last.health,
+        said=status.said(),
+        confirm=TESTING_A_SOURCE,
+    )
+
+
+@router.get(PROBE_STATE_PATH, response_model=ConnectorProbeView, responses=COMMON_RESPONSES)
+async def connector_probe(request: Request, connector: str, asked: Asked) -> ConnectorProbeView:
+    """Whether a test of this source's connection waits for the worker, and what the last found.
+
+    The screen's read first, then only a connection this reader may be told of: a source with none,
+    and one the reader may not see, are the screen's one refusal.
+    """
+    _permitted(asked.reach, asked.now)
+    records = records_of(request)
+    probes = probes_of(request)
+    if records is None or probes is None:
+        raise Failed("no database on this process")
+    admitted = admitted_connections(await records.connected(), asked.reach, asked.now)
+    if not any(one.connector == connector for one in admitted):
+        raise _not_answerable("connection test")
+    return probe_view(connector, await probes.status(connector))
+
+
+@router.post(PROBE_PATH, response_model=ConnectorProbeView, responses=_WRITE_RESPONSES)
+async def ask_probe(request: Request, connector: str, asked: Asked) -> JSONResponse:
+    """Ask the worker for one test of this source's connection, or ask nothing and say why.
+
+    Asked of the authority an edit asks, before anything is judged. A source whose plan refuses it
+    is a problem on the source in the plan's own sentence, because the worker would make no call.
+    See `brain.ops.connector_probe`.
+    """
+    if not may_connect_source(asked.reach, connector, asked.now):
+        log.info("testing a source not answerable", principal=asked.caller.principal.id)
+        raise _not_answerable("test")
+    current = await _live_connection(request, connector)
+    if current is None:
+        raise _not_answerable("test")
+    refused = untestable(current, now=asked.now)
+    if refused:
+        problem = SettingProblem(field=SOURCE_FIELD, code="not_testable", message=refused)
+        return _problems((problem,))
+    probes = probes_of(request)
+    if probes is None:
+        raise Failed("no database on this process")
+    actor = asked.reach.principal_id
+    await probes.ask(
+        connector,
+        at=asked.now,
+        by=actor,
+        trace_id=_trace_id(),
+        ent_hash=asked.reach.ent_hash(),
+    )
+    log.info("source test asked for", connector=connector, principal=actor)
+    answered = probe_view(connector, await probes.status(connector))
     return JSONResponse(status_code=200, content=answered.model_dump(mode="json"))
