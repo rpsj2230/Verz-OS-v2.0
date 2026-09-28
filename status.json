@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-28T16:27:30.593969+00:00",
-  "commit": "2d7155f",
-  "commit_subject": "Connectors is rebuilt on the page kit: every source is listed, each has a page, and a connection can be edited, rekeyed and exported",
+  "generated_at": "2026-09-28T16:36:55.484358+00:00",
+  "commit": "2a3ff71",
+  "commit_subject": "The Lark direct-reply check reads a web citation as the sentence a chat lists",
   "total": 1576,
   "done": 358,
   "percent": 22.7,
