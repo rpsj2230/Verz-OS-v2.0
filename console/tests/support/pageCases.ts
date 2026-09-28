@@ -493,122 +493,130 @@ const LIVE_RUNS = {
 };
 
 /**
- * The models screen's five answers. Its own route's tiers, providers and unmeasured sentences
- * carry unbreakable tokens, the chain is `MATRIX`, and the spend line's department is one too,
- * because a department key sits in a `.fields__row` label rather than in a scrolling table. The
- * providers answer is editable and names a credential, so both controls and the vault's column are
- * drawn, and its unbroken provider, model and switcher all sit inside the two scrolling tables.
+ * The providers answer every page of the Models and routing module reads: one provider whose slug,
+ * description, model, deployment and vault slot are tokens with nowhere to break. It is editable,
+ * names a credential and carries a registry row, a last test and what it was sent, so every control,
+ * the key form and the terms form are drawn. The slug is the provider page's address too.
  */
+export const PROVIDERS_ANSWER = {
+  profile: "hosted",
+  providers: [
+    {
+      listed: 0,
+      provider: UNBROKEN,
+      description: UNBROKEN,
+      hosted: true,
+      switched_on: false,
+      switched_by: UNBROKEN,
+      switched_at: "2019-03-04T09:00:00Z",
+      key_held: true,
+      credential: { slot: UNBROKEN, description: UNBROKEN, held: true, set_at: "2019-03-04T09:00:00Z" },
+      registered: {
+        label: UNBROKEN,
+        kind: "openai_compatible",
+        base_url: `https://${UNBROKEN}.example`,
+        models: [UNBROKEN],
+        processing_region: UNBROKEN,
+        residency_class: "region_pinned",
+        storage_location: UNBROKEN,
+        retention_terms: UNBROKEN,
+        training_terms: UNBROKEN,
+        agreement_url: null,
+        lane_overrides: [{ lane: "answer", timeout_seconds: 10, attempts: null }],
+      },
+      disclosed: [{ category: "question", told: UNBROKEN, attempts: 3 }],
+      last_check: { answered: false, outcome: "timeout", model: UNBROKEN, at: "2019-03-04T09:00:00Z" },
+    },
+  ],
+  rungs: [
+    {
+      rung_id: RUNG_ID,
+      tier: "main",
+      position: 0,
+      role: "primary",
+      deployment_id: UNBROKEN,
+      provider: UNBROKEN,
+      model: UNBROKEN,
+      enabled: true,
+      answers: false,
+      skipped_because: "switched_off",
+      told: "This provider is switched off on this screen, so nothing is sent to it.",
+      state: "closed",
+      measured: false,
+      unhealthy_because: null,
+      live_seen: 0,
+      live_failed: 0,
+      probes_seen: 2,
+      probes_failed: 1,
+      last_probe_at: "2019-03-04T09:00:00Z",
+      last_live_at: null,
+    },
+  ],
+  exhausted_tiers: ["main"],
+  editable: true,
+  profile_editable: true,
+  vault: "ready",
+  vault_told: "The secrets vault answered.",
+  tiers: [
+    { tier: "small", context_window: 128000, escalation_headroom: 0.8, configured: false },
+    { tier: "main", context_window: 50000, escalation_headroom: 0.5, configured: true },
+  ],
+  residency: [
+    {
+      id: "44444444-4444-4444-8444-444444444444",
+      scope: { clauses: [{ field: "department", op: "eq", value: UNBROKEN }] },
+      allowed_regions: [UNBROKEN],
+      on_prem_only: false,
+      note: UNBROKEN,
+      created_by: UNBROKEN,
+      created_at: "2019-03-04T09:00:00Z",
+    },
+  ],
+  depth_alerts: [
+    {
+      raised_at: "2019-03-04T09:00:00Z",
+      level: "warning",
+      tier: "main",
+      depth: 2,
+      served_by: UNBROKEN,
+      reason: UNBROKEN,
+      trace_id: UNBROKEN,
+    },
+  ],
+  next_cursor: null,
+};
+
+/** One provider's figures: two counted, and the cost named as not recorded with its reason. */
+const PROVIDER_STATS = {
+  provider: UNBROKEN,
+  days: 30,
+  calls: 12,
+  failures: 1,
+  cost_minor: null,
+  unrecorded: [{ figure: "model_cost", why: UNBROKEN }],
+};
+
+/** A provider's history: one entry under its own subject, switched off by a person named by id. */
+const PROVIDER_HISTORY = {
+  items: [
+    {
+      at: "2019-03-04T09:00:00Z",
+      action: "setting",
+      actor_id: UNBROKEN,
+      subject_kind: "setting",
+      subject_id: `provider.${UNBROKEN}`,
+      details: { change: "switched_off" },
+    },
+  ],
+  next_cursor: null,
+  order: "newest",
+  actions: ["setting"],
+  subject_kinds: ["setting"],
+  actors: [UNBROKEN],
+};
+
 const MODELS_AND_HEALTH = {
-  "/api/v1/operate/models": {
-    start: "2019-02-25T09:00:00Z",
-    end: "2019-03-04T09:00:00Z",
-    tiers: [{ tier: "main", handles: UNBROKEN }],
-    lanes: [
-      { lane: "fast", requests: 3 },
-      { lane: "answer", requests: 7 },
-    ],
-    providers: [{ provider: UNBROKEN, description: UNBROKEN }],
-    unmeasured: [{ measure: UNBROKEN, because: UNBROKEN }],
-    fallbacks_fired: 4,
-  },
-  "/api/v1/models/providers": {
-    profile: "hosted",
-    providers: [
-      {
-        provider: UNBROKEN,
-        description: UNBROKEN,
-        hosted: true,
-        switched_on: false,
-        switched_by: UNBROKEN,
-        switched_at: "2019-03-04T09:00:00Z",
-        key_held: true,
-        credential: { slot: UNBROKEN, description: UNBROKEN, held: true, set_at: "2019-03-04T09:00:00Z" },
-      },
-    ],
-    rungs: [
-      {
-        rung_id: RUNG_ID,
-        tier: "main",
-        position: 0,
-        role: "primary",
-        deployment_id: UNBROKEN,
-        provider: UNBROKEN,
-        model: UNBROKEN,
-        enabled: true,
-        answers: false,
-        skipped_because: "switched_off",
-        told: "This provider is switched off on this screen, so nothing is sent to it.",
-        state: "closed",
-        measured: false,
-        unhealthy_because: null,
-        live_seen: 0,
-        live_failed: 0,
-        probes_seen: 2,
-        probes_failed: 1,
-        last_probe_at: "2019-03-04T09:00:00Z",
-        last_live_at: null,
-      },
-    ],
-    exhausted_tiers: ["main"],
-    editable: true,
-    profile_editable: true,
-    vault: "ready",
-    vault_told: "The secrets vault answered.",
-    tiers: [
-      { tier: "small", context_window: 128000, escalation_headroom: 0.8, configured: false },
-      { tier: "main", context_window: 50000, escalation_headroom: 0.5, configured: true },
-    ],
-    residency: [
-      {
-        id: "44444444-4444-4444-8444-444444444444",
-        scope: { clauses: [{ field: "department", op: "eq", value: UNBROKEN }] },
-        allowed_regions: [UNBROKEN],
-        on_prem_only: false,
-        note: UNBROKEN,
-        created_by: UNBROKEN,
-        created_at: "2019-03-04T09:00:00Z",
-      },
-    ],
-    depth_alerts: [
-      {
-        raised_at: "2019-03-04T09:00:00Z",
-        level: "warning",
-        tier: "main",
-        depth: 2,
-        served_by: UNBROKEN,
-        reason: UNBROKEN,
-        trace_id: UNBROKEN,
-      },
-    ],
-  },
-  "/api/v1/report/service-levels": {
-    start: "2019-02-25T09:00:00Z",
-    end: "2019-03-04T09:00:00Z",
-    lanes: [
-      {
-        lane: "answer",
-        objective_p95_ms: 8000,
-        objective_success_rate: 0.99,
-        p95_ms: 4100,
-        success_rate: 1,
-        requests: 7,
-        met: true,
-        shortfalls: [],
-      },
-    ],
-  },
-  "/api/v1/report/spend": {
-    dimension: "department",
-    built: true,
-    lines: [{ key: UNBROKEN, cost_minor: 700 }],
-    machine_included: false,
-    total_minor: 700,
-    as_of: "2019-03-04T09:00:00Z",
-    freshness: "live",
-    currency: "XXX",
-    time_zone: "UTC",
-  },
+  "/api/v1/models/providers": PROVIDERS_ANSWER,
   // One model priced and one not, so both the figures and the unpriced sentence are drawn.
   "/api/v1/models/prices": {
     currency: "SGD",
@@ -633,6 +641,13 @@ const MODELS_AND_HEALTH = {
       },
     ],
   },
+};
+
+/** One provider's page: the providers answer narrowed by the route, its figures and its history. */
+const PROVIDER_PAGE = {
+  "/api/v1/models/providers": PROVIDERS_ANSWER,
+  [`/api/v1/models/providers/${UNBROKEN}/stats`]: PROVIDER_STATS,
+  "/api/v1/audit": PROVIDER_HISTORY,
 };
 
 const DEPARTMENTS = {
@@ -1306,6 +1321,7 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     drawsValues: true,
     answers: {
       "/api/v1/routing/rungs": MATRIX,
+      "/api/v1/models/providers": PROVIDERS_ANSWER,
       "/api/v1/routing/changes": ROUTING_CHANGES,
       "/api/v1/routing/golden-questions": GOLDEN_QUESTIONS,
       "/api/v1/routing/golden-questions/askers": GOLDEN_ASKERS,
@@ -1317,8 +1333,10 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     drawsValues: true,
     answers: {
       "/api/v1/routing/rungs": MATRIX,
+      "/api/v1/models/providers": PROVIDERS_ANSWER,
       "/api/v1/routing/changes": ROUTING_CHANGES,
       "/api/v1/routing/golden-questions": GOLDEN_QUESTIONS,
+      "/api/v1/routing/golden-questions/askers": GOLDEN_ASKERS,
     },
   },
   "/classification": { address: "/classification", signedIn: true, drawsValues: false, answers: {} },
@@ -2384,6 +2402,19 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     signedIn: true,
     drawsValues: true,
     answers: MODELS_AND_HEALTH,
+  },
+  // One provider's Dashboard and its Profile, whose key and terms forms are drawn for this reader.
+  "/models/:provider": {
+    address: `/models/${UNBROKEN}`,
+    signedIn: true,
+    drawsValues: true,
+    answers: PROVIDER_PAGE,
+  },
+  "/models/:provider/:view": {
+    address: `/models/${UNBROKEN}/profile`,
+    signedIn: true,
+    drawsValues: true,
+    answers: PROVIDER_PAGE,
   },
   // Questions and gaps. Nothing connected, so the one-row table is drawn, and one gap line, so the
   // second is. The sentence every asker receives arrives unbroken twice: inside the table, whose

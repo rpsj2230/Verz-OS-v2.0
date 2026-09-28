@@ -7,7 +7,7 @@
 
 | Route | Called by |
 | --- | --- |
-| `GET /api/v1/audit` | `/`, `/audit` |
+| `GET /api/v1/audit` | `/`, `/audit`, `/models/:provider`, `/models/:provider/:view` |
 | `GET /api/v1/audit/history` | `/audit` |
 | `GET /api/v1/requirements/checks` | `/requirement-checks` |
 | `POST /api/v1/audit/verification` | `/audit` |

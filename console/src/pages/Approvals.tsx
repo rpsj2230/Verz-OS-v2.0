@@ -17,7 +17,7 @@
  * the action. A rejection needs one of the route's reasons and its button stays disabled until one
  * is chosen. The page claims a decision only when the API's answer confirms it: after a decision
  * in the queue the queue is asked again rather than edited in place, for the reason
- * `pages/Matrix.tsx` gives about a saved rung, and a refusal is the API's own sentence, which is
+ * `pages/models/RungEditor.tsx` gives about a saved step, and a refusal is the API's own sentence, which is
  * the same for an approval somebody else already decided and one that never existed. See
  * `A_DECISION_IS_CLAIMED_ONLY_WHEN_THE_API_CONFIRMS_IT`.
  *

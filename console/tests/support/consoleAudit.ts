@@ -132,6 +132,7 @@ import { editApiPath, exportApiPath, keyApiPath } from "../../src/pages/connecto
 import { LARK_API_PATH, LARK_TEST_API_PATH } from "../../src/pages/larkConnectQuery";
 import { agentMoveApiPath } from "../../src/pages/agentLifecycleQuery";
 import { credentialPath } from "../../src/components/ProviderKeyForm";
+import { moveStepApiPath, retireStepApiPath } from "../../src/pages/models/modelsActions";
 import { REGISTER_API_PATH, secretApiPath, switchOffApiPath } from "../../src/pages/webhooksQuery";
 import {
   ISSUE_KEY_API_PATH,
@@ -363,12 +364,13 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "AI providers, models and the routing between them": {
-    screens: ["/models", "/routing", "/routing/:rungId"],
+    screens: ["/models", "/models/:provider", "/models/:provider/:view", "/routing", "/routing/:rungId"],
     routes: [
       "/api/v1/operate/models",
       "/api/v1/models/providers*",
       "/api/v1/models/profile",
       "/api/v1/models/prices",
+      "/api/v1/routing/export",
       "/api/v1/routing/rungs*",
       "/api/v1/routing/changes",
       "/api/v1/routing/golden-questions*",
@@ -388,11 +390,11 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
     installation: ["INSTALL_MODEL_PROFILE", "INSTALL_MODEL_ENDPOINT", "INSTALL_EMBEDDING_DIMENSIONS"],
     gaps: [
-      {
-        what: "A provider's terms and an added provider's retirement are logged and not on the audit ledger: the ledger's action list gains no provider entry in this release.",
-        leaf: "M5.6.4",
-      },
       { what: "The model endpoint cannot be changed after setup.", because: ONCE_BY_THE_WIZARD },
+      {
+        what: "A provider's page shows no cost: cost is kept per request, whose calls can reach more than one provider, so it is left out rather than drawn as nought, and the Spend report shows it by model.",
+        because: "brain.ops.usage_store writes one cost row per request with its model and no provider, and the spend rows are read under the spend grant, which a reader of the models screen need not hold.",
+      },
     ],
   },
   "Agents and their configuration, including templates": {
@@ -1013,25 +1015,37 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
     at("POST /api/v1/jobs/{name}/resume", "actionPath", actionPath("resume", "spend_report_refresh")),
     at("POST /api/v1/jobs/{name}/run", "actionPath", actionPath("run", "spend_report_refresh")),
   ],
-  "src/pages/Matrix.tsx rungApiPath(rung.id)": [at("PATCH /api/v1/routing/rungs/{rung_id}", "rungApiPath", rungApiPath("rung-1"))],
-  "src/components/MatrixGate.tsx GOLDEN_API_PATH": [
+  "src/pages/models/RungEditor.tsx rungApiPath(rung.id)": [at("PATCH /api/v1/routing/rungs/{rung_id}", "rungApiPath", rungApiPath("rung-1"))],
+  "src/pages/models/RungEditor.tsx moveStepApiPath(rung.id)": [
+    at("POST /api/v1/routing/rungs/{rung_id}/move", "moveStepApiPath", moveStepApiPath("rung-1")),
+  ],
+  "src/pages/models/RungEditor.tsx retireStepApiPath(rung.id)": [
+    at("POST /api/v1/routing/rungs/{rung_id}/retire", "retireStepApiPath", retireStepApiPath("rung-1")),
+  ],
+  "src/pages/models/RoutingPage.tsx moveStepApiPath(asked.rungId)": [
+    at("POST /api/v1/routing/rungs/{rung_id}/move", "moveStepApiPath", moveStepApiPath("rung-1")),
+  ],
+  "src/pages/models/RoutingPage.tsx retireStepApiPath(asked.rungId)": [
+    at("POST /api/v1/routing/rungs/{rung_id}/retire", "retireStepApiPath", retireStepApiPath("rung-1")),
+  ],
+  "src/pages/models/GoldenQuestions.tsx GOLDEN_API_PATH": [
     at("POST /api/v1/routing/golden-questions", "GOLDEN_API_PATH", GOLDEN_API_PATH),
   ],
-  "src/components/MatrixGate.tsx retireGoldenApiPath(asked.row.id)": [
+  "src/pages/models/GoldenQuestions.tsx retireGoldenApiPath(asked.row.id)": [
     at(
       "POST /api/v1/routing/golden-questions/{question_id}/retire",
       "retireGoldenApiPath",
       retireGoldenApiPath("33333333-3333-4333-8333-333333333333"),
     ),
   ],
-  "src/components/MatrixGate.tsx ADD_RUNG_API_PATH": [at("POST /api/v1/routing/rungs", "ADD_RUNG_API_PATH", ADD_RUNG_API_PATH)],
-  "src/components/ProviderRegister.tsx termsApiPath(asked.provider)": [
+  "src/pages/models/AddStep.tsx ADD_RUNG_API_PATH": [at("POST /api/v1/routing/rungs", "ADD_RUNG_API_PATH", ADD_RUNG_API_PATH)],
+  "src/pages/models/ProviderProfile.tsx termsApiPath(row.provider)": [
     at("PUT /api/v1/models/providers/{provider}/terms", "termsApiPath", termsApiPath("anthropic")),
   ],
-  "src/components/ProviderRegister.tsx retireProviderApiPath(asked.provider)": [
+  "src/pages/models/ProviderDetailPage.tsx retireProviderApiPath(pending.provider)": [
     at("POST /api/v1/models/providers/{provider}/retire", "retireProviderApiPath", retireProviderApiPath("acme_llm")),
   ],
-  "src/components/ProviderRegister.tsx ADD_PROVIDER_API_PATH": [
+  "src/pages/models/AddProvider.tsx ADD_PROVIDER_API_PATH": [
     at("POST /api/v1/models/providers", "ADD_PROVIDER_API_PATH", ADD_PROVIDER_API_PATH),
   ],
   "src/components/ProviderKeyForm.tsx credentialPath(slot)": [
@@ -1056,12 +1070,18 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/components/AgentModelPin.tsx modelPinApiPath(agentId)": [
     at("PUT /api/v1/agents/{agent_id}/model-pin", "modelPinApiPath", modelPinApiPath("quote-helper")),
   ],
-  "src/pages/Models.tsx providerSwitchApiPath(pending.provider)": [
+  "src/pages/models/ProvidersPage.tsx providerSwitchApiPath(pending.provider)": [
     at("PUT /api/v1/models/providers/{provider}", "providerSwitchApiPath", providerSwitchApiPath("anthropic")),
   ],
-  "src/pages/Models.tsx PROFILE_API_PATH": [at("PUT /api/v1/models/profile", "PROFILE_API_PATH", PROFILE_API_PATH)],
   "src/components/ModelPrices.tsx PRICES_API_PATH": [at("PUT /api/v1/models/prices", "PRICES_API_PATH", PRICES_API_PATH)],
-  "src/pages/Models.tsx providerCheckApiPath(pending.provider)": [
+  "src/pages/models/ProvidersPage.tsx PROFILE_API_PATH": [at("PUT /api/v1/models/profile", "PROFILE_API_PATH", PROFILE_API_PATH)],
+  "src/pages/models/ProvidersPage.tsx providerCheckApiPath(pending.provider)": [
+    at("POST /api/v1/models/providers/{provider}/check", "providerCheckApiPath", providerCheckApiPath("anthropic")),
+  ],
+  "src/pages/models/ProviderDetailPage.tsx providerSwitchApiPath(pending.provider)": [
+    at("PUT /api/v1/models/providers/{provider}", "providerSwitchApiPath", providerSwitchApiPath("anthropic")),
+  ],
+  "src/pages/models/ProviderDetailPage.tsx providerCheckApiPath(pending.provider)": [
     at("POST /api/v1/models/providers/{provider}/check", "providerCheckApiPath", providerCheckApiPath("anthropic")),
   ],
   "src/pages/People.tsx REMOVAL_API_PATH": [at("POST /api/v1/govern/grants/removal", "REMOVAL_API_PATH", REMOVAL_API_PATH)],
@@ -1258,6 +1278,18 @@ function audited(name: string): Proof {
   return t("test_console_control_audit", name, true);
 }
 
+/** `0140`'s registry trigger against PostgreSQL: registered, changed and retired, never the terms. */
+const REGISTRY_LEDGERED = t(
+  "test_models_routing_module",
+  "test_a_registry_row_registered_changed_and_retired_leaves_three_entries_no_terms",
+  true,
+);
+/** A step moved and retired over HTTP against PostgreSQL: the rows, the roles, the records, the ledger. */
+const STEP_MOVED_AND_RETIRED = t(
+  "test_models_routing_module",
+  "test_a_move_and_a_retirement_leave_the_rows_roles_records_and_entries_they_claim",
+  true,
+);
 const SETTINGS_PRESSED = audited("test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick");
 /** Each lifecycle move pressed over HTTP against PostgreSQL: the row, and the ledger entry naming who. */
 const LIFECYCLE_PRESSED = t(
@@ -1846,6 +1878,16 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     },
     behaviour: t("test_matrix_gate", "test_a_gate_with_no_golden_questions_holds_the_change_and_says_to_record_some"),
   },
+  "POST /api/v1/routing/rungs/{rung_id}/move": {
+    row: STEP_MOVED_AND_RETIRED,
+    audit: STEP_MOVED_AND_RETIRED,
+    behaviour: STEP_MOVED_AND_RETIRED,
+  },
+  "POST /api/v1/routing/rungs/{rung_id}/retire": {
+    row: STEP_MOVED_AND_RETIRED,
+    audit: STEP_MOVED_AND_RETIRED,
+    behaviour: STEP_MOVED_AND_RETIRED,
+  },
   "POST /api/v1/routing/rungs": {
     row: t("test_routing_routes", "test_a_rung_is_added_at_the_end_of_its_tier_only_through_the_gate"),
     audit: audited("test_a_rung_saved_from_the_screen_leaves_its_row_and_an_entry_naming_what_moved"),
@@ -1853,10 +1895,7 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
   },
   "PUT /api/v1/models/providers/{provider}/terms": {
     row: t("test_provider_registry_routes", "test_terms_recorded_for_a_built_in_provider_write_its_first_registry_row"),
-    audit: {
-      none: "A provider's terms are logged and not written to the audit ledger in this release.",
-      leaf: "M5.6.4",
-    },
+    audit: REGISTRY_LEDGERED,
     behaviour: t(
       "test_model_calls",
       "test_a_constrained_call_skips_an_undocumented_rung_for_the_documented_one_behind_it",
@@ -1864,10 +1903,7 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
   },
   "POST /api/v1/models/providers/{provider}/retire": {
     row: t("test_provider_registry_routes", "test_an_added_provider_is_retired_and_a_built_in_one_cannot_be"),
-    audit: {
-      none: "Retiring an added provider is logged and not written to the audit ledger in this release.",
-      leaf: "M5.6.4",
-    },
+    audit: REGISTRY_LEDGERED,
     behaviour: t("test_model_assembly", "test_a_provider_with_no_driver_is_told_which_of_the_two_things_is_missing"),
   },
   "POST /api/v1/models/providers": {

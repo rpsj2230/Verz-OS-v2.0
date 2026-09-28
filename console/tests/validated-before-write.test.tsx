@@ -92,29 +92,31 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
     { pattern: "/library", index: 4, writes: true },
   ],
   "src/pages/AccessRequests.tsx": [{ pattern: "/access-requests", index: 0, writes: true }],
-  "src/pages/Matrix.tsx": [{ pattern: "/routing/:rungId", index: 1, writes: true }],
-  // After the matrix's own search form: the golden question, then the rung to add.
-  "src/components/MatrixGate.tsx": [
-    { pattern: "/routing", index: 1, writes: true },
-    { pattern: "/routing", index: 2, writes: true },
+  // Index 0 on the Routing page is the matrix's search form, which only narrows. On a step's page its
+  // numbers and then where it sits follow; the golden question and the residency rule come after.
+  "src/pages/models/RungEditor.tsx": [
+    { pattern: "/routing/:rungId", index: 1, writes: true },
+    { pattern: "/routing/:rungId", index: 2, writes: true },
   ],
-  // The add form is the only form until a provider's terms are opened, which draws theirs first.
-  "src/components/ProviderRegister.tsx": [
-    { pattern: "/models", index: 0, writes: true },
-    { pattern: "/models", opener: "Record terms", index: 0, writes: true },
-  ],
-  // After the register's add form: the residency constraint form, then a tier's numbers once opened,
+  "src/pages/models/GoldenQuestions.tsx": [{ pattern: "/routing", index: 1, writes: true }],
+  // Add a step opens above the matrix, so it is then the first form.
+  "src/pages/models/AddStep.tsx": [{ pattern: "/routing", opener: "Add a step", index: 0, writes: true }],
+  // Under Advanced after the golden question: the residency rule, and a level's numbers once opened,
   // which draws above the residency form.
   "src/components/RoutingSettings.tsx": [
-    { pattern: "/models", index: 1, writes: true },
-    { pattern: "/models", opener: "Edit numbers", index: 1, writes: true },
+    { pattern: "/routing", index: 2, writes: true },
+    { pattern: "/routing", opener: "Edit numbers", index: 2, writes: true },
   ],
-  // A provider's key field opens on its row and is then the first form on the page, above the register's.
-  "src/components/ProviderKeyForm.tsx": [{ pattern: "/models", opener: "Replace key", index: 0, writes: true }],
+  // Adding a provider opens above the list, whose search form then follows it.
+  "src/pages/models/AddProvider.tsx": [{ pattern: "/models", opener: "Add a provider", index: 0, writes: true }],
+  // A provider's Profile: the terms form, and the key form above it once Replace key is pressed.
+  "src/pages/models/ProviderProfile.tsx": [{ pattern: "/models/:provider/:view", index: 0, writes: true }],
+  "src/components/ProviderKeyForm.tsx": [{ pattern: "/models/:provider/:view", opener: "Replace key", index: 0, writes: true }],
   // The Profile is a view at its own address, so the pin's form is on that page case with no opener.
   "src/components/AgentModelPin.tsx": [{ pattern: "/agents/:agentId/:tab", index: 0, writes: true }],
   // A model's price opens on its row in the prices card, above the register's forms (M27.12.5).
-  "src/components/ModelPrices.tsx": [{ pattern: "/models", opener: "Set price", index: 0, writes: true }],
+  // The prices card is under the providers list, after the list's search form.
+  "src/components/ModelPrices.tsx": [{ pattern: "/models", opener: "Set price", index: 1, writes: true }],
   "src/pages/Notifications.tsx": [
     { pattern: "/notifications", index: 0, writes: true },
     { pattern: "/notifications", index: 1, writes: true },
@@ -250,6 +252,7 @@ function pressFirst(root: Element, label: string): void {
 
 beforeAll(async () => {
   await import("../src/pages/Matrix");
+  await import("../src/pages/Provider");
   await import("../src/pages/Classification");
   await import("../src/pages/People");
 }, 120_000);

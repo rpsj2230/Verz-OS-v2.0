@@ -35,10 +35,15 @@ with the name to save it under so the console hands it to the browser as a file.
 a company shows it as it is, prints it, or pastes it into a contract annex, and it needs nothing
 to open.
 
-Rejected: an audit ledger entry per terms edit. The ledger's action list is a check constraint
-that four workstreams widen this wave, and a fifth widening in the same release is a merge
-conflict in the database; the key write is on the ledger already, through the credential record,
-and a terms edit is logged. It is the next migration's to add.
+**Registering, a terms edit and a retirement are on the audit ledger** (M5.6.4, since `0140`).
+`0140`'s trigger on `ops.model_provider` appends a `setting` entry under the provider's own
+subject, `setting:provider.<slug>`, which is the subject its switch is already recorded under, so
+one provider's history is one subject: `registered` on the insert, `changed` with the names of the
+columns that moved, and `retired`. Never a value, for `brain.audit.ledger.changed_fields`' reason.
+Each write here attributes its transaction first, so the entry carries the request's reach and
+trace. Rejected: an action of its own. The ledger's actions are a closed list with one recorder
+method each (`brain.audit.record.ACTION_BY_METHOD`), and a provider's terms are configuration of
+the install exactly as its switch is.
 
 Task ids: M5.6.4, M5.7.2, M5.1.3, M5.5.3
 """
@@ -57,6 +62,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.api import API_PREFIX, COMMON_RESPONSES, NoEchoRoute
 from brain.api_routes import Asked
+from brain.attribution import attribute
 from brain.core.errors import BrainError, Failed
 from brain.credential_routes import (
     NOT_KEPT_STATUS,
@@ -327,6 +333,8 @@ async def record_terms(
         "updated_by": asked.caller.principal.id,
     }
     async with _require(request)() as session:
+        # Who, at what reach, in which request, for the entry `0140`'s trigger appends.
+        await attribute(session, asked)
         if existing is None:
             described = {one.slug: one.description for one in PROVIDER_SLOTS}
             await session.execute(
@@ -401,6 +409,7 @@ async def add_provider(
         # The type name alone, for `brain.credential_routes`' reason: a message can quote a value.
         raise Failed(f"keeping a provider key: {type(exc).__name__}") from exc
     async with factory() as session:
+        await attribute(session, asked)
         await session.execute(
             insert(ModelProviderRow).values(
                 slug=body.slug,
@@ -442,6 +451,7 @@ async def retire_provider(request: Request, provider: str, asked: Asked) -> Prov
         log.info("provider retire names no added provider", principal=asked.caller.principal.id)
         raise _not_answerable()
     async with _require(request)() as session:
+        await attribute(session, asked)
         await session.execute(
             update(ModelProviderRow)
             .where(ModelProviderRow.slug == provider, ModelProviderRow.deleted_at.is_(None))
