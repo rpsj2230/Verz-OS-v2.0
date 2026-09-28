@@ -127,6 +127,11 @@ const A_CONNECTION_CHANGES_ONE_SOURCE_AT_A_TIME =
   "key, disconnect) is confirmed in the API's words for that source, because each agrees to what one " +
   "source may read. docs/admin-console-architecture.md marks bulk as not applicable to connectors.";
 
+const AN_AUTOMATION_IS_CHANGED_OVER_WHAT_WAS_SHOWN =
+  "Every change to an automation carries the confirmation of that automation as it was shown, and " +
+  "adopting one lends the adopter's own reach to it, so each is agreed to one automation at a time: " +
+  "brain.console.automations. docs/admin-console-architecture.md marks bulk as not applicable here.";
+
 /** What each long list does not offer, and why. Everything it does offer is read off the page. */
 /**
  * The two lists read through a tool a model also calls, whose request has no position to page by:
@@ -181,6 +186,7 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
   "/logs": { bulk: A_LOG_ROW_IS_READ_AND_NEVER_WRITTEN },
   "/agents": { bulk: READ_ONLY },
   "/connectors": { bulk: A_CONNECTION_CHANGES_ONE_SOURCE_AT_A_TIME },
+  "/automations": { bulk: AN_AUTOMATION_IS_CHANGED_OVER_WHAT_WAS_SHOWN },
   "/agent-templates": { bulk: READ_ONLY },
   "/approvals": { bulk: AN_APPROVAL_IS_DECIDED_FROM_ITS_OWN_CARD },
   "/adoption": { bulk: READ_ONLY },

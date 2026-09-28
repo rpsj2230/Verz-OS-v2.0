@@ -55,6 +55,7 @@ from brain.tables.application_log import ApplicationLogRow
 from brain.tables.artifact import ArtifactRow
 from brain.tables.audit import AuditEntryRow
 from brain.tables.automation import AutomationOwnerRow
+from brain.tables.automation_change import AutomationChangeRow
 from brain.tables.automation_run import AutomationRunRow, AutomationScheduleRow
 from brain.tables.break_glass_notice import BreakGlassNoticeRow
 from brain.tables.browsing import BrowserEnvelopeRow
@@ -369,6 +370,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     "ops.acceptance_result",
     # 0136_ops_halt. Points at nothing: a halt names its target by value, and outlives it.
     "ops.halt",
+    # 0145_automation_change. Points at nothing: the automation, the agent and both people are
+    # values, so the record of who paused, removed or adopted an automation outlives all of them.
+    "agent.automation_change",
 )
 
 __all__ = [
@@ -382,6 +386,7 @@ __all__ = [
     "ApplicationLogRow",
     "ArtifactRow",
     "AuditEntryRow",
+    "AutomationChangeRow",
     "AutomationOwnerRow",
     "AutomationRunRow",
     "AutomationScheduleRow",

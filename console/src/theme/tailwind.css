@@ -68,6 +68,7 @@
 @source "../pages/agents";
 @source "../pages/connectors";
 @source "../pages/overview";
+@source "../pages/automations";
 @source not inline("grid");
 
 /*
