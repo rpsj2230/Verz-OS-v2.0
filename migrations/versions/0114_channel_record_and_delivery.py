@@ -44,7 +44,7 @@ from sqlalchemy.dialects import postgresql
 revision = "0114"
 # The head of origin/main when this was written (028fe36c); 0114 is the number the Wave 2 plan
 # holds for the channel pipeline, re-pointed at landing if another lands first.
-down_revision = "0108"
+down_revision = "0113"
 branch_labels = None
 depends_on = None
 

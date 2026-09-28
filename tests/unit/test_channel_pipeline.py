@@ -1636,7 +1636,7 @@ def test_0114_copies_every_check_and_width_it_shares_with_the_models() -> None:
     assert m.REASON_WHEN_NOT_DELIVERED == channel_table.REASON_WHEN_NOT_DELIVERED
     assert checks("ops.channel_delivery")["ck_channel_delivery_reason_known"] == m.REASONS
     assert checks("ops.channel")["ck_channel_secret_path_is_derived"] == m.SLOT_IS_DERIVED
-    assert m.down_revision == "0108"
+    assert m.down_revision == "0113"
 
 
 def test_0114_secures_both_tables_and_grants_no_delete_and_no_rewrite_of_a_delivery() -> None:
