@@ -656,6 +656,17 @@ AUDIT_KIND_DECISIONS: Final[Mapping[str, AuditKindDecision]] = MappingProxyType(
                     "decided they should know."
                 ),
             ),
+            AuditKindDecision(
+                kind="halt",
+                covered=False,
+                because=(
+                    "Not covered, for the reason breach is not, since the kind was added on "
+                    "2026-09-28. A halt is declared and resumed only by somebody holding "
+                    "admin:halt, which this sync never grants a head, and an entry says which "
+                    "scope was stopped: a standing reach over these entries would tell a head "
+                    "that another department, an agent or a person had been stopped."
+                ),
+            ),
         )
     }
 )

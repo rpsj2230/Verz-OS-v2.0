@@ -844,7 +844,9 @@ def test_a_head_holds_the_three_governance_kinds_and_none_of_the_other_eight() -
     `memory`, a correction naming a memory, whose existence is recall's to disclose and never an
     actor-scoped audit grant's; and
     `department` and `scope`, the structure grants are written against, changed only under
-    `admin:department` or `admin:scope`, neither of which this sync grants a head.
+    `admin:department` or `admin:scope`, neither of which this sync grants a head;
+    and `halt`, a stop or a resume, declared only under `admin:halt`, whose scope would tell a head
+    that somewhere else had been stopped.
 
     Delete this and the set can be widened one kind at a time by whoever finds a page thin,
     and the widening is invisible because every other test here is about the shape of a grant
@@ -861,6 +863,7 @@ def test_a_head_holds_the_three_governance_kinds_and_none_of_the_other_eight() -
         "entity",
         "erasure",
         "grant",
+        "halt",
         "legal_hold",
         "memory",
         "retention",

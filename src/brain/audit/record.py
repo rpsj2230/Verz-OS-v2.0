@@ -62,6 +62,7 @@ if TYPE_CHECKING:
     # gets updated is whichever the person was looking at.
     from brain.gate.injection import AutonomyTier
     from brain.identity.roles import BreakGlassReason
+    from brain.ops.halt import HaltScope
     from brain.tables.identity import SessionEndReason
     from brain.tables.review import ReviewDecision
     from brain.tables.webhook_change import WebhookChange
@@ -176,6 +177,7 @@ ACTION_BY_METHOD: Final[Mapping[str, AuditAction]] = MappingProxyType(
         "principal_state": AuditAction.PRINCIPAL_STATE,
         "breach": AuditAction.BREACH,
         "agent_owner": AuditAction.AGENT_OWNER,
+        "halt": AuditAction.HALT,
     }
 )
 
@@ -402,6 +404,15 @@ class BreachChange(enum.StrEnum):
     INDIVIDUALS_NOTIFIED = "individuals_notified"
     INDIVIDUALS_EXCUSED = "individuals_excused"
     CLOSED = "closed"
+
+
+class HaltAct(enum.StrEnum):
+    """What a row of `ops.halt` records. The two values `0136`'s trigger writes: a stop, and the
+    resume that lifts one. Two rows rather than one row edited, so who stopped the system is never
+    overwritten by who started it again."""
+
+    HALT = "halt"
+    RESUME = "resume"
 
 
 class ElevationChange(enum.StrEnum):
@@ -1209,6 +1220,18 @@ class AuditRecorder:
         the case, so its whole clock is one subject.
         """
         return self._write(AuditAction.BREACH, subject("breach", case_id), {"change": change.value})
+
+    def halt(self, *, halt_id: str, act: HaltAct, scope: HaltScope) -> AuditEntry:
+        """Record that somebody stopped something, or resumed it.
+
+        Written in a deployed database by `0136`'s trigger on `ops.halt`, one entry per row, and
+        held to these details by a test. The subject is the row, and the scope says what it
+        covered. **Never the target nor the reason**: a target may be a person's id, which is not
+        a field name and would be kept as the marker, and a reason is prose an administrator typed.
+        """
+        return self._write(
+            AuditAction.HALT, subject("halt", halt_id), {"act": act.value, "scope": scope.value}
+        )
 
     def elevation(
         self,
