@@ -754,6 +754,10 @@ def test_there_is_one_screen_for_every_screen_the_work_breakdown_names() -> None
         # to a task (docs/requirements/register.json): console work that had no task. Work on the
         # console, not registry entries, like the groups above.
         "M27.15": 83,  # found by tracing every requirement to a task
+        # Appended 2026-09-28 at the owner's request (register CON-70): every page rebuilt to the
+        # key screens design, cleaned of what an administrator does not need, and proved in the
+        # browser. Work on the console, not registry entries.
+        "M27.16": 5,  # enterprise console rebuild
     }
 
     every_leaf = {leaf for one in every_module for leaf in one["leaf_ids"]}

@@ -12469,6 +12469,23 @@
    "decision": null
   },
   {
+   "id": "CON-70",
+   "source": "owner, 2026-09-28 (chat): the console is messy, carries things an administrator does not need, is not enterprise grade, misses things that ease management, and does not follow the key screens design built on the template chosen on 2026-09-17",
+   "area": "Console",
+   "requirement": "The console is rebuilt to enterprise grade on the shadcn/ui template chosen on 2026-09-17 and the key screens design in docs/screens.html: every page rebuilt to its designed screen, what an administrator does not need removed, and every list given the management tools an enterprise console has, each page proved in the browser on the owner's install.",
+   "leaves": [
+    "M27.16.1",
+    "M27.16.2",
+    "M27.16.3",
+    "M27.16.4",
+    "M27.16.5"
+   ],
+   "proof": [
+    "M27.16.5"
+   ],
+   "decision": null
+  },
+  {
    "id": "DEC-1",
    "source": "needs-rupash 58",
    "area": "Modularity",

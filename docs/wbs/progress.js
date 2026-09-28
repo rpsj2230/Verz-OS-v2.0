@@ -90,18 +90,18 @@ const PROGRESS = {
     updated: "2026-09-28",
   },
   "M10.2.2": {
-    status: "IN PROGRESS",
-    why: "Wave 2 batch 2, the Lark chat channel (L1); proved once the owner creates the Lark app from Connect Lark",
+    status: "READY FOR TESTING",
+    why: "built in the Lark channel (L1, merged d426e3d3); proved once the owner creates the Lark app from Connect Lark and a group mention is answered while an unmentioned message is left alone",
     updated: "2026-09-28",
   },
   "M10.2.5": {
-    status: "IN PROGRESS",
-    why: "Wave 2 batch 2, the Lark chat channel (L1); proved once the owner creates the Lark app from Connect Lark",
+    status: "READY FOR TESTING",
+    why: "built in the Lark channel (L1, merged d426e3d3); provable server-side with bindings the check writes, and by a person once the binding route (CH2) lands",
     updated: "2026-09-28",
   },
   "M10.2.6": {
-    status: "IN PROGRESS",
-    why: "Wave 2 batch 2, the Lark chat channel (L1); proved once the owner creates the Lark app from Connect Lark",
+    status: "READY FOR TESTING",
+    why: "built in the Lark channel (L1, merged d426e3d3); provable server-side with bindings the check writes, and by a person once the binding route (CH2) lands",
     updated: "2026-09-28",
   },
   "M10.3.1": {
@@ -125,23 +125,23 @@ const PROGRESS = {
     updated: "2026-09-28",
   },
   "M10.4.1": {
-    status: "IN PROGRESS",
-    why: "Wave 2 batch 2, the Lark chat channel (L1); proved once the owner creates the Lark app from Connect Lark",
+    status: "READY FOR TESTING",
+    why: "built in the Lark channel (L1, merged d426e3d3); provable server-side with bindings the check writes, and by a person once the binding route (CH2) lands",
     updated: "2026-09-28",
   },
   "M10.4.2": {
-    status: "IN PROGRESS",
-    why: "Wave 2 batch 2, the Lark chat channel (L1); proved once the owner creates the Lark app from Connect Lark",
+    status: "READY FOR TESTING",
+    why: "built in the Lark channel (L1, merged d426e3d3); provable server-side with bindings the check writes, and by a person once the binding route (CH2) lands",
     updated: "2026-09-28",
   },
   "M10.4.3": {
-    status: "IN PROGRESS",
-    why: "Wave 2 batch 2, the Lark chat channel (L1); proved once the owner creates the Lark app from Connect Lark",
+    status: "READY FOR TESTING",
+    why: "built in the Lark channel (L1, merged d426e3d3); provable server-side with bindings the check writes, and by a person once the binding route (CH2) lands",
     updated: "2026-09-28",
   },
   "M10.4.4": {
-    status: "IN PROGRESS",
-    why: "Wave 2 batch 2, the Lark chat channel (L1); proved once the owner creates the Lark app from Connect Lark",
+    status: "READY FOR TESTING",
+    why: "built in the Lark channel (L1, merged d426e3d3); provable server-side with bindings the check writes, and by a person once the binding route (CH2) lands",
     updated: "2026-09-28",
   },
   "M10.4.5": {
@@ -151,7 +151,7 @@ const PROGRESS = {
   },
   "M10.6.1": {
     status: "IN PROGRESS",
-    why: "the send path and records are live (PR #105); each vendor's wire comes with its own package, Lark first (L1, in progress)",
+    why: "the webhook and Lark wires are live (PR #105; L1, merged d426e3d3); every other vendor's wire comes with its own package",
     updated: "2026-09-28",
   },
   "M10.6.3": {
@@ -160,48 +160,48 @@ const PROGRESS = {
     updated: "2026-09-28",
   },
   "M11.1.1": {
-    status: "IN PROGRESS",
-    why: "Wave 2 batch 2, connector registries and the minimal index (C1), under the owner's rule that connectors never bulk-sync",
+    status: "READY FOR TESTING",
+    why: "built in connector registries and the minimal index (C1, merged 7c54d7d8); proved when a connected source's worker sync runs through the declared interface and health shows it (Xero or HubSpot)",
     updated: "2026-09-28",
   },
   "M11.1.6": {
     status: "IN PROGRESS",
-    why: "Wave 2 batch 2, connector registries and the minimal index (C1), under the owner's rule that connectors never bulk-sync",
+    why: "connect and disconnect routes are built (C1, merged 7c54d7d8); enable and upgrade have no caller yet",
     updated: "2026-09-28",
   },
   "M11.1.7": {
-    status: "IN PROGRESS",
-    why: "Wave 2 batch 2, connector registries and the minimal index (C1), under the owner's rule that connectors never bulk-sync",
+    status: "READY FOR TESTING",
+    why: "built in connector registries and the minimal index (C1, merged 7c54d7d8); proved when a changed manifest makes the next sync refuse because the digest differs",
     updated: "2026-09-28",
   },
   "M11.4.1": {
-    status: "IN PROGRESS",
-    why: "Wave 2 batch 2, connector registries and the minimal index (C1), under the owner's rule that connectors never bulk-sync",
+    status: "READY FOR TESTING",
+    why: "built in connector registries and the minimal index (C1, merged 7c54d7d8); proved when a sync leaves proj.record holding source, entity type, identifiers and hot fields",
     updated: "2026-09-28",
   },
   "M11.4.2": {
-    status: "IN PROGRESS",
-    why: "Wave 2 batch 2, connector registries and the minimal index (C1), under the owner's rule that connectors never bulk-sync",
+    status: "READY FOR TESTING",
+    why: "built in connector registries and the minimal index (C1, merged 7c54d7d8); proved when a manifest projecting a thirteenth field is refused at review",
     updated: "2026-09-28",
   },
   "M11.4.3": {
-    status: "IN PROGRESS",
-    why: "Wave 2 batch 2, connector registries and the minimal index (C1), under the owner's rule that connectors never bulk-sync",
+    status: "READY FOR TESTING",
+    why: "built in connector registries and the minimal index (C1, merged 7c54d7d8); proved when a field failing a projectability clause is refused at manifest review",
     updated: "2026-09-28",
   },
   "M11.4.4": {
-    status: "IN PROGRESS",
-    why: "Wave 2 batch 2, connector registries and the minimal index (C1), under the owner's rule that connectors never bulk-sync",
+    status: "READY FOR TESTING",
+    why: "built in connector registries and the minimal index (C1, merged 7c54d7d8); proved when a projected email, phone, address, identity number, bank or salary field is refused",
     updated: "2026-09-28",
   },
   "M11.4.5": {
-    status: "IN PROGRESS",
-    why: "Wave 2 batch 2, connector registries and the minimal index (C1), under the owner's rule that connectors never bulk-sync",
+    status: "READY FOR TESTING",
+    why: "built in connector registries and the minimal index (C1, merged 7c54d7d8); proved when a projected row stores its visibility predicate and no resolved list of people",
     updated: "2026-09-28",
   },
   "M11.4.7": {
-    status: "IN PROGRESS",
-    why: "Wave 2 batch 2, connector registries and the minimal index (C1), under the owner's rule that connectors never bulk-sync",
+    status: "READY FOR TESTING",
+    why: "built in connector registries and the minimal index (C1, merged 7c54d7d8); proved when a source with no change signal projects no fields",
     updated: "2026-09-28",
   },
   "M11.4.9": {
@@ -210,18 +210,18 @@ const PROGRESS = {
     updated: "2026-09-28",
   },
   "M11.8.1": {
-    status: "IN PROGRESS",
-    why: "Wave 2 batch 2, connector registries and the minimal index (C1), under the owner's rule that connectors never bulk-sync",
+    status: "READY FOR TESTING",
+    why: "built in connector registries and the minimal index (C1, merged 7c54d7d8); proved when manifest review refuses a field that is not an id, join key, status, timestamp, visibility predicate or short label",
     updated: "2026-09-28",
   },
   "M11.8.2": {
-    status: "IN PROGRESS",
-    why: "Wave 2 batch 2, connector registries and the minimal index (C1), under the owner's rule that connectors never bulk-sync",
+    status: "READY FOR TESTING",
+    why: "built in connector registries and the minimal index (C1, merged 7c54d7d8); proved when a canary planted in a recorded response is found by the index audit in no table, memory, projection or log",
     updated: "2026-09-28",
   },
   "M12.1.1": {
-    status: "IN PROGRESS",
-    why: "tool catalogue and switch (T1): lands after PR #107 (migration 0117 follows 0116)",
+    status: "READY FOR TESTING",
+    why: "built in the tool catalogue and switch (T1, merged 1d2566c8); proved when agent.tool_definition lists each registered tool and its check constraint enforces the name grammar",
     updated: "2026-09-28",
   },
   "M12.1.3": {
@@ -230,28 +230,28 @@ const PROGRESS = {
     updated: "2026-09-28",
   },
   "M12.1.4": {
-    status: "IN PROGRESS",
-    why: "tool catalogue and switch (T1): lands after PR #107 (migration 0117 follows 0116)",
+    status: "READY FOR TESTING",
+    why: "built in the tool catalogue and switch (T1, merged 1d2566c8); proved when each tool on Tools declares a typed or opaque result contract",
     updated: "2026-09-28",
   },
   "M12.2.1": {
-    status: "IN PROGRESS",
-    why: "Wave 2 batch 2, skill import, review and versions (T2)",
+    status: "READY FOR TESTING",
+    why: "built in skill import, review and versions (T2, merged d654f1f4); proved when a SKILL.md with bad frontmatter pasted on Skills is refused saying why",
     updated: "2026-09-28",
   },
   "M12.2.2": {
-    status: "IN PROGRESS",
-    why: "Wave 2 batch 2, skill import, review and versions (T2)",
+    status: "READY FOR TESTING",
+    why: "built in skill import, review and versions (T2, merged d654f1f4); proved when a skill imported from a GitHub repository at a pinned commit lands unreviewed",
     updated: "2026-09-28",
   },
   "M12.2.3": {
-    status: "IN PROGRESS",
-    why: "Wave 2 batch 2, skill import, review and versions (T2)",
+    status: "READY FOR TESTING",
+    why: "built in skill import, review and versions (T2, merged d654f1f4); proved when an import from an allowlisted address lands and a non-allowlisted one is refused",
     updated: "2026-09-28",
   },
   "M12.2.4": {
-    status: "IN PROGRESS",
-    why: "Wave 2 batch 2, skill import, review and versions (T2)",
+    status: "READY FOR TESTING",
+    why: "built in skill import, review and versions (T2, merged d654f1f4); proved when a .zip with a traversing member is refused before anything is written",
     updated: "2026-09-28",
   },
   "M12.2.5": {
@@ -260,38 +260,38 @@ const PROGRESS = {
     updated: "2026-09-28",
   },
   "M12.2.6": {
-    status: "IN PROGRESS",
-    why: "Wave 2 batch 2, skill import, review and versions (T2)",
+    status: "READY FOR TESTING",
+    why: "built in skill import, review and versions (T2, merged d654f1f4); proved when an imported skill appears in the review queue with its line diff",
     updated: "2026-09-28",
   },
   "M12.3.2": {
-    status: "IN PROGRESS",
-    why: "Wave 2 batch 2, skill import, review and versions (T2)",
+    status: "READY FOR TESTING",
+    why: "built in skill import, review and versions (T2, merged d654f1f4); proved when an edited skill waits for review as a new version while the old stays readable; the agent-pin half shows once Wave 3 creates agents",
     updated: "2026-09-28",
   },
   "M12.3.8": {
-    status: "IN PROGRESS",
-    why: "tool catalogue and switch (T1): lands after PR #107 (migration 0117 follows 0116)",
+    status: "READY FOR TESTING",
+    why: "built in the tool catalogue and switch (T1, merged 1d2566c8); proved when a side-effecting tool whose name reads as a sensitive effect and declares none is refused at registration",
     updated: "2026-09-28",
   },
   "M12.4.12": {
-    status: "IN PROGRESS",
-    why: "Wave 2 batch 2, skill import, review and versions (T2)",
+    status: "READY FOR TESTING",
+    why: "built in skill import, review and versions (T2, merged d654f1f4); proved when a SKILL.md whose description does not open by saying when to use it is refused at import",
     updated: "2026-09-28",
   },
   "M12.4.13": {
-    status: "IN PROGRESS",
-    why: "Wave 2 batch 2, skill import, review and versions (T2)",
+    status: "READY FOR TESTING",
+    why: "built in skill import, review and versions (T2, merged d654f1f4); proved when Skills offers category chips drawn only from skills the reader can see",
     updated: "2026-09-28",
   },
   "M12.4.3": {
-    status: "IN PROGRESS",
-    why: "tool catalogue and switch (T1): lands after PR #107 (migration 0117 follows 0116)",
+    status: "READY FOR TESTING",
+    why: "built in the tool catalogue and switch (T1, merged 1d2566c8); proved when a tool switched off on Tools refuses every call naming the switch, and a department admin stops only their department",
     updated: "2026-09-28",
   },
   "M12.4.6": {
-    status: "IN PROGRESS",
-    why: "Wave 2 batch 2, skill import, review and versions (T2)",
+    status: "READY FOR TESTING",
+    why: "built in skill import, review and versions (T2, merged d654f1f4); proved when an admin's approval of their own import is listed as self_approved and another person's import needs a different reviewer",
     updated: "2026-09-28",
   },
   "M2.3.1": {
@@ -391,7 +391,7 @@ const PROGRESS = {
   },
   "M38.2.2.3": {
     status: "IN PROGRESS",
-    why: "Wave 2 batch 2, the Lark chat channel (L1); proved once the owner creates the Lark app from Connect Lark",
+    why: "the Lark channel is merged (L1, d426e3d3); the exit check also needs question-time live read (C2) and the binding route (CH2), neither on main yet",
     updated: "2026-09-28",
   },
   "M38.4.1.2": {
@@ -465,18 +465,18 @@ const PROGRESS = {
     updated: "2026-09-28",
   },
   "M7.4.4": {
-    status: "IN PROGRESS",
-    why: "Wave 2 batch 2, knowledge lifecycle (K2)",
+    status: "READY FOR TESTING",
+    why: "built in knowledge lifecycle (K2, merged f0722dd3); proved when a company-wide request waits on Approvals and applies only when another holder of approve:knowledge.visibility approves",
     updated: "2026-09-28",
   },
   "M7.4.5": {
-    status: "IN PROGRESS",
-    why: "Wave 2 batch 2, knowledge lifecycle (K2)",
+    status: "READY FOR TESTING",
+    why: "built in knowledge lifecycle (K2, merged f0722dd3); proved when a newer version uploaded on a document shows the old one superseded and answers use the new one",
     updated: "2026-09-28",
   },
   "M7.4.6": {
-    status: "IN PROGRESS",
-    why: "Wave 2 batch 2, knowledge lifecycle (K2)",
+    status: "READY FOR TESTING",
+    why: "built in knowledge lifecycle (K2, merged f0722dd3); proved when a past review date makes the worker's re-verification run open the owner's task, and verifying closes it",
     updated: "2026-09-28",
   },
   "M7.4.7": {
@@ -485,18 +485,18 @@ const PROGRESS = {
     updated: "2026-09-28",
   },
   "M7.5.1": {
-    status: "IN PROGRESS",
-    why: "classified tables and price lists (K6): in PR #107, after the knowledge upload",
+    status: "READY FOR TESTING",
+    why: "built in classified tables (K6, merged c0552331 and 9e277b69); proved when a price list CSV or XLSX uploaded on Classification has each column classified open, restricted or derived",
     updated: "2026-09-28",
   },
   "M7.5.2": {
-    status: "IN PROGRESS",
-    why: "classified tables and price lists (K6): in PR #107, after the knowledge upload",
+    status: "READY FOR TESTING",
+    why: "built in classified tables (K6, merged c0552331 and 9e277b69); proved when a reader without the cost grant asks a service's price and gets the sell price with cost and margin withheld",
     updated: "2026-09-28",
   },
   "M7.5.3": {
-    status: "IN PROGRESS",
-    why: "classified tables and price lists (K6): in PR #107, after the knowledge upload",
+    status: "READY FOR TESTING",
+    why: "built in classified tables (K6, merged c0552331 and 9e277b69); proved when a column marked, reviewed and applied on Classification leaves the change in the ledger",
     updated: "2026-09-28",
   },
   "M7.6.1": {
@@ -505,8 +505,8 @@ const PROGRESS = {
     updated: "2026-09-28",
   },
   "M7.6.2": {
-    status: "IN PROGRESS",
-    why: "Wave 2 batch 2, knowledge lifecycle (K2)",
+    status: "READY FOR TESTING",
+    why: "built in knowledge lifecycle (K2, merged f0722dd3); proved when a captured solution waits until another admin:knowledge holder approves it, then answers as a verified approved solution",
     updated: "2026-09-28",
   },
   "M7.6.3": {
@@ -521,12 +521,12 @@ const PROGRESS = {
   },
   "M7.7.2": {
     status: "IN PROGRESS",
-    why: "Wave 2 batch 2, knowledge lifecycle (K2)",
+    why: "a steward per document is built (K2, merged f0722dd3); connected sources and agents have no steward yet",
     updated: "2026-09-28",
   },
   "M7.7.3": {
     status: "IN PROGRESS",
-    why: "classified tables and price lists (K6): in PR #107, after the knowledge upload",
+    why: "price lists uploaded on Classification convert (K6, merged c0552331); no upload path yet offers a price-list document for conversion",
     updated: "2026-09-28",
   },
   "M8.1.1": {
