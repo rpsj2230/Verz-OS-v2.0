@@ -308,6 +308,10 @@ export const ACTION_PHRASES: Readonly<Record<string, string>> = Object.freeze({
   principal_state: "disabled or enabled",
   breach: "opened, assessed, notified or closed",
   agent_owner: "became the owner of",
+  // What 0137's trigger writes: a hand-over is agent_owner's, and a duplicate is a new agent created.
+  agent: "created, enabled, disabled, archived or published",
+  // A stop on the install or on one department, agent, connector or person, or its resume (0136).
+  halt: "stopped or resumed work under",
 });
 
 /** The phrase for an action, or its code when the vocabulary has outgrown this console. */
