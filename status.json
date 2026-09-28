@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-09-28T15:09:40.634423+00:00",
-  "commit": "7d9ff01",
-  "commit_subject": "The console's menu is the plan's nine module groups, served by the API, and each page registers its own route",
-  "total": 1587,
+  "generated_at": "2026-09-28T15:33:33.499688+00:00",
+  "commit": "604e41d",
+  "commit_subject": "The install checks its own tasks after each deploy, and eleven duplicate tasks merge",
+  "total": 1576,
   "done": 346,
-  "percent": 21.8,
+  "percent": 22.0,
   "acts": 47,
-  "decided": 120,
+  "decided": 131,
   "current_wave": 0,
   "waves": [
     {
@@ -51,41 +51,41 @@
     {
       "wave": 3,
       "name": "Agents, knowledge, console",
-      "total": 582,
+      "total": 576,
       "done": 22,
       "percent": 3.8,
       "in_progress": 1,
       "ready_for_testing": 0,
       "blocked": 0,
-      "open": 559,
+      "open": 553,
       "acts": 1,
-      "decided": 50
+      "decided": 56
     },
     {
       "wave": 4,
       "name": "Doing, lifecycle, extensions",
-      "total": 230,
+      "total": 227,
       "done": 4,
-      "percent": 1.7,
+      "percent": 1.8,
       "in_progress": 0,
       "ready_for_testing": 0,
       "blocked": 0,
-      "open": 226,
+      "open": 223,
       "acts": 0,
-      "decided": 20
+      "decided": 23
     },
     {
       "wave": 5,
       "name": "Hands, delivery, go-live",
-      "total": 217,
+      "total": 215,
       "done": 23,
-      "percent": 10.6,
+      "percent": 10.7,
       "in_progress": 0,
       "ready_for_testing": 0,
       "blocked": 0,
-      "open": 194,
+      "open": 192,
       "acts": 42,
-      "decided": 16
+      "decided": 18
     },
     {
       "wave": 6,
@@ -223,19 +223,19 @@
       "module": "M13",
       "name": "Agents and templates",
       "wave": 3,
-      "total": 70,
+      "total": 69,
       "done": 0,
       "acts": 0,
-      "decided": 15
+      "decided": 16
     },
     {
       "module": "M14",
       "name": "Entity resolution",
       "wave": 3,
-      "total": 44,
+      "total": 43,
       "done": 1,
       "acts": 0,
-      "decided": 0
+      "decided": 1
     },
     {
       "module": "M15",
@@ -250,10 +250,10 @@
       "module": "M16",
       "name": "Memory and learning",
       "wave": 3,
-      "total": 49,
+      "total": 48,
       "done": 0,
       "acts": 0,
-      "decided": 0
+      "decided": 1
     },
     {
       "module": "M17",
@@ -268,10 +268,10 @@
       "module": "M18",
       "name": "Multi-agent execution",
       "wave": 4,
-      "total": 22,
+      "total": 21,
       "done": 0,
       "acts": 0,
-      "decided": 0
+      "decided": 1
     },
     {
       "module": "M19",
@@ -349,10 +349,10 @@
       "module": "M27",
       "name": "Console, reports, observability",
       "wave": 3,
-      "total": 218,
+      "total": 216,
       "done": 14,
       "acts": 0,
-      "decided": 20
+      "decided": 22
     },
     {
       "module": "M28",
@@ -376,10 +376,10 @@
       "module": "M30",
       "name": "Hosting, delivery and recovery",
       "wave": 5,
-      "total": 37,
+      "total": 36,
       "done": 6,
       "acts": 1,
-      "decided": 9
+      "decided": 10
     },
     {
       "module": "M31",
@@ -430,10 +430,10 @@
       "module": "M36",
       "name": "Scaling triggers and performance",
       "wave": 5,
-      "total": 24,
+      "total": 23,
       "done": 1,
       "acts": 0,
-      "decided": 2
+      "decided": 3
     },
     {
       "module": "M37",
@@ -457,19 +457,19 @@
       "module": "M39",
       "name": "Agent workspace, the inside-an-agent surface",
       "wave": 3,
-      "total": 82,
+      "total": 81,
       "done": 0,
       "acts": 0,
-      "decided": 1
+      "decided": 2
     },
     {
       "module": "M40",
       "name": "Member self-service application",
       "wave": 4,
-      "total": 56,
+      "total": 54,
       "done": 0,
       "acts": 0,
-      "decided": 4
+      "decided": 6
     },
     {
       "module": "M41",
