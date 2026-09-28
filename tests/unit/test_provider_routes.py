@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.pool import NullPool
 from sqlalchemy.sql.dml import Insert
 
+from brain import provider_routes
 from brain.api import API_PREFIX
 from brain.api_routes import GateWiring
 from brain.app import Settings, create_app
@@ -292,7 +293,8 @@ class SettingSession(AsyncSession):
         assert columns == ["key", "value_type", "value", "updated_by", "updated_at"], columns
         now = datetime.now(UTC)
         rows = [
-            (key, SettingType.BOOLEAN.value, value, by, now)
+            # A price row holds an object (M27.12.5); every switch holds a boolean.
+            (key, SettingType.JSON.value if isinstance(value, dict) else "boolean", value, by, now)
             for key, (value, by) in sorted(_ESTATE.settings.items())
         ]
         return _Rows(rows)
@@ -1066,3 +1068,166 @@ def test_a_step_whose_key_the_provider_refused_is_marked_until_a_later_call_answ
             (401,),
             (None,),
         ]
+
+
+# ------------------------------------------------------------------------------ the prices
+PRICES = f"{API_PREFIX}/models/prices"
+
+#: A price for the anthropic rung's model, in minor units of the install's currency per million.
+SONNET_PRICE = {
+    "provider": "anthropic",
+    "model": "anthropic-model",
+    "input_minor_per_million": "300",
+    "output_minor_per_million": "0.075",
+}
+
+
+@pytest.fixture
+def in_sgd(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The install counts in SGD. Read by the route through `brain.locale.currency`."""
+    monkeypatch.setattr(provider_routes, "install_currency", lambda: "SGD")
+
+
+def test_a_reader_is_shown_each_model_on_the_ladder_with_its_price_and_whether_it_is_costed(
+    client: TestClient, estate: Estate, in_sgd: None
+) -> None:
+    """A model priced in the install's currency is costed, a model with no price is not and says
+    so with no figure, a price in another currency is shown and not costed, and a model priced and
+    not on the ladder is listed as such.
+
+    What breaks if this is deleted: an administrator cannot see which models' calls leave no cost,
+    and an install nobody priced looks as though it records every call."""
+    estate.settings["model_price.anthropic"] = (
+        {
+            "anthropic-model": {
+                "input_minor_per_million": "300",
+                "output_minor_per_million": "1500",
+                "currency": "SGD",
+            },
+            "retired-model": {
+                "input_minor_per_million": "1",
+                "output_minor_per_million": "2",
+                "currency": "SGD",
+            },
+        },
+        "u_admin",
+    )
+    estate.settings["model_price.moonshot"] = (
+        {
+            "moonshot-model": {
+                "input_minor_per_million": "5",
+                "output_minor_per_million": "6",
+                "currency": "EUR",
+            }
+        },
+        "u_admin",
+    )
+
+    shown = call(client, "GET", "u_narrow", PRICES)
+
+    assert shown.status_code == 200
+    body = shown.json()
+    assert body["currency"] == "SGD"
+    rows = {(one["provider"], one["model"]): one for one in body["models"]}
+    assert rows[("anthropic", "anthropic-model")] == {
+        "provider": "anthropic",
+        "model": "anthropic-model",
+        "on_ladder": True,
+        "input_minor_per_million": "300",
+        "output_minor_per_million": "1500",
+        "currency": "SGD",
+        "costed": True,
+    }
+    assert rows[("openai", "openai-model")]["costed"] is False
+    assert rows[("openai", "openai-model")]["input_minor_per_million"] is None
+    assert rows[("moonshot", "moonshot-model")]["costed"] is False
+    assert rows[("moonshot", "moonshot-model")]["currency"] == "EUR"
+    assert rows[("anthropic", "retired-model")]["on_ladder"] is False
+    assert list(rows) == sorted(rows)
+
+
+def test_the_prices_are_refused_to_a_reader_who_cannot_read_the_models_screen(
+    client: TestClient, in_sgd: None
+) -> None:
+    """What breaks if this is deleted: the prices are one address away from a caller the screen
+    refuses."""
+    assert call(client, "GET", "u_none", PRICES).status_code == 404
+    assert call(client, "GET", "u_elsewhere", PRICES).status_code == 404
+
+
+def test_a_price_is_set_by_the_switch_holder_attributed_and_kept_in_the_installs_currency(
+    client: TestClient, estate: Estate, in_sgd: None
+) -> None:
+    """The row is the provider's, holding the model's price as text in SGD, written with who set
+    it after the attribution the setting's ledger entry reads, and the answer is every model with
+    this one now costed.
+
+    What breaks if this is deleted: the Models screen's price is written nowhere, or written with
+    no writer on the ledger, or in no currency."""
+    answered = call(client, "PUT", "u_wide", PRICES, SONNET_PRICE)
+
+    assert answered.status_code == 200
+    assert estate.settings == {
+        "model_price.anthropic": (
+            {
+                "anthropic-model": {
+                    "input_minor_per_million": "300",
+                    "output_minor_per_million": "0.075",
+                    "currency": "SGD",
+                }
+            },
+            "u_wide",
+        )
+    }
+    assert estate.attributed == [ACTOR_SETTING, ENT_HASH_SETTING, TRACE_ID_SETTING]
+    rows = {(one["provider"], one["model"]): one for one in answered.json()["models"]}
+    assert rows[("anthropic", "anthropic-model")]["costed"] is True
+
+
+@pytest.mark.parametrize("pid", ["u_narrow", "u_elsewhere", "u_none"])
+def test_a_price_is_refused_without_the_write_held_over_everything_and_writes_nothing(
+    client: TestClient, estate: Estate, in_sgd: None, pid: str
+) -> None:
+    """What breaks if this is deleted: a department-scoped grant sets what every department's
+    calls are costed at."""
+    assert call(client, "PUT", pid, PRICES, SONNET_PRICE).status_code == 404
+    assert estate.settings == {}
+
+
+def test_a_price_for_a_provider_the_product_cannot_call_is_refused_like_no_authority(
+    client: TestClient, estate: Estate, in_sgd: None
+) -> None:
+    """What breaks if this is deleted: a price row is kept under a name no call can ever carry."""
+    refused = call(client, "PUT", "u_wide", PRICES, {**SONNET_PRICE, "provider": "nobody"})
+    assert refused.status_code == 404
+    assert estate.settings == {}
+
+
+def test_a_price_before_the_install_has_a_currency_is_refused_and_writes_nothing(
+    client: TestClient, estate: Estate, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With the currency still `XXX` the write is a 422 whose sentence sends the administrator to
+    Settings, and nothing is kept.
+
+    What breaks if this is deleted: a price set in no currency is costed later in whichever one is
+    chosen, a figure off by the exchange rate with nothing on it saying so."""
+    monkeypatch.setattr(provider_routes, "install_currency", lambda: "XXX")
+
+    refused = call(client, "PUT", "u_wide", PRICES, SONNET_PRICE)
+
+    assert refused.status_code == 422
+    assert [one["message"] for one in refused.json()["problems"]] == [
+        provider_routes.A_PRICE_NEEDS_THE_INSTALLS_CURRENCY
+    ]
+    assert estate.settings == {}
+
+
+@pytest.mark.parametrize("figure", ["-1", "abc", "0.0000001", "1e12"])
+def test_a_price_that_is_not_a_bounded_figure_is_refused_and_writes_nothing(
+    client: TestClient, estate: Estate, in_sgd: None, figure: str
+) -> None:
+    """What breaks if this is deleted: a negative or unbounded price reaches the store, and a
+    request is costed below nought or at a slipped digit."""
+    body = {**SONNET_PRICE, "input_minor_per_million": figure}
+    assert call(client, "PUT", "u_wide", PRICES, body).status_code == 422
+    assert estate.settings == {}

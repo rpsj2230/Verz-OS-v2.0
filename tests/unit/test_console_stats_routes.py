@@ -271,6 +271,20 @@ class Library:
     async def categorise(self, *args: Any, **kwargs: Any) -> None:
         raise AssertionError("a stats read wrote")
 
+    # The protocol's retirement and detachment half (`0139`). Without them this is no
+    # `SkillLibrary`, and `library_of` quietly falls back to the database the stub cannot answer.
+    async def retirements(self, digests: Sequence[str]) -> Mapping[str, Any]:
+        return {}
+
+    async def retire(self, *args: Any, **kwargs: Any) -> None:
+        raise AssertionError("a stats read wrote")
+
+    async def detach(self, *args: Any, **kwargs: Any) -> bool:
+        raise AssertionError("a stats read wrote")
+
+    async def assignment_history(self, names: Sequence[str]) -> tuple[tuple[Any, ...], ...]:
+        return (), ()
+
 
 @pytest.fixture
 def held() -> Held:
@@ -352,8 +366,10 @@ def test_cost_is_not_recorded_rather_than_nought_until_a_run_writes_one(
     served: tuple[TestClient, Stub], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Delete this and an agent that cost money shows 0 while nothing records a run's cost, and
-    once something does the figure has to follow the budget screen's basis."""
+    once something does the figure has to follow the budget screen's basis. Both halves set the
+    flag, because the usage recorder turned it on and the unrecorded half must still be tested."""
     client, _ = served
+    monkeypatch.setattr(console_stats_routes, "RUN_SPEND_IS_RECORDED", False)
     unrecorded = AgentStatsView.model_validate(stats(client, "u_admin", "agents", AGENT).json())
     assert [one.cost_minor for one in unrecorded.periods] == [None, None]
     assert [one.figure for one in unrecorded.unrecorded] == ["model_cost"]

@@ -111,6 +111,10 @@ const OVERVIEW_CARDS: Readonly<Record<string, string>> = {
   "/": "/audit",
   "/department": "/agents",
   "/agents/:agentId/:tab": "/routing",
+  // One skill's page reads the Skills page's answer narrowed to its name; the library itself is
+  // paged, searched, filtered and ordered on /skills.
+  "/skills/:name": "/skills",
+  "/skills/:name/:view": "/skills",
 };
 const AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST =
   "This screen is an overview, and the list it borrows is one card on it with a link to the screen " +
@@ -121,14 +125,18 @@ const A_PIN_IS_ONE_AGENTS =
   "level's, which are saved one at a time on the Routing screen, so there is no act to do to many " +
   "of them from here.";
 const A_SKILL_IS_DECIDED_FROM_ITS_OWN_BYTES =
-  "The skills listed are what agents run, and nothing about a listed skill is written from it. The " +
-  "writes on this screen are a review, which approves exactly the bytes of one package after " +
-  "reading its body, and an assignment of one approved skill to one agent.";
+  "Every write on a skill is about one version or one agent: a review approves exactly the bytes a " +
+  "reviewer read, a retirement names the agents still running that version for somebody to detach, " +
+  "and a detachment ends one assignment, so there is no act that applies to several rows at once.";
 
 const A_CONNECTION_CHANGES_ONE_SOURCE_AT_A_TIME =
   "There is at most one live connection per source, and every act on one (connect, edit, replace the " +
   "key, disconnect) is confirmed in the API's words for that source, because each agrees to what one " +
   "source may read. docs/admin-console-architecture.md marks bulk as not applicable to connectors.";
+const AN_UNBINDING_IS_ONE_PERSONS_CHAT =
+  "Unbinding stops a chat account being answered as its person, at once, and is recorded against " +
+  "them; it is confirmed one person at a time so nobody's chat is taken away as a side effect of " +
+  "somebody else's.";
 
 /** What each long list does not offer, and why. Everything it does offer is read off the page. */
 /**
@@ -191,7 +199,20 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
   "/people/:subject": { bulk: A_GRANT_IS_REMOVED_BY_REVIEW_IN_BULK },
   "/scopes": { bulk: READ_ONLY },
   "/skills": { bulk: A_SKILL_IS_DECIDED_FROM_ITS_OWN_BYTES },
-  "/skills/:name": { bulk: A_SKILL_IS_DECIDED_FROM_ITS_OWN_BYTES },
+  "/skills/:name": {
+    page: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    search: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    filter: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    sort: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    bulk: A_SKILL_IS_DECIDED_FROM_ITS_OWN_BYTES,
+  },
+  "/skills/:name/:view": {
+    page: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    search: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    filter: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    sort: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    bulk: A_SKILL_IS_DECIDED_FROM_ITS_OWN_BYTES,
+  },
   "/library": { bulk: READ_ONLY },
   "/sessions": {},
   "/sign-in-links": { bulk: AN_UNLINK_LOCKS_A_PERSON_OUT },
@@ -202,6 +223,7 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
   "/elevation": { bulk: AN_ELEVATION_IS_DECIDED_ON_ITS_OWN_REASON },
   "/access_review": {},
   "/access-requests": { bulk: READ_ONLY },
+  "/channels": { bulk: AN_UNBINDING_IS_ONE_PERSONS_CHAT },
 };
 
 /**

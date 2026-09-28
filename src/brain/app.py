@@ -80,6 +80,7 @@ from brain.automation_gallery_routes import router as automation_gallery_router
 from brain.automation_routes import AutomationWiring
 from brain.automation_routes import router as automation_router
 from brain.automation_schedule_routes import router as automation_schedule_router
+from brain.binding_routes import router as binding_router
 from brain.cache import (
     AsyncValkeyClient,
     NoEntitlementCache,
@@ -180,6 +181,7 @@ from brain.ops.starter_store import furnish as furnish_install
 from brain.ops.telemetry_store import TelemetryRecorder
 from brain.ops.tool_store import SessionSwitchSource, record_catalogue
 from brain.ops.trace_sink import CountingTraceSink
+from brain.ops.usage_store import UsageRecorder
 from brain.ops.vault_renewal import keep_renewing, renewer_at_start
 from brain.ops.webhook_admin import signing_secrets_at_start
 from brain.principal_state_routes import router as principal_state_router
@@ -896,11 +898,13 @@ def request_recorders_for(
     if sessions is None:
         return ()
     # The sensitive read recorder last: it raises on a failed write, and the measurements before
-    # it catch their own. See `brain.ops.sensitive_read_store`.
+    # it catch their own. See `brain.ops.sensitive_read_store`. The usage recorder writes a
+    # request's cost and its skill uses (M27.12.5, M27.15.9), and catches its own failures.
     return (
         QuestionRecorder(sessions),
         TelemetryRecorder(sessions),
         GapRecorder(sessions),
+        UsageRecorder(sessions),
         SensitiveReadRecorder(sessions),
     )
 
@@ -1458,9 +1462,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # The document a citation on Ask links to, its passages at the reader's reach through the
     # handler and policy the answer used. See `brain.cited_document_routes`.
     app.include_router(cited_document_router)
-    # The landing screen's figure row: how the last seven days' requests ended, at the reader's
-    # basis. See `brain.console_overview_figures_routes`.
+    # The landing screen's figure row: how the last seven days' requests ended and what they cost,
+    # each at the reader's basis. See `brain.console_overview_figures_routes`.
     app.include_router(console_overview_figures_router)
+    # Binding a chat account with a one-time code minted in My workspace, unbinding it, and the
+    # Channels screen's bindings and health behind the channel's own authority. See
+    # `brain.binding_routes`.
+    app.include_router(binding_router)
     # One entity's figures on its detail page, each behind the question its list screen asks, and
     # the landing screen's health strip and Needs you. See `brain.console_stats_routes` and
     # `brain.console_overview_routes`.

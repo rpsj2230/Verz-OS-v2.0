@@ -594,6 +594,30 @@ const MODELS_AND_HEALTH = {
     currency: "XXX",
     time_zone: "UTC",
   },
+  // One model priced and one not, so both the figures and the unpriced sentence are drawn.
+  "/api/v1/models/prices": {
+    currency: "SGD",
+    models: [
+      {
+        provider: UNBROKEN,
+        model: UNBROKEN,
+        on_ladder: true,
+        input_minor_per_million: "300",
+        output_minor_per_million: "1500",
+        currency: "SGD",
+        costed: true,
+      },
+      {
+        provider: "anthropic",
+        model: UNBROKEN,
+        on_ladder: false,
+        input_minor_per_million: null,
+        output_minor_per_million: null,
+        currency: null,
+        costed: false,
+      },
+    ],
+  },
 };
 
 const DEPARTMENTS = {
@@ -728,23 +752,111 @@ const SUBSCRIBERS = {
   told: UNBROKEN,
 };
 
+/** One version in the library, with every control the Profile can draw switched on. */
+const SKILL_VERSION = {
+  digest: "d".repeat(64),
+  name: UNBROKEN,
+  version: "1.0.0",
+  description: UNBROKEN,
+  source: "github",
+  source_location: UNBROKEN,
+  source_commit: "c".repeat(40),
+  source_path: UNBROKEN,
+  submitted_by: UNBROKEN,
+  submitted_by_name: UNBROKEN,
+  submitted_at: "2019-03-04T09:00:00Z",
+  review: "approved",
+  reviewer: UNBROKEN,
+  reviewer_name: UNBROKEN,
+  reviewed_at: "2019-03-04T10:00:00Z",
+  tools: [{ name: UNBROKEN, capability: UNBROKEN }],
+  capabilities: [UNBROKEN],
+  unregistered_tools: [],
+  body: UNBROKEN,
+  reviewable: false,
+  assignable: true,
+  edited_from: null,
+  self_decided: false,
+  categories: [UNBROKEN],
+  diff: null,
+  markdown: UNBROKEN,
+  editable: true,
+  retired: false,
+  retired_at: null,
+  retired_by: null,
+  retirable: true,
+};
+
 const SKILLS = {
   items: [
     {
       name: UNBROKEN,
-      pinned_by: [{ agent_id: UNBROKEN, digest: "d".repeat(64) }],
+      pinned_by: [
+        {
+          agent_id: UNBROKEN,
+          digest: "d".repeat(64),
+          display_name: UNBROKEN,
+          assigned_at: "2019-03-04T11:00:00Z",
+          assigned_by: UNBROKEN,
+        },
+      ],
       versions_differ: true,
+      categories: [UNBROKEN],
     },
   ],
   next_cursor: null,
   total: null,
   truncated: false,
   queue: { entries: [], waiting: 0, edits: 0, stale: 0 },
-  library: [],
+  library: [SKILL_VERSION],
   library_truncated: false,
-  agents: [],
-  may_add: false,
+  agents: [{ agent_id: UNBROKEN, display_name: UNBROKEN }],
+  may_add: true,
   registry_is_absent: false,
+  categories: [UNBROKEN],
+};
+
+/** The searchable library, one row per version (`brain.skill_routes.SkillLibraryPage`). */
+const SKILL_LIBRARY = {
+  items: [
+    {
+      digest: "d".repeat(64),
+      name: UNBROKEN,
+      version: "1.0.0",
+      description: UNBROKEN,
+      review: "pending",
+      retired: true,
+      categories: [UNBROKEN],
+      agents_running: 2,
+      source: "upload",
+      submitted_at: "2019-03-04T09:00:00Z",
+    },
+  ],
+  next_cursor: null,
+  total: null,
+  queue: { entries: [], waiting: 3, edits: 1, stale: 0 },
+  library_truncated: false,
+  truncated: false,
+  may_add: true,
+  categories: [UNBROKEN],
+};
+
+/** One skill's figures as `brain.console_stats_routes.SkillStatsView` sends them. */
+const SKILL_STATS = {
+  skill_name: UNBROKEN,
+  agents_pinned: 2,
+  pinned_versions: 1,
+  versions: 3,
+  periods: ["7d", "30d"].map((range) => ({
+    range,
+    since: "2019-02-02T00:00:00Z",
+    until: "2019-03-04T12:00:00Z",
+    versions_added: 1,
+  })),
+  unrecorded: [
+    { figure: "runs_that_used_it", why: UNBROKEN },
+    { figure: "last_used", why: UNBROKEN },
+  ],
 };
 
 /** Every registered route pattern, and what to mount for it. */
@@ -1079,8 +1191,8 @@ const CONNECTORS_SCREEN = {
 export const PAGES: Readonly<Record<string, PageCase>> = {
   // The Overview, SCREEN 1: the health strip and Needs you from the overview route, the figure row
   // from the figures route, the roster and the Connectors list, and the audit log's newest page.
-  // Every drawn value the API sent is the unbroken token: a part's name, a queue's name, and the
-  // signed-in person's name and identifiers in Advanced.
+  // Every drawn value the API sent is the unbroken token: a part's name, a queue's name, the week's
+  // cost's currency, and the signed-in person's name and identifiers in Advanced.
   "/": {
     address: "/",
     signedIn: true,
@@ -1122,7 +1234,10 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         basis: "everyone",
         answered: 1847,
         nothing_returned: 312,
-        not_recorded: [{ figure: "cost", why: UNBROKEN }],
+        cost_basis: "everyone",
+        cost_minor: 128450,
+        currency: UNBROKEN,
+        not_recorded: [],
       },
       "/api/v1/agents": {
         items: [{ agent_id: "quote-helper", display_name: UNBROKEN, owner_id: UNBROKEN, state: "enabled" }],
@@ -1502,16 +1617,25 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     drawsValues: true,
     answers: { "/api/v1/govern/scopes": SCOPES },
   },
-  // Skills, mounted twice for the people screen's reason: once from the menu and once at one
-  // skill's own address, because the second draws a second list under the open skill.
+  // Skills: the searchable library, one skill's Dashboard at its bare address with the figures
+  // from the shared stats route, and its Profile, the view with every control on it.
   "/skills": {
     address: "/skills",
     signedIn: true,
     drawsValues: true,
-    answers: { "/api/v1/skills": SKILLS },
+    answers: { "/api/v1/skills/library": SKILL_LIBRARY },
   },
   "/skills/:name": {
     address: `/skills/${encodeURIComponent(UNBROKEN)}`,
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/skills": SKILLS,
+      [`/api/v1/console/skills/${UNBROKEN}/stats`]: SKILL_STATS,
+    },
+  },
+  "/skills/:name/:view": {
+    address: `/skills/${encodeURIComponent(UNBROKEN)}/profile`,
     signedIn: true,
     drawsValues: true,
     answers: { "/api/v1/skills": SKILLS },
@@ -2601,6 +2725,13 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         accounts: UNBROKEN,
         staleness: null,
       },
+      "/api/v1/me/channels": {
+        channels: [
+          { channel: "lark", bound: true, bound_at: "2019-03-01T09:00:00Z", may_bind: true },
+          { channel: "webhook", bound: false, bound_at: null, may_bind: true },
+        ],
+        told: UNBROKEN,
+      },
     },
   },
   // Webhooks. Identifiers are in the tables, which scroll; the served sentences, the vault's state
@@ -2789,6 +2920,95 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
             asked_at: "2019-03-04T09:00:00Z",
             handled_at: null,
             handled_by: null,
+          },
+        ],
+      },
+    },
+  },
+  // Channels. Identifiers, a bound person's id and a delivery sit in lists and definition rows that
+  // must wrap. One channel this release receives on, set up and switched on, and one it does not,
+  // so every part a card can draw is on the page. The confirmations are held in
+  // `tests/channels-page.test.tsx`.
+  "/channels": {
+    address: "/channels",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/channels": {
+        channels: [
+          {
+            channel: "slack",
+            receives: false,
+            events_path: "",
+            tenant_fields: [],
+            configured: false,
+            enabled: false,
+            tenant: {},
+            secret_held: null,
+            updated_by: null,
+            updated_at: null,
+          },
+          {
+            channel: "webhook",
+            receives: true,
+            events_path: "/api/v1/channels/webhook/events",
+            tenant_fields: ["reply_url"],
+            configured: true,
+            enabled: true,
+            tenant: { reply_url: UNBROKEN },
+            secret_held: true,
+            updated_by: UNBROKEN,
+            updated_at: "2019-03-04T09:00:00Z",
+          },
+        ],
+        told: UNBROKEN,
+      },
+      "/api/v1/channels/slack/health": {
+        channel: "slack",
+        receives: false,
+        features: ["cards", "ephemeral"],
+        max_classification: "confidential",
+        can_carry_label: true,
+        health: "not_set_up",
+        told: UNBROKEN,
+        last_received_at: null,
+        last_sent_at: null,
+        last_fault: null,
+      },
+      "/api/v1/channels/webhook/health": {
+        channel: "webhook",
+        receives: true,
+        features: [],
+        max_classification: "internal",
+        can_carry_label: true,
+        health: "failing",
+        told: UNBROKEN,
+        last_received_at: "2019-03-04T09:00:00Z",
+        last_sent_at: "2019-03-04T09:01:00Z",
+        last_fault: {
+          direction: "outbound",
+          outcome: "refused",
+          reason: "vendor_refused",
+          vendor_status: 403,
+          recorded_at: "2019-03-04T09:02:00Z",
+        },
+      },
+      "/api/v1/channels/webhook/bindings": {
+        channel: "webhook",
+        items: [{ principal_id: UNBROKEN, display_name: UNBROKEN, bound_at: "2019-03-01T09:00:00Z" }],
+        next_cursor: null,
+        truncated: false,
+        told: UNBROKEN,
+      },
+      "/api/v1/channels/webhook/deliveries": {
+        channel: "webhook",
+        deliveries: [
+          {
+            direction: "inbound",
+            outcome: "accepted",
+            reason: null,
+            vendor_status: null,
+            recorded_at: "2019-03-04T09:00:00Z",
           },
         ],
       },

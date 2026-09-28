@@ -47,6 +47,11 @@
  * amount alone with a link to where it is set, never the code meaning none (found on the owner's
  * install on 2026-09-28 as "XXX 0.00").
  *
+ * **Prices sit under the cost, because they are what the cost is counted at** (M27.12.5). Each
+ * model a step names is listed with its price per million tokens and whether its calls are costed,
+ * and a price is set from its row by the reader who may switch a provider. See
+ * `components/ModelPrices.tsx`.
+ *
  * **Plain words only** (the owner, 2026-09-28): Simple, Medium, Complex, step, provider, model. No
  * rung, ladder, tier, lane or slot is drawn anywhere on the screen, Advanced included, and
  * `tests/models-page.test.tsx` reads the whole rendered page for them.
@@ -56,7 +61,7 @@
  * the matrix are drawn. Loading, unreachable, refused and unreadable are different sentences in
  * every card.
  *
- * Task ids: M27.2.3, M27.8.8, M5.7.1, M5.7.3, M5.6.4, M5.7.2, M5.2.2, M5.4.3, M5.4.8, M5.5.1
+ * Task ids: M27.2.3, M27.8.8, M5.7.1, M5.7.3, M5.6.4, M5.7.2, M5.2.2, M5.4.3, M5.4.8, M5.5.1, M27.12.5
  */
 
 import { useCallback, useMemo, useState, type ReactElement, type ReactNode } from "react";
@@ -65,6 +70,7 @@ import { request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
 import { useResource, type Resource } from "../api/useResource";
 import { ConfirmAction } from "../components/ConfirmAction";
+import { ModelPrices } from "../components/ModelPrices";
 import { ProviderKeyForm } from "../components/ProviderKeyForm";
 import { ProviderRegister } from "../components/ProviderRegister";
 import { RoutingSettings } from "../components/RoutingSettings";
@@ -938,6 +944,7 @@ function ModelsAnswer({ models }: { readonly models: ModelsBody }) {
       <ProvidersCard plan={plan} onPlan={onPlan} />
       <FailoverMatrix plan={plan} />
       <CostThisMonth spend={spend} />
+      <ModelPrices editable={plan.body !== null && plan.body.editable} />
       <Advanced models={models} latency={latency} plan={plan} onPlan={onPlan} />
     </>
   );

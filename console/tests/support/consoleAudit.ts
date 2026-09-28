@@ -49,7 +49,10 @@ import {
 import {
   assignPath,
   categoriesPath,
+  detachPath,
   IMPORT_PATH,
+  reinstatementPath,
+  retirementPath,
   reviewPath,
   SKILLS_API_PATH,
   versionsPath,
@@ -97,6 +100,7 @@ import {
   termsApiPath,
 } from "../../src/pages/providerRegisterQuery";
 import { modelPinApiPath } from "../../src/pages/agentModelPinQuery";
+import { PRICES_API_PATH } from "../../src/pages/modelPricesQuery";
 import { PROFILE_API_PATH, providerCheckApiPath, providerSwitchApiPath } from "../../src/pages/modelsQuery";
 import {
   RESIDENCY_API_PATH,
@@ -162,6 +166,14 @@ import {
   newVersionPath,
 } from "../../src/pages/knowledgeLifecycleQuery";
 import { LINKS_API_PATH, queuedPath } from "../../src/pages/knowledgeIntakeQuery";
+import {
+  channelApiPath,
+  myCodeApiPath,
+  myUnbindApiPath,
+  switchApiPath,
+  testApiPath,
+  unbindApiPath,
+} from "../../src/pages/channelsQuery";
 import { CONSOLE_ROOT, readRepoFile } from "./repo";
 
 // ------------------------------------------------------------------------------------ inputs
@@ -357,6 +369,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/operate/models",
       "/api/v1/models/providers*",
       "/api/v1/models/profile",
+      "/api/v1/models/prices",
       "/api/v1/routing/rungs*",
       "/api/v1/routing/changes",
       "/api/v1/routing/golden-questions*",
@@ -422,14 +435,18 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "Skills and tools": {
-    screens: ["/skills", "/skills/:name", "/tools"],
+    screens: ["/skills", "/skills/:name", "/skills/:name/:view", "/tools"],
     routes: [
       "/api/v1/skills",
+      "/api/v1/skills/library",
       "/api/v1/skills/imports",
       "/api/v1/skills/{digest}/versions",
       "/api/v1/skills/{digest}/categories",
       "/api/v1/skills/{digest}/review",
       "/api/v1/skills/{digest}/assignments",
+      "/api/v1/skills/{digest}/retirement",
+      "/api/v1/skills/{digest}/reinstatement",
+      "/api/v1/skills/{digest}/detachments",
       "/api/v1/console/skills/{skill_name}/stats",
       "/api/v1/tools",
       "/api/v1/tools/{name}/switch",
@@ -441,12 +458,15 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "agent.tool_definition",
       "agent.tool_switch",
       "agent.skill_category",
+      "agent.skill_invocation",
+      "agent.skill_retirement",
+      "agent.skill_detachment",
     ],
     installation: ["INSTALL_ACCEPTANCE_SKILL_SOURCE"],
     gaps: [
       {
-        what: "A skill cannot be removed from an agent from the console, only replaced by another version of it.",
-        because: "brain.console.agent_tabs.detach decides a removal and no route performs one; brain.skill_routes assigns and replaces.",
+        what: "A skill cannot be tried out through an agent in practice mode before it is assigned.",
+        because: "docs/admin-console-architecture.md 4.2 tests a skill through an agent that holds it, rehearsed at SHADOW, and no route runs a rehearsal; the Profile draws it inert with pages/skills/skillActions.ts' sentence.",
       },
       {
         what: "A skill that declares scripts cannot be added.",
@@ -476,7 +496,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "Connectors and third-party integrations": {
-    screens: ["/connectors", "/connectors/:connector", "/connectors/:connector/:view"],
+    screens: ["/connectors", "/connectors/:connector", "/connectors/:connector/:view", "/channels"],
     routes: [
       "/api/v1/connectors",
       "/api/v1/connectors/{connector}/disconnect",
@@ -488,10 +508,12 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/connectors/lark-app",
       "/api/v1/connectors/lark-app/test",
       "/api/v1/channels*",
+      "/api/v1/me/channels*",
       "/api/v1/console/connectors/{connector}/stats",
       "/api/v1/console/channels/{name}/stats",
     ],
     tables: [
+      "auth.binding_code",
       "ops.channel",
       "ops.channel_delivery",
       "ops.connector_connection",
@@ -532,11 +554,6 @@ export const AREAS: Readonly<Record<string, Area>> = {
         what: "A Lark account is linked to a person with a one-time code only once the binding store is wired.",
         because:
           "The chat channel receives, verifies and answers Lark's events at /api/v1/channels/lark/events, and offers a code sent in a direct message to brain.channels.inbound.ChatBinder; the store that mints the code in a web session and keeps the binding is the channel binding package's, and until it is wired every sender is answered as unbound, brain.channels.inbound.NOBODY_IS_BOUND_UNTIL_A_BINDING_IS_KEPT.",
-      },
-      {
-        what: "A channel's record, switch, test message and deliveries have routes and no screen.",
-        because:
-          "The Channels screen is drawn over brain.channel_routes by the channels screen package, which follows this one; until then a channel is set up and proved through those routes, each change is in the audit ledger under setting:channel.<channel>, and the deliveries route lists every refusal without its content.",
       },
     ],
   },
@@ -956,6 +973,24 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/Tools.tsx switchPath(choice.tool)": [
     at("POST /api/v1/tools/{name}/switch", "switchPath", toolSwitchPath("notes.read_note")),
   ],
+  "src/pages/Channels.tsx channelApiPath(row.channel)": [
+    at("PUT /api/v1/channels/{name}", "channelApiPath", channelApiPath("webhook")),
+  ],
+  "src/pages/Channels.tsx switchApiPath(row.channel)": [
+    at("POST /api/v1/channels/{name}/switch", "switchApiPath", switchApiPath("webhook")),
+  ],
+  "src/pages/Channels.tsx testApiPath(name)": [
+    at("POST /api/v1/channels/{name}/test", "testApiPath", testApiPath("webhook")),
+  ],
+  "src/pages/Channels.tsx unbindApiPath(name)": [
+    at("POST /api/v1/channels/{name}/bindings/unbind", "unbindApiPath", unbindApiPath("webhook")),
+  ],
+  "src/components/MyChannels.tsx myCodeApiPath(row.channel)": [
+    at("POST /api/v1/me/channels/{name}/code", "myCodeApiPath", myCodeApiPath("webhook")),
+  ],
+  "src/components/MyChannels.tsx myUnbindApiPath(row.channel)": [
+    at("POST /api/v1/me/channels/{name}/unbind", "myUnbindApiPath", myUnbindApiPath("webhook")),
+  ],
   "src/pages/Settings.tsx savePath(row.name)": [at("PUT /api/v1/install/settings/{name}", "savePath", savePath("INSTALL_COMPANY_NAME"))],
   "src/pages/FirstRun.tsx FINISH_PATH": [at("POST /setup/sign-in", "FINISH_PATH", FINISH_PATH, false)],
   "src/pages/FirstRun.tsx APPOINTMENT_PATH": [at("POST /setup/appointment", "APPOINTMENT_PATH", APPOINTMENT_PATH, false)],
@@ -1036,6 +1071,7 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
     at("PUT /api/v1/models/providers/{provider}", "providerSwitchApiPath", providerSwitchApiPath("anthropic")),
   ],
   "src/pages/Models.tsx PROFILE_API_PATH": [at("PUT /api/v1/models/profile", "PROFILE_API_PATH", PROFILE_API_PATH)],
+  "src/components/ModelPrices.tsx PRICES_API_PATH": [at("PUT /api/v1/models/prices", "PRICES_API_PATH", PRICES_API_PATH)],
   "src/pages/Models.tsx providerCheckApiPath(pending.provider)": [
     at("POST /api/v1/models/providers/{provider}/check", "providerCheckApiPath", providerCheckApiPath("anthropic")),
   ],
@@ -1085,19 +1121,26 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/Notifications.tsx TRIAL_API_PATH": [
     at("POST /api/v1/notifications/relay/test", "TRIAL_API_PATH", RELAY_TRIAL_API_PATH),
   ],
-  "src/pages/Skills.tsx SKILLS_API_PATH": [at("POST /api/v1/skills", "SKILLS_API_PATH", SKILLS_API_PATH)],
-  "src/pages/Skills.tsx IMPORT_PATH": [at("POST /api/v1/skills/imports", "IMPORT_PATH", IMPORT_PATH)],
-  "src/pages/Skills.tsx versionsPath(one.digest)": [
+  "src/pages/skills/SkillForms.tsx SKILLS_API_PATH": [at("POST /api/v1/skills", "SKILLS_API_PATH", SKILLS_API_PATH)],
+  "src/pages/skills/SkillForms.tsx IMPORT_PATH": [at("POST /api/v1/skills/imports", "IMPORT_PATH", IMPORT_PATH)],
+  "src/pages/skills/SkillForms.tsx versionsPath(one.digest)": [
     at("POST /api/v1/skills/{digest}/versions", "versionsPath", versionsPath("d".repeat(64))),
   ],
-  "src/pages/Skills.tsx categoriesPath(one.digest)": [
+  "src/pages/skills/SkillForms.tsx categoriesPath(one.digest)": [
     at("POST /api/v1/skills/{digest}/categories", "categoriesPath", categoriesPath("d".repeat(64))),
   ],
-  "src/pages/Skills.tsx reviewPath(one.digest)": [
+  "src/pages/skills/SkillProfile.tsx reviewPath(one.digest)": [
     at("POST /api/v1/skills/{digest}/review", "reviewPath", reviewPath("d".repeat(64))),
   ],
-  "src/pages/Skills.tsx assignPath(one.digest)": [
+  "src/pages/skills/SkillForms.tsx assignPath(one.digest)": [
     at("POST /api/v1/skills/{digest}/assignments", "assignPath", assignPath("d".repeat(64))),
+  ],
+  "src/pages/skills/SkillProfile.tsx retired ? reinstatementPath(one.digest) : retirementPath(one.digest)": [
+    at("POST /api/v1/skills/{digest}/reinstatement", "reinstatementPath", reinstatementPath("d".repeat(64))),
+    at("POST /api/v1/skills/{digest}/retirement", "retirementPath", retirementPath("d".repeat(64))),
+  ],
+  "src/pages/skills/SkillProfile.tsx detachPath(pin.digest)": [
+    at("POST /api/v1/skills/{digest}/detachments", "detachPath", detachPath("d".repeat(64))),
   ],
   "src/pages/connectors/SourceActs.tsx disconnectApiPath(name)": [
     at("POST /api/v1/connectors/{connector}/disconnect", "disconnectApiPath", disconnectApiPath("xero")),
@@ -1369,6 +1412,21 @@ const A_RETIRED_KEY_IS_NOT_FOUND = t(
   "test_a_retired_key_or_account_is_not_found_by_the_request_path",
   true,
 );
+const A_CHANNEL_RECORD_IS_KEPT_AND_SWITCHED = t(
+  "test_channel_pipeline",
+  "test_the_stores_keep_one_row_per_channel_and_switch_only_the_one_named",
+  true,
+);
+const A_CHANNEL_CHANGE_IS_AUDITED = t(
+  "test_channel_pipeline",
+  "test_each_set_up_and_switch_leaves_one_attributed_entry_and_the_chain_verifies",
+  true,
+);
+const A_BINDING_CHANGE_IS_AUDITED = t(
+  "test_channel_binding",
+  "test_each_bind_rebind_and_unbind_leaves_its_entry_and_the_chain_verifies",
+  true,
+);
 
 /** Every write route a screen sends, followed to the system. */
 export const PROOFS: Readonly<Record<string, Proofs>> = {
@@ -1395,6 +1453,56 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
       none: "Retiring an account sets deleted_at on it and its keys and records no credential write, so brain.identity.service_account_store.retire leaves no ledger entry naming who retired it.",
     },
     behaviour: A_RETIRED_KEY_IS_NOT_FOUND,
+  },
+  "PUT /api/v1/channels/{name}": {
+    row: A_CHANNEL_RECORD_IS_KEPT_AND_SWITCHED,
+    audit: A_CHANNEL_CHANGE_IS_AUDITED,
+    behaviour: t(
+      "test_channel_pipeline",
+      "test_a_channel_is_set_up_with_its_secret_kept_in_the_vault_and_never_sent_back",
+    ),
+  },
+  "POST /api/v1/channels/{name}/switch": {
+    row: A_CHANNEL_RECORD_IS_KEPT_AND_SWITCHED,
+    audit: A_CHANNEL_CHANGE_IS_AUDITED,
+    behaviour: t(
+      "test_channel_pipeline",
+      "test_switching_one_channel_off_stops_it_receiving_and_sending_and_leaves_another_alone",
+    ),
+  },
+  "POST /api/v1/channels/{name}/test": {
+    row: t("test_channel_pipeline", "test_a_test_message_is_sent_once_per_record_and_destination"),
+    audit: {
+      none: "A test message is recorded in ops.operation under its key and in ops.channel_delivery with its outcome, and the audit ledger has no action for a message sent: brain.ops.mail.A_TEST_IS_ONE_MESSAGE_PER_CONFIGURATION.",
+    },
+    behaviour: t("test_channel_pipeline", "test_a_test_message_is_sent_once_per_record_and_destination"),
+  },
+  "POST /api/v1/channels/{name}/bindings/unbind": {
+    row: A_BINDING_CHANGE_IS_AUDITED,
+    audit: A_BINDING_CHANGE_IS_AUDITED,
+    behaviour: t(
+      "test_channel_binding",
+      "test_an_administrator_lists_who_is_bound_and_unbinds_one_and_a_stranger_is_told_nothing",
+    ),
+  },
+  "POST /api/v1/me/channels/{name}/code": {
+    row: t(
+      "test_channel_binding",
+      "test_a_code_is_kept_spent_once_and_never_brought_back_by_the_application",
+      true,
+    ),
+    audit: {
+      notApplicable: "A code binds nothing until its person sends it from a chat, and the binding it then makes is the channel_binding entry 0118's trigger appends; minting one changes nobody's access.",
+    },
+    behaviour: t(
+      "test_channel_binding",
+      "test_a_person_mints_a_code_in_my_workspace_sends_it_and_is_answered_as_themself",
+    ),
+  },
+  "POST /api/v1/me/channels/{name}/unbind": {
+    row: A_BINDING_CHANGE_IS_AUDITED,
+    audit: A_BINDING_CHANGE_IS_AUDITED,
+    behaviour: t("test_channel_binding", "test_a_person_unbinds_their_own_chat_and_it_is_recorded_as_theirs"),
   },
   "POST /api/v1/govern/learning/undo": {
     row: UNDO_REACHES_THE_ROW_THE_LEDGER_AND_RECALL,
@@ -1823,6 +1931,11 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     audit: A_SETTING_ENTRY_NO_TEST_FOLLOWS,
     behaviour: t("test_provider_routes", "test_switching_a_provider_off_takes_its_rungs_out_of_the_next_plan_at_once"),
   },
+  "PUT /api/v1/models/prices": {
+    row: t("test_usage_store", "test_the_price_of_each_model_is_merged_into_its_providers_one_row", true),
+    audit: A_SETTING_ENTRY_NO_TEST_FOLLOWS,
+    behaviour: t("test_usage_store", "test_a_model_call_is_metered_once_however_often_its_request_is_recorded", true),
+  },
   "PUT /api/v1/models/profile": {
     row: t("test_provider_routes", "test_where_answers_are_made_is_saved_by_the_super_administrator_ledgered_and_planned_at_once"),
     audit: {
@@ -2016,6 +2129,21 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: LIFECYCLE_PRESSED,
     audit: LIFECYCLE_PRESSED,
     behaviour: t("test_agent_lifecycle_routes", "test_a_duplicate_is_a_new_disabled_agent_from_the_same_version_with_the_same_ceiling"),
+  },
+  "POST /api/v1/skills/{digest}/retirement": {
+    row: t("test_skill_lifecycle", "test_a_detachment_and_a_retirement_each_write_rows_and_entries_through_the_store", true),
+    audit: t("test_skill_lifecycle", "test_a_detachment_and_a_retirement_each_write_rows_and_entries_through_the_store", true),
+    behaviour: t("test_skill_lifecycle", "test_a_retired_version_is_refused_to_new_agents_and_its_holders_are_listed_not_detached"),
+  },
+  "POST /api/v1/skills/{digest}/reinstatement": {
+    row: t("test_skill_lifecycle", "test_a_detachment_and_a_retirement_each_write_rows_and_entries_through_the_store", true),
+    audit: t("test_skill_lifecycle", "test_a_detachment_and_a_retirement_each_write_rows_and_entries_through_the_store", true),
+    behaviour: t("test_skill_lifecycle", "test_a_retired_version_is_refused_to_new_agents_and_its_holders_are_listed_not_detached"),
+  },
+  "POST /api/v1/skills/{digest}/detachments": {
+    row: t("test_skill_lifecycle", "test_a_detachment_and_a_retirement_each_write_rows_and_entries_through_the_store", true),
+    audit: t("test_skill_lifecycle", "test_a_detachment_and_a_retirement_each_write_rows_and_entries_through_the_store", true),
+    behaviour: t("test_skill_lifecycle", "test_a_detached_skill_is_gone_from_the_agent_and_its_assignment_is_no_longer_in_force"),
   },
   "POST /api/v1/agents/{agent_id}/automations": {
     row: t("test_automation_gallery_routes", "test_one_confirmed_request_writes_the_automation_its_registry_entry_and_its_audit_context"),

@@ -68,6 +68,7 @@
 @source "../pages/agents";
 @source "../pages/connectors";
 @source "../pages/overview";
+@source "../pages/skills";
 @source "../pages/credentials";
 @source not inline("grid");
 

@@ -115,6 +115,8 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
   "src/pages/credentials/SetValueForm.tsx": [{ pattern: "/credentials/:family/:name/:view", index: 0, writes: true }],
   // The Profile is a view at its own address, so the pin's form is on that page case with no opener.
   "src/components/AgentModelPin.tsx": [{ pattern: "/agents/:agentId/:tab", index: 0, writes: true }],
+  // A model's price opens on its row in the prices card, above the register's forms (M27.12.5).
+  "src/components/ModelPrices.tsx": [{ pattern: "/models", opener: "Set price", index: 0, writes: true }],
   "src/pages/Notifications.tsx": [
     { pattern: "/notifications", index: 0, writes: true },
     { pattern: "/notifications", index: 1, writes: true },
@@ -154,6 +156,12 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
     { pattern: "/compliance", index: 4, writes: true },
     { pattern: "/compliance", index: 5, writes: true },
   ],
+  // Index 0 is the bound people's search bar, which only narrows; then the webhook channel's set-up
+  // and its test message. The Slack card, not received, draws no form.
+  "src/pages/Channels.tsx": [
+    { pattern: "/channels", index: 1, writes: true },
+    { pattern: "/channels", index: 2, writes: true },
+  ],
   "src/pages/Webhooks.tsx": [
     { pattern: "/webhooks", index: 0, writes: false },
     { pattern: "/webhooks", opener: "Replace secret", index: 1, writes: true },
@@ -187,11 +195,13 @@ const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
     "setting_problem before anything is written, answering 422 with a sentence drawn beside the field. " +
     "tests/unit/test_settings_routes.py holds a refused value writing no row; the page case draws " +
     "no editable row, so no form is opened here.",
-  "src/pages/Skills.tsx":
-    "Neither form is drawn with the page's usual answers, which offer no add and no approved skill. " +
-    "The add form's submit is disabled until packageProblem accepts a package, which " +
-    "tests/skills-page.test.tsx holds for an empty paste and an oversized one. The assign form's " +
-    "select holds only agents the API listed and its button is disabled without one.",
+  "src/pages/skills/SkillForms.tsx":
+    "Every form here opens behind a press the page cases do not make: Add a skill's drawer, Edit as a " +
+    "new version, or the Profile's assign and categories cards. Each says what it accepts above its " +
+    "fields, and a blank one cannot be sent: Add stays disabled until packageProblem accepts a package, " +
+    "Import until importProblem accepts the repository and commit or the address, and Save until the " +
+    "edit has text, which tests/skills-page.test.tsx holds for Add. The assign form only opens a " +
+    "confirmation naming an agent the API listed.",
   "src/pages/Ask.tsx":
     "The question form cannot be sent blank by a person: its only submit button is disabled until " +
     "askBody accepts the text, and the field's maxLength stops a question longer than the route " +

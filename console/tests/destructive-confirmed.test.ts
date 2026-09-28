@@ -116,19 +116,19 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
   "src/pages/People.tsx GRANTS_API_PATH":
     "Writes a new grant. Entitlements are additive only, a grant replaces nothing, and taking one " +
     "back is the removal beside it, which is confirmed.",
-  "src/pages/Skills.tsx SKILLS_API_PATH":
+  "src/pages/skills/SkillForms.tsx SKILLS_API_PATH":
     "Adds a skill to the library undecided. A second import of the same bytes is refused by the " +
     "table's key rather than written over, so nothing existing is replaced, and the skill reaches no " +
     "agent until somebody approves it and an administrator assigns it, both of which are confirmed.",
-  "src/pages/Skills.tsx IMPORT_PATH":
+  "src/pages/skills/SkillForms.tsx IMPORT_PATH":
     "Imports a skill from a repository commit or an address into the library undecided, exactly as " +
     "an added package is: the same bytes twice are refused by the key, nothing existing is replaced, " +
     "and it reaches no agent until it is approved and assigned, both of which are confirmed.",
-  "src/pages/Skills.tsx versionsPath(one.digest)":
+  "src/pages/skills/SkillForms.tsx versionsPath(one.digest)":
     "Saves an edit as a new, undecided version beside the one it came from, which is never changed; " +
     "every agent keeps the version it runs, which tests/unit/test_skill_routes.py holds, so nothing " +
     "existing is ended or replaced.",
-  "src/pages/Skills.tsx categoriesPath(one.digest)":
+  "src/pages/skills/SkillForms.tsx categoriesPath(one.digest)":
     "Sets the labels a skill is filed under. The previous labels are shown in the box before the " +
     "press and can be typed back, the change is a new row that edits none, and a label reaches no " +
     "agent and changes no procedure.",
@@ -161,6 +161,13 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "Testing a Lark connection exchanges the pasted credential for a token and makes small reads; " +
     "it writes nothing here or in Lark and keeps nothing it read, which " +
     "tests/unit/test_lark_connect.py holds over the requests a fake Lark server received.",
+  "src/pages/Channels.tsx testApiPath(name)":
+    "A test message is one product sentence to one destination, sent once per channel record and " +
+    "destination, which tests/unit/test_channel_pipeline.py holds; it ends and replaces nothing.",
+  "src/components/MyChannels.tsx myCodeApiPath(row.channel)":
+    "Asking for a code binds nothing: the code is shown to the person who asked and does nothing " +
+    "until they send it from their own chat. It ends only an older code of theirs for that channel " +
+    "that nothing has used, which tests/unit/test_channel_binding.py holds.",
 };
 
 /** How many times a non-GET `method:` or an `openStream(` call is written in the control files. */

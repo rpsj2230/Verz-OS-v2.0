@@ -133,9 +133,12 @@ MIGRATION_CHANNEL = VERSIONS / "0114_channel_record_and_delivery.py"
 MIGRATION_CLASSIFIED_TABLES = VERSIONS / "0116_classified_tables.py"
 MIGRATION_TOOL_CATALOGUE = VERSIONS / "0117_tool_catalogue_and_switch.py"
 MIGRATION_SKILL_CATEGORY = VERSIONS / "0121_skill_sources_versions_and_categories.py"
+MIGRATION_SKILL_INVOCATION = VERSIONS / "0138_skill_invocation.py"
 MIGRATION_KNOWLEDGE_LIFECYCLE = VERSIONS / "0120_knowledge_lifecycle.py"
 MIGRATION_ACCEPTANCE = VERSIONS / "0133_acceptance_result.py"
 MIGRATION_HALT = VERSIONS / "0136_ops_halt.py"
+MIGRATION_BINDING_CODE = VERSIONS / "0118_channel_binding_codes.py"
+MIGRATION_SKILL_LIFECYCLE = VERSIONS / "0139_skill_retirement_and_detachment.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -366,6 +369,12 @@ CHANNEL_TABLES: tuple[str, ...] = ("ops.channel", "ops.channel_delivery")
 SKILL_CATEGORY_TABLES: tuple[str, ...] = ("agent.skill_category",)
 #: And the two 0120 adds: what a steward is asked, and a solution waiting for a named person.
 KNOWLEDGE_LIFECYCLE_TABLES: tuple[str, ...] = ("know.steward_task", "know.solution")
+#: And the one 0118 adds: the one-time codes that bind a chat account to a person.
+BINDING_CODE_TABLES: tuple[str, ...] = ("auth.binding_code",)
+#: And the one 0138 adds: each skill a run used, by digest.
+SKILL_INVOCATION_TABLES: tuple[str, ...] = ("agent.skill_invocation",)
+#: And the two 0139 adds: a version retired or reinstated, and a skill detached from an agent.
+SKILL_LIFECYCLE_TABLES: tuple[str, ...] = ("agent.skill_retirement", "agent.skill_detachment")
 
 SENSITIVE_READ_TABLES: tuple[str, ...] = ("ops.sensitive_read",)
 
@@ -442,6 +451,9 @@ ALL_TABLES = (
     + KNOWLEDGE_LIFECYCLE_TABLES
     + ACCEPTANCE_TABLES
     + HALT_TABLES
+    + BINDING_CODE_TABLES
+    + SKILL_INVOCATION_TABLES
+    + SKILL_LIFECYCLE_TABLES
 )
 
 
@@ -517,16 +529,41 @@ def squash(text: str) -> str:
     return " ".join(text.split())
 
 
+def in_chain_order() -> tuple[Path, ...]:
+    """Every migration in the order Alembic runs them: by `down_revision`, not by file name.
+
+    The two differ as soon as a number is held for a package that lands late, which the Wave 2
+    plan does on purpose: `0118` follows `0137`. Replacements applied in file-name order would
+    then run `0118`'s substitution before the list it replaces exists, and the chain would end
+    on the list `0137` left, reporting a model-versus-migration mismatch that the database never
+    has. File-name order breaks a tie, so a chain with no late number reads as it always did.
+    """
+    paths = sorted(VERSIONS.glob("*.py"))
+    revision_of = {path: str(migration_module(path).revision) for path in paths}
+    after: dict[str | None, list[Path]] = {}
+    for path in paths:
+        down = migration_module(path).down_revision
+        after.setdefault(None if down is None else str(down), []).append(path)
+    ordered: list[Path] = []
+    waiting = list(after.get(None, []))
+    while waiting:
+        path = waiting.pop(0)
+        ordered.append(path)
+        waiting = sorted(waiting + after.get(revision_of[path], []))
+    assert len(ordered) == len(paths), "a migration is not on the chain from the first one"
+    return tuple(ordered)
+
+
 @functools.cache
 def _supersessions() -> tuple[tuple[str, str], ...]:
     """Constraint text that a later migration has replaced, gathered from the migrations.
 
     Read from the migrations rather than listed here, so that amending a constraint is one
     file to edit rather than two. A migration that changes one exports `SUPERSEDES` mapping
-    the old rendered text to the new.
+    the old rendered text to the new. In the order the migrations run; see `in_chain_order`.
     """
     found: list[tuple[str, str]] = []
-    for path in sorted(VERSIONS.glob("*.py")):
+    for path in in_chain_order():
         replaced = getattr(migration_module(path), "SUPERSEDES", None)
         if replaced:
             found.extend((squash(old), squash(new)) for old, new in replaced.items())
@@ -1221,12 +1258,18 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert tool_catalogue.TABLES == TOOL_CATALOGUE_TABLES
     skill_category = migration_module(MIGRATION_SKILL_CATEGORY)
     assert skill_category.TABLES == SKILL_CATEGORY_TABLES
+    skill_invocation = migration_module(MIGRATION_SKILL_INVOCATION)
+    assert skill_invocation.TABLES == SKILL_INVOCATION_TABLES
     knowledge_lifecycle = migration_module(MIGRATION_KNOWLEDGE_LIFECYCLE)
     assert knowledge_lifecycle.TABLES == KNOWLEDGE_LIFECYCLE_TABLES
     acceptance = migration_module(MIGRATION_ACCEPTANCE)
     assert acceptance.TABLES == ACCEPTANCE_TABLES
     halt = migration_module(MIGRATION_HALT)
     assert halt.TABLES == HALT_TABLES
+    binding_code = migration_module(MIGRATION_BINDING_CODE)
+    assert binding_code.TABLES == BINDING_CODE_TABLES
+    skill_lifecycle = migration_module(MIGRATION_SKILL_LIFECYCLE)
+    assert skill_lifecycle.TABLES == SKILL_LIFECYCLE_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1312,6 +1355,9 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(knowledge_lifecycle.TABLES)
         + tuple(acceptance.TABLES)
         + tuple(halt.TABLES)
+        + tuple(binding_code.TABLES)
+        + tuple(skill_invocation.TABLES)
+        + tuple(skill_lifecycle.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1378,6 +1424,9 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(knowledge_lifecycle.TABLES),
         set(acceptance.TABLES),
         set(halt.TABLES),
+        set(binding_code.TABLES),
+        set(skill_invocation.TABLES),
+        set(skill_lifecycle.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

@@ -24,10 +24,12 @@ request and a request about nothing are one status in `brain.ops.telemetry.Reque
 `nothing_returned` is one figure and is never split: splitting it is the count of what people
 were refused. See `A_REFUSAL_AND_AN_ABSENCE_ARE_ONE_FIGURE`.
 
-**A figure nothing records is named, and never served as nought.** A skill's invocations have
-no writer (`brain.console.agent_tabs.SkillInvocation` is a shape nothing fills), a connector's
-live reads are `brain.ops.telemetry.UNFILLABLE_TODAY["connector"]`, and a run's cost has no
-writer on the request path while `brain.console.agent_profile.RUN_SPEND_IS_RECORDED` is false.
+**A figure this page does not count is named, and never served as nought.** A skill's
+invocations (`agent.skill_invocation`) and the source a request read
+(`obs.request_telemetry.connector`, `brain.ops.telemetry.FILLED_BY_A_SOURCE_READ`) have had a
+writer since `brain.ops.usage_store` and M27.1.5 landed, and these routes do not count either
+yet, so each is named rather than served; a run's cost has no writer on the request path while
+`brain.console.agent_profile.RUN_SPEND_IS_RECORDED` is false.
 Each is an `Unrecorded` row with its sentence, which is
 `brain.agent_routes.A_FIGURE_NOTHING_STORES_IS_ABSENT_AND_NEVER_NOUGHT` applied to a page of
 figures rather than to one headline.
@@ -59,7 +61,7 @@ from typing import Final
 
 from brain.console.workspace import Basis, Range, window
 from brain.ops.connector_sync import SyncOutcome
-from brain.ops.telemetry import UNFILLABLE_TODAY, RequestStatus
+from brain.ops.telemetry import RequestStatus
 from brain.tables.channel import DeliveryOutcome, Direction
 
 # ------------------------------------------------------------------ written-down reasons
@@ -136,25 +138,35 @@ RUN_COST_IS_NOT_RECORDED: Final = Unrecorded(
     ),
 )
 
-#: Why a skill's invocations are not shown.
+#: Why a skill's invocations are not shown: recorded since the usage recorder, not counted here.
 SKILL_RUNS_ARE_NOT_RECORDED: Final = (
     Unrecorded(
         figure="runs_that_used_it",
         why=(
-            "no table records that a run invoked a skill: the invocation shape exists and "
-            "nothing writes one, so a count here would be nought rather than a measurement"
+            "each skill a run used is recorded now, and this page does not count those uses yet, "
+            "so a count here would be nought rather than a measurement"
         ),
     ),
     Unrecorded(
         figure="last_used",
-        why="no table records that a run invoked a skill, so there is no last use to read",
+        why="this page does not read the recorded uses of a skill yet, so there is no last use",
     ),
 )
 
-#: Why a connector's live reads are not shown. The sentence is the request ledger's own.
+#: Why a connector's live reads are not shown: the ledger names the source, and nothing here
+#: counts it yet.
 LIVE_READS_ARE_NOT_RECORDED: Final = (
-    Unrecorded(figure="live_reads", why=UNFILLABLE_TODAY["connector"]),
-    Unrecorded(figure="last_live_read", why=UNFILLABLE_TODAY["connector"]),
+    Unrecorded(
+        figure="live_reads",
+        why=(
+            "the request ledger names the one source a request read, and this page does not "
+            "count those reads yet, so a count here would be nought rather than a measurement"
+        ),
+    ),
+    Unrecorded(
+        figure="last_live_read",
+        why="this page does not read the sources the request ledger names yet",
+    ),
 )
 
 #: Why a channel's answers are served as messages sent.

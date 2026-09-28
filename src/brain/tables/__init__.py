@@ -56,6 +56,7 @@ from brain.tables.artifact import ArtifactRow
 from brain.tables.audit import AuditEntryRow
 from brain.tables.automation import AutomationOwnerRow
 from brain.tables.automation_run import AutomationRunRow, AutomationScheduleRow
+from brain.tables.binding_code import BindingCodeRow
 from brain.tables.break_glass_notice import BreakGlassNoticeRow
 from brain.tables.browsing import BrowserEnvelopeRow
 from brain.tables.budget import BudgetVersionRow
@@ -124,7 +125,14 @@ from brain.tables.routing import ModelAttemptRow, RoutingRungRow, RoutingTierRow
 from brain.tables.schedule import ControlRunRow
 from brain.tables.sensitive_read import SensitiveReadRow
 from brain.tables.service_account import ApiKeyRow, ServiceAccountRow
-from brain.tables.skill import SkillAssignmentRow, SkillReviewRow, SkillRow
+from brain.tables.skill import (
+    SkillAssignmentRow,
+    SkillDetachmentRow,
+    SkillRetirementRow,
+    SkillReviewRow,
+    SkillRow,
+)
+from brain.tables.skill_invocation import SkillInvocationRow
 from brain.tables.spend import ReportRefreshRow, SpendActualRow
 from brain.tables.staff import StaffMemberRow, StaffSyncRunRow
 from brain.tables.suspension import SuspensionRow
@@ -369,6 +377,16 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     "ops.acceptance_result",
     # 0136_ops_halt. Points at nothing: a halt names its target by value, and outlives it.
     "ops.halt",
+    # 0118_channel_binding_codes. A code points at the person it binds; the session it was shown
+    # in is a value, so a code outlives the sign-in only as a row nobody can spend.
+    "auth.binding_code",
+    # 0138_skill_invocation. Points at nothing: a use names its skill by digest and its agent and
+    # request by value, and outlives all three.
+    "agent.skill_invocation",
+    # 0139_skill_retirement_and_detachment. A retirement points at the skill it retires and a
+    # detachment at the assignment it ends, so both follow them; the people are values.
+    "agent.skill_retirement",
+    "agent.skill_detachment",
 )
 
 __all__ = [
@@ -385,6 +403,7 @@ __all__ = [
     "AutomationOwnerRow",
     "AutomationRunRow",
     "AutomationScheduleRow",
+    "BindingCodeRow",
     "BreachCaseRow",
     "BreakGlassNoticeRow",
     "BrowserEnvelopeRow",
@@ -462,6 +481,9 @@ __all__ = [
     "SettingRow",
     "SettingType",
     "SkillAssignmentRow",
+    "SkillDetachmentRow",
+    "SkillInvocationRow",
+    "SkillRetirementRow",
     "SkillReviewRow",
     "SkillRow",
     "SolutionRow",
