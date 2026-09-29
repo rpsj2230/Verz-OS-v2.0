@@ -147,9 +147,11 @@ async def a_cached_answer_reaches_only_the_reach_it_was_computed_for(h: Harness)
         ),
     )
     table = table_capability(prices.entity).value
-    priced = column_capability(prices.entity, ASKED).value
+    # The cost is derived from the margin and the sell price, so reading it needs both grants,
+    # as a finance reader holds them in the table check.
+    priced = tuple(column_capability(prices.entity, one).value for one in (ASKED, "margin"))
     first, second = h.principal(A, "priced"), h.principal(A, "unpriced")
-    await h.person(first, department=A, grants=_in(A, table, priced))
+    await h.person(first, department=A, grants=_in(A, table, *priced))
     await h.person(second, department=A, grants=_in(A, table))
 
     app = await rules_app(h, KeptPrompts())
@@ -183,9 +185,9 @@ async def a_cached_answer_reaches_only_the_reach_it_was_computed_for(h: Harness)
             "a price list uploaded again was answered from the old upload's cache"
         )
 
-    for capability in (table, priced):
+    for capability in (table, *priced):
         await h.execute(*h.attributed(), retire_grant(first, capability))
-    for capability in (table, priced):
+    for capability in (table, *priced):
         await h.grant(first, capability, _in(B, capability)[0][1])
     moved = await asked(first)
     if moved.from_cache or (moved.text is not None and service[ASKED] in moved.text):

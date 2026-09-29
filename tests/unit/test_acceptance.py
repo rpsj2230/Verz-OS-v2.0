@@ -574,6 +574,8 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         assert (first.name, first.outcome) == (second.name, second.outcome)
     outcomes = {one.name: (one.outcome, one.reason) for one in waited[1]}
     assert outcomes.pop("asking_past_a_window_is_refused_with_a_retry_hint")[0] == NOT_RUN
+    # No cache here either; `tests/unit/test_acceptance_cache.py` runs it with a store in its place.
+    assert outcomes.pop("a_cached_answer_reaches_only_the_reach_it_was_computed_for")[0] == NOT_RUN
     assert outcomes.pop("a_skill_is_imported_from_a_github_commit_and_from_an_address") == (
         NOT_RUN,
         "this install names no public skill to import, so no import from GitHub was asked",
@@ -597,7 +599,7 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
     assert len(outcomes) == 35
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 118
+    assert runs == [(2,)] and len(recorded) == 120
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }
