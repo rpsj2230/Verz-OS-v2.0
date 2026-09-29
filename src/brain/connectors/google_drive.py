@@ -231,6 +231,7 @@ from brain.knowledge.scanning import ScannedContent, Scanner, scan_for_parsing
 from brain.knowledge.uploads import receive_upload
 from brain.knowledge.visibility import KnowledgeVisibility, Visibility
 from brain.knowledge.visibility import admit_upload as admit_visibility_level
+from brain.ops.connect_steps import GuideStep, LineKind, Sketch, SketchLine, keyed
 from brain.ops.limits import MAX_BACKOFF_SECONDS
 from brain.ops.secrets import SecretRef
 
@@ -2212,15 +2213,97 @@ def read_back_reading(operation: RestOperation, reply: Reply) -> Reading:
     return Reading(outcome=CallOutcome.OK, matched=len(rows), complete=not next_cursor(reply))
 
 
+#: Why this screen cannot connect it, said by the declaration and by the guide's last step.
+NOT_FROM_THE_CONSOLE_SAYS: Final = (
+    "It is connected to one folder, with the department whose knowledge the folder "
+    "is and the person answerable for what it contributes, and its key is a service "
+    "account key file rather than one unbroken key. This screen takes neither yet, so "
+    "it is connected at the server."
+)
+#: The screens that prepare Google Drive for this system, ending where the server takes over:
+#: this screen takes no key file yet, which the last step says in the declaration's own words.
+GUIDE: Final = keyed(
+    (
+        GuideStep(
+            key="service_account",
+            title="Create a service account",
+            text=(
+                "In Google Cloud console open IAM & Admin, Service Accounts, and click Create "
+                "service account. Name it after this system and give it no role. Never grant it "
+                "domain-wide delegation: that reads everything, for everyone, and no folder pin "
+                "here would narrow it."
+            ),
+            sketch=Sketch(
+                place="Google Cloud console",
+                heading="Service accounts",
+                menu=("IAM", "Service Accounts", "Roles"),
+                menu_mark="Service Accounts",
+                lines=(SketchLine(LineKind.TEXT, "No domain-wide delegation"),),
+                button="Create service account",
+            ),
+            link="https://console.cloud.google.com/iam-admin/serviceaccounts",
+            link_label="Open Service Accounts",
+        ),
+        GuideStep(
+            key="drive_api",
+            title="Switch on the Google Drive API",
+            text=(
+                "In the same project open APIs & Services, Library, search for Google Drive API "
+                "and click Enable."
+            ),
+            sketch=Sketch(
+                place="Google Cloud console",
+                heading="Google Drive API",
+                button="Enable",
+            ),
+            link="https://console.cloud.google.com/apis/library/drive.googleapis.com",
+            link_label="Open the Google Drive API",
+        ),
+        GuideStep(
+            key="share",
+            title="Share the one folder with it, as a viewer",
+            text=(
+                "In Google Drive, right-click the one folder this system should read, choose "
+                "Share, paste the service account's email address and give it Viewer. Share "
+                "nothing else with it: one folder is what a connection reads."
+            ),
+            sketch=Sketch(
+                place="Google Drive",
+                heading="Share the folder",
+                lines=(
+                    SketchLine(LineKind.ITEM, "Service account's address", "Viewer", mark=True),
+                ),
+                button="Share",
+            ),
+        ),
+        GuideStep(
+            key="at_the_server",
+            title="Connect it at the server",
+            text=(
+                "This screen cannot finish this one. "
+                + NOT_FROM_THE_CONSOLE_SAYS
+                + " Hand whoever runs this install's server the service account's key file, the "
+                "folder's id and the department the folder belongs to."
+            ),
+            sketch=Sketch(
+                place="Your server",
+                heading="Connected at the server",
+                lines=(
+                    SketchLine(LineKind.ITEM, "The service account's key file", mark=True),
+                    SketchLine(LineKind.ITEM, "The folder's id", mark=True),
+                    SketchLine(LineKind.ITEM, "The department it belongs to", mark=True),
+                ),
+            ),
+        ),
+    )
+)
+
+
 CONNECTOR: Final = ConnectorDeclaration(
     name=GOOGLE_DRIVE,
     label="Google Drive",
-    not_from_the_console=(
-        "It is connected to one folder, with the department whose knowledge the folder "
-        "is and the person answerable for what it contributes, and its key is a service "
-        "account key file rather than one unbroken key. This screen takes neither yet, so "
-        "it is connected at the server."
-    ),
+    guide=GUIDE,
+    not_from_the_console=NOT_FROM_THE_CONSOLE_SAYS,
     read_back=ReadBack(
         reading=read_back_reading,
         recorded=(

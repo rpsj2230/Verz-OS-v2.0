@@ -26,7 +26,11 @@
  * use, and to its place in the body, `settings.` and the name, which is what a validation refusal
  * of the body uses.
  *
- * Task ids: M42.6.5, M42.5.9, M27.8.5
+ * **The settings, and never the key, can start from what was typed before.** The Connectors
+ * screen's connect flow keeps a source's settings while its dialog is closed (`kit/flowMemory.ts`),
+ * so it hands them back here and hears each change; first run passes neither and starts blank.
+ *
+ * Task ids: M42.6.5, M42.5.9, M27.8.5, M27.11.9
  */
 
 import { useState, type FormEvent } from "react";
@@ -72,6 +76,10 @@ interface ConnectSourceProps {
   readonly keyBlank: string;
   /** Called with the API's sentence once the source is connected. */
   readonly onConnected: (told: string) => void;
+  /** The settings to start from, typed earlier in the same flow. Never a key. */
+  readonly startSettings?: Readonly<Record<string, string>> | undefined;
+  /** Told the settings after every change, so a flow can keep them while its dialog is closed. */
+  readonly onSettingsChange?: ((settings: Readonly<Record<string, string>>) => void) | undefined;
 }
 
 /** Every name a setting's input answers to: its own, and its place in the body. */
@@ -79,8 +87,16 @@ function settingNames(name: string): readonly string[] {
   return [name, `settings.${name}`];
 }
 
-export function ConnectSource({ source, confirmation, keyMaxChars, keyBlank, onConnected }: ConnectSourceProps) {
-  const [settings, setSettings] = useState<Record<string, string>>(() => blankSettings(source));
+export function ConnectSource({
+  source,
+  confirmation,
+  keyMaxChars,
+  keyBlank,
+  onConnected,
+  startSettings,
+  onSettingsChange,
+}: ConnectSourceProps) {
+  const [settings, setSettings] = useState<Record<string, string>>(() => ({ ...blankSettings(source), ...startSettings }));
   const [key, setKey] = useState("");
   const [pending, setPending] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -148,7 +164,9 @@ export function ConnectSource({ source, confirmation, keyMaxChars, keyBlank, onC
               {...problemAttributes(problems, prefix, settingNames(one.name))}
               disabled={busy || pending}
               onChange={(event) => {
-                setSettings({ ...settings, [one.name]: event.target.value });
+                const next = { ...settings, [one.name]: event.target.value };
+                setSettings(next);
+                onSettingsChange?.(next);
               }}
             />
             <p className="field-description">{one.hint}</p>

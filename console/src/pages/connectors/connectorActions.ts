@@ -35,6 +35,7 @@ export const ACT_LABELS = Object.freeze({
   connectLark: "Connect Lark",
   addLarkUse: "Add a use to Lark",
   manageLark: "Manage Lark",
+  howToConnect: "How to connect",
   edit: "Edit settings",
   key: "Replace key",
   export: "Export record",

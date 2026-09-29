@@ -227,6 +227,14 @@ export function FlowDialog({
     >
       <DialogContent
         data-slot="flow-dialog"
+        // Focus the dialog itself rather than its first control, which is the first step's button:
+        // a ring on step 1 reads as that step being chosen. Tab still moves through every control.
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          if (event.target instanceof HTMLElement) {
+            event.target.focus();
+          }
+        }}
         className="max-h-[calc(100dvh-1rem)] max-w-[calc(100%-1rem)] grid-cols-[minmax(0,1fr)] gap-4 overflow-x-hidden overflow-y-auto p-4 sm:max-h-[calc(100dvh-4rem)] sm:max-w-4xl sm:p-6"
       >
         <DialogHeader className="pr-10">

@@ -134,9 +134,10 @@ const CONNECTORS_SCREEN = {
       credential_label: UNBROKEN,
       credential_hint: UNBROKEN,
       may_connect: true,
+      steps: [],
     },
   ],
-  not_connectable: [{ name: UNBROKEN, label: UNBROKEN, why: UNBROKEN }],
+  not_connectable: [{ name: UNBROKEN, label: UNBROKEN, why: UNBROKEN, steps: [] }],
   evidence: [
     {
       name: UNBROKEN,

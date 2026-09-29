@@ -68,7 +68,6 @@ import {
 import { CONNECTORS_HEADING } from "./ConnectorsPage";
 import { DriftPill, HealthPill, StatusPill } from "./pills";
 import {
-  ConnectDrawer,
   DisconnectDialog,
   EditDrawer,
   KeyDrawer,
@@ -77,6 +76,7 @@ import {
   exportRecord,
   type OpenAct,
 } from "./SourceActs";
+import { SourceFlow } from "./SourceFlow";
 import { ConnectionTestNote, NOT_TESTED, TestConnectionButton, useConnectionTest } from "./TestConnection";
 
 /** The three views, in the owner's order. The first is where the bare address lands. */
@@ -270,6 +270,18 @@ function SourceAnswer({ name, tab }: { readonly name: string; readonly tab: stri
               {ACT_LABELS.connect}
             </Button>
           ) : null}
+          {source.connectFrom === "server" ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="min-h-11 sm:min-h-8"
+              onClick={() => {
+                act({ act: "connect", source: source.name });
+              }}
+            >
+              {ACT_LABELS.howToConnect}
+            </Button>
+          ) : null}
           {source.connectFrom === "lark" ? (
             <Button
               size="sm"
@@ -349,7 +361,7 @@ function SourceAnswer({ name, tab }: { readonly name: string; readonly tab: stri
         {view === "about" ? <ConnectorAbout detail={detail} /> : null}
       </DetailPage>
       {open?.act === "connect" && page !== null ? (
-        <ConnectDrawer page={page} source={open.source} onClose={close} onDone={done} />
+        <SourceFlow page={page} source={open.source} onClose={close} onDone={done} />
       ) : null}
       {open?.act === "lark" ? <LarkDialog start={open.start} onClose={closeLark} onDone={done} /> : null}
       {open?.act === "edit" && form !== undefined ? (

@@ -61,7 +61,8 @@ import {
 import { idsWords } from "./connectorStats";
 import { DriftPill, HealthPill, StatusPill } from "./pills";
 import { LarkCard } from "./LarkCard";
-import { ConnectDrawer, DisconnectDialog, LarkDialog, type OpenAct } from "./SourceActs";
+import { DisconnectDialog, LarkDialog, type OpenAct } from "./SourceActs";
+import { SourceFlow } from "./SourceFlow";
 import { useSourceStats, type SourceStats } from "./useSourceStats";
 
 /** The page's heading, which is also the menu's label for it. */
@@ -167,6 +168,15 @@ function RowMenu({
             }}
           >
             {ACT_LABELS.connect}
+          </DropdownMenuItem>
+        ) : null}
+        {row.connectFrom === "server" ? (
+          <DropdownMenuItem
+            onSelect={() => {
+              onAct({ act: "connect", source: row.name });
+            }}
+          >
+            {ACT_LABELS.howToConnect}
           </DropdownMenuItem>
         ) : null}
         {row.connectFrom === "lark" ? (
@@ -382,7 +392,7 @@ export function ConnectorsPage() {
         footer={<CopyPolicy page={page} />}
       />
       {open?.act === "connect" && page !== null ? (
-        <ConnectDrawer page={page} source={open.source} onClose={close} onDone={done} />
+        <SourceFlow page={page} source={open.source} onClose={close} onDone={done} />
       ) : null}
       {open?.act === "lark" ? <LarkDialog start={open.start} onClose={closeLark} onDone={done} /> : null}
       {open?.act === "disconnect" && page !== null ? (

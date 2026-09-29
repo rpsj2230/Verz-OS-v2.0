@@ -181,6 +181,7 @@ from brain.core.field_policy import Classification, FieldPolicy, FieldRule
 from brain.core.projection import ProjectionRefusedError
 from brain.core.scope import Clause, Op, Scope
 from brain.gate.provenance import Freshness, StalenessHorizon, assess_freshness
+from brain.ops.connect_steps import GuideStep, LineKind, Sketch, SketchLine, keyed
 from brain.ops.limits import MAX_BACKOFF_SECONDS, ConnectorLimit, connector_ceiling
 from brain.ops.secrets import SecretRef
 from brain.tools.fetch import Fetcher, Resolver
@@ -1846,9 +1847,76 @@ def built_from_the_console(settings: Mapping[str, str], ref: SecretRef) -> Conne
     return hubspot_manifest(HubSpotConnection(portal_id=settings["portal_id"]), ref=ref)
 
 
+#: The screens an administrator connects HubSpot through, the form last. HubSpot has moved private
+#: apps between menus, so the step names both places and the link only opens HubSpot.
+GUIDE: Final = keyed(
+    (
+        GuideStep(
+            key="create",
+            title="Create a private app in HubSpot",
+            text=(
+                "In HubSpot, click the settings gear at the top right, then Integrations, Private "
+                "Apps (HubSpot may list it under Development, Legacy apps), and click Create a "
+                "private app. Name it after this system."
+            ),
+            sketch=Sketch(
+                place="HubSpot settings",
+                heading="Private Apps",
+                menu=("Account defaults", "Integrations", "Private Apps", "Users & Teams"),
+                menu_mark="Private Apps",
+                button="Create a private app",
+            ),
+            link="https://app.hubspot.com/",
+            link_label="Open HubSpot",
+        ),
+        GuideStep(
+            key="scopes",
+            title="Give it read scopes only and copy its token",
+            text=(
+                "On the Scopes tab tick crm.objects.contacts.read and crm.objects.deals.read and "
+                "nothing with write in it or touching settings. Click Create app, confirm, and "
+                "copy the access token it shows."
+            ),
+            sketch=Sketch(
+                place="HubSpot settings",
+                heading="Create a private app",
+                tabs=("Basic info", "Scopes"),
+                tab_mark="Scopes",
+                lines=(
+                    SketchLine(LineKind.ITEM, "crm.objects.contacts.read", mark=True),
+                    SketchLine(LineKind.ITEM, "crm.objects.deals.read", mark=True),
+                    SketchLine(LineKind.TEXT, "Nothing with write, nothing on settings"),
+                ),
+                button="Create app",
+            ),
+        ),
+        GuideStep(
+            key="connect",
+            title="Paste the account id and the token here",
+            text=(
+                "Paste the HubSpot account id, as HubSpot shows it in the account's settings, and "
+                "the access token below, and press Connect HubSpot. A connection reads one account "
+                "and no other, and the token goes to the vault and is never shown again."
+            ),
+            sketch=Sketch(
+                place="Company Brain",
+                heading="Connect HubSpot",
+                lines=(
+                    SketchLine(LineKind.FIELD, "Account id", "...", mark=True),
+                    SketchLine(LineKind.FIELD, "Access token", "********", mark=True),
+                ),
+                button="Connect HubSpot",
+            ),
+            asks=("portal_id", "credential"),
+        ),
+    )
+)
+
+
 CONNECTOR: Final = ConnectorDeclaration(
     name=CONNECTOR_NAME,
     label="HubSpot",
+    guide=GUIDE,
     console=ConsoleForm(
         settings=(
             Setting(

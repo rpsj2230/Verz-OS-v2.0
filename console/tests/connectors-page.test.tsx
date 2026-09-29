@@ -40,6 +40,7 @@ import { CHECK_AGAIN, NOT_NOW } from "../src/pages/connectors/TestConnection";
 import { connectorAddress, readSourceRows } from "../src/pages/connectors/connectorSources";
 import { CONNECT_A_SOURCE, CONNECTORS_HEADING, NOT_AVAILABLE } from "../src/pages/connectors/ConnectorsPage";
 import { KEY_SUPPLIED, REVIEW_EDIT, REVIEW_KEY } from "../src/pages/connectors/SourceActs";
+import { AT_THE_SERVER, FROM_HERE, START } from "../src/pages/connectors/SourceFlow";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { declaredNavigation } from "./support/navigation";
 import { apiDocument, declaredPropertyNames, declaredRequestBodySchema } from "./support/openapi";
@@ -64,6 +65,19 @@ function sentinel(name: string): string {
   return `${name.toUpperCase()}-SENTINEL`;
 }
 
+/** One step of a connect flow as the API serves it, asking for `asks` on its screen. */
+function aStep(key: string, asks: string[] = []): Connectable["steps"][number] {
+  return {
+    key,
+    title: `${key}-TITLE`,
+    text: sentinel(`${key}-text`),
+    sketch: { place: "Vendor", heading: `${key}-HEADING`, menu: [], menu_mark: "", tabs: [], tab_mark: "", lines: [], button: "" },
+    link: key === "create" ? "https://vendor.example.test/apps" : "",
+    link_label: key === "create" ? "Open the vendor's apps" : "",
+    asks,
+  };
+}
+
 function aSource(over: Partial<Connectable> = {}): Connectable {
   return {
     name: "xero",
@@ -74,6 +88,7 @@ function aSource(over: Partial<Connectable> = {}): Connectable {
     credential_label: "The key Xero issued for this connection",
     credential_hint: sentinel("key-hint"),
     may_connect: true,
+    steps: [aStep("create"), aStep("authorise"), aStep("connect", ["tenant_id", "credential"])],
     ...over,
   };
 }
@@ -123,7 +138,14 @@ function aPage(over: Partial<Connectors> = {}): Connectors {
     vault: "ready",
     vault_told: "",
     connectable: [aSource(), aSource({ name: "hubspot", label: "HubSpot", settings: [] })],
-    not_connectable: [{ name: "laravel", label: "Laravel database views", why: sentinel("laravel-why") }],
+    not_connectable: [
+      {
+        name: "laravel",
+        label: "Laravel database views",
+        why: sentinel("laravel-why"),
+        steps: [aStep("views"), aStep("user"), aStep("at_the_server")],
+      },
+    ],
     evidence: [],
     key_max_chars: 1000,
     key_blank: sentinel("key-blank"),
@@ -453,6 +475,13 @@ describe("the list", () => {
       fireEvent.click(screen.getByRole("button", { name: CONNECT_A_SOURCE }));
     });
     const drawer = await screen.findByRole("dialog");
+    await act(async () => {
+      fireEvent.click(within(drawer).getByRole("button", { name: `${START}: Xero` }));
+    });
+    expect(within(drawer).getByText("Step 1 of 3")).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(within(drawer).getByRole("button", { name: /Step 3 of 3/ }));
+    });
     expect(drawer.textContent).toContain(sentinel("tenant-hint"));
     expect(drawer.textContent).toContain(sentinel("key-hint"));
     await act(async () => {
@@ -481,6 +510,85 @@ describe("the list", () => {
       ]);
     });
     expect(document.body.innerHTML).not.toContain(KEY);
+  });
+
+  test("connecting is a flow of the source's own steps, each with its picture, and the form on the last", async () => {
+    // What breaks if this is deleted: a connector opens a bare form again, with the vendor's
+    // steps only as a hint under a field and no picture of where to press.
+    await consoleAt(CONNECTORS_PATH);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: CONNECT_A_SOURCE }));
+    });
+    const dialog = await screen.findByRole("dialog");
+    const sources = within(dialog).getByRole("list", { name: "Sources" });
+    expect(sources.textContent).toContain(`Xero${FROM_HERE}`);
+    expect(sources.textContent).toContain(`Laravel database views${AT_THE_SERVER}`);
+    expect(sources.textContent).not.toContain("Lark");
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: `${START}: Xero` }));
+    });
+    expect(within(dialog).getByRole("heading", { name: "create-TITLE" })).toBeTruthy();
+    expect(within(dialog).getByRole("img", { name: /A picture of the screen/ })).toBeTruthy();
+    expect(within(dialog).getByRole("link", { name: /Open the vendor's apps/ }).getAttribute("href")).toBe(
+      "https://vendor.example.test/apps",
+    );
+    // The form is on the last screen only.
+    expect(within(dialog).queryByRole("button", { name: "Connect Xero" })).toBeNull();
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "Next" }));
+    });
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "Next" }));
+    });
+    expect(within(dialog).getByRole("button", { name: "Connect Xero" })).toBeTruthy();
+  });
+
+  test("a source connected at the server shows its steps and no form", async () => {
+    // What breaks if this is deleted: a source this screen cannot connect offers a form nobody
+    // can send, or no way to learn how it is connected at all.
+    await consoleAt(CONNECTORS_PATH);
+    await choose(await openMenu("Actions for Laravel database views"), ACT_LABELS.howToConnect);
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Step 1 of 3")).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: /Step 3 of 3/ }));
+    });
+    expect(dialog.textContent).toContain(sentinel("at_the_server-text"));
+    expect(within(dialog).queryByRole("button", { name: "Next" })).toBeNull();
+    expect(dialog.querySelector("form")).toBeNull();
+  });
+
+  test("closing the flow keeps the step and the settings typed, and never the key", async () => {
+    // What breaks if this is deleted: somebody who closes the dialog to find the organisation id
+    // in Xero comes back to the first step with the form empty, or the key outlives the dialog.
+    await consoleAt(CONNECTORS_PATH);
+    const open = async (): Promise<HTMLElement> => {
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: CONNECT_A_SOURCE }));
+      });
+      const dialog = await screen.findByRole("dialog");
+      await act(async () => {
+        fireEvent.click(within(dialog).getByRole("button", { name: `${START}: Xero` }));
+      });
+      return dialog;
+    };
+    let dialog = await open();
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: /Step 3 of 3/ }));
+    });
+    fireEvent.change(within(dialog).getByLabelText("Organisation id"), { target: { value: "tenant-one" } });
+    fireEvent.change(within(dialog).getByLabelText("The key Xero issued for this connection"), { target: { value: KEY } });
+    await act(async () => {
+      fireEvent.keyDown(dialog, { key: "Escape" });
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+    expect(document.body.innerHTML).not.toContain(KEY);
+    dialog = await open();
+    expect(within(dialog).getByText("Step 3 of 3")).toBeTruthy();
+    expect((within(dialog).getByLabelText("Organisation id") as HTMLInputElement).value).toBe("tenant-one");
+    expect((within(dialog).getByLabelText("The key Xero issued for this connection") as HTMLInputElement).value).toBe("");
   });
 
   test("disconnecting from a row is confirmed in the API's words, and keeping it sends nothing", async () => {
