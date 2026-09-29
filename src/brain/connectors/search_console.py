@@ -78,6 +78,7 @@ from brain.connectors.contract import (
     TransportKind,
     assert_holds_no_credential,
 )
+from brain.connectors.date_range import DateWindow
 from brain.connectors.declaration import (
     CREDENTIAL_ASK,
     ConnectorDeclaration,
@@ -645,10 +646,18 @@ class SearchConsoleReport:
         return IdentityMode.SERVICE
 
     def request_for(
-        self, entity: str, source_id: str, *, settings: Mapping[str, str], today: date
+        self,
+        entity: str,
+        source_id: str,
+        *,
+        settings: Mapping[str, str],
+        today: date,
+        window: DateWindow | None,
     ) -> tuple[ReportCall, ...]:
         """The four calls, for the connected site only. See
-        `A_REPORT_READS_ONLY_THE_CONNECTED_SITE`."""
+        `A_REPORT_READS_ONLY_THE_CONNECTED_SITE`. No figure tool reads this source yet, so no
+        window is ever handed in."""
+        del window
         _assert_site(entity)
         connected = SearchConsoleConnection.from_settings(settings).site
         if source_id != site_id_of(connected):
@@ -672,9 +681,11 @@ class SearchConsoleReport:
         *,
         answers: tuple[Any, ...],
         today: date,
+        window: DateWindow | None,
         fetched_at: str,
     ) -> PageReply:
         """The four answers as the site's figures, counted back from the day they were asked."""
+        del window
         _assert_site(entity)
         return PageReply(
             call=CallOutcome.OK,

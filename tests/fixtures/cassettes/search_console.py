@@ -271,6 +271,7 @@ def replay(recorded: Cassette) -> Replayed:
         SITE,
         answers=tuple(answers),
         today=ASKED_ON,
+        window=None,
         fetched_at=FETCHED_AT,
     )
     assert page.rows is not None

@@ -120,6 +120,7 @@ from brain.ops.credentials import credentials_at_start, keep_refreshing
 from brain.ops.default_ladder_store import SessionLadderWriter
 from brain.ops.install_settings import keep_holding
 from brain.ops.install_settings import refresh as refresh_install_settings
+from brain.ops.live_read_run import live_records_for
 from brain.ops.log_store import start_log_store, stop_log_store
 from brain.ops.matrix_gate_run import InstallMatrixGate
 from brain.ops.model_service import (
@@ -500,7 +501,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # the same True. What would fix it is readiness knowing which profile it is in, which is
     # a change to what the check means rather than to this line.
     records = SessionRowSource(app.state.db_sessions) if app.state.db_sessions else None
-    app.state.tools = build_registry(source=settings.tool_source, records=records)
+    # The live reads a connected source's figure tools make (M11.7.1), kept on the state so the
+    # answer lane's refreshes share their throttle, breakers and fetches in flight
+    # (`brain.api_routes.live_records_of` finds this one).
+    live = live_records_for(app.state.db_sessions or None, app.state.vault)
+    if live is not None:
+        app.state.live_records = live
+    app.state.tools = build_registry(
+        source=settings.tool_source, records=records, figures=live if records else None
+    )
     app.state.ready["tools"] = True
     # Every call to a registered tool asks the switch table first, and each tool's catalogue row
     # is written so a stop has a row to name. Never fatal: a catalogue row a switch needs is

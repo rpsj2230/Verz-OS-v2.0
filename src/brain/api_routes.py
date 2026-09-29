@@ -211,6 +211,7 @@ from brain.knowledge.rows import (
     MAX_ROW_LIMIT,
     RowRequest,
     entity_capability,
+    is_row_tool,
     row_scope_for,
 )
 from brain.knowledge.search import KNOWLEDGE_READ
@@ -728,7 +729,7 @@ async def records(
         raise Failed("no tool registry on this process")
 
     classification = classification_for(entity)
-    matching = [d for d in registry.definitions() if d.entity == entity]
+    matching = [d for d in registry.definitions() if d.entity == entity and is_row_tool(d)]
     # `row_scope_for` and never a check written here. It is the same function `read_rows`
     # consults, so "does this caller reach rows of this kind" has one answer; the difference
     # is only that a route has to turn None into a status while a reader turns it into FALSE.
@@ -888,7 +889,9 @@ def row_readers(registry: ToolRegistry) -> dict[tuple[str, str], RowReader]:
     """
     readers: dict[tuple[str, str], RowReader] = {}
     for definition in registry.definitions():
-        if not definition.entity or not definition.source:
+        if not is_row_tool(definition):
+            # A figure tool shares its row tool's source and entity and takes a range; see
+            # `brain.knowledge.rows.is_row_tool`.
             continue
         # A cast at a boundary the registry keeps deliberately loose. It holds handlers of
         # two shapes and will go on doing so: `brain.tools.run_skill.handler` is synchronous

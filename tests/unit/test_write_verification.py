@@ -261,6 +261,7 @@ EXPECTED: Mapping[tuple[str, str], Verification] = {
     # A report, a token and every refusal hold no property, and a property read never proves one
     # is gone: see `google_analytics.A_PROPERTY_READ_CANNOT_PROVE_ABSENCE`.
     ("google_analytics", "GA-200-report"): Verification.INCONCLUSIVE,
+    ("google_analytics", "GA-200-range-report"): Verification.INCONCLUSIVE,
     ("google_analytics", "GA-200-token"): Verification.INCONCLUSIVE,
     ("google_analytics", "GA-400-token"): Verification.INCONCLUSIVE,
     ("google_analytics", "GA-401"): Verification.INCONCLUSIVE,

@@ -81,15 +81,16 @@ def test_on_a_real_database_a_property_answers_its_figure_live_and_nothing_is_le
         ("live", "a connected property's figure was not told to a reader granted it"),
         ("kept", "a figure read live was found in a table"),
         ("reach", "a property's figure was told to a reader not granted it"),
+        ("range", "the figure tool did not ask Google for the range it was given"),
     ],
 )
 def test_the_google_check_fails_where_the_path_is_broken(
     monkeypatch: pytest.MonkeyPatch, broken: str, reason: str
 ) -> None:
-    """Four breaks, one per property: the account made to act as a person, a live reader that never
-    reads, the figure kept beside the property in the index, and the property's department rule
-    dropped. Each fails the check with its own sentence. Delete this and the check can pass with
-    the property gone."""
+    """Five breaks, one per property: the account made to act as a person, a live reader that never
+    reads, the figure kept beside the property in the index, the property's department rule moved,
+    and the figure tool's range dropped for the last 28 days. Each fails the check with its own
+    sentence. Delete this and the check can pass with the property gone."""
     import brain.connectors.google_analytics as google_analytics
     import brain.connectors.google_service_account as google_service_account
     import brain.ops.live_records as live_records
@@ -145,6 +146,13 @@ def test_the_google_check_fails_where_the_path_is_broken(
 
         monkeypatch.setattr(connector_store.StoredConnections, "connect", remembering)
         monkeypatch.setattr(live_records.SourceRecords, "refresh", copying)
+    elif broken == "range":
+        # The tool's range dropped on the way, and the last 28 days asked for instead.
+        from brain.connectors.date_range import RangeRequest, window_of
+
+        monkeypatch.setattr(
+            RangeRequest, "window", lambda self, *, today: window_of("last 28 days", today=today)
+        )
     else:
         monkeypatch.setattr(
             google_analytics.AnalyticsConnection,

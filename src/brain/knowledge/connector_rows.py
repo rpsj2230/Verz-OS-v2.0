@@ -190,7 +190,7 @@ def google_analytics_classifications() -> tuple[TableClassification, ...]:
             google_analytics.GOOGLE_ANALYTICS,
             google_analytics.ENTITY_PROPERTY,
             tuple(one.name for one in google_analytics.PROPERTY_FIELDS),
-            google_analytics.FIGURE_FIELDS,
+            (*google_analytics.FIGURE_FIELDS, *google_analytics.RANGE_FIGURE_FIELDS),
         ),
     )
 
@@ -265,6 +265,37 @@ CONNECTOR_ROW_DESCRIPTIONS: Final[Mapping[str, Mapping[str, str]]] = MappingProx
 
 
 # ------------------------------------------------------------------------ the questions
+#: Fields a record carries only when read live, by entity: its figures, which no index row holds,
+#: so a filter on one matches nothing whatever it names. The records route's bound on how many
+#: columns a filter may name is a bound on the columns a row carries, and these are not among them.
+LIVE_ONLY: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
+    {
+        google_analytics.ENTITY_PROPERTY: (
+            *google_analytics.FIGURE_FIELDS,
+            *google_analytics.RANGE_FIGURE_FIELDS,
+        ),
+    }
+)
+
+#: Fields a figure tool answers for a range it was asked for, and no question on Ask can name,
+#: because a question's range is in its words: see `A_TOOL_S_RANGE_IS_NOT_A_QUESTION_S`.
+UNASKED: Final[Mapping[tuple[str, str], frozenset[str]]] = MappingProxyType(
+    {
+        (google_analytics.GOOGLE_ANALYTICS, google_analytics.ENTITY_PROPERTY): frozenset(
+            google_analytics.RANGE_FIGURE_FIELDS
+        ),
+    }
+)
+
+#: Why a figure tool's fields are classified and never asked about on Ask.
+A_TOOL_S_RANGE_IS_NOT_A_QUESTION_S: Final = (
+    "A figure tool answers sessions or clicks for the range it was given, and a question on Ask "
+    "names its range in its words from the ranges its fields carry. A question about plain "
+    "sessions would name no range, and would be answered from a report that has no such field, "
+    "so those fields are classified for the redactor and offered to no question shape."
+)
+
+
 def connected_questions(connected: Iterable[str]) -> tuple[FastPathRule, ...]:
     """The question shapes the connected sources answer. See `A_SOURCE_NOBODY_CONNECTED_...`.
 
@@ -277,5 +308,8 @@ def connected_questions(connected: Iterable[str]) -> tuple[FastPathRule, ...]:
             key = NAMED_BY.get((source, classification.entity))
             if key is None or classification.rule_for(key) is None:
                 continue
-            rules.extend(questions_over(classification, source=source, key_column=key))
+            unasked = UNASKED.get((source, classification.entity), frozenset())
+            rules.extend(
+                questions_over(classification, source=source, key_column=key, unasked=unasked)
+            )
     return tuple(rules)

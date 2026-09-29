@@ -251,7 +251,7 @@ def test_a_report_is_four_calls_for_the_connected_site_only() -> None:
     Delete this and an index row naming another site the account can reach would be read."""
     today = date(2999, 1, 1)
     calls = SearchConsoleReport().request_for(
-        ENTITY_SITE, site_id_of(SITE), settings=SETTINGS, today=today
+        ENTITY_SITE, site_id_of(SITE), settings=SETTINGS, today=today, window=None
     )
 
     base = f"{SEARCH_CONSOLE_API_URL}/sites/sc-domain%3Aexample.com"
@@ -270,7 +270,11 @@ def test_a_report_is_four_calls_for_the_connected_site_only() -> None:
     assert calls[3].body is None
     with pytest.raises(SearchConsoleShapeError, match="connection was made with"):
         SearchConsoleReport().request_for(
-            ENTITY_SITE, site_id_of("sc-domain:example.org"), settings=SETTINGS, today=today
+            ENTITY_SITE,
+            site_id_of("sc-domain:example.org"),
+            settings=SETTINGS,
+            today=today,
+            window=None,
         )
     assert "connection" in A_REPORT_READS_ONLY_THE_CONNECTED_SITE
 

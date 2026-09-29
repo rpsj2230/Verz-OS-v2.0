@@ -21,18 +21,21 @@ POST with a body naming the date ranges and the metrics. `AnalyticsReport` is th
 property's id, which the answer lane lays over the index row exactly as it lays a live record's
 fields. See `declaration.A_FIGURE_IS_READ_BY_A_REPORT_AND_A_RECORD_BY_ITS_OWN_ENDPOINT`.
 
-**The date range is named in the question, from a closed set of four, and all four are one call.**
+**A question on Ask names its range from a closed set of four, and all four are one call.**
 `yesterday`, `last_7_days`, `last_28_days` and `last_90_days`, each Google's own relative dates
-resolved in the property's time zone, which is the zone its owner reads the same figures in. A
-report takes at most four date ranges, so one call answers every range and every figure, which is
-what fits a question's live read budget (`brain.connectors.live_read.LIVE_READ_TIMEOUT_MS`) with a
-token exchange in front of it. The fields are named `<figure>_<range>`, so "what is the sessions
-last 28 days of <property>" is a question the answer lane already knows how to ask
-(`brain.knowledge.connector_rows`), and a range outside the four is not a field and cannot be
-asked for. See `THE_DATE_RANGE_IS_ONE_OF_FOUR_AND_ALL_FOUR_ARE_ONE_REPORT`. **This narrows the
-leaf, and it is the owner's question rather than this module's decision**: an arbitrary range
-("March", "the last quarter") would be a second call per range and a tool argument no question
-shape carries yet, and whether the four are enough is asked in the report that shipped this.
+resolved in the property's time zone. A report takes at most four date ranges, so one call answers
+every range and every figure, which is what fits a question's live read budget
+(`brain.connectors.live_read.LIVE_READ_TIMEOUT_MS`) with a token exchange in front of it. The
+fields are named `<figure>_<range>`, so "what is the sessions last 28 days of <property>" is a
+question the answer lane already knows how to ask (`brain.knowledge.connector_rows`). See
+`THE_DATE_RANGE_IS_ONE_OF_FOUR_AND_ALL_FOUR_ARE_ONE_REPORT`.
+
+**Any other range is a tool argument (M11.7.1's "a named date range").** A workflow or an agent's
+step asks `google_analytics.read_traffic` with a first and last day or a period (last month, since
+a date, last N days), held to `brain.connectors.date_range`'s grammar and to sixteen months back;
+the report is then that one range (`range_body`), read with the task lane's patience, and answers
+`sessions`, `users` and `conversions` beside the range's own days. See
+`brain.knowledge.connector_figures`.
 
 **Conversions are what Google now calls key events.** Google renamed the metric in 2024 and the
 Data API reads it as `keyEvents`; the field a person asks for is `conversions`, in the owner's
@@ -93,6 +96,7 @@ from brain.connectors.contract import (
     TransportKind,
     assert_holds_no_credential,
 )
+from brain.connectors.date_range import DateWindow
 from brain.connectors.declaration import (
     CREDENTIAL_ASK,
     ConnectorDeclaration,
@@ -262,6 +266,19 @@ REPORT_BODY: Final[Mapping[str, Any]] = MappingProxyType(
 )
 
 
+#: What a figure tool answers for one range: the range's days, and each figure over them.
+RANGE_FIGURE_FIELDS: Final[tuple[str, ...]] = ("start_date", "end_date", *FIGURES.values())
+
+
+def range_body(window: DateWindow) -> dict[str, Any]:
+    """The report for one window: its two days as Google's dates, and every figure over them."""
+    return {
+        "dateRanges": [{"startDate": window.start.isoformat(), "endDate": window.end.isoformat()}],
+        "metrics": [{"name": name} for name in FIGURES],
+        "keepEmptyRows": True,
+    }
+
+
 class AnalyticsShapeError(ConnectorContractError):
     """A reply that is not the shape Google documents for it. Carries no value from the reply."""
 
@@ -429,8 +446,8 @@ def manifest(
             ToolDeclaration(
                 name="google_analytics.read_traffic",
                 description=(
-                    "Read the connected property's sessions, users and conversions for yesterday "
-                    "or the last 7, 28 or 90 days, live from Google Analytics. Nothing is stored."
+                    "Read the connected property's sessions, users and conversions for any range "
+                    "within the last sixteen months, live from Google Analytics. Nothing is stored."
                 ),
                 entity=ENTITY_PROPERTY,
                 identity_mode=IdentityMode.SERVICE,
@@ -623,6 +640,42 @@ def figures_of(body: Any, *, source_id: str, fetched_at: str) -> TypedResult[Sou
     )
 
 
+def range_figures_of(
+    body: Any, *, source_id: str, window: DateWindow, fetched_at: str
+) -> TypedResult[SourceRecord]:
+    """One window's report as one record: the property's id, the window's days and each figure.
+
+    One date range carries no `dateRange` dimension, so the report is at most one row of metrics,
+    read by the names its headers state; no row is the window's days and no figure, rather than
+    noughts nobody sent. A reply this does not read is refused whole, as `figures_of` refuses one.
+    """
+    figures: dict[str, str] = {
+        "start_date": window.start.isoformat(),
+        "end_date": window.end.isoformat(),
+    }
+    try:
+        headers = [one["name"] for one in body.get("metricHeaders", ())]
+        rows = body.get("rows", ())
+        if sorted(headers) != sorted(FIGURES) or len(rows) > 1 or body.get("dimensionHeaders"):
+            msg = "the report is not one row of the figures asked for"
+            raise AnalyticsShapeError(msg)
+        for row in rows:
+            values = [one["value"] for one in row["metricValues"]]
+            for header, value in zip(headers, values, strict=True):
+                if not isinstance(value, str) or not _FIGURE_RE.match(value):
+                    raise AnalyticsShapeError(A_FIGURE_IS_A_NUMBER)
+                figures[FIGURES[header]] = value
+    except (AttributeError, KeyError, IndexError, TypeError, ValueError):
+        msg = "the report is not the shape Google documents"
+        raise AnalyticsShapeError(msg) from None
+    return normalise(
+        ENTITY_PROPERTY,
+        ({"id": source_id, **figures},),
+        source=GOOGLE_ANALYTICS,
+        fetched_at=fetched_at,
+    )
+
+
 class AnalyticsReport:
     """The property's figures for every named range, read by one report while somebody waits.
 
@@ -638,20 +691,28 @@ class AnalyticsReport:
         return IdentityMode.SERVICE
 
     def request_for(
-        self, entity: str, source_id: str, *, settings: Mapping[str, str], today: date
+        self,
+        entity: str,
+        source_id: str,
+        *,
+        settings: Mapping[str, str],
+        today: date,
+        window: DateWindow | None,
     ) -> tuple[ReportCall, ...]:
-        """The one report, for the connected property only. See
-        `A_REPORT_READS_ONLY_THE_CONNECTED_PROPERTY`. `today` is unused: Google resolves the
-        relative dates in the property's own time zone."""
+        """The one report, for the connected property only: every named range for a question on
+        Ask, or the one window a figure tool asked for. See
+        `A_REPORT_READS_ONLY_THE_CONNECTED_PROPERTY`. `today` is unused: Google resolves relative
+        dates in the property's own time zone, and a window is already its days."""
         del today
         _assert_property(entity)
         connected = AnalyticsConnection.from_settings(settings).property_id
         if source_id != connected:
             raise AnalyticsShapeError(A_REPORT_READS_ONLY_THE_CONNECTED_PROPERTY)
+        body = dict(REPORT_BODY) if window is None else range_body(window)
         return (
             ReportCall(
                 url=f"{DATA_API_URL}/v1beta/properties/{connected}:runReport",
-                body=json.dumps(dict(REPORT_BODY), separators=(",", ":")).encode("utf-8"),
+                body=json.dumps(body, separators=(",", ":")).encode("utf-8"),
             ),
         )
 
@@ -662,6 +723,7 @@ class AnalyticsReport:
         *,
         answers: tuple[Any, ...],
         today: date,
+        window: DateWindow | None,
         fetched_at: str,
     ) -> PageReply:
         """The one report's body as the property's figures. A report is one call here, and
@@ -671,10 +733,14 @@ class AnalyticsReport:
         if len(answers) != 1:
             msg = "a Google Analytics report is one call, and this was answered as several"
             raise AnalyticsShapeError(msg)
-        return PageReply(
-            call=CallOutcome.OK,
-            rows=figures_of(answers[0], source_id=source_id, fetched_at=fetched_at),
+        rows = (
+            figures_of(answers[0], source_id=source_id, fetched_at=fetched_at)
+            if window is None
+            else range_figures_of(
+                answers[0], source_id=source_id, window=window, fetched_at=fetched_at
+            )
         )
+        return PageReply(call=CallOutcome.OK, rows=rows)
 
 
 # ------------------------------------------------- connecting from the console (M11.7.1)
@@ -868,6 +934,7 @@ CONNECTOR: Final = ConnectorDeclaration(
         recorded=(
             "GA-200-property",
             "GA-200-report",
+            "GA-200-range-report",
             "GA-200-token",
             "GA-400-token",
             "GA-401",

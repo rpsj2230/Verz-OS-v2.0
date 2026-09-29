@@ -29,13 +29,16 @@ disagrees is a read refused, with a constant sentence in the operator's log.
 
 **A record's figures are read by the report its source declares (M11.7.1, M11.7.2).** Google
 Analytics' traffic for a property is not the property read again: `declaration.LiveReport` names the
-calls a report is (one POST for Analytics; four for Search Console, three POSTs and a GET), the
-address rule checks each, and they are sent at once on pinned connections, `SourcePoster` for a
-call with a body. When every call answered, the connector's own interpretation turns the bodies
-into one record carrying the record's id, which the lane lays over the index row as it lays a live
-record. A Google source's key file is exchanged for a token first, for this one read, through
-`connector_sync_run.presented`, and the token goes with the read. A process given no poster reads
-no report that posts and mints no token, and the read is refused rather than made some other way.
+calls a report is (one POST for Analytics; several for Search Console, POSTs and a GET), the
+address rule checks each, and they are sent at once on pinned connections,
+`SourcePoster` for a call with a body. When every call answered, the connector's own
+interpretation turns the bodies into one record carrying the record's id, which the lane lays over
+the index row as it lays a live record. A read may carry one range beside the id (`RANGE_FILTER`),
+which only a report reads and only when it is a window this product wrote; that is how a figure
+tool asks for any range within Google's sixteen months. A Google source's key file is exchanged
+for a token first, for this one read, through `connector_sync_run.presented`, and the token goes
+with the read. A process given no poster reads no report that posts and mints no token, and the
+read is refused rather than made some other way.
 
 **The socket's timeout is the live read's.** The call is blocking and runs in a thread, which the
 executor cannot cancel, so the caller is built with `live_read.LIVE_READ_TIMEOUT_MS` as its timeout
@@ -62,10 +65,12 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.connectors.contract import ConnectorContractError, FetchRequest
+from brain.connectors.date_range import DateWindow
 from brain.connectors.declaration import ConnectorDeclaration, PageReply, ReportCall, shipped
 from brain.connectors.google_token import TokenNotIssuedError
 from brain.connectors.live_read import (
     LIVE_READ_TIMEOUT_MS,
+    RANGE_FILTER,
     RECORD_ID_FILTER,
     LiveReply,
     LiveSource,
@@ -187,8 +192,18 @@ class ConnectedSources:
         live, report, reading = declared.live, declared.report, declared.reading
         assert reading is not None  # `_declared` admits no other
         ids = [value for key, value in request.filters if key == RECORD_ID_FILTER]
-        if len(ids) != 1 or len(request.filters) != 1:
+        ranges = [value for key, value in request.filters if key == RANGE_FILTER]
+        if len(ids) != 1 or len(ranges) > 1 or len(request.filters) != 1 + len(ranges):
             return _refused(connection.connector, NOT_ONE_RECORD)
+        window: DateWindow | None = None
+        if ranges:
+            # A range is a report's, and only a window this product wrote is one.
+            if report is None or request.entity not in report.entities():
+                return _refused(connection.connector, NOT_ONE_RECORD)
+            try:
+                window = DateWindow.parsed(ranges[0])
+            except ValueError:
+                return _refused(connection.connector, ADDRESS_OR_SHAPE)
         try:
             manifest = manifest_for(connection.connector, connection.settings)
         except (NotConnectableError, ConnectorContractError):
@@ -221,7 +236,9 @@ class ConnectedSources:
                 "Authorization": authorization(reading.key_scheme(), shown),
             }
             if report is not None and request.entity in report.entities():
-                return self._read_report(connection, declared, request.entity, ids[0], headers)
+                return self._read_report(
+                    connection, declared, request.entity, ids[0], headers, window
+                )
             if live is None:
                 return _refused(connection.connector, NOT_ONE_RECORD)
             try:
@@ -257,6 +274,7 @@ class ConnectedSources:
         entity: str,
         source_id: str,
         headers: Mapping[str, str],
+        window: DateWindow | None,
     ) -> LiveReply:
         """The figures one record names, by the calls its source's report is, made at once.
 
@@ -268,7 +286,9 @@ class ConnectedSources:
         assert report is not None  # `read_one` sends only a declared report's entities here
         today = self._clock().date()
         try:
-            asked = report.request_for(entity, source_id, settings=connection.settings, today=today)
+            asked = report.request_for(
+                entity, source_id, settings=connection.settings, today=today, window=window
+            )
             checked = tuple((one, assert_fetchable(one.url, self._resolver)) for one in asked)
         except Exception:
             # Broad, and the type is not kept, for `read_one`'s reason.
@@ -309,6 +329,7 @@ class ConnectedSources:
                 source_id,
                 answers=tuple(json.loads(one.body) for one in answers),
                 today=today,
+                window=window,
                 fetched_at=self._clock().isoformat(),
             )
         except Exception:
