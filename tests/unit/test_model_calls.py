@@ -4,7 +4,7 @@ Driven with a ladder, an attempt log and drivers held in memory, so the walk is 
 policy layer describes it and nothing opens a socket or a connection.
 
 Task ids: M27.7.14, M27.8.8, M5.3.4, M5.4.6, M5.5.4, M5.5.2, M5.1.3, M5.7.3, M5.6.4, M5.4.1,
-M5.7.2, M5.2.2, M5.4.3, M5.4.7, M5.4.8, M5.5.1, M3.6.3
+M5.7.2, M5.2.2, M5.4.3, M5.4.7, M5.4.8, M5.5.1, M3.6.3, M6.4.4
 """
 
 from __future__ import annotations
@@ -302,6 +302,29 @@ def test_a_rung_with_two_attempts_is_tried_again_and_the_second_try_is_a_retry()
     usage = meter.usage()
     assert usage is not None
     assert (usage.calls, usage.fallback_count, usage.retry_count) == (2, 0, 1)
+
+
+def test_every_try_carries_its_lanes_pinned_effort_the_retry_and_the_fallback_too() -> None:
+    """`EVERY_TRY_CARRIES_ITS_LANES_EFFORT`. The answer lane pins medium and the task lane high
+    (`brain.gate.effort`), and each request the walk sends carries its lane's, including a retry on
+    the same step and the step it falls back to. Until 2026-09-29 no request carried one, so a
+    model that always thinks thought at its maximum. Delete this and the executor can stop
+    attaching it, and the wire's translation, tested on its own, is never handed anything."""
+    primary = Scripted(TransportConnectionError(), TransportStatusError(503))
+    second = Scripted(ok())
+    calls, _ = executor(
+        Ladder((rung("anthropic", attempts=2), rung("moonshot", position=1))),
+        {"anthropic": primary, "moonshot": second},
+    )
+    complete(calls, Meter())
+    sent = [*primary.sent, *second.sent]
+    assert len(sent) == 3
+    assert [dict(one.extra) for one in sent] == [{"reasoning_effort": "medium"}] * 3
+
+    tasked = Scripted(ok())
+    calls, _ = executor(Ladder((rung("anthropic", tier=Tier.HEAVY),)), {"anthropic": tasked})
+    complete(calls, Meter(), lane=Lane.TASK, tier=Tier.HEAVY)
+    assert [dict(one.extra) for one in tasked.sent] == [{"reasoning_effort": "high"}]
 
 
 def test_a_failure_with_no_trigger_stops_the_chain_and_never_reaches_the_next_rung() -> None:
