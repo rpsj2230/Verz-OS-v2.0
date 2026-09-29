@@ -2,10 +2,37 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**1 item is open: 91,** the checks only you can do on your install; it waits for the Knowledge
-upload grants (item 105) to land. Each says in plain terms what it is, what I recommend, and every step.
+**2 items are open: 121,** whose conversations an agent's page lists, **and 91,** the checks only
+you can do on your install; it waits for the Knowledge upload grants (item 105) to land. Each says in
+plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 121. On an agent's page, whose conversations are listed?
+
+**In plain terms:** each agent's page is getting a Conversations list. Today every conversation
+belongs to one person: the Brain keeps a separate thread for each person, even when several people
+talk to the same agent in one Lark group, and nobody can see anybody else's. Your reference design
+(the AnyGen screenshot, requirement ANY-028) shows the list "narrowed to threads related to me",
+which implies the full list includes other people's conversations too. That would be a privacy
+change, so it is yours to decide.
+
+**Option A: each person sees only their own conversations with the agent.** Exactly how the Brain
+works today. The "related to me" filter is not needed, because everything listed is already yours.
+
+**Option B: the agent's owner and administrators also see that other people's conversations
+happened**: who, when, and whether the agent failed, but never the question or the answer. Useful
+for spotting an agent that keeps failing. The words stay private because another person's answer
+was built from what *they* may see, which may be more than the viewer may.
+
+What is **not** offered: showing other people's questions and answers. It would let anyone who can
+open an agent's page read answers built from somebody else's access, which breaks the rule that
+nobody sees through the Brain what they could not see themselves.
+
+**My recommendation: A now**, and B later if you want owners to watch an agent's failures.
+
+**What I need from you:** reply "121: A" or "121: B". Until then the list is built as A, which is
+safe either way: B only ever adds to it.
 
 ## 91. Checks only you can do on your install (about 45 minutes, one sitting)
 
