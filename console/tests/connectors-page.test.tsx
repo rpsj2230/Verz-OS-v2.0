@@ -16,7 +16,7 @@
  * themselves**: `tests/support/python.ts` reads field names out of `brain.connector_routes`, and
  * `tests/support/openapi.ts` the request bodies and paths the routes declare.
  *
- * Task ids: M27.11.9, M27.15.39, M27.15.58, M11.7.7, M27.16.1, M42.6.5, M27.15.8
+ * Task ids: M27.11.9, M27.15.39, M27.15.58, M11.7.7, M27.16.1, M42.6.5, M27.15.8, M11.3.4
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -45,10 +45,12 @@ import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./suppo
 import { declaredNavigation } from "./support/navigation";
 import { apiDocument, declaredPropertyNames, declaredRequestBodySchema } from "./support/openapi";
 import { backendModelFields } from "./support/python";
+import { readConnectorStats, shareWords } from "../src/pages/connectors/connectorStats";
 import { installRadixStubs } from "./support/radix";
 import { readConsoleFile } from "./support/repo";
 
 const ROUTES = "src/brain/connector_routes.py";
+const STATS_ROUTES = "src/brain/console_stats_routes.py";
 const CONSOLE_ORIGIN = "https://console.test";
 
 /** A key nothing else could contain, so finding it anywhere is a leak. */
@@ -213,6 +215,19 @@ const XERO_STATS = {
     live_reads: range === "30d" ? 317 : 0,
   })),
   unrecorded: [],
+  calls: {
+    window_seconds: 60,
+    requests: 12,
+    per_second: 0.2,
+    per_minute: 12,
+    concurrency: 1,
+    quota_ratio: 0.25,
+    error_ratio: 0,
+    latency_p50_ms: 140,
+    latency_p95_ms: 610,
+    quiet: false,
+  },
+  calls_told: sentinel("calls-told"),
 };
 
 const XERO_DETAIL = {
@@ -636,6 +651,21 @@ describe("one source's page", () => {
     const hubspot = await consoleAt(connectorAddress("hubspot"));
     expect(hubspot.container.textContent).toContain(NOT_CONNECTED_TITLE);
     expect(asked(hubspot.idp, "/api/v1/console/connectors/hubspot/stats")).toBe(0);
+  });
+
+  test("the calls questions made to the source are drawn as the route sent them, with whose they are (M11.3.4)", async () => {
+    // What breaks if this is deleted: a calls figure the page works out itself, a share drawn from
+    // too few calls to mean one, or the calls drawn without the route's sentence about whose they are.
+    expect(Object.keys(XERO_STATS).sort()).toEqual(backendModelFields(STATS_ROUTES, "ConnectorStatsView").sort());
+    expect(Object.keys(XERO_STATS.calls).sort()).toEqual(backendModelFields(STATS_ROUTES, "ConnectorCallsView").sort());
+    const { container } = await consoleAt(connectorAddress("xero"));
+    const text = container.textContent ?? "";
+    expect(text).toContain(sentinel("calls-told"));
+    expect(text).toContain("25%");
+    expect(text).toContain("140 ms typical, 610 ms slowest");
+    const quiet = { ...XERO_STATS.calls, quiet: true };
+    const said = readConnectorStats({ ...XERO_STATS, calls: quiet })?.calls;
+    expect(said === undefined ? "" : shareWords(0.25, said)).toBe("Too few calls to say");
   });
 
   test("the profile shows settings, the minimal index and who uses it, names people, and shows no key", async () => {
