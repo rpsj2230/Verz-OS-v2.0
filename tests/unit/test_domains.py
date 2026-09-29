@@ -296,7 +296,8 @@ def test_the_worker_indexes_each_listed_domain_and_asks_only_their_registries() 
             return self
 
         async def execute(self, statement: Any) -> None:
-            written.append(statement.compile(dialect=postgresql.dialect()).params)
+            dialect: Any = postgresql.dialect()  # type: ignore[no-untyped-call]
+            written.append(statement.compile(dialect=dialect).params)
 
     one = connection()
     plan = plan_for(one, last=None, now=LONG_AGO)
@@ -327,7 +328,7 @@ def read_live(domain: str, caller: Caller) -> Any:
     one = connection()
     sources = ConnectedSources(
         {domains.CONNECTOR_NAME: one},
-        keys=NoKeys(),  # type: ignore[arg-type]
+        keys=NoKeys(),
         caller=caller,
         resolver=Resolver(),
         clock=lambda: LONG_AGO,

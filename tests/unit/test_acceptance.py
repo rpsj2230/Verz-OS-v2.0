@@ -228,6 +228,10 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     assert by_module["brain.ops.acceptance_checks_console_connect"] == [
         "each_source_is_connected_edited_and_switched_off_in_the_console",
     ]
+    # A domain's facts from its registry; `tests/unit/test_acceptance_domains.py`.
+    assert by_module["brain.ops.acceptance_checks_domains"] == [
+        "a_domain_s_expiry_comes_from_its_registry_and_no_other_is_asked",
+    ]
     assert list(by_module) == list(acceptance.CHECK_MODULES)
     oversight = {one.name: one.leaves for one in registered()}
     assert oversight["unusual_volume_is_found_per_person"] == ("M23.2.1",)
