@@ -104,7 +104,7 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     """Held per module, so a package adding checks in a module of its own changes only its own
     line here: limits, channels and documents, then volume, refusals and a head's audit, then Lark
     chat's three, the skill library's four, the models' eleven and the audit's one, the connectors'
-    three, the tools' three, a document's life in four, the classified tables' three and an
+    four, the tools' three, a document's life in four, the classified tables' three and an
     answer's evidence in four, the modules in `CHECK_MODULES` order rather than the order a process
     imported them. Delete this and a check can drop out of the suite with the page simply listing
     one fewer row, or the page can lead with whichever module was imported first."""
@@ -143,6 +143,7 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "manifest_review_refuses_a_projection_that_is_more_than_a_pointer",
         "a_sync_keeps_its_minimal_index_and_the_canary_reaches_no_table",
         "a_changed_declaration_makes_the_next_sync_refuse",
+        "a_source_is_connected_switched_off_and_upgraded_from_the_console",
     ]
     assert by_module["brain.ops.acceptance_checks_tools"] == [
         "every_registered_tool_is_a_catalogue_row_under_the_name_grammar",
