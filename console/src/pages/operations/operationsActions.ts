@@ -4,9 +4,10 @@
  *
  * **Measured against the routes on main on 2026-09-29.** The API pauses, resumes and runs a job now,
  * lists a job's past runs, exports the log and the audit trail, and reads everything else on these
- * pages. It serves no route that stops a run in progress, changes a rate limit, starts a backup
- * rehearsal or imports data. Each is drawn as `kit/UnavailableAction` with the sentence below, so
- * the page shows the act exists and is coming rather than hiding it or faking it.
+ * pages. It serves no route that stops a run in progress, starts a backup rehearsal or imports
+ * data. Each is drawn as `kit/UnavailableAction` with the sentence below, so the page shows the act
+ * exists and is coming rather than hiding it or faking it. Changing a rate limit was on this list
+ * until 2026-09-29, when `brain.tuning_routes` landed and the Rate limits page drew the control.
  *
  * **When a route lands, its sentence goes and a live control takes its place, in the same commit.**
  * `tests/operations-pages.test.tsx` reads every `retiredBy` against the API document, so this table
@@ -21,12 +22,6 @@ export const UNAVAILABLE = Object.freeze({
     reason:
       "Not available yet: stopping a run that has started. Pausing the job stops the schedule starting it again.",
     retiredBy: /^\/api\/v1\/(jobs|operate\/runs)\/\{[^}]+\}\/(stop|cancel)\b/,
-  },
-  changeLimits: {
-    label: "Change limits",
-    reason:
-      "Coming soon: changing a rate limit from here, within bounds the product fixes. Today the limits are the product's own.",
-    retiredBy: /^\/api\/v1\/install\/limits\/[^/]+/,
   },
   startRehearsal: {
     label: "Start a rehearsal",
