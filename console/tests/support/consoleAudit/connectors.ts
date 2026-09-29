@@ -10,7 +10,7 @@
 import { CONNECTORS_API_PATH, disconnectApiPath } from "../../../src/pages/connectorsQuery";
 import { probeApiPath } from "../../../src/pages/connectors/connectorProbe";
 import { editApiPath, exportApiPath, keyApiPath } from "../../../src/pages/connectors/connectorSources";
-import { LARK_API_PATH, LARK_TEST_API_PATH } from "../../../src/pages/larkConnectQuery";
+import { LARK_API_PATH, LARK_SWITCH_OFF_API_PATH, LARK_TEST_API_PATH } from "../../../src/pages/larkConnectQuery";
 import {
   A_SETTING_ENTRY_NO_TEST_FOLLOWS,
   at,
@@ -61,10 +61,13 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
     at("POST /api/v1/connectors/{connector}/probe", "probeApiPath", probeApiPath("xero")),
   ],
   "src/components/ConnectSource.tsx CONNECTORS_API_PATH": [at("POST /api/v1/connectors", "CONNECTORS_API_PATH", CONNECTORS_API_PATH)],
-  "src/components/ConnectLark.tsx LARK_TEST_API_PATH": [
+  "src/pages/connectors/LarkFlow.tsx LARK_TEST_API_PATH": [
     at("POST /api/v1/connectors/lark-app/test", "LARK_TEST_API_PATH", LARK_TEST_API_PATH),
   ],
-  "src/components/ConnectLark.tsx LARK_API_PATH": [at("POST /api/v1/connectors/lark-app", "LARK_API_PATH", LARK_API_PATH)],
+  "src/pages/connectors/LarkFlow.tsx LARK_API_PATH": [at("POST /api/v1/connectors/lark-app", "LARK_API_PATH", LARK_API_PATH)],
+  "src/pages/connectors/LarkCard.tsx LARK_SWITCH_OFF_API_PATH": [
+    at("POST /api/v1/connectors/lark-app/switch-off", "LARK_SWITCH_OFF_API_PATH", LARK_SWITCH_OFF_API_PATH),
+  ],
 };
 
 export const PROOFS: Readonly<Record<string, Proofs>> = {
@@ -79,9 +82,14 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     behaviour: t("test_lark_connect", "test_after_a_save_each_use_says_where_it_stands"),
   },
   "POST /api/v1/connectors/lark-app/test": {
-    row: { notApplicable: "A Lark test writes no row here or in Lark: every request after the token exchange is a read, which the fake Lark server records." },
-    audit: { notApplicable: "Nothing is written, so there is nothing for the ledger to record, and the secret is never logged." },
+    row: t("test_lark_connect", "test_a_test_records_when_it_ran_and_each_verdict_and_nothing_it_was_sent"),
+    audit: A_SETTING_ENTRY_NO_TEST_FOLLOWS,
     behaviour: t("test_lark_connect", "test_the_test_route_reports_each_use_and_writes_nothing"),
+  },
+  "POST /api/v1/connectors/lark-app/switch-off": {
+    row: t("test_lark_connect", "test_switching_a_use_off_leaves_the_others_on_and_the_key_in_the_vault"),
+    audit: A_SETTING_ENTRY_NO_TEST_FOLLOWS,
+    behaviour: t("test_lark_connect", "test_switching_the_chat_channel_off_switches_its_record_off_and_keeps_its_ids"),
   },
   "POST /api/v1/connectors/{connector}/disconnect": {
     row: CONNECTION_REACHES_THE_ROW_AND_THE_LEDGER,

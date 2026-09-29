@@ -15,7 +15,9 @@
  *
  * **Connecting, Connect Lark and disconnecting work from here**; editing, replacing a key, the
  * export and testing a connection are on a source's own page, where its settings are and where what
- * a test found is shown.
+ * a test found is shown. **Once Lark is connected its card replaces the Connect Lark button** (the
+ * owner found the button still offered after Lark was connected): the card says what is switched on
+ * and when it was last tested, and the header offers adding a use instead.
  *
  * **What was removed from the old screen, and why.** The table's wiring, key, ceiling and projected
  * columns (each is on a source's page now); the principal id beside who connected a source; the
@@ -44,6 +46,7 @@ import {
 } from "../../components/ui/dropdown-menu";
 import { Skeleton } from "../../components/ui/skeleton";
 import { CONNECTORS_API_PATH, CONNECTORS_LABEL, type Connectors as ConnectorsBody } from "../connectorsQuery";
+import { LARK_API_PATH, type LarkGuide } from "../larkConnectQuery";
 import { ACT_LABELS } from "./connectorActions";
 import {
   CONNECT_FROM_WORDS,
@@ -57,7 +60,9 @@ import {
 } from "./connectorSources";
 import { idsWords } from "./connectorStats";
 import { DriftPill, HealthPill, StatusPill } from "./pills";
-import { ConnectDrawer, DisconnectDialog, LarkDrawer, type OpenAct } from "./SourceActs";
+import { LarkCard } from "./LarkCard";
+import { DisconnectDialog, LarkDialog, type OpenAct } from "./SourceActs";
+import { SourceFlow } from "./SourceFlow";
 import { useSourceStats, type SourceStats } from "./useSourceStats";
 
 /** The page's heading, which is also the menu's label for it. */
@@ -136,9 +141,12 @@ function lastReadWords(row: SourceRow): string {
 
 function RowMenu({
   row,
+  larkConnected,
   onAct,
 }: {
   readonly row: SourceRow;
+  /** Whether any Lark use is switched on, which turns Connect Lark into Manage Lark. */
+  readonly larkConnected: boolean;
   readonly onAct: (act: OpenAct) => void;
 }) {
   const connected = row.status !== "not_connected";
@@ -162,13 +170,22 @@ function RowMenu({
             {ACT_LABELS.connect}
           </DropdownMenuItem>
         ) : null}
+        {row.connectFrom === "server" ? (
+          <DropdownMenuItem
+            onSelect={() => {
+              onAct({ act: "connect", source: row.name });
+            }}
+          >
+            {ACT_LABELS.howToConnect}
+          </DropdownMenuItem>
+        ) : null}
         {row.connectFrom === "lark" ? (
           <DropdownMenuItem
             onSelect={() => {
-              onAct({ act: "lark" });
+              onAct({ act: "lark", start: { at: "choose" } });
             }}
           >
-            {ACT_LABELS.connectLark}
+            {larkConnected ? ACT_LABELS.manageLark : ACT_LABELS.connectLark}
           </DropdownMenuItem>
         ) : null}
         {row.connectFrom === "console" && row.mayManage && hasFigures(row) ? (
@@ -217,6 +234,8 @@ export function ConnectorsPage() {
   const statsOf = useSourceStats(useMemo(() => rows.filter(hasFigures).map((row) => row.name), [rows]));
   const context = useResource<ConnectorsBody>(CONNECTORS_API_PATH, version);
   const page = context.data;
+  const lark = useResource<LarkGuide>(LARK_API_PATH, version).data;
+  const larkConnected = lark?.connected === true;
 
   const done = useCallback((sentence: string) => {
     setOpen(null);
@@ -319,10 +338,10 @@ export function ConnectorsPage() {
             className="min-h-11 sm:min-h-8"
             onClick={() => {
               setTold(null);
-              setOpen({ act: "lark" });
+              setOpen({ act: "lark", start: larkConnected ? { at: "choose" } : undefined });
             }}
           >
-            {ACT_LABELS.connectLark}
+            {larkConnected ? ACT_LABELS.addLarkUse : ACT_LABELS.connectLark}
           </Button>
         }
         notice={
@@ -333,6 +352,16 @@ export function ConnectorsPage() {
               </div>
             )}
             {page === null || page.vault_told === "" ? null : <Note kind="not-yet">{page.vault_told}</Note>}
+            {lark !== null && lark.connected ? (
+              <LarkCard
+                guide={lark}
+                onOpen={(start) => {
+                  setTold(null);
+                  setOpen({ act: "lark", start });
+                }}
+                onDone={done}
+              />
+            ) : null}
           </>
         }
         listing={listing}
@@ -348,6 +377,7 @@ export function ConnectorsPage() {
         rowActions={(row) => (
           <RowMenu
             row={row}
+            larkConnected={larkConnected}
             onAct={(act) => {
               setTold(null);
               setOpen(act);
@@ -362,9 +392,9 @@ export function ConnectorsPage() {
         footer={<CopyPolicy page={page} />}
       />
       {open?.act === "connect" && page !== null ? (
-        <ConnectDrawer page={page} source={open.source} onClose={close} onDone={done} />
+        <SourceFlow page={page} source={open.source} onClose={close} onDone={done} />
       ) : null}
-      {open?.act === "lark" ? <LarkDrawer onClose={closeLark} /> : null}
+      {open?.act === "lark" ? <LarkDialog start={open.start} onClose={closeLark} onDone={done} /> : null}
       {open?.act === "disconnect" && page !== null ? (
         <DisconnectDialog name={open.source} label={open.label} consequence={page.confirm_disconnect} onClose={close} onDone={done} />
       ) : null}
