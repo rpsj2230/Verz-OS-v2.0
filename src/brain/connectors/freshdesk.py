@@ -1205,13 +1205,30 @@ LIVE_BODY_FIELD: Final = "description_text"
 TICKET_LIVE_MAPPING: Final[tuple[FieldMapping, ...]] = (*TICKET_MAPPING, *_mapping(LIVE_BODY_FIELD))
 
 
+#: What the manifest says `freshdesk.read_ticket` does: the address it reads one ticket at and
+#: the body field it reads beyond the index's. Built from the live read's own path and field, so
+#: the declaration and the call cannot name different things, and held against the live
+#: operation's mapping by a test rather than against these constants.
+READ_TICKET_DESCRIPTION: Final = (
+    "Read one helpdesk ticket by its id, live, at the helpdesk's "
+    + ENDPOINTS[Endpoint.GET_TICKET].spec.path
+    + ", with its body in plain text ("
+    + LIVE_BODY_FIELD
+    + "). The body is read for the question that asks for it and never stored."
+)
+
+
 def live_ticket_operation(*, domain: str) -> RestOperation:
     """One ticket by its id, with its body, for a live read (M11.6.2, M11.9.2).
 
     The one-ticket endpoint and not the list, because the list names no ticket by id and carries
-    no body. Its mapping is the ticket's plus the body, and it is not part of the manifest: a live
-    read keeps nothing, so a connection agreed before this read existed is not asked to agree
-    again. See `brain.connectors.declaration.A_RECORD_IS_READ_BY_THE_CALL_THAT_HOLDS_IT`.
+    no body. Its mapping is the ticket's plus the body. Reading a ticket's body is something the
+    connector does, and a customer's free text is exactly what a person agreeing to the connector
+    has to see it do, so the manifest's `freshdesk.read_ticket` declares this address and this
+    field (`READ_TICKET_DESCRIPTION`), and a connection agreed before it goes through the
+    registry's upgrade, where a person accepts the change. Whether the body is kept is a separate
+    question, and it is not: see `FETCHED_LIVE_INSTEAD`. See also
+    `brain.connectors.declaration.A_RECORD_IS_READ_BY_THE_CALL_THAT_HOLDS_IT`.
     """
     shape = shape_for(Endpoint.GET_TICKET)
     return RestOperation(
@@ -1364,7 +1381,7 @@ def manifest(
             ),
             ToolDeclaration(
                 name="freshdesk.read_ticket",
-                description="Read one helpdesk ticket by its id.",
+                description=READ_TICKET_DESCRIPTION,
                 entity=TICKET,
                 identity_mode=IdentityMode.SERVICE,
             ),
