@@ -2,111 +2,104 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**5 items are open: 115 to 118,** four decisions about Lark sign-in, Lark Base visibility and approving
-from Lark cards, each with my recommendation, **and 91,** the checks only you can do on your install; it
-waits for the Knowledge upload grants (item 105) to land. Each says in plain terms what it is, what I
-recommend, and every step.
+**6 items are open: 121 to 125,** whose conversations an agent's page lists, where uploaded
+documents are stored, a task that names a table library, the automation canvas, and the Lark group
+for the evening digest, each with my recommendation, **and 91,** the checks only you can do on your
+install; it waits for the Knowledge upload grants (item 105) to land. Each says in plain terms what it
+is, what I recommend, and every step.
 
 # Open
 
-## 118. Should an approval card reach the approver in Lark as soon as it is raised?
+## 125. Which Lark group receives the evening build digest?
 
-**In plain terms:** when an agent asks for an approval, the approver in Lark does not hear about it
-until they write "approve" to the Brain's bot, and only then does the card appear. The Brain cannot
-send them the card first, because it deliberately keeps only a fingerprint of each person's Lark
-identity, not an address it could send to. The console's Needs-you list shows every waiting approval
-either way.
+**In plain terms:** each evening the Brain can post a short message to a Lark group: tasks closed
+that day, tasks opened, and anything overdue (M38.3.3). It needs to know which group, and the
+Brain's Lark app has to be a member of it.
 
-**Option A: keep it as it is.** Approvers ask the bot, or look in the console. Nothing about anybody's
-Lark account is stored.
+**My recommendation: a new group with just you in it**, so the digest never lands in a chat
+other people use for work.
 
-**Option B: keep each linked person's Lark address, so the card is sent the moment the approval is
-raised.** Needs one database change. The Brain then holds one Lark identifier per linked person; it is
-treated as personal data, so it is removed when the person is erased, and it is never shown on a
-screen.
+**What you do:**
 
-**My recommendation: B.** An approval nobody is told about waits until somebody thinks to look, and an
-agent held at an approval is an agent doing nothing. The address is the least the Brain can hold to
-send a card, and B is also the first step towards signing in with Lark (item 115, option A).
+1. In Lark, create a group chat, for example "Brain daily".
+2. Open the group's settings, choose **Bots**, then **Add bot**, and pick the Brain's Lark app
+   (the same app you connected as the staff source).
+3. Reply "125: done, the group is called <its name>". The digest is still to be built; it is
+   built to post to that group, and I tell you when the first one is due.
 
-**What I need from you:** reply "118: B" or "118: A". Nothing is built for this until you do.
+## 124. Switch on the automation canvas?
 
-## 117. May an approval be decided by pressing a button on a Lark card?
+**In plain terms:** the automation canvas is an optional drawing board for fixed, step-by-step
+automations (a trigger, then set steps, with no model deciding what happens next). It runs in a
+sandboxed container of its own that needs about 512 MiB of memory, and memory on your server is
+the question in item 120. Three install tasks wait on it being switched on (M32.6.1.1, M32.6.1.2
+and M32.6.1.4); everything behind it is built and tested.
 
-**In plain terms:** you asked that approvals be decided only in the console or on Lark cards
-(OWN-147), and that approving needs a sign-in with a second factor (DEF-06). In the console both hold.
-On a Lark card the Brain checks that the press came from the Lark account linked to the person the card
-was made for, and for the same action, but it cannot tell whether that person signed in to Lark with
-two-step verification. So a card press is only as strong as your company's Lark sign-in.
+**Option A: not now.** Its three install tasks move to Wave 4, and it is switched on once item 120
+leaves room. **Option B: switch it on now**, and it takes 512 MiB from what item 120 is sharing out.
 
-**What happens meanwhile:** the approval cards ship with a setting, **Approve from Lark cards**, that
-is **off on every install**. While it is off, a card shows the request and a link to decide it in the
-console, where your second factor is asked for. Nothing can be approved from Lark until you choose.
+**My recommendation: A.** Nothing you have asked for today needs it, and memory is the scarcest
+thing on the server.
 
-**Option A: switch the setting on.** A press on the card approves. Suitable when the company's Lark
-requires two-step verification for everyone, which a Lark administrator can require for the whole
-company.
+**What I need from you:** reply "124: A" or "124: B".
 
-**Option B: leave it off.** Every approval is decided in the console with a second factor.
+## 123. May a task that names a table library be marked done by what it is for?
 
-**Option C: build a stricter card.** A press counts only if the approver has also signed in to the
-Brain with their second factor within the last few hours; otherwise the card sends them to the console.
-Safer than A, and more build.
+**In plain terms:** task M32.5.2.1 says every grid in the console uses a particular table library
+(TanStack Table) with paging and filtering on the server. The console's own table deliberately
+does not use that library, to keep the pages small and fast, and every list does page and filter
+on the server, which is your requirement GAP2-24 and is tested. The library was a means; the
+paging is the end.
 
-**My recommendation: A, once you have confirmed that Verz's Lark requires two-step verification for
-everyone.** It keeps both of your rules in practice, and it keeps approvals where your people already
-are. If Lark does not require it, B until it does.
+**My recommendation: yes.** The task is marked decided by what it is for, and the requirement it
+serves stays exactly as it is.
 
-**What I need from you:** reply "117: A", "117: B" or "117: C". If A, I will tell you where the
-setting is once it is live.
+**What I need from you:** reply "123: yes", or "123: no" if you want the library used.
 
-## 116. Who may see the records in a Lark Base?
+## 122. Where are your uploaded documents stored?
 
-**In plain terms:** the Lark Base connector reads your Base tables so the Brain can answer questions
-from them. Somebody has to decide which people may see which table's records through the Brain.
+**In plain terms:** your requirement LIVE-01 says your install runs an object store: the place
+uploaded files, exports and backups are kept as files. Yours has none yet, so four tasks wait on it
+(M32.3.1.1 to M32.3.2.2), and everything else about it is built and tested. The product supports
+three kinds.
 
-**Option A: the Brain decides, table by table.** An administrator or data steward grants a department
-or a person access to each table on the Brain's own screens, exactly as for every other source. Works
-today and works the same for every company. The cost: a table shared with only a few people in Lark
-could be granted more widely in the Brain, by a person, on purpose, with the grant recorded.
+**Option A: on your own server (SeaweedFS).** Your documents never leave your server. It needs
+about 256 MiB of memory, which is part of item 120's picture. **Option B: Cloudflare R2**, a
+bucket in a Cloudflare account, which costs a little each month and uses no memory on your server,
+but your documents are then held by Cloudflare. **Option C: Amazon S3**, the same as B at Amazon.
 
-**Option B: follow Lark's own sharing.** A person sees a table's records through the Brain only if
-Lark shares that table with them. Needs every Brain user linked to their Lark account (item 115) and a
-permission check with Lark for each person at question time, so it cannot be built before 115 is
-answered.
+**My recommendation: A.** The Brain is built so that your data stays on your server, and 256 MiB
+is small beside the rest of item 120.
 
-**My recommendation: A now, B later** as an option an administrator switches on per connection, once
-people are linked to their Lark accounts.
+**What you do:** reply "122: A", and I add it to the server myself over the connection I already
+use, then tell you when the Health page shows it ready. For B or C, reply with the letter and I
+give you the steps to create the bucket and paste its key into the console.
 
-**What I need from you:** reply "116: A now, B later", or tell me otherwise.
+## 121. On an agent's page, whose conversations are listed?
 
-## 115. How do the people on your Lark staff list become Brain users?
+**In plain terms:** each agent's page is getting a Conversations list. Today every conversation
+belongs to one person: the Brain keeps a separate thread for each person, even when several people
+talk to the same agent in one Lark group, and nobody can see anybody else's. Your reference design
+(the AnyGen screenshot, requirement ANY-028) shows the list "narrowed to threads related to me",
+which implies the full list includes other people's conversations too. That would be a privacy
+change, so it is yours to decide.
 
-**In plain terms:** the staff sync reads your 123 people from Lark and has placed 116 of them in 11
-departments, but none of them can sign in to the Brain. The sync creates no Brain accounts, and a
-person can only sign in once an administrator has linked a sign-in account to them by hand. So the
-work you asked for on 29 September (showing each person's status, keeping suspended and outsourced
-people out, and choosing where departments come from) would reach almost nobody until this is
-decided. That work is started and waits on this answer.
+**Option A: each person sees only their own conversations with the agent.** Exactly how the Brain
+works today. The "related to me" filter is not needed, because everything listed is already yours.
 
-**Option A: people sign in with their Lark account.** No Brain passwords at all. The sign-in service
-the Brain uses (Keycloak) has no ready-made Lark sign-in, so this means building a bridge between the
-two: the largest of the three.
+**Option B: the agent's owner and administrators also see that other people's conversations
+happened**: who, when, and whether the agent failed, but never the question or the answer. Useful
+for spotting an agent that keeps failing. The words stay private because another person's answer
+was built from what *they* may see, which may be more than the viewer may.
 
-**Option B: the sync creates each person's Brain account and emails them an invitation.** Each active
-person on the staff list gets an account and an email to set their password and second factor, sent
-by the sign-in service's own email, the same one "Forgot password" uses. Suspended people and leavers
-get no account, and outsourced people get none unless an administrator allows their employment type.
-When someone leaves or is suspended in Lark, the next sync closes their account.
+What is **not** offered: showing other people's questions and answers. It would let anyone who can
+open an agent's page read answers built from somebody else's access, which breaks the rule that
+nobody sees through the Brain what they could not see themselves.
 
-**Option C: an administrator adds each person by hand.** Nothing to build, and a chore for every
-joiner.
+**My recommendation: A now**, and B later if you want owners to watch an agent's failures.
 
-**My recommendation: B now, A later.** B uses what the Brain already has, works for any company
-whatever its staff source, and keeps the staff list and the Brain in step on their own. A can follow
-as a second way to sign in, once 118's option B has stored each person's Lark address.
-
-**What I need from you:** reply "115: B now, A later", or tell me otherwise.
+**What I need from you:** reply "121: A" or "121: B". Until then the list is built as A, which is
+safe either way: B only ever adds to it.
 
 ## 91. Checks only you can do on your install (about 45 minutes, one sitting)
 
@@ -151,11 +144,103 @@ need a model to answer. Tell me "checks done" and I close the tasks from your re
 7. **The remaining rows (M1.8.8, M2.3.2, M24.3.6).** On **Requirement checks**, open the
    Permissions, Departments and Observability areas. Each row still "Not checked yet" says what it
    needs; try it and record it.
+8. **Health of the vault and the worker (M32.7.2).** On **Overview**, read the health strip, then
+   open **Govern > Staff sources**: the secrets vault and the worker both show healthy and the last
+   Lark sync shows when it ran. Record what you see.
 
 The chat parts of checks 1 and 2 (binding a Lark identity with a code, the same reach in chat)
 cannot be done until Wave 2 builds the Lark chat channel; both moved there with item 97.
 
 # Answered
+
+## 118. An approval card reaches the approver in Lark as soon as it is raised - DECIDED 2026-09-29: B
+
+**In plain terms:** the approver in Lark used to see a card only after writing "approve" to the
+Brain's bot, because the Brain kept only a fingerprint of each person's Lark identity and no address
+it could send to. **Your answer, 2026-09-29:** "B: store each linked person's Lark address so the
+card can be sent straight away."
+
+What is being built:
+
+1. **Each linked person's Lark address is kept** beside the fingerprint, treated as personal data:
+   removed when the person is erased, never shown on a screen.
+2. **The card is sent to the approver the moment the approval is raised**, in their own Lark chat.
+   Whether pressing it decides the approval is item 117's setting.
+3. The same stored address is what signing in with Lark (item 115, option A) will use later.
+
+**What you do:** nothing.
+
+## 116. Who may see the records in a Lark Base - DECIDED 2026-09-29: the Brain's own roles and permissions
+
+**In plain terms:** the Lark Base connector reads your Base tables so the Brain can answer from them,
+and somebody has to decide who may see which table's records. **Your answer, 2026-09-29:** "It should
+be based on Roles & permission that we have in the brain system in Backend Console."
+
+What that means: **option A.** A Base table is governed exactly like every other source. An
+administrator or data steward grants a department or a person access to a table, and to its columns,
+on the Brain's own screens, and every grant is recorded. Lark's own sharing is not consulted, so the
+answer never depends on how a table happens to be shared in Lark. Nobody sees a Base table's records
+until they are granted.
+
+**What you do:** after the Lark Base connection is live, grant each table on the console as you do any
+other source. I will tell you when it is ready and where.
+
+## 115. How the people on your Lark staff list become Brain users - DECIDED 2026-09-29: B now, A next, and no emails sent
+
+**In plain terms:** the staff sync reads your people from Lark and places them in departments, but it
+created no Brain accounts, so none of them could sign in. **Your answer, 2026-09-29:** "I will go with
+your recommendation: B now, A next. B gets your people onto the Brain soonest and suits any company.
+A then gives Lark companies one-click sign-in without passwords." **And then:** "do remember not to
+send the Link to them ... they need to click Forget Password on the login page and then they will get
+the link. I don't want to send the bulk email to all. Only those who click forget password will get
+the link."
+
+What is being built, in this order:
+
+1. **B, now: the sync creates each active person's Brain account, and sends nobody anything.** No
+   invitation and no bulk email, ever. A person who wants to start presses **Forgot password** on the
+   sign-in page, enters their work email, and only then gets a link to set their password; at their
+   first sign-in they set up their second factor. Suspended people and leavers get no account;
+   outsourced people get none unless an administrator allows their employment type. When someone
+   leaves or is suspended in Lark, the next sync closes their account. It works the same for any
+   company, whatever its staff source.
+2. **Then the work this was holding up:** each person's status and employment type on People,
+   suspended and outsourced people kept out of the Brain, and the choice of where departments come
+   from (Lark's, or your own with people assigned to them).
+3. **A, next: sign in with Lark**, as a second way in for companies whose staff list is Lark, with no
+   password. It uses each person's stored Lark address (item 118).
+
+**What you will need to do:** tell people their account is ready and to use **Forgot password** on
+the sign-in page the first time; People will show that sentence ready to copy. If the sign-in
+service has no email settings on your install, Forgot password cannot send its link, and the staff
+source's page will say so and tell you what to fill in.
+
+## 117. Approving by pressing a button on a Lark card - DECIDED 2026-09-29: yes, once Lark requires two-step verification
+
+**In plain terms:** you asked that approvals be decided only in the console or on Lark cards
+(OWN-147), and that approving needs a sign-in with a second factor (DEF-06). On a Lark card the Brain
+checks that the press came from the Lark account linked to the person the card was made for, and for
+the same action, but it cannot tell whether that person signed in to Lark with two-step verification.
+**Your answer, 2026-09-29: "Yes, you can proceed with your recommendation"**, which was to switch
+approving from Lark cards on once your company's Lark requires two-step verification for everyone.
+
+What that means, and what was built:
+
+1. **Every install ships with the setting "Approve from Lark cards" off.** While it is off a card shows
+   the request and a link to decide it in the console, where the second factor is asked for.
+2. **Switching it on is an audited administrator change**, and its help text says in plain words that
+   a card press relies on the company's own Lark sign-in.
+3. **DEF-06 now records this as its decision:** a card press approves without the Brain's own second
+   factor only while that setting is on.
+
+**What you do, once, after the approval cards are live (I will tell you when):**
+
+1. In the Lark Admin console, open the security settings and find two-step verification. Check that it
+   is required for all members, not merely available. If it is not, turn the requirement on there first.
+2. Tell me "Lark two-step is required", and I switch **Approve from Lark cards** on for your install, or
+   show you where it is on the console's settings.
+
+**Reversible:** switch the setting off and every approval goes back to the console.
 
 ## 114. The vault opens itself, and every release keeps it up to date - DECIDED 2026-09-29
 

@@ -195,6 +195,20 @@ def test_a_projection_left_wide_fails_the_typed_tool_check(
 
 
 @pytest.mark.needs_db
+def test_records_built_without_the_scope_s_fields_fail_the_typed_tool_check(
+    install: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The row plane back as it was before 2026-09-29: records built from the projection alone,
+    so a department-scoped reader's redactor has no department to judge and withholds every
+    field. Delete this and the check can go back to reading the tool's records and never the
+    redacted answer, which is how that defect passed it."""
+    from brain.knowledge import rows
+
+    monkeypatch.setattr(rows, "scope_carried", lambda scope, columns: ())
+    assert "redactor did not show" in _failed(install, TOOL)
+
+
+@pytest.mark.needs_db
 def test_fusion_that_drops_the_vector_leg_fails_the_fusion_check(
     install: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
