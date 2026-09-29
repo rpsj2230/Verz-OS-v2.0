@@ -12,7 +12,7 @@
  * metrics or a browser's rounding are not seen. This is the mechanism the README says the old
  * layout tests move to when a page is restyled.
  *
- * Task ids: M27.10.2
+ * Task ids: M27.10.2, M27.15.64, M27.15.65
  */
 
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
