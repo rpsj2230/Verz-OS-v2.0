@@ -1,12 +1,15 @@
-"""The install acceptance checks for connectors: what review refuses, what a sync keeps, the pin.
+"""The install acceptance checks for connectors: review refusals, a sync, the pin, a life.
 
-Three checks, split where the leaves split. The first holds test declarations to the install's own
+Four checks, split where the leaves split. The first holds test declarations to the install's own
 manifest review, which is `brain.connectors.manifest`'s constructors and nothing else: the product
 has no other door a projection comes through. The second is the worker's read of a source, driven
 through `brain.ops.connector_sync_run.attempt` with the source's answers recorded in the check and a
 canary planted in them, and the install's own index audit looking for the canary afterwards. The
 third connects a source inside the check's transaction under a declaration this release no longer
-makes, and asks the worker's plan whether the next sync may read it.
+makes, and asks the worker's plan whether the next sync may read it. The fourth takes a source
+through its life as the Connectors screen's routes do (connected, switched off, connected again and
+upgraded to a changed declaration), reading the worker's plan, the live reads and the ledger after
+each step.
 
 **No check calls a source, and no check holds a real key.** The recorded answers are written here
 in the envelope Xero documents for its Invoices and Contacts endpoints, as the connector's own
@@ -37,7 +40,7 @@ not run. See `A_SEARCH_THAT_CANNOT_SEE_EVERY_ROW_IS_NOT_RUN`. The search is the 
 every row of every table, so what it costs grows with the install; each table is one statement,
 bounded by the run's statement timeout, and nothing is locked by reading.
 
-Task ids: M38.5.1
+Task ids: M38.5.1, M11.1.6
 """
 
 from __future__ import annotations
@@ -623,3 +626,118 @@ async def a_changed_declaration_makes_the_next_sync_refuse(h: Harness) -> None:
     agreed = await planned()
     if agreed.refused or not agreed.due or agreed.manifest != declared:
         raise CheckFailedError("a source reconnected under this release's declaration was not read")
+
+
+# ------------------------------------------------ 4. connected, switched off, upgraded
+@check(
+    leaves=("M11.1.6",),
+    sentence=(
+        "A Xero tenant is connected, switched off and connected again inside the check through "
+        "the store the Connectors screen's routes call, then upgraded to a changed declaration "
+        "the way its edit route re-pins one: the worker's plan and the live reads follow each "
+        "step, and every step is an entry in the audit ledger under who took it."
+    ),
+)
+async def a_source_is_connected_switched_off_and_upgraded_from_the_console(h: Harness) -> None:
+    from brain.connectors.declaration import shipped
+    from brain.connectors.manifest import manifest_digest
+    from brain.connectors.xero import ENTITY_INVOICE
+    from brain.ops.connectable import CONNECTABLE, manifest_for
+    from brain.ops.connector_store import StoredConnections, live
+    from brain.ops.connector_sync import plan_for
+    from brain.ops.connector_sync_store import read_live
+    from brain.ops.live_read_run import ConnectedSources
+
+    if SOURCE not in shipped() or SOURCE not in CONNECTABLE:
+        raise CheckFailedError("the source is not registered as one the console connects")
+    if (await h.execute(live(SOURCE))).scalar_one_or_none() is not None:
+        raise CheckNotRunError(SOURCE_ALREADY_CONNECTED)
+
+    settings = _settings()
+    declared = manifest_for(SOURCE, settings)
+    store = StoredConnections(h.sessions)
+    said = {"actor": h.actor, "trace_id": h.trace_id, "ent_hash": SET_UP_REACH}
+
+    async def reading() -> tuple[Any, ...]:
+        async with h.sessions() as session, session.begin():
+            return tuple(
+                one for one in await read_live(session) if one.connection.connector == SOURCE
+            )
+
+    def reads_live(connections: Sequence[Any]) -> bool:
+        """Whether a question would read the source live, asked as the answer path asks."""
+        sources = ConnectedSources(
+            {one.connection.connector: one.connection for one in connections},
+            keys=_Keys(),
+            caller=_Recorded(invoices=b"{}", contacts=b"{}"),
+            resolver=_Resolver(),
+            clock=_clock,
+        )
+        return sources.reads(SOURCE, ENTITY_INVOICE) is not None
+
+    # Registered and enabled: connected, read by the worker's plan.
+    await store.connect(
+        connector=SOURCE,
+        settings=settings,
+        digest=manifest_digest(declared),
+        keep_key=_nothing_kept,
+        **said,
+    )
+    first = await reading()
+    if len(first) != 1 or not plan_for(first[0].connection, last=None, now=h.now).due:
+        raise CheckFailedError("a source connected from the console was not read by the worker")
+    if not reads_live(first):
+        raise CheckFailedError("a source connected from the console was not read live")
+
+    # Switched off: the worker reads it no more, and nothing is left connected.
+    await store.disconnect(SOURCE, **said)
+    off = await reading()
+    if off or reads_live(off) or (await h.execute(live(SOURCE))).scalar_one_or_none() is not None:
+        raise CheckFailedError("a source switched off from the console was still read")
+
+    # Switched on again, then upgraded: a declaration this release changed is re-pinned by the
+    # edit route's own call, and the next plan reads under it.
+    first_tool = declared.tools[0]
+    older = dataclasses.replace(
+        declared,
+        tools=(
+            dataclasses.replace(first_tool, description=f"{first_tool.description} {h.word()}"),
+            *declared.tools[1:],
+        ),
+    )
+    await store.connect(
+        connector=SOURCE,
+        settings=settings,
+        digest=manifest_digest(older),
+        keep_key=_nothing_kept,
+        **said,
+    )
+    stale = await reading()
+    if len(stale) != 1 or plan_for(stale[0].connection, last=None, now=h.now).due:
+        raise CheckFailedError("a source pinned to an older declaration was read before upgrade")
+    await store.reconnect(
+        connector=SOURCE, settings=settings, digest=manifest_digest(declared), **said
+    )
+    upgraded = await reading()
+    if len(upgraded) != 1:
+        raise CheckFailedError("an upgraded source was not left connected once")
+    plan = plan_for(upgraded[0].connection, last=None, now=h.now)
+    if not plan.due or plan.manifest != declared:
+        raise CheckFailedError("an upgraded source was not read under this release's declaration")
+
+    changes = [
+        (str(actor), details if isinstance(details, dict) else json.loads(details))
+        for actor, details in (
+            await h.execute(
+                text(
+                    "SELECT actor_id, details FROM obs.audit_entry"
+                    " WHERE subject = :subject AND trace_id = :trace ORDER BY seq"
+                ).bindparams(subject=f"connector:{SOURCE}", trace=h.trace_id)
+            )
+        ).all()
+    ]
+    steps = [details.get("change") for _, details in changes]
+    if steps != ["connected", "disconnected", "connected", "disconnected", "connected"]:
+        raise CheckFailedError("a step in the source's life is missing from the audit ledger")
+    if any(actor != h.actor for actor, _ in changes):
+        raise CheckFailedError("a step in the source's life was recorded under somebody else")
