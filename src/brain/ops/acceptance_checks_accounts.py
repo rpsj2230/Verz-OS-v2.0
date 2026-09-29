@@ -25,7 +25,7 @@ Task ids: M38.5.1, M1.6.16, M1.6.17
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Final
 
 from sqlalchemy import insert, select
 
@@ -52,6 +52,10 @@ from brain.ops.acceptance import RESERVED_DEPARTMENTS, CheckFailedError, check
 from brain.ops.acceptance_run import Harness
 from brain.ops.staff_accounts_run import open_or_close_person, person_for
 from brain.tables.identity import PrincipalIdentityRow, PrincipalRow
+
+#: Where this module's checks stand on the Install page, before every larger key. See
+#: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
+CHECK_ORDER: Final = 230
 
 #: The staff source the check lists people from. No install chooses a source by this name.
 SOURCE = "acceptance"

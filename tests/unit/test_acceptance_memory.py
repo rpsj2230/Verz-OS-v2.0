@@ -24,7 +24,7 @@ from typing import Any
 import pytest
 
 from brain.ops import acceptance_checks_memory as memory
-from brain.ops.acceptance import CHECK_MODULES, FAILED, PASSED, Check, registered
+from brain.ops.acceptance import FAILED, PASSED, Check, check_modules, registered
 from tests.unit.test_acceptance import ROOT, WRITTEN_BY_CHECKS, at_head
 
 MODULE = "brain.ops.acceptance_checks_memory"
@@ -70,7 +70,7 @@ def test_the_memory_checks_prove_the_memory_leaves_and_nothing_else() -> None:
     and a check can close a leaf it does not exercise, or fall out of the run with the Install page
     listing four rows fewer."""
     assert {check.name: check.leaves for check in mine()} == LEAVES
-    assert MODULE in CHECK_MODULES
+    assert MODULE in check_modules()
 
 
 def test_every_leaf_the_memory_checks_name_is_a_leaf_of_the_work_breakdown() -> None:

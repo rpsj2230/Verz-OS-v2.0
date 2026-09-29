@@ -560,17 +560,17 @@ def test_an_acceptance_check_the_run_calls_is_reached_and_nothing_beside_it_is(
     tmp_path: Path,
 ) -> None:
     """`AN_ACCEPTANCE_CHECK_IS_REACHED_BY_THE_ACCEPTANCE_RUN`: a function decorated with
-    `check(leaves=..., sentence=...)` in a module `CHECK_MODULES` names is run by the acceptance
+    `check(leaves=..., sentence=...)` in a module `check_modules` finds is run by the acceptance
     run, and so is a helper it calls by name. Beside them, three that are not: an undecorated
     function in the same module, the same decorator in a module the registry does not name, and a
     decorator called check with other arguments.
 
     Delete this and either an acceptance check that asks a control's decision function reports a
     scheduled control as unreached, or the exception widens until any decorator hides a chain."""
-    from brain.ops.acceptance import CHECK_MODULES
+    from brain.ops.acceptance import check_modules
     from brain.ops.controls import chains_worth_checking
 
-    named = next(one for one in CHECK_MODULES if one.startswith("brain.ops."))
+    named = next(one for one in check_modules() if one.startswith("brain.ops."))
     decorated = '@check(leaves=("M1.1.1",), sentence="Said.")\n'
     _write_tree(
         tmp_path,
