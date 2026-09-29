@@ -394,6 +394,8 @@ def _credential(name: str) -> str:
             return json.dumps(
                 {"user": f"acceptance_{secrets.token_hex(4)}", "password": secrets.token_hex(16)}
             )
+        case CredentialShape.NONE:
+            return ""
 
 
 @dataclass

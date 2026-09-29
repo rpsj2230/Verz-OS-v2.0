@@ -51,7 +51,13 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.connectors.contract import ConnectorContractError, FetchRequest
-from brain.connectors.declaration import ConnectorDeclaration, shipped
+from brain.connectors.declaration import (
+    ChecksLiveFacts,
+    ConnectorDeclaration,
+    LiveLookup,
+    RoutedReading,
+    shipped,
+)
 from brain.connectors.live_read import (
     LIVE_READ_TIMEOUT_MS,
     RECORD_ID_FILTER,
@@ -62,7 +68,8 @@ from brain.connectors.live_read import (
 from brain.connectors.manifest import manifest_digest
 from brain.connectors.rest import MAX_RESPONSE_BYTES
 from brain.connectors.throttle import CallOutcome, classify
-from brain.core.envelope import IdentityMode
+from brain.connectors.transports import SourceRecord
+from brain.core.envelope import IdentityMode, TypedResult
 from brain.ops.connectable import NotConnectableError, manifest_for
 from brain.ops.connector_store import Connection, StoredConnections
 from brain.ops.connector_sync_run import (
@@ -71,7 +78,9 @@ from brain.ops.connector_sync_run import (
     RunTokenVault,
     SourceCaller,
     WorkerConnectorKeys,
-    authorization,
+    borrowed,
+    call_headers,
+    page_operation,
 )
 from brain.ops.live_records import SourceRecords
 from brain.ops.secrets import SecretsUnavailableError
@@ -169,25 +178,34 @@ class ConnectedSources:
             return _refused(connection.connector, NOT_CONNECTABLE)
         if manifest_digest(manifest) != connection.digest:
             return _refused(connection.connector, DECLARATION_CHANGED)
-        lease = self._keys.lease(manifest.credential.ref, now=self._clock())
+        lease = borrowed(self._keys, reading, manifest.credential.ref, now=self._clock())
         try:
             try:
                 key = lease.key()
             except SecretsUnavailableError:
                 return _refused(connection.connector, NO_KEY_FOR_THE_READ)
-            headers = {
-                **reading.call_headers(connection.settings),
-                "Accept": "application/json",
-                "Authorization": authorization(reading.key_scheme(), key),
-            }
-            try:
-                operation = reading.operation(
-                    request.entity, settings=connection.settings, resolver=self._resolver
+            headers = call_headers(reading, connection.settings, key)
+            entity, fetched_at = request.entity, self._clock().isoformat()
+            if isinstance(reading, RoutedReading):
+                said_so = reading.unpublished(
+                    entity, ids[0], settings=connection.settings, fetched_at=fetched_at
                 )
-                arguments = {
-                    **reading.first_page(request.entity),
-                    **live.arguments_for(request.entity, ids[0]),
-                }
+                if said_so is not None:
+                    # No server publishes it: it is told as that, with no call made.
+                    return LiveReply(
+                        outcome=CallOutcome.OK, rows=self._with_facts(live, entity, said_so)
+                    )
+            try:
+                arguments = dict(live.arguments_for(entity, ids[0]))
+                if not isinstance(reading, RoutedReading):
+                    arguments = {**reading.first_page(entity), **arguments}
+                operation = page_operation(
+                    reading,
+                    entity,
+                    arguments,
+                    settings=connection.settings,
+                    resolver=self._resolver,
+                )
                 checked = operation.prepare(arguments, resolver=self._resolver)
             except Exception:
                 # Broad, and the type is not kept: a refusal can quote the id it refused.
@@ -209,13 +227,35 @@ class ConnectedSources:
                     operation,
                     status=answer.status or 0,
                     body=json.loads(answer.body),
-                    fetched_at=self._clock().isoformat(),
+                    fetched_at=fetched_at,
                 )
             except Exception:
                 return _refused(connection.connector, ADDRESS_OR_SHAPE)
-            return LiveReply(outcome=reply.call, rows=reply.rows)
+            rows = None if reply.rows is None else self._with_facts(live, entity, reply.rows)
+            return LiveReply(outcome=reply.call, rows=rows)
         finally:
             lease.close(self._clock())
+
+    def _with_facts(
+        self, live: LiveLookup, entity: str, rows: TypedResult[SourceRecord]
+    ) -> TypedResult[SourceRecord]:
+        """The rows with the facts a lookup reads besides its source's record, where it reads any.
+
+        See `brain.connectors.declaration.ChecksLiveFacts`. Each fact is a value read for this
+        question, laid over its row and kept nowhere.
+        """
+        if not isinstance(live, ChecksLiveFacts):
+            return rows
+        records = tuple(
+            SourceRecord.model_validate(
+                {
+                    **one.model_dump(),
+                    **live.facts(entity, one.id, caller=self._caller, resolver=self._resolver),
+                }
+            )
+            for one in rows.records
+        )
+        return rows.model_copy(update={"records": records})
 
 
 def _refused(connector: str, why: str) -> LiveReply:

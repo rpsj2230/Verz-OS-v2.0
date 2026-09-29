@@ -390,6 +390,40 @@ class RoutedReading(Protocol):
         """The index entries of records no server publishes, kept without a call."""
         ...
 
+    def unpublished(
+        self, entity: str, source_id: str, *, settings: Mapping[str, str], fetched_at: str
+    ) -> TypedResult[SourceRecord] | None:
+        """What a live read of a record no server publishes is told, or None for a routed one.
+
+        The record said as unpublished, read with no call, so a question about it is answered
+        with that rather than with a source that could not be reached.
+        """
+        ...
+
+
+class OneCall(Protocol):
+    """One GET, as the worker's and the live read's caller makes it. Never raises."""
+
+    def get(self, url: str, *, address: str, headers: Mapping[str, str], max_bytes: int) -> Any:
+        """The answer: a status, headers and a body, or that it came back not at all."""
+        ...
+
+
+@runtime_checkable
+class ChecksLiveFacts(Protocol):
+    """A live lookup that adds facts read from somewhere other than its source's record (M11.7.4).
+
+    A domain's registry says who registered it and until when; whether its site answers is asked
+    of the site itself. The facts are values read for the question and kept nowhere, like every
+    other value a live read returns.
+    """
+
+    def facts(
+        self, entity: str, source_id: str, *, caller: OneCall, resolver: Resolver
+    ) -> Mapping[str, str]:
+        """The facts one record carries besides its source's record, by field name."""
+        ...
+
 
 # ------------------------------------------------------------------ reading one record live
 class LiveLookup(Protocol):
