@@ -984,6 +984,12 @@ def seed_chain() -> RoutingChain:
     There is no cross-provider rung, and that is honest rather than incomplete: only one
     provider is contracted. A chain listing a provider we hold no key for is a chain that
     fails at the exact moment it is reached.
+
+    Since 2026-09-29 the ladder an install is written is not this chain's shape: it is
+    `brain.models.default_ladder`'s, the owner's failover matrix, whose Moonshot step is left
+    out before planning while no Moonshot key is held (`brain.models.assembly`), so the
+    objection above no longer applies to it. This chain supplies its numbers and its
+    Medium and Complex models, and nothing else reads it.
     """
     sonnet_global = Deployment(
         id="anthropic-sonnet-global",
