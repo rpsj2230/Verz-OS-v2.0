@@ -457,10 +457,14 @@ describe("the Department page", () => {
         "/api/v1/audit": json({ items: [entry("maintenance", "renamed"), entry("maintenance_two", "retired")], next_cursor: null, order: "newest", actions: [], subject_kinds: [], actors: [] }),
       }),
     );
-    const rows = [...container.querySelectorAll("main tbody tr")].map((one) => one.textContent ?? "");
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toContain("Renamed");
-    expect(rows[0]).toContain(sentinel("person"));
+    // The actor's name is a second request (`PersonName.useNames`) that can land after the rows, and
+    // until it does the row says "another account"; so the name is waited for, not assumed.
+    await waitFor(() => {
+      const rows = [...container.querySelectorAll("main tbody tr")].map((one) => one.textContent ?? "");
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toContain("Renamed");
+      expect(rows[0]).toContain(sentinel("person"));
+    });
   });
 
   test("a company administrator who opens the address is sent to Departments", async () => {
