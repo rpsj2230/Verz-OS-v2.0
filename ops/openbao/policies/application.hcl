@@ -1,6 +1,6 @@
 # What the application may do with the secrets vault.
 #
-# Task ids: M31.3.2.2, M27.8.7, M27.8.12, M42.6.5, M42.6.2, M11.9.2
+# Task ids: M31.3.2.2, M27.8.7, M27.8.12, M42.6.5, M42.6.2, M11.9.2, M13.8.10
 #
 # The application answers questions. It borrows connector credentials for the length of one
 # request and gives them back, which is why most rules below are about *creating and
@@ -117,6 +117,20 @@ path "auth/token/create/connector-run" {
   capabilities = ["create", "update"]
 }
 
+# This install's template signing key, created once and never written over. See
+# brain.ops.template_key and brain.ops.openbao.A_KEY_WRITTEN_ONCE_HAS_NO_WRITER_THAT_REPLACES_IT.
+#
+# create, so the application mints it into an empty slot at start; the write carries kv's own
+# check-and-set at version 0 as well. No update: on a kv version 2 path the vault asks for update
+# whenever the slot already holds a version, so without it nothing this token does can replace the
+# key, whatever the request carries. read, because this process signs and verifies with it. One
+# exact path and no wildcard, no delete, no destroy and no metadata, so its version history cannot
+# be erased from here either. The engine is enabled by the installer; on an install made before it,
+# by the step in ops/openbao/UNSEAL.md, Loading a release's policies on a running install.
+path "template_signing/data/key" {
+  capabilities = ["create", "read"]
+}
+
 # Deny by omission is the default here, so the following are listed only to say they were
 # considered and refused rather than forgotten:
 #
@@ -126,3 +140,4 @@ path "auth/token/create/connector-run" {
 #   secret/data/*        static secrets, for the reason at the top
 #   providers/metadata/* update or delete: see above
 #   providers/delete/*   and destroy/*: removing a provider key is done at the server
+#   template_signing/*   update, delete, destroy and metadata: the key is created once, above

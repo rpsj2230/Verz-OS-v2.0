@@ -26,7 +26,7 @@ from typing import Any
 import pytest
 
 from brain.core.department import SLUG_PATTERN
-from brain.ops import acceptance, acceptance_run
+from brain.ops import acceptance, acceptance_audit, acceptance_run
 from brain.ops.acceptance import (
     FAILED,
     NOT_RUN,
@@ -129,6 +129,11 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "a_skill_is_imported_from_a_github_commit_and_from_an_address",
         "an_edit_is_a_new_version_and_moves_no_agent_until_reassigned",
         "categories_are_kept_and_offered_from_what_a_reader_was_shown",
+    ]
+    # One row per provider per leaf, then three; `tests/unit/test_acceptance_models.py` names them.
+    assert len(by_module["brain.ops.acceptance_models"]) == 11
+    assert by_module["brain.ops.acceptance_audit"] == [
+        "each_audited_act_is_in_the_ledger_and_a_missing_entry_is_caught"
     ]
     assert list(by_module) == list(acceptance.CHECK_MODULES)
     oversight = {one.name: one.leaves for one in registered()}
@@ -454,6 +459,13 @@ WRITTEN_BY_CHECKS = (
     "gate.team",
     "gate.team_membership",
     "gate.department_lead",
+    "ops.routing_rung",
+    "ops.model_attempt",
+    "ops.provider_health",
+    "ops.chain_depth_alert",
+    "ops.spend_actual",
+    "ops.sensitive_read",
+    "er.canonical",
 )
 
 
@@ -514,10 +526,19 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         NOT_RUN,
         "this install names no public skill to import, so no import from GitHub was asked",
     )
+    # No key and no hosted profile here, so every check that reaches a model says it was not run;
+    # `tests/unit/test_acceptance_models.py` runs them against providers that answer.
+    for model_check in registered(("brain.ops.acceptance_models",)):
+        assert outcomes.pop(model_check.name)[0] == NOT_RUN, model_check.name
+    # Every act that exists was seen, and the leaf still cannot close: see its module.
+    assert outcomes.pop("each_audited_act_is_in_the_ledger_and_a_missing_entry_is_caught") == (
+        NOT_RUN,
+        acceptance_audit.A_BROWSER_SESSION_AND_A_TRACE_STORE_ARE_NOT_BUILT,
+    )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
     assert len(outcomes) == 11
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 26
+    assert runs == [(2,)] and len(recorded) == 50
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }

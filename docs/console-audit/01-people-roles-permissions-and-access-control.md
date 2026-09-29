@@ -1,19 +1,19 @@
 ### People, roles, permissions and access control
 
 - **Screens:** `/people`, `/people/:personId`, `/people/:personId/:view`, `/roles`, `/capabilities`, `/scopes`, `/packs`, `/access_review`, `/access_review/:kind/:rowId`, `/elevation`, `/elevation/:requestId`, `/sessions`, `/sign-in-links`, `/staff_sources`, `/access-requests`, `/service-accounts`, `/service-accounts/:clientId`
-- **Tables:** `auth.principal`, `auth.principal_identity`, `auth.session`, `auth.directory_role_grant`, `gate.capability_grant`, `gate.capability_pack`, `gate.capability_pack_assignment`, `gate.capability_registry`, `gate.scope`, `gate.grants_version`, `gate.policy_epoch`, `gate.review_decision`, `gate.elevation_request`, `auth.staff_member`, `auth.staff_sync_run`, `auth.service_account`, `auth.api_key`, `gate.access_request`, `gate.role_grant`, `auth.group_role_rule`, `gate.break_glass_notice`
+- **Tables:** `auth.principal`, `auth.principal_identity`, `auth.session`, `auth.directory_role_grant`, `gate.capability_grant`, `gate.capability_pack`, `gate.capability_pack_assignment`, `gate.capability_registry`, `gate.scope`, `gate.grants_version`, `gate.policy_epoch`, `gate.review_decision`, `gate.elevation_request`, `auth.staff_member`, `auth.staff_sync_run`, `auth.service_account`, `auth.api_key`, `gate.access_request`, `gate.access_request_handled`, `gate.role_grant`, `auth.group_role_rule`, `gate.break_glass_notice`
 - **Installation values:** `INSTALL_OIDC_ISSUER`, `INSTALL_OIDC_REALM`, `INSTALL_OIDC_CLIENT_ID`, `INSTALL_OIDC_REDIRECT_URIS`, `INSTALL_BROKERED_DIRECTORY`, `INSTALL_STAFF_SOURCE`, `INSTALL_STAFF_SOURCE_LOCATION`, `INSTALL_BROKERED_CLIENT_ID`
 - **Measured here:** 65 routes, 1 called by no screen; 38 write routes, 38 with all three proofs; 6 gaps.
 
 | Route | Called by |
 | --- | --- |
 | `GET /api/v1/access-requests` | `/access-requests` |
-| `GET /api/v1/console/navigation` | `/department` |
+| `GET /api/v1/console/navigation` | `/department`, `/department/:view` |
 | `GET /api/v1/govern/access-review` | `/access_review`, `/access_review/:kind/:rowId` |
 | `GET /api/v1/govern/capabilities` | `/capabilities` |
 | `GET /api/v1/govern/data-steward` | `/people` |
-| `GET /api/v1/govern/directory` | `/people`, `/roles` |
-| `GET /api/v1/govern/directory/{principal_id}` | `/people/:personId`, `/people/:personId/:view` |
+| `GET /api/v1/govern/directory` | `/department`, `/department/:view`, `/people`, `/roles` |
+| `GET /api/v1/govern/directory/{principal_id}` | `/memory/:subject`, `/memory/:subject/:view`, `/people/:personId`, `/people/:personId/:view` |
 | `GET /api/v1/govern/elevation` | `/elevation`, `/elevation/:requestId` |
 | `GET /api/v1/govern/elevation/notices` | `/elevation` |
 | `GET /api/v1/govern/packs` | `/packs` |
@@ -22,7 +22,7 @@
 | `GET /api/v1/govern/roles/group-rules` | `/roles` |
 | `GET /api/v1/govern/roles/holders` | `/people/:personId/:view`, `/roles` |
 | `GET /api/v1/govern/roles/misconfigurations` | `/roles` |
-| `GET /api/v1/govern/scopes` | `/departments/:slug/:view`, `/scopes` |
+| `GET /api/v1/govern/scopes` | `/department/:view`, `/departments/:slug/:view`, `/scopes` |
 | `GET /api/v1/govern/service-accounts` | `/service-accounts` |
 | `GET /api/v1/govern/service-accounts/{client_id}` | `/service-accounts/:clientId` |
 | `GET /api/v1/govern/sessions` | `/sessions` |

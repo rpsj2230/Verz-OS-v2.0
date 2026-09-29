@@ -50,7 +50,7 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
   "src/pages/audit/VerifyPage.tsx VERIFICATION_API_PATH":
     "Walking the ledger reads every entry and writes nothing: brain.audit_routes.verify_ledger stores no " +
     "report, which tests/unit/test_chain_check.py holds, so there is nothing for a press to destroy.",
-  "src/pages/RequirementChecks.tsx CHECKS_API_PATH":
+  "src/pages/requirement-checks/RecordDrawer.tsx CHECKS_API_PATH":
     "Recording a check appends a row. A later check supersedes an earlier one without editing it and " +
     "nothing is removed, which tests/unit/test_requirement_check_routes.py holds, so nothing existing " +
     "is ended or replaced.",

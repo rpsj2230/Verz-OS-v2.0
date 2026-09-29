@@ -1,10 +1,11 @@
 /**
- * The Requirement checks screen, and the Audit screen's verification card.
+ * The Requirement checks page on the page kit, and the Audit screen's verification card.
  *
  * Mounted directly on a memory router at each address, for the reason `tests/sessions-page.test.tsx`
  * gives. The failures worth testing look like the screen working: a requirement nobody checked drawn
- * as passed, a check sent with no note, a recorded check that never reaches the table, and a walk of
- * the ledger drawn as a tick when only the chain was checked.
+ * as passed, evidence from a check that proves another leaf, a check sent with no note, a recorded
+ * check that never reaches the row, a person drawn as their reference, and a walk of the ledger drawn
+ * as a tick when only the chain was checked.
  *
  * Task ids: M1.8.8, M2.3.2, M5.6.5, M24.3.6, M24.1.2, M24.3.3
  */
@@ -12,11 +13,13 @@
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
-import { READING_CHECKS, NOT_CHECKED } from "../src/pages/RequirementChecks";
+import { NOTHING_MATCHES } from "../src/components/ListControls";
+import { READING_CHECKS, NOT_CHECKED, RECORD_LABEL, RECORDED as RECORDED_SENTENCE } from "../src/pages/requirement-checks/RequirementChecksPage";
 import { DRAFT_PROBLEMS } from "../src/pages/requirementChecksQuery";
 import { CHECK_HEAD_LABEL, WALK_LABEL } from "../src/pages/Audit";
 import { COMPLETENESS_WORDS, HEAD_PROBLEMS } from "../src/pages/auditQuery";
 import { fakeIdentityProvider, loadConsole, signIn } from "./support/auth";
+import { installRadixStubs } from "./support/radix";
 
 const CHECKS = "/api/v1/requirements/checks";
 const VERIFY = "/api/v1/audit/verification";
@@ -25,6 +28,7 @@ const TOLD = "A check is what a person saw this install do.";
 const CAVEAT = "no anchor was checked, so this run proves continuity and not completeness";
 
 beforeAll(async () => {
+  installRadixStubs();
   await import("../src/pages/RequirementChecks");
   await import("../src/pages/Audit");
 }, 60_000);
@@ -47,8 +51,24 @@ function checksBody(latest: unknown = null): unknown {
     ],
     area: "Permissions",
     requirements: [
-      { id: "ARC-A-001", requirement: "Each person sees only what they are entitled to see.", source: "s", latest },
-      { id: "DEC-30", requirement: "Every personnel read is written down.", source: "s", latest: null },
+      {
+        id: "ARC-A-001",
+        requirement: "Each person sees only what they are entitled to see.",
+        source: "s",
+        latest,
+        proof: ["M1.8.8"],
+        evidence: [
+          {
+            name: "grant_is_refused",
+            sentence: "A refusal names nothing.",
+            leaves: ["M1.8.8"],
+            outcome: "passed",
+            checked_at: "2019-03-04T09:00:05+00:00",
+            reason: "",
+          },
+        ],
+      },
+      { id: "DEC-30", requirement: "Every personnel read is written down.", source: "s", latest: null, proof: ["M24.3.6"], evidence: [] },
     ],
     release_commit: "a".repeat(40),
     told: TOLD,
@@ -108,6 +128,9 @@ async function checksPage(sent: Sent[], afterRecord: unknown = null): Promise<HT
       if (url.pathname === CHECKS) {
         return json(checksBody(recorded ? afterRecord : null));
       }
+      if (url.pathname === "/api/v1/govern/directory/u_admin") {
+        return json({ person: { principal_id: "u_admin", display_name: "Ada Admin", standing: "live", packs: [] }, placements: {}, held: [] });
+      }
       return null;
     },
     sent,
@@ -115,56 +138,105 @@ async function checksPage(sent: Sent[], afterRecord: unknown = null): Promise<HT
   );
 }
 
-describe("the requirement checks screen", () => {
-  test("every area with where it stands, and one area's requirements in the owner's words, unchecked", async () => {
-    // What breaks if this is deleted: an area's standing drops off, or a requirement nobody checked
-    // is drawn with somebody else's check.
+function drawerFor(container: HTMLElement, id: string): HTMLElement {
+  const opener = [...container.querySelectorAll("button")].find((one) => one.getAttribute("aria-label") === `${RECORD_LABEL} a check of ${id}`);
+  if (opener === undefined) {
+    throw new Error(`No record control for ${id}.`);
+  }
+  fireEvent.click(opener);
+  const found = document.body.querySelector<HTMLElement>('[data-slot="drawer"]');
+  if (found === null) {
+    throw new Error("The drawer did not open.");
+  }
+  return found;
+}
+
+describe("the requirement checks page", () => {
+  test("where the register and each area stand, and one area's requirements with their proof and evidence", async () => {
+    // What breaks if this is deleted: an area's standing drops off, a requirement nobody checked is
+    // drawn with somebody else's check, or the install's own evidence is missing from the row.
     const container = await checksPage([]);
-    const areas = container.querySelector('[aria-label="Areas of the register"]')?.textContent ?? "";
-    expect(areas).toContain("Permissions");
-    expect(areas).toContain("0 passed, 0 failed, 2 not yet checked, of 2, for M1.8.8");
-    expect(areas).toContain("Models");
-    const table = container.querySelector('[aria-label="Requirements in this area"]')?.textContent ?? "";
-    expect(table).toContain("Each person sees only what they are entitled to see.");
-    expect(table).toContain(NOT_CHECKED);
-    expect(container.textContent).toContain(TOLD);
+    const register = container.querySelector('[aria-label="The whole register"]')?.textContent ?? "";
+    expect(register).toContain("Requirements3");
+    expect(register).toContain("To check3");
+    const areas = container.querySelector("table")?.closest('[data-slot="section-card"]');
+    expect(areas).not.toBeNull();
+    const byArea = [...container.querySelectorAll('[data-slot="section-card"]')].find((one) => one.querySelector("h2")?.textContent === "By area");
+    expect(byArea?.textContent).toContain("Permissions");
+    expect(byArea?.textContent).toContain("0 of 2");
+    expect(byArea?.textContent).toContain("Models");
+    const rows = [...container.querySelectorAll('[data-slot="section-card"]')]
+      .find((one) => one.querySelector("h2")?.textContent === "Permissions")
+      ?.querySelectorAll("tbody tr");
+    const first = rows?.[0]?.textContent ?? "";
+    expect(first).toContain("Each person sees only what they are entitled to see.");
+    expect(first).toContain("M1.8.8");
+    expect(first).toContain("Passed");
+    expect(first).toContain(NOT_CHECKED);
+    expect(rows?.[1]?.textContent).toContain("No automatic check");
   });
 
-  test("a check sent blank is told what to fill in and nothing is sent", async () => {
-    // What breaks if this is deleted: a check with no requirement, no outcome or no note reaches the
-    // API, and the one record of what a person saw says nothing.
+  test("a check sent blank from the drawer is told what to fill in and nothing is sent", async () => {
+    // What breaks if this is deleted: a check with no outcome or no note reaches the API, and the one
+    // record of what a person saw says nothing.
     const sent: Sent[] = [];
     const container = await checksPage(sent);
-    fireEvent.submit(container.querySelector('form[aria-label="Record a check"]') as HTMLFormElement);
-    await waitFor(() => expect(container.textContent).toContain(DRAFT_PROBLEMS.note));
-    expect(container.textContent).toContain(DRAFT_PROBLEMS.requirementId);
-    expect(container.textContent).toContain(DRAFT_PROBLEMS.outcome);
+    const drawer = drawerFor(container, "ARC-A-001");
+    expect(drawer.textContent).toContain("A refusal names nothing.");
+    expect(drawer.textContent).toContain(TOLD);
+    fireEvent.submit(drawer.querySelector('form[aria-label="Record a check"]') as HTMLFormElement);
+    await waitFor(() => expect(drawer.textContent).toContain(DRAFT_PROBLEMS.note));
+    expect(drawer.textContent).toContain(DRAFT_PROBLEMS.outcome);
     expect(sent.filter((one) => one.method !== "GET")).toEqual([]);
   });
 
-  test("a check filled in is sent as the API takes it and the table shows it afterwards", async () => {
-    // What breaks if this is deleted: the form sends a different body from the one the route
-    // takes, or a recorded check never reaches the table the person is looking at.
+  test("a check filled in is sent as the API takes it and the row shows it afterwards, by name", async () => {
+    // What breaks if this is deleted: the drawer sends a different body from the one the route
+    // takes, a recorded check never reaches the row, or the recorder is drawn as a reference.
     const sent: Sent[] = [];
     const container = await checksPage(sent, RECORDED);
-    const form = container.querySelector('form[aria-label="Record a check"]') as HTMLFormElement;
-    const [requirement, outcome] = [...form.querySelectorAll("select")];
-    fireEvent.change(requirement as HTMLSelectElement, { target: { value: "ARC-A-001" } });
-    fireEvent.change(outcome as HTMLSelectElement, { target: { value: "passed" } });
+    const drawer = drawerFor(container, "ARC-A-001");
+    const form = drawer.querySelector('form[aria-label="Record a check"]') as HTMLFormElement;
+    fireEvent.click(form.querySelector('input[value="passed"]') as HTMLInputElement);
     fireEvent.change(form.querySelector("textarea") as HTMLTextAreaElement, {
       target: { value: "  Asked as Priya and was refused the salary.  " },
     });
     fireEvent.submit(form);
-    await waitFor(() => expect(container.textContent).toContain("Passed by u_admin"));
-    const posted = sent.filter((one) => one.method === "POST");
-    expect(posted).toEqual([
+    await waitFor(() => expect(container.textContent).toContain(RECORDED_SENTENCE));
+    expect(sent.filter((one) => one.method === "POST")).toEqual([
       {
         method: "POST",
         path: CHECKS,
         body: { requirement_id: "ARC-A-001", outcome: "passed", note: "Asked as Priya and was refused the salary." },
       },
     ]);
-    expect(container.textContent).toContain("release aaaaaaa");
+    await waitFor(() => expect(container.querySelector("tbody tr")?.textContent).toContain("Passed"));
+    expect(container.textContent).not.toContain("u_admin");
+    const reopened = drawerFor(container, "ARC-A-001");
+    await waitFor(() => expect(reopened.textContent).toContain("by Ada Admin"));
+    const advanced = reopened.querySelector('[data-slot="advanced"]')?.textContent ?? "";
+    expect(advanced).toContain("u_admin");
+    expect((reopened.textContent ?? "").replace(advanced, "")).not.toContain("u_admin");
+  });
+
+  test("the standing and the words narrow the area's rows, and clearing them brings every row back", async () => {
+    // What breaks if this is deleted: a narrowing that hides a row it should show, or one that cannot
+    // be undone, so a requirement looks missing from the register.
+    const container = await checksPage([]);
+    const narrowing = container.querySelector('form[aria-label="Narrow the requirements"]') as HTMLFormElement;
+    const standing = [...narrowing.querySelectorAll("select")].find((one) => one.querySelector('option[value="failed"]') !== null) as HTMLSelectElement;
+    fireEvent.change(standing, { target: { value: "failed" } });
+    await waitFor(() => expect(container.textContent).toContain(NOTHING_MATCHES));
+    fireEvent.change(standing, { target: { value: "unchecked" } });
+    await waitFor(() => expect(container.querySelectorAll("tbody tr").length).toBeGreaterThan(2));
+    fireEvent.change(narrowing.querySelector('input[type="search"]') as HTMLInputElement, { target: { value: "personnel" } });
+    await waitFor(() => {
+      const rows = [...container.querySelectorAll('[data-slot="section-card"]')]
+        .find((one) => one.querySelector("h2")?.textContent === "Permissions")
+        ?.querySelectorAll("tbody tr");
+      expect([...(rows ?? [])].map((one) => one.textContent ?? "").join(" ")).toContain("DEC-30");
+      expect(rows?.length).toBe(1);
+    });
   });
 });
 

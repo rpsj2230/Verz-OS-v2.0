@@ -184,6 +184,14 @@ class Meter:
         distinct = set(self._routes)
         return next(iter(distinct)) if len(distinct) == 1 else None
 
+    def classified(self) -> bool:
+        """Whether the executor classified any call of this request, whether or not they agree.
+
+        `route` is None both for no call and for two that disagree, and only the first leaves the
+        row to the front half's tier (`brain.gate.answer.route_of`).
+        """
+        return bool(self._routes)
+
     def attempted(self) -> None:
         """A call was sent. Counted before it returns, so a call that raised still counts."""
         self._attempts += 1

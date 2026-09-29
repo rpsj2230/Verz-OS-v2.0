@@ -36,6 +36,9 @@ module.exports = {
     "M38.5.3":3,
     // The starter pack needs the template signing key built in Wave 3: owner, 2026-09-21, item 82.
     "M41.2.7":3,
+    // The template signing key itself is pulled forward so agents can be published from the
+    // console: owner, 2026-09-29, item 82.
+    "M13.8.10":2,
     // The full profile needs presidio, which the redactor (M4) uses: owner, 2026-09-21, item 77.
     "M0.4.2":1,
     // Ignoring a duplicate chat delivery needs Wave 2's inbound chat route: owner, 2026-09-22, item 95.

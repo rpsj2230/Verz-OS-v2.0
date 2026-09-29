@@ -241,6 +241,8 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.audit.chain_check:LedgerSequence.after": Repeat.READS,
         "brain.audit.chain_check:LedgerSequence.at_seq": Repeat.READS,
         "brain.audit.chain_check:LedgerSequence.newest": Repeat.READS,
+        # The acceptance results a requirement row shows as its evidence, read and never written.
+        "brain.requirement_check_routes:AcceptanceRuns.newest": Repeat.READS,
         # A requirement check (0099) is an append with no key: a second press is a second check,
         # which is what it is, since a later check supersedes and never edits an earlier one.
         "brain.requirement_check_routes:RequirementChecks.latest": Repeat.READS,
@@ -259,6 +261,12 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # version reads metadata only.
         "brain.ops.credentials:CredentialVault.static_kv_version": Repeat.READS,
         "brain.ops.credentials:CredentialVault.write_static_kv": Repeat.SAME_RESULT_WHEN_REPEATED,
+        # The template signing key's slot: a create the vault accepts only while the slot never
+        # held a version, so a repeat is refused and leaves the first key in place; the read reads.
+        "brain.ops.template_key:TemplateKeyVault.create_static_kv_once": (
+            Repeat.SAME_RESULT_WHEN_REPEATED
+        ),
+        "brain.ops.template_key:TemplateKeyVault.read_static_kv": Repeat.READS,
         # The record of a kept key (0054): a row in this system's own table, whose trigger appends
         # the ledger entry. A repeat is a second row and a second entry, which is right, because a
         # repeated call follows a second write to the vault.

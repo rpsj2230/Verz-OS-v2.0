@@ -68,7 +68,7 @@ Since 2026-09-17 `ops/install/install.sh` runs the vault on every profile (a `li
 decline it with `--no-vault`), and it does steps 1 to 6 below itself, in four steps of its own:
 it starts the vault, initialises it with the split above, **prints the five pieces once at the
 terminal**, opens it with three of them, turns on both audit devices, enables the `providers`,
-`webhooks` and `connector_keys` engines, loads the policies, creates the `connector-run` token
+`webhooks`, `connector_keys` and `template_signing` engines, loads the policies, creates the `connector-run` token
 role a connector run's token is minted against, defines every source's key slot with its scopes and
 no key, mints the application's token and,
 on a profile with a worker, the worker's, each with a period of 768 hours, appends them and the
@@ -102,7 +102,8 @@ person running the install with three of the holders:
 2. Generate a root token with the same three holders: `docker exec -it brain-vault bao operator
    generate-root -init`, then the steps it prints. It leaves a record that it happened.
 3. With that token, do what the installer did not: enable any
-   of `providers`, `webhooks` and `connector_keys` that `bao secrets list` does not show, each as
+   of `providers`, `webhooks`, `connector_keys` and `template_signing` that `bao secrets list` does
+   not show, each as
    `bao secrets enable -path=<name> kv-v2`; `sh ops/openbao/load-policies.sh`; then the
    `connector-run` token role and the source slots, steps 3 and 4 of "A connected source's key" in
    `ops/openbao/credential-slots.md`.
@@ -115,6 +116,62 @@ person running the install with three of the holders:
 If the installer says the root token could not be revoked, only step 5 is left: generate a new
 one with three holders, revoke the old one by its accessor from `bao list auth/token/accessors`,
 then revoke the new one with step 6.
+
+## Loading a release's policies on a running install
+
+A release that changes a file in `ops/openbao/policies`, or adds an engine, is not in force on a
+running vault: the vault goes on enforcing the policies it loaded until somebody with three unseal
+pieces loads them again. On an install made before 2026-09-29 two changes wait on this, and one
+sitting does both:
+
+- **Answers reading a connected source live** (needs-rupash 99): the application's policy now lets
+  it mint the one-read `connector-run` token. Until the reload, the Credentials screen's vault card
+  says "Answers cannot read connected sources live yet".
+- **The template signing key** (needs-rupash 82): a new engine, `template_signing`, and create and
+  read on its one slot, so the application can mint the key once and read it. Until the reload the
+  card says "Template signing key: not yet created, waiting for the vault policy reload", and
+  publishing and installing agents are unavailable.
+
+You need three of the five holders, each with their own piece; a shell on the server as a user
+that may run `docker`; and the release's `ops/openbao/` directory on that server (on an install
+made by the installer, `/opt/brain/ops/openbao`, which each update replaces with the release's own).
+Nothing below is typed into a file, and the root token exists from step 4 to step 7 only.
+
+1. On the console, open **Credentials**. The vault card must show a **Template signing key** line.
+   If it does not, the install is not on this release yet: update it first, then start here.
+2. On the server, go to the directory that holds this release's `ops/openbao/` (on an install made
+   by the installer, `cd /opt/brain`).
+3. Start a root token: `docker exec -it brain-vault bao operator generate-root -init`. It prints a
+   **Nonce** and an **OTP**. Leave both on this screen; nothing else needs them.
+4. Each of the three holders in turn runs
+   `docker exec -it brain-vault bao operator generate-root -nonce=<the Nonce from step 3>` and types
+   their own piece at the prompt, which does not show it. The third run prints an **Encoded Token**.
+   Put the root token into this shell without it reaching the screen:
+   `export BAO_TOKEN="$(docker exec brain-vault bao operator generate-root -decode=<the Encoded Token> -otp=<the OTP from step 3>)"`.
+5. Enable the new engine: `docker exec -e BAO_TOKEN brain-vault bao secrets list`. If
+   `template_signing/` is not in the list, run
+   `docker exec -e BAO_TOKEN brain-vault bao secrets enable -path=template_signing kv-v2`.
+   Enabling it again when it is listed is refused and changes nothing.
+6. Load the policies: `sh ops/openbao/load-policies.sh`. It prints `loaded application` and one
+   line for every other policy, then the list the vault holds. Confirm the two changes are in force:
+   `docker exec -e BAO_TOKEN brain-vault bao policy read application` shows
+   `path "template_signing/data/key"` with `["create", "read"]` and
+   `path "auth/token/create/connector-run"` with `["create", "update"]`. Confirm the token role live
+   reads mint against is there: `docker exec -e BAO_TOKEN brain-vault bao read
+   auth/token/roles/connector-run` shows `allowed_policies` as `[connector-run]`; if it says no value
+   was found, create it with step 3 of "A connected source's key" in `credential-slots.md`.
+7. Revoke the root token and clear it from the shell:
+   `docker exec -e BAO_TOKEN brain-vault bao token revoke -self`, then `unset BAO_TOKEN`.
+8. Restart the application, which mints the key into its empty slot and reads it back: on an
+   install made by the installer, `docker compose <your profile's -f files> restart app` from
+   `/opt/brain`; on a deployment panel, restart the application there. The worker needs no restart.
+9. Confirm on the console: **Credentials**, the vault card says "Template signing key: held" and no
+   longer says answers cannot read connected sources live. The application's log has a
+   `template signing key held` line per process and never the key. Live reads needed no restart:
+   the vault applies a reloaded policy to the tokens already out.
+
+If step 9 still says waiting, step 5 or 6 did not take: `bao secrets list` and `bao policy read
+application` under a new root token (steps 3 and 4) say which, and step 7 revokes it again.
 
 ## First install by hand
 

@@ -506,6 +506,29 @@ def run_acceptance_now(
     return said
 
 
+async def hold_what_was_saved(database_url: str) -> None:
+    """Hold the installation values saved in the wizard and the console, as the worker does.
+
+    A process started by hand has no lifespan and no schedule, so without this it reads the model
+    profile and every other saved value from its environment alone, and a check asking a provider
+    finds an install saved as hosted keeping text on its own hardware. The worker reloads them
+    before every tick (`brain.ops.worker.THE_WORKER_HOLDS_WHAT_WAS_SAVED_BEFORE_EVERY_TICK`); a
+    table that cannot be read is said and the run goes on with the environment's values.
+    """
+    from brain.ops.install_settings import refresh_changed
+    from brain.session import make_session_factory
+
+    engine = make_app_engine(database_url)
+    try:
+        await refresh_changed(make_session_factory(engine))
+    except Exception as exc:
+        print(
+            f"{LOG_PREFIX} the saved settings could not be read: {describe(exc)}", file=sys.stderr
+        )
+    finally:
+        await engine.dispose()
+
+
 def main() -> int:
     """Run every check now against this container's database, record it, and print each result.
 
@@ -518,6 +541,7 @@ def main() -> int:
         print(f"{LOG_PREFIX} no database is configured, so nothing was checked", file=sys.stderr)
         return 1
     commit = settings.resolved_commit()
+    asyncio.run(hold_what_was_saved(settings.database_url))
     _, results = asyncio.run(
         run_acceptance(settings.database_url, settings=settings, commit=commit, force=True)
     )

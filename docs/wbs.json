@@ -1829,7 +1829,9 @@
     "On the install a super admin and a department admin each create an agent from their requirements and a workflow, assign its skills and tools, and the agent answers through its channel, with the checks recorded",
     "A template agent installs with one click using sensible defaults, and the full setup wizard stays available for anyone who wants to change them"
    ],
-   "leaf_waves": {},
+   "leaf_waves": {
+    "M13.8.10": 2
+   },
    "leaf_acts": {},
    "leaf_decided": {
     "M13.1.4": {
