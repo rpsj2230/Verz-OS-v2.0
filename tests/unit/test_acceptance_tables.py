@@ -687,9 +687,12 @@ def the_same_words_refused_for_two_places(monkeypatch: pytest.MonkeyPatch) -> No
 
 def a_scope_never_read(monkeypatch: pytest.MonkeyPatch) -> None:
     """The Classification routes as they were until 2026-09-29: the grants held anywhere at all."""
-    monkeypatch.setattr(
-        "brain.classification_routes.table_within_reach", lambda reach, rows, now: True
-    )
+    monkeypatch.setattr("brain.classification_routes.table_within_reach", lambda *given: True)
+
+
+def a_read_needing_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The Classification read as it was until 2026-09-29: the read grant held anywhere at all."""
+    monkeypatch.setattr("brain.classification_routes.TO_READ", ())
 
 
 def attributing_the_upload_alone(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -839,10 +842,17 @@ def marking_any_column(monkeypatch: pytest.MonkeyPatch) -> None:
         ),
         pytest.param(
             MARKED,
-            "an administrator of one department could change another department's price list, or "
-            "was refused it in other words than a price list that does not exist",
+            "an administrator of one department could read or change another department's price "
+            "list, or was refused it in other words than a price list that does not exist",
             a_scope_never_read,
             id="a-department-administrator-changes-another-department-s-table",
+        ),
+        pytest.param(
+            MARKED,
+            "an administrator of one department could read or change another department's price "
+            "list, or was refused it in other words than a price list that does not exist",
+            a_read_needing_nothing,
+            id="a-department-administrator-reads-another-department-s-table",
         ),
         pytest.param(
             ASKED,

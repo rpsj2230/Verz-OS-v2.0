@@ -42,6 +42,8 @@ from brain.app import Settings, create_app
 from brain.classification_routes import (
     CLASSIFICATION_READ,
     CLASSIFICATION_WRITE,
+    TO_CHANGE,
+    TO_READ,
     ColumnMark,
     table_within_reach,
 )
@@ -1072,13 +1074,16 @@ def both_grants(scope: Scope) -> tuple[Grant, ...]:
     )
 
 
-#: Web's administrator, Finance's administrator and the install's, under three of the people
+#: Web's administrator, Finance's administrator and the install's, and web's reader of
+#: classifications, who may read them and change nothing, under four of the people
 #: `tests.unit.test_api_routes` mints tokens for.
 WEB_ADMIN, FINANCE_ADMIN, INSTALL_ADMIN = "u_prefix", "u_elsewhere", "u_admin"
+WEB_READER = "u_narrow"
 SCOPED_GRANTS: Mapping[str, tuple[Grant, ...]] = {
     WEB_ADMIN: both_grants(Scope.department("web")),
     FINANCE_ADMIN: both_grants(Scope.department("finance")),
     INSTALL_ADMIN: both_grants(Scope.unrestricted()),
+    WEB_READER: (Grant(capability=CLASSIFICATION_READ, scope=Scope.department("web")),),
 }
 
 
@@ -1206,7 +1211,8 @@ def test_another_department_s_table_is_refused_to_them_exactly_as_a_missing_one(
     assert {str(refusal(one)) for one in missing} == {str(refusal(missing[0]))}
     assert memory.tables["finance_prices"] is stored
     assert [one.actor_id for one in memory.writers] == [INSTALL_ADMIN]
-    assert call(departments, "GET", "/finance_prices", WEB_ADMIN).json()["editable"] is False
+    # Nor may they read it: see the read's own test below.
+    assert refusal(read_as(departments, WEB_ADMIN, "finance_prices")) == refusal(missing[0])
 
 
 def test_a_department_administrator_may_not_upload_rows_outside_their_department(
@@ -1246,6 +1252,84 @@ def test_an_install_wide_administrator_changes_any_department_s_table(
         INSTALL_ADMIN,
         INSTALL_ADMIN,
     ]
+
+
+def read_as(c: TestClient, pid: str, entity: str) -> Response:
+    """The Classification screen's read of one table's column rules."""
+    return call(c, "GET", f"/{entity}", pid)
+
+
+def test_another_department_s_table_is_unreadable_to_them_exactly_as_a_missing_one(
+    departments: TestClient,
+) -> None:
+    """**Reading is scoped as changing is.** Finance's price list is refused to web's reader and to
+    web's administrator in the very body a table that does not exist gets, so neither learns which
+    columns finance keeps confidential, nor that finance holds a table by that name. Delete this and
+    a department reader can map every other department's price lists one name at a time."""
+    upload_as(departments, INSTALL_ADMIN, "finance_prices", placed("finance"))
+    upload_as(departments, INSTALL_ADMIN, "mixed_prices", placed("web") + b"Extra,finance,1,1\n")
+    upload_as(departments, INSTALL_ADMIN, "all_prices", CSV)
+
+    refused = [
+        read_as(departments, pid, entity)
+        for pid in (WEB_READER, WEB_ADMIN)
+        for entity in ("finance_prices", "mixed_prices", "all_prices")
+    ]
+    missing = read_as(departments, WEB_READER, "no_such_prices")
+
+    assert missing.status_code == 404
+    assert missing.json()["message"] == Absent.public_message
+    assert {one.status_code for one in refused} == {404}
+    assert {str(refusal(one)) for one in refused} == {str(refusal(missing))}
+
+
+def test_a_table_within_reach_is_read_whole_and_editable_only_with_the_write_grant(
+    departments: TestClient,
+) -> None:
+    """The sibling: web's reader reads web's price list whole, and is told it is not editable;
+    web's administrator reads it editable; finance's administrator and the install's read finance's;
+    and the shipped price list, whose rules are a release rather than anybody's rows, is read by
+    anybody holding the read grant at all. Delete this and the refusal above is satisfied by a read
+    that answers nobody."""
+    upload_as(departments, WEB_ADMIN, "web_prices", placed("web"))
+    upload_as(departments, FINANCE_ADMIN, "finance_prices", placed("finance"))
+
+    reader = read_as(departments, WEB_READER, "web_prices")
+    admin = read_as(departments, WEB_ADMIN, "web_prices")
+    theirs = read_as(departments, FINANCE_ADMIN, "finance_prices")
+    install = read_as(departments, INSTALL_ADMIN, "finance_prices")
+    shipped = read_as(departments, WEB_READER, PRICE_LIST.entity)
+
+    for answered in (reader, admin, theirs, install, shipped):
+        assert answered.status_code == 200, answered.text
+    assert reader.json()["editable"] is False
+    assert {one["column"] for one in reader.json()["columns"]} == {
+        "name",
+        "department",
+        "sell_price",
+        "cost",
+    }
+    assert admin.json()["editable"] is True
+    assert theirs.json()["editable"] is True and install.json()["editable"] is True
+    assert shipped.json()["stored"] is False
+
+
+def test_the_read_grant_alone_reaches_a_table_whose_every_row_it_admits() -> None:
+    """`table_within_reach` asked for reading: the read grant at every row, and the write grant not
+    at all, since reading changes nothing. Delete this and reading a table either needs the write
+    grant, which no reader holds, or needs no scope, which is the defect."""
+    reader = EntitlementSet(
+        principal_id="p_reader",
+        grants=(Grant(capability=CLASSIFICATION_READ, scope=Scope.department("web")),),
+    )
+    in_web, in_finance = {"department": "web"}, {"department": "finance"}
+
+    assert table_within_reach(reader, (in_web,), NOW, TO_READ)
+    assert not table_within_reach(reader, (in_web, in_finance), NOW, TO_READ)
+    assert not table_within_reach(reader, (), NOW, TO_READ)
+    assert not table_within_reach(reader, (in_web,), NOW)
+    assert TO_READ == (CLASSIFICATION_READ,)
+    assert (CLASSIFICATION_READ, CLASSIFICATION_WRITE) == TO_CHANGE
 
 
 #: What each asker holds on the answer route: a salesperson, and Finance.

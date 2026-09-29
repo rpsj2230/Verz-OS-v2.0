@@ -130,8 +130,8 @@ EACH_LIST_WAS_NOT_ANSWERED: Final = (
 )
 
 ANOTHER_DEPARTMENT_S_TABLE_WAS_TOLD_APART: Final = (
-    "an administrator of one department could change another department's price list, or was "
-    "refused it in other words than a price list that does not exist"
+    "an administrator of one department could read or change another department's price list, "
+    "or was refused it in other words than a price list that does not exist"
 )
 
 A_PRICE_LIST_WAS_REFUSED: Final = (
@@ -442,17 +442,23 @@ async def _upload(
     return stored, view_of(stored.classification, editable=True, stored=stored)
 
 
-async def _changeable(h: Harness, admin: _Administrator, entity: str) -> StoredTable | None:
+async def _changeable(
+    h: Harness, admin: _Administrator, entity: str, *, reading: bool = False
+) -> StoredTable | None:
     """`brain.classification_routes._changeable_or_absent`'s answer: the uploaded table when it
     exists and every row of it is within the administrator's grants, and None, the routes' one
-    refusal, both when it does not exist and when it is out of reach."""
-    from brain.classification_routes import table_within_reach
+    refusal, both when it does not exist and when it is out of reach. `reading` asks what
+    `brain.classification_routes.classification` asks before it answers a table's rules: the read
+    grant alone, at every row."""
+    from brain.classification_routes import TO_CHANGE, TO_READ, table_within_reach
 
     tables = _tables(h)
     stored = await tables.table(entity)
     if stored is None:
         return None
-    return stored if table_within_reach(admin.reach, await tables.rows_of(stored), h.now) else None
+    rows = await tables.rows_of(stored)
+    needing = TO_READ if reading else TO_CHANGE
+    return stored if table_within_reach(admin.reach, rows, h.now, needing) else None
 
 
 async def _marked_table(h: Harness, admin: _Administrator, entity: str) -> StoredTable:
@@ -795,8 +801,8 @@ async def a_reader_without_the_cost_grant_is_told_the_sell_price_alone(h: Harnes
         "An administrator with a second factor marks a price list's margin restricted: the review "
         "names the cost as newly reachable and stores nothing; applied, the mark is stored, the "
         "epoch moves and 0116 ledgers it under their name, reach and request. A mark that would "
-        "not load, a person without the write grant and another department's administrator, "
-        "refused as for a missing table, change nothing."
+        "not load and a person without the write grant change nothing; to another department's "
+        "administrator the list is missing, read or changed."
     ),
 )
 async def an_applied_mark_is_in_the_ledger_under_the_administrator(h: Harness) -> None:
@@ -876,5 +882,8 @@ async def an_applied_mark_is_in_the_ledger_under_the_administrator(h: Harness) -
         or await _changeable(h, admin, f"{theirs.entity}_nowhere") is not None
         or await _changeable(h, admin, prices.entity) is None
         or await _changeable(h, elsewhere, theirs.entity) is None
+        or await _changeable(h, admin, theirs.entity, reading=True) is not None
+        or await _changeable(h, admin, f"{theirs.entity}_nowhere", reading=True) is not None
+        or await _changeable(h, admin, prices.entity, reading=True) is None
     ):
         raise CheckFailedError(ANOTHER_DEPARTMENT_S_TABLE_WAS_TOLD_APART)
