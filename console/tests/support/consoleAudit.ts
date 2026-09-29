@@ -679,7 +679,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
   },
   "The audit trail: who changed what, and when": {
     screens: ["/audit", "/audit/verify", "/audit/subject/:kind/:id", "/audit/subject/:kind/:id/:view", "/requirement-checks"],
-    routes: ["/api/v1/audit*", "/api/v1/requirements/checks"],
+    routes: ["/api/v1/audit*", "/api/v1/requirements/checks", "/api/v1/traces*"],
     tables: [
       "obs.audit_entry",
       "ops.sensitive_read",
@@ -691,7 +691,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
     installation: [],
     gaps: [
       {
-        what: "A run's trace graph is stored masked and read only under its own role, and no screen reads it: TraceGraph draws a completed run and no route serves one.",
+        what: "A run's trace graph is stored masked and read only under the payload role, and no screen reads it: the read route serves one to a holder of that role, and no page calls it for TraceGraph to draw.",
         leaf: "M20.2.1",
       },
     ],

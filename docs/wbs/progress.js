@@ -409,6 +409,26 @@ const PROGRESS = {
     why: "live since d6290cb; a DeepSeek key was replaced on the install on 28 Sep, and the proof is that provider answering with it without a redeploy, once the worker fix of 2026-09-28 deploys (needs-rupash 98)",
     updated: "2026-09-28",
   },
+  "M32.1.1.1": {
+    status: "BLOCKED",
+    why: "waits on memory for Langfuse: 2,048 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-30 (needs-rupash 120, row 3)",
+    updated: "2026-09-30",
+  },
+  "M32.1.1.2": {
+    status: "BLOCKED",
+    why: "waits on memory for Langfuse: 2,048 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-30 (needs-rupash 120, row 3)",
+    updated: "2026-09-30",
+  },
+  "M32.2.1.1": {
+    status: "BLOCKED",
+    why: "waits on memory for the personal-data detector: 1,536 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-30 (needs-rupash 120, row 1)",
+    updated: "2026-09-30",
+  },
+  "M32.2.1.2": {
+    status: "BLOCKED",
+    why: "waits on memory for the model server that serves GLiNER: 3,840 MB wanted with its worker and file store, 248 MB unclaimed, measured 2026-09-30 (needs-rupash 120, row 2)",
+    updated: "2026-09-30",
+  },
   "M38.2.1.1": {
     status: "READY FOR TESTING",
     why: "WAVE_RECORDS and /build/waves are live on staging; proved when the first wave is accepted and recorded",
@@ -459,15 +479,35 @@ const PROGRESS = {
     why: "knowledge upload (PR #106, merged, migration 0115): proved when a document uploaded for one department answers that department and nobody else, which needs a knowledge grant (needs-rupash 105)",
     updated: "2026-09-28",
   },
+  "M7.2.1": {
+    status: "BLOCKED",
+    why: "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+    updated: "2026-09-29",
+  },
   "M7.2.2": {
     status: "READY FOR TESTING",
     why: "knowledge upload (PR #106, merged, migration 0115): proved when a document uploaded for one department answers that department and nobody else, which needs a knowledge grant (needs-rupash 105)",
     updated: "2026-09-28",
   },
+  "M7.2.3": {
+    status: "BLOCKED",
+    why: "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+    updated: "2026-09-29",
+  },
+  "M7.2.4": {
+    status: "BLOCKED",
+    why: "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+    updated: "2026-09-29",
+  },
   "M7.2.5": {
     status: "READY FOR TESTING",
     why: "knowledge upload (PR #106, merged, migration 0115): proved when a document uploaded for one department answers that department and nobody else, which needs a knowledge grant (needs-rupash 105)",
     updated: "2026-09-28",
+  },
+  "M7.2.6": {
+    status: "BLOCKED",
+    why: "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+    updated: "2026-09-29",
   },
   "M7.3.1": {
     status: "READY FOR TESTING",
@@ -478,6 +518,21 @@ const PROGRESS = {
     status: "READY FOR TESTING",
     why: "knowledge upload (PR #106, merged, migration 0115): proved when a document uploaded for one department answers that department and nobody else, which needs a knowledge grant (needs-rupash 105)",
     updated: "2026-09-28",
+  },
+  "M7.3.3": {
+    status: "BLOCKED",
+    why: "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+    updated: "2026-09-29",
+  },
+  "M7.3.4": {
+    status: "BLOCKED",
+    why: "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+    updated: "2026-09-29",
+  },
+  "M7.3.5": {
+    status: "BLOCKED",
+    why: "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+    updated: "2026-09-29",
   },
   "M7.4.1": {
     status: "READY FOR TESTING",
@@ -549,6 +604,16 @@ const PROGRESS = {
     why: "knowledge upload (PR #106, merged, migration 0115): proved when a document uploaded for one department answers that department and nobody else, which needs a knowledge grant (needs-rupash 105)",
     updated: "2026-09-28",
   },
+  "M7.7.10": {
+    status: "BLOCKED",
+    why: "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+    updated: "2026-09-29",
+  },
+  "M7.7.11": {
+    status: "BLOCKED",
+    why: "waits on the owner's choice of upload limit, which sizes the model server; the model server reads 64 MB a document as sized (needs-rupash 119)",
+    updated: "2026-09-29",
+  },
   "M7.7.2": {
     status: "IN PROGRESS",
     why: "a steward per document is built (K2, merged f0722dd3); connected sources and agents have no steward yet",
@@ -558,6 +623,16 @@ const PROGRESS = {
     status: "IN PROGRESS",
     why: "price lists uploaded on Classification convert (K6, merged c0552331); no upload path yet offers a price-list document for conversion",
     updated: "2026-09-28",
+  },
+  "M7.7.8": {
+    status: "BLOCKED",
+    why: "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+    updated: "2026-09-29",
+  },
+  "M7.7.9": {
+    status: "BLOCKED",
+    why: "waits on memory for the model server: 3,840 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-29 (needs-rupash 120)",
+    updated: "2026-09-29",
   },
   "M8.1.1": {
     status: "IN PROGRESS",
