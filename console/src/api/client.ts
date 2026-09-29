@@ -176,6 +176,11 @@ export type StreamResult =
        * carry a reference in, and this is the one the server's log holds that failure under.
        */
       readonly traceId: string;
+      /**
+       * The thread the answer was kept in (`x-thread-id`), or empty when nothing was kept. The
+       * page sends it back with a follow-up to continue the same conversation (M9.1.1).
+       */
+      readonly threadId: string;
     }
   | { readonly ok: false; readonly failure: ApiFailure; readonly body: unknown };
 
@@ -236,5 +241,10 @@ export async function openStream(
     return { ok: false, failure: failureFrom(response, payload), body: payload };
   }
 
-  return { ok: true, events: eventsOf(response), traceId: response.headers.get("x-trace-id") ?? "" };
+  return {
+    ok: true,
+    events: eventsOf(response),
+    traceId: response.headers.get("x-trace-id") ?? "",
+    threadId: response.headers.get("x-thread-id") ?? "",
+  };
 }

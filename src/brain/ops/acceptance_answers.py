@@ -105,6 +105,23 @@ CITES_ELSEWHERE: Final = "cites-elsewhere"
 #: The stand-in model that answers with no words at all.
 SILENT: Final = "silent"
 
+#: The stand-in model that reads one passage and refuses a longer prompt as too long for it, in
+#: the error body OpenAI documents for a context-length refusal, which Moonshot shares.
+READS_ONE: Final = "reads-one-passage"
+
+#: That refusal. `brain.models.wire.CONTEXT_EXCEEDED_CODES` is what reads its code.
+TOO_LONG: Final = (
+    400,
+    {
+        "error": {
+            "message": "This model's maximum context length was exceeded by the messages.",
+            "type": "invalid_request_error",
+            "param": "messages",
+            "code": "context_length_exceeded",
+        }
+    },
+)
+
 #: The document reference the citing stand-in names. Shaped like an item id, and held by nothing.
 ELSEWHERE_REFERENCE: Final = "acceptance-document-nobody-uploaded"
 
@@ -138,12 +155,21 @@ class Replies(StandIns):
     """`StandIns`, with the two replies these checks need beside the ones it answers."""
 
     said: list[str] = field(default_factory=list)
+    #: Every request body the stand-in was sent, for a check reading what a model was shown.
+    bodies: list[str] = field(default_factory=list)
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
+        self.bodies.append(request.content.decode("utf-8", "replace"))
         model = str(json.loads(request.content).get("model", ""))
         if model == SILENT:
             self.asked[(request.url.host, model)] += 1
             return _completion(model, "")
+        if model == READS_ONE:
+            self.asked[(request.url.host, model)] += 1
+            if request.content.decode("utf-8", "replace").count("Passage ") > 1:
+                return httpx.Response(TOO_LONG[0], json=TOO_LONG[1])
+            self.said.append(STAND_IN_REPLY)
+            return _completion(model, STAND_IN_REPLY)
         if model == CITES_ELSEWHERE:
             self.asked[(request.url.host, model)] += 1
             reply = f"{STAND_IN_REPLY} It is set out in document {ELSEWHERE_REFERENCE}, passage 1."
@@ -517,3 +543,127 @@ def _statement(scope: Any) -> str:
     if not said:
         raise CheckFailedError("a scope naming what a reader reaches rendered no statement")
     return said
+
+
+# ----------------------------------------------------------- 5. a kind narrows it (M7.6.1)
+@check(
+    leaves=("M7.6.1",),
+    sentence=(
+        "An FAQ and an SOP added in acceptance_a pair one word with two values: the library lists "
+        "each under its kind and narrows to one, a member's question narrowed to FAQs shows the "
+        "model the FAQ alone and one asked of every kind shows both, and a pricing note holding a "
+        "table is refused."
+    ),
+)
+async def a_question_narrowed_to_a_kind_is_answered_from_that_kind_alone(h: Harness) -> None:
+    from brain.knowledge.ingest import MediaType, ParseFailure
+    from brain.knowledge.kinds import KindError, KnowledgeKind
+    from brain.ops.acceptance_checks import _upload
+    from brain.ops.acceptance_documents import a_markdown_document
+    from brain.ops.acceptance_models import ASKED, PAIRED, shown
+
+    s = await asking_with_a_stand_in(h)
+    await pinned(h, (step(ANSWERS),))
+    key, values = h.word(), {KnowledgeKind.FAQ: h.word(), KnowledgeKind.SOP: h.word()}
+    items: dict[KnowledgeKind, str] = {}
+    for kind, value in values.items():
+        read = await _upload(
+            h,
+            s.library,
+            filename=f"Acceptance {kind.value}.md",
+            declared=MediaType.MARKDOWN.value,
+            body=a_markdown_document("Acceptance kind", PAIRED.format(key=key, value=value)),
+            kind=kind,
+        )
+        if isinstance(read, ParseFailure):
+            raise CheckFailedError("a document added with a kind could not be read")
+        items[kind] = str(read.item.item_id)
+
+    listed = await _library(h, s.app, s.reader, (f"kind:{KnowledgeKind.FAQ.value}",))
+    ours = {one.item_id: one.kind for one in listed if one.item_id in items.values()}
+    if ours != {items[KnowledgeKind.FAQ]: KnowledgeKind.FAQ.value}:
+        raise CheckFailedError("the library did not list the FAQ under its kind, and it alone")
+
+    question = ASKED.format(key=key)
+    narrowed = await asked(h, s.app, s.reader, question, 1, kinds=(KnowledgeKind.FAQ,))
+    everything = await asked(h, s.app, s.reader, question, 2)
+    seen_narrowed, seen_everything = shown(narrowed), shown(everything)
+    if values[KnowledgeKind.FAQ] not in seen_narrowed or values[KnowledgeKind.SOP] in seen_narrowed:
+        raise CheckFailedError("a question narrowed to FAQs was shown a document of another kind")
+    if not all(value in seen_everything for value in values.values()):
+        raise CheckFailedError("a question asked of every kind was not shown both documents")
+
+    table = "\n".join(["| Service | Price |", "| --- | --- |", f"| {h.word()} | 900 |"])
+    try:
+        await _upload(
+            h,
+            s.library,
+            filename="Acceptance pricing note.md",
+            declared=MediaType.MARKDOWN.value,
+            body=a_markdown_document("Acceptance pricing", table),
+            kind=KnowledgeKind.PRICING_NOTE,
+        )
+    except KindError:
+        return
+    raise CheckFailedError("a pricing note holding a table of prices was added")
+
+
+async def _library(
+    h: Harness, app: FastAPI, principal_id: str, filters: tuple[str, ...]
+) -> tuple[Any, ...]:
+    """The Knowledge list as the route answers `principal_id`, narrowed by `filters`."""
+    from starlette.requests import Request
+
+    from brain.gate.admission import Assurance, admit
+    from brain.gate.context import Channel
+    from brain.identity.principal_store import StoredPrincipals
+    from brain.knowledge_lifecycle_routes import knowledge_list
+    from brain.listing import ListAsked
+
+    person = await StoredPrincipals(h.sessions).live_principal(principal_id)
+    if person is None:
+        raise CheckFailedError("a reserved person was not live in the directory")
+    reach = admit(await h.reach(principal_id), Channel.CONSOLE, Assurance.AUTHENTICATED)
+    request = Request({"type": "http", "app": app, "headers": [], "method": "GET"})
+    # A cast at the route's boundary, for `_cited`'s reason: a `Caller` is minted from a token.
+    asking = cast(
+        Any, SimpleNamespace(caller=SimpleNamespace(principal=person), reach=reach, now=h.now)
+    )
+    page = await knowledge_list(request, asking, ListAsked(filters=filters))
+    return tuple(page.items)
+
+
+# ---------------------------------------------- 6. more than the largest model reads (M15.4.1)
+@check(
+    leaves=("M15.4.1",),
+    sentence=(
+        "Three documents in acceptance_a answer a member's question and the only model on the "
+        "ladder refuses any prompt holding more than one passage as too long: the member is "
+        "answered from one passage, citing that one alone, and the answer says it drew on one of "
+        "the three passages found."
+    ),
+)
+async def a_prompt_too_long_for_every_model_is_answered_from_fewer(h: Harness) -> None:
+    from brain.core.errors import Degraded
+    from brain.gate.model_lane import TRIMMED_TEXT
+    from brain.ops.acceptance_models import ASKED, paired_in, shown
+
+    s = await asking_with_a_stand_in(h)
+    key = h.word()
+    papers = [await paired_in(h, A, s.library, key=key) for _ in range(3)]
+    await pinned(h, (step(READS_ONE),))
+    try:
+        answered = await asked(h, s.app, s.reader, ASKED.format(key=key), 1, at=datetime.now(UTC))
+    except Degraded:
+        raise CheckFailedError(
+            "a prompt too long for every model was answered with the provider's failure rather "
+            "than from fewer passages"
+        ) from None
+    cited = _documents(answered)
+    drew_on = [one.value for one in papers if one.value in shown(answered)]
+    if len(drew_on) != 1 or len({one.view().get("document_id") for one in cited}) != 1:
+        raise CheckFailedError("the answer was not drawn from, and cited for, one passage alone")
+    if s.responder.sent_to(STAND_IN_ADDRESS, READS_ONE) != 2:
+        raise CheckFailedError("the model was not asked again with fewer passages, once")
+    if TRIMMED_TEXT.format(shown=1, found=3) not in (answered.text or ""):
+        raise CheckFailedError("the answer did not say it drew on one of the three passages found")
