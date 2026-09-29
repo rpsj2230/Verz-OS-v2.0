@@ -12,17 +12,20 @@ Task ids: M27.7.4, M1.6.12
 
 from __future__ import annotations
 
+import re
 from collections.abc import Awaitable, Callable, Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from brain.audit.ledger import TRACE_ID
 from brain.console.organisation import founded
 from brain.gate.context import Channel
 from brain.gate.ingress import identity_hash
 from brain.identity.organisation_store import Attribution, StoredOrganisation
+from brain.identity.organisation_sync import sync_trace
 from brain.identity.staff_source import Asserts, Roster, StaffRecord
 from brain.ops.source_organisation import apply_organisation, found_named, named_departments
 from brain.session import make_session_factory
@@ -167,7 +170,9 @@ def test_a_run_places_people_in_the_teams_a_source_names_by_its_own_spelling(url
             roster,
             known={"wei@example.test": "u_wei", "new@example.test": "u_new"},
             last_applied=None,
-            trace_id="trace-sync",
+            # The trace a scheduled run writes under, not one written for the test: until
+            # 2026-09-29 the run's was an ISO time the ledger refuses, and every placement with it.
+            trace_id=sync_trace("staff-sync", datetime(2999, 3, 1, 2, 0, tzinfo=UTC)),
         )
 
     plan = through(url, walk)
@@ -178,3 +183,19 @@ def test_a_run_places_people_in_the_teams_a_source_names_by_its_own_spelling(url
     assert sql(url, "SELECT principal_id, appointed_by FROM gate.department_lead") == [
         ("u_new", sync)
     ]
+
+
+@pytest.mark.parametrize(
+    "at",
+    [
+        datetime(2999, 3, 1, 2, 0, tzinfo=UTC),
+        datetime(2019, 12, 31, 23, 59, 59, 999999, tzinfo=UTC),
+        datetime(2999, 3, 1, 10, 30, tzinfo=timezone(timedelta(hours=8))),
+    ],
+)
+def test_a_scheduled_run_s_trace_is_one_the_ledger_accepts(at: datetime) -> None:
+    """The ledger's own pattern, for any clock and any offset, and the same instant in two zones is
+    one trace. Delete this and a step can go back to `now.isoformat()`, which the ledger refuses
+    with the whole write, and the run's broad catch hides it."""
+    assert re.fullmatch(TRACE_ID, sync_trace("staff-sync", at))
+    assert sync_trace("staff-accounts", at) == sync_trace("staff-accounts", at.astimezone(UTC))

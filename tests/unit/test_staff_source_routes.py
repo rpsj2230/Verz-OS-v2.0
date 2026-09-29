@@ -655,3 +655,25 @@ def test_a_trial_carries_a_plan_or_a_refusal_and_never_neither() -> None:
             trial=TrialRunView(source=SPREADSHEET, plan=None, refusals=["no"], safe_to_apply=False),
             unread="There is no trial.",
         )
+
+
+def test_the_screen_says_how_people_first_sign_in_and_what_stops_them_with_nothing_sent(
+    client: TestClient,
+) -> None:
+    """The owner's flow, on the page an administrator connects the list from: nobody is sent
+    anything, a person presses Forgot password, and without the sign-in service's email settings
+    nobody can, with what to fill in. Delete this and the screen can promise invitations the sync
+    never sends, or leave an install with no email settings wondering why nobody can sign in."""
+    page = body(client, PAGE_PATH, "u_admin")
+
+    assert "sends nobody anything" in page["accounts"]
+    assert "Forgot password" in page["accounts"]
+    assert page["email_settings"].startswith(
+        "If the sign-in service has no email settings, nobody can set a password yet"
+    )
+    for field in ("Realm settings", "Email", "From address", "Host", "Port", "Test connection"):
+        assert field in page["email_settings"]
+    assert page["account_ready"] == (
+        "Your account is ready. Go to the sign-in page, press Forgot password and enter your "
+        "work email."
+    )

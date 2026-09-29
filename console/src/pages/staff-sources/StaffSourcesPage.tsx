@@ -23,11 +23,16 @@
  * A reader who reaches no source and an install with none are one answer from the API and are drawn
  * alike, and nothing here counts rows the reader may not see. Identifiers are in `Advanced` only.
  *
+ * **Sign-in accounts, and what stops people using them.** Since 2026-09-29 (needs-rupash 115) the
+ * sync gives each active person an account and sends nobody anything; this says how a person first
+ * signs in, that without the sign-in service's email settings nobody can yet and what to fill in,
+ * and the sentence to pass on. All three are the API's words (`StaffSourcesView`).
+ *
  * **A staff list read through Connect Lark shows Lark's card here too**, with the same Test, Manage
  * and Disconnect as the Connectors screen (`connectors/LarkCard.tsx`), and Connect Lark is offered
  * only while Lark is not connected; once it is, the offer is adding the staff list to it.
  *
- * Task ids: M1.6.12, M1.8.6, M1.8.9, M27.7.2, M27.16.1
+ * Task ids: M1.6.12, M1.8.6, M1.8.9, M27.7.2, M27.16.1, M1.6.16
  */
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
@@ -77,12 +82,14 @@ import { ACT_LABELS } from "../connectors/connectorActions";
 import { ConnectDrawer } from "./ConnectDrawer";
 import { Names, Problem } from "./parts";
 import { outcomeWords, sourceTitle, when } from "./staffSourceWords";
+import { ACCOUNT_READY_HEADING, CopySentence } from "../people/AccountReady";
 import { SyncCredential } from "./SyncCredential";
 import { Transfers } from "./Transfers";
 
 export const STAFF_SOURCES_HEADING = STAFF_SOURCES_LABEL;
 export const STAFF_SOURCES_LEDE =
-  "Where this install reads who works here and which department they are in. A staff list never signs anybody in.";
+  "Where this install reads who works here and which department they are in. Each active person on the list gets a sign-in account, and nobody is sent anything.";
+export const ACCOUNTS_HEADING = "Sign-in accounts";
 export const LOADING = "Loading staff sources.";
 
 export const AT_A_GLANCE = "The staff source at a glance";
@@ -350,6 +357,21 @@ export function StaffSourcesPage() {
         ) : null}
 
         {credential === null ? null : <SyncCredential credential={credential} onDone={done} />}
+
+        {selection === null || !selection.reads_a_list || body.accounts === "" ? null : (
+          <SectionCard title={ACCOUNTS_HEADING} lede={body.accounts}>
+            <div className="flex min-w-0 flex-col gap-3">
+              {body.email_settings === "" ? null : <Note>{body.email_settings}</Note>}
+              {body.account_ready === "" ? null : (
+                <FactList>
+                  <Fact label={ACCOUNT_READY_HEADING}>
+                    <CopySentence sentence={body.account_ready} />
+                  </Fact>
+                </FactList>
+              )}
+            </div>
+          </SectionCard>
+        )}
 
         <SectionCard title={RUNS_HEADING} lede={RUNS_LEDE}>
           {runsAnswer.failure !== null ? (

@@ -65,6 +65,13 @@ with a leaver, and fails the way the heads' reach does: logged, and never undoin
 for the team memberships and department leads the source names, ending only what this source's
 sync made, and fails the way the heads' reach does.
 
+**Each active person gets a sign-in account, before the roster is written (since 2026-09-29).**
+Needs Rupash item 115 decided that the sync gives everybody the list names as active a Brain
+account; `brain.ops.staff_accounts_run.provide_accounts` makes, links, closes and opens them in the
+install's Keycloak and sends nobody anything, and its counts go on the same run row. It runs
+only for a plan `dry_run` marks safe and never raises. See
+`ACCOUNTS_ARE_MADE_BEFORE_THE_ROSTER_IS_WRITTEN`.
+
 Task ids: M1.6.1, M1.6.2, M1.6.4, M1.6.5, M1.6.6, M1.6.12, M1.8.6, M1.8.3, M1.8.9, M26.1.2, M26.1.3
 """
 
@@ -102,6 +109,7 @@ from brain.connectors.staff_directories import (
     location_problem,
     pull,
 )
+from brain.identity.organisation_sync import sync_trace
 from brain.identity.staff_adapters import (
     GOOGLE_SHEET,
     GOOGLE_WORKSPACE,
@@ -135,6 +143,7 @@ from brain.ops.openbao import VaultUnreachableError
 from brain.ops.safe_error import redact
 from brain.ops.secrets import SecretsUnavailableError
 from brain.ops.source_organisation import apply_organisation
+from brain.ops.staff_accounts_run import provide_accounts
 from brain.ops.staff_sync_store import (
     RunRecord,
     read_last_applied,
@@ -443,6 +452,10 @@ async def http_fetch(outbound: Outbound) -> Answer:
         body = response.json()
     except ValueError:
         body = {}
+    if isinstance(body, list):
+        # A listing that answers with a bare array, which Keycloak's admin interface does: kept
+        # under `items` so an `Answer` stays a mapping, where it used to be dropped as `{}`.
+        return Answer(status=response.status_code, body={"items": body})
     return Answer(status=response.status_code, body=body if isinstance(body, Mapping) else {})
 
 
@@ -551,25 +564,41 @@ async def sync_staff_on(
     async with sessions() as session, session.begin():
         members = await read_members(session, chosen.name)
         last_applied = await read_last_applied(session, chosen.name)
-        application = application_for(
-            roster,
-            stable_ids=stable_ids,
-            aliases=aliases,
-            members=members,
-            last_applied=last_applied,
+    application = application_for(
+        roster,
+        stable_ids=stable_ids,
+        aliases=aliases,
+        members=members,
+        last_applied=last_applied,
+    )
+    if not application.plan.safe_to_apply:
+        detail = said(_sentence(" ".join(application.plan.refusals)))
+        record = RunRecord(
+            source=chosen.name,
+            started_at=now,
+            finished_at=max(clock(), now),
+            outcome=RunOutcome.MISCONFIGURED,
+            detail=detail,
+            report=report,
         )
-        if not application.plan.safe_to_apply:
-            detail = said(_sentence(" ".join(application.plan.refusals)))
-            record = RunRecord(
-                source=chosen.name,
-                started_at=now,
-                finished_at=max(clock(), now),
-                outcome=RunOutcome.MISCONFIGURED,
-                detail=detail,
-                report=report,
-            )
+        async with sessions() as session, session.begin():
             await session.execute(run_row(record))
-            return StaffSyncRun(outcome=record.outcome, detail=detail, report=report)
+        return StaffSyncRun(outcome=record.outcome, detail=detail, report=report)
+    # Before the roster is written and outside any transaction, because it calls the sign-in
+    # service; see `ACCOUNTS_ARE_MADE_BEFORE_THE_ROSTER_IS_WRITTEN`. A trial plans, makes nothing.
+    accounts = await provide_accounts(
+        sessions=sessions,
+        roster=roster,
+        stable_ids=stable_ids,
+        keys=keys,
+        fetch=fetch,
+        env=env,
+        now=now,
+        absent_is_gone=roster.may_remove() and last_applied is not None,
+        trial=trial,
+    )
+    report = (*report, *accounts.sentences)
+    async with sessions() as session, session.begin():
         if trial:
             record = RunRecord(
                 source=chosen.name,
@@ -617,6 +646,18 @@ def _would_change(source: str, application: Application) -> str:
         f"{len(application.marked_left)} as having left and move {len(application.renamed)} to a "
         f"new address. {NOBODY_CHANGED}"
     )
+
+
+#: Why the accounts step comes before the roster is written rather than after it.
+ACCOUNTS_ARE_MADE_BEFORE_THE_ROSTER_IS_WRITTEN: Final = (
+    "The run row is appended once and never updated, so what the accounts step did can only be "
+    "on it if the step has run before the row is written; and a person the step brings in is "
+    "then joined to their row by the time the Starter packs, the heads' reach and the "
+    "organisation are worked out, on the same run rather than the next. It runs only for a plan "
+    "dry_run marks safe, so an accounts step never acts on a list the roster itself refused, and "
+    "it never raises: a sign-in service that refuses is a sentence on the row and the roster is "
+    "applied as it would have been."
+)
 
 
 #: Why a head's reach that cannot be written does not fail the run.
@@ -692,7 +733,7 @@ async def _place_in_organisation(
             roster,
             known=await roster_principals(sessions, roster),
             last_applied=last_applied,
-            trace_id=f"staff-sync-{now.isoformat()}",
+            trace_id=sync_trace("staff-sync", now),
         )
     except Exception as exc:
         # Broad on purpose, as the heads' reach is: the roster is already committed.

@@ -156,6 +156,11 @@ from brain.credential_routes import (
 )
 from brain.identity.directory import DirectoryAssertion
 from brain.identity.lifecycle import LifecycleError, adopt, agents_for_adoption
+from brain.identity.staff_accounts import (
+    HOW_A_PERSON_FIRST_SIGNS_IN,
+    WITHOUT_EMAIL_SETTINGS,
+    YOUR_ACCOUNT_IS_READY,
+)
 from brain.identity.staff_adapters import LARK
 from brain.identity.staff_roster import APPLIED_OUTCOMES, Application
 from brain.identity.staff_source import (
@@ -341,6 +346,13 @@ class StaffSourcesView(BaseModel):
     options: list[SourceOptionView]
     selection: SelectionView | None
     how_to_choose: str = WHERE_A_SOURCE_IS_CHOSEN
+    #: How a person on the list first signs in, and that nobody is sent anything (needs-rupash
+    #: 115). Constants of the product, for `how_to_choose`'s reason.
+    accounts: str = HOW_A_PERSON_FIRST_SIGNS_IN
+    #: What stops them, and what to fill in at the sign-in service.
+    email_settings: str = WITHOUT_EMAIL_SETTINGS
+    #: The sentence to pass on to somebody whose account is ready.
+    account_ready: str = YOUR_ACCOUNT_IS_READY
 
 
 class RosterPersonView(BaseModel):
