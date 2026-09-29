@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-29T14:58:48.305818+00:00",
-  "commit": "b0fd9b86",
-  "commit_subject": "The evening digest hands its channel the text it rendered, where it used to post an empty message (#243)",
+  "generated_at": "2026-09-29T15:16:16.001434+00:00",
+  "commit": "9517eb53",
+  "commit_subject": "Four decisions go to the owner: how staff-list people become Brain users, who sees a Lark Base, and approving from Lark cards (#259)",
   "total": 1576,
   "done": 459,
   "percent": 29.1,
