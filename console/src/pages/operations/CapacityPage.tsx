@@ -16,12 +16,17 @@
  * used the one word for two things. A size that declares no memory says so rather than "0 MiB",
  * which read as a measurement of nothing.
  *
- * Task ids: M27.7.27, M27.16.1
+ * **Sizing is stated at the busiest minute, and the first limit at scale is named** (M22.3.1,
+ * M22.3.2, M22.3.4). Each sizing's in-flight figure and slots are the API's, worked by Little's law in
+ * `brain.ops.admission`, so this page draws them and computes nothing; the first limit reached at ten
+ * and a hundred times today's volume is the product's documented sentence.
+ *
+ * Task ids: M27.7.27, M27.16.1, M22.3.1, M22.3.2, M22.3.4
  */
 
 import { useResource } from "../../api/useResource";
 import { KpiStrip, Note, SectionCard, StatCard, type EntityColumn } from "../../components/kit";
-import { CAPACITY_API_PATH, type Capacity as CapacityBody, type Connection } from "../installQuery";
+import { CAPACITY_API_PATH, type Capacity as CapacityBody, type Connection, type Sizing } from "../installQuery";
 import { OpsPage, PLATFORM, WholeList } from "./parts";
 
 export const CAPACITY_HEADING = "Capacity";
@@ -39,6 +44,34 @@ export const NO_CONNECTIONS = "No databases declared";
 export const NO_CONNECTIONS_MORE = "No database is declared, so there are no connections to weigh.";
 /** Why the reserved figure is not recorded on this install. */
 export const RESERVED_NOT_READ = "No compose file is mounted where the application runs, so what it reserves is not read here.";
+export const SIZING_HEADING = "Sized for the busiest minute";
+export const SIZING_LEDE =
+  "Each sizing is the busiest minute's questions a second times how long each is in flight, which is how many are in flight at once. A day's total sizes a machine that is never busy.";
+export const NO_SIZINGS = "No sizing is recorded";
+export const FIRST_LIMIT_HEADING = "The first limit reached at ten and a hundred times";
+
+function perSecond(value: number): string {
+  return `${value.toLocaleString("en-GB")} a second`;
+}
+
+function seconds(value: number): string {
+  return `${value.toLocaleString("en-GB")} s`;
+}
+
+const SIZING_COLUMNS: readonly EntityColumn<Sizing>[] = [
+  { id: "name", header: "Sizing", hideable: false, cell: (row) => row.name, text: (row) => row.name },
+  { id: "peak", header: "Busiest minute", align: "end", cell: (row) => perSecond(row.peak_per_second), text: (row) => perSecond(row.peak_per_second) },
+  { id: "service", header: "Each takes", align: "end", cell: (row) => seconds(row.service_seconds), text: (row) => seconds(row.service_seconds) },
+  {
+    id: "in_flight",
+    header: "In flight at once",
+    align: "end",
+    cell: (row) => row.in_flight_at_peak.toLocaleString("en-GB"),
+    text: (row) => String(row.in_flight_at_peak),
+  },
+  { id: "slots", header: "Slots needed", align: "end", cell: (row) => row.slots_needed.toLocaleString("en-GB"), text: (row) => String(row.slots_needed) },
+  { id: "reason", header: "Where the figure came from", hidden: true, cell: (row) => row.reason, text: (row) => row.reason },
+];
 
 function mib(value: number): string {
   return `${value.toLocaleString("en-GB")} MiB`;
@@ -101,6 +134,21 @@ export function CapacityPage() {
               empty={NO_CONNECTIONS}
               emptyDescription={NO_CONNECTIONS_MORE}
             />
+            <WholeList
+              title={SIZING_HEADING}
+              lede={SIZING_LEDE}
+              caption={SIZING_HEADING}
+              columns={SIZING_COLUMNS}
+              rows={page.sizings ?? []}
+              rowId={(row) => row.name}
+              rowLabel={(row) => row.name}
+              empty={NO_SIZINGS}
+            />
+            {page.first_limit ? (
+              <SectionCard title={FIRST_LIMIT_HEADING}>
+                <Note>{page.first_limit}</Note>
+              </SectionCard>
+            ) : null}
           </>
         );
       }}
