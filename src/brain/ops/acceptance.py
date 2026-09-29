@@ -134,6 +134,21 @@ A_RESULT_NAMES_NO_DATA: Final = (
     "reason quoting a row would be a copy of it."
 )
 
+#: Why a check stopped by a model call says how the call ended, and nothing else about it.
+A_MODEL_CALL_THAT_STOPS_A_CHECK_IS_NAMED_BY_HOW_IT_ENDED: Final = (
+    "A check stopped by a provider's failure used to be recorded as the exception's type, and a "
+    "moonshot check that timed out on 2026-09-29 read as a planning fault until the worker's log "
+    "was read. How a call ended is a closed vocabulary the Models screen already words for an "
+    "administrator, and a planner's refusal carries the product's own sentence, so the reason "
+    "names those and never the step, the model or the provider's words."
+)
+
+#: What a reason begins with when a model call stopped the check.
+A_MODEL_CALL_STOPPED_THE_CHECK: Final = "a model call stopped the check: "
+
+#: What a reason begins with when the planner found no step it could try.
+NO_STEP_COULD_BE_TRIED: Final = "no step of the ladder could be tried: "
+
 #: Why the scheduled control runs once per commit.
 ONE_RUN_PER_DEPLOYED_COMMIT: Final = (
     "The control ticks often and runs the checks only when the commit this process serves has no "
@@ -304,15 +319,29 @@ class Result:
 def reason_for(exc: BaseException) -> tuple[str, str]:
     """The outcome and the stored reason for whatever a check raised.
 
-    A verdict carries its own literal sentence, cut to the column. Anything else is a failure
-    named by its type alone: its message may quote a row, a key or an address.
+    A verdict carries its own literal sentence, cut to the column. A model call that stopped the
+    check is named by how it ended, in the Models screen's words for that ending, and a planner
+    that found no step to try by its own public sentence; see
+    `A_MODEL_CALL_THAT_STOPS_A_CHECK_IS_NAMED_BY_HOW_IT_ENDED`. Anything else is a failure named
+    by its type alone: its message may quote a row, a key or an address.
     """
+    from brain.models.driver import ProviderUnavailable
+    from brain.models.routing import NoCompliantRoute
+
     if isinstance(exc, CheckFailedError):
         return FAILED, exc.reason[:REASON_CHARS]
     if isinstance(exc, CheckNotRunError):
         return NOT_RUN, exc.reason[:REASON_CHARS]
     if isinstance(exc, TimeoutError):
         return FAILED, "the check did not finish in the time it is allowed"
+    if isinstance(exc, ProviderUnavailable):
+        # Imported here: the route module brings FastAPI, and only a failed call needs it.
+        from brain.provider_routes import CHECK_TOLD, failure_outcome
+
+        told = CHECK_TOLD[failure_outcome(exc.failure)]
+        return FAILED, (A_MODEL_CALL_STOPPED_THE_CHECK + told)[:REASON_CHARS]
+    if isinstance(exc, NoCompliantRoute):
+        return FAILED, (NO_STEP_COULD_BE_TRIED + exc.public_message)[:REASON_CHARS]
     return FAILED, f"the check stopped on {type(exc).__name__}; the worker's log says where"[
         :REASON_CHARS
     ]
