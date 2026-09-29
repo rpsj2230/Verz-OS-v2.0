@@ -209,15 +209,14 @@ def test_the_pause_check_fails_when_a_memory_keeps_what_the_answer_said(
     import re
 
     from brain import api_routes
-
-    kept = api_routes.turn_of
+    from brain.memory.turn import turn_of as kept
 
     def with_the_answer(**kw: Any) -> Any:
         text = kw["outcome"].text
         if not text:
             return kept(**kw)
         heard = " ".join(re.findall(r"QZ[0-9A-F]+", text))
-        return kept(**{**kw, "said": f"{kw['said']} Remember that I heard {heard}."})
+        return kept(**{**kw, "said": f"Remember that I heard {heard}. {kw['said']}"})
 
     monkeypatch.setattr(api_routes, "turn_of", with_the_answer)
 
