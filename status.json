@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-29T21:12:43.447128+00:00",
-  "commit": "b9b40e4e",
-  "commit_subject": "Email is a channel an install can connect: signed mail in, answers out by the install's own relay, and Connect Email one screen at a time (#285)",
+  "generated_at": "2026-09-29T21:25:18.643432+00:00",
+  "commit": "3c7f44f5",
+  "commit_subject": "The email channel is connectable, and its steps go on the owner's page (#289)",
   "total": 1584,
   "done": 469,
   "percent": 29.6,
