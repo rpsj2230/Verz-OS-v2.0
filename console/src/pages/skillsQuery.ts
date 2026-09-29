@@ -18,6 +18,11 @@
  * one skill's page reads `GET /skills` narrowed to its name. The paths for the lifecycle writes,
  * retiring, reinstating and detaching (M27.15.55, M27.15.56), are here with the others.
  *
+ * **A package carries its scripts and example tasks, a version with examples is rehearsed before it
+ * is approved, and an approved version is exported (M12.4.11, M12.3.4, M12.3.1).** The rehearsal
+ * and the export are writes like the others; the export answers the package as base64, which
+ * `packageFile` turns back into the zip a person saves, and another install adds it undecided.
+ *
  * **Nothing here decides who may do what.** `may_add`, `reviewable`, `assignable` and the list of
  * agents decide which controls are drawn, and each write asks every question again on the server.
  * The one check made here before a write is that there is something to send and that it is not
@@ -28,7 +33,8 @@
  * on the page is the review queue's, which `brain.console.govern_estate.skill_queue` computes over
  * exactly the entries listed beneath it.
  *
- * Task ids: M42.6.4, M12.2.2, M12.2.3, M12.2.6, M12.3.2, M12.4.6, M12.4.13, M27.16.1
+ * Task ids: M42.6.4, M12.2.2, M12.2.3, M12.2.6, M12.3.2, M12.4.6, M12.4.13, M27.16.1, M12.4.11,
+ * M12.3.4, M12.3.1
  */
 
 import type { components } from "../api/schema";
@@ -63,6 +69,16 @@ export type LibraryRow = components["schemas"]["SkillVersionRowView"];
 export type Retired = components["schemas"]["RetirementView"];
 /** What a detachment answered, as `DetachedView` sends it (M27.15.55). */
 export type Detached = components["schemas"]["DetachedView"];
+/** One script a version carries, as `ScriptView` sends it (M12.4.11). */
+export type SkillScript = components["schemas"]["ScriptView"];
+/** One example task and the behaviour expected, as `ExampleView` sends it (M12.3.4). */
+export type SkillExample = components["schemas"]["ExampleView"];
+/** The newest rehearsal of a version, as `RehearsalView` sends it (M12.3.4). */
+export type SkillRehearsal = components["schemas"]["SkillRehearsalView"];
+/** The body a rehearsal sends, as `RehearsalAsked` declares it. */
+export type RehearsalBody = components["schemas"]["RehearsalAsked"];
+/** An exported package, as `SkillPackageView` sends it (M12.3.1). */
+export type ExportedPackage = components["schemas"]["SkillPackageView"];
 
 /** Where the API keeps this screen, and its writes. */
 export const SKILLS_API_PATH = "/skills";
@@ -102,6 +118,16 @@ export function reviewPath(digest: string): string {
 
 export function assignPath(digest: string): string {
   return `${SKILLS_API_PATH}/${encodeURIComponent(digest)}/assignments`;
+}
+
+/** Where a rehearsal of one version's examples is recorded (M12.3.4). */
+export function rehearsalsPath(digest: string): string {
+  return `${SKILLS_API_PATH}/${encodeURIComponent(digest)}/rehearsals`;
+}
+
+/** Where one approved version is exported as a package (M12.3.1). */
+export function exportsPath(digest: string): string {
+  return `${SKILLS_API_PATH}/${encodeURIComponent(digest)}/exports`;
 }
 
 /** The console addresses. The second is one skill open. */
@@ -438,4 +464,65 @@ export function assignedSentence(done: Assigned, agent: AgentChoice | undefined)
       ? "Through that agent it can use none of the tools it names for you."
       : `Through that agent it can use, for you: ${done.reach.join(", ")}.`;
   return `${done.skill_name} was assigned to ${who}. ${reach}`;
+}
+
+// ------------------------------------------------------------------- rehearsing and exporting
+
+/** What a rehearsal is on this install today, said beside the form rather than implied. */
+export const REHEARSAL_IS_A_PERSON_S_VERDICT =
+  "No model carries out a skill here yet, so a rehearsal is you reading each example against these " +
+  "instructions, or trying it yourself, and saying whether it behaved as expected. It is recorded " +
+  "under your name for exactly this version.";
+
+/** Why Approve is not drawn yet for a version with examples. */
+export const REHEARSE_BEFORE_APPROVING =
+  "This version has example tasks, so it can be approved only after a rehearsal in which every " +
+  "example behaved as expected. Reject is still open.";
+
+/** The rehearsal a person sends: one verdict per example, in order. */
+export function rehearsalBody(behaved: readonly boolean[]): RehearsalBody {
+  return { behaved: [...behaved] };
+}
+
+/** How a rehearsal reads beside the version. */
+export function rehearsalWords(done: SkillRehearsal): string {
+  const who = personWords(done.rehearsed_by_name, "somebody");
+  const behaved = done.behaved.filter((one) => one).length;
+  return done.passed
+    ? `Rehearsed by ${who}: every example behaved as expected.`
+    : `Rehearsed by ${who}: ${String(behaved)} of the ${String(done.behaved.length)} examples behaved as expected.`;
+}
+
+/** The sentence after a rehearsal was recorded. */
+export function rehearsedSentence(one: LibrarySkill): string {
+  return one.awaits_rehearsal === true
+    ? `The rehearsal of ${one.name} ${one.version} was recorded. Not every example behaved, so it cannot be approved yet.`
+    : `The rehearsal of ${one.name} ${one.version} was recorded. It can now be approved.`;
+}
+
+/** What exporting does, said on the button's page before it is pressed. */
+export const EXPORT_WORDS =
+  "Saves this approved version as a .zip another install can add. It arrives there waiting for " +
+  "review; the approval here does not travel with it.";
+
+/** The sentence after a package was saved. */
+export function exportedSentence(done: ExportedPackage): string {
+  return `${done.name} ${done.version} was saved as ${done.file_name}. Add it on another install to review it there.`;
+}
+
+/**
+ * Hand the package to the browser as a file, from the base64 the route answered with, as a `data:`
+ * address a link saves. Nothing here decodes it: the bytes go to the file as they came.
+ */
+export function savePackage(done: ExportedPackage, into: Document = globalThis.document): boolean {
+  if (typeof into.createElement !== "function") {
+    return false;
+  }
+  const link = into.createElement("a");
+  link.href = `data:application/zip;base64,${done.content}`;
+  link.download = done.file_name;
+  into.body.appendChild(link);
+  link.click();
+  link.remove();
+  return true;
 }

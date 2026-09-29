@@ -356,6 +356,11 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "agent.skill_detachment",
         "agent.skill_retirement",
         "agent.skill_review",
+        # A skill's scripts and example tasks, and a rehearsal of them (`0164`): `submitted_by`
+        # and `rehearsed_by` are actors, not owners, and each row is about a version of a skill.
+        "agent.skill_example",
+        "agent.skill_rehearsal",
+        "agent.skill_script",
         # A tool the install registers, and a stop on it (`0117`): who threw or lifted a switch is
         # an actor, not an owner, and a stop is about a tool and a department, never a person.
         "agent.tool_definition",

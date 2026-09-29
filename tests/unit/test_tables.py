@@ -146,6 +146,7 @@ MIGRATION_ACCESS_REQUEST_HANDLED = (
 )
 MIGRATION_TRACE_AND_BROWSER_SESSION = VERSIONS / "0150_trace_store_and_browser_session.py"
 MIGRATION_RECORD_LIVES = VERSIONS / "0152_record_lives_and_source_epochs.py"
+MIGRATION_SKILL_PACKAGES = VERSIONS / "0164_skill_scripts_examples_and_rehearsals.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -414,6 +415,12 @@ TRACE_AND_BROWSER_SESSION_TABLES: tuple[str, ...] = (
 )
 #: And the one 0152 adds: how many times each connected source's rows have changed.
 RECORD_LIVES_TABLES: tuple[str, ...] = ("proj.source_epoch",)
+#: And the three 0164 adds: a skill's scripts, its example tasks, and a rehearsal of them.
+SKILL_PACKAGE_TABLES: tuple[str, ...] = (
+    "agent.skill_script",
+    "agent.skill_example",
+    "agent.skill_rehearsal",
+)
 
 ALL_TABLES = (
     CORE_TABLES
@@ -485,6 +492,7 @@ ALL_TABLES = (
     + ACCESS_REQUEST_HANDLED_TABLES
     + TRACE_AND_BROWSER_SESSION_TABLES
     + RECORD_LIVES_TABLES
+    + SKILL_PACKAGE_TABLES
 )
 
 
@@ -1311,6 +1319,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert trace_and_browser_session.TABLES == TRACE_AND_BROWSER_SESSION_TABLES
     record_lives = migration_module(MIGRATION_RECORD_LIVES)
     assert record_lives.TABLES == RECORD_LIVES_TABLES
+    skill_packages = migration_module(MIGRATION_SKILL_PACKAGES)
+    assert skill_packages.TABLES == SKILL_PACKAGE_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1404,6 +1414,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(access_request_handled.TABLES)
         + tuple(trace_and_browser_session.TABLES)
         + tuple(record_lives.TABLES)
+        + tuple(skill_packages.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1478,6 +1489,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(access_request_handled.TABLES),
         set(trace_and_browser_session.TABLES),
         set(record_lives.TABLES),
+        set(skill_packages.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

@@ -305,6 +305,16 @@ class SkillChange(enum.StrEnum):
     #: `0139`: a version retired, so no agent may newly be assigned it, or reinstated.
     RETIRED = "retired"
     REINSTATED = "reinstated"
+    #: `0164`: a version's example tasks rehearsed against it, with whether every one behaved as
+    #: expected in the details as `outcome` (M12.3.4).
+    REHEARSED = "rehearsed"
+
+
+class RehearsalOutcome(enum.StrEnum):
+    """How a rehearsal of a skill's examples came out: the two words `0164`'s trigger writes."""
+
+    PASSED = "passed"
+    FAILED = "failed"
 
 
 class CredentialChange(enum.StrEnum):
@@ -1106,6 +1116,7 @@ class AuditRecorder:
         change: SkillChange,
         source: str | None = None,
         edited_from: str | None = None,
+        outcome: RehearsalOutcome | None = None,
     ) -> AuditEntry:
         """Record that a skill was added to the library, or approved or rejected.
 
@@ -1133,6 +1144,9 @@ class AuditRecorder:
             details["edited_from"] = edited_from
         if source is not None:
             details["source"] = source
+        if outcome is not None:
+            # `0164`: a rehearsal says whether every example behaved, as one closed word.
+            details["outcome"] = outcome.value
         return self._write(AuditAction.SKILL, subject("skill", name), details)
 
     def connector(self, *, connector: str, change: ConnectorChange) -> AuditEntry:

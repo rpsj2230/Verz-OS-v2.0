@@ -25,7 +25,7 @@ diff that breaks it.
 **Sandboxed, and precise about which half.** A sandbox has to deny the filesystem outside a
 working directory, network egress, environment variables carrying credentials, subprocess
 spawning, and unbounded CPU, memory and wall clock. `SANDBOX_PROPERTIES` lists all of them
-with the mechanism that actually denies each, and it is honest in both directions: four are
+with the mechanism that actually denies each, and it is honest in both directions: five are
 enforced by code in this module, and the other six are declarations a container has to honour.
 Saying "this is policy and the enforcement is elsewhere" is the correct move where it is
 true, which is what `brain.ops.wiring` does about a compose file that has never run and what
@@ -75,7 +75,17 @@ no runner registers no execution tool, which is the shape `brain.tools.startup` 
 row tool with no source: a tool that is present and cannot answer safely is worse than one
 that is absent.
 
-Task ids: M12.2.9
+**The bytes handed to a runner are the bytes that were approved, checked here (M12.4.11).**
+`plan_run` takes the script's bytes as read from the library and holds them to the sha256 the
+approved skill recorded for that script, through `brain.tools.skills.verified_script`, before a
+`SandboxSpec` exists; the spec then carries those bytes, so a runner is never left to read a
+file off a disk that somebody could have changed since. A changed byte is refused in planning,
+which is before anything runs, and the pin's own comparison of digests (`resolve_pin`) catches a
+recorded sha256 that was itself changed. Rejected: handing the runner the digest and letting it
+fetch the bytes, which puts the one check that matters on the far side of the component this
+module trusts least.
+
+Task ids: M12.2.9, M12.4.11
 """
 
 from __future__ import annotations
@@ -101,6 +111,7 @@ from brain.tools.skills import (
     execution_tool,
     resolve_pin,
     safe_archive_member,
+    verified_script,
 )
 
 # ------------------------------------------------------------------ written-down reasons
@@ -285,10 +296,11 @@ class SandboxSpec:
     saying "do not pass the credentials to the sandbox" holds until the first person who
     needs one; a type that cannot hold one does not.
 
-    `digest` is the approved digest of the skill, carried so the runner materialises the
-    exact bytes a named person reviewed. A runner that unpacked whatever is on disk under
-    that skill's name would be running something nobody approved, and the pin in
-    `brain.tools.skills` would have been checking a version that never ran.
+    `digest` is the approved digest of the skill, and `content` the bytes of the script to run,
+    which `plan_run` has already held to the sha256 that digest covers. A runner runs `content`
+    and nothing else: one that unpacked whatever is on disk under that skill's name would be
+    running something nobody approved, and the pin in `brain.tools.skills` would have been
+    checking a version that never ran.
 
     `reach_hash` is the hash of `E(caller) ∩ agent_ceiling`. A hash and not a grant: it is
     the reach this run is attributed to, so an audit row can say what the run was allowed to
@@ -306,6 +318,8 @@ class SandboxSpec:
     leash: ScriptLeash = field(default_factory=ScriptLeash)
     network: Egress = Egress.DENIED
     reach_hash: str = ""
+    #: The script's bytes, verified against the approved sha256 before this spec was built.
+    content: bytes = b""
 
 
 # --------------------------------------------------- what a sandbox must deny (M12.2.9)
@@ -334,7 +348,7 @@ class SandboxProperty:
             raise SkillScriptError(msg)
 
 
-#: The honest table. Four rows are code in this module and the other six are declarations a
+#: The honest table. Five rows are code in this module and the other six are declarations a
 #: container has to honour, which is why `SkillScriptTool` cannot be built without a runner.
 SANDBOX_PROPERTIES: Final[tuple[SandboxProperty, ...]] = (
     SandboxProperty(
@@ -343,6 +357,14 @@ SANDBOX_PROPERTIES: Final[tuple[SandboxProperty, ...]] = (
         enforced_by=(
             "plan_run, which refuses a script that is not in Skill.scripts and re-runs "
             "safe_archive_member over the requested path"
+        ),
+    ),
+    SandboxProperty(
+        denies="running bytes other than the ones a reviewer approved",
+        enforced_here=True,
+        enforced_by=(
+            "plan_run, which holds the script's bytes to the sha256 the approved skill recorded "
+            "for it through verified_script and hands the runner those bytes and no path"
         ),
     ),
     SandboxProperty(
@@ -559,6 +581,10 @@ class SkillLibrary(Protocol):
         self, agent_id: str, skill_name: str
     ) -> tuple[SkillPin, ImportedSkill] | None: ...
 
+    def script(self, digest: str, path: str) -> bytes | None:
+        """The bytes stored for one script of the skill with this digest, or None (M12.4.11)."""
+        ...
+
 
 #: One refusal for "no such skill", "not approved", "not pinned to this agent" and "edited
 #: since it was pinned". Collapsed on purpose, and this is the one message in this module a
@@ -580,22 +606,27 @@ def plan_run(
     skill: Skill,
     request: ScriptRequest,
     *,
+    content: bytes,
     leash: ScriptLeash,
     environment: Mapping[str, str],
     reach_hash: str,
 ) -> SandboxSpec:
-    """Everything decided before anything runs, or a refusal (M12.2.9).
+    """Everything decided before anything runs, or a refusal (M12.2.9, M12.4.11).
 
-    The script is checked twice and the order is the argument. `safe_archive_member` runs
+    The script is checked three times and the order is the argument. `safe_archive_member` runs
     first, so `../../etc/shadow` is refused as a traversal rather than as an undeclared
     name, which is what an operator reading the message needs to know. Membership of
     `Skill.scripts` runs second and is the stronger check: it is the reviewed list, and a
-    path that is in it has been through the same validation at import.
+    path that is in it has been through the same validation at import. Third, `content`, the
+    bytes as the library holds them now, is held to the sha256 the approved skill recorded for
+    that script, and a script whose bytes changed after approval is refused here, before a spec
+    exists for any runner to receive.
 
-    Both, rather than either. Membership alone would rest on `Skill.scripts` having been
+    All three, rather than any one. Membership alone would rest on `Skill.scripts` having been
     validated at construction, which is true today and is a property of a different module;
     the path check alone would let a model run any file that happened to be in the folder,
-    including one an archive dropped there that nobody reviewed.
+    including one an archive dropped there that nobody reviewed; and neither says anything about
+    whether the bytes are the ones a reviewer read.
     """
     safe_archive_member(request.script)
     if request.script not in skill.scripts:
@@ -605,6 +636,10 @@ def plan_run(
             "nobody read, whatever else is sitting in the folder"
         )
         raise SkillScriptError(msg)
+    try:
+        approved = verified_script(skill, request.script, content)
+    except SkillError as refused:
+        raise SkillScriptError(str(refused)) from None
 
     return SandboxSpec(
         skill=skill.name,
@@ -615,6 +650,7 @@ def plan_run(
         leash=leash,
         network=Egress.DENIED,
         reach_hash=reach_hash,
+        content=approved,
     )
 
 
@@ -800,9 +836,13 @@ class SkillScriptTool:
             except SkillError as exc:
                 raise SkillScriptError(SKILL_NOT_AVAILABLE) from exc
 
+            content = self.library.script(pin.digest, request.script)
+            if content is None:
+                raise SkillScriptError(SKILL_NOT_AVAILABLE)
             spec = plan_run(
                 skill,
                 request,
+                content=content,
                 leash=self.leash,
                 environment=self.environment,
                 reach_hash=entitlement.intersect(agent_ceiling, now).ent_hash(),

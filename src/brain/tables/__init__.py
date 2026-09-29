@@ -134,9 +134,12 @@ from brain.tables.service_account import ApiKeyRow, ServiceAccountRow
 from brain.tables.skill import (
     SkillAssignmentRow,
     SkillDetachmentRow,
+    SkillExampleRow,
+    SkillRehearsalRow,
     SkillRetirementRow,
     SkillReviewRow,
     SkillRow,
+    SkillScriptRow,
 )
 from brain.tables.skill_invocation import SkillInvocationRow
 from brain.tables.spend import ReportRefreshRow, SpendActualRow
@@ -412,6 +415,11 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0152_record_lives_and_source_epochs. Points at nothing: a source is a value, and the epoch
     # outlives any one connection of it, as `proj.record`'s rows do.
     "proj.source_epoch",
+    # 0164_skill_scripts_examples_and_rehearsals. Each points at the skill whose bytes it holds or
+    # rehearses, so all three follow it; the people are values.
+    "agent.skill_script",
+    "agent.skill_example",
+    "agent.skill_rehearsal",
 )
 
 __all__ = [
@@ -512,10 +520,13 @@ __all__ = [
     "SettingType",
     "SkillAssignmentRow",
     "SkillDetachmentRow",
+    "SkillExampleRow",
     "SkillInvocationRow",
+    "SkillRehearsalRow",
     "SkillRetirementRow",
     "SkillReviewRow",
     "SkillRow",
+    "SkillScriptRow",
     "SolutionRow",
     "SourceEpochRow",
     "SpendActualRow",

@@ -14,26 +14,48 @@ comes out is an `ImportedSkill` in the imported state, and there is no parameter
 path that could carry an approval, which is `brain.migration.skills.arriving`'s construction for
 the same reason. See `ADDING_A_SKILL_READS_IT_AND_RUNS_NOTHING`.
 
-**A skill that declares scripts is refused at the door, and that is a decision about the digest.**
-`brain.tools.skills.Skill.digest` covers a script's name and not its bytes, so an approval of a
-skill with scripts would survive an edit to the one part of it that is code. Nothing on an install
-runs a script yet either (`brain.tools.run_skill` has no runner), so accepting one would store code
-nobody can review by digest and nothing can execute. See
-`A_SCRIPT_THE_DIGEST_DOES_NOT_COVER_IS_A_SCRIPT_NOBODY_APPROVED`.
+**A package carries its scripts and its example tasks, and the digest covers every byte of both
+(M12.4.11, M12.3.4).** Until 2026-09-29 a skill declaring scripts was refused at the door, because
+`brain.tools.skills.Skill.digest` covered a script's name and not its bytes. It now covers the
+sha256 of each script's bytes and every example task, so a package is a `SKILL.md`, the scripts
+it declares, an `examples.json` holding its example tasks with the behaviour expected of each,
+and, when it was exported from another install, a `MANIFEST.json` naming its version and digest.
+A file that is none of those is refused rather than skipped, and a declared script the package
+does not hold is refused too, so no byte the digest does not cover is ever kept and no script is
+approved by name alone. See `A_PACKAGE_KEEPS_ONLY_WHAT_ITS_DIGEST_COVERS`. Nothing here runs a
+script; `brain.tools.run_skill.plan_run` holds its bytes to the approved sha256 before anything
+could.
 
 **A skill arrives three ways, and each is read, never run (M12.2.2, M12.2.3, M12.2.4).** A package
 pasted or uploaded (`read_package`); a repository at a full commit sha (`read_github`), whose
-tarball is inflated in memory under a ceiling and from which exactly one member is read, the
-`SKILL.md` at the path asked for; and an https address on `brain.tools.fetch.SKILL_SOURCE_HOSTS`
-(`read_url`), whose answer is a `SKILL.md` or a zip holding one. Each comes out as the same
-imported skill with a different `SkillSource`, so the review and everything after it cannot tell
-how it arrived except by reading the source. The fetch is `brain.tools.fetch`'s and happens before
-this module is called; nothing here opens a connection. **Only the `SKILL.md` is taken from a
-repository folder.** A zip holding anything else is refused, for
-`A_SCRIPT_THE_DIGEST_DOES_NOT_COVER_IS_A_SCRIPT_NOBODY_APPROVED`; a repository folder commonly holds
-a licence or a readme beside its `SKILL.md`, and refusing those would refuse most repositories, so
-they are left where they are and never stored, which is the same outcome by a gentler route: no
-byte the digest does not cover is kept. A `SKILL.md` that declares scripts is still refused.
+tarball is inflated in memory under a ceiling and from which only the `SKILL.md` at the path asked
+for, the scripts it declares and its `examples.json` are read; and an https address on
+`brain.tools.fetch.SKILL_SOURCE_HOSTS` (`read_url`), whose answer is a `SKILL.md` or a zip holding
+one with its files. Each comes out as the same imported skill with a different `SkillSource`, so
+the review and everything after it cannot tell how it arrived except by reading the source. The
+fetch is `brain.tools.fetch`'s and happens before this module is called; nothing here opens a
+connection. A repository folder commonly holds a licence or a readme beside its `SKILL.md`, and
+refusing those would refuse most repositories, so they are left where they are and never stored,
+which is the zip's rule by a gentler route: no byte the digest does not cover is kept.
+
+**A version with example tasks is approved only once they have been rehearsed against it
+(M12.3.4).** `rehearsal` records, for exactly one digest, whether each example behaved as expected,
+in the name of the person who rehearsed it, and `decided` refuses to approve a version with
+examples until the newest rehearsal of those bytes says every one did. **A rehearsal is a person's
+verdict today, and it says so**: nothing on an install asks a model to carry out a skill yet
+(`brain.agent_builder_routes.A_REHEARSAL_RUNS_NO_MODEL_YET`), so the record is somebody reading
+each example against these instructions, or trying it, and saying whether it behaved. See
+`A_REHEARSAL_IS_A_PERSON_S_VERDICT_UNTIL_A_MODEL_ANSWERS` and
+`A_VERSION_WITH_EXAMPLES_IS_APPROVED_ONLY_AFTER_THEY_ARE_REHEARSED`.
+
+**An approved skill is exported as a package another install imports unreviewed (M12.3.1).**
+`exported` refuses anything not approved and unchanged since, holds every script's bytes to the
+approved sha256 once more, and writes a zip with the `SKILL.md`, the scripts, the examples and a
+`MANIFEST.json` naming the version and digest. `read_package` on the other install recomputes the
+digest from what arrived and refuses a package whose contents do not digest to what its manifest
+says, and what it accepts lands in the imported state like any other package, because an
+approval is a fact about a person on the install that granted it. See
+`AN_EXPORTED_PACKAGE_LANDS_UNREVIEWED_AND_ONLY_IF_ITS_BYTES_MATCH_ITS_DIGEST`.
 
 **An administrator may approve a skill they imported, and the ledger says it was their own (D4,
 M12.4.6).** Until 2026-09-28 `decided` refused the importer whatever they held, and the table
@@ -90,18 +112,21 @@ Scope: domain logic. Nothing here opens a connection or reads a clock; rows, the
 instant arrive as arguments.
 
 Task ids: M42.6.4, M12.2.2, M12.2.3, M12.2.4, M12.2.6, M12.3.2, M12.4.6, M12.4.13, M27.15.55
+Task ids: M12.4.11, M12.3.4, M12.3.1
 """
 
 from __future__ import annotations
 
 import hashlib
 import io
+import json
 import re
+import stat
 import tarfile
 import zipfile
 import zlib
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Final
 
@@ -122,19 +147,27 @@ from brain.tools.extract import MAX_MEMBERS, _is_regular
 from brain.tools.registry import ToolRegistry
 from brain.tools.review import QueueEntry, pending
 from brain.tools.skills import (
+    DIGEST_RE,
+    MAX_EXAMPLES,
     SKILL_FILE,
     ImportedSkill,
+    ScriptFile,
     Skill,
     SkillError,
+    SkillExample,
     SkillPin,
     SkillSource,
+    SkillState,
     SourceKind,
+    markdown_of,
     required_capabilities,
     safe_archive_member,
     safe_archive_members,
+    script_sha256,
     skill_from_markdown,
     skill_reach,
     unknown_tools,
+    verified_script,
     version_key,
 )
 
@@ -149,14 +182,47 @@ ADDING_A_SKILL_READS_IT_AND_RUNS_NOTHING: Final = (
     "nothing on it executes, renders or fetches what the package says."
 )
 
-#: Why a skill with scripts is refused rather than stored.
-A_SCRIPT_THE_DIGEST_DOES_NOT_COVER_IS_A_SCRIPT_NOBODY_APPROVED: Final = (
-    "Skill.digest covers each script's name and not its bytes, so an approval of a skill with "
-    "scripts is an approval that survives an edit to the one part of the skill that is code. "
-    "No install runs a script yet either, because brain.tools.run_skill has no runner. So a "
-    "package that declares scripts, or carries any file beside its SKILL.md, is refused at the "
-    "door with a sentence saying so, rather than stored where a reviewer would approve prose "
-    "and a digest would stand for code nobody read."
+#: Why a package may carry its scripts and its examples, and nothing else.
+A_PACKAGE_KEEPS_ONLY_WHAT_ITS_DIGEST_COVERS: Final = (
+    "A package is a SKILL.md, the scripts it declares, an examples.json with its example tasks, "
+    "and, when it was exported from another install, a MANIFEST.json naming its version and "
+    "digest. The digest a reviewer approves covers the bytes of every script and every example, "
+    "so a file that is none of those is refused rather than skipped, and a script the SKILL.md "
+    "declares and the package does not hold is refused too: a byte the digest does not cover is "
+    "a byte nobody approved, and a script approved by its name alone is code nobody read."
+)
+
+#: Why approving a version with examples waits for a rehearsal of exactly those bytes (M12.3.4).
+A_VERSION_WITH_EXAMPLES_IS_APPROVED_ONLY_AFTER_THEY_ARE_REHEARSED: Final = (
+    "A skill carries example tasks with the behaviour expected of it, and a version that carries "
+    "them cannot be approved until they have been rehearsed against that version and every one "
+    "behaved as expected. The rehearsal is recorded against the version's digest, so an edit, "
+    "which is a new digest, is rehearsed again before it can be approved. Rejecting a version "
+    "needs no rehearsal."
+)
+
+#: What a rehearsal is on an install today, said rather than implied (M12.3.4).
+A_REHEARSAL_IS_A_PERSON_S_VERDICT_UNTIL_A_MODEL_ANSWERS: Final = (
+    "No model carries out a skill on an install yet, so a rehearsal is a named person reading "
+    "each example task against this version's instructions, or trying it by hand, and recording "
+    "whether it behaved as expected. The record says who, when, which version and each verdict, "
+    "and the ledger keeps it; it does not claim a model was run."
+)
+
+#: Why an exported package lands unreviewed, and only when its bytes match its digest (M12.3.1).
+AN_EXPORTED_PACKAGE_LANDS_UNREVIEWED_AND_ONLY_IF_ITS_BYTES_MATCH_ITS_DIGEST: Final = (
+    "An exported package names the version and the digest it was approved as. The install that "
+    "imports it computes the digest again from the bytes that arrived and refuses a package "
+    "whose contents do not match it, because such a package was changed after it left. What it "
+    "accepts lands undecided like any other import: an approval is a decision a person made on "
+    "the install that exported it, and it does not travel with the file."
+)
+
+#: Why only an approved version is exported.
+ONLY_AN_APPROVED_VERSION_IS_EXPORTED: Final = (
+    "An export carries the digest a named person approved, so a version nobody approved, one "
+    "that was rejected, or one whose stored bytes no longer match what was approved has no "
+    "approved digest to carry and is not exported."
 )
 
 #: Why the importer may decide, and what is recorded when they do (D4).
@@ -284,6 +350,27 @@ MAX_ADDRESS_CHARS: Final = 400
 #: category is in none.
 MAX_CATEGORIES: Final = 8
 
+#: The file beside a `SKILL.md` holding its example tasks: a JSON list of objects, each with a
+#: `task` and the behaviour `expected` of the skill on it (M12.3.4).
+EXAMPLES_FILE: Final = "examples.json"
+
+#: The file an exported package carries naming its format, name, version and digest (M12.3.1).
+MANIFEST_FILE: Final = "MANIFEST.json"
+
+#: The format an exported package declares in its manifest. A package in another format is
+#: refused rather than guessed at, for the reason the frontmatter parser refuses an unknown key.
+PACKAGE_FORMAT: Final = "brain.skill.package.v1"
+
+#: The fields an exported package's manifest carries, and no others.
+MANIFEST_FIELDS: Final[frozenset[str]] = frozenset({"format", "name", "version", "digest"})
+
+#: The names a package's own files take, which no script may take too.
+PACKAGE_FILES: Final[frozenset[str]] = frozenset({SKILL_FILE, EXAMPLES_FILE, MANIFEST_FILE})
+
+#: The time every member of an exported zip is stamped with, the earliest a zip can hold, so two
+#: exports of one version are the same bytes whenever they are made.
+EXPORT_STAMP: Final = (1980, 1, 1, 0, 0, 0)
+
 
 def _library_screen_read(reach: EntitlementSet, now: datetime | None) -> bool:
     """The Skills screen's own question: its capability and the configuration plane together."""
@@ -344,6 +431,11 @@ class LibrarySkill:
     submitted_at: datetime
     #: The digest of the version this one was edited from, when it is an edit (M12.3.2).
     edited_from: str | None = None
+    #: The bytes of each declared script as they arrived, carried from an import or an edit to
+    #: the write that stores them beside the row, and empty when a row is read back: a library
+    #: listing reads the sha256 each script was approved as, never the bytes (M12.4.11).
+    #: Left out of equality, because the sha256 the digest covers already says which bytes.
+    scripts: Mapping[str, bytes] = field(default_factory=dict, compare=False)
 
     @property
     def name(self) -> str:
@@ -391,10 +483,16 @@ def another_spelling(skill: Skill, library: Iterable[LibrarySkill]) -> str | Non
 
 @dataclass(frozen=True)
 class Package:
-    """A package that parsed: the skill and where its bytes came from."""
+    """A package that parsed: the skill, where its bytes came from, and its scripts' bytes.
+
+    `exported_as` is the digest a `MANIFEST.json` said the package was exported as, when it
+    carried one, and it has already been held equal to the skill's own digest (M12.3.1).
+    """
 
     skill: Skill
     source: SkillSource
+    scripts: Mapping[str, bytes] = field(default_factory=dict, compare=False)
+    exported_as: str | None = None
 
 
 def _refused(reason: str) -> SkillLibraryError:
@@ -420,13 +518,24 @@ def _markdown_text(raw: bytes, refuse: Refusal = _refused) -> str:
     return text.replace("\r\n", "\n")
 
 
-def _from_archive(content: bytes) -> str:
-    """The one `SKILL.md` a zip holds, read in memory, or a refusal.
+@dataclass(frozen=True)
+class Unpacked:
+    """What a package held: its `SKILL.md` as text, and every other file by its path relative to
+    the folder the `SKILL.md` is in."""
+
+    markdown: str
+    files: Mapping[str, bytes]
+
+
+def _from_archive(content: bytes) -> Unpacked:
+    """The `SKILL.md` a zip holds and the files beside it, read in memory, or a refusal.
 
     The rules `brain.tools.extract.extract_zip` applies before it writes anything, applied before
-    anything is read, and no member is ever written anywhere. Any member but the `SKILL.md` is
-    refused rather than skipped, for `safe_archive_members`' reason about an archive with one
-    hostile name and for `A_SCRIPT_THE_DIGEST_DOES_NOT_COVER_IS_A_SCRIPT_NOBODY_APPROVED`.
+    anything is read, and no member is ever written anywhere. Every member must be a regular file
+    in the `SKILL.md`'s own folder or under it, for `safe_archive_members`' reason about an archive
+    with one hostile name: a member elsewhere is refused rather than skipped. Which of the files
+    beside the `SKILL.md` may be kept is `_packaged`'s question, because only the `SKILL.md` says
+    which scripts it declares. See `A_PACKAGE_KEEPS_ONLY_WHAT_ITS_DIGEST_COVERS`.
     """
     try:
         archive = zipfile.ZipFile(io.BytesIO(content))
@@ -445,44 +554,166 @@ def _from_archive(content: bytes) -> str:
             names = safe_archive_members(info.filename for info in infos)
         except SkillError as refused:
             raise _refused(str(refused)) from None
-        others = sorted(name for name in names if name.rsplit("/", 1)[-1] != SKILL_FILE)
-        if others:
+        (manifest,) = (name for name in names if name.rsplit("/", 1)[-1] == SKILL_FILE)
+        folder = manifest[: -len(SKILL_FILE)]
+        outside = sorted(name for name in names if not name.startswith(folder))
+        if outside:
             raise _refused(
-                f"the archive holds {others} beside its {SKILL_FILE}. "
-                f"{A_SCRIPT_THE_DIGEST_DOES_NOT_COVER_IS_A_SCRIPT_NOBODY_APPROVED}"
+                f"the archive holds {outside} outside the folder its {SKILL_FILE} is in. "
+                f"{A_PACKAGE_KEEPS_ONLY_WHAT_ITS_DIGEST_COVERS}"
             )
-        (manifest,) = infos
-        mode = manifest.external_attr >> 16
-        if mode and not _is_regular(mode):
-            raise _refused(f"{manifest.filename!r} in the archive is not a regular file")
-        if manifest.flag_bits & 0x1:
-            raise _refused("the archive is encrypted; add the SKILL.md itself instead")
-        with archive.open(manifest) as source:
-            raw = source.read(MAX_PACKAGE_BYTES + 1)
-    if len(raw) > MAX_PACKAGE_BYTES:
-        raise _refused("the archive is larger than it declared")
-    return _markdown_text(raw)
+        read: dict[str, bytes] = {}
+        total = 0
+        for info in infos:
+            mode = info.external_attr >> 16
+            if mode and not _is_regular(mode):
+                raise _refused(f"{info.filename!r} in the archive is not a regular file")
+            if info.flag_bits & 0x1:
+                raise _refused("the archive is encrypted; add the files themselves instead")
+            with archive.open(info) as source:
+                raw = source.read(MAX_PACKAGE_BYTES + 1)
+            total += len(raw)
+            if total > MAX_PACKAGE_BYTES:
+                raise _refused("the archive is larger than it declared")
+            read[info.filename[len(folder) :]] = raw
+    markdown = read.pop(SKILL_FILE)
+    return Unpacked(markdown=_markdown_text(markdown), files=read)
 
 
 def _skill_of(text: str, refuse: Refusal = _refused) -> Skill:
     """The skill a `SKILL.md` declares, held to every rule a package is held to, or a refusal.
 
-    The one parser, `skill_from_markdown`, and then the two refusals the library adds: a skill
-    declaring scripts, for `A_SCRIPT_THE_DIGEST_DOES_NOT_COVER_IS_A_SCRIPT_NOBODY_APPROVED`, and a
-    version in digits other than 0 to 9, which the table's check would refuse after the press.
+    The one parser, `skill_from_markdown`, and then the refusals the library adds: a script named
+    like one of a package's own files, which would make the package ambiguous about which it is,
+    and a version in digits other than 0 to 9, which the table's check would refuse after the
+    press. Whether the package holds the scripts it declares is `_packaged`'s question.
     """
     try:
         skill = skill_from_markdown(text)
     except SkillError as refused:
         raise refuse(str(refused)) from None
-    if skill.scripts:
+    clashing = sorted(set(skill.scripts) & PACKAGE_FILES)
+    if clashing:
         raise refuse(
-            f"it declares scripts {list(skill.scripts)}. "
-            f"{A_SCRIPT_THE_DIGEST_DOES_NOT_COVER_IS_A_SCRIPT_NOBODY_APPROVED}"
+            f"it declares {clashing} as scripts, which is the name of a file every package "
+            "carries for itself; name the script something else"
         )
     if not skill.version.isascii():
         raise refuse(f"its version {skill.version!r} is not written in the digits 0 to 9")
     return skill
+
+
+def examples_from(raw: bytes, refuse: Refusal = _refused) -> tuple[SkillExample, ...]:
+    """The example tasks an `examples.json` holds, or a refusal saying what to fix (M12.3.4).
+
+    A JSON list of objects, each with exactly a `task` and the behaviour `expected` of the skill
+    on it, as text, at most `MAX_EXAMPLES` of them. Nothing else is read out of the file, and a
+    key it does not know is refused rather than ignored, for the reason the frontmatter parser
+    refuses one: an ignored declaration reads exactly like an honoured one.
+    """
+    try:
+        found = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        raise refuse(f"its {EXAMPLES_FILE} is not JSON text in UTF-8") from None
+    if not isinstance(found, list):
+        raise refuse(f"its {EXAMPLES_FILE} is not a list of example tasks")
+    if len(found) > MAX_EXAMPLES:
+        raise refuse(
+            f"its {EXAMPLES_FILE} holds {len(found)} example tasks, over the {MAX_EXAMPLES} limit"
+        )
+    examples: list[SkillExample] = []
+    for number, one in enumerate(found, start=1):
+        if not isinstance(one, dict) or set(one) != {"task", "expected"}:
+            raise refuse(
+                f"example {number} in its {EXAMPLES_FILE} is not an object with exactly a task and "
+                "the behaviour expected"
+            )
+        try:
+            examples.append(SkillExample(task=one["task"], expected=one["expected"]))
+        except ValueError:
+            raise refuse(
+                f"example {number} in its {EXAMPLES_FILE} needs a task and an expected behaviour, "
+                "each some words of text"
+            ) from None
+    return tuple(examples)
+
+
+def _manifest_digest(raw: bytes, skill: Skill, refuse: Refusal) -> str:
+    """The digest an exported package's `MANIFEST.json` names, once it is held to the contents.
+
+    See `AN_EXPORTED_PACKAGE_LANDS_UNREVIEWED_AND_ONLY_IF_ITS_BYTES_MATCH_ITS_DIGEST`. The format,
+    the name and the version are compared as well as the digest, so a manifest copied from another
+    package is refused even where its contents happen to parse.
+    """
+    try:
+        manifest = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        raise refuse(f"its {MANIFEST_FILE} is not JSON text in UTF-8") from None
+    if not isinstance(manifest, dict) or set(manifest) != MANIFEST_FIELDS:
+        raise refuse(f"its {MANIFEST_FILE} does not name exactly {sorted(MANIFEST_FIELDS)}")
+    if manifest["format"] != PACKAGE_FORMAT:
+        raise refuse(f"its {MANIFEST_FILE} is not a {PACKAGE_FORMAT} package")
+    digest = manifest["digest"]
+    if not isinstance(digest, str) or not DIGEST_RE.match(digest):
+        raise refuse(f"its {MANIFEST_FILE} names no digest")
+    if (manifest["name"], manifest["version"], digest) != (
+        skill.name,
+        skill.version,
+        skill.digest(),
+    ):
+        raise refuse(
+            "it was exported as a version whose contents are not these: its manifest names a "
+            "name, version or digest the package's own files do not have, so something in it "
+            "changed after it was exported. "
+            f"{AN_EXPORTED_PACKAGE_LANDS_UNREVIEWED_AND_ONLY_IF_ITS_BYTES_MATCH_ITS_DIGEST}"
+        )
+    return digest
+
+
+def _packaged(
+    text: str, files: Mapping[str, bytes], refuse: Refusal = _refused
+) -> tuple[Skill, dict[str, bytes], str | None]:
+    """The skill a package holds with its scripts' sha256 and its examples, the scripts' bytes,
+    and the digest its manifest named, or a refusal. See
+    `A_PACKAGE_KEEPS_ONLY_WHAT_ITS_DIGEST_COVERS`.
+
+    Every file beside the `SKILL.md` is a declared script, the examples or the manifest, and
+    every declared script is there. The manifest is checked last, against the skill as built from
+    everything else, because it is a claim about all of it.
+    """
+    skill = _skill_of(text, refuse)
+    scripts = {path: raw for path, raw in files.items() if path not in PACKAGE_FILES}
+    stray = sorted(set(scripts) - set(skill.scripts))
+    if stray:
+        raise refuse(
+            f"the package holds {stray}, which its {SKILL_FILE} does not declare as scripts. "
+            f"{A_PACKAGE_KEEPS_ONLY_WHAT_ITS_DIGEST_COVERS}"
+        )
+    missing = sorted(set(skill.scripts) - set(scripts))
+    if missing:
+        raise refuse(
+            f"its {SKILL_FILE} declares the scripts {missing} and the package does not hold "
+            f"them; add the {SKILL_FILE} and its scripts together in a .zip. "
+            f"{A_PACKAGE_KEEPS_ONLY_WHAT_ITS_DIGEST_COVERS}"
+        )
+    examples_raw = files.get(EXAMPLES_FILE)
+    examples = () if examples_raw is None else examples_from(examples_raw, refuse)
+    try:
+        built = Skill.model_validate(
+            {
+                **skill.model_dump(),
+                "script_files": [
+                    ScriptFile(path=path, sha256=script_sha256(raw))
+                    for path, raw in sorted(scripts.items())
+                ],
+                "examples": list(examples),
+            }
+        )
+    except ValueError:
+        raise refuse("its scripts and examples do not make a skill") from None
+    manifest_raw = files.get(MANIFEST_FILE)
+    exported_as = None if manifest_raw is None else _manifest_digest(manifest_raw, built, refuse)
+    return built, scripts, exported_as
 
 
 def read_package(file_name: str, content: bytes) -> Package:
@@ -505,9 +736,9 @@ def read_package(file_name: str, content: bytes) -> Package:
         ) from None
     lowered = file_name.lower()
     if lowered.endswith(ARCHIVE_SUFFIX):
-        text = _from_archive(content)
+        unpacked = _from_archive(content)
     elif lowered.endswith(MARKDOWN_SUFFIX):
-        text = _markdown_text(content)
+        unpacked = Unpacked(markdown=_markdown_text(content), files={})
     else:
         raise _refused(f"a package is a {SKILL_FILE} or a .zip holding one, and this is neither")
     source = SkillSource(
@@ -515,7 +746,12 @@ def read_package(file_name: str, content: bytes) -> Package:
         location=file_name,
         content_digest=hashlib.sha256(content).hexdigest(),
     )
-    return Package(skill=_skill_of(text), source=source)
+    return _package(unpacked, source)
+
+
+def _package(unpacked: Unpacked, source: SkillSource) -> Package:
+    skill, scripts, exported_as = _packaged(unpacked.markdown, unpacked.files)
+    return Package(skill=skill, source=source, scripts=scripts, exported_as=exported_as)
 
 
 # ------------------------------------------------------------------- from a URL (M12.2.3)
@@ -555,11 +791,15 @@ def read_url(url: str, content: bytes) -> Package:
             "the address answered with a compressed archive; import a repository by its name "
             "and a commit instead"
         )
-    text = _from_archive(content) if content.startswith(ZIP_MAGIC) else _markdown_text(content)
+    unpacked = (
+        _from_archive(content)
+        if content.startswith(ZIP_MAGIC)
+        else Unpacked(markdown=_markdown_text(content), files={})
+    )
     source = SkillSource(
         kind=SourceKind.URL, location=url, content_digest=hashlib.sha256(content).hexdigest()
     )
-    return Package(skill=_skill_of(text), source=source)
+    return _package(unpacked, source)
 
 
 # ------------------------------------------------------ from a repository commit (M12.2.2)
@@ -606,25 +846,28 @@ def _inflated(tarball: bytes) -> bytes:
     return data
 
 
-def _from_tarball(tarball: bytes, path: str) -> bytes:
-    """The bytes of the one `SKILL.md` at `path` in a repository tarball, or a refusal.
+def _from_tarball(tarball: bytes, path: str) -> tuple[bytes, Unpacked]:
+    """The bytes of the one `SKILL.md` at `path` in a repository tarball, and what the package
+    is read as: that `SKILL.md`, the scripts it declares and its `examples.json`. Or a refusal.
 
     GitHub's tarball holds one top folder, named for the repository and the commit, and the tree
-    under it. Nothing is extracted: the members are listed from memory, exactly one is read, and
-    it must be a regular file, because a symlink named `SKILL.md` has an ordinary name and points
-    wherever its author chose. Every other member is left unread, which is why its name is held
-    to no rule here: nothing is written anywhere, so no name can be a path to anything.
+    under it. Nothing is extracted: the members are listed from memory, the `SKILL.md` is read,
+    then only the scripts it declares and its examples, and each must be a regular file, because
+    a symlink named `SKILL.md` has an ordinary name and points wherever its author chose. Every
+    other member is left unread, which is why its name is held to no rule here: nothing is written
+    anywhere, so no name can be a path to anything.
     """
     data = _inflated(tarball)
     try:
         with tarfile.open(fileobj=io.BytesIO(data), mode="r:") as archive:
-            return _manifest_in(archive, path)
+            return _folder_in(archive, path)
     except tarfile.TarError:
         raise _refused("the repository archive is not a tar archive") from None
 
 
-def _manifest_in(archive: tarfile.TarFile, path: str) -> bytes:
-    """The one `SKILL.md` at `path` under the archive's one top folder. See `_from_tarball`."""
+def _folder_in(archive: tarfile.TarFile, path: str) -> tuple[bytes, Unpacked]:
+    """The `SKILL.md` at `path` under the archive's one top folder and the files it names. See
+    `_from_tarball`."""
     members: list[tarfile.TarInfo] = []
     for member in archive:
         members.append(member)
@@ -634,23 +877,46 @@ def _manifest_in(archive: tarfile.TarFile, path: str) -> bytes:
     if len(tops) != 1:
         raise _refused("the repository archive is not one folder, as a commit's archive is")
     (top,) = tops
-    wanted = "/".join(part for part in (top, path, SKILL_FILE) if part)
-    found = [member for member in members if member.name == wanted]
     where = f"the folder {path!r}" if path else "the repository's top folder"
-    if not found:
+    folder = "/".join(part for part in (top, path) if part)
+    raw = _member_in(archive, members, f"{folder}/{SKILL_FILE}", where)
+    if raw is None:
         raise _refused(f"there is no {SKILL_FILE} in {where} at that commit")
+    markdown = _markdown_text(raw)
+    files: dict[str, bytes] = {}
+    total = len(raw)
+    for name in (*_skill_of(markdown).scripts, EXAMPLES_FILE):
+        found = _member_in(archive, members, f"{folder}/{name}", where)
+        if found is None:
+            continue
+        total += len(found)
+        if total > MAX_PACKAGE_BYTES:
+            raise _refused(
+                f"the {SKILL_FILE} and the files it names in {where} are over the "
+                f"{MAX_PACKAGE_BYTES} byte limit"
+            )
+        files[name] = found
+    return raw, Unpacked(markdown=markdown, files=files)
+
+
+def _member_in(
+    archive: tarfile.TarFile, members: Sequence[tarfile.TarInfo], wanted: str, where: str
+) -> bytes | None:
+    """One regular file's bytes by its full name in the tarball, None when it is not there."""
+    found = [member for member in members if member.name == wanted]
+    name = wanted.rsplit("/", 1)[-1]
+    if not found:
+        return None
     if len(found) > 1:
-        raise _refused(f"the archive lists {SKILL_FILE} in {where} more than once")
-    (manifest,) = found
-    if not manifest.isreg():
-        raise _refused(f"the {SKILL_FILE} in {where} is not a regular file")
-    if manifest.size > MAX_PACKAGE_BYTES:
-        raise _refused(
-            f"the {SKILL_FILE} is {manifest.size} bytes, over the {MAX_PACKAGE_BYTES} limit"
-        )
-    handle = archive.extractfile(manifest)
+        raise _refused(f"the archive lists {name} in {where} more than once")
+    (member,) = found
+    if not member.isreg():
+        raise _refused(f"the {name} in {where} is not a regular file")
+    if member.size > MAX_PACKAGE_BYTES:
+        raise _refused(f"the {name} is {member.size} bytes, over the {MAX_PACKAGE_BYTES} limit")
+    handle = archive.extractfile(member)
     if handle is None:
-        raise _refused(f"the {SKILL_FILE} in {where} could not be read")
+        raise _refused(f"the {name} in {where} could not be read")
     with handle:
         return handle.read(MAX_PACKAGE_BYTES + 1)
 
@@ -659,14 +925,15 @@ def read_github(source: SkillSource, tarball: bytes) -> Package:
     """The skill at one folder of one commit, from the tarball of that commit (M12.2.2).
 
     The source keeps the repository, the commit and the folder, which is what fetching it again
-    needs, and a digest over the `SKILL.md` it read, which the commit fixes.
+    needs, and a digest over the `SKILL.md` it read, which the commit fixes. The scripts it
+    declares and its examples are read from the same folder at the same commit, and the skill's
+    own digest covers their bytes (M12.4.11, M12.3.4).
     """
     if source.kind is not SourceKind.GITHUB:
         raise _refused("a repository import is read from a repository source")
-    raw = _from_tarball(tarball, source.path)
-    text = _markdown_text(raw)
+    raw, unpacked = _from_tarball(tarball, source.path)
     pinned = source.model_copy(update={"content_digest": hashlib.sha256(raw).hexdigest()})
-    return Package(skill=_skill_of(text), source=pinned)
+    return _package(unpacked, pinned)
 
 
 def added(package: Package, *, by: str, at: datetime) -> LibrarySkill:
@@ -681,7 +948,11 @@ def added(package: Package, *, by: str, at: datetime) -> LibrarySkill:
         raise SkillLibraryError("the time a skill was added must be timezone-aware")
     imported = ImportedSkill(skill=package.skill, source=package.source)
     return LibrarySkill(
-        imported=imported, digest=package.skill.digest(), submitted_by=by, submitted_at=at
+        imported=imported,
+        digest=package.skill.digest(),
+        submitted_by=by,
+        submitted_at=at,
+        scripts=dict(package.scripts),
     )
 
 
@@ -693,6 +964,7 @@ def edited(
     by: str,
     at: datetime,
     library: Iterable[LibrarySkill],
+    scripts: Mapping[str, bytes] | None = None,
 ) -> LibrarySkill:
     """The edited `SKILL.md` as a new version of `one`, undecided, or a refusal saying why.
 
@@ -701,6 +973,12 @@ def edited(
     The source is the text as it arrived, which is what `SourceKind` records for anything with no
     address to fetch again, so an edit of a skill that came from a commit no longer claims that
     commit.
+
+    **An edit changes the `SKILL.md` and carries the scripts and the examples over unchanged**
+    (M12.4.11, M12.3.4). `scripts` is the bytes the version edited holds, as the store read them,
+    and each is held to the sha256 that version was approved or added as before it is copied, so
+    an edit can never be the way a changed script enters the library. An edit declaring other
+    scripts is refused: a script is changed by adding a package, whose bytes a reviewer is shown.
     """
     if not by.strip():
         raise SkillLibraryError("a skill is edited by a named person, never by an empty string")
@@ -714,7 +992,21 @@ def edited(
     raw = text.replace("\r\n", "\n").encode("utf-8")
     if len(raw) > MAX_PACKAGE_BYTES:
         raise _not_saved(f"the edit is {len(raw)} bytes, over the {MAX_PACKAGE_BYTES} limit")
-    skill = _skill_of(raw.decode("utf-8"), _not_saved)
+    before = one.imported.skill
+    parsed = _skill_of(raw.decode("utf-8"), _not_saved)
+    if parsed.scripts != before.scripts:
+        raise _not_saved(
+            f"an edit keeps the scripts {list(before.scripts)} the version edited declares; "
+            "to change a script, add the skill again as a package holding it"
+        )
+    carried = _carried_scripts(one, scripts or {})
+    skill = Skill.model_validate(
+        {
+            **parsed.model_dump(),
+            "script_files": [item.model_dump() for item in before.script_files],
+            "examples": [item.model_dump() for item in before.examples],
+        }
+    )
     try:
         imported = one.imported.with_content(skill)
     except SkillError as refused:
@@ -743,7 +1035,22 @@ def edited(
         submitted_by=by,
         submitted_at=at,
         edited_from=one.digest,
+        scripts=carried,
     )
+
+
+def _carried_scripts(one: LibrarySkill, scripts: Mapping[str, bytes]) -> dict[str, bytes]:
+    """The version's script bytes, each held to the sha256 it was added as, or a refusal."""
+    carried: dict[str, bytes] = {}
+    for path in one.imported.skill.scripts:
+        try:
+            carried[path] = verified_script(one.imported.skill, path, scripts.get(path, b""))
+        except SkillError:
+            raise _not_saved(
+                f"the stored script {path!r} of {one.name!r} no longer matches the version it was "
+                "added as, so an edit would carry over bytes nobody added"
+            ) from None
+    return carried
 
 
 def compared_with(one: LibrarySkill, library: Iterable[LibrarySkill]) -> LibrarySkill | None:
@@ -769,19 +1076,37 @@ def compared_with(one: LibrarySkill, library: Iterable[LibrarySkill]) -> Library
 
 
 # ------------------------------------------------------------------------- deciding about one
-def decided(one: LibrarySkill, *, reviewer: str, approve: bool, at: datetime) -> LibrarySkill:
-    """The skill with a decision on it, or a refusal (M12.4.6).
+def decided(
+    one: LibrarySkill,
+    *,
+    reviewer: str,
+    approve: bool,
+    at: datetime,
+    rehearsal: Rehearsal | None = None,
+) -> LibrarySkill:
+    """The skill with a decision on it, or a refusal (M12.4.6, M12.3.4).
 
     The person who added it may decide too; see
     `AN_ADMINISTRATOR_MAY_APPROVE_WHAT_THEY_IMPORTED_AND_THE_LEDGER_SAYS_SO`, and `self_decided`
     on the answer. Bytes that no longer digest to their key are refused first, because an approval
     is recorded against the key and would approve something nobody read. The second-decision
     refusal and the named-person refusal are `ImportedSkill`'s own.
+
+    **An approval of a version with example tasks needs `rehearsal`, the newest rehearsal of these
+    bytes, and every example in it behaved as expected.** None is the default, so a caller that
+    forgets to pass one is refused rather than let through. A rejection needs none. See
+    `A_VERSION_WITH_EXAMPLES_IS_APPROVED_ONLY_AFTER_THEY_ARE_REHEARSED`.
     """
     if one.moved:
         raise SkillLibraryError(
             f"nothing was decided: the stored text of {one.name!r} no longer matches the version "
             "it was added as, so an approval would be of words nobody added; add it again"
+        )
+    if approve and awaits_rehearsal(one, rehearsal):
+        raise SkillLibraryError(
+            f"nothing was decided: {one.name} {one.imported.skill.version} carries example tasks "
+            "and has not been rehearsed against them with every one behaving as expected. "
+            f"{A_VERSION_WITH_EXAMPLES_IS_APPROVED_ONLY_AFTER_THEY_ARE_REHEARSED}"
         )
     try:
         imported = (
@@ -798,6 +1123,181 @@ def decided(one: LibrarySkill, *, reviewer: str, approve: bool, at: datetime) ->
         submitted_at=one.submitted_at,
         edited_from=one.edited_from,
     )
+
+
+# ------------------------------------------------------------------ rehearsing (M12.3.4)
+@dataclass(frozen=True)
+class Rehearsal:
+    """One rehearsal of one version's example tasks: a verdict per example, by whom and when.
+
+    See `A_REHEARSAL_IS_A_PERSON_S_VERDICT_UNTIL_A_MODEL_ANSWERS` for what a verdict is today.
+    """
+
+    digest: str
+    #: Whether each example, in the order the version carries them, behaved as expected.
+    behaved: tuple[bool, ...]
+    rehearsed_by: str
+    at: datetime
+
+    @property
+    def passed(self) -> bool:
+        """Every example behaved as expected, and there was at least one."""
+        return bool(self.behaved) and all(self.behaved)
+
+
+def may_rehearse(reach: EntitlementSet, now: datetime | None = None) -> bool:
+    """Whether this reader may record a rehearsal: whoever may add a skill or review one."""
+    return may_add(reach, now) or may_review(reach, now)
+
+
+def rehearsal(one: LibrarySkill, behaved: Sequence[bool], *, by: str, at: datetime) -> Rehearsal:
+    """A rehearsal of `one`'s examples with these verdicts, or a refusal saying why (M12.3.4).
+
+    Refused for a version with no examples, which has nothing to rehearse; for one already
+    decided, which a rehearsal could no longer let through or hold back; for bytes that no longer
+    digest to their key, which would be a rehearsal of words nobody added; and for a verdict count
+    that is not one per example, which would leave an example unrehearsed or rehearse one that
+    does not exist.
+    """
+    if not by.strip():
+        raise SkillLibraryError("a rehearsal is recorded by a named person, never an empty string")
+    if at.tzinfo is None:
+        raise SkillLibraryError("the time of a rehearsal must be timezone-aware")
+    skill = one.imported.skill
+    if one.moved:
+        raise SkillLibraryError(
+            f"nothing was recorded: the stored text of {one.name!r} no longer matches the version "
+            "it was added as, so a rehearsal would be of words nobody added"
+        )
+    if not skill.examples:
+        raise SkillLibraryError(
+            f"nothing was recorded: {one.name} {skill.version} carries no example tasks to rehearse"
+        )
+    if one.imported.state is not SkillState.IMPORTED:
+        raise SkillLibraryError(
+            f"nothing was recorded: {one.name} {skill.version} is already "
+            f"{one.imported.state.value}, and a rehearsal only matters before a decision"
+        )
+    if len(behaved) != len(skill.examples):
+        raise SkillLibraryError(
+            f"nothing was recorded: {one.name} {skill.version} carries {len(skill.examples)} "
+            "example tasks, and a rehearsal says for each one whether it behaved as expected"
+        )
+    return Rehearsal(digest=one.digest, behaved=tuple(behaved), rehearsed_by=by, at=at)
+
+
+def awaits_rehearsal(one: LibrarySkill, newest: Rehearsal | None) -> bool:
+    """Whether this version may not be approved yet for want of a passing rehearsal of it.
+
+    `newest` is the newest rehearsal recorded for these bytes, as the store reads it. A version
+    with no examples never waits; one with examples waits until the newest rehearsal of exactly
+    its digest has a verdict per example and every one behaved.
+    """
+    examples = one.imported.skill.examples
+    if not examples:
+        return False
+    return not (
+        newest is not None
+        and newest.digest == one.digest
+        and len(newest.behaved) == len(examples)
+        and newest.passed
+    )
+
+
+# ------------------------------------------------------------------ exporting (M12.3.1)
+@dataclass(frozen=True)
+class ExportedPackage:
+    """An approved version as a zip another install imports, and what its manifest names."""
+
+    file_name: str
+    content: bytes
+    name: str
+    version: str
+    digest: str
+
+
+def may_export(reach: EntitlementSet, now: datetime | None = None) -> bool:
+    """Whether this reader may export a skill: the skill authority over everything, as adding asks.
+
+    An export carries the instructions and the scripts off this install, which is the body a
+    reader of the library is shown only when they may add or review, and adding is the act an
+    export is for on the other side.
+    """
+    return may_add(reach, now)
+
+
+def exported(one: LibrarySkill, scripts: Mapping[str, bytes]) -> ExportedPackage:
+    """`one` as a package another install can import, or a refusal saying why (M12.3.1).
+
+    Only an approved version whose stored bytes still digest to the approval; see
+    `ONLY_AN_APPROVED_VERSION_IS_EXPORTED`. Every script's bytes, as the store read them, are held
+    to the approved sha256 once more before they are written, so an export cannot carry a changed
+    script under an approval it does not have. The zip holds the `SKILL.md` as `markdown_of`
+    writes it, the scripts at their paths, the examples as `examples.json` and a `MANIFEST.json`
+    naming the format, name, version and digest, at the top of the archive, each member a regular
+    file stamped `EXPORT_STAMP` in name order, so two exports of one version are the same bytes.
+    A package the other install's `read_package` would refuse for its size is refused here.
+    """
+    skill = one.imported.skill
+    if not one.imported.is_executable() or one.moved:
+        raise SkillLibraryError(
+            f"nothing was exported: {one.name} {skill.version} is not an approved version whose "
+            f"words are unchanged since. {ONLY_AN_APPROVED_VERSION_IS_EXPORTED}"
+        )
+    members: dict[str, bytes] = {}
+    for path in skill.scripts:
+        try:
+            members[path] = verified_script(skill, path, scripts.get(path, b""))
+        except SkillError:
+            raise SkillLibraryError(
+                f"nothing was exported: the stored script {path!r} of {one.name} {skill.version} "
+                "is not the one that was approved"
+            ) from None
+    try:
+        members[SKILL_FILE] = markdown_of(skill).encode("utf-8")
+    except SkillError:
+        raise SkillLibraryError(
+            f"nothing was exported: {one.name} {skill.version} does not read back from the "
+            f"{SKILL_FILE} it would be written as"
+        ) from None
+    if skill.examples:
+        members[EXAMPLES_FILE] = _json_bytes(
+            [{"task": item.task, "expected": item.expected} for item in skill.examples]
+        )
+    members[MANIFEST_FILE] = _json_bytes(
+        {
+            "format": PACKAGE_FORMAT,
+            "name": skill.name,
+            "version": skill.version,
+            "digest": one.digest,
+        }
+    )
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name in sorted(members):
+            info = zipfile.ZipInfo(name, date_time=EXPORT_STAMP)
+            info.external_attr = (stat.S_IFREG | 0o644) << 16
+            info.compress_type = zipfile.ZIP_DEFLATED
+            archive.writestr(info, members[name])
+    content = out.getvalue()
+    unpacked = sum(len(raw) for raw in members.values())
+    if max(unpacked, len(content)) > MAX_PACKAGE_BYTES:
+        raise SkillLibraryError(
+            f"nothing was exported: {one.name} {skill.version} would be a package over the "
+            f"{MAX_PACKAGE_BYTES} byte limit another install imports"
+        )
+    return ExportedPackage(
+        file_name=f"{skill.name}-{skill.version}{ARCHIVE_SUFFIX}",
+        content=content,
+        name=skill.name,
+        version=skill.version,
+        digest=one.digest,
+    )
+
+
+def _json_bytes(value: object) -> bytes:
+    """JSON a person can read in the file, keys in order, as UTF-8 with a closing newline."""
+    return (json.dumps(value, indent=2, sort_keys=True, ensure_ascii=False) + "\n").encode("utf-8")
 
 
 # ------------------------------------------------------------------ categories (M12.4.13)

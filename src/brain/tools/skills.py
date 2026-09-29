@@ -40,7 +40,23 @@ with one of `WHEN_OPENINGS`. See `A_DESCRIPTION_OPENS_BY_SAYING_WHEN_THE_SKILL_I
 rule about the file and not about the type, so a `Skill` built in code is not held to it; every
 path a file takes into the library goes through `skill_from_markdown`.
 
-Task ids: M12.2.1, M12.2.4, M12.2.5, M12.2.6, M12.2.7, M12.2.8, M12.2.9, M12.4.12
+**The digest covers the bytes of every script and every example task, not only their names
+(M12.4.11, M12.3.4).** Until 2026-09-29 `Skill.digest` covered a script's name, so an approval of
+a skill with scripts would have survived an edit to the one part of it that is code, and the
+library refused every such skill at the door for that reason. `Skill.script_files` now carries a
+sha256 of each declared script's bytes and `Skill.examples` the example tasks with the behaviour
+expected of each, and both are hashed into the digest, so a changed byte is a different skill that
+needs a review of its own. **A skill with neither digests exactly as it always has**: the section
+is appended only when there is something in it, so every skill stored and approved before this
+change keeps its key and its approval. And `verified_script` is the one comparison of a script's
+bytes with what was approved, which `brain.tools.run_skill.plan_run` asks before anything runs.
+See `A_SCRIPT_CHANGED_AFTER_APPROVAL_IS_REFUSED_BEFORE_IT_RUNS`.
+
+Rejected: one digest over all the scripts together. It refuses the same changes and cannot say
+which script changed, and a reviewer shown a list of files is shown one digest per file.
+
+Task ids: M12.2.1, M12.2.4, M12.2.5, M12.2.6, M12.2.7, M12.2.8, M12.2.9, M12.4.12, M12.4.11
+Task ids: M12.3.4
 """
 
 from __future__ import annotations
@@ -95,6 +111,29 @@ SKILL_FILE: Final = "SKILL.md"
 #: attaches to its own: changing what a digest covers invalidates every approval ever
 #: granted, so this line is a migration rather than an edit.
 DIGEST_SCHEMA: Final = "brain.skill.v1"
+
+#: The marker opening the part of a digest that covers script bytes and example tasks. Appended
+#: only when a skill carries either, so a skill with neither digests as it did before either
+#: existed; see the module docstring.
+CONTENTS_SECTION: Final = "brain.skill.v1.contents"
+
+#: The most example tasks one skill carries. Enough to show a reviewer what the skill is for; a
+#: skill needing more is several skills.
+MAX_EXAMPLES: Final = 20
+
+#: The longest example task, and the longest behaviour expected of it. `brain.agents.template.
+#: GOLDEN_CHARS`' figure for a golden question, which is the same kind of sentence; restated
+#: because that module imports this one, and a test holds the two equal.
+EXAMPLE_CHARS: Final = 500
+
+#: Why a script whose bytes are not the approved ones is refused before anything runs.
+A_SCRIPT_CHANGED_AFTER_APPROVAL_IS_REFUSED_BEFORE_IT_RUNS: Final = (
+    "A reviewer approves a skill by its digest, and the digest covers the sha256 of every script's "
+    "bytes. So before a script is handed to anything that could run it, its bytes are hashed again "
+    "and compared with the sha256 the approved skill recorded for it, and a script that differs by "
+    "one byte, or has no recorded sha256 at all, is refused there. A script nobody approved the "
+    "bytes of is code nobody read."
+)
 
 #: What a `SKILL.md` may declare. Closed, because the alternative is that an unknown key is
 #: ignored, and a skill whose `capabilities:` line was silently ignored looks exactly like a
@@ -402,6 +441,61 @@ def safe_archive_members(names: Iterable[str]) -> tuple[str, ...]:
 # ----------------------------------------------------------------------- the skill
 
 
+def script_sha256(content: bytes) -> str:
+    """The sha256 of a script's bytes, as `ScriptFile.sha256` records it."""
+    return hashlib.sha256(content).hexdigest()
+
+
+class ScriptFile(BaseModel):
+    """One declared script and the sha256 of the bytes a reviewer approved (M12.4.11).
+
+    The bytes themselves are not here. A `Skill` is read for every row of a library listing, and
+    the bytes are needed only by whoever runs or exports a script, who reads them and holds them
+    to this sha256 with `verified_script`.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    path: str
+    sha256: str
+
+    @field_validator("path")
+    @classmethod
+    def _inside_the_folder(cls, v: str) -> str:
+        safe_archive_member(v)
+        return v
+
+    @field_validator("sha256")
+    @classmethod
+    def _is_a_digest(cls, v: str) -> str:
+        if not DIGEST_RE.match(v):
+            msg = f"script sha256 {v!r} is not a sha256"
+            raise ValueError(msg)
+        return v
+
+
+class SkillExample(BaseModel):
+    """One example task and the behaviour expected of the skill on it (M12.3.4).
+
+    `brain.agents.template.GoldenCase`'s shape for an agent, and for its reason: the expectation
+    is words, not a pattern, because an expectation matched on text fails the day a model
+    rephrases and reads as a regression when it is not one.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    task: str = Field(min_length=1, max_length=EXAMPLE_CHARS)
+    expected: str = Field(min_length=1, max_length=EXAMPLE_CHARS)
+
+    @field_validator("task", "expected")
+    @classmethod
+    def _says_something(cls, v: str) -> str:
+        if not v.strip():
+            msg = "an example task and its expected behaviour each say something"
+            raise ValueError(msg)
+        return v
+
+
 class Skill(BaseModel):
     """A procedure, and the tools it expects to use.
 
@@ -425,6 +519,12 @@ class Skill(BaseModel):
     scripts: tuple[str, ...] = ()
     #: The instructions. Withheld until the skill is approved; see `body_of`.
     body: str = ""
+    #: The sha256 of each declared script's bytes, in path order (M12.4.11). Empty for a skill
+    #: whose scripts arrived as names only, which `verified_script` refuses to run.
+    script_files: tuple[ScriptFile, ...] = ()
+    #: Example tasks with the behaviour expected of each, in the order a reviewer read them
+    #: (M12.3.4). They travel beside the `SKILL.md`, never in it.
+    examples: tuple[SkillExample, ...] = Field(default=(), max_length=MAX_EXAMPLES)
 
     @field_validator("name")
     @classmethod
@@ -465,6 +565,34 @@ class Skill(BaseModel):
             safe_archive_member(path)
         return tuple(sorted(set(v)))
 
+    @field_validator("script_files")
+    @classmethod
+    def _one_file_per_path_in_path_order(cls, v: tuple[ScriptFile, ...]) -> tuple[ScriptFile, ...]:
+        """Sorted by path, so the order they arrived in cannot change the digest, and one each."""
+        paths = [one.path for one in v]
+        if len(set(paths)) != len(paths):
+            msg = "a skill records one sha256 per script; two for one path would be a guess"
+            raise ValueError(msg)
+        return tuple(sorted(v, key=lambda one: one.path))
+
+    @model_validator(mode="after")
+    def _every_recorded_file_is_a_declared_script(self) -> Self:
+        """The recorded files are exactly the declared scripts, or there are none recorded.
+
+        None is admitted, because a `SKILL.md` read on its own names its scripts and carries no
+        bytes, and `verified_script` refuses to run a script with no sha256. A partial set is not:
+        a skill declaring two scripts and approving the bytes of one is a skill whose other
+        script nobody read.
+        """
+        if self.script_files and {one.path for one in self.script_files} != set(self.scripts):
+            msg = (
+                f"skill {self.name!r} declares scripts {list(self.scripts)} and records the bytes "
+                f"of {[one.path for one in self.script_files]}; every declared script is recorded, "
+                "and nothing else is"
+            )
+            raise ValueError(msg)
+        return self
+
     def digest(self) -> str:
         """A digest over everything a reviewer read.
 
@@ -472,6 +600,12 @@ class Skill(BaseModel):
         joining with a separator makes two different skills share a digest as soon as any
         part can contain the separator, and an approval satisfied by a different skill than
         the one shown is worse than no approval.
+
+        **The script bytes and the examples are a section of their own, appended only when there
+        is one** (M12.4.11, M12.3.4). It opens with `CONTENTS_SECTION` and counts each list before
+        its items, so a script cannot be read as an example or the other way round. A skill with
+        neither digests exactly as before the section existed, which is what keeps every approval
+        already granted.
         """
         parts: list[str] = [
             DIGEST_SCHEMA,
@@ -482,8 +616,19 @@ class Skill(BaseModel):
             *self.tools,
             *self.scripts,
         ]
+        if self.script_files or self.examples:
+            parts.extend((CONTENTS_SECTION, str(len(self.script_files))))
+            for one in self.script_files:
+                parts.extend((one.path, one.sha256))
+            parts.append(str(len(self.examples)))
+            for example in self.examples:
+                parts.extend((example.task, example.expected))
         joined = "".join(f"{len(part)}:{part}" for part in parts)
         return hashlib.sha256(joined.encode("utf-8")).hexdigest()
+
+    def recorded(self, path: str) -> ScriptFile | None:
+        """The sha256 recorded for one declared script, or None when none was."""
+        return next((one for one in self.script_files if one.path == path), None)
 
 
 def says_when_it_is_used(description: str) -> bool:
@@ -523,6 +668,9 @@ def markdown_of(skill: Skill) -> str:
     opens with a bracket, say, would read back as a list, and an edit offered that text would be
     an edit of a different skill. The description rule is not applied on the way out, so a skill
     added before the rule can still be opened, and the edit is where it has to be fixed.
+
+    The script bytes and the examples travel beside the `SKILL.md` and never in it, so the text is
+    compared with the skill without them (M12.4.11, M12.3.4).
     """
     lines = [
         "---",
@@ -541,9 +689,36 @@ def markdown_of(skill: Skill) -> str:
         read_back = _skill_from_text(text)
     except SkillError as refused:
         raise SkillError(f"{msg}: {refused}") from None
-    if read_back != skill:
+    if read_back != skill.model_copy(update={"script_files": (), "examples": ()}):
         raise SkillError(msg)
     return text
+
+
+def verified_script(skill: Skill, path: str, content: bytes) -> bytes:
+    """These bytes, when they are the ones approved for this declared script, or a refusal.
+
+    The one comparison of a script's bytes with what a reviewer approved (M12.4.11). A path the
+    skill does not declare, a declared script with no recorded sha256, and bytes whose sha256 is
+    not the recorded one are each refused, and the message names the script and never quotes its
+    bytes. See `A_SCRIPT_CHANGED_AFTER_APPROVAL_IS_REFUSED_BEFORE_IT_RUNS`.
+    """
+    if path not in skill.scripts:
+        msg = f"skill {skill.name!r} declares no script {path!r}"
+        raise SkillError(msg)
+    recorded = skill.recorded(path)
+    if recorded is None:
+        msg = (
+            f"skill {skill.name!r} records no sha256 for its script {path!r}, so nobody approved "
+            f"its bytes. {A_SCRIPT_CHANGED_AFTER_APPROVAL_IS_REFUSED_BEFORE_IT_RUNS}"
+        )
+        raise SkillError(msg)
+    if script_sha256(content) != recorded.sha256:
+        msg = (
+            f"the script {path!r} of skill {skill.name!r} is not the one that was approved: its "
+            f"bytes have changed. {A_SCRIPT_CHANGED_AFTER_APPROVAL_IS_REFUSED_BEFORE_IT_RUNS}"
+        )
+        raise SkillError(msg)
+    return content
 
 
 def version_key(version: str) -> tuple[int, ...]:

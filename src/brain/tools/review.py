@@ -41,7 +41,14 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Final
 
-from brain.tools.skills import ImportedSkill, Skill, SkillState, diff_skills
+from brain.tools.skills import (
+    ImportedSkill,
+    ScriptFile,
+    Skill,
+    SkillExample,
+    SkillState,
+    diff_skills,
+)
 
 #: How long something may sit unreviewed before it is called out. Not an expiry: nothing is
 #: auto-rejected, because an auto-rejection is a decision nobody made and the author would
@@ -155,9 +162,18 @@ def summarise(entries: Sequence[QueueEntry], now: datetime) -> QueueSummary:
 
 
 # ------------------------------------------------------------ the words that changed (M12.2.6)
-#: The frontmatter a reviewer reads, in the order a `SKILL.md` declares it. The body is diffed by
-#: line and never shown here as one value.
-DIFFED_FIELDS: Final[tuple[str, ...]] = ("name", "description", "version", "tools", "scripts")
+#: The frontmatter a reviewer reads, in the order a `SKILL.md` declares it, then the sha256 of each
+#: script's bytes and the example tasks, which travel beside it (M12.4.11, M12.3.4). The body is
+#: diffed by line and never shown here as one value.
+DIFFED_FIELDS: Final[tuple[str, ...]] = (
+    "name",
+    "description",
+    "version",
+    "tools",
+    "scripts",
+    "script_files",
+    "examples",
+)
 
 
 class LineChange(enum.StrEnum):
@@ -204,10 +220,22 @@ class SkillDiff:
 
 
 def _shown(value: object) -> str:
-    """A field as the reviewer reads it: a list joined with commas, anything else as written."""
+    """A field as the reviewer reads it: a list joined with commas, anything else as written.
+
+    A script is its path and the sha256 of its bytes, and an example its task and what is expected
+    of it, so a changed byte or a reworded expectation reads as that rather than as a model's repr.
+    """
     if isinstance(value, tuple):
-        return ", ".join(str(item) for item in value)
+        return ", ".join(_item(item) for item in value)
     return str(value)
+
+
+def _item(item: object) -> str:
+    if isinstance(item, ScriptFile):
+        return f"{item.path} ({item.sha256})"
+    if isinstance(item, SkillExample):
+        return f"{item.task} -> {item.expected}"
+    return str(item)
 
 
 def content_diff(old: Skill, new: Skill) -> SkillDiff:

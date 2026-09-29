@@ -43,7 +43,7 @@ from brain.console.agent_tabs import AgentTabError
 from brain.console.reads import Plane, plane_capability
 from brain.console.screens import screen
 from brain.console.skill_library import (
-    A_SCRIPT_THE_DIGEST_DOES_NOT_COVER_IS_A_SCRIPT_NOBODY_APPROVED,
+    A_PACKAGE_KEEPS_ONLY_WHAT_ITS_DIGEST_COVERS,
     ASSIGN_REASON,
     MAX_PACKAGE_BYTES,
     REPLACE_REASON,
@@ -271,14 +271,14 @@ def test_a_zip_holding_only_its_skill_md_is_read_in_memory() -> None:
     assert package.source.content_digest == hashlib.sha256(archive).hexdigest()
 
 
-def test_a_package_that_declares_scripts_or_carries_another_file_is_refused() -> None:
-    """A skill whose code the approval digest would not cover is refused at the door, whether the
-    `SKILL.md` names a script or the archive carries a file beside it.
+def test_a_package_missing_a_declared_script_or_carrying_an_undeclared_file_is_refused() -> None:
+    """Only bytes the approval digest covers are kept, and no script is approved by name alone:
+    a pasted `SKILL.md` naming a script it cannot carry is refused, and so is a zip carrying a
+    file its `SKILL.md` does not declare (M12.4.11).
 
-    Delete this and a reviewer approves the prose of a skill whose scripts can then be edited
-    without the approval noticing, because `Skill.digest` covers a script's name and not its
-    bytes."""
-    with pytest.raises(SkillLibraryError, match="declares scripts"):
+    Delete this and a reviewer approves the prose of a skill whose script was never in the
+    package, or a file nobody declared rides along into the library unreviewed."""
+    with pytest.raises(SkillLibraryError, match="declares the scripts"):
         read_package("SKILL.md", text_with(scripts="[run.py]").encode("utf-8"))
     with pytest.raises(SkillLibraryError) as beside:
         read_package(
@@ -287,7 +287,7 @@ def test_a_package_that_declares_scripts_or_carries_another_file_is_refused() ->
         )
 
     assert "run.py" in str(beside.value)
-    assert A_SCRIPT_THE_DIGEST_DOES_NOT_COVER_IS_A_SCRIPT_NOBODY_APPROVED in str(beside.value)
+    assert A_PACKAGE_KEEPS_ONLY_WHAT_ITS_DIGEST_COVERS in str(beside.value)
 
 
 def test_an_archive_member_that_is_not_a_regular_file_is_refused_and_an_unstated_mode_is_read() -> (

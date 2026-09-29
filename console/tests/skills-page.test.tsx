@@ -14,7 +14,8 @@
  * **The shapes are the API's.** Every field the page reads is compared with the Python model that
  * sends it, and every path it sends to with the API document.
  *
- * Task ids: M27.16.1, M27.11.8, M27.15.55, M27.15.56, M42.6.4, M12.2.2, M12.3.2, M12.4.13
+ * Task ids: M27.16.1, M27.11.8, M27.15.55, M27.15.56, M42.6.4, M12.2.2, M12.3.2, M12.4.13,
+ * M12.3.4, M12.3.1, M12.4.11
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -26,15 +27,18 @@ import { SKILLS_HEADING } from "../src/pages/Skills";
 import { HISTORY_ELSEWHERE } from "../src/pages/skills/SkillAbout";
 import { LAST_USED_LABEL, NOT_USED, RUNS_LABEL } from "../src/pages/skills/SkillDashboard";
 import { NO_SUCH_SKILL } from "../src/pages/skills/SkillDetailPage";
-import { PACKAGE_FORMAT } from "../src/pages/skills/SkillForms";
-import { RETIRE, REINSTATE, DETACH, APPROVE } from "../src/pages/skills/SkillProfile";
+import { ANSWER_EVERY_EXAMPLE, BEHAVED, DID_NOT_BEHAVE, PACKAGE_FORMAT, RECORD_REHEARSAL } from "../src/pages/skills/SkillForms";
+import { RETIRE, REINSTATE, DETACH, APPROVE, EXPORT, REHEARSE, REJECT } from "../src/pages/skills/SkillProfile";
 import { queueWords, readLibraryRows } from "../src/pages/skills/SkillsPage";
 import { REVIEW_PILL, UNAVAILABLE } from "../src/pages/skills/skillActions";
 import { readHistory, readSkillDetail } from "../src/pages/skills/skillDetailQuery";
 import {
   detachPath,
+  exportsPath,
   LIBRARY_API_PATH,
   MAX_PACKAGE_BYTES,
+  REHEARSE_BEFORE_APPROVING,
+  rehearsalsPath,
   reinstatementPath,
   retirementPath,
   reviewPath,
@@ -148,8 +152,34 @@ function version(overrides: Record<string, unknown> = {}): Record<string, unknow
     retirable: true,
     submitted_by_name: "Iris Importer",
     reviewer_name: "Rex Reviewer",
+    scripts: [],
+    examples: [],
+    rehearsal: null,
+    awaits_rehearsal: false,
+    rehearsable: false,
+    exportable: false,
     ...overrides,
   };
+}
+
+/** A waiting version carrying a script and two example tasks, not yet rehearsed (M12.3.4). */
+function waitingWithExamples(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return version({
+    review: "pending",
+    reviewer: null,
+    reviewed_at: null,
+    reviewer_name: null,
+    reviewable: true,
+    assignable: false,
+    scripts: [{ path: "scripts/check.py", sha256: "c".repeat(64), text: "print('checked')", is_text: true }],
+    examples: [
+      { task: "A client asks when their domain expires", expected: "Names the expiry date" },
+      { task: "A client asks twice", expected: "Answers the same way twice" },
+    ],
+    awaits_rehearsal: true,
+    rehearsable: true,
+    ...overrides,
+  });
 }
 
 /** The Skills page's answer, as `brain.skill_routes.SkillsPage` serialises it. */
@@ -504,6 +534,87 @@ describe("one skill's page", () => {
     await waitFor(() => {
       expect(sent.find((one) => one.method === "POST")?.body).toEqual({ decision: "approve" });
     });
+  });
+
+  test("a version with examples shows them and its script, and offers Reject and no Approve until rehearsed", async () => {
+    // What breaks if this is deleted: an Approve button every press of which is refused, or a
+    // script approved by somebody the page never showed its code to (M12.3.4, M12.4.11).
+    const { container } = await consoleAt(`${skillAddress(NAME)}/profile`, skillAnswers([waitingWithExamples()], []));
+
+    const page = container.querySelector('[data-slot="skill-profile"]') as HTMLElement;
+    expect(page.textContent).toContain("A client asks when their domain expires");
+    expect(page.textContent).toContain("Names the expiry date");
+    expect(page.textContent).toContain("print('checked')");
+    expect(page.textContent).toContain(REHEARSE_BEFORE_APPROVING);
+    expect([...page.querySelectorAll("button")].some((one) => one.textContent === APPROVE)).toBe(false);
+    expect([...page.querySelectorAll("button")].some((one) => one.textContent === REJECT)).toBe(true);
+    const advanced = page.querySelector('[data-slot="advanced"]') as HTMLElement;
+    expect(advanced.textContent).toContain("c".repeat(64));
+
+    const rehearsed = await consoleAt(
+      `${skillAddress(NAME)}/profile`,
+      skillAnswers([waitingWithExamples({ awaits_rehearsal: false, rehearsal: { behaved: [true, true], passed: true, rehearsed_at: "2019-03-05T11:00:00Z", rehearsed_by: "u_reviewer", rehearsed_by_name: "Rex Reviewer" } })], []),
+    );
+    expect(rehearsed.container.textContent).toContain("Rehearsed by Rex Reviewer: every example behaved as expected.");
+    expect([...rehearsed.container.querySelectorAll("button")].some((one) => one.textContent === APPROVE)).toBe(true);
+  });
+
+  test("a rehearsal sends one verdict per example, and only once every example has one", async () => {
+    // What breaks if this is deleted: a rehearsal sent with an example nobody answered, recorded
+    // as not behaving, or verdicts sent out of the examples' order (M12.3.4).
+    const { container, sent } = await consoleAt(`${skillAddress(NAME)}/profile`, skillAnswers([waitingWithExamples()], [], {
+      [`POST ${API}${rehearsalsPath(DIGEST)}`]: { status: 201, body: waitingWithExamples({ awaits_rehearsal: false }) },
+    }));
+
+    pressed(`${REHEARSE} of ${NAME}`, container);
+    const form = container.querySelector<HTMLFormElement>(`form[aria-label^="Rehearse"]`) as HTMLFormElement;
+    const submit = [...form.querySelectorAll("button")].find((one) => one.textContent === RECORD_REHEARSAL) as HTMLButtonElement;
+    expect(form.textContent).toContain(ANSWER_EVERY_EXAMPLE);
+    expect(submit.disabled).toBe(true);
+    fireEvent.submit(form);
+    expect(sent.some((one) => one.method === "POST")).toBe(false);
+
+    const [first, second] = [...form.querySelectorAll("fieldset")];
+    fireEvent.click(within(first as HTMLElement).getByLabelText(BEHAVED));
+    expect(submit.disabled).toBe(true);
+    fireEvent.click(within(second as HTMLElement).getByLabelText(DID_NOT_BEHAVE));
+    expect(submit.disabled).toBe(false);
+    fireEvent.submit(form);
+    await waitFor(() => {
+      expect(sent.find((one) => one.method === "POST")?.body).toEqual({ behaved: [true, false] });
+    });
+    expect(declaredPropertyNames(declaredRequestBodySchema(`${API}/skills/{digest}/rehearsals`, "post"))).toEqual(["behaved"]);
+  });
+
+  test("an approved version offers Export package, which posts once and saves the zip it was answered", async () => {
+    // What breaks if this is deleted: an export offered for a version nobody approved, or one
+    // whose answer the page drops instead of saving (M12.3.1).
+    const hidden = await consoleAt(`${skillAddress(NAME)}/profile`, skillAnswers([version()], []));
+    expect([...hidden.container.querySelectorAll("button")].some((one) => one.textContent?.includes(EXPORT))).toBe(false);
+    hidden.container.remove();
+
+    const saved: string[] = [];
+    const click = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) {
+      saved.push(`${this.download} ${this.href.slice(0, 40)}`);
+    };
+    try {
+      const { container, sent } = await consoleAt(`${skillAddress(NAME)}/profile`, skillAnswers([version({ exportable: true })], [], {
+        [`POST ${API}${exportsPath(DIGEST)}`]: {
+          body: { file_name: `${NAME}-1.1.0.zip`, content: "UEsDBA==", encoding: "base64", name: NAME, version: "1.1.0", digest: DIGEST },
+        },
+      }));
+      pressed(`${EXPORT} ${NAME}`, container);
+      await waitFor(() => {
+        expect(sent.filter((one) => one.method === "POST").map((one) => one.path)).toEqual([`${API}${exportsPath(DIGEST)}`]);
+      });
+      await waitFor(() => {
+        expect(saved).toEqual([`${NAME}-1.1.0.zip data:application/zip;base64,UEsDBA==`]);
+      });
+    } finally {
+      HTMLAnchorElement.prototype.click = click;
+    }
+    expect(backendModelFields(ROUTES, "SkillPackageView").sort()).toEqual(["content", "digest", "encoding", "file_name", "name", "version"]);
   });
 
   test("the About view reads the history from the ledger, and says where it is kept when refused", async () => {

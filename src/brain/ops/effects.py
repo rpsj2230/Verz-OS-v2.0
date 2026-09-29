@@ -190,6 +190,11 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # A second detachment finds the install changed and writes nothing.
         "brain.skill_routes:SkillLibrary.detach": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.skill_routes:SkillLibrary.assignment_history": Repeat.READS,
+        # A version's script bytes and its rehearsals (`0164`): a second rehearsal adds a second
+        # row, and the newest is the one that decides.
+        "brain.skill_routes:SkillContents.scripts": Repeat.READS,
+        "brain.skill_routes:SkillContents.rehearse": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.skill_routes:SkillContents.rehearsals": Repeat.READS,
         "brain.skill_routes:AgentInstalls.agent": Repeat.READS,
         # An agent's lifecycle (0137): reads, a move written by compare-and-set against the state
         # the page drew, so a second press finds the row already moved and writes nothing, and an
@@ -672,6 +677,8 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.tools.fetch:Fetcher.get_once": Repeat.READS,
         "brain.tools.run_skill:ScriptRunner.run": Repeat.NO_EFFECT_AT_THE_FAR_END,
         "brain.tools.run_skill:SkillLibrary.pinned_skill": Repeat.READS,
+        # The bytes stored for one script, which `plan_run` holds to the approved sha256.
+        "brain.tools.run_skill:SkillLibrary.script": Repeat.READS,
         # Whether a stop refuses this call: a read of the switch table, asked at every call.
         "brain.tools.registry:SwitchSource.stop_for": Repeat.READS,
         # The website check (M12.4.4): one request that never follows a redirect, and one read of

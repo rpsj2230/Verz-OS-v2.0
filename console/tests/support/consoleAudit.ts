@@ -347,6 +347,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/skills/{digest}/retirement",
       "/api/v1/skills/{digest}/reinstatement",
       "/api/v1/skills/{digest}/detachments",
+      "/api/v1/skills/{digest}/rehearsals",
+      "/api/v1/skills/{digest}/exports",
       "/api/v1/console/skills/{skill_name}/stats",
       "/api/v1/tools",
       "/api/v1/tools/{name}/switch",
@@ -361,6 +363,9 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "agent.skill_invocation",
       "agent.skill_retirement",
       "agent.skill_detachment",
+      "agent.skill_script",
+      "agent.skill_example",
+      "agent.skill_rehearsal",
     ],
     installation: ["INSTALL_ACCEPTANCE_SKILL_SOURCE"],
     gaps: [
@@ -369,8 +374,12 @@ export const AREAS: Readonly<Record<string, Area>> = {
         because: "docs/admin-console-architecture.md 4.2 tests a skill through an agent that holds it, rehearsed at SHADOW, and no route runs a rehearsal; the Profile draws it inert with pages/skills/skillActions.ts' sentence.",
       },
       {
-        what: "A skill that declares scripts cannot be added.",
-        because: "brain.tools.skills.Skill.digest covers a script's name and not its bytes, so an approval would not cover the code, and brain.tools.run_skill has no runner; brain.console.skill_library refuses one at the door.",
+        what: "A skill's script is approved by its bytes and checked before a run, and nothing runs it.",
+        because: "brain.tools.run_skill.plan_run refuses bytes other than the approved sha256, and no sandbox runner is built, so the execution tool is registered nowhere (brain.tools.run_skill.SANDBOX_PROPERTIES says which six properties a container still has to honour).",
+      },
+      {
+        what: "A rehearsal of a skill's example tasks is a person's recorded verdict, not a model's run.",
+        because: "no model carries out a skill on an install yet (brain.agent_builder_routes.A_REHEARSAL_RUNS_NO_MODEL_YET), so brain.console.skill_library.A_REHEARSAL_IS_A_PERSON_S_VERDICT_UNTIL_A_MODEL_ANSWERS records who judged each example and says so on the form.",
       },
     ],
   },

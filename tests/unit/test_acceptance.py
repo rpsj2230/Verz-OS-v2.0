@@ -105,9 +105,9 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     here: limits, channels and documents, then volume, refusals and a head's audit, then Lark
     chat's three, the skill library's four, the models' eleven and the audit's one, the
     connectors' four, the tools' three, a document's life in four, the classified tables' three,
-    an answer's evidence in four, the connector framework's nine, retrieval's seven and a source's
-    changes in four, the modules in `CHECK_MODULES` order rather than the order a process imported
-    them. Delete this
+    an answer's evidence in four, the connector framework's nine, retrieval's seven, a source's
+    changes in four and a skill package's three, the modules in `CHECK_MODULES` order rather than
+    the order a process imported them. Delete this
     and a check can drop out of the suite with the page simply listing one fewer row, or the page
     can lead with whichever module was imported first."""
     by_module: dict[str, list[str]] = {}
@@ -198,6 +198,12 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "a_read_cut_short_carries_on_where_it_stopped",
         "a_changed_read_moves_the_epoch_and_the_cached_answer_goes",
         "a_dropped_record_is_retired_withheld_and_returned_as_a_new_row",
+    ]
+    # A skill's scripts, examples and export; `tests/unit/test_acceptance_skill_packages.py`.
+    assert by_module["brain.ops.acceptance_checks_skill_packages"] == [
+        "a_script_changed_after_approval_is_refused_before_it_runs",
+        "a_version_with_examples_is_approved_only_once_rehearsed",
+        "an_approved_skill_is_exported_and_a_changed_package_is_refused",
     ]
     assert list(by_module) == list(acceptance.CHECK_MODULES)
     oversight = {one.name: one.leaves for one in registered()}
@@ -569,6 +575,9 @@ WRITTEN_BY_CHECKS = (
     "agent.skill_review",
     "agent.skill_category",
     "agent.skill_assignment",
+    "agent.skill_script",
+    "agent.skill_example",
+    "agent.skill_rehearsal",
     "agent.agent",
     "agent.template_instance",
     "agent.template_version",
@@ -686,9 +695,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         acceptance_audit.NO_DEPLOYMENT_IS_RECORDED_TO_KEEP_OUT,
     )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
-    assert len(outcomes) == 51
+    assert len(outcomes) == 54
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 152
+    assert runs == [(2,)] and len(recorded) == 158
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }

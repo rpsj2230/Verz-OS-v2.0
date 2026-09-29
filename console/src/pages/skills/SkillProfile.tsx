@@ -18,10 +18,17 @@
  * the version it was edited from and the people's identifiers are in each version's Advanced
  * section; the page names people and agents.
  *
- * Task ids: M27.16.1, M27.15.55, M27.15.56, M12.2.6, M12.3.2, M12.4.6
+ * **A version shows its scripts, its example tasks and its newest rehearsal** (M12.4.11, M12.3.4).
+ * A waiting version's script is readable here, because approving it approves those bytes; each
+ * script's sha256 is in Advanced. A version with examples draws Rehearse examples, and no Approve
+ * until a rehearsal in which every one behaved, saying so. **An approved version draws Export
+ * package** (M12.3.1), which saves the zip another install adds; it ends nothing, so it is not
+ * confirmed, and `tests/destructive-confirmed.test.ts` records why.
+ *
+ * Task ids: M27.16.1, M27.15.55, M27.15.56, M12.2.6, M12.3.2, M12.4.6, M12.4.11, M12.3.4, M12.3.1
  */
 
-import { FlaskConical, Pencil } from "lucide-react";
+import { ClipboardCheck, Download, FlaskConical, Pencil } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { request } from "../../api/client";
@@ -44,18 +51,25 @@ import {
   decisionQuestion,
   decisionWords,
   detachPath,
+  EXPORT_WORDS,
+  exportedSentence,
+  exportsPath,
+  REHEARSE_BEFORE_APPROVING,
+  rehearsalWords,
   reinstatementPath,
   retirementPath,
   reviewPath,
+  savePackage,
   sourceWords,
   type AgentChoice,
   type Detached,
+  type ExportedPackage,
   type LibrarySkill,
   type Retired,
   type SkillDiff,
   type SkillPin,
 } from "../skillsQuery";
-import { AssignForm, CategoriesForm, EditVersionForm, type Tell } from "./SkillForms";
+import { AssignForm, CategoriesForm, EditVersionForm, RehearseForm, type Tell } from "./SkillForms";
 import { ReviewPill, RetiredPill } from "./pills";
 import { UNAVAILABLE } from "./skillActions";
 import { dayWords, named, type SkillDetail } from "./skillDetailQuery";
@@ -78,6 +92,10 @@ export const KEEP = "Keep as it is";
 export const DETACH = "Detach";
 export const DO_NOT_DETACH = "Keep it on the agent";
 export const TRY_OUT = "Try it out";
+export const REHEARSE = "Rehearse examples";
+export const EXPORT = "Export package";
+export const EXAMPLES_HEADING = "Example tasks";
+export const NOT_TEXT = "This script is not text, so it is not shown here.";
 
 export function retireQuestion(one: LibrarySkill): string {
   return `Retire ${one.name} ${one.version}?`;
@@ -175,7 +193,101 @@ function Reach({ one, registryIsAbsent }: { readonly one: LibrarySkill; readonly
   );
 }
 
-/** Approve or Reject, each confirmed. */
+/** Save one approved version as a package another install adds (M12.3.1). */
+function ExportPackage({ one, onTold }: { readonly one: LibrarySkill; readonly onTold: Tell }) {
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
+
+  async function save() {
+    setBusy(true);
+    setFailure(null);
+    const result = await request<ExportedPackage>(exportsPath(one.digest), { method: "POST" });
+    setBusy(false);
+    if (!result.ok) {
+      setFailure(result.failure);
+      return;
+    }
+    onTold(
+      savePackage(result.data)
+        ? { ok: true, sentence: exportedSentence(result.data) }
+        : { ok: false, sentence: "This browser could not save the file. Try another browser." },
+    );
+  }
+
+  return (
+    <>
+      {failure === null ? null : <FailureNotice failure={failure} />}
+      <Button
+        size="sm"
+        variant="outline"
+        className="min-h-11 sm:min-h-8"
+        aria-label={`${EXPORT} ${one.name} ${one.version}`}
+        title={EXPORT_WORDS}
+        disabled={busy}
+        onClick={() => void save()}
+      >
+        <Download aria-hidden /> {EXPORT}
+      </Button>
+    </>
+  );
+}
+
+/** The scripts a version carries: each path, and a waiting version's text (M12.4.11). */
+function Scripts({ one }: { readonly one: LibrarySkill }) {
+  const scripts = one.scripts ?? [];
+  if (scripts.length === 0) {
+    return null;
+  }
+  return (
+    <div className="flex min-w-0 flex-col gap-2">
+      <h4 className="m-0 text-[12.5px] font-semibold text-ink">Scripts</h4>
+      {scripts.map((script) =>
+        script.text === null || script.text === undefined ? (
+          <p key={script.path} className="m-0 font-mono text-[12px] text-body [overflow-wrap:anywhere]">
+            {script.path}
+            {script.is_text === false ? <span className="font-sans text-dim"> ({NOT_TEXT})</span> : null}
+          </p>
+        ) : (
+          <details key={script.path} className="rounded-md border border-line">
+            <summary className="flex min-h-11 cursor-pointer items-center px-3 font-mono text-[12.5px] text-ink sm:min-h-9">
+              {script.path}
+            </summary>
+            <pre className="m-0 max-h-96 overflow-auto border-t border-line bg-sunk p-3 font-mono text-[12px] leading-relaxed whitespace-pre-wrap text-body">
+              {script.text}
+            </pre>
+          </details>
+        ),
+      )}
+    </div>
+  );
+}
+
+/** A version's example tasks and what is expected of each (M12.3.4). */
+function Examples({ one }: { readonly one: LibrarySkill }) {
+  const examples = one.examples ?? [];
+  if (examples.length === 0) {
+    return null;
+  }
+  return (
+    <div className="flex min-w-0 flex-col gap-2">
+      <h4 className="m-0 text-[12.5px] font-semibold text-ink">{EXAMPLES_HEADING}</h4>
+      <ol className="m-0 flex list-decimal flex-col gap-1.5 pl-5 text-[12.5px] text-body">
+        {examples.map((example, index) => (
+          <li key={`${String(index)}-${example.task}`} className="[overflow-wrap:anywhere]">
+            {example.task} <span className="text-dim">Expected: {example.expected}</span>
+          </li>
+        ))}
+      </ol>
+      {one.rehearsal === null || one.rehearsal === undefined ? (
+        <p className="m-0 text-[12.5px] text-dim">Not rehearsed yet.</p>
+      ) : (
+        <p className="m-0 text-[12.5px] text-body">{rehearsalWords(one.rehearsal)}</p>
+      )}
+    </div>
+  );
+}
+
+/** Approve or Reject, each confirmed. Approve waits for a rehearsal when there are examples. */
 function Decide({ one, onTold }: { readonly one: LibrarySkill; readonly onTold: Tell }) {
   const [asking, setAsking] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
@@ -197,19 +309,24 @@ function Decide({ one, onTold }: { readonly one: LibrarySkill; readonly onTold: 
     }
   }
 
+  const waits = one.awaits_rehearsal === true;
   return (
     <>
       {failure === null ? null : <FailureNotice failure={failure} />}
-      <Button
-        size="sm"
-        className="min-h-11 sm:min-h-8"
-        aria-label={`${APPROVE} ${one.name} ${one.version}`}
-        onClick={() => {
-          setAsking(true);
-        }}
-      >
-        {APPROVE}
-      </Button>
+      {waits ? (
+        <Note>{REHEARSE_BEFORE_APPROVING}</Note>
+      ) : (
+        <Button
+          size="sm"
+          className="min-h-11 sm:min-h-8"
+          aria-label={`${APPROVE} ${one.name} ${one.version}`}
+          onClick={() => {
+            setAsking(true);
+          }}
+        >
+          {APPROVE}
+        </Button>
+      )}
       <Button
         size="sm"
         variant="outline"
@@ -302,8 +419,16 @@ function Version({
   readonly onTold: Tell;
 }) {
   const [editing, setEditing] = useState(false);
+  const [rehearsing, setRehearsing] = useState(false);
   const assignable = one.assignable && agents.length > 0;
-  const acts = one.reviewable || one.editable || one.retirable === true || assignable;
+  const acts =
+    one.reviewable ||
+    one.editable ||
+    one.retirable === true ||
+    one.rehearsable === true ||
+    one.exportable === true ||
+    assignable;
+  const open = editing || rehearsing;
   return (
     <section
       data-slot="skill-version"
@@ -347,6 +472,8 @@ function Version({
           </pre>
         </details>
       )}
+      <Scripts one={one} />
+      <Examples one={one} />
       {one.diff === null || one.diff === undefined ? null : <Changed diff={one.diff} />}
       {editing ? (
         <EditVersionForm
@@ -357,8 +484,30 @@ function Version({
           }}
         />
       ) : null}
-      {acts && !editing ? (
+      {rehearsing ? (
+        <RehearseForm
+          one={one}
+          onTold={onTold}
+          onDone={() => {
+            setRehearsing(false);
+          }}
+        />
+      ) : null}
+      {acts && !open ? (
         <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3">
+          {one.rehearsable === true ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="min-h-11 sm:min-h-8"
+              aria-label={`${REHEARSE} of ${one.name} ${one.version}`}
+              onClick={() => {
+                setRehearsing(true);
+              }}
+            >
+              <ClipboardCheck aria-hidden /> {REHEARSE}
+            </Button>
+          ) : null}
           {one.reviewable ? <Decide one={one} onTold={onTold} /> : null}
           {one.editable ? (
             <Button
@@ -374,12 +523,13 @@ function Version({
             </Button>
           ) : null}
           {one.retirable === true ? <Retirement one={one} onTold={onTold} /> : null}
+          {one.exportable === true ? <ExportPackage one={one} onTold={onTold} /> : null}
           {one.review === "approved" && one.retired !== true ? (
             <UnavailableAction label={TRY_OUT} text={TRY_OUT} icon={<FlaskConical aria-hidden />} reason={UNAVAILABLE.tryOut.reason} />
           ) : null}
         </div>
       ) : null}
-      {assignable && !editing ? <AssignForm one={one} agents={agents} onTold={onTold} /> : null}
+      {assignable && !open ? <AssignForm one={one} agents={agents} onTold={onTold} /> : null}
       <Advanced>
         <FactList>
           <Fact label="Digest">
@@ -403,6 +553,11 @@ function Version({
               <span className="font-mono text-[11.5px]">{one.reviewer}</span>
             </Fact>
           )}
+          {(one.scripts ?? []).map((script) => (
+            <Fact key={script.path} label={`sha256 of ${script.path}`}>
+              <span className="font-mono text-[11.5px]">{script.sha256}</span>
+            </Fact>
+          ))}
         </FactList>
       </Advanced>
     </section>

@@ -1,6 +1,7 @@
 /**
  * The Skills module's forms: add a skill by paste or upload, import one from GitHub or an address,
- * save an edit as a new version, set categories, and assign an approved version to an agent.
+ * save an edit as a new version, set categories, record a rehearsal of a version's example tasks,
+ * and assign an approved version to an agent.
  *
  * **Every form says what it accepts before anybody presses anything.** The owner's rule for these
  * pages, and the old page broke it: a paste box with no word about the format, and a refusal
@@ -10,12 +11,17 @@
  * shape is right, with the reason drawn under the fields. The API still judges everything; a
  * refusal is drawn where it was made, with each problem beside the input it names.
  *
- * **Adding, importing, editing and categorising end nothing, so none asks to be confirmed**; each
- * is recorded in `tests/destructive-confirmed.test.ts` with its reason. **Assigning replaces the
- * version an agent runs, so its submit opens a `ConfirmDialog`** naming the agent, and only the
- * dialog's confirm sends it.
+ * **Adding, importing, editing, categorising and rehearsing end nothing, so none asks to be
+ * confirmed**; each is recorded in `tests/destructive-confirmed.test.ts` with its reason.
+ * **Assigning replaces the version an agent runs, so its submit opens a `ConfirmDialog`** naming the
+ * agent, and only the dialog's confirm sends it.
  *
- * Task ids: M27.16.1, M12.2.2, M12.2.3, M12.3.2, M12.4.13
+ * **A rehearsal asks one question per example and sends nothing until each is answered** (M12.3.4):
+ * behaved as expected, or did not. None is chosen to begin with, because a verdict filled in for a
+ * person is a rehearsal nobody did, and the form says above its questions that the verdict is theirs
+ * and not a model's.
+ *
+ * Task ids: M27.16.1, M12.2.2, M12.2.3, M12.3.2, M12.4.13, M12.3.4
  */
 
 import { useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
@@ -45,6 +51,10 @@ import {
   MAX_PACKAGE_BYTES,
   packageProblem,
   pasted,
+  REHEARSAL_IS_A_PERSON_S_VERDICT,
+  rehearsalBody,
+  rehearsalsPath,
+  rehearsedSentence,
   repositoryImport,
   SKILLS_API_PATH,
   versionsPath,
@@ -77,6 +87,10 @@ export const ADDRESS_LABEL = "Address";
 export const EDIT_LABEL = "The SKILL.md, edited";
 export const SAVE_VERSION = "Save as a new version";
 export const SET_CATEGORIES = "Save categories";
+export const RECORD_REHEARSAL = "Record the rehearsal";
+export const BEHAVED = "Behaved as expected";
+export const DID_NOT_BEHAVE = "Did not";
+export const ANSWER_EVERY_EXAMPLE = "Say for every example whether it behaved as expected.";
 export const ASSIGN_LABEL = "Agent";
 export const ASSIGN = "Assign to agent";
 export const DO_NOT_ASSIGN = "Do not assign";
@@ -84,13 +98,15 @@ export const DO_NOT_ASSIGN = "Do not assign";
 /** The format lines, said before a person submits. */
 export const PACKAGE_FORMAT =
   `A SKILL.md with a name, a description that opens "Use when", a version such as 1.0.0 and the tools ` +
-  `it uses; or a .zip holding only that file. At most ${String(MAX_PACKAGE_BYTES / 1024)} KB. A skill ` +
-  "that declares scripts is refused.";
+  "it uses; or a .zip holding that file with the scripts it declares and, if it has example tasks, an " +
+  `examples.json listing each task and what is expected. At most ${String(MAX_PACKAGE_BYTES / 1024)} KB. ` +
+  "A package exported from another install is added the same way and waits for review here.";
 export const CATEGORIES_FORMAT =
   "Optional. Lower-case words or hyphenated words, separated by commas, at most eight: hosting, client-billing.";
 export const REPOSITORY_FORMAT =
   "The repository as owner/repository, the full forty-character commit (not a branch), and the folder " +
-  "holding the SKILL.md, left empty for the top folder. Only the SKILL.md is taken.";
+  "holding the SKILL.md, left empty for the top folder. The SKILL.md, the scripts it declares and its " +
+  "examples.json are taken, and nothing else in the folder.";
 export const ADDRESS_FORMAT = "An https:// address on GitHub answering with a SKILL.md or a .zip holding one.";
 export const EDIT_FORMAT =
   "The whole SKILL.md. Keep the name, and give a later version number than this one; the edit waits for review.";
@@ -438,6 +454,93 @@ export function CategoriesForm({ one, onTold }: { readonly one: LibrarySkill; re
       <div>
         <Button type="submit" variant="outline" size="sm" className="min-h-11 sm:min-h-8" disabled={busy}>
           {SET_CATEGORIES}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+/** Whether each example behaved as expected, one answer per example, none chosen (M12.3.4). */
+export function RehearseForm({
+  one,
+  onTold,
+  onDone,
+}: {
+  readonly one: LibrarySkill;
+  readonly onTold: Tell;
+  readonly onDone: () => void;
+}) {
+  const examples = one.examples ?? [];
+  const [verdicts, setVerdicts] = useState<readonly (boolean | null)[]>(examples.map(() => null));
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  const answered = verdicts.every((verdict) => verdict !== null);
+
+  async function record(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!answered) {
+      return;
+    }
+    setBusy(true);
+    setFailure(null);
+    const result = await request<LibrarySkill>(rehearsalsPath(one.digest), {
+      method: "POST",
+      body: rehearsalBody(verdicts.map((verdict) => verdict === true)),
+    });
+    setBusy(false);
+    if (result.ok) {
+      onDone();
+      onTold({ ok: true, sentence: rehearsedSentence(result.data) });
+    } else {
+      setFailure(result.failure);
+    }
+  }
+
+  return (
+    <form
+      className="flex min-w-0 flex-col gap-3"
+      aria-label={`Rehearse ${one.name} ${one.version}`}
+      onSubmit={(event) => void record(event)}
+    >
+      <Note>{REHEARSAL_IS_A_PERSON_S_VERDICT}</Note>
+      {failure === null ? null : <FailureNotice failure={failure} fields={["behaved"]} />}
+      <ol className="m-0 flex list-decimal flex-col gap-3 pl-5">
+        {examples.map((example, index) => (
+          <li key={`${String(index)}-${example.task}`} className="flex min-w-0 flex-col gap-1.5">
+            <fieldset className="m-0 flex min-w-0 flex-col gap-1.5 border-0 p-0">
+              <legend className="text-[13px] font-medium text-ink [overflow-wrap:anywhere]">{example.task}</legend>
+              <p className="m-0 text-[12.5px] text-dim [overflow-wrap:anywhere]">Expected: {example.expected}</p>
+              <span className="flex flex-wrap gap-4">
+                {(
+                  [
+                    [true, BEHAVED],
+                    [false, DID_NOT_BEHAVE],
+                  ] as const
+                ).map(([value, label]) => (
+                  <label key={label} className="inline-flex min-h-11 items-center gap-2 text-[13px] text-ink sm:min-h-8">
+                    <input
+                      type="radio"
+                      name={`behaved-${String(index)}`}
+                      checked={verdicts[index] === value}
+                      onChange={() => {
+                        setVerdicts(verdicts.map((verdict, at) => (at === index ? value : verdict)));
+                      }}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </span>
+            </fieldset>
+          </li>
+        ))}
+      </ol>
+      <Problem text={answered ? null : ANSWER_EVERY_EXAMPLE} />
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" disabled={busy || !answered}>
+          {RECORD_REHEARSAL}
+        </Button>
+        <Button type="button" variant="outline" onClick={onDone}>
+          Cancel
         </Button>
       </div>
     </form>

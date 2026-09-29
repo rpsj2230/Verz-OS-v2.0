@@ -11,7 +11,9 @@ import {
   assignPath,
   categoriesPath,
   detachPath,
+  exportsPath,
   IMPORT_PATH,
+  rehearsalsPath,
   reinstatementPath,
   retirementPath,
   reviewPath,
@@ -41,6 +43,12 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   ],
   "src/pages/skills/SkillProfile.tsx detachPath(pin.digest)": [
     at("POST /api/v1/skills/{digest}/detachments", "detachPath", detachPath("d".repeat(64))),
+  ],
+  "src/pages/skills/SkillForms.tsx rehearsalsPath(one.digest)": [
+    at("POST /api/v1/skills/{digest}/rehearsals", "rehearsalsPath", rehearsalsPath("d".repeat(64))),
+  ],
+  "src/pages/skills/SkillProfile.tsx exportsPath(one.digest)": [
+    at("POST /api/v1/skills/{digest}/exports", "exportsPath", exportsPath("d".repeat(64))),
   ],
 };
 
@@ -84,6 +92,19 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: t("test_skill_lifecycle", "test_a_detachment_and_a_retirement_each_write_rows_and_entries_through_the_store", true),
     audit: t("test_skill_lifecycle", "test_a_detachment_and_a_retirement_each_write_rows_and_entries_through_the_store", true),
     behaviour: t("test_skill_lifecycle", "test_a_retired_version_is_refused_to_new_agents_and_its_holders_are_listed_not_detached"),
+  },
+  "POST /api/v1/skills/{digest}/rehearsals": {
+    row: t("test_skill_packages", "test_a_package_s_scripts_examples_and_rehearsals_are_stored_beside_it_and_read_back", true),
+    audit: t("test_skill_packages", "test_a_package_s_scripts_examples_and_rehearsals_are_stored_beside_it_and_read_back", true),
+    behaviour: t("test_skill_packages", "test_a_version_with_examples_is_rehearsed_then_approved_through_the_routes"),
+  },
+  "POST /api/v1/skills/{digest}/exports": {
+    row: {
+      notApplicable:
+        "An export writes no row: it answers the approved version's words, scripts and examples as a zip, which lands on another install only when somebody adds it there.",
+    },
+    audit: { notApplicable: "An export changes nothing anybody holds, so there is nothing for the ledger to record." },
+    behaviour: t("test_skill_packages", "test_an_approved_skill_is_exported_through_the_route_and_reads_back_as_that_version"),
   },
   "POST /api/v1/skills/{digest}/detachments": {
     row: t("test_skill_lifecycle", "test_a_detachment_and_a_retirement_each_write_rows_and_entries_through_the_store", true),

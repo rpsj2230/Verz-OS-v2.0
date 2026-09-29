@@ -41,6 +41,18 @@ const SKILL_VERSION = {
   retired_at: null,
   retired_by: null,
   retirable: true,
+  scripts: [{ path: "scripts/check.py", sha256: "e".repeat(64), text: UNBROKEN, is_text: true }],
+  examples: [{ task: UNBROKEN, expected: UNBROKEN }],
+  rehearsal: {
+    behaved: [true],
+    passed: true,
+    rehearsed_at: "2019-03-04T09:30:00Z",
+    rehearsed_by: UNBROKEN,
+    rehearsed_by_name: UNBROKEN,
+  },
+  awaits_rehearsal: false,
+  rehearsable: true,
+  exportable: true,
 };
 
 const SKILLS = {

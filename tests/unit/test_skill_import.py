@@ -194,13 +194,31 @@ def test_a_source_that_could_move_or_escape_is_refused_before_anything_is_fetche
     )
 
 
-def test_a_skill_md_declaring_scripts_is_refused_from_a_repository_as_from_an_upload() -> None:
-    """Delete this and a repository import stores a skill whose scripts the digest does not
-    cover, which the upload path has refused since `0056`."""
+def test_a_repository_skill_carries_the_scripts_it_declares_and_is_refused_without_them() -> None:
+    """**M12.4.11 from a repository.** A `SKILL.md` declaring a script the folder holds is read
+    with the sha256 of that script's bytes, which its digest covers; one declaring a script the
+    folder does not hold is refused, as an upload missing it is. A readme beside it is left unread.
+
+    Delete this and a repository import stores a skill whose script nobody's approval covers, or
+    refuses every repository skill with a script, which the upload path now admits."""
     scripted = SKILL_TEXT.replace("tools: [", "scripts: [run.py]\ntools: [")
 
-    with pytest.raises(SkillLibraryError, match="declares scripts"):
+    with pytest.raises(SkillLibraryError, match="declares the scripts"):
         from_repository(tarball({f"{FOLDER}/SKILL.md": scripted.encode("utf-8")}))
+    read = from_repository(
+        tarball(
+            {
+                f"{FOLDER}/SKILL.md": scripted.encode("utf-8"),
+                f"{FOLDER}/run.py": b"print('expiry')\n",
+                f"{FOLDER}/README.md": b"not part of the skill",
+            }
+        )
+    )
+
+    assert [(one.path, one.sha256) for one in read.imported.skill.script_files] == [
+        ("run.py", hashlib.sha256(b"print('expiry')\n").hexdigest())
+    ]
+    assert read.scripts == {"run.py": b"print('expiry')\n"}
 
 
 # -------------------------------------------------------------------- from an address (M12.2.3)

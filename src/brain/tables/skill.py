@@ -46,7 +46,18 @@ applies, because a label is not part of the procedure and changing one must not 
 to review. Every constraint `0121` adds binds only a column it added, for
 `brain.deployment.compatibility`'s reason about the release still running during a deploy.
 
-Task ids: M42.6.4, M12.2.2, M12.2.3, M12.3.2, M12.4.6, M12.4.13
+**`0164` adds three tables and touches none** (M12.4.11, M12.3.4). A skill's scripts, one row per
+script holding its bytes and the sha256 of them, which a check holds equal, so a row cannot say
+one thing and hold another; its example tasks, one row per example in the order a reviewer read
+them; and a rehearsal of a version's examples, one row per rehearsal, whose `passed` a check holds
+to the verdicts it records. The scripts and the examples are keyed to the skill row by its digest
+and its importer together, as a decision is, so they are written by the person who added the
+skill and belong to exactly those bytes. **They are separate tables rather than columns on
+`agent.skill`** so the release running during a deploy writes skill rows it has always written;
+that release reads a skill with scripts or examples without them, digests it differently from
+its key, and treats it as changed since approval, which is the safe direction.
+
+Task ids: M42.6.4, M12.2.2, M12.2.3, M12.3.2, M12.4.6, M12.4.13, M12.4.11, M12.3.4
 """
 
 from __future__ import annotations
@@ -63,6 +74,8 @@ from sqlalchemy import (
     ForeignKey,
     ForeignKeyConstraint,
     Identity,
+    LargeBinary,
+    SmallInteger,
     String,
     Text,
     UniqueConstraint,
@@ -119,6 +132,26 @@ PATH_PATTERN: Final = r"^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$"
 
 #: `brain.console.skill_library.MAX_CATEGORIES`, restated for the same reason.
 MAX_CATEGORIES: Final = 8
+
+#: `brain.tools.skills.MAX_MEMBER_LENGTH`, the longest path a script may have. `0164`.
+SCRIPT_PATH_CHARS: Final = 200
+
+#: A script's path inside its skill's folder: segments of the archive member grammar joined by
+#: slashes, `brain.tools.skills.ARCHIVE_SEGMENT_RE` without its length, which the width holds.
+SCRIPT_PATH_PATTERN: Final = r"^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$"
+
+#: `brain.console.skill_library.MAX_PACKAGE_BYTES`, the most one script may hold. `0164`.
+MAX_SCRIPT_BYTES: Final = 256 * 1024
+
+#: `brain.tools.skills.MAX_EXAMPLES` and `EXAMPLE_CHARS`, restated for the same reason. `0164`.
+MAX_EXAMPLES: Final = 20
+EXAMPLE_CHARS: Final = 500
+
+#: A script row holds the bytes its sha256 names, and nothing else. `0164`.
+SCRIPT_SHA256_IS_OF_ITS_CONTENT: Final = "content_sha256 = encode(sha256(content), 'hex')"
+
+#: A rehearsal passed exactly when no example in it failed to behave. `0164`.
+PASSED_WHEN_NO_EXAMPLE_FAILED: Final = "passed = (NOT (behaved @> '[false]'::jsonb))"
 
 #: The source rule `0121` widened, under the name `0056` gave it.
 SOURCE_KIND_CHECK: Final = f"source_kind IN ('{GITHUB}', '{UPLOAD}', '{URL}')"
@@ -383,5 +416,117 @@ class SkillDetachmentRow(Base):
         CheckConstraint(f"digest ~ '{DIGEST}'", name="digest_shape"),
         CheckConstraint(f"detached_by ~ '{IDENTIFIER}'", name="detached_by_is_an_identifier"),
         UniqueConstraint("assignment_id", name="uq_skill_detachment_assignment_id"),
+        {"schema": "agent"},
+    )
+
+
+class SkillScriptRow(Base):
+    """`agent.skill_script`. One declared script of one skill: its bytes and their sha256. `0164`.
+
+    Keyed by the skill's digest and the script's path, so a script is held once per version, and
+    held to `agent.skill` by the digest and the importer together, so its bytes were written by the
+    person who added those bytes. The check holds the sha256 to the bytes, and the application may
+    insert and read and never update, so a script's bytes cannot be changed under the digest a
+    reviewer approved (M12.4.11).
+    """
+
+    __tablename__ = "skill_script"
+
+    skill_digest: Mapped[str] = mapped_column(String(DIGEST_CHARS), primary_key=True)
+    path: Mapped[str] = mapped_column(String(SCRIPT_PATH_CHARS), primary_key=True)
+    #: The script as it arrived. Read to run it or export it and never to list the library.
+    content: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    #: `brain.tools.skills.ScriptFile.sha256`, which the skill's digest covers.
+    content_sha256: Mapped[str] = mapped_column(String(DIGEST_CHARS), nullable=False)
+    #: The importer, copied and held to the skill row by the composite key.
+    submitted_by: Mapped[str] = mapped_column(String(PRINCIPAL_ID_CHARS), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(f"skill_digest ~ '{DIGEST}'", name="skill_digest_shape"),
+        CheckConstraint(f"path ~ '{SCRIPT_PATH_PATTERN}'", name="path_shape"),
+        CheckConstraint(f"content_sha256 ~ '{DIGEST}'", name="content_sha256_shape"),
+        CheckConstraint(SCRIPT_SHA256_IS_OF_ITS_CONTENT, name="content_sha256_is_of_its_content"),
+        CheckConstraint(f"octet_length(content) <= {MAX_SCRIPT_BYTES}", name="content_is_a_script"),
+        CheckConstraint(f"submitted_by ~ '{IDENTIFIER}'", name="submitted_by_is_an_identifier"),
+        ForeignKeyConstraint(
+            ["skill_digest", "submitted_by"],
+            ["agent.skill.digest", "agent.skill.submitted_by"],
+        ),
+        {"schema": "agent"},
+    )
+
+
+class SkillExampleRow(Base):
+    """`agent.skill_example`. One example task of one skill and the behaviour expected. `0164`.
+
+    Keyed by the skill's digest and the example's ordinal, from one, so the examples read back in
+    the order a reviewer read them, and held to `agent.skill` as a script is (M12.3.4).
+    """
+
+    __tablename__ = "skill_example"
+
+    skill_digest: Mapped[str] = mapped_column(String(DIGEST_CHARS), primary_key=True)
+    ordinal: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
+    task: Mapped[str] = mapped_column(String(EXAMPLE_CHARS), nullable=False)
+    expected: Mapped[str] = mapped_column(String(EXAMPLE_CHARS), nullable=False)
+    #: The importer, copied and held to the skill row by the composite key.
+    submitted_by: Mapped[str] = mapped_column(String(PRINCIPAL_ID_CHARS), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(f"skill_digest ~ '{DIGEST}'", name="skill_digest_shape"),
+        CheckConstraint(
+            f"ordinal BETWEEN 1 AND {MAX_EXAMPLES}", name="ordinal_is_one_of_the_examples"
+        ),
+        CheckConstraint("length(btrim(task)) > 0", name="task_present"),
+        CheckConstraint("length(btrim(expected)) > 0", name="expected_present"),
+        CheckConstraint(f"submitted_by ~ '{IDENTIFIER}'", name="submitted_by_is_an_identifier"),
+        ForeignKeyConstraint(
+            ["skill_digest", "submitted_by"],
+            ["agent.skill.digest", "agent.skill.submitted_by"],
+        ),
+        {"schema": "agent"},
+    )
+
+
+class SkillRehearsalRow(Base):
+    """`agent.skill_rehearsal`. One rehearsal of one version's example tasks. `0164`.
+
+    Appended and never edited: the newest row for a digest is the rehearsal that decides whether
+    the version may be approved, and the rows before it are what earlier rehearsals found, the
+    shape `SkillRetirementRow` has. `behaved` is a verdict per example in order, and the check
+    holds `passed` to it, so a row cannot say it passed while recording an example that did not
+    behave (M12.3.4).
+    """
+
+    __tablename__ = "skill_rehearsal"
+
+    #: The order rows were written in, which is what "newest" means here.
+    seq: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
+    digest: Mapped[str] = mapped_column(
+        String(DIGEST_CHARS), ForeignKey("agent.skill.digest"), nullable=False
+    )
+    #: Whether each example behaved as expected, as a JSON list of booleans in example order.
+    behaved: Mapped[list[Any]] = mapped_column(JSONB, nullable=False)
+    passed: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    #: Who rehearsed it. The ledger entry's actor, read off this column by the trigger.
+    rehearsed_by: Mapped[str] = mapped_column(String(PRINCIPAL_ID_CHARS), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "CASE WHEN jsonb_typeof(behaved) = 'array' "
+            f"THEN jsonb_array_length(behaved) BETWEEN 1 AND {MAX_EXAMPLES} ELSE false END",
+            name="behaved_is_a_verdict_per_example",
+        ),
+        CheckConstraint(PASSED_WHEN_NO_EXAMPLE_FAILED, name="passed_when_no_example_failed"),
+        CheckConstraint(f"rehearsed_by ~ '{IDENTIFIER}'", name="rehearsed_by_is_an_identifier"),
         {"schema": "agent"},
     )

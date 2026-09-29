@@ -65,6 +65,7 @@ from brain.console.skill_library import (
     Detachment,
     DetachmentRecord,
     LibrarySkill,
+    Rehearsal,
     Retirement,
     added,
     decided,
@@ -338,6 +339,9 @@ class Library:
         self.records: list[AssignmentRecord] = []
         self.detachments: list[DetachmentRecord] = []
         self.detached: list[Detachment] = []
+        #: Each version's script bytes and every rehearsal row, oldest first (`0164`).
+        self.script_bytes: dict[str, dict[str, bytes]] = {}
+        self.rehearsed: list[Rehearsal] = []
 
     async def retirements(self, digests: Sequence[str]) -> Mapping[str, Retirement]:
         self.calls.append("retirements")
@@ -428,6 +432,7 @@ class Library:
         if one.digest in self.skills:
             return False
         self.skills[one.digest] = one
+        self.script_bytes[one.digest] = dict(one.scripts)
         return True
 
     async def decide(self, one: LibrarySkill, *, ent_hash: str, trace_id: str) -> bool:
@@ -436,6 +441,20 @@ class Library:
             return False
         self.skills[one.digest] = one
         return True
+
+    async def scripts(self, digest: str) -> Mapping[str, bytes]:
+        """The bytes each script arrived with, as `0164`'s table keeps them beside the row."""
+        self.calls.append("scripts")
+        return dict(self.script_bytes.get(digest, {}))
+
+    async def rehearse(self, done: Rehearsal, *, ent_hash: str, trace_id: str) -> None:
+        self.calls.append("rehearse")
+        self.rehearsed.append(done)
+
+    async def rehearsals(self, digests: Sequence[str]) -> Mapping[str, Rehearsal]:
+        """The newest rehearsal of each digest, as `DISTINCT ON` keeps it."""
+        self.calls.append("rehearsals")
+        return {one.digest: one for one in self.rehearsed if one.digest in digests}
 
     async def assign(
         self, made: Assignment, *, expected_hash: str, ent_hash: str, trace_id: str
@@ -1015,16 +1034,16 @@ def test_a_queue_entry_carries_no_body_and_no_reviewer() -> None:
 # --------------------------------------------------------------- what it will not say
 
 
-def test_the_writes_are_nine_posts_and_no_read_answers_one_skill_by_name(
+def test_the_writes_are_eleven_posts_and_no_read_answers_one_skill_by_name(
     client: TestClient,
 ) -> None:
-    """Under `/skills` there are two GETs, neither taking a path parameter, and nine POSTs: add a
-    package, import from a repository or an address, save an edit as a version, set categories,
-    decide about one, assign one, retire and reinstate a version, and detach one from an agent.
-    Read off the application's own document.
+    """Under `/skills` there are two GETs, neither taking a path parameter, and eleven POSTs: add
+    a package, import from a repository or an address, save an edit as a version, set categories,
+    decide about one, record a rehearsal of its examples, export it, assign one, retire and
+    reinstate a version, and detach one from an agent. Read off the application's own document.
 
-    Delete this and a tenth write, an approval folded into an import say, or a GET answering one
-    skill by name, can arrive without anybody arguing for it."""
+    Delete this and a twelfth write, an approval folded into an import say, or a GET answering one
+    skill by name (an export as a GET would be one), can arrive without anybody arguing for it."""
     paths = client.app.openapi()["paths"]  # type: ignore[attr-defined]
     mine = {path: set(operations) for path, operations in paths.items() if path.startswith(SKILLS)}
 
@@ -1035,6 +1054,8 @@ def test_the_writes_are_nine_posts_and_no_read_answers_one_skill_by_name(
         f"{SKILLS}/{{digest}}/versions": {"post"},
         f"{SKILLS}/{{digest}}/categories": {"post"},
         f"{SKILLS}/{{digest}}/review": {"post"},
+        f"{SKILLS}/{{digest}}/rehearsals": {"post"},
+        f"{SKILLS}/{{digest}}/exports": {"post"},
         f"{SKILLS}/{{digest}}/assignments": {"post"},
         f"{SKILLS}/{{digest}}/retirement": {"post"},
         f"{SKILLS}/{{digest}}/reinstatement": {"post"},

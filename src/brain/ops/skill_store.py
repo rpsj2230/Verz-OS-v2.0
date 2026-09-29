@@ -44,7 +44,16 @@ written into the row; a template's own skill has none and the column is left emp
 and detachments are read back as records, from which `brain.console.skill_library.
 current_assignments` derives what is in force; nothing here decides that.
 
+**`0164`'s three tables are written beside the skill row and read beside it (M12.4.11, M12.3.4).**
+Adding a skill writes its row, a row per script holding its bytes and a row per example task in
+one transaction, so a skill never exists without the scripts and examples its digest covers. A
+skill read back carries the sha256 recorded for each script and its examples, which its digest is
+recomputed over, and never the scripts' bytes: those are read by `scripts` for the one version a
+caller runs or exports. A rehearsal is a new row and the newest per digest is the one that
+decides, read with `DISTINCT ON` as a retirement is.
+
 Task ids: M42.6.4, M12.2.2, M12.2.3, M12.3.2, M12.4.6, M12.4.13, M27.15.55, M27.15.56
+Task ids: M12.4.11, M12.3.4
 """
 
 from __future__ import annotations
@@ -65,6 +74,7 @@ from brain.console.skill_library import (
     Detachment,
     DetachmentRecord,
     LibrarySkill,
+    Rehearsal,
     Retirement,
 )
 from brain.ops.automation_owner_store import PRINCIPAL_SETTING
@@ -74,12 +84,23 @@ from brain.tables.skill import (
     SkillAssignmentRow,
     SkillCategoryRow,
     SkillDetachmentRow,
+    SkillExampleRow,
+    SkillRehearsalRow,
     SkillRetirementRow,
     SkillReviewRow,
     SkillRow,
+    SkillScriptRow,
 )
 from brain.tables.template import TemplateInstanceRow
-from brain.tools.skills import ImportedSkill, Skill, SkillSource, SkillState, SourceKind
+from brain.tools.skills import (
+    ImportedSkill,
+    ScriptFile,
+    Skill,
+    SkillExample,
+    SkillSource,
+    SkillState,
+    SourceKind,
+)
 
 log = structlog.get_logger()
 
@@ -141,6 +162,88 @@ def adding(one: LibrarySkill) -> ReturningInsert[tuple[str]]:
         .values(**skill_values(one))
         .on_conflict_do_nothing(index_elements=["digest"])
         .returning(SkillRow.digest)
+    )
+
+
+def script_values(one: LibrarySkill) -> list[dict[str, Any]]:
+    """A row per declared script: its bytes and their sha256, in the importer's name (`0164`).
+
+    The sha256 is the one the skill recorded, and the bytes are those that arrived; the table's
+    check holds the two equal, so bytes that do not match what the digest covers are refused by the
+    database as well as by `brain.tools.skills.verified_script`.
+    """
+    skill = one.imported.skill
+    return [
+        {
+            "skill_digest": one.digest,
+            "path": recorded.path,
+            "content": one.scripts.get(recorded.path, b""),
+            "content_sha256": recorded.sha256,
+            "submitted_by": one.submitted_by,
+        }
+        for recorded in skill.script_files
+    ]
+
+
+def example_values(one: LibrarySkill) -> list[dict[str, Any]]:
+    """A row per example task, from one in the order the skill carries them (`0164`)."""
+    return [
+        {
+            "skill_digest": one.digest,
+            "ordinal": ordinal,
+            "task": example.task,
+            "expected": example.expected,
+            "submitted_by": one.submitted_by,
+        }
+        for ordinal, example in enumerate(one.imported.skill.examples, start=1)
+    ]
+
+
+def recorded_scripts_of(digests: Sequence[str]) -> Select[tuple[str, str, str]]:
+    """The path and sha256 of every script of these skills, never the bytes."""
+    return (
+        select(SkillScriptRow.skill_digest, SkillScriptRow.path, SkillScriptRow.content_sha256)
+        .where(SkillScriptRow.skill_digest.in_(sorted(set(digests))))
+        .order_by(SkillScriptRow.skill_digest, SkillScriptRow.path)
+    )
+
+
+def examples_of(digests: Sequence[str]) -> Select[tuple[str, str, str]]:
+    """Every example task of these skills, in each skill's order."""
+    return (
+        select(SkillExampleRow.skill_digest, SkillExampleRow.task, SkillExampleRow.expected)
+        .where(SkillExampleRow.skill_digest.in_(sorted(set(digests))))
+        .order_by(SkillExampleRow.skill_digest, SkillExampleRow.ordinal)
+    )
+
+
+def script_bytes_of(digest: str) -> Select[tuple[str, bytes]]:
+    """Every script of one skill with its bytes, for running or exporting that version."""
+    return (
+        select(SkillScriptRow.path, SkillScriptRow.content)
+        .where(SkillScriptRow.skill_digest == digest)
+        .order_by(SkillScriptRow.path)
+    )
+
+
+def rehearsal_values(done: Rehearsal) -> dict[str, Any]:
+    """What a rehearsal records. `passed` is written, and the table's check holds it to the
+    verdicts in `behaved`."""
+    return {
+        "digest": done.digest,
+        "behaved": list(done.behaved),
+        "passed": done.passed,
+        "rehearsed_by": done.rehearsed_by,
+    }
+
+
+def rehearsals_of(digests: Sequence[str]) -> Select[tuple[SkillRehearsalRow]]:
+    """The newest rehearsal of each of these digests. `DISTINCT ON` keeps the first."""
+    return (
+        select(SkillRehearsalRow)
+        .where(SkillRehearsalRow.digest.in_(sorted(set(digests))))
+        .order_by(SkillRehearsalRow.digest, SkillRehearsalRow.seq.desc())
+        .distinct(SkillRehearsalRow.digest)
     )
 
 
@@ -294,11 +397,19 @@ def detachments_named(names: Sequence[str]) -> Select[tuple[SkillDetachmentRow]]
 
 
 # ------------------------------------------------------------------------ rows to the domain
-def library_skill_of(row: SkillRow, review: SkillReviewRow | None) -> LibrarySkill | None:
+def library_skill_of(
+    row: SkillRow,
+    review: SkillReviewRow | None,
+    scripts: Sequence[tuple[str, str]] = (),
+    examples: Sequence[tuple[str, str]] = (),
+) -> LibrarySkill | None:
     """The stored skill as the library holds it, or None when it does not construct.
 
     The approved digest is the key the decision row names, never the digest of the fields, so a
     row edited after its approval reads as moved: `ImportedSkill.is_executable` compares the two.
+    `scripts` is each script's path and recorded sha256, and `examples` each task and expected
+    behaviour in order (`0164`), and the digest covers both, so a script or an example added,
+    removed or changed after approval reads as moved in the same way.
     """
     try:
         skill = Skill(
@@ -307,6 +418,9 @@ def library_skill_of(row: SkillRow, review: SkillReviewRow | None) -> LibrarySki
             version=row.version,
             tools=tuple(row.tools),
             body=row.body,
+            scripts=tuple(path for path, _sha in scripts),
+            script_files=tuple(ScriptFile(path=path, sha256=sha) for path, sha in scripts),
+            examples=tuple(SkillExample(task=task, expected=wanted) for task, wanted in examples),
         )
         source = SkillSource(
             kind=SourceKind(row.source_kind),
@@ -365,9 +479,48 @@ def detachment_record_of(row: SkillDetachmentRow) -> DetachmentRecord:
     )
 
 
-def _constructed(rows: Sequence[Any]) -> tuple[LibrarySkill, ...]:
-    found = (library_skill_of(skill_row, review_row) for skill_row, review_row in rows)
+def rehearsal_of(row: SkillRehearsalRow) -> Rehearsal | None:
+    """A stored rehearsal, or None when its verdicts are not a list of booleans."""
+    if not isinstance(row.behaved, list) or not all(isinstance(one, bool) for one in row.behaved):
+        return None
+    return Rehearsal(
+        digest=row.digest,
+        behaved=tuple(row.behaved),
+        rehearsed_by=row.rehearsed_by,
+        at=row.created_at,
+    )
+
+
+def _constructed(
+    rows: Sequence[Any],
+    scripts: Mapping[str, list[tuple[str, str]]],
+    examples: Mapping[str, list[tuple[str, str]]],
+) -> tuple[LibrarySkill, ...]:
+    found = (
+        library_skill_of(
+            skill_row,
+            review_row,
+            scripts.get(skill_row.digest, ()),
+            examples.get(skill_row.digest, ()),
+        )
+        for skill_row, review_row in rows
+    )
     return tuple(one for one in found if one is not None)
+
+
+async def _contents(
+    session: AsyncSession, digests: Sequence[str]
+) -> tuple[dict[str, list[tuple[str, str]]], dict[str, list[tuple[str, str]]]]:
+    """The recorded scripts and the examples of these skills, by digest, in order."""
+    scripts: dict[str, list[tuple[str, str]]] = {}
+    examples: dict[str, list[tuple[str, str]]] = {}
+    if not digests:
+        return scripts, examples
+    for digest, path, sha in (await session.execute(recorded_scripts_of(digests))).all():
+        scripts.setdefault(str(digest), []).append((str(path), str(sha)))
+    for digest, task, wanted in (await session.execute(examples_of(digests))).all():
+        examples.setdefault(str(digest), []).append((str(task), str(wanted)))
+    return scripts, examples
 
 
 class StoredSkills:
@@ -379,22 +532,59 @@ class StoredSkills:
     async def library(self, limit: int = MAX_LIBRARY) -> tuple[LibrarySkill, ...]:
         async with self._sessions() as session:
             rows = (await session.execute(library_of(limit))).all()
-        return _constructed(rows)
+            scripts, examples = await _contents(session, [row[0].digest for row in rows])
+        return _constructed(rows, scripts, examples)
 
     async def skill(self, digest: str) -> LibrarySkill | None:
         async with self._sessions() as session:
             rows = (await session.execute(one_skill(digest))).all()
-        found = _constructed(rows)
+            scripts, examples = await _contents(session, [row[0].digest for row in rows])
+        found = _constructed(rows, scripts, examples)
         return found[0] if found else None
 
     async def add(self, one: LibrarySkill, *, ent_hash: str, trace_id: str) -> bool:
-        """Write the skill, or say these bytes are already in the library."""
+        """Write the skill, its scripts and its examples, or say these bytes are already held.
+
+        One transaction, so a skill is never stored without the scripts and examples its digest
+        covers; a second import of the same bytes writes nothing at all (`0164`).
+        """
         async with self._sessions() as session, session.begin():
             await session.execute(_set_config(PRINCIPAL_SETTING, one.submitted_by))
             await session.execute(_set_config(TRACE_ID_SETTING, trace_id))
             await session.execute(_set_config(ENT_HASH_SETTING, ent_hash))
             written = (await session.execute(adding(one))).scalar_one_or_none()
+            if written is not None:
+                for values in script_values(one):
+                    await session.execute(insert(SkillScriptRow).values(**values))
+                for values in example_values(one):
+                    await session.execute(insert(SkillExampleRow).values(**values))
         return written is not None
+
+    async def scripts(self, digest: str) -> Mapping[str, bytes]:
+        """The bytes of every script of one version, by path. Empty for a skill with none.
+
+        Read for running or exporting that version, and held there to the sha256 it was approved
+        as; nothing here compares them (M12.4.11).
+        """
+        async with self._sessions() as session:
+            rows = (await session.execute(script_bytes_of(digest))).all()
+        return {str(path): bytes(content) for path, content in rows}
+
+    async def rehearse(self, done: Rehearsal, *, ent_hash: str, trace_id: str) -> None:
+        """Record a rehearsal in the rehearser's name, with its ledger entry (M12.3.4)."""
+        async with self._sessions() as session, session.begin():
+            await session.execute(_set_config(PRINCIPAL_SETTING, done.rehearsed_by))
+            await session.execute(_set_config(TRACE_ID_SETTING, trace_id))
+            await session.execute(_set_config(ENT_HASH_SETTING, ent_hash))
+            await session.execute(insert(SkillRehearsalRow).values(**rehearsal_values(done)))
+
+    async def rehearsals(self, digests: Sequence[str]) -> Mapping[str, Rehearsal]:
+        """Each of these versions' newest rehearsal. A version never rehearsed is absent."""
+        if not digests:
+            return {}
+        async with self._sessions() as session:
+            rows = (await session.execute(rehearsals_of(digests))).scalars().all()
+        return {row.digest: found for row in rows if (found := rehearsal_of(row)) is not None}
 
     async def decide(self, one: LibrarySkill, *, ent_hash: str, trace_id: str) -> bool:
         """Write the decision, or say the skill was already decided."""

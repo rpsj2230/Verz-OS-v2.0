@@ -171,6 +171,14 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "Sets the labels a skill is filed under. The previous labels are shown in the box before the " +
     "press and can be typed back, the change is a new row that edits none, and a label reaches no " +
     "agent and changes no procedure.",
+  "src/pages/skills/SkillForms.tsx rehearsalsPath(one.digest)":
+    "Records whether each example task behaved, as a new row that edits none. A later rehearsal " +
+    "of the same version is recorded beside it and the newest is the one that counts, and a " +
+    "rehearsal approves nothing: the approval is its own confirmed act.",
+  "src/pages/skills/SkillProfile.tsx exportsPath(one.digest)":
+    "Saves an approved version as a file and writes nothing on this install, which " +
+    "tests/unit/test_skill_packages.py holds; the version, its approval and every agent running it " +
+    "are exactly as they were.",
   "src/pages/sessions/SignInLinksPage.tsx LINK_API_PATH":
     "Binds a sign-in to a person. A subject already bound elsewhere is refused with a 409 rather " +
     "than re-pointed, so nothing existing is replaced; unlinking is the destructive act and it is " +

@@ -121,8 +121,24 @@ when an assignment still in force put it there, when and by whom, from
 who decided it, who retired it and who assigned it are sent as display names beside the ids the
 page used to print, read from the directory for exactly those people.
 
+**A package carries scripts and example tasks, a version with examples is rehearsed before it is
+approved, and an approved version is exported (M12.4.11, M12.3.4, M12.3.1).** Adding a zip
+reads its scripts and its `examples.json` through `read_package`, and the review pane shows each
+script's sha256 and, while the version waits for a decision, its text, so what is approved is
+code somebody could read. `POST /skills/{digest}/rehearsals` records whether each example behaved
+as expected, asked of whoever may add or review, and `POST /skills/{digest}/review` passes the
+newest rehearsal of those bytes to `decided`, which refuses to approve a version with examples
+until every one behaved; see `brain.console.skill_library.
+A_VERSION_WITH_EXAMPLES_IS_APPROVED_ONLY_AFTER_THEY_ARE_REHEARSED`. `POST /skills/{digest}/exports`
+answers the approved version as a zip another install adds through `POST /skills`, where it lands
+undecided. **An export is a POST and writes nothing**: it is an act one person takes on one
+version, asked of the skill authority before the digest is looked up as every write here is, and
+the rejected read by name stays rejected, because a GET with a digest in its path is the oracle
+the writes are built not to be. Rejected: recording each export on the ledger, which would need a
+table for a fact that changes nothing anybody holds, as the routing export does not.
+
 Task ids: M42.6.4, M27.8.6, M12.2.2, M12.2.3, M12.2.5, M12.2.6, M12.3.2, M12.4.6, M12.4.13
-Task ids: M27.11.8, M27.15.55, M27.15.56, M27.16.1
+Task ids: M27.11.8, M27.15.55, M27.15.56, M27.16.1, M12.4.11, M12.3.4, M12.3.1
 """
 
 from __future__ import annotations
@@ -130,6 +146,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import binascii
+import hashlib
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -176,6 +193,7 @@ from brain.console.skill_library import (
     DetachmentRecord,
     LibrarySkill,
     Package,
+    Rehearsal,
     Retirement,
     SkillLibraryError,
     SkillReach,
@@ -183,6 +201,7 @@ from brain.console.skill_library import (
     added,
     another_spelling,
     assignment,
+    awaits_rehearsal,
     categories_from,
     chips,
     compared_with,
@@ -190,16 +209,20 @@ from brain.console.skill_library import (
     decided,
     detachment,
     edited,
+    exported,
     github_source,
     may_add,
     may_assign,
+    may_export,
     may_read_library,
+    may_rehearse,
     may_review,
     queue_entries,
     reach_through,
     read_github,
     read_package,
     read_url,
+    rehearsal,
     retired_digests,
     retiring,
     trusted_reach,
@@ -219,7 +242,7 @@ from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
 from brain.tools.fetch import Fetcher, Resolver, fetch_skill_source, fetch_skill_url
 from brain.tools.registry import ToolRegistry
 from brain.tools.review import QueueEntry, SkillDiff, content_diff
-from brain.tools.skills import DIGEST_RE, SkillError, SkillPin, markdown_of
+from brain.tools.skills import DIGEST_RE, MAX_EXAMPLES, SkillError, SkillPin, markdown_of
 
 log = structlog.get_logger()
 
@@ -386,6 +409,45 @@ class ToolReachView(BaseModel):
     capability: str | None
 
 
+class ScriptView(BaseModel):
+    """One script a version carries: its path, the sha256 of the bytes it was added as, and, while
+    the version waits for a decision, its text for the reviewer (M12.4.11).
+
+    `text` is null once the version is decided, for a reader the body is not disclosed to, and for
+    bytes that are not UTF-8 text, which `is_text` says, so a reviewer is never shown nothing and
+    left to read it as an empty script.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    path: str
+    sha256: str
+    text: str | None = None
+    is_text: bool = True
+
+
+class ExampleView(BaseModel):
+    """One example task a version carries and the behaviour expected of it (M12.3.4)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    task: str
+    expected: str
+
+
+class SkillRehearsalView(BaseModel):
+    """The newest rehearsal of a version's examples: each verdict, who and when (M12.3.4)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    behaved: tuple[bool, ...]
+    passed: bool
+    rehearsed_at: datetime
+    rehearsed_by: str
+    #: The display name of whoever rehearsed it, when the directory holds one.
+    rehearsed_by_name: str | None = None
+
+
 class LibrarySkillView(BaseModel):
     """One skill in the library: SCREEN 6's library row and its review pane in one shape.
 
@@ -441,6 +503,19 @@ class LibrarySkillView(BaseModel):
     #: The display names of whoever added it and whoever decided it, when the directory holds one.
     submitted_by_name: str | None = None
     reviewer_name: str | None = None
+    #: The scripts this version carries, each with the sha256 its digest covers (M12.4.11).
+    scripts: tuple[ScriptView, ...] = ()
+    #: The example tasks it carries, for a reader the body is disclosed to (M12.3.4).
+    examples: tuple[ExampleView, ...] = ()
+    #: The newest rehearsal of these bytes, for a reader the body is disclosed to.
+    rehearsal: SkillRehearsalView | None = None
+    #: It carries examples and may not be approved until a rehearsal in which every one behaved.
+    awaits_rehearsal: bool = False
+    #: This reader may record a rehearsal of it now. Decides whether a form is drawn and nothing
+    #: more.
+    rehearsable: bool = False
+    #: This reader may export it now: it is approved, unchanged, and they hold the authority.
+    exportable: bool = False
 
 
 class AgentChoiceView(BaseModel):
@@ -546,6 +621,32 @@ class ReviewAsked(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     decision: Literal["approve", "reject"]
+
+
+class RehearsalAsked(BaseModel):
+    """Whether each example behaved as expected, in the order the version carries them (M12.3.4).
+
+    Nothing that could name the rehearser, who is the caller, or the version, which is the one in
+    the path.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    behaved: tuple[bool, ...] = Field(min_length=1, max_length=MAX_EXAMPLES)
+
+
+class SkillPackageView(BaseModel):
+    """An approved version as a package another install adds, and what its manifest names
+    (M12.3.1). `content` is the zip in base64, as `POST /skills` takes one."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    file_name: str
+    content: str
+    encoding: Literal["base64"] = "base64"
+    name: str
+    version: str
+    digest: str
 
 
 class AssignAsked(BaseModel):
@@ -670,6 +771,22 @@ class SkillLibrary(Protocol):
     ) -> tuple[tuple[AssignmentRecord, ...], tuple[DetachmentRecord, ...]]: ...
 
 
+@runtime_checkable
+class SkillContents(Protocol):
+    """A version's script bytes and the rehearsals of its examples (M12.4.11, M12.3.4).
+
+    A protocol of its own rather than three more methods on `SkillLibrary`, so a screen that reads
+    the library and never a script or a rehearsal keeps a stand-in that does not pretend to hold
+    them. `brain.ops.skill_store.StoredSkills` implements both.
+    """
+
+    async def scripts(self, digest: str) -> Mapping[str, bytes]: ...
+
+    async def rehearse(self, done: Rehearsal, *, ent_hash: str, trace_id: str) -> None: ...
+
+    async def rehearsals(self, digests: Sequence[str]) -> Mapping[str, Rehearsal]: ...
+
+
 @dataclass(frozen=True)
 class FoundAgent:
     """One stored agent, its install when it has one that constructs, and the install's hash."""
@@ -727,6 +844,14 @@ def library_of(request: Request) -> SkillLibrary:
     """`app.state.skill_library` when something put one there, and the database otherwise."""
     found = getattr(request.app.state, "skill_library", None)
     if isinstance(found, SkillLibrary):
+        return found
+    return StoredSkills(_require_sessions(request))
+
+
+def contents_of(request: Request) -> SkillContents:
+    """`app.state.skill_library` when it holds scripts and rehearsals too, and the database else."""
+    found = getattr(request.app.state, "skill_library", None)
+    if isinstance(found, SkillContents):
         return found
     return StoredSkills(_require_sessions(request))
 
@@ -961,17 +1086,30 @@ def library_view(
     against: LibrarySkill | None = None,
     retirement: Retirement | None = None,
     people: Mapping[str, str] | None = None,
+    rehearsal: Rehearsal | None = None,
+    script_bytes: Mapping[str, bytes] | None = None,
+    rehearses: bool = False,
+    exports: bool = False,
 ) -> LibrarySkillView:
     """One library row, with the reach the registry gives it and what this reader is offered.
 
     `reviewable` no longer asks who added the skill, for D4 (M12.4.6). The diff and the text an
     edit starts from are words of the skill, so each goes only where the body goes. A retired
     version is never `assignable`, whatever else holds (M27.15.56).
+
+    The examples, the newest rehearsal and a waiting version's script text are words of the skill
+    too and go where the body goes (M12.3.4, M12.4.11); every script's path and sha256 go to any
+    reader of the row, as the tools it names do. `script_bytes` is the waiting version's scripts as
+    the store read them, and a script's text is drawn only when those bytes are the ones its digest
+    covers, so the reviewer reads what they would approve.
     """
     imported = one.imported
     state = review_state(imported)
     retired = retirement is not None and retirement.retired
     named = people or {}
+    skill = imported.skill
+    shown_bytes = script_bytes if discloses_body and state is Review.PENDING else None
+    newest = rehearsal if rehearsal is not None and rehearsal.digest == one.digest else None
     return LibrarySkillView(
         digest=one.digest,
         name=imported.skill.name,
@@ -1010,6 +1148,38 @@ def library_view(
         retirable=edits,
         submitted_by_name=named.get(one.submitted_by),
         reviewer_name=named.get(imported.reviewer) if imported.reviewer else None,
+        scripts=tuple(script_view(one.path, one.sha256, shown_bytes) for one in skill.script_files),
+        examples=(
+            tuple(ExampleView(task=item.task, expected=item.expected) for item in skill.examples)
+            if discloses_body
+            else ()
+        ),
+        rehearsal=rehearsal_view(newest, named) if discloses_body and newest is not None else None,
+        awaits_rehearsal=state is Review.PENDING and awaits_rehearsal(one, newest),
+        rehearsable=rehearses and state is Review.PENDING and bool(skill.examples),
+        exportable=exports and state is Review.APPROVED,
+    )
+
+
+def script_view(path: str, sha256: str, shown: Mapping[str, bytes] | None) -> ScriptView:
+    """One script as the row draws it: its text only when the bytes shown are the approved ones."""
+    raw = None if shown is None else shown.get(path)
+    if raw is None or hashlib.sha256(raw).hexdigest() != sha256:
+        return ScriptView(path=path, sha256=sha256)
+    try:
+        return ScriptView(path=path, sha256=sha256, text=raw.decode("utf-8"))
+    except UnicodeDecodeError:
+        return ScriptView(path=path, sha256=sha256, is_text=False)
+
+
+def rehearsal_view(done: Rehearsal, people: Mapping[str, str]) -> SkillRehearsalView:
+    """One rehearsal, copied field by field, with the rehearser named when the directory can."""
+    return SkillRehearsalView(
+        behaved=done.behaved,
+        passed=done.passed,
+        rehearsed_at=done.at,
+        rehearsed_by=done.rehearsed_by,
+        rehearsed_by_name=people.get(done.rehearsed_by),
     )
 
 
@@ -1126,13 +1296,16 @@ def _people_in(
     library: Sequence[LibrarySkill],
     retirements: Mapping[str, Retirement],
     history: tuple[tuple[AssignmentRecord, ...], tuple[DetachmentRecord, ...]],
+    rehearsals: Mapping[str, Rehearsal] | None = None,
 ) -> set[str]:
-    """Everybody the page names: who added, decided, retired and assigned what it lists."""
+    """Everybody the page names: who added, decided, retired, assigned and rehearsed what it
+    lists."""
     return (
         {one.submitted_by for one in library}
         | {one.imported.reviewer for one in library if one.imported.reviewer}
         | {one.set_by for one in retirements.values()}
         | {one.assigned_by for one in history[0]}
+        | {one.rehearsed_by for one in (rehearsals or {}).values()}
     )
 
 
@@ -1159,20 +1332,29 @@ async def skills(request: Request, asked: Asked, listed: CatalogueQuery) -> Skil
     retirements = await store.retirements([one.digest for one in library])
     held_names = sorted({one.name for one in library})
     history = await store.assignment_history(held_names)
-    estate = await _estate(request, asked, _people_in(library, retirements, history))
+    reviews = may_review(asked.reach, asked.now)
+    adds = may_add(asked.reach, asked.now)
+    discloses = reviews or adds
+    contents = contents_of(request) if library else None
+    rehearsals = (
+        await contents.rehearsals([one.digest for one in library]) if contents is not None else {}
+    )
+    waiting_scripts = (
+        await _waiting_scripts(contents, library) if contents is not None and discloses else {}
+    )
+    estate = await _estate(request, asked, _people_in(library, retirements, history, rehearsals))
     pins = estate.pins
     # The names this reader was shown, and nothing else: see `chips`.
     shown = {pin.skill_name for pin in pins} | {one.name for one in library}
     filed = await store.categories(sorted(shown))
     registry = _tool_registry(request)
-    reviews = may_review(asked.reach, asked.now)
-    adds = may_add(asked.reach, asked.now)
     choices = tuple(
         AgentChoiceView(agent_id=one.agent_id, display_name=one.display_name)
         for one in estate.mine
         if readable and may_assign(asked.reach, agent_scope_row(one), asked.now)
     )
-    discloses = reviews or adds
+    rehearses = may_rehearse(asked.reach, asked.now)
+    exports = may_export(asked.reach, asked.now)
     rows = catalogue(
         pins,
         filed,
@@ -1198,6 +1380,10 @@ async def skills(request: Request, asked: Asked, listed: CatalogueQuery) -> Skil
                 against=compared_with(one, library),
                 retirement=retirements.get(one.digest),
                 people=estate.people,
+                rehearsal=rehearsals.get(one.digest),
+                script_bytes=waiting_scripts.get(one.digest),
+                rehearses=rehearses,
+                exports=exports,
             )
             for one in library
         ),
@@ -1207,6 +1393,22 @@ async def skills(request: Request, asked: Asked, listed: CatalogueQuery) -> Skil
         registry_is_absent=registry is None,
         categories=chips(filed, shown),
     )
+
+
+async def _waiting_scripts(
+    contents: SkillContents, library: Sequence[LibrarySkill]
+) -> dict[str, Mapping[str, bytes]]:
+    """The script bytes of every version waiting for a decision, for its reviewer to read.
+
+    Only the waiting ones, because those are the versions somebody is about to approve, and a
+    decided version's scripts are what its digest says they are; reading every version's bytes
+    for every page would be the whole library's code on every load.
+    """
+    return {
+        one.digest: await contents.scripts(one.digest)
+        for one in library
+        if one.imported.skill.script_files and review_state(one.imported) is Review.PENDING
+    }
 
 
 def library_row(
@@ -1315,6 +1517,7 @@ async def _view_for(
     is disclosed; the diff is against the library as read for the write.
     """
     store = library_of(request)
+    contents = contents_of(request)
     filed = await store.categories([one.name])
     retirement = (await store.retirements([one.digest])).get(one.digest)
     return library_view(
@@ -1327,6 +1530,10 @@ async def _view_for(
         categories=filed.get(one.name, ()),
         against=compared_with(one, [*library, one]),
         retirement=retirement,
+        rehearsal=(await contents.rehearsals([one.digest])).get(one.digest),
+        script_bytes=(await _waiting_scripts(contents, [one])).get(one.digest),
+        rehearses=may_rehearse(asked.reach, asked.now),
+        exports=may_export(asked.reach, asked.now),
     )
 
 
@@ -1483,11 +1690,18 @@ async def edit_skill(
     one = await library_of(request).skill(digest)
     if one is None:
         raise _refused_because("nothing was saved: no skill in the library has that digest")
+    # The version's scripts travel with the edit, held to their sha256 by `edited` (M12.4.11).
+    scripts = await contents_of(request).scripts(digest) if one.imported.skill.scripts else {}
     return await _added(
         request,
         asked,
         lambda held: edited(
-            one, body.content, by=asked.caller.principal.id, at=asked.now, library=held
+            one,
+            body.content,
+            by=asked.caller.principal.id,
+            at=asked.now,
+            library=held,
+            scripts=scripts,
         ),
         (),
     )
@@ -1540,12 +1754,15 @@ async def review_skill(
     one = await library.skill(digest)
     if one is None:
         raise _refused_because("nothing was decided: no skill in the library has that digest")
+    # The newest rehearsal of these bytes, which an approval of a version with examples needs.
+    newest = (await contents_of(request).rehearsals([digest])).get(digest)
     try:
         after = decided(
             one,
             reviewer=asked.caller.principal.id,
             approve=body.decision == "approve",
             at=asked.now,
+            rehearsal=newest,
         )
     except SkillLibraryError as refused:
         raise _refused_because(str(refused)) from None
@@ -1561,6 +1778,77 @@ async def review_skill(
         principal=asked.caller.principal.id,
     )
     return await _view_for(after, request, asked, await library.library(MAX_LIBRARY))
+
+
+@router.post(
+    "/skills/{digest}/rehearsals",
+    status_code=201,
+    response_model=LibrarySkillView,
+    responses=COMMON_RESPONSES,
+)
+async def rehearse_skill(
+    request: Request, digest: Digest, body: RehearsalAsked, asked: Asked
+) -> JSONResponse:
+    """Record a rehearsal of one version's example tasks: whether each behaved (M12.3.4).
+
+    The authority first, before the digest is looked up: whoever may add or review a skill. The
+    rehearsal is the caller's verdict, recorded in their name, and says nothing a model did; see
+    `brain.console.skill_library.A_REHEARSAL_IS_A_PERSON_S_VERDICT_UNTIL_A_MODEL_ANSWERS`. The
+    answer is the version's row, which says whether it may now be approved.
+    """
+    if not may_rehearse(asked.reach, asked.now):
+        log.info("skill not rehearsable", principal=asked.caller.principal.id)
+        raise _not_answerable()
+    library = library_of(request)
+    one = await library.skill(digest)
+    if one is None:
+        raise _refused_because("nothing was recorded: no skill in the library has that digest")
+    try:
+        done = rehearsal(one, body.behaved, by=asked.caller.principal.id, at=asked.now)
+    except SkillLibraryError as refused:
+        raise _refused_because(str(refused)) from None
+    await contents_of(request).rehearse(done, ent_hash=asked.reach.ent_hash(), trace_id=_trace_id())
+    log.info(
+        "skill rehearsed",
+        skill=one.name,
+        passed=done.passed,
+        principal=asked.caller.principal.id,
+    )
+    view = await _view_for(one, request, asked, await library.library(MAX_LIBRARY))
+    return JSONResponse(status_code=201, content=view.model_dump(mode="json"))
+
+
+@router.post(
+    "/skills/{digest}/exports", response_model=SkillPackageView, responses=COMMON_RESPONSES
+)
+async def export_skill(request: Request, digest: Digest, asked: Asked) -> SkillPackageView:
+    """One approved version as a package another install adds, undecided, through `POST /skills`
+    (M12.3.1).
+
+    The authority first, before the digest is looked up: the skill authority over everything, as
+    adding asks. Nothing is written. `brain.console.skill_library.exported` refuses a version that
+    is not approved and unchanged since, and holds every script's bytes to the approved sha256
+    before they leave; see `ONLY_AN_APPROVED_VERSION_IS_EXPORTED`.
+    """
+    if not may_export(asked.reach, asked.now):
+        log.info("skill not exportable", principal=asked.caller.principal.id)
+        raise _not_answerable()
+    one = await library_of(request).skill(digest)
+    if one is None:
+        raise _refused_because("nothing was exported: no skill in the library has that digest")
+    scripts = await contents_of(request).scripts(digest) if one.imported.skill.scripts else {}
+    try:
+        package = exported(one, scripts)
+    except SkillLibraryError as refused:
+        raise _refused_because(str(refused)) from None
+    log.info("skill exported", skill=one.name, principal=asked.caller.principal.id)
+    return SkillPackageView(
+        file_name=package.file_name,
+        content=base64.b64encode(package.content).decode("ascii"),
+        name=package.name,
+        version=package.version,
+        digest=package.digest,
+    )
 
 
 @router.post(

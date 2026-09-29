@@ -184,10 +184,11 @@ const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
     "no editable row, so no form is opened here.",
   "src/pages/skills/SkillForms.tsx":
     "Every form here opens behind a press the page cases do not make: Add a skill's drawer, Edit as a " +
-    "new version, or the Profile's assign and categories cards. Each says what it accepts above its " +
-    "fields, and a blank one cannot be sent: Add stays disabled until packageProblem accepts a package, " +
-    "Import until importProblem accepts the repository and commit or the address, and Save until the " +
-    "edit has text, which tests/skills-page.test.tsx holds for Add. The assign form only opens a " +
+    "new version, Rehearse examples, or the Profile's assign and categories cards. Each says what it " +
+    "accepts above its fields, and a blank one cannot be sent: Add stays disabled until packageProblem " +
+    "accepts a package, Import until importProblem accepts the repository and commit or the address, " +
+    "Save until the edit has text, and Record the rehearsal until every example has an answer, which " +
+    "tests/skills-page.test.tsx holds for Add and for the rehearsal. The assign form only opens a " +
     "confirmation naming an agent the API listed.",
   "src/pages/people/GrantDrawers.tsx": "Every form here opens in a drawer, which the kit renders outside the page's main landmark where " +
     "this harness looks. Each is submitted blank in tests/people-access-pages.test.tsx, which holds " +

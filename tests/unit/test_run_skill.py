@@ -68,18 +68,23 @@ from brain.tools.run_skill import (
 )
 from brain.tools.skills import (
     ImportedSkill,
+    ScriptFile,
     Skill,
     SkillError,
     SkillPin,
     SkillSource,
     SourceKind,
     execution_tool,
+    script_sha256,
     skill_from_markdown,
 )
 
 SRC = Path(__file__).resolve().parents[2] / "src" / "brain"
 
 REVIEWED_AT = datetime(2026, 9, 6, 9, 30, tzinfo=UTC)
+
+#: The bytes of the one script `_skill` declares, whose sha256 it records (M12.4.11).
+CHECK_PY = b"print('3 accounts expire this month')\n"
 
 
 # ------------------------------------------------------------------ fixtures and doubles
@@ -92,6 +97,7 @@ def _skill(*, body: str = "check the expiry, then open a ticket") -> Skill:
         version="1.0.0",
         scripts=("scripts/check.py",),
         body=body,
+        script_files=(ScriptFile(path="scripts/check.py", sha256=script_sha256(CHECK_PY)),),
     )
 
 
@@ -116,11 +122,21 @@ class _Library:
     cannot easily be made to produce: a skill that is not there, one that is there and
     unapproved, and one that has been edited since it was pinned."""
 
-    def __init__(self, entries: dict[tuple[str, str], tuple[SkillPin, ImportedSkill]]) -> None:
+    def __init__(
+        self,
+        entries: dict[tuple[str, str], tuple[SkillPin, ImportedSkill]],
+        scripts: dict[str, bytes] | None = None,
+    ) -> None:
         self._entries = entries
+        #: The bytes stored for each script path, whatever the digest; `CHECK_PY` unless a test
+        #: says otherwise (M12.4.11).
+        self._scripts = {"scripts/check.py": CHECK_PY} if scripts is None else scripts
 
     def pinned_skill(self, agent_id: str, skill_name: str) -> tuple[SkillPin, ImportedSkill] | None:
         return self._entries.get((agent_id, skill_name))
+
+    def script(self, digest: str, path: str) -> bytes | None:
+        return self._scripts.get(path)
 
 
 class _Runner:
@@ -431,7 +447,9 @@ def test_a_script_the_reviewed_skill_did_not_declare_never_runs() -> None:
     request = ScriptRequest(skill=skill.name, script="scripts/other.py")
 
     with pytest.raises(SkillScriptError, match="reviewed list"):
-        plan_run(skill, request, leash=ScriptLeash(), environment={}, reach_hash="")
+        plan_run(
+            skill, request, content=CHECK_PY, leash=ScriptLeash(), environment={}, reach_hash=""
+        )
 
 
 def test_a_script_path_that_leaves_the_skill_folder_never_runs() -> None:
@@ -453,7 +471,9 @@ def test_a_script_path_that_leaves_the_skill_folder_never_runs() -> None:
     for path in ("../../etc/shadow", "..\\..\\etc\\shadow", "/etc/shadow"):
         request = ScriptRequest(skill=skill.name, script=path)
         with pytest.raises(SkillError) as raised:
-            plan_run(skill, request, leash=ScriptLeash(), environment={}, reach_hash="")
+            plan_run(
+                skill, request, content=CHECK_PY, leash=ScriptLeash(), environment={}, reach_hash=""
+            )
         assert not isinstance(raised.value, SkillScriptError)
 
 
@@ -511,19 +531,20 @@ def test_the_sandbox_can_only_declare_that_egress_is_denied() -> None:
 
 def test_every_property_this_module_does_not_enforce_names_what_would_enforce_it() -> None:
     """**The test that keeps the module honest rather than the one that proves it works.**
-    Six of these ten properties are declarations a container has to honour, and a module that
+    Six of these eleven properties are declarations a container has to honour, and a module that
     listed them without naming an enforcer would be read as a guarantee by the next person.
 
     Delete this and `SANDBOX_PROPERTIES` becomes a list of things the sandbox does, which is
     a claim of isolation nobody implemented."""
     enforced = [prop for prop in SANDBOX_PROPERTIES if prop.enforced_here]
 
-    # Pinned at four rather than derived, for the reason `brain.ops.wiring` pins a memory
+    # Pinned at five rather than derived, for the reason `brain.ops.wiring` pins a memory
     # budget somewhere that is not the thing being budgeted: a count taken from the table
     # agrees with the table for every possible value, including the one where every row
-    # claims to be enforced. Each of these four has a named test above proving it.
-    assert len(enforced) == 4
-    assert len(unenforced_properties()) == len(SANDBOX_PROPERTIES) - 4
+    # claims to be enforced. Each of these five has a named test proving it, the fifth (bytes
+    # other than the approved ones) in `tests/unit/test_skill_packages.py`.
+    assert len(enforced) == 5
+    assert len(unenforced_properties()) == len(SANDBOX_PROPERTIES) - 5
     for prop in SANDBOX_PROPERTIES:
         assert prop.enforced_by.strip()
     assert len(sandbox_gaps()) == len(unenforced_properties())
@@ -554,7 +575,9 @@ def test_the_spec_carries_the_digest_so_a_runner_cannot_unpack_another_version()
     skill = _skill()
     request = ScriptRequest(skill=skill.name, script="scripts/check.py")
 
-    spec = plan_run(skill, request, leash=ScriptLeash(), environment={}, reach_hash="")
+    spec = plan_run(
+        skill, request, content=CHECK_PY, leash=ScriptLeash(), environment={}, reach_hash=""
+    )
 
     assert spec.digest == skill.digest()
     assert spec.script == "scripts/check.py"
