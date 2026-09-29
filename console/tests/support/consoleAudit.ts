@@ -518,6 +518,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/knowledge/verifications",
       "/api/v1/govern/learning",
       "/api/v1/govern/learning/undo",
+      "/api/v1/govern/learning/settings*",
       "/api/v1/govern/memory",
       "/api/v1/me/memory*",
       "/api/v1/records/{entity}",
@@ -678,9 +679,21 @@ export const AREAS: Readonly<Record<string, Area>> = {
   "The audit trail: who changed what, and when": {
     screens: ["/audit", "/audit/verify", "/audit/subject/:kind/:id", "/audit/subject/:kind/:id/:view", "/requirement-checks"],
     routes: ["/api/v1/audit*", "/api/v1/requirements/checks"],
-    tables: ["obs.audit_entry", "ops.sensitive_read", "ops.requirement_check"],
+    tables: [
+      "obs.audit_entry",
+      "ops.sensitive_read",
+      "ops.requirement_check",
+      "agent.browser_session",
+      "obs.trace_step",
+      "obs.trace_read",
+    ],
     installation: [],
-    gaps: [],
+    gaps: [
+      {
+        what: "A run's trace graph is stored masked and read only under its own role, and no screen reads it: TraceGraph draws a completed run and no route serves one.",
+        leaf: "M20.2.1",
+      },
+    ],
   },
   "System health and the state of every service": {
     screens: ["/", "/models", "/runs"],

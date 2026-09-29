@@ -1512,16 +1512,27 @@ def test_a_caller_with_no_grant_is_refused_each_screen_and_its_holder_is_answere
 
 def test_the_undo_is_the_only_write_on_the_three_screens(client: TestClient) -> None:
     """The application's own OpenAPI document declares GET on the three paths, POST on the undo,
-    and nothing else under either screen.
+    and nothing else under either screen but the Learning screen's two figures.
 
+    Those are `brain.tuning_routes`' (M16.6.8): a read and a PUT that saves an `ops.setting` row
+    within the product's bounds, which `tests/unit/test_learning_settings.py` follows to the row
+    and to the next recall, so they are listed here by name rather than excused by a prefix.
     Delete this and an edit or an upload can be added with nothing behind it, which is the control
     `docs/admin-console.md` says is worse than none: it renders and reaches no row."""
+    from brain.tuning_routes import LEARNING_SETTINGS_PATH
+
     paths = client.get("/openapi.json").json()["paths"]
+    settings = f"{API_PREFIX}{LEARNING_SETTINGS_PATH}"
 
     for path in (LIBRARY, LEARNING, MEMORY):
         assert set(paths[path]) == {"get"}
     assert set(paths[UNDO]) == {"post"}
-    assert [one for one in paths if one.startswith(f"{API_PREFIX}/govern/learning/")] == [UNDO]
+    assert set(paths[settings]) == {"get"}
+    assert set(paths[f"{settings}/{{name}}"]) == {"put"}
+    under_learning = sorted(
+        one for one in paths if one.startswith(f"{API_PREFIX}/govern/learning/")
+    )
+    assert under_learning == sorted([UNDO, settings, f"{settings}/{{name}}"])
     assert not [one for one in paths if one.startswith(f"{API_PREFIX}/govern/memory/")]
 
 
@@ -1538,6 +1549,7 @@ VIEWS: tuple[type[BaseModel], ...] = (
     MemoryTextView,
     RevisionView,
     SubjectMemoryView,
+    estate_routes.QueueAlarmView,
 )
 
 
@@ -1559,3 +1571,75 @@ def test_nothing_in_this_module_computes_a_reach() -> None:
     """Delete this and a route here can intersect two entitlement sets of its own, which is a
     second implementation of the invariant, and the copy on a screen is the one nobody audits."""
     assert intersections_in(inspect.getsource(estate_routes)) == ()
+
+
+# ------------------------------------------------------------ the Waiting view's alarm (M16.5.4)
+def _gated(n: int) -> tuple[Any, ...]:
+    """`n` scope widenings formed in web, each recallable by a reader holding the client grant.
+
+    Dated in 2019 on purpose: the alarm is not about the present, so nothing here may expire.
+    """
+    from brain.memory.digest import Learning
+    from brain.memory.formation import Formation, MemoryKind
+    from brain.memory.tiers import Change, propose
+
+    formed = datetime(2019, 3, 5, 9, 0, tzinfo=UTC)
+    return tuple(
+        Learning(
+            memory_id=f"m_gated_{number}",
+            proposal=propose(Change.SCOPE_WIDENING, subject=f"subject:{number}"),
+            formation=Formation(
+                principal_id="u_writer",
+                capabilities=(Capability(value="read:client_record"),),
+                scope=Scope.department("web"),
+                ent_hash="0" * 32,
+                formed_at=formed + timedelta(minutes=number),
+                kind=MemoryKind.ADAPTIVE,
+            ),
+            agent_id="a_desk",
+        )
+        for number in range(n)
+    )
+
+
+def _routed(learnings: Sequence[Any]) -> tuple[Any, ...]:
+    from brain.console.reach_view import TierThreeRouting
+
+    return tuple(
+        TierThreeRouting(memory_id=one.memory_id, department="web", back_to="agent:a_desk/learning")
+        for one in learnings
+    )
+
+
+def test_the_waiting_alarm_is_raised_past_one_sitting_of_the_rows_listed_and_no_others() -> None:
+    """**The alarm reads what the page lists and nothing it withholds.** One more gated change
+    than a sitting's worth, all listed, raises it; exactly a sitting's worth does not; and the same
+    sixteen stored with only three of them listed does not, because an alarm over rows the reader
+    is not shown is a count of them. With tier three withheld there is no alarm at all. Delete
+    this and the route can hand the domain every stored learning, and a banner tells a reader
+    there are more gated changes than the three on their page.
+
+    The figure is `brain.memory.review.QUEUE_ALARM_AT`, whose derivation from a sitting and a
+    review is that module's test; this holds the route to it, not the figure."""
+    from brain.memory.review import QUEUE_ALARM_AT
+
+    reader = EntitlementSet(
+        principal_id="u_reader",
+        grants=(
+            Grant(capability=Capability(value="read:client_record"), scope=Scope.department("web")),
+        ),
+    )
+    now = datetime(2019, 3, 6, 9, 0, tzinfo=UTC)
+    over = _gated(QUEUE_ALARM_AT + 1)
+    within = over[:QUEUE_ALARM_AT]
+
+    raised = estate_routes.waiting_alarm(_routed(over), over, reader=reader, now=now)
+    quiet = estate_routes.waiting_alarm(_routed(within), within, reader=reader, now=now)
+    partly = estate_routes.waiting_alarm(_routed(over[:3]), over, reader=reader, now=now)
+
+    assert raised is not None and raised.raised
+    assert raised.says[:1].isupper() and raised.says.endswith(".")
+    assert not re.search(r"[0-9]", raised.says)
+    assert quiet is not None and not quiet.raised
+    assert partly is not None and not partly.raised
+    assert estate_routes.waiting_alarm(None, over, reader=reader, now=now) is None
