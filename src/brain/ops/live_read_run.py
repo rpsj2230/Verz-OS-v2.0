@@ -27,6 +27,11 @@ a connector declares waits for a person before the worker reads it on a schedule
 (`connector_sync.plan_for`), and a question does not get round that by asking: a digest that
 disagrees is a read refused, with a constant sentence in the operator's log.
 
+**A record listed under another is named by both ids when it is read back (M11.7.3).** A
+Cloudflare DNS record's index id is its zone's and its own, and the lookup lays both into the path
+from it; the record read back is named the same way, so `brain.ops.live_records` matches it to its
+index row.
+
 **The socket's timeout is the live read's.** The call is blocking and runs in a thread, which the
 executor cannot cancel, so the caller is built with `live_read.LIVE_READ_TIMEOUT_MS` as its timeout
 and the thread ends when the executor stops waiting for it rather than thirty seconds later.
@@ -35,7 +40,7 @@ Scope: every part that touches the world is handed in (the keys, the caller, the
 clock), so the tests drive it over recorded replies, and `live_records_for` is the one place the
 real ones are chosen.
 
-Task ids: M11.9.2, M11.5.1, M11.2.5
+Task ids: M11.9.2, M11.5.1, M11.2.5, M11.7.3
 """
 
 from __future__ import annotations
@@ -51,7 +56,7 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.connectors.contract import ConnectorContractError, FetchRequest
-from brain.connectors.declaration import ConnectorDeclaration, shipped
+from brain.connectors.declaration import ConnectorDeclaration, listed_under, shipped
 from brain.connectors.live_read import (
     LIVE_READ_TIMEOUT_MS,
     RECORD_ID_FILTER,
@@ -181,6 +186,10 @@ class ConnectedSources:
                 "Authorization": authorization(reading.key_scheme(), key),
             }
             try:
+                # A record listed under another is named by both ids, and what is read back is
+                # named the same way. See `brain.connectors.declaration.A_RECORD_LISTED_UNDER_...`.
+                under = listed_under(reading, request.entity)
+                parent_id = None if under is None else under.split(ids[0])[0]
                 # The lookup's own one-record call where it names one, otherwise the reading's
                 # list narrowed to the record. See `A_RECORD_IS_READ_BY_THE_CALL_THAT_HOLDS_IT`.
                 own = live.operation(
@@ -218,7 +227,10 @@ class ConnectedSources:
                 )
             except Exception:
                 return _refused(connection.connector, ADDRESS_OR_SHAPE)
-            return LiveReply(outcome=reply.call, rows=reply.rows)
+            rows = reply.rows
+            if rows is not None and under is not None and parent_id is not None:
+                rows = under.named(rows, parent_id)
+            return LiveReply(outcome=reply.call, rows=rows)
         finally:
             lease.close(self._clock())
 

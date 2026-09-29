@@ -232,6 +232,10 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     assert by_module["brain.ops.acceptance_checks_sources"] == [
         "a_connected_source_answers_on_ask_from_its_index_and_its_source",
     ]
+    # Cloudflare read live and a DNS change held; `tests/unit/test_acceptance_cloudflare.py`.
+    assert by_module["brain.ops.acceptance_checks_cloudflare"] == [
+        "cloudflare_is_read_live_and_a_dns_change_waits_for_a_person",
+    ]
     assert by_module["brain.ops.acceptance_checks_organisation"] == [
         "departments_a_staff_source_names_are_founded_once",
         "the_staff_sync_places_people_where_its_source_says",

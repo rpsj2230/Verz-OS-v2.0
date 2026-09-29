@@ -616,6 +616,7 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.connectors.declaration:SourceReading.retry_after": Repeat.READS,
         "brain.connectors.declaration:SourceReading.allowance_spent": Repeat.READS,
         "brain.connectors.declaration:SourceReading.projected": Repeat.READS,
+        "brain.connectors.declaration:ReadsListedUnder.listed_under": Repeat.READS,
         # A run's vault lease (0093): a child token minted per attempt that expires at its own
         # TTL, read through once and revoked at the attempt's end, where a second revoke finds it
         # gone. See `brain.ops.connector_lease`.

@@ -95,6 +95,11 @@ SLOT_SCOPES: Final[Mapping[str, SlotScopes]] = MappingProxyType(
         one.connector: one
         for one in (
             SlotScopes(
+                "cloudflare",
+                request=("Zone Read", "DNS Read", "Analytics Read"),
+                refuse=("DNS Write", "any Edit permission", "the Global API Key"),
+            ),
+            SlotScopes(
                 "freshdesk",
                 request=("an agent API key with read access",),
                 refuse=("an admin key, which can change SLAs and delete tickets",),
