@@ -86,9 +86,8 @@ from brain.attribution import of_request, trace_of_request
 from brain.core.entitlement import EntitlementSet
 from brain.core.envelope import TypedResult
 from brain.core.errors import Absent, Failed
-from brain.core.redaction import redact
 from brain.gate.entitlement_store import RESOLVE, entitlements_from
-from brain.gate.model_lane import PASSAGE_POLICY
+from brain.gate.model_lane import redact_passages
 from brain.knowledge.chunk_store import ChunkStoreError
 from brain.knowledge.document_tools import (
     KNOWLEDGE_ENTITY,
@@ -897,12 +896,11 @@ async def version_text(
             visibility=target.visibility.level.value,
             owner_id=target.owner_id,
         )
-        kept = redact(
+        kept = redact_passages(
             TypedResult[KnowledgePassage](
                 records=(record,), source=f"{KNOWLEDGE_TOOL_PREFIX}.history"
             ),
             entitlement=asked.reach,
-            policy=PASSAGE_POLICY,
             now=asked.now,
         ).payload.records
         if kept and kept[0].get("document"):
