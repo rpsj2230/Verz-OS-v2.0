@@ -293,11 +293,6 @@ const CLOSED_VOCABULARIES: Readonly<Record<string, Readonly<Record<string, strin
       "The periods are the console's own windows over the route's start and end, the same in every " +
       "install, and the log is not narrowed per reader, so a window names nothing about what exists.",
   },
-  "/adoption": {
-    Period:
-      "The periods are the console's own windows over the route's days parameter, the same in " +
-      "every install, and a line for a department is drawn for every window alike.",
-  },
 };
 
 /** The document path a request path was asked of, or null when no route matches it. */

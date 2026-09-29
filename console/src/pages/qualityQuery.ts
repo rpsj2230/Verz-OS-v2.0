@@ -16,7 +16,10 @@
  * **A reader who may not see a run is sent the body of an install with none**, including that a
  * run is owed, and this module reads both the same way. The sentence for no run is true of both.
  *
- * Task ids: M27.7.19
+ * **The runs in a period arrive listed, newest first**, and a reader who may not see a run is sent
+ * none and nothing cut off, the body of an install whose canaries did not run in it.
+ *
+ * Task ids: M27.7.19, M27.16.1
  */
 
 import type { components } from "../api/schema";
@@ -34,6 +37,34 @@ export const A_PASS_IS_DRAWN_ONLY_FOR_A_RUN_THE_API_CALLS_PASSED =
 
 /** Where the API keeps this screen. */
 export const QUALITY_API_PATH = "/report/quality";
+
+/** The window parameter the route declares, in days. */
+export const DAYS_PARAMETER = "days";
+
+/** The whole request for the runs in the last `days`. */
+export function qualityApiPathFor(days: number): string {
+  return `${QUALITY_API_PATH}?${DAYS_PARAMETER}=${String(days)}`;
+}
+
+/** Each run state as the page's word for it. A state it does not know is shown as sent. */
+export const RUN_RESULT_WORDS: Readonly<Record<string, string>> = Object.freeze({
+  passed: "Passed",
+  failed: "Failed",
+  declined: "Report only",
+  unfinished: "Unfinished",
+});
+
+export function resultWords(state: string): string {
+  return RUN_RESULT_WORDS[state] ?? state;
+}
+
+/** How many of the runs listed ended each way. Counts of rows the reader was shown, nothing else. */
+export function runCounts(runs: readonly CanaryRunBody[]): { readonly passed: number; readonly failed: number } {
+  return {
+    passed: runs.filter((one) => one.state === "passed").length,
+    failed: runs.filter((one) => one.state === "failed").length,
+  };
+}
 
 /** The console address, at the screen's own key in `brain.console.screens`. */
 export const QUALITY_PATH = "/quality";
@@ -58,6 +89,8 @@ export function readQuality(payload: unknown): QualityBody | null {
     canary_interval_seconds?: unknown;
     findings_are_recorded?: unknown;
     evaluation_runs_are_recorded?: unknown;
+    runs?: unknown;
+    runs_truncated?: unknown;
   };
   // `typeof null` is "object", so this admits a run and an absent run and refuses a missing field.
   if (typeof body.last_canary_run !== "object") {
@@ -68,7 +101,9 @@ export function readQuality(payload: unknown): QualityBody | null {
     typeof body.canaries_started !== "boolean" ||
     typeof body.canary_interval_seconds !== "number" ||
     typeof body.findings_are_recorded !== "boolean" ||
-    typeof body.evaluation_runs_are_recorded !== "boolean"
+    typeof body.evaluation_runs_are_recorded !== "boolean" ||
+    !Array.isArray(body.runs) ||
+    typeof body.runs_truncated !== "boolean"
   ) {
     return null;
   }

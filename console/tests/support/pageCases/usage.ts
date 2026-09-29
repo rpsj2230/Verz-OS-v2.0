@@ -8,9 +8,8 @@
 import { type PageCase, UNBROKEN } from "../pageFixtures";
 
 export const PAGES: Readonly<Record<string, PageCase>> = {
-  // Usage and cost. A department and a person are both identifiers with no break in them, one in
-  // each table, and a model name is one too, in the token table the API sends in place of the
-  // not-measured sentences it used to.
+  // Usage. A department and a person's name are both values with no break in them, one in each
+  // card of bars, and a model name is one too, in the tokens card.
   "/usage": {
     address: "/usage",
     signedIn: true,
@@ -20,7 +19,7 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         start: "2019-02-26T09:00:00Z",
         end: "2019-03-05T09:00:00Z",
         departments: [{ department: UNBROKEN, questions: 3, people: 1 }],
-        people: [{ person: UNBROKEN, questions: 3 }],
+        people: [{ person: UNBROKEN, questions: 3, name: UNBROKEN }],
         questions: 3,
         machine_included: false,
         not_measured: [],

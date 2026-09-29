@@ -325,3 +325,45 @@ def test_an_outcome_with_no_state_is_reported() -> None:
 
     assert len(found) == 1
     assert "'skipped'" in found[0]
+
+
+@pytest.mark.parametrize(
+    "entitlement",
+    [reader(None), reader(Scope.department("support")), reader(Scope.unrestricted(), expired=True)],
+    ids=["no_grant", "department_scoped", "expired"],
+)
+def test_a_window_of_runs_is_withheld_whole_and_its_cut_off_is_never_said_to_a_withheld_reader(
+    entitlement: EntitlementSet,
+) -> None:
+    """The runs in a period are the last run said many times, so the same reader is refused them.
+
+    A history longer than the bound, so a screen that decided the cut-off before the reader would
+    tell a withheld reader the list was cut off, which says the canaries ran. What breaks if this
+    is deleted: a department admin reads a period's red runs off the Quality page, or learns from
+    a truncated flag that there were more runs than a page holds.
+    """
+    history = [a_run(RunState.FAILED), a_run(RunState.PASSED), a_run(RunState.FAILED)]
+    never_run = quality_for_reader(None, reader(Scope.unrestricted()), now=NOW, started=True)
+
+    withheld = quality_for_reader(
+        a_run(), entitlement, now=NOW, started=True, history=history, listed=2
+    )
+
+    assert withheld == never_run
+    assert (withheld.runs, withheld.runs_truncated) == ((), False)
+
+
+def test_a_whole_install_reader_is_shown_the_runs_to_the_bound_and_told_of_a_cut_off() -> None:
+    """The positive case: the runs arrive in the order given, to the bound, and past it says so.
+
+    What breaks if this is deleted: the rule above is satisfied by a screen that lists no run to
+    anybody, and the Quality page's period switch changes nothing.
+    """
+    history = [a_run(RunState.FAILED), a_run(RunState.PASSED), a_run(RunState.FAILED)]
+    permitted = reader(Scope.unrestricted())
+
+    cut = quality_for_reader(None, permitted, now=NOW, started=True, history=history, listed=2)
+    whole = quality_for_reader(None, permitted, now=NOW, started=True, history=history, listed=3)
+
+    assert (cut.runs, cut.runs_truncated) == (tuple(history[:2]), True)
+    assert (whole.runs, whole.runs_truncated) == (tuple(history), False)

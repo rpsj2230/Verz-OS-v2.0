@@ -24,7 +24,10 @@
  * sent and does not translate it: "overdue" beside an answer described as "ageing" would be a
  * second vocabulary for one fact.
  *
- * Task ids: M27.7.15
+ * **The Spend dashboard asks for a period and a dimension** (`spendReportPath`) and draws no figure
+ * while the report says cost is not recorded (`costNotRecorded`).
+ *
+ * Task ids: M27.7.15, M27.16.1
  */
 
 import type { components } from "../api/schema";
@@ -187,4 +190,52 @@ export function freshnessLine(report: SpendReportBody): string {
     return report.freshness;
   }
   return `${report.freshness}, as of ${report.as_of}`;
+}
+
+// ------------------------------------------------------------------------ the Spend dashboard
+
+/** The parameter the route takes for the first day a report covers, inclusive, in UTC. */
+export const SINCE_PARAMETER = "since";
+
+/**
+ * The dimensions the Spend page offers, each a word a reader already uses: a department, a model,
+ * a lane. The route also groups by person and by agent, whose keys are identifiers, so the page
+ * leaves those to the Usage page, which names people.
+ */
+export const SPEND_DIMENSIONS: readonly { readonly value: string; readonly label: string }[] = [
+  { value: "department", label: "Department" },
+  { value: "model", label: "Model" },
+  { value: "lane", label: "Lane" },
+];
+
+/** The UTC day `days` before `now`, as the route's `YYYY-MM-DD`. */
+export function daysBefore(now: Date, days: number): string {
+  const day = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - days));
+  return day.toISOString().slice(0, 10);
+}
+
+/** The whole request for one dimension over the last `days`, ending today. */
+export function spendReportPath(dimension: string, days: number, now: Date): string {
+  return `${SPEND_API_PATH}?${DIMENSION_PARAMETER}=${dimension}&${SINCE_PARAMETER}=${daysBefore(now, days)}`;
+}
+
+/**
+ * Why cost is not recorded, when the report says so, or null when its figures are measurements.
+ *
+ * The route names `cost` in `not_recorded` while nothing writes cost or no model is priced in the
+ * install's currency, which is the Overview's own rule and sentence. A report over no cost rows
+ * then reads 0.00 for a company that has spent money, so the page draws the sentence instead.
+ */
+export function costNotRecorded(report: SpendReportBody): string | null {
+  const said = (report as { not_recorded?: unknown }).not_recorded;
+  if (!Array.isArray(said)) {
+    return null;
+  }
+  for (const one of said) {
+    const entry = one as { figure?: unknown; why?: unknown };
+    if (entry.figure === "cost" && typeof entry.why === "string" && entry.why.trim() !== "") {
+      return entry.why;
+    }
+  }
+  return null;
 }
