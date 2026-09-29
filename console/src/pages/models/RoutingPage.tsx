@@ -1,53 +1,49 @@
 /**
- * The Routing page on the shared kit: the failover matrix as the owner drew it on 2026-09-03, one
- * table of Complexity, Step, Provider, Model and Role, and what changing it takes.
+ * The Routing page on the shared kit: the failover matrix as the owner drew it on 2026-09-03 and
+ * restated on 2026-09-29 (`FailoverMatrixCard`, the card the Models page draws too), and what
+ * changing it takes.
  *
  * **Top to bottom**: a change the gate just held, with why and the three steps that get it through;
- * a notice when a level cannot answer; the matrix; one step's editor when its address is open; the
- * golden questions every change is asked; the recent changes; and, under Advanced, each level's
- * numbers and the residency rules (`components/RoutingSettings.tsx`), which are tuning.
+ * a notice when a level cannot answer; one line, before anybody tries, when no golden question is
+ * recorded, because every change would be held; the matrix; the golden questions every change is
+ * asked; the recent changes; and, under Advanced, each level's numbers and the residency rules
+ * (`components/RoutingSettings.tsx`), which are tuning. One step's editor opens at its own address
+ * in a drawer over the matrix.
  *
  * **Every change goes through the matrix gate, and says so before it is sent.** Adding, editing,
  * moving and retiring a step are each confirmed with a sentence saying it is tried against the
  * golden questions first; the answer is the change as `ops.routing_change` recorded it, applied or
  * held, and a held one is drawn above the matrix. The matrix is then asked again, never patched.
  *
- * **What is asked, and of whom.** The matrix is `GET /routing/rungs` under the list contract, in
- * the chain's one order with a search, the level, provider and in-use filters the route declares,
- * and "Show more" when it says there is more; a level is numbered from the rows drawn. The plan
+ * **What is asked, and of whom.** The matrix is `GET /routing/rungs`, the whole chain in one page
+ * (`CHAIN_PAGE_SIZE` is every step the route loads) in the chain's one order, with "Show more" only
+ * when the API says there is more; a level is numbered from the rows drawn. The plan
  * (`GET /models/providers`) gives each step's role as the next call derives it and the marker on a
  * step that will not answer. Both are asked for every reader. The changes, the golden questions and
  * the people are asked only when the matrix says this reader may change it, which is presentation:
  * every write is refused by the route without the matrix write over everything.
  *
- * **What was removed from the old screens**: the id and deployment columns (under Advanced in a
- * step's editor); the Models page's second copy of the matrix and its Edit link here; "by" and a
- * principal id on every change; the figures and each step's health table; and a paragraph on the
- * page's own implementation.
+ * **What was removed on 2026-09-29, to match the owner's screenshot**: the card's lede, its search
+ * and its three filters, the heavy line between levels, the square default pill, the visible
+ * column of buttons, and the editor drawn as a panel under the table. Earlier: the id and
+ * deployment columns (under Advanced in a step's editor), the Models page's second copy of the
+ * matrix, "by" and a principal id on every change, the figures and each step's health table, and a
+ * paragraph on the page's own implementation.
  *
  * Task ids: M5.3.3, M27.15.38, M5.6.2, M5.7.2, M27.16.1
  */
 
-import { ArrowDown, ArrowUp, Download, MoreHorizontal, Plus } from "lucide-react";
+import { Download, Plus } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { request } from "../../api/client";
 import type { ApiFailure } from "../../api/errors";
 import { useResource } from "../../api/useResource";
-import { ConfirmDialog, EmptyState, FailureState, ListToolbar, LoadingState, Note, PageHeader, SectionCard } from "../../components/kit";
-import { NOTHING_MATCHES, SHOW_MORE } from "../../components/ListControls";
-import { narrows } from "../../components/listing";
+import { ConfirmDialog, FailureState, LoadingState, Note, PageHeader, SectionCard } from "../../components/kit";
+import { SHOW_MORE } from "../../components/ListControls";
 import { useListing } from "../../components/useListing";
 import { RoutingSettings } from "../../components/RoutingSettings";
 import { Button } from "../../components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "../../components/ui/dropdown-menu";
-import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
 import {
   APPLIED,
   changeWords,
@@ -61,43 +57,32 @@ import {
   readGolden,
   type ChangeRow,
 } from "../matrixGateQuery";
-import { CHAIN_PAGE_SIZE, MATRIX_API_PATH, MATRIX_FILTERS, MATRIX_PATH, readMatrixPage, rungAddress, type RungRow } from "../matrixQuery";
-import {
-  exhaustedSentence,
-  LEVELS_CANNOT_ANSWER,
-  NO_STEP_FOR_THE_LEVEL,
-  PROVIDERS_API_PATH,
-  readProviders,
-} from "../modelsQuery";
+import { CHAIN_PAGE_SIZE, MATRIX_API_PATH, MATRIX_PATH, readMatrixPage, rungAddress, type RungRow } from "../matrixQuery";
+import { exhaustedSentence, LEVELS_CANNOT_ANSWER, PROVIDERS_API_PATH, readProviders } from "../modelsQuery";
 import { AddStep } from "./AddStep";
-import { GoldenQuestions } from "./GoldenQuestions";
+import { FailoverMatrixCard, type StepAsk } from "./FailoverMatrixCard";
+import { GOLDEN_QUESTION_FIELD, GoldenQuestions } from "./GoldenQuestions";
 import { HeldExplanation } from "./HeldChange";
 import { EXPORT_API_PATH, MODULE_LABEL, moveStepApiPath, retireStepApiPath, saveText } from "./modelsActions";
-import { MarkerPill, RolePill } from "./pills";
 import { dayWords } from "./providerWords";
 import { RungEditor } from "./RungEditor";
 import {
+  ADD_A_GOLDEN_QUESTION,
+  HELD_UNTIL_A_GOLDEN_QUESTION,
   KEEP_STEP,
   matrixLines,
-  MOVE_DOWN,
   MOVE_STEP,
-  MOVE_UP,
   moveConsequence,
   moveQuestion,
   RETIRE_STEP,
   retireConsequence,
   retireQuestion,
-  type MatrixLine,
 } from "./routingWords";
 
+export { FAILOVER_MATRIX } from "./FailoverMatrixCard";
+
 export const ROUTING_HEADING = "Routing";
-export const ROUTING_LEDE = "Which model answers each level of question, and what happens when it fails.";
-export const FAILOVER_MATRIX = "Failover matrix: what answers, and what happens when it fails";
-export const MATRIX_LEDE =
-  "A question is answered by its level's first step. When a step fails, is too slow or is turned away, the next step is tried.";
 export const LOADING_MATRIX = "Loading the failover matrix.";
-export const FILTERS_LABEL = "Narrow the matrix";
-export const SEARCH_HINT = "Search steps";
 export const ADD_A_STEP = "Add a step";
 export const EXPORT = "Export";
 export const EXPORT_SAYS = "Downloads the steps, the providers and each level's numbers as a file, with no key in it.";
@@ -109,121 +94,22 @@ export const CHANGES_LEDE = "Each change to the matrix and whether it was applie
 export const ADVANCED = "Advanced";
 export const SETTINGS_HEADING = "Each level's context window and escalation, and the rules on where a department's questions may be answered.";
 
-/** A write the matrix's own rows send, held while its confirmation is open. */
-type Pending =
-  | { readonly kind: "move"; readonly line: MatrixLine; readonly rungId: string; readonly step: number }
-  | { readonly kind: "retire"; readonly line: MatrixLine; readonly rungId: string };
-
-function StepMenu({ line, onAsk }: { readonly line: MatrixLine; readonly onAsk: (pending: Pending) => void }) {
-  const rung = line.rung;
-  if (rung === null || line.step === null) {
-    return null;
-  }
-  const step = line.step;
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon-sm" className="size-11 sm:size-8" aria-label={`Actions for step ${String(step)} of ${line.provider} ${line.model}`}>
-          <MoreHorizontal aria-hidden />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-52">
-        <DropdownMenuItem asChild>
-          <Link to={rungAddress(rung.id)}>Edit</Link>
-        </DropdownMenuItem>
-        {step > 1 ? (
-          <DropdownMenuItem
-            onSelect={() => {
-              onAsk({ kind: "move", line, rungId: rung.id, step: step - 1 });
-            }}
-          >
-            <ArrowUp aria-hidden /> {MOVE_UP}
-          </DropdownMenuItem>
-        ) : null}
-        {step < line.of ? (
-          <DropdownMenuItem
-            onSelect={() => {
-              onAsk({ kind: "move", line, rungId: rung.id, step: step + 1 });
-            }}
-          >
-            <ArrowDown aria-hidden /> {MOVE_DOWN}
-          </DropdownMenuItem>
-        ) : null}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onSelect={() => {
-            onAsk({ kind: "retire", line, rungId: rung.id });
-          }}
-        >
-          {RETIRE_STEP}
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
+/** Takes the reader to the golden question's first field, where the next one is added. */
+function goToGoldenQuestion(): void {
+  const field = document.getElementById(GOLDEN_QUESTION_FIELD);
+  field?.scrollIntoView({ block: "center" });
+  field?.focus();
 }
 
-function FailoverMatrix({
-  lines,
-  editable,
-  openId,
-  onAsk,
-}: {
-  readonly lines: readonly MatrixLine[];
-  readonly editable: boolean;
-  readonly openId: string | undefined;
-  readonly onAsk: (pending: Pending) => void;
-}) {
+/** The one line said before anybody tries a change that would be held for want of a golden question. */
+export function GoldenFirst() {
   return (
-    <Table className="text-[13px]">
-      <TableCaption className="sr-only">{FAILOVER_MATRIX}</TableCaption>
-      <TableHeader className="bg-sunk">
-        <TableRow className="hover:bg-transparent">
-          <TableHead scope="col">Complexity</TableHead>
-          <TableHead scope="col">Step</TableHead>
-          <TableHead scope="col">Provider</TableHead>
-          <TableHead scope="col">Model</TableHead>
-          <TableHead scope="col">Role</TableHead>
-          {editable ? (
-            <TableHead scope="col" className="w-12">
-              <span className="sr-only">Actions</span>
-            </TableHead>
-          ) : null}
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {lines.map((line) => (
-          <TableRow
-            key={line.key}
-            data-state={line.rung !== null && line.rung.id === openId ? "selected" : undefined}
-            className={line.level === null ? undefined : "border-t-2 border-t-line"}
-          >
-            <TableCell className="font-semibold text-ink">{line.level ?? ""}</TableCell>
-            <TableCell className="tabular-nums">{line.step === null ? "" : String(line.step)}</TableCell>
-            {line.rung === null ? (
-              <TableCell colSpan={editable ? 4 : 3} className="text-dim">
-                {NO_STEP_FOR_THE_LEVEL}
-              </TableCell>
-            ) : (
-              <>
-                <TableCell className="[overflow-wrap:anywhere] whitespace-normal">{line.provider}</TableCell>
-                <TableCell className="font-mono text-[12px] [overflow-wrap:anywhere] whitespace-normal">{line.model}</TableCell>
-                <TableCell>
-                  <span className="flex flex-wrap items-center gap-1.5">
-                    <RolePill role={line.role} />
-                    {line.marker === null ? null : <MarkerPill marker={line.marker} />}
-                  </span>
-                </TableCell>
-                {editable ? (
-                  <TableCell className="w-12 py-1.5">
-                    <StepMenu line={line} onAsk={onAsk} />
-                  </TableCell>
-                ) : null}
-              </>
-            )}
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+    <p data-slot="golden-first" className="m-0 flex flex-wrap items-baseline gap-x-2 text-[13px] text-body">
+      <span>{HELD_UNTIL_A_GOLDEN_QUESTION}</span>
+      <Button variant="link" className="h-auto min-h-11 p-0 text-[13px] text-acc-text sm:min-h-0" onClick={goToGoldenQuestion}>
+        {ADD_A_GOLDEN_QUESTION}
+      </Button>
+    </p>
   );
 }
 
@@ -251,9 +137,10 @@ function RecentChanges({ changes }: { readonly changes: readonly ChangeRow[] }) 
 
 export function RoutingPage() {
   const { rungId } = useParams();
+  const navigate = useNavigate();
   // A counter, so two changes in a row ask again twice. Never drawn.
   const [version, setVersion] = useState(0);
-  const listing = useListing<RungRow>(MATRIX_API_PATH, { choices: MATRIX_FILTERS, version, pageSize: CHAIN_PAGE_SIZE });
+  const listing = useListing<RungRow>(MATRIX_API_PATH, { version, pageSize: CHAIN_PAGE_SIZE });
   const plan = useResource<unknown>(PROVIDERS_API_PATH, version);
   const page = useMemo(() => readMatrixPage(listing.body), [listing.body]);
   const body = useMemo(() => readProviders(plan.data), [plan.data]);
@@ -261,7 +148,7 @@ export function RoutingPage() {
   const changes = useResource<unknown>(editable ? CHANGES_API_PATH : null, version);
   const golden = useResource<unknown>(editable ? GOLDEN_API_PATH : null, version);
   const [decided, setDecided] = useState<ChangeRow | null>(null);
-  const [pending, setPending] = useState<Pending | null>(null);
+  const [pending, setPending] = useState<StepAsk | null>(null);
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
@@ -277,7 +164,7 @@ export function RoutingPage() {
   }, []);
 
   const send = useCallback(
-    (asked: Pending) => {
+    (asked: StepAsk) => {
       setBusy(true);
       void (async () => {
         const result =
@@ -312,20 +199,11 @@ export function RoutingPage() {
     })();
   }, []);
 
-  const onAsk = (asked: Pending) => {
-    setFailure(null);
-    setPending(asked);
-  };
-
-  let matrixBody;
+  let state;
   if (listing.failure !== null) {
-    matrixBody = <FailureState failure={listing.failure} />;
+    state = <FailureState failure={listing.failure} />;
   } else if (listing.busy) {
-    matrixBody = <LoadingState label={LOADING_MATRIX} />;
-  } else if (page.rungs.length === 0 && narrows(listing.question)) {
-    matrixBody = <EmptyState title={NOTHING_MATCHES} description="Change the search or clear a filter." />;
-  } else {
-    matrixBody = <FailoverMatrix lines={lines} editable={editable} openId={rungId} onAsk={onAsk} />;
+    state = <LoadingState label={LOADING_MATRIX} />;
   }
 
   return (
@@ -333,7 +211,6 @@ export function RoutingPage() {
       <PageHeader
         crumbs={[{ label: MODULE_LABEL }, { label: ROUTING_HEADING }]}
         title={ROUTING_HEADING}
-        lede={ROUTING_LEDE}
         primary={
           editable ? (
             <Button
@@ -378,11 +255,13 @@ export function RoutingPage() {
           ))}
         </section>
       )}
+      {editable && goldenCount === 0 && decided === null ? <GoldenFirst /> : null}
 
       {adding && editable ? (
         <AddStep
           providers={body?.providers ?? []}
           plan={body?.rungs ?? []}
+          goldenCount={goldenCount}
           onDecided={onDecided}
           onClose={() => {
             setAdding(false);
@@ -390,29 +269,61 @@ export function RoutingPage() {
         />
       ) : null}
 
-      <SectionCard title={FAILOVER_MATRIX} lede={MATRIX_LEDE}>
-        <div className="flex min-w-0 flex-col gap-3">
-          <ListToolbar label={FILTERS_LABEL} listing={listing} choices={MATRIX_FILTERS} searchHint={SEARCH_HINT} />
-          {matrixBody}
-          {listing.moreFailure === null ? null : <FailureState failure={listing.moreFailure} />}
-          {listing.more ? (
-            <Button
-              variant="outline"
-              className="min-h-11 self-start sm:min-h-9"
-              disabled={listing.fetchingMore}
-              onClick={() => {
-                listing.showMore();
-              }}
-            >
-              {SHOW_MORE}
-            </Button>
-          ) : null}
-          {page.truncated ? <Note>{THERE_IS_MORE}</Note> : null}
-        </div>
-      </SectionCard>
+      <FailoverMatrixCard
+        lines={lines}
+        openId={rungId}
+        state={state}
+        acts={
+          editable
+            ? {
+                open: (line) => {
+                  if (line.rung !== null) {
+                    void navigate(rungAddress(line.rung.id));
+                  }
+                },
+                ask: (asked) => {
+                  setFailure(null);
+                  setPending(asked);
+                },
+              }
+            : undefined
+        }
+        footer={
+          listing.moreFailure === null && !listing.more && !page.truncated ? undefined : (
+            <>
+              {listing.moreFailure === null ? null : <FailureState failure={listing.moreFailure} />}
+              {listing.more ? (
+                <Button
+                  variant="outline"
+                  className="min-h-11 self-start sm:min-h-9"
+                  disabled={listing.fetchingMore}
+                  onClick={() => {
+                    listing.showMore();
+                  }}
+                >
+                  {SHOW_MORE}
+                </Button>
+              ) : null}
+              {page.truncated ? <Note>{THERE_IS_MORE}</Note> : null}
+            </>
+          )
+        }
+      />
 
-      {open !== null && editable ? <RungEditor key={open.key} line={open} onDecided={onDecided} /> : null}
-      {rungId !== undefined && open === null && !listing.busy && listing.failure === null && !narrows(listing.question) ? (
+      {open !== null && editable ? (
+        <RungEditor
+          key={open.key}
+          line={open}
+          onDecided={(change) => {
+            onDecided(change);
+            void navigate(MATRIX_PATH);
+          }}
+          onClose={() => {
+            void navigate(MATRIX_PATH);
+          }}
+        />
+      ) : null}
+      {rungId !== undefined && open === null && !listing.busy && listing.failure === null ? (
         <Note>
           {NO_SUCH_STEP} <Link to={MATRIX_PATH}>{ROUTING_HEADING}</Link>
         </Note>
