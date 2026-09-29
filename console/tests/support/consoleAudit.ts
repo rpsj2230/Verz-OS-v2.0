@@ -221,13 +221,21 @@ export const AREAS: Readonly<Record<string, Area>> = {
   },
   "System settings and application configuration": {
     screens: ["/install", "/settings", "/limits", "/connections", "/first-run", "/first-run/staff-list"],
-    routes: ["/api/v1/install", "/api/v1/install/settings*", "/api/v1/install/limits", "/api/v1/install/capacity", "/setup/*"],
+    routes: [
+      "/api/v1/install",
+      "/api/v1/install/settings*",
+      "/api/v1/install/limits",
+      "/api/v1/install/tuning*",
+      "/api/v1/install/capacity",
+      "/setup/*",
+    ],
     tables: ["ops.setting", "ops.budget_version"],
     installation: ["INSTALL_LOCALES", "INSTALL_CURRENCY", "INSTALL_TIME_ZONE"],
     gaps: [
       {
-        what: "Limits and budgets are read and never changed.",
-        because: "No route writes ops.budget_version or a ceiling; a limit is a release today.",
+        what: "Spending budgets are read and never changed.",
+        because:
+          "No route writes ops.budget_version. The request windows and capacity budgets are changed on Rate limits (brain.tuning_routes, since 2026-09-29); a spending ceiling is a release today.",
       },
     ],
   },

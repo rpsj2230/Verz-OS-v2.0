@@ -429,6 +429,7 @@ async def asked(
     n: int,
     *,
     agent: str | None = None,
+    at: datetime | None = None,
 ) -> Answered:
     """One question through `/answer`'s own function, as `principal_id` in the console.
 
@@ -436,6 +437,11 @@ async def asked(
     signed-in person, under a trace of this check's own, which the request row and every attempt
     row then carry. A window refusing it is a failure: the check installs no windows. `agent` is
     the agent picked beside the question, as the web application sends it.
+
+    `at` is the instant the question is asked, the check's start unless said otherwise. A check
+    reading an answer's freshness asks at the moment it asks, because everything it wrote since
+    its start carries a later time, and a read time after the moment of asking is one the product
+    rightly refuses to date.
     """
     from starlette.requests import Request
 
@@ -450,10 +456,11 @@ async def asked(
         raise CheckFailedError("a reserved person was not live in the directory")
     reach = admit(await h.reach(principal_id), Channel.CONSOLE, Assurance.AUTHENTICATED)
     request = Request({"type": "http", "app": app, "headers": [], "method": "POST"})
+    now = h.now if at is None else at
     outcome = await answered_for(
         request,
-        open_trace(trace_of(h, n), h.now, Channel.CONSOLE),
-        Answering(principal=person, reach=reach, channel=Channel.CONSOLE, now=h.now),
+        open_trace(trace_of(h, n), now, Channel.CONSOLE),
+        Answering(principal=person, reach=reach, channel=Channel.CONSOLE, now=now),
         Question(question=question, agent=agent),
     )
     if not isinstance(outcome, Answered):
