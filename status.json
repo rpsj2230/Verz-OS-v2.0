@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-29T21:41:20.745340+00:00",
-  "commit": "41ac932d",
-  "commit_subject": "Search Console's indexing issues, read from the sitemaps because Google has no page report, goes to the owner (#292)",
+  "generated_at": "2026-09-29T22:08:03.642991+00:00",
+  "commit": "87c4fc9d",
+  "commit_subject": "A website's browser is handed a widget session that holds nothing, or told in one sentence why not (#290)",
   "total": 1584,
   "done": 469,
   "percent": 29.6,
