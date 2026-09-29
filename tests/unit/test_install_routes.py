@@ -36,7 +36,7 @@ from __future__ import annotations
 import json
 import threading
 import time
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -45,6 +45,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
+from brain.agent_builder_routes import REHEARSE_PATH
 from brain.api import API_PREFIX
 from brain.app import Settings, create_app
 from brain.console.installation import Fact as InstallationFact
@@ -1267,13 +1268,44 @@ def test_the_recovery_screen_accepts_no_write_and_no_route_offers_a_drill() -> N
     paths = _app().openapi()["paths"]
 
     assert set(paths[RECOVERY_PATH]) == {"get"}
-    offered = [
-        path
-        for path, operations in paths.items()
-        if set(operations) - {"get"}
-        and any(word in path for word in ("drill", "rehears", "restore"))
-    ]
+    offered = [path for path, operations in paths.items() if _offers_a_drill(path, operations)]
     assert offered == []
+
+
+#: The one address that takes a write under a drill's word and is not a drill. Rehearsing an agent
+#: draft is `brain.agents.install.rehearse`: a Shadow run through the gate that restores nothing, so
+#: the word is the builder's. It is let through by its exact path and never by its word, so a
+#: rehearsal added anywhere else, a recovery drill included, is still caught.
+AGENT_DRAFT_REHEARSAL = f"{API_PREFIX}{REHEARSE_PATH}"
+
+
+def _offers_a_drill(path: str, operations: Iterable[str]) -> bool:
+    """Whether an address takes a write under a word a recovery drill would be called by."""
+    return (
+        bool(set(operations) - {"get"})
+        and path != AGENT_DRAFT_REHEARSAL
+        and any(word in path for word in ("drill", "rehears", "restore"))
+    )
+
+
+def test_the_drill_detector_lets_the_agent_rehearsal_through_by_its_path_and_nothing_else() -> None:
+    """The agent draft's rehearsal is served and passes, and every other write under a drill's word
+    is still caught, beside it and anywhere else.
+
+    Delete this and the exemption in `_offers_a_drill` can be widened to the word `rehears` or to
+    anything under `agent-drafts`, and a drill button's route added under either would pass the
+    test above while the detector looked as strict as it was."""
+    assert "post" in _app().openapi()["paths"][AGENT_DRAFT_REHEARSAL]
+    assert not _offers_a_drill(AGENT_DRAFT_REHEARSAL, {"post"})
+
+    for drill in (
+        f"{API_PREFIX}/install/recovery/rehearse",
+        f"{API_PREFIX}/agent-drafts/{{draft_id}}/restore",
+        f"{API_PREFIX}/agent-drafts/{{draft_id}}/rehearse-restore",
+        f"{API_PREFIX}/backups/drill",
+    ):
+        assert _offers_a_drill(drill, {"post"}), drill
+        assert not _offers_a_drill(drill, {"get"}), drill
 
 
 def _switch_rows(on: bool | None) -> Any:

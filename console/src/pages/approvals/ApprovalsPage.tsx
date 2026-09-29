@@ -10,7 +10,7 @@
  * verdict is said above it with focus moved there, because the card that was pressed is gone and a
  * phone would otherwise be left looking at nothing (`A_CONFIRMATION_IS_DRAWN_WHERE_THE_THUMB_IS`).
  *
- * Task ids: M35.3.1.2, M35.3.1.1, M40.6.1.5, M40.1.2.3, M27.8.6, M27.16.1
+ * Task ids: M35.3.1.2, M35.3.1.1, M40.6.1.5, M40.1.2.3, M27.8.6, M27.16.1, M27.15.31
  */
 
 import { CheckCheck } from "lucide-react";
@@ -21,6 +21,7 @@ import { FETCHING_MORE, NOTHING_MATCHES, SHOW_MORE } from "../../components/List
 import { narrows, NO_QUESTION, type FilterChoice, type SortChoice } from "../../components/listing";
 import { useListing } from "../../components/useListing";
 import { Button } from "../../components/ui/button";
+import { WaitingPublishes } from "../agents/WaitingPublishes";
 import { APPROVALS_API_PATH, readApprovalQueue } from "../approvalsQuery";
 import { nameOf, peopleIn } from "../review/parts";
 import { ApprovalCard, DecisionControls, said, type Verdict } from "./ApprovalCard";
@@ -151,6 +152,7 @@ export function ApprovalsPage() {
         ) : null}
         {read?.truncated === true ? <Note>{MORE_APPROVALS}</Note> : null}
       </section>
+      <WaitingPublishes />
     </div>
   );
 }

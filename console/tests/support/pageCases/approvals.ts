@@ -7,6 +7,7 @@
  */
 
 import { type PageCase, UNBROKEN } from "../pageFixtures";
+import { DRAFT_SUMMARY } from "./agents";
 
 function card(id: string): Record<string, unknown> {
   return {
@@ -25,6 +26,8 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     drawsValues: true,
     answers: {
       "/api/v1/approvals": { items: [card("sus_1")], next_cursor: null, truncated: false, people: { [UNBROKEN]: UNBROKEN } },
+      // The agent publishes waiting for this reader as the second person, drawn below the cards.
+      "/api/v1/agent-drafts": { items: [], waiting_for_you: [DRAFT_SUMMARY] },
     },
   },
   "/approvals/:suspensionId": {

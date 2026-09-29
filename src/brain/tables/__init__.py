@@ -99,6 +99,11 @@ from brain.tables.identity import (
 from brain.tables.knowledge import KnowledgeItemRow
 from brain.tables.knowledge_lifecycle import SolutionRow, StewardTaskRow
 from brain.tables.learning import CorrectionRow, LearningRow
+from brain.tables.manifest_draft import (
+    ManifestActRow,
+    ManifestDraftRow,
+    ManifestRevisionRow,
+)
 from brain.tables.memory import AdaptiveMemoryRow, PersistentMemoryRow
 from brain.tables.model_health import (
     ChainDepthAlertRow,
@@ -391,6 +396,11 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0145_automation_change. Points at nothing: the automation, the agent and both people are
     # values, so the record of who paused, removed or adopted an automation outlives all of them.
     "agent.automation_change",
+    # 0149_agent_manifest_draft. A revision points at its draft and an act at its revision; the
+    # agent is named by value, because a new agent's row exists only once it is published.
+    "agent.manifest_draft",
+    "agent.manifest_revision",
+    "agent.manifest_act",
 )
 
 __all__ = [
@@ -450,6 +460,9 @@ __all__ = [
     "KnowledgeItemRow",
     "LearningRow",
     "LegalHoldRow",
+    "ManifestActRow",
+    "ManifestDraftRow",
+    "ManifestRevisionRow",
     "MessageRole",
     "MessageRow",
     "ModelAttemptRow",

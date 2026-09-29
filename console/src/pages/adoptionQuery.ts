@@ -55,12 +55,6 @@ export const LIMIT_PARAMETER = "limit";
  */
 export const ADOPTION_DAYS = 30;
 
-/** The windows a reader may choose, in days. A closed list: a free number box is a second parser. */
-export const ADOPTION_PERIODS: readonly number[] = [7, ADOPTION_DAYS, 90, 365];
-
-export function periodWords(days: number): string {
-  return days === 365 ? "The last year" : `The last ${String(days)} days`;
-}
 
 /** The filters the adoption route declares that this screen offers, over lines drawn. */
 export const ADOPTION_FILTERS: readonly FilterChoice<AdoptionLineRow>[] = [

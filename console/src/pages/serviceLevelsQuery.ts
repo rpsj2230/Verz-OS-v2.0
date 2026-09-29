@@ -72,6 +72,11 @@ export const HOURS_PARAMETER = "hours";
  */
 export const READING_HOURS = 24;
 
+/** The whole request for the last `days`, which the route bounds at ninety. */
+export function serviceLevelsPathFor(days: number): string {
+  return `${SERVICE_LEVELS_API_PATH}?${HOURS_PARAMETER}=${String(days * 24)}`;
+}
+
 /** The whole request this screen makes, query string included. */
 export function serviceLevelsApiPath(): string {
   return `${SERVICE_LEVELS_API_PATH}?${HOURS_PARAMETER}=${String(READING_HOURS)}`;

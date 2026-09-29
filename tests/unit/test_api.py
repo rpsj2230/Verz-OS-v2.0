@@ -274,8 +274,21 @@ def test_the_documented_error_shape_is_the_one_the_application_returns() -> None
     template install with the automations' own `NotChangedView` when the page's confirmation no
     longer matches the row, or the move is refused in the domain's sentence (an archived agent
     cannot be enabled), so the confirmation dialog can say why nothing changed.
+    `brain.agent_builder_routes` answers every write on a draft with the same body, for the same
+    reason: a draft saved since, a publish that is not checked, an agent that moved.
 
     Delete this and 404 can be documented as any shape at all as long as it is documented."""
+    from brain.agent_builder_routes import (
+        APPROVE_PATH,
+        CHECK_PATH,
+        DECLINE_PATH,
+        DRAFTS_PATH,
+        EDIT_PATH,
+        PROCEDURE_PATH,
+        PUBLISH_PATH,
+        REHEARSE_PATH,
+        SAVE_PATH,
+    )
     from brain.agent_lifecycle_routes import (
         ARCHIVE_PATH,
         DISABLE_PATH,
@@ -320,6 +333,15 @@ def test_the_documented_error_shape_is_the_one_the_application_returns() -> None
                 TRANSFER_PATH,
                 DUPLICATE_PATH,
                 INSTALL_PATH,
+                DRAFTS_PATH,
+                EDIT_PATH,
+                SAVE_PATH,
+                CHECK_PATH,
+                REHEARSE_PATH,
+                PROCEDURE_PATH,
+                PUBLISH_PATH,
+                APPROVE_PATH,
+                DECLINE_PATH,
             )
         },
         **{

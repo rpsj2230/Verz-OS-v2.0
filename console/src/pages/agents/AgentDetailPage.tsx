@@ -26,7 +26,7 @@
  * and again under Settings; the "Agent" heading above the agent's own name; and a strip of tab
  * purpose sentences that described the page's own structure to the person using it.
  *
- * Task ids: M39.1.2.1, M39.1.2.4, M39.1.2.5, M39.6.1.3, M5.7.3, M27.10.2
+ * Task ids: M39.1.2.1, M39.1.2.4, M39.1.2.5, M39.6.1.3, M5.7.3, M27.10.2, M27.11.6
  */
 
 import { ChevronDown, IdCard, Info, LayoutDashboard, MessageSquarePlus, Settings } from "lucide-react";
@@ -54,7 +54,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../../components/ui/dropdown-menu";
@@ -70,6 +69,7 @@ import { AgentDashboard } from "./AgentDashboard";
 import { daysSince, readHeaderFacts, readProfile, spendIsRecorded } from "./agentDetailQuery";
 import { AgentProfile, LEASH_ANCHOR } from "./AgentProfile";
 import { ROSTER_HEADING, agentAddress } from "./AgentsPage";
+import { useDraftStart } from "./DraftStart";
 import { useLifecycleActs } from "./LifecycleActs";
 import { LeashPill, StatePill } from "./pills";
 import "../../styles/agent-workspace.css";
@@ -94,6 +94,7 @@ export const SKILLS_LABEL = "Skills";
 export const DAYS_LABEL = "Days since created";
 export const SPEND_NOT_RECORDED = "spend is not recorded, so the figure is left out rather than drawn as nought.";
 export const AUTOMATIONS_SECTION = "Automations";
+export const EDIT_AS_DRAFT = "Edit as a draft";
 
 /** The settings tab's key, whose content is the Profile. */
 const SETTINGS_TAB = "settings";
@@ -127,11 +128,13 @@ function SettingsMenu({
   agentId,
   state,
   onChoose,
+  onEditDraft,
   busy,
 }: {
   readonly agentId: string;
   readonly state: string | undefined;
   readonly onChoose: (agentId: string, act: LifecycleAct) => void;
+  readonly onEditDraft: () => void;
   readonly busy: boolean;
 }) {
   // The lifecycle acts are live; which of them this reader may press is the lifecycle route's to
@@ -151,6 +154,9 @@ function SettingsMenu({
         <DropdownMenuItem asChild>
           <Link to={`${viewAddress(agentId, "profile")}#${LEASH_ANCHOR}`}>Pin a model or read the leash</Link>
         </DropdownMenuItem>
+        <DropdownMenuItem disabled={busy} onSelect={onEditDraft}>
+          {EDIT_AS_DRAFT}
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         {acts.map((act) => (
           <DropdownMenuItem
@@ -163,12 +169,6 @@ function SettingsMenu({
             {ACT_LABELS[act]}
           </DropdownMenuItem>
         ))}
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel className="text-[11px] font-normal text-dim">Coming soon</DropdownMenuLabel>
-        <DropdownMenuItem disabled className="flex-col items-start gap-0.5">
-          <span>Edit as a draft</span>
-          <span className="text-[11px] leading-snug text-dim">{UNAVAILABLE.editDraft.reason}</span>
-        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -207,6 +207,7 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
     setAgentVersion((count) => count + 1);
   }, []);
   const lifecycle = useLifecycleActs(onMoved, agentAddress);
+  const drafting = useDraftStart();
   const answer = useResource<unknown>(agentWorkspaceApiPath(agentId), agentVersion);
   const workspace = useMemo(() => readAgentWorkspace(answer.data), [answer.data]);
   const facts = useMemo(() => readHeaderFacts(answer.data), [answer.data]);
@@ -243,6 +244,9 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
     return null;
   }
   const { agent } = workspace;
+  const editDraft = () => {
+    drafting.begin({ kind: "agent", agentId, name: agent.displayName });
+  };
   const headingId = `agent-${agent.agentId}`;
   const figures = workspace.figures;
   const views: DetailView[] = VIEWS.map((one) => {
@@ -273,7 +277,13 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
       actions={
         <>
           {profile === null ? null : (
-            <SettingsMenu agentId={agentId} state={facts.state} onChoose={lifecycle.choose} busy={lifecycle.busy} />
+            <SettingsMenu
+              agentId={agentId}
+              state={facts.state}
+              onChoose={lifecycle.choose}
+              onEditDraft={editDraft}
+              busy={lifecycle.busy || drafting.busy}
+            />
           )}
           <UnavailableAction
             text="Add to a chat group"
@@ -320,6 +330,8 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
     >
       {lifecycle.notice}
       {lifecycle.dialog}
+      {drafting.notice}
+      {drafting.dialog}
       {view === "dashboard" ? (
         <AgentDashboard
           agentId={agentId}
@@ -342,6 +354,7 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
           onTransfer={() => {
             lifecycle.choose(agentId, "transfer");
           }}
+          onEditDraft={editDraft}
         />
       ) : null}
       {view === "about" ? <AgentAbout agentId={agentId} profileAddress={viewAddress(agentId, "profile")} /> : null}

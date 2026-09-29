@@ -8,10 +8,9 @@
 import { type PageCase, UNBROKEN } from "../pageFixtures";
 
 export const PAGES: Readonly<Record<string, PageCase>> = {
-  // Questions and gaps. Nothing connected, so the one-row table is drawn, and one gap line, so the
-  // second is. The sentence every asker receives arrives unbroken twice: inside the table, whose
-  // parent scrolls, and in the note that quotes the not-found sentence outside it, which has to be
-  // able to break. The gap line's department and source are unbroken inside their own table.
+  // Questions and gaps. Nothing connected, so the card quoting what every asker is told is drawn,
+  // outside any table, where the unbroken sentence has to break; and one gap line, whose department
+  // and source are unbroken in the bars and in the table.
   "/questions": {
     address: "/questions",
     signedIn: true,

@@ -46,6 +46,37 @@ export const QUESTIONS_API_PATH = "/report/questions";
 /** The console address, at the screen's own key in `brain.console.screens`. */
 export const QUESTIONS_PATH = "/questions";
 
+/** The window parameter the route declares, in days. */
+export const DAYS_PARAMETER = "days";
+
+/** The whole request for the gaps in the last `days`. */
+export function questionsApiPathFor(days: number): string {
+  return `${QUESTIONS_API_PATH}?${DAYS_PARAMETER}=${String(days)}`;
+}
+
+/** The gap lines added up by department, most asked first. Over the lines sent and nothing else. */
+export function askedByDepartment(gaps: readonly GapLineBody[]): readonly { readonly department: string; readonly asked: number }[] {
+  const summed = new Map<string, number>();
+  for (const one of gaps) {
+    summed.set(one.department, (summed.get(one.department) ?? 0) + one.asked);
+  }
+  return [...summed.entries()]
+    .map(([department, asked]) => ({ department, asked }))
+    .sort((a, b) => b.asked - a.asked || (a.department < b.department ? -1 : a.department > b.department ? 1 : 0));
+}
+
+/**
+ * The headline figures over the lines sent: questions, departments, and the sources named. A line
+ * whose source the reader is not told is counted in the questions and never as a source.
+ */
+export function gapFigures(gaps: readonly GapLineBody[]): { readonly asked: number; readonly departments: number; readonly sources: number } {
+  return {
+    asked: gaps.reduce((sum, one) => sum + one.asked, 0),
+    departments: new Set(gaps.map((one) => one.department)).size,
+    sources: new Set(gaps.flatMap((one) => (one.source === null ? [] : [one.source]))).size,
+  };
+}
+
 /** Where the fix for a gap is made. */
 export const CONNECTORS_PATH = "/connectors";
 

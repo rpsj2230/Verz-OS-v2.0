@@ -49,7 +49,7 @@ export const LOG_IS_ON_THE_LOGS_SCREEN = "The application's warnings and errors 
 export const LOGS_LINK = "Open Logs";
 export const FAILURE_MESSAGES_STAY_ON_THE_SERVER = "A failure is shown by its kind; its message stays on the server.";
 
-/** The windows offered, in hours. The API's own bound is four weeks. */
+/** The windows offered, in hours. The API's own bound is ninety days. */
 export const WINDOWS: readonly { readonly hours: number; readonly label: string }[] = [
   { hours: 24, label: "Last 24 hours" },
   { hours: 24 * 7, label: "Last 7 days" },

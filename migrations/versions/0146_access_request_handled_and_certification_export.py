@@ -32,7 +32,7 @@ from alembic import op
 
 revision = "0146"
 # The head of origin/main when this was written; re-pointed when it lands.
-down_revision = "0148"
+down_revision = "0149"
 branch_labels = None
 depends_on = None
 

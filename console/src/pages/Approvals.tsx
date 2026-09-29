@@ -3,7 +3,7 @@
  * import. The pages are in `approvals/`, built on the shared page kit around the phone-first card
  * `styles/approvals.css` draws, which this module imports so it arrives with the page.
  *
- * Task ids: M35.3.1.2, M35.3.1.1, M40.6.1.5, M40.1.2.3, M27.8.6, M27.16.1
+ * Task ids: M35.3.1.2, M35.3.1.1, M40.6.1.5, M40.1.2.3, M27.8.6, M27.16.1, M27.15.31
  */
 
 import "../styles/approvals.css";

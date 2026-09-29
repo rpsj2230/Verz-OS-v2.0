@@ -44,6 +44,11 @@ from brain.access_request_routes import router as access_request_router
 # workspace's router without an import cycle. The same audience and the same one 404.
 from brain.agent_about_routes import router as agent_about_router
 
+# New agent and Edit as a draft: the builder's form, drafts saved as revisions, checked,
+# rehearsed and published, and the second person a wider publish waits for. See
+# `brain.agent_builder_routes`.
+from brain.agent_builder_routes import router as agent_builder_router
+
 # Enabling, disabling, archiving, handing on and duplicating an agent, and installing a
 # published template version. Its own router because these are writes and the agent router
 # above is the page's read: an `admin:` authority asked before the agent is read, its

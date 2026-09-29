@@ -6,12 +6,13 @@
  * for one agent: the roster, the workspace, the About flow, pinning a model, the automation gallery
  * with install, start and stop, the instruction override (`/govern/prompts/{agent_id}`, drawn on the
  * Prompts page) and skill assignment (`/skills/{digest}/assignments`, drawn on the Skills page). It
- * served no route that creates an agent, saves or publishes a draft, changes its audience, its
- * ceiling or its leash, or installs it into a chat group: `brain.builder` holds the rules and nothing
- * calls them over HTTP. Each of those is an `UNAVAILABLE` sentence below and is drawn as
+ * served no route that changes an agent's audience or its leash, previews it as a person, or installs
+ * it into a chat group. Each of those is an `UNAVAILABLE` sentence below and is drawn as
  * `kit/UnavailableAction`, so the page shows the act exists and is coming rather than hiding it or
  * faking it. Switching on and off, archiving, duplicating and handing on arrived with
- * `brain.agent_lifecycle_routes` on 2026-09-29 and are live acts (`LifecycleActs.tsx`).
+ * `brain.agent_lifecycle_routes` on 2026-09-29 and are live acts (`LifecycleActs.tsx`); creating an
+ * agent, editing one as a draft and changing its permissions through that draft arrived with
+ * `brain.agent_builder_routes` the same day (`NewAgentPage.tsx`, `DraftStart.tsx`, `DraftPage.tsx`).
  *
  * **When a route lands, its sentence goes and a live control takes its place, in the same commit.**
  * `tests/agents-page.test.tsx` reads every sentence here against the API document: an act listed as
@@ -21,27 +22,14 @@
  * The sentences are for an administrator: plain words, led by "Coming soon:" or "Not available
  * yet:", and no package code, route or internal name.
  *
- * Task ids: M27.10.2
+ * Task ids: M27.10.2, M27.11.6
  */
 
 /** Why each act that has no route cannot be pressed, and the shape of the API path whose arrival retires it. */
 export const UNAVAILABLE = Object.freeze({
-  create: {
-    reason: "Coming soon: creating an agent from a template or from scratch. The template catalogue shows what can be installed.",
-    retiredBy: /^\/api\/v1\/(agents\/drafts|agent-drafts|builder)\b/,
-  },
-  editDraft: {
-    reason: "Coming soon: editing an agent as a draft and publishing the change.",
-    retiredBy: /^\/api\/v1\/agents\/\{[^}]+\}\/drafts?\b/,
-  },
   chatGroup: {
     reason: "Coming soon: adding an agent to a group chat.",
     retiredBy: /^\/api\/v1\/agents\/\{[^}]+\}\/(channels|groups)\b/,
-  },
-  permissions: {
-    reason:
-      "Coming soon: changing permissions. A wider change will start in practice mode and need a second person to approve it.",
-    retiredBy: /^\/api\/v1\/agents\/\{[^}]+\}\/(ceiling|permissions)\b/,
   },
   preview: {
     reason: "Coming soon: seeing what this agent could reach for one particular person.",
