@@ -2,11 +2,34 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**2 items are open: 121,** whose conversations an agent's page lists, **and 91,** the checks only
-you can do on your install; it waits for the Knowledge upload grants (item 105) to land. Each says in
+**3 items are open: 126,** whether a staff list anybody can edit gives people sign-in accounts,
+**121,** whose conversations an agent's page lists, **and 91,** the checks only you can do on your
+install; it waits for the Knowledge upload grants (item 105) to land. Each says in
 plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 126. Does a staff list anybody with its link can edit give people sign-in accounts?
+
+**In plain terms:** item 115's B is built: the staff sync gives each active person a sign-in account
+and sends nobody anything. One case I decided the safe way and need you to confirm. A spreadsheet or
+a Google Sheet can be edited by anybody who has its link, so a row somebody adds would become a real
+way into the Brain for whatever address they typed, as long as they can read that mailbox and press
+Forgot password. Lark, Google Workspace, Microsoft Entra and LDAP are changed only by your
+administrators, and they give accounts as you asked.
+
+**Option A: only a company directory gives accounts.** A sheet still lists people, places them in
+departments and marks leavers; it makes no accounts, and the Staff sources page says so. People on a
+sheet are given their sign-in by an administrator in Keycloak, as today.
+
+**Option B: a sheet gives accounts too.** Anybody who can edit the sheet can then let somebody in.
+Only sensible for a sheet you have locked to one or two people.
+
+**My recommendation: A.** It is what is built, and it matches the rule the product already keeps: a
+sheet is trusted to say who exists and nothing more.
+
+**What I need from you:** reply "126: A" or "126: B". Until then A holds, which is the safe side: B
+only adds accounts.
 
 ## 121. On an agent's page, whose conversations are listed?
 

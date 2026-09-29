@@ -44,6 +44,16 @@ const PROGRESS = {
     why: "Google Workspace, Entra and Lark staff lists built (PR #97); proved when the owner connects Lark as the staff source and the first sync lists people with their departments (needs-rupash 91)",
     updated: "2026-09-28",
   },
+  "M1.6.16": {
+    status: "READY FOR TESTING",
+    why: "built (M1/staff-accounts): the staff sync makes each active person's sign-in account and sends nobody anything; proved when a release has set up the accounts client and a reserved person's Forgot password sets their password and second factor (M1.6.18)",
+    updated: "2026-09-30",
+  },
+  "M1.6.17": {
+    status: "READY FOR TESTING",
+    why: "built (M1/staff-accounts): a leaver's or suspended person's account the sync made is closed on the next sync and their Brain sessions ended; proved on the install with a reserved leaver (M1.6.18)",
+    updated: "2026-09-30",
+  },
   "M1.8.3": {
     status: "READY FOR TESTING",
     why: "built (PR #98): the staff sync writes a head's audit reads over their department's people and Audit is on the department menu; proved when a department head signs in and sees only their people's activity",
