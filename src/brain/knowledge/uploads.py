@@ -655,6 +655,29 @@ def ingestion_request(trace_id: str) -> AdmissionRequest:
     )
 
 
+def reading_request(trace_id: str) -> AdmissionRequest:
+    """One document read inside the request, while the person who sent it waits (M22.2.1).
+
+    The single upload and the link are parsed before their response is sent, so somebody is
+    watching this one finish, and that is what makes it INTERACTIVE: it may use the whole of the
+    document-job budget, and over it the person is told at once rather than handed a place in a
+    queue they are not in. It shares that one budget with the queued upload, whose BATCH share is
+    half of it, so a bulk upload cannot take the slot a person's own document needs, and a person
+    reading a document is refused only once every slot is in use.
+
+    Not a parameter on `ingestion_request`, for `INGESTION_CANNOT_BE_PROMOTED_OUT_OF_BATCH`'s
+    reason: the class follows from where the parse runs, and a route that reads in the request
+    calls this one while the queue's door calls the other. `Lane.ANSWER` because a lane can only
+    lower a class and the answer lane is the one somebody waits on.
+    """
+    return AdmissionRequest(
+        trace_id=trace_id,
+        lane=Lane.ANSWER,
+        traffic_class=TrafficClass.HUMAN_INTERACTIVE,
+        resource=Resource.DOCUMENT_JOBS,
+    )
+
+
 def queue_limits_for(budgets: Sequence[Budget]) -> QueueLimits:
     """The ingestion queue's ceilings, derived from the budget rather than set beside it.
 
@@ -689,9 +712,13 @@ class IngestionAdmission:
     means a parse slot exists this instant. An uploader needs the first; a console showing a
     queue needs the second.
 
-    There is no field for the queue depth or for a position, and `QueueDecision` gives the
-    reason: a position is a count of other people's work, it moves backwards as often as
-    forwards, and nobody watching it learns anything they can act on.
+    This is the door's answer, taken before a byte is read, over the job queue's own counts. The
+    place an accepted upload is given and its expected wait are the capacity ledger's, taken once
+    the file has a ticket (`brain.ops.capacity_ledger`, called by
+    `brain.knowledge_intake_routes.queue_upload`), because only there are the documents read in
+    requests counted beside the ones the worker reads. Until 2026-09-29 this docstring said a
+    position should never be shown, and the owner's requirement ARC-B-141 says the opposite: a
+    queued person sees their position and expected wait.
     """
 
     accepted: bool

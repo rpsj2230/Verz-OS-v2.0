@@ -38,9 +38,10 @@ leash is bound to this install's tools by `brain.agents.install.bound_leash`, wh
 finished install stores the rungs from. What the page is not told is
 `brain.agents.install.pinned_leash`, which holds every rung at Shadow while a declared
 connector is not serving, because no connector registry is read by the process answering the
-page, and the risk score `brain.gate.injection.autonomy_ceiling` applies per request. Both only
-lower a rung, so the page states the most the agent could do, which is the direction a
-description of supervision may err in. See
+page, and the risk score `brain.gate.injection.autonomy_ceiling` applies per request. Nor is it
+told the rung each tool's side effect allows, which `brain.gate.invoke.invoke` holds every run
+to through `ToolRegistry.tighten` (M12.1.3). All three only lower a rung, so the page states the
+most the agent could do, which is the direction a description of supervision may err in. See
 `THE_LEASH_SHOWN_IS_THE_CONFIGURED_ONE_AND_A_RUN_MAY_ONLY_BE_HELD_LOWER`.
 
 **Whether anything writes a run's cost is read off the source, and served beside the figure.**
@@ -103,9 +104,10 @@ A_RUNG_A_PAGE_CANNOT_SEE_THE_ROW_FOR_IS_EVERY_RUNG_IT_COULD_BE: Final = (
 #: Why the page's rungs are an upper bound.
 THE_LEASH_SHOWN_IS_THE_CONFIGURED_ONE_AND_A_RUN_MAY_ONLY_BE_HELD_LOWER: Final = (
     "The rungs shown are the template's leash bound to this install's tools. A run is held "
-    "lower still while a declared connector is not serving and whenever the risk score of a "
-    "request tightens it, and neither is known to the page. Both only lower a rung, so the "
-    "page states the most the agent could do and never less."
+    "lower still while a declared connector is not serving, whenever the risk score of a "
+    "request tightens it, and on a tool whose side effect allows less than the rung set, and "
+    "the page is told none of the three. All three only lower a rung, so the page states the "
+    "most the agent could do and never less."
 )
 
 #: Why a figure travels with the statement of whether anything writes it.

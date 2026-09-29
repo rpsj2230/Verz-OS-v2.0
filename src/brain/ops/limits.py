@@ -1223,16 +1223,22 @@ def _whose(scope: LimitScope, period: str) -> str:
             assert_never(scope)
 
 
-def when_again(retry_after_seconds: float) -> str:
-    """When the person may ask again, from the same rounding the header uses.
+def wait_in_words(seconds: float) -> str:
+    """A wait as a person reads it, from the same rounding the header uses.
 
     Seconds under two minutes and whole minutes, rounded up, from there. See
-    `A_REFUSAL_SAYS_WHEN_IN_WORDS`.
+    `A_REFUSAL_SAYS_WHEN_IN_WORDS`. Shared with the queued upload's expected wait
+    (`brain.knowledge.ingest_queue.outcome_sentence`), so a wait is said one way everywhere.
     """
-    whole = int(retry_after_header(retry_after_seconds))
+    whole = int(retry_after_header(seconds))
     if whole < 2 * MINUTE_SECONDS:
-        return f"You can ask again in {whole} second{'' if whole == 1 else 's'}."
-    return f"You can ask again in {math.ceil(whole / MINUTE_SECONDS)} minutes."
+        return f"{whole} second{'' if whole == 1 else 's'}"
+    return f"{math.ceil(whole / MINUTE_SECONDS)} minutes"
+
+
+def when_again(retry_after_seconds: float) -> str:
+    """When the person may ask again, in `wait_in_words`."""
+    return f"You can ask again in {wait_in_words(retry_after_seconds)}."
 
 
 def refusal_sentence(binding: Limit | None, retry_after_seconds: float) -> str:
