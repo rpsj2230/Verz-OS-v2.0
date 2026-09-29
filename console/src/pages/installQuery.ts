@@ -69,8 +69,10 @@ export type Rehearsal = components["schemas"]["RehearsalView"];
 /** The ceilings, and the throttling list when there is one. */
 export type Limits = components["schemas"]["LimitsView"];
 
-/** Memory and connections. */
+/** Memory and connections, and the sizings at the busiest minute. */
 export type Capacity = components["schemas"]["CapacityView"];
+/** One capacity sizing, at its busiest minute, with Little's law worked (M22.3.1, M22.3.2). */
+export type Sizing = components["schemas"]["SizingView"];
 
 /**
  * Written down because dropping the label is the single change that makes these screens lie,
