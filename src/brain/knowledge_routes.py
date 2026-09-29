@@ -69,6 +69,7 @@ from brain.attribution import of_request
 from brain.core.department import SLUG_RE
 from brain.core.entitlement import EntitlementSet
 from brain.core.errors import Absent, Failed
+from brain.knowledge.app_parse_budget import app_parse_budget_bytes
 from brain.knowledge.chunk_store import ChunkStoreError, ingest_document
 from brain.knowledge.chunking import Block
 from brain.knowledge.document_tools import departments_query
@@ -251,9 +252,19 @@ def read_one_at_a_time(
     placement: KnowledgeVisibility,
     owner_id: str,
 ) -> ReadUpload | ParseFailure:
-    """`read_for_text_path` under the parse lock, in the thread it runs in."""
+    """`read_for_text_path` under the parse lock, in the thread it runs in.
+
+    Admitted against the application's own budget, never the parse worker's: this read happens in
+    the application container. See `brain.knowledge.app_parse_budget`.
+    """
     with _ONE_PARSE_AT_A_TIME:
-        return read_for_text_path(received, kind=kind, placement=placement, owner_id=owner_id)
+        return read_for_text_path(
+            received,
+            kind=kind,
+            placement=placement,
+            owner_id=owner_id,
+            budget_bytes=app_parse_budget_bytes(),
+        )
 
 
 def _refused(field: str, code: str, message: str) -> JSONResponse:
