@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-29T05:08:42.733622+00:00",
-  "commit": "4f13a7b9",
-  "commit_subject": "The agent builder's forms draw every control from the kit, so a tool, a connector or a test question can be added, and every label and message is in plain words (#200)",
+  "generated_at": "2026-09-29T05:32:45.835305+00:00",
+  "commit": "147de6af",
+  "commit_subject": "Usage counts every person's questions, keys are typed into a masked field, and the other walk findings on the owner's install are fixed (#202)",
   "total": 1576,
   "done": 410,
   "percent": 26.0,
