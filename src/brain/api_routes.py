@@ -117,7 +117,13 @@ anything; and again once the agent is chosen, with all three, which is the decis
 records. Only that second call records, so a request refused by either never enters a window.
 See `A_QUESTION_IS_REFUSED_BEFORE_IT_COSTS_ANYTHING_AND_COUNTED_ONCE_IT_IS_ADMITTED`.
 
-Task ids: M31.1.4.1, M31.1.4.3, M31.1.4.4, M32.5.2.1, M1.1.7, M1.8.2, M23.1.1, M23.1.5
+**An answer's scope statement names the knowledge library and the uploaded tables to a reader who
+reaches them (M8.2.2).** `covered_at` is `sources_at`, the library and the tables, and it is what
+the lane is handed; `sources_at` itself stays the connector sources the cache and the agent
+screens key on. See
+`THE_SCOPE_STATEMENT_NAMES_EVERY_PLANE_A_READER_REACHES`.
+
+Task ids: M31.1.4.1, M31.1.4.3, M31.1.4.4, M32.5.2.1, M1.1.7, M1.8.2, M23.1.1, M23.1.5, M8.2.2
 """
 
 from __future__ import annotations
@@ -126,7 +132,7 @@ import asyncio
 import hashlib
 import inspect
 import secrets
-from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Annotated, Any, Final, cast
@@ -891,6 +897,48 @@ def sources_at(registry: ToolRegistry, reach: EntitlementSet, now: datetime) -> 
     )
 
 
+#: What the scope statement calls the document plane, which no row tool names as a source.
+KNOWLEDGE_COVERED: Final = "the knowledge library"
+
+#: What the scope statement calls the tables uploaded on Classification, which the registry holds
+#: none of: `brain.api_routes.answered_for` reads them through `classified_lane_of` beside it.
+TABLES_COVERED: Final = "the uploaded tables"
+
+#: Why an answer's scope statement names the library and the uploaded tables beside the sources.
+THE_SCOPE_STATEMENT_NAMES_EVERY_PLANE_A_READER_REACHES: Final = (
+    "The statement says what an answer could have been drawn from, derived from the reader's "
+    "reach and never from what answered. The knowledge tools carry no source and the uploaded "
+    "tables are not in the registry, so until 2026-09-29 a reader answered from a document or a "
+    "price list was told nothing about what was searched. Each is named to a reader holding its "
+    "read and never to one without it, on an answer and a refusal alike."
+)
+
+
+def covered_at(
+    registry: ToolRegistry,
+    reach: EntitlementSet,
+    now: datetime,
+    *,
+    tables: Iterable[str] = (),
+) -> tuple[str, ...]:
+    """What the answer's scope statement names: the sources, the library, the tables (M8.2.2).
+
+    `sources_at`, then the knowledge library when this process searches documents and the reach
+    holds the knowledge read, then the uploaded tables when the reach reads any of `tables`,
+    the entities `classified_lane_of` answers. Each is decided from reach alone, which is
+    `SearchScope`'s rule. Kept apart from `sources_at`, whose names are connector sources that
+    the cache and the agent screens key on. See
+    `THE_SCOPE_STATEMENT_NAMES_EVERY_PLANE_A_READER_REACHES`.
+    """
+    library = registry.has(SEARCH_DOCUMENTS) and reach.scope_for(KNOWLEDGE_READ, now) is not None
+    uploaded = any(row_scope_for(entity, reach, now) is not None for entity in tables)
+    return (
+        *sources_at(registry, reach, now),
+        *((KNOWLEDGE_COVERED,) if library else ()),
+        *((TABLES_COVERED,) if uploaded else ()),
+    )
+
+
 def field_policies(registry: ToolRegistry) -> dict[str, FieldPolicy]:
     """One field policy per classified entity, for the redaction the lane performs.
 
@@ -1419,7 +1467,9 @@ async def answered_for(
         # at the caller's own. Everything read below is read at that reach and no other.
         agent = roster.records.get(front.selection.agent_id)
         reach = run_entitlement(asking.reach, agent)
-        sources = sources_at(registry, reach, asking.now)
+        sources = covered_at(
+            registry, reach, asking.now, tables=[entity for _, entity in tables.readers]
+        )
         # Only a request the front half routed to a tier may reach a model, so no model is
         # called before ROUTE and PROJECT: a fast-lane question answers or abstains. The model
         # is shown what the asker said about themselves and may still recall (M16.6.3).
