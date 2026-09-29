@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-29T08:07:10.574518+00:00",
-  "commit": "7e263aeb",
-  "commit_subject": "An answer's citations, badges and four kinds of nothing are checked on the install, and a refused column reaches the administrator's trace (#206)",
+  "generated_at": "2026-09-29T08:08:04.153899+00:00",
+  "commit": "cc6a9df4",
+  "commit_subject": "\"Each of the four providers answers\" moves to Wave 5 while OpenAI and DeepSeek are turned off (#208)",
   "total": 1576,
   "done": 410,
   "percent": 26.0,
@@ -25,11 +25,11 @@
     {
       "wave": 1,
       "name": "The gate",
-      "total": 156,
+      "total": 155,
       "done": 151,
-      "percent": 96.8,
+      "percent": 97.4,
       "in_progress": 0,
-      "ready_for_testing": 2,
+      "ready_for_testing": 1,
       "blocked": 3,
       "open": 0,
       "acts": 1,
@@ -77,13 +77,13 @@
     {
       "wave": 5,
       "name": "Hands, delivery, go-live",
-      "total": 216,
+      "total": 217,
       "done": 23,
       "percent": 10.6,
       "in_progress": 0,
       "ready_for_testing": 0,
       "blocked": 0,
-      "open": 193,
+      "open": 194,
       "acts": 42,
       "decided": 18
     },
@@ -952,9 +952,9 @@
       "updated": "2026-09-29"
     },
     "M5.7.1": {
-      "status": "READY FOR TESTING",
-      "why": "Models and health shows all four providers with Add key, Test and Turn off (PR #100); proved when each answers on the install (needs-rupash 98)",
-      "updated": "2026-09-28"
+      "status": "OPEN",
+      "why": "moved to Wave 5 (needs-rupash 113): Anthropic and Moonshot answer on the install; OpenAI and DeepSeek are turned off until their accounts are funded",
+      "updated": "2026-09-29"
     },
     "M7.4.7": {
       "status": "IN PROGRESS",
