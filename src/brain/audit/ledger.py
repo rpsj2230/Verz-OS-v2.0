@@ -34,7 +34,7 @@ Scope: M24.1 is the chain logic only. Nothing here touches a database. The table
 eventually persists these entries stores the same fields and runs `verify` as its check
 job (M24.1.2).
 
-Task ids: M24.1.1, M24.1.2, M24.1.3, M24.1.4, M24.2.1, M42.6.5, M27.7.21, M27.11.1
+Task ids: M24.1.1, M24.1.2, M24.1.3, M24.1.4, M24.2.1, M42.6.5, M27.7.21, M27.11.1, M24.3.4
 """
 
 from __future__ import annotations
@@ -529,6 +529,27 @@ class AuditAction(enum.StrEnum):
     already reads. **Never the steward's id in the details**: a principal id is not a field name,
     so the recorder would keep the marker, and the row says who answers for the agent now. Five
     characters.
+
+    BROWSER_SESSION was added on 2026-09-29. M24.3.4 asks that an agent's browser session appear
+    in the audit view with its recording, and a session wrote nothing anywhere: the envelope row
+    says what a run was permitted, and nothing said that a browser was ever opened on it, for
+    whom, under which trace, or what recording it left. **Recorded by the database, from `0150`'s
+    trigger on `agent.browser_session`**, on the insert that starts one and the one update that
+    ends it, the way CONNECTOR is, so a session a statement opens is recorded as surely as one the
+    runner opens.
+
+    Every existing member was tried. SESSION_END is one sitting of a sign-in ending, about a
+    person; a browser session is a run of an agent on somebody's portal, and "who ended her
+    sign-in" filled with browser runs buries the answer. AGENT is the agent's lifecycle, and a
+    run changes nothing about the agent; APPROVAL is the envelope decided, which is recorded
+    already; PUBLISH is an artefact leaving. One member for both ends, with the change in the
+    details, for the reason SIGN_IN gives. The subject is the run under the existing kind
+    `session`, where break-glass sessions already sit, so no kind and no capability is added.
+    The actor is the envelope's asker, whose reach the run was compiled against; the trace is the
+    run's own, which is what the run's trace graph is keyed by; and an ended session that kept a
+    recording names it by the sha256 of its transcript, which is a digest of text nobody can
+    enumerate and so recordable, where the recording's key would be stored as the marker. Fifteen
+    characters.
     """
 
     GRANT = "grant"
@@ -670,6 +691,10 @@ class AuditAction(enum.StrEnum):
     #: query GRANT exists to serve, which is `COMPOSE_CHANGE`'s argument against GRANT one member
     #: along (M27.15.24).
     PACK = "pack"
+    #: An agent's browser session was started or ended. Which is in the details, with the sha256
+    #: of the recording's transcript when an ended session kept one. Written by `0150`'s trigger
+    #: on `agent.browser_session` under the run's own subject, `session:<run id>` (M24.3.4).
+    BROWSER_SESSION = "browser_session"
 
 
 # --------------------------------------------------------------------- redaction
