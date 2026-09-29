@@ -10,7 +10,7 @@ worker's schedule runs over the requests filed. It decides nothing `brain.ops.er
 **Whose row a table holds is declared, table by table, and a table nobody decided about stops its
 store.** A store is a set of schemas, and a schema holds tables a person owns, tables a person only
 acted in, and tables about nobody. `SUBJECT_COLUMNS` names the column that says whose a row is,
-`THROUGH` names the one table whose rows belong to a person through a parent, `ABOUT_NOBODY` names
+`THROUGH` names the tables whose rows belong to a person through a parent, `ABOUT_NOBODY` names
 every table no row of which is a person's own, and `RETAINED` names the one table an erasure keeps
 on purpose. A table the catalogue lists and none of those four names refuses the whole store, for
 `brain.ops.erasure.A_STORE_LEFT_OUT_OF_A_SUBJECT_ACCESS_REQUEST_IS_A_LIE`' reason: a table skipped
@@ -224,6 +224,10 @@ SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
         # `0067` grants no way for a row to leave, so an erasure keeps these and reports them kept.
         "agent.automation_run": "principal_id",
         "agent.browser_envelope": "asked_by",
+        # A draft of an agent, for the person who started it (`0149`), as `agent.agent` is its
+        # owner's. `0149` grants no way for a row to leave, so an erasure keeps these and reports
+        # them kept, and the ledger entries each row appended were never the erasure's to reach.
+        "agent.manifest_draft": "owner_id",
         # Which skill a run used, for the person it ran for (`0138`). `0138` grants no way for a row
         # to leave, so an erasure keeps these and reports them kept, as it does a cost.
         "agent.skill_invocation": "principal_id",
@@ -294,6 +298,14 @@ class Through:
 THROUGH: Final[Mapping[str, Through]] = MappingProxyType(
     {
         "chat.message": Through(parent="chat.conversation", key="conversation_id", parent_key="id"),
+        # A draft's saves and the acts on each are its owner's through the draft (`0149`). A second
+        # person's approval names them as an actor, not an owner, so the row is the draft's owner's.
+        "agent.manifest_revision": Through(
+            parent="agent.manifest_draft", key="draft_id", parent_key="id"
+        ),
+        "agent.manifest_act": Through(
+            parent="agent.manifest_draft", key="draft_id", parent_key="id"
+        ),
         # A key is a person's through the account it speaks for. `0095`.
         "auth.api_key": Through(
             parent="auth.service_account", key="client_id", parent_key="client_id"
