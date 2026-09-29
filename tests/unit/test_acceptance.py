@@ -140,6 +140,7 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "manifest_review_refuses_a_projection_that_is_more_than_a_pointer",
         "a_sync_keeps_its_minimal_index_and_the_canary_reaches_no_table",
         "a_changed_declaration_makes_the_next_sync_refuse",
+        "a_source_is_connected_switched_off_and_upgraded_from_the_console",
     ]
     assert by_module["brain.ops.acceptance_checks_tools"] == [
         "every_registered_tool_is_a_catalogue_row_under_the_name_grammar",
@@ -573,6 +574,10 @@ WRITTEN_BY_CHECKS = (
     "ops.outbox_delivery",
     "gate.grants_version",
     "gate.policy_epoch",
+    "agent.browser_envelope",
+    "agent.browser_session",
+    "obs.trace_step",
+    "obs.trace_read",
 )
 
 
@@ -649,10 +654,11 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         )
     ):
         assert outcomes.pop(model_check.name)[0] == NOT_RUN, model_check.name
-    # Every act that exists was seen, and the leaf still cannot close: see its module.
+    # Every act, the chain, the trace and the export were seen, and no deploy is recorded here to
+    # be kept out of the export: `tests/unit/test_acceptance_audit.py` records one and passes.
     assert outcomes.pop("each_audited_act_is_in_the_ledger_and_a_missing_entry_is_caught") == (
         NOT_RUN,
-        acceptance_audit.A_BROWSER_SESSION_AND_A_TRACE_STORE_ARE_NOT_BUILT,
+        acceptance_audit.NO_DEPLOYMENT_IS_RECORDED_TO_KEEP_OUT,
     )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
     assert after == before
