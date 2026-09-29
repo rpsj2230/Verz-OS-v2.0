@@ -99,11 +99,22 @@ that would take the figures with it. See `A_FIGURE_SAYS_ITS_CURRENCY_AND_ITS_CLO
 `adoption_for_reader` produced for this reader, so a search for a department answers a line only
 where the reader's usage grant already admits one.
 
+**The Report dashboards (M27.16.1, 2026-09-29) added four things, each read where it is decided.**
+A person line carries the name the directory holds for that person, read only for the people
+already on the reader's lines, so the page names people rather than printing principal ids. A
+spend report says when cost is not recorded, by the Overview's own rule and sentence (nothing
+writes cost, or no model is priced in the install's currency), so a report over no cost rows is
+never drawn as 0.00. The service-level window may be ninety days, which is the console's widest
+period, bounded separately from `MAX_READING_HOURS` so the operate and error screens keep theirs.
+And Quality lists the canary runs in a window, withheld whole as the last run is. See
+`A_NAME_IS_READ_ONLY_FOR_A_PERSON_ALREADY_ON_THE_READERS_LINES`.
+
 Task ids: M27.7.14, M27.7.15, M27.7.16, M27.7.17, M27.7.18, M27.7.19, M27.8.6
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from datetime import date, datetime, timedelta
 from typing import Annotated, Final
 
@@ -117,8 +128,10 @@ from brain.adoption import DepartmentAdoption
 from brain.api import API_PREFIX, COMMON_RESPONSES, Page
 from brain.api_routes import Asked, row_readers
 from brain.console.adoption_view import adoption_for_reader
+from brain.console.agent_profile import RUN_SPEND_IS_RECORDED
 from brain.console.quality_view import (
     CANARY_CONTROL,
+    CANARY_RUNS_LISTED,
     EVALUATION_RUNS_ARE_RECORDED,
     FINDINGS_ARE_RECORDED,
     CanaryRun,
@@ -135,9 +148,17 @@ from brain.console.questions_view import (
 from brain.console.service_level_view import service_levels_for_reader
 from brain.console.spend_report_view import MaterialisedReport, spend_report_from_view
 from brain.console.usage_screen import AUTOMATION_IS_COUNTED, UsageScreen, usage_for_reader
+from brain.console.usage_view import Axis
+from brain.console_overview_figures_routes import (
+    COST_HAS_NO_PRICE,
+    COST_IS_NOT_RECORDED,
+    FigureNotRecordedView,
+    priced_in,
+)
 from brain.core.errors import Failed
 from brain.listing import Column, ListAsked, Listing
 from brain.locale import LocaleError, currency, time_zone
+from brain.ops.price_store import read_prices
 from brain.ops.question_gap_store import gaps_between
 from brain.ops.question_store import asked_between
 from brain.ops.schedule_runner import runner_for
@@ -145,6 +166,7 @@ from brain.ops.service_levels import LaneReading, ServiceLevels
 from brain.ops.spend import Dimension
 from brain.ops.spend_store import read_spend_daily
 from brain.ops.telemetry_store import metered_between
+from brain.routing_routes import names_of
 from brain.tables.gate import DepartmentRow
 from brain.tables.schedule import ControlRunRow
 from brain.tools.registry import ToolRegistry
@@ -212,6 +234,20 @@ A_SCREEN_THAT_CANNOT_SHOW_A_FIGURE_SAYS_SO_ON_THE_RESPONSE: Final = (
 #: past any lane's objective period and well inside what one read of `obs.request_telemetry`
 #: can group. See `A_WINDOW_BOUND_IS_A_RESOURCE_LIMIT_AND_NEVER_A_PERMISSION`.
 MAX_READING_HOURS: Final = 24 * 28
+
+#: The longest window the service levels screen itself may ask for, in hours: ninety days, the
+#: console's widest period. Separate from `MAX_READING_HOURS`, which the operate and error screens
+#: take as their own bound, so widening the report does not widen what they may read.
+MAX_SERVICE_LEVEL_HOURS: Final = 24 * 90
+
+#: Why a person line's name is read after the reader's lines are decided, and only for them.
+A_NAME_IS_READ_ONLY_FOR_A_PERSON_ALREADY_ON_THE_READERS_LINES: Final = (
+    "A usage line already tells its reader that this person asked this many questions, so the "
+    "person's name adds no person to what they may see. The names are read for exactly the ids on "
+    "the lines the read module produced for this reader, after it produced them, so a name can "
+    "never arrive for somebody the reader was not already shown, and a person the directory no "
+    "longer holds is sent with no name rather than dropped."
+)
 
 #: What a reading covers when nobody says. A day, because a lane's attainment over a shorter
 #: window is a sample and over a longer one is a month somebody has to divide by hand.
@@ -358,6 +394,9 @@ class SpendReportView(BaseModel):
     currency: str = UNSET_CURRENCY
     #: The IANA zone the install renders an instant in, `UTC` when it chose none.
     time_zone: str = UNSET_TIME_ZONE
+    #: `cost` with the Overview's sentence while nothing records cost on this install, and empty
+    #: once it does. The page then draws no figure, because a report over no rows reads 0.00.
+    not_recorded: list[FigureNotRecordedView] = []
 
 
 class AdoptionLineView(BaseModel):
@@ -402,12 +441,17 @@ class DepartmentUsageView(BaseModel):
 
 
 class PersonUsageView(BaseModel):
-    """One person's questions on the usage screen. `brain.console.usage_screen.PersonLine`."""
+    """One person's questions on the usage screen. `brain.console.usage_screen.PersonLine`.
+
+    `name` is the directory's display name for `person`, or null when the directory no longer
+    holds them. See `A_NAME_IS_READ_ONLY_FOR_A_PERSON_ALREADY_ON_THE_READERS_LINES`.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     person: str
     questions: int
+    name: str | None = None
 
 
 class TokenLineView(BaseModel):
@@ -527,10 +571,20 @@ class QualityView(BaseModel):
     canary_interval_seconds: int
     findings_are_recorded: bool
     evaluation_runs_are_recorded: bool
+    #: The runs started in the window asked for, newest first; empty for a reader who may not
+    #: see a run, exactly as for an install whose canaries did not run in it.
+    runs: list[CanaryRunView] = []
+    #: The window held more runs than the list carries. Never true for a withheld reader.
+    runs_truncated: bool = False
 
 
-def usage_screen_view_of(screen: UsageScreen) -> UsageView:
-    """The usage screen, copied field by field, with the absent axes carried as null."""
+def usage_screen_view_of(screen: UsageScreen, names: Mapping[str, str] | None = None) -> UsageView:
+    """The usage screen, copied field by field, with the absent axes carried as null.
+
+    `names` is the directory's name for each person on the lines, read by `usage` for exactly
+    those ids; a person it does not name is sent with no name.
+    """
+    named = names or {}
     return UsageView(
         start=screen.start,
         end=screen.end,
@@ -544,7 +598,10 @@ def usage_screen_view_of(screen: UsageScreen) -> UsageView:
         ],
         people=None
         if screen.people is None
-        else [PersonUsageView(person=one.person, questions=one.questions) for one in screen.people],
+        else [
+            PersonUsageView(person=one.person, questions=one.questions, name=named.get(one.person))
+            for one in screen.people
+        ],
         questions=screen.questions,
         machine_included=AUTOMATION_IS_COUNTED,
         not_measured=[one.value for one in screen.not_measured],
@@ -605,6 +662,8 @@ def quality_view_of(screen: QualityScreen) -> QualityView:
         canary_interval_seconds=screen.canary_interval_seconds,
         findings_are_recorded=FINDINGS_ARE_RECORDED,
         evaluation_runs_are_recorded=EVALUATION_RUNS_ARE_RECORDED,
+        runs=[canary_run_view_of(one) for one in screen.runs],
+        runs_truncated=screen.runs_truncated,
     )
 
 
@@ -641,6 +700,7 @@ def spend_view_of(
     dimension: Dimension,
     *,
     money: tuple[str, str] = (UNSET_CURRENCY, UNSET_TIME_ZONE),
+    not_recorded: Sequence[FigureNotRecordedView] = (),
 ) -> SpendReportView:
     """A materialised report, copied field by field, including the case with no report in it.
 
@@ -661,6 +721,7 @@ def spend_view_of(
             freshness=report.freshness.state.value,
             currency=money[0],
             time_zone=money[1],
+            not_recorded=list(not_recorded),
         )
     return SpendReportView(
         dimension=dimension.value,
@@ -674,7 +735,22 @@ def spend_view_of(
         freshness=report.freshness.state.value,
         currency=money[0],
         time_zone=money[1],
+        not_recorded=list(not_recorded),
     )
+
+
+async def cost_unrecorded(session: AsyncSession, code: str) -> FigureNotRecordedView | None:
+    """Why no cost is recorded on this install, in the Overview's sentence, or None when it is.
+
+    `brain.console_overview_figures_routes.week_cost`'s rule and its two sentences, imported
+    rather than restated: nothing writes cost, or no model has a price in the install's currency.
+    A currency left unset is one no price can be in, so it reads no price at all.
+    """
+    if not RUN_SPEND_IS_RECORDED:
+        return COST_IS_NOT_RECORDED
+    if code == UNSET_CURRENCY or not priced_in(await read_prices(session), code):
+        return COST_HAS_NO_PRICE
+    return None
 
 
 def adoption_view_of(line: DepartmentAdoption) -> AdoptionLineView:
@@ -732,6 +808,26 @@ def last_canary_run() -> Select[tuple[datetime, datetime | None, str | None]]:
     )
 
 
+def canary_runs_between(
+    start: datetime, end: datetime, *, limit: int
+) -> Select[tuple[datetime, datetime | None, str | None]]:
+    """The canary runs started inside the window, newest first, to at most `limit` rows.
+
+    `last_canary_run`'s three columns and none other, for its reason. The caller asks for one
+    more than it lists, and `quality_for_reader` decides whether the list is cut off.
+    """
+    return (
+        select(ControlRunRow.started_at, ControlRunRow.finished_at, ControlRunRow.outcome)
+        .where(
+            ControlRunRow.name == CANARY_CONTROL,
+            ControlRunRow.started_at >= start,
+            ControlRunRow.started_at <= end,
+        )
+        .order_by(ControlRunRow.started_at.desc())
+        .limit(limit)
+    )
+
+
 # ------------------------------------------------------------------------- the wiring
 
 
@@ -773,7 +869,7 @@ router = APIRouter(prefix=API_PREFIX, tags=["report"])
 async def service_levels(
     request: Request,
     asked: Asked,
-    hours: Annotated[int, Query(ge=1, le=MAX_READING_HOURS)] = DEFAULT_READING_HOURS,
+    hours: Annotated[int, Query(ge=1, le=MAX_SERVICE_LEVEL_HOURS)] = DEFAULT_READING_HOURS,
 ) -> ServiceLevelsView:
     """Each lane's measured attainment over the last `hours`, as this reader may be shown it.
 
@@ -822,8 +918,10 @@ async def spend(
     price of a schedule.
     """
     factory = _require_sessions(request)
+    money = money_and_clock()
     async with factory() as session:
         refreshed_at, days = await read_spend_daily(session)
+        unrecorded = await cost_unrecorded(session, money[0])
     report = spend_report_from_view(
         days,
         refreshed_at,
@@ -834,7 +932,9 @@ async def spend(
         until=until,
         include_machine=include_machine,
     )
-    return spend_view_of(report, dimension, money=money_and_clock())
+    return spend_view_of(
+        report, dimension, money=money, not_recorded=() if unrecorded is None else (unrecorded,)
+    )
 
 
 #: What the Adoption screen may search, filter and order its lines by.
@@ -905,7 +1005,9 @@ async def usage(
     departments, then the questions. Then the ledger rows in the window whose tokens were counted
     (M27.7.14). `brain.console.usage_screen.usage_for_reader` chooses the questions once, groups
     them twice, joins the tokens to the questions it chose, decides which axes this reader is
-    offered, and names what is not measured. Nothing is filtered, summed or named here.
+    offered, and names what is not measured. Nothing is filtered or summed here. Then the
+    directory's names for the people on those lines and no others, which is
+    `A_NAME_IS_READ_ONLY_FOR_A_PERSON_ALREADY_ON_THE_READERS_LINES`.
     """
     factory = _require_sessions(request)
     start = asked.now - timedelta(days=days)
@@ -913,16 +1015,35 @@ async def usage(
         departments = list((await session.execute(live_departments())).scalars().all())
         questions = await asked_between(session, start=start, end=asked.now)
         metered = await metered_between(session, start=start, end=asked.now)
-    screen = usage_for_reader(
-        questions,
-        departments,
-        asked.reach,
-        start=start,
-        end=asked.now,
-        now=asked.now,
-        metered=metered,
-    )
-    return usage_screen_view_of(screen)
+        screen = usage_for_reader(
+            questions,
+            departments,
+            asked.reach,
+            start=start,
+            end=asked.now,
+            now=asked.now,
+            metered=metered,
+        )
+        shown = people_on(screen)
+        names = (
+            {str(pid): str(name) for pid, name in (await session.execute(names_of(shown))).all()}
+            if shown
+            else {}
+        )
+    return usage_screen_view_of(screen, names)
+
+
+def people_on(screen: UsageScreen) -> frozenset[str]:
+    """Every person id on this reader's lines: the person table and the tokens by person.
+
+    The ids a name may be read for, and no others. See
+    `A_NAME_IS_READ_ONLY_FOR_A_PERSON_ALREADY_ON_THE_READERS_LINES`.
+    """
+    listed = {one.person for one in screen.people or ()}
+    for report in screen.tokens:
+        if report.axis is Axis.PERSON:
+            listed |= {line.key for line in report.lines}
+    return frozenset(listed)
 
 
 @router.get("/report/questions", response_model=QuestionsView, responses=COMMON_RESPONSES)
@@ -959,26 +1080,41 @@ async def questions(
 
 
 @router.get("/report/quality", response_model=QualityView, responses=COMMON_RESPONSES)
-async def quality(request: Request, asked: Asked) -> QualityView:
-    """When the permission canaries last ran and how that run ended, if this reader may know.
+async def quality(
+    request: Request,
+    asked: Asked,
+    days: Annotated[int, Query(ge=1, le=MAX_USAGE_DAYS)] = DEFAULT_USAGE_DAYS,
+) -> QualityView:
+    """When the permission canaries last ran, and every run in the last `days`, if this reader
+    may know.
 
-    The newest attempt is read whoever is asking, and `brain.console.quality_view` decides
-    whether this reader is shown it, last. Whether anything starts the canaries is read off
-    `brain.ops.schedule_runner.runner_for`, which is the lookup the worker itself makes before
-    it starts a control.
+    The newest attempt and the window's runs are read whoever is asking, and
+    `brain.console.quality_view` decides whether this reader is shown them, last. Whether anything
+    starts the canaries is read off `brain.ops.schedule_runner.runner_for`, which is the lookup
+    the worker itself makes before it starts a control. The window is bounded as usage is.
     """
     factory = _require_sessions(request)
+    start = asked.now - timedelta(days=days)
     async with factory() as session:
         found = (await session.execute(last_canary_run())).first()
+        window = (
+            await session.execute(
+                canary_runs_between(start, asked.now, limit=CANARY_RUNS_LISTED + 1)
+            )
+        ).all()
     run = (
         None
         if found is None
         else canary_run_of(started_at=found[0], finished_at=found[1], outcome=found[2])
     )
+    history = [
+        canary_run_of(started_at=one[0], finished_at=one[1], outcome=one[2]) for one in window
+    ]
     screen = quality_for_reader(
         run,
         asked.reach,
         now=asked.now,
         started=runner_for(CANARY_CONTROL).run is not None,
+        history=history,
     )
     return quality_view_of(screen)
