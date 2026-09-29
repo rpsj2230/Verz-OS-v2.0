@@ -132,6 +132,7 @@ Scope: five read-only routes. Nothing here writes, and the only session anything
 is the one it deliberately does not open.
 
 Task ids: M27.7.25, M27.7.27, M42.3.9, M38.1.3.5, M23.1.1, M23.2.1, M27.15.51
+Task ids: M22.3.1, M22.3.2, M22.3.4
 """
 
 from __future__ import annotations
@@ -175,7 +176,7 @@ from brain.console.version_view import panel as updates_panel
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.errors import Absent, Failed
 from brain.deployment.release_feed import ReleaseWatch, feed_address
-from brain.ops.admission import Ceiling
+from brain.ops.admission import FIRST_BOTTLENECK_AT_SCALE, Ceiling, seed_profiles
 from brain.ops.backup_manifest import DRILL_SUFFIX, MANIFEST_SUFFIX, read_drills, read_manifests
 from brain.ops.deployment_history import History, history_from, recorded
 from brain.ops.features import RELEASE_CHECK, is_on
@@ -934,9 +935,47 @@ class ConnectionView(BaseModel):
     headroom: int
 
 
+class SizingView(BaseModel):
+    """One capacity sizing, stated at the busiest minute rather than as a day's volume (M22.3.1).
+
+    `in_flight_at_peak` is Little's law over the two figures beside it and `slots_needed` is it
+    rounded up, both computed by `brain.ops.admission.CapacityProfile` rather than here, so the
+    screen cannot show a sizing whose arithmetic the admission budgets do not share (M22.3.2).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    peak_per_second: float
+    service_seconds: float
+    in_flight_at_peak: float
+    slots_needed: int
+    reason: str
+
+
+def capacity_plan() -> tuple[list[SizingView], str]:
+    """The sizings and the documented first limit at ten and a hundred times, as served.
+
+    One function the route and the install's acceptance check both call, so the check reads what
+    the screen is sent rather than a second copy of the figures.
+    """
+    sizings = [
+        SizingView(
+            name=one.name,
+            peak_per_second=one.peak_arrivals_per_second,
+            service_seconds=one.mean_service_seconds,
+            in_flight_at_peak=one.concurrency,
+            slots_needed=one.servers_needed,
+            reason=one.reason,
+        )
+        for one in seed_profiles()
+    ]
+    return sizings, FIRST_BOTTLENECK_AT_SCALE
+
+
 class CapacityView(BaseModel):
     """Memory and connections, from `brain.ops.wiring`, `brain.ops.compose` and
-    `brain.ops.connections`.
+    `brain.ops.connections`, and the sizings and first limit from `brain.ops.admission`.
 
     The one surface in this group that needs nothing outside the process: every figure is
     arithmetic over what the source tree declares, so there is no unread shape here and there
@@ -947,6 +986,10 @@ class CapacityView(BaseModel):
 
     memory: MemoryView
     connections: list[ConnectionView]
+    #: Each capacity sizing at its busiest minute, with Little's law worked (M22.3.1, M22.3.2).
+    sizings: list[SizingView] = []
+    #: The documented first limit reached at ten and at a hundred times today's volume (M22.3.4).
+    first_limit: str = ""
 
 
 # ---------------------------------------------------------------------- the projections
@@ -1400,7 +1443,10 @@ async def capacity(request: Request, asked: Asked) -> CapacityView:
     to the declared one would read as two independent numbers agreeing.
     """
     _permitted(asked.reach, "connections", asked.now)
+    sizings, first_limit = capacity_plan()
     return CapacityView(
         memory=memory_view(memory_capacity(settings_of(request).profile)),
         connections=[connection_view(one) for one in connection_capacity()],
+        sizings=sizings,
+        first_limit=first_limit,
     )

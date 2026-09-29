@@ -38,7 +38,7 @@ layers that record into it and a future import of this module from `brain.gate` 
 produce a cycle.
 
 Task ids: M24.1.3, M24.1.4, M42.6.5, M27.7.21, M27.7.4, M27.7.8, M27.11.1, M24.2.4, M27.11.5
-Task ids: M27.15.19, M27.15.24
+Task ids: M27.15.19, M27.15.24, M24.3.4
 """
 
 from __future__ import annotations
@@ -182,6 +182,7 @@ ACTION_BY_METHOD: Final[Mapping[str, AuditAction]] = MappingProxyType(
         "agent": AuditAction.AGENT,
         "channel_binding": AuditAction.CHANNEL_BINDING,
         "pack": AuditAction.PACK,
+        "browser_session": AuditAction.BROWSER_SESSION,
     }
 )
 
@@ -490,6 +491,17 @@ VERSIONED_PACK_CHANGES: Final[frozenset[PackChange]] = frozenset(
 #: is a name, a capability or a digest, and a bare number is a value, so `3` would be stored as the
 #: marker; `v3` is a name. `0141`'s trigger writes the same prefix, and a test holds the two to one.
 PACK_VERSION_PREFIX: Final = "v"
+
+
+class BrowserSessionChange(enum.StrEnum):
+    """The two ends of an agent's browser session, as `0150`'s trigger writes them (M24.3.4).
+
+    `STARTED` is the insert into `agent.browser_session`; `ENDED` is the one update setting
+    `ended_at`, which carries the recording's digest when the session kept one.
+    """
+
+    STARTED = "started"
+    ENDED = "ended"
 
 
 class ElevationChange(enum.StrEnum):
@@ -1411,6 +1423,28 @@ class AuditRecorder:
         return self._write(
             AuditAction.HALT, subject("halt", halt_id), {"act": act.value, "scope": scope.value}
         )
+
+    def browser_session(
+        self, *, run_id: str, change: BrowserSessionChange, recording: str | None = None
+    ) -> AuditEntry:
+        """Record that an agent's browser session started or ended (M24.3.4).
+
+        Written in a deployed database by `0150`'s trigger on `agent.browser_session`, and held to
+        these details by a test. The subject is the run, so a session's two ends are one subject.
+        `recording` is the sha256 of the transcript an ended session kept, refused on a start and
+        refused unless it is a digest: a start has recorded nothing yet, and anything but a digest
+        would be stored as the marker, which is an entry that no longer says which recording.
+        """
+        details: dict[str, str] = {"change": change.value}
+        if recording is not None:
+            if change is not BrowserSessionChange.ENDED:
+                msg = "a session that has only started has kept no recording to name"
+                raise ValueError(msg)
+            if not re.fullmatch(DIGEST, recording):
+                msg = f"{recording!r} is not the sha256 of a transcript"
+                raise ValueError(msg)
+            details["recording"] = recording
+        return self._write(AuditAction.BROWSER_SESSION, subject("session", run_id), details)
 
     def elevation(
         self,

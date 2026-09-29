@@ -300,6 +300,14 @@ THROUGH: Final[Mapping[str, Through]] = MappingProxyType(
         "chat.message": Through(parent="chat.conversation", key="conversation_id", parent_key="id"),
         # A draft's saves and the acts on each are its owner's through the draft (`0149`). A second
         # person's approval names them as an actor, not an owner, so the row is the draft's owner's.
+        # 0150: a browser session is the person's its run was sealed for, through the envelope;
+        # a trace step is the asker's whose request carries its trace id.
+        "agent.browser_session": Through(
+            parent="agent.browser_envelope", key="run_id", parent_key="run_id"
+        ),
+        "obs.trace_step": Through(
+            parent="obs.request_telemetry", key="trace_id", parent_key="trace_id"
+        ),
         "agent.manifest_revision": Through(
             parent="agent.manifest_draft", key="draft_id", parent_key="id"
         ),
@@ -435,6 +443,8 @@ RETAINED: Final[Mapping[str, str]] = MappingProxyType(
         "auth.staff_member": A_ROSTER_ROW_IS_THE_SOURCES_AND_RETURNS_WHILE_THE_SOURCE_LISTS_THEM,
         "auth.staff_sync_run": A_ROSTER_ROW_IS_THE_SOURCES_AND_RETURNS_WHILE_THE_SOURCE_LISTS_THEM,
         "ops.sensitive_read": A_READ_OF_A_RECORD_IS_THE_LEDGERS_AND_IS_KEPT,
+        # 0150: who read a trace's payload, under the separate role, is the reader's accountability.
+        "obs.trace_read": A_READ_OF_A_RECORD_IS_THE_LEDGERS_AND_IS_KEPT,
         "ops.halt": A_HALT_ON_A_PERSON_IS_A_PROTECTION_AND_IS_KEPT,
     }
 )
