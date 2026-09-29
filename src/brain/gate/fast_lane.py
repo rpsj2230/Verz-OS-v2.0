@@ -41,6 +41,20 @@ reads the answer. Here nothing does. Both cases therefore return nothing and let
 lane read the actual words, which costs one model call and is the cheap side of the asymmetry
 `brain.gate.classify` is built on.
 
+**Except that one question asked of several places is not two questions, and until 2026-09-29
+it was refused as though it were.** Every uploaded price list with a sell price column is asked
+about in exactly the same words (`brain.knowledge.classified_rows.QUESTION_SHAPES`), so the owner's
+install, holding two, matched two rules on every sell price question and answered nobody about
+either list. Rules whose literal words are the same, each for a different place, read the same
+name out of the question, so they are one question that several places might answer: each place
+is read at the caller's own reach, and the one holding the name answers. **A place the caller may
+not read contributes exactly what a place that does not exist contributes**, because its read
+compiles to nothing, and two records across the places is the ambiguous name it would be inside
+one place. Rules in different words, and two rules for one place, are still the fall-through
+above. See `ONE_QUESTION_ASKED_OF_SEVERAL_PLACES_IS_READ_IN_EACH`. Rejected: putting a table's
+title into its question shapes, which would make "what is the sell price of X" match no table at
+all, the question the owner asks.
+
 **An empty answer is the same answer for a denial and an absence.** A caller with no grant on
 the entity gets a result with no records, and so does a caller asking about a client that does
 not exist. They are the same object, produced by the same path, in the same time: the query
@@ -75,7 +89,7 @@ application's pool. The first thing that composition found here was the keying d
 `entities_served`, which `tests/e2e/test_wave_one_console_question.py` reached with the seeded
 demo.
 
-Task ids: M6.1.1, M6.1.2, M6.1.4
+Task ids: M6.1.1, M6.1.2, M6.1.4, M7.5.2
 """
 
 from __future__ import annotations
@@ -134,6 +148,16 @@ TWO_RULES_MATCHING_ONE_QUESTION_IS_A_FALL_THROUGH = (
     "model, answering the wrong question is caught by something reading the answer. Here "
     "nothing reads it. So neither rule answers, the answer lane takes the question, and the "
     "cost is one model call against an operator error that would otherwise be invisible."
+)
+
+#: Why the same words for several places are read in each rather than refused as two rules.
+ONE_QUESTION_ASKED_OF_SEVERAL_PLACES_IS_READ_IN_EACH: Final = (
+    "Two rules in the same literal words, each for a different place, read the same name out of "
+    "the question, so they are one question that several places might answer, and refusing the "
+    "pair answered nobody about either the moment a second price list was uploaded. Each place is "
+    "read at the caller's own reach and the one holding the name answers. A place the caller may "
+    "not read compiles to nothing, which is what a place that does not exist contributes, and two "
+    "records across the places is an ambiguous name, as it would be inside one place."
 )
 
 #: Why two records matching one name produces no answer rather than the first row.
@@ -391,6 +415,17 @@ def match_rule(
     the row plane has a reader for, which is wiring; the permission is decided downstream,
     once, by the row plane.
     """
+    found = _matches(question, rules, served)
+    if len(found) > 1:
+        _two_rules_matched(found)
+        return None
+    return found[0] if found else None
+
+
+def _matches(
+    question: str, rules: Sequence[FastPathRule], served: frozenset[tuple[str, str]]
+) -> list[RuleMatch]:
+    """Every served rule this question is exactly, in the rules' order."""
     tidy = _tidy(question)
     found: list[RuleMatch] = []
     for rule in rules:
@@ -399,12 +434,26 @@ def match_rule(
         match = _apply(rule, tidy)
         if match is not None:
             found.append(match)
-    if len(found) > 1:
-        # The rule ids and never the question. A question is a person's words, and a log
-        # line is read by more people, for longer, than the answer was.
-        log.warning("fast_lane.two_rules_matched", rules=sorted(m.rule.rule_id for m in found))
-        return None
-    return found[0] if found else None
+    return found
+
+
+def _two_rules_matched(found: Sequence[RuleMatch]) -> None:
+    # The rule ids and never the question. A question is a person's words, and a log line is
+    # read by more people, for longer, than the answer was.
+    log.warning("fast_lane.two_rules_matched", rules=sorted(m.rule.rule_id for m in found))
+
+
+def asked_of_several_places(found: Sequence[RuleMatch]) -> bool:
+    """Whether these matches are one question asked of several places, and so each to be read.
+
+    The same literal words on both sides of the hole and the same name read out of it, each for
+    a different source and entity pair. Two rules for one pair are an operator's duplicate, and
+    rules in different words read a different name each; both stay a fall-through. See
+    `ONE_QUESTION_ASKED_OF_SEVERAL_PLACES_IS_READ_IN_EACH`.
+    """
+    words = {(_tidy(m.rule.before), _tidy(m.rule.after), m.value) for m in found}
+    places = {(m.rule.source, m.rule.entity) for m in found}
+    return len(found) > 1 and len(words) == 1 and len(places) == len(found)
 
 
 def unserved_match(
@@ -543,10 +592,35 @@ async def respond(
     name. It returns an answer with no records for a caller who may not see the entity, which
     is the same answer somebody gets for a name that does not exist. See
     `AN_EMPTY_ANSWER_IS_THE_SAME_ANSWER_FOR_A_DENIAL_AND_AN_ABSENCE`.
+
+    **One question asked of several places reads each of them, at this caller's reach**, and the
+    one place whose read came back with a record answers. None of them holding the name is the
+    first place's empty answer, which is the object one place gives for a name it does not hold,
+    so the lane cannot say how many places were asked. See
+    `ONE_QUESTION_ASKED_OF_SEVERAL_PLACES_IS_READ_IN_EACH`.
     """
-    match = match_rule(question, rules, served=entities_served(readers))
-    if match is None:
+    found = _matches(question, rules, entities_served(readers))
+    if not found:
         return None
+    if len(found) > 1 and not asked_of_several_places(found):
+        _two_rules_matched(found)
+        return None
+    answers = [await _read(match, readers, entitlement=entitlement, now=now) for match in found]
+    held = [one for one in answers if one.result.records]
+    if sum(len(one.result.records) for one in held) > 1:
+        log.warning("fast_lane.two_records_matched", rules=sorted(one.rule_id for one in held))
+        return None
+    return held[0] if held else answers[0]
+
+
+async def _read(
+    match: RuleMatch,
+    readers: Mapping[tuple[str, str], RowReader],
+    *,
+    entitlement: EntitlementSet,
+    now: datetime | None,
+) -> FastLaneAnswer:
+    """One matched rule's rows, read at this caller's reach, narrowed to the name it read."""
     # **This comment said the refusal inside `reader_for` could not be reached from here, and
     # until 2026-09-14 it could.** `entities_served` keyed on the entity while `readers` is
     # keyed on the pair, so a rule for `demo.client` matched on a lane whose only client reader
@@ -565,9 +639,6 @@ async def respond(
         limit=FAST_LANE_ROW_LIMIT,
     )
     result = await reader(request, entitlement=entitlement, now=now)
-    if len(result.records) > 1:
-        log.warning("fast_lane.two_records_matched", rule=match.rule.rule_id)
-        return None
     return FastLaneAnswer(
         rule_id=match.rule.rule_id,
         entity=match.rule.entity,

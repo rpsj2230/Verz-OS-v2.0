@@ -38,6 +38,22 @@ const ELEVATION = {
   recorded: UNBROKEN,
   notified: UNBROKEN,
   authorising: UNBROKEN,
+  people: { [UNBROKEN]: UNBROKEN },
+};
+
+/** The break-glass notices addressed to the reader, with the names of the people on them. */
+const NOTICES = {
+  items: [
+    {
+      session_id: "s-1",
+      principal_id: UNBROKEN,
+      authorised_by: UNBROKEN,
+      reason: "lockout",
+      lapses_at: "2019-03-04T13:00:00Z",
+      told_at: "2019-03-04T09:00:00Z",
+    },
+  ],
+  people: { [UNBROKEN]: UNBROKEN },
 };
 
 export const PAGES: Readonly<Record<string, PageCase>> = {
@@ -47,18 +63,14 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     drawsValues: true,
     answers: {
       "/api/v1/govern/elevation": ELEVATION,
-      "/api/v1/govern/elevation/notices": {
-        items: [
-          {
-            session_id: "s-1",
-            principal_id: UNBROKEN,
-            authorised_by: UNBROKEN,
-            reason: "lockout",
-            lapses_at: "2019-03-04T13:00:00Z",
-            told_at: "2019-03-04T09:00:00Z",
-          },
-        ],
-      },
+      "/api/v1/govern/elevation/notices": NOTICES,
     },
+  },
+  // One request's page asks the same list for it by id.
+  "/elevation/:requestId": {
+    address: "/elevation/11111111-2222-3333-4444-555555555555",
+    signedIn: true,
+    drawsValues: true,
+    answers: { "/api/v1/govern/elevation": ELEVATION },
   },
 };

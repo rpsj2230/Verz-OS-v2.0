@@ -11,7 +11,7 @@ import { handledApiPath } from "../../../src/pages/referralsQuery";
 import { at, COMPLIANCE_CASE, type Proofs, t, type WriteRoute } from "../auditClaims";
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
-  "src/pages/Referrals.tsx handledApiPath(chosen.referral_id)": [
+  "src/pages/referrals/ReferralsPage.tsx handledApiPath(one.referral_id)": [
     at("POST /api/v1/me/referrals/{referral_id}/handled", "handledApiPath", handledApiPath(COMPLIANCE_CASE)),
   ],
 };

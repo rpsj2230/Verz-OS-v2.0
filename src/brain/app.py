@@ -116,6 +116,7 @@ from brain.ops.automation_owner_store import StoredAutomations
 from brain.ops.credential_write_store import credential_writes_for
 from brain.ops.credentials import credentials_at_start, keep_refreshing
 from brain.ops.default_ladder_store import SessionLadderWriter
+from brain.ops.install_settings import keep_holding
 from brain.ops.install_settings import refresh as refresh_install_settings
 from brain.ops.log_store import start_log_store, stop_log_store
 from brain.ops.matrix_gate_run import InstallMatrixGate
@@ -338,6 +339,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         if app.state.credentials.configured
         else None
     )
+    # The saved settings, re-read every minute once they are first loaded below, so a value
+    # changed on the Settings screen reaches every process and not only the one that saved it.
+    # See `brain.ops.install_settings.A_SAVED_SETTING_IS_NOT_A_MESSAGE_TO_ANOTHER_WORKER`.
+    holding: asyncio.Task[None] | None = None
 
     if settings.run_migrations and not settings.database_url and settings.env != "development":
         # Loud on purpose. Skipping migrations because a variable was unset is exactly
@@ -397,6 +402,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             await refresh_install_settings(app.state.db_sessions)
         except Exception:
             log.exception("installation settings could not be loaded")
+        holding = asyncio.create_task(keep_holding(app.state.db_sessions))
         # An administrator appointed before a capability existed is granted it now, and one whose
         # capability was taken away is not given it back. After the migrations, under the
         # appointment's own lock, and never fatal: a missing capability is a screen that refuses,
@@ -676,6 +682,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             refreshing.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await refreshing
+        if holding is not None:
+            holding.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await holding
         if trying is not None:
             trying.cancel()
             with contextlib.suppress(asyncio.CancelledError):

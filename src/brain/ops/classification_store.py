@@ -110,6 +110,14 @@ class ClassifiedTables:
     ) -> StoredTable | None:
         raise NotImplementedError
 
+    async def rows_of(self, table: StoredTable) -> tuple[Mapping[str, str], ...]:
+        """The rows of this table's live upload, as the file had them, in the file's order.
+
+        What the Classification routes judge an administrator's scope against: a change to the
+        classification is a change to what everybody may see of every one of these rows.
+        """
+        raise NotImplementedError
+
     def records(self) -> RowSource:
         raise NotImplementedError
 
@@ -283,6 +291,18 @@ class SqlClassifiedTables(ClassifiedTables):
             )
             await session.commit()
         return stored
+
+    async def rows_of(self, table: StoredTable) -> tuple[Mapping[str, str], ...]:
+        async with self._sessions() as session:
+            result = await session.execute(
+                select(ClassifiedRecordRow.fields)
+                .where(ClassifiedRecordRow.entity == table.entity)
+                .where(ClassifiedRecordRow.version == table.version)
+                .order_by(ClassifiedRecordRow.position)
+            )
+            held = list(result.scalars().all())
+        # A JSONB value arrives decoded, and every value was written as the file's text.
+        return tuple({str(k): str(v) for k, v in dict(one).items()} for one in held)
 
 
 async def _attribute(session: AsyncSession, writer: Writer) -> None:

@@ -14,9 +14,15 @@ for this reason, and the reason is the question; see `brain.core.redaction.Owner
 read by the owner's list and by nothing that reaches the asker, whose reply is a constant.
 
 **Insert and read, never update or delete.** A request is a record that it was made; a decision is
-a grant written on the Roles screen, which is where an owner acts on it.
+a grant written on the People or Roles screens, which is where an owner acts on it.
 
-Task ids: M4.3.4, M2.2.4
+**Handled is a row of its own, `gate.access_request_handled`** (`0146`, needs-rupash gap (a)). Its
+owner marks a request handled once, by inserting one row keyed by the request, so the request row
+is never updated and a mark cannot be moved or cleared. Rejected: two columns on the request with a
+column grant and an update policy, which gave the application an UPDATE on a table built insert
+only, and put a restriction on a table the release before already writes.
+
+Task ids: M4.3.4, M2.2.4, M27.16.1
 """
 
 from __future__ import annotations
@@ -25,7 +31,7 @@ import uuid
 from datetime import datetime
 from typing import Final
 
-from sqlalchemy import CheckConstraint, DateTime, String, Uuid, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from brain.db import Base
@@ -77,3 +83,25 @@ class AccessRequestRow(Base):
         ),
         {"schema": "gate"},
     )
+
+
+class AccessRequestHandledRow(Base):
+    """`gate.access_request_handled`. One request marked handled by its owner, once (`0146`).
+
+    Keyed by the request, so a second mark is a conflict rather than a second row. `0146`'s insert
+    policy admits a row only when `handled_by` is the owner of the request it names.
+    """
+
+    __tablename__ = "access_request_handled"
+
+    request_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("gate.access_request.id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+    handled_by: Mapped[str] = mapped_column(String(PRINCIPAL_ID_CHARS), nullable=False)
+    handled_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = ({"schema": "gate"},)

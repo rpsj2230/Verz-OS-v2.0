@@ -95,14 +95,17 @@ A_READABLE_EXPORT_NAMES_NO_WINDOW: Final = (
 class ExportDataSet(enum.StrEnum):
     """Every data set an export can be taken of from the console. Closed, like `ExportReason`.
 
-    One member, because one data set can be exported end to end on an install today. Every other
-    candidate and the reason it cannot be is `brain.ops.data_transfer.CATALOGUE`, and a member is
-    added here on the day its export runs, with the migration that widens the constraint.
+    A member is added here on the day its export runs, with the migration that widens the
+    constraint. Every other candidate and the reason it cannot be is
+    `brain.ops.data_transfer.CATALOGUE`.
     """
 
     #: A window of the audit ledger, as `brain.audit.export` or `brain.audit.readable_export`
     #: renders it.
     AUDIT_TRAIL = "audit_trail"
+    #: The grants and packs one reviewer may decide, with their last review, taken from the
+    #: Access review screen (`brain.certification_export_routes`, `0146`). Always readable.
+    ACCESS_CERTIFICATION = "access_certification"
 
 
 class ExportForm(enum.StrEnum):

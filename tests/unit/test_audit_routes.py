@@ -363,6 +363,41 @@ def test_every_filter_narrows_to_exactly_what_it_names(client: TestClient) -> No
     assert [one[2] for one in by_window] == ["connector:xero", "artifact:report_1"]
 
 
+def test_changes_only_leaves_out_reads_refusals_and_vault_calls_and_keeps_every_change(
+    client: TestClient, ledger: Ledger
+) -> None:
+    """Found on the owner's install on 2026-09-29: the Dashboard's six newest entries were all
+    "Answered a call about a credential", and the grants and settings a person had changed were
+    pushed off the card. The Dashboard asks for changes only.
+
+    Delete this and the filter can be accepted and ignored, which is the flooded card again, or
+    drop a change with the reads, which is a card that hides what somebody did."""
+    for minute, action in ((10, AuditAction.VAULT_ACCESS), (11, AuditAction.RECORD_READ)):
+        entry = chain_of([(action, "u_admin", "credential:providers.one", {})])[0]
+        row = stored(entry)
+        row.at = BEGAN + timedelta(minutes=minute)
+        ledger.rows.append(row)
+
+    changes = seen(get(client, "u_admin", changes_only="true"))
+    everything = seen(get(client, "u_admin"))
+
+    assert [one[0] for one in changes] == ["sign_in", "revoke", "leash_change", "publish", "grant"]
+    assert {one[0] for one in everything} >= {"vault_access", "deny"}
+
+
+def test_changes_only_with_an_action_that_is_not_a_change_is_an_empty_page(
+    client: TestClient,
+) -> None:
+    """An empty action set means every action, so a read asked for with changes only must come
+    back empty rather than widened to the whole ledger.
+
+    Delete this and `action=deny&changes_only=true` answers with every entry."""
+    assert seen(get(client, "u_admin", action="deny", changes_only="true")) == []
+    assert seen(get(client, "u_admin", action="revoke", changes_only="true")) == [
+        ("revoke", "u_admin", "principal:u_narrow")
+    ]
+
+
 def test_a_search_reads_what_a_visible_row_says_and_never_an_entry_the_reader_may_not_see(
     client: TestClient,
 ) -> None:
@@ -631,3 +666,63 @@ def test_a_row_with_an_action_nobody_declared_is_not_an_entry() -> None:
 
     assert entry_from(row) is None
     assert entry_from(stored(chain_of(PLAN)[0])) is not None
+
+
+# ------------------------------------------------------- one subject, and the people named
+
+
+@dataclass
+class Names:
+    """A `brain.people_names.PeopleNames` that knows everybody, and records what it was asked."""
+
+    asked: list[set[str]] = field(default_factory=list)
+
+    async def names(self, principal_ids: Any) -> dict[str, str]:
+        wanted = set(principal_ids)
+        self.asked.append(wanted)
+        # One stranger answered whatever was asked, so a route that passed it on would show it.
+        return {**{one: f"Name of {one}" for one in wanted}, "u_stranger": "Somebody else"}
+
+
+def test_the_ledger_narrowed_to_one_subject_reads_and_shows_only_that_subjects_entries(
+    client: TestClient, ledger: Ledger
+) -> None:
+    """A subject's own page in the console. Delete this and `subject_id` can be accepted and
+    ignored, so the page titled with one person lists everybody's entries, or narrowed only after
+    reading the whole window rather than in the statement."""
+    answer = get(client, "u_admin", subject_kind="principal", subject_id="u_wide")
+
+    assert answer.status_code == 200, answer.text
+    assert [one[2] for one in seen(answer)] == ["principal:u_wide", "principal:u_wide"]
+    assert {one["subject"] for one in ledger.calls} == {"principal:u_wide"}
+
+
+def test_a_subject_id_without_its_kind_is_refused_and_the_ledger_is_not_read(
+    client: TestClient, ledger: Ledger
+) -> None:
+    """Delete this and an id alone is silently dropped, which reads as a subject with the whole
+    ledger for its history."""
+    answer = get(client, "u_admin", subject_id="u_wide")
+
+    assert answer.status_code == 422
+    assert ledger.calls == []
+
+
+def test_the_answer_names_the_people_on_its_own_rows_and_nobody_else(
+    client: TestClient,
+) -> None:
+    """`brain.people_names`' rule, served. Delete this and the names can be looked up for rows the
+    reader is not shown, or a store's extra answer reaches the page as a directory entry."""
+    names = Names()
+    client.app.state.people_names = names  # type: ignore[attr-defined]
+
+    narrow = get(client, "u_narrow").json()
+    shown = {one["actor_id"] for one in narrow["items"]} | {
+        one["subject_id"] for one in narrow["items"] if one["subject_kind"] == "principal"
+    }
+    history = get(client, "u_admin", HISTORY, subject_kind="principal", subject_id="u_wide").json()
+
+    assert narrow["people"] == {one: f"Name of {one}" for one in shown}
+    assert "u_elsewhere" not in names.asked[0]
+    assert history["people"]["u_wide"] == "Name of u_wide"
+    assert "u_stranger" not in history["people"]

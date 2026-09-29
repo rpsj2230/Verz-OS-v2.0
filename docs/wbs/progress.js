@@ -55,9 +55,9 @@ const PROGRESS = {
     updated: "2026-09-28",
   },
   "M1.8.8": {
-    status: "BLOCKED",
-    why: "the owner records the remaining permissions rows on Requirement checks (needs-rupash 91, check 7)",
-    updated: "2026-09-28",
+    status: "OPEN",
+    why: "moved to Wave 4 (needs-rupash 112): closes when every permissions requirement row has its proof on the install",
+    updated: "2026-09-29",
   },
   "M10.1.1": {
     status: "READY FOR TESTING",
@@ -300,9 +300,9 @@ const PROGRESS = {
     updated: "2026-09-28",
   },
   "M2.3.2": {
-    status: "BLOCKED",
-    why: "the owner records the remaining departments rows on Requirement checks (needs-rupash 91, check 7)",
-    updated: "2026-09-28",
+    status: "OPEN",
+    why: "moved to Wave 4 (needs-rupash 112): closes when every departments requirement row has its proof on the install",
+    updated: "2026-09-29",
   },
   "M23.1.1": {
     status: "READY FOR TESTING",
@@ -340,9 +340,9 @@ const PROGRESS = {
     updated: "2026-09-28",
   },
   "M24.3.6": {
-    status: "BLOCKED",
-    why: "the owner records the remaining observability rows on Requirement checks (needs-rupash 91, check 7)",
-    updated: "2026-09-28",
+    status: "OPEN",
+    why: "moved to Wave 5 (needs-rupash 112): closes when every observability requirement row has its proof on the install",
+    updated: "2026-09-29",
   },
   "M3.2.2": {
     status: "READY FOR TESTING",
@@ -425,9 +425,9 @@ const PROGRESS = {
     updated: "2026-09-28",
   },
   "M5.6.5": {
-    status: "BLOCKED",
-    why: "the owner's models check on the install (needs-rupash 91, check 6), once the providers answer (needs-rupash 98)",
-    updated: "2026-09-28",
+    status: "OPEN",
+    why: "moved to Wave 3 (needs-rupash 112): closes when every models requirement row has its proof on the install",
+    updated: "2026-09-29",
   },
   "M5.7.1": {
     status: "READY FOR TESTING",

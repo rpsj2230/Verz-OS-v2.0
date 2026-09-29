@@ -5,16 +5,41 @@
  * Task ids: none
  */
 
-import { AUDIT, type PageCase } from "../pageFixtures";
+import { AUDIT, UNBROKEN, type PageCase } from "../pageFixtures";
+
+/** The ledger's page with the names of its people, which the Who column and filter draw. */
+const LEDGER = { ...AUDIT, people: { [UNBROKEN]: UNBROKEN } };
+
+/** One subject's access changes, as `brain.audit_routes.PermissionHistoryView` sends them. */
+const HISTORY = {
+  subject_kind: "principal",
+  subject_id: UNBROKEN,
+  events: [{ at: "2019-03-04T09:00:00Z", action: "grant", actor_id: UNBROKEN, details: { capability: UNBROKEN } }],
+  full: false,
+  people: { [UNBROKEN]: UNBROKEN },
+};
 
 export const PAGES: Readonly<Record<string, PageCase>> = {
-  // Audit. The actor is drawn twice, in the table and as an option in the Who filter, and the
-  // option is the one outside anything that scrolls. The history card is not opened here; it is
-  // the same table shape and is held in `tests/audit-page.test.tsx`.
+  // Audit. The actor is drawn in the table and as an option in the Who filter, which is outside
+  // anything that scrolls.
   "/audit": {
     address: "/audit",
     signedIn: true,
     drawsValues: true,
-    answers: { "/api/v1/audit": AUDIT },
+    answers: { "/api/v1/audit": LEDGER },
+  },
+  "/audit/verify": { address: "/audit/verify", signedIn: true, drawsValues: false, answers: {} },
+  // One subject's page: every entry about it, and a person's access changes as its second view.
+  "/audit/subject/:kind/:id": {
+    address: "/audit/subject/principal/u_wide",
+    signedIn: true,
+    drawsValues: true,
+    answers: { "/api/v1/audit": LEDGER },
+  },
+  "/audit/subject/:kind/:id/:view": {
+    address: "/audit/subject/principal/u_wide/permissions",
+    signedIn: true,
+    drawsValues: true,
+    answers: { "/api/v1/audit": LEDGER, "/api/v1/audit/history": HISTORY },
   },
 };

@@ -119,7 +119,7 @@ const ONCE_BY_THE_WIZARD =
 /** Every area of the standard, keyed by the standard's own words. */
 export const AREAS: Readonly<Record<string, Area>> = {
   "People, roles, permissions and access control": {
-    screens: ["/people", "/people/:personId", "/people/:personId/:view", "/roles", "/capabilities", "/scopes", "/packs", "/access_review", "/elevation", "/sessions", "/sign-in-links", "/staff_sources", "/access-requests", "/service-accounts", "/service-accounts/:clientId"],
+    screens: ["/people", "/people/:personId", "/people/:personId/:view", "/roles", "/capabilities", "/scopes", "/packs", "/access_review", "/access_review/:kind/:rowId", "/elevation", "/elevation/:requestId", "/sessions", "/sign-in-links", "/staff_sources", "/access-requests", "/service-accounts", "/service-accounts/:clientId"],
     routes: [
       "/api/v1/me",
       "/api/v1/console/navigation",
@@ -141,7 +141,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/govern/people/disable",
       "/api/v1/govern/people/enable",
       "/api/v1/govern/service-accounts*",
-      "/api/v1/access-requests",
+      "/api/v1/access-requests*",
       "/api/v1/govern/roles/holders",
       "/api/v1/govern/roles/appointment",
       "/api/v1/govern/roles/deputy",
@@ -167,6 +167,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "auth.service_account",
       "auth.api_key",
       "gate.access_request",
+      "gate.access_request_handled",
       "gate.role_grant",
       "auth.group_role_rule",
       "gate.break_glass_notice",
@@ -664,7 +665,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "The audit trail: who changed what, and when": {
-    screens: ["/audit", "/requirement-checks"],
+    screens: ["/audit", "/audit/verify", "/audit/subject/:kind/:id", "/audit/subject/:kind/:id/:view", "/requirement-checks"],
     routes: ["/api/v1/audit*", "/api/v1/requirements/checks"],
     tables: ["obs.audit_entry", "ops.sensitive_read", "ops.requirement_check"],
     installation: [],
@@ -683,7 +684,17 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "Backup and recovery": {
-    screens: ["/recovery", "/retention", "/compliance", "/referrals"],
+    screens: [
+      "/recovery",
+      "/retention",
+      "/retention/:view",
+      "/retention/holds/:holdId",
+      "/retention/erasures/:requestId",
+      "/compliance",
+      "/compliance/:view",
+      "/compliance/breaches/:caseId",
+      "/referrals",
+    ],
     routes: [
       "/api/v1/install/recovery",
       "/api/v1/govern/retention*",

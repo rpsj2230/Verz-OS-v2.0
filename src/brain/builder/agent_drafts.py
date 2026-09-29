@@ -83,7 +83,7 @@ from brain.agents.template import (
     install,
     publish,
 )
-from brain.builder.compose import BuilderError
+from brain.builder.compose import SECTION_OF_PATH, BuilderError, Section, paths_in
 from brain.builder.draft_words import DraftAct, DraftKind, DraftState
 from brain.builder.drafts import (
     FIRST_VERSION,
@@ -92,6 +92,7 @@ from brain.builder.drafts import (
     Revision,
     whole_manifest,
 )
+from brain.builder.form import FIELD_WORDS, SECTION_TITLES
 from brain.builder.publish import (
     APPROVERS_FOR_AN_ORDINARY_PUBLISH,
     approvers_needed,
@@ -465,41 +466,36 @@ def next_version(on_file: Iterable[int]) -> int:
 
 
 # -------------------------------------------------------------------- the plain words
-#: What each manifest section is called on the form, for a problem's "where".
-SECTION_WORDS: Final[Mapping[str, str]] = {
-    "identity": "Identity",
-    "persona": "Instructions",
-    "tier": "Model size",
-    "skills": "Skills",
-    "authority": "Permissions",
-    "connectors": "Connectors",
-    "guardrails": "Supervision",
-    "golden_set": "Test questions",
-    "placeholders": "Questions for whoever installs it",
-}
-
-#: What each field is called, for a problem's "where".
-FIELD_WORDS: Final[Mapping[str, str]] = {
-    "display_name": "name",
-    "summary": "summary",
-    "template_id": "address",
-    "scope": "rows it may read",
-    "capabilities": "what it may read",
-    "allowed_tools": "tools it may use",
-    "required_tools": "tools it cannot work without",
-    "max_side_effect": "the most it may do",
-    "leash": "approval settings",
-}
+def _lower_first(words: str) -> str:
+    return words[:1].lower() + words[1:]
 
 
 def where(path: str) -> str:
-    """Where a problem is, in the words the form uses. A path nobody named reads as itself."""
-    head, _, rest = path.partition(".")
-    section = SECTION_WORDS.get(head, head)
-    field = rest.split(".", 1)[0] if rest else ""
-    if not field or field.isdigit():
-        return section
-    return f"{section}, {FIELD_WORDS.get(field, field.replace('_', ' '))}"
+    """Where a problem is, in the words of the Write step: its section's heading, then its field's.
+
+    The words are `brain.builder.form`'s, the ones the form itself is labelled with, so a problem
+    never names a heading that is not on the screen. Until 2026-09-29 this module kept a second
+    table, and it sent people to headings called "Permissions" and "Identity", neither of which
+    the form had. A holder split across sections names every section it is in, and a path nobody
+    filed reads as itself.
+    """
+    parts = path.split(".")
+    for length in (2, 1):
+        filed = ".".join(parts[:length])
+        section = SECTION_OF_PATH.get(filed)
+        if section is None:
+            continue
+        heading = SECTION_TITLES[section]
+        said = FIELD_WORDS.get(filed)
+        if said is None or said.title.casefold() == heading.casefold():
+            return heading
+        return f"{heading}, {_lower_first(said.title)}"
+    holding = [
+        SECTION_TITLES[one]
+        for one in Section
+        if any(path_ == parts[0] or path_.startswith(f"{parts[0]}.") for path_ in paths_in(one))
+    ]
+    return " or ".join(holding) if holding else path
 
 
 def plain(problem: Problem) -> str:

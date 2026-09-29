@@ -1,8 +1,9 @@
 {
-  "schema": "brain.builder.form.v1",
+  "schema": "brain.builder.form.v2",
   "sections": [
     {
       "section": "identity",
+      "title": "Name and summary",
       "schema": {
         "type": "object",
         "properties": {
@@ -358,10 +359,39 @@
         "required": [
           "identity"
         ]
+      },
+      "ui": {
+        "identity": {
+          "ui:label": false,
+          "display_name": {
+            "ui:title": "Display name",
+            "ui:description": "The name people see in the agent list and in a conversation."
+          },
+          "published_by": {
+            "ui:title": "Published by",
+            "ui:description": "Set by the server when the draft is published.",
+            "ui:widget": "hidden"
+          },
+          "summary": {
+            "ui:title": "Summary",
+            "ui:description": "One or two sentences on what it is for."
+          },
+          "template_id": {
+            "ui:title": "Address",
+            "ui:description": "Set by the server when the draft is published.",
+            "ui:widget": "hidden"
+          },
+          "version": {
+            "ui:title": "Version",
+            "ui:description": "Set by the server when the draft is published.",
+            "ui:widget": "hidden"
+          }
+        }
       }
     },
     {
       "section": "persona",
+      "title": "Instructions",
       "schema": {
         "type": "object",
         "properties": {
@@ -689,10 +719,50 @@
             "type": "string"
           }
         }
+      },
+      "ui": {
+        "persona": {
+          "ui:title": "Instructions",
+          "ui:description": "What the agent is for and how it answers, in plain sentences. Nothing written here can widen what it may read.",
+          "ui:widget": "textarea"
+        },
+        "placeholders": {
+          "ui:title": "Questions for whoever installs it",
+          "ui:description": "What each company must answer when it installs this agent, such as where its price list is kept.",
+          "items": {
+            "ui:title": "Question",
+            "key": {
+              "ui:title": "Short name",
+              "ui:description": "Lower-case letters, digits and underscores, starting with a letter: price_list."
+            },
+            "prompt": {
+              "ui:title": "Question",
+              "ui:description": "What the person installing it is asked."
+            },
+            "required": {
+              "ui:title": "It must be answered"
+            }
+          },
+          "ui:options": {
+            "orderable": false,
+            "addLabel": "Add a question"
+          }
+        },
+        "tier": {
+          "ui:title": "Model size",
+          "ui:description": "How much thinking it does. Main suits most agents.",
+          "ui:enumNames": {
+            "none": "No model",
+            "small": "Small",
+            "main": "Main",
+            "heavy": "Heavy"
+          }
+        }
       }
     },
     {
       "section": "knowledge",
+      "title": "Knowledge",
       "schema": {
         "type": "object",
         "properties": {
@@ -1020,10 +1090,77 @@
             "type": "string"
           }
         }
+      },
+      "ui": {
+        "authority": {
+          "ui:label": false,
+          "scope": {
+            "ui:title": "Records it may read",
+            "ui:description": "Conditions every record must meet. With none it narrows nothing, and it never reads more than the person using it may.",
+            "clauses": {
+              "ui:title": "Conditions",
+              "ui:description": "Every condition must hold for a record to count.",
+              "items": {
+                "ui:title": "Condition",
+                "field": {
+                  "ui:title": "Field",
+                  "ui:description": "The record's field: lower-case letters, digits, underscores and dots, starting with a letter: department."
+                },
+                "op": {
+                  "ui:title": "Test",
+                  "ui:enumNames": {
+                    "eq": "is",
+                    "in": "is one of",
+                    "prefix": "starts with",
+                    "any": "any value"
+                  }
+                },
+                "value": {
+                  "ui:title": "Value",
+                  "ui:description": "One value for is and starts with, a list for is one of, and none for any value.",
+                  "anyOf": [
+                    {
+                      "ui:title": "One value"
+                    },
+                    {
+                      "ui:title": "A list of values",
+                      "items": {
+                        "ui:title": "Value"
+                      },
+                      "ui:options": {
+                        "orderable": false,
+                        "addLabel": "Add a value"
+                      }
+                    },
+                    {
+                      "ui:title": "No value"
+                    }
+                  ]
+                }
+              },
+              "ui:options": {
+                "orderable": false,
+                "addLabel": "Add a condition"
+              }
+            }
+          }
+        },
+        "connectors": {
+          "ui:title": "Connectors",
+          "ui:description": "The systems it needs connected before it can be switched on, each by the connector's name: helpdesk.",
+          "items": {
+            "ui:title": "Connector"
+          },
+          "ui:options": {
+            "orderable": false,
+            "addLabel": "Add a connector"
+          }
+        }
       }
     },
     {
       "section": "skills",
+      "title": "Skills",
       "schema": {
         "type": "object",
         "properties": {
@@ -1341,10 +1478,32 @@
             "type": "string"
           }
         }
+      },
+      "ui": {
+        "skills": {
+          "ui:title": "Skills",
+          "ui:description": "Reviewed procedures it follows, each pinned to the version that was reviewed.",
+          "items": {
+            "ui:title": "Skill",
+            "name": {
+              "ui:title": "Skill name",
+              "ui:description": "As the Skills page shows it: lower-case letters, digits, hyphens and underscores, starting with a letter."
+            },
+            "digest": {
+              "ui:title": "Fingerprint",
+              "ui:description": "The reviewed version's fingerprint: 64 characters, digits and the letters a to f."
+            }
+          },
+          "ui:options": {
+            "orderable": false,
+            "addLabel": "Add a skill"
+          }
+        }
       }
     },
     {
       "section": "tools",
+      "title": "Tools and permissions",
       "schema": {
         "type": "object",
         "properties": {
@@ -1685,10 +1844,53 @@
             "type": "string"
           }
         }
+      },
+      "ui": {
+        "authority": {
+          "ui:label": false,
+          "allowed_tools": {
+            "ui:title": "Tools it may use",
+            "ui:description": "Each by the tool's name: helpdesk.read_ticket. Only these can be called, or drawn in a procedure.",
+            "items": {
+              "ui:title": "Tool"
+            },
+            "ui:options": {
+              "orderable": false,
+              "addLabel": "Add a tool it may use"
+            }
+          },
+          "capabilities": {
+            "ui:title": "Permissions",
+            "ui:description": "What it may do, each written as a verb, a colon and a thing, with a field after a dot if you need one: read:invoice.total. The verbs are read, write, invoke, approve and admin.",
+            "items": {
+              "ui:title": "Permission",
+              "value": {
+                "ui:title": "Permission",
+                "ui:description": "Such as read:invoice.total."
+              }
+            },
+            "ui:options": {
+              "orderable": false,
+              "addLabel": "Add a permission"
+            }
+          },
+          "required_tools": {
+            "ui:title": "Tools it cannot work without",
+            "ui:description": "Tools this install must have before it can be switched on, each by the tool's name.",
+            "items": {
+              "ui:title": "Tool"
+            },
+            "ui:options": {
+              "orderable": false,
+              "addLabel": "Add a tool it cannot work without"
+            }
+          }
+        }
       }
     },
     {
       "section": "leash",
+      "title": "Supervision",
       "schema": {
         "type": "object",
         "properties": {
@@ -2017,10 +2219,100 @@
             "type": "string"
           }
         }
+      },
+      "ui": {
+        "guardrails": {
+          "ui:label": false,
+          "leash": {
+            "ui:title": "Approval settings",
+            "ui:description": "How much a person is involved before an action. Every action starts at Shadow, and a setting is raised later from the agent's own runs.",
+            "items": {
+              "ui:title": "Approval setting",
+              "target": {
+                "ui:title": "Action",
+                "ui:description": "A kind of record, or one action on it after a dot: invoice, or ticket.update_status. Lower-case letters, digits and underscores."
+              },
+              "scope": {
+                "ui:title": "Records it applies to",
+                "ui:description": "With no conditions it applies to every record.",
+                "clauses": {
+                  "ui:title": "Conditions",
+                  "ui:description": "Every condition must hold for a record to count.",
+                  "items": {
+                    "ui:title": "Condition",
+                    "field": {
+                      "ui:title": "Field",
+                      "ui:description": "The record's field: lower-case letters, digits, underscores and dots, starting with a letter: department."
+                    },
+                    "op": {
+                      "ui:title": "Test",
+                      "ui:enumNames": {
+                        "eq": "is",
+                        "in": "is one of",
+                        "prefix": "starts with",
+                        "any": "any value"
+                      }
+                    },
+                    "value": {
+                      "ui:title": "Value",
+                      "ui:description": "One value for is and starts with, a list for is one of, and none for any value.",
+                      "anyOf": [
+                        {
+                          "ui:title": "One value"
+                        },
+                        {
+                          "ui:title": "A list of values",
+                          "items": {
+                            "ui:title": "Value"
+                          },
+                          "ui:options": {
+                            "orderable": false,
+                            "addLabel": "Add a value"
+                          }
+                        },
+                        {
+                          "ui:title": "No value"
+                        }
+                      ]
+                    }
+                  },
+                  "ui:options": {
+                    "orderable": false,
+                    "addLabel": "Add a condition"
+                  }
+                }
+              },
+              "rung": {
+                "ui:title": "Setting",
+                "ui:enumNames": {
+                  "0": "Shadow",
+                  "1": "Assisted",
+                  "2": "Autonomous"
+                }
+              }
+            },
+            "ui:options": {
+              "orderable": false,
+              "addLabel": "Add an approval setting"
+            }
+          },
+          "max_side_effect": {
+            "ui:title": "The most it may do",
+            "ui:description": "The strongest effect any one of its actions may have.",
+            "ui:enumNames": {
+              "none": "Nothing: it only reads",
+              "draft": "Drafts for a person to send",
+              "write": "Changes records",
+              "send": "Sends messages",
+              "money": "Moves money"
+            }
+          }
+        }
       }
     },
     {
       "section": "tests",
+      "title": "Test questions",
       "schema": {
         "type": "object",
         "properties": {
@@ -2336,6 +2628,28 @@
             ],
             "title": "Tier",
             "type": "string"
+          }
+        }
+      },
+      "ui": {
+        "golden_set": {
+          "ui:title": "Test questions",
+          "ui:description": "Questions it must still answer well once installed, each with what a good answer says.",
+          "items": {
+            "ui:title": "Test question",
+            "question": {
+              "ui:title": "Question",
+              "ui:widget": "textarea"
+            },
+            "expectation": {
+              "ui:title": "What a good answer says",
+              "ui:description": "In words rather than an exact answer: it is judged, not matched.",
+              "ui:widget": "textarea"
+            }
+          },
+          "ui:options": {
+            "orderable": false,
+            "addLabel": "Add a test question"
           }
         }
       }

@@ -11,7 +11,7 @@ import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
 import { BREAK_GLASS_NOTICES_API_PATH } from "../src/pages/governPeopleQuery";
-import { NOTHING_TOLD, TOLD_LIST_LABEL } from "../src/pages/Elevation";
+import { NO_REQUESTS, TOLD_HEADING, TOLD_LABEL as TOLD_LIST_LABEL } from "../src/pages/review/ElevationPage";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 
 type Answers = Readonly<Record<string, unknown>>;
@@ -109,25 +109,29 @@ describe("the break-glass notices on the elevation screen", () => {
             told_at: "2019-03-04T09:00:00Z",
           },
         ],
+        people: { u_partner: "Pat Partner", u_approver: "Abe Approver" },
       },
     });
     await waitFor(() => {
-      expect(container.querySelector(`[aria-label="${TOLD_LIST_LABEL}"]`)).not.toBeNull();
+      expect(container.querySelector(`table`)).not.toBeNull();
     });
-    const told = container.querySelector(`[aria-label="${TOLD_LIST_LABEL}"]`)?.textContent ?? "";
-    expect(told).toContain("u_partner");
-    expect(told).toContain("u_approver");
+    const told = [...container.querySelectorAll("table")].find((one) => one.querySelector("caption")?.textContent === TOLD_LIST_LABEL)?.textContent ?? "";
+    expect(told).toContain("Pat Partner");
+    expect(told).toContain("Abe Approver");
     expect(told).toContain("incident response");
+    expect(told).not.toContain("u_partner");
   });
 
-  test("a reader told nothing is told so in a sentence", async () => {
-    // What breaks if this is deleted: an empty answer renders as a blank section.
+  test("a reader told nothing is shown no section, which is a statement about their own notices only", async () => {
+    // What breaks if this is deleted: an empty answer renders as a blank section. The notices are
+    // the reader's own, so leaving the section out says nothing about anybody else's.
     const { container } = await consoleAt("/elevation", {
       "/govern/elevation": ELEVATION,
       [BREAK_GLASS_NOTICES_API_PATH]: { items: [] },
     });
     await waitFor(() => {
-      expect(container.textContent).toContain(NOTHING_TOLD);
+      expect(container.textContent).toContain(NO_REQUESTS);
     });
+    expect(container.textContent).not.toContain(TOLD_HEADING);
   });
 });

@@ -796,6 +796,15 @@ class SkippedRung:
     reason: SkipReason
 
 
+#: What a person is told when every rung their request could use sits outside the regions its
+#: residency constraint allows. A constant so an install check (M5.6.3) can hold the refusal a
+#: person reads to the product's own words rather than to a copy of them.
+RESIDENCY_REFUSAL = (
+    "I cannot answer that without sending the data outside the region its policy allows, so I "
+    "have not."
+)
+
+
 class NoCompliantRoute(Degraded):
     """No rung in the tier may serve this request.
 
@@ -837,10 +846,7 @@ class ChainSelection:
             # A residency refusal is a policy outcome the asker can act on (raise it with
             # an admin, agree a transfer clause); an outage is transient and reporting one
             # as the other sends them to wait for a recovery that will not help.
-            public = (
-                "I cannot answer that without sending the data outside the region its "
-                "policy allows, so I have not."
-            )
+            public = RESIDENCY_REFUSAL
         elif reasons:
             public = Degraded.public_message
         elif self.tier is Tier.NONE:

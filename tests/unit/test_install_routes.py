@@ -53,6 +53,7 @@ from brain.console.installation import Source
 from brain.console.reads import Plane, plane_capability
 from brain.console.screens import NOT_AT_DEPARTMENT_SCOPE, for_department, navigation, screen
 from brain.console.version_view import (
+    A_LOOK_THAT_HAS_NOT_FINISHED,
     COMMIT_FACT,
     PINNED_FACT,
     Running,
@@ -79,6 +80,7 @@ from brain.install_routes import (
     RecoveryView,
     updates_view,
 )
+from brain.ops.connector_store import Connection
 from brain.ops.install_docs import drill_figures
 from brain.ops.limits import Limit, LimiterState, LimitScope
 from brain.ops.recovery import Coverage
@@ -151,6 +153,9 @@ INSTALL_GRANTS: dict[str, tuple[Grant, ...]] = {
         _grant(RECOVERY_READ, WHOLE),
         _grant(LIMITS_READ, WHOLE),
         _grant(CAPACITY_READ, WHOLE),
+        # The Connectors screen's read, so the Limits screen may list a connected source's
+        # ceiling to this reader: it lists what that screen would tell them is connected.
+        _grant(screen("connectors").read.requires, WHOLE),
     ),
     "u_elsewhere": (THE_CONSOLE_PLANE, _grant(CAPACITY_READ, WHOLE)),
 }
@@ -363,12 +368,12 @@ def test_this_install_answers_the_profile_the_release_and_the_migration_level(
 
     assert response.status_code == 200
     facts = facts_of(response.json())
-    assert facts["profile"]["source"] == Source.DECLARED.value
-    assert facts["profile"]["value"] == Settings(env="development").profile
+    assert facts["install size"]["source"] == Source.DECLARED.value
+    assert facts["install size"]["value"] == Settings(env="development").profile
     assert facts["release"]["source"] == Source.UNKNOWN.value
     assert facts["release"]["value"] == ""
     assert facts["release"]["because"].strip() != ""
-    assert facts["migration level"]["source"] == Source.DECLARED.value
+    assert facts["database version"]["source"] == Source.DECLARED.value
 
 
 def test_the_version_panel_names_no_release_and_says_what_would_have_to_change(
@@ -503,25 +508,82 @@ def test_rate_limits_answers_the_ceilings_and_no_empty_list_of_who_is_throttled(
     half is which.
 
     An empty throttling list reads as nobody being throttled, which is the flattering direction
-    on a screen an operator opens during an incident. So the ceilings are answered whole, the
-    list is absent, and the reason is beside it.
-
-    The ceilings are asserted against `brain.ops.limits.ceilings()` rather than against a count,
-    and `derived` is checked to be present on every row because a daily figure calculated from a
-    per-minute one always flatters the source.
+    on a screen an operator opens during an incident. So the list is absent and the reason is
+    beside it. With no source connected there is no source ceiling to list, and none is.
 
     Delete this and the route could answer an empty list on every install, which is the one
     answer a person acts on by not acting."""
-    from brain.ops.limits import ceilings
-
     response = get(client, "u_admin", LIMITS_PATH)
 
     assert response.status_code == 200
     body = response.json()
     assert body["throttled"] is None
     assert body["unread"] == NOTHING_HERE_ENUMERATES_THE_LIVE_WINDOWS
-    assert [one["name"] for one in body["ceilings"]] == [one.name for one in ceilings()]
+    assert body["ceilings"] == []
+
+
+class ConnectedOnly:
+    """`ConnectorRecords` holding these sources as connected, and refusing any change."""
+
+    def __init__(self, *names: str) -> None:
+        self.names = names
+
+    async def connected(self) -> tuple[Connection, ...]:
+        return tuple(
+            Connection(
+                connector=name,
+                settings={},
+                digest="0" * 64,
+                connected_by="u_setup",
+                connected_at=LONG_AGO,
+            )
+            for name in self.names
+        )
+
+    async def connect(self, **_: Any) -> Connection:
+        raise AssertionError("the limits screen connected a source")
+
+    async def disconnect(self, *_: Any, **__: Any) -> datetime:
+        raise AssertionError("the limits screen disconnected a source")
+
+
+def test_the_ceilings_are_the_connected_sources_in_the_words_the_connectors_screen_uses() -> None:
+    """Found on the owner's install on 2026-09-29: "Ceilings of connected systems" listed xero,
+    freshdesk and lark_base by their internal names with no source connected.
+
+    Delete this and the list goes back to every source the product ships, by its code, whether
+    or not this install reads it."""
+    from brain.ops.limits import ceilings
+
+    app = _app()
+    with TestClient(app, raise_server_exceptions=False) as c:
+        app.state.gate = _wiring()
+        app.state.connector_records = ConnectedOnly("lark_base", "xero")
+        body = get(c, "u_admin", LIMITS_PATH).json()
+
+    shipped_ceilings = {one.name for one in ceilings()}
+    assert [one["name"] for one in body["ceilings"]] == ["Xero", "Lark Base"]
+    assert not {one["name"] for one in body["ceilings"]} & shipped_ceilings
     assert all("derived" in one for one in body["ceilings"])
+    applies = {one["applies_to"] for one in body["windows"]}
+    assert "Xero" in applies and "freshdesk" not in applies and "Freshdesk" not in applies
+
+
+def test_a_reader_who_may_not_be_told_of_a_source_is_shown_no_ceiling_for_it() -> None:
+    """The sibling: the list is the Connectors screen's answer for this reader, so a reader with
+    no read of that screen is shown what an install with nothing connected shows.
+
+    Delete this and the Limits screen becomes a way to learn which sources are connected without
+    the grant the Connectors screen asks for."""
+    app = _app()
+    with TestClient(app, raise_server_exceptions=False) as c:
+        app.state.gate = _wiring()
+        app.state.connector_records = ConnectedOnly("xero")
+        body = get(c, "u_prefix", LIMITS_PATH).json()
+        shown = get(c, "u_admin", LIMITS_PATH).json()
+
+    assert body["ceilings"] == []
+    assert [one["name"] for one in shown["ceilings"]] == ["Xero"]
 
 
 def test_a_wired_throttle_source_answers_the_rows_this_readers_grant_matches(
@@ -1091,8 +1153,12 @@ def test_a_built_image_reports_its_own_commit_and_a_checkout_reports_that_it_has
     assert built["running"]["tag"] == ""
     assert built["standing"] == Standing.UNKNOWN_RUNNING.value
 
-    on_the_install = get(client, "u_admin", INSTALL_PATH).json()
-    assert facts_of(on_the_install)["release"]["source"] == Source.MEASURED.value
+    on_the_install = facts_of(get(client, "u_admin", INSTALL_PATH).json())
+    # The same answer on both screens: the commit under its own name, and no release named.
+    assert on_the_install["built from commit"]["source"] == Source.MEASURED.value
+    assert on_the_install["built from commit"]["value"] == a_commit
+    assert on_the_install["release"]["source"] == Source.UNKNOWN.value
+    assert on_the_install["release"]["because"] == built["running"]["cannot_say"]
 
 
 # --- the running release and the release list (M42.3.9) ----------------------------------------
@@ -1350,3 +1416,63 @@ def test_the_console_switch_turns_the_release_check_on_where_the_environment_did
     assert (held.asked == [A_LIST]) is asked
     if not asked:
         assert answer.json()["standing"] == Standing.SWITCHED_OFF.value
+
+
+def test_an_unpinned_install_with_the_check_on_says_its_look_has_not_finished() -> None:
+    """Found on the owner's install on 2026-09-29: running `:latest`, the check switched on, and
+    the updates answer carried neither a release nor a reason (`told` and `unanswered` null), so
+    nothing on the page said whether the switch had done anything.
+
+    Delete this and the page goes back to saying nothing about the newest release while the
+    first look is running, on exactly the install whose running release is unknown."""
+    held = HeldList("v1.5.0")
+    watch = ReleaseWatch(fetch=held)
+    app = _app_with({"APP_IMAGE": "ghcr.io/example/brain:latest", FEED_VARIABLE: A_LIST})
+    with TestClient(app, raise_server_exceptions=False) as c:
+        app.state.gate = _wiring()
+        app.state.release_watch = watch
+        app.state.db_sessions = _switch_rows(True)
+        body = get(c, "u_admin", UPDATES_PATH).json()
+        held.gate.set()
+        time.sleep(0.2)
+
+    assert body["standing"] == Standing.UNKNOWN_RUNNING.value
+    assert body["told"] is None and body["unanswered"] is None
+    assert body["look"] == A_LOOK_THAT_HAS_NOT_FINISHED
+
+
+def test_a_pinned_install_whose_look_has_not_finished_says_so_once() -> None:
+    """The sibling on a pinned install: the standing is "not checked yet" and already says to come
+    back in a minute, so the look sentence is empty and the page does not say it twice.
+
+    Delete this and a look sentence sent beside that standing draws the instruction twice."""
+    held = HeldList("v1.5.0")
+    watch = ReleaseWatch(fetch=held)
+    app = _app_with({"APP_IMAGE": "ghcr.io/example/brain:v1.4.0", FEED_VARIABLE: A_LIST})
+    with TestClient(app, raise_server_exceptions=False) as c:
+        app.state.gate = _wiring()
+        app.state.release_watch = watch
+        app.state.db_sessions = _switch_rows(True)
+        body = get(c, "u_admin", UPDATES_PATH).json()
+        held.gate.set()
+        time.sleep(0.2)
+
+    assert body["standing"] == Standing.NOT_LOOKED_YET.value
+    assert body["look"] == ""
+
+
+def test_a_switched_off_check_gives_its_reason_and_no_look_sentence() -> None:
+    """The sibling: with the check off the reason is `unanswered`'s, and the look sentence is
+    empty, so the page draws one statement about the newest release and not two.
+
+    Delete this and a look sentence sent on every answer passes the test above."""
+    watch = ReleaseWatch(fetch=HeldList("v1.5.0"))
+    app = _app_with({"APP_IMAGE": "ghcr.io/example/brain:latest", FEED_VARIABLE: A_LIST})
+    with TestClient(app, raise_server_exceptions=False) as c:
+        app.state.gate = _wiring()
+        app.state.release_watch = watch
+        app.state.db_sessions = _switch_rows(False)
+        body = get(c, "u_admin", UPDATES_PATH).json()
+
+    assert body["unanswered"] is not None
+    assert body["look"] == ""

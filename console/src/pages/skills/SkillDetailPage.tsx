@@ -150,7 +150,7 @@ function SkillAnswer({ name, view: asked }: { readonly name: string; readonly vi
       <div className="flex min-w-0 flex-col gap-3">
         {told === null ? null : (
           <div role={told.ok ? "status" : "alert"}>
-            <Note kind={told.ok ? "works" : "info"}>{told.sentence}</Note>
+            <Note kind={told.ok ? "done" : "info"}>{told.sentence}</Note>
           </div>
         )}
         {view === "dashboard" ? <SkillDashboard detail={detail} profileAddress={profileAddress} /> : null}

@@ -44,12 +44,13 @@ sets outranks the vault, which is `brain.ops.provider_keys.load_into_environment
 **Nothing about the install reaches the provider.** The sentence is fixed and asks for one word,
 the output is capped, and no question, passage or person is in it.
 
-Task ids: M5.4.7, M5.4.3
+Task ids: M5.4.7, M5.4.3, M5.6.3
 """
 
 from __future__ import annotations
 
 import asyncio
+import enum
 import threading
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -316,10 +317,23 @@ class DriverProbes:
         return True
 
 
+class KeySource(enum.StrEnum):
+    """Where a provider's key was found for a call: the one fact about a key that may be said."""
+
+    #: A variable the process's own environment sets, which outranks the vault.
+    ENVIRONMENT = "environment"
+    #: The install's vault, read under the worker's policy.
+    VAULT = "vault"
+    #: Neither holds one.
+    NONE = "none"
+
+
 class WorkerProviderKeys:
     """`ProviderKeys` over the worker's environment and its vault, kept for `KEY_REREAD_SECONDS`.
 
     A lock, because the transport's lookup runs in the thread `probe_on` hands the call to.
+    `source` says where a key came from and never what it is, for an install check (M5.6.3) that
+    must show the install's own vault key answered without holding the key to show it.
     """
 
     def __init__(self, vault: OpenBaoVault | None, *, ttl: float = KEY_REREAD_SECONDS) -> None:
@@ -328,14 +342,15 @@ class WorkerProviderKeys:
         self._lock = threading.Lock()
         self._kept: dict[str, tuple[str | None, float]] = {}
 
-    def _read(self, slot: ProviderSlot, now: float) -> str | None:
+    def _found(self, slot: ProviderSlot, now: float) -> tuple[str | None, KeySource]:
+        """The key and where it came from, in the one order every reader of a key uses."""
         own = process_environment().get(slot.env_var, "").strip()
         if own:
-            return own
+            return own, KeySource.ENVIRONMENT
         with self._lock:
             kept = self._kept.get(slot.slug)
             if kept is not None and now - kept[1] < self._ttl:
-                return kept[0]
+                return kept[0], KeySource.NONE if kept[0] is None else KeySource.VAULT
         value: str | None = None
         if self._vault is not None:
             try:
@@ -344,10 +359,17 @@ class WorkerProviderKeys:
                 value = None
         with self._lock:
             self._kept[slot.slug] = (value, now)
-        return value
+        return value, KeySource.NONE if value is None else KeySource.VAULT
+
+    def _read(self, slot: ProviderSlot, now: float) -> str | None:
+        return self._found(slot, now)[0]
 
     def held(self, slots: Sequence[ProviderSlot], now: float) -> frozenset[str]:
         return frozenset(one.slug for one in slots if self._read(one, now) is not None)
+
+    def source(self, slot: ProviderSlot, now: float) -> KeySource:
+        """Where this slot's key would be read from at `now`. The source, never the value."""
+        return self._found(slot, now)[1]
 
     def lookup(self, slot: ProviderSlot) -> KeyLookup:
         def read() -> str | None:

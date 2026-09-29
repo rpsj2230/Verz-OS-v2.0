@@ -198,6 +198,18 @@ class EventKind(enum.StrEnum):
     APPROVAL_REQUESTED = "approval.requested"
 
 
+#: Each kind of event in words, for a sentence an administrator reads. Complete over
+#: `EventKind`, which a test holds.
+EVENT_WORDS: Final[Mapping[EventKind, str]] = MappingProxyType(
+    {
+        EventKind.AUTOMATION_RUN_FINISHED: "an automation run finishes",
+        EventKind.OPERATION_SETTLED: "an action sent to another system succeeds or fails",
+        EventKind.CONNECTOR_HEALTH_CHANGED: "a connected source's health changes",
+        EventKind.APPROVAL_REQUESTED: "somebody is asked to approve something",
+    }
+)
+
+
 #: Who may create, change or deactivate a subscriber. Named here so the console cannot pick a
 #: different string: a screen that checked `admin:webhooks` while the grants said
 #: `admin:webhook_subscriber` would refuse everybody, and the fix somebody reaches for under
@@ -798,15 +810,20 @@ def subscriber_gaps(subscribers: Sequence[Subscriber]) -> tuple[str, ...]:
     for endpoint, owners in sorted(endpoints.items()):
         if len(owners) > 1:
             findings.append(
-                f"{sorted(owners)} all deliver to {endpoint}, so it receives every matching "
-                "event once per subscription. Deduplication is on the event id and these are "
-                "the same event, so the receiver drops the copies and reports us as flapping"
+                f"{', '.join(sorted(owners))} all deliver to {endpoint}, so it receives every "
+                "event once for each of them. The receiver drops the copies, and to it this "
+                "install looks as though it is sending twice."
             )
-    taken = {kind for s in subscribers if s.active for kind in s.kinds}
+    live = [one for one in subscribers if one.active]
+    # With no subscriber switched on, every kind is untaken and saying so four times is the
+    # empty list said again; the list's own empty state already says how one is added.
+    if not live:
+        return tuple(findings)
+    taken = {kind for one in live for kind in one.kinds}
     for kind in EventKind:
         if kind not in taken:
             findings.append(
-                f"nothing takes {kind.value}; events of that kind are written and never "
-                "delivered, which is a quiet integration rather than a failing one"
+                f"No subscriber is told when {EVENT_WORDS[kind]}. Those events are recorded "
+                "and sent nowhere."
             )
     return tuple(findings)

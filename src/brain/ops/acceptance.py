@@ -169,6 +169,7 @@ CHECK_MODULES: Final = (
     "brain.ops.acceptance_checks_chat",
     "brain.ops.acceptance_checks_skills",
     "brain.ops.acceptance_models",
+    "brain.ops.acceptance_routing",
     "brain.ops.acceptance_audit",
     "brain.ops.acceptance_checks_connectors",
     "brain.ops.acceptance_checks_tools",

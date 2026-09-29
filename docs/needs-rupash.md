@@ -100,6 +100,16 @@ setup file too: after the move its pieces open nothing. `--rollback` puts everyt
 dated copy exists. Rehearsed end to end on throwaway containers on your server on 2026-09-29, never
 touching the running vault. `ops/openbao/UNSEAL.md` is the plain-words guide.
 
+## 112. The four "every requirement in an area is demonstrated" tasks move to their proofs' wave - DECIDED 2026-09-29
+
+M1.8.8 (permissions), M2.3.2 (departments), M5.6.5 (models) and M24.3.6 (observability) each close only
+when every requirement row of their area has its proof on the install. Measured on 2026-09-29, none of
+the 188 rows had all its proof tasks done, and most of those proofs are later waves' work (69 of the 80
+permissions rows are proved in Wave 3). They sat in Wave 1, where nobody could finish them. **Your
+answer, 2026-09-29: "yes move them".** Models moves to Wave 3, permissions and departments to Wave 4,
+observability to Wave 5, the wave of each area's last proof. Nothing is removed from the programme and
+the total is unchanged; reversible: say so and they move back.
+
 ## 111. Promoting knowledge company-wide still takes two people - DECIDED 2026-09-29
 
 K2: a Super Admin cannot approve their own promotion of knowledge to company-wide, so an install with
