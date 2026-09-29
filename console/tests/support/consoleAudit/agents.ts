@@ -16,6 +16,7 @@ import {
 import { modelPinApiPath } from "../../../src/pages/agentModelPinQuery";
 import { agentBudgetApiPath } from "../../../src/pages/agents/AgentSpend";
 import { memoryDeletionApiPath, memoryEditApiPath } from "../../../src/pages/agents/agentMemoryQuery";
+import { artifactArchiveApiPath, artifactSupersedeApiPath } from "../../../src/pages/agents/agentArtifactsQuery";
 import { UNDO_API_PATH } from "../../../src/pages/learningQuery";
 import { agentPreviewApiPath, skillAssignApiPath, skillDetachApiPath } from "../../../src/pages/agents/agentCapabilitiesQuery";
 import { agentMoveApiPath } from "../../../src/pages/agentLifecycleQuery";
@@ -64,6 +65,20 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   ],
   "src/pages/agents/AgentCapabilities.tsx agentPreviewApiPath(agentId)": [
     at("POST /api/v1/agents/{agent_id}/preview", "agentPreviewApiPath", agentPreviewApiPath("quote-helper")),
+  ],
+  "src/pages/agents/AgentArtifacts.tsx artifactArchiveApiPath(agentId, one.item.artifactId)": [
+    at(
+      "POST /api/v1/agents/{agent_id}/artifacts/{artifact_id}/archive",
+      "artifactArchiveApiPath",
+      artifactArchiveApiPath("quote-helper", "a".repeat(32)),
+    ),
+  ],
+  "src/pages/agents/AgentArtifacts.tsx artifactSupersedeApiPath(agentId, one.item.artifactId)": [
+    at(
+      "POST /api/v1/agents/{agent_id}/artifacts/{artifact_id}/supersede",
+      "artifactSupersedeApiPath",
+      artifactSupersedeApiPath("quote-helper", "a".repeat(32)),
+    ),
   ],
   "src/pages/agents/AgentMemory.tsx memoryDeletionApiPath(agentId, one.item.memoryId)": [
     at("POST /api/v1/agents/{agent_id}/memory/{memory_id}/deletion", "memoryDeletionApiPath", memoryDeletionApiPath("quote-helper", "m1")),
@@ -129,7 +144,28 @@ const MEMORY_CHANGED = t(
   true,
 );
 
+/** A supersession and an archive pressed over HTTP against PostgreSQL: a change row each, in the changer's name. */
+const ARTIFACT_CHANGED = t(
+  "test_agent_artifact_routes",
+  "test_the_steward_supersedes_the_person_archives_and_a_colleague_is_told_who_may",
+  true,
+);
+
+/** Why an artifact's change writes no ledger entry: the change row is the record. */
+const AN_ARTIFACT_CHANGE_IS_ITS_OWN_RECORD =
+  "Superseding or archiving an artifact changes nobody's access, which is what the ledger records; the change is a row of agent.artifact_change naming who, at what reach, in which request and when (0153).";
+
 export const PROOFS: Readonly<Record<string, Proofs>> = {
+  "POST /api/v1/agents/{agent_id}/artifacts/{artifact_id}/archive": {
+    row: ARTIFACT_CHANGED,
+    audit: { notApplicable: AN_ARTIFACT_CHANGE_IS_ITS_OWN_RECORD },
+    behaviour: ARTIFACT_CHANGED,
+  },
+  "POST /api/v1/agents/{agent_id}/artifacts/{artifact_id}/supersede": {
+    row: ARTIFACT_CHANGED,
+    audit: { notApplicable: AN_ARTIFACT_CHANGE_IS_ITS_OWN_RECORD },
+    behaviour: ARTIFACT_CHANGED,
+  },
   "POST /api/v1/agents/{agent_id}/memory/{memory_id}/deletion": {
     row: MEMORY_CHANGED,
     audit: MEMORY_CHANGED,

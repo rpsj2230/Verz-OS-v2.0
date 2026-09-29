@@ -52,7 +52,7 @@ from brain.tables.adoption import QuestionAskedRow
 from brain.tables.agent import AgentRow
 from brain.tables.agent_automation import AgentAutomationRow
 from brain.tables.application_log import ApplicationLogRow
-from brain.tables.artifact import ArtifactRow
+from brain.tables.artifact import ArtifactChangeRow, ArtifactRow
 from brain.tables.audit import AuditEntryRow
 from brain.tables.automation import AutomationOwnerRow
 from brain.tables.automation_change import AutomationChangeRow
@@ -409,6 +409,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     "agent.browser_session",
     "obs.trace_step",
     "obs.trace_read",
+    # 0153_artifact_change_and_client. A change points at the artifact it changed and at the one
+    # that superseded it, which are never deleted; the person is a value.
+    "agent.artifact_change",
 )
 
 __all__ = [
@@ -421,6 +424,7 @@ __all__ = [
     "AgentRow",
     "ApiKeyRow",
     "ApplicationLogRow",
+    "ArtifactChangeRow",
     "ArtifactRow",
     "AuditEntryRow",
     "AutomationChangeRow",
