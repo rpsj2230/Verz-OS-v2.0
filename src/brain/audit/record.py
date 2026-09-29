@@ -415,7 +415,9 @@ class OrganisationChange(enum.StrEnum):
     column moving, which is the one change the console makes to a live row; `CHANGED` is any other
     column moving, which only a statement typed by hand does, and names the columns; `RETIRED` is
     `deleted_at` being set. A scope's name is its `label`, and since `0141` the console renames one,
-    so a move of a scope's label is `RENAMED` too and never `CHANGED` (M27.11.1).
+    so a move of a scope's label is `RENAMED` too and never `CHANGED` (M27.11.1). `MOVED` is a
+    person put in another department, which `0170`'s trigger writes under the person, naming the
+    department they were moved to (M1.6.20).
     """
 
     JOINED = "joined"
@@ -426,6 +428,7 @@ class OrganisationChange(enum.StrEnum):
     RENAMED = "renamed"
     CHANGED = "changed"
     RETIRED = "retired"
+    MOVED = "moved"
 
 
 #: Which of the placement changes are about a team, and which about leading a department. Two sets

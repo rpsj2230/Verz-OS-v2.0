@@ -13,7 +13,9 @@
  * stand, whatever this drew; the controls are drawn only for a reader the API says may organise.
  * The teams offered are the department's own teams as the Departments route answers this reader.
  *
- * **The department a person sits in is the staff source's**, so it is not changed here.
+ * **The department a person sits in is the staff source's**, so it is not changed here; on an install
+ * whose departments are managed on People it is changed on the list, several people at a time
+ * (`MoveDrawer`), and the footer says so (M1.6.19).
  *
  * Task ids: M27.11.2, M27.16.1
  */
@@ -27,7 +29,7 @@ import { ConfirmDialog, Drawer, FailureState, NotOffered, SectionCard } from "..
 import { Button } from "../../components/ui/button";
 import { listPath, NO_QUESTION } from "../../components/listing";
 import { Field, FormProblem, NativeSelect } from "../access/formParts";
-import { EDITED_AT_THE_SOURCE } from "./peopleActions";
+import { DEPARTMENT_SET_ON_PEOPLE, EDITED_AT_THE_SOURCE } from "./peopleActions";
 import type { PersonDetail } from "./peopleQuery";
 
 export const DEPARTMENTS_API_PATH = "/govern/departments";
@@ -281,7 +283,7 @@ export function PersonPlacements({ detail, onWritten }: { readonly detail: Perso
       <SectionCard
         title="Department"
         lede="Where they sit, as the staff source records it."
-        footer={<NotOffered>{EDITED_AT_THE_SOURCE}</NotOffered>}
+        footer={<NotOffered>{detail.departmentSetOnPeople ? DEPARTMENT_SET_ON_PEOPLE : EDITED_AT_THE_SOURCE}</NotOffered>}
         action={
           department !== undefined && mayOrganise && !leads.has(department.slug) ? (
             <PlacementAct

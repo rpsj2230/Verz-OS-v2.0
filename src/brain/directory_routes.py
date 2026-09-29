@@ -87,6 +87,7 @@ from brain.console.organisation import (
     ORGANISING_AUTHORITY,
     Member,
     may_add_person,
+    may_organise,
     nameable,
     placed,
 )
@@ -101,7 +102,12 @@ from brain.core.scope import Scope
 from brain.core.scope_sql import PredicateRefusedError
 from brain.gate.admission import Assurance
 from brain.gate.context import Channel
-from brain.identity.organisation_store import one_department
+from brain.identity.departments_from import (
+    DEPARTMENTS_COME_FROM_THE_STAFF_LIST,
+    DepartmentsFrom,
+    departments_from,
+)
+from brain.identity.organisation_store import moving_people, one_department
 from brain.identity.principal_state_store import A_DISABLE_IS_REVERSIBLE_AND_A_LEAVER_IS_NOT
 from brain.identity.staff_accounts import YOUR_ACCOUNT_IS_READY, allowed_types
 from brain.identity.staff_roster import digest_of
@@ -295,6 +301,9 @@ class DirectoryPage(BaseModel):
     adding: str
     #: With a staff list read: the sentence to pass on to somebody whose account the sync made.
     account_ready: str | None = None
+    #: Several people may be moved to a department: departments are managed on People and the
+    #: organising authority is held somewhere (M1.6.20). Presentation only; the route asks again.
+    may_move: bool = False
     disabling: str = A_DISABLE_IS_REVERSIBLE_AND_A_LEAVER_IS_NOT
     staleness: StalenessBanner | None = None
 
@@ -369,6 +378,9 @@ class PersonDetail(BaseModel):
     #: this person's address, and the reader holds the granting authority over their row
     #: (M1.10.4). The route asks all of it again.
     may_add_work_email: bool = False
+    #: Departments are managed on People on this install, so their department is set there and
+    #: not at the staff source (M1.6.19). Presentation only.
+    department_set_on_people: bool = False
 
 
 #: A person's name as a person reads it, trimmed, as `auth.principal.display_name_present` requires.
@@ -423,6 +435,47 @@ class PersonAdded(BaseModel):
     created_at: datetime
 
 
+#: Where several people are moved to one department.
+MOVING_PATH: Final = "/govern/directory/department"
+
+#: The most people one move carries. A bound on the request, as `/govern/grants/several` has one.
+MAX_MOVED: Final = 200
+
+
+#: A person's id as a move names one.
+PersonId = Annotated[str, StringConstraints(min_length=1, max_length=PRINCIPAL_ID_CHARS)]
+
+
+class DepartmentMoving(BaseModel):
+    """Several people to put in one department, on an install that manages departments on People.
+
+    `extra="forbid"`, so a body naming anything else is refused rather than ignored.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    principal_ids: list[PersonId] = Field(min_length=1, max_length=MAX_MOVED)
+    department: DepartmentSlug
+
+
+class DepartmentMoved(BaseModel):
+    """Who was moved. Somebody already in the department is not a move, and is not listed."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    department: str
+    moved: list[str]
+    told: str
+
+
+#: Why a move is all of the people named or none of them.
+A_MOVE_IS_EVERYBODY_OR_NOBODY: Final = (
+    "Several people are moved in one statement or not at all. A move that went through for some of "
+    "them would leave the page showing a selection the database no longer matches, and the one "
+    "refusal for any of them says nothing about which person this reader may not move."
+)
+
+
 # ---------------------------------------------------------------- the statements
 
 
@@ -457,6 +510,27 @@ def one_person(principal_id: str) -> Select[tuple[str, str, str | None, str, dat
         PrincipalRow.id == principal_id,
         PrincipalRow.deleted_at.is_(None),
         PrincipalRow.kind == PrincipalKind.HUMAN.value,
+    )
+
+
+def people_by_id(
+    principal_ids: Sequence[str],
+) -> Select[tuple[str, str, str | None, str, datetime | None]]:
+    """These live people, as `one_person` reads one, in id order."""
+    return (
+        select(
+            PrincipalRow.id,
+            PrincipalRow.display_name,
+            PrincipalRow.primary_department,
+            PrincipalRow.employment,
+            PrincipalRow.disabled_at,
+        )
+        .where(
+            PrincipalRow.id.in_(list(principal_ids)),
+            PrincipalRow.deleted_at.is_(None),
+            PrincipalRow.kind == PrincipalKind.HUMAN.value,
+        )
+        .order_by(PrincipalRow.id)
     )
 
 
@@ -875,6 +949,8 @@ async def directory(request: Request, asked: Asked, listed: DirectoryQuery) -> D
         if from_a_list
         else ADDING_A_PERSON_GRANTS_NOTHING,
         account_ready=YOUR_ACCOUNT_IS_READY if from_a_list else None,
+        may_move=departments_from() is DepartmentsFrom.CONSOLE
+        and reach.scope_for(ORGANISING_AUTHORITY, now) is not None,
         staleness=served.banner,
     )
 
@@ -1101,6 +1177,7 @@ async def person_page(
         and found.person.standing is None
         and not found.person.member.disabled
         and _may_join(asked, found.person.member),
+        department_set_on_people=departments_from() is DepartmentsFrom.CONSOLE,
     )
 
 
@@ -1257,4 +1334,66 @@ async def add_person(request: Request, body: PersonAdding, asked: Asked) -> Pers
         display_name=body.display_name,
         department=body.department,
         created_at=created,
+    )
+
+
+# -------------------------------------------------------------------- moving (M1.6.20)
+
+
+def _no_person_to_move() -> Absent:
+    """The one refusal a move makes to a caller who is told nothing more."""
+    return Absent("those people are not movable here by this caller")
+
+
+@router.post(MOVING_PATH, response_model=DepartmentMoved, responses=COMMON_RESPONSES)
+async def move_people(request: Request, body: DepartmentMoving, asked: Asked) -> DepartmentMoved:
+    """Put several people in one department, on an install that manages departments on People.
+
+    The authority anywhere first, so a caller holding it nowhere learns nothing, not even where
+    departments come from; then the setting, said to a holder in a sentence; then the authority over
+    the department they go to, before the database; then the department, which must be live, and
+    every person, each of whom this reader must be able to name and to organise where they sit now
+    and where they are going (`may_organise`). One refusal for any of them, and nobody moves; see
+    `A_MOVE_IS_EVERYBODY_OR_NOBODY`. The update is attributed so `0170`'s trigger records each move
+    under the caller.
+    """
+    reach, now = asked.reach, asked.now
+    if reach.scope_for(ORGANISING_AUTHORITY, now) is None:
+        log.info("people not movable", principal=asked.caller.principal.id)
+        raise _no_person_to_move()
+    if departments_from() is not DepartmentsFrom.CONSOLE:
+        raise _said(DEPARTMENTS_COME_FROM_THE_STAFF_LIST)
+    if not may_add_person(reach, department=body.department, now=now):
+        log.info("people not movable there", principal=asked.caller.principal.id)
+        raise _no_person_to_move()
+    wanted = sorted(set(body.principal_ids))
+    async with _sessions(request)() as session:
+        if (await session.execute(one_department(body.department))).first() is None:
+            await session.rollback()
+            raise _said(A_DEPARTMENT_NAMED_IS_NOT_LIVE)
+        members = [member_of(row) for row in (await session.execute(people_by_id(wanted))).all()]
+        shown = {one.principal_id for one in nameable(members, reach, now)}
+        if [one.principal_id for one in members] != wanted or not all(
+            one.principal_id in shown
+            and may_organise(reach, department=body.department, person=one, now=now)
+            for one in members
+        ):
+            await session.rollback()
+            log.info("people not movable", principal=asked.caller.principal.id)
+            raise _no_person_to_move()
+        moving = [one.principal_id for one in members if one.department != body.department]
+        if moving:
+            await attribute(session, asked)
+            await session.execute(moving_people(moving, body.department))
+        await session.commit()
+    log.info(
+        "people moved", principal=asked.caller.principal.id, moved=len(moving), to=body.department
+    )
+    return DepartmentMoved(
+        department=body.department,
+        moved=moving,
+        told=(
+            f"Moved {len(moving)} {'person' if len(moving) == 1 else 'people'}. Their access has "
+            "not changed: what they may see is still only what their grants say."
+        ),
     )
