@@ -140,6 +140,8 @@ case "$1" in
   cp)
     case "$2" in
       *:/app/ops/openbao/.) [ -d "$S/openbao" ] || exit 1; cp -R "$S/openbao/." "$3"; exit 0 ;;
+      *:/app/ops/keycloak/accounts-client.sh)
+        [ -f "$S/accounts" ] || exit 1; cp "$S/accounts" "$3"; exit 0 ;;
     esac
     printf '{\n  "task_ids": [\n    "M1.1.1",\n    "M2.2.2"\n  ]\n}\n' ;;
 esac
@@ -157,6 +159,7 @@ class Ran:
     output: str
     applied: str
     containers: dict[str, list[str]]
+    accounts: str
 
 
 #: The app's networks as `docker inspect` lists them, by name, each with the compose project
@@ -176,12 +179,14 @@ def deploy(
     broken: tuple[str, ...] = (),
     deploy_token: bool = False,
     apply_exit: int | None = None,
+    accounts_exit: int | None = None,
 ) -> Ran:
     """Run the real script once: the app runs `running`, the registry's tag is `NEW`.
 
     `deploy_token` puts a deploy token file where the script looks; `apply_exit` gives the new
     image an `ops/openbao/apply-release.sh` that exits with it, and None gives it none, as an image
-    from before the vault changes shipped in it.
+    from before the vault changes shipped in it. `accounts_exit` gives the running application an
+    `ops/keycloak/accounts-client.sh` that records whom it was pointed at and exits with it.
     """
     state = tmp_path / "state"
     bin_dir = tmp_path / "bin"
@@ -226,6 +231,14 @@ def deploy(
             newline="\n",
         )
 
+    if accounts_exit is not None:
+        (state / "accounts").write_text(
+            f'#!/bin/sh\necho "ran with $BRAIN_APP_CONTAINER" > "{state}/accounts-ran"\n'
+            f"exit {accounts_exit}\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+
     env = {
         **os.environ,
         "PATH": f"{bin_dir.as_posix()}{os.pathsep}{os.environ.get('PATH', '')}",
@@ -245,6 +258,7 @@ def deploy(
     lines = record.read_text(encoding="utf-8").splitlines() if record.exists() else []
     published = state / "published"
     applied = state / "applied"
+    accounts = state / "accounts-ran"
     return Ran(
         code=done.returncode,
         calls=(state / "calls").read_text(encoding="utf-8").splitlines(),
@@ -253,6 +267,7 @@ def deploy(
         published=published.read_text(encoding="utf-8") if published.exists() else "",
         output=done.stdout + done.stderr,
         applied=applied.read_text(encoding="utf-8").strip() if applied.exists() else "",
+        accounts=accounts.read_text(encoding="utf-8").strip() if accounts.exists() else "",
         containers={
             line.split()[0]: line.split()
             for line in (state / "containers").read_text(encoding="utf-8").splitlines()
@@ -622,3 +637,49 @@ def test_an_image_from_before_the_vault_changes_shipped_deploys_as_before(tmp_pa
     assert ran.code == 0, ran.output
     assert "carries no vault changes" in ran.output
     assert ran.running == NEW
+
+
+# ------------------------------------------------------------ the staff accounts client (M1.6.16)
+def test_once_the_app_is_ready_the_release_s_accounts_client_step_runs_against_it(
+    tmp_path: Path,
+) -> None:
+    """The release's own `ops/keycloak/accounts-client.sh`, copied out of the application after it
+    answers ready and run here pointed at it, so every install upgraded into the release gets the
+    staff sync's accounts client with nobody doing anything. Delete this and the step can run
+    before the application that keeps the secret is up, or not at all on an upgraded install."""
+    ran = deploy(tmp_path, running=OLD, good={OLD, NEW}, accounts_exit=0)
+
+    assert ran.code == 0, ran.output
+    assert ran.accounts == f"ran with app-{UUID}"
+    copied = first(ran.calls, f"cp app-{UUID}:/app/ops/keycloak/accounts-client.sh")
+    assert first(ran.calls, "compose up") < copied
+    assert [one["outcome"] for one in ran.records] == ["deployed"]
+
+
+def test_an_accounts_client_step_that_fails_is_said_and_the_deploy_still_succeeds(
+    tmp_path: Path,
+) -> None:
+    """The application is healthy and serving, so a sign-in service that refused is a line in the
+    journal and the step is tried again on the next deploy. Delete this and a Keycloak with a
+    changed administrator password rolls back or fails every release."""
+    ran = deploy(tmp_path, running=OLD, good={OLD, NEW}, accounts_exit=1)
+
+    assert ran.code == 0, ran.output
+    assert "ACCOUNTS CLIENT NOT SET UP" in ran.output
+    assert ran.running == NEW
+    assert [one["outcome"] for one in ran.records] == ["deployed"]
+
+
+def test_an_image_held_back_or_older_than_the_step_never_runs_it(tmp_path: Path) -> None:
+    """A held-back image never reaches the step, and an image from before it shipped says so and
+    deploys. Delete this and the step can run against an application that never answered ready,
+    or an older image's missing script can fail its deploy."""
+    (tmp_path / "held").mkdir()
+    (tmp_path / "older").mkdir()
+    held = deploy(tmp_path / "held", running=OLD, good={OLD}, accounts_exit=0)
+    older = deploy(tmp_path / "older", running=OLD, good={OLD, NEW}, accounts_exit=None)
+
+    assert held.code == 1
+    assert held.accounts == ""
+    assert older.code == 0, older.output
+    assert "carries no accounts client step" in older.output

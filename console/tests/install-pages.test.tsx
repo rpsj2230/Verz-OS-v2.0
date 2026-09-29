@@ -36,6 +36,7 @@ import { describe, expect, test } from "vitest";
 import {
   CEILING_COLUMNS,
   CONNECTION_COLUMNS,
+  DEFERRED_COLUMNS,
   INSTALL_SECTIONS,
   THROTTLE_COLUMNS,
   UNUSUAL_COLUMNS,
@@ -142,6 +143,7 @@ describe("what these pages agree with the API about", () => {
     );
     expect([...WINDOW_COLUMNS].sort()).toEqual(backendModelFields(ROUTES, "WindowView").sort());
     expect([...UNUSUAL_COLUMNS].sort()).toEqual(backendModelFields(ROUTES, "UnusualView").sort());
+    expect([...DEFERRED_COLUMNS].sort()).toEqual(backendModelFields(ROUTES, "DeferredView").sort());
   });
 
   test("every field of what is running and of the newest release is one the version page draws", () => {

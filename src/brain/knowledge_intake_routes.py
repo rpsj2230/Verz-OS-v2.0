@@ -24,6 +24,19 @@ with 429 and a `Retry-After`, before a byte of the body is read, which is the ba
 `brain.knowledge.ingest.admit_to_queue` argues for. `GET /knowledge/uploads/queued/{ticket}` says
 what became of one, to the person who sent it and to nobody else.
 
+**An accepted file is given its place in the install's document-job budget, as BATCH** (M22.1.4,
+M22.2.3). Once the file has a ticket it asks `brain.ops.capacity_ledger` as
+`brain.knowledge.uploads.ingestion_request`, under the ticket, so the same file sent twice holds one
+place. Inside BATCH's share it starts as soon as the worker reaches it; past the share nobody is
+waiting on it, so it keeps its place rather than being refused, and the answer carries its position
+and expected wait, which the Knowledge page shows. The worker turns the place into a slot when it
+starts and gives it back when it ends (`brain.knowledge.ingest_queue.register_ingest_tasks`). The
+share is counted against every document being read, the ones read in a request by a person waiting
+among them, which is how one budget is shared by two classes with different shares. Where the
+install has no cache, or it does not answer, the job queue's own counts decide the position (see
+`brain.ops.capacity_ledger.AN_UNANSWERED_LEDGER_DECIDES_ON_WHAT_THE_CALLER_COUNTED`). A link is
+read in the request, so it takes a slot as the single upload does.
+
 **Both are audited as the person who added them, through `0115`'s trigger.** The link is stored by
 `brain.knowledge_routes.store_upload`, which attributes the write to the request; a queued file is
 written by the worker as its uploader, with the queueing request's trace. The ledger entry names
@@ -33,13 +46,14 @@ the item, its kind, level and department, and never a word of it.
 `brain.knowledge.ingest.SCAN_CAUSE_TEXT`'s words (M7.1.3). A place the person may not add to is a
 404 with no reason, as the upload's is.
 
-Task ids: M7.1.2, M7.1.3, M7.1.5, M22.2.4, M7.7.3
+Task ids: M7.1.2, M7.1.3, M7.1.5, M22.2.4, M7.7.3, M22.1.4, M22.2.1, M22.2.3
 """
 
 from __future__ import annotations
 
 import asyncio
 import math
+from datetime import datetime
 from typing import Annotated, Any, Final, Protocol
 from urllib.parse import unquote
 
@@ -50,7 +64,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.api import API_PREFIX, COMMON_RESPONSES, ErrorBody, RequestProblemView
-from brain.api_routes import Asked, Asking
+from brain.api_routes import Asked, Asking, capacity_ledger_of
 from brain.attribution import trace_of_request
 from brain.core.department import SLUG_RE
 from brain.core.errors import Absent, Failed
@@ -85,6 +99,7 @@ from brain.knowledge.uploads import (
     admit_ingestion,
     assert_declared_length,
     assert_safe_filename,
+    ingestion_request,
     offer_a_table_file,
     placement_for_upload,
     read_arriving,
@@ -101,12 +116,16 @@ from brain.knowledge_routes import (
     NAME_HEADER,
     OFFERED_AS_A_TABLE,
     UploadedView,
+    give_back,
     live_departments,
     may_add,
     reads_knowledge,
     store_upload,
+    take_reading_slot,
+    too_busy,
 )
-from brain.ops.admission import CapacityState, Resource
+from brain.ops.admission import CapacityState, QueuePlacement, Resource, decide
+from brain.ops.capacity_ledger import CapacityLedger, Taken
 from brain.ops.object_store import ObjectStore
 from brain.ops.queue import Job
 from brain.ops.skill_fetch import HttpsFetcher, SystemResolver
@@ -149,6 +168,10 @@ REFUSALS: Final[dict[int | str, dict[str, Any]]] = {
 
 QUEUED_REFUSALS: Final[dict[int | str, dict[str, Any]]] = {
     **REFUSALS,
+    503: {
+        "model": ErrorBody,
+        "description": "The queue or a source did not answer. Nothing was queued.",
+    },
     429: {
         "model": ErrorBody,
         "description": "The queue is full. Nothing was read; send it again after Retry-After.",
@@ -175,10 +198,18 @@ class QueuedView(BaseModel):
     ticket: str
     name: str
     state: str
-    #: The sentence the console shows, including the cause when it was not added.
+    #: The sentence the console shows, including the cause when it was not added, and the place
+    #: and expected wait when it was just queued behind others.
     said: str
     item_id: str | None
     passages: int
+    #: Where it stands among the work waiting for a slot to read documents, when it was queued
+    #: past BATCH's share. Null when it starts as soon as the worker reaches it, and on every
+    #: later look: a place is true when it is given and nobody keeps it current.
+    position: int | None = None
+    #: The expected wait before it starts, in seconds, beside `position`. An estimate from
+    #: Little's law that assumes no new arrivals, so a floor rather than a promise.
+    expected_wait_seconds: float | None = None
 
 
 def _refused(
@@ -274,6 +305,16 @@ async def add_link(
         page = await asyncio.to_thread(
             receive_page, link.url, fetcher=make_fetcher(), resolver=make_resolver()
         )
+    except OfferedAsATable as exc:
+        return _refused("url", OFFERED_AS_A_TABLE, str(exc))
+    except (IngestRefused, KindError) as exc:
+        return _refused("url", "not_added", str(exc))
+    # Read in the request, so a slot as the single upload takes one, after the fetch for its
+    # reason: `brain.knowledge_routes.THE_PARSE_HOLDS_A_SLOT_OF_THE_BUDGET`.
+    ledger, taken = await take_reading_slot(request, now=asked.now)
+    if not taken.admitted:
+        return too_busy(taken.decision, field="url")
+    try:
         read = await asyncio.to_thread(
             _read_link, page, kind=link.kind, placement=placement, asked=asked
         )
@@ -281,6 +322,8 @@ async def add_link(
         return _refused("url", OFFERED_AS_A_TABLE, str(exc))
     except (IngestRefused, KindError) as exc:
         return _refused("url", "not_added", str(exc))
+    finally:
+        await give_back(ledger, taken)
     if isinstance(read, ParseFailure):
         return _refused("url", read.cause.value, read.message())
     try:
@@ -360,14 +403,36 @@ def store_of(request: Request) -> ObjectStore | None:
     return store if isinstance(store, ObjectStore) else None
 
 
-def _queued_view(ticket: Ticket) -> QueuedView:
+def _queued_view(ticket: Ticket, place: QueuePlacement | None = None) -> QueuedView:
     return QueuedView(
         ticket=ticket.ticket,
         name=ticket.filename,
         state=ticket.state.value,
-        said=outcome_sentence(ticket),
+        said=outcome_sentence(ticket, place=place),
         item_id=ticket.item_id or None,
         passages=ticket.passages,
+        position=None if place is None else place.position,
+        expected_wait_seconds=None if place is None else place.expected_wait_seconds,
+    )
+
+
+async def take_a_place(
+    request: Request, *, ticket: str, running: int, waiting: int, now: datetime
+) -> tuple[CapacityLedger | None, Taken]:
+    """The queued file's place in the document-job budget, as BATCH, held under its ticket.
+
+    `running` and `waiting` are the job queue's own counts, which decide where there is no cache
+    to ask and where the cache does not answer; see the module docstring.
+    """
+    asked_for = ingestion_request(trace_of_request())
+    budgets = configured_budgets()
+    key = asked_for.budget_key
+    counted = CapacityState(used={key: running}, queued={key: waiting})
+    ledger = capacity_ledger_of(request.app.state)
+    if ledger is None:
+        return None, Taken(decision=decide(asked_for, budgets, counted, now=now))
+    return ledger, await asyncio.to_thread(
+        ledger.admit, asked_for, budgets, now=now, member=ticket, fallback=counted
     )
 
 
@@ -449,24 +514,36 @@ async def queue_upload(
         now=asked.now,
     )
     backend = store.backend
-    await asyncio.to_thread(store_original, scanned, backend=backend, prefix=store.prefix)
-    await asyncio.to_thread(put_ticket, backend, ticket, prefix=store.prefix)
+    ledger, taken = await take_a_place(
+        request, ticket=ticket.ticket, running=running, waiting=waiting, now=asked.now
+    )
+    queued = False
     try:
-        await queue.enqueue(ingest_job(ticket.ticket))
-    except Exception as exc:
-        # After the original and the ticket are kept: sending the file again writes the same two
-        # objects under the same names, so a retry costs a transfer and leaves nothing behind.
-        log.warning("knowledge.queue_did_not_take", error=type(exc).__name__)
-        return _refused("file", "queue_unavailable", THE_QUEUE_DID_NOT_ANSWER, status=503)
+        await asyncio.to_thread(store_original, scanned, backend=backend, prefix=store.prefix)
+        await asyncio.to_thread(put_ticket, backend, ticket, prefix=store.prefix)
+        try:
+            await queue.enqueue(ingest_job(ticket.ticket))
+        except Exception as exc:
+            # After the original and the ticket are kept: sending the file again writes the same
+            # two objects under the same names, so a retry costs a transfer and leaves nothing.
+            log.warning("knowledge.queue_did_not_take", error=type(exc).__name__)
+            return _refused("file", "queue_unavailable", THE_QUEUE_DID_NOT_ANSWER, status=503)
+        queued = True
+    finally:
+        # A place held for a file that never reached the queue would stand in front of every
+        # file after it until it lapsed.
+        if not queued:
+            await give_back(ledger, taken)
     log.info(
         "knowledge.queued",
         principal=asked.caller.principal.id,
         ticket=ticket.ticket,
         kind=kind.value,
         level=placement.level.value,
-        starts_now=admission.starts_now,
+        starts_now=taken.admitted,
+        degraded=taken.degraded,
     )
-    return _queued_view(ticket)
+    return _queued_view(ticket, place=taken.decision.queue)
 
 
 @router.get(QUEUED_PATH + "/{ticket}", response_model=QueuedView, responses=COMMON_RESPONSES)

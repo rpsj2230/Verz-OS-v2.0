@@ -37,12 +37,12 @@ expired once its deadline passes (M8.3.4).
 **The downgrade** drops the table, the columns and restores `0133`'s control names, and refuses when
 a control run named `escalation_expiry` is kept, for the reason `0133` gives about its own.
 
-Revises `0157`, the head of main when this was written.
+Revises `0156`, the head of main when this was written.
 
 Task ids: M8.3.1, M8.3.2, M8.3.4
 
 Revision ID: 0168
-Revises: 0157
+Revises: 0156
 """
 
 from __future__ import annotations
@@ -52,7 +52,7 @@ from alembic import op
 
 revision = "0168"
 # The head of origin/main when this was written; re-pointed when it lands.
-down_revision = "0157"
+down_revision = "0156"
 branch_labels = None
 depends_on = None
 

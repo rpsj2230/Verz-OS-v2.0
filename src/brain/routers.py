@@ -375,6 +375,10 @@ from brain.thread_routes import router as thread_router
 # the install or one department's people, behind `admin:tool`. See `brain.tool_routes`.
 from brain.tool_routes import router as tool_router
 
+# One run's stored trace, read under the payload role the caller's own token carries, with the
+# read on record before it happens. See `brain.trace_routes`.
+from brain.trace_routes import router as trace_router
+
 # Every budget and request window a person may set from the Rate limits screen, within the
 # product's bounds, and one set, behind `admin:install_setting`. See `brain.tuning_routes`.
 from brain.tuning_routes import router as tuning_router
