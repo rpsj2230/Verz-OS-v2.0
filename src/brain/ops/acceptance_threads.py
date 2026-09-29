@@ -109,12 +109,11 @@ async def asked_on_the_web(
     )
     ask = Question(question=question, thread=thread)
     request = _request(app)
-    outcome = await answered_for(
-        request, open_trace(f"{h.trace_id}-{n}", now, Channel.CONSOLE), answering, ask
-    )
+    recorder = open_trace(f"{h.trace_id}-{n}", now, Channel.CONSOLE)
+    outcome = await answered_for(request, recorder, answering, ask)
     if not isinstance(outcome, Answered):
         raise CheckFailedError("a question was refused by a window the check never installs")
-    return outcome, await remembered(request, answering, ask, outcome)
+    return outcome, await remembered(request, answering, ask, outcome, recorder)
 
 
 async def _thread(h: Harness, principal_id: str, thread_id: str) -> Thread | None:
@@ -353,3 +352,89 @@ async def a_wrong_answer_is_kept_as_a_signal_and_no_words_with_it(h: Harness) ->
         )
     if await StoredThreads(h.sessions).corrections(other):
         raise CheckFailedError("the learning signal read one person's correction as another's")
+
+
+# ------------------------------------------- 5. an agent's conversations (M39.8.9)
+@check(
+    leaves=("M39.8.9",),
+    sentence=(
+        "Two members of acceptance_a each have a thread with one agent, one of them a run that "
+        "failed: the agent's Conversations section lists each member their own thread and never "
+        "the other's, naming the agent, their first question and how the run ended; the failed "
+        "one says failed and reopens with no answer shown; and a member the section is not open "
+        "to is answered as for an agent that does not exist."
+    ),
+)
+async def an_agents_conversations_are_its_readers_own_and_say_what_failed(h: Harness) -> None:
+    from brain.agent_conversation_routes import agent_conversations_route
+    from brain.chat.remember import remember_failure
+    from brain.chat.thread_store import Exchange, StoredThreads
+    from brain.console.reads import Plane, plane_capability
+    from brain.core.errors import Absent
+    from brain.gate.context import Channel
+    from brain.ops.acceptance_checks import _in
+    from brain.ops.acceptance_checks_skills import _an_agent
+    from brain.tables.chat import RunState
+
+    await h.found_departments()
+    member, colleague, outsider = (
+        h.principal(A, "member"),
+        h.principal(A, "colleague"),
+        h.principal(A, "outsider"),
+    )
+    reads = _in(A, "read:question", *(plane_capability(one).value for one in Plane))
+    await h.person(member, department=A, grants=reads)
+    await h.person(colleague, department=A, grants=reads)
+    await h.person(outsider, department=A)
+    agent_id = await _an_agent(h, member)
+    app = await _web(h)
+    store = StoredThreads(h.sessions)
+    failed_question, answered_question = h.word(), h.word()
+
+    kept = await remember_failure(
+        store,
+        principal_id=member,
+        thread_id=None,
+        channel=Channel.CONSOLE,
+        question=failed_question,
+        agent_id=agent_id,
+        trace_id=f"{h.trace_id}-1",
+        now=h.now,
+    )
+    await store.record(
+        colleague,
+        thread_id=None,
+        channel=Channel.CONSOLE,
+        exchange=Exchange(
+            question=answered_question,
+            answer=h.word(),
+            refs=(),
+            agent_id=agent_id,
+            trace_id=f"{h.trace_id}-2",
+            state=RunState.ANSWERED,
+        ),
+        now=h.now,
+    )
+    if kept is None:
+        raise CheckFailedError("a failed run was kept in no thread")
+
+    async def listed(principal_id: str) -> list[tuple[str, str | None, list[str]]] | None:
+        try:
+            view = await agent_conversations_route(
+                _request(app), agent_id, await _asking(h, principal_id)
+            )
+        except Absent:
+            return None
+        return [
+            (one.title, one.state, [agent.agent_id for agent in one.agents]) for one in view.items
+        ]
+
+    if await listed(member) != [(failed_question, RunState.FAILED.value, [agent_id])]:
+        raise CheckFailedError("a member's section did not list their own failed run as failed")
+    if await listed(colleague) != [(answered_question, RunState.ANSWERED.value, [agent_id])]:
+        raise CheckFailedError("a member's section listed other than their own thread")
+    opened = await _opened(h, app, member, kept)
+    if opened is None or [one.body for one in opened.messages] != [failed_question]:
+        raise CheckFailedError("a failed run reopened with something shown as its answer")
+    if await listed(outsider) is not None:
+        raise CheckFailedError("the section opened to a member it is not open to")

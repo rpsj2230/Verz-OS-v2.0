@@ -44,9 +44,12 @@ questions of seven modules. This route answers one of them: it holds the agent's
 its install, which is the Settings tab's content. Since 2026-09-16 a second tab has something in
 it whatever the agent: the Automations tab draws the product's automation gallery, served by
 `brain.automation_gallery_routes` behind the same tab's read, and the gallery is never empty
-because `brain.console.automation_gallery.BUILT_IN` is not. The other five have no route serving
-their read, so they are not populated, and they are absent from the strip rather than drawn over
-an empty panel. See `ONLY_WHAT_THIS_ROUTE_HOLDS_IS_POPULATED`.
+because `brain.console.automation_gallery.BUILT_IN` is not. Since 2026-09-30 a third does: the
+Conversations tab lists the reader's own threads with the agent (`brain.agent_conversation_routes`,
+behind the same tab's read), and an empty list there is the reader's own history and hides nobody
+else's, so it is not the count an empty heading would otherwise be. The other four have no route
+serving their read, so they are not populated, and they are absent from the strip rather than drawn
+over an empty panel. See `ONLY_WHAT_THIS_ROUTE_HOLDS_IS_POPULATED`.
 
 **The composition travels exactly when the Settings tab does.** `composition_rows` carries
 the persona, which is prompt material, and says whether somebody may see it is the strip's
@@ -307,9 +310,11 @@ ONLY_WHAT_THIS_ROUTE_HOLDS_IS_POPULATED: Final = (
     "tab_strip shows a tab that is permitted and populated, and a heading over an empty panel "
     "is a count of hidden things spelled out. This route holds the agent's record and its "
     "install, which is what the Settings tab reads, and the Automations tab always holds the "
-    "product's automation gallery, which its own route serves behind the same tab's read. "
-    "Marking the other five populated would draw five headings over nothing; marking Settings "
-    "empty would withhold a tab whose content is already in the response."
+    "product's automation gallery, which its own route serves behind the same tab's read. The "
+    "Conversations tab holds the reader's own threads with the agent, and an empty one is their "
+    "own history and hides nobody's. Marking the other four populated would draw four headings "
+    "over nothing; marking Settings empty would withhold a tab whose content is already in the "
+    "response."
 )
 
 #: Why a malformed row is refused as though it were missing.
@@ -411,7 +416,7 @@ THE_PROFILE_IS_CONFIGURATION_AND_ITS_CAPABILITY_NAMES_ARE_THE_VOCABULARYS: Final
 MAX_ROSTER_ENTRIES: Final = 500
 
 #: The tabs with something in them for every agent. See `ONLY_WHAT_THIS_ROUTE_HOLDS_IS_POPULATED`.
-POPULATED_HERE: Final[frozenset[Tab]] = frozenset({Tab.SETTINGS, GALLERY_TAB})
+POPULATED_HERE: Final[frozenset[Tab]] = frozenset({Tab.SETTINGS, GALLERY_TAB, Tab.CONVERSATIONS})
 
 #: The most templates one gallery answer carries. A resource bound, as the roster's is.
 MAX_TEMPLATE_ENTRIES: Final = 500

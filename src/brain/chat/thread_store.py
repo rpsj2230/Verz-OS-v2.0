@@ -65,7 +65,7 @@ from brain.chat.turns import Correction, CorrectionKind, RecordRef, record_corre
 from brain.core.field_policy import Classification
 from brain.gate.context import Channel
 from brain.memory.signals import Observation, Signal
-from brain.tables.chat import TITLE_CHARS, ConversationRow, MessageRole, MessageRow
+from brain.tables.chat import TITLE_CHARS, ConversationRow, MessageRole, MessageRow, RunState
 
 # ------------------------------------------------------------------ written-down reasons
 #: Why a chat channel's thread id is derived rather than stored.
@@ -98,6 +98,13 @@ SEARCH_READS_ONLY_THE_ASKERS_OWN_QUESTIONS: Final = (
     "An answer's words may be ones the reader no longer reaches, and a search matching them "
     "would say they are still there. A question is the person's own words, always shown back to "
     "them, so the search reads questions and titles, which are questions, and nothing else."
+)
+
+#: Why a failed run is kept as a question and an empty turn.
+FAILED_RUN_SHOWS_NOTHING: Final = (
+    "A run that failed produced nothing the person was shown, so its thread keeps the question and "
+    "an answer turn marked failed with no words and no references. A failed turn carrying text "
+    "would be model output nobody was shown, stored as if it had been."
 )
 
 #: Why the console is a surface of the highest ceiling here.
@@ -173,11 +180,37 @@ class Exchange:
 
     `refs` is what the answer drew on, or None when that was not recorded, which is stored so the
     answer is never shown again; see `AN_ANSWER_WHOSE_SOURCES_ARE_UNKNOWN_IS_NEVER_SHOWN_AGAIN`.
+    `agent_id`, `trace_id` and `state` are the run behind the answer (`0161`): the stored agent
+    that answered or empty for the asker's own reach, the request's trace, and how it ended.
     """
 
     question: str
     answer: str
     refs: tuple[RecordRef, ...] | None
+    agent_id: str = ""
+    trace_id: str = ""
+    state: RunState = RunState.ANSWERED
+
+    def __post_init__(self) -> None:
+        if self.state is RunState.FAILED and (self.answer or self.refs is not None):
+            msg = FAILED_RUN_SHOWS_NOTHING
+            raise ValueError(msg)
+
+
+def failed_exchange(question: str, *, agent_id: str, trace_id: str) -> Exchange:
+    """The question of a run that failed, and a turn saying so with nothing in it.
+
+    See `FAILED_RUN_SHOWS_NOTHING`. Its references are unrecorded, so a reader that ignored the
+    state would still never show it.
+    """
+    return Exchange(
+        question=question,
+        answer="",
+        refs=None,
+        agent_id=agent_id,
+        trace_id=trace_id,
+        state=RunState.FAILED,
+    )
 
 
 def _title(question: str) -> str:
@@ -234,6 +267,9 @@ class StoredThreads:
                         "channel": channel.value,
                         "body": exchange.answer,
                         "refs": refs,
+                        "agent_id": exchange.agent_id or None,
+                        "trace_id": exchange.trace_id or None,
+                        "run_state": exchange.state.value,
                         "created_at": now + ANSWER_AFTER_QUESTION,
                     },
                 ],
@@ -358,6 +394,46 @@ class StoredThreads:
             )
             return await self._loaded(session, principal_id, list(ids))
 
+    async def threads_with_agent(
+        self, principal_id: str, agent_id: str, *, limit: int = MOST_THREADS
+    ) -> tuple[Thread, ...]:
+        """This person's threads an agent answered in, most recently used first (M39.8.9).
+
+        The person's own and nobody else's, for the reason `threads` gives: `app.principal_id`
+        names them first and row-level security shows only their conversations. An agent is in a
+        thread when one of its answers is, which `0161` records on the answer.
+        """
+        async with self._sessions() as session, session.begin():
+            await session.execute(_SET_PRINCIPAL, {"principal": principal_id})
+            latest = (
+                sa.select(
+                    MessageRow.conversation_id, sa.func.max(MessageRow.created_at).label("at")
+                )
+                .group_by(MessageRow.conversation_id)
+                .subquery()
+            )
+            answered = sa.exists(
+                sa.select(MessageRow.id).where(
+                    MessageRow.conversation_id == ConversationRow.id,
+                    MessageRow.role == MessageRole.ASSISTANT.value,
+                    MessageRow.agent_id == agent_id,
+                )
+            )
+            ids = (
+                (
+                    await session.execute(
+                        sa.select(ConversationRow.id)
+                        .join(latest, latest.c.conversation_id == ConversationRow.id)
+                        .where(ConversationRow.principal_id == principal_id, answered)
+                        .order_by(latest.c.at.desc(), ConversationRow.id)
+                        .limit(max(1, min(limit, MOST_THREADS)))
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            return await self._loaded(session, principal_id, list(ids))
+
     async def thread(self, principal_id: str, thread_id: str) -> Thread | None:
         """One of this person's threads, or None for one that is not theirs or does not exist."""
         wanted = parsed_thread_id(thread_id)
@@ -459,12 +535,19 @@ def _message_of(row: MessageRow) -> ThreadMessage:
         # read back as the API's is never shown again, which is the direction to fail in.
         channel = Channel.API
     raw: Any = row.refs
+    try:
+        state = None if row.run_state is None else RunState(row.run_state)
+    except ValueError:
+        # A state this build does not know is read as not recorded, never as answered.
+        state = None
     return ThreadMessage(
         role=MessageRole(row.role),
         at=row.created_at,
         channel=channel,
         body=row.body,
         refs=refs_from_json(raw),
+        agent_id=row.agent_id or "",
+        run_state=state,
     )
 
 

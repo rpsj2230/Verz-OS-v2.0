@@ -65,6 +65,7 @@ import { AUTOMATIONS_TAB, automationGalleryApiPath } from "../automationGalleryQ
 import { actsFor, ACT_LABELS, type LifecycleAct } from "../agentLifecycleQuery";
 import { UNAVAILABLE, WORKS_AT } from "./agentActions";
 import { AgentAbout } from "./AgentAbout";
+import { AgentConversations } from "./AgentConversations";
 import { AgentDashboard } from "./AgentDashboard";
 import { daysSince, readHeaderFacts, readProfile, spendIsRecorded } from "./agentDetailQuery";
 import { AgentProfile, LEASH_ANCHOR } from "./AgentProfile";
@@ -94,10 +95,14 @@ export const SKILLS_LABEL = "Skills";
 export const DAYS_LABEL = "Days since created";
 export const SPEND_NOT_RECORDED = "spend is not recorded, so the figure is left out rather than drawn as nought.";
 export const AUTOMATIONS_SECTION = "Automations";
+export const CONVERSATIONS_SECTION = "Conversations";
 export const EDIT_AS_DRAFT = "Edit as a draft";
 
 /** The settings tab's key, whose content is the Profile. */
 const SETTINGS_TAB = "settings";
+
+/** The conversations tab's key, whose content is the reader's own threads with this agent. */
+export const CONVERSATIONS_TAB = "conversations";
 
 /** Where a view of an agent is. The Dashboard is the bare address. */
 export function viewAddress(agentId: string, view: AgentView | string): string {
@@ -105,7 +110,10 @@ export function viewAddress(agentId: string, view: AgentView | string): string {
 }
 
 /** Which view an address opens, given the sections this reader may open. */
-export function viewFor(tab: string | undefined, sections: readonly string[]): AgentView | typeof AUTOMATIONS_TAB {
+export function viewFor(
+  tab: string | undefined,
+  sections: readonly string[],
+): AgentView | typeof AUTOMATIONS_TAB | typeof CONVERSATIONS_TAB {
   if (tab === "profile" || tab === "about") {
     return tab;
   }
@@ -114,6 +122,9 @@ export function viewFor(tab: string | undefined, sections: readonly string[]): A
   }
   if (tab === AUTOMATIONS_TAB && sections.includes(AUTOMATIONS_TAB)) {
     return AUTOMATIONS_TAB;
+  }
+  if (tab === CONVERSATIONS_TAB && sections.includes(CONVERSATIONS_TAB)) {
+    return CONVERSATIONS_TAB;
   }
   return "dashboard";
 }
@@ -254,8 +265,8 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
     return { key: one, label: VIEW_LABELS[one], to: viewAddress(agentId, one), icon: <Icon aria-hidden /> };
   });
   const menuSections = workspace.tabs
-    .filter((one) => one.tab === AUTOMATIONS_TAB)
-    .map((one) => ({ tab: one.tab, label: AUTOMATIONS_SECTION }));
+    .filter((one) => one.tab === AUTOMATIONS_TAB || one.tab === CONVERSATIONS_TAB)
+    .map((one) => ({ tab: one.tab, label: one.tab === CONVERSATIONS_TAB ? CONVERSATIONS_SECTION : AUTOMATIONS_SECTION }));
   const subline = [
     facts.ownerName === undefined ? null : `steward ${facts.ownerName}`,
     agent.lineage === undefined ? null : `from a template, version ${String(agent.lineage.version)}`,
@@ -325,7 +336,7 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
     <DetailPage
       crumbs={[{ label: ROSTER_HEADING, to: ROSTER_ADDRESS }, { label: agent.displayName }]}
       header={header}
-      switcher={<ViewSwitch label={VIEWS_LABEL} views={views} current={view === AUTOMATIONS_TAB ? undefined : view} />}
+      switcher={<ViewSwitch label={VIEWS_LABEL} views={views} current={view === AUTOMATIONS_TAB || view === CONVERSATIONS_TAB ? undefined : view} />}
       beside={<SectionsMenu agentId={agentId} sections={menuSections} />}
     >
       {lifecycle.notice}
@@ -358,6 +369,11 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
         />
       ) : null}
       {view === "about" ? <AgentAbout agentId={agentId} profileAddress={viewAddress(agentId, "profile")} /> : null}
+      {view === CONVERSATIONS_TAB ? (
+        <SectionCard title={CONVERSATIONS_SECTION} lede="Your own conversations with this agent, wherever you asked, and how each run ended.">
+          <AgentConversations agentId={agentId} />
+        </SectionCard>
+      ) : null}
       {view === AUTOMATIONS_TAB ? (
         <SectionCard title={AUTOMATIONS_SECTION} lede="What this agent runs on a schedule, and what can be installed for it.">
           <div className="flex min-w-0 flex-col gap-4">
