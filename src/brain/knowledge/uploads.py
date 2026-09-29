@@ -61,7 +61,13 @@ asynchronously, then admitted by `admit_upload`, scanned and parsed by
   document needs a second person to reach its own department; widening it does, and that is
   M7.4.4's path.
 
-Task ids: M7.1.1, M7.1.2, M7.1.4, M7.1.5, M7.4.3, M7.6.3, M7.2.5
+**A spreadsheet is offered to Classification at every door and never read as text (M7.7.3).**
+`offer_a_table_file` refuses a CSV or a workbook with `TABLE_OFFER_TEXT` before a byte is read, on
+the single upload, the queue and a link, because a price list indexed as text puts cost and margin
+in passages a department's readers are shown. See
+`A_TABLE_FILE_IS_OFFERED_FOR_CONVERSION_AND_NEVER_INDEXED_AS_TEXT`.
+
+Task ids: M7.1.1, M7.1.2, M7.1.4, M7.1.5, M7.4.3, M7.6.3, M7.2.5, M7.7.3
 """
 
 from __future__ import annotations
@@ -110,6 +116,7 @@ from brain.knowledge.scanning import (
     scan_for_parsing,
 )
 from brain.knowledge.search import TITLE_CHARS, Reach
+from brain.knowledge.table_file import is_a_table_file
 from brain.knowledge.text_path import (
     TABLES_ARE_VISIBLE,
     TEXT_PATH_TYPES,
@@ -443,7 +450,12 @@ A_LINK_IS_TYPED_BY_WHAT_IT_ANSWERED: Final = (
 
 
 def page_type(body: bytes, url: str) -> MediaType:
-    """What a link answered with, from its bytes. See `A_LINK_IS_TYPED_BY_WHAT_IT_ANSWERED`."""
+    """What a link answered with, from its bytes. See `A_LINK_IS_TYPED_BY_WHAT_IT_ANSWERED`.
+
+    A link to a spreadsheet is offered to Classification first (M7.7.3): its bytes sniff as text
+    or as a Word container, and read as either it would be a price list indexed as text.
+    """
+    offer_a_table_file(urlsplit(url).path)
     match sniff(body[:SNIFF_BYTES]):
         case Container.PDF:
             return MediaType.PDF
@@ -813,6 +825,44 @@ async def read_arriving(chunks: AsyncIterable[bytes], *, ceiling: int) -> bytes:
             )
             raise IngestRefused(msg)
     return bytes(buffer)
+
+
+#: What somebody adding a spreadsheet as a document is told (M7.7.3). Offered rather than refused:
+#: the file is wanted, and the place it belongs is named with what that place does with it.
+TABLE_OFFER_TEXT: Final = (
+    "a spreadsheet is kept as a table whose columns are classified, so each person reads only "
+    "the columns they may, and is not added as text. Add it on Classification, which turns its "
+    "rows into a table Ask answers from."
+)
+
+#: Why a table file is offered to Classification at every door into the document plane.
+A_TABLE_FILE_IS_OFFERED_FOR_CONVERSION_AND_NEVER_INDEXED_AS_TEXT: Final = (
+    "A price list indexed as text puts every column, cost and margin among them, in passages "
+    "anybody reading the department's documents is shown, which is the leak column "
+    "classification exists to prevent. So a CSV or a workbook arriving as a document, by file, "
+    "by queue or by link, is offered to Classification, whose upload converts it to classified "
+    "rows, and is never read as text. The offer names where to go; it is not a failure of the file."
+)
+
+
+class OfferedAsATable(IngestRefused):
+    """A table file arriving as a document, offered to Classification instead (M7.7.3)."""
+
+
+def offer_a_table_file(filename: str, declared_type: str = "") -> None:
+    """Refuse a table file at a document door with the offer, before a byte is read (M7.7.3).
+
+    By the file's name, which is how `brain.knowledge.table_file` knows what it converts, and by
+    the declared type, so a workbook sent under another name is offered too. See
+    `A_TABLE_FILE_IS_OFFERED_FOR_CONVERSION_AND_NEVER_INDEXED_AS_TEXT`.
+    """
+    declared = declared_type.split(";", 1)[0].strip().lower()
+    if is_a_table_file(filename) or declared in TABLE_TYPES:
+        raise OfferedAsATable(TABLE_OFFER_TEXT)
+
+
+#: The declared types of the files Classification converts.
+TABLE_TYPES: Final = frozenset({MediaType.CSV.value, MediaType.XLSX.value})
 
 
 def text_path_type(declared_type: str) -> MediaType:
