@@ -105,7 +105,8 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     here: limits, channels and documents, then volume, refusals and a head's audit, then Lark
     chat's three, the skill library's four, the models' eleven and the audit's one, the
     connectors' three, the tools' three, a document's life in four, the classified tables'
-    three, an answer's evidence in four and retrieval's seven, the modules in `CHECK_MODULES`
+    three, an answer's evidence in four, retrieval's seven and ingestion's six, the modules in
+    `CHECK_MODULES`
     order rather than the order a process imported them. Delete this and a check can drop out of
     the suite with the page simply listing one fewer row, or the page can lead with whichever
     module was imported first."""
@@ -177,6 +178,15 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "hybrid_search_returns_what_each_leg_finds_fused_by_rank",
         "the_database_withholds_passages_the_statement_did_not_filter",
         "three_readers_get_everything_in_their_scope_and_nothing_else",
+    ]
+    # Getting a document in; `tests/unit/test_acceptance_ingest.py`.
+    assert by_module["brain.ops.acceptance_ingest"] == [
+        "a_file_carrying_script_or_macros_is_refused_before_it_is_read",
+        "the_antivirus_test_file_is_refused_as_malware",
+        "a_link_is_fetched_read_and_found_in_its_department",
+        "a_full_ingestion_queue_refuses_with_a_retry_hint",
+        "a_queued_file_is_kept_in_the_store_and_read_by_the_worker",
+        "the_embedding_width_is_the_installs_and_held_under_vectors",
     ]
     assert list(by_module) == list(acceptance.CHECK_MODULES)
     oversight = {one.name: one.leaves for one in registered()}
@@ -561,11 +571,15 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     there, one run each, keyed by the commit. Delete this and a check that commits, or one
     that cannot pass on a real schema, reaches the owner's server first."""
     from tests.fixtures.scratch_postgres import sql
+    from tests.unit.test_acceptance_ingest import offline_install
 
     with at_head("brain_acceptance_run") as url:
         before = counts(url)
         for name, value in INSTALL.items():
             monkeypatch.setenv(name, value)
+        # The link answered by a recorded page and the queue driver's count stood in, as
+        # `tests/unit/test_acceptance_ingest.py` runs them: a test never asks the network.
+        offline_install(monkeypatch)
         waited = run_on(url, {})
         bound = run_on(url, {})
         after = counts(url)
@@ -596,14 +610,17 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     ):
         assert outcomes.pop(model_check.name)[0] == NOT_RUN, model_check.name
     # Every act that exists was seen, and the leaf still cannot close: see its module.
+    # No antivirus and no object store here; `tests/unit/test_acceptance_ingest.py` runs both.
+    assert outcomes.pop("the_antivirus_test_file_is_refused_as_malware")[0] == NOT_RUN
+    assert outcomes.pop("a_queued_file_is_kept_in_the_store_and_read_by_the_worker")[0] == NOT_RUN
     assert outcomes.pop("each_audited_act_is_in_the_ledger_and_a_missing_entry_is_caught") == (
         NOT_RUN,
         acceptance_audit.A_BROWSER_SESSION_AND_A_TRACE_STORE_ARE_NOT_BUILT,
     )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
-    assert len(outcomes) == 31
+    assert len(outcomes) == 35
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 110
+    assert runs == [(2,)] and len(recorded) == 122
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }

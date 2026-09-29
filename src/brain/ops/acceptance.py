@@ -177,6 +177,7 @@ CHECK_MODULES: Final = (
     "brain.ops.acceptance_checks_tables",
     "brain.ops.acceptance_answers",
     "brain.ops.acceptance_retrieval",
+    "brain.ops.acceptance_ingest",
 )
 
 
