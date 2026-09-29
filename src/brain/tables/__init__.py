@@ -115,7 +115,7 @@ from brain.tables.operation import OperationRow
 from brain.tables.organisation import DepartmentLeadRow, TeamMembershipRow
 from brain.tables.outbox import OutboxDeliveryRow, OutboxEventRow, WebhookSubscriberRow
 from brain.tables.plugin import PluginInstallRow, PluginVersionRow
-from brain.tables.projection import ProjectedRecordRow
+from brain.tables.projection import ProjectedRecordRow, SourceEpochRow
 from brain.tables.question_gap import QuestionGapRow
 from brain.tables.requirement_check import RequirementCheckRow
 from brain.tables.resolution import (
@@ -409,6 +409,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     "agent.browser_session",
     "obs.trace_step",
     "obs.trace_read",
+    # 0152_record_lives_and_source_epochs. Points at nothing: a source is a value, and the epoch
+    # outlives any one connection of it, as `proj.record`'s rows do.
+    "proj.source_epoch",
 )
 
 __all__ = [
@@ -514,6 +517,7 @@ __all__ = [
     "SkillReviewRow",
     "SkillRow",
     "SolutionRow",
+    "SourceEpochRow",
     "SpendActualRow",
     "StaffMemberRow",
     "StaffSyncRunRow",

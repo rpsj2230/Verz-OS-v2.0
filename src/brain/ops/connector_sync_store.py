@@ -11,10 +11,16 @@ ago. The id is added because an attempt names the connection it read with; see
 `brain.tables.connector_sync`.
 
 **A record is written by one upsert that never revives a retired row and never moves a reading
-backwards.** The conflict clause updates only a row that is still live and whose `last_seen_at` is
-not newer than this reading's, so a record an erasure or a person retired stays retired whatever the
-source still says, which is `0045`'s rule that a retirement is final, and a slower reading cannot
-overwrite a faster one's. See `A_RETIRED_RECORD_STAYS_RETIRED_WHATEVER_THE_SOURCE_SAYS`.
+backwards.** Its conflict target is the unique index over live rows (`0152`), so a record with only
+a retired row is written as a new live row beside it, and the retired row keeps the fields, the
+last reading and the retirement it had, which is `0045`'s rule that a retirement is final. The
+update applies only when this reading is not older than the one stored, so a slower reading cannot
+overwrite a faster one's. See `A_RETIRED_ROW_STAYS_AS_IT_WAS_RETIRED_AND_A_RETURNED_RECORD_IS_NEW`.
+
+**A retirement and an epoch are statements here and decisions in `brain.ops.connector_sync`.**
+`retire_unseen` stamps `statement_timestamp()`, the one instant `0045`'s policy lets the application
+write, and `advance_epoch` counts a change in `proj.source_epoch`; the worker runs each in the
+transaction of the write it describes. `StoredSourceEpochs` is the answer path's read of them.
 
 **The worker writes as the login its URL names**, which on an install is the database's owner, as
 `brain.ops.erasure_store` and `brain.ops.webhook_delivery` already do. Under the application role
@@ -31,7 +37,7 @@ reaches the source's health; see `brain.ops.connector_probe`.
 the first in the attribution the ledger's trigger reads, and reads both back for the page; the
 worker's statements over the second are `probe_targets` and `probe_starts`.
 
-Task ids: M42.6.5, M31.3.2.3, M31.3.2.4, M27.15.8
+Task ids: M42.6.5, M31.3.2.3, M31.3.2.4, M27.15.8, M11.4.6, M11.4.8, M11.8.4, M11.8.11
 """
 
 from __future__ import annotations
@@ -41,9 +47,20 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from types import MappingProxyType
-from typing import Any, Final, Protocol, runtime_checkable
+from typing import Any, Final, Protocol, cast, runtime_checkable
 
-from sqlalchemy import Insert, RowMapping, Select, and_, func, select
+from sqlalchemy import (
+    Insert,
+    RowMapping,
+    Select,
+    Table,
+    Update,
+    and_,
+    func,
+    select,
+    text,
+    update,
+)
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -59,19 +76,21 @@ from brain.ops.connector_probe import (
     requests_in,
 )
 from brain.ops.connector_store import Connection, every_live
-from brain.ops.connector_sync import Attempt, StoredValue, SyncOutcome, SyncState
+from brain.ops.connector_sync import Attempt, ReadState, StoredValue, SyncOutcome, SyncState
 from brain.ops.setting_store import read_namespace, values_under
 from brain.tables.audit import attributed_to
 from brain.tables.connector_connection import ConnectorConnectionRow
 from brain.tables.connector_sync import ConnectorSyncRow
-from brain.tables.projection import ProjectedRecordRow
+from brain.tables.projection import LIVE, ProjectedRecordRow, SourceEpochRow
 
-#: Why the upsert's update is conditional.
-A_RETIRED_RECORD_STAYS_RETIRED_WHATEVER_THE_SOURCE_SAYS: Final = (
-    "A projected record is retired by an erasure or by a person, and 0045 makes a retirement "
-    "final. A sync that revived a retired record because the source still lists it would undo an "
-    "erasure on the next run, silently, as the worker. So the conflict update applies only to a "
-    "live row, and only when this reading is not older than the one stored."
+#: Why the upsert's conflict target is the live rows, and its update conditional.
+A_RETIRED_ROW_STAYS_AS_IT_WAS_RETIRED_AND_A_RETURNED_RECORD_IS_NEW: Final = (
+    "A projected row is retired when a complete read of everything no longer returns its record, "
+    "and 0045 makes a retirement final. So the upsert never touches a retired row: its conflict "
+    "target is the unique index over live rows, and a record the source returns after it was "
+    "retired is inserted as a new live row, while the retired one keeps the fields, the last "
+    "reading and the instant it was retired with. The update applies only when this reading is "
+    "not older than the one stored, so a slower reading cannot overwrite a faster one's."
 )
 
 
@@ -101,7 +120,8 @@ def live_connections() -> Select[Any]:
 
 
 def latest_attempts() -> Select[Any]:
-    """The newest attempt of every live connection, and when each was last read to the end."""
+    """The newest attempt of every live connection, when each was last read to the end, and where
+    reading it stood."""
     newest = (
         select(ConnectorSyncRow)
         .distinct(ConnectorSyncRow.connection_id)
@@ -117,6 +137,15 @@ def latest_attempts() -> Select[Any]:
         .group_by(ConnectorSyncRow.connection_id)
         .subquery("synced")
     )
+    # Where reading stood, from the newest attempt that recorded it: a test of the connection
+    # records none and must not make the next read start again.
+    placed = (
+        select(ConnectorSyncRow.connection_id, ConnectorSyncRow.read_state)
+        .distinct(ConnectorSyncRow.connection_id)
+        .where(ConnectorSyncRow.read_state.is_not(None))
+        .order_by(ConnectorSyncRow.connection_id, ConnectorSyncRow.finished_at.desc())
+        .subquery("placed")
+    )
     return (
         select(
             newest.c.connection_id,
@@ -128,6 +157,7 @@ def latest_attempts() -> Select[Any]:
             newest.c.next_attempt_at,
             newest.c.detail,
             synced.c.last_synced_at,
+            placed.c.read_state,
         )
         .join(
             ConnectorConnectionRow,
@@ -137,12 +167,14 @@ def latest_attempts() -> Select[Any]:
             ),
         )
         .outerjoin(synced, synced.c.connection_id == newest.c.connection_id)
+        .outerjoin(placed, placed.c.connection_id == newest.c.connection_id)
         .order_by(newest.c.connector)
     )
 
 
 def record_upsert(record: ProjectedRecord, fields: Mapping[str, StoredValue]) -> Insert:
-    """Write one projected record, or refresh it. See the module docstring for the condition."""
+    """Write one projected record, or refresh its live row. See
+    `A_RETIRED_ROW_STAYS_AS_IT_WAS_RETIRED_AND_A_RETURNED_RECORD_IS_NEW`."""
     statement = insert(ProjectedRecordRow).values(
         source=record.source,
         entity=record.entity,
@@ -153,16 +185,85 @@ def record_upsert(record: ProjectedRecord, fields: Mapping[str, StoredValue]) ->
     table = ProjectedRecordRow.__table__
     return statement.on_conflict_do_update(
         index_elements=[table.c.source, table.c.entity, table.c.source_id],
+        # The live-row index's own predicate, or PostgreSQL infers no index and every write fails.
+        index_where=text(LIVE),
         set_={
             "fields": statement.excluded.fields,
             "last_seen_at": statement.excluded.last_seen_at,
             "updated_at": func.now(),
         },
-        where=and_(
-            table.c.deleted_at.is_(None),
-            table.c.last_seen_at <= statement.excluded.last_seen_at,
-        ),
+        where=table.c.last_seen_at <= statement.excluded.last_seen_at,
     )
+
+
+def live_fields(source: str, entity: str, source_ids: Sequence[str]) -> Select[Any]:
+    """The live index rows of these records, as they stand before a page is written over them."""
+    return select(ProjectedRecordRow.source_id, ProjectedRecordRow.fields).where(
+        ProjectedRecordRow.source == source,
+        ProjectedRecordRow.entity == entity,
+        ProjectedRecordRow.source_id.in_(list(source_ids)),
+        ProjectedRecordRow.deleted_at.is_(None),
+    )
+
+
+def retire_unseen(source: str, entity: str, before: datetime) -> Update:
+    """Retire every live row of one entity the read that began at `before` did not see.
+
+    A row the read saw carries a `last_seen_at` of that read, which is never before it began; a
+    row it did not see keeps an older one. Stamped with `statement_timestamp()`, which is when the
+    absence was noticed and the one instant `0045`'s policy lets the application write. See
+    `brain.ops.connector_sync.WHAT_A_COMPLETE_READ_OF_EVERYTHING_DID_NOT_RETURN_IS_RETIRED`.
+    """
+    # A cast at the ORM's boundary: a declarative class's `__table__` is typed as the `FromClause`
+    # it is declared as, and this one is a `Table`. The table rather than the class, so the update
+    # is plain SQL with no session bookkeeping to evaluate a server-side instant in Python.
+    table = cast(Table, ProjectedRecordRow.__table__)
+    return (
+        update(table)
+        .where(
+            table.c.source == source,
+            table.c.entity == entity,
+            table.c.deleted_at.is_(None),
+            table.c.last_seen_at < before,
+        )
+        .values(deleted_at=func.statement_timestamp())
+    )
+
+
+def advance_epoch(source: str) -> Insert:
+    """Count one change to a source's rows. See `brain.tables.projection.SourceEpochRow`."""
+    statement = insert(SourceEpochRow).values(source=source, epoch=1)
+    table = SourceEpochRow.__table__
+    return statement.on_conflict_do_update(
+        index_elements=[table.c.source],
+        set_={"epoch": table.c.epoch + 1, "updated_at": func.now()},
+    )
+
+
+def source_epochs() -> Select[Any]:
+    """Every source's epoch."""
+    return select(SourceEpochRow.source, SourceEpochRow.epoch)
+
+
+@runtime_checkable
+class SourceEpochs(Protocol):
+    """What the answer path reads to key a cached answer on its sources' changes."""
+
+    async def epochs(self) -> Mapping[str, int]:
+        """Every source's epoch, by name. A source with none has never changed a row."""
+        ...
+
+
+class StoredSourceEpochs:
+    """`SourceEpochs` over this install's database, as the application role."""
+
+    def __init__(self, sessions: async_sessionmaker[AsyncSession]) -> None:
+        self._sessions = sessions
+
+    async def epochs(self) -> Mapping[str, int]:
+        async with self._sessions() as session, session.begin():
+            rows = (await session.execute(source_epochs())).all()
+        return MappingProxyType({str(name): int(epoch) for name, epoch in rows})
 
 
 def attempt_row(connection_id: uuid.UUID, attempt: Attempt) -> Insert:
@@ -182,6 +283,7 @@ def attempt_row(connection_id: uuid.UUID, attempt: Attempt) -> Insert:
         next_attempt_at=attempt.next_attempt_at,
         detail=attempt.detail,
         lease=attempt.lease.value,
+        read_state=None if attempt.read_state is None else attempt.read_state.stored(),
     )
 
 
@@ -198,6 +300,7 @@ def _state(row: RowMapping) -> SyncState:
         next_attempt_at=row["next_attempt_at"],
         detail=str(row["detail"]),
         last_synced_at=row["last_synced_at"],
+        read_state=ReadState.from_stored(str(row["connector"]), row["read_state"]),
     )
 
 

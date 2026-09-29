@@ -20,13 +20,26 @@ projection that grows past the cap is not a fuller projection, it is a second co
 source system with its own retention, its own staleness and its own breach surface, and
 nobody ever decides to build that. It arrives one useful field at a time.
 
-**The key is `(source, entity, source_id)`, and each of the three is load-bearing.** That
-triple is the entire content of "which record in which system", so it is the natural key and
-there is no surrogate. A `uuid` id would let one source record be projected twice, and two
-rows for one record is not a duplicate-row problem here: a refresh updates one of them, the
-other goes on serving the value it was written with, and the fast lane filters, sorts and
-counts across both. The count is then wrong with nothing anywhere reporting it, which is the
-same argument `auth.directory_role_grant` makes about its own natural key.
+**One live row per `(source, entity, source_id)`, and each of the three is load-bearing.** That
+triple is the entire content of "which record in which system", and a unique index over the live
+rows holds it: two live rows for one record is not a duplicate-row problem here, because a
+refresh updates one of them, the other goes on serving the value it was written with, and the
+fast lane filters, sorts and counts across both. The count is then wrong with nothing anywhere
+reporting it, which is the same argument `auth.directory_role_grant` makes about its own natural
+key.
+
+**The index covers live rows only, since `0152`, because a record the source returns is a new
+live row and the retired one stays as it was retired.** A read that no longer returns a record
+retires its row with when that was noticed (`brain.ops.connector_sync.
+WHAT_A_COMPLETE_READ_OF_EVERYTHING_DID_NOT_RETURN_IS_RETIRED`), and a retirement is final under
+`0045`'s update policy. Until `0152` the triple was the primary key over every row, retired ones
+included, so a record the source listed again could be neither written beside its retired row
+nor revived, and a record a sweep retired wrongly (a page the source skipped) would have been
+absent from every answer for good. So the primary key is now `id`, a value minted by the
+database that nothing reads as a record's identity, and the triple is unique among live rows.
+Rejected: a generation number beside the triple as a four-part natural key. The application's
+role cannot see a retired row, so it could not compute the next generation, and a key an
+acceptance check cannot write under is a key the install cannot prove.
 
 `source` is in the key because record ids are the source's own namespace: Freshdesk company
 42 and Xero contact 42 are different companies, and a key without the source merges them by
@@ -71,15 +84,21 @@ property is that it inserts in a loop. The fast lane's filters are per entity ki
 index worth having is a per-entity expression index added when there is a measured query to
 add it for, rather than a blanket one added on the day the table is created.
 
-Task ids: M11.4.1
+**A source's epoch lives beside its rows, in `proj.source_epoch`.** One counter per source,
+advanced in the same transaction as the write that changed the source's rows, so an epoch can
+never say a source is unchanged while its rows have moved; the answer path reads it into the
+answer cache's key. `SourceEpochRow` argues the rest.
+
+Task ids: M11.4.1, M11.8.11, M11.8.4
 """
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Final
 
-from sqlalchemy import CheckConstraint, DateTime, Index, String, text
+from sqlalchemy import BigInteger, CheckConstraint, DateTime, Index, String, Uuid, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -119,6 +138,14 @@ FIELDS_WITHIN_THE_CAP = f"{FIELD_COUNT_SQL} <= {MAX_PROJECTED_FIELDS}"
 #: error and yields nothing, so a scalar would sail through a cap that counts zero keys.
 FIELDS_IS_AN_OBJECT = "jsonb_typeof(fields) = 'object'"
 
+#: What makes a row live. The predicate of the unique index below and of the upsert that names it
+#: as its conflict target, written once so the two cannot come to disagree: an `ON CONFLICT` whose
+#: predicate differs from the index's infers no index at all, and every write fails.
+LIVE: Final = "deleted_at IS NULL"
+
+#: The unique index over live rows, named by `0152` and by the tests that hold the two equal.
+LIVE_RECORD_INDEX: Final = "ux_record_live"
+
 
 class ProjectedRecordRow(TimestampMixin, SoftDeleteMixin, Base):
     """`proj.record`. One projected record: which source, which record, and how old (M11.4.1).
@@ -138,15 +165,15 @@ class ProjectedRecordRow(TimestampMixin, SoftDeleteMixin, Base):
     __tablename__ = "record"
 
     #: The connector this came from, as `ConnectorManifest.name` spells it.
-    source: Mapped[str] = mapped_column(String(SOURCE_CHARS), primary_key=True)
+    source: Mapped[str] = mapped_column(String(SOURCE_CHARS), nullable=False)
 
     #: The entity kind, as the manifest's `ProjectedEntity.entity` spells it. The redactor
     #: and the field policy are both looked up by this string.
-    entity: Mapped[str] = mapped_column(String(ENTITY_CHARS), primary_key=True)
+    entity: Mapped[str] = mapped_column(String(ENTITY_CHARS), nullable=False)
 
     #: The source's own identifier, passed through and never parsed. Its shape is the
     #: source's business, and reading one here would make us wrong the day they change it.
-    source_id: Mapped[str] = mapped_column(String(SOURCE_ID_CHARS), primary_key=True)
+    source_id: Mapped[str] = mapped_column(String(SOURCE_ID_CHARS), nullable=False)
 
     #: The entity registry's id, once resolution has produced one. Null until then, which is
     #: the ordinary state of a row a backfill has just written. See the module docstring for
@@ -163,6 +190,13 @@ class ProjectedRecordRow(TimestampMixin, SoftDeleteMixin, Base):
     #: `brain.connectors.projection` computes an age from, and the only evidence that the
     #: change signal is still delivering.
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    #: The row's own name, minted by the database. Added by `0152`, last, as `ALTER TABLE` adds
+    #: a column, so the model declares it where the database holds it. Nothing reads it as a
+    #: record's identity: see the module docstring for why the key over live rows is the triple.
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
 
     __table_args__ = (
         # Text plus check constraints rather than any narrower column type, matching every
@@ -190,5 +224,63 @@ class ProjectedRecordRow(TimestampMixin, SoftDeleteMixin, Base):
             "local_id",
             postgresql_where=text("deleted_at IS NULL"),
         ),
+        # One live row per record, and a retired row beside it for every time the source
+        # stopped returning it and then returned it. The upsert names this index, with its
+        # predicate, as its conflict target. See the module docstring.
+        Index(
+            LIVE_RECORD_INDEX,
+            "source",
+            "entity",
+            "source_id",
+            unique=True,
+            postgresql_where=text(LIVE),
+        ),
+        {"schema": "proj"},
+    )
+
+
+class SourceEpochRow(Base):
+    """`proj.source_epoch`. How many times a source's rows have changed, one row a source (M11.8.4).
+
+    **A counter advanced in the transaction that changed the rows**, by
+    `brain.ops.connector_sync_store.advance_epoch`, which the worker calls when a page it writes
+    holds a record the index did not or a field that moved, and when a complete read retires
+    what it no longer returned. So the epoch and the rows it speaks for commit together or not at
+    all, and the answer cache's key, which carries it (`brain.api_routes.caching_of`), never
+    matches an answer computed before the change. An unchanged read confirms its rows' times and
+    leaves the epoch where it was, so a quiet source keeps its cached answers.
+
+    **Here and not in the cache, and not derived from `last_seen_at`.** A counter in Valkey is
+    lost to an eviction or a restart while the answers stored under it may survive, and one that
+    starts again at zero can match an answer stored before the first change; the worker also
+    holds no cache client. An epoch read off `last_seen_at`, which is what
+    `brain.gate.caches.CachedFreshness.epoch` does, moves on every read that merely confirmed a
+    record, so every answer about a source would be dropped every quarter hour whether anything
+    changed or not.
+
+    **The shape `gate.policy_epoch` has, for its reasons.** Created on first use rather than
+    seeded, a reader treating a missing row as zero; no DELETE grant, because a counter that
+    could be removed could start again under an answer it once invalidated. Keyed by the
+    source's name rather than by the connection, because `proj.record` is: a source connected
+    again keeps its rows, so it keeps their epoch.
+    """
+
+    __tablename__ = "source_epoch"
+
+    #: The connector, as `proj.record.source` spells it.
+    source: Mapped[str] = mapped_column(String(SOURCE_CHARS), primary_key=True)
+    #: How many writes have changed this source's rows. At least one, since a row is only ever
+    #: written by an advance.
+    epoch: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=text("1"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(f"source ~ '{OBJECT_NAME_PATTERN}'", name="source_is_a_name"),
+        CheckConstraint("epoch >= 1", name="epoch_counts_a_change"),
         {"schema": "proj"},
     )

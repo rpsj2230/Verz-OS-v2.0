@@ -124,6 +124,7 @@ screens key on. See
 `THE_SCOPE_STATEMENT_NAMES_EVERY_PLANE_A_READER_REACHES`.
 
 Task ids: M31.1.4.1, M31.1.4.3, M31.1.4.4, M32.5.2.1, M1.1.7, M1.8.2, M23.1.1, M23.1.5, M8.2.2
+Task ids: M11.8.4
 """
 
 from __future__ import annotations
@@ -197,6 +198,7 @@ from brain.knowledge.rows import (
 )
 from brain.knowledge.search import KNOWLEDGE_READ
 from brain.ops.classification_store import classified_lane_of
+from brain.ops.connector_sync_store import SourceEpochs, StoredSourceEpochs
 from brain.ops.denial_store import Denial, Denials, StoredDenials, record_beside
 from brain.ops.limit_store import StoreVerdict, ValkeyWindowStore, make_store
 from brain.ops.limits import (
@@ -1072,15 +1074,31 @@ def policy_epoch_of(policies: Mapping[str, FieldPolicy]) -> int:
     return int(hashlib.sha256(blob.encode("utf-8")).hexdigest()[:15], 16)
 
 
+#: Why the answer key carries the epoch of every source its reader reaches.
+AN_ANSWER_IS_KEYED_ON_EVERY_SOURCE_ITS_READER_REACHES: Final = (
+    "The cache is looked up before the question is answered, so which sources the answer will "
+    "read is not known yet; what is known is every source the reader reaches, and the answer can "
+    "read no other. So the key carries each of those sources' epochs, a source with none as zero. "
+    "A change "
+    "to any source the reader reaches makes the next lookup a miss, which is at worst a question "
+    "answered again when an unrelated source moved, and never an answer served after a source it "
+    "read moved."
+)
+
+
 def caching_of(
-    state: Any, policies: Mapping[str, FieldPolicy], sources: Sequence[str]
+    state: Any,
+    policies: Mapping[str, FieldPolicy],
+    sources: Sequence[str],
+    epochs: Mapping[str, int],
 ) -> Caching | None:
     """The answer-cache lookup for this request, or None on a process with no answer store.
 
     `brain.app.lifespan` installs `ValkeyAnswerStore` only when a cache is configured. With
     none the front half still enters CACHE and misses, so the record says the step ran.
     `sources` is every source the reader reaches, so a volatile one makes the question
-    uncacheable rather than a cached answer stale.
+    uncacheable rather than a cached answer stale, and each carries its epoch from `epochs`
+    (M11.8.4): see `AN_ANSWER_IS_KEYED_ON_EVERY_SOURCE_ITS_READER_REACHES`.
     """
     store: AnswerStore | None = getattr(state, "answer_store", None)
     if store is None:
@@ -1088,10 +1106,28 @@ def caching_of(
     return Caching(
         store=store,
         policy_epoch=policy_epoch_of(policies),
-        # No source records an epoch yet, so the key holds none and the TTL bounds staleness.
-        source_epochs={},
+        source_epochs={name: epochs.get(name, 0) for name in sorted(set(sources))},
         sources=frozenset(sources),
     )
+
+
+async def source_epochs_of(state: Any) -> Mapping[str, int]:
+    """Every source's epoch, for the answer cache's key, or none where nothing is cached.
+
+    Read only on a process with an answer store, because the epochs have no other reader on this
+    path, and from the database the worker advances them in
+    (`brain.tables.projection.SourceEpochRow`). A process with a store and no database has no
+    source that changes, so it keys on none.
+    """
+    if getattr(state, "answer_store", None) is None:
+        return {}
+    epochs: SourceEpochs | None = getattr(state, "source_epochs", None)
+    if epochs is None:
+        sessions = getattr(state, "db_sessions", None)
+        if sessions is None:
+            return {}
+        epochs = StoredSourceEpochs(sessions)
+    return await epochs.epochs()
 
 
 def sensitive_referrals_of(request: Request) -> SensitiveReferrals | None:
@@ -1345,7 +1381,12 @@ async def answered_for(
     caching = (
         None
         if referral is not None
-        else caching_of(request.app.state, policies, sources_at(registry, asking.reach, asking.now))
+        else caching_of(
+            request.app.state,
+            policies,
+            sources_at(registry, asking.reach, asking.now),
+            await source_epochs_of(request.app.state),
+        )
     )
 
     try:

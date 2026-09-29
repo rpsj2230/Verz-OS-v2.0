@@ -105,8 +105,9 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     here: limits, channels and documents, then volume, refusals and a head's audit, then Lark
     chat's three, the skill library's four, the models' eleven and the audit's one, the
     connectors' four, the tools' three, a document's life in four, the classified tables' three,
-    an answer's evidence in four, the connector framework's nine and retrieval's seven, the
-    modules in `CHECK_MODULES` order rather than the order a process imported them. Delete this
+    an answer's evidence in four, the connector framework's nine, retrieval's seven and a source's
+    changes in four, the modules in `CHECK_MODULES` order rather than the order a process imported
+    them. Delete this
     and a check can drop out of the suite with the page simply listing one fewer row, or the page
     can lead with whichever module was imported first."""
     by_module: dict[str, list[str]] = {}
@@ -189,6 +190,14 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "hybrid_search_returns_what_each_leg_finds_fused_by_rank",
         "the_database_withholds_passages_the_statement_did_not_filter",
         "three_readers_get_everything_in_their_scope_and_nothing_else",
+    ]
+    # How a connected source's changes reach the install;
+    # `tests/unit/test_acceptance_change_signals.py`.
+    assert by_module["brain.ops.acceptance_checks_change_signals"] == [
+        "a_second_read_asks_only_for_what_changed_since_the_first",
+        "a_read_cut_short_carries_on_where_it_stopped",
+        "a_changed_read_moves_the_epoch_and_the_cached_answer_goes",
+        "a_dropped_record_is_retired_withheld_and_returned_as_a_new_row",
     ]
     assert list(by_module) == list(acceptance.CHECK_MODULES)
     oversight = {one.name: one.leaves for one in registered()}
@@ -577,6 +586,7 @@ WRITTEN_BY_CHECKS = (
     "ops.sensitive_read",
     "er.canonical",
     "proj.record",
+    "proj.source_epoch",
     "ops.connector_connection",
     "ops.connector_sync",
     "ops.setting",
@@ -672,9 +682,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         acceptance_audit.NO_DEPLOYMENT_IS_RECORDED_TO_KEEP_OUT,
     )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
-    assert len(outcomes) == 43
+    assert len(outcomes) == 47
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 136
+    assert runs == [(2,)] and len(recorded) == 144
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }
