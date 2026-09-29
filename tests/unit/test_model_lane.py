@@ -204,13 +204,14 @@ def ask(
     *,
     search: Passages | None = None,
     reply: Completion | BaseException | None = None,
+    script: Sequence[Completion | BaseException] = (),
     with_model: bool = True,
     entitlement: EntitlementSet = CALLER,
     rules: Sequence[FastPathRule] = (HOURS,),
     rows: Rows | None = None,
 ) -> Run:
     """The lane, with a model step whose model is a real executor over a recording transport."""
-    transport = Scripted(completion() if reply is None else reply)
+    transport = Scripted(*script) if script else Scripted(completion() if reply is None else reply)
     calls, attempts = executor(Ladder((rung("anthropic"),)), {"anthropic": transport})
     found = search if search is not None else Passages(VISIBLE, WITHHELD)
     sink = Sink()
@@ -903,6 +904,92 @@ def test_a_refusal_the_provider_reports_as_an_error_is_the_refused_abstention() 
     assert run.answered.abstention.reason is AbstentionReason.REFUSED
     assert len(run.sent) == 1
     assert run.attempts.outcomes() == [("main-0", 0, "refused")]
+
+
+# --- M15.4.1 -----------------------------------------------------------------------------------
+
+
+def _many(count: int) -> Passages:
+    return Passages(
+        *(VISIBLE.model_copy(update={"id": f"c_handbook_{number}"}) for number in range(count))
+    )
+
+
+def test_a_prompt_too_long_for_every_model_is_asked_again_with_fewer_passages_and_says_so() -> None:
+    """The largest model refuses the prompt as too long twice: the lane asks again with half the
+    passages, then half again, and answers from the one it could send, citing that one alone and
+    saying it drew on one of the six found (M15.4.1).
+
+    Delete this and a question whose passages are longer than a model reads is answered with the
+    provider's failure, or from fewer passages with nothing said, which is the silent truncation
+    `A_REQUEST_TOO_LONG_FOR_EVERY_MODEL_IS_ANSWERED_FROM_FEWER_PASSAGES_AND_SAYS_SO` forbids."""
+    from brain.gate.model_lane import TRIMMED_TEXT
+    from brain.models.adapter import ContextWindowExceededError
+
+    too_long = ContextWindowExceededError("context_length_exceeded")
+    run = ask(search=_many(PASSAGES_SHOWN), script=(too_long, too_long, completion()))
+
+    assert run.raised is None
+    assert run.answered is not None and run.answered.composed is not None
+    shown_per_request = [
+        "\n".join(message.content for message in request.messages).count("Passage ")
+        for request in run.sent
+    ]
+    assert shown_per_request == [PASSAGES_SHOWN, PASSAGES_SHOWN // 2, 1]
+    assert {one.record_id for one in run.answered.composed.citations} == {"c_handbook_0"}
+    said = TRIMMED_TEXT.format(shown=1, found=PASSAGES_SHOWN)
+    assert run.answered.text is not None and said in run.answered.text
+
+
+def test_the_passages_counted_as_found_are_only_those_the_reader_could_read() -> None:
+    """Four readable passages and two the reader's grants withhold, refused as too long once: the
+    answer says it drew on two of the four found, never of six. DENIED and ABSENT read the same,
+    and a count that included the withheld two would tell the reader two things exist that they
+    may not see. Delete this and the sentence can count what the search found rather than what
+    survived redaction, which is a count of hidden items by subtraction."""
+    from brain.gate.model_lane import TRIMMED_TEXT
+    from brain.models.adapter import ContextWindowExceededError
+
+    readable = tuple(
+        VISIBLE.model_copy(update={"id": f"c_handbook_{number}"}) for number in range(4)
+    )
+    withheld = tuple(
+        WITHHELD.model_copy(update={"id": f"c_withheldrecordid_{number}"}) for number in range(2)
+    )
+    run = ask(
+        search=Passages(*withheld, *readable),
+        script=(ContextWindowExceededError("context_length_exceeded"), completion()),
+    )
+
+    assert run.answered is not None and run.answered.text is not None
+    assert TRIMMED_TEXT.format(shown=2, found=4) in run.answered.text
+    assert "of the 6 passages" not in run.answered.text
+
+
+def test_an_answer_that_fit_says_nothing_about_fewer_passages() -> None:
+    """The positive sibling: a prompt the model read first time is answered from every passage
+    and the answer says nothing about drawing on fewer. Delete this and the sentence can be added
+    to every answer, which would make it mean nothing."""
+    run = ask(search=_many(3))
+
+    assert run.answered is not None and run.answered.text is not None
+    assert "passages found for you" not in run.answered.text
+    assert len(run.sent) == 1
+
+
+def test_one_passage_too_long_and_any_other_failure_are_not_asked_again() -> None:
+    """A single passage the model still cannot read, and a provider failing for any other reason,
+    are the provider's failure after one request: there is nothing fewer to send, and a failure
+    that is not about length is not cured by sending less. Delete this and the lane can loop on a
+    failure that trimming cannot fix, paying for each attempt."""
+    from brain.models.adapter import ContextWindowExceededError, TransportStatusError
+
+    alone = ask(search=_many(1), script=(ContextWindowExceededError("context_length_exceeded"),))
+    down = ask(search=_many(PASSAGES_SHOWN), script=(TransportStatusError(503),))
+
+    for run in (alone, down):
+        assert isinstance(run.raised, ProviderUnavailable)
+        assert len(run.sent) == 1
 
 
 def test_the_attempt_row_names_the_categories_of_data_the_prompt_carried() -> None:

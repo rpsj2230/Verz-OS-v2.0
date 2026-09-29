@@ -105,11 +105,11 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     here: limits, channels and documents, then volume, refusals and a head's audit, then Lark
     chat's three, the skill library's four, the models' eleven and the audit's one, the
     connectors' four, the tools' three, a document's life in four, the classified tables' three,
-    an answer's evidence in five, the connector framework's eight, retrieval's seven,
-    ingestion's seven and threads' two, the modules in `CHECK_MODULES` order rather than the
-    order a process imported them. Delete this and a check can drop out of the suite with the
-    page simply listing one fewer row, or the page can lead with whichever module was imported
-    first."""
+    an answer's evidence in six, the connector framework's eight, retrieval's seven,
+    ingestion's seven, threads' four and a document's whole life in one, the modules in
+    `CHECK_MODULES` order rather than the order a process imported them. Delete this and a
+    check can drop out of the suite with the page simply listing one fewer row, or the page can
+    lead with whichever module was imported first."""
     by_module: dict[str, list[str]] = {}
     for one in registered():
         by_module.setdefault(one.run.__module__, []).append(one.name)
@@ -170,6 +170,7 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "four_kinds_of_nothing_are_kept_apart",
         "an_answer_and_a_refusal_say_what_the_asker_s_reach_covers",
         "a_question_narrowed_to_a_kind_is_answered_from_that_kind_alone",
+        "a_prompt_too_long_for_every_model_is_answered_from_fewer",
     ]
     assert by_module["brain.ops.acceptance_checks_connector_framework"] == [
         "a_source_is_read_by_its_declaration_and_its_key_is_in_no_table",
@@ -207,6 +208,10 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "a_thread_begun_in_lark_is_listed_and_continued_on_the_web",
         "a_follow_up_is_answered_from_what_its_thread_cited",
         "a_wrong_answer_is_kept_as_a_signal_and_no_words_with_it",
+    ]
+    # A document's whole life, walked as one flow; `tests/unit/test_acceptance_knowledge.py`.
+    assert by_module["brain.ops.acceptance_knowledge"] == [
+        "a_document_is_added_answered_replaced_and_falls_due_for_review",
     ]
     assert list(by_module) == list(acceptance.CHECK_MODULES)
     oversight = {one.name: one.leaves for one in registered()}
@@ -689,6 +694,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         assert outcomes.pop(model_check.name)[0] == NOT_RUN, model_check.name
     # A follow-up is answered by a model too; `tests/unit/test_acceptance_threads.py` runs it.
     assert outcomes.pop("a_follow_up_is_answered_from_what_its_thread_cited")[0] == NOT_RUN
+    assert (
+        outcomes.pop("a_document_is_added_answered_replaced_and_falls_due_for_review")[0] == NOT_RUN
+    )
     # No antivirus and no object store here; `tests/unit/test_acceptance_ingest.py` runs both.
     assert outcomes.pop("the_antivirus_test_file_is_refused_as_malware")[0] == NOT_RUN
     assert outcomes.pop("a_queued_file_is_kept_in_the_store_and_read_by_the_worker")[0] == NOT_RUN
@@ -701,7 +709,7 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
     assert len(outcomes) == 50
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 158
+    assert runs == [(2,)] and len(recorded) == 162
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }

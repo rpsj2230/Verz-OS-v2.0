@@ -145,8 +145,15 @@ so replaying it lets one ungrounded sentence become the next answer's source, an
 under yesterday's grants, so replaying it shows a reader what they may no longer read. See
 `A_FOLLOW_UP_CARRIES_QUESTIONS_AND_CITED_PASSAGES_RE_READ_NOW`.
 
+**A request longer than the largest model reads is answered from fewer passages, and says so
+(M15.4.1).** The executor climbs a tier on a provider's context-length refusal; when the top tier
+refuses too it raises with that failure, and the draft halves the passages it shows and asks
+again, down to one, before giving up. The answer then carries `TRIMMED_TEXT`: how many of the
+passages found it drew on, both counts of passages the reader could read. See
+`A_REQUEST_TOO_LONG_FOR_EVERY_MODEL_IS_ANSWERED_FROM_FEWER_PASSAGES_AND_SAYS_SO`.
+
 Task ids: M3.9.3, M8.1.4, M9.2.1, M6.4.2, M5.4.1, M5.7.3, M5.6.4, M5.2.2, M5.5.1, M7.7.1, M8.1.2
-Task ids: M27.15.9, M15.4.3, M9.2.3
+Task ids: M27.15.9, M15.4.3, M9.2.3, M15.4.1
 """
 
 from __future__ import annotations
@@ -704,6 +711,51 @@ class Drafted:
     outcome: ComposedAnswer | Abstention
     asked: bool
     provenance: Provenance = NO_EVIDENCE
+    #: Set when the passages found were more than the largest model could read and the answer
+    #: was drawn from fewer (M15.4.1); the answer says so in `Trimmed.sentence`.
+    trimmed: Trimmed | None = None
+
+
+#: Why a request too long for every model is answered from fewer passages, and says so.
+A_REQUEST_TOO_LONG_FOR_EVERY_MODEL_IS_ANSWERED_FROM_FEWER_PASSAGES_AND_SAYS_SO: Final = (
+    "The prompt's byte bound keeps a prompt inside the answer tier's window as the tier table "
+    "states it, and a provider can still refuse one as longer than its model reads: a smaller "
+    "window than the table says, or a tokeniser that counts differently. The executor already "
+    "climbs to the next tier on that refusal; when the largest refuses too, the lane halves the "
+    "passages it shows and asks again, down to one, and the answer says how many of the "
+    "passages found it drew on. Rejected: cutting each passage shorter, which quotes every "
+    "source mid-sentence, and answering from fewer with nothing said, which is the silent "
+    "truncation the owner's requirement forbids."
+)
+
+#: What an answer drawn from fewer passages than were found says, after its evidence notice.
+#: Counts of passages the reader was shown and could read, so nothing withheld is counted.
+TRIMMED_TEXT: Final = (
+    "This answer drew on {shown} of the {found} passages found for you, because together they "
+    "were more than the largest model could read at once."
+)
+
+
+@dataclass(frozen=True)
+class Trimmed:
+    """How many passages an answer drew on, and how many were found and could be shown."""
+
+    shown: int
+    found: int
+
+    def sentence(self) -> str:
+        return TRIMMED_TEXT.format(shown=self.shown, found=self.found)
+
+
+def fewer(payload: ChannelPayload) -> ChannelPayload | None:
+    """The payload with half its passages, the first ones, or None when one is all it holds.
+
+    The first because a search returns its best first. The locks of the passages dropped go with
+    them, as `shown` drops them, so nothing is cited that the model was not shown.
+    """
+    if len(payload.records) <= 1:
+        return None
+    return _cut(payload, len(payload.records) // 2)
 
 
 # ------------------------------------------------------------------------------ the prompt
@@ -719,7 +771,12 @@ def shown(payload: ChannelPayload) -> ChannelPayload:
     """
     if len(payload.records) <= PASSAGES_SHOWN:
         return payload
-    kept = payload.records[:PASSAGES_SHOWN]
+    return _cut(payload, PASSAGES_SHOWN)
+
+
+def _cut(payload: ChannelPayload, keep: int) -> ChannelPayload:
+    """The first `keep` passages, with the locks of only those, marked as cut."""
+    kept = payload.records[:keep]
     ids = {str(_first(record, ID_KEYS)) for record in kept}
     return ChannelPayload(
         records=kept,
@@ -958,30 +1015,46 @@ async def draft(
     offered = () if agent is None else skills_offered(agent, caller=entitlement, now=now)
     cards = offered_cards(offered)
     earlier = () if follow_up is None else follow_up.earlier
-    messages = messages_of(prompt_for(question, payload, cards, earlier=earlier))
     # The model writes the prose, so its call is the composing step and follows the redactor.
     step(GateStep.COMPOSE)
     if using is not None and cards:
         using(skill_uses(offered))
-    try:
-        response = await lane.model.complete(
-            messages,
-            routing=routing_for(messages, None if agent is None else agent.record.tier),
-            reach=reach_scopes(entitlement),
-            lane=Lane.ANSWER,
-            meter=meter,
-            trace_id=trace_id,
-            agent_version=lane.agent_version,
-            max_output_tokens=settings_for(Lane.ANSWER).max_output_tokens,
-            pin=None if agent is None else agent.record.model_pin,
-            categories=sent_categories(lane.question_category, payload, cards),
-        )
-    except ProviderUnavailable as failed:
-        if not failed.failure.refused:
-            raise
-        # M5.4.1: the provider declined on content. Answered once, as the refusal a declining
-        # reply becomes, and never tried on another model: the chain already stopped on it.
-        return Drafted(outcome=refused(scope, detail="the model declined on content"), asked=True)
+    found_count = len(payload.records)
+    while True:
+        messages = messages_of(prompt_for(question, payload, cards, earlier=earlier))
+        try:
+            response = await lane.model.complete(
+                messages,
+                routing=routing_for(messages, None if agent is None else agent.record.tier),
+                reach=reach_scopes(entitlement),
+                lane=Lane.ANSWER,
+                meter=meter,
+                trace_id=trace_id,
+                agent_version=lane.agent_version,
+                max_output_tokens=settings_for(Lane.ANSWER).max_output_tokens,
+                pin=None if agent is None else agent.record.model_pin,
+                categories=sent_categories(lane.question_category, payload, cards),
+            )
+        except ProviderUnavailable as failed:
+            if failed.failure.refused:
+                # M5.4.1: the provider declined on content. Answered once, as the refusal a
+                # declining reply becomes, and never tried on another model.
+                return Drafted(
+                    outcome=refused(scope, detail="the model declined on content"), asked=True
+                )
+            # M15.4.1: longer than the largest model reads, after the executor climbed every
+            # tier. See the reason constant beside `Trimmed`.
+            smaller = fewer(payload) if failed.failure.context_exceeded else None
+            if smaller is None:
+                raise
+            payload = smaller
+            continue
+        break
+    trimmed = (
+        None
+        if len(payload.records) == found_count
+        else Trimmed(shown=len(payload.records), found=found_count)
+    )
     if is_refusal(response.finish_reason):
         return Drafted(outcome=refused(scope, detail="the model declined on content"), asked=True)
     text = response.text.strip()
@@ -999,4 +1072,4 @@ async def draft(
     uncited = abstain_if_uncited(provenance, scope=scope, policy=lane.citations)
     if uncited is not None:
         return Drafted(outcome=uncited, asked=True)
-    return Drafted(outcome=composed, asked=True, provenance=provenance)
+    return Drafted(outcome=composed, asked=True, provenance=provenance, trimmed=trimmed)

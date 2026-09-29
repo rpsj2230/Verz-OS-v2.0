@@ -15,7 +15,7 @@ surviving.
 
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
-Task ids: M8.1.1, M8.1.2, M8.1.4, M7.4.7, M8.2.1, M8.2.2, M9.2.1, M7.6.1
+Task ids: M8.1.1, M8.1.2, M8.1.4, M7.4.7, M8.2.1, M8.2.2, M9.2.1, M7.6.1, M15.4.1
 """
 
 from __future__ import annotations
@@ -34,6 +34,7 @@ from brain.ops.acceptance import FAILED, PASSED, registered
 from brain.ops.acceptance_answers import (
     CITES_ELSEWHERE,
     ELSEWHERE_REFERENCE,
+    READS_ONE,
     SILENT,
     Replies,
 )
@@ -49,11 +50,12 @@ RECORD = "a_record_answer_cites_the_record_field_and_read_time"
 NOTHING = "four_kinds_of_nothing_are_kept_apart"
 SCOPE = "an_answer_and_a_refusal_say_what_the_asker_s_reach_covers"
 KIND = "a_question_narrowed_to_a_kind_is_answered_from_that_kind_alone"
+TRIM = "a_prompt_too_long_for_every_model_is_answered_from_fewer"
 
 
 # ------------------------------------------------------------------------ the figures
 def test_the_module_declares_one_check_per_group_of_leaves() -> None:
-    """Five checks, each closing its own leaves. Delete this and a check can lose a leaf with the
+    """Six checks, each closing its own leaves. Delete this and a check can lose a leaf with the
     page showing the same number of rows, and the leaf closes on a check that never looked."""
     checks = [(one.name, one.leaves) for one in registered((MODULE,))]
     assert checks == [
@@ -62,6 +64,7 @@ def test_the_module_declares_one_check_per_group_of_leaves() -> None:
         (NOTHING, ("M8.2.1",)),
         (SCOPE, ("M8.2.2",)),
         (KIND, ("M7.6.1",)),
+        (TRIM, ("M15.4.1",)),
     ]
 
 
@@ -74,6 +77,33 @@ def _completion_of(model: str) -> Any:
         "POST", f"{STAND_IN_ADDRESS}/chat/completions", content=json.dumps({"model": model})
     )
     return completion_from(PROVIDER_WIRES["openai"], responder(request).json())
+
+
+def test_the_reading_stand_in_refuses_two_passages_in_the_shape_the_wire_reads_as_too_long() -> (
+    None
+):
+    """The refusal is read by `brain.models.wire`, outside the module, as the context-length
+    failure, and one passage is answered. Delete this and the stand-in's refusal can drift to a
+    shape the wire reads as an ordinary provider error, so the M15.4.1 check fails on every
+    install for a reason that is the stand-in's, or it can accept two passages and pass whatever
+    the lane does."""
+    from brain.models.adapter import ContextWindowExceededError
+    from brain.models.wire import failure_for_status
+
+    responder = Replies()
+
+    def sent(passages: int) -> httpx.Response:
+        body = {"model": READS_ONE, "messages": [{"content": "Passage 1 " * passages}]}
+        request = httpx.Request(
+            "POST", f"{STAND_IN_ADDRESS}/chat/completions", content=json.dumps(body)
+        )
+        return responder(request)
+
+    refused = sent(2)
+    assert isinstance(
+        failure_for_status(refused.status_code, refused.json()), ContextWindowExceededError
+    )
+    assert sent(1).status_code == 200
 
 
 def test_the_stand_in_s_two_replies_are_read_as_prose_naming_a_document_and_as_nothing() -> None:
@@ -226,7 +256,7 @@ def test_every_answer_check_passes_on_an_install_and_leaves_nothing(
     after = _counts(install)
 
     assert outcomes == dict.fromkeys(outcomes, (PASSED, "")), outcomes
-    assert len(outcomes) == 5
+    assert len(outcomes) == 6
     assert after == before and live_ladder(install) == ladder and ladder
     assert vaulted.sent == []
 
@@ -343,3 +373,27 @@ def test_a_kind_the_search_ignores_fails_the_kind_check(
 
     monkeypatch.setattr(api_routes, "model_lane_for", unnarrowed)
     assert "another kind" in _failed(install, KIND)
+
+
+@pytest.mark.needs_db
+def test_a_lane_that_gives_up_on_a_prompt_too_long_fails_the_trim_check(
+    install: str, vaulted: Providers, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The lane with nothing fewer to send, as it was until 2026-09-29: the provider's failure is
+    the answer. Delete this and M15.4.1 closes on a check a lane that never trims passes."""
+    from brain.gate import model_lane
+
+    monkeypatch.setattr(model_lane, "fewer", lambda payload: None)
+    assert "provider's failure" in _failed(install, TRIM)
+
+
+@pytest.mark.needs_db
+def test_an_answer_silent_about_its_trimmed_passages_fails_the_trim_check(
+    install: str, vaulted: Providers, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The lane trimming and the answer saying nothing of it. Delete this and M15.4.1 closes with
+    the silent truncation the owner's requirement forbids."""
+    from brain.gate import model_lane
+
+    monkeypatch.setattr(model_lane.Trimmed, "sentence", lambda self: "")
+    assert "did not say" in _failed(install, TRIM)

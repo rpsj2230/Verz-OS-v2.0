@@ -196,6 +196,7 @@ CHECK_MODULES: Final = (
     "brain.ops.acceptance_retrieval",
     "brain.ops.acceptance_ingest",
     "brain.ops.acceptance_threads",
+    "brain.ops.acceptance_knowledge",
 )
 
 

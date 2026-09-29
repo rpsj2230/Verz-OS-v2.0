@@ -105,6 +105,23 @@ CITES_ELSEWHERE: Final = "cites-elsewhere"
 #: The stand-in model that answers with no words at all.
 SILENT: Final = "silent"
 
+#: The stand-in model that reads one passage and refuses a longer prompt as too long for it, in
+#: the error body OpenAI documents for a context-length refusal, which Moonshot shares.
+READS_ONE: Final = "reads-one-passage"
+
+#: That refusal. `brain.models.wire.CONTEXT_EXCEEDED_CODES` is what reads its code.
+TOO_LONG: Final = (
+    400,
+    {
+        "error": {
+            "message": "This model's maximum context length was exceeded by the messages.",
+            "type": "invalid_request_error",
+            "param": "messages",
+            "code": "context_length_exceeded",
+        }
+    },
+)
+
 #: The document reference the citing stand-in names. Shaped like an item id, and held by nothing.
 ELSEWHERE_REFERENCE: Final = "acceptance-document-nobody-uploaded"
 
@@ -147,6 +164,12 @@ class Replies(StandIns):
         if model == SILENT:
             self.asked[(request.url.host, model)] += 1
             return _completion(model, "")
+        if model == READS_ONE:
+            self.asked[(request.url.host, model)] += 1
+            if request.content.decode("utf-8", "replace").count("Passage ") > 1:
+                return httpx.Response(TOO_LONG[0], json=TOO_LONG[1])
+            self.said.append(STAND_IN_REPLY)
+            return _completion(model, STAND_IN_REPLY)
         if model == CITES_ELSEWHERE:
             self.asked[(request.url.host, model)] += 1
             reply = f"{STAND_IN_REPLY} It is set out in document {ELSEWHERE_REFERENCE}, passage 1."
@@ -608,3 +631,39 @@ async def _library(
     )
     page = await knowledge_list(request, asking, ListAsked(filters=filters))
     return tuple(page.items)
+
+
+# ---------------------------------------------- 6. more than the largest model reads (M15.4.1)
+@check(
+    leaves=("M15.4.1",),
+    sentence=(
+        "Three documents in acceptance_a answer a member's question and the only model on the "
+        "ladder refuses any prompt holding more than one passage as too long: the member is "
+        "answered from one passage, citing that one alone, and the answer says it drew on one of "
+        "the three passages found."
+    ),
+)
+async def a_prompt_too_long_for_every_model_is_answered_from_fewer(h: Harness) -> None:
+    from brain.core.errors import Degraded
+    from brain.gate.model_lane import TRIMMED_TEXT
+    from brain.ops.acceptance_models import ASKED, paired_in, shown
+
+    s = await asking_with_a_stand_in(h)
+    key = h.word()
+    papers = [await paired_in(h, A, s.library, key=key) for _ in range(3)]
+    await pinned(h, (step(READS_ONE),))
+    try:
+        answered = await asked(h, s.app, s.reader, ASKED.format(key=key), 1, at=datetime.now(UTC))
+    except Degraded:
+        raise CheckFailedError(
+            "a prompt too long for every model was answered with the provider's failure rather "
+            "than from fewer passages"
+        ) from None
+    cited = _documents(answered)
+    drew_on = [one.value for one in papers if one.value in shown(answered)]
+    if len(drew_on) != 1 or len({one.view().get("document_id") for one in cited}) != 1:
+        raise CheckFailedError("the answer was not drawn from, and cited for, one passage alone")
+    if s.responder.sent_to(STAND_IN_ADDRESS, READS_ONE) != 2:
+        raise CheckFailedError("the model was not asked again with fewer passages, once")
+    if TRIMMED_TEXT.format(shown=1, found=3) not in (answered.text or ""):
+        raise CheckFailedError("the answer did not say it drew on one of the three passages found")
