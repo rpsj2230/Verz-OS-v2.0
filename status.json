@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-29T16:31:27.574899+00:00",
-  "commit": "d3984a4c",
-  "commit_subject": "A reader scoped to their department is shown their own rows: a record carries the fields its reader's scope tests (#261)",
+  "generated_at": "2026-09-29T16:35:41.896582+00:00",
+  "commit": "91bf74ae",
+  "commit_subject": "Connect Lark's Wiki step tells an administrator how many matched pages were not read, and never which (#267)",
   "total": 1576,
   "done": 466,
   "percent": 29.6,
