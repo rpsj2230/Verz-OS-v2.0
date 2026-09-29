@@ -1,63 +1,60 @@
-"""How the unseal key is split, who holds a piece, and what happens to the root token.
+"""How the vault's recovery key is split, who holds a piece, and what happens to the root token.
 
-OpenBao splits its unseal key with Shamir's scheme at `bao operator init`, once, and the two
-numbers that decide the whole custody model used to live as two flags on one line of a shell
-command in `ops/openbao/UNSEAL.md`. That is the wrong home for them, and the reason is not
-tidiness: **the shell accepts every wrong combination silently, and each one looks like the
-shape of the right answer.** `-key-shares=5 -key-threshold=1` initialises perfectly and hands
-five people a key that each of them can open the vault with alone. `-key-shares=5
--key-threshold=5` also initialises perfectly and produces a vault that one lost laptop
-destroys, permanently, along with every credential in it. Neither is a typo a reviewer
-catches by reading, because both are five and a small number on the same line.
+**Since 2026-09-29 the vault opens itself, and this module decides the emergency spare.** Until then
+every restart of the vault needed three of five people to type an unseal piece, and a release that
+changed a policy needed the same three to generate a root token. On 2026-09-29 a release changed two
+policies, nobody could find three pieces, and the owner decided (`docs/needs-rupash.md` item 114):
+the vault unseals itself from a key file only root on the server can read, every release applies its
+own policies with a narrow deploy token, and the pieces become **recovery** pieces, an optional
+emergency spare chosen at install. A recovery piece does not open the vault; with the static seal
+nothing but the key file does. What a recovery quorum still does is generate a root token (`bao
+operator generate-root`) when the deploy token has lapsed or a policy only root may write has
+changed, which is why the numbers are still worth refusing when they are wrong.
 
-So the quorum is an object here, constructed once, validated at construction, and rendered
-back out as the exact flags. The rule the module exists to keep is that the numbers cannot be
-in two places disagreeing.
+**Two choices, and the default is the simple one.** `SINGLE_RECOVERY_KEY` is one recovery key,
+written by the installer to a root-only file for whoever runs the install to move into a password
+manager. `RECOVERY_SPLIT` is the three-of-five the owner decided in item 17, kept as the stricter
+choice (`--recovery-split` on the installer) for a company that wants no single person able to
+make a root token. The trade-off the owner accepted is written in item 114 in plain words: on one
+server, anyone with root can open the vault, and that person can already read the running
+application's memory, so pieces held by five people bought ceremony rather than protection.
 
-**What was decided.** `docs/needs-rupash.md` item 17: five pieces, any three open it, so
-three people have to agree and the company survives losing two. The five holders are named
-here rather than only in prose. The root token is revoked after setup.
+**The split is still an object, and the rule the module exists to keep has not changed: the
+numbers cannot be in two places disagreeing.** The shell accepts every wrong combination silently,
+and each looks like the shape of the right answer. `-recovery-shares=5 -recovery-threshold=1`
+initialises perfectly and hands five people a key each of them can make a root token with alone;
+`-recovery-shares=5 -recovery-threshold=5` means one lost piece ends the emergency route for good.
+Neither is a typo a reviewer catches by reading. One key on its own is not a split and is not
+refused as one: it is the named single-key choice, and the split rules apply only to a split.
 
-**A frozen dataclass, not a pydantic model, and the dependency is not the reason.** Pydantic
-is already a dependency of this project. The reason is coercion. Pydantic's value is parsing
-untrusted input at a trust boundary, and there is no boundary here: this object is built once
-from literals in this file, under code review, and never from a request body, a JSON document
-or an environment variable. At that boundary pydantic would helpfully turn `shares="5"` into
-`5`, and for a number this consequential a string is a mistake that should stop a type check
-rather than be quietly normalised. A frozen dataclass with a `__post_init__` that refuses gets
-the validation without the coercion, and mypy strict checks it with no plugin.
+**A frozen dataclass, not a pydantic model, and the dependency is not the reason.** Pydantic's
+value is parsing untrusted input at a trust boundary, and there is none here: this object is built
+from literals in this file, under review, and never from a request body or an environment
+variable. Pydantic would helpfully turn `shares="5"` into `5`, and for a number this consequential
+a string is a mistake that should stop a type check rather than be quietly normalised.
 
-**Source, not a database row, and this is the honest answer to "a setting in the backend".**
-The request was to be able to select these options rather than have them buried in a shell
-script, and this module is where they now live and where any console screen must read them
-from. What was deliberately not built is a row an operator can edit at runtime, because the
-vault will not honour it. The split is fixed at `bao operator init` and the only way to change
-it afterwards is `bao operator rekey`, which itself needs the current threshold met by the
-current holders. A save button that changed a number the vault ignores is worse than no
-screen: it would report success for a change that did not happen. There is a second reason
-and it is the one that bites during an incident: this policy governs the vault that holds the
-database credentials, so keeping it in that database makes it unreadable at exactly the moment
-somebody needs to know who to phone.
+**Source, not a database row.** The split is fixed at `bao operator init` and the only way to
+change it afterwards is `bao operator rekey -target=recovery`, which itself needs the current
+recovery quorum. A save button that changed a number the vault ignores would report success for a
+change that did not happen, and this policy governs the vault that holds the database's
+neighbours' credentials, so keeping it in that database makes it unreadable when it is needed.
 
-**Rejected: keeping the root token in a sealed envelope.** This is the usual compromise and
-it does not survive being looked at. An envelope protects the paper, not the token. The token
-itself is still live, still bypasses every policy in `ops/openbao/policies`, and appeared in
-whatever terminal scrollback, screen recording or shell history existed when `bao operator
-init` printed it, so the envelope's contents were never the only copy. Worse, the vault's own
-audit log cannot help: a root token is recorded as an ordinary accessor HMAC with no field
-marking it as root, so no query over the log distinguishes "somebody opened the envelope" from
-legitimate admin work. And the emergency the envelope exists for is already served without it:
-`bao operator generate-root` reconstructs a root token from a quorum of unseal pieces, which
-is the same three people, and leaves a record of having been done. The envelope buys nothing
-that generate-root does not, and costs a permanent, unattributable bypass. So the token is
-revoked, and `revoke_root_command` is the step that does it.
+**Rejected: keeping the root token in a sealed envelope.** An envelope protects the paper, not the
+token: it is still live, still bypasses every policy in `ops/openbao/policies`, and appeared in
+whatever terminal printed it. The audit log records a root token as an ordinary accessor HMAC, so
+no query distinguishes "somebody opened the envelope" from legitimate work. `bao operator
+generate-root` rebuilds one from the recovery key and leaves a record, so the token is revoked and
+`revoke_root_command` is the step that does it.
+
+**Rejected: no recovery key at all.** The owner was offered it. Without one, a lapsed deploy token
+or a change to the deploy policy itself has no way back short of a new vault and every credential
+re-issued by hand, and the file costs one line in a password manager.
 
 Task ids: M31.3.2.1
 """
 
 from __future__ import annotations
 
-import sys
 from dataclasses import dataclass
 
 
@@ -151,12 +148,17 @@ class Holder:
 
 @dataclass(frozen=True)
 class QuorumPolicy:
-    """`shares` pieces of the unseal key, any `threshold` of which open the vault.
+    """`shares` recovery pieces, any `threshold` of which make a root token.
 
     Every combination refused in `__post_init__` is one OpenBao accepts without complaint. The
     vault does not have an opinion about whether a split is a sensible custody arrangement; it
     has an opinion about whether the arithmetic parses. This is where the difference is caught,
     and it has to be caught before the one command that can never be run twice.
+
+    **One key is the named exception, not a loophole.** `shares=1, threshold=1` is the single
+    recovery key, and the three split rules (a threshold of one, a threshold equal to the share
+    count, every holder on call) are rules about a split, so they are not asked of it. Anything
+    else with a threshold of one is five copies of one key and is still refused.
     """
 
     shares: int
@@ -184,28 +186,31 @@ class QuorumPolicy:
             )
             raise QuorumPolicyError(msg)
 
-        if self.threshold == 1:
-            msg = (
-                f"a threshold of 1 over {self.shares} pieces is not a split: every holder can "
-                "open the vault alone, and all the pieces buy is more copies of one key to "
-                "lose"
-            )
-            raise QuorumPolicyError(msg)
-
-        if self.threshold == self.shares:
-            msg = (
-                f"{self.shares} of {self.shares} means one lost piece destroys the vault. Not "
-                "locks it out of reach: destroys it. Nothing can decrypt the storage without "
-                "every piece, so recovery means re-issuing every credential by hand from every "
-                "provider."
-            )
-            raise QuorumPolicyError(msg)
-
         if len(self.holders) != self.shares:
             msg = (
                 f"{self.shares} pieces and {len(self.holders)} named holders. A piece nobody "
                 "is named against is a piece whose location cannot be stated, and in practice "
                 "that is the one still sitting in the terminal it was printed in."
+            )
+            raise QuorumPolicyError(msg)
+
+        if self.is_single_key:
+            return
+
+        if self.threshold == 1:
+            msg = (
+                f"a threshold of 1 over {self.shares} pieces is not a split: every holder can "
+                "make a root token alone, and all the pieces buy is more copies of one key to "
+                "lose. One key is the single-key choice, with one holder"
+            )
+            raise QuorumPolicyError(msg)
+
+        if self.threshold == self.shares:
+            msg = (
+                f"{self.shares} of {self.shares} means one lost piece ends the emergency route "
+                "for good: no root token can ever be generated again, so a lapsed deploy token "
+                "or a change to the deploy policy has no way back short of a new vault and every "
+                "credential re-issued by hand."
             )
             raise QuorumPolicyError(msg)
 
@@ -234,8 +239,13 @@ class QuorumPolicy:
             raise QuorumPolicyError(msg)
 
     @property
+    def is_single_key(self) -> bool:
+        """Whether this is the one-key choice rather than a split."""
+        return self.shares == 1 and self.threshold == 1
+
+    @property
     def survivable_losses(self) -> int:
-        """How many pieces can be lost with the vault still openable."""
+        """How many pieces can be lost with a root token still possible to generate."""
         return self.shares - self.threshold
 
     @property
@@ -262,13 +272,13 @@ class QuorumPolicy:
             raise QuorumPolicyError(msg)
 
 
-#: The decision from `docs/needs-rupash.md` item 17: five pieces, any three open it.
+#: The stricter choice: the decision from `docs/needs-rupash.md` item 17, five pieces and any three.
 #:
-#: Shipped with placeholder holders on purpose, and `assert_configured` refuses it in that
-#: state. The alternative was to ship no default at all and make the first operator invent
-#: both numbers, which moves the decision out of review and into the hour somebody is trying
-#: to get a vault running.
-DEFAULT_POLICY = QuorumPolicy(
+#: Shipped with placeholder holders on purpose, and `assert_configured` refuses it in that state:
+#: the people who hold a company's pieces are that company's decision, never this file's. Since
+#: item 114 it is a choice at install (`--recovery-split`), and the pieces it makes are recovery
+#: pieces: they make a root token in an emergency and do not open the vault, which opens itself.
+RECOVERY_SPLIT = QuorumPolicy(
     shares=5,
     threshold=3,
     holders=(
@@ -282,24 +292,43 @@ DEFAULT_POLICY = QuorumPolicy(
     ),
 )
 
+#: The default since `docs/needs-rupash.md` item 114: one recovery key, which the installer
+#: writes to a root-only file for whoever installs to move into a password manager.
+SINGLE_RECOVERY_KEY = QuorumPolicy(
+    shares=1,
+    threshold=1,
+    holders=(Holder("unassigned-1", PLACEHOLDER_NAME, on_call=False),),
+)
+
+#: What an install gets unless it asks for the split.
+DEFAULT_POLICY = SINGLE_RECOVERY_KEY
+
+#: The installer flag that chooses the split, and the policy it chooses.
+SPLIT_FLAG = "--recovery-split"
+
 
 def init_args(policy: QuorumPolicy = DEFAULT_POLICY) -> tuple[str, ...]:
     """The `bao operator init` flags this policy means, and nothing else.
 
-    Deliberately pure and deliberately not gated on `assert_configured`. The numbers were
-    decided before the people were, and a renderer that refused to state them until five names
-    existed would make the runbook unable to explain the shape of the thing it is describing.
-    The gate belongs on `main`, which is what an operator actually runs.
+    **Recovery flags, because the vault's seal is the key file.** With a `static` seal OpenBao
+    refuses to split an unseal key it does not have, and what it splits is the recovery key.
+    Measured on OpenBao 2.4.1 on 2026-09-29: `-recovery-shares=1 -recovery-threshold=1` answers
+    with one `Recovery Key 1:` line and an `Initial Root Token:` line, and the vault is unsealed
+    before the command returns.
+
+    Deliberately pure and deliberately not gated on `assert_configured`: the numbers were decided
+    before the people were, and a renderer that refused to state them until five names existed
+    would make the runbook unable to explain the shape of the thing it describes.
     """
-    return (f"-key-shares={policy.shares}", f"-key-threshold={policy.threshold}")
+    return (f"-recovery-shares={policy.shares}", f"-recovery-threshold={policy.threshold}")
 
 
 def init_command(policy: QuorumPolicy = DEFAULT_POLICY) -> str:
-    """The whole line an operator pastes, so `UNSEAL.md` can quote it verbatim.
+    """The whole line, so `UNSEAL.md` can quote it verbatim and a test can hold the two equal.
 
-    A whole line rather than the flags alone, because the runbook is quoted against this
-    string by a test. Comparing flags would let the surrounding command drift while the check
-    still passed, and the surrounding command is the half with the container name in it.
+    A whole line rather than the flags alone, because comparing flags would let the surrounding
+    command drift while the check still passed, and the surrounding command is the half with the
+    container name in it.
     """
     return f"docker exec -it {VAULT_CONTAINER} bao operator init " + " ".join(init_args(policy))
 
@@ -314,32 +343,35 @@ def revoke_root_command() -> str:
     return f"docker exec -it {VAULT_CONTAINER} bao token revoke -self"
 
 
-def main() -> int:
-    """`python -m brain.ops.vault_quorum`. Prints what `UNSEAL.md` tells an operator to run.
+def generate_root_command() -> str:
+    """The line that starts making a root token from the recovery key, for the emergency section.
 
-    Exits non-zero while any holder slot is unnamed, because "the setup helper ran cleanly" is
-    the wrong thing for a vault with no named custodians to look like. The commands are printed
-    anyway rather than withheld: an operator who cannot see them just types them from memory,
-    and the memory is where the wrong numbers live.
+    The only route to a root token once the installer has revoked its own, and the reason a
+    recovery key is kept at all. It prints a nonce and a one-time password and then asks for a
+    recovery key, as many times as the threshold, at a prompt that does not echo.
     """
-    policy = DEFAULT_POLICY
-    print(f"shares:    {policy.shares}")
-    print(f"threshold: {policy.threshold}  (survives losing {policy.survivable_losses})")
+    return f"docker exec -it {VAULT_CONTAINER} bao operator generate-root -init"
+
+
+def main() -> int:
+    """`python -m brain.ops.vault_quorum`. Prints both choices and the lines `UNSEAL.md` quotes.
+
+    Exits zero: the default needs nobody named, because one key is kept by whoever installs.
+    The split's holders are listed with the slots still unnamed marked, and naming them is the
+    installing company's decision, recorded outside this repository.
+    """
+    for label, policy in (("default", DEFAULT_POLICY), (SPLIT_FLAG, RECOVERY_SPLIT)):
+        print(f"{label}: {policy.threshold} of {policy.shares} recovery pieces")
+        print(f"  initialise:  {init_command(policy)}")
     print()
-    print(f"initialise:  {init_command(policy)}")
-    print(f"revoke_root: {revoke_root_command()}")
+    print(f"revoke_root:   {revoke_root_command()}")
+    print(f"generate_root: {generate_root_command()}")
     print()
-    print("holders:")
-    for position, holder in enumerate(policy.holders, 1):
+    print(f"{SPLIT_FLAG} holders:")
+    for position, holder in enumerate(RECOVERY_SPLIT.holders, 1):
         rota = "on call" if holder.on_call else "outside the on-call rotation"
         flag = "   <- nobody named yet" if holder.is_placeholder else ""
         print(f"  {position}. {holder.name} ({holder.holder_id}, {rota}){flag}")
-
-    try:
-        policy.assert_configured()
-    except QuorumPolicyError as exc:
-        print(f"\nnot ready to initialise: {exc}", file=sys.stderr)
-        return 1
     return 0
 
 

@@ -1421,7 +1421,7 @@
   everything is wired: a check that goes red on arrival is a check somebody switches off, and
   the honest version of it goes red the day a control quietly stops being run.</p>
 
-  <p><strong>Two that this section previously listed as open are decided.</strong> Production deploys on <em>every push</em>, not from a tagged release: the owner chose it deliberately, so the pipeline carries the CI gate instead of a tag, and a release manifest records what shipped without anybody tagging anything. And the vault custody question is settled at <em>five unseal pieces, any three of which open it</em>, with the root token revoked once an admin auth method works. Both numbers live in <code>brain.ops.vault_quorum</code> and the runbook derives its command from that module, so the two cannot drift.</p>
+  <p><strong>Two that this section previously listed as open are decided.</strong> Production deploys on <em>every push</em>, not from a tagged release: the owner chose it deliberately, so the pipeline carries the CI gate instead of a tag, and a release manifest records what shipped without anybody tagging anything. And the vault custody question is settled, and was settled again on 2026-09-29 (Needs Rupash 114): <em>the vault opens itself</em> from a seal key only root on the server can read, every release applies its own vault policies with a deploy token, and recovery pieces are an emergency spare chosen at install, one key by default or five pieces any three of which make a root token. The root token is revoked at the end of setup. The numbers live in <code>brain.ops.vault_quorum</code> and the runbook derives its commands from that module, so the two cannot drift.</p>
 </section>
 
 <footer>

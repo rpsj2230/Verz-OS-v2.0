@@ -411,7 +411,8 @@ INCLUDED: Final[tuple[Rule, ...]] = (
     ),
     Rule(
         "ops/openbao",
-        "the vault policies, the credential slots and the unseal runbook. A client running the "
+        "the vault policies and the script each release applies them with, the credential slots, "
+        "the vault's runbook and the switch an older install moves with. A client running the "
         "vault has to hold these on their own server, because a policy nobody can read is a "
         "permission nobody can review",
     ),
@@ -1263,12 +1264,12 @@ def _an_install_is_here(marker: str) -> Step:
 
 
 def _onto_this_release(variable: str, plan: Sequence[Step] = PLAN) -> tuple[Step, ...]:
-    """The five steps that put an install on the release it has just unpacked.
+    """The six steps that put an install on the release it has just unpacked.
 
     One tuple rather than two copies, because an update and a rollback do exactly the same
     thing from here and differ only in how they decided which tag.
 
-    **Three of the five are the installer's own, taken by name.** Pinning the image is one of
+    **Four of the six are the installer's own, taken by name.** Pinning the image is one of
     them since 2026-09-15, because the install has to write the variable too now that the
     compose files refuse without it, and two copies of a pin are two ways to pin. The settings
     step is first because a release that adds a fifth file four containers might mount would
@@ -1277,6 +1278,12 @@ def _onto_this_release(variable: str, plan: Sequence[Step] = PLAN) -> tuple[Step
     an allowlist a client has edited is not touched. The readiness step is last because
     readiness is what tells a person the swap worked, and a second copy of that check here
     would be a second answer to the only question either script is run to have answered.
+
+    **The vault's step comes before the containers are recreated**, so the application that starts
+    on the new release finds the policies it was written against already in force (needs-rupash
+    114). A rollback runs the same step from the older release's unpacked directory, which puts
+    that release's policies back; engines and slots are only ever added, so nothing it wrote is
+    removed.
     """
     pinned = f'"$BRAIN_REPOSITORY:${variable}"'
     return (
@@ -1300,6 +1307,7 @@ def _onto_this_release(variable: str, plan: Sequence[Step] = PLAN) -> tuple[Step
             # the script exists for would be skipped.
             already_done=f"docker image inspect {pinned} >/dev/null 2>&1",
         ),
+        step_named("apply this release's vault policies, engines and roles", plan),
         Step(
             name="recreate the containers on the pinned image",
             run="docker compose $BRAIN_COMPOSE_FILES up -d",

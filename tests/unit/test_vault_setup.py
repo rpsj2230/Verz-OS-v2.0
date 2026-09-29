@@ -13,6 +13,7 @@ Task ids: M42.6.2, M42.5.14, M31.3.2.3, M31.3.2.6, M38.4.1.3
 
 from __future__ import annotations
 
+import fnmatch
 import os
 import re
 import shutil
@@ -26,6 +27,7 @@ import yaml
 
 from brain.deployment.app_environment import (
     VAULT_AUDIT_LOG,
+    VAULT_AUDIT_VOLUME,
     VAULT_NETWORK,
     VAULT_OVERLAY,
     VAULT_PROJECT,
@@ -41,38 +43,54 @@ from brain.deployment.installer import INSTALL_ENV_FILE, INSTALL_HOME, PLAN, ste
 from brain.deployment.release import REPO, render_rollback, render_update
 from brain.deployment.requirements import files_for
 from brain.deployment.vault_setup import (
+    APPLY_SCRIPT,
     DECLINABLE_PROFILES,
+    DEPLOY_POLICY,
+    DEPLOY_TOKEN_PERIOD,
     ENGINES,
+    NO_DEPLOY_TOKEN_EXIT,
     OBJECT_STORE_FILE,
+    SEAL_KEY_BYTES,
+    SEAL_KEY_FILE,
+    TOKEN_METHOD_MAX_TTL,
     TOKEN_PERIOD,
     VAULT_ADDRESS,
+    VAULT_NETWORK_NAME,
     VAULT_PORT,
     VAULT_SERVICE,
+    VAULT_STATE_DIR,
+    render_apply,
     vault_choice_lines,
 )
 from brain.ops.connector_lease import RUN_POLICY, RUN_ROLE_MAX_TTL_SECONDS, RUN_TOKEN_ROLE
 from brain.ops.connector_slots import SLOT_SCOPES
 from brain.ops.openbao import STATIC_PREFIXES
-from brain.ops.vault_quorum import DEFAULT_POLICY
+from brain.ops.vault_quorum import RECOVERY_SPLIT
 from brain.ops.wiring import PROFILES
 from tests.unit.test_deployment_release import REPOSITORY, TOKEN, an_install, run_script
 
-#: The four vault steps, by the names the plan gives them, in the order they run.
+#: The vault steps, by the names the plan gives them, in the order they run.
 VAULT_STEPS = (
+    "make the secrets vault's seal key",
     "start the secrets vault",
-    "initialise the secrets vault and show its unseal pieces, once",
-    "open the secrets vault and give this install its tokens",
+    "initialise the secrets vault and keep its recovery key",
+    "configure the secrets vault and give this install its tokens",
+    "apply this release's vault policies, engines and roles",
     "compose the secrets vault in",
 )
 
-#: What the stand-in's `bao operator init` prints: five pieces and a root token, as OpenBao does.
+#: What the stand-in's `bao operator init` prints: recovery keys and a root token, as OpenBao does.
 PIECES = tuple(f"piece-{n}-b64+/=" for n in range(1, 6))
+RECOVERY = "the-one-recovery-key-b64+/="
 ROOT = "root-token-printed-once"
 APP_TOKEN = "application-token-minted"
 WORKER_TOKEN = "worker-token-minted"
+DEPLOY_TOKEN = "deploy-token-minted"
 
 #: A `docker` that answers as `bao` inside `brain-vault` does, recording what it was asked, with
-#: which `BAO_TOKEN` in its environment, and what arrived on its standard input.
+#: which `BAO_TOKEN` in its environment, and holding what the apply script reads back: policies
+#: by name, the run role's settings and each slot's metadata, printed as OpenBao prints them
+#: (measured on 2.4.1 on 2026-09-29: a list as `[a]`, custom metadata as `map[k:v k:v]`).
 STAND_IN = r"""#!/bin/sh
 state="$FAKE_VAULT"
 printf '%s\n' "$*" >> "$state/argv"
@@ -94,28 +112,80 @@ done
 shift
 asked="$*"
 printf '%s|%s\n' "$presented" "$asked" >> "$state/calls"
+known() { case "$presented" in __ROOT__|__APP__|__WORKER__|__DEPLOY__) return 0 ;; esac; return 1; }
 case "$asked" in
   "operator init -status") test -f "$state/initialised" && exit 0; exit 2 ;;
-  "operator init -key-shares=5 -key-threshold=3")
+  "operator init -recovery-shares=1 -recovery-threshold=1")
+    touch "$state/initialised"
+    printf 'Recovery Key 1: %s\n\nInitial Root Token: %s\n\nSuccess!\n' \
+      "__RECOVERY__" "__ROOT__"
+    exit 0 ;;
+  "operator init -recovery-shares=5 -recovery-threshold=3")
     touch "$state/initialised"
     n=1
-    for piece in __PIECES__; do printf 'Unseal Key %s: %s\n' "$n" "$piece"; n=$((n + 1)); done
-    printf '\nInitial Root Token: %s\n\nVault initialized with 5 key shares.\n' "__ROOT__"
+    for piece in __PIECES__; do printf 'Recovery Key %s: %s\n' "$n" "$piece"; n=$((n + 1)); done
+    printf '\nInitial Root Token: %s\n\nSuccess! Vault is initialized\n' "__ROOT__"
     exit 0 ;;
-  "write sys/unseal key=-") { cat; printf '\n'; } >> "$state/unsealed"; exit 0 ;;
   "status") exit 0 ;;
-  "secrets list") printf 'cubbyhole/    cubbyhole    n/a\n'; exit 0 ;;
-  "secrets enable"*) exit 0 ;;
-  "write auth/token/roles/connector-run "*) exit 0 ;;
-  "kv metadata put -mount=connector_keys "*) exit 0 ;;
-  "policy write "*" -") name="${asked#policy write }"; cat > "$state/policy.${name% -}"; exit 0 ;;
+  "token lookup") known && exit 0; exit 2 ;;
+  "token renew") exit 0 ;;
+  "secrets list")
+    printf 'cubbyhole/    cubbyhole    n/a\n'
+    for engine in $(cat "$state/engines" 2>/dev/null); do
+      printf '%s/    kv    n/a\n' "$engine"
+    done
+    exit 0 ;;
+  "secrets enable -path="*" kv-v2")
+    engine="${asked#secrets enable -path=}"
+    printf '%s\n' "${engine% kv-v2}" >> "$state/engines"; exit 0 ;;
+  "read -field=policy sys/policies/acl/"*) cat "$state/policy.${asked##*/}" 2>/dev/null; exit $? ;;
+  "policy write "*" -")
+    name="${asked#policy write }"; name="${name% -}"
+    # The deploy token's own policy and the default one are read-only to it, as deploy.hcl says.
+    if test "$presented" = "__DEPLOY__" \
+      && { test "$name" = deploy || test "$name" = default; }; then
+      cat >/dev/null; exit 2
+    fi
+    cat > "$state/policy.$name"; exit 0 ;;
+  "write auth/token/roles/connector-run "*)
+    for pair in ${asked#write auth/token/roles/connector-run }; do
+      printf '%s\n' "${pair#*=}" > "$state/role.${pair%%=*}"
+    done
+    exit 0 ;;
+  "read -field=allowed_policies auth/token/roles/connector-run")
+    test -f "$state/role.allowed_policies" \
+      && printf '[%s]\n' "$(cat "$state/role.allowed_policies")"
+    exit 0 ;;
+  "read -field="*" auth/token/roles/connector-run")
+    field="${asked#read -field=}"; cat "$state/role.${field%% *}" 2>/dev/null; exit 0 ;;
+  "read -field=custom_metadata connector_keys/metadata/"*)
+    cat "$state/slot.${asked##*/}" 2>/dev/null; exit 0 ;;
+  "kv metadata put -mount=connector_keys "*) ;;
+  "auth tune -max-lease-ttl=8760h token/") exit 0 ;;
   "token create -policy=application"*) printf '%s' "__APP__"; exit 0 ;;
   "token create -policy=worker"*) printf '%s' "__WORKER__"; exit 0 ;;
-  "token lookup") test "$presented" = "__APP__" && exit 0; exit 1 ;;
+  "token create -policy=deploy"*) printf '%s' "__DEPLOY__"; exit 0 ;;
   "token revoke -self") exit 0 ;;
+  *) exit 99 ;;
 esac
-exit 99
+# kv metadata put: the arguments one by one, so a scope with spaces in it arrives whole.
+shift 3
+scopes=""; refused=""; name=""
+for one in "$@"; do
+  case "$one" in
+    -custom-metadata=scopes=*) scopes="${one#-custom-metadata=scopes=}" ;;
+    -custom-metadata=not_requested=*) refused="${one#-custom-metadata=not_requested=}" ;;
+    *) name="$one" ;;
+  esac
+done
+printf 'map[not_requested:%s scopes:%s]\n' "$refused" "$scopes" > "$state/slot.$name"
+exit 0
 """
+
+
+#: The policy files and the switch, as the release lays them out.
+POLICY_FILES = tuple(sorted((REPO / "ops/openbao/policies").glob("*.hcl")))
+SWITCH_SCRIPT = "ops/openbao/switch-to-auto-unseal.sh"
 
 
 def committed() -> str:
@@ -158,16 +228,45 @@ def a_shell() -> str:
     return shell
 
 
+def stand_in() -> str:
+    """The stand-in `docker`, with this file's values put where it prints them."""
+    return (
+        STAND_IN.replace("__PIECES__", " ".join(f"'{one}'" for one in PIECES))
+        .replace("__RECOVERY__", RECOVERY)
+        .replace("__ROOT__", ROOT)
+        .replace("__APP__", APP_TOKEN)
+        .replace("__WORKER__", WORKER_TOKEN)
+        .replace("__DEPLOY__", DEPLOY_TOKEN)
+    )
+
+
+def an_install_with_the_vaults_files(tmp_path: Path) -> tuple[Path, Path]:
+    """An install directory carrying this release's `ops/openbao`, and a state directory for it.
+
+    The committed `apply-release.sh` is copied with the one path it names outside the install, the
+    deploy token's, moved into the throwaway state directory: a test run must never read or write
+    `/etc` on the machine it runs on, and the path is the only rewrite.
+    """
+    home = an_install(tmp_path / "install")
+    shutil.copytree(
+        REPO / "ops/openbao/policies", home / "ops/openbao/policies", dirs_exist_ok=True
+    )
+    etc = tmp_path / "etc-brain-vault"
+    home.joinpath(APPLY_SCRIPT).write_text(
+        (REPO / APPLY_SCRIPT).read_text(encoding="utf-8").replace(VAULT_STATE_DIR, etc.as_posix()),
+        encoding="utf-8",
+        newline="\n",
+    )
+    return home, etc
+
+
 def installing(
     tmp_path: Path, args: Sequence[str], *, env_lines: Sequence[str] = (), initialised: bool = False
 ) -> tuple[subprocess.CompletedProcess[str], Path, Path]:
     """Run the vault steps once, against a stand-in vault, in a throwaway install directory."""
-    home = an_install(tmp_path / "install")
+    home, etc = an_install_with_the_vaults_files(tmp_path)
     with home.joinpath(INSTALL_ENV_FILE).open("a", encoding="utf-8", newline="\n") as env:
         env.writelines(f"{one}\n" for one in env_lines)
-    shutil.copytree(
-        REPO / "ops/openbao/policies", home / "ops/openbao/policies", dirs_exist_ok=True
-    )
     state = tmp_path / "vault"
     state.mkdir(exist_ok=True)
     if initialised:
@@ -175,18 +274,13 @@ def installing(
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir(exist_ok=True)
     docker = bin_dir / "docker"
-    docker.write_text(
-        STAND_IN.replace("__PIECES__", " ".join(f"'{one}'" for one in PIECES))
-        .replace("__ROOT__", ROOT)
-        .replace("__APP__", APP_TOKEN)
-        .replace("__WORKER__", WORKER_TOKEN),
-        encoding="utf-8",
-        newline="\n",
-    )
+    docker.write_text(stand_in(), encoding="utf-8", newline="\n")
     docker.chmod(0o755)
     script = tmp_path / "install.sh"
     script.write_text(
-        the_vault_steps(committed()).replace(INSTALL_HOME, home.as_posix()),
+        the_vault_steps(committed())
+        .replace(INSTALL_HOME, home.as_posix())
+        .replace(VAULT_STATE_DIR, etc.as_posix()),
         encoding="utf-8",
         newline="\n",
     )
@@ -215,41 +309,50 @@ def lines(path: Path) -> list[str]:
 def test_a_fresh_standard_install_opens_the_vault_and_writes_both_tokens_and_the_address(
     tmp_path: Path,
 ) -> None:
-    """**The leaf's installer half, run.** The pieces are printed once and never the root token;
-    three of them reach the vault on standard input and on no argument list; both audit devices,
-    the three engines and every policy file are loaded under the root token; both tokens are minted
-    under it and written after the address; the root token is revoked last; and the file list the
-    rest of the install composes gains both overlays.
+    """**The leaf's installer half, run.** The seal key is written root-only and never printed; the
+    one recovery key goes to its root-only file and never to the terminal; nothing unseals the
+    vault, which opens itself; the release's engines, every policy file, the run role and every
+    slot are applied under the root token and read back; the application's, the worker's and the
+    deploy token are minted under it, the deploy token into its own root-only file; the root token
+    is revoked last; the apply step finds everything in force with the deploy token; and the file
+    list the rest of the install composes gains both overlays.
 
-    Delete this and the vault steps can be valid shell that loses a piece in a pipe, passes the
-    root token as an argument, writes a token nothing composes, or never revokes the root token,
-    and every test that reads the script still passes."""
+    Delete this and the vault steps can be valid shell that prints the recovery key, passes the
+    root token as an argument, writes a token nothing composes, leaves the deploy token readable,
+    or never revokes the root token, and every test that reads the script still passes."""
     done, home, state = installing(tmp_path, ("--release", "v1.0.0", "--profile", "standard"))
 
     assert done.returncode == 0, done.stderr
-    out = done.stdout
-    for n, piece in enumerate(PIECES, 1):
-        assert out.count(f"piece {n} of {DEFAULT_POLICY.shares}: {piece}") == 1
-    assert ROOT not in out + done.stderr
-    assert APP_TOKEN not in out + done.stderr
-    assert lines(state / "unsealed") == list(PIECES[: DEFAULT_POLICY.threshold])
+    out = done.stdout + done.stderr
+    etc = tmp_path / "etc-brain-vault"
+    seal = etc / "seal.key"
+    assert seal.stat().st_size == SEAL_KEY_BYTES
+    assert oct(seal.stat().st_mode & 0o777) == "0o400"
+    assert oct(etc.stat().st_mode & 0o777) == "0o700"
+    assert (etc / "recovery.key").read_text(encoding="utf-8").strip() == RECOVERY
+    assert oct((etc / "recovery.key").stat().st_mode & 0o777) == "0o400"
+    assert (etc / "deploy.token").read_text(encoding="utf-8") == DEPLOY_TOKEN
+    assert oct((etc / "deploy.token").stat().st_mode & 0o777) == "0o400"
+    for secret in (RECOVERY, ROOT, APP_TOKEN, WORKER_TOKEN, DEPLOY_TOKEN):
+        assert secret not in out
     argv = (state / "argv").read_text(encoding="utf-8")
-    for secret in (*PIECES, ROOT, APP_TOKEN, WORKER_TOKEN):
+    for secret in (RECOVERY, ROOT, APP_TOKEN, WORKER_TOKEN, DEPLOY_TOKEN):
         assert secret not in argv
+    assert "unseal" not in argv
+    assert f"network create {VAULT_NETWORK_NAME}" not in argv  # the stand-in says it exists
 
     calls = [one.split("|", 1) for one in lines(state / "calls")]
     as_root = [asked for presented, asked in calls if presented == ROOT]
-    # OpenBao 2.4 refuses an audit device over the API; they are declared in the compose file.
     assert not [one for one in as_root if one.startswith("audit")]
     assert [one for one in as_root if one.startswith("secrets enable")] == [
         f"secrets enable -path={engine} kv-v2" for engine in ENGINES
     ]
     policies = sorted(path.stem for path in (REPO / "ops/openbao/policies").glob("*.hcl"))
+    assert DEPLOY_POLICY in policies
     assert sorted(path.name.removeprefix("policy.") for path in state.glob("policy.*")) == policies
-    assert (state / "policy.application").read_text(encoding="utf-8") == (
+    assert (state / "policy.application").read_text(encoding="utf-8").strip() == (
         REPO / "ops/openbao/policies/application.hcl"
-    ).read_text(encoding="utf-8").replace("\r", "")
-    # The run-token role and every source's slot, defined under the root token before it goes.
+    ).read_text(encoding="utf-8").replace("\r", "").strip()
     assert [one for one in as_root if one.startswith("write auth/token/roles")] == [
         f"write auth/token/roles/{RUN_TOKEN_ROLE} allowed_policies={RUN_POLICY} orphan=false "
         "renewable=false token_no_default_policy=true "
@@ -257,23 +360,36 @@ def test_a_fresh_standard_install_opens_the_vault_and_writes_both_tokens_and_the
     ]
     defined = [one for one in as_root if one.startswith("kv metadata put")]
     assert [one.rsplit(" ", 1)[-1] for one in defined] == sorted(SLOT_SCOPES)
-    for one in defined:
-        slot = SLOT_SCOPES[one.rsplit(" ", 1)[-1]]
-        assert f"-custom-metadata=scopes={'; '.join(slot.request)}" in one
-        assert f"-custom-metadata=not_requested={'; '.join(slot.refuse)}" in one
+    for name, slot in SLOT_SCOPES.items():
+        assert (state / f"slot.{name}").read_text(encoding="utf-8").strip() == (
+            f"map[not_requested:{'; '.join(slot.refuse)} scopes:{'; '.join(slot.request)}]"
+        )
+    assert f"auth tune -max-lease-ttl={TOKEN_METHOD_MAX_TTL} token/" in as_root
     assert [one for one in as_root if one.startswith("token create")] == [
         f"token create -policy=application -orphan -period={TOKEN_PERIOD} -field=token",
         f"token create -policy=worker -orphan -period={TOKEN_PERIOD} -field=token",
+        f"token create -policy={DEPLOY_POLICY} -no-default-policy -orphan "
+        f"-period={DEPLOY_TOKEN_PERIOD} -field=token",
     ]
-    assert calls[-1] == [ROOT, "token revoke -self"]
-    assert [presented for presented, asked in calls if asked == "token lookup"] == [APP_TOKEN]
+    revoked = next(i for i, (who, asked) in enumerate(calls) if asked == "token revoke -self")
+    assert calls[revoked][0] == ROOT
+    assert all(who != ROOT for who, _ in calls[revoked + 1 :])
+    # The apply step's done test ran with the deploy token and found everything in force.
+    after = calls[revoked + 1 :]
+    assert [who for who, _ in after if who] and all(who in ("", DEPLOY_TOKEN) for who, _ in after)
+    assert not [
+        asked
+        for _, asked in after
+        if not asked.startswith(("read", "secrets list", "status", "token lookup"))
+    ]
+    assert f"{VAULT_STEPS[4]} - already done, skipping" in done.stdout
 
     assert lines(home / INSTALL_ENV_FILE)[-3:] == [
         f"BRAIN_VAULT_ADDRESS={VAULT_ADDRESS}",
         f"BRAIN_VAULT_TOKEN={APP_TOKEN}",
         f"{WORKER_VAULT_CHOICE}={WORKER_TOKEN}",
     ]
-    composed = out.strip().splitlines()[-1].removeprefix("files: ").split()
+    composed = done.stdout.strip().splitlines()[-1].removeprefix("files: ").split()
     assert [one.rsplit("/", 1)[-1] for one in composed[1::2]] == [
         *files_for("standard"),
         VAULT_OVERLAY,
@@ -281,16 +397,36 @@ def test_a_fresh_standard_install_opens_the_vault_and_writes_both_tokens_and_the
     ]
 
 
+def test_the_recovery_split_prints_five_pieces_once_and_writes_no_recovery_file(
+    tmp_path: Path,
+) -> None:
+    """The stricter choice: five recovery pieces for five people, printed once, numbered, and kept
+    nowhere on the server. Delete this and `--recovery-split` can write the pieces to a file beside
+    the seal key, which is one person holding all five, or print the root token with them."""
+    done, _, state = installing(
+        tmp_path, ("--release", "v1.0.0", "--profile", "standard", "--recovery-split")
+    )
+
+    assert done.returncode == 0, done.stderr
+    for n, piece in enumerate(PIECES, 1):
+        assert done.stdout.count(f"piece {n} of {RECOVERY_SPLIT.shares}: {piece}") == 1
+    assert ROOT not in done.stdout + done.stderr
+    assert not (tmp_path / "etc-brain-vault" / "recovery.key").exists()
+    asked = [one.split("|", 1)[1] for one in lines(state / "calls")]
+    assert "operator init -recovery-shares=5 -recovery-threshold=3" in asked
+    assert "operator init -recovery-shares=1 -recovery-threshold=1" not in asked
+
+
 def test_a_second_run_skips_every_vault_step_that_writes_and_still_composes_the_vault_in(
     tmp_path: Path,
 ) -> None:
-    """Safe to run twice, which for the vault means never initialising it again: a second
-    `operator init` on a vault that holds keys is refused by the vault, and one that got through
-    would print pieces to nobody. Delete this and a re-run could lose the overlays it no longer
-    remembers choosing, because the choice is only in the file."""
+    """Safe to run twice, which for the vault means never initialising it again and never writing a
+    second seal key: a key made now could not open the vault the first one sealed. Delete this and a
+    re-run could replace the seal key, or lose the overlays it no longer remembers choosing."""
     first, home, state = installing(tmp_path, ("--release", "v1.0.0", "--profile", "standard"))
     assert first.returncode == 0, first.stderr
     (state / "calls").unlink()
+    seal = (tmp_path / "etc-brain-vault" / "seal.key").read_bytes()
 
     second = subprocess.run(
         [
@@ -315,11 +451,11 @@ def test_a_second_run_skips_every_vault_step_that_writes_and_still_composes_the_
     )
 
     assert second.returncode == 0, second.stderr
-    for name in VAULT_STEPS[:3]:
+    for name in VAULT_STEPS[:5]:
         assert f"{name} - already done, skipping" in second.stdout
-    assert "operator init -key-shares" not in "\n".join(lines(state / "calls"))
+    assert (tmp_path / "etc-brain-vault" / "seal.key").read_bytes() == seal
+    assert "operator init -recovery" not in "\n".join(lines(state / "calls"))
     assert not any(one.startswith(ROOT) for one in lines(state / "calls"))
-    assert "piece 1 of" not in second.stdout
     assert lines(home / INSTALL_ENV_FILE).count(f"BRAIN_VAULT_TOKEN={APP_TOKEN}") == 1
     assert (
         second.stdout.strip()
@@ -410,7 +546,7 @@ def test_only_lite_may_decline_the_vault_as_only_its_files_run_no_worker_or_obje
 
 
 def test_the_engines_enabled_are_the_four_the_product_writes_and_the_policy_names() -> None:
-    """Delete this and an engine the console writes to is one the installer never enabled, which
+    """Delete this and an engine the console writes to is one no release ever enabled, which
     reads as the vault refusing: a 404 on a write is an engine that is not mounted. The template
     signing key's engine is granted on its one slot rather than on every name, which is
     `brain.ops.template_key`'s write-once rule, so it is held to that exact path."""
@@ -421,12 +557,8 @@ def test_the_engines_enabled_are_the_four_the_product_writes_and_the_policy_name
         assert f'path "{engine}/data/+"' in policy
     assert 'path "template_signing/data/key"' in policy
     assert 'path "template_signing/data/+"' not in policy
-    assert (
-        f"for engine in {' '.join(ENGINES)}; do"
-        in committed().splitlines()[
-            next(i for i, one in enumerate(committed().splitlines()) if "for engine in" in one)
-        ]
-    )
+    applied = (REPO / APPLY_SCRIPT).read_text(encoding="utf-8").splitlines()
+    assert applied.count(f"for engine in {' '.join(ENGINES)}; do") == 2
 
 
 def test_the_period_is_the_documented_one_and_the_policies_minted_against_are_files_loaded() -> (
@@ -583,10 +715,10 @@ def test_only_the_initialising_step_prints_the_vaults_answer_and_every_other_use
             found = printing.search(line)
             if found is None:
                 continue
-            if step.name == VAULT_STEPS[1]:
+            if step.name == VAULT_STEPS[2]:
                 continue
             assert found.group("rest").lstrip().startswith("|"), (step.name, line)
-    assert step_named(VAULT_STEPS[1]).presents_once
+    assert step_named(VAULT_STEPS[2]).presents_once
 
 
 def test_no_piece_or_token_is_put_on_an_argument_list_or_in_a_here_string() -> None:
@@ -594,12 +726,14 @@ def test_no_piece_or_token_is_put_on_an_argument_list_or_in_a_here_string() -> N
     `-e BAO_TOKEN=<token>`,
     puts a secret where every local user can read it for as long as the command runs, and a
     here-string writes it to a temporary file on the bash an older distribution ships."""
-    text = "\n".join(step_named(name).run for name in VAULT_STEPS)
+    text = "\n".join(step_named(name).run for name in VAULT_STEPS) + render_apply()
     assert "<<" not in text
+    # A vault that opens itself is never given a piece, by the command or by the API.
     assert "operator unseal" not in text
+    assert "sys/unseal" not in text
     assert "BAO_TOKEN=$" not in text.replace('BAO_TOKEN="$', "")
     assert "-e BAO_TOKEN=" not in text
-    assert "sys/unseal key=-" in text
+    assert "-e BAO_TOKEN " in text
 
 
 # ============================================================================ the overlays
@@ -648,7 +782,7 @@ def test_the_installer_update_and_rollback_compose_the_vault_in_one_way() -> Non
     """Delete this and an update can compose the vault differently from the install, which is an
     update that restarts the worker without its token."""
     chosen = vault_choice_lines(INSTALL_HOME, INSTALL_ENV_FILE)
-    assert step_named(VAULT_STEPS[3]).run.splitlines() == list(chosen)
+    assert step_named(VAULT_STEPS[5]).run.splitlines() == list(chosen)
     for render in (render_update, render_rollback):
         rendered = render(repository=REPOSITORY, tunnel_token=TOKEN).splitlines()
         assert all(one in rendered for one in chosen)
@@ -684,3 +818,277 @@ def test_an_update_composes_the_worker_overlay_exactly_when_the_file_holds_the_w
     assert done.returncode == 0, done.stderr
     names = [one.rsplit("/", 1)[-1] for one in done.stdout.strip().splitlines()[-1].split()[1::2]]
     assert names == [*files_for(profile), *(VAULT_OVERLAY, WORKER_VAULT_OVERLAY)[:overlays]]
+
+
+# ============================================================================ apply-release.sh
+def applying(
+    tmp_path: Path, *args: str, token: str = DEPLOY_TOKEN, state: Path | None = None
+) -> tuple[subprocess.CompletedProcess[str], Path]:
+    """Run the committed apply script against the stand-in vault, the token given in its file."""
+    home, etc = an_install_with_the_vaults_files(tmp_path)
+    etc.mkdir(exist_ok=True)
+    if token:
+        (etc / "deploy.token").write_text(token, encoding="utf-8", newline="\n")
+    vault = state or tmp_path / "vault"
+    vault.mkdir(exist_ok=True)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    docker = bin_dir / "docker"
+    docker.write_text(stand_in(), encoding="utf-8", newline="\n")
+    docker.chmod(0o755)
+    shell = shutil.which("sh")
+    assert shell is not None
+    env = {key: value for key, value in os.environ.items() if key not in {"BAO_TOKEN", "BAO_ADDR"}}
+    done = subprocess.run(
+        [shell, (home / APPLY_SCRIPT).as_posix(), *args],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=120,
+        env={
+            **env,
+            "PATH": f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}",
+            "FAKE_VAULT": vault.as_posix(),
+        },
+    )
+    return done, vault
+
+
+def test_the_committed_apply_script_is_what_the_module_renders() -> None:
+    """Generated, and every path that applies a release's vault changes runs the committed copy: the
+    installer, the update, the rollback, the automatic deploy and the switch. Delete this and an
+    engine added to the module reaches none of them, or an edit to the file is overwritten silently
+    by the next regeneration."""
+    assert (REPO / APPLY_SCRIPT).read_text(encoding="utf-8") == render_apply()
+
+
+def test_a_release_applies_its_own_changes_reads_them_back_and_a_second_run_writes_nothing(
+    tmp_path: Path,
+) -> None:
+    """**Owner decision 2 of needs-rupash 114, run.** On a vault holding none of it, the deploy
+    token enables the four engines, loads every policy except its own, defines the run role and the
+    eight slots, and says they are in force; `--check` then passes; and a second apply writes
+    nothing, because a deploy that changed nothing must change nothing.
+
+    Delete this and the apply script can write and never read back, or rewrite every slot on every
+    deploy, or report success over a policy the vault did not take."""
+    state = tmp_path / "vault"
+    state.mkdir()
+    # The deploy policy is loaded by the installer under root before the deploy token exists.
+    (state / "policy.deploy").write_text(
+        (REPO / "ops/openbao/policies/deploy.hcl").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    before, _ = applying(tmp_path / "a", "--check", state=state)
+    assert before.returncode == 1
+    assert "not in force: the providers engine" in before.stderr
+    assert "not in force: the application policy" in before.stderr
+
+    first, _ = applying(tmp_path / "b", state=state)
+    assert first.returncode == 0, first.stderr
+    assert first.stdout.strip() == (
+        f"vault: in force: {len(ENGINES)} engines, "
+        f"{len(list((REPO / 'ops/openbao/policies').glob('*.hcl')))} policies, the "
+        f"{RUN_TOKEN_ROLE} token role and {len(SLOT_SCOPES)} credential slots"
+    )
+    calls = lines(state / "calls")
+    assert all(one.startswith((f"{DEPLOY_TOKEN}|", "|status")) for one in calls)
+    assert f"{DEPLOY_TOKEN}|policy write deploy -" not in calls
+
+    checked, _ = applying(tmp_path / "c", "--check", state=state)
+    assert checked.returncode == 0, checked.stderr
+
+    (state / "calls").unlink()
+    again, _ = applying(tmp_path / "d", state=state)
+    assert again.returncode == 0, again.stderr
+    writes = [
+        one
+        for one in lines(state / "calls")
+        if one.split("|", 1)[1].startswith(("secrets enable", "policy write", "write ", "kv "))
+    ]
+    assert writes == []
+    for secret in (DEPLOY_TOKEN, ROOT):
+        assert secret not in first.stdout + first.stderr + again.stdout + again.stderr
+
+
+def test_a_release_that_changes_the_deploy_policy_is_refused_in_words(tmp_path: Path) -> None:
+    """The one policy a deploy may not load itself, so no deploy can widen its own reach. Delete
+    this and the refusal can become a generic "would not load", which sends somebody looking for a
+    fault
+    in the vault instead of for the root token the change needs."""
+    state = tmp_path / "vault"
+    state.mkdir()
+    (state / "policy.deploy").write_text("an older deploy policy\n", encoding="utf-8")
+    done, _ = applying(tmp_path / "a", state=state)
+    assert done.returncode == 1
+    assert "changes the deploy token's own policy" in done.stderr
+    assert "In an emergency" in done.stderr
+
+
+def test_with_no_deploy_token_the_apply_says_so_and_exits_with_its_own_status(
+    tmp_path: Path,
+) -> None:
+    """An install made before the vault opened itself has no deploy token. Its update must carry on
+    (the release's step reads this status and says what moves it), so the status has to be told
+    apart from a failure. Delete this and every update of such an install either stops or reports
+    the vault's changes applied when nothing was."""
+    done, state = applying(tmp_path, token="")
+    assert done.returncode == NO_DEPLOY_TOKEN_EXIT
+    assert "switch-to-auto-unseal.sh" in done.stderr
+    assert not (state / "calls").exists()
+
+
+def test_the_update_carries_on_past_an_install_with_no_deploy_token_and_stops_on_a_failure() -> (
+    None
+):
+    """The step the update and the rollback share with the installer, read as the shell it renders.
+    Delete this and an older install's update can stop at the vault step for ever, or a failed apply
+    can be passed over as though it were an older install."""
+    run = step_named(VAULT_STEPS[4]).run
+    assert f'test "$BRAIN_VAULT_APPLIED" -eq {NO_DEPLOY_TOKEN_EXIT}' in run
+    assert 'elif test "$BRAIN_VAULT_APPLIED" -ne 0; then' in run
+    for render in (render_update, render_rollback):
+        rendered = render(repository=REPOSITORY, tunnel_token=TOKEN)
+        assert re.search(rf"^# step \d+ of \d+: {re.escape(VAULT_STEPS[4])}$", rendered, re.M)
+        assert rendered.index(VAULT_STEPS[4]) < rendered.index("recreate the containers")
+
+
+# ============================================================================ the seal
+def test_the_vault_opens_itself_from_a_root_only_key_file_and_never_from_the_environment() -> None:
+    """**Owner decision 1 of needs-rupash 114, read out of the compose file.** A static seal
+    naming a file; the file bind-mounted read-only from the path the installer writes, refused
+    rather than invented when missing; copied by the entrypoint into a tmpfs the vault's own user
+    reads; and the vault still dropping root. Delete this and the seal can move to an environment
+    variable, which `docker inspect` prints, or the mount can go back to the short form, where a
+    missing key becomes
+    an empty directory and a vault that never opens."""
+    body = load(VAULT_PROJECT)["services"][VAULT_SERVICE]
+    config = vault_config()
+    seal = re.search(r'seal\s+"static"\s*\{([^}]*)\}', config)
+    assert seal is not None
+    fields = dict(re.findall(r'(\w+)\s*=\s*"([^"]*)"', seal.group(1)))
+    assert fields["current_key"].startswith("file://")
+    assert "env://" not in config
+    inside = fields["current_key"].removeprefix("file://")
+    mounts = [one for one in body["volumes"] if isinstance(one, dict)]
+    assert len(mounts) == 1
+    key = mounts[0]
+    assert key["type"] == "bind"
+    assert key["read_only"] is True
+    assert key["bind"]["create_host_path"] is False
+    assert key["source"] == f"${{BRAIN_VAULT_SEAL_KEY:-{SEAL_KEY_FILE}}}"
+    entry = " ".join(body["entrypoint"])
+    assert f"{key['target']} {inside}" in entry
+    assert "install -o openbao -g openbao -m 0400" in entry
+    assert entry.rstrip().endswith("exec /usr/local/bin/docker-entrypoint.sh server")
+    assert any(one.startswith(inside.rsplit("/", 1)[0] + ":") for one in body["tmpfs"])
+    assert "BAO_SKIP_DROP_ROOT" not in str(body.get("environment"))
+    assert "SKIP_DROP_ROOT" not in entry
+
+
+def test_the_vaults_names_default_to_the_ones_every_other_file_reads() -> None:
+    """The container, the network and both volumes are parameters so the switch can bring a vault up
+    under the old one's names, and each default is a name another file depends on: the address the
+    installer writes, the external network the application's overlay joins, and the audit volume
+    the worker mounts by name. Delete this and a default can drift from the file that reads it."""
+    project = load(VAULT_PROJECT)
+    body = project["services"][VAULT_SERVICE]
+    assert body["container_name"] == "${BRAIN_VAULT_CONTAINER:-brain-vault}"
+    network = project["networks"][VAULT_NETWORK]
+    assert network["external"] is True
+    assert network["name"] == f"${{BRAIN_VAULT_NETWORK:-{VAULT_NETWORK_NAME}}}"
+    assert VAULT_NETWORK_NAME == VAULT_NETWORK
+    assert project["volumes"]["brain-vault-logs"]["name"] == (
+        f"${{BRAIN_VAULT_LOGS_VOLUME:-{VAULT_AUDIT_VOLUME}}}"
+    )
+    assert project["volumes"]["brain-vault-data"]["name"] == (
+        "${BRAIN_VAULT_DATA_VOLUME:-brain-vault_brain-vault-data}"
+    )
+    assert f"docker network create {VAULT_NETWORK_NAME}" in step_named(VAULT_STEPS[1]).run
+
+
+def test_the_seal_key_step_never_writes_over_a_key_or_makes_one_for_an_older_vault() -> None:
+    """A key made now could not open a vault sealed with another, so the step is skipped when a key
+    is there and when a vault is already initialised. Delete this and a second run can replace the
+    seal key of a running vault, which opens nothing at its next restart."""
+    step = step_named(VAULT_STEPS[0])
+    assert f"test -s {SEAL_KEY_FILE}" in step.already_done
+    assert "operator init -status" in step.already_done
+    assert f"mv {SEAL_KEY_FILE}.new {SEAL_KEY_FILE}" in step.run
+    assert f"head -c {SEAL_KEY_BYTES} /dev/urandom" in step.run
+    assert "printf" not in step.run.replace('say "', "")
+
+
+# ============================================================================ the deploy policy
+def test_the_deploy_token_may_load_policies_and_can_neither_read_a_secret_nor_widen_itself() -> (
+    None
+):
+    """What `policies/deploy.hcl` grants, parsed. Measured against OpenBao 2.4.1 on 2026-09-29: the
+    most specific path wins, so the two exact read-only rules replace the policy glob for the deploy
+    token's own policy and the default one. Delete this and a well-meant edit can let a deploy read
+    a provider key, mint a token, remove an engine, or rewrite its own policy and so everything."""
+    text = (REPO / "ops/openbao/policies/deploy.hcl").read_text(encoding="utf-8")
+    live = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+    granted = {
+        path: re.findall(r'"([^"]+)"', caps)
+        for path, caps in re.findall(
+            r'path\s+"([^"]+)"\s*\{[^}]*capabilities\s*=\s*\[([^\]]*)\]', live, re.S
+        )
+    }
+    assert granted["sys/policies/acl/deploy"] == ["read"]
+    assert granted["sys/policies/acl/default"] == ["read"]
+    assert set(granted["sys/policies/acl/*"]) == {"create", "update", "read", "list"}
+    assert not [path for path, caps in granted.items() if "delete" in caps or "sudo" in caps]
+    assert not [path for path in granted if "/data/" in path or path.endswith("/data")]
+    assert not [path for path in granted if path.startswith("auth/token/create")]
+    assert set(granted) <= {
+        "sys/policies/acl/*",
+        "sys/policies/acl",
+        "sys/policies/acl/deploy",
+        "sys/policies/acl/default",
+        "sys/mounts",
+        "sys/mounts/*",
+        "auth/token/roles/*",
+        "connector_keys/metadata/*",
+        "auth/token/lookup-self",
+        "auth/token/renew-self",
+    }
+
+
+def ignored_by_the_build(path: str) -> bool:
+    """Whether `.dockerignore` keeps this path out of the build, reading its rules in order."""
+    excluded = False
+    for line in (REPO / ".dockerignore").read_text(encoding="utf-8").splitlines():
+        rule = line.strip()
+        if not rule or rule.startswith("#"):
+            continue
+        negated = rule.startswith("!")
+        pattern = rule.removeprefix("!")
+        parts = path.split("/")
+        prefixes = ["/".join(parts[: n + 1]) for n in range(len(parts))]
+        if any(fnmatch.fnmatch(one, pattern) for one in prefixes):
+            excluded = not negated
+    return excluded
+
+
+def test_the_image_carries_its_releases_vault_changes_where_the_deploy_hook_reads_them() -> None:
+    """A server that deploys from the image alone (`ops/deploy/brain-deploy`) has no checkout, so a
+    release's policies reach it inside the image or not at all. Three halves, each of which alone is
+    satisfied by a pair that disagrees: the Dockerfile copies the script and the policies to where
+    the hook copies them from, and `.dockerignore`, which keeps the rest of `ops` out, lets both
+    through. Delete this and a trimmed build drops them, and every deploy says its image carries no
+    vault changes while its policies wait for nobody."""
+    dockerfile = (REPO / "Dockerfile").read_text(encoding="utf-8")
+    copied = dict(
+        re.findall(r"^COPY\s+(?:--\S+\s+)*(ops/openbao/\S+)\s+(\S+)\s*$", dockerfile, re.M)
+    )
+    assert copied == {
+        APPLY_SCRIPT: f"/app/{APPLY_SCRIPT}",
+        "ops/openbao/policies": "/app/ops/openbao/policies",
+    }
+    hook = (REPO / "ops/deploy/brain-deploy").read_text(encoding="utf-8")
+    assert 'docker cp "$cid:/app/ops/openbao/." "$dir/"' in hook
+    assert 'sh "$dir/apply-release.sh"' in hook
+    for path in (APPLY_SCRIPT, *(f"ops/openbao/policies/{one.name}" for one in POLICY_FILES)):
+        assert not ignored_by_the_build(path), path
+    assert ignored_by_the_build("ops/openbao/UNSEAL.md")
+    assert ignored_by_the_build(SWITCH_SCRIPT)

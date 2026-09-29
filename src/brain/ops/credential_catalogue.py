@@ -108,9 +108,10 @@ EVERY_WRITE_FROM_THIS_SCREEN_IS_ON_THE_LEDGER: Final = (
 #: Why the screen asks the vault whether live reads may run, rather than reading the policy file.
 LIVE_READS_WAIT_FOR_THE_POLICY_THE_VAULT_LOADED: Final = (
     "The application policy in this release lets a question borrow a source's key for one read, "
-    "but a vault enforces the policy it loaded, and loading it again needs the unseal pieces. So "
-    "the vault is asked what its loaded policy lets this token do on that one mint, and the "
-    "screen says in words when live reads are waiting for somebody to load it."
+    "but a vault enforces the policy it loaded, and a release's policies are loaded by its deploy "
+    "step, or not at all on an install whose vault is still opened by people. So the vault is "
+    "asked what its loaded policy lets this token do on that one mint, and the screen says in "
+    "words when live reads are waiting for it."
 )
 
 # ---------------------------------------------------------------------- the vocabulary
@@ -159,9 +160,10 @@ LIVE_READS_SAY: Final[Mapping[LiveReads, str]] = MappingProxyType(
         ),
         LiveReads.WAITING: (
             "Answers cannot read connected sources live yet: the vault is still enforcing the "
-            "application policy from before live reads. Three holders of the unseal pieces load "
-            "the policies again with sh ops/openbao/load-policies.sh (ops/openbao/UNSEAL.md, "
-            "Loading a release's policies on a running install)."
+            "application policy from before live reads. Each deploy applies its release's "
+            "policies itself; a vault still opened by people moves first with "
+            "ops/openbao/switch-to-auto-unseal.sh (ops/openbao/UNSEAL.md, Moving an older "
+            "install)."
         ),
         LiveReads.UNKNOWN: "",
     }

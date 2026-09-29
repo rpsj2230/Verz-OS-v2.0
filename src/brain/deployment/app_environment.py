@@ -445,11 +445,24 @@ def worker_vault_overlay_gaps(
     return tuple(found)
 
 
+#: A compose value that is a variable with a default, `${NAME:-default}`.
+_WITH_A_DEFAULT: Final = re.compile(r"^\$\{[A-Z][A-Z0-9_]*:-([^}]+)\}$")
+
+
 def vault_network_of(document: Mapping[str, Any]) -> str | None:
-    """The name the vault's own compose project gives its one network, or None."""
+    """The name the vault's own compose project gives its one network, or None.
+
+    Since 2026-09-29 the name is `${BRAIN_VAULT_NETWORK:-brain-vault}`, so the switch that moves an
+    older install's vault can bring it up on the network that vault is already on. Every install
+    sets no such variable and gets the default, so the default is the name, and anything else
+    written there is returned as written for the comparison to refuse.
+    """
     networks = document.get("networks")
     if not isinstance(networks, Mapping) or len(networks) != 1:
         return None
     [(key, body)] = networks.items()
     named = body.get("name") if isinstance(body, Mapping) else None
-    return str(named) if named else str(key)
+    if not named:
+        return str(key)
+    defaulted = _WITH_A_DEFAULT.match(str(named))
+    return defaulted.group(1) if defaulted else str(named)

@@ -344,9 +344,10 @@ def test_the_template_and_the_four_settings_are_what_the_plan_reads_from_the_arc
         "docker-compose.vault.yml",
         "ops/automation/egress.conf",
         "ops/langfuse/clickhouse-memory.xml",
-        # The vault's own project and the policies loaded into it, since the installer runs it.
+        # The vault's own project, and the script every release applies its vault changes with,
+        # which reads the policy files from beside itself (needs-rupash 114).
+        "ops/openbao/apply-release.sh",
         "ops/openbao/compose.yml",
-        "ops/openbao/policies/",
         "ops/seaweedfs/provision.sh",
         "ops/seaweedfs/s3.json",
     )

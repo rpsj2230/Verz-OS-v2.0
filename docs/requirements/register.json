@@ -13227,7 +13227,7 @@
     "M27.14.8",
     "M33.8.2"
    ],
-   "decision": null
+   "decision": "needs-rupash 114: the vault opens itself from a root-only seal key; three of five became the stricter recovery choice at install, one recovery key the default, and no piece opens the vault"
   },
   {
    "id": "DEC-48",
@@ -13414,6 +13414,23 @@
    ],
    "proof": [
     "M37.7.6"
+   ],
+   "decision": null
+  },
+  {
+   "id": "DEC-60",
+   "source": "needs-rupash 114",
+   "area": "Hosting and delivery",
+   "requirement": "The secrets vault opens itself whenever the server starts, every release applies its own vault policies, engines and roles during deploy with no person holding a key and says loudly when they did not take, recovery pieces are an optional emergency spare chosen at install, and an install made before this moves onto it with one command that keeps every token and secret.",
+   "leaves": [
+    "M31.3.2.1",
+    "M31.3.2.2",
+    "M42.6.2",
+    "M38.1.3.3"
+   ],
+   "proof": [
+    "M42.7.2",
+    "M42.4.5"
    ],
    "decision": null
   },
