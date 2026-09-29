@@ -9,7 +9,10 @@ key for each provider in the environment and `httpx.MockTransport` in the place 
 The transport answers in the two documented shapes `brain.models.wire.completion_from` reads
 (Anthropic's Messages API, and the chat completions shape OpenAI, Moonshot and DeepSeek share),
 refuses to connect to anything under `.invalid` as a resolver does, and echoes the value a check's
-document pairs with its word, which is what a model reading that passage would answer. So the
+document pairs with its word, which is what a model reading that passage would answer. It refuses
+a reasoning effort sent to a model that takes none, and treats Moonshot's `kimi-k3` as Kimi
+documents it and the owner's install measured it on 2026-09-29: sent no effort, it thinks at its
+maximum and runs past the step's time. So the
 product's own transport, adapter, executor, answer lane and recorders run whole, and only the
 network is replaced. Every check passes, nothing a check wrote is left, and the two checks with an
 argument to fail are shown failing: a stand-in that answers is no fallback, and a model that answers
@@ -50,6 +53,15 @@ from tests.unit.test_acceptance import at_head, counts
 
 #: The sentence a check's document holds, as a model reading it would find it.
 PAIRED = re.compile(r"(QZ[0-9A-F]{16}) is paired with (QZ[0-9A-F]{16})")
+
+#: Moonshot's model that always thinks, as the transport knows it: where it is reached and its
+#: name. Kimi's K3 quickstart: it takes a reasoning effort of low, high or max, and thinks at max
+#: when it is sent none, which on the owner's install on 2026-09-29 ran past the step's twelve
+#: seconds on the M5.6.1 check's one-sentence question.
+THINKING = (httpx.URL(PROVIDER_WIRES["moonshot"].base_url).host, "kimi-k3")
+
+#: The efforts that model takes. Anything else in the field is refused, as a provider refuses it.
+THINKING_EFFORTS = frozenset({"low", "high", "max"})
 
 MODULE = "brain.ops.acceptance_models"
 
@@ -134,10 +146,16 @@ class Providers:
     its provider's documented shape with the value the passage pairs, or `ready` for the Models
     screen's fixed sentence. `wrong` answers every question with a value no document holds, and
     `stand_in_answers` lets the stand-in answer as a provider would.
+
+    A reasoning effort is refused with a 400 by every model but `THINKING`, and by that one when
+    it is not an effort it takes, as a provider refuses a field or a value it does not know. Sent
+    none, or its maximum, `THINKING` runs past the step's time, as it did on the owner's install;
+    `slow_thinking` makes it run past at every effort, as a slow provider would.
     """
 
     wrong: bool = False
     stand_in_answers: bool = False
+    slow_thinking: bool = False
     sent: list[httpx.Request] = field(default_factory=list)
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
@@ -145,6 +163,14 @@ class Providers:
         if request.url.host.endswith(".invalid") and not self.stand_in_answers:
             raise httpx.ConnectError("no such host", request=request)
         body = json.loads(request.content)
+        thinks = (request.url.host, body.get("model")) == THINKING
+        effort = body.get("reasoning_effort")
+        if effort is not None and not (thinks and effort in THINKING_EFFORTS):
+            return httpx.Response(
+                400, json={"error": {"type": "invalid_request_error", "message": "unknown"}}
+            )
+        if thinks and (self.slow_thinking or effort in (None, "max")):
+            raise httpx.ReadTimeout("still thinking", request=request)
         found = PAIRED.search(json.dumps(body))
         reply = "QZ0000000000000000" if self.wrong else found.group(2) if found else "ready"
         if request.url.path.endswith("/v1/messages"):
@@ -297,6 +323,50 @@ def test_every_model_check_passes_against_answering_providers_and_leaves_nothing
     assert httpx.URL(STAND_IN_ADDRESS).host in reached
     assert embedder.asked == []
     assert "not-a-key" not in said.out + said.err
+
+
+@pytest.mark.needs_db
+def test_a_question_pinned_to_a_model_that_always_thinks_is_sent_the_lanes_effort(
+    providers: Providers,
+) -> None:
+    """**The owner's install on 2026-09-29, reproduced.** With the owner's matrix as the ladder, the
+    moonshot check pins Medium to `kimi-k3`, which thinks at its maximum when it is sent no effort
+    and ran past the step's time. The check passes because every request to it carried the answer
+    lane's effort in its own word, and no request to any other model carried the field at all,
+    which a provider would refuse with a 400 that stops the chain. Delete this and the executor
+    can stop sending the effort, and the moonshot check fails on the install again with every
+    model check here still green but this one, or start sending it to Anthropic and break them."""
+    with at_head("brain_acceptance_models_think") as url:
+        laddered(url)
+        outcomes = run_models(url)
+    assert outcomes["a_question_is_answered_end_to_end_via_moonshot"] == (PASSED, "")
+    bodies = [
+        ((one.url.host, json.loads(one.content).get("model")), json.loads(one.content))
+        for one in providers.sent
+        if not one.url.host.endswith(".invalid")
+    ]
+    thinking = [body.get("reasoning_effort") for name, body in bodies if name == THINKING]
+    assert thinking and set(thinking) == {"low"}
+    assert all("reasoning_effort" not in body for name, body in bodies if name != THINKING)
+
+
+@pytest.mark.needs_db
+def test_a_model_that_runs_past_its_step_fails_the_check_saying_it_did_not_answer_in_time(
+    providers: Providers,
+) -> None:
+    """The failure half: a thinking model that runs past its step at every effort fails the check,
+    and the reason says the provider did not answer in time rather than naming an exception type.
+    Delete this and the reason can go back to "stopped on ProviderUnavailable", which is what sent
+    the 2026-09-29 diagnosis to the planner rather than to the provider's time."""
+    providers.slow_thinking = True
+    with at_head("brain_acceptance_models_slow") as url:
+        laddered(url)
+        outcomes = run_models(url)
+    assert outcomes["a_question_is_answered_end_to_end_via_moonshot"] == (
+        FAILED,
+        "a model call stopped the check: The provider did not answer in time.",
+    )
+    assert outcomes["a_question_is_answered_end_to_end_via_anthropic"] == (PASSED, "")
 
 
 @pytest.mark.needs_db
