@@ -24,11 +24,23 @@ question asks (M11.9.2), so no connected answer stands on an old index row; the 
 price list is the pair every install answers from its index, and a row of it read days before is
 what surfaces the staleness (M11.4.9). See `A_PRICE_READ_DAYS_AGO_IS_ANSWERED_AS_OLD`.
 
-**What it does not prove, said once.** A question over many records (M11.8.3's headers clause) has
-no question shape yet, and the request recorders are not handed to the lane, so the canary search
-covers what the lane and the sources wrote and not the request row.
+**A question over many records is the second check, and it ends not run on purpose.** Which
+invoices hold a status and how many do are answered from the index's header fields with no call
+to Xero, and every clause of M11.8.3 an install can show without an inference server is asserted
+before it: the index keeps no field the denylist names and none of the planted values, a reader
+who may not name the records or read the status is told what a status nobody holds is told, and a
+ticket body read live is told and kept nowhere. The leaf's last clause, document embeddings
+computed with no outbound call, needs the install's own inference server, which this release does
+not run (needs-rupash 120). **So the check raises not run rather than passing**: a pass would
+count the leaf as proved on a clause nothing ran, and a stand-in server would prove the stand-in.
+See `EMBEDDINGS_WAIT_FOR_THE_INFERENCE_SERVER`.
 
-Task ids: M11.6.5, M11.6.2, M11.4.9, M11.9.2
+**What neither proves, said once.** The request recorders are not handed to the lane, so the
+canary search covers what the lane and the sources wrote and not the request row, and the trace
+the lane emits is not searched: `brain.ops.trace_sink.CountingTraceSink` writes counts and field
+names by construction, and that construction is the whole of the log clause's proof here.
+
+Task ids: M11.6.5, M11.6.2, M11.4.9, M11.9.2, M11.8.3
 """
 
 from __future__ import annotations
@@ -55,8 +67,12 @@ from brain.ops.acceptance_checks_connectors import (
 from brain.ops.acceptance_run import SET_UP_REACH, Harness
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable, Mapping, Sequence
+
     from brain.core.entitlement import EntitlementSet
     from brain.gate.answer import Answered
+    from brain.gate.fast_lane import FastPathRule
+    from brain.knowledge.classified_rows import Many
     from brain.ops.connector_store import Connection
     from brain.ops.connector_sync_run import SourceAnswer
 
@@ -84,10 +100,18 @@ A_PRICE_READ_DAYS_AGO_IS_ANSWERED_AS_OLD: Final = (
     "horizon, so the answer must say it may be out of date and date its citation by that read."
 )
 
+#: Why the header check ends not run, and what would let it pass.
+EMBEDDINGS_WAIT_FOR_THE_INFERENCE_SERVER: Final = (
+    "Every other clause of M11.8.3 passed. The last, document embeddings computed with no "
+    "outbound call, needs the install's own inference server, which this release does not run "
+    "(needs-rupash 120), so the leaf is not proved."
+)
+
 __all__ = [
     "A_CONNECTED_SOURCE_IS_NOT_CONNECTED_AGAIN",
     "A_PRICE_READ_DAYS_AGO_IS_ANSWERED_AS_OLD",
     "A_TICKET_READ_LIVE_IS_NOT_OLD",
+    "EMBEDDINGS_WAIT_FOR_THE_INFERENCE_SERVER",
 ]
 
 # ------------------------------------------------------------------------ the figures
@@ -194,6 +218,98 @@ def _prose(answered: Answered) -> str:
     return heard(answered.frames).prose
 
 
+async def _nothing_connected(h: Harness) -> None:
+    """Step aside where the install has either source connected, and found the departments.
+
+    See `A_SOURCE_IS_CONNECTED_HERE_ALREADY`. A question shape from a source nobody connected is a
+    failure rather than a reason to step aside: it is Ask answering from a connection that is not
+    there.
+    """
+    from brain.api_routes import connected_questions_of
+    from brain.connectors import freshdesk, xero
+    from brain.ops.connector_store import live
+
+    for name in (xero.CONNECTOR_NAME, freshdesk.FRESHDESK):
+        if (await h.execute(live(name))).scalar_one_or_none() is not None:
+            raise CheckNotRunError(A_SOURCE_IS_CONNECTED_HERE_ALREADY)
+    await h.found_departments()
+    if await connected_questions_of(SimpleNamespace(db_sessions=h.sessions)):
+        raise CheckFailedError("a source nobody connected contributed a question shape")
+
+
+@dataclass(frozen=True)
+class _Route:
+    """What the answer route hands the lane, built by the route's own functions."""
+
+    rules: tuple[FastPathRule, ...]
+    readers: Mapping[tuple[str, str], Any]
+    ask: Callable[..., Awaitable[Answered]]
+
+
+async def _route(h: Harness, connections: Sequence[Connection], caller: Any) -> _Route:
+    """The registry the application builds, its row readers and field policies, the question
+    shapes of the sources connected now, and a live reader over the same connections, all over the
+    check's transaction. So what a check asks is the path a question takes on an install."""
+    from brain.api_routes import (
+        connected_questions_of,
+        covered_at,
+        field_policies,
+        row_readers,
+        source_field_policies,
+    )
+    from brain.gate.answer import answer_lane
+    from brain.gate.context import Channel
+    from brain.gate.finish import Origin
+    from brain.identity.principal_store import StoredPrincipals
+    from brain.knowledge.row_store import SessionRowSource
+    from brain.ops.acceptance_checks_tables import _console
+    from brain.ops.live_read_run import ConnectedSources
+    from brain.ops.live_records import SourceRecords
+    from brain.ops.trace_sink import CountingTraceSink
+    from brain.tools.startup import build_registry
+
+    rules = await connected_questions_of(SimpleNamespace(db_sessions=h.sessions))
+    registry = build_registry(source=h.settings.tool_source, records=SessionRowSource(h.sessions))
+    readers = row_readers(registry)
+    by_connector = {one.connector: one for one in connections}
+
+    async def connected() -> Any:
+        return ConnectedSources(
+            by_connector,
+            keys=_Keys(),
+            caller=caller,
+            resolver=_Resolver(),
+            clock=lambda: h.now,
+        )
+
+    live_records = SourceRecords(connected=connected, clock=lambda: h.now)
+
+    async def ask(
+        principal_id: str, question: str, *, also: Sequence[FastPathRule] = ()
+    ) -> Answered:
+        person = await StoredPrincipals(h.sessions).live_principal(principal_id)
+        if person is None:
+            raise CheckFailedError("a reserved person was not live in the directory")
+        reach: EntitlementSet = await _console(h, principal_id, second_factor=False)
+        return await answer_lane(
+            question,
+            origin=Origin(trace_id=h.trace_id, principal=person, channel=Channel.CONSOLE),
+            recorders=(),
+            rules=(*rules, *also),
+            readers=readers,
+            entitlement=reach,
+            policies=field_policies(registry),
+            reachable_sources=covered_at(registry, reach, h.now),
+            sink=CountingTraceSink(),
+            now=h.now,
+            clock=lambda: h.now,
+            live=live_records,
+            source_policies=source_field_policies(registry),
+        )
+
+    return _Route(rules=rules, readers=readers, ask=ask)
+
+
 # ------------------------------------------------ 1. a connected source answers on Ask
 @check(
     leaves=("M11.6.5", "M11.6.2", "M11.4.9"),
@@ -206,36 +322,12 @@ def _prose(answered: Answered) -> str:
     ),
 )
 async def a_connected_source_answers_on_ask_from_its_index_and_its_source(h: Harness) -> None:
-    from brain.api_routes import (
-        connected_questions_of,
-        covered_at,
-        field_policies,
-        row_readers,
-        source_field_policies,
-    )
     from brain.connectors import freshdesk, xero
     from brain.connectors.minimal_index import fresh_canary
-    from brain.gate.answer import answer_lane
-    from brain.gate.context import Channel
-    from brain.gate.finish import Origin
     from brain.gate.provenance import STALENESS_TEXT, Freshness
-    from brain.identity.principal_store import StoredPrincipals
     from brain.knowledge.classified_rows import QUESTION_SHAPES, label_of
-    from brain.knowledge.row_store import SessionRowSource
-    from brain.ops.acceptance_checks_tables import _console
-    from brain.ops.connector_store import live
-    from brain.ops.live_read_run import ConnectedSources
-    from brain.ops.live_records import SourceRecords
-    from brain.ops.trace_sink import CountingTraceSink
-    from brain.tools.startup import build_registry
 
-    for name in (xero.CONNECTOR_NAME, freshdesk.FRESHDESK):
-        if (await h.execute(live(name))).scalar_one_or_none() is not None:
-            raise CheckNotRunError(A_SOURCE_IS_CONNECTED_HERE_ALREADY)
-    await h.found_departments()
-    state = SimpleNamespace(db_sessions=h.sessions)
-    if await connected_questions_of(state):
-        raise CheckFailedError("a source nobody connected contributed a question shape")
+    await _nothing_connected(h)
 
     # Xero: one invoice, its amount a canary the index must never hold.
     canary = fresh_canary("ACCEPTANCE")
@@ -284,50 +376,18 @@ async def a_connected_source_answers_on_ask_from_its_index_and_its_source(h: Har
     await _connect_and_read(h, helpdesk_connection, helpdesk, at=read_at)
 
     # What the answer route builds, by its own functions, over the check's transaction.
-    rules = await connected_questions_of(state)
-    if {rule.source for rule in rules} != {xero.CONNECTOR_NAME, freshdesk.FRESHDESK}:
+    route = await _route(
+        h, (ledger_connection, helpdesk_connection), _Both(ledger=ledger, helpdesk=helpdesk)
+    )
+    if {rule.source for rule in route.rules} != {xero.CONNECTOR_NAME, freshdesk.FRESHDESK}:
         raise CheckFailedError("the connected sources contributed no question shapes to Ask")
-    registry = build_registry(source=h.settings.tool_source, records=SessionRowSource(h.sessions))
-    readers = row_readers(registry)
     for pair in (
         (xero.CONNECTOR_NAME, xero.ENTITY_INVOICE),
         (freshdesk.FRESHDESK, freshdesk.TICKET),
     ):
-        if pair not in readers:
+        if pair not in route.readers:
             raise CheckFailedError("the application registered no reader for a connected source")
-    connections = {one.connector: one for one in (ledger_connection, helpdesk_connection)}
-
-    async def connected() -> Any:
-        return ConnectedSources(
-            connections,
-            keys=_Keys(),
-            caller=_Both(ledger=ledger, helpdesk=helpdesk),
-            resolver=_Resolver(),
-            clock=lambda: h.now,
-        )
-
-    live_records = SourceRecords(connected=connected, clock=lambda: h.now)
-
-    async def ask(principal_id: str, question: str, *, also: Any = ()) -> Answered:
-        person = await StoredPrincipals(h.sessions).live_principal(principal_id)
-        if person is None:
-            raise CheckFailedError("a reserved person was not live in the directory")
-        reach: EntitlementSet = await _console(h, principal_id, second_factor=False)
-        return await answer_lane(
-            question,
-            origin=Origin(trace_id=h.trace_id, principal=person, channel=Channel.CONSOLE),
-            recorders=(),
-            rules=(*rules, *also),
-            readers=readers,
-            entitlement=reach,
-            policies=field_policies(registry),
-            reachable_sources=covered_at(registry, reach, h.now),
-            sink=CountingTraceSink(),
-            now=h.now,
-            clock=lambda: h.now,
-            live=live_records,
-            source_policies=source_field_policies(registry),
-        )
+    ask = route.ask
 
     def asking(field_name: str, slot: str) -> str:
         return QUESTION_SHAPES[0].format(label=label_of(field_name), slot=slot)
@@ -445,3 +505,177 @@ async def _stale_price(h: Harness, ask: Any, asking: Any) -> None:
     dated = {datetime.fromisoformat(one.freshness.fetched_at) for one in old.provenance.rows}
     if dated != {read_at}:
         raise CheckFailedError("a row's citation was not dated by when it was last read")
+
+
+# ------------------------------------- 2. a question over many records, from the headers
+@check(
+    leaves=("M11.8.3",),
+    sentence=(
+        "A Xero tenant and a Freshdesk helpdesk made up for the check are read by the worker "
+        "from recorded answers holding emails, phones and a ticket body: the index keeps none of "
+        "them, which invoices hold a status and how many are answered from the index with no call "
+        "to Xero, a reader who may not name them or read the status is told what an unheld status "
+        "is told, and the body read live is in no table."
+    ),
+)
+async def a_question_over_many_records_is_answered_from_the_index_headers(h: Harness) -> None:
+    from sqlalchemy import select
+
+    from brain.connectors import freshdesk, xero
+    from brain.connectors.minimal_index import fresh_canary
+    from brain.core.projection import is_forbidden
+    from brain.knowledge.classified_rows import MANY_SHAPES, QUESTION_SHAPES, label_of
+    from brain.tables.projection import ProjectedRecordRow
+
+    await _nothing_connected(h)
+
+    # Xero: two invoices holding a status nothing else on this install holds, so a count is only
+    # the check's, and a third that does not. Every amount, email, phone and tax number a canary.
+    amount, email, phone, body = (fresh_canary("ACCEPTANCE") for _ in range(4))
+    held, holding, other = h.word(), (h.word(), h.word()), h.word()
+    contact_id = str(uuid.uuid4())
+    invoices = {
+        "Invoices": [
+            {
+                "InvoiceID": str(uuid.uuid4()),
+                "InvoiceNumber": number,
+                "Contact": {"ContactID": contact_id},
+                "AmountDue": amount,
+                "DueDate": DUE_DATE,
+                "Status": status,
+            }
+            for number, status in ((holding[0], held), (holding[1], held), (other, "DRAFT"))
+        ]
+    }
+    contacts = {
+        "Contacts": [
+            {
+                "ContactID": contact_id,
+                "Name": h.word(),
+                "ContactStatus": "ACTIVE",
+                "UpdatedDateUTC": DUE_DATE,
+                "EmailAddress": email,
+                "TaxNumber": amount,
+                "Phones": [{"PhoneType": "DEFAULT", "PhoneNumber": phone}],
+            }
+        ]
+    }
+    ledger = _Recorded(
+        invoices=json.dumps(invoices).encode("utf-8"),
+        contacts=json.dumps(contacts).encode("utf-8"),
+    )
+    ledger_connection = _connection(h, xero.CONNECTOR_NAME, {"tenant_id": str(uuid.uuid4())})
+    await _connect_and_read(h, ledger_connection, ledger, at=h.now)
+
+    # Freshdesk: a ticket whose list answer carries its requester's email and phone and its body.
+    subject = h.word()
+    ticket = {
+        "id": 900_000 + uuid.uuid4().int % 99_999,
+        "subject": subject,
+        "status": OPEN,
+        "priority": 1,
+        "company_id": 1,
+        "requester_id": 1,
+        "group_id": 1,
+        "created_at": "2019-03-01T10:00:00Z",
+        "updated_at": "2019-03-02T10:00:00Z",
+        "due_by": "2019-03-08T10:00:00Z",
+        "requester": {"id": 1, "email": email, "phone": phone},
+        freshdesk.LIVE_BODY_FIELD: body,
+    }
+    helpdesk_connection = _connection(
+        h,
+        freshdesk.FRESHDESK,
+        {freshdesk.DOMAIN_SETTING: HELPDESK, freshdesk.DEPARTMENT_SETTING: A},
+    )
+    helpdesk = _Helpdesk(ticket, body=body)
+    await _connect_and_read(h, helpdesk_connection, helpdesk, at=h.now)
+
+    # Deny-listed fields never reach the projection: no field the denylist names, and no value.
+    kept = (
+        await h.execute(
+            select(ProjectedRecordRow.fields).where(
+                ProjectedRecordRow.source.in_((xero.CONNECTOR_NAME, freshdesk.FRESHDESK))
+            )
+        )
+    ).scalars()
+    fields = [dict(one) for one in kept]
+    if len(fields) < len(invoices["Invoices"]) + len(contacts["Contacts"]) + 1:
+        raise CheckFailedError("the index did not hold a row for each record the sources answered")
+    if any(is_forbidden(name) for row in fields for name in row):
+        raise CheckFailedError("a field the denylist names was kept in the index")
+    for canary in (amount, email, phone, body):
+        if await _search(h, canary):
+            raise CheckFailedError("a value the index must not keep was found in a table")
+
+    route = await _route(
+        h, (ledger_connection, helpdesk_connection), _Both(ledger=ledger, helpdesk=helpdesk)
+    )
+    many = {rule.many for rule in route.rules if rule.entity == xero.ENTITY_INVOICE}
+    if many != {None, *MANY_SHAPES}:
+        raise CheckFailedError("Ask was given no question over many invoices")
+    entities = f"{label_of(xero.ENTITY_INVOICE)}s"
+
+    def over(shape: Many, status: str) -> str:
+        return MANY_SHAPES[shape].format(entities=entities, label=label_of("status"), slot=status)
+
+    reads = ("read:invoice", "read:invoice.invoice_number", "read:invoice.status")
+    finance = h.principal(A, "finance")
+    await h.person(
+        finance, department=A, grants=tuple((one, Scope.unrestricted()) for one in reads)
+    )
+
+    # Which, and how many: from the index at the asker's reach, and Xero is not called.
+    called = len(ledger.asked)
+    listed = await route.ask(finance, over("which", held))
+    if len(ledger.asked) != called:
+        raise CheckFailedError("a question over many invoices called Xero")
+    told = _prose(listed)
+    if listed.composed is None or not all(number in told for number in holding):
+        raise CheckFailedError("which invoices hold a status was not answered with their numbers")
+    if other in told or listed.provenance is None:
+        raise CheckFailedError("a list of invoices named one not holding the status, or cited none")
+    counted = await route.ask(finance, over("how_many", held))
+    if counted.composed is None or f"{len(holding)}" not in _prose(counted):
+        raise CheckFailedError("how many invoices hold a status was not answered with the count")
+
+    # DENIED and ABSENT: a reader who may not name the invoices, and one who may not read the
+    # status, are each told exactly what a status nobody holds is told.
+    for missing, role in (
+        ("read:invoice.invoice_number", "clerk"),
+        ("read:invoice.status", "viewer"),
+    ):
+        reader = h.principal(A, role)
+        await h.person(
+            reader,
+            department=A,
+            grants=tuple((one, Scope.unrestricted()) for one in reads if one != missing),
+        )
+        for shape in MANY_SHAPES:
+            refused = await route.ask(reader, over(shape, held))
+            unheld = await route.ask(reader, over(shape, h.word()))
+            if refused.composed is not None or _prose(refused) != _prose(unheld):
+                raise CheckFailedError("invoices a reader may not name were told apart from none")
+
+    # The ticket answered live, its body told to a reader granted it and kept nowhere.
+    support = h.principal(A, "support")
+    await h.person(
+        support,
+        department=A,
+        grants=tuple(
+            (one, Scope.department(A))
+            for one in (
+                "read:ticket",
+                "read:ticket.subject",
+                f"read:ticket.{freshdesk.LIVE_BODY_FIELD}",
+            )
+        ),
+    )
+    asked = QUESTION_SHAPES[0].format(label=label_of(freshdesk.LIVE_BODY_FIELD), slot=subject)
+    read = await route.ask(support, asked)
+    if read.composed is None or body not in _prose(read):
+        raise CheckFailedError("a ticket's body was not read from the helpdesk when it was asked")
+    if await _search(h, body):
+        raise CheckFailedError("a ticket's body read live was found in a table")
+
+    raise CheckNotRunError(EMBEDDINGS_WAIT_FOR_THE_INFERENCE_SERVER)

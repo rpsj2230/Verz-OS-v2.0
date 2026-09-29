@@ -26,7 +26,7 @@ from typing import Any
 import pytest
 
 from brain.core.department import SLUG_PATTERN
-from brain.ops import acceptance, acceptance_audit, acceptance_run
+from brain.ops import acceptance, acceptance_audit, acceptance_checks_sources, acceptance_run
 from brain.ops import acceptance_checks_deployment as acceptance_deployment
 from brain.ops.acceptance import (
     FAILED,
@@ -218,6 +218,7 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     # Connected sources on Ask; `tests/unit/test_acceptance_sources.py`.
     assert by_module["brain.ops.acceptance_checks_sources"] == [
         "a_connected_source_answers_on_ask_from_its_index_and_its_source",
+        "a_question_over_many_records_is_answered_from_the_index_headers",
     ]
     assert list(by_module) == list(acceptance.CHECK_MODULES)
     oversight = {one.name: one.leaves for one in registered()}
@@ -724,10 +725,16 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         "the_scrub_meets_its_budget_on_this_install_s_processor",
     ):
         assert outcomes.pop(worker_check) == (NOT_RUN, acceptance_deployment.NOT_IN_A_WORKER)
+    # The embeddings clause waits for an inference server, and the check says so after every
+    # other clause has passed; `tests/unit/test_acceptance_sources.py` breaks each of those.
+    assert outcomes.pop("a_question_over_many_records_is_answered_from_the_index_headers") == (
+        NOT_RUN,
+        acceptance_checks_sources.EMBEDDINGS_WAIT_FOR_THE_INFERENCE_SERVER,
+    )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
     assert len(outcomes) == 57
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 182
+    assert runs == [(2,)] and len(recorded) == 184
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }

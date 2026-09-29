@@ -47,7 +47,7 @@ Rejected: registering a `RowTool` per uploaded table at startup. The registry is
 the process starts, so an upload would reach Ask only after a restart, and the tool would read
 `proj.record`, which holds none of these rows.
 
-Task ids: M7.5.2, M7.7.3
+Task ids: M7.5.2, M7.7.3, M11.8.3
 """
 
 from __future__ import annotations
@@ -56,7 +56,7 @@ import hashlib
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Final
+from typing import Any, Final, Literal
 
 import structlog
 from pydantic import ValidationError
@@ -371,6 +371,57 @@ def questions_over(
                 )
             except ValidationError:
                 continue
+    return tuple(rules)
+
+
+#: Which of the two a question over many records asks: which records hold a header value, or how
+#: many do.
+Many = Literal["which", "how_many"]
+
+#: The words each is asked in. `{entities}` is the entity's label, plural.
+MANY_SHAPES: Final[Mapping[Many, str]] = {
+    "which": "which {entities} have {label} {slot}",
+    "how_many": "how many {entities} have {label} {slot}",
+}
+
+
+def listings_over(
+    classification: TableClassification,
+    *,
+    source: str,
+    key_column: str,
+    headers: Sequence[tuple[str, Many]],
+) -> tuple[FastPathRule, ...]:
+    """The questions over many records one entity answers: by each header, named by its key.
+
+    See `brain.gate.fast_lane.A_QUESTION_OVER_MANY_RECORDS_IS_ANSWERED_FROM_THE_INDEX_HEADERS`.
+    `headers` pairs a field the index keeps with what it keeps it for, so a field kept to filter
+    by is asked which and one kept to count by is asked how many, and nothing else. A header the
+    classification does not hold is skipped, as a column no rule may read, and each is answered
+    with the key column, the field a person names a record by.
+    """
+    entities = f"{label_of(classification.entity)}s"
+    rules: list[FastPathRule] = []
+    for header, many in headers:
+        if header == key_column or classification.rule_for(header) is None:
+            continue
+        try:
+            rules.append(
+                FastPathRule(
+                    rule_id=rule_name(classification.entity, header, many, source=source),
+                    template=MANY_SHAPES[many].format(
+                        entities=entities, label=label_of(header), slot="{" + header + "}"
+                    ),
+                    slot=header,
+                    source=source,
+                    entity=classification.entity,
+                    match_field=header,
+                    answer_field=key_column,
+                    many=many,
+                )
+            )
+        except ValidationError:
+            continue
     return tuple(rules)
 
 

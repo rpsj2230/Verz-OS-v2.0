@@ -1041,10 +1041,13 @@ def test_a_fast_lane_answer_has_nowhere_to_put_a_tool() -> None:
     model, in a module whose docstring argues against it, which is a decision somebody makes
     rather than a line they add.
 
+    The sixth field, `many`, was that decision made once on 2026-09-30 (M11.8.3): it says which
+    kind of question was matched, one record or many, and holds nothing a model could call.
+
     Delete this and the catalogue is empty by habit."""
     names = {f.name for f in dataclasses.fields(FastLaneAnswer)}
 
-    assert names == {"rule_id", "entity", "source", "field", "result"}
+    assert names == {"rule_id", "entity", "source", "field", "result", "many"}
     annotations = " ".join(f"{f.name}:{f.type}" for f in dataclasses.fields(FastLaneAnswer))
     for forbidden in ("tool", "catalogue", "catalog", "prompt", "model", "message"):
         assert forbidden not in annotations.lower()

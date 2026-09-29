@@ -7,7 +7,11 @@ holds afterwards what it held before. Then it is run against the product broken 
 connected sources contributing no question shapes, a live read that is never made, and an index
 answer dated by the question rather than by its row. Each fails with its own sentence.
 
-Task ids: M11.6.5, M11.6.2, M11.4.9, M11.9.2
+The second check, a question over many records, is run the same way and ends not run with the
+sentence saying the embeddings clause waits for an inference server, which is the outcome it is
+meant to have on every install until one runs; broken where it proves, it fails instead.
+
+Task ids: M11.6.5, M11.6.2, M11.4.9, M11.9.2, M11.8.3
 """
 
 from __future__ import annotations
@@ -28,6 +32,7 @@ from tests.unit.test_acceptance import at_head, counts
 ROOT = Path(__file__).resolve().parents[2]
 MODULE = "brain.ops.acceptance_checks_sources"
 NAME = "a_connected_source_answers_on_ask_from_its_index_and_its_source"
+HEADERS = "a_question_over_many_records_is_answered_from_the_index_headers"
 
 #: Every table the check writes to, which must hold afterwards what it held before.
 WRITTEN = ("proj.record", "ops.connector_connection", "ops.connector_sync")
@@ -41,11 +46,12 @@ def test_the_sources_check_is_registered_with_the_leaves_it_proves() -> None:
     """Delete this and the check can close a leaf it does not exercise, or name an id no task
     has."""
     assert {name: one.leaves for name, one in mine().items()} == {
-        NAME: ("M11.6.5", "M11.6.2", "M11.4.9")
+        NAME: ("M11.6.5", "M11.6.2", "M11.4.9"),
+        HEADERS: ("M11.8.3",),
     }
     wbs = json.loads((ROOT / "docs" / "wbs.json").read_text(encoding="utf-8"))
     leaves = {one for module in wbs["modules"] for one in module["leaf_ids"]}
-    assert set(mine()[NAME].leaves) <= leaves
+    assert {leaf for one in mine().values() for leaf in one.leaves} <= leaves
 
 
 def run_checks(url: str, checks: Sequence[Check]) -> dict[str, tuple[str, str]]:
@@ -77,15 +83,22 @@ def written(url: str) -> dict[str, int]:
 
 @pytest.mark.needs_db
 def test_on_a_real_database_a_connected_source_answers_and_nothing_is_left_behind() -> None:
-    """**The check as the worker runs it, against PostgreSQL at head.** It passes, and the
-    projection, the connections, the attempts and the ledger hold what they held before. Delete
-    this and the one path from a connected source to Ask can break with nothing on the owner's
-    install saying so, or a check that commits a connection can reach his server."""
+    """**The checks as the worker runs them, against PostgreSQL at head.** The first passes, the
+    second reaches its last line and says the embeddings clause was not run, and the projection,
+    the connections, the attempts and the ledger hold what they held before. Delete this and the
+    one path from a connected source to Ask can break with nothing on the owner's install saying
+    so, the header check can pass on a clause nothing ran, or a check that commits a connection
+    can reach his server."""
+    from brain.ops.acceptance_checks_sources import EMBEDDINGS_WAIT_FOR_THE_INFERENCE_SERVER
+
     with at_head("brain_acceptance_sources") as url:
         before = (counts(url), written(url))
         outcome = run_checks(url, tuple(mine().values()))
         after = (counts(url), written(url))
-    assert outcome == {NAME: (PASSED, "")}
+    assert outcome == {
+        NAME: (PASSED, ""),
+        HEADERS: (NOT_RUN, EMBEDDINGS_WAIT_FOR_THE_INFERENCE_SERVER),
+    }
     assert after == before
 
 
@@ -158,5 +171,55 @@ def test_the_sources_check_steps_aside_where_the_install_has_a_source_connected(
             " VALUES ('xero', '{}'::jsonb, %s, 'u_admin')",
             "0" * 64,
         )
-        outcome = run_checks(url, (mine()[NAME],))
-    assert outcome[NAME] == (NOT_RUN, A_SOURCE_IS_CONNECTED_HERE_ALREADY)
+        outcome = run_checks(url, tuple(mine().values()))
+    assert outcome == dict.fromkeys(mine(), (NOT_RUN, A_SOURCE_IS_CONNECTED_HERE_ALREADY))
+
+
+@pytest.mark.needs_db
+@pytest.mark.parametrize(
+    ("broken", "reason"),
+    [
+        ("listing", "which invoices hold a status was not answered with their numbers"),
+        ("filter", "invoices a reader may not name were told apart from none"),
+        ("live", "a question over many invoices called Xero"),
+    ],
+)
+def test_the_header_check_fails_where_the_path_is_broken(
+    monkeypatch: pytest.MonkeyPatch, broken: str, reason: str
+) -> None:
+    """Three breaks, one per property: a list that names nobody, a filter on a status the reader
+    may not read that is compiled rather than refused into nothing, and a question over many
+    records answered as a question about one, which reads its records from their source. Each
+    fails the check with its own sentence rather than reaching the not-run line. Delete this and
+    the header check can reach its last line with the property gone, and read on the page as
+    nothing worse than waiting."""
+    import brain.gate.answer as answer
+    import brain.knowledge.rows as rows
+
+    if broken == "listing":
+        monkeypatch.setattr(answer, "many_from", lambda found, payload: "")
+    elif broken == "filter":
+        from brain.core.scope_sql import compile_where
+
+        def compiled(tool: Any, request: Any, columns: Any) -> Any:
+            del tool, columns
+            return compile_where(request.filters, rows.ROW_LAYOUT, param_prefix=rows.FILTER_PREFIX)
+
+        monkeypatch.setattr(rows, "_compile_filters", compiled)
+    else:
+        import dataclasses
+
+        import brain.gate.fast_lane as fast_lane
+
+        plain = fast_lane._read
+
+        async def one_at_a_time(*args: Any, **kwargs: Any) -> Any:
+            return dataclasses.replace(await plain(*args, **kwargs), many=None)
+
+        monkeypatch.setattr(fast_lane, "_read", one_at_a_time)
+    with at_head(f"brain_acceptance_headers_{broken}") as url:
+        before = written(url)
+        outcome = run_checks(url, (mine()[HEADERS],))
+        after = written(url)
+    assert outcome[HEADERS] == (FAILED, reason)
+    assert after == before

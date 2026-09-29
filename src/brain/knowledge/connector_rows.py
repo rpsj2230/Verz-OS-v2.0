@@ -27,11 +27,19 @@ connected contributes no question shape that could tell a person it exists.
 
 **What each answer reads, and what it never keeps.** The fast lane finds the record in the index
 at the asker's reach, `brain.ops.live_records.SourceRecords` reads that record from its source
-while the asker waits (Xero today; Freshdesk declares no live lookup yet), the redactor removes
-every field the asker may not read, and the answer is dated by the oldest row it stands on
-(`brain.knowledge.rows.answered_as_of`). Nothing a live read returns is written anywhere.
+while the asker waits, the redactor removes every field the asker may not read, and the answer is
+dated by the oldest row it stands on (`brain.knowledge.rows.answered_as_of`). Nothing a live read
+returns is written anywhere.
 
-Task ids: M11.6.5, M11.6.2, M11.4.9
+**A question over many records is asked of the header fields, and only as the connector declares
+them.** `HEADERS` reads each status field off the connector's projection with the uses it was
+declared for, so a status kept to filter by is asked which records hold a value and one kept to
+count by is asked how many, and neither reads a source (M11.8.3). A status stored as a code rather
+than a word, as Freshdesk's is, matches no question until the code has a word a person would type:
+a one-digit value is below the fast lane's shortest slot, and that is left as it is rather than
+lowering the floor for every question.
+
+Task ids: M11.6.5, M11.6.2, M11.4.9, M11.8.3
 """
 
 from __future__ import annotations
@@ -41,10 +49,11 @@ from types import MappingProxyType
 from typing import Final
 
 from brain.connectors import freshdesk, xero
+from brain.connectors.manifest import FieldShape, HotUse, ProjectedField
 from brain.core.entitlement import Capability
 from brain.core.field_policy import Classification, FieldRule
 from brain.gate.fast_lane import FastPathRule
-from brain.knowledge.classified_rows import questions_over
+from brain.knowledge.classified_rows import Many, listings_over, questions_over
 from brain.knowledge.columns import ColumnRule, TableClassification
 
 #: Why a source's classification is compiled from its own rules.
@@ -161,6 +170,32 @@ NAMED_BY: Final[Mapping[tuple[str, str], str]] = MappingProxyType(
     }
 )
 
+
+def _headers(fields: Iterable[ProjectedField]) -> tuple[tuple[str, Many], ...]:
+    """Each status field paired with what its declared uses let a question ask of it."""
+    asks: tuple[tuple[HotUse, Many], ...] = ((HotUse.FILTER, "which"), (HotUse.COUNT, "how_many"))
+    return tuple(
+        (one.name, many)
+        for one in fields
+        if one.shape is FieldShape.STATUS
+        for use, many in asks
+        if use in one.uses
+    )
+
+
+#: What each source's index keeps its header fields for: every projected field of the status
+#: shape, asked which records hold a value where the connector declares it kept to filter by and
+#: how many where it declares it kept to count by. Read off the connector's own projection, so a
+#: use the connector stops declaring stops being asked about.
+HEADERS: Final[Mapping[tuple[str, str], tuple[tuple[str, Many], ...]]] = MappingProxyType(
+    {
+        (xero.CONNECTOR_NAME, entity): _headers(fields)
+        for entity, fields in xero.PROJECTED_FIELDS.items()
+    }
+    | {(freshdesk.FRESHDESK, freshdesk.TICKET): _headers(freshdesk.TICKET_FIELDS)}
+)
+
+
 #: What each source's row tools are described as in the catalogue.
 CONNECTOR_ROW_DESCRIPTIONS: Final[Mapping[str, Mapping[str, str]]] = MappingProxyType(
     {
@@ -195,4 +230,12 @@ def connected_questions(connected: Iterable[str]) -> tuple[FastPathRule, ...]:
             if key is None or classification.rule_for(key) is None:
                 continue
             rules.extend(questions_over(classification, source=source, key_column=key))
+            rules.extend(
+                listings_over(
+                    classification,
+                    source=source,
+                    key_column=key,
+                    headers=HEADERS.get((source, classification.entity), ()),
+                )
+            )
     return tuple(rules)

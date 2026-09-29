@@ -99,7 +99,9 @@ def test_only_a_connected_source_contributes_questions_and_each_is_keyed_on_its_
     xero_only = connected_questions([xero.CONNECTOR_NAME])
     assert {rule.source for rule in xero_only} == {xero.CONNECTOR_NAME}
     for rule in xero_only:
-        assert rule.match_field == NAMED_BY[(rule.source, rule.entity)]
+        # A question about one record matches its name; one over many answers with the names.
+        named = rule.match_field if rule.many is None else rule.answer_field
+        assert named == NAMED_BY[(rule.source, rule.entity)]
         assert rule.answer_field != rule.match_field
     both = connected_questions([xero.CONNECTOR_NAME, freshdesk.FRESHDESK])
     assert {rule.source for rule in both} == {xero.CONNECTOR_NAME, freshdesk.FRESHDESK}

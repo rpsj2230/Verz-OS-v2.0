@@ -89,7 +89,7 @@ application's pool. The first thing that composition found here was the keying d
 `entities_served`, which `tests/e2e/test_wave_one_console_question.py` reached with the seeded
 demo.
 
-Task ids: M6.1.1, M6.1.2, M6.1.4, M7.5.2
+Task ids: M6.1.1, M6.1.2, M6.1.4, M7.5.2, M11.8.3
 """
 
 from __future__ import annotations
@@ -100,7 +100,7 @@ from collections.abc import Awaitable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from types import ModuleType
-from typing import Any, Final, Protocol
+from typing import Any, Final, Literal, Protocol
 
 import structlog
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
@@ -204,6 +204,21 @@ MAX_RULES: Final = 200
 #: See `TWO_RECORDS_MATCHING_ONE_NAME_IS_A_FALL_THROUGH`.
 FAST_LANE_ROW_LIMIT: Final = 2
 
+#: How many rows a question over many records may fetch, and so name. Past it the answer says it
+#: is the first so many, which is a fact about rows this reader may read and nothing about others.
+MANY_ROW_LIMIT: Final = 20
+
+#: Why a question over many records is answered from the index's own header fields.
+A_QUESTION_OVER_MANY_RECORDS_IS_ANSWERED_FROM_THE_INDEX_HEADERS: Final = (
+    "Which invoices are authorised, or how many tickets are open, is a question about the "
+    "records' status, and a status is one of the few fields the minimal index keeps for exactly "
+    "this: to filter and count by. So it is answered from the index at the asker's reach, "
+    "filtering on the header field and naming each record by its label, and no source is called: "
+    "a live read per record would spend a source's allowance on a question the index answers, and "
+    "the values it would read are not what was asked. Only records the asker may read are named "
+    "or counted, so the answer says nothing about any other."
+)
+
 #: The fields a rule row must carry, and the only ones read off it. Named rather than
 #: splatted, so a column added to `gate.fast_path_rule` cannot reach the matcher by
 #: accident: a new column is inert until somebody adds it here and to the type below.
@@ -272,6 +287,13 @@ class FastPathRule(BaseModel):
     #: answer. Separate, because "which client" and "what about them" are different columns.
     match_field: str = Field(min_length=1, max_length=60, pattern=OBJECT_NAME_PATTERN)
     answer_field: str = Field(min_length=1, max_length=60, pattern=OBJECT_NAME_PATTERN)
+
+    #: None for a question about one named record, the ordinary kind. `which` and `how_many` ask
+    #: over every record whose `match_field` holds the slot's value, answered with the
+    #: `answer_field` of each or with how many there are (M11.8.3). Never carried by a stored rule
+    #: row (`DECLARED_FIELDS` does not name it), so only code builds one. See
+    #: `A_QUESTION_OVER_MANY_RECORDS_IS_ANSWERED_FROM_THE_INDEX_HEADERS`.
+    many: Literal["which", "how_many"] | None = None
 
     @model_validator(mode="after")
     def _template_has_exactly_one_hole(self) -> FastPathRule:
@@ -547,6 +569,8 @@ class FastLaneAnswer:
     source: str
     field: str
     result: TypedResult[RowRecord]
+    #: The rule's `many`: None for one named record.
+    many: str | None = None
 
     @property
     def grounded(self) -> bool:
@@ -602,6 +626,15 @@ async def respond(
     found = _matches(question, rules, entities_served(readers))
     if not found:
         return None
+    if any(match.rule.many is not None for match in found):
+        # A question over many records reads one place: see
+        # `A_QUESTION_OVER_MANY_RECORDS_IS_ANSWERED_FROM_THE_INDEX_HEADERS`.
+        if len(found) > 1:
+            _two_rules_matched(found)
+            return None
+        return await _read(
+            found[0], readers, entitlement=entitlement, now=now, limit=MANY_ROW_LIMIT
+        )
     if len(found) > 1 and not asked_of_several_places(found):
         _two_rules_matched(found)
         return None
@@ -619,6 +652,7 @@ async def _read(
     *,
     entitlement: EntitlementSet,
     now: datetime | None,
+    limit: int = FAST_LANE_ROW_LIMIT,
 ) -> FastLaneAnswer:
     """One matched rule's rows, read at this caller's reach, narrowed to the name it read."""
     # **This comment said the refusal inside `reader_for` could not be reached from here, and
@@ -636,7 +670,7 @@ async def _read(
         # is the same kind of object as the system's and is bound as a parameter by the same
         # `compile_where`. There is no shape it can take that renders as SQL text.
         filters=Scope(clauses=(Clause(field=match.rule.match_field, op=Op.EQ, value=match.value),)),
-        limit=FAST_LANE_ROW_LIMIT,
+        limit=limit,
     )
     result = await reader(request, entitlement=entitlement, now=now)
     return FastLaneAnswer(
@@ -645,6 +679,7 @@ async def _read(
         source=match.rule.source,
         field=match.rule.answer_field,
         result=result,
+        many=match.rule.many,
     )
 
 

@@ -151,7 +151,7 @@ own source name, `tables`, which names no connector. The skills the model step o
 
 Task ids: M30.5.2, M21.3.4, M3.9.3, M4.4.4, M2.2.4, M3.1.2, M3.6.3, M11.9.2, M11.5.1, M11.5.5
 Task ids: M15.4.2, M8.1.3, M8.2.1, M11.4.9
-Task ids: M27.1.5, M27.15.9
+Task ids: M27.1.5, M27.15.9, M11.8.3
 """
 
 from __future__ import annotations
@@ -685,6 +685,21 @@ async def _outcome(
         log.warning("answer.no_policy", entity=found.entity, rule=found.rule_id)
         return _abstained(stream, frames, gaps, nothing_retrieved(scope, detail="unclassified"))
 
+    if found.many is not None:
+        return _answered_from_headers(
+            found,
+            stream,
+            frames,
+            gaps,
+            scope,
+            policy=policy,
+            entitlement=entitlement,
+            sink=sink,
+            now=now,
+            recorder=recorder,
+            horizons=horizons,
+        )
+
     read_live = False
     if live is not None:
         # The index found the record; its source answers for it. See
@@ -740,6 +755,70 @@ async def _outcome(
     if uncited is not None:
         return _abstained(stream, frames, gaps, uncited)
     return _answered(stream, frames, gaps, composed, scope, evidence, kept=not read_live)
+
+
+def many_from(answer: FastLaneAnswer, payload: ChannelPayload) -> str:
+    """A question over many records' answer, from what survived redaction and nothing else.
+
+    `served_from`'s rule for a list: each record the payload still names by the rule's answer
+    field, sorted, and a read that stopped at `brain.gate.fast_lane.MANY_ROW_LIMIT` said to be the
+    first so many. A record whose name was
+    withheld is neither named nor counted, so the answer says nothing about a record this reader
+    may not name. Empty when none is named, which the caller turns into the one abstention a
+    denial and an absence share.
+    """
+    names = sorted(
+        str(record[answer.field]) for record in payload.records if answer.field in record
+    )
+    if not names:
+        return ""
+    first = answer.result.truncated
+    if answer.many == "how_many":
+        return f"at least {len(names)}" if first else f"{len(names)}"
+    listed = "; ".join(names)
+    return f"the first {len(names)}: {listed}" if first else listed
+
+
+def _answered_from_headers(
+    found: FastLaneAnswer,
+    stream: AnswerStream,
+    frames: list[str],
+    gaps: Sequence[Gap],
+    scope: SearchScope,
+    *,
+    policy: FieldPolicy,
+    entitlement: EntitlementSet,
+    sink: TraceSink,
+    now: datetime,
+    recorder: Recorder | None,
+    horizons: Horizons,
+) -> Answered:
+    """A question over many records, answered from the index and never read live (M11.8.3).
+
+    See `brain.gate.fast_lane.A_QUESTION_OVER_MANY_RECORDS_IS_ANSWERED_FROM_THE_INDEX_HEADERS`. The
+    same redaction, abstention, composition and evidence as a question about one record, so the
+    rules that keep a denial and an absence alike hold here unchanged.
+    """
+    _enter(recorder, GateStep.REDACT)
+    redacted = redact(found.result, entitlement=entitlement, policy=policy, now=now)
+    payload = redacted.payload
+    sentence = many_from(found, payload)
+    declined = abstention_for_search(
+        payload, scope=scope, sources_connected=True, answers_the_question=True
+    )
+    if declined is None and not sentence:
+        declined = _withheld_or_absent(
+            found, payload, scope, policy=policy, entitlement=entitlement, now=now
+        )
+    if declined is not None:
+        return _abstained(stream, frames, gaps, declined)
+    _enter(recorder, GateStep.COMPOSE)
+    composed = compose(sentence, redacted, sink=sink, now=now)
+    evidence = provenance_for(composed, horizon=horizons.rows, now=now)
+    uncited = abstain_if_uncited(evidence, scope=scope)
+    if uncited is not None:
+        return _abstained(stream, frames, gaps, uncited)
+    return _answered(stream, frames, gaps, composed, scope, evidence, kept=True)
 
 
 def policy_for(
