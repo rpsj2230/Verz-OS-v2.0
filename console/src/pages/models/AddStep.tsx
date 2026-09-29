@@ -2,6 +2,9 @@
  * Adding a step at the end of a level: the level, the provider and model it calls, and its three
  * numbers, sent from a confirmation through the matrix gate.
  *
+ * **A change is held while no golden question is recorded, and the form says so before it is sent**,
+ * so nobody fills it in to learn that from the refusal.
+ *
  * **The provider is chosen from the providers this install can call**, by the name a person knows,
  * and the model offers the names already in use and those an added provider serves; the route still
  * judges the pair (`brain.routing_routes.RungAdd`). The answer is the change as the gate decided it,
@@ -13,7 +16,7 @@
 import { useState, type FormEvent } from "react";
 import { request } from "../../api/client";
 import type { ApiFailure, FieldProblem } from "../../api/errors";
-import { ConfirmDialog, FailureState, SectionCard } from "../../components/kit";
+import { ConfirmDialog, FailureState, Note, SectionCard } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { problemAttributes } from "../../ui/FieldProblems";
 import {
@@ -33,6 +36,7 @@ import { MAX_SMALLINT, MAX_TIMEOUT_SECONDS } from "../matrixQuery";
 import { levelName, providerName, type ProviderStateRow, type RungStateRow } from "../modelsQuery";
 import { FIELD_CONTROL, FormField } from "./FormField";
 import { modelsInUse } from "./providerWords";
+import { HELD_UNTIL_A_GOLDEN_QUESTION } from "./routingWords";
 
 const FORM = "add-step";
 
@@ -48,11 +52,14 @@ export const DO_NOT_ADD_STEP = "Cancel";
 export function AddStep({
   providers,
   plan,
+  goldenCount,
   onDecided,
   onClose,
 }: {
   readonly providers: readonly ProviderStateRow[];
   readonly plan: readonly RungStateRow[];
+  /** How many golden questions are recorded, or null where the page does not know. */
+  readonly goldenCount: number | null;
   readonly onDecided: (change: ChangeRow | null) => void;
   readonly onClose: () => void;
 }) {
@@ -123,6 +130,7 @@ export function AddStep({
   return (
     <SectionCard title={ADD_RUNG_HEADING} lede={ADD_STEP_LEDE}>
       <form aria-label={ADD_RUNG_HEADING} className="flex flex-col gap-3" onSubmit={ask} noValidate>
+        {goldenCount === 0 ? <Note>{HELD_UNTIL_A_GOLDEN_QUESTION}</Note> : null}
         <div className="[display:grid] grid-cols-1 gap-3 sm:grid-cols-3">
           <FormField id={id("tier")} label="Level" hint={LEVEL_HINT} form={FORM} name="tier" problems={problems}>
             <select
