@@ -88,7 +88,6 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
   // The grant and pack forms of an open subject, then the grant to several, which is drawn under
   // the list once it is opened and so sits after the list's search.
   "src/pages/prompts/PromptsPage.tsx": [{ pattern: "/prompts", opener: "Edit instructions", index: 0, writes: true }],
-  "src/pages/RequirementChecks.tsx": [{ pattern: "/requirement-checks", index: 0, writes: true }],
   "src/pages/Retention.tsx": [
     { pattern: "/retention", index: 0, writes: true },
     { pattern: "/retention", index: 1, writes: true },
@@ -123,6 +122,10 @@ const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
     "over the matrix and drawn outside the main landmark these cases read. tests/models-module.test.tsx " +
     "submits each blank and holds that no confirmation opens, nothing is sent, and what to fill in is " +
     "said beside the field.",
+  "src/pages/requirement-checks/RecordDrawer.tsx":
+    "The record form is inside a requirement's drawer, opened from its row and drawn outside the main " +
+    "landmark these cases read. tests/requirement-checks-page.test.tsx submits it blank and holds that " +
+    "nothing is sent and the outcome and the note are each told what to fill in beside the field.",
   "src/pages/webhooks/WebhookActs.tsx":
     "The registration and the secret replacement are inside drawers opened from the page header or a " +
     "subscriber's page, outside the main landmark these cases read. tests/webhooks-page.test.tsx submits " +

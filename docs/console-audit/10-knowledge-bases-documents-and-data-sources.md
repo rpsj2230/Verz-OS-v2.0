@@ -1,6 +1,6 @@
 ### Knowledge bases, documents and data sources
 
-- **Screens:** `/library`, `/library/:itemId`, `/library/:itemId/:view`, `/solutions`, `/learning`, `/memory`, `/memory/:subject`, `/records`, `/records/:entity`, `/classification`, `/classification/:entity`, `/classification/:entity/:column`, `/artifacts`
+- **Screens:** `/library`, `/library/:itemId`, `/library/:itemId/:view`, `/solutions`, `/learning`, `/learning/:view`, `/memory`, `/memory/:subject`, `/memory/:subject/:view`, `/records`, `/records/:entity`, `/classification`, `/classification/:entity`, `/classification/:entity/:column`, `/artifacts`
 - **Tables:** `know.item`, `know.chunk`, `know.steward_task`, `know.solution`, `mem.adaptive`, `mem.persistent`, `mem.learning`, `mem.correction`, `gate.fast_path_rule`, `gate.field_policy`, `agent.artifact`, `know.classified_table`, `know.classified_row`
 - **Installation values:** `INSTALL_VECTOR_STORE`, `INSTALL_EMBEDDING_REVISION`, `INSTALL_KNOWLEDGE_SCANNER`, `INSTALL_CLAMAV_ADDRESS`
 - **Measured here:** 32 routes, 4 called by no screen; 16 write routes, 16 with all three proofs; 7 gaps.
@@ -9,10 +9,10 @@
 | --- | --- |
 | `GET /api/v1/classifications/{entity}` | `/classification/:entity`, `/classification/:entity/:column` |
 | `GET /api/v1/govern/artifacts` | `/artifacts` |
-| `GET /api/v1/govern/learning` | `/learning` |
+| `GET /api/v1/govern/learning` | `/learning`, `/learning/:view` |
 | `GET /api/v1/govern/library` | **no screen** |
-| `GET /api/v1/govern/memory` | `/memory/:subject` |
-| `GET /api/v1/knowledge/documents` | `/library` |
+| `GET /api/v1/govern/memory` | `/memory/:subject`, `/memory/:subject/:view` |
+| `GET /api/v1/knowledge/documents` | `/department`, `/library` |
 | `GET /api/v1/knowledge/items` | **no screen** |
 | `GET /api/v1/knowledge/items/{item_id}` | `/library/:itemId`, `/library/:itemId/:view` |
 | `GET /api/v1/knowledge/items/{item_id}/history` | `/library/:itemId/:view` |
@@ -25,7 +25,7 @@
 | `GET /api/v1/records/{entity}/access` | **no screen** |
 | `POST /api/v1/classifications/{entity}/columns/{column}/marks/review` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` |
 | `POST /api/v1/classifications/{entity}/columns/{column}/review` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` |
-| `POST /api/v1/govern/learning/undo` | `/learning` |
+| `POST /api/v1/govern/learning/undo` | `/learning`, `/learning/:view` |
 | `POST /api/v1/knowledge/items/{item_id}/promotion` | `/library/:itemId`, `/library/:itemId/:view` |
 | `POST /api/v1/knowledge/items/{item_id}/steward` | `/library/:itemId`, `/library/:itemId/:view` |
 | `POST /api/v1/knowledge/items/{item_id}/verification` | `/library/:itemId`, `/library/:itemId/:view` |
@@ -54,7 +54,7 @@
 | --- | --- | --- | --- | --- |
 | `POST /api/v1/classifications/{entity}/columns/{column}/marks/review` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` | Not applicable: A review of a mark is a dry run and writes nothing. | Not applicable: A review changes nothing, so there is nothing to record. | `test_a_mark_review_stores_nothing` in `tests/unit/test_classified_tables.py` |
 | `POST /api/v1/classifications/{entity}/columns/{column}/review` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` | Not applicable: A review is a dry run and writes nothing. | Not applicable: A review changes nothing, so there is nothing to record. | `test_the_only_writes_mounted_here_are_the_upload_and_the_mark` in `tests/unit/test_classification_routes.py` |
-| `POST /api/v1/govern/learning/undo` | `/learning` | `test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next` in `tests/unit/test_memory_store.py` (database, in CI) | `test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next` in `tests/unit/test_memory_store.py` (database, in CI) | `test_an_undo_writes_the_correction_and_the_next_reading_no_longer_recalls_the_learning` in `tests/unit/test_estate_routes.py` |
+| `POST /api/v1/govern/learning/undo` | `/learning`, `/learning/:view` | `test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next` in `tests/unit/test_memory_store.py` (database, in CI) | `test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next` in `tests/unit/test_memory_store.py` (database, in CI) | `test_an_undo_writes_the_correction_and_the_next_reading_no_longer_recalls_the_learning` in `tests/unit/test_estate_routes.py` |
 | `POST /api/v1/knowledge/items/{item_id}/promotion` | `/library/:itemId`, `/library/:itemId/:view` | `test_a_promotion_waits_on_the_approvals_screen_and_is_applied_when_a_super_admin_approves` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | `test_a_promotion_waits_on_the_approvals_screen_and_is_applied_when_a_super_admin_approves` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | `test_a_promotion_waits_on_the_approvals_screen_and_is_applied_when_a_super_admin_approves` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) |
 | `POST /api/v1/knowledge/items/{item_id}/steward` | `/library/:itemId`, `/library/:itemId/:view` | `test_a_steward_is_handed_over_to_somebody_who_reaches_it_and_is_told` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | `test_a_steward_is_handed_over_to_somebody_who_reaches_it_and_is_told` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | `test_a_steward_is_handed_over_to_somebody_who_reaches_it_and_is_told` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) |
 | `POST /api/v1/knowledge/items/{item_id}/verification` | `/library/:itemId`, `/library/:itemId/:view` | `test_a_document_due_for_review_opens_a_task_for_its_steward_which_verifying_closes` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | `test_a_newer_version_supersedes_the_older_which_stays_readable_and_answers_use_the_newer` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) | `test_a_document_due_for_review_opens_a_task_for_its_steward_which_verifying_closes` in `tests/unit/test_knowledge_lifecycle_db.py` (database, in CI) |

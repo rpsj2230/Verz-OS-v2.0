@@ -94,6 +94,9 @@ const A_LOG_ROW_IS_READ_AND_NEVER_WRITTEN =
 const OVERVIEW_CARDS: Readonly<Record<string, string>> = {
   "/": "/audit",
   "/department": "/agents",
+  // The Profile and About views read the Departments row and the directory's people for one
+  // department, and link to the Departments page, which pages, searches and filters that route.
+  "/department/:view": "/departments",
   "/agents/:agentId/:tab": "/routing",
   // One skill's page reads the Skills page's answer narrowed to its name; the library itself is
   // paged, searched, filtered and ordered on /skills.
@@ -128,6 +131,9 @@ const A_SKILL_IS_DECIDED_FROM_ITS_OWN_BYTES =
 const A_DRAFT_STARTS_FROM_ONE_TEMPLATE =
   "A draft is started from one template and is its author's own, so there is no act that starts " +
   "one from several templates at once.";
+const A_DEPARTMENT_PAGE_IS_ONE_DEPARTMENT =
+  "This page is one department, and its only writes rename or retire that department, each " +
+  "confirmed on its own, so there is no act to do to several rows at once.";
 const AN_UNBINDING_IS_ONE_PERSONS_CHAT =
   "Unbinding stops a chat account being answered as its person, at once, and is recorded against " +
   "them; it is confirmed one person at a time so nobody's chat is taken away as a side effect of " +
@@ -239,6 +245,13 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
     filter: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
     sort: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
     bulk: READ_ONLY,
+  },
+  "/department/:view": {
+    page: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    search: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    filter: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    sort: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    bulk: A_DEPARTMENT_PAGE_IS_ONE_DEPARTMENT,
   },
   "/logs": { bulk: A_LOG_ROW_IS_READ_AND_NEVER_WRITTEN },
   "/agents": {},
