@@ -265,7 +265,19 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "Agents and their configuration, including templates": {
-    screens: ["/agents", "/agents/:agentId", "/agents/:agentId/:tab", "/agent-templates", "/agent-templates/:templateId", "/approvals", "/approvals/:suspensionId"],
+    screens: [
+      "/agents",
+      "/agents/:agentId",
+      "/agents/:agentId/:tab",
+      "/agent-templates",
+      "/agent-templates/:templateId",
+      "/approvals",
+      "/approvals/:suspensionId",
+      "/agents/new",
+      "/agents/drafts",
+      "/agents/drafts/:draftId",
+      "/agents/drafts/:draftId/:step",
+    ],
     routes: [
       "/api/v1/agents",
       "/api/v1/agents/{agent_id}/workspace",
@@ -282,6 +294,9 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/agent-templates/{template_id}",
       "/api/v1/agent-templates/{template_id}/versions/{version}*",
       "/api/v1/approvals*",
+      "/api/v1/agents/{agent_id}/drafts",
+      "/api/v1/agent-drafts*",
+      "/api/v1/builder/form",
     ],
     tables: [
       "agent.agent",
@@ -290,12 +305,19 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "agent.upgrade_decline",
       "agent.browser_envelope",
       "gate.suspension",
+      "agent.manifest_draft",
+      "agent.manifest_revision",
+      "agent.manifest_act",
     ],
     installation: [],
     gaps: [
       {
-        what: "An agent cannot be created from scratch, and its manifest, leash and procedure cannot be edited.",
-        because: "components/ManifestForm.tsx and components/ProcedureCanvas.tsx are built and tested and rendered by no registered page, and no route writes a template version from the console.",
+        what: "A draft is written, checked and rehearsed on every install, and published only where the install holds a template signing key.",
+        because: "brain.agent_builder_routes signs a published draft with the key brain.agent_lifecycle_routes installs with, and no setting holds one yet (brain.ops.starter_store.NO_TEMPLATE_IS_SIGNED_BEFORE_THE_INSTALL_HOLDS_A_KEY_OF_ITS_OWN); publishing says so rather than signing with a weaker key.",
+      },
+      {
+        what: "A rung above Shadow cannot be published from a draft, and a rehearsal does not ask its test questions.",
+        because: "brain.builder.agent_drafts.A_RUNG_IS_RAISED_WITH_EVIDENCE_AND_NEVER_BY_A_DRAFT, and no model answers for an agent yet (brain.agent_builder_routes.A_REHEARSAL_RUNS_NO_MODEL_YET).",
       },
       {
         what: "A published template version cannot be installed from the console.",

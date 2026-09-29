@@ -105,6 +105,9 @@ const OVERVIEW_CARDS: Readonly<Record<string, string>> = {
   "/roles": "/people",
   "/departments/:slug": "/departments",
   "/departments/:slug/:view": "/scopes",
+  // New agent offers the gallery's first page as the templates a draft can start from, and links
+  // to the gallery, which pages, searches and filters the same route.
+  "/agents/new": "/agent-templates",
 };
 const AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST =
   "This screen is an overview, and the list it borrows is one card on it with a link to the screen " +
@@ -122,6 +125,9 @@ const A_SKILL_IS_DECIDED_FROM_ITS_OWN_BYTES =
   "reviewer read, a retirement names the agents still running that version for somebody to detach, " +
   "and a detachment ends one assignment, so there is no act that applies to several rows at once.";
 
+const A_DRAFT_STARTS_FROM_ONE_TEMPLATE =
+  "A draft is started from one template and is its author's own, so there is no act that starts " +
+  "one from several templates at once.";
 const AN_UNBINDING_IS_ONE_PERSONS_CHAT =
   "Unbinding stops a chat account being answered as its person, at once, and is recorded against " +
   "them; it is confirmed one person at a time so nobody's chat is taken away as a side effect of " +
@@ -204,6 +210,13 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
   "/connectors": {},
   "/automations": {},
   "/agent-templates": {},
+  "/agents/new": {
+    page: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    search: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    filter: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    sort: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    bulk: A_DRAFT_STARTS_FROM_ONE_TEMPLATE,
+  },
   "/jobs/:name": {},
   "/approvals": { bulk: AN_APPROVAL_IS_DECIDED_FROM_ITS_OWN_CARD },
   "/adoption": { bulk: READ_ONLY },

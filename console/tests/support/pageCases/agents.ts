@@ -1,12 +1,14 @@
 /**
- * The page cases for `/agents`, `/agents/:agentId` and `/agents/:agentId/:tab`: the address each is
- * mounted at and what the stand-in API answers it with. `support/pageCases.ts` collects this file
+ * The page cases for `/agents`, `/agents/:agentId` and `/agents/:agentId/:tab`, and for New agent,
+ * the drafts list and one draft: the address each is mounted at and what the stand-in API answers
+ * it with. `support/pageCases.ts` collects this file
  * by its name and says what a case is for.
  *
  * Task ids: none
  */
 
 import { MATRIX, type PageCase, UNBROKEN } from "../pageFixtures";
+import { readConsoleFile } from "../repo";
 
 /** One agent's figures as `brain.console_stats_routes.AgentStatsView` sends them. */
 const AGENT_STATS = {
@@ -85,6 +87,52 @@ const AGENT_AUTOMATIONS = {
   result_rule: UNBROKEN,
 };
 
+/** A draft's id, as `brain.agent_builder_routes` mints one. */
+export const DRAFT_ID = "44444444-4444-4444-8444-444444444444";
+
+/** One draft on the drafts list, as `AgentDraftSummary` sends it. */
+export const DRAFT_SUMMARY = {
+  draft_id: DRAFT_ID,
+  agent_id: "quote_helper_ab12cd",
+  name: UNBROKEN,
+  kind: "new",
+  state: "waiting",
+  revision: 2,
+  saved_at: "2019-03-04T09:00:00Z",
+};
+
+/** One draft, as `AgentDraftView` sends it, with the widest values its steps draw. */
+const DRAFT_VIEW = {
+  ...DRAFT_SUMMARY,
+  document: {
+    identity: {
+      template_id: "quote_helper_ab12cd",
+      version: 1,
+      published_by: UNBROKEN,
+      display_name: UNBROKEN,
+      summary: UNBROKEN,
+    },
+    persona: UNBROKEN,
+    tier: "main",
+    skills: [],
+    authority: { scope: { clauses: [] }, capabilities: [], allowed_tools: [], required_tools: [] },
+    connectors: [],
+    guardrails: { max_side_effect: "none", leash: [] },
+    golden_set: [],
+    placeholders: [],
+  },
+  problems: [UNBROKEN],
+  acts: [{ revision: 2, act: "checked", at: "2019-03-04T09:00:00Z" }],
+  yours: true,
+  waiting_on_you: false,
+  widened: [UNBROKEN],
+  drawable_tools: [UNBROKEN],
+  publish_unavailable: null,
+};
+
+/** The builder's form, which `tests/unit/test_builder_form.py` holds equal to the API's. */
+const BUILDER_FORM: unknown = JSON.parse(readConsoleFile("tests/fixtures/manifest-form.json"));
+
 export const PAGES: Readonly<Record<string, PageCase>> = {
   "/agents": {
     address: "/agents",
@@ -156,5 +204,49 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
       },
       "/api/v1/routing/rungs": MATRIX,
     },
+  },
+  // New agent: start from scratch, or from a template the gallery offers.
+  "/agents/new": {
+    address: "/agents/new",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/agent-templates": {
+        items: [
+          {
+            template_id: UNBROKEN,
+            version: 1,
+            display_name: UNBROKEN,
+            summary: UNBROKEN,
+            published_by: UNBROKEN,
+            origin: "built_in",
+          },
+        ],
+        next_cursor: null,
+        total: null,
+        truncated: false,
+      },
+    },
+  },
+  // The reader's drafts and the publishes waiting for them.
+  "/agents/drafts": {
+    address: "/agents/drafts",
+    signedIn: true,
+    drawsValues: true,
+    answers: { "/api/v1/agent-drafts": { items: [DRAFT_SUMMARY], waiting_for_you: [DRAFT_SUMMARY] } },
+  },
+  // One draft's Write step, the one with the most on it: the builder's whole form.
+  "/agents/drafts/:draftId": {
+    address: `/agents/drafts/${DRAFT_ID}`,
+    signedIn: true,
+    drawsValues: true,
+    answers: { [`/api/v1/agent-drafts/${DRAFT_ID}`]: DRAFT_VIEW, "/api/v1/builder/form": BUILDER_FORM },
+  },
+  // Its Publish step, with the audience choice and the history.
+  "/agents/drafts/:draftId/:step": {
+    address: `/agents/drafts/${DRAFT_ID}/publish`,
+    signedIn: true,
+    drawsValues: true,
+    answers: { [`/api/v1/agent-drafts/${DRAFT_ID}`]: DRAFT_VIEW },
   },
 };

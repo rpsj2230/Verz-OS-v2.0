@@ -23,14 +23,14 @@
  *
  * **Switching on and off, archiving and duplicating are live on each row** for a reader the roster
  * sends a state to, each confirmed through `LifecycleActs.tsx`, which asks the lifecycle route what
- * this reader may do before it confirms anything. Creating an agent is drawn and inert with the
- * sentence `agentActions.ts` gives, because no route on main does it. The one bulk act is export,
- * which reads: agents change one at a time.
+ * this reader may do before it confirms anything. New agent opens the guided start
+ * (`NewAgentPage.tsx`), and Drafts lists what the reader is building and what waits for them to
+ * approve. The one bulk act is export, which reads: agents change one at a time.
  *
  * Imported statically, as the roster always was, because the kit reaches nothing heavier than the
  * shell already does.
  *
- * Task ids: M39.1.2.5, M27.8.6, M27.10.2
+ * Task ids: M39.1.2.5, M27.8.6, M27.10.2, M27.11.6
  */
 
 import { Bot, MoreHorizontal, Plus } from "lucide-react";
@@ -39,13 +39,7 @@ import { Link } from "react-router-dom";
 import type { FilterChoice, SortChoice } from "../../components/listing";
 import { useListing } from "../../components/useListing";
 import { AGENT_ADDRESS_PREFIX } from "../../components/agentWorkspaceState";
-import {
-  Chip,
-  ListPage,
-  NOT_RECORDED,
-  UnavailableAction,
-  type EntityColumn,
-} from "../../components/kit";
+import { Chip, ListPage, NOT_RECORDED, type EntityColumn } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import {
   DropdownMenu,
@@ -58,7 +52,8 @@ import { Skeleton } from "../../components/ui/skeleton";
 import { scopeLines } from "../scopeText";
 import { ROSTER_API_PATH } from "../agentsQuery";
 import { actsFor, ACT_LABELS, type LifecycleAct } from "../agentLifecycleQuery";
-import { rungWords, stateWords, UNAVAILABLE, WORKS_AT } from "./agentActions";
+import { rungWords, stateWords, WORKS_AT } from "./agentActions";
+import { DRAFTS_ADDRESS, NEW_AGENT_ADDRESS } from "./agentDraftsQuery";
 import { countWords, FIRST_PERIOD, periodOf, whenWords } from "./agentStats";
 import { useLifecycleActs } from "./LifecycleActs";
 import { LeashPill, StatePill } from "./pills";
@@ -77,7 +72,7 @@ export const LOADING_AGENTS = "Loading agents.";
 /** The empty state, whichever of the reasons it is empty. */
 export const NO_AGENTS = "No agents to show";
 export const NO_AGENTS_DESCRIPTION =
-  "An agent appears here once somebody installs one from the template catalogue or builds one, and it is offered to you.";
+  "An agent appears here once somebody builds one with New agent and publishes it, and it is offered to you. Administrators who may make agents can start one.";
 
 /** What the table is, for a screen reader. */
 export const ROSTER_LIST_LABEL = "Agents you can open";
@@ -85,6 +80,7 @@ export const FILTERS_LABEL = "Narrow the agents";
 export const SEARCH_HINT = "Search agents";
 
 export const NEW_AGENT = "New agent";
+export const DRAFTS_LINK = "Drafts";
 export const TEMPLATES_LINK = "Agent templates";
 
 /** A row's figures that could not be read. Never a number. */
@@ -323,11 +319,23 @@ export function AgentsPage() {
       crumbs={[{ label: ROSTER_HEADING }]}
       title={ROSTER_HEADING}
       lede={ROSTER_LEDE}
-      primary={<UnavailableAction label={NEW_AGENT} text={NEW_AGENT} icon={<Plus aria-hidden />} reason={UNAVAILABLE.create.reason} />}
-      actions={
-        <Button asChild variant="outline" size="sm" className="min-h-11 text-ink no-underline sm:min-h-8">
-          <Link to={WORKS_AT.templates}>{TEMPLATES_LINK}</Link>
+      primary={
+        <Button asChild size="sm" className="min-h-11 no-underline sm:min-h-8">
+          <Link to={NEW_AGENT_ADDRESS}>
+            <Plus aria-hidden />
+            {NEW_AGENT}
+          </Link>
         </Button>
+      }
+      actions={
+        <>
+          <Button asChild variant="outline" size="sm" className="min-h-11 text-ink no-underline sm:min-h-8">
+            <Link to={DRAFTS_ADDRESS}>{DRAFTS_LINK}</Link>
+          </Button>
+          <Button asChild variant="outline" size="sm" className="min-h-11 text-ink no-underline sm:min-h-8">
+            <Link to={WORKS_AT.templates}>{TEMPLATES_LINK}</Link>
+          </Button>
+        </>
       }
       listing={listing}
       rows={rows}
@@ -353,7 +361,7 @@ export function AgentsPage() {
       emptyIcon={<Bot aria-hidden />}
       emptyAction={
         <Button asChild variant="outline" className="text-ink no-underline">
-          <Link to={WORKS_AT.templates}>{TEMPLATES_LINK}</Link>
+          <Link to={NEW_AGENT_ADDRESS}>{NEW_AGENT}</Link>
         </Button>
       }
     />

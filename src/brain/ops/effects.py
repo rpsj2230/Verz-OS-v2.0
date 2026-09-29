@@ -200,6 +200,25 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.agent_lifecycle_routes:AgentLifecycles.live_principal": Repeat.READS,
         "brain.agent_lifecycle_routes:AgentLifecycles.change": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.agent_lifecycle_routes:AgentLifecycles.create": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # An agent's drafts (0149): reads, and appends. A second save of the same body returns the
+        # revision already kept, a second act on one revision is refused by its key, and a second
+        # publish finds the instance written or moved and writes nothing.
+        "brain.builder.draft_store:AgentDraftStore.draft": Repeat.READS,
+        "brain.builder.draft_store:AgentDraftStore.drafts_owned_by": Repeat.READS,
+        "brain.builder.draft_store:AgentDraftStore.waiting": Repeat.READS,
+        "brain.builder.draft_store:AgentDraftStore.agent": Repeat.READS,
+        "brain.builder.draft_store:AgentDraftStore.versions_of": Repeat.READS,
+        "brain.builder.draft_store:AgentDraftStore.department_of": Repeat.READS,
+        "brain.builder.draft_store:AgentDraftStore.newest_published": Repeat.READS,
+        "brain.builder.draft_store:AgentDraftStore.start": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.builder.draft_store:AgentDraftStore.append": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.builder.draft_store:AgentDraftStore.record": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.builder.draft_store:AgentDraftStore.publish_new": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
+        "brain.builder.draft_store:AgentDraftStore.publish_edit": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
         # Approvals: reads and writes of this system's own suspension rows.
         "brain.approval_routes:SuspensionSource.open_suspensions": Repeat.READS,
         "brain.approval_routes:SuspensionSource.suspension": Repeat.READS,

@@ -101,6 +101,9 @@ export const EMPTIES_ONLY: Readonly<Record<string, readonly string[]>> = {
  * because it would be excusing nothing.
  */
 export const NO_EMPTY_SENTENCE: Readonly<Record<string, string>> = {
+  "/agents/drafts/:draftId/:step":
+    "One draft is not a list. Its history and what it adds are drawn only when there is something " +
+    "in them, because a heading over nothing would read as acts or reach the reader was not shown.",
   "/agents/:agentId":
     "One agent is not a list. Its connectors, skills and channels are blocks that draw nothing when " +
     "they have no rows, because a heading over an empty block cannot be told from one whose rows the " +
