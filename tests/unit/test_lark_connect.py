@@ -20,9 +20,9 @@ import logging
 import re
 import threading
 from collections.abc import Iterator, Mapping
-from datetime import datetime
+from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any, Final
+from typing import Any, Final, cast
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -36,6 +36,7 @@ from brain.app import Settings, create_app
 from brain.channels.lark import LarkSecret
 from brain.connector_routes import CONNECTORS_READ
 from brain.connectors import lark_wiki
+from brain.connectors.lark_wiki import SpaceDeclaration
 from brain.connectors.registry import INSTALL_AUTHORITY
 from brain.connectors.staff_directories import LARK_SCOPE_PURPOSE, LARK_SYNC_SCOPES
 from brain.console.reads import Plane, plane_capability
@@ -44,14 +45,18 @@ from brain.core.scope import Clause, Op, Scope
 from brain.credential_routes import CREDENTIAL_AUTHORITY
 from brain.gate.context import Channel
 from brain.install import BY_NAME, hold_saved
+from brain.knowledge.visibility import KnowledgeVisibility
 from brain.lark_connect_routes import (
     EVENTS_ARRIVING,
     EVENTS_NONE_YET,
     EVENTS_OFF,
     LARK_PATH,
+    LARK_SWITCH_OFF_PATH,
     LARK_TEST_PATH,
+    LARK_WIKI_SPACES_PATH,
     REFUSED_EVENT_TOLD,
     REPLY_TOLD,
+    LarkFacts,
 )
 from brain.ops.channel_store import DeliveryEntry
 from brain.ops.connectable import CONNECTABLE, NotConnectableError, manifest_for
@@ -62,11 +67,17 @@ from brain.ops.lark_connect import (
     MESSAGE_EVENT,
     USES,
     WIKI_PERMISSION_SCOPE,
+    StepKey,
     Use,
+    UseResult,
     Verdict,
+    app_page,
     base_token,
     events_address,
+    last_test_from,
     probe_connection,
+    redo_for,
+    scope_import,
     scopes_for,
     settings_for,
     steps_for,
@@ -176,7 +187,7 @@ class FakeLark:
         elif path.endswith("/departments/0/children"):
             items = [] if self.empty_directory else [{"open_department_id": "od_1"}]
         elif path == "/open-apis/wiki/v2/spaces":
-            items = [{"space_id": "7000000000000000001"}]
+            items = [{"space_id": "7000000000000000001", "name": "Handbook"}]
         elif path.endswith("/nodes"):
             items = [{"node_token": "wikcnNODE1", "obj_token": "doxcnDOC1", "obj_type": "docx"}]
         elif path.endswith("/tables"):
@@ -258,13 +269,21 @@ def test_the_scope_list_and_the_steps_follow_the_uses_chosen() -> None:
     assert staff == set(LARK_SYNC_SCOPES.split())
     both = {one.name for one in scopes_for([Use.STAFF_LIST, Use.WIKI])}
     assert both == staff | {one.name for one in USES[Use.WIKI].scopes}
-    text = " ".join(one.text for one in steps_for([Use.STAFF_LIST], platform="larksuite.com"))
-    assert "contact:user.email:readonly" in text
-    assert "wiki:wiki:readonly" not in text and MEMBERS_SCOPE not in text
-    assert "All members" in text
-    titles = [one.title for one in steps_for([Use.WIKI, Use.CHANNEL], platform="feishu.cn")]
-    assert "Share your wiki spaces with it" in titles and "Turn on the bot" in titles
-    assert "https://open.feishu.cn/app" in steps_for([Use.WIKI], platform="feishu.cn")[0].text
+    staff_steps = steps_for([Use.STAFF_LIST], platform="larksuite.com")
+    assert [one.key for one in staff_steps] == [
+        StepKey.CHOOSE,
+        StepKey.CREATE,
+        StepKey.CREDENTIALS,
+        StepKey.PERMISSIONS,
+        StepKey.RELEASE,
+        StepKey.TEST,
+    ]
+    (permissions,) = [one for one in staff_steps if one.key == StepKey.PERMISSIONS]
+    assert "All members" in permissions.text and "scopes" in permissions.asks
+    keys = [one.key for one in steps_for([Use.WIKI, Use.CHANNEL], platform="feishu.cn")]
+    assert StepKey.SHARE_WIKI in keys and StepKey.BOT in keys and StepKey.SHARE_BASE not in keys
+    create = steps_for([Use.WIKI], platform="feishu.cn")[1]
+    assert create.link == "https://open.feishu.cn/app"
 
 
 def test_the_events_address_is_built_from_the_installs_own_redirect_uri() -> None:
@@ -290,8 +309,9 @@ def test_a_base_token_is_read_from_a_link_or_given_bare_and_nothing_else_is() ->
 
 def test_a_working_app_is_reported_working_for_every_use_and_only_reads(lark: FakeLark) -> None:
     """The positive case: every use works, and every request the server received after the one
-    token exchange was a GET. Delete this and the test can write to Lark, or a working app can be
-    reported broken, and nothing notices."""
+    token exchange was a GET, one row at a time except the one page of wiki spaces. Delete this
+    and the test can write to Lark, or a working app can be reported broken, and nothing
+    notices."""
     result = probe(lark, *Use)
     assert result.token_ok
     assert {one.use: one.verdict for one in result.uses} == dict.fromkeys(Use, Verdict.WORKING)
@@ -301,7 +321,10 @@ def test_a_working_app_is_reported_working_for_every_use_and_only_reads(lark: Fa
     assert len(methods) > len(Use)
     for _, path, _ in lark.seen[1:]:
         query = parse_qs(urlsplit(path).query)
-        assert query.get("page_size", ["1"]) == ["1"]
+        # One page of the wiki's spaces is listed so the next step can name them, at the most
+        # Lark's documented page size for that listing allows; every other read asks for one.
+        wanted = ["50"] if urlsplit(path).path == "/open-apis/wiki/v2/spaces" else ["1"]
+        assert query.get("page_size", ["1"]) == wanted
     assert not any("raw_content" in path for _, path, _ in lark.seen)
 
 
@@ -411,6 +434,60 @@ class StoredValues:
         self.saved.append(dict(values))
 
 
+class KeptFacts:
+    """The App ID and the last test in memory: every keep, in order, and what a read answers."""
+
+    def __init__(self) -> None:
+        self.facts = LarkFacts()
+        self.kept: list[dict[str, object]] = []
+
+    async def read(self) -> LarkFacts:
+        return self.facts
+
+    async def keep(
+        self, *, app_id: str | None, last_test: dict[str, object] | None, asked: Asking
+    ) -> None:
+        self.kept.append({"app_id": app_id, "last_test": last_test})
+        self.facts = LarkFacts(
+            app_id=self.facts.app_id if app_id is None else app_id,
+            last_test=self.facts.last_test if last_test is None else last_test_from(last_test),
+        )
+
+
+class KeptSpaces:
+    """The declared wiki spaces in memory: every save's entries, and the declarations read back."""
+
+    def __init__(self) -> None:
+        self.saved: list[list[tuple[str, str, str, str]]] = []
+
+    async def declared(self) -> tuple[SpaceDeclaration, ...]:
+        found: dict[str, SpaceDeclaration] = {}
+        for save in self.saved:
+            for space_id, reach, department, by in save:
+                visibility = (
+                    KnowledgeVisibility.company(owner_id=by)
+                    if reach == "company"
+                    else KnowledgeVisibility.of_department(department, owner_id=by)
+                )
+                found[space_id] = SpaceDeclaration(space_id, visibility, by)
+        return tuple(found.values())
+
+    async def declare(self, entries: Any, asked: Asking) -> None:
+        self.saved.append(
+            [
+                (one.space_id, one.reach, one.department, asked.caller.principal.id)
+                for one in entries
+            ]
+        )
+
+
+class Names:
+    """The directory's names in memory, for the steward shown beside a declared space."""
+
+    async def names(self, principal_ids: Any) -> dict[str, str]:
+        return {one: f"Name of {one}" for one in principal_ids}
+
+
 class NeverAsked:
     """Stands where the connector rows and the database would be; asking it fails the test."""
 
@@ -451,6 +528,9 @@ def client(app: FastAPI, lark: FakeLark) -> Iterator[TestClient]:
         app.state.connector_records = NeverAsked()
         app.state.lark_open_base = lark.base
         app.state.lark_settings = StoredValues()
+        app.state.lark_facts = KeptFacts()
+        app.state.lark_wiki_spaces = KeptSpaces()
+        app.state.people_names = Names()
         # The chat channel's own record and deliveries, in memory: a save writes the one and
         # the card reads the other.
         app.state.channel_records = Records()
@@ -682,41 +762,254 @@ def test_connecting_lark_copies_no_content_and_registers_nothing_the_sync_worker
 
 
 def test_the_chat_steps_name_every_scope_and_the_event_and_save_before_the_address() -> None:
-    """The owner creates the Lark app from these steps and nothing else, so they name each of the
-    four chat scopes, the one event, both keys, and put the save here before the Request URL in
-    Lark, which Lark checks the moment it is entered. Delete this and a step can be dropped or
-    reordered, and the owner's app is refused its address with no sentence saying why."""
+    """The owner creates the Lark app from these steps and nothing else, so the permissions they
+    copy name each of the four chat scopes, the steps name the one event and both keys, and the
+    save here comes before the Request URL in Lark, which Lark checks the moment it is entered.
+    Delete this and a step can be dropped or reordered, and the owner's app is refused its address
+    with no sentence saying why."""
     steps = steps_for([Use.CHANNEL], platform="larksuite.com")
-    titles = [one.title for one in steps]
     text = " ".join(one.text for one in steps)
-    for scope in (
-        "im:message.p2p_msg:readonly",
-        "im:message.group_at_msg:readonly",
-        MEMBERS_SCOPE,
-        "im:message:send_as_bot",
-    ):
-        assert scope in text
-    assert {one.name for one in USES[Use.CHANNEL].scopes} == {
+    copied = json.loads(scope_import([Use.CHANNEL]))["scopes"]["tenant"]
+    assert set(copied) == {
         "im:message.p2p_msg:readonly",
         "im:message.group_at_msg:readonly",
         MEMBERS_SCOPE,
         "im:message:send_as_bot",
     }
+    assert {one.name for one in USES[Use.CHANNEL].scopes} == set(copied)
     assert MESSAGE_EVENT == "im.message.receive_v1" and MESSAGE_EVENT in text
     assert "Encrypt Key" in text and "Verification Token" in text
-    order = [
-        "Turn on the bot",
-        "Add the scopes",
-        "Copy the Encrypt Key and Verification Token",
-        "Save here first",
-        "Point Lark's events at this install",
-        f"Subscribe to {MESSAGE_EVENT}",
-        "Release a version",
-        "Have it approved",
-        "Test, then save",
-        "Ask the bot",
+    assert [one.key for one in steps] == [
+        StepKey.CHOOSE,
+        StepKey.CREATE,
+        StepKey.CREDENTIALS,
+        StepKey.BOT,
+        StepKey.PERMISSIONS,
+        StepKey.EVENTS_KEYS,
+        StepKey.EVENTS_ADDRESS,
+        StepKey.RELEASE,
+        StepKey.TEST,
     ]
-    assert [one for one in titles if one in order] == order
+    (keys,) = [one for one in steps if one.key == StepKey.EVENTS_KEYS]
+    assert "save_channel" in keys.asks and "encrypt_key" in keys.asks
+
+
+def test_every_use_takes_fewer_screens_than_the_list_it_replaced() -> None:
+    """The owner asked for fewer steps. The list this flow replaced had, for the staff list alone,
+    nine things to do counting the choice of uses, and for all four uses eighteen; the flow is six
+    and thirteen, the two after the test being where a wiki space is declared and a Base's tables
+    are granted. Delete this and a step can be split back out one screen at a time."""
+    assert len(steps_for([Use.STAFF_LIST], platform="larksuite.com")) == 6
+    assert len(steps_for(list(Use), platform="larksuite.com")) == 13
+    for use in Use:
+        assert len(steps_for([use], platform="larksuite.com")) <= 9
+
+
+def test_copy_all_holds_exactly_the_scopes_the_chosen_uses_need_in_lark_import_shape() -> None:
+    """The text pasted into Lark's batch import is the staff reader's own scope list for the
+    staff list, the union for several uses, and asks for no user scope. Delete this and the
+    pasted list can drift from the one the test checks, or ask for a scope nobody chose."""
+    staff = json.loads(scope_import([Use.STAFF_LIST]))
+    assert staff == {"scopes": {"tenant": LARK_SYNC_SCOPES.split(), "user": []}}
+    both = json.loads(scope_import([Use.STAFF_LIST, Use.WIKI]))["scopes"]["tenant"]
+    assert both == [one.name for one in scopes_for([Use.STAFF_LIST, Use.WIKI])]
+    assert len(both) == len(set(both))
+    assert json.loads(scope_import([]))["scopes"]["tenant"] == []
+
+
+def test_the_app_id_turns_each_later_step_into_a_link_to_its_own_page() -> None:
+    """Once the App ID is known, the permissions step opens that app's permissions page on the
+    chosen platform; before it, and for anything not in Lark's shape, the console's app list.
+    Delete this and a typed value can become a link somewhere else, or the links never arrive."""
+    assert app_page("feishu.cn", APP_ID, StepKey.PERMISSIONS) == (
+        f"https://open.feishu.cn/app/{APP_ID}/auth"
+    )
+    assert app_page("larksuite.com", APP_ID, StepKey.RELEASE) == (
+        f"https://open.larksuite.com/app/{APP_ID}/version"
+    )
+    for typed in ("", "cli_", "https://elsewhere.example/x", f"{APP_ID}/../../x"):
+        assert app_page("larksuite.com", typed, StepKey.PERMISSIONS) == (
+            "https://open.larksuite.com/app"
+        )
+    linked = {
+        one.key: one.link for one in steps_for(list(Use), platform="larksuite.com", app_id=APP_ID)
+    }
+    assert linked[StepKey.PERMISSIONS].endswith(f"/{APP_ID}/auth")
+    assert linked[StepKey.SHARE_WIKI] == ""
+
+
+def test_each_verdict_sends_the_administrator_to_the_step_that_fixes_it() -> None:
+    """A missing scope goes to the permissions and then the release, because Lark cannot tell a
+    scope not added from one not released; a directory the app cannot see goes to the contacts
+    range on the permissions page; a Base not shared goes to sharing the Base; a working use goes
+    nowhere. Delete this and the flow can send somebody to the wrong screen."""
+
+    def verdict(use: Use, found: Verdict) -> tuple[StepKey, ...]:
+        return redo_for(UseResult(use, found, "told"))
+
+    assert verdict(Use.WIKI, Verdict.MISSING_SCOPE) == (StepKey.PERMISSIONS, StepKey.RELEASE)
+    assert verdict(Use.STAFF_LIST, Verdict.NOT_RELEASED) == (StepKey.RELEASE,)
+    assert verdict(Use.STAFF_LIST, Verdict.NOT_SHARED)[0] == StepKey.PERMISSIONS
+    assert verdict(Use.BASE, Verdict.NOT_SHARED) == (StepKey.SHARE_BASE,)
+    assert verdict(Use.BASE, Verdict.NEEDS_SETTING) == (StepKey.SHARE_BASE,)
+    assert verdict(Use.WIKI, Verdict.NOT_SHARED) == (StepKey.SHARE_WIKI,)
+    assert verdict(Use.CHANNEL, Verdict.NOT_SHARED)[0] == StepKey.BOT
+    assert verdict(Use.CHANNEL, Verdict.CREDENTIAL_REFUSED) == (StepKey.CREDENTIALS,)
+    assert verdict(Use.WIKI, Verdict.WORKING) == ()
+    for use in Use:
+        chosen = {one.key for one in steps_for([use], platform="larksuite.com")}
+        for found in Verdict:
+            assert set(verdict(use, found)) <= chosen
+
+
+def test_a_missing_scope_sends_the_test_route_back_to_permissions_and_release(
+    app: FastAPI, client: TestClient, lark: FakeLark
+) -> None:
+    """Through the application: the use with a scope missing names the two steps to redo and the
+    working use names none, and a refused credential sends the whole test back to the
+    credentials. Delete this and the console has no step to send anybody to."""
+    lark.refuse["/open-apis/im/v1/chats"] = missing(MEMBERS_SCOPE)
+    answered = client.post(
+        f"{API_PREFIX}{LARK_TEST_PATH}",
+        headers=headers("u_admin"),
+        json=body(Use.WIKI, Use.CHANNEL),
+    ).json()
+    redo = {one["name"]: one["redo"] for one in answered["uses"]}
+    assert redo == {"knowledge_wiki": [], "chat_channel": ["permissions", "release"]}
+    assert answered["redo"] == []
+    refused = client.post(
+        f"{API_PREFIX}{LARK_TEST_PATH}",
+        headers=headers("u_admin"),
+        json=body(Use.WIKI, secret="not-the-secret"),
+    ).json()
+    assert refused["accepted"] is False and refused["redo"] == ["credentials", "choose"]
+
+
+def test_a_test_records_when_it_ran_and_each_verdict_and_nothing_it_was_sent(
+    app: FastAPI, client: TestClient, lark: FakeLark
+) -> None:
+    """The card says when Lark was last tested. What is kept is the instant and a verdict word per
+    use, never the secret or the App ID typed for the test, and the guide reads it back. Delete
+    this and the card has no last test, or the record can grow to hold what was sent."""
+    lark.refuse["/open-apis/im/v1/chats"] = missing(MEMBERS_SCOPE)
+    client.post(
+        f"{API_PREFIX}{LARK_TEST_PATH}",
+        headers=headers("u_admin"),
+        json=body(Use.WIKI, Use.CHANNEL),
+    )
+    (kept,) = app.state.lark_facts.kept
+    assert kept["app_id"] is None
+    record = kept["last_test"]
+    assert isinstance(record, dict)
+    assert set(record) == {"at", "accepted", "uses"}
+    assert record["uses"] == {"knowledge_wiki": "working", "chat_channel": "missing_scope"}
+    assert SECRET not in json.dumps(kept) and APP_ID not in json.dumps(kept)
+    shown = client.get(f"{API_PREFIX}{LARK_PATH}", headers=headers("u_admin")).json()["last_test"]
+    assert shown["accepted"] is True
+    assert {one["name"]: one["verdict"] for one in shown["uses"]} == record["uses"]
+
+
+def test_a_save_keeps_the_app_id_so_every_later_link_opens_the_app(
+    app: FastAPI, client: TestClient
+) -> None:
+    """The App ID is not a secret and is kept on a save, so the card and a later Add a use open the
+    app's own pages. Delete this and a returning administrator has to find the app again."""
+    app.state.credentials = Credentials(Vault(), environ={}, writes=Recorded())
+    client.post(f"{API_PREFIX}{LARK_PATH}", headers=headers("u_admin"), json=body(Use.WIKI))
+    assert app.state.lark_facts.kept[-1] == {"app_id": APP_ID, "last_test": None}
+    hold_saved(settings_for([Use.WIKI], platform="larksuite.com", base_link=""))
+    guide = client.get(f"{API_PREFIX}{LARK_PATH}", headers=headers("u_admin")).json()
+    assert guide["app_id"] == APP_ID and guide["connected"] is True
+    links = {one["key"]: one["link"] for one in guide["steps"]}
+    assert links["permissions"] == f"https://open.larksuite.com/app/{APP_ID}/auth"
+    assert json.loads(guide["scope_import"])["scopes"]["tenant"] == [
+        one.name for one in USES[Use.WIKI].scopes
+    ]
+
+
+def test_nothing_switched_on_reads_as_not_connected(client: TestClient) -> None:
+    """The Connect Lark button is offered only while this is false. Delete this and the button
+    stays after Lark is connected, which is what the owner found."""
+    guide = client.get(f"{API_PREFIX}{LARK_PATH}", headers=headers("u_admin")).json()
+    assert guide["connected"] is False and guide["last_test"] is None
+
+
+def test_switching_a_use_off_leaves_the_others_on_and_the_key_in_the_vault(
+    app: FastAPI, client: TestClient
+) -> None:
+    """Switching the Wiki off keeps the staff list on and writes no key; switching the staff list
+    off hands the staff source to nothing only while Lark is it. Delete this and Disconnect can
+    switch off more than was asked, or leave the staff sync reading a source nobody chose."""
+    vault = Vault()
+    app.state.credentials = Credentials(vault, environ={}, writes=Recorded())
+    hold_saved(settings_for([Use.WIKI, Use.STAFF_LIST], platform="larksuite.com", base_link=""))
+    answered = client.post(
+        f"{API_PREFIX}{LARK_SWITCH_OFF_PATH}",
+        headers=headers("u_admin"),
+        json={"uses": ["knowledge_wiki"]},
+    )
+    assert answered.status_code == 200 and answered.json()["switched_off"] == ["knowledge_wiki"]
+    assert app.state.lark_settings.saved[-1] == {"INSTALL_LARK_USES": "staff_list"}
+    client.post(
+        f"{API_PREFIX}{LARK_SWITCH_OFF_PATH}",
+        headers=headers("u_admin"),
+        json={"uses": ["staff_list"]},
+    )
+    assert app.state.lark_settings.saved[-1] == {
+        "INSTALL_LARK_USES": "knowledge_wiki",
+        "INSTALL_STAFF_SOURCE": "none",
+    }
+    hold_saved(
+        settings_for([Use.STAFF_LIST], platform="larksuite.com", base_link="")
+        | {"INSTALL_STAFF_SOURCE": "google_workspace"}
+    )
+    client.post(
+        f"{API_PREFIX}{LARK_SWITCH_OFF_PATH}",
+        headers=headers("u_admin"),
+        json={"uses": ["staff_list"]},
+    )
+    assert app.state.lark_settings.saved[-1] == {"INSTALL_LARK_USES": "none"}
+    assert vault.written == []
+
+
+def test_switching_off_asks_each_uses_own_authority(app: FastAPI, client: TestClient) -> None:
+    """u_narrow may switch the Wiki and not the staff list. Delete this and one grant switches off
+    every use, including the staff source somebody else governs."""
+    hold_saved(settings_for([Use.WIKI, Use.STAFF_LIST], platform="larksuite.com", base_link=""))
+    both = client.post(
+        f"{API_PREFIX}{LARK_SWITCH_OFF_PATH}",
+        headers=headers("u_narrow"),
+        json={"uses": ["knowledge_wiki", "staff_list"]},
+    )
+    assert both.status_code == 404 and app.state.lark_settings.saved == []
+    alone = client.post(
+        f"{API_PREFIX}{LARK_SWITCH_OFF_PATH}",
+        headers=headers("u_narrow"),
+        json={"uses": ["knowledge_wiki"]},
+    )
+    assert alone.status_code == 200
+    assert app.state.lark_settings.saved == [{"INSTALL_LARK_USES": "staff_list"}]
+
+
+def test_switching_the_chat_channel_off_switches_its_record_off_and_keeps_its_ids(
+    app: FastAPI, client: TestClient
+) -> None:
+    """The Channels screen reads the same record, so switching the chat channel off here switches
+    it off there, and its App ID and bot id stay for the next save. Delete this and Lark keeps
+    answering after Disconnect."""
+    app.state.credentials = Credentials(Vault(), environ={}, writes=Recorded())
+    client.post(f"{API_PREFIX}{LARK_PATH}", headers=headers("u_admin"), json=body(Use.CHANNEL))
+    before = asyncio.run(app.state.channel_records.get(Channel.LARK))
+    assert before is not None and before.enabled
+    hold_saved(settings_for([Use.CHANNEL], platform="larksuite.com", base_link=""))
+    client.post(
+        f"{API_PREFIX}{LARK_SWITCH_OFF_PATH}",
+        headers=headers("u_admin"),
+        json={"uses": ["chat_channel"]},
+    )
+    after = asyncio.run(app.state.channel_records.get(Channel.LARK))
+    assert after is not None and not after.enabled
+    assert dict(after.tenant) == dict(before.tenant)
 
 
 def test_the_chat_channel_needs_both_event_keys_and_names_each_field_missing(
@@ -827,3 +1120,242 @@ def test_the_card_shows_the_events_address_and_whether_events_are_arriving(
     assert arriving["last_received"] is not None and arriving["reply_outcome"] == "sent"
     narrow = client.get(f"{API_PREFIX}{LARK_PATH}", headers=headers("u_narrow")).json()
     assert narrow["events"] is None
+
+
+# ------------------------------------------------------------------ the facts, on a database
+
+
+class _Principal:
+    id = "u_admin"
+
+
+class _Caller:
+    principal = _Principal()
+
+
+class _Reach:
+    def ent_hash(self) -> str:
+        return "0" * 32
+
+
+@pytest.mark.needs_db
+def test_the_app_id_and_the_last_test_are_kept_in_the_settings_table_and_read_back() -> None:
+    """Through the real `ops.setting` table and its constraints: the App ID is a string row, the
+    last test a JSON row the table accepts, a second keep writes over the first, and reading them
+    back gives the card what it shows. Delete this and a store that the table refuses passes every
+    test over the in-memory one, and the card never says when Lark was last tested."""
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+    from brain.lark_connect_routes import StoredLarkFacts
+    from brain.ops.lark_connect import ProbeResult, UseResult, last_test_value
+    from tests.fixtures.scratch_postgres import add_modelled, drop, fresh, sql
+    from tests.unit.test_connector_sync_run import through
+
+    asked = cast(Asking, type("Asked", (), {"caller": _Caller(), "reach": _Reach()})())
+    at = datetime(2999, 1, 2, 3, 4, tzinfo=UTC)
+    tested = ProbeResult(
+        True,
+        "told",
+        (UseResult(Use.WIKI, Verdict.WORKING, "ok"), UseResult(Use.BASE, Verdict.NOT_SHARED, "no")),
+    )
+    name = "brain_test_lark_facts"
+    url = fresh(name)
+    try:
+        add_modelled(url, ("ops.setting",))
+
+        async def work(sessions: async_sessionmaker[AsyncSession]) -> Any:
+            store = StoredLarkFacts(sessions)
+            await store.keep(app_id="cli_old0000", last_test=None, asked=asked)
+            await store.keep(app_id=APP_ID, last_test=last_test_value(tested, at=at), asked=asked)
+            return await store.read()
+
+        facts = through(url, work)
+        rows = sql(url, "SELECT key, value_type FROM ops.setting ORDER BY key")
+    finally:
+        drop(name)
+    assert rows == [
+        ("connector.lark_app.app_id", "string"),
+        ("connector.lark_app.last_test", "json"),
+    ]
+    assert facts.app_id == APP_ID
+    assert facts.last_test is not None and facts.last_test.at == at
+    assert dict(facts.last_test.verdicts) == {
+        Use.WIKI: Verdict.WORKING,
+        Use.BASE: Verdict.NOT_SHARED,
+    }
+
+
+# ------------------------------------------------------------------ the knowledge steps
+
+
+def test_the_wiki_and_the_base_each_end_with_the_step_their_knowledge_needs() -> None:
+    """After the test, the Wiki asks who may read each space and the Base says its tables are
+    granted per table; the Base's sharing step names both of its scopes, the release and the tick.
+    Delete this and a wiki switched on reads no space, or a Base is indexed and nobody is told
+    that reading a table needs a grant."""
+    wiki = [one.key for one in steps_for([Use.WIKI], platform="larksuite.com")]
+    assert wiki[-2:] == [StepKey.TEST, StepKey.WIKI_SPACES]
+    base = steps_for([Use.BASE], platform="larksuite.com")
+    assert [one.key for one in base][-2:] == [StepKey.TEST, StepKey.BASE_ACCESS]
+    (share,) = [one for one in base if one.key == StepKey.SHARE_BASE]
+    for scope in USES[Use.BASE].scopes:
+        assert scope.name in share.text
+    assert "released" in share.text and "ticked" in share.text and "Add document app" in share.text
+    access = base[-1]
+    assert "read:lark_<table>" in access.text and "read:lark_<table>.*" in access.text
+    assert "five minutes" in access.text
+    staff = [one.key for one in steps_for([Use.STAFF_LIST], platform="larksuite.com")]
+    assert StepKey.WIKI_SPACES not in staff and StepKey.BASE_ACCESS not in staff
+
+
+def test_a_wiki_test_lists_the_spaces_lark_shows_the_app_and_nothing_of_their_pages(
+    client: TestClient, lark: FakeLark
+) -> None:
+    """The step that declares spaces offers the ones the app can see. Delete this and every space
+    has to be pasted by hand, or a test starts carrying a page's content back."""
+    answered = client.post(
+        f"{API_PREFIX}{LARK_TEST_PATH}", headers=headers("u_admin"), json=body(Use.WIKI)
+    ).json()
+    (wiki,) = answered["uses"]
+    assert wiki["spaces"] == [{"space_id": "7000000000000000001", "name": "Handbook"}]
+    asked = [urlsplit(path) for method, path, _ in lark.seen if "/wiki/v2/spaces" in path]
+    assert parse_qs(asked[0].query)["page_size"] == ["50"]
+
+
+def test_a_space_is_declared_by_its_link_or_its_id_with_the_declarer_as_steward(
+    app: FastAPI, client: TestClient
+) -> None:
+    """A space pasted as its settings link and one given by id are declared at their reaches, the
+    caller is each one's steward, and the list names the steward rather than their id. Delete
+    this and the Wiki's reader finds no space, or finds one declared at a reach nobody chose."""
+    answered = client.post(
+        f"{API_PREFIX}{LARK_WIKI_SPACES_PATH}",
+        headers=headers("u_admin"),
+        json={
+            "spaces": [
+                {
+                    "space": "https://x.larksuite.com/wiki/space/7000000000000000001?a=1",
+                    "reach": "company",
+                },
+                {"space": "7000000000000000002", "reach": "department", "department": "finance"},
+            ]
+        },
+    )
+    assert answered.status_code == 200
+    assert answered.json()["declared"] == ["7000000000000000001", "7000000000000000002"]
+    assert app.state.lark_wiki_spaces.saved == [
+        [
+            ("7000000000000000001", "company", "", "u_admin"),
+            ("7000000000000000002", "department", "finance", "u_admin"),
+        ]
+    ]
+    listed = client.get(f"{API_PREFIX}{LARK_WIKI_SPACES_PATH}", headers=headers("u_admin")).json()
+    assert listed["may_declare"] is True
+    assert [
+        (one["space_id"], one["reach"], one["department"], one["steward"])
+        for one in listed["spaces"]
+    ] == [
+        ("7000000000000000001", "company", "", "Name of u_admin"),
+        ("7000000000000000002", "department", "finance", "Name of u_admin"),
+    ]
+
+
+def test_a_space_that_would_not_be_read_back_is_refused_by_field_and_nothing_is_declared(
+    app: FastAPI, client: TestClient
+) -> None:
+    """A link that names no space, a reach that is neither, a department reach with no department
+    and a department in no department's shape are each told beside their field, and the good
+    space in the same save is not declared either. Delete this and a save declares half of what
+    was asked, or keeps a space no reader will ever be told."""
+    answered = client.post(
+        f"{API_PREFIX}{LARK_WIKI_SPACES_PATH}",
+        headers=headers("u_admin"),
+        json={
+            "spaces": [
+                {"space": "7000000000000000001", "reach": "company"},
+                {"space": "https://x.larksuite.com/wiki/wikcnNODE", "reach": "company"},
+                {"space": "7000000000000000003", "reach": "everyone"},
+                {"space": "7000000000000000004", "reach": "department"},
+                {"space": "7000000000000000005", "reach": "department", "department": "Not A Slug"},
+            ]
+        },
+    )
+    assert answered.status_code == 422
+    fields = [one["field"] for one in answered.json()["problems"]]
+    assert fields == [
+        "spaces.1.space",
+        "spaces.2.reach",
+        "spaces.3.department",
+        "spaces.4.department",
+    ]
+    assert app.state.lark_wiki_spaces.saved == []
+    blank = client.post(
+        f"{API_PREFIX}{LARK_WIKI_SPACES_PATH}", headers=headers("u_admin"), json={"spaces": []}
+    )
+    assert blank.status_code == 422 and app.state.lark_wiki_spaces.saved == []
+
+
+def test_declaring_a_space_asks_the_wikis_own_authority(app: FastAPI, client: TestClient) -> None:
+    """u_narrow holds the Wiki's installation authority and may declare; u_none holds no such
+    grant and is refused in the one way this router refuses anybody. Delete this and anybody who
+    can read the Connectors screen decides who is told the company's wiki."""
+    space = {"spaces": [{"space": "7000000000000000001", "reach": "company"}]}
+    refused = client.post(
+        f"{API_PREFIX}{LARK_WIKI_SPACES_PATH}", headers=headers("u_none"), json=space
+    )
+    assert refused.status_code == 404 and app.state.lark_wiki_spaces.saved == []
+    allowed = client.post(
+        f"{API_PREFIX}{LARK_WIKI_SPACES_PATH}", headers=headers("u_narrow"), json=space
+    )
+    assert allowed.status_code == 200
+    assert app.state.lark_wiki_spaces.saved == [
+        [("7000000000000000001", "company", "", "u_narrow")]
+    ]
+
+
+@pytest.mark.needs_db
+def test_declared_spaces_are_kept_in_the_settings_table_and_read_back() -> None:
+    """Through the real `ops.setting` table: two spaces declared, a row written by hand in no
+    readable shape skipped, and each declaration's steward the person who wrote it. Delete this and
+    a declaration the table refuses, or one the reader skips, passes every in-memory test."""
+    from brain.lark_connect_routes import SpaceEntry, StoredWikiSpaces
+    from brain.ops.lark_wiki_spaces import SPACES_NAMESPACE
+    from brain.ops.setting_store import put
+    from brain.tables.config import SettingType
+    from tests.fixtures.scratch_postgres import add_modelled, drop, fresh
+    from tests.unit.test_connector_sync_run import through
+
+    asked = cast(Asking, type("Asked", (), {"caller": _Caller(), "reach": _Reach()})())
+    name = "brain_test_lark_spaces"
+    url = fresh(name)
+    try:
+        add_modelled(url, ("ops.setting",))
+
+        async def work(sessions: Any) -> Any:
+            store = StoredWikiSpaces(sessions)
+            await store.declare(
+                [
+                    SpaceEntry("7000000000000000001", "company", ""),
+                    SpaceEntry("7000000000000000002", "department", "finance"),
+                ],
+                asked,
+            )
+            async with sessions() as session:
+                await put(
+                    session,
+                    f"{SPACES_NAMESPACE}.sbroken",
+                    value_type=SettingType.JSON,
+                    value={"space_id": "7000000000000000009", "reach": "department"},
+                    description="written by hand",
+                    updated_by="u_admin",
+                )
+                await session.commit()
+            return await store.declared()
+
+        declared = through(url, work)
+    finally:
+        drop(name)
+    assert [(one.space_id, one.visibility.level.value, one.owner_id) for one in declared] == [
+        ("7000000000000000001", "company", "u_admin"),
+        ("7000000000000000002", "department", "u_admin"),
+    ]

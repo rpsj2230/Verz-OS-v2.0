@@ -14338,7 +14338,7 @@
    "proof": [
     "M27.14.1"
    ],
-   "decision": null
+   "decision": "needs-rupash 117: a Lark card press approves without the Brain's own second factor, only while the install's Approve from Lark cards setting is on, which is switched on once the company's Lark requires two-step verification"
   },
   {
    "id": "DEF-07",
