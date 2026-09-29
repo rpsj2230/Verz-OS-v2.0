@@ -563,6 +563,19 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # The Limits screen's walk over the windows, which writes nothing.
         "brain.ops.limit_store:WindowClient.scan_iter": Repeat.READS,
         "brain.ops.limit_store:WindowClient.zrange": Repeat.READS,
+        # The capacity ledger's slots and places: a count kept in the cache, where a slot taken
+        # twice under one name is one slot and a slot taken twice under two lapses with its lease.
+        # See `brain.ops.capacity_ledger.A_SLOT_NOBODY_GAVE_BACK_IS_FREED_BY_ITS_LEASE`.
+        "brain.ops.capacity_ledger:LedgerPipeline.watch": Repeat.DERIVED_STATE,
+        "brain.ops.capacity_ledger:LedgerPipeline.multi": Repeat.DERIVED_STATE,
+        "brain.ops.capacity_ledger:LedgerPipeline.execute": Repeat.DERIVED_STATE,
+        "brain.ops.capacity_ledger:LedgerPipeline.zrange": Repeat.READS,
+        "brain.ops.capacity_ledger:LedgerPipeline.zremrangebyscore": Repeat.DERIVED_STATE,
+        "brain.ops.capacity_ledger:LedgerPipeline.zadd": Repeat.DERIVED_STATE,
+        "brain.ops.capacity_ledger:LedgerPipeline.zrem": Repeat.SAME_RESULT_WHEN_REPEATED,
+        "brain.ops.capacity_ledger:LedgerPipeline.expire": Repeat.DERIVED_STATE,
+        "brain.ops.capacity_ledger:LedgerClient.pipeline": Repeat.READS,
+        "brain.ops.capacity_ledger:LedgerClient.zrange": Repeat.READS,
         # The denial alerts kept for each recipient: every write is a put by content, so a pass
         # run twice leaves the store as one pass did. See `brain.ops.denial_alert_store`.
         "brain.ops.denial_alert_store:AlertClient.scan_iter": Repeat.READS,

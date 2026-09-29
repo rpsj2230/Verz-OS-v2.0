@@ -196,6 +196,7 @@ from brain.knowledge.rows import (
     row_scope_for,
 )
 from brain.knowledge.search import KNOWLEDGE_READ
+from brain.ops.capacity_ledger import CapacityLedger, make_ledger
 from brain.ops.classification_store import classified_lane_of
 from brain.ops.denial_store import Denial, Denials, StoredDenials, record_beside
 from brain.ops.limit_store import StoreVerdict, ValkeyWindowStore, make_store
@@ -1191,6 +1192,27 @@ def limit_store_of(state: Any) -> ValkeyWindowStore | None:
         return None
     made = make_store(client)
     state.limit_store = made
+    return made
+
+
+def capacity_ledger_of(state: Any) -> CapacityLedger | None:
+    """The slots and queues this process counts work in, or None on a process with no cache.
+
+    `limit_store_of`'s construction: what a test installed, or the synchronous client
+    `brain.app.lifespan` opens for the answer cache, wrapped once and kept on the state so its
+    health counters span requests. The same Valkey under its own key prefix, so no second
+    connection is opened and no key collides. None where no cache is configured, which every
+    caller answers with what it counted itself: see
+    `brain.ops.capacity_ledger.AN_UNANSWERED_LEDGER_DECIDES_ON_WHAT_THE_CALLER_COUNTED`.
+    """
+    found = getattr(state, "capacity_ledger", None)
+    if isinstance(found, CapacityLedger):
+        return found
+    client = getattr(state, "answer_client", None)
+    if client is None:
+        return None
+    made = make_ledger(client)
+    state.capacity_ledger = made
     return made
 
 
