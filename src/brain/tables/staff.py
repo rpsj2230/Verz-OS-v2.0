@@ -19,9 +19,10 @@ a second source of facts and entitlements are additive: the offboarding that rem
 person's decision on the console, and the leaver's agents are listed for a new owner from this mark
 (M1.8.9). See `brain.identity.staff_roster.A_LEAVER_IS_MARKED_AND_NOTHING_IS_REVOKED`.
 
-**One run row per scheduled attempt that got as far as a chosen source.** `outcome` is closed,
-`detail` is one sentence, and the four arrays carry display names and constant sentences, never an
-address, a credential or a vendor payload. `last_applied` is read from here, which is what makes
+**One run row per scheduled attempt that got as far as a chosen source, and one per trial read.**
+`outcome` is closed, `detail` is one sentence, the four arrays carry display names and constant
+sentences, and `report` counts what was read and says why anybody is in no department (`0155`),
+never an address, a credential or a vendor payload. A trial is `tried` and writes no member. `last_applied` is read from here, which is what makes
 the first run of a source add and never remove.
 
 Task ids: M1.6.1, M1.6.7, M1.6.8, M1.6.12, M1.8.6, M1.8.9
@@ -42,6 +43,7 @@ from sqlalchemy import (
     UniqueConstraint,
     Uuid,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
@@ -76,6 +78,7 @@ RUN_OUTCOMES: Final[tuple[str, ...]] = (
     "misconfigured",
     "no_credential",
     "not_schedulable",
+    "tried",
     "unchanged",
     "unreachable",
 )
@@ -142,6 +145,11 @@ class StaffSyncRunRow(Base):
     renamed: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False)
     #: Why removals were held back, and what a person has to look at, in constant sentences.
     withheld: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False)
+    #: What the run read, in counts, and what to change at the source: `ReadReport.words`, one
+    #: sentence an element, never a name. Empty for a run that read nothing. Added by `0155`.
+    report: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), nullable=False, server_default=text("'{}'")
+    )
 
     __table_args__ = (
         CheckConstraint(f"source ~ '{SOURCE_PATTERN}'", name="source_shape"),
