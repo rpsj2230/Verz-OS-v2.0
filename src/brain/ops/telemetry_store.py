@@ -42,6 +42,13 @@ should send. The join to the question a row belongs to is made in the read modul
 and the person, which is `A_TRACE_THAT_NAMES_TWO_SHAPES_NAMES_NONE`'s pairing, and a question
 and its ledger row share the instant the gate judged the request at, so one window holds both.
 
+**A person's question with no question row is read by window too (M27.7.14).** `unplaced_rows`
+returns a person's requests in `[start, end)` whose trace `ops.question_asked` does not hold,
+which are the questions of people the directory placed in no department. Found on the owner's
+install on 2026-09-29, where every asker had none and the usage screen said nought beside a
+Dashboard counting four. The asker must be a person this install holds, so a schedule and an
+identifier the directory never issued are not counted as somebody asking.
+
 Task ids: M30.5.2, M21.3.4, M27.7.14
 """
 
@@ -49,12 +56,15 @@ from __future__ import annotations
 
 from collections.abc import Collection, Mapping, Sequence
 from datetime import datetime
+from typing import Final
 
 import structlog
-from sqlalchemy import Select, insert, select
+from sqlalchemy import Select, exists, func, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.core.lane import Lane
+from brain.core.principal import PrincipalKind
+from brain.gate.context import TrafficClass
 from brain.gate.finish import Finished
 from brain.ops.question_store import (
     A_MEASUREMENT_THAT_CANNOT_BE_WRITTEN_DOES_NOT_TAKE_THE_ANSWER_WITH_IT,
@@ -66,9 +76,12 @@ from brain.ops.telemetry import (
     QuestionShape,
     RequestStatus,
     RequestTelemetry,
+    UnplacedQuestion,
     request_telemetry_of,
     shapes_by_request,
 )
+from brain.tables.adoption import QuestionAskedRow
+from brain.tables.identity import PrincipalRow
 from brain.tables.telemetry import RequestTelemetryRow
 
 log = structlog.get_logger(__name__)
@@ -81,6 +94,7 @@ __all__ = [
     "record",
     "service_levels_between",
     "shapes_for",
+    "unplaced_between",
 ]
 
 
@@ -200,6 +214,49 @@ async def metered_between(
         for trace_id, principal, model, agent, tokens_in, tokens_out in found.all()
         # Both are tested in the statement; the columns are nullable, so the types are.
         if tokens_in is not None and tokens_out is not None
+    )
+
+
+#: The traffic classes a person makes, which is `brain.ops.limits.is_automated`'s complement.
+PEOPLES_TRAFFIC: Final = (TrafficClass.HUMAN_INTERACTIVE, TrafficClass.HUMAN_ASYNC)
+
+
+def unplaced_rows(start: datetime, end: datetime) -> Select[tuple[str, str, str, datetime]]:
+    """Each question a person asked in `[start, end)` that the question ledger has no row for.
+
+    A person's traffic, from a principal this install holds as a person, whose trace has no
+    `ops.question_asked` row: the question recorder keeps one only with a department, so these
+    are the questions of people the directory placed nowhere. One row per trace and person,
+    dated by its earliest ledger row, which is the question ledger's own dating rule.
+    """
+    earliest = func.min(RequestTelemetryRow.received_at)
+    return (
+        select(
+            RequestTelemetryRow.trace_id,
+            RequestTelemetryRow.principal,
+            func.min(RequestTelemetryRow.traffic_class),
+            earliest,
+        )
+        .join(PrincipalRow, PrincipalRow.id == RequestTelemetryRow.principal)
+        .where(RequestTelemetryRow.received_at >= start, RequestTelemetryRow.received_at < end)
+        .where(RequestTelemetryRow.traffic_class.in_([one.value for one in PEOPLES_TRAFFIC]))
+        .where(PrincipalRow.kind == PrincipalKind.HUMAN.value)
+        .where(~exists().where(QuestionAskedRow.trace_id == RequestTelemetryRow.trace_id))
+        .group_by(RequestTelemetryRow.trace_id, RequestTelemetryRow.principal)
+        .order_by(earliest, RequestTelemetryRow.trace_id)
+    )
+
+
+async def unplaced_between(
+    session: AsyncSession, *, start: datetime, end: datetime
+) -> tuple[UnplacedQuestion, ...]:
+    """The questions people with no department asked in `[start, end)`, for the usage screen."""
+    found = await session.execute(unplaced_rows(start, end))
+    return tuple(
+        UnplacedQuestion(
+            trace_id=trace_id, principal=principal, traffic=TrafficClass(traffic), at=at
+        )
+        for trace_id, principal, traffic, at in found.all()
     )
 
 

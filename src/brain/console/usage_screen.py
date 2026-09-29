@@ -46,6 +46,13 @@ it in its constructor, because a renderer that adds the lines up itself is the o
 day be handed a list it did not draw all of. See
 `THE_PERSON_AND_DEPARTMENT_TABLES_ARE_ONE_POPULATION_GROUPED_TWICE`.
 
+**A question from somebody the directory placed nowhere is still a question.** The question
+ledger keeps a department with every row, so a person with none was counted nowhere, and the
+owner's install showed nought here beside four answered on the Dashboard. The request ledger
+records every person's question, so the route hands in the ones the question ledger has no row
+for, and they are counted under `NO_DEPARTMENT` for a reader whose grant has no clause on the
+place, and for nobody else. See `A_QUESTION_IS_A_REQUEST_A_PERSON_MADE_WHEREVER_THEY_SIT`.
+
 **Whether an axis is offered is `usage_view.may_break_down_by` and nothing written here.** The
 person and department axes are read behind the usage grant for the reasons `usage_view` sets
 out; an axis a reader may not have is absent rather than empty, and so is the total, which has
@@ -94,6 +101,7 @@ from typing import Final
 
 from brain.adoption import Asked, DepartmentAdoption, department_lines, questions_in_reach
 from brain.console.adoption_view import reachable_departments
+from brain.console.spend_view import may_read_unplaced
 from brain.console.usage_view import (
     Axis,
     UsageReport,
@@ -103,8 +111,9 @@ from brain.console.usage_view import (
     may_break_down_by,
 )
 from brain.core.entitlement import EntitlementSet
+from brain.core.principal import PrincipalKind
 from brain.gate.context import traffic_class_for
-from brain.ops.telemetry import REQUEST_FIELDS, UNFILLABLE_TODAY, MeteredRequest
+from brain.ops.telemetry import REQUEST_FIELDS, UNFILLABLE_TODAY, MeteredRequest, UnplacedQuestion
 
 
 class UsageScreenError(Exception):
@@ -152,6 +161,20 @@ TOKENS_ARE_JOINED_TO_THE_QUESTIONS_THIS_READER_IS_ALREADY_SHOWN: Final = (
 
 #: The model key a request is grouped under when its calls named no single model.
 NO_SINGLE_MODEL: Final = "no single model"
+
+#: The department line a question from somebody the directory placed nowhere is counted under.
+NO_DEPARTMENT: Final = "No department"
+
+#: Why a question from somebody with no department is counted, and for whom.
+A_QUESTION_IS_A_REQUEST_A_PERSON_MADE_WHEREVER_THEY_SIT: Final = (
+    "The question ledger keeps a question only with its asker's department, so a person the "
+    "directory placed nowhere, often the administrator who installed the product, asked "
+    "questions the Dashboard and Service levels counted and this screen did not: the owner's "
+    "install showed nought here beside four answered on the Dashboard. So a question is what "
+    "the request ledger records a person asking, wherever they sit, and one with no department "
+    "is counted under its own line for a reader whose grant has no clause on the place. A "
+    "department's administrator is not told of it, because it is in no department of theirs."
+)
 
 #: Why automation is not counted and no count of it is shown.
 AUTOMATION_IS_REMOVED_BEFORE_ANYTHING_IS_COUNTED: Final = (
@@ -256,16 +279,19 @@ class PersonLine:
             raise UsageScreenError(msg)
 
 
-def person_lines(questions: Sequence[Asked]) -> tuple[PersonLine, ...]:
+def person_lines(
+    questions: Sequence[Asked], unplaced: Sequence[UnplacedQuestion] = ()
+) -> tuple[PersonLine, ...]:
     """The questions already chosen, grouped by who asked, most first and then by name.
 
-    Takes questions `brain.adoption.questions_in_reach` has chosen and chooses nothing itself,
-    which is `THE_PERSON_AND_DEPARTMENT_TABLES_ARE_ONE_POPULATION_GROUPED_TWICE`: a filter here
-    would be a second answer to which questions this reader may know about.
+    Takes questions `brain.adoption.questions_in_reach` has chosen, and the unplaced questions
+    `usage_for_reader` has admitted, and chooses nothing itself, which is
+    `THE_PERSON_AND_DEPARTMENT_TABLES_ARE_ONE_POPULATION_GROUPED_TWICE`: a filter here would be
+    a second answer to which questions this reader may know about.
     """
     counted: dict[str, int] = {}
-    for one in questions:
-        counted[one.principal_id] = counted.get(one.principal_id, 0) + 1
+    for person in [one.principal_id for one in questions] + [one.principal for one in unplaced]:
+        counted[person] = counted.get(person, 0) + 1
     return tuple(
         sorted(
             (PersonLine(person=person, questions=asked) for person, asked in counted.items()),
@@ -302,6 +328,35 @@ def token_rows(chosen: Sequence[Asked], metered: Iterable[MeteredRequest]) -> tu
                 )
             )
     return tuple(rows)
+
+
+def unplaced_token_rows(
+    unplaced: Sequence[UnplacedQuestion], metered: Iterable[MeteredRequest]
+) -> tuple[UsageRow, ...]:
+    """`token_rows` for questions with no department, grouped under `NO_DEPARTMENT`.
+
+    Takes only the unplaced questions `usage_for_reader` has already admitted, so a ledger row
+    reaches the token tables through a question this reader's question tables count, which is
+    `TOKENS_ARE_JOINED_TO_THE_QUESTIONS_THIS_READER_IS_ALREADY_SHOWN` kept for this line too.
+    """
+    by_request: dict[tuple[str, str], list[MeteredRequest]] = {}
+    for one in metered:
+        by_request.setdefault((one.trace_id, one.principal), []).append(one)
+    return tuple(
+        UsageRow(
+            principal_id=question.principal,
+            principal_kind=PrincipalKind.HUMAN,
+            traffic=question.traffic,
+            department=NO_DEPARTMENT,
+            model=used.model or NO_SINGLE_MODEL,
+            agent_id=used.agent_version,
+            tokens_in=used.tokens_in,
+            tokens_out=used.tokens_out,
+            at=question.at,
+        )
+        for question in unplaced
+        for used in by_request.get((question.trace_id, question.principal), ())
+    )
 
 
 # ---------------------------------------------------------------------------- the screen
@@ -357,6 +412,7 @@ def usage_for_reader(
     end: datetime,
     now: datetime,
     metered: Iterable[MeteredRequest] = (),
+    unplaced: Sequence[UnplacedQuestion] = (),
 ) -> UsageScreen:
     """The usage screen for one reader over `[start, end)` (M27.7.14, the questions half).
 
@@ -367,29 +423,52 @@ def usage_for_reader(
 
     `metered` is every ledger row in the window whose tokens were counted, and only the rows
     sharing a chosen question's trace and person reach the token tables; see `token_rows`.
+
+    `unplaced` is every question in the window from somebody with no department, which is
+    counted, under `NO_DEPARTMENT`, only for a reader whose grant has no clause on the place.
+    See `A_QUESTION_IS_A_REQUEST_A_PERSON_MADE_WHEREVER_THEY_SIT`.
     """
     reachable = reachable_departments(departments, entitlement, now=now)
     chosen = questions_in_reach(asked, reachable, start=start, end=end)
+    placeless = (
+        tuple(one for one in unplaced if start <= one.at < end)
+        if may_read_unplaced(entitlement, now=now)
+        else ()
+    )
     by_department = (
-        department_lines(chosen, reachable)
+        department_lines(chosen, reachable) + unplaced_line(placeless)
         if may_break_down_by(Axis.DEPARTMENT, entitlement, now=now)
         else None
     )
     by_person = (
-        person_lines(chosen) if may_break_down_by(Axis.PERSON, entitlement, now=now) else None
+        person_lines(chosen, placeless)
+        if may_break_down_by(Axis.PERSON, entitlement, now=now)
+        else None
     )
     offered = by_department is not None or by_person is not None
+    metered_rows = tuple(metered)
+    rows = token_rows(chosen, metered_rows) + unplaced_token_rows(placeless, metered_rows)
     return UsageScreen(
         start=start,
         end=end,
         departments=by_department,
         people=by_person,
-        questions=len(chosen) if offered else None,
+        questions=len(chosen) + len(placeless) if offered else None,
         not_measured=not_measured(entitlement, now=now),
-        tokens=breakdowns(
-            admit(token_rows(chosen, metered), entitlement, now=now), entitlement, now=now
-        ),
+        tokens=breakdowns(admit(rows, entitlement, now=now), entitlement, now=now),
     )
+
+
+def unplaced_line(placeless: Sequence[UnplacedQuestion]) -> tuple[DepartmentAdoption, ...]:
+    """The `NO_DEPARTMENT` line over admitted unplaced questions, or nothing when there are none.
+
+    No line at all rather than a line of nought, because a department line for a place nobody
+    asked from would be a row the directory does not hold.
+    """
+    if not placeless:
+        return ()
+    people = {one.principal for one in placeless}
+    return (DepartmentAdoption(NO_DEPARTMENT, len(placeless), len(people)),)
 
 
 # ------------------------------------------------------------------------------ the gaps

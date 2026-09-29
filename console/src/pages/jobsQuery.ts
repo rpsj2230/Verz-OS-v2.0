@@ -124,11 +124,20 @@ export function actionQuestion(action: JobAction, row: JobRow): string {
   return action === "pause" ? `Pause ${name}?` : action === "resume" ? `Resume ${name}?` : `Run ${name} now?`;
 }
 
+/**
+ * The job's guarantee as the end of "nothing makes sure ...": its own clause, which starts with
+ * "that", with no full stop of its own. Until 2026-09-29 the Pause confirmation read "this is not
+ * kept true: that the gate still refuses ...", which the owner could not parse.
+ */
+export function pausedClause(keepsTrue: string): string {
+  return keepsTrue.trim().replace(/[.\s]+$/, "");
+}
+
 /** What happens, to what, including what stops holding while a job is paused. */
 export function actionConsequence(action: JobAction, row: JobRow): string {
   const name = jobName(row.control);
   if (action === "pause") {
-    return `The worker stops starting ${name} from its next tick, until it is resumed. While it is paused, this is not kept true: ${row.keeps_true}`;
+    return `The worker stops starting ${name} from its next tick, until it is resumed. While it is paused, nothing makes sure ${pausedClause(row.keeps_true)}.`;
   }
   if (action === "resume") {
     return `The worker starts ${name} again the next time it is owed a run.`;
@@ -159,6 +168,15 @@ export function personWords(id: string | null | undefined, people: Readonly<Reco
     return SOMEBODY;
   }
   return people?.[id] ?? SOMEBODY;
+}
+
+/**
+ * Whether a run of this job has started and not finished, which is the only time stopping one is
+ * an act anybody could want. Found on the owner's install on 2026-09-29: a job that had never run
+ * offered "Stop the run".
+ */
+export function runIsGoing(row: JobRow): boolean {
+  return row.last_started_at !== null && row.last_started_at !== undefined && (row.last_outcome === null || row.last_outcome === undefined);
 }
 
 /** The last run, in words: its outcome and its report or its kind of failure. */

@@ -27,6 +27,12 @@
  * refusal is shown in the API's own words, which name the author's own steps and never anything
  * the author was not shown.
  *
+ * **Every control says what it does in words, and is a kit button.** The kinds, the ways out and a
+ * branch's tests are the server's vocabulary (`tool_call`, `holds`, `prefix`), which is right on the
+ * wire and wrong on a button: the words below name each for a person, and the values sent are
+ * still the vocabulary's. The buttons were the stylesheet's `.button` and are the kit's `Button`,
+ * the control every other part of the agent builder is drawn with (2026-09-29).
+ *
  * **No route takes a drawing yet.** Nothing under `/api/v1` accepts one or answers a SKILL.md, so
  * this is mounted on no page, and what is checked is this console's half of the exchange: that
  * drawing on it produces the drawing the server's own test reads.
@@ -36,6 +42,7 @@
 
 import { useState } from "react";
 import type { ApiFailure } from "../api/errors";
+import { Button } from "./ui/button";
 import { Chip } from "../ui/Chip";
 import { GraphCanvas } from "./GraphCanvas";
 import {
@@ -60,8 +67,41 @@ import {
   type Drawing,
   type DrawingPayload,
   type Step,
+  type StepKind,
+  type Way,
 } from "./procedure";
 import { FailureNotice } from "../ui/FailureNotice";
+
+/** What each kind of step is called, and the words on the button that adds one. */
+export const KIND_WORDS: Readonly<Record<StepKind, string>> = Object.freeze({
+  start: "Start",
+  tool_call: "Tool step",
+  branch: "Branch",
+  ask: "Question",
+  finish: "Finish",
+});
+
+export const ADD_WORDS: Readonly<Record<StepKind, string>> = Object.freeze({
+  start: "Add a start",
+  tool_call: "Add a tool step",
+  branch: "Add a branch",
+  ask: "Add a question",
+  finish: "Add a finish",
+});
+
+/** What each way out of a step is called, beside the choice of where it goes. */
+export const WAY_WORDS: Readonly<Record<Way, string>> = Object.freeze({
+  next: "Then go to",
+  holds: "If every test holds, go to",
+  otherwise: "Otherwise, go to",
+});
+
+/** What each test a branch may make is called: the words the builder's form uses for a condition. */
+export const OP_WORDS: Readonly<Record<ClauseOp, string>> = Object.freeze({
+  eq: "is",
+  in: "is one of",
+  prefix: "starts with",
+});
 
 interface ProcedureCanvasProps {
   /** What this procedure is, for a screen reader and for anybody reading it. */
@@ -116,7 +156,7 @@ function ClauseControls({ step, drawing, change }: Change & { readonly step: Ste
             >
               {CLAUSE_OPS.map((op) => (
                 <option key={op} value={op}>
-                  {op}
+                  {OP_WORDS[op]}
                 </option>
               ))}
             </select>
@@ -136,23 +176,25 @@ function ClauseControls({ step, drawing, change }: Change & { readonly step: Ste
                 onChange={(event) => edit(index, { value: event.target.value })}
               />
             )}
-            <button
+            <Button
               type="button"
-              className="button"
+              variant="outline"
+              size="sm"
               onClick={() => replace(step.clauses.filter((_, at) => at !== index))}
             >
               Remove this test
-            </button>
+            </Button>
           </div>
         );
       })}
-      <button
+      <Button
         type="button"
-        className="button"
+        variant="outline"
+        size="sm"
         onClick={() => replace([...step.clauses, { field: "", op: "eq", value: "" }])}
       >
         Add a test
-      </button>
+      </Button>
     </div>
   );
 }
@@ -169,7 +211,7 @@ function StepControls({
   return (
     <fieldset className="procedure-step__fields">
       <legend className="procedure-step__heading">
-        <code>{step.id}</code> <Chip label={step.kind} />
+        <code>{step.id}</code> <Chip label={KIND_WORDS[step.kind]} />
       </legend>
 
       {step.kind === "tool_call" ? (
@@ -211,7 +253,7 @@ function StepControls({
 
       {WAYS_OUT[step.kind].map((way) => (
         <div key={way} className="procedure-step__field">
-          <label htmlFor={id(way)}>{way}</label>
+          <label htmlFor={id(way)}>{WAY_WORDS[way]}</label>
           <select
             id={id(way)}
             className="form-control"
@@ -235,13 +277,14 @@ function StepControls({
       ))}
 
       {step.id === START_ID ? null : (
-        <button
+        <Button
           type="button"
-          className="button"
+          variant="outline"
+          size="sm"
           onClick={() => change(removeStep(drawing, step.id))}
         >
           Remove {step.id}
-        </button>
+        </Button>
       )}
     </fieldset>
   );
@@ -271,14 +314,15 @@ export function ProcedureCanvas({
       {canAddStep(drawing) ? (
         <div className="procedure__palette" role="group" aria-label="Add a step">
           {ADDABLE_KINDS.map((kind) => (
-            <button
+            <Button
               key={kind}
               type="button"
-              className="button"
+              variant="outline"
+              size="sm"
               onClick={() => change(addStep(drawing, kind))}
             >
-              Add {kind}
-            </button>
+              {ADD_WORDS[kind]}
+            </Button>
           ))}
         </div>
       ) : (

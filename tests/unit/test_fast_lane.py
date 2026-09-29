@@ -545,6 +545,186 @@ def test_two_rules_matching_one_question_answer_neither() -> None:
     assert match_rule("hours left on Acme", [other], served=SERVED) is not None
 
 
+# ------------------------------------------ one question asked of several places (M7.5.2)
+
+#: A second kind of record asked about in exactly the words `HOURS` is, as every uploaded price
+#: list with a sell price column is. A different entity rather than a different source, so that a
+#: caller can hold one and not the other and the two places can be told apart by reach.
+ACCOUNTS = TableClassification(
+    entity="account",
+    rules=(
+        ColumnRule(
+            column="name",
+            required_capability=Capability(value="read:account.name"),
+            classification=Classification.INTERNAL,
+        ),
+        ColumnRule(
+            column="hours_remaining",
+            required_capability=Capability(value="read:account.hours_remaining"),
+            classification=Classification.CONFIDENTIAL,
+        ),
+    ),
+)
+ACCOUNT_TOOL = RowTool(
+    source="laravel", classification=ACCOUNTS, description="Read an account record."
+)
+SEES_ACCOUNT_HOURS = ("read:account", "read:account.name", "read:account.hours_remaining")
+ACCOUNT_HOURS = FastPathRule(
+    rule_id="account_hours_remaining",
+    template="hours left on {client}",
+    slot="client",
+    source="laravel",
+    entity="account",
+    match_field="name",
+    answer_field="hours_remaining",
+)
+ACME_ACCOUNT = {"entity": "account", "id": "a_12", "name": "Acme", "hours_remaining": "70"}
+
+
+def two_places(
+    clients: RecordingSource, accounts: RecordingSource
+) -> dict[tuple[str, str], fast_lane.RowReader]:
+    """A lane reading clients and accounts, each from its own source."""
+    return {
+        ("laravel", "client"): CLIENT_TOOL.reader(clients),
+        ("laravel", "account"): ACCOUNT_TOOL.reader(accounts),
+    }
+
+
+def test_one_question_asked_of_two_places_is_answered_by_the_one_holding_the_name() -> None:
+    """**The defect found on an install on 2026-09-29.** Two uploaded price lists with a sell price
+    column are asked about in the same words, the pair was refused as two rules matching, and
+    neither list was answered for anybody. The same words for two places are one question, so each
+    place is read at the caller's reach and the one holding the name answers. See
+    `ONE_QUESTION_ASKED_OF_SEVERAL_PLACES_IS_READ_IN_EACH`.
+
+    Delete this and uploading a second price list silences the first."""
+    clients, accounts = RecordingSource(ACME), RecordingSource()
+
+    answer = respond(
+        "hours left on Acme",
+        rules=[HOURS, ACCOUNT_HOURS],
+        readers=two_places(clients, accounts),
+        entitlement=ents(*SEES_CLIENT_HOURS, *SEES_ACCOUNT_HOURS),
+    )
+    other = respond(
+        "hours left on Acme",
+        rules=[HOURS, ACCOUNT_HOURS],
+        readers=two_places(RecordingSource(), RecordingSource(ACME_ACCOUNT)),
+        entitlement=ents(*SEES_CLIENT_HOURS, *SEES_ACCOUNT_HOURS),
+    )
+
+    assert answer is not None and answer.entity == "client"
+    assert answer.rule_id == HOURS.rule_id
+    assert [one.model_dump()["hours_remaining"] for one in answer.result.records] == ["12"]
+    assert len(clients.queries) == 1 and len(accounts.queries) == 1
+    assert other is not None and other.entity == "account"
+    assert [one.model_dump()["hours_remaining"] for one in other.result.records] == ["70"]
+
+
+def test_a_name_two_places_both_hold_is_answered_by_neither() -> None:
+    """Two records under one name across two places is the ambiguous name it would be inside one:
+    see `TWO_RECORDS_MATCHING_ONE_NAME_IS_A_FALL_THROUGH`. Delete this and the place whose rule
+    was loaded first answers for a name the other place holds too."""
+    answer = respond(
+        "hours left on Acme",
+        rules=[HOURS, ACCOUNT_HOURS],
+        readers=two_places(RecordingSource(ACME), RecordingSource(ACME_ACCOUNT)),
+        entitlement=ents(*SEES_CLIENT_HOURS, *SEES_ACCOUNT_HOURS),
+    )
+
+    assert answer is None
+
+
+def test_a_place_the_caller_may_not_read_answers_as_a_place_that_does_not_exist() -> None:
+    """**DENIED and ABSENT across places.** A caller holding clients and not accounts asks about a
+    name both hold: the account source is never asked, and the answer is the one a lane with no
+    accounts at all gives them, so nothing they receive says the other place holds the name.
+
+    Delete this and the ambiguity can be judged over records the caller may not see, which
+    answers them differently depending on what an unreadable place holds."""
+    accounts = RecordingSource(ACME_ACCOUNT)
+    reach = ents(*SEES_CLIENT_HOURS)
+
+    both = respond(
+        "hours left on Acme",
+        rules=[HOURS, ACCOUNT_HOURS],
+        readers=two_places(RecordingSource(ACME), accounts),
+        entitlement=reach,
+    )
+    alone = respond(
+        "hours left on Acme",
+        rules=[HOURS],
+        readers=readers_for(RecordingSource(ACME)),
+        entitlement=reach,
+    )
+
+    assert accounts.queries == []
+    assert both is not None and alone is not None
+    assert (both.rule_id, both.entity, both.field, both.result.records) == (
+        alone.rule_id,
+        alone.entity,
+        alone.field,
+        alone.result.records,
+    )
+
+
+def test_a_name_no_place_holds_is_answered_as_absent_from_the_first_place() -> None:
+    """Nothing held anywhere is an answer with no records, the same object a single place gives
+    for a name it does not hold, so the lane abstains in the words it uses for an absence. Delete
+    this and a question asked of two places reads as a fall-through where one place reads as an
+    absence, which is a fact about how many places were asked."""
+    answer = respond(
+        "hours left on Nobody",
+        rules=[HOURS, ACCOUNT_HOURS],
+        readers=two_places(RecordingSource(), RecordingSource()),
+        entitlement=ents(*SEES_CLIENT_HOURS, *SEES_ACCOUNT_HOURS),
+    )
+
+    assert answer is not None
+    assert answer.rule_id == HOURS.rule_id and answer.result.records == ()
+
+
+def test_two_rules_in_different_words_or_for_one_place_are_still_answered_by_neither() -> None:
+    """What stays a fall-through. Two rules for one place in the same words are an operator's
+    duplicate, and two rules in different words matching one question read a different name out
+    of it each; neither is one question asked of several places, and neither is read at all.
+    Delete this and the reading above swallows `TWO_RULES_MATCHING_ONE_QUESTION_IS_A_FALL_THROUGH`
+    whole."""
+    alias = HOURS.model_copy(update={"rule_id": "client_hours_alias"})
+    other_words = FastPathRule(
+        rule_id="account_left_on_acme",
+        template="{account} left on Acme",
+        slot="account",
+        source="laravel",
+        entity="account",
+        match_field="name",
+        answer_field="hours_remaining",
+    )
+    clients, accounts = RecordingSource(ACME), RecordingSource(ACME_ACCOUNT)
+    reach = ents(*SEES_CLIENT_HOURS, *SEES_ACCOUNT_HOURS)
+
+    duplicate = respond(
+        "hours left on Acme",
+        rules=[HOURS, alias],
+        readers=two_places(clients, accounts),
+        entitlement=reach,
+    )
+    differently = respond(
+        "hours left on Acme",
+        rules=[HOURS, other_words],
+        readers=two_places(clients, accounts),
+        entitlement=reach,
+    )
+
+    assert duplicate is None and differently is None
+    assert clients.queries == [] and accounts.queries == []
+    # And each rule on its own still matches, so these are refusals of the pairs.
+    served = entities_served(two_places(clients, accounts))
+    assert match_rule("hours left on Acme", [other_words], served=served) is not None
+    assert match_rule("hours left on Acme", [alias], served=served) is not None
+
+
 def test_a_rule_for_an_entity_the_row_plane_does_not_serve_is_never_considered() -> None:
     """The filter is about wiring and not about a person: it is the set of source and entity
     pairs a reader exists for, derived from the readers themselves so the two cannot disagree.

@@ -384,6 +384,44 @@ def test_an_approval_the_database_refuses_fails_the_promotion_check_as_a_fault(
 
 
 @pytest.mark.needs_db
+def test_a_moved_document_s_refusal_answered_as_a_fault_fails_the_promotion_check(
+    head: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """**The route as it was until 2026-09-29.** With the store no longer recognising `0120`'s
+    refusal of a moved document, approving the card whose document gained a newer version is a
+    fault on the route, and the check says so. Delete this and the check can pass an install whose
+    Approvals screen answers such a card with a 500, which is what the owner's did."""
+    monkeypatch.setattr("brain.gate.suspension_store.refused_because_it_moved", lambda exc: False)
+    name = "a_company_wide_request_waits_until_another_approver_approves_it"
+
+    assert run_checks(head, (by_name(name),))[name] == (
+        FAILED,
+        lifecycle.THE_DATABASE_REFUSED_AN_APPROVAL_THE_SCREEN_OFFERED,
+    )
+
+
+@pytest.mark.needs_db
+def test_a_moved_document_s_card_left_open_fails_the_promotion_check(
+    head: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With the refused approval answered and the card never closed, it stays waiting for the next
+    approver to fail on, and the check says so. Delete this and the check passes a screen that
+    tells one approver the request no longer applies and offers it to everybody else again."""
+
+    async def left_open(*args: Any, **kwargs: Any) -> Any:
+        return None
+
+    monkeypatch.setattr("brain.approval_routes.close_as_no_longer_applying", left_open)
+    name = "a_company_wide_request_waits_until_another_approver_approves_it"
+
+    assert run_checks(head, (by_name(name),))[name] == (
+        FAILED,
+        "approving a card whose document had a newer version since it was asked for was not "
+        "answered that the request no longer applies and closed as rejected",
+    )
+
+
+@pytest.mark.needs_db
 def test_a_nag_routed_away_from_the_steward_fails_the_re_verification_check(
     head: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -17,7 +17,7 @@
  * satisfy the first test for ever. So the second one reads the records page's own graph and
  * insists the libraries really are reached from there.
  *
- * Task ids: M32.5.1.2
+ * Task ids: M32.5.1.2, M27.15.74
  */
 
 import { readdirSync, readFileSync } from "node:fs";

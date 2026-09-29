@@ -329,7 +329,7 @@ export function ConnectorsPage() {
           <>
             {told === null || told === "" ? null : (
               <div role="status">
-                <Note kind="works">{told}</Note>
+                <Note kind="done">{told}</Note>
               </div>
             )}
             {page === null || page.vault_told === "" ? null : <Note kind="not-yet">{page.vault_told}</Note>}

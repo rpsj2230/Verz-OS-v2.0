@@ -241,12 +241,14 @@ SHAPED: Final[frozenset[LiteralKind]] = frozenset(
 
 # ------------------------------------------------------------------------ the shapes
 class BuilderFormSection(BaseModel):
-    """One section of the form, as `brain.builder.form.section_schema` cut it."""
+    """One section of the form: its name, its heading, its schema and its words (a uiSchema)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
 
     section: str
+    title: str
     form: dict[str, Any] = Field(alias="schema")
+    ui: dict[str, Any]
 
 
 class BuilderFormView(BaseModel):

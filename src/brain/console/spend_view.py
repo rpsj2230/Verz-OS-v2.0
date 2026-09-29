@@ -269,6 +269,20 @@ def may_read_spend(
     return scope.matches({PLACE_FIELD: department})
 
 
+def may_read_unplaced(entitlement: EntitlementSet, *, now: datetime | None = None) -> bool:
+    """Whether this reader's usage grant admits a row that sits in no department.
+
+    `may_read_spend`'s pair asked about a row with no place: `Clause.matches` refuses a missing
+    field, so only a grant with no clause on the place admits one. A department's administrator
+    is therefore never told of a question from somebody the directory placed nowhere, and a
+    reader of the whole company is, which is the direction to fail in.
+    """
+    scope = entitlement.scope_for(USAGE_AUTHORITY, now)
+    if scope is None:
+        return False
+    return scope.matches({PLACE_FIELD: None})
+
+
 def visible(
     actuals: Sequence[Actual], entitlement: EntitlementSet, *, now: datetime | None = None
 ) -> tuple[Actual, ...]:

@@ -24,11 +24,11 @@
  * Task ids: M20.1.2
  */
 
-import { fireEvent, render } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import type { RJSFSchema } from "@rjsf/utils";
 import ts from "typescript";
 import { describe, expect, test } from "vitest";
-import { ManifestForm } from "../src/components/ManifestForm";
+import { ManifestForm, saveWords } from "../src/components/ManifestForm";
 import {
   MANIFEST_FORM_SCHEMA,
   UnreadableManifestForm,
@@ -46,7 +46,7 @@ import {
 import { readConsoleFile } from "./support/repo";
 import { parseConsoleSource } from "./support/typescript";
 
-function theDocument(): { schema: string; sections: { section: string; schema: unknown }[] } {
+function theDocument(): { schema: string; sections: { section: string; title: string; schema: unknown; ui: unknown }[] } {
   return JSON.parse(readConsoleFile("tests/fixtures/manifest-form.json"));
 }
 
@@ -128,7 +128,7 @@ describe("a form generated from the manifest schema", () => {
     const container = render(<ManifestForm caption="An agent" sections={all} />).container;
 
     for (const one of all) {
-      const region = container.querySelector(`section[aria-label="${one.section}"]`);
+      const region = container.querySelector(`section[data-section="${one.section}"]`);
       expect(region, one.section).toBeInstanceOf(HTMLElement);
       expect(controlIds(region as HTMLElement), one.section).toEqual(declaredControls(one));
     }
@@ -144,7 +144,7 @@ describe("a form generated from the manifest schema", () => {
     const fields = holder.properties as Record<string, RJSFSchema>;
     fields["nickname"] = { type: "string", title: "Nickname" };
     delete fields["summary"];
-    const reshaped: ManifestSection = { section: "identity", schema: changed };
+    const reshaped: ManifestSection = { ...identity, schema: changed };
 
     const container = render(<ManifestForm caption="An agent" sections={[reshaped]} />).container;
     const ids = controlIds(container);
@@ -161,10 +161,14 @@ describe("a form generated from the manifest schema", () => {
     // the limit is submitted.
     const bound = backendDisplayNameChars();
     const submitted: unknown[] = [];
+    // The address, version and publisher are carried rather than drawn, because the server sets
+    // them on publish, so they arrive with the draft as they do on the page.
+    const draft = { identity: { template_id: "support_triage", version: 1, published_by: "author" } };
     const container = render(
       <ManifestForm
         caption="An agent"
         sections={[section("identity")]}
+        draft={draft}
         onSubmit={(_, data) => submitted.push(data)}
       />,
     ).container;
@@ -175,9 +179,6 @@ describe("a form generated from the manifest schema", () => {
       fireEvent.submit(container.querySelector("form") as HTMLFormElement);
     };
 
-    fill("identity_identity_template_id", "support_triage");
-    fill("identity_identity_version", "1");
-    fill("identity_identity_published_by", "author");
     fill("identity_identity_display_name", "x".repeat(bound + 1));
     submit();
     expect(submitted).toHaveLength(0);
@@ -204,6 +205,85 @@ describe("a form generated from the manifest schema", () => {
         file,
       ).toEqual([]);
     }
+  });
+});
+
+/** Every list the builder's form draws with nothing in it: its Add words, from the document. */
+function listsDrawnEmpty(): string[] {
+  const found: string[] = [];
+  const walk = (ui: unknown): void => {
+    if (typeof ui !== "object" || ui === null || Array.isArray(ui)) {
+      return;
+    }
+    for (const [key, inner] of Object.entries(ui)) {
+      if (key === "ui:options" && typeof inner === "object" && inner !== null && "addLabel" in inner) {
+        found.push(String((inner as { addLabel: unknown }).addLabel));
+      } else if (key !== "items" && key !== "anyOf") {
+        // An entry's own lists appear only once an entry is added, so they are not walked.
+        walk(inner);
+      }
+    }
+  };
+  for (const one of sections()) {
+    walk(one.ui);
+  }
+  return found;
+}
+
+describe("the words on the builder's form", () => {
+  test("every heading, label and button is the document's plain words and none is a name from the code", () => {
+    // What breaks if this is deleted: the Write step as the owner found it on 2026-09-29, headed
+    // "ManifestIdentity*" over "Display Name", with "SideEffect" and "Submit" beside them. Every
+    // section is drawn, with an entry in every list, and every heading, legend, label and button on
+    // it is read: none is a model's class name, none is written like an identifier, and each
+    // section's heading is the one the document sends.
+    const all = sections();
+    const definitions = new Set(Object.keys((all[0]?.schema.$defs ?? {}) as object));
+    expect(definitions.has("ManifestIdentity")).toBe(true);
+    const container = render(<ManifestForm caption="An agent" sections={all} />).container;
+    for (const add of [...container.querySelectorAll<HTMLButtonElement>("button")].filter((one) => one.textContent?.startsWith("Add"))) {
+      fireEvent.click(add);
+    }
+
+    const words = [...container.querySelectorAll("h3, legend, label, button, option")].map((one) => (one.textContent ?? "").trim());
+    expect(words.length).toBeGreaterThan(40);
+    for (const one of words) {
+      expect(one, one).not.toBe("");
+      expect(one.includes("_"), one).toBe(false);
+      expect(/[a-z][A-Z]/.test(one), one).toBe(false);
+      expect([...definitions].some((name) => one.includes(name)), one).toBe(false);
+    }
+    expect(words).not.toContain("Submit");
+    expect([...container.querySelectorAll("h3")].map((one) => one.textContent)).toEqual(all.map((one) => one.title));
+    expect(container.textContent).toContain("Display name");
+  });
+
+  test("every list has an Add button named for it, and each adds an entry to its own list", () => {
+    // What breaks if this is deleted: the nine invisible buttons the owner could not press, or nine
+    // buttons that each say Add and cannot be told apart. The names are read from the document the
+    // form is served, each is found by its accessible name, and pressing it adds an entry to the
+    // list it sits under and to no other.
+    const names = listsDrawnEmpty();
+    expect(names).toHaveLength(9);
+    expect(new Set(names).size).toBe(names.length);
+    render(<ManifestForm caption="An agent" sections={sections()} />);
+
+    for (const name of names) {
+      const button = screen.getByRole("button", { name });
+      const list = button.closest("[data-slot='form-list']") as HTMLElement;
+      const before = list.querySelectorAll(":scope > div > [data-slot='form-list-item']").length;
+      fireEvent.click(button);
+      expect(list.querySelectorAll(":scope > div > [data-slot='form-list-item']").length, name).toBe(before + 1);
+    }
+  });
+
+  test("each section is saved by a button that names it", () => {
+    // What breaks if this is deleted: seven buttons called Save on one page, or the library's Submit.
+    render(<ManifestForm caption="An agent" sections={sections()} />);
+    for (const one of sections()) {
+      expect(screen.getByRole("button", { name: saveWords(one.title) })).toBeDefined();
+    }
+    expect(saveWords("Tools and permissions")).toBe("Save tools and permissions");
   });
 });
 
@@ -270,8 +350,9 @@ describe("reading the document", () => {
       { ...good, schema: "brain.builder.form.v0" },
       { ...good, sections: [] },
       { ...good, sections: [...good.sections, first] },
-      { ...good, sections: [{ section: "identity", schema: { type: "string" } }] },
-      { ...good, sections: [{ section: "", schema: first?.schema }] },
+      { ...good, sections: [{ section: "identity", title: "A heading", schema: { type: "string" } }] },
+      { ...good, sections: [{ section: "", title: "A heading", schema: first?.schema }] },
+      { ...good, sections: [{ ...first, title: "" }] },
     ];
     for (const body of bodies) {
       expect(() => readManifestForm(body)).toThrow(UnreadableManifestForm);
