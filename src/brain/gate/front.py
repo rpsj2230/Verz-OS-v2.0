@@ -132,6 +132,8 @@ class FrontHalf:
             selection_stage=self.selection.stage,
             selected_agent=self.selection.agent_id,
             lane_basis=self.lane.basis,
+            routed_tier=None if self.tier is None else self.tier.tier,
+            tier_basis=None if self.tier is None else self.tier.basis,
         )
 
 
