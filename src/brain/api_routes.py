@@ -123,7 +123,12 @@ the lane is handed; `sources_at` itself stays the connector sources the cache an
 screens key on. See
 `THE_SCOPE_STATEMENT_NAMES_EVERY_PLANE_A_READER_REACHES`.
 
+**A question may be narrowed to kinds of knowledge (M7.6.1).** `Question.kinds` reaches the passage
+search through `model_lane_for`, and a narrowed question is neither looked up in nor kept by the
+answer cache, whose key has no kind. See `A_NARROWED_QUESTION_IS_NOT_THE_UNNARROWED_ONE`.
+
 Task ids: M31.1.4.1, M31.1.4.3, M31.1.4.4, M32.5.2.1, M1.1.7, M1.8.2, M23.1.1, M23.1.5, M8.2.2
+Task ids: M7.6.1
 """
 
 from __future__ import annotations
@@ -141,7 +146,7 @@ import structlog
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response, StreamingResponse
-from pydantic import BaseModel, ConfigDict, JsonValue, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, StringConstraints
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from brain.agents.model import AGENT_ID_CHARS, AgentRecord
@@ -188,6 +193,7 @@ from brain.identity.oidc import TokenRefusal, TokenRefusedError, VerifiedClaims
 from brain.identity.roles import NoStandingEntitlement
 from brain.identity.sessions import reach_for
 from brain.knowledge.document_tools import SEARCH_DOCUMENTS, KnowledgePassage
+from brain.knowledge.kinds import KnowledgeKind
 from brain.knowledge.rows import (
     DEFAULT_ROW_LIMIT,
     MAX_ROW_LIMIT,
@@ -833,6 +839,11 @@ class Question(BaseModel):
     #: The agent the person picked, by id, or None. Judged by `brain.gate.select.select_agent`
     #: against the agents this person may use, like any name; see `brain.gate.addressing`.
     agent: Annotated[str, StringConstraints(max_length=AGENT_ID_CHARS)] | None = None
+    #: The kinds of knowledge the person narrowed the question to, or none for every kind
+    #: (M7.6.1). Narrows what the passage search looks at and never whose reach it runs at. A
+    #: narrowed question is not looked up in or kept by the answer cache, whose key has no kind:
+    #: see `A_NARROWED_QUESTION_IS_NOT_THE_UNNARROWED_ONE`.
+    kinds: tuple[KnowledgeKind, ...] = Field(default=(), max_length=len(KnowledgeKind))
 
 
 def row_readers(registry: ToolRegistry) -> dict[tuple[str, str], RowReader]:
@@ -1032,17 +1043,34 @@ DEFAULT_AGENT: Final = "brain"
 
 
 def model_lane_for(
-    state: Any, agent: AgentRecord | None, registry: ToolRegistry
+    state: Any,
+    agent: AgentRecord | None,
+    registry: ToolRegistry,
+    kinds: tuple[KnowledgeKind, ...] = (),
 ) -> ModelLane | None:
-    """The model step, carrying the selected agent when a stored one was chosen (M3.9.8).
+    """The model step, carrying the selected agent when a stored one was chosen (M3.9.8), and
+    searching only the kinds of knowledge the person narrowed the question to (M7.6.1).
 
     The agent's tier and pinned model reach the call through `AgentRun`; its skill pins are not
     read on this route yet, so it runs with none. See `brain.gate.roster`.
     """
     lane = model_lane_of(state)
-    if lane is None or agent is None:
+    if lane is None:
+        return None
+    if kinds and isinstance(lane.search, DocumentSearchTool):
+        lane = replace(lane, search=replace(lane.search, kinds=kinds))
+    if agent is None:
         return lane
     return replace(lane, agent=AgentRun(record=agent, pins=(), library=(), registry=registry))
+
+
+#: Why a question narrowed to kinds of knowledge skips the answer cache both ways.
+A_NARROWED_QUESTION_IS_NOT_THE_UNNARROWED_ONE: Final = (
+    "The answer cache keys a question by its words, the reach and the policies, and not by the "
+    "kinds of knowledge it was narrowed to. A question narrowed to FAQs served from the cache "
+    "entry of the same words asked of everything would be answered from documents the person "
+    "excluded, and the reverse. So a narrowed question is neither looked up nor kept."
+)
 
 
 def default_agents(registry: ToolRegistry) -> dict[str, AgentSetup]:
@@ -1344,7 +1372,7 @@ async def answered_for(
     # misses, as it does on a process with none, so the request row reads as any other's.
     caching = (
         None
-        if referral is not None
+        if referral is not None or ask.kinds
         else caching_of(request.app.state, policies, sources_at(registry, asking.reach, asking.now))
     )
 
@@ -1406,7 +1434,7 @@ async def answered_for(
             cached=front.cached,
             # Only a request the front half routed to a tier may reach a model, so no model is
             # called before ROUTE and PROJECT: a fast-lane question answers or abstains.
-            model=model_lane_for(request.app.state, agent, registry)
+            model=model_lane_for(request.app.state, agent, registry, ask.kinds)
             if front.calls_a_model
             else None,
             front=front.record(),

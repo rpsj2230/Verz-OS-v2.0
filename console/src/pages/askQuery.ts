@@ -31,6 +31,10 @@
  * frames and a status, and there is no spend figure, no duration and no token count anywhere
  * in them. A screen that showed one would be showing a number this console made up.
  *
+ * **A person may narrow a question to one kind of knowledge** (M7.6.1), from the closed list
+ * `KIND_WORDS` holds; the route searches only that kind's passages and the answer cache neither
+ * serves nor keeps a narrowed question, because its key has no kind.
+ *
  * **The agent a person picks travels beside the question and decides nothing here.** `askBody`
  * adds the id when one was chosen, and `brain.gate.select.select_agent` decides whether this
  * person may use it; the picker lists the roster `GET /api/v1/agents` sent (M3.9.8).
@@ -40,11 +44,12 @@
  * and `freshnessWords` puts the API's freshness beside the date. See
  * `A_CITATION_IS_DRAWN_AS_A_LINK_TO_WHAT_IT_NAMES`.
  *
- * Task ids: M42.6.3, M3.9.8, M8.1.1, M8.1.2, M8.1.3, M7.4.7
+ * Task ids: M42.6.3, M3.9.8, M8.1.1, M8.1.2, M8.1.3, M7.4.7, M7.6.1
  */
 
 import type { AnswerEvent } from "../api/events";
 import { citedDocumentAddress } from "./citedDocumentQuery";
+import { KIND_WORDS } from "./knowledgeQuery";
 
 /** Written down because a question is the one value on this screen that must not travel. */
 export const A_QUESTION_TYPED_HERE_IS_A_QUESTION_TYPED_ONCE =
@@ -94,7 +99,8 @@ export const MAX_QUESTION_CHARS = 4000;
 export function askBody(
   question: string,
   agent = "",
-): { readonly question: string; readonly agent?: string } | null {
+  kind = "",
+): { readonly question: string; readonly agent?: string; readonly kinds?: readonly string[] } | null {
   const asked = question.trim();
   if (asked === "" || asked.length > MAX_QUESTION_CHARS) {
     return null;
@@ -102,7 +108,10 @@ export function askBody(
   // The picker's id, sent only when somebody chose one. The route judges it like any name, so
   // an agent the person may not use answers exactly as one that does not exist.
   const named = agent.trim();
-  return named === "" ? { question: asked } : { question: asked, agent: named };
+  // The kind of knowledge the question is narrowed to (M7.6.1), sent only when one was chosen
+  // and only when it is a kind the API stores, so a stale option never becomes a refused request.
+  const narrowed = kind !== "" && kind in KIND_WORDS ? { kinds: [kind] } : {};
+  return { question: asked, ...(named === "" ? {} : { agent: named }), ...narrowed };
 }
 
 /** Written down because a citation that cannot be followed is one nobody checks. */

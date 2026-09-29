@@ -15,7 +15,7 @@ surviving.
 
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
-Task ids: M8.1.1, M8.1.2, M8.1.4, M7.4.7, M8.2.1, M8.2.2, M9.2.1
+Task ids: M8.1.1, M8.1.2, M8.1.4, M7.4.7, M8.2.1, M8.2.2, M9.2.1, M7.6.1
 """
 
 from __future__ import annotations
@@ -48,11 +48,12 @@ DOCUMENT = "a_document_answer_cites_the_passage_it_was_shown_with_its_badge"
 RECORD = "a_record_answer_cites_the_record_field_and_read_time"
 NOTHING = "four_kinds_of_nothing_are_kept_apart"
 SCOPE = "an_answer_and_a_refusal_say_what_the_asker_s_reach_covers"
+KIND = "a_question_narrowed_to_a_kind_is_answered_from_that_kind_alone"
 
 
 # ------------------------------------------------------------------------ the figures
 def test_the_module_declares_one_check_per_group_of_leaves() -> None:
-    """Four checks, each closing its own leaves. Delete this and a check can lose a leaf with the
+    """Five checks, each closing its own leaves. Delete this and a check can lose a leaf with the
     page showing the same number of rows, and the leaf closes on a check that never looked."""
     checks = [(one.name, one.leaves) for one in registered((MODULE,))]
     assert checks == [
@@ -60,6 +61,7 @@ def test_the_module_declares_one_check_per_group_of_leaves() -> None:
         (RECORD, ("M8.1.1", "M9.2.1")),
         (NOTHING, ("M8.2.1",)),
         (SCOPE, ("M8.2.2",)),
+        (KIND, ("M7.6.1",)),
     ]
 
 
@@ -219,7 +221,7 @@ def test_every_answer_check_passes_on_an_install_and_leaves_nothing(
     after = _counts(install)
 
     assert outcomes == dict.fromkeys(outcomes, (PASSED, "")), outcomes
-    assert len(outcomes) == 4
+    assert len(outcomes) == 5
     assert after == before and live_ladder(install) == ladder and ladder
     assert vaulted.sent == []
 
@@ -317,3 +319,20 @@ def test_the_library_left_out_of_the_statement_fails_the_scope_check(
         lambda registry, reach, now, **kw: api_routes.sources_at(registry, reach, now),
     )
     assert "library" in _failed(install, SCOPE)
+
+
+@pytest.mark.needs_db
+def test_a_kind_the_search_ignores_fails_the_kind_check(
+    install: str, vaulted: Providers, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The route's kinds dropped on the way to the passage search, as they were until 2026-09-29.
+    Delete this and M7.6.1 closes on a check that a search of every kind passes."""
+    from brain import api_routes
+
+    original = api_routes.model_lane_for
+
+    def unnarrowed(state: Any, agent: Any, registry: Any, kinds: Any = ()) -> Any:
+        return original(state, agent, registry)
+
+    monkeypatch.setattr(api_routes, "model_lane_for", unnarrowed)
+    assert "another kind" in _failed(install, KIND)

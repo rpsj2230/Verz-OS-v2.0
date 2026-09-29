@@ -37,7 +37,8 @@ from __future__ import annotations
 import asyncio
 import io
 import zipfile
-from typing import TYPE_CHECKING, Any, Final
+from types import SimpleNamespace
+from typing import TYPE_CHECKING, Any, Final, cast
 
 from brain.ops.acceptance import RESERVED_DEPARTMENTS, CheckFailedError, CheckNotRunError, check
 from brain.ops.acceptance_checks import KNOWLEDGE_READS, _found, _in, _upload
@@ -312,7 +313,8 @@ async def _stored(h: Harness, uploader: str, read: Any) -> None:
 async def a_full_ingestion_queue_refuses_with_a_retry_hint(h: Harness) -> None:
     from brain.knowledge.uploads import admit_ingestion, queue_limits_for
     from brain.knowledge_intake_routes import DriverQueue
-    from brain.ops.admission import CapacityState, Resource, seed_budgets
+    from brain.ops.admission import CapacityState, Resource
+    from brain.ops.tuning import configured_budgets
 
     if not h.settings.database_url:
         raise CheckNotRunError("the process running this check names no database for the queue")
@@ -320,7 +322,7 @@ async def a_full_ingestion_queue_refuses_with_a_retry_hint(h: Harness) -> None:
         waiting, running = await DriverQueue(h.settings.database_url).counts()
     except Exception as exc:
         raise CheckFailedError("the install's ingestion queue did not answer") from exc
-    budgets = seed_budgets()
+    budgets = configured_budgets()
     limits = queue_limits_for(budgets)
 
     def asked(depth: int) -> Any:
@@ -514,3 +516,97 @@ async def _refused_by_the_migration(h: Harness, owner: str, statement: str) -> b
     except DBAPIError:
         return True
     return False
+
+
+# ------------------------------------------------------- 7. a price list is a table (M7.7.3)
+@check(
+    leaves=("M7.7.3",),
+    sentence=(
+        "A price list sent to acceptance_a as a document, one at a time and to the queue, is "
+        "answered with the offer to add it on Classification and nothing of it is read or found; "
+        "the same file added on Classification is kept as a table of classified rows."
+    ),
+)
+async def a_price_list_sent_as_a_document_is_offered_to_classification(h: Harness) -> None:
+    import json
+    from urllib.parse import quote
+
+    from fastapi import FastAPI
+    from starlette.requests import Request
+
+    from brain.gate.admission import Assurance, admit
+    from brain.gate.context import Channel
+    from brain.identity.principal_store import StoredPrincipals
+    from brain.knowledge.kinds import KnowledgeKind
+    from brain.knowledge.uploads import TABLE_OFFER_TEXT
+    from brain.knowledge.visibility import Visibility
+    from brain.knowledge_intake_routes import queue_upload
+    from brain.knowledge_routes import NAME_HEADER, OFFERED_AS_A_TABLE, upload
+    from brain.ops.acceptance_checks_tables import (
+        ASKED_COLUMNS,
+        ASKED_HEADINGS,
+        _administrator,
+        _price_list,
+    )
+    from brain.ops.acceptance_checks_tables import _upload as _classified
+
+    library, member, _ = await _library(h)
+    prices = _price_list(h, "offer", ASKED_HEADINGS, ASKED_COLUMNS)
+    body = prices.csv()
+    app = FastAPI()
+    app.state.db_sessions = h.sessions
+    person = await StoredPrincipals(h.sessions).live_principal(library)
+    if person is None:
+        raise CheckFailedError("a reserved person was not live in the directory")
+    # With a second factor, as an administrator adding knowledge signs in: `admit` withholds an
+    # `admin:` verb from a session without one.
+    reach = admit(await h.reach(library), Channel.CONSOLE, Assurance.STRONG)
+    # A cast at the routes' boundary: they read the caller's principal, reach and instant, and a
+    # `Caller` is minted only from a verified token.
+    asking = cast(
+        Any, SimpleNamespace(caller=SimpleNamespace(principal=person), reach=reach, now=h.now)
+    )
+
+    def sent(path: str) -> Any:
+        headers = [
+            (b"content-type", b"text/csv"),
+            (b"content-length", str(len(body)).encode()),
+            (NAME_HEADER.encode(), quote("Acceptance price list.csv").encode()),
+        ]
+
+        async def receive() -> dict[str, Any]:
+            return {"type": "http.request", "body": body, "more_body": False}
+
+        scope = {"type": "http", "app": app, "headers": headers, "method": "POST", "path": path}
+        return Request(scope, receive)
+
+    for door in (upload, queue_upload):
+        answered = await door(
+            sent("/api/v1/knowledge/uploads"),
+            asking,
+            KnowledgeKind.PRICING_NOTE,
+            Visibility.DEPARTMENT,
+            A,
+        )
+        told = json.loads(bytes(getattr(answered, "body", b"{}")) or b"{}")
+        problems = told.get("problems") or [{}]
+        if (
+            getattr(answered, "status_code", 0) != 422
+            or problems[0].get("code") != OFFERED_AS_A_TABLE
+            or told.get("message") != TABLE_OFFER_TEXT
+        ):
+            raise CheckFailedError(
+                "a price list sent as a document was not offered to Classification"
+            )
+    words = {value for row in prices.rows for value in row.values() if value != A}
+    for word in sorted(words)[:3]:
+        found, _ = await _found(h, member, word)
+        if found.records:
+            raise CheckFailedError("a price list sent as a document was read as text")
+
+    admin = await _administrator(h)
+    stored, _ = await _classified(
+        h, admin, prices, filename="Acceptance price list.csv", content=body
+    )
+    if stored.entity != prices.entity:
+        raise CheckFailedError("the price list added on Classification was not kept as a table")

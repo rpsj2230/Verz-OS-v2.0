@@ -87,7 +87,11 @@
  * this page draws it as it draws every text frame. See
  * `askQuery.A_CITATION_IS_DRAWN_AS_A_LINK_TO_WHAT_IT_NAMES`.
  *
- * Task ids: M42.6.3, M35.2.1.3, M27.8.5, M3.9.8, M8.1.1, M8.1.2, M8.1.3, M7.4.7, M11.4.9
+ * **A question can be narrowed to one kind of knowledge (M7.6.1).** The picker lists the closed
+ * list `KIND_WORDS` holds, the same words the library shows, and its first choice searches every
+ * kind, which is what an unnarrowed question has always done.
+ *
+ * Task ids: M42.6.3, M35.2.1.3, M27.8.5, M3.9.8, M8.1.1, M8.1.2, M8.1.3, M7.4.7, M11.4.9, M7.6.1
  */
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
@@ -109,6 +113,7 @@ import {
   type AnswerView,
   type CitationView,
 } from "./askQuery";
+import { KIND_WORDS } from "./knowledgeQuery";
 import { FailureNotice, NO_REFERENCE_CAME_BACK } from "../ui/FailureNotice";
 import { readRoster, ROSTER_API_PATH, type RosterEntryView } from "./agentsQuery";
 
@@ -172,6 +177,13 @@ export const ANY_AGENT = "Whichever agent suits the question";
 /** The id tying the picker to its label. */
 const AGENT_FIELD_ID = "ask-agent";
 
+/** The kind picker's label, and its first choice, which searches every kind (M7.6.1). */
+export const KIND_LABEL = "Search only";
+export const ANY_KIND = "Every kind of knowledge";
+
+/** The id tying the kind picker to its label. */
+const KIND_FIELD_ID = "ask-kind";
+
 /** The id tying the label to the field. One field on the page, so one id. */
 const QUESTION_FIELD_ID = "ask-question";
 
@@ -223,6 +235,7 @@ export function Ask() {
   const [asking, setAsking] = useState<Asking>(IDLE);
   const [agents, setAgents] = useState<readonly RosterEntryView[]>([]);
   const [agent, setAgent] = useState("");
+  const [kind, setKind] = useState("");
 
   // The agents this person may see, for the picker. A roster that did not come back is no
   // picker rather than an error: the question can still be asked, and the router chooses.
@@ -262,7 +275,7 @@ export function Ask() {
   const ask = useCallback(
     (submitted: FormEvent<HTMLFormElement>) => {
       submitted.preventDefault();
-      const body = askBody(question, agent);
+      const body = askBody(question, agent, kind);
       if (body === null) {
         // Not a question the route would take. Doing nothing is the answer: a request known
         // to be refused is a round trip spent to be told what this console already knew.
@@ -298,7 +311,7 @@ export function Ask() {
         }
       })();
     },
-    [question, agent],
+    [question, agent, kind],
   );
 
   const { view, busy, failure, traceId } = asking;
@@ -362,6 +375,23 @@ export function Ask() {
             </select>
           </>
         ) : null}
+        <label className="ask__label" htmlFor={KIND_FIELD_ID}>
+          {KIND_LABEL}
+        </label>
+        <select
+          id={KIND_FIELD_ID}
+          className="form-control"
+          value={kind}
+          disabled={busy}
+          onChange={(changed) => setKind(changed.target.value)}
+        >
+          <option value="">{ANY_KIND}</option>
+          {Object.entries(KIND_WORDS).map(([value, words]) => (
+            <option key={value} value={value}>
+              {words}
+            </option>
+          ))}
+        </select>
         <div className="form-actions">
           <button
             type="submit"

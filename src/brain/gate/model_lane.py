@@ -190,6 +190,7 @@ from brain.knowledge.document_tools import (
     KnowledgePassage,
 )
 from brain.knowledge.item import KnowledgeItem
+from brain.knowledge.kinds import KnowledgeKind
 from brain.models.adapter import is_refusal
 from brain.models.disclosure import DataCategory
 from brain.models.driver import DriverMessage, DriverResponse, ProviderUnavailable, Role
@@ -504,11 +505,17 @@ class DocumentSearchTool:
     """
 
     handler: Callable[..., Awaitable[TypedResult[KnowledgePassage]]]
+    #: The kinds of item this question is narrowed to, or none for every kind (M7.6.1). A
+    #: narrowing of the question the asker chose and never of the reach, which the handler
+    #: decides; see `brain.knowledge.document_tools`, whose reason says so.
+    kinds: tuple[KnowledgeKind, ...] = ()
 
     async def passages(
         self, question: str, *, entitlement: EntitlementSet, now: datetime
     ) -> TypedResult[KnowledgePassage]:
-        request = DocumentSearch(question=question[:QUESTION_CHARS], limit=PASSAGES_SHOWN)
+        request = DocumentSearch(
+            question=question[:QUESTION_CHARS], limit=PASSAGES_SHOWN, kinds=self.kinds
+        )
         return await self.handler(request, entitlement=entitlement, now=now)
 
 

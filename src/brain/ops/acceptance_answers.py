@@ -517,3 +517,91 @@ def _statement(scope: Any) -> str:
     if not said:
         raise CheckFailedError("a scope naming what a reader reaches rendered no statement")
     return said
+
+
+# ----------------------------------------------------------- 5. a kind narrows it (M7.6.1)
+@check(
+    leaves=("M7.6.1",),
+    sentence=(
+        "An FAQ and an SOP added in acceptance_a pair one word with two values: the library lists "
+        "each under its kind and narrows to one, a member's question narrowed to FAQs shows the "
+        "model the FAQ alone and one asked of every kind shows both, and a pricing note holding a "
+        "table is refused."
+    ),
+)
+async def a_question_narrowed_to_a_kind_is_answered_from_that_kind_alone(h: Harness) -> None:
+    from brain.knowledge.ingest import MediaType, ParseFailure
+    from brain.knowledge.kinds import KindError, KnowledgeKind
+    from brain.ops.acceptance_checks import _upload
+    from brain.ops.acceptance_documents import a_markdown_document
+    from brain.ops.acceptance_models import ASKED, PAIRED, shown
+
+    s = await asking_with_a_stand_in(h)
+    await pinned(h, (step(ANSWERS),))
+    key, values = h.word(), {KnowledgeKind.FAQ: h.word(), KnowledgeKind.SOP: h.word()}
+    items: dict[KnowledgeKind, str] = {}
+    for kind, value in values.items():
+        read = await _upload(
+            h,
+            s.library,
+            filename=f"Acceptance {kind.value}.md",
+            declared=MediaType.MARKDOWN.value,
+            body=a_markdown_document("Acceptance kind", PAIRED.format(key=key, value=value)),
+            kind=kind,
+        )
+        if isinstance(read, ParseFailure):
+            raise CheckFailedError("a document added with a kind could not be read")
+        items[kind] = str(read.item.item_id)
+
+    listed = await _library(h, s.app, s.reader, (f"kind:{KnowledgeKind.FAQ.value}",))
+    ours = {one.item_id: one.kind for one in listed if one.item_id in items.values()}
+    if ours != {items[KnowledgeKind.FAQ]: KnowledgeKind.FAQ.value}:
+        raise CheckFailedError("the library did not list the FAQ under its kind, and it alone")
+
+    question = ASKED.format(key=key)
+    narrowed = await asked(h, s.app, s.reader, question, 1, kinds=(KnowledgeKind.FAQ,))
+    everything = await asked(h, s.app, s.reader, question, 2)
+    seen_narrowed, seen_everything = shown(narrowed), shown(everything)
+    if values[KnowledgeKind.FAQ] not in seen_narrowed or values[KnowledgeKind.SOP] in seen_narrowed:
+        raise CheckFailedError("a question narrowed to FAQs was shown a document of another kind")
+    if not all(value in seen_everything for value in values.values()):
+        raise CheckFailedError("a question asked of every kind was not shown both documents")
+
+    table = "\n".join(["| Service | Price |", "| --- | --- |", f"| {h.word()} | 900 |"])
+    try:
+        await _upload(
+            h,
+            s.library,
+            filename="Acceptance pricing note.md",
+            declared=MediaType.MARKDOWN.value,
+            body=a_markdown_document("Acceptance pricing", table),
+            kind=KnowledgeKind.PRICING_NOTE,
+        )
+    except KindError:
+        return
+    raise CheckFailedError("a pricing note holding a table of prices was added")
+
+
+async def _library(
+    h: Harness, app: FastAPI, principal_id: str, filters: tuple[str, ...]
+) -> tuple[Any, ...]:
+    """The Knowledge list as the route answers `principal_id`, narrowed by `filters`."""
+    from starlette.requests import Request
+
+    from brain.gate.admission import Assurance, admit
+    from brain.gate.context import Channel
+    from brain.identity.principal_store import StoredPrincipals
+    from brain.knowledge_lifecycle_routes import knowledge_list
+    from brain.listing import ListAsked
+
+    person = await StoredPrincipals(h.sessions).live_principal(principal_id)
+    if person is None:
+        raise CheckFailedError("a reserved person was not live in the directory")
+    reach = admit(await h.reach(principal_id), Channel.CONSOLE, Assurance.AUTHENTICATED)
+    request = Request({"type": "http", "app": app, "headers": [], "method": "GET"})
+    # A cast at the route's boundary, for `_cited`'s reason: a `Caller` is minted from a token.
+    asking = cast(
+        Any, SimpleNamespace(caller=SimpleNamespace(principal=person), reach=reach, now=h.now)
+    )
+    page = await knowledge_list(request, asking, ListAsked(filters=filters))
+    return tuple(page.items)

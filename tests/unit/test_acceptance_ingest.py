@@ -11,7 +11,7 @@ the two that need them say they were not run; and each is shown failing with the
 
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
-Task ids: M7.1.2, M7.1.3, M7.1.4, M7.1.5, M7.7.4
+Task ids: M7.1.2, M7.1.3, M7.1.4, M7.1.5, M7.7.4, M7.7.3
 """
 
 from __future__ import annotations
@@ -48,6 +48,7 @@ LINK = "a_link_is_fetched_read_and_found_in_its_department"
 QUEUE = "a_full_ingestion_queue_refuses_with_a_retry_hint"
 QUEUED = "a_queued_file_is_kept_in_the_store_and_read_by_the_worker"
 WIDTH = "the_embedding_width_is_the_installs_and_held_under_vectors"
+OFFER = "a_price_list_sent_as_a_document_is_offered_to_classification"
 
 #: The recorded page the documentation domain answers with, as its own markup has it.
 EXAMPLE_PAGE = (
@@ -59,7 +60,7 @@ EXAMPLE_PAGE = (
 
 # ------------------------------------------------------------------------ the figures
 def test_the_module_declares_one_check_per_door() -> None:
-    """Six checks and the leaves each proves. Delete this and a check can lose a leaf with the
+    """Seven checks and the leaves each proves. Delete this and a check can lose a leaf with the
     page showing the same rows, and the leaf closes on a check that never looked."""
     checks = [(one.name, one.leaves) for one in registered((MODULE,))]
     assert checks == [
@@ -69,6 +70,7 @@ def test_the_module_declares_one_check_per_door() -> None:
         (QUEUE, ("M7.1.5",)),
         (QUEUED, ("M7.1.5", "M7.1.4")),
         (WIDTH, ("M7.7.4",)),
+        (OFFER, ("M7.7.3",)),
     ]
 
 
@@ -164,14 +166,14 @@ def run_ingest(url: str, *names: str) -> dict[str, tuple[str, str]]:
 
 
 @pytest.mark.needs_db
-def test_on_an_install_with_no_antivirus_and_no_store_four_pass_and_two_are_not_run(
+def test_on_an_install_with_no_antivirus_and_no_store_five_pass_and_two_are_not_run(
     install: str, offline: None
 ) -> None:
-    """**The module as the worker runs it on a fresh install.** The scan, the link, the queue and
-    the width pass; the antivirus half and the queued file say why they were not asked, in their
-    own sentences, and nothing a check wrote is left. Delete this and a check that can never pass
-    on a real schema, or one that fails where it should say it was not run, reaches the owner's
-    server first."""
+    """**The module as the worker runs it on a fresh install.** The scan, the link, the queue, the
+    width and the price list's offer pass; the antivirus half and the queued file say why they
+    were not asked, in their own sentences, and nothing a check wrote is left. Delete this and a
+    check that can never pass on a real schema, or one that fails where it should say it was not
+    run, reaches the owner's server first."""
     before = counts(install)
     outcomes = run_ingest(install)
     assert counts(install) == before
@@ -182,6 +184,7 @@ def test_on_an_install_with_no_antivirus_and_no_store_four_pass_and_two_are_not_
         QUEUE: PASSED,
         QUEUED: NOT_RUN,
         WIDTH: PASSED,
+        OFFER: PASSED,
     }, outcomes
     assert "no antivirus" in outcomes[VIRUS][1]
     assert "no object store" in outcomes[QUEUED][1]
@@ -275,3 +278,16 @@ def test_a_width_refusal_that_refuses_nothing_fails_the_width_check(
 
     monkeypatch.setattr(search, "width_change_refusal", lambda dimensions: "SELECT 1")
     assert "let a width change pass" in _failed(install, WIDTH)
+
+
+@pytest.mark.needs_db
+def test_a_spreadsheet_read_as_a_document_fails_the_offer_check(
+    install: str, offline: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The doors as they were until 2026-09-29, taking a spreadsheet as a document. Delete this and
+    M7.7.3 closes on a check that never saw a door make the offer."""
+    from brain import knowledge_intake_routes, knowledge_routes
+
+    for module in (knowledge_routes, knowledge_intake_routes):
+        monkeypatch.setattr(module, "offer_a_table_file", lambda *args: None)
+    assert "not offered" in _failed(install, OFFER)

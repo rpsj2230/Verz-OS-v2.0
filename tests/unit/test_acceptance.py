@@ -105,7 +105,7 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     here: limits, channels and documents, then volume, refusals and a head's audit, then Lark
     chat's three, the skill library's four, the models' eleven and the audit's one, the
     connectors' three, the tools' three, a document's life in four, the classified tables'
-    three, an answer's evidence in four, retrieval's seven and ingestion's six, the modules in
+    three, an answer's evidence in five, retrieval's seven and ingestion's seven, the modules in
     `CHECK_MODULES`
     order rather than the order a process imported them. Delete this and a check can drop out of
     the suite with the page simply listing one fewer row, or the page can lead with whichever
@@ -168,6 +168,7 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "a_record_answer_cites_the_record_field_and_read_time",
         "four_kinds_of_nothing_are_kept_apart",
         "an_answer_and_a_refusal_say_what_the_asker_s_reach_covers",
+        "a_question_narrowed_to_a_kind_is_answered_from_that_kind_alone",
     ]
     # Retrieval on the install's own index; `tests/unit/test_acceptance_retrieval.py`.
     assert by_module["brain.ops.acceptance_retrieval"] == [
@@ -187,6 +188,7 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "a_full_ingestion_queue_refuses_with_a_retry_hint",
         "a_queued_file_is_kept_in_the_store_and_read_by_the_worker",
         "the_embedding_width_is_the_installs_and_held_under_vectors",
+        "a_price_list_sent_as_a_document_is_offered_to_classification",
     ]
     assert list(by_module) == list(acceptance.CHECK_MODULES)
     oversight = {one.name: one.leaves for one in registered()}
@@ -619,9 +621,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         acceptance_audit.A_BROWSER_SESSION_AND_A_TRACE_STORE_ARE_NOT_BUILT,
     )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
-    assert len(outcomes) == 36
+    assert len(outcomes) == 37
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 126
+    assert runs == [(2,)] and len(recorded) == 130
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }
