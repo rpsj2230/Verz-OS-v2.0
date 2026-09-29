@@ -148,10 +148,21 @@ IDENTIFIERS: Final[Mapping[str, str]] = {
     "xero": "11111111-2222-3333-4444-555555555555",
     "hubspot": "12345678",
     "freshdesk": "example.freshdesk.com",
+    "google_drive": "1AbCdEfGhIjKlMnOpQrStUv",
+    "laravel": "portal",
 }
 
-#: The settings after the first that a source asks for, for the one source that asks for two.
-FURTHER_SETTINGS: Final[Mapping[str, Mapping[str, str]]] = {"freshdesk": {"department": "support"}}
+#: The settings after the first that a source asks for, for the sources that ask for more than one.
+FURTHER_SETTINGS: Final[Mapping[str, Mapping[str, str]]] = {
+    "freshdesk": {"department": "support"},
+    "google_drive": {"domain": "example.com", "department": "operations", "steward": "u_steward"},
+    "laravel": {
+        "client_rule": "department = sales",
+        "user_rule": "department in sales, operations",
+        "max_rows": "500",
+        "timeout_seconds": "10",
+    },
+}
 
 
 def _grant(capability: Any, scope: Scope) -> Grant:
@@ -306,12 +317,19 @@ def client(app: FastAPI) -> Iterator[TestClient]:
         yield c
 
 
+async def everybody_is_live(principal_id: str) -> bool:
+    """A directory in which every id names somebody, for the routes' own tests."""
+    del principal_id
+    return True
+
+
 def attach(
     app: FastAPI, records: Records | None, vault: Vault | None, writes: Recorded | None = None
 ) -> None:
     if records is not None:
         app.state.connector_records = records
     app.state.credentials = Credentials(vault, environ={}, writes=writes)
+    app.state.people_are_live = everybody_is_live
 
 
 def headers(pid: str, claims: Mapping[str, object] | None = None) -> dict[str, str]:
@@ -700,8 +718,9 @@ def test_every_source_is_served_with_the_steps_of_its_connect_flow(
             "credential",
         ]
         assert all(step["sketch"]["heading"] for step in one["steps"])
-    drive = next(one for one in body["not_connectable"] if one["name"] == "google_drive")
-    assert drive["steps"][-1]["asks"] == [] and len(drive["steps"]) == 4
+    # Since 2026-09-30 (M11.7.7) the only sources not connected here are Lark's, whose flow is
+    # Connect Lark's own; each is still served with a sentence saying so.
+    assert {one["name"] for one in body["not_connectable"]} == {"lark_base", "lark_wiki"}
 
 
 def test_the_authority_to_connect_is_a_fact_about_the_reader_and_narrows_nothing(
@@ -723,6 +742,8 @@ def test_the_authority_to_connect_is_a_fact_about_the_reader_and_narrows_nothing
         "xero": True,
         "hubspot": False,
         "freshdesk": False,
+        "google_drive": False,
+        "laravel": False,
     }
 
 
@@ -813,6 +834,94 @@ def test_an_administrator_connects_a_source_and_its_key_is_kept_in_its_slot_and_
     assert KEY not in answered.text
 
 
+def test_a_key_file_and_a_database_user_reach_their_slots_in_their_own_shapes(
+    app: FastAPI, client: TestClient
+) -> None:
+    """M11.7.7 through the route: Google Drive's key file is kept whole as its slot's key, and the
+    Laravel user as its password with its name beside it, and the forms say which shape each
+    takes. Delete this and the two sources connect with their credentials kept where no reader
+    looks, or a form offers a key box for a key file."""
+    from brain.ops.credentials import MAX_KEY_FILE_CHARS, SERVICE_ACCOUNT, USER_FIELD
+
+    records, vault = Records(), Vault()
+    attach(app, records, vault)
+    key_file = json.dumps(
+        {"type": SERVICE_ACCOUNT, "client_email": "a@b.example", "private_key": "FILE-SENTINEL"},
+        indent=2,
+    )
+    user = json.dumps({"user": "brain_reader", "password": "PASSWORD-SENTINEL"})
+    drive = post(client, "u_admin", LISTING, connection_body("google_drive", credential=key_file))
+    views = post(client, "u_admin", LISTING, connection_body("laravel", credential=user))
+
+    assert (drive.status_code, views.status_code) == (200, 200)
+    assert vault.written == [
+        ("connector_keys/google_drive", {KEY_FIELD: key_file}),
+        ("connector_keys/laravel", {KEY_FIELD: "PASSWORD-SENTINEL", USER_FIELD: "brain_reader"}),
+    ]
+    assert "FILE-SENTINEL" not in drive.text and "PASSWORD-SENTINEL" not in views.text
+    forms = {one["name"]: one for one in get(client, "u_admin").json()["connectable"]}
+    assert (forms["google_drive"]["credential_shape"], forms["laravel"]["credential_shape"]) == (
+        "key_file",
+        "database_user",
+    )
+    assert forms["google_drive"]["credential_max_chars"] == MAX_KEY_FILE_CHARS
+    assert forms["xero"]["credential_shape"] == "key"
+
+
+def test_an_answerable_person_who_is_nobody_here_is_refused_and_nothing_is_kept(
+    app: FastAPI, client: TestClient
+) -> None:
+    """`Setting.names_a_person`: Google Drive's steward must be somebody live on this install. The
+    connector reads no table, so the route asks. Delete this and a mistyped id is kept as the
+    person answerable for a folder, and nobody is ever asked to re-check its files."""
+    from brain.ops.credentials import SERVICE_ACCOUNT
+
+    records, vault = Records(), Vault()
+    attach(app, records, vault)
+    asked: list[str] = []
+
+    async def only_one(principal_id: str) -> bool:
+        asked.append(principal_id)
+        return principal_id == "u_steward"
+
+    app.state.people_are_live = only_one
+    key_file = json.dumps({"type": SERVICE_ACCOUNT, "client_email": "a", "private_key": "b"})
+    nobody = connection_body(
+        "google_drive",
+        settings={**settings_for("google_drive"), "steward": "u_nobody"},
+        credential=key_file,
+    )
+    refused = post(client, "u_admin", LISTING, nobody)
+    kept = post(client, "u_admin", LISTING, connection_body("google_drive", credential=key_file))
+
+    assert refused.status_code == 422
+    assert [(one["field"], one["code"]) for one in refused.json()["problems"]] == [
+        ("steward", "refused")
+    ]
+    assert kept.status_code == 200 and asked == ["u_nobody", "u_steward"]
+    assert [slot for slot, _ in vault.written] == ["connector_keys/google_drive"]
+
+
+def test_a_credential_in_the_wrong_shape_is_refused_and_nothing_is_kept(
+    app: FastAPI, client: TestClient
+) -> None:
+    """Delete this and a pasted key is kept as though it were a key file, or a user with no
+    password is kept and every read fails at the database."""
+    records, vault = Records(), Vault()
+    attach(app, records, vault)
+    drive = post(client, "u_admin", LISTING, connection_body("google_drive", credential=KEY))
+    views = post(client, "u_admin", LISTING, connection_body("laravel", credential='{"user": "u"}'))
+
+    assert (drive.status_code, views.status_code) == (422, 422)
+    assert [(one["field"], one["code"]) for one in drive.json()["problems"]] == [
+        ("credential", "not_a_key_file")
+    ]
+    assert [(one["field"], one["code"]) for one in views.json()["problems"]] == [
+        ("credential", "blank")
+    ]
+    assert records.asked == 0 and vault.written == []
+
+
 def test_a_connection_hands_the_store_what_the_source_declares_for_the_data_steward(
     app: FastAPI, client: TestClient
 ) -> None:
@@ -852,7 +961,7 @@ def test_a_caller_who_may_not_connect_this_source_is_refused_before_anything_is_
         post(client, "u_elsewhere", LISTING, connection_body()),
         post(client, "u_narrow", LISTING, connection_body("hubspot")),
         post(client, "u_none", LISTING, connection_body(settings={}, credential="")),
-        post(client, "u_narrow", LISTING, connection_body("laravel")),
+        post(client, "u_narrow", LISTING, connection_body("lark_base")),
     ]
     for refused in refusals:
         assert (refused.status_code, without_trace(refused)) == (
@@ -888,7 +997,7 @@ def test_every_problem_with_a_connection_is_told_at_once_and_nothing_is_written(
     records, vault = Records(), Vault()
     attach(app, records, vault)
     both = post(client, "u_admin", LISTING, connection_body(settings={}, credential="one two"))
-    unknown = post(client, "u_admin", LISTING, connection_body("laravel"))
+    unknown = post(client, "u_admin", LISTING, connection_body("lark_base"))
     refused = post(client, "u_admin", LISTING, connection_body(settings={"tenant_id": "*"}))
 
     assert both.status_code == unknown.status_code == refused.status_code == 422
@@ -1154,7 +1263,7 @@ def test_the_module_lists_every_shipped_source_and_a_connection_only_adds_to_its
         "console",
         "lark",
     )
-    assert rows["laravel"]["connect_from"] == "server"
+    assert rows["laravel"]["connect_from"] == "console"
     assert body["total"] is None
     narrowed = read(client, "u_admin", f"{SOURCES}?filter=status:connected").json()
     assert [one["name"] for one in narrowed["items"]] == ["xero"]

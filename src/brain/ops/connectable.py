@@ -11,14 +11,15 @@ module, and `CONNECTABLE` and `NOT_FROM_THE_CONSOLE` are read off
 the two lists are total over the shipped connectors by construction, and a connector joins the
 Connectors screen by declaring itself, with no edit here.
 
-**A source is connectable from the console when its manifest is built from identifiers a person
-can type and one key they can paste**, and today that is three of the seven. Xero is pinned to one
-organisation, HubSpot to one account and Freshdesk to one helpdesk and the one department that reads
-it, and each connection class already refuses an identifier that narrows nothing. The other four
-need something this screen has no way to collect: a visibility
-rule written by somebody who has read the source's own permission model, a declaration of which
-department a space or a folder belongs to, or a key file rather than a key. Each says which, and the
-screen shows the sentence rather than leaving the source out.
+**A source is connectable from the console when its manifest is built from settings a person can
+type and a credential in the shape its vendor issues it**, and since 2026-09-30 (M11.7.7) that is
+every shipped source but the two Connect Lark switches on. Xero is pinned to one organisation,
+HubSpot to one account and Freshdesk to one helpdesk and the one department that reads it; Google
+Drive to one folder, the department it belongs to and the person answerable for it, with a service
+account's key file; the Laravel database to one schema's views, each with the visibility rule
+written by whoever read its definition, with a read-only user's name and password. Each connection
+class already refuses a setting that narrows nothing. Lark's Base and Wiki are connected on Connect
+Lark, which says so, and the screen shows that sentence rather than leaving them out.
 
 **Validation is the connector's own refusal, and never a second opinion about it.** The settings
 are checked for being given and for fitting, and then the manifest is built from them: a selector
@@ -37,7 +38,7 @@ Rejected: a `ConnectorRegistry` built from these at start. The registry is a run
 somebody installed; this is the product's list of what could be, and a registry holding every
 connectable source would read on the screen as every source connected.
 
-Task ids: M42.6.5, M11.1.6, M11.9.6
+Task ids: M42.6.5, M11.1.6, M11.9.6, M11.7.7
 """
 
 from __future__ import annotations
@@ -48,7 +49,7 @@ from types import MappingProxyType
 from typing import Final
 
 from brain.connectors.contract import ConnectorContractError
-from brain.connectors.declaration import Setting, SettingRefusedError, shipped
+from brain.connectors.declaration import CredentialShape, Setting, SettingRefusedError, shipped
 from brain.connectors.manifest import ConnectorManifest
 from brain.ops.connect_steps import GuideStep
 from brain.ops.credentials import connector_key_slot
@@ -90,6 +91,8 @@ class Connectable:
     build: Callable[[Mapping[str, str], SecretRef], ConnectorManifest]
     #: The screens that take an administrator from nothing to this form, the form last.
     guide: tuple[GuideStep, ...] = ()
+    #: How the credential is asked for and kept (M11.7.7).
+    credential_shape: CredentialShape = CredentialShape.KEY
 
 
 @dataclass(frozen=True)
@@ -128,6 +131,7 @@ CONNECTABLE: Final[Mapping[str, Connectable]] = MappingProxyType(
             credential_hint=one.console.credential_hint,
             build=one.console.build,
             guide=one.guide,
+            credential_shape=one.console.credential_shape,
         )
         for name, one in shipped().items()
         if one.console is not None

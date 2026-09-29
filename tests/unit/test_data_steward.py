@@ -73,6 +73,19 @@ SETTINGS: Mapping[str, Mapping[str, str]] = {
     "xero": {"tenant_id": "11111111-2222-3333-4444-555555555555"},
     "hubspot": {"portal_id": "12345678"},
     "freshdesk": {"domain": "example.freshdesk.com", "department": "support"},
+    "google_drive": {
+        "folder": "1AbCdEfGhIjKlMnOpQrStUv",
+        "domain": "example.com",
+        "department": "operations",
+        "steward": "u_steward",
+    },
+    "laravel": {
+        "schema": "portal",
+        "client_rule": "department = sales",
+        "user_rule": "department in sales, operations",
+        "max_rows": "500",
+        "timeout_seconds": "10",
+    },
 }
 
 FINANCE = "finance"
