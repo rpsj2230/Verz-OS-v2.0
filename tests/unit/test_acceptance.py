@@ -198,6 +198,12 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "a_run_s_trace_is_stored_masked_and_read_only_after_its_row",
         "the_scrub_meets_its_budget_on_this_install_s_processor",
     ]
+    # Approval cards in Lark and what a chat may not decide; `tests/unit/test_acceptance_cards.py`.
+    assert by_module["brain.ops.acceptance_checks_cards"] == [
+        "typed_approve_decides_nothing_and_the_approver_gets_one_card",
+        "a_card_press_decides_as_its_approver_alone_and_closes_the_card",
+        "group_chat_and_channel_policy_hold_on_one_install",
+    ]
     assert list(by_module) == list(acceptance.CHECK_MODULES)
     oversight = {one.name: one.leaves for one in registered()}
     assert oversight["unusual_volume_is_found_per_person"] == ("M23.2.1",)
@@ -692,9 +698,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     ):
         assert outcomes.pop(worker_check) == (NOT_RUN, acceptance_deployment.NOT_IN_A_WORKER)
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
-    assert len(outcomes) == 48
+    assert len(outcomes) == 51
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 152
+    assert runs == [(2,)] and len(recorded) == 158
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }

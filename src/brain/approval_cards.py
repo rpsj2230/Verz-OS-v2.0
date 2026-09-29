@@ -1,0 +1,652 @@
+"""Approval cards in a chat: offered to the person who may decide, decided by their press alone.
+
+`brain.channels.cards` has held the approval card since M10.2.3 was first written: a card built at
+the approver's own reach, a press refused from anybody else, a close budget that keeps a reserve
+for closing what was opened. Nothing sent one and nothing read a press, and a bound person's chat
+admits read alone, so an approval could be decided in the console and nowhere else. This module is
+the wiring, between the events route (`brain.channel_routes`), which verifies, claims and answers
+the vendor, and the Approvals route (`brain.approval_routes`), whose `take_decision` is the one
+function that decides an approval. There is no second decision path here and no second statement
+of who may approve.
+
+**A card is offered where its reader alone reads it, when they write about deciding (M10.2.3,
+M10.7.1).** A bound person whose message is a decision word is told where approvals are decided,
+and on a channel that carries approvals and cards each approval the Approvals screen would offer
+them is sent as a card to a conversation only they read with the bot, never to a group. Which
+approvals is `brain.approval_routes.shown_card`, the question the Approvals screen asks, at the
+reach a press would decide under, so a card is offered exactly when pressing it could decide it.
+The card's body is `brain.console.approvals.card`'s for that reach, which is what the same person
+reads on the Approvals screen, and `build_approval_card` refuses one computed at any other: the
+asker's reach never reaches the approver (needs-rupash 14). Each card goes once per approver and
+approval, keyed through the operation ledger, and every open draws on the open half of the card
+ceiling. See `A_CARD_IS_OFFERED_WHERE_ITS_READER_ALONE_READS_IT`.
+
+**No card is sent at the moment an approval is raised, and the reason is an address, not a
+choice.** A chat binding keeps the digest of the chat identity and never the identity
+(`brain.gate.ingress.Binding`, "a table of them is a phone book of the company"), so nothing on an
+install can address a bound person until they write to it. Sending at raise time needs an address
+kept per binding, which is a column, a migration and a reversal of that decision, and it is left
+for the owner. See `NO_CARD_IS_SENT_WHEN_AN_APPROVAL_IS_RAISED`.
+
+**A press decides only as the person the card was built for, only while it is open at its
+digest, and only as the permission allows (M10.2.3, needs-rupash 16).** The press value names the
+suspension, its action digest and whom the card was built for; the presser's chat account must be
+bound to that principal, so a press by anybody else in a group, or on a card forwarded to them,
+decides nothing. The stored suspension must be the one the card named, at the same digest, and
+open: `take_decision` holds its row and asks `card` at the press reach, so a press after it was
+decided in the console, by another approver, or after it lapsed is refused by the store and not
+by anything this module remembers. The press reach is `brain.gate.admission.admit_card_press`, a
+binding's read and the `approve` verb under the channel's ceiling, from the presser's own grants,
+and a message never gets it. A replayed press is refused before any of this, by the claim on the
+callback's own id. Every refusal is one sentence, whatever the reason, so a press cannot learn
+which reason it was. See `A_PRESS_DECIDES_ONLY_AS_THE_PERSON_THE_CARD_WAS_BUILT_FOR`.
+
+**A decided card is closed by a patch within the card ceiling, and a refused one in the answer
+(M10.2.4).** Two cases and two paths, each chosen for its case. A press that decided knows the
+state the card is now in, which is the only thing `close_card` and `FALLBACK_TEMPLATE` can say, so
+its card is closed after the vendor has been answered: the close half of the ceiling is asked, the
+card is replaced by `PATCH` of its message, and when the patch is refused the text fallback goes to
+the approver's own chat, drawn from the same half again. It is made after the answer because the
+decision's own transaction can widen a document and every passage of it, and a card carried in an
+answer Lark stopped waiting for is a card never replaced. A press that decided nothing knows no
+state it may say (a decided row is not readable at the presser's reach, and saying who decided it
+would be telling), so its card is replaced in the callback's own answer by a card with nothing to
+press, which costs no call against any ceiling. Rejected: carrying the decided card in the answer
+too, which spends nothing but depends on Lark still listening. See
+`A_DECIDED_CARD_IS_PATCHED_AND_A_REFUSED_ONE_CLOSED_IN_THE_ANSWER`.
+
+**The card windows are the install's, and a check's are its own.** On a running install a window
+lives in Valkey through `brain.ops.limit_store`, asked and recorded once through
+`brain.channels.cards.close_admitted`; a process without Valkey admits, which is
+`brain.ops.limit_store.UNREACHABLE_POLICY` for a channel's window. A test or an install check puts
+`HeldCardWindows` on the application, because a check may not touch a key another caller uses.
+
+Task ids: M10.2.3, M10.2.4, M10.7.1
+"""
+
+from __future__ import annotations
+
+import asyncio
+import hashlib
+import uuid
+from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Final, Protocol
+
+import structlog
+from fastapi import Request
+
+from brain.api_routes import limit_store_of, wiring_of
+from brain.approval_routes import (
+    A_REQUEST_THAT_NO_LONGER_APPLIES,
+    DecidableVerdict,
+    DecisionAsked,
+    RejectionReason,
+    SuspensionStore,
+    shown_card,
+    suspensions_of,
+    take_decision,
+)
+from brain.attribution import trace_of_request
+from brain.channels.adapter import CardAction, CardWire, Feature, adapter_for, channel_wires
+from brain.channels.cards import (
+    FALLBACK_TEMPLATE,
+    ApprovalCard,
+    CardCall,
+    CardRefusedError,
+    CardStaleError,
+    PatchOutcome,
+    build_approval_card,
+    buttons,
+    card_limit,
+    close_admitted,
+    press_value,
+    read_press_value,
+    render_card,
+    render_decided,
+)
+from brain.channels.inbound import (
+    DECIDE_WHERE_TOLD,
+    ChannelBindings,
+    Inbound,
+    Pressed,
+    prompt_intent,
+    reply_intent,
+)
+from brain.channels.outbound import Delivered, Outgoing
+from brain.chat_answer import People, ask_link, people_of
+from brain.console.approvals import Card
+from brain.core.entitlement import EntitlementSet
+from brain.core.errors import Absent, Failed
+from brain.core.redaction import ChannelPayload
+from brain.gate.admission import admit_card_press, verbs_for_channel
+from brain.gate.context import Channel
+from brain.gate.ingress import Binding, Unrecognised, identity_hash
+from brain.gate.leash import ApprovalState, SuspendedAction
+from brain.gate.resolve import resolve
+from brain.ops.channel_store import ChannelRecord
+from brain.ops.idempotency import Intent
+from brain.ops.lark_connect import ASK_PATH
+from brain.ops.limit_store import ValkeyWindowStore
+from brain.ops.limits import LimitDecision, LimiterState, check
+from brain.tables.channel import DeliveryOutcome
+
+log = structlog.get_logger()
+
+# ------------------------------------------------------------------ written-down reasons
+
+#: Why a card goes only where its reader alone reads it, and only for what they could decide.
+A_CARD_IS_OFFERED_WHERE_ITS_READER_ALONE_READS_IT: Final = (
+    "An approval card is offered to a bound person who wrote about deciding, in a conversation "
+    "only they read with the bot and never in a group, for each approval the Approvals screen "
+    "would offer them at the reach a press would decide under, with the body that screen shows "
+    "them. A control in a room is a control the room can press, and a card for an approval its "
+    "reader could not decide is a button that can only fail."
+)
+
+#: Why nothing is sent when an approval is raised.
+NO_CARD_IS_SENT_WHEN_AN_APPROVAL_IS_RAISED: Final = (
+    "A chat binding keeps the digest of a chat identity and never the identity, so nothing on "
+    "an install can address a bound person until they write to it. A card at the moment an "
+    "approval is raised needs an address kept for every binding, which reverses that decision "
+    "and is the owner's to take; until then a card is offered when its reader writes."
+)
+
+#: Why a press decides only as the person the card was built for.
+A_PRESS_DECIDES_ONLY_AS_THE_PERSON_THE_CARD_WAS_BUILT_FOR: Final = (
+    "A press is honoured only from the chat account bound to the principal the card was built "
+    "for, on the suspension it names at the digest it names, while the stored row is open and "
+    "that person's own permission admits it, through the Approvals route's take_decision. A "
+    "press by anybody else, after a decision elsewhere or after the window, or replayed, "
+    "decides nothing, and every refusal is one sentence."
+)
+
+#: Why a decided card is patched and a refused one closed in the callback's answer.
+A_DECIDED_CARD_IS_PATCHED_AND_A_REFUSED_ONE_CLOSED_IN_THE_ANSWER: Final = (
+    "A press that decided knows the state its card is now in, so the card is replaced after the "
+    "vendor is answered, within the close half of the card ceiling, with the text fallback when "
+    "the replacement is refused. A press that decided nothing knows no state it may say, so its "
+    "card is replaced in the callback's own answer by one with nothing to press, at no cost."
+)
+
+# --------------------------------------------------------------------------- words
+
+#: What a press that decided nothing is told, whatever the reason: one sentence for every reason,
+#: so a press cannot learn whether it was the wrong person, a decided card or a lapsed one.
+PRESS_REFUSED_TOLD: Final = (
+    "This approval is not open to you here, so nothing was decided. The Approvals screen in the "
+    "console shows what is waiting on you."
+)
+
+#: What a press is told when nothing on this process can decide it.
+PRESS_NOT_TAKEN_TOLD: Final = (
+    "Nothing was decided: approvals cannot be decided from here just now. Use the Approvals "
+    "screen in the console."
+)
+
+#: What the card says once a press decided nothing on it.
+CLOSED_TOLD: Final = (
+    "This approval is no longer open here. The Approvals screen in the console shows what is "
+    "waiting on you."
+)
+
+#: What a press that decided is told, by what it decided.
+DECIDED_TOLD: Final[Mapping[ApprovalState, str]] = {
+    ApprovalState.APPROVED: "Approved. It is recorded under your name.",
+    ApprovalState.REJECTED: "Rejected. It is recorded under your name, with your reason.",
+}
+
+#: What the reject control says before a reason is chosen.
+REJECT_PROMPT: Final = "Reject because..."
+
+#: The reasons a rejection gives, in the words the console's Approvals screen uses for them
+#: (`console/src/pages/approvalsQuery.ts`, `REJECTION_REASONS`); a test holds the two equal.
+REJECTION_WORDS: Final[Mapping[RejectionReason, str]] = {
+    RejectionReason.NOT_WHAT_WAS_ASKED: "It is not what was asked for",
+    RejectionReason.WRONG_TARGET: "It is aimed at the wrong record",
+    RejectionReason.NO_LONGER_NEEDED: "It is no longer needed",
+    RejectionReason.NEEDS_MORE_DETAIL: "It needs more detail first",
+}
+
+#: The console's Approvals page, under the install's own address.
+APPROVALS_PATH: Final = "/approvals"
+
+#: The most cards one message is answered with, soonest to lapse first. A bound on what one
+#: message costs the open half of the card ceiling, and never a statement about the rest: the
+#: sentence already says the Approvals screen lists everything waiting.
+MAX_CARDS_OFFERED: Final = 5
+
+
+# ------------------------------------------------------------------------ the windows
+
+
+class CardWindows(Protocol):
+    """Where the card ceiling's two windows are asked and recorded. One hit per call admitted."""
+
+    async def spend(self, call: CardCall, now: datetime) -> LimitDecision:
+        """Whether one more request of this kind may go now; recorded when it may."""
+        ...
+
+
+@dataclass
+class SharedCardWindows:
+    """The install's windows, in Valkey through `brain.ops.limit_store`, or none without it."""
+
+    store: ValkeyWindowStore | None
+
+    async def spend(self, call: CardCall, now: datetime) -> LimitDecision:
+        if self.store is None:
+            # No windows to count in, and a channel's window admits then: see the module note.
+            return check(now=now, limits=(), state=LimiterState())
+        verdict = await asyncio.to_thread(
+            self.store.check_and_record, now=now, limits=(card_limit(call),)
+        )
+        return verdict.decision
+
+
+@dataclass
+class HeldCardWindows:
+    """The two windows in memory, for a test and for an install check, which may not touch a key
+    another caller uses."""
+
+    state: LimiterState = field(default_factory=LimiterState)
+
+    async def spend(self, call: CardCall, now: datetime) -> LimitDecision:
+        limit = card_limit(call)
+        decision = check(now=now, limits=(limit,), state=self.state)
+        if decision.allowed:
+            self.state = self.state.record(now, (limit,))
+        return decision
+
+
+def card_windows_of(request: Request) -> CardWindows:
+    """`app.state.card_windows` when a test or a check put one there, the install's otherwise."""
+    found = getattr(request.app.state, "card_windows", None)
+    if isinstance(found, SharedCardWindows | HeldCardWindows):
+        return found
+    return SharedCardWindows(limit_store_of(request.app.state))
+
+
+# ------------------------------------------------------------------------ the pieces
+
+
+def carries_cards(channel: Channel) -> bool:
+    """Whether an approval card may be offered on this channel at all.
+
+    Three facts and all three: its ceiling carries `approve`, its adapter declares cards, and its
+    wire can post one. The first is `brain.gate.admission`'s, so a channel whose ceiling changes
+    changes this at the same moment.
+    """
+    wire = channel_wires().get(channel)
+    return (
+        "approve" in verbs_for_channel(channel)
+        and adapter_for(channel).capabilities().supports(Feature.CARDS)
+        and isinstance(wire, CardWire)
+    )
+
+
+def card_payload(shown: Card) -> ChannelPayload:
+    """What an approval card shows: `brain.console.approvals.Card`'s own fields, no more.
+
+    `shown` is what the Approvals screen shows this reader, so the card cannot show them anything
+    that screen would not. No entity and no id on the record, since the card's first line names
+    the approval already.
+    """
+    return ChannelPayload(
+        records=(
+            {
+                "request": shown.artefact,
+                "runs as": shown.runs_as,
+                "until": shown.expires_at.isoformat(timespec="minutes"),
+            },
+        )
+    )
+
+
+def controls_for(approve: Mapping[str, str], reject: Mapping[str, str]) -> tuple[CardAction, ...]:
+    """Approve as a button, and Reject as a choice of the reasons the console offers.
+
+    A rejection names its reason (`brain.approval_routes.DecisionAsked`), so the reject control is
+    the four reasons and a press on it carries the one chosen; a card that rejected with no reason
+    would be refused by the route or record a reason nobody gave.
+    """
+    return (
+        CardAction(text="Approve", value=approve),
+        CardAction(
+            text=REJECT_PROMPT,
+            value=reject,
+            options=tuple((reason.value, REJECTION_WORDS[reason]) for reason in RejectionReason),
+        ),
+    )
+
+
+def card_controls(card: ApprovalCard) -> tuple[CardAction, ...]:
+    """The controls on this card, each carrying `press_value` for its own decision."""
+    approve = next(one for one in buttons() if one.decision is ApprovalState.APPROVED)
+    reject = next(one for one in buttons() if one.decision is ApprovalState.REJECTED)
+    return controls_for(press_value(card, approve), press_value(card, reject))
+
+
+def built(
+    suspension: SuspendedAction, shown: Card, *, reach: EntitlementSet, channel: Channel
+) -> ApprovalCard:
+    """The card for this approval at this reach: the body the Approvals screen shows them.
+
+    One card id per approval, reader and action, so the card offered and the card closed are the
+    same card and a send is keyed once for each reader. `CardRefusedError` from
+    `build_approval_card` for a body computed at any reach but the reader's own.
+    """
+    key = _key(suspension.id, reach.principal_id, suspension.action_digest)
+    return build_approval_card(
+        card_id=f"card.{key}",
+        suspension_id=suspension.id,
+        action_digest=suspension.action_digest,
+        payload=card_payload(shown),
+        body_ent_hash=reach.ent_hash(),
+        approver=reach,
+        raised_at=suspension.raised_at,
+        expires_at=suspension.expires_at,
+        capabilities=adapter_for(channel).capabilities(),
+    )
+
+
+def decision_asked(decision: ApprovalState, option: str) -> DecisionAsked | None:
+    """The route's body for what a press chose, or None for a press that chose nothing it can.
+
+    An approval chooses no option; a rejection chooses one of `RejectionReason`. Anything else is
+    not a press on a card this module built.
+    """
+    if decision is ApprovalState.APPROVED and not option:
+        return DecisionAsked(verdict=DecidableVerdict.APPROVED)
+    if decision is ApprovalState.REJECTED and option in {one.value for one in RejectionReason}:
+        return DecisionAsked(verdict=DecidableVerdict.REJECTED, reason_code=RejectionReason(option))
+    return None
+
+
+def approvals_link() -> str:
+    """The install's Approvals page, or empty on an install that names no address of its own.
+
+    From the same address the chat's link to Ask is made from, so the two cannot disagree about
+    where this install is.
+    """
+    ask = ask_link()
+    return f"{ask.removesuffix(ASK_PATH)}{APPROVALS_PATH}" if ask.endswith(ASK_PATH) else ""
+
+
+def where_to_decide(link: str) -> str:
+    """`DECIDE_WHERE_TOLD`, and the Approvals page when the install has an address of its own."""
+    return f"{DECIDE_WHERE_TOLD} Open Approvals: {link}" if link else DECIDE_WHERE_TOLD
+
+
+def _key(*parts: str) -> str:
+    blob = "".join(f"{len(part)}:{part}" for part in parts)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:32]
+
+
+# ------------------------------------------------------------------------ the cards
+
+
+type ReachLoader = Callable[[str, datetime], Awaitable[EntitlementSet]]
+
+
+def nominal_reach(request: Request) -> ReachLoader:
+    """A person's own grants, resolved as `brain.api_routes.asking` resolves a caller's."""
+
+    async def load(principal_id: str, now: datetime) -> EntitlementSet:
+        wiring = wiring_of(request)
+        if wiring is None:
+            raise Failed("no gate wiring on this process")
+        resolved = await resolve(
+            principal_id,
+            versions=wiring.versions,
+            store=wiring.store,
+            cache=wiring.cache,
+            now=now,
+        )
+        return resolved.entitlements
+
+    return load
+
+
+@dataclass
+class ApprovalCards:
+    """`brain.channels.inbound.ApprovalOfferer` and `CardPresser`: offers cards, decides presses.
+
+    Built per request by `of`, from that request's bindings, directory, suspension store, gate
+    and card windows, so a test's in-memory ones are the ones used.
+    """
+
+    bindings: ChannelBindings
+    people: People
+    store: SuspensionStore | None
+    reach_of: ReachLoader
+    windows: CardWindows
+    trace_id: str
+    link: str = ""
+
+    @classmethod
+    def of(cls, request: Request, *, bindings: ChannelBindings) -> ApprovalCards:
+        found = suspensions_of(request)
+        return cls(
+            bindings=bindings,
+            people=people_of(request),
+            store=found if isinstance(found, SuspensionStore) else None,
+            reach_of=nominal_reach(request),
+            windows=card_windows_of(request),
+            trace_id=trace_of_request() or f"card-{uuid.uuid4().hex[:16]}",
+            link=approvals_link(),
+        )
+
+    # ------------------------------------------------------------------ the offer
+
+    def told(self) -> str:
+        """What a decision word is answered with on this install. See `where_to_decide`."""
+        return where_to_decide(self.link)
+
+    async def offer(
+        self,
+        inbound: Inbound,
+        *,
+        binding: Binding,
+        record: ChannelRecord,
+        reply_to: str,
+        now: datetime,
+    ) -> tuple[Outgoing, ...]:
+        """Where approvals are decided, and each one waiting on this person as a card.
+
+        The sentence goes first and to everybody alike. A binding to somebody disabled or gone is
+        told what an unbound sender is told, as `brain.chat_answer.ChatAnswerer` tells them. See
+        `A_CARD_IS_OFFERED_WHERE_ITS_READER_ALONE_READS_IT`.
+        """
+        event = inbound.event
+        conversation = inbound.conversation
+        shared = conversation is not None and conversation.shared
+        mine = conversation.sender_to if shared and conversation is not None else reply_to
+        person = await self.people.live(binding.principal_id)
+        if person is None or not person.is_active(now):
+            return (
+                Outgoing(
+                    channel=event.channel,
+                    to=mine,
+                    intent=prompt_intent(record, binding.identity_hash),
+                    text=Unrecognised(channel=event.channel).prompt,
+                ),
+            )
+        told = Outgoing(
+            channel=event.channel, to=mine, intent=reply_intent(record, event), text=self.told()
+        )
+        if self.store is None or not carries_cards(event.channel):
+            return (told,)
+        nominal = await self.reach_of(person.id, now)
+        reach = admit_card_press(nominal, event.channel)
+        waiting = await self.store.reading_as(reach, now).open_suspensions()
+        offered = sorted(
+            ((one, shown) for one in waiting if (shown := shown_card(one, reach, now)) is not None),
+            key=lambda pair: (pair[1].expires_at, pair[1].suspension_id),
+        )[:MAX_CARDS_OFFERED]
+        cards: list[Outgoing] = []
+        for suspension, shown in offered:
+            if not (await self.windows.spend(CardCall.OPEN, now)).allowed:
+                # The open half is spent; the sentence already names the Approvals screen.
+                log.info("approval card not offered: open window full")
+                break
+            try:
+                card = built(suspension, shown, reach=reach, channel=event.channel)
+            except CardRefusedError:
+                log.warning("approval card not built", suspension=suspension.id)
+                continue
+            cards.append(
+                Outgoing(
+                    channel=event.channel,
+                    to=mine,
+                    intent=Intent(
+                        principal_id=person.id, intent_ref=f"approval_card.{card.card_id}"
+                    ),
+                    text=render_card(card),
+                    payload=card.payload,
+                    recipient=person.id,
+                    planned_hash=nominal.ent_hash(),
+                    actions=card_controls(card),
+                )
+            )
+        return (told, *cards)
+
+    # ------------------------------------------------------------------ the press
+
+    async def press(
+        self, inbound: Inbound, *, record: ChannelRecord, reply_to: str, now: datetime
+    ) -> Pressed:
+        """Decide this press through `take_decision`, or say in one sentence it decided nothing.
+
+        See `A_PRESS_DECIDES_ONLY_AS_THE_PERSON_THE_CARD_WAS_BUILT_FOR` for the order and
+        `A_DECIDED_CARD_IS_PATCHED_AND_A_REFUSED_ONE_CLOSED_IN_THE_ANSWER` for what closes it.
+        """
+        pressed = inbound.press
+        if pressed is None:
+            msg = "only a press on a card is decided here"
+            raise ValueError(msg)
+        event = inbound.event
+        named = read_press_value(pressed.value)
+        if named is None:
+            return Pressed(told=PRESS_REFUSED_TOLD)
+        digest = identity_hash(event.channel, event.channel_identity)
+        binding = await self._binding(event.channel, digest)
+        if binding is None or binding.principal_id != named.rendered_for:
+            # Somebody else's press, in a group or on a forwarded card: their copy is theirs to
+            # look at and nothing here touches it.
+            return Pressed(told=PRESS_REFUSED_TOLD)
+        person = await self.people.live(binding.principal_id)
+        asked = decision_asked(named.decision, pressed.option)
+        if person is None or not person.is_active(now) or asked is None:
+            return Pressed(told=PRESS_REFUSED_TOLD)
+        if self.store is None:
+            return Pressed(told=PRESS_NOT_TAKEN_TOLD)
+        nominal = await self.reach_of(person.id, now)
+        reach = admit_card_press(nominal, event.channel)
+        found = await self.store.reading_as(reach, now).suspension(named.suspension_id)
+        if found is None or found.action_digest != named.action_digest:
+            return Pressed(told=PRESS_REFUSED_TOLD, closed=CLOSED_TOLD)
+        shown = shown_card(found, reach, now)
+        if shown is None:
+            return Pressed(told=PRESS_REFUSED_TOLD, closed=CLOSED_TOLD)
+        try:
+            decided = await take_decision(
+                self.store, found.id, reach, asked, trace_id=self.trace_id, now=now
+            )
+        except Absent as refused:
+            moved = refused.public_message == A_REQUEST_THAT_NO_LONGER_APPLIES
+            told = A_REQUEST_THAT_NO_LONGER_APPLIES if moved else PRESS_REFUSED_TOLD
+            return Pressed(told=told, closed=CLOSED_TOLD)
+        except Failed:
+            return Pressed(told=PRESS_NOT_TAKEN_TOLD)
+        log.info("approval decided on a card", verdict=asked.verdict.value)
+        return await self._closing(
+            found,
+            shown,
+            decided.suspension.state,
+            message_id=pressed.message_id,
+            reply_to=reply_to,
+            reach=reach,
+            nominal=nominal,
+            channel=event.channel,
+            now=now,
+        )
+
+    async def _binding(self, channel: Channel, digest: str) -> Binding | None:
+        return await self.bindings.binding_for(channel, digest)
+
+    async def _closing(
+        self,
+        suspension: SuspendedAction,
+        shown: Card,
+        state: ApprovalState,
+        *,
+        message_id: str,
+        reply_to: str,
+        reach: EntitlementSet,
+        nominal: EntitlementSet,
+        channel: Channel,
+        now: datetime,
+    ) -> Pressed:
+        """The decided card's replacement and its fallback, drawn from the close half."""
+        told = DECIDED_TOLD[state]
+        # Typed as an object: whether a wire can edit a card is a question about its class.
+        wire: object = channel_wires().get(channel)
+        capabilities = adapter_for(channel).capabilities()
+        try:
+            card = built(suspension, shown, reach=reach, channel=channel)
+            key = card.card_id
+            plan = close_admitted(
+                card,
+                state=state,
+                decision=await self.windows.spend(CardCall.CLOSE, now),
+                capabilities=capabilities,
+            )
+        except CardStaleError:
+            log.info("approval card not closed: close window full")
+            return Pressed(told=told, decided=True)
+        except CardRefusedError:
+            log.warning("approval card not closed", suspension=suspension.id)
+            return Pressed(told=told, decided=True)
+        fallback = Outgoing(
+            channel=channel,
+            to=reply_to,
+            intent=Intent(principal_id=reach.principal_id, intent_ref=f"approval_stale.{key}"),
+            text=FALLBACK_TEMPLATE.format(suspension=suspension.id, state=state.value),
+        )
+        if plan.outcome is PatchOutcome.TEXT_FALLBACK or not isinstance(wire, CardWire):
+            return Pressed(told=told, decided=True, fallback=fallback)
+        patch = Outgoing(
+            channel=channel,
+            to=wire.edit_address(message_id),
+            intent=Intent(principal_id=reach.principal_id, intent_ref=f"approval_closed.{key}"),
+            text=render_decided(plan.card),
+            payload=card.payload,
+            recipient=reach.principal_id,
+            planned_hash=nominal.ent_hash(),
+        )
+        return Pressed(told=told, decided=True, patch=patch, fallback=fallback)
+
+
+async def closed_after(
+    pressed: Pressed,
+    *,
+    send: Callable[[Outgoing], Awaitable[Delivered]],
+    windows: CardWindows,
+    now: datetime,
+) -> None:
+    """Replace a decided card, and send the text fallback when the replacement did not go.
+
+    The fallback after a refused patch is a second request, so it draws on the close half again;
+    a fallback planned instead of a patch was drawn when the plan was made.
+    """
+    if pressed.patch is not None:
+        delivered = await send(pressed.patch)
+        if delivered.outcome is DeliveryOutcome.SENT or pressed.fallback is None:
+            return
+        if not (await windows.spend(CardCall.CLOSE, now)).allowed:
+            log.info("approval card fallback not sent: close window full")
+            return
+    if pressed.fallback is not None:
+        await send(pressed.fallback)

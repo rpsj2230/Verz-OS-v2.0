@@ -754,6 +754,17 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.channels.binding:BindingTable.on_channel": Repeat.READS,
         "brain.channels.binding:BindingTable.bind": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.channels.binding:BindingTable.unbind": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # Approval cards in a chat (M10.2.3). A wire builds a card's request and its press answer
+        # from bytes and a secret; the send is `deliver`'s, through the transport, keyed. An offer
+        # reads approvals and counts one hit in the card ceiling's open window per card; a press
+        # decides through `brain.approval_routes.take_decision`, whose update names the pending
+        # row, so a second press on a decided row changes nothing.
+        "brain.channels.adapter:CardWire.card_request": Repeat.READS,
+        "brain.channels.adapter:CardWire.edit_address": Repeat.READS,
+        "brain.channels.adapter:CardWire.press_answer": Repeat.READS,
+        "brain.channels.inbound:ApprovalOfferer.offer": Repeat.DERIVED_STATE,
+        "brain.channels.inbound:CardPresser.press": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.approval_cards:CardWindows.spend": Repeat.DERIVED_STATE,
     }
 )
 

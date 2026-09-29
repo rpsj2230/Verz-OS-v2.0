@@ -50,6 +50,19 @@ decided, and pressed - and the thing they were deciding about may have been take
 somebody else in between. A refusal after the fact is an error message; a disarmed card is
 an answer.
 
+**A press is checked with no card kept anywhere (M10.2.3).** The press value carries the
+suspension, the action digest and the principal the card was built for, and `read_press_value`
+takes back exactly those four and nothing else. Whoever receives a press then asks the three
+questions that need no card state: is the presser's chat account bound to that principal, is the
+stored suspension still open at that digest, and does the permission admit this person now.
+`ApprovalCard.armed` still answers for a card held in memory, and it is not what stands between a
+stale card and a decision on a running install: the store's own refusal of a decided row is.
+
+**A shared window is asked once, outside.** `close_card` asks an in-memory window, which is what
+a test holds; a running install keeps its windows in Valkey, where `brain.ops.limit_store`
+checks and records in one watched transaction. `close_admitted` takes that decision instead of
+asking again, so the window is asked exactly once whichever keeps it.
+
 Nothing here opens a connection and nothing here re-implements a limiter. The sliding window
 is `ops.limits`, the ceiling is the verified one in `ops.limits.SOURCE_CEILINGS`, and this
 module supplies the policy on top of them.
@@ -76,7 +89,7 @@ from brain.core.redaction import (
     ChannelPayload,
     render_lock,
 )
-from brain.gate.leash import DIGEST, ApprovalState
+from brain.gate.leash import DIGEST, IDENTIFIER, ApprovalState
 from brain.ops.limits import (
     MINUTE_SECONDS,
     Limit,
@@ -331,14 +344,66 @@ def press_value(card: ApprovalCard, button: Button) -> dict[str, str]:
     """What comes back when this button is pressed.
 
     The suspension and the digest travel with the press so the decision names the action it
-    was granted for. Nothing about the body is in here: a press carrying a rendered value
-    would put that value into whatever logs the callback, for every card ever pressed.
+    was granted for, and `rendered_for` so a press is honoured only from the account bound to
+    the person the card was built for: that is how a press is checked with no card kept
+    anywhere between the send and the press. Nothing about the body is in here: a press
+    carrying a rendered value would put that value into whatever logs the callback, for every
+    card ever pressed.
     """
     return {
         "suspension_id": card.suspension_id,
         "action_digest": card.action_digest,
         "decision": button.decision.value,
+        "rendered_for": card.rendered_for,
     }
+
+
+#: What a press value's identifiers may look like: `gate.leash.IDENTIFIER`, the grammar a
+#: suspension id and a principal id are both held to.
+_IDENTIFIER_RE: Final = re.compile(IDENTIFIER)
+
+
+@dataclass(frozen=True)
+class PressValue:
+    """A press value read back: the four identifiers `press_value` wrote, and nothing else."""
+
+    suspension_id: str
+    action_digest: str
+    decision: ApprovalState
+    rendered_for: str
+
+
+def read_press_value(value: Mapping[str, object]) -> PressValue | None:
+    """The press value a card of ours sent back, or None for anything that is not exactly one.
+
+    Exactly the four keys, each in its own grammar, and a decision that is a decision: a value
+    with a fifth key or a pending decision is not one this module wrote, and guessing what it
+    meant is how a press on something else gets honoured. None rather than a raise, because the
+    caller answers every refusal of a press with one sentence and has nothing to branch on.
+    """
+    if set(value) != {"suspension_id", "action_digest", "decision", "rendered_for"}:
+        return None
+    suspension_id = value["suspension_id"]
+    action_digest = value["action_digest"]
+    decision = value["decision"]
+    rendered_for = value["rendered_for"]
+    if not (
+        isinstance(suspension_id, str)
+        and isinstance(action_digest, str)
+        and isinstance(decision, str)
+        and isinstance(rendered_for, str)
+        and _IDENTIFIER_RE.match(suspension_id)
+        and _DIGEST_RE.match(action_digest)
+        and _IDENTIFIER_RE.match(rendered_for)
+        and decision in (ApprovalState.APPROVED.value, ApprovalState.REJECTED.value)
+    ):
+        return None
+    return PressValue(
+        suspension_id=suspension_id,
+        action_digest=action_digest,
+        decision=ApprovalState(decision),
+        rendered_for=rendered_for,
+    )
 
 
 def build_approval_card(
@@ -412,6 +477,30 @@ def render_card(card: ApprovalCard) -> str:
         f"Approval {card.suspension_id}",
         render_body(card.payload),
         "Actions: " + ", ".join(button.text for button in buttons()),
+    ]
+    body = "\n".join(lines)
+    assert_label_survives(body, card.payload)
+    return body
+
+
+#: The line a decided card ends with instead of its actions.
+DECIDED_LINE: Final = "Decided: {state}. Nothing is left to do on this card."
+
+
+def render_decided(card: ApprovalCard) -> str:
+    """The card as it stands once decided: its body and the decision, and no action to take.
+
+    Through the one renderer, so a patched card keeps its label as the card it replaces did.
+    Refused for a card still pending or still armed: a decided body on a card that could still be
+    pressed is the stale card this module exists to prevent, drawn the other way round.
+    """
+    if card.state is ApprovalState.PENDING or card.armed:
+        msg = f"card {card.card_id} is not closed, so it has no decided state to show"
+        raise CardRefusedError(msg)
+    lines = [
+        f"Approval {card.suspension_id}",
+        render_body(card.payload),
+        DECIDED_LINE.format(state=card.state.value),
     ]
     body = "\n".join(lines)
     assert_label_survives(body, card.payload)
@@ -596,6 +685,31 @@ def close_card(
     refused: two decisions on one action is not a retry, and picking one of them silently is
     the guess this module has no evidence to make.
     """
+    limit = card_limit(CardCall.CLOSE)
+    return close_admitted(
+        card,
+        state=state,
+        decision=check(now=now, limits=(limit,), state=limiter),
+        capabilities=capabilities,
+    )
+
+
+def close_admitted(
+    card: ApprovalCard,
+    *,
+    state: ApprovalState,
+    decision: LimitDecision,
+    capabilities: ChannelCapabilities,
+) -> PatchPlan:
+    """`close_card` with the close window already asked, for a window kept outside this process.
+
+    The shared window lives in `brain.ops.limit_store`, which checks and records in one watched
+    transaction; asking it again here with an empty state would be a check that always admits.
+    So the caller hands over what that window decided, and everything else is `close_card`'s,
+    in `close_card`'s order: the card disarmed first, a pending or a second different close
+    refused, a full window raised as `CardStaleError`, and the surface's ability to edit decided
+    last. `close_card` is this with the decision made from an in-memory state.
+    """
     if state is ApprovalState.PENDING:
         msg = "closing a card to pending is not a close; there would be nothing to say"
         raise CardRefusedError(msg)
@@ -610,7 +724,6 @@ def close_card(
     text = FALLBACK_TEMPLATE.format(suspension=card.suspension_id, state=state.value)
 
     limit = card_limit(CardCall.CLOSE)
-    decision = check(now=now, limits=(limit,), state=limiter)
     if not decision.allowed:
         msg = (
             f"the close window is full, so card {card.card_id} still shows an open decision. "

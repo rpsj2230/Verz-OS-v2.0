@@ -47,7 +47,16 @@ vendor like Lark asks before every request, and `verify` hands back the request 
 vendor that encrypts. All three arrived with the Lark channel and change nothing for a wire that
 declares none of them.
 
-Task ids: M10.1.1, M10.1.2, M10.1.3, M10.1.4, M10.1.5, M10.2.1, M10.6.1, M10.2.6
+**A card is a message with controls on it, and a press is read like a message (M10.2.3).**
+`CardAction` is one control: its words and the identifiers a press sends back, which are
+identifiers and never a value. `CardPress` is what a press carried, handed back on
+`Received.press` beside a `ChannelEvent` of its own, so a press is claimed by the same dedupe key
+as a message and a replayed press is refused by the database. `CardWire` is the extra a wire
+declares when its vendor has cards: the request that posts one, and the answer a press is given.
+A wire that declares none is asked for none, and a card planned for it is refused as one it
+cannot carry.
+
+Task ids: M10.1.1, M10.1.2, M10.1.3, M10.1.4, M10.1.5, M10.2.1, M10.6.1, M10.2.6, M10.2.3
 """
 
 from __future__ import annotations
@@ -60,7 +69,7 @@ from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from types import MappingProxyType, ModuleType
-from typing import Final, Protocol, runtime_checkable
+from typing import Any, Final, Protocol, runtime_checkable
 
 from brain.connectors.throttle import CallOutcome
 from brain.core.field_policy import Classification
@@ -394,6 +403,34 @@ BOT_ID: Final = "bot_id"
 
 
 @dataclass(frozen=True)
+class CardAction:
+    """One control on a card: the words on it and what a press on it sends back (M10.2.3).
+
+    `value` is identifiers only, for `brain.channels.cards.press_value`'s reason: a press is logged
+    by whatever receives it, for every card ever pressed. `options` makes the control a choice of
+    several, each a value and the words for it, and a press then says which was chosen.
+    """
+
+    text: str
+    value: Mapping[str, str]
+    options: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True)
+class CardPress:
+    """What a press on a card sent back, and which delivered message the card is (M10.2.3).
+
+    `message_id` is the vendor's own id for the card's message, which is what an edit of it is
+    addressed to, so nothing about a card needs keeping between the send and the press.
+    """
+
+    value: Mapping[str, str]
+    #: The option chosen, for a control that offers several; empty for a button.
+    option: str
+    message_id: str
+
+
+@dataclass(frozen=True)
 class Received:
     """A verified request, read: the event the gate reads and where a reply to it goes."""
 
@@ -403,6 +440,9 @@ class Received:
     #: Present for a chat whose conversations can hold more than one reader. None for a channel
     #: where the reply goes back to the sender alone, as the company's own system's does.
     conversation: Conversation | None = None
+    #: Present when this was a press on a card rather than a message; the event is then the
+    #: press's own, carrying no text, so it is claimed exactly as a message is.
+    press: CardPress | None = None
 
 
 @dataclass(frozen=True)
@@ -417,7 +457,8 @@ class VendorRequest:
     url: str
     headers: Mapping[str, str] = field(repr=False)
     body: bytes = field(repr=False)
-    #: `POST` to deliver; `GET` for the one read a chat needs, who is in a conversation.
+    #: `POST` to deliver, `PATCH` to replace a card already delivered, both through `send` and
+    #: both keyed; `GET` for the one read a chat needs, who is in a conversation.
     method: str = "POST"
     #: A credential exchanged for a bearer token first, for a vendor that authorises requests
     #: with a token of its own minting rather than with the secret itself.
@@ -506,6 +547,38 @@ class ChannelWire(Protocol):
         ...
 
 
+@runtime_checkable
+class CardWire(Protocol):
+    """What a wire adds when its vendor has cards a person can press (M10.2.3, M10.2.4).
+
+    Asked by `isinstance`, as `brain.chat_answer.RoomReader` is: whether a wire can post a card is
+    a question about its class, and a wire that cannot is refused a card as one it cannot carry.
+    Pure, as every wire method is. An edit of a card already sent is an ordinary reply to an
+    address of the wire's own, so it is sent, keyed and recorded as every reply is.
+    """
+
+    def card_request(
+        self,
+        *,
+        to: str,
+        text: str,
+        actions: tuple[CardAction, ...],
+        secret: str,
+        tenant: Mapping[str, str],
+    ) -> VendorRequest:
+        """The request that posts `text` as a card with these controls to `to`, or `ValueError`."""
+        ...
+
+    def edit_address(self, message_id: str) -> str:
+        """The address a reply is sent to so that it replaces the card in this message."""
+        ...
+
+    def press_answer(self, *, told: str, closed: str, decided: bool) -> Mapping[str, Any]:
+        """What the vendor is answered with for a press: `told` shown to the presser at once, and
+        the card replaced by `closed` when it is not empty, at no cost against any ceiling."""
+        ...
+
+
 class ChannelTransport(Protocol):
     """Whatever puts a `VendorRequest` on the network. `brain.channel_routes.HttpsTransport`.
 
@@ -514,7 +587,9 @@ class ChannelTransport(Protocol):
 
     `read` is the other half, and a separate method so the two cannot be confused: a `GET` that
     changes nothing at the vendor, the one read a chat makes, who is in a conversation. It refuses
-    anything but a `GET`, so a send cannot reach the vendor by the door that is not keyed.
+    anything but a `GET`, so a send cannot reach the vendor by the door that is not keyed. `send`
+    takes a `POST` or a `PATCH`, the second being a card replaced in place, which is as much an
+    effect as a message and goes by the same keyed door.
     """
 
     def send(self, request: VendorRequest) -> VendorAnswer: ...

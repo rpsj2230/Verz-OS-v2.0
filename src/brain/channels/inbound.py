@@ -56,7 +56,23 @@ which of its members is unbound. See `THE_BINDING_PROMPT_IS_SENT_ONCE_AND_TO_THE
 redeemed by the store that keeps bindings (CH2's), and nothing here knows its shape. A code posted
 where others read it binds nobody. See `A_CODE_IS_REDEEMED_ONLY_WHERE_THE_SENDER_ALONE_READS_IT`.
 
-Task ids: M3.2.2, M3.9.8, M10.2.1, M10.2.6, M10.3.3, M10.6.1, M10.6.3, M1.8.5
+**A message never decides an approval, on any channel, and the sender is told where one is
+decided (M10.7.1).** A bound sender whose message is a decision word, "approve", "reject" and
+their kin, or asks for their approvals, is not answered as a question: `reply_for` hands it to the
+`ApprovalOfferer` before the answerer, which tells them in words that approvals are decided in the
+console, the staff web app or on an approval card, and on a channel that carries cards puts each
+approval waiting on them in front of them as one. With no offerer wired it is told the same
+sentence alone. Nothing on this path can decide anything: a message is admitted at a binding's
+read, and the only decision a chat can take is a press on a card, which is a different request
+with its own branch in the events route. The sentence is one for every sender on a channel,
+whether or not anything waits on them, so asking cannot learn whether an approval exists. See
+`A_MESSAGE_NEVER_DECIDES_AN_APPROVAL`.
+
+**A press on a card is read like a message and handed to the `CardPresser` (M10.2.3).** A wire
+that reads one returns `Received.press` beside an event of its own, which `receive` claims as it
+claims a message, so a replayed press is refused by the database before anything reads its value.
+
+Task ids: M3.2.2, M3.9.8, M10.2.1, M10.2.6, M10.3.3, M10.6.1, M10.6.3, M1.8.5, M10.7.1, M10.2.3
 """
 
 from __future__ import annotations
@@ -71,7 +87,14 @@ from typing import Final, Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from brain.channels.adapter import BOT_ID, Arrived, ChannelAdapter, ChannelWire, Conversation
+from brain.channels.adapter import (
+    BOT_ID,
+    Arrived,
+    CardPress,
+    ChannelAdapter,
+    ChannelWire,
+    Conversation,
+)
 from brain.channels.outbound import Outgoing
 from brain.channels.webhook import WebhookRefusedError
 from brain.gate.addressing import Address, from_mention
@@ -139,6 +162,44 @@ CODE_REFUSED_TOLD: Final = (
     "your profile in the console and send it here."
 )
 
+#: Why a decision word in a message is answered with where to decide, and decides nothing.
+A_MESSAGE_NEVER_DECIDES_AN_APPROVAL: Final = (
+    "A message is words bound to no action, admitted at a binding's read, so a reply meaning "
+    "approve on WhatsApp, email, the webhook channel or a Lark chat decides nothing. The sender "
+    "is told, in one sentence the same for everybody, that approvals are decided in the console, "
+    "the staff web app or on an approval card; on a channel with cards, each approval waiting on "
+    "them is put in front of them as one."
+)
+
+#: What a sender whose message was a decision word is told. One sentence for everybody.
+DECIDE_WHERE_TOLD: Final = (
+    "A message never decides an approval. Approvals are decided on the Approvals screen in the "
+    "console or the staff web app, or with the buttons on an approval card in your own Lark chat "
+    "with me."
+)
+
+#: The words a message opens with when it means to decide something, and the one that asks what
+#: is waiting. Closed, and short on purpose: a question that happens to open with one of them is
+#: told where to decide rather than answered, which costs a person one more message and never
+#: decides anything.
+DECISION_WORDS: Final = frozenset(
+    {
+        "approve",
+        "approved",
+        "approval",
+        "approvals",
+        "reject",
+        "rejected",
+        "decline",
+        "declined",
+        "deny",
+        "denied",
+    }
+)
+
+#: The most words a decision reply is. Longer is a sentence about something, and a question.
+MAX_DECISION_WORDS: Final = 8
+
 #: The largest body read. A chat message with its envelope, never a document: a vendor that
 #: sends a file sends a reference to it.
 MAX_BODY_BYTES: Final = 256 * 1024
@@ -155,6 +216,8 @@ class Inbound:
     address: Address
     #: Where it was said, for a chat whose conversations can hold more than one reader.
     conversation: Conversation | None = None
+    #: A press on a card rather than a message: the events route's `CardPresser` takes it.
+    press: CardPress | None = None
 
 
 class ReceiptKind(enum.StrEnum):
@@ -229,6 +292,70 @@ class ChatBinder(Protocol):
     async def redeem(self, event: ChannelEvent, text: str, *, now: datetime) -> Redeemed:
         """Bind this event's sender with the code in `text`, or say why nothing was bound."""
         ...
+
+
+class ApprovalOfferer(Protocol):
+    """What a bound sender's decision word is answered with. `brain.approval_cards.ApprovalCards`.
+
+    The sentence saying where approvals are decided, first, and on a channel with cards each
+    approval waiting on the sender as a card in a conversation only they read. See
+    `A_MESSAGE_NEVER_DECIDES_AN_APPROVAL`.
+    """
+
+    async def offer(
+        self,
+        inbound: Inbound,
+        *,
+        binding: Binding,
+        record: ChannelRecord,
+        reply_to: str,
+        now: datetime,
+    ) -> Sequence[Outgoing]:
+        """The messages to send: the sentence, then any card, each made at its reader's reach."""
+        ...
+
+
+@dataclass(frozen=True)
+class Pressed:
+    """What a press on a card came to, as the vendor is answered and the card is then closed.
+
+    `told` is shown to the presser at once and `closed`, when not empty, replaces the card in the
+    same answer. `patch` replaces the card after a decision, by a call against the card ceiling,
+    and `fallback` is sent only when `patch` was not delivered.
+    """
+
+    told: str
+    closed: str = ""
+    decided: bool = False
+    patch: Outgoing | None = None
+    fallback: Outgoing | None = None
+
+
+class CardPresser(Protocol):
+    """What decides a press on an approval card. `brain.approval_cards.ApprovalCards`."""
+
+    async def press(
+        self, inbound: Inbound, *, record: ChannelRecord, reply_to: str, now: datetime
+    ) -> Pressed:
+        """Decide this press, or say in one sentence that it decided nothing. `reply_to` is the
+        presser's own conversation with the bot, where a fallback goes."""
+        ...
+
+
+def is_decision_reply(text: str) -> bool:
+    """Whether a message means to decide an approval, or asks what is waiting (M10.7.1).
+
+    Its first word, a leading slash aside, is one of `DECISION_WORDS`, it is at most
+    `MAX_DECISION_WORDS` long, and it is not a question. Read from the words a person typed and
+    never from anything they name: which approval they meant is not asked, because no message
+    decides one.
+    """
+    said = text.strip()
+    words = said.lower().split()
+    if not words or len(words) > MAX_DECISION_WORDS or said.endswith("?"):
+        return False
+    first = words[0].lstrip("/").strip(".,!:;")
+    return first in DECISION_WORDS
 
 
 class NoBindingsYet:
@@ -323,6 +450,7 @@ async def receive(
             event=received.event,
             address=from_mention(received.event.text),
             conversation=received.conversation,
+            press=received.press,
         ),
         reply_to=received.reply_to,
     )
@@ -376,17 +504,22 @@ async def reply_for(
     answerer: ChannelAnswerer | None,
     now: datetime,
     binder: ChatBinder | None = None,
+    offerer: ApprovalOfferer | None = None,
 ) -> tuple[Outgoing, ...] | None:
     """What to send back to an accepted message: None when nothing on this install answers it,
     and nothing at all for a shared conversation's message that was not for the bot.
 
     A sender bound to nobody may be binding: a message in a conversation they alone read is
     offered to `binder` first (M1.8.5). Otherwise they are sent the unrecognised prompt, once and
-    to them alone (M10.3.3). A bound sender is the answerer's; with none wired the caller records
-    `not_answerable`.
+    to them alone (M10.3.3). A bound sender's decision word is `offerer`'s, or with none wired is
+    told `DECIDE_WHERE_TOLD` alone, in a conversation only they read (M10.7.1). Any other message
+    from a bound sender is the answerer's; with none wired the caller records `not_answerable`.
     """
     if receipt.inbound is None:
         msg = "only an accepted message is replied to"
+        raise ValueError(msg)
+    if receipt.inbound.press is not None:
+        msg = "a press on a card is decided by a CardPresser and never replied to as a message"
         raise ValueError(msg)
     inbound = receipt.inbound
     event = inbound.event
@@ -415,6 +548,22 @@ async def reply_for(
                 to=receipt.reply_to if conversation is None else conversation.sender_to,
                 intent=prompt_intent(record, digest),
                 text=Unrecognised(channel=event.channel).prompt,
+            ),
+        )
+    if is_decision_reply(inbound.address.question):
+        # Never the answerer's, and never a decision. See `A_MESSAGE_NEVER_DECIDES_AN_APPROVAL`.
+        if offerer is not None:
+            offered = await offerer.offer(
+                inbound, binding=binding, record=record, reply_to=receipt.reply_to, now=now
+            )
+            return tuple(offered)
+        shared = conversation is not None and conversation.shared
+        return (
+            Outgoing(
+                channel=event.channel,
+                to=conversation.sender_to if shared and conversation else receipt.reply_to,
+                intent=reply_intent(record, event),
+                text=DECIDE_WHERE_TOLD,
             ),
         )
     if answerer is None:
