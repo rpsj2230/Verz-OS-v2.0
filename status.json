@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-09-29T10:01:21.488936+00:00",
-  "commit": "9c938232",
-  "commit_subject": "Moonshot's kimi-k3 is told the answer lane's effort instead of thinking at its maximum, and a check stopped by a model call says how the call ended (#216)",
+  "generated_at": "2026-09-29T10:24:57.452194+00:00",
+  "commit": "da981bde",
+  "commit_subject": "A run's trace is stored masked behind its own role, a browser session reaches the ledger, and the audit install check asserts every clause (#197)",
   "total": 1576,
-  "done": 412,
-  "percent": 26.1,
+  "done": 437,
+  "percent": 27.7,
   "acts": 47,
   "decided": 131,
   "current_wave": 0,
@@ -39,12 +39,12 @@
       "wave": 2,
       "name": "Data, channels, retrieval",
       "total": 265,
-      "done": 66,
-      "percent": 24.9,
-      "in_progress": 20,
-      "ready_for_testing": 5,
+      "done": 91,
+      "percent": 34.3,
+      "in_progress": 14,
+      "ready_for_testing": 2,
       "blocked": 2,
-      "open": 172,
+      "open": 156,
       "acts": 0,
       "decided": 20
     },
@@ -170,7 +170,7 @@
       "name": "Knowledge, assets, document parsing",
       "wave": 2,
       "total": 39,
-      "done": 15,
+      "done": 18,
       "acts": 0,
       "decided": 1
     },
@@ -179,7 +179,7 @@
       "name": "Provenance, abstention, escalation",
       "wave": 2,
       "total": 11,
-      "done": 0,
+      "done": 5,
       "acts": 0,
       "decided": 3
     },
@@ -188,7 +188,7 @@
       "name": "Chat and conversation",
       "wave": 2,
       "total": 6,
-      "done": 0,
+      "done": 1,
       "acts": 0,
       "decided": 2
     },
@@ -206,7 +206,7 @@
       "name": "Connectors, federation, projection",
       "wave": 2,
       "total": 71,
-      "done": 9,
+      "done": 23,
       "acts": 0,
       "decided": 3
     },
@@ -305,7 +305,7 @@
       "name": "Admission control and capacity",
       "wave": 2,
       "total": 13,
-      "done": 0,
+      "done": 2,
       "acts": 0,
       "decided": 1
     },
@@ -591,13 +591,27 @@
     "M10.4.4",
     "M10.4.5",
     "M10.6.3",
+    "M11.1.1",
+    "M11.1.3",
     "M11.1.7",
+    "M11.2.1",
+    "M11.2.2",
+    "M11.2.3",
+    "M11.2.5",
+    "M11.2.6",
+    "M11.3.1",
+    "M11.3.2",
+    "M11.3.3",
+    "M11.3.5",
     "M11.4.1",
     "M11.4.2",
     "M11.4.3",
     "M11.4.4",
     "M11.4.5",
     "M11.4.7",
+    "M11.5.1",
+    "M11.5.4",
+    "M11.5.5",
     "M11.8.1",
     "M11.8.2",
     "M12.1.1",
@@ -621,6 +635,8 @@
     "M2.2.1",
     "M2.2.2",
     "M2.2.4",
+    "M22.1.2",
+    "M22.4.1",
     "M23.1.1",
     "M23.1.2",
     "M23.1.3",
@@ -907,10 +923,19 @@
     "M7.4.4",
     "M7.4.5",
     "M7.4.6",
+    "M7.4.7",
     "M7.5.1",
+    "M7.5.2",
+    "M7.5.3",
     "M7.6.2",
     "M7.6.3",
-    "M7.7.1"
+    "M7.7.1",
+    "M8.1.1",
+    "M8.1.2",
+    "M8.1.4",
+    "M8.2.1",
+    "M8.2.2",
+    "M9.2.1"
   ],
   "leaf_status": {
     "M1.6.5": {
@@ -958,21 +983,6 @@
       "why": "moved to Wave 5 (needs-rupash 113): Anthropic and Moonshot answer on the install; OpenAI and DeepSeek are turned off until their accounts are funded",
       "updated": "2026-09-29"
     },
-    "M7.4.7": {
-      "status": "IN PROGRESS",
-      "why": "Wave 2 batch 2, citations, freshness and abstention on Ask (R2)",
-      "updated": "2026-09-28"
-    },
-    "M7.5.2": {
-      "status": "READY FOR TESTING",
-      "why": "built in classified tables (K6, merged c0552331 and 9e277b69); proved when a reader without the cost grant asks a service's price and gets the sell price with cost and margin withheld",
-      "updated": "2026-09-28"
-    },
-    "M7.5.3": {
-      "status": "READY FOR TESTING",
-      "why": "built in classified tables (K6, merged c0552331 and 9e277b69); proved when a column marked, reviewed and applied on Classification leaves the change in the ledger",
-      "updated": "2026-09-28"
-    },
     "M7.6.1": {
       "status": "IN PROGRESS",
       "why": "a kind is set at upload and filters the library and the search tool (PR #106); Ask has no kind picker yet",
@@ -986,31 +996,6 @@
     "M7.7.3": {
       "status": "IN PROGRESS",
       "why": "price lists uploaded on Classification convert (K6, merged c0552331); no upload path yet offers a price-list document for conversion",
-      "updated": "2026-09-28"
-    },
-    "M8.1.1": {
-      "status": "IN PROGRESS",
-      "why": "Wave 2 batch 2, citations, freshness and abstention on Ask (R2)",
-      "updated": "2026-09-28"
-    },
-    "M8.1.2": {
-      "status": "IN PROGRESS",
-      "why": "Wave 2 batch 2, citations, freshness and abstention on Ask (R2)",
-      "updated": "2026-09-28"
-    },
-    "M8.1.4": {
-      "status": "IN PROGRESS",
-      "why": "Wave 2 batch 2, citations, freshness and abstention on Ask (R2)",
-      "updated": "2026-09-28"
-    },
-    "M8.2.1": {
-      "status": "IN PROGRESS",
-      "why": "Wave 2 batch 2, citations, freshness and abstention on Ask (R2)",
-      "updated": "2026-09-28"
-    },
-    "M8.2.2": {
-      "status": "IN PROGRESS",
-      "why": "Wave 2 batch 2, citations, freshness and abstention on Ask (R2)",
       "updated": "2026-09-28"
     },
     "M8.2.4": {
@@ -1051,11 +1036,6 @@
     "M10.6.1": {
       "status": "IN PROGRESS",
       "why": "the webhook and Lark wires are live (PR #105; L1, merged d426e3d3); every other vendor's wire comes with its own package",
-      "updated": "2026-09-28"
-    },
-    "M11.1.1": {
-      "status": "READY FOR TESTING",
-      "why": "built in connector registries and the minimal index (C1, merged 7c54d7d8); proved when a connected source's worker sync runs through the declared interface and health shows it (Xero or HubSpot)",
       "updated": "2026-09-28"
     },
     "M11.1.6": {
@@ -1115,12 +1095,18 @@
     }
   },
   "wave_records": {},
-  "closed_today": 42,
+  "closed_today": 67,
   "next_up": [
     "M38.2.1.1",
     "M41.3.1"
   ],
   "recent": [
+    {
+      "sha": "e111bc2",
+      "at": "2026-09-29T09:42:35+00:00",
+      "subject": "Twenty-five Wave 2 tasks close on the install's acceptance run: price lists, citations and scope statements, the connector framework and rate limits (#223)",
+      "closed": "M11.1.1,M11.1.3,M11.2.1,M11.2.2,M11.2.3,M11.2.5,M11.2.6,M11.3.1,M11.3.2,M11.3.3,M11.3.5,M11.5.1,M11.5.4,M11.5.5,M22.1.2,M22.4.1,M7.4.7,M7.5.2,M7.5.3,M8.1.1,M8.1.2,M8.1.4,M8.2.1,M8.2.2,M9.2.1"
+    },
     {
       "sha": "3cbb087",
       "at": "2026-09-29T08:30:41+00:00",
@@ -1234,12 +1220,6 @@
       "at": "2026-09-21T18:06:54+00:00",
       "subject": "Three model tasks close on their CI proof, and Needs you asks to move two tasks to the waves that build what they need",
       "closed": "M5.6.2,M5.6.4,M5.7.2"
-    },
-    {
-      "sha": "601c390",
-      "at": "2026-09-21T17:52:56+00:00",
-      "subject": "The gate records from arrival, serves stored answers with their age, and answers as the agent a person names",
-      "closed": "M3.1.2,M3.1.3,M3.4.1,M3.5.2,M3.5.3,M3.9.8"
     }
   ]
 }
