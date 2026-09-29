@@ -2,13 +2,45 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**8 items are open: 127 to 129,** things for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the vault open itself), **121 to 124,** whose conversations an agent's page lists, where uploaded
+**9 items are open: 131,** making staff accounts work on your install, **127 to 129,** things for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the vault open itself), **121 to 124,** whose conversations an agent's page lists, where uploaded
 documents are stored, a task that names a table library, and the automation canvas, each with my
 recommendation, **and 91,** the checks only you can do on your
 install; it waits for the Knowledge upload grants (item 105) to land. Each says in plain terms what it
 is, what I recommend, and every step.
 
 # Open
+
+## 131. Make staff accounts work on your install (after #281 is deployed)
+
+**In plain terms:** item 115's accounts are built (#281): each active person on the staff list gets
+a Brain account with no email sent, and gets in by pressing **Forgot password** on the sign-in page.
+Two things on your install have to be in place first, one of them only you can do.
+
+**Part 1, yours: the sign-in service's email settings.** Forgot password sends its link by email,
+so the sign-in service (Keycloak) needs an email account to send from. Without it nobody can set a
+password. You need the details of a mailbox that may send mail: its server address (SMTP host),
+port, and a username and password; your email provider's help pages list them.
+
+1. Open the Keycloak admin console (the same place you added users for item 91) and sign in.
+2. Choose your realm, then **Realm settings**, then the **Email** tab.
+3. Fill in **From** (for example no-reply at your domain), **Host**, **Port**, **Encryption**
+   (usually StartTLS on port 587), turn on **Authentication** and fill in the **Username** and
+   **Password**.
+4. Press **Test connection**; Keycloak sends a test mail to your own address. Then **Save**.
+
+**Part 2, mine with your go-ahead: three server steps.**
+
+- Install the updated deploy script, so releases set up the accounts client and apply their own
+  vault changes (this is also item 129's prerequisite).
+- Run the accounts-client setup once, which creates the sign-in service client the sync uses and
+  puts its secret straight into the vault; nobody sees it.
+- Add one setting the worker needs (the sign-in address, `INSTALL_OIDC_ISSUER`) to the worker in the
+  hosting panel's stored configuration.
+
+**What you do:** fill in Part 1 whenever suits you, and reply "131: do the server steps" for Part 2.
+I tell you when both are done and the next staff sync has made the accounts; then you can tell
+people: "Your account is ready. Go to the sign-in page, press Forgot password and enter your work
+email."
 
 ## 129. Let the vault open itself after a restart (item 114's switch, still to do)
 
