@@ -49,6 +49,7 @@ from brain.channels.adapter import (
     channel_adapters,
     channel_wires,
 )
+from brain.channels.email import WIRE as EMAIL_WIRE
 from brain.channels.inbound import (
     MAX_BODY_BYTES,
     Inbound,
@@ -468,7 +469,11 @@ def test_every_adapter_in_the_package_is_registered_once_in_channel_order() -> N
         Channel.WHATSAPP,
     }
     assert channel_adapters() == CHANNEL_ADAPTERS
-    assert dict(channel_wires()) == {Channel.LARK: LARK_WIRE, Channel.WEBHOOK: WIRE}
+    assert dict(channel_wires()) == {
+        Channel.EMAIL: EMAIL_WIRE,
+        Channel.LARK: LARK_WIRE,
+        Channel.WEBHOOK: WIRE,
+    }
 
 
 PROBE_MODULE = """

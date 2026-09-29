@@ -14,7 +14,7 @@
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
-import { NOT_RECORDED } from "../src/components/kit";
+import { NOT_COPIED_TEXT, NOT_RECORDED } from "../src/components/kit";
 import { DISCONNECT_LABEL, GET_CODE_LABEL, READING_MY_CHANNELS } from "../src/components/MyChannels";
 import { TENANT_FORMAT } from "../src/pages/channelsQuery";
 import { ACT_LABELS, UNAVAILABLE } from "../src/pages/channels/channelActions";
@@ -48,6 +48,8 @@ function row(overrides: Record<string, unknown> = {}): Record<string, unknown> {
     health: "working",
     last_delivered_at: AT,
     events_path: "/api/v1/channels/webhook/events",
+    events_address: "",
+    steps: [],
     tenant_fields: ["reply_url"],
     tenant: { reply_url: "https://hooks.example.test/reply" },
     changed_at: AT,
@@ -368,6 +370,117 @@ describe("one channel's page", () => {
       expect(paths.filter((path) => retiredBy.test(path)), act).toEqual([]);
     }
     expect(UNAVAILABLE.verify.retiredBy.test("/api/v1/channels/{name}/verify")).toBe(true);
+  });
+});
+
+const SCRIPT = "export default { async email(message, env) {} };";
+const ADDRESS_TO_PASTE = "https://brain.example.test/api/v1/channels/email/events";
+
+function aStep(key: string, extra: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    key,
+    title: `Do ${key}`,
+    text: `What to press for ${key}.`,
+    sketch: { place: "Vendor", heading: key, menu: [], menu_mark: "", tabs: [], tab_mark: "", lines: [], button: "" },
+    link: "",
+    link_label: "",
+    asks: [],
+    copy_text: "",
+    copy_label: "",
+    ...extra,
+  };
+}
+
+const EMAIL = row({
+  channel: "email",
+  label: "Email",
+  status: "not_set_up",
+  secret: "none",
+  health: "not_set_up",
+  last_delivered_at: null,
+  events_path: "/api/v1/channels/email/events",
+  events_address: ADDRESS_TO_PASTE,
+  tenant_fields: ["address"],
+  tenant: {},
+  changed_at: null,
+  changed_by: null,
+  changed_by_name: null,
+  steps: [
+    aStep("address", { link: "https://dash.example.test/", link_label: "Open the vendor" }),
+    aStep("worker", { asks: ["events_address"], copy_text: SCRIPT, copy_label: "Copy the Worker script" }),
+    aStep("save", { asks: ["address", "secret"] }),
+  ],
+});
+
+function emailAnswers(): Record<string, unknown> {
+  return answers({
+    "/api/v1/console/channels/email": EMAIL,
+    "/api/v1/console/channels/email/stats": { ...stats(), channel: "email" },
+    "/api/v1/channels/email/health": { ...HEALTH, channel: "email" },
+    "/api/v1/channels/email/bindings": { ...BOUND, channel: "email", items: [] },
+    "/api/v1/channels/email/deliveries": { channel: "email", deliveries: [] },
+  });
+}
+
+function flow(): HTMLElement {
+  const found = document.body.querySelector<HTMLElement>('[data-slot="flow-dialog"]');
+  if (found === null) {
+    throw new Error("No connect flow is open.");
+  }
+  return found;
+}
+
+describe("connecting a channel one screen at a time", () => {
+  test("a channel with steps offers them from its header, with the address to paste and the script to copy", async () => {
+    // What breaks if this is deleted: the steps a channel's module declares reach no screen, the
+    // Worker step shows no address to paste, or its script can only be retyped by hand when the
+    // browser refuses the clipboard.
+    const { container } = await consoleAt("/channels/email", emailAnswers());
+    fireEvent.click(button(container, "Connect Email"));
+    expect(flow().textContent).toContain("Step 1 of 3");
+    expect(flow().querySelector('a[href="https://dash.example.test/"]')?.textContent).toContain("Open the vendor");
+    fireEvent.click(button(flow(), "Step 2 of 3"));
+    expect(flow().textContent).toContain(ADDRESS_TO_PASTE);
+    fireEvent.click(button(flow(), "Copy the Worker script"));
+    await waitFor(() => {
+      expect(flow().textContent).toContain(NOT_COPIED_TEXT);
+    });
+    const script = flow().querySelector<HTMLTextAreaElement>('textarea[aria-label="Copy the Worker script"]');
+    expect(script?.value).toBe(SCRIPT);
+  });
+
+  test("the last screen is the set-up form, sends the secret once, and then offers a test message", async () => {
+    // What breaks if this is deleted: the flow ends in a form that saves nothing, sends the secret
+    // twice or leaves it in the page, or closes before the test message it promises.
+    const { container, sent } = await consoleAt("/channels/email", emailAnswers());
+    fireEvent.click(button(container, "Connect Email"));
+    fireEvent.click(button(flow(), "Step 3 of 3"));
+    const form = flow().querySelector<HTMLFormElement>('form[aria-label="Set up Email"]') as HTMLFormElement;
+    expect(flow().querySelector('form[aria-label="Send test message on Email"]')).toBeNull();
+    fireEvent.change(form.querySelector('input[name="address"]') as HTMLInputElement, {
+      target: { value: "ask@ask.example.test" },
+    });
+    fireEvent.input(form.querySelector('[data-slot="secret-field"] input') as HTMLInputElement, {
+      target: { value: SECRET_TYPED },
+    });
+    fireEvent.click(form.querySelector('input[name="enabled"]') as HTMLInputElement);
+    fireEvent.click(button(form, ACT_LABELS.save));
+    fireEvent.click(button(dialog(), ACT_LABELS.save));
+    await waitFor(() => {
+      expect(sent.filter((one) => one.method === "PUT").map((one) => [one.path, one.body])).toEqual([
+        ["/api/v1/channels/email", { enabled: true, tenant: { address: "ask@ask.example.test" }, secret: SECRET_TYPED }],
+      ]);
+    });
+    await waitFor(() => {
+      expect(flow().querySelector('form[aria-label="Send test message on Email"]')).not.toBeNull();
+    });
+    expect(document.body.innerHTML).not.toContain(SECRET_TYPED);
+  });
+
+  test("a channel with no steps offers no connect button", async () => {
+    // What breaks if this is deleted: every channel shows a Connect button that opens an empty flow.
+    const { container } = await consoleAt("/channels/webhook", answers());
+    expect([...container.querySelectorAll("button")].some((one) => one.textContent?.startsWith("Connect"))).toBe(false);
   });
 });
 
