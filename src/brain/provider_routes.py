@@ -1374,8 +1374,46 @@ async def check(request: Request, provider: str, asked: Asked) -> CheckView:
     if provider not in switchable(plan):
         log.info("provider check names no provider", principal=asked.caller.principal.id)
         raise _not_answerable()
-    trace_id = _trace_id()
-    origin = Origin(trace_id=trace_id, principal=asked.caller.principal, channel=asked.channel)
+    view = await checked_through(
+        calls,
+        plan,
+        provider,
+        origin=Origin(
+            trace_id=_trace_id(), principal=asked.caller.principal, channel=asked.channel
+        ),
+        at=asked.now,
+        entitlement_hash=asked.reach.ent_hash(),
+        recorders=getattr(request.app.state, "request_recorders", ()),
+    )
+    await _remember(request, asked, provider, view)
+    log.info(
+        "provider checked",
+        provider=provider,
+        outcome=view.outcome,
+        default_model=view.default_model,
+        principal=asked.caller.principal.id,
+    )
+    return view
+
+
+async def checked_through(
+    calls: ModelCalls,
+    plan: Planned,
+    provider: str,
+    *,
+    origin: Origin,
+    at: datetime,
+    entitlement_hash: str,
+    recorders: Iterable[RequestRecorder],
+) -> CheckView:
+    """One provider checked as the Test button checks it: the call, and its row and its cost.
+
+    The route's body after the authority and before the test is remembered, taken out so the
+    install's acceptance check sends exactly the call an administrator's press sends (M5.7.1),
+    as `brain.api_routes.answered_for` is taken out of `/answer` for a chat channel. `plan` is
+    the one the provider was found in; `recorders` are the process's, of which the ledger's row
+    and the cost are kept (M27.12.5), because a check is a billed call and not a question.
+    """
     meter = Meter()
     added = None if names_the_provider(plan, provider) else unladdered_rung(plan, provider)
     if added is not None:
@@ -1390,35 +1428,24 @@ async def check(request: Request, provider: str, asked: Asked) -> CheckView:
         provider,
         tier,
         meter=meter,
-        trace_id=trace_id,
+        trace_id=origin.trace_id,
         default=None if added is None else added.model,
     )
-    recorders: tuple[RequestRecorder, ...] = tuple(
-        one
-        for one in getattr(request.app.state, "request_recorders", ())
-        # The ledger's row and the check's cost (M27.12.5): a check is a billed call.
-        if isinstance(one, TelemetryRecorder | UsageRecorder)
+    kept: tuple[RequestRecorder, ...] = tuple(
+        one for one in recorders if isinstance(one, TelemetryRecorder | UsageRecorder)
     )
     await finish(
-        recorders,
+        kept,
         Finished(
             origin=origin,
-            at=asked.now,
+            at=at,
             outcome=ModelCallOutcome(answered=view.answered),
             completed_at=datetime.now(UTC),
-            entitlement_hash=asked.reach.ent_hash(),
+            entitlement_hash=entitlement_hash,
             lane=Lane.ANSWER,
             tool_calls=0,
             model_usage=meter.usage(),
         ),
-    )
-    await _remember(request, asked, provider, view)
-    log.info(
-        "provider checked",
-        provider=provider,
-        outcome=view.outcome,
-        default_model=view.default_model,
-        principal=asked.caller.principal.id,
     )
     return view
 

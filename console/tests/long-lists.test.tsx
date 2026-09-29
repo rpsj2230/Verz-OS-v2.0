@@ -94,6 +94,9 @@ const A_LOG_ROW_IS_READ_AND_NEVER_WRITTEN =
 const OVERVIEW_CARDS: Readonly<Record<string, string>> = {
   "/": "/audit",
   "/department": "/agents",
+  // The Profile and About views read the Departments row and the directory's people for one
+  // department, and link to the Departments page, which pages, searches and filters that route.
+  "/department/:view": "/departments",
   "/agents/:agentId/:tab": "/routing",
   // One skill's page reads the Skills page's answer narrowed to its name; the library itself is
   // paged, searched, filtered and ordered on /skills.
@@ -105,6 +108,9 @@ const OVERVIEW_CARDS: Readonly<Record<string, string>> = {
   "/roles": "/people",
   "/departments/:slug": "/departments",
   "/departments/:slug/:view": "/scopes",
+  // New agent offers the gallery's first page as the templates a draft can start from, and links
+  // to the gallery, which pages, searches and filters the same route.
+  "/agents/new": "/agent-templates",
 };
 const AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST =
   "This screen is an overview, and the list it borrows is one card on it with a link to the screen " +
@@ -122,10 +128,36 @@ const A_SKILL_IS_DECIDED_FROM_ITS_OWN_BYTES =
   "reviewer read, a retirement names the agents still running that version for somebody to detach, " +
   "and a detachment ends one assignment, so there is no act that applies to several rows at once.";
 
+const A_DRAFT_STARTS_FROM_ONE_TEMPLATE =
+  "A draft is started from one template and is its author's own, so there is no act that starts " +
+  "one from several templates at once.";
+const A_DEPARTMENT_PAGE_IS_ONE_DEPARTMENT =
+  "This page is one department, and its only writes rename or retire that department, each " +
+  "confirmed on its own, so there is no act to do to several rows at once.";
 const AN_UNBINDING_IS_ONE_PERSONS_CHAT =
   "Unbinding stops a chat account being answered as its person, at once, and is recorded against " +
   "them; it is confirmed one person at a time so nobody's chat is taken away as a side effect of " +
   "somebody else's.";
+
+/**
+ * The Models screen as the owner drew it on 2026-09-03 and restated on 2026-09-29: providers as a row
+ * of cards and his failover matrix as one table, with no search box and no filter on either.
+ */
+const THE_OWNER_DREW_IT_WHOLE =
+  "The owner's design of record for the Models screen, 2026-09-03 and restated 2026-09-29, draws the " +
+  "providers as a row of cards and the failover matrix as one table with no search box and no " +
+  "filter: a handful of providers and a dozen steps are read at a glance, a narrowed matrix is not " +
+  "the chain any question walks, and each list still pages when the API says there is more.";
+const THE_PROVIDERS_KEEP_THE_PRODUCTS_ORDER =
+  "The providers are drawn in the order the route answers them, built in first and then those an " +
+  "administrator added, which is the order the owner's screen reads them in; the route takes no " +
+  "other order from this page.";
+const A_PROVIDER_IS_SWITCHED_ONE_AT_A_TIME =
+  "A provider is given a key, tested and switched from its own card, each confirmed with its own " +
+  "consequence: switching several off at once can leave a level with no provider answering, which " +
+  "nothing refuses, and a test spends tokens under the presser's name.";
+/** The screens drawn whole by the owner's design, excused search and filter for that reason alone. */
+const DRAWN_WHOLE: ReadonlySet<string> = new Set(["/models", "/routing", "/routing/:rungId"]);
 
 const A_RUN_IS_WRITTEN_BY_THE_WORKER =
   "A job's past runs are rows the worker writes as it runs the job, and nothing a person presses " +
@@ -159,8 +191,18 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
     sort: ROW_PLANE_HAS_NO_ORDER,
     bulk: READ_ONLY,
   },
-  "/routing": { sort: CHAIN_IN_ORDER, bulk: A_RUNG_IS_SAVED_ONE_AT_A_TIME },
-  "/models": {},
+  "/routing": {
+    search: THE_OWNER_DREW_IT_WHOLE,
+    filter: THE_OWNER_DREW_IT_WHOLE,
+    sort: CHAIN_IN_ORDER,
+    bulk: A_RUNG_IS_SAVED_ONE_AT_A_TIME,
+  },
+  "/models": {
+    search: THE_OWNER_DREW_IT_WHOLE,
+    filter: THE_OWNER_DREW_IT_WHOLE,
+    sort: THE_PROVIDERS_KEEP_THE_PRODUCTS_ORDER,
+    bulk: A_PROVIDER_IS_SWITCHED_ONE_AT_A_TIME,
+  },
   // A provider's page draws that provider out of the providers list and links back to it.
   "/models/:provider": {
     page: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
@@ -176,7 +218,12 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
     sort: CHAIN_IN_ORDER,
     bulk: A_PROVIDER_PAGE_IS_ONE_PROVIDER,
   },
-  "/routing/:rungId": { sort: CHAIN_IN_ORDER, bulk: A_RUNG_IS_SAVED_ONE_AT_A_TIME },
+  "/routing/:rungId": {
+    search: THE_OWNER_DREW_IT_WHOLE,
+    filter: THE_OWNER_DREW_IT_WHOLE,
+    sort: CHAIN_IN_ORDER,
+    bulk: A_RUNG_IS_SAVED_ONE_AT_A_TIME,
+  },
   // The Profile's model card draws the agent's level from the matrix and links to the Routing screen.
   "/agents/:agentId/:tab": {
     page: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
@@ -199,11 +246,25 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
     sort: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
     bulk: READ_ONLY,
   },
+  "/department/:view": {
+    page: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    search: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    filter: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    sort: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    bulk: A_DEPARTMENT_PAGE_IS_ONE_DEPARTMENT,
+  },
   "/logs": { bulk: A_LOG_ROW_IS_READ_AND_NEVER_WRITTEN },
   "/agents": {},
   "/connectors": {},
   "/automations": {},
   "/agent-templates": {},
+  "/agents/new": {
+    page: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    search: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    filter: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    sort: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    bulk: A_DRAFT_STARTS_FROM_ONE_TEMPLATE,
+  },
   "/jobs/:name": {},
   "/approvals": { bulk: AN_APPROVAL_IS_DECIDED_FROM_ITS_OWN_CARD },
   "/adoption": { bulk: READ_ONLY },
@@ -455,19 +516,24 @@ describe("long lists", () => {
   test("only a model's tool and an overview card are excused paging, and only a fact is excused an order", () => {
     // What breaks if this is deleted: the table quietly regrowing the excuses M27.8.6 removed. Every
     // list but the records route pages, searches and filters, except a card on an overview whose
-    // link goes to a screen that does all three over the same route; and the only lists not ordered
-    // by the reader are the ones whose order is a fact rather than a preference.
+    // link goes to a screen that does all three over the same route, and the owner's Models screen,
+    // which he drew whole and which still pages; and the only lists not ordered by the reader are
+    // the ones whose order is a fact rather than a preference.
     for (const [pattern, missing] of Object.entries(MISSING)) {
       const overview = OVERVIEW_CARDS[pattern];
       if (overview !== undefined) {
         const linked = MISSING[overview] ?? {};
-        expect(["page", "search", "filter"].filter((one) => one in linked), `${overview} behind ${pattern}`).toEqual([]);
+        const wanted = DRAWN_WHOLE.has(overview) ? ["page"] : ["page", "search", "filter"];
+        expect(wanted.filter((one) => one in linked), `${overview} behind ${pattern}`).toEqual([]);
         for (const capability of ["page", "search", "filter"] as const) {
           expect(missing[capability], `${pattern} ${capability}`).toBe(AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST);
         }
         continue;
       }
-      if (!(pattern in THROUGH_A_MODELS_TOOL)) {
+      if (DRAWN_WHOLE.has(pattern)) {
+        expect("page" in missing, pattern).toBe(false);
+        expect([missing.search, missing.filter], pattern).toEqual([THE_OWNER_DREW_IT_WHOLE, THE_OWNER_DREW_IT_WHOLE]);
+      } else if (!(pattern in THROUGH_A_MODELS_TOOL)) {
         expect(["page", "search", "filter"].filter((one) => one in missing), pattern).toEqual([]);
       }
       if (pattern in THROUGH_A_MODELS_TOOL) {
@@ -479,7 +545,9 @@ describe("long lists", () => {
         }
       }
       if ("sort" in missing) {
-        expect([ROW_PLANE_HAS_NO_ORDER, CHAIN_IN_ORDER, A_DOCUMENT_HAS_ONE_ORDER]).toContain(missing.sort);
+        expect([ROW_PLANE_HAS_NO_ORDER, CHAIN_IN_ORDER, A_DOCUMENT_HAS_ONE_ORDER, THE_PROVIDERS_KEEP_THE_PRODUCTS_ORDER]).toContain(
+          missing.sort,
+        );
       }
     }
   });

@@ -11,16 +11,17 @@
  *
  * **Every control is live or says why it is not.** Pinning a model, assigning a skill and handing the
  * agent on have routes and work (the skill on the Skills page, where an approved skill is chosen, and
- * the hand-over through the page's confirmed lifecycle act); adding a source, choosing channels,
- * changing who can find it, changing permissions, previewing as a person, changing a rung and
- * browser use have none and are `UnavailableAction`s with `agentActions.ts`' sentences. Computer use is a sentence, because the product has nothing behind a
- * switch.
+ * the hand-over through the page's confirmed lifecycle act); adding a source and changing permissions
+ * are changes to the agent's manifest, so each starts a draft of the agent through the page's
+ * confirmed Edit as a draft. Choosing channels, changing who can find it, previewing as a person,
+ * changing a rung and browser use have no route and are `UnavailableAction`s with `agentActions.ts`'
+ * sentences. Computer use is a sentence, because the product has nothing behind a switch.
  *
  * **Identifiers are in the Advanced section.** The agent's slug, the steward's and builder's
  * principal ids and the template's id are how the system names them; the cards show names and
  * words, and `kit/parts.tsx`' `Advanced` holds the rest for a support request.
  *
- * Task ids: M27.10.2, M5.7.3
+ * Task ids: M27.10.2, M5.7.3, M27.11.6
  */
 
 import { Brain, Globe, MonitorX, Plug, Radio, ShieldCheck, Sparkles } from "lucide-react";
@@ -55,6 +56,12 @@ export const TEMPLATE_HEADING = "Template and local changes";
 export const LEARNING_HEADING = "Learning from conversations";
 export const BROWSER_HEADING = "Browser use";
 export const COMPUTER_HEADING = "Computer use";
+
+/** A source and a permission are changed through a draft of the agent. */
+export const ADD_A_SOURCE = "Add a source to this agent, through a draft";
+export const CHANGE_PERMISSIONS = "Change permissions";
+export const CHANGE_THROUGH_A_DRAFT =
+  "Starts a draft of this agent. A wider change waits for a second person to approve it, and starts at Shadow.";
 
 /** The id the leash list carries, which the About view links to. */
 export const LEASH_ANCHOR = "leash";
@@ -91,10 +98,12 @@ function Capabilities({
   connectors,
   skills,
   channels,
+  onEditDraft,
 }: {
   readonly connectors: ConnectorStrip;
   readonly skills: readonly SkillPin[];
   readonly channels: readonly ChannelOffer[];
+  readonly onEditDraft?: (() => void) | undefined;
 }) {
   if (connectors.shown.length === 0 && skills.length === 0 && channels.length === 0) {
     return null;
@@ -105,7 +114,20 @@ function Capabilities({
         <CapabilityRow
           icon={<Plug aria-hidden />}
           label="Connectors"
-          add={<UnavailableAction size="icon-sm" icon={<span aria-hidden>+</span>} label="Add a source to this agent" reason={UNAVAILABLE.editDraft.reason} />}
+          add={
+            onEditDraft === undefined ? null : (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="size-11 sm:size-8"
+                aria-label={ADD_A_SOURCE}
+                title={ADD_A_SOURCE}
+                onClick={onEditDraft}
+              >
+                <span aria-hidden>+</span>
+              </Button>
+            )
+          }
           note={
             <Note>
               Attached means the agent is set up to use the source. Requested means its setup asks for it and nothing links it yet.
@@ -164,7 +186,7 @@ function Capabilities({
   );
 }
 
-function Permissions({ profile }: { readonly profile: ProfileShown }) {
+function Permissions({ profile, onEditDraft }: { readonly profile: ProfileShown; readonly onEditDraft?: (() => void) | undefined }) {
   const { ceiling } = profile;
   if (ceiling === undefined) {
     return null;
@@ -176,7 +198,11 @@ function Permissions({ profile }: { readonly profile: ProfileShown }) {
       action={<ShieldCheck aria-hidden className="size-4 text-dim" />}
       footer={
         <div className="flex flex-wrap gap-2">
-          <UnavailableAction text="Change permissions" label="Change permissions" reason={UNAVAILABLE.permissions.reason} />
+          {onEditDraft === undefined ? null : (
+            <Button variant="outline" size="sm" className="min-h-11 sm:min-h-8" title={CHANGE_THROUGH_A_DRAFT} onClick={onEditDraft}>
+              {CHANGE_PERMISSIONS}
+            </Button>
+          )}
           <UnavailableAction text="Preview as a person" label="Preview as a person" reason={UNAVAILABLE.preview.reason} />
         </div>
       }
@@ -392,6 +418,7 @@ export function AgentProfile({
   composition,
   divergent,
   onTransfer,
+  onEditDraft,
 }: {
   readonly agent: AgentIdentity;
   readonly facts: HeaderFacts;
@@ -404,17 +431,19 @@ export function AgentProfile({
   readonly divergent: readonly string[];
   /** Opens the page's confirmed hand-over. Absent where the page offers none. */
   readonly onTransfer?: (() => void) | undefined;
+  /** Opens the page's confirmed Edit as a draft. Absent where the page offers none. */
+  readonly onEditDraft?: (() => void) | undefined;
 }) {
   return (
     <div data-slot="agent-profile" className="flex min-w-0 flex-col gap-4">
       <div className="[display:grid] min-w-0 gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
         <div className="flex min-w-0 flex-col gap-4">
-          <Capabilities connectors={connectors} skills={skills} channels={channels} />
+          <Capabilities connectors={connectors} skills={skills} channels={channels} onEditDraft={onEditDraft} />
           <Availability facts={facts} profile={profile} onTransfer={onTransfer} />
           <Learning />
         </div>
         <div className="flex min-w-0 flex-col gap-4">
-          {profile === null ? null : <Permissions profile={profile} />}
+          {profile === null ? null : <Permissions profile={profile} onEditDraft={onEditDraft} />}
           {profile === null ? null : <ModelAndAutonomy agentId={agent.agentId} profile={profile} choice={choice} />}
         </div>
       </div>

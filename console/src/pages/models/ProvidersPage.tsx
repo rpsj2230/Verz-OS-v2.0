@@ -1,23 +1,28 @@
 /**
- * The providers list, on the shared page kit: every AI provider this install can use, switched on
- * or off, whether a key is held, its last test, and the models its steps use.
+ * The Models page, on the shared page kit: the AI providers this install can use as a row of
+ * compact cards, then the failover matrix that decides which of them answers, then what their
+ * calls cost. The owner's screenshot of 2026-09-03, restated on 2026-09-29, is the design of
+ * record: providers at the top and his matrix under them.
  *
- * **This is the owner's list and nothing more** (2026-09-22: the screen was "very complicated").
- * The old Models and health page drew about ten tables; the failover matrix is now the Routing
- * page's, a provider's terms, figures and history are its own page's, and the tier numbers and
- * residency rules are under the Routing page's Advanced section. What stayed here is what an
- * administrator does every day: turn a provider on or off, test it, open it to add its key.
+ * **A card says what an administrator acts on every day and nothing more** (2026-09-22: the screen
+ * was "very complicated"): the provider by the name a person knows, its status, whether a key is
+ * held and its last test, and the three acts, add a key, test it and turn it off or on. Its terms,
+ * figures and history are its own page's, which the name opens. The models it is used for are the
+ * matrix's to say, under the cards, rather than a second copy on each card.
  *
- * **The list is the route's**, `GET /models/providers` under the list contract
- * (`brain.provider_routes.PROVIDERS`), so the search and the two filters are requests and the order
- * is the product's. The steps and the profile come on the same answer, so the status and the models
- * in use are the plan the next call makes.
+ * **The matrix is the same card the Routing page draws** (`FailoverMatrixCard`), read from the same
+ * two answers: `GET /routing/rungs` for the whole chain and the providers' plan for each step's role
+ * and marker. Here a step opens on the Routing page, where its editor and the matrix gate are.
  *
- * **Where answers are made sits above the list, because it decides whether any of them is used.**
+ * **Both lists are drawn whole, with no search, filter or order**: a handful of providers and a
+ * dozen steps are read at a glance, and "Show more" is drawn only when the API says there is more.
+ * The providers keep the product's own order, built in first.
+ *
+ * **Where answers are made sits above the cards, because it decides whether any of them is used.**
  * It is the install's profile, shown to every reader and changed from a confirmation by a reader the
  * API says may.
  *
- * **The prices sit under the list, because they are what a provider's calls are costed at**
+ * **The prices sit at the end, because they are what a provider's calls are costed at**
  * (M27.12.5): `components/ModelPrices.tsx`, each model a step names with its price per million
  * tokens and whether its calls are costed, set from its row by a reader who may switch a provider.
  *
@@ -26,26 +31,23 @@
  * (`modelsQuery.A_CHECK_SPENDS_TOKENS_SO_IT_IS_CONFIRMED`), and a new provider is somewhere questions
  * may be sent. `editable` decides whether a control is drawn and decides nothing else.
  *
+ * **What was removed on 2026-09-29**: the providers table with its search, its two filters, its
+ * order, its column chooser, its row selection and export, and the Models in use column.
+ *
  * Task ids: M27.16.1, M27.8.8, M5.7.1, M5.7.2, M5.6.4, M27.12.5
  */
 
-import { Download, MoreHorizontal, Plus, Route } from "lucide-react";
+import { Download, Plus, Route } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { request } from "../../api/client";
 import type { ApiFailure } from "../../api/errors";
-import type { FilterChoice, SortChoice } from "../../components/listing";
 import { useListing } from "../../components/useListing";
-import { Chip, ConfirmDialog, FailureState, ListPage, Note, type EntityColumn } from "../../components/kit";
+import { ConfirmDialog, EmptyState, FailureState, LoadingState, Note, PageHeader } from "../../components/kit";
+import { SHOW_MORE } from "../../components/ListControls";
 import { ModelPrices } from "../../components/ModelPrices";
 import { Button } from "../../components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "../../components/ui/dropdown-menu";
+import { CHAIN_PAGE_SIZE, MATRIX_API_PATH, readMatrixPage, rungAddress, type RungRow } from "../matrixQuery";
 import {
   checkConsequence,
   checkQuestion,
@@ -81,54 +83,26 @@ import {
   WHERE_ANSWERS_ARE_MADE,
   type ProviderStateRow,
   type ProvidersBody,
+  type RungStateRow,
 } from "../modelsQuery";
 import { readRegisterDocument, REGISTER_API_PATH, REGISTER_HEADING } from "../providerRegisterQuery";
 import { AddProvider } from "./AddProvider";
+import { FailoverMatrixCard } from "./FailoverMatrixCard";
 import { MODULE_LABEL, providerAddress, saveText, WORKS_AT } from "./modelsActions";
-import { OnOffPill, StatusPill } from "./pills";
-import { lastTestWords, modelsInUse } from "./providerWords";
+import { StatusPill } from "./pills";
+import { lastTestWords } from "./providerWords";
+import { matrixLines } from "./routingWords";
 
-export const PROVIDERS_LEDE =
-  "The AI providers this install can use: switched on or off, whether a key is held, the last test, and the models in use.";
+export const PROVIDERS_LEDE = "The AI providers this install can use, and which of them answers each level of question.";
 export const LOADING_PROVIDERS = "Loading the providers.";
+export const LOADING_MATRIX = "Loading the failover matrix.";
 export const NO_PROVIDERS = "No providers to show";
 export const NO_PROVIDERS_DESCRIPTION = "A provider appears here once it is built in or added by an administrator.";
 export const PROVIDERS_CAPTION = "AI providers";
-export const FILTERS_LABEL = "Narrow the providers";
-export const SEARCH_HINT = "Search providers";
 export const ADD_A_PROVIDER = "Add a provider";
 export const ROUTING_LINK = "Routing";
-export const NONE_IN_USE = "None in use";
-
-export const PROVIDER_COLUMN = "Provider";
-export const ON_COLUMN = "On or off";
-export const KEY_COLUMN = "Key";
-export const LAST_TEST_COLUMN = "Last test";
-export const MODELS_COLUMN = "Models in use";
-
-/** The two filters the route declares that this page offers. */
-export const PROVIDER_FILTERS: readonly FilterChoice<ProviderStateRow>[] = [
-  {
-    column: "switched_on",
-    label: ON_COLUMN,
-    everything: "On or off",
-    read: (row) => row.switched_on,
-    describe: (value) => (value === "true" ? "On" : "Off"),
-  },
-  {
-    column: "key_held",
-    label: KEY_COLUMN,
-    everything: "Any key",
-    read: (row) => row.key_held ?? undefined,
-    describe: (value) => (value === "true" ? "Held" : "Not held"),
-  },
-];
-
-/** The orders the route declares: the product's own, and by name. */
-export const PROVIDER_SORTS: readonly SortChoice[] = [
-  { value: "", label: "Built in first" },
-  { value: "provider", label: "Name" },
-];
+export const KEY_LABEL = "Key";
+export const LAST_TEST_LABEL = "Last test";
 
 /** A write this page is about to send, held while its confirmation is open. */
 type Ask =
@@ -180,54 +154,80 @@ function askLabel(ask: Ask): string {
   return ask.kind === "check" ? SEND_THE_TEST : chooseProfileLabel(ask.profile);
 }
 
-function RowMenu({
+/** One provider as a compact card: its name and status, its key and last test, and its acts. */
+function ProviderCard({
   row,
   name,
+  steps,
+  profile,
   editable,
   onAsk,
 }: {
   readonly row: ProviderStateRow;
   readonly name: string;
+  readonly steps: readonly RungStateRow[];
+  readonly profile: string | undefined;
   readonly editable: boolean;
   readonly onAsk: (ask: Ask) => void;
 }) {
+  const mayKey = row.credential !== null;
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon-sm" className="size-11 sm:size-8" aria-label={`Actions for ${name}`}>
-          <MoreHorizontal aria-hidden />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-60">
-        <DropdownMenuItem asChild>
-          <Link to={providerAddress(row.provider)}>Open</Link>
-        </DropdownMenuItem>
-        {row.credential === null ? null : (
-          <DropdownMenuItem asChild>
-            <Link to={providerAddress(row.provider, "profile")}>{keyAction(row)}</Link>
-          </DropdownMenuItem>
-        )}
-        {editable ? (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onSelect={() => {
-                onAsk({ kind: "check", provider: row.provider, name });
-              }}
-            >
-              {TEST}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => {
-                onAsk({ kind: "switch", provider: row.provider, name, on: !row.switched_on });
-              }}
-            >
-              {row.switched_on ? TURN_OFF : TURN_ON}
-            </DropdownMenuItem>
-          </>
-        ) : null}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <li data-slot="provider-card" className="flex min-w-0 flex-col gap-2 rounded-md border border-line bg-panel px-4 py-3">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+        <Link
+          to={providerAddress(row.provider)}
+          className="min-w-0 text-[14px] font-semibold text-ink underline-offset-4 [overflow-wrap:anywhere] hover:text-acc-text hover:underline"
+        >
+          {name}
+        </Link>
+        <StatusPill status={providerStatus(row, steps, profile)} />
+      </div>
+      <dl className="m-0 flex flex-wrap gap-x-4 gap-y-0.5 text-[12.5px]">
+        <div className="flex gap-1">
+          <dt className="text-dim">{KEY_LABEL}:</dt>
+          <dd className="m-0 text-body">{keyHeldWords(row.key_held)}</dd>
+        </div>
+        <div className="flex min-w-0 gap-1">
+          <dt className="shrink-0 text-dim">{LAST_TEST_LABEL}:</dt>
+          <dd className="m-0 min-w-0 text-body [overflow-wrap:anywhere]">{lastTestWords(row.last_check)}</dd>
+        </div>
+      </dl>
+      {mayKey || editable ? (
+        <div className="mt-auto flex flex-wrap gap-1.5 pt-1">
+          {mayKey ? (
+            <Button asChild variant="outline" size="sm" className="min-h-11 text-ink no-underline sm:min-h-7">
+              <Link to={providerAddress(row.provider, "profile")}>{keyAction(row)}</Link>
+            </Button>
+          ) : null}
+          {editable ? (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                className="min-h-11 sm:min-h-7"
+                aria-label={`${TEST} ${name}`}
+                onClick={() => {
+                  onAsk({ kind: "check", provider: row.provider, name });
+                }}
+              >
+                {TEST}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="min-h-11 sm:min-h-7"
+                aria-label={`${row.switched_on ? TURN_OFF : TURN_ON} ${name}`}
+                onClick={() => {
+                  onAsk({ kind: "switch", provider: row.provider, name, on: !row.switched_on });
+                }}
+              >
+                {row.switched_on ? TURN_OFF : TURN_ON}
+              </Button>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+    </li>
   );
 }
 
@@ -260,13 +260,13 @@ function WhereAnswersAreMade({ body, onAsk }: { readonly body: ProvidersBody; re
 }
 
 export function ProvidersPage() {
+  const navigate = useNavigate();
   const [version, setVersion] = useState(0);
-  const listing = useListing<ProviderStateRow>(PROVIDERS_API_PATH, {
-    choices: PROVIDER_FILTERS,
-    version,
-  });
+  const listing = useListing<ProviderStateRow>(PROVIDERS_API_PATH, { version });
+  const chain = useListing<RungRow>(MATRIX_API_PATH, { version, pageSize: CHAIN_PAGE_SIZE });
   const rows = useMemo(() => readProviderRows(listing.body), [listing.body]);
   const body = useMemo(() => readProviders(listing.body), [listing.body]);
+  const matrix = useMemo(() => readMatrixPage(chain.body), [chain.body]);
   const [asked, setAsked] = useState<Ask | null>(null);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
@@ -318,6 +318,7 @@ export function ProvidersPage() {
   const providers = body?.providers ?? [];
   const steps = body?.rungs ?? [];
   const editable = body?.editable === true;
+  const lines = useMemo(() => matrixLines(matrix.rungs, steps, providers), [matrix.rungs, steps, providers]);
   // Adding writes a key as well as a provider, so it is offered to a reader the API sent the vault's
   // column to, who may manage credentials, and who may also switch.
   const mayAdd = editable && providers.some((one) => one.credential !== null);
@@ -327,68 +328,41 @@ export function ProvidersPage() {
     setAsked(ask);
   };
 
-  const columns: readonly EntityColumn<ProviderStateRow>[] = [
-    {
-      id: "provider",
-      header: PROVIDER_COLUMN,
-      hideable: false,
-      cell: (row) => (
-        <span className="flex min-w-[11rem] flex-col gap-1">
-          <Link
-            to={providerAddress(row.provider)}
-            className="font-medium text-ink underline-offset-4 [overflow-wrap:anywhere] hover:text-acc-text hover:underline"
-          >
-            {providerName(row.provider, providers)}
-          </Link>
-          <span>
-            <StatusPill status={providerStatus(row, steps, body?.profile)} />
-          </span>
-        </span>
-      ),
-      text: (row) => providerName(row.provider, providers),
-    },
-    {
-      id: "switched_on",
-      header: ON_COLUMN,
-      cell: (row) => <OnOffPill on={row.switched_on} />,
-      text: (row) => (row.switched_on ? "On" : "Off"),
-    },
-    {
-      id: "key",
-      header: KEY_COLUMN,
-      cell: (row) => <span className="text-body">{keyHeldWords(row.key_held)}</span>,
-      text: (row) => keyHeldWords(row.key_held),
-    },
-    {
-      id: "last_test",
-      header: LAST_TEST_COLUMN,
-      cell: (row) => <span className="text-body">{lastTestWords(row.last_check)}</span>,
-      text: (row) => lastTestWords(row.last_check),
-    },
-    {
-      id: "models",
-      header: MODELS_COLUMN,
-      cell: (row) => {
-        const models = modelsInUse(row.provider, steps);
-        return models.length === 0 ? (
-          <span className="text-[12.5px] text-dim">{NONE_IN_USE}</span>
-        ) : (
-          <span className="flex flex-wrap gap-1">
-            {models.map((one) => (
-              <Chip key={one} mono>
-                {one}
-              </Chip>
-            ))}
-          </span>
-        );
-      },
-      text: (row) => modelsInUse(row.provider, steps).join("; "),
-    },
-  ];
+  let cards;
+  if (listing.failure !== null) {
+    cards = <FailureState failure={listing.failure} />;
+  } else if (listing.busy) {
+    cards = <LoadingState label={LOADING_PROVIDERS} />;
+  } else if (rows.length === 0) {
+    cards = <EmptyState title={NO_PROVIDERS} description={NO_PROVIDERS_DESCRIPTION} />;
+  } else {
+    cards = (
+      <ul aria-label={PROVIDERS_CAPTION} className="m-0 [display:grid] list-none grid-cols-1 gap-3 p-0 sm:grid-cols-2 xl:grid-cols-3">
+        {rows.map((row) => (
+          <ProviderCard
+            key={row.provider}
+            row={row}
+            name={providerName(row.provider, providers)}
+            steps={steps}
+            profile={body?.profile}
+            editable={editable}
+            onAsk={onAsk}
+          />
+        ))}
+      </ul>
+    );
+  }
+
+  let matrixState;
+  if (chain.failure !== null) {
+    matrixState = <FailureState failure={chain.failure} />;
+  } else if (chain.busy) {
+    matrixState = <LoadingState label={LOADING_MATRIX} />;
+  }
 
   return (
-    <>
-      <ListPage
+    <div data-slot="models-page" className="flex min-w-0 flex-col gap-4">
+      <PageHeader
         crumbs={[{ label: MODULE_LABEL }, { label: MODELS_LABEL }]}
         title={MODELS_LABEL}
         lede={PROVIDERS_LEDE}
@@ -420,48 +394,81 @@ export function ProvidersPage() {
             )}
           </>
         }
-        notice={
-          <>
-            {body === null ? null : <WhereAnswersAreMade body={body} onAsk={onAsk} />}
-            {adding && mayAdd ? (
-              <AddProvider
-                onAdded={(name) => {
-                  setAdding(false);
-                  setTold(`${name} was added. Add a step for one of its models on the Routing page to use it.`);
-                  setVersion((count) => count + 1);
-                }}
-                onClose={() => {
-                  setAdding(false);
-                }}
-              />
-            ) : null}
-            {told === null ? null : (
-              <div role="status">
-                <Note kind="works">{told}</Note>
-              </div>
-            )}
-            {failure === null ? null : <FailureState failure={failure} />}
-          </>
-        }
-        listing={listing}
-        rows={rows}
-        filtersLabel={FILTERS_LABEL}
-        choices={PROVIDER_FILTERS}
-        sorts={PROVIDER_SORTS}
-        searchHint={SEARCH_HINT}
-        caption={PROVIDERS_CAPTION}
-        columns={columns}
-        rowId={(row) => row.provider}
-        rowLabel={(row) => providerName(row.provider, providers)}
-        rowActions={(row) => (
-          <RowMenu row={row} name={providerName(row.provider, providers)} editable={editable} onAsk={onAsk} />
-        )}
-        exportName="providers"
-        loading={LOADING_PROVIDERS}
-        emptyTitle={NO_PROVIDERS}
-        emptyDescription={NO_PROVIDERS_DESCRIPTION}
-        footer={body === null ? undefined : <ModelPrices editable={editable} />}
       />
+      {body === null ? null : <WhereAnswersAreMade body={body} onAsk={onAsk} />}
+      {adding && mayAdd ? (
+        <AddProvider
+          onAdded={(name) => {
+            setAdding(false);
+            setTold(`${name} was added. Add a step for one of its models on the Routing page to use it.`);
+            setVersion((count) => count + 1);
+          }}
+          onClose={() => {
+            setAdding(false);
+          }}
+        />
+      ) : null}
+      {told === null ? null : (
+        <div role="status">
+          <Note kind="works">{told}</Note>
+        </div>
+      )}
+      {failure === null ? null : <FailureState failure={failure} />}
+
+      <section aria-label={PROVIDERS_CAPTION} className="flex min-w-0 flex-col gap-2">
+        {cards}
+        {listing.moreFailure === null ? null : <FailureState failure={listing.moreFailure} />}
+        {listing.more ? (
+          <Button
+            variant="outline"
+            className="min-h-11 self-start sm:min-h-9"
+            disabled={listing.fetchingMore}
+            onClick={() => {
+              listing.showMore();
+            }}
+          >
+            {SHOW_MORE}
+          </Button>
+        ) : null}
+      </section>
+
+      <FailoverMatrixCard
+        lines={lines}
+        state={matrixState}
+        acts={
+          matrix.editable
+            ? {
+                open: (line) => {
+                  if (line.rung !== null) {
+                    void navigate(rungAddress(line.rung.id));
+                  }
+                },
+              }
+            : undefined
+        }
+        footer={
+          chain.moreFailure === null && !chain.more ? undefined : (
+            <>
+              {chain.moreFailure === null ? null : <FailureState failure={chain.moreFailure} />}
+              {chain.more ? (
+                <Button
+                  variant="outline"
+                  className="min-h-11 self-start sm:min-h-9"
+                  disabled={chain.fetchingMore}
+                  onClick={() => {
+                    chain.showMore();
+                  }}
+                >
+                  {SHOW_MORE}
+                </Button>
+              ) : null}
+            </>
+          )
+        }
+      />
+
+      {body === null ? null : <ModelPrices editable={editable} />}
+
       <ConfirmDialog
         open={asked !== null}
         question={asked === null ? "" : askQuestion(asked)}
@@ -478,6 +485,6 @@ export function ProvidersPage() {
           setAsked(null);
         }}
       />
-    </>
+    </div>
   );
 }

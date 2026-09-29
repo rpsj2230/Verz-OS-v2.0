@@ -8,12 +8,12 @@
 | Route | Called by |
 | --- | --- |
 | `GET /api/v1/access-requests` | `/access-requests` |
-| `GET /api/v1/console/navigation` | `/department` |
+| `GET /api/v1/console/navigation` | `/department`, `/department/:view` |
 | `GET /api/v1/govern/access-review` | `/access_review` |
 | `GET /api/v1/govern/capabilities` | `/capabilities` |
 | `GET /api/v1/govern/data-steward` | `/people` |
-| `GET /api/v1/govern/directory` | `/people`, `/roles` |
-| `GET /api/v1/govern/directory/{principal_id}` | `/people/:personId`, `/people/:personId/:view` |
+| `GET /api/v1/govern/directory` | `/department`, `/department/:view`, `/people`, `/roles` |
+| `GET /api/v1/govern/directory/{principal_id}` | `/memory/:subject`, `/memory/:subject/:view`, `/people/:personId`, `/people/:personId/:view` |
 | `GET /api/v1/govern/elevation` | `/elevation` |
 | `GET /api/v1/govern/elevation/notices` | `/elevation` |
 | `GET /api/v1/govern/packs` | `/packs` |
@@ -22,7 +22,7 @@
 | `GET /api/v1/govern/roles/group-rules` | `/roles` |
 | `GET /api/v1/govern/roles/holders` | `/people/:personId/:view`, `/roles` |
 | `GET /api/v1/govern/roles/misconfigurations` | `/roles` |
-| `GET /api/v1/govern/scopes` | `/departments/:slug/:view`, `/scopes` |
+| `GET /api/v1/govern/scopes` | `/department/:view`, `/departments/:slug/:view`, `/scopes` |
 | `GET /api/v1/govern/service-accounts` | `/service-accounts` |
 | `GET /api/v1/govern/service-accounts/{client_id}` | `/service-accounts/:clientId` |
 | `GET /api/v1/govern/sessions` | `/sessions` |

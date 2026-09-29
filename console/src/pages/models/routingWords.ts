@@ -92,6 +92,15 @@ export function stepName(line: { readonly step: number | null; readonly tier: st
   return `step ${String(line.step ?? 0)} of the ${levelName(line.tier)} level (${line.provider} ${line.model})`;
 }
 
+/**
+ * Said above the matrix, and in the Add a step form, to a reader who may change the matrix while no
+ * golden question is recorded: every change would be held, so they are told before they try rather
+ * than by the first refusal.
+ */
+export const HELD_UNTIL_A_GOLDEN_QUESTION =
+  "Changes to the matrix are held until at least one golden question is recorded.";
+export const ADD_A_GOLDEN_QUESTION = "Add a golden question";
+
 /** What every change on this page is tried against before it is used. */
 export const TRIED_FIRST =
   "It is tried against the golden questions and the permission checks first: if nothing gets worse " +
@@ -121,6 +130,7 @@ export function moveConsequence(tier: string, step: number): string {
   );
 }
 
+export const EDIT_STEP = "Edit";
 export const RETIRE_STEP = "Retire";
 export const KEEP_STEP = "Keep the step";
 export const MOVE_STEP = "Move it";

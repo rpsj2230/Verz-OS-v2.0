@@ -27,16 +27,27 @@ const REQUIREMENT_CHECKS = {
         release_commit: "a".repeat(40),
         note: UNBROKEN,
       },
+      proof: ["M1.8.8"],
+      evidence: [
+        {
+          name: "grant_is_refused",
+          sentence: UNBROKEN,
+          leaves: ["M1.8.8"],
+          outcome: "passed",
+          checked_at: "2019-03-04T09:00:00+00:00",
+          reason: "",
+        },
+      ],
     },
-    { id: "DEC-30", requirement: UNBROKEN, source: UNBROKEN, latest: null },
+    { id: "DEC-30", requirement: UNBROKEN, source: UNBROKEN, latest: null, proof: ["M24.3.6"], evidence: [] },
   ],
   release_commit: "a".repeat(40),
   told: UNBROKEN,
 };
 
 export const PAGES: Readonly<Record<string, PageCase>> = {
-  // Requirement checks. The requirements table scrolls; the areas, the served sentence and the form
-  // sit outside it.
+  // Requirement checks. The requirements and the areas are tables, and the requirement's own words
+  // are unbroken. Whoever recorded a check is named in the drawer, which is not opened here.
   "/requirement-checks": {
     address: "/requirement-checks",
     signedIn: true,

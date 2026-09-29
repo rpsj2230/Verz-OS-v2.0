@@ -34,7 +34,7 @@
  * Chrome on 2026-09-16 with the console's own sheets: at 360 pixels the card began 1003 pixels
  * down before and 385 after. `tests/approvals-phone.test.tsx` holds the rules.
  *
- * Task ids: M35.3.1.2, M35.3.1.1, M40.6.1.5, M40.1.2.3, M27.8.6
+ * Task ids: M35.3.1.2, M35.3.1.1, M40.6.1.5, M40.1.2.3, M27.8.6, M27.15.31
  */
 
 import "../styles/approvals.css";
@@ -61,6 +61,7 @@ import {
 } from "./approvalsQuery";
 import { FailureNotice } from "../ui/FailureNotice";
 import { FieldProblems, problemAttributes } from "../ui/FieldProblems";
+import { WaitingPublishes } from "./agents/WaitingPublishes";
 
 /** Written down because a button that turns green on click is the easy version of this page. */
 export const A_DECISION_IS_CLAIMED_ONLY_WHEN_THE_API_CONFIRMS_IT =
@@ -351,6 +352,7 @@ function QueueView() {
         </p>
       )}
       <QueueRows version={round} onDecided={decided} />
+      <WaitingPublishes />
     </>
   );
 }
