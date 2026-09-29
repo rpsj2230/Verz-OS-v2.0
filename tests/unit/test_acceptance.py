@@ -104,10 +104,11 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     """Held per module, so a package adding checks in a module of its own changes only its own
     line here: limits, channels and documents, then volume, refusals and a head's audit, then Lark
     chat's three, the skill library's four, the models' eleven and the audit's one, the connectors'
-    three, the tools' three, a document's life in four, the classified tables' three and an
-    answer's evidence in four, the modules in `CHECK_MODULES` order rather than the order a process
-    imported them. Delete this and a check can drop out of the suite with the page simply listing
-    one fewer row, or the page can lead with whichever module was imported first."""
+    three, the tools' three, a document's life in four, the classified tables' three, an answer's
+    evidence in four and the connector framework's eight, the modules in `CHECK_MODULES` order
+    rather than the order a process imported them. Delete this and a check can drop out of the
+    suite with the page simply listing one fewer row, or the page can lead with whichever module
+    was imported first."""
     by_module: dict[str, list[str]] = {}
     for one in registered():
         by_module.setdefault(one.run.__module__, []).append(one.name)
@@ -166,6 +167,16 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "a_record_answer_cites_the_record_field_and_read_time",
         "four_kinds_of_nothing_are_kept_apart",
         "an_answer_and_a_refusal_say_what_the_asker_s_reach_covers",
+    ]
+    assert by_module["brain.ops.acceptance_checks_connector_framework"] == [
+        "a_source_is_read_by_its_declaration_and_its_key_is_in_no_table",
+        "a_rest_read_is_built_from_a_spec_and_refused_before_a_call",
+        "a_source_is_connected_to_one_named_thing_and_never_to_everything",
+        "a_run_leases_its_key_and_the_next_run_reads_a_replaced_one",
+        "a_live_read_uses_the_service_key_ends_on_time_and_is_made_once",
+        "a_burst_is_paced_by_the_source_s_documented_ceiling",
+        "failures_open_the_breaker_and_a_refusal_is_retried_in_budget",
+        "an_unreached_source_is_named_only_to_an_asker_who_could_see_it",
     ]
     assert list(by_module) == list(acceptance.CHECK_MODULES)
     oversight = {one.name: one.leaves for one in registered()}
@@ -591,9 +602,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         acceptance_audit.A_BROWSER_SESSION_AND_A_TRACE_STORE_ARE_NOT_BUILT,
     )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
-    assert len(outcomes) == 26
+    assert len(outcomes) == 34
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 102
+    assert runs == [(2,)] and len(recorded) == 118
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }
