@@ -121,8 +121,8 @@ class RequestFailureView(BaseModel):
     lane_basis: str | None = None
     selection_stage: str | None = None
     selected_agent: str | None = None
-    #: Where the executor routed the model call and the step that settled it (M3.6.3), and the
-    #: model and provider that answered; null where no call was routed or none answered.
+    #: Where the request was routed and the step that settled it (M3.6.3), and the model and
+    #: provider that answered; null where nothing routed it or none answered.
     routed_tier: str | None = None
     tier_basis: str | None = None
     model: str | None = None

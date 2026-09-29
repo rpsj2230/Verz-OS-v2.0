@@ -10,6 +10,7 @@ Task ids: M3.2.2, M3.4.2, M3.6.3
 from __future__ import annotations
 
 from collections.abc import Iterator
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -18,14 +19,15 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from brain.core.entitlement import EntitlementSet
 from brain.core.lane import Lane
+from brain.gate.answer import route_of
 from brain.gate.classify import LaneBasis
 from brain.gate.context import Channel
 from brain.gate.event_store import ExternalIdTooLongError, first_delivery
 from brain.gate.finish import Finished, FinishError, FrontRecord, Origin
 from brain.gate.ingress import ChannelEvent
 from brain.gate.select import SelectionStage
-from brain.models.metering import ModelRoute
-from brain.models.routing import Tier, TierBasis
+from brain.models.metering import Meter, ModelRoute
+from brain.models.routing import RoutingRequest, Tier, TierBasis, classify_tier
 from brain.ops.telemetry import request_telemetry_of
 from brain.ops.telemetry_store import record
 from brain.tables.channel_event import EXTERNAL_ID_CHARS
@@ -120,6 +122,50 @@ def test_a_request_the_front_half_did_not_run_for_leaves_all_its_columns_empty()
 def test_a_score_outside_the_scale_is_refused(score: int) -> None:
     with pytest.raises(FinishError):
         FrontRecord(score, Lane.ANSWER, SelectionStage.DEFAULT, "general", LaneBasis.DEFAULT)
+
+
+def test_a_front_half_tier_is_recorded_with_the_step_that_settled_it_or_not_at_all() -> None:
+    """A tier with no basis would put a routing decision on the row with no reason beside it,
+    and a basis with no tier a reason for nothing. Delete this and either half can reach the row
+    alone, where a report reads it as a decision."""
+    with pytest.raises(FinishError):
+        replace(FRONT, routed_tier=Tier.MAIN)
+    with pytest.raises(FinishError):
+        replace(FRONT, tier_basis=TierBasis.DEFAULT)
+    held = replace(FRONT, routed_tier=Tier.MAIN, tier_basis=TierBasis.DEFAULT)
+    assert (held.routed_tier, held.tier_basis) == (Tier.MAIN, TierBasis.DEFAULT)
+
+
+#: What the front half decided at ROUTE for an answer-lane question: the default tier.
+ROUTED_MAIN = replace(FRONT, routed_tier=Tier.MAIN, tier_basis=TierBasis.DEFAULT)
+
+
+def test_a_request_no_call_was_classified_for_is_routed_where_the_front_half_sent_it() -> None:
+    """`THE_ROW_HOLDS_THE_LAST_ROUTING_DECISION_MADE`, the front half's half: a question answered
+    by a rule or abstained on before a model carries the tier ROUTE chose, and a cache hit, which
+    ROUTE never ran for, and a request that never passed the front half carry none.
+
+    Delete this and such a request's row holds a lane and no tier, which is the defect every
+    routed row on the owner's install had until 2026-09-29."""
+    assert route_of(Meter(), ROUTED_MAIN) == ModelRoute(tier=Tier.MAIN, basis=TierBasis.DEFAULT)
+    assert route_of(Meter(), FRONT) is None
+    assert route_of(Meter(), None) is None
+
+
+def test_the_executor_s_decision_outranks_the_front_half_s_even_when_it_names_none() -> None:
+    """The executor's half: a call classified heavy for its size is recorded heavy although the
+    front half said main, and two calls that disagree record no tier rather than falling back to
+    the front half's, because a disagreement is the executor's answer and not the absence of one.
+
+    Delete this and the row can name the tier the front half guessed before the messages were
+    built instead of the one the call was sent to, or turn a disagreement into a false agreement."""
+    heavy = Meter()
+    heavy.routed(classify_tier(RoutingRequest(lane=Lane.ANSWER, estimated_context_tokens=10**6)))
+    assert route_of(heavy, ROUTED_MAIN) == ModelRoute(tier=Tier.HEAVY, basis=TierBasis.CONTEXT)
+    split = Meter()
+    split.routed(classify_tier(RoutingRequest(lane=Lane.ANSWER)))
+    split.routed(classify_tier(RoutingRequest(lane=Lane.TASK)))
+    assert route_of(split, ROUTED_MAIN) is None
 
 
 def test_an_external_id_longer_than_the_key_is_refused_rather_than_truncated() -> None:
