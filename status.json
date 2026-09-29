@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-29T06:39:48.474926+00:00",
-  "commit": "67b83bab",
-  "commit_subject": "Governance is rebuilt on the page kit: Audit log, Approvals, Access review, Elevation, Access requests, Retention, Compliance, Referrals and Fields and records (#189)",
+  "generated_at": "2026-09-29T07:20:14.963684+00:00",
+  "commit": "e6ab3dd9",
+  "commit_subject": "The vault opens itself, every release applies its own vault changes, and an older install moves in place with one command (#205)",
   "total": 1576,
   "done": 410,
   "percent": 26.0,
