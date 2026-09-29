@@ -27,7 +27,7 @@ step:
    provider's sending details (host, port, sender address, user name and password) and send its
    test message. These can be the same details item 131 asks for.
 2. **Give the Brain an address of its own.** In Cloudflare open your domain, then **Email Routing**.
-   Use a subdomain such as ask.yourdomain, never the domain your staff's mailboxes use: open
+   Use a subdomain of your domain just for the Brain, never the domain your staff's mailboxes use: open
    **Settings** and add the subdomain under **Subdomains**. If Cloudflare asks to turn Email Routing
    on for the whole domain, stop and ask whoever runs your company's mail.
 3. **Create the Worker that hands mail to the Brain.** Open **Workers & Pages**, create a Worker from
@@ -36,7 +36,7 @@ step:
    BRAIN_EVENTS_URL (the address the console shows), BRAIN_DOMAINS (your staff's email domains) and
    BRAIN_SECRET, as a secret, a long random value you make up now.
 4. **Send the address's mail to the Worker.** In **Email Routing**, **Routing rules**, create an
-   address on your subdomain such as ask@ask.yourdomain, choose **Send to a Worker**, pick
+   address on that subdomain (for example one named ask), choose **Send to a Worker**, pick
    company-brain-mail and save.
 5. **Save it in the console.** Type that address, paste the BRAIN_SECRET value, tick **Switched on**
    and press **Save set-up**. Then write to the address from your own mailbox: the first answer asks
