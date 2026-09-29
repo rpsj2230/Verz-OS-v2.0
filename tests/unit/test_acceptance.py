@@ -105,7 +105,7 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     here: limits, channels and documents, then volume, refusals and a head's audit, then Lark
     chat's three, the skill library's four, the models' eleven and the audit's one, the
     connectors' four, the tools' three, a document's life in four, the classified tables' three,
-    an answer's evidence in six, the connector framework's nine, retrieval's seven,
+    an answer's evidence in seven, the connector framework's nine, retrieval's seven,
     ingestion's seven, threads' four and a document's whole life in one, the modules in
     `CHECK_MODULES` order rather than the order a process imported them. Delete this and a
     check can drop out of the suite with the page simply listing one fewer row, or the page can
@@ -171,6 +171,7 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "an_answer_and_a_refusal_say_what_the_asker_s_reach_covers",
         "a_question_narrowed_to_a_kind_is_answered_from_that_kind_alone",
         "a_prompt_too_long_for_every_model_is_answered_from_fewer",
+        "a_followed_citation_is_kept_as_a_place_and_nothing_else",
     ]
     assert by_module["brain.ops.acceptance_checks_connector_framework"] == [
         "a_source_is_read_by_its_declaration_and_its_key_is_in_no_table",
@@ -714,7 +715,7 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
     assert len(outcomes) == 55
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 172
+    assert runs == [(2,)] and len(recorded) == 174
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }

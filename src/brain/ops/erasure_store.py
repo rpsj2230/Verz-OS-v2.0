@@ -411,6 +411,9 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         # question no connected source covered is nobody's once the question ledger's row is gone.
         "ops.question_gap",
         "ops.report_refresh",
+        # A retrieval keeps which retrievers ran, three counts, the places followed and a duration:
+        # `0151` keeps no document, no question and no principal, so nothing in it is anybody's.
+        "ops.retrieval_event",
         "ops.retention_release",
         "ops.retention_report",
         "ops.routing_change",

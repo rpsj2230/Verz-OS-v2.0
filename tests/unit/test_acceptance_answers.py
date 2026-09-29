@@ -15,7 +15,7 @@ surviving.
 
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
-Task ids: M8.1.1, M8.1.2, M8.1.4, M7.4.7, M8.2.1, M8.2.2, M9.2.1, M7.6.1, M15.4.1
+Task ids: M8.1.1, M8.1.2, M8.1.4, M7.4.7, M8.2.1, M8.2.2, M9.2.1, M7.6.1, M15.4.1, M15.3.4
 """
 
 from __future__ import annotations
@@ -51,11 +51,12 @@ NOTHING = "four_kinds_of_nothing_are_kept_apart"
 SCOPE = "an_answer_and_a_refusal_say_what_the_asker_s_reach_covers"
 KIND = "a_question_narrowed_to_a_kind_is_answered_from_that_kind_alone"
 TRIM = "a_prompt_too_long_for_every_model_is_answered_from_fewer"
+FOLLOWED = "a_followed_citation_is_kept_as_a_place_and_nothing_else"
 
 
 # ------------------------------------------------------------------------ the figures
 def test_the_module_declares_one_check_per_group_of_leaves() -> None:
-    """Six checks, each closing its own leaves. Delete this and a check can lose a leaf with the
+    """Seven checks, each closing its own leaves. Delete this and a check can lose a leaf with the
     page showing the same number of rows, and the leaf closes on a check that never looked."""
     checks = [(one.name, one.leaves) for one in registered((MODULE,))]
     assert checks == [
@@ -65,6 +66,7 @@ def test_the_module_declares_one_check_per_group_of_leaves() -> None:
         (SCOPE, ("M8.2.2",)),
         (KIND, ("M7.6.1",)),
         (TRIM, ("M15.4.1",)),
+        (FOLLOWED, ("M15.3.4",)),
     ]
 
 
@@ -256,7 +258,7 @@ def test_every_answer_check_passes_on_an_install_and_leaves_nothing(
     after = _counts(install)
 
     assert outcomes == dict.fromkeys(outcomes, (PASSED, "")), outcomes
-    assert len(outcomes) == 6
+    assert len(outcomes) == 7
     assert after == before and live_ladder(install) == ladder and ladder
     assert vaulted.sent == []
 
@@ -397,3 +399,35 @@ def test_an_answer_silent_about_its_trimmed_passages_fails_the_trim_check(
 
     monkeypatch.setattr(model_lane.Trimmed, "sentence", lambda self: "")
     assert "did not say" in _failed(install, TRIM)
+
+
+@pytest.mark.needs_db
+def test_a_search_that_notes_nothing_fails_the_retrieval_log_check(
+    install: str, vaulted: Providers, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The passage search noting nothing for the request, as it did until 2026-09-29. Delete this
+    and M15.3.4 closes on a check a product that logs no retrieval passes."""
+    from brain.knowledge import document_tools
+
+    monkeypatch.setattr(document_tools, "note", lambda searched: None)
+    assert "kept no retrieval" in _failed(install, FOLLOWED)
+
+
+@pytest.mark.needs_db
+def test_a_citation_without_its_place_fails_the_retrieval_log_check(
+    install: str, vaulted: Providers, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The lane placing no passage in the reader's list. Delete this and M15.3.4 closes with a
+    cited page that has nothing to send back."""
+    from brain.gate import model_lane
+
+    original = model_lane.trace_of
+
+    def unplaced(payload: Any, *, reach: Any) -> Any:
+        from dataclasses import replace
+
+        trace = original(payload, reach=reach)
+        return replace(trace, passages=tuple(replace(one, position=0) for one in trace.passages))
+
+    monkeypatch.setattr(model_lane, "trace_of", unplaced)
+    assert "place in the reader's list" in _failed(install, FOLLOWED)

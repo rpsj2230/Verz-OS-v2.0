@@ -100,7 +100,7 @@ is. See `A_PASSAGE_CARRIES_THE_PLACE_ITS_SCOPES_TEST`.
 narrowing sees exactly the items the reach admits. It narrows what the caller asked about and
 decides nothing about what they may see. See `A_KIND_NARROWS_THE_QUESTION_AND_NEVER_THE_REACH`.
 
-Task ids: M15.2.6, M15.3.2, M7.7.1, M7.6.1
+Task ids: M15.2.6, M15.3.2, M7.7.1, M7.6.1, M15.3.4
 """
 
 from __future__ import annotations
@@ -128,12 +128,15 @@ from brain.knowledge.embed_queue import EmbeddingService
 from brain.knowledge.embedding import EmbeddedVector, EmbeddingError
 from brain.knowledge.item import ITEM_ID_PATTERN
 from brain.knowledge.kinds import KnowledgeKind
+from brain.knowledge.retrieval_log import Searched, elapsed_ms, note, started
 from brain.knowledge.rows import RowQuery, RowSource
 from brain.knowledge.search import (
     CANDIDATE_DEPTH,
     CHUNK,
     KNOWLEDGE_READ,
+    LEXICAL_RETRIEVER,
     RETRIEVABLE_STATE_VALUES,
+    VECTOR_RETRIEVER,
     Reach,
     SearchError,
     cjk_lexical_query,
@@ -574,11 +577,10 @@ def searcher(
         reach = await reach_through(records, entitlement, now)
         if reach is None:
             return _result((), now, truncated=False)
+        since = started()
         vector = None if embedder is None else await embedder.vector(request.question)
-        legs = [
-            await records.rows(query)
-            for query in search_queries(request.question, reach=reach, kinds=request.kinds)
-        ]
+        queries = search_queries(request.question, reach=reach, kinds=request.kinds)
+        legs = [await records.rows(query) for query in queries]
         # One ranking from the legs in the order they arrived, each passage once: a chunk that
         # matches in two scripts is one passage, and `Ranking` refuses it listed twice.
         lexical = tuple(dict.fromkeys(str(row["chunk_id"]) for rows in legs for row in rows))
@@ -588,9 +590,24 @@ def searcher(
                 vector_search_query(vector, reach=reach, kinds=request.kinds)
             )
             nearest = tuple(dict.fromkeys(str(row["chunk_id"]) for row in found))
-        page = [one.ref for one in hybrid(lexical=lexical, vector=nearest, limit=request.limit)]
+        fused = hybrid(lexical=lexical, vector=nearest, limit=request.limit)
+        page = [one.ref for one in fused]
         bodies = passages_query(page, reach=reach)
         rows = () if bodies.certainly_empty else await records.rows(bodies)
+        ran = (
+            *((LEXICAL_RETRIEVER,) if queries else ()),
+            *(() if vector is None else (VECTOR_RETRIEVER,)),
+        )
+        if ran:
+            # For the learning signal, and only where a request collects it (M15.3.4). The chunk
+            # ids stay in memory for the request; see `brain.knowledge.retrieval_log`.
+            note(
+                Searched(
+                    retrievers=ran,
+                    corroborated=frozenset(one.ref for one in fused if one.corroborated),
+                    latency_ms=elapsed_ms(since),
+                )
+            )
         return _result(_passages(page, rows), now, truncated=len(page) == request.limit)
 
     return search

@@ -247,8 +247,8 @@ const ANSWER_REGION_ID = "ask-answer";
  * rather than fields draws. The badge is neutral whatever it says: its words carry the state, and
  * a colour chosen from them would be this console holding an opinion about the item.
  */
-function Cited({ citation }: { readonly citation: CitationView }) {
-  const address = citationAddress(citation);
+function Cited({ citation, retrievalId }: { readonly citation: CitationView; readonly retrievalId: string }) {
+  const address = citationAddress(citation, retrievalId);
   const fresh = freshnessWords(citation);
   return (
     <>
@@ -287,6 +287,8 @@ export function Ask() {
   const [kind, setKind] = useState("");
   // The conversation the next question continues, and this person's conversations (M9.1).
   const [thread, setThread] = useState("");
+  // The retrieval the answer on the screen was drawn from, which a followed citation names (M15.3.4).
+  const [retrievalId, setRetrievalId] = useState("");
   const [threads, setThreads] = useState<readonly ThreadSummary[] | null>(null);
   const [searching, setSearching] = useState("");
   const [found, setFound] = useState<readonly ThreadSummary[] | null>(null);
@@ -373,6 +375,7 @@ export function Ask() {
         if (opened.threadId !== "") {
           setThread(opened.threadId);
         }
+        setRetrievalId(opened.retrievalId);
         for await (const event of opened.events) {
           if (controller.signal.aborted) {
             return;
@@ -510,7 +513,7 @@ export function Ask() {
           <ul className="ask__sources">
             {view.citations.map((citation, at) => (
               <li key={`${at}-${citation.label}`}>
-                <Cited citation={citation} />
+                <Cited citation={citation} retrievalId={retrievalId} />
               </li>
             ))}
           </ul>

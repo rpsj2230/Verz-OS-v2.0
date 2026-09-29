@@ -667,3 +667,125 @@ async def a_prompt_too_long_for_every_model_is_answered_from_fewer(h: Harness) -
         raise CheckFailedError("the model was not asked again with fewer passages, once")
     if TRIMMED_TEXT.format(shown=1, found=3) not in (answered.text or ""):
         raise CheckFailedError("the answer did not say it drew on one of the three passages found")
+
+
+# ---------------------------------------------- 7. the retrieval log (M15.3.4)
+#: The columns a retrieval is kept under, which name no document, question or person.
+RETRIEVAL_COLUMNS: Final = frozenset(
+    {"event_id", "at", "retrievers", "returned", "corroborated", "used", "latency_ms"}
+)
+
+
+def _asking_as(h: Harness, reach: Any) -> Any:
+    """What the retrieval routes read of a signed-in caller: the reach and the instant."""
+    # A cast at the routes' boundary: they read these two, and a `Caller` is minted only from a
+    # verified token.
+    return cast(Any, SimpleNamespace(reach=reach, now=h.now))
+
+
+@check(
+    leaves=("M15.3.4",),
+    sentence=(
+        "A member of acceptance_a is answered on Ask from their document: the retrieval is kept "
+        "with the retrievers that ran, the passages shown and no document, question or person; "
+        "following the cited passage keeps its place once, a place outside the list and an id "
+        "naming nothing are one 404, a search outside Ask keeps nothing, and the signal is read "
+        "by a knowledge administrator alone."
+    ),
+)
+async def a_followed_citation_is_kept_as_a_place_and_nothing_else(h: Harness) -> None:
+    from uuid import uuid4
+
+    from sqlalchemy import func, select, text
+
+    from brain.api_routes import logged_retrieval
+    from brain.core.errors import Absent
+    from brain.gate.admission import Assurance, admit
+    from brain.gate.context import Channel
+    from brain.gate.model_lane import PASSAGES_SHOWN
+    from brain.knowledge.quality import signal
+    from brain.knowledge.retrieval_log import collected
+    from brain.ops.retrieval_store import StoredRetrievals
+    from brain.retrieval_routes import NOT_ENOUGH_YET, UseAsked, retrieval_signal, used
+    from brain.tables.retrieval import RetrievalEventRow
+
+    s = await asking_with_a_stand_in(h)
+    await pinned(h, (step(ANSWERS),))
+    with collected() as searched:
+        answered = await asked(h, s.app, s.reader, s.paired.question, 1, at=datetime.now(UTC))
+    cited = _documents(answered)
+    event_id = await logged_retrieval(s.app.state, searched, answered)
+    if event_id is None:
+        raise CheckFailedError("an answer on Ask drawn from a document kept no retrieval")
+
+    async def kept() -> dict[str, Any]:
+        async with h.sessions() as session, session.begin():
+            found = await session.execute(
+                text("SELECT * FROM ops.retrieval_event WHERE event_id = CAST(:id AS uuid)"),
+                {"id": event_id},
+            )
+            row = found.mappings().first()
+        return {} if row is None else dict(row)
+
+    row = await kept()
+    shown = len(answered.composed.payload.records) if answered.composed is not None else 0
+    if set(row) != RETRIEVAL_COLUMNS:
+        raise CheckFailedError("a retrieval was kept with a column beyond what the signal reads")
+    if (row["retrievers"], row["returned"], list(row["used"])) != ("lexical", shown, []):
+        raise CheckFailedError(
+            "a retrieval was not kept as the retrievers that ran and the list shown"
+        )
+    positions = {one.view().get("position") for one in cited}
+    if "1" not in positions:
+        raise CheckFailedError("a cited passage did not carry its place in the reader's list")
+
+    # Following the citation, as the cited page does, twice; then two uses that name nothing.
+    asking = _asking_as(h, admit(await h.reach(s.reader), Channel.CONSOLE, Assurance.AUTHENTICATED))
+    for _ in range(2):
+        await used(_request(s.app), asking, event_id, UseAsked(position=1))
+    if list((await kept())["used"]) != [1]:
+        raise CheckFailedError("a followed citation's place was not kept, or was kept twice")
+    for wrong_id, position in ((event_id, shown + 1), (str(uuid4()), 1)):
+        if position > PASSAGES_SHOWN:
+            # Past what any list shows, which the route's own body refuses before the store.
+            continue
+        try:
+            await used(_request(s.app), asking, wrong_id, UseAsked(position=position))
+        except Absent:
+            continue
+        raise CheckFailedError("a place outside the list, or an id naming nothing, was kept")
+
+    # A search made outside Ask keeps nothing.
+    async with h.sessions() as session, session.begin():
+        before = await session.scalar(select(func.count()).select_from(RetrievalEventRow))
+    await _found(h, s.reader, s.paired.key)
+    async with h.sessions() as session, session.begin():
+        after = await session.scalar(select(func.count()).select_from(RetrievalEventRow))
+    if before != after:
+        raise CheckFailedError("a search made outside Ask kept a retrieval nobody could follow")
+
+    # The signal, for a knowledge administrator and for nobody else.
+    try:
+        await retrieval_signal(_request(s.app), asking)
+    except Absent:
+        pass
+    else:
+        raise CheckFailedError("a member who runs no part of the library read the retrieval signal")
+    # An administrator's verbs are admitted at a strong sign-in, as the console signs one in.
+    administering = _asking_as(
+        h, admit(await h.reach(s.library), Channel.CONSOLE, Assurance.STRONG)
+    )
+    view = await retrieval_signal(_request(s.app), administering)
+    recent = await StoredRetrievals(h.sessions).recent()
+    expected = signal(recent)
+    if expected is None:
+        if view.enough or view.told != NOT_ENOUGH_YET:
+            raise CheckFailedError("a signal was answered with fewer retrievals than it needs")
+    elif not view.enough or view.events != expected.events:
+        raise CheckFailedError("the signal was not read over the most recent retrievals")
+
+
+def _request(app: FastAPI) -> Any:
+    from starlette.requests import Request
+
+    return Request({"type": "http", "app": app, "headers": [], "method": "POST"})
