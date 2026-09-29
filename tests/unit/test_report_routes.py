@@ -29,6 +29,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -38,6 +39,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.api import API_PREFIX
 from brain.app import Settings, create_app
+from brain.console_overview_figures_routes import COST_HAS_NO_PRICE
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.lane import Lane
 from brain.core.principal import PrincipalKind
@@ -45,6 +47,8 @@ from brain.core.scope import Clause, Op, Scope
 from brain.gate.context import Channel, TrafficClass
 from brain.install import BY_NAME, hold_saved
 from brain.listing import DEFAULT_PAGE_ROWS, MAX_PAGE_ROWS
+from brain.models.pricing import Price, stored_of
+from brain.ops.price_store import price_key
 from brain.ops.reliability import LANE_OBJECTIVES
 from brain.ops.spend import Dimension
 from brain.ops.telemetry import RequestStatus
@@ -56,7 +60,9 @@ from brain.report_routes import (
     live_departments,
 )
 from brain.tables.adoption import QuestionAskedRow
+from brain.tables.config import SettingType
 from tests.fixtures.http_client import Response
+from tests.fixtures.setting_rows import SettingRows
 from tests.unit.test_api_routes import (
     Directory,
     Keys,
@@ -139,6 +145,8 @@ class Stored:
         self.spend_days: tuple[SpendDailyRow, ...] = ()
         self.departments: tuple[str, ...] = ()
         self.questions: tuple[QuestionAskedRow, ...] = ()
+        #: `ops.setting`, where the model prices are kept. None set unless a test sets one.
+        self.settings = SettingRows()
         self.statements: list[str] = []
 
 
@@ -180,6 +188,9 @@ class StubSession(AsyncSession):
     async def execute(self, statement: Any, *args: Any, **kwargs: Any) -> Any:
         text = str(statement)
         _STORED.statements.append(text)
+        settings = _STORED.settings.answer(statement)
+        if settings is not None:
+            return settings
         if "obs.request_telemetry" in text:
             return StubResult(_STORED.observations)
         if "ops.report_refresh" in text:
@@ -484,6 +495,7 @@ def test_a_spend_report_carries_no_field_counting_what_it_did_not_show(
         "freshness",
         "currency",
         "time_zone",
+        "not_recorded",
     }
 
 
@@ -516,6 +528,52 @@ def test_a_spend_report_says_the_installs_currency_and_zone_and_an_unresolved_on
         BY_NAME["INSTALL_CURRENCY"].default,
         BY_NAME["INSTALL_TIME_ZONE"].default,
     ) == (UNSET_CURRENCY, UNSET_TIME_ZONE)
+
+
+def test_the_service_level_window_reaches_the_consoles_widest_period_of_ninety_days(
+    client: TestClient, stored: Stored
+) -> None:
+    """Every Report page offers 7, 30 and 90 days, and ninety is inside this route's bound.
+
+    What breaks if this is deleted: the bound is put back to four weeks and the Service levels
+    page's 30 and 90 day periods are refused with a validation error on every load.
+    """
+    assert MAX_READING_HOURS == 90 * 24
+    assert get(client, SERVICE_LEVELS_PATH, "u_wide", hours=90 * 24).status_code == 200
+
+
+def test_a_spend_report_says_cost_is_not_recorded_until_a_model_is_priced_in_its_currency(
+    client: TestClient, stored: Stored
+) -> None:
+    """The Overview's rule and sentence, on the report a Spend page draws its figures from.
+
+    The recorder costs a request only when every model it called is priced in the install's
+    currency, so before a price exists the report is a sum over no cost rows and reads 0.00 for a
+    company that has spent money. The report says so, and stops saying so once a price is set.
+    Delete this and the Spend page draws 0.00 as a measurement on every install nobody has priced.
+    """
+    stored.refreshed_at = datetime.now(UTC) - timedelta(hours=1)
+    before = hold_saved({"INSTALL_CURRENCY": "sgd"})
+    try:
+        unpriced = get(client, SPEND_PATH, "u_wide").json()
+        stored.settings.hold(
+            price_key("anthropic"),
+            {
+                "a-model": stored_of(
+                    Price(input_minor=Decimal(300), output_minor=Decimal(1500), currency="SGD")
+                )
+            },
+            value_type=SettingType.JSON.value,
+        )
+        priced = get(client, SPEND_PATH, "u_wide").json()
+        hold_saved({"INSTALL_CURRENCY": "XXX"})
+        no_currency = get(client, SPEND_PATH, "u_wide").json()
+    finally:
+        hold_saved(before)
+
+    assert unpriced["not_recorded"] == [COST_HAS_NO_PRICE.model_dump()]
+    assert priced["not_recorded"] == []
+    assert no_currency["not_recorded"] == [COST_HAS_NO_PRICE.model_dump()]
 
 
 def test_the_report_says_whether_machine_traffic_was_counted(

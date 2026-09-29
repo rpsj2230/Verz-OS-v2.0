@@ -123,6 +123,17 @@ FINDINGS_ARE_RECORDED: Final = False
 #: Whether an install holds a golden corpus score or an evaluation run to compare against. No.
 EVALUATION_RUNS_ARE_RECORDED: Final = False
 
+#: The most runs one window lists. Twice a day for a year is 732, so the bound is reached only by
+#: runs started by hand, and the screen then says the list is cut off rather than counting past it.
+CANARY_RUNS_LISTED: Final = 1000
+
+#: Why the runs in a window are decided by the same predicate as the last run.
+A_RUN_HISTORY_IS_WITHHELD_WHOLE_AS_THE_LAST_RUN_IS: Final = (
+    "The runs in a window are the last run said many times, so a reader who may not see the last "
+    "run may not see any of them. The list is empty for that reader and says nothing is cut off, "
+    "which is exactly the answer of an install whose canaries have not run in the window."
+)
+
 
 # --------------------------------------------------------------------------- the runs
 class RunState(enum.StrEnum):
@@ -200,6 +211,11 @@ class QualityScreen:
     canaries_started: bool
     #: How often the canaries are due, from the canaries module's own figure.
     canary_interval_seconds: int
+    #: The runs started in the window asked for, newest first, or none for a reader who may not
+    #: see a run. See `A_RUN_HISTORY_IS_WITHHELD_WHOLE_AS_THE_LAST_RUN_IS`.
+    runs: tuple[CanaryRun, ...] = ()
+    #: The window held more runs than `CANARY_RUNS_LISTED`. Never true for a withheld reader.
+    runs_truncated: bool = False
 
 
 def may_read_canary_runs(entitlement: EntitlementSet, *, now: datetime) -> bool:
@@ -220,6 +236,8 @@ def quality_for_reader(
     *,
     now: datetime,
     started: bool,
+    history: Sequence[CanaryRun] = (),
+    listed: int = CANARY_RUNS_LISTED,
 ) -> QualityScreen:
     """The quality screen for one reader (M27.7.19).
 
@@ -228,13 +246,20 @@ def quality_for_reader(
     is `brain.ops.canaries.due` over the run shown, so a withheld run is owed as a run never made
     is, which is `A_WITHHELD_RUN_AND_A_RUN_NEVER_MADE_ARE_ONE_OBJECT` kept for the one field
     derived from the run.
+
+    `history` is the window's runs newest first, read to one past `listed` whoever is asking, so
+    whether the list is cut off is decided here, after the reader is, and never on the route.
     """
-    shown = last if may_read_canary_runs(entitlement, now=now) else None
+    may = may_read_canary_runs(entitlement, now=now)
+    shown = last if may else None
+    runs = tuple(history[:listed]) if may else ()
     return QualityScreen(
         last_canary_run=shown,
         canaries_owed=due(last_run=None if shown is None else shown.started_at, now=now),
         canaries_started=started,
         canary_interval_seconds=CANARY_INTERVAL_SECONDS,
+        runs=runs,
+        runs_truncated=may and len(history) > listed,
     )
 
 

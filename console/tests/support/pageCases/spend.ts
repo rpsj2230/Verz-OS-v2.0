@@ -8,6 +8,8 @@
 import { type PageCase, UNBROKEN } from "../pageFixtures";
 
 export const PAGES: Readonly<Record<string, PageCase>> = {
+  // Spend, with cost recorded: the line's key is unbroken, in the card of bars and the Largest
+  // figure, which is outside any table and has to break.
   "/spend": {
     address: "/spend",
     signedIn: true,
@@ -21,6 +23,9 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         total_minor: 700,
         as_of: "2019-03-04T09:00:00Z",
         freshness: "live",
+        currency: "XXX",
+        time_zone: "UTC",
+        not_recorded: [],
       },
     },
   },

@@ -33,17 +33,21 @@
  * **Every total is the API's and is never added up here**, which is `spendQuery.ts`'
  * `A_TOTAL_IS_READ_AND_NEVER_ADDED_UP_HERE` and the read module's own assertion. The questions total
  * is `questions`, and each token table's totals row is that breakdown's `total_runs`,
- * `total_tokens_in` and `total_tokens_out`. The person table is paged in the browser over every line
- * the API sent, so the total above it is always the total of the whole list and a page is never a
- * list the total fails to describe.
+ * `total_tokens_in` and `total_tokens_out`.
  *
  * **No count of what a reader was not shown.** No "of", no "others", no number of automated
- * questions. The page counts pages of lines the reader holds and nothing else.
+ * questions.
  *
- * Task ids: M27.7.14
+ * **A person is named, never numbered.** Each person line carries the directory's name for them
+ * (`brain.report_routes.A_NAME_IS_READ_ONLY_FOR_A_PERSON_ALREADY_ON_THE_READERS_LINES`), and the
+ * tokens by person are keyed by the same ids, so `personWords` names both; somebody the directory
+ * no longer holds is said as such, and their reference is in the export and nowhere on the page.
+ *
+ * Task ids: M27.7.14, M27.16.1
  */
 
 import type { components } from "../api/schema";
+import { REPORT_PERIODS, type ReportPeriod } from "./reports/reportParts";
 
 /** The whole screen, as `brain.report_routes.UsageView` sends it. */
 export type UsageBody = components["schemas"]["UsageView"];
@@ -85,11 +89,8 @@ export const DAYS_PARAMETER = "days";
  * own "Last 7 days". Each is inside the route's bound, which `tests/report-screens.test.tsx`
  * reads out of the API's own document.
  */
-export const PERIODS = [7, 30, 90] as const;
-export type Period = (typeof PERIODS)[number];
-
-/** The person lines drawn on one page. */
-export const PEOPLE_PER_PAGE = 25;
+export const PERIODS = REPORT_PERIODS;
+export type Period = ReportPeriod;
 
 /** The whole request this screen makes for one window. */
 export function usageApiPath(days: Period): string {
@@ -157,22 +158,16 @@ function isBreakdown(value: unknown): boolean {
   );
 }
 
-/** The sentence said for each measure the API names as not measured. */
+/** Why a measure the API names as not measured has no figure, for the card's tooltip. */
 export const NOT_MEASURED_SENTENCES: Readonly<Record<string, string>> = Object.freeze({
-  tokens:
-    "Tokens are not measured on this install: the request ledger does not record a token " +
-    "count, so no token table is drawn.",
-  model:
-    "Which model answered is not measured on this install: the request ledger does not record " +
-    "it, so no table by model is drawn.",
-  agent:
-    "Which agent answered is not measured on this install: the request ledger does not record " +
-    "it, so no table by agent is drawn.",
+  tokens: "The request ledger on this install does not count tokens.",
+  model: "The request ledger on this install does not record which model answered.",
+  agent: "The request ledger on this install does not record which agent answered.",
 });
 
 /** One sentence for a measure, including one this console has no sentence for yet. */
 export function notMeasuredSentence(measure: string): string {
-  return NOT_MEASURED_SENTENCES[measure] ?? `${measure} is not measured on this install.`;
+  return NOT_MEASURED_SENTENCES[measure] ?? "This install does not measure it.";
 }
 
 /** The heading and caption of one token table, by the axis the API names. */
@@ -212,52 +207,32 @@ export function glanceTokens(
     : { tokensIn: first.total_tokens_in, tokensOut: first.total_tokens_out };
 }
 
-/** The at-a-glance tokens in words. */
-export function glanceTokensLine(tokensIn: number, tokensOut: number): string {
-  return `${String(tokensIn)} in, ${String(tokensOut)} out`;
+/** Said for somebody on a usage line the directory no longer holds. */
+export const NOT_IN_THE_DIRECTORY = "Someone no longer in the directory";
+
+/** Each person id on the lines, with the name the API sent for them. */
+export function namesOf(people: readonly PersonUsageRow[] | null): ReadonlyMap<string, string> {
+  const named = new Map<string, string>();
+  for (const one of people ?? []) {
+    if (typeof one.name === "string" && one.name.trim() !== "") {
+      named.set(one.person, one.name);
+    }
+  }
+  return named;
 }
 
-/** How the person table is narrowed, ordered and paged. Nothing here reaches the API. */
-export interface PeopleView {
-  /** Part of a person's reference, compared without regard to case. Empty matches everybody. */
-  readonly search: string;
-  /** Most questions first, as the API ordered them, or by reference. */
-  readonly sort: "questions" | "person";
-  /** Which page, counted from one. */
-  readonly page: number;
+/** A person as the page says them: their name, or that the directory no longer holds them. */
+export function personWords(person: string, names: ReadonlyMap<string, string>): string {
+  return names.get(person) ?? NOT_IN_THE_DIRECTORY;
 }
 
-export const EVERYBODY: PeopleView = Object.freeze({ search: "", sort: "questions", page: 1 });
+/** The API's placeholder keys, in words. Anything else is shown as sent. */
+const TOKEN_KEY_WORDS: Readonly<Record<string, string>> = Object.freeze({
+  "no agent": "No agent",
+  "no single model": "More than one model",
+});
 
-/** One page of the person table. */
-export interface PeoplePage {
-  readonly rows: readonly PersonUsageRow[];
-  readonly page: number;
-  readonly hasPrevious: boolean;
-  readonly hasNext: boolean;
-}
-
-/**
- * The person lines on one page of the view, from the lines the API sent and nothing else.
- *
- * A page past the end is clamped to the last page, so a search that narrows the list while a
- * later page is open shows the last page of the narrowed list rather than an empty one that reads
- * as nobody matching.
- */
-export function peoplePage(lines: readonly PersonUsageRow[], view: PeopleView): PeoplePage {
-  const wanted = view.search.trim().toLowerCase();
-  const kept = lines.filter((line) => wanted === "" || line.person.toLowerCase().includes(wanted));
-  const ordered =
-    view.sort === "person"
-      ? [...kept].sort((a, b) => (a.person < b.person ? -1 : a.person > b.person ? 1 : 0))
-      : kept;
-  const pages = Math.max(1, Math.ceil(ordered.length / PEOPLE_PER_PAGE));
-  const page = Math.min(Math.max(1, view.page), pages);
-  const first = (page - 1) * PEOPLE_PER_PAGE;
-  return {
-    rows: ordered.slice(first, first + PEOPLE_PER_PAGE),
-    page,
-    hasPrevious: page > 1,
-    hasNext: page < pages,
-  };
+/** A token line's key as the page says it: a person by name, a placeholder in words. */
+export function tokenKeyWords(axis: string, key: string, names: ReadonlyMap<string, string>): string {
+  return axis === "person" ? personWords(key, names) : (TOKEN_KEY_WORDS[key] ?? key);
 }

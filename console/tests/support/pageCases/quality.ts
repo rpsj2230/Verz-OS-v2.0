@@ -9,8 +9,8 @@ import { type PageCase, UNBROKEN } from "../pageFixtures";
 
 export const PAGES: Readonly<Record<string, PageCase>> = {
   // Quality and canaries. A run state the console has no words for is drawn as the API sent it,
-  // so an unbroken one reaches the figures list outside any table, which is the `.fields__row`
-  // shape that once took a page to 911 pixels.
+  // so an unbroken one reaches the Last run figure outside any table, and the runs table inside
+  // one.
   "/quality": {
     address: "/quality",
     signedIn: true,
@@ -27,6 +27,14 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         canary_interval_seconds: 43200,
         findings_are_recorded: false,
         evaluation_runs_are_recorded: false,
+        runs: [
+          {
+            started_at: "2019-03-05T06:00:00Z",
+            finished_at: "2019-03-05T06:02:00Z",
+            state: UNBROKEN,
+          },
+        ],
+        runs_truncated: false,
       },
     },
   },

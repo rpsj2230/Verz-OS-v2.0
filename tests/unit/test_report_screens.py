@@ -39,7 +39,12 @@ from brain.core.scope import Scope
 from brain.gate.context import Channel
 from brain.identity.bearer import TokenAuthority
 from brain.ops.schedule_runner import Runner, runner_for
-from brain.report_routes import DEFAULT_USAGE_DAYS, MAX_USAGE_DAYS, last_canary_run
+from brain.report_routes import (
+    DEFAULT_USAGE_DAYS,
+    MAX_USAGE_DAYS,
+    canary_runs_between,
+    last_canary_run,
+)
 from brain.tables.adoption import QuestionAskedRow
 from brain.tables.question_gap import QuestionGapRow
 from brain.tools.startup import build_registry
@@ -112,7 +117,11 @@ class Stored:
         self.canary_runs: tuple[tuple[Any, ...], ...] = ()
         #: Ledger rows whose tokens were counted: trace, principal, model, agent, in, out.
         self.metered: tuple[tuple[Any, ...], ...] = ()
+        #: The directory's names: principal id and display name.
+        self.names: tuple[tuple[str, str], ...] = ()
         self.statements: list[str] = []
+        #: Every statement as it was handed over, for the parameters its text does not show.
+        self.executed: list[Any] = []
 
 
 _STORED = Stored()
@@ -140,6 +149,9 @@ class StubSession(AsyncSession):
     async def execute(self, statement: Any, *args: Any, **kwargs: Any) -> Any:
         text = str(statement)
         _STORED.statements.append(text)
+        _STORED.executed.append(statement)
+        if "auth.principal" in text:
+            return StubResult(_STORED.names)
         if "gate.department" in text:
             return StubResult(_STORED.departments)
         if "ops.question_asked" in text:
@@ -270,14 +282,61 @@ def test_a_company_wide_reader_is_shown_questions_by_department_and_by_person(
         {"department": "web", "questions": 1, "people": 1},
     ]
     assert body["people"] == [
-        {"person": "u_ana", "questions": 2},
-        {"person": "u_ben", "questions": 1},
-        {"person": "u_cai", "questions": 1},
+        {"person": "u_ana", "questions": 2, "name": None},
+        {"person": "u_ben", "questions": 1, "name": None},
+        {"person": "u_cai", "questions": 1, "name": None},
     ]
     assert body["questions"] == 4
     assert body["machine_included"] is False
     assert body["not_measured"] == []
     assert [one["axis"] for one in body["tokens"]] == ["person", "department", "model", "agent"]
+
+
+def test_a_person_line_carries_the_directorys_name_read_only_for_the_people_on_the_lines(
+    client: TestClient, stored: Stored
+) -> None:
+    """The page names people rather than printing principal ids, and asks for no other name.
+
+    What breaks if this is deleted: the names are read for everybody in the directory, or for
+    the whole question ledger, and the day a response carries the map a department admin reads
+    the names of people asking in other departments; or the usage table goes back to ids. A
+    person the directory no longer holds keeps their line with no name.
+    """
+    seed_questions(stored)
+    stored.names = (("u_ana", "Ana Lim"), ("u_ben", "Ben Tan"))
+    # A model call, so the department and model tables have keys that are not people.
+    stored.metered = (("t1", "u_ana", "claude-sonnet-5", None, 100, 10),)
+
+    body = get(client, USAGE_PATH, "u_narrow").json()
+
+    assert [(one["person"], one["name"]) for one in body["people"]] == [
+        ("u_ana", "Ana Lim"),
+        ("u_ben", "Ben Tan"),
+    ]
+    (asked,) = [one for one in stored.executed if "auth.principal" in str(one)]
+    listed = [value for value in asked.compile().params.values() if isinstance(value, list)]
+    assert listed == [["u_ana", "u_ben"]]
+
+    stored.names = (("u_ana", "Ana Lim"),)
+    wide = get(client, USAGE_PATH, "u_wide").json()
+    assert [(one["person"], one["name"]) for one in wide["people"]] == [
+        ("u_ana", "Ana Lim"),
+        ("u_ben", None),
+        ("u_cai", None),
+    ]
+
+
+def test_a_reader_shown_no_person_is_asked_no_name(client: TestClient, stored: Stored) -> None:
+    """No lines, no names: the directory is not read for a reader the person axis is withheld from.
+
+    What breaks if this is deleted: the name read is made for every reader, and a change that
+    starts carrying what it found reaches the readers with no person table at all.
+    """
+    seed_questions(stored)
+
+    get(client, USAGE_PATH, "u_none")
+
+    assert not any("auth.principal" in one for one in stored.statements)
 
 
 def test_a_department_scoped_reader_is_shown_that_department_on_both_tables(
@@ -372,16 +431,22 @@ def test_usage_reads_the_directory_and_then_the_questions_for_every_reader(
     """A reader offered nothing does the same two reads as a reader offered everything.
 
     What breaks if this is deleted: the route returns early for a reader it expects to refuse,
-    and that reader is the one whose request to a broken process succeeds.
+    and that reader is the one whose request to a broken process succeeds. The names of the
+    people on a reader's lines are read after the decision, so only a reader with lines has a
+    fourth read, and it is the directory's names and nothing else.
     """
     seed_questions(stored)
 
     for pid in ("u_wide", "u_none"):
         stored.statements.clear()
         get(client, USAGE_PATH, pid)
-        assert ["gate.department" in one for one in stored.statements] == [True, False, False]
-        assert "ops.question_asked" in stored.statements[1]
-        assert "obs.request_telemetry" in stored.statements[2]
+        before = stored.statements[:3]
+        assert ["gate.department" in one for one in before] == [True, False, False]
+        assert "ops.question_asked" in before[1]
+        assert "obs.request_telemetry" in before[2]
+        after = stored.statements[3:]
+        assert all("auth.principal" in one for one in after)
+        assert len(after) == (1 if pid == "u_wide" else 0)
 
 
 def test_tokens_are_joined_to_the_questions_the_reader_is_shown_and_totalled_by_the_api(
@@ -536,6 +601,8 @@ def test_a_whole_install_evaluation_reader_is_shown_the_last_canary_run(
     assert body["canary_interval_seconds"] == 12 * 60 * 60
     assert body["findings_are_recorded"] is False
     assert body["evaluation_runs_are_recorded"] is False
+    assert body["runs"] == [body["last_canary_run"]]
+    assert body["runs_truncated"] is False
 
 
 @pytest.mark.parametrize("pid", ["u_narrow", "u_none", "u_prefix"])
@@ -593,6 +660,33 @@ def test_the_canary_run_statement_selects_no_detail_and_takes_the_newest_start()
     assert "ORDER BY ops.control_run.started_at DESC" in compiled
     assert "LIMIT :param_1" in compiled
     assert statement.compile().params == {"name_1": "canary_run", "param_1": 1}
+
+
+def test_the_window_of_canary_runs_is_the_period_asked_newest_first_and_bounded() -> None:
+    """The history statement, compiled: the canary control only, the window, newest first.
+
+    What breaks if this is deleted: a run outside the period asked for is counted in it, another
+    control's attempts are listed as canary runs, or the detail column where a finding's field
+    name would be written reaches a page.
+    """
+    start = datetime(2019, 3, 1, tzinfo=UTC)
+    end = datetime(2019, 3, 31, tzinfo=UTC)
+    statement = canary_runs_between(start, end, limit=7)
+    compiled = str(statement)
+
+    assert compiled.startswith(
+        "SELECT ops.control_run.started_at, ops.control_run.finished_at, ops.control_run.outcome"
+    )
+    assert "detail" not in compiled
+    assert "ops.control_run.started_at >= :started_at_1" in compiled
+    assert "ops.control_run.started_at <= :started_at_2" in compiled
+    assert "ORDER BY ops.control_run.started_at DESC" in compiled
+    assert statement.compile().params == {
+        "name_1": "canary_run",
+        "started_at_1": start,
+        "started_at_2": end,
+        "param_1": 7,
+    }
 
 
 # ------------------------------------------------------------------------------- unwired

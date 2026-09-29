@@ -9,9 +9,8 @@
 import { type PageCase, UNBROKEN } from "../pageFixtures";
 
 export const PAGES: Readonly<Record<string, PageCase>> = {
-  // The three Report screens. Each draws a table of figures beside a key that can be an
-  // unbroken identifier, which is the shape that took five views off the side of a phone
-  // before `.grid__scroll` existed: the table scrolls and the document does not.
+  // Service levels. The lane is unbroken in the answer-time bars, outside any table, and in the
+  // lanes table beside an unbroken shortfall.
   "/service-levels": {
     address: "/service-levels",
     signedIn: true,
