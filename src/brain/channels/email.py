@@ -93,6 +93,7 @@ from string import Template
 from typing import Final
 
 from brain.channels.adapter import (
+    EVENTS_ADDRESS_ASK,
     SECRET_ASK,
     Arrived,
     ChannelCapabilities,
@@ -868,9 +869,6 @@ export default {
     timestamp_header=TIMESTAMP_HEADER,
     signature_header=SIGNATURE_HEADER,
 )
-
-#: The ask on the Worker step that shows this install's events address to copy.
-EVENTS_ADDRESS_ASK: Final = "events_address"
 
 
 def _dashboard(

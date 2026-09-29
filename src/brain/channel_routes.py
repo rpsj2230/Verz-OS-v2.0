@@ -68,12 +68,17 @@ transport is `brain.channels.relay.RelayingTransport` over the one above, so the
 thread, and both dropped with the message. A relay not set up sends nothing and is recorded as
 refused. See `brain.channels.relay.ONE_RELAY_SERVES_EVERY_MESSAGE_THIS_INSTALL_SENDS`.
 
+**A channel whose vendor needs two secrets takes them as parts, and keeps them whole.** A wire
+naming `secret_parts` is saved with every part at once, as one JSON object in its one slot, or with
+none to keep the ones held; a single `secret` is refused for it, and parts for any other. See
+`brain.channels.adapter.SEVERAL_PARTS_ARE_WRITTEN_AS_ONE`.
+
 **A channel's connect steps and the address to paste ride on its view.** `steps_of` serves the
 channel's `GUIDE` and `events_address_of` the events address in full, built on the install setting
 that already names this install's public address, as Lark's is; both are empty for a channel with
 none, so the console draws a flow only where one was declared.
 
-Task ids: M10.2.1, M10.6.1, M10.6.3, M10.3.3, M10.4.5, M3.2.2, M10.2.6, M1.8.5, M10.5.6
+Task ids: M10.2.1, M10.6.1, M10.6.3, M10.3.3, M10.4.5, M3.2.2, M10.2.6, M1.8.5, M10.5.6, M10.5.1
 """
 
 from __future__ import annotations
@@ -143,6 +148,7 @@ from brain.ops.channel_store import (
     VaultChannelSecrets,
     channel_secret_slot,
 )
+from brain.ops.connect_steps import EVENTS_ADDRESS_MARK
 from brain.ops.connector_admin import may_connect_source
 from brain.ops.credentials import (
     MAX_CREDENTIAL_CHARS,
@@ -731,7 +737,7 @@ def secret_problems(wire: ChannelWire, body: ChannelAsked) -> list[str]:
     """What is wrong with the secret asked: the wrong shape for this channel, or a part missing.
 
     A channel with parts takes every part at once or none, and never a single `secret`; one with
-    none takes `secret` alone. See `brain.channels.adapter.A_SECRET_OF_SEVERAL_PARTS_IS_KEPT_WHOLE`.
+    none takes `secret` alone. See `brain.channels.adapter.SEVERAL_PARTS_ARE_WRITTEN_AS_ONE`.
     """
     parts = wire.secret_parts
     if not parts:
@@ -787,8 +793,21 @@ def events_address_of(channel: Channel) -> str:
 
 
 def steps_of(channel: Channel) -> list[GuideStepView]:
-    """The steps that connect a channel, ending in its own form; none for a channel with none."""
-    return [step_view(one) for one in channel_guides().get(channel, ())]
+    """The steps that connect a channel, holding its own form; none for a channel with none.
+
+    A text to copy that names the events address has this install's written in, where it names
+    one; see `brain.ops.connect_steps.EVENTS_ADDRESS_MARK`.
+    """
+    address = events_address_of(channel)
+    served = []
+    for one in channel_guides().get(channel, ()):
+        view = step_view(one)
+        if address and EVENTS_ADDRESS_MARK in view.copy_text:
+            view = view.model_copy(
+                update={"copy_text": view.copy_text.replace(EVENTS_ADDRESS_MARK, address)}
+            )
+        served.append(view)
+    return served
 
 
 def _error(status: int, message: str) -> JSONResponse:

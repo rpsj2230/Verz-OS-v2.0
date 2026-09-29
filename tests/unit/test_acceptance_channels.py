@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -28,18 +29,24 @@ from tests.unit.test_channel_pipeline import KeptVault
 ROOT = Path(__file__).resolve().parents[2]
 MODULE = "brain.ops.acceptance_checks_channels"
 EMAIL = "an_email_is_taken_signed_and_answered_by_the_install_s_relay"
+SLACK = "a_slack_message_is_taken_signed_and_answered_on_the_bot_token"
 
 
 def mine() -> dict[str, Check]:
     return {one.name: one for one in registered((MODULE,))}
 
 
-def test_the_email_check_is_registered_with_the_leaf_it_proves() -> None:
+def test_each_channel_check_is_registered_with_the_leaf_it_proves() -> None:
     """Delete this and the check can close a leaf it does not exercise, or name an id no task
     has."""
-    assert {name: one.leaves for name, one in mine().items()} == {EMAIL: ("M10.5.6",)}
+    assert {name: one.leaves for name, one in mine().items()} == {
+        EMAIL: ("M10.5.6",),
+        SLACK: ("M10.5.1",),
+    }
     wbs = json.loads((ROOT / "docs" / "wbs.json").read_text(encoding="utf-8"))
-    assert "M10.5.6" in {one for module in wbs["modules"] for one in module["leaf_ids"]}
+    assert {"M10.5.6", "M10.5.1"} <= {
+        one for module in wbs["modules"] for one in module["leaf_ids"]
+    }
 
 
 def lends(password: str | None) -> MailPassword:
@@ -84,9 +91,7 @@ def test_with_no_relay_saved_the_reply_half_is_not_run(install: str) -> None:
     """**Half a sentence is not a pass.** The inbound half runs and the check says the rest was
     not asked. Delete this and an install with no relay could show email as proved."""
     before = counts(install)
-    assert run_check(install, tuple(mine().values())) == {
-        EMAIL: (NOT_RUN, channels.NO_RELAY_IS_SAVED)
-    }
+    assert run_check(install, (mine()[EMAIL],)) == {EMAIL: (NOT_RUN, channels.NO_RELAY_IS_SAVED)}
     assert counts(install) == before
 
 
@@ -102,7 +107,7 @@ def test_with_a_relay_saved_the_check_passes_and_leaves_nothing_behind(
     save_relay(install)
     monkeypatch.setattr("brain.channel_routes.mail_password_of", lambda request: lends("pw"))
     before = counts(install)
-    assert run_check(install, tuple(mine().values())) == {EMAIL: (PASSED, "")}
+    assert run_check(install, (mine()[EMAIL],)) == {EMAIL: (PASSED, "")}
     assert counts(install) == before
 
 
@@ -168,4 +173,46 @@ def test_the_check_fails_where_the_product_breaks(
         monkeypatch.setattr(email, "normalise", believing)
     else:
         monkeypatch.setattr("brain.channel_routes.mail_password_of", lambda request: lends(None))
-    assert run_check(install, tuple(mine().values())) == {EMAIL: (FAILED, reason)}
+    assert run_check(install, (mine()[EMAIL],)) == {EMAIL: (FAILED, reason)}
+
+
+@pytest.mark.needs_db
+def test_the_slack_check_passes_on_a_real_schema_and_leaves_nothing_behind(install: str) -> None:
+    """**The Slack check as the worker runs it**: it needs no relay and no vendor, so it passes,
+    and every table it wrote to holds what it held before. Delete this and a check that cannot
+    pass on the real schema, or one that commits a Slack record, reaches the owner's server."""
+    before = counts(install)
+    assert run_check(install, (mine()[SLACK],)) == {SLACK: (PASSED, "")}
+    assert counts(install) == before
+
+
+@pytest.mark.needs_db
+@pytest.mark.parametrize(
+    ("broken", "reason"),
+    [
+        ("signature", "a request signed with another secret was accepted"),
+        ("token", "the answer was not built on the bot's token"),
+        ("challenge", "Slack's address check was not answered with its own challenge"),
+    ],
+)
+def test_the_slack_check_fails_where_the_product_breaks(
+    install: str, monkeypatch: pytest.MonkeyPatch, broken: str, reason: str
+) -> None:
+    """Broken the way each would break: the wire skipping the signature, the request sent without
+    the token, and the address check left unanswered. Delete this and any of them could go with the
+    check green."""
+    from brain.channels import slack
+
+    if broken == "signature":
+        monkeypatch.setattr(slack, "verify", lambda **kwargs: None)
+    elif broken == "token":
+        real = slack.SlackWire.request_for
+
+        def tokenless(self: Any, **kwargs: Any) -> Any:
+            made = real(self, **kwargs)
+            return replace(made, headers={"Content-Type": "application/json"})
+
+        monkeypatch.setattr(slack.SlackWire, "request_for", tokenless)
+    else:
+        monkeypatch.setattr(slack.SlackWire, "handshake", lambda self, arrived: None)
+    assert run_check(install, (mine()[SLACK],)) == {SLACK: (FAILED, reason)}

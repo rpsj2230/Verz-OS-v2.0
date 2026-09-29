@@ -124,7 +124,8 @@ INBOUND: Final[tuple[InboundChannel, ...]] = (
         how=(
             "Slack signs each request with the app's signing secret over the time and the exact "
             "bytes sent; the check refuses a request more than five minutes old or signed with "
-            "anything else."
+            "anything else. It is received at its channel's events address while its record is "
+            "switched on."
         ),
     ),
     InboundChannel(

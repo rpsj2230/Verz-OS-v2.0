@@ -217,6 +217,7 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     # One per channel a vendor connects; `tests/unit/test_acceptance_channels.py` runs them.
     assert by_module["brain.ops.acceptance_checks_channels"] == [
         "an_email_is_taken_signed_and_answered_by_the_install_s_relay",
+        "a_slack_message_is_taken_signed_and_answered_on_the_bot_token",
     ]
     assert list(by_module) == list(acceptance.CHECK_MODULES)
     oversight = {one.name: one.leaves for one in registered()}
