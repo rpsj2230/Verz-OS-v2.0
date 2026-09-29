@@ -252,7 +252,7 @@ export function ServiceAccountDetailPage({ clientId }: { readonly clientId: stri
     <div className="flex min-w-0 flex-col gap-3">
       {told === null ? null : (
         <div role="status">
-          <Note kind="works">{told}</Note>
+          <Note kind="done">{told}</Note>
         </div>
       )}
       <AccountView

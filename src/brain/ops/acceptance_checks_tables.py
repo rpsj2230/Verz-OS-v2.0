@@ -15,18 +15,23 @@ so it loads the administrator through the one resolver, narrows the reach with
 `brain.gate.admission.admit` as the dependency does for a console session with a second factor, and
 asks `may_change`, which `tests/unit/test_acceptance_tables.py` holds to the route's own function
 over every combination of grants and sign-in. See
-`THE_ROUTES_GATE_IS_RESTATED_AND_HELD_TO_THE_ROUTES_OWN`. Rejected: calling the route functions with
-a caller whose verified claims the check wrote, which would put a signature nobody checked where the
-product keeps only ones it did.
+`THE_ROUTES_GATE_IS_RESTATED_AND_HELD_TO_THE_ROUTES_OWN`. Where the grants are held is not restated:
+the routes ask `brain.classification_routes.table_within_reach` at every row a change governs, and
+the check calls that function over the rows the store holds, as the routes do. Rejected: calling the
+route functions with a caller whose verified claims the check wrote, which would put a signature
+nobody checked where the product keeps only ones it did.
 
-**Ask is asked on its own lane, with no model, over the check's own table's questions.**
+**Ask is asked on its own lane, with no model, over every table's questions.**
 `brain.ops.classification_store.classified_lane_of` builds the lane from every live table as the
-answer route does, and `brain.gate.answer.answer_lane` answers over its readers and its policies, so
-the projection, the redactor, the abstention and the frames a person receives are the install's.
-The one narrowing is which question shapes are matched, for
-`THE_CHECK_MATCHES_ONLY_ITS_OWN_TABLE_S_QUESTIONS`. Rejected: columns renamed for the run, which
-would dodge the collision and prove nothing about a price list, because only the product's own
-column names are classified by `brain.knowledge.columns.first_classification`.
+answer route does, and `brain.gate.answer.answer_lane` answers over its rules, its readers and its
+policies, so the matcher, the projection, the redactor, the abstention and the frames a person
+receives are the install's. The check uploads two price lists with the same columns and asks each
+about its own services, which is the collision the owner's install showed on 2026-09-29: every
+table with a sell price column is asked in the same words, and until then the lane answered nobody
+about either. Until that day the check matched its own table's rules alone to dodge the collision,
+which proved one price list worked on an install where two did not. See
+`TWO_PRICE_LISTS_ARE_ASKED_IN_THE_SAME_WORDS_AND_EACH_ANSWERS`. A price list of the install's own
+matches the same questions and is read at the check's readers' reach, which reaches none of it.
 
 **What a reader is refused is looked for in three places, because it is withheld in three.** The
 rows Ask reads for the reader, the redactor handed rows that do carry the cost, and the frames the
@@ -36,11 +41,12 @@ gone. A reader holding the margin grant and not the cost grant is asked as well,
 the margin from them is the derivation and nothing else.
 
 **Every name is the run's.** Tables are `acceptance_<run>_...`, every value and every service name
-is a word nothing else holds, and every grant is scoped to acceptance_a. The classification grants
-are held as `_may_change` asks for them, which is whether they are held at all, so their scope
-narrows nothing about a table; the only table the administrator changes is the run's own. A table a
-reader asks about places its rows in acceptance_a through a department column the administrator
-marks open, because a department grant is judged against that column on every row.
+is a word nothing else holds, and every grant is scoped to a reserved department. Every table the
+check uploads places its rows in acceptance_a through a department column, because a department
+grant is judged against that column on every row: by the routes, for the administrator changing the
+table, and by the row plane, for a reader asking about it once the administrator marks it open. The
+one table placed in acceptance_b is uploaded by acceptance_b's own administrator, and is there to be
+refused to acceptance_a's in the words a table that does not exist gets.
 
 Task ids: M38.5.1, M7.5.1, M7.5.2, M7.5.3
 """
@@ -73,12 +79,12 @@ if TYPE_CHECKING:
     from brain.core.entitlement import EntitlementSet
     from brain.core.principal import Principal
     from brain.gate.answer import Answered
-    from brain.gate.fast_lane import FastPathRule
     from brain.knowledge.classified_rows import ClassifiedLane, StoredTable
     from brain.knowledge.columns import ColumnAccess
     from brain.ops.classification_store import ClassifiedTables
 
 A: Final = RESERVED_DEPARTMENTS[0]
+B: Final = RESERVED_DEPARTMENTS[1]
 
 # ------------------------------------------------------------------ written-down reasons
 #: Why the check asks the gate the routes ask, and how the two are kept one.
@@ -90,13 +96,13 @@ THE_ROUTES_GATE_IS_RESTATED_AND_HELD_TO_THE_ROUTES_OWN: Final = (
     "part without a red build."
 )
 
-#: Why the lane is asked with the check's own table's question shapes and no others.
-THE_CHECK_MATCHES_ONLY_ITS_OWN_TABLE_S_QUESTIONS: Final = (
-    "Every uploaded table with a sell price column is asked about in the same words, so on an "
-    "install that holds a price list of its own, 'what is the sell price of' a service matches "
-    "two rules and the lane answers nobody. The check matches the question against its own "
-    "table's rules alone; the readers, the policies, the projection, the redactor and the frames "
-    "are the lane's as the answer route builds it on this install."
+#: Why the check uploads two price lists and asks the whole lane about both.
+TWO_PRICE_LISTS_ARE_ASKED_IN_THE_SAME_WORDS_AND_EACH_ANSWERS: Final = (
+    "Every uploaded table with a sell price column is asked about in the same words, and until "
+    "2026-09-29 a second one made the lane answer nobody about either, which the owner's install "
+    "showed and this check, matching its own table's rules alone, did not. So it uploads two price "
+    "lists with the same columns, asks the lane's every rule about each list's own service, and "
+    "fails unless each is answered from its own list and withheld as one list withholds."
 )
 
 #: Why each write the check makes carries a trace of its own.
@@ -108,20 +114,39 @@ AN_APPLIED_MARK_IS_ATTRIBUTED_BY_ITS_OWN_REQUEST: Final = (
     "would leave the upload's trace on the entry, which the check reads as a failure."
 )
 
+#: Why the check asks a table another department's administrator uploaded.
+ANOTHER_DEPARTMENT_S_TABLE_IS_REFUSED_AS_A_MISSING_ONE: Final = (
+    "Until 2026-09-29 the Classification routes asked whether both classification grants were "
+    "held and never where, so a department's administrator could mark any department's price "
+    "list, and this check, whose administrator changed only a table of its own, passed. So a "
+    "table placed in acceptance_b, uploaded by acceptance_b's administrator, is asked for as "
+    "acceptance_a's would change it, and must be refused exactly as a name no table has."
+)
+
 # ------------------------------------------------------------ the words a failure is said in
+EACH_LIST_WAS_NOT_ANSWERED: Final = (
+    "a reader holding two price lists asked in the same words was not answered each list's sell"
+    " price from its own list"
+)
+
+ANOTHER_DEPARTMENT_S_TABLE_WAS_TOLD_APART: Final = (
+    "an administrator of one department could change another department's price list, or was "
+    "refused it in other words than a price list that does not exist"
+)
+
 A_PRICE_LIST_WAS_REFUSED: Final = (
     "a well-formed price list, uploaded as a CSV or an XLSX, was refused as the upload route "
     "refuses one"
 )
 
 # ------------------------------------------------------------------------ the figures
-#: A price list's headings as somebody types them: the four the shipped price list classifies, and
-#: one it does not.
-PRICE_LIST_HEADINGS: Final = ("Name", "Sell Price", "Cost", "Margin", "Notes")
+#: A price list's headings as somebody types them: the four the shipped price list classifies, the
+#: department its rows are placed in, and a note it does not classify.
+PRICE_LIST_HEADINGS: Final = ("Name", "Department", "Sell Price", "Cost", "Margin", "Notes")
 
 #: The column each of those headings is held under, written out rather than derived, so the
 #: product's parser is held to it by a test instead of agreeing with itself.
-PRICE_LIST_COLUMNS: Final = ("name", "sell_price", "cost", "margin", "notes")
+PRICE_LIST_COLUMNS: Final = ("name", "department", "sell_price", "cost", "margin", "notes")
 
 #: A price list a reader asks about: the same columns, placed in a department.
 ASKED_HEADINGS: Final = ("Name", "Department", "Sell Price", "Cost", "Margin")
@@ -131,11 +156,15 @@ ASKED_COLUMNS: Final = ("name", "department", "sell_price", "cost", "margin")
 #: `brain.knowledge.columns.PRICE_LIST` ships them and default-deny leaves the rest.
 FIRST_MARKS: Final[dict[str, tuple[str, tuple[str, ...]]]] = {
     "name": ("open", ()),
+    "department": ("restricted", ()),
     "sell_price": ("open", ()),
     "cost": ("derived", ("margin", "sell_price")),
     "margin": ("derived", ("cost", "sell_price")),
     "notes": ("restricted", ()),
 }
+
+#: The two price lists the Ask check uploads, asked about in the same words.
+ASKED_LISTS: Final = ("prices", "rates")
 
 #: The two columns a reader without the cost grant is never told, and the one they are.
 WITHHELD: Final = ("cost", "margin")
@@ -247,14 +276,19 @@ class _PriceList:
 
 
 def _price_list(
-    h: Harness, what: str, headings: Sequence[str], columns: Sequence[str]
+    h: Harness,
+    what: str,
+    headings: Sequence[str],
+    columns: Sequence[str],
+    *,
+    department: str = A,
 ) -> _PriceList:
-    """`SERVICES` services, every value a word nothing else holds, any department acceptance_a."""
+    """`SERVICES` services, every value a word nothing else holds, every row in `department`."""
     rows = []
     for _ in range(SERVICES):
         row = {column: h.word() for column in columns}
         if "department" in row:
-            row["department"] = A
+            row["department"] = department
         rows.append(row)
     return _PriceList(
         entity=f"acceptance_{h.run}_{what}",
@@ -298,17 +332,17 @@ class _Administrator:
     reach: EntitlementSet
 
 
-async def _administrator(h: Harness) -> _Administrator:
-    """A reserved person of acceptance_a holding both classification grants, let through the
-    routes' gate. Every request the check makes as them is made at this one reach and one instant,
-    so the gate asked once here is the answer each of those requests would be given."""
+async def _administrator(h: Harness, department: str = A) -> _Administrator:
+    """A reserved person of `department` holding both classification grants there, let through
+    the routes' gate. Every request the check makes as them is made at this one reach and one
+    instant, so the gate asked once here is the answer each of those requests would be given."""
     from brain.classification_routes import CLASSIFICATION_READ, CLASSIFICATION_WRITE
 
-    made = h.principal(A, "classifier")
+    made = h.principal(department, "classifier")
     await h.person(
         made,
-        department=A,
-        grants=_in(A, CLASSIFICATION_READ.value, CLASSIFICATION_WRITE.value),
+        department=department,
+        grants=_in(department, CLASSIFICATION_READ.value, CLASSIFICATION_WRITE.value),
     )
     admin = _Administrator(made, await _console(h, made, second_factor=True))
     if not may_change(admin.reach, h.now):
@@ -351,8 +385,14 @@ async def _upload(
     h: Harness, admin: _Administrator, prices: _PriceList, *, filename: str, content: bytes
 ) -> tuple[StoredTable, ClassificationView]:
     """`brain.classification_routes.upload_table`'s steps after its gate, in its order, for one
-    file. The gate is `_administrator`'s."""
-    from brain.classification_routes import TableUpload, _upload_refusal, view_of
+    file. The gate is `_administrator`'s; where it is held is the routes' own function, asked at
+    the rows the file brings and the rows it replaces."""
+    from brain.classification_routes import (
+        TableUpload,
+        _upload_refusal,
+        table_within_reach,
+        view_of,
+    )
     from brain.knowledge.classified_rows import next_upload
     from brain.knowledge.columns import ColumnClassificationError, column_name_for
     from brain.knowledge.table_file import TableFileError, read_table_file
@@ -377,8 +417,12 @@ async def _upload(
         # both in one sentence where the route tells them in two.
         if key not in parsed.columns:
             raise CheckFailedError(A_PRICE_LIST_WAS_REFUSED)
+        existing = await tables.table(prices.entity)
+        replaced = () if existing is None else await tables.rows_of(existing)
+        if not table_within_reach(admin.reach, (*parsed.rows, *replaced), h.now):
+            raise CheckFailedError(A_PRICE_LIST_WAS_REFUSED)
         table = next_upload(
-            await tables.table(prices.entity),
+            existing,
             entity=prices.entity,
             title=body.title.strip(),
             key_column=key,
@@ -398,9 +442,22 @@ async def _upload(
     return stored, view_of(stored.classification, editable=True, stored=stored)
 
 
-async def _marked_table(h: Harness, entity: str) -> StoredTable:
+async def _changeable(h: Harness, admin: _Administrator, entity: str) -> StoredTable | None:
+    """`brain.classification_routes._changeable_or_absent`'s answer: the uploaded table when it
+    exists and every row of it is within the administrator's grants, and None, the routes' one
+    refusal, both when it does not exist and when it is out of reach."""
+    from brain.classification_routes import table_within_reach
+
+    tables = _tables(h)
+    stored = await tables.table(entity)
+    if stored is None:
+        return None
+    return stored if table_within_reach(admin.reach, await tables.rows_of(stored), h.now) else None
+
+
+async def _marked_table(h: Harness, admin: _Administrator, entity: str) -> StoredTable:
     """The mark routes' opening after their gate: the uploaded table, or the one refusal."""
-    stored = await _tables(h).table(entity)
+    stored = await _changeable(h, admin, entity)
     if stored is None:
         raise CheckFailedError("a table uploaded a moment before was not there to be marked")
     return stored
@@ -417,7 +474,7 @@ async def _review(
     """`brain.classification_routes.review_mark`'s steps: nothing is written."""
     from brain.classification_routes import ColumnMark, _mark_review
 
-    stored = await _marked_table(h, entity)
+    stored = await _marked_table(h, admin, entity)
     return _mark_review(stored, column, ColumnMark(access=access, derived_from=list(derived_from)))
 
 
@@ -440,7 +497,7 @@ async def _apply(
     from brain.knowledge.columns import marked
     from brain.ops.classification_store import Writer
 
-    stored = await _marked_table(h, entity)
+    stored = await _marked_table(h, admin, entity)
     mark = ColumnMark(access=access, derived_from=list(derived_from))
     verdict = _mark_review(stored, column, mark)
     if verdict.would_not_load:
@@ -577,14 +634,14 @@ async def a_price_list_upload_classifies_every_column(h: Harness) -> None:
 async def _ask(
     h: Harness,
     lane: ClassifiedLane,
-    rules: Sequence[FastPathRule],
     person: Principal,
     reach: EntitlementSet,
     column: str,
     service: str,
 ) -> Answered:
-    """One question in the first shape a table is asked in, answered on Ask's lane with no
-    model, no cache and no recorder. See `THE_CHECK_MATCHES_ONLY_ITS_OWN_TABLE_S_QUESTIONS`."""
+    """One question in the first shape a table is asked in, answered on Ask's lane over every rule
+    it holds, with no model, no cache and no recorder. See
+    `TWO_PRICE_LISTS_ARE_ASKED_IN_THE_SAME_WORDS_AND_EACH_ANSWERS`."""
     from brain.gate.answer import answer_lane
     from brain.gate.context import Channel
     from brain.gate.finish import Origin
@@ -598,7 +655,7 @@ async def _ask(
             trace_id=f"{h.trace_id}{ASK_TRACE}", principal=person, channel=Channel.CONSOLE
         ),
         recorders=(),
-        rules=rules,
+        rules=lane.rules,
         readers=lane.readers,
         entitlement=reach,
         policies=lane.policies,
@@ -613,10 +670,11 @@ async def _ask(
 @check(
     leaves=("M7.5.2",),
     sentence=(
-        "On Ask's own lane, with no model, a reader holding an uploaded price list without the "
-        "cost grant is answered a service's sell price, and asking its cost or margin is answered "
-        "as if the service did not exist; with the margin grant and not the cost grant, neither; "
-        "with both, all three. The rows read and the redactor withhold the same two columns."
+        "On Ask's own lane, with no model, two price lists with the same columns each answer for "
+        "their own services: without the cost grant a reader of both is told a service's sell "
+        "price, and its cost or margin as if the service did not exist; with the margin grant "
+        "alone, neither; with both, all three. The rows read and the redactor withhold the same "
+        "two columns."
     ),
 )
 async def a_reader_without_the_cost_grant_is_told_the_sell_price_alone(h: Harness) -> None:
@@ -629,15 +687,23 @@ async def a_reader_without_the_cost_grant_is_told_the_sell_price_alone(h: Harnes
 
     await h.found_departments()
     admin = await _administrator(h)
-    prices = _price_list(h, "prices", ASKED_HEADINGS, ASKED_COLUMNS)
-    await _upload(h, admin, prices, filename=f"{prices.entity}.csv", content=prices.csv())
-    opened = await _apply(h, admin, prices.entity, "department", ColumnAccess.OPEN)
-    if not opened.applied:
-        raise CheckFailedError("an uploaded price list's department column could not be opened")
+    # See TWO_PRICE_LISTS_ARE_ASKED_IN_THE_SAME_WORDS_AND_EACH_ANSWERS.
+    lists = tuple(_price_list(h, what, ASKED_HEADINGS, ASKED_COLUMNS) for what in ASKED_LISTS)
+    for prices in lists:
+        await _upload(h, admin, prices, filename=f"{prices.entity}.csv", content=prices.csv())
+        opened = await _apply(h, admin, prices.entity, "department", ColumnAccess.OPEN)
+        if not opened.applied:
+            raise CheckFailedError("an uploaded price list's department column could not be opened")
 
-    table = table_capability(prices.entity).value
-    cost, margin = (column_capability(prices.entity, one).value for one in WITHHELD)
-    held = {"sales": (table,), "short": (table, margin), "finance": (table, cost, margin)}
+    tables = tuple(table_capability(one.entity).value for one in lists)
+    costs, margins = (
+        tuple(column_capability(one.entity, column).value for one in lists) for column in WITHHELD
+    )
+    held = {
+        "sales": tables,
+        "short": (*tables, *margins),
+        "finance": (*tables, *costs, *margins),
+    }
     people: dict[str, Principal] = {}
     reach: dict[str, EntitlementSet] = {}
     for role, capabilities in held.items():
@@ -650,78 +716,87 @@ async def a_reader_without_the_cost_grant_is_told_the_sell_price_alone(h: Harnes
     narrow = ("sales", "short")
 
     lane = await classified_lane_of(_Application(h.sessions))
-    reader = lane.readers.get((TABLES_SOURCE, prices.entity))
-    policy = lane.policies.get(prices.entity)
-    rules = tuple(one for one in lane.rules if one.entity == prices.entity)
-    if reader is None or policy is None or not rules:
-        raise CheckFailedError("Ask's lane did not carry the price list uploaded a moment before")
-    secret = {row[column] for row in prices.rows for column in WITHHELD}
-
-    # The rows Ask reads for each reader, before anything redacts them.
-    read = {role: await reader(RowRequest(), entitlement=reach[role], now=h.now) for role in held}
-    if {len(one.records) for one in read.values()} != {SERVICES}:
-        raise CheckFailedError(
-            "readers of one price list were read different numbers of its rows, which counts "
-            "what one of them was refused"
-        )
-    for role in narrow:
-        for record in read[role].records:
-            seen = record.model_dump()
-            if set(WITHHELD) & set(seen) or secret & {str(value) for value in seen.values()}:
-                raise CheckFailedError(
-                    "the rows Ask read for a reader without the cost grant carried the cost or "
-                    "the margin"
-                )
-    if any(not set(WITHHELD) <= set(one.model_dump()) for one in read["finance"].records):
-        raise CheckFailedError("the rows Ask read for a reader holding both grants left one out")
-
-    # The redactor, handed the rows that do carry the cost and the margin.
-    for role in ("finance", *narrow):
-        payload = redact(read["finance"], entitlement=reach[role], policy=policy, now=h.now).payload
-        kept = [set(one) for one in payload.records]
-        wanted = {SELL_PRICE, *WITHHELD} if role == "finance" else {SELL_PRICE}
-        if len(kept) != SERVICES or any(one & {SELL_PRICE, *WITHHELD} != wanted for one in kept):
+    for prices in lists:
+        reader = lane.readers.get((TABLES_SOURCE, prices.entity))
+        policy = lane.policies.get(prices.entity)
+        if reader is None or policy is None or all(r.entity != prices.entity for r in lane.rules):
             raise CheckFailedError(
-                "the redactor, handed rows holding the cost and the margin, did not narrow them to "
-                "the sell price for a reader without the cost grant and leave them whole with it"
+                "Ask's lane did not carry the price list uploaded a moment before"
+            )
+        secret = {row[column] for row in prices.rows for column in WITHHELD}
+
+        # The rows Ask reads for each reader, before anything redacts them.
+        read = {
+            role: await reader(RowRequest(), entitlement=reach[role], now=h.now) for role in held
+        }
+        if {len(one.records) for one in read.values()} != {SERVICES}:
+            raise CheckFailedError(
+                "readers of one price list were read different numbers of its rows, which counts "
+                "what one of them was refused"
+            )
+        for role in narrow:
+            for record in read[role].records:
+                seen = record.model_dump()
+                if set(WITHHELD) & set(seen) or secret & {str(value) for value in seen.values()}:
+                    raise CheckFailedError(
+                        "the rows Ask read for a reader without the cost grant carried the cost "
+                        "or the margin"
+                    )
+        if any(not set(WITHHELD) <= set(one.model_dump()) for one in read["finance"].records):
+            raise CheckFailedError(
+                "the rows Ask read for a reader holding both grants left one out"
             )
 
-    # What the lane answers each of them.
-    service, nobody = prices.rows[0], h.word()
-    for role in narrow:
-        told = await _ask(h, lane, rules, people[role], reach[role], SELL_PRICE, service["name"])
-        if told.text is None or service[SELL_PRICE] not in told.text:
-            raise CheckFailedError("a reader holding the price list was not answered a sell price")
-        for column in WITHHELD:
-            withheld = await _ask(
-                h, lane, rules, people[role], reach[role], column, service["name"]
-            )
-            absent = await _ask(h, lane, rules, people[role], reach[role], column, nobody)
-            if withheld.text is not None or withheld.frames != absent.frames:
+        # The redactor, handed the rows that do carry the cost and the margin.
+        for role in ("finance", *narrow):
+            payload = redact(
+                read["finance"], entitlement=reach[role], policy=policy, now=h.now
+            ).payload
+            kept = [set(one) for one in payload.records]
+            wanted = {SELL_PRICE, *WITHHELD} if role == "finance" else {SELL_PRICE}
+            if len(kept) != SERVICES or any(
+                one & {SELL_PRICE, *WITHHELD} != wanted for one in kept
+            ):
                 raise CheckFailedError(
-                    "a reader without the cost grant asking a service's cost or margin was not "
-                    "answered as for a service that does not exist"
+                    "the redactor, handed rows holding the cost and the margin, did not narrow "
+                    "them to the sell price for a reader without the cost grant and leave them "
+                    "whole with it"
                 )
-    for column in (SELL_PRICE, *WITHHELD):
-        told = await _ask(
-            h, lane, rules, people["finance"], reach["finance"], column, service["name"]
-        )
-        if told.text is None or service[column] not in told.text:
-            raise CheckFailedError(
-                "a reader holding the cost and margin grants was not answered a service's sell "
-                "price, cost and margin"
-            )
+
+    # What the lane answers each of them, about each list's own service, over every rule it holds.
+    nobody = h.word()
+    for prices in lists:
+        service = prices.rows[0]
+        for role in narrow:
+            told = await _ask(h, lane, people[role], reach[role], SELL_PRICE, service["name"])
+            if told.text is None or service[SELL_PRICE] not in told.text:
+                raise CheckFailedError(EACH_LIST_WAS_NOT_ANSWERED)
+            for column in WITHHELD:
+                withheld = await _ask(h, lane, people[role], reach[role], column, service["name"])
+                absent = await _ask(h, lane, people[role], reach[role], column, nobody)
+                if withheld.text is not None or withheld.frames != absent.frames:
+                    raise CheckFailedError(
+                        "a reader without the cost grant asking a service's cost or margin was "
+                        "not answered as for a service that does not exist"
+                    )
+        for column in (SELL_PRICE, *WITHHELD):
+            told = await _ask(h, lane, people["finance"], reach["finance"], column, service["name"])
+            if told.text is None or service[column] not in told.text:
+                raise CheckFailedError(
+                    "a reader holding the cost and margin grants was not answered a service's "
+                    "sell price, cost and margin"
+                )
 
 
 # ---------------------------------------------------------- 3. a mark applied (M7.5.3)
 @check(
     leaves=("M7.5.3",),
     sentence=(
-        "On an uploaded price list an administrator with a second factor marks the margin "
-        "restricted: the review names the cost as newly reachable and stores nothing; applied, the "
-        "mark is stored, the policy epoch moves, and obs.audit_entry holds 0116's classified entry "
-        "under the administrator's name, reach and request. A mark that would not load, and "
-        "anybody without the write grant, change nothing."
+        "An administrator with a second factor marks a price list's margin restricted: the review "
+        "names the cost as newly reachable and stores nothing; applied, the mark is stored, the "
+        "epoch moves and 0116 ledgers it under their name, reach and request. A mark that would "
+        "not load, a person without the write grant and another department's administrator, "
+        "refused as for a missing table, change nothing."
     ),
 )
 async def an_applied_mark_is_in_the_ledger_under_the_administrator(h: Harness) -> None:
@@ -790,3 +865,16 @@ async def an_applied_mark_is_in_the_ledger_under_the_administrator(h: Harness) -
             "the upload and the applied mark did not reach the ledger once each, as 0116's entries "
             "under the administrator's name, reach and request"
         )
+
+    # Last, so every guard above is reached first. See
+    # ANOTHER_DEPARTMENT_S_TABLE_IS_REFUSED_AS_A_MISSING_ONE.
+    elsewhere = await _administrator(h, B)
+    theirs = _price_list(h, "theirs", PRICE_LIST_HEADINGS, PRICE_LIST_COLUMNS, department=B)
+    await _upload(h, elsewhere, theirs, filename=f"{theirs.entity}.csv", content=theirs.csv())
+    if (
+        await _changeable(h, admin, theirs.entity) is not None
+        or await _changeable(h, admin, f"{theirs.entity}_nowhere") is not None
+        or await _changeable(h, admin, prices.entity) is None
+        or await _changeable(h, elsewhere, theirs.entity) is None
+    ):
+        raise CheckFailedError(ANOTHER_DEPARTMENT_S_TABLE_WAS_TOLD_APART)

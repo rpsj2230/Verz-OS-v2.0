@@ -118,7 +118,7 @@ function KeyCard({ row, name, onChanged }: { readonly row: ProviderStateRow; rea
       ) : null}
       {told === null ? null : (
         <div role="status" className="mt-3">
-          <Note kind="works">{told}</Note>
+          <Note kind="done">{told}</Note>
         </div>
       )}
     </SectionCard>
@@ -288,7 +288,7 @@ function TermsForm({ row, name, onChanged }: { readonly row: ProviderStateRow; r
       </form>
       {told === null ? null : (
         <div role="status" className="mt-3">
-          <Note kind="works">{told}</Note>
+          <Note kind="done">{told}</Note>
         </div>
       )}
       <ConfirmDialog

@@ -341,8 +341,23 @@ describe("one background job's page", () => {
     expect(header.textContent).toContain("12");
     expect(mainText(container)).toContain("REPORT-SENTENCE");
     expect(asked(idp).some((url) => url.pathname === `${JOB_API}/runs` && url.searchParams.get("limit") !== null)).toBe(true);
+    // The last run finished, so there is no run to stop and nothing offers to stop one.
+    expect(container.querySelector(`[${UNAVAILABLE_MARK}]`)).toBeNull();
+  });
+
+  test("stopping a run is offered, as not available yet, only while a run is going", async () => {
+    // Found on the owner's install on 2026-09-29: a job that had never run offered "Stop the run".
+    // What breaks if this is deleted: the unavailable act is drawn on every job again, or a job
+    // with a run going stops saying that the run cannot be stopped here.
+    const going = jobDetail({ job: job({ last_started_at: "2019-03-06T08:00:00Z", last_outcome: null, last_finished_at: null }) });
+    const { container } = await open("/jobs/spend_report_refresh", {
+      [`GET ${JOB_API}`]: () => ({ body: going }),
+      [`GET ${JOB_API}/runs`]: () => ({ body: { items: [], next_cursor: null, truncated: false } }),
+    });
+    await waitFor(() => expect(container.querySelector('[data-slot="detail-header"] h1')).not.toBeNull());
     const stop = container.querySelector(`[${UNAVAILABLE_MARK}]`);
     expect(stop?.textContent).toContain(UNAVAILABLE.stopRun.label);
+    expect(stop?.getAttribute("aria-disabled")).toBe("true");
   });
 
   test("the Profile names the person who paused it, and the About keeps the identifier in Advanced", async () => {

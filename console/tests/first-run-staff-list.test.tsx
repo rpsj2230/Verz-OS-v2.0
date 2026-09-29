@@ -136,6 +136,8 @@ function give(container: HTMLElement, id: string, value: string): void {
   if (!found) {
     throw new Error(`No control #${id} on "${headingOf(container)}".`);
   }
+  // The client secret is the kit's masked field, which hears an input event rather than a change.
+  fireEvent.input(found, { target: { value } });
   fireEvent.change(found, { target: { value } });
 }
 

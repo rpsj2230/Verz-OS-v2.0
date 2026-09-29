@@ -313,17 +313,17 @@ function ConnectForm({ guide, onConnected }: { readonly guide: Guide; readonly o
         </p>
       ) : null}
       {tested === null || connected !== "" ? null : tested.read ? (
-        <Note kind="works">{tested.told}</Note>
+        <Note kind="done">{tested.told}</Note>
       ) : (
         <Problem>{tested.told}</Problem>
       )}
       {connected !== "" || readable || tested === null || useHeld ? null : <Note>{TEST_FIRST}</Note>}
-      {connected === "" ? null : <Note kind="works">{connected}</Note>}
+      {connected === "" ? null : <Note kind="done">{connected}</Note>}
       {connected === "" || useHeld ? null : (
         <section className="flex min-w-0 flex-col gap-3 border-t border-line pt-3" aria-label={FIRST_SYNC_HEADING}>
           <h3 className="m-0 text-sm font-semibold text-ink">{FIRST_SYNC_HEADING}</h3>
           {applied !== null ? (
-            <Note kind="works">{applied.told}</Note>
+            <Note kind="done">{applied.told}</Note>
           ) : (
             <>
               <div className="flex flex-wrap gap-2">

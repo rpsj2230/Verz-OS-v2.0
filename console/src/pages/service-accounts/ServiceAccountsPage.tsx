@@ -218,7 +218,7 @@ export function ServiceAccountsPage() {
         <>
           {told === null ? null : (
             <div role="status">
-              <Note kind="works">{told}</Note>
+              <Note kind="done">{told}</Note>
             </div>
           )}
           {open?.act === "register" ? (

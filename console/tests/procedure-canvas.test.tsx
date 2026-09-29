@@ -45,8 +45,9 @@ import {
   updateStep,
   type Drawing,
   type DrawingPayload,
+  type StepKind,
 } from "../src/components/procedure";
-import { ProcedureCanvas } from "../src/components/ProcedureCanvas";
+import { ADD_WORDS, KIND_WORDS, OP_WORDS, ProcedureCanvas, WAY_WORDS } from "../src/components/ProcedureCanvas";
 import {
   backendClauseOps,
   backendDrawingKeys,
@@ -156,10 +157,10 @@ describe("what bounds the canvas", () => {
     expect(offered).toEqual(
       backendNodeKinds()
         .filter((kind) => kind !== "start")
-        .map((kind) => `Add ${kind}`),
+        .map((kind) => ADD_WORDS[kind as StepKind]),
     );
     for (const kind of ADDABLE_KINDS) {
-      press(container, `Add ${kind}`);
+      press(container, ADD_WORDS[kind]);
     }
     expect(stepsDrawn(container)).toEqual(["start", "step_1", "step_2", "step_3", "step_4"]);
     expect(container.querySelector(".procedure__bound")).toBeNull();
@@ -217,6 +218,36 @@ describe("what bounds the canvas", () => {
   });
 });
 
+describe("the words on the canvas", () => {
+  test("every kind, way out and test is named in words, and a condition's test reads as the builder's form reads it", () => {
+    // What breaks if this is deleted: "Add tool_call", "holds" and "prefix" back on the Procedure step,
+    // the server's vocabulary where a person reads, or a condition that says "starts with" on the Write
+    // step and something else here. The values sent are still the vocabulary's.
+    expect(Object.keys(KIND_WORDS)).toEqual([...STEP_KINDS]);
+    expect(Object.keys(WAY_WORDS)).toEqual([...WAYS]);
+    expect(Object.keys(OP_WORDS)).toEqual([...CLAUSE_OPS]);
+    for (const words of [...Object.values(KIND_WORDS), ...Object.values(WAY_WORDS), ...Object.values(OP_WORDS), ...Object.values(ADD_WORDS)]) {
+      expect(words.includes("_"), words).toBe(false);
+    }
+    const form = JSON.parse(readConsoleFile("tests/fixtures/manifest-form.json")) as {
+      sections: { section: string; ui: { authority: { scope: { clauses: { items: { op: { "ui:enumNames": Record<string, string> } } } } } } }[];
+    };
+    const named = form.sections.find((one) => one.section === "knowledge")?.ui.authority.scope.clauses.items.op["ui:enumNames"] ?? {};
+    for (const op of CLAUSE_OPS) {
+      expect(OP_WORDS[op], op).toBe(named[op]);
+    }
+
+    const branching = updateStep(addStep(NEW_DRAWING, "branch"), "step_1", {
+      clauses: [{ field: "tier", op: "prefix", value: "g" }],
+    });
+    const container = render(<ProcedureCanvas caption={CAPTION} tools={TOOLS} initial={branching} />).container;
+    const op = control(container, "step_1-clause-0-op") as HTMLSelectElement;
+    expect([...op.options].map((one) => one.textContent)).toEqual(CLAUSE_OPS.map((one) => OP_WORDS[one]));
+    expect(op.value).toBe("prefix");
+    expect(container.querySelector('label[for="step_1-holds"]')?.textContent).toBe(WAY_WORDS.holds);
+  });
+});
+
 describe("what the canvas sends", () => {
   test("drawing on the canvas produces exactly the drawing the server turns into a SKILL.md", () => {
     // What breaks if this is deleted: the canvas and the server each pass against their own idea
@@ -228,10 +259,10 @@ describe("what the canvas sends", () => {
       <ProcedureCanvas caption={CAPTION} tools={TOOLS} onChange={(drawing) => sent.push(drawing)} />,
     );
 
-    press(container, "Add tool_call");
-    press(container, "Add branch");
-    press(container, "Add ask");
-    press(container, "Add finish");
+    press(container, ADD_WORDS.tool_call);
+    press(container, ADD_WORDS.branch);
+    press(container, ADD_WORDS.ask);
+    press(container, ADD_WORDS.finish);
     set(container, "step_1-tool", "crm.read_client");
     press(container, "Add a test");
     set(container, "step_2-clause-0-field", "tier");

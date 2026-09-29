@@ -25,24 +25,35 @@
  * throw. A form with a section quietly missing looks exactly like a complete one, which is the
  * argument `brain.builder.form` makes about a path the schema does not describe.
  *
- * **Nothing under `/api/v1` sends this document yet.** `brain.builder.form.form_document` is the
- * body a route would answer, and the suite reads the same document from
- * `tests/fixtures/manifest-form.json`, which the Python unit suite holds equal to it.
+ * **The words are the API's too.** Each section arrives with its heading and a uiSchema of plain
+ * words (`brain.builder.form.section_ui`): a label, what the field accepts, the words on a list's
+ * Add button, the name of each choice. Until version 2 of the document there were none, and the
+ * form library labelled the Write step from the schema alone: "ManifestIdentity", "Allowed Tools",
+ * "SideEffect", which is how the owner met it on 2026-09-29. A section with no heading is refused,
+ * for the reason a section with no name is.
+ *
+ * `GET /api/v1/builder/form` answers `brain.builder.form.form_document`, and the suite reads the
+ * same document from `tests/fixtures/manifest-form.json`, which the Python unit suite holds equal
+ * to it.
  *
  * Task ids: M20.1.2
  */
 
-import type { RJSFSchema } from "@rjsf/utils";
+import type { RJSFSchema, UiSchema } from "@rjsf/utils";
 
 /** The version of the document this console reads: `brain.builder.form.FORM_SCHEMA`. */
-export const MANIFEST_FORM_SCHEMA = "brain.builder.form.v1";
+export const MANIFEST_FORM_SCHEMA = "brain.builder.form.v2";
 
 /** One section of the builder's form. */
 export interface ManifestSection {
   /** The section, in the API's own word for it. The console adds nothing to it. */
   readonly section: string;
+  /** The section's heading on the Write step, in the API's words. */
+  readonly title: string;
   /** The section's form, as the API cut it out of the manifest schema. Never assembled here. */
   readonly schema: RJSFSchema;
+  /** The section's words, as a uiSchema the API wrote. Empty when it sent none. */
+  readonly ui: UiSchema;
 }
 
 /** A body that was not a builder form. A bug in the console or the API, never an answer. */
@@ -72,6 +83,9 @@ export function readManifestForm(payload: unknown): readonly ManifestSection[] {
     ) {
       throw new UnreadableManifestForm("Every section of a builder form has a name of its own.");
     }
+    if (typeof entry.title !== "string" || entry.title.trim() === "") {
+      throw new UnreadableManifestForm(`Section ${entry.section} of a builder form has no heading.`);
+    }
     const schema = entry.schema;
     if (!isObject(schema) || schema.type !== "object" || !isObject(schema.properties)) {
       throw new UnreadableManifestForm(`Section ${entry.section} of a builder form is not a form.`);
@@ -80,7 +94,10 @@ export function readManifestForm(payload: unknown): readonly ManifestSection[] {
     // A cast at the library boundary: an object with properties is what the form library needs
     // to render anything, and proving the rest of JSON Schema structurally here buys nothing the
     // library does not check again when it compiles the schema.
-    sections.push({ section: entry.section, schema: schema as RJSFSchema });
+    // The words are presentation only, so a document that sends none still renders, labelled from
+    // the schema; a value that is not an object is read as none rather than handed to the library.
+    const words: UiSchema = isObject(entry.ui) ? (entry.ui as UiSchema) : {};
+    sections.push({ section: entry.section, title: entry.title, schema: schema as RJSFSchema, ui: words });
   }
   return sections;
 }

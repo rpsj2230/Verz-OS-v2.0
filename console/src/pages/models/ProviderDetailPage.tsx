@@ -281,7 +281,7 @@ function ProviderAnswer({ provider, view }: { readonly provider: string; readonl
           <div className="flex flex-col gap-2">
             {told === null ? null : (
               <div role="status">
-                <Note kind="works">{told}</Note>
+                <Note kind="done">{told}</Note>
               </div>
             )}
             {failure === null ? null : <FailureState failure={failure} />}

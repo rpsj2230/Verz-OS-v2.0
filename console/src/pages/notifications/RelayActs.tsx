@@ -54,6 +54,15 @@ export const SAVE_RELAY_LABEL = "Save relay";
 export const EDIT_RELAY_LABEL = "Edit relay";
 export const SET_UP_RELAY_LABEL = "Set up relay";
 export const PASSWORD_LABEL = "Replace password";
+export const SET_PASSWORD_LABEL = "Set a password";
+
+/**
+ * The password act in words: replacing one only when a password is held. Until 2026-09-29 the
+ * owner's install offered "Replace password" beside "No relay is saved".
+ */
+export function passwordLabel(held: boolean | null | undefined): string {
+  return held === true ? PASSWORD_LABEL : SET_PASSWORD_LABEL;
+}
 export const SAVE_PASSWORD_LABEL = "Save password";
 export const TRIAL_LABEL = "Send test message";
 export const REMOVE_LABEL = "Remove relay";
@@ -328,7 +337,7 @@ export function PasswordDrawer({
           onClose();
         }
       }}
-      title={PASSWORD_LABEL}
+      title={passwordLabel(page.email.password.held)}
       description={PASSWORD_DESCRIPTION}
       footer={<Footer form={PASSWORD_FORM} label={SAVE_PASSWORD_LABEL} busy={busy} onClose={onClose} />}
     >
@@ -348,7 +357,7 @@ export function PasswordDrawer({
       </div>
       <ConfirmDialog
         open={asking}
-        question="Replace the relay's password?"
+        question={page.email.password.held === true ? "Replace the relay's password?" : "Set the relay's password?"}
         consequence={page.keeping_password}
         confirmLabel={SAVE_PASSWORD_LABEL}
         cancelLabel={KEEP_LABEL}
@@ -505,6 +514,7 @@ export function NoticeSwitchDialog({
       consequence={on ? page.switching_on : page.switching_off}
       details={failure === null ? undefined : <FailureNotice failure={failure} title={NOT_DONE} />}
       confirmLabel={on ? SWITCH_ON_LABEL : SWITCH_OFF_LABEL}
+      danger={!on}
       cancelLabel={KEEP_LABEL}
       busy={busy}
       onConfirm={send}

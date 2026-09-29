@@ -29,8 +29,8 @@
  * Task ids: M32.5.2.2
  */
 
-import { fireEvent, render } from "@testing-library/react";
-import type { RJSFSchema } from "@rjsf/utils";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { TranslatableString, type RJSFSchema } from "@rjsf/utils";
 import { describe, expect, test } from "vitest";
 import {
   CREDENTIAL_FORMAT,
@@ -40,6 +40,7 @@ import {
   withoutWithheld,
 } from "../src/components/formSchema";
 import { lockedCellKey, lockedCellsFrom } from "../src/components/paging";
+import { SAVE, boundsSentence, libraryWords, plainErrors } from "../src/components/formWords";
 import { CHECK_THESE_ANSWERS, SchemaForm } from "../src/components/SchemaForm";
 import { Lock } from "../src/ui/Lock";
 import { backendLockedFieldFields, backendRedactionReasons } from "./support/python";
@@ -369,17 +370,16 @@ describe("what a generated form does build", () => {
 
   test("the form's own buttons and messages are the console's, not the library's", () => {
     // What breaks if this is deleted: a second design system arrives one class at a time. The
-    // library's submit button is `btn btn-info` and its error list is a red panel, which is a
-    // severity variant of the thing `ui/Notice.tsx` deliberately has exactly one of. Neither
-    // has a rule in this console's stylesheet, so both would render unstyled in a project
-    // whose whole theme is one file of tokens, and the fix somebody reaches for is a colour
-    // written in a component.
+    // library's submit button is `btn btn-info` and its error list is a red panel, and neither has a
+    // rule in this console, so both would render unstyled. The button is the kit's, saying Save when
+    // the caller named no words, which is the library's "Submit" replaced.
     const submitted: unknown[] = [];
     const container = form({ onSubmit: (data) => submitted.push(data) });
 
     const button = container.querySelector("button") as HTMLButtonElement;
-    expect(button.getAttribute("class")).toBe("button");
-    expect(container.innerHTML).not.toContain("btn-info");
+    expect(button.getAttribute("data-slot")).toBe("button");
+    expect(button.textContent).toBe(SAVE);
+    expect([...container.querySelectorAll("[class]")].flatMap((one) => [...one.classList]).filter((one) => /^btn/.test(one))).toEqual([]);
 
     // Submitting with a required field empty is the console's own validation, about what
     // somebody typed here and never about what the API decided, which is why showing it is
@@ -389,5 +389,156 @@ describe("what a generated form does build", () => {
     expect(submitted).toHaveLength(0);
     expect(container.querySelector(".notice__title")?.textContent).toBe(CHECK_THESE_ANSWERS);
     expect(container.querySelector(".panel-danger")).toBeNull();
+  });
+});
+
+describe("a generated form drawn from the kit", () => {
+  const LISTED: RJSFSchema = {
+    type: "object",
+    properties: {
+      tags: { type: "array", title: "Tags", items: { type: "string", title: "Tag" } },
+      notes: {
+        type: "array",
+        title: "Notes",
+        items: { type: "object", title: "Note", properties: { text: { type: "string", title: "Text" } } },
+      },
+    },
+  };
+
+  test("a list's Add button is a kit button with words on it, and pressing it adds a numbered entry that can be removed", () => {
+    // What breaks if this is deleted: the defect the owner met on 2026-09-29. The library's Add
+    // button is Bootstrap 3 markup around an empty icon, which the kit's reset draws at 0 by 0
+    // pixels, so nothing could be added to any list. Found here by its name, as a person and a
+    // screen reader find it, and pressed; an entry that cannot be removed again is the other half.
+    const submitted: unknown[] = [];
+    render(<SchemaForm caption="Lists" schema={LISTED} uiSchema={{ tags: { "ui:options": { addLabel: "Add a tag" } } }} onSubmit={(data) => submitted.push(data)} />);
+
+    const add = screen.getByRole("button", { name: "Add a tag" });
+    expect(add.getAttribute("data-slot")).toBe("button");
+    fireEvent.click(add);
+    fireEvent.click(screen.getByRole("button", { name: "Add a tag" }));
+    fireEvent.change(screen.getByLabelText("Tag 1"), { target: { value: "north" } });
+    fireEvent.change(screen.getByLabelText("Tag 2"), { target: { value: "south" } });
+
+    // A list with no words of its own is named from what one entry is called.
+    fireEvent.click(screen.getByRole("button", { name: "Add note" }));
+    expect(screen.getByText("Note 1")).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove tag 1" }));
+    expect(screen.queryByLabelText("Tag 2")).toBeNull();
+    fireEvent.submit(document.querySelector("form") as HTMLFormElement);
+    expect(submitted).toEqual([{ tags: ["south"], notes: [{}] }]);
+  });
+
+  test("nothing a generated form draws is the library's Bootstrap markup, and every button says what it does", () => {
+    // What breaks if this is deleted: one list, one template or one button left on the library's
+    // default, which renders as an invisible control with a name nobody chose. Every button on a form
+    // holding lists, entries and a submit has words, and no class from Bootstrap reaches the page.
+    const { container } = render(<SchemaForm caption="Lists" schema={LISTED} formData={{ tags: ["a"], notes: [{ text: "b" }] }} />);
+
+    const bootstrap = /^(btn(-.+)?|glyphicon(-.+)?|col-(xs|sm|md|lg|xl)-.+|panel(-.+)?|row|array-item-toolbox|array-item-list)$/;
+    const classes = [...container.querySelectorAll("[class]")].flatMap((one) => [...one.classList]);
+    expect(classes.length).toBeGreaterThan(0);
+    expect(classes.filter((one) => bootstrap.test(one))).toEqual([]);
+    const buttons = [...container.querySelectorAll("button")];
+    expect(buttons.length).toBeGreaterThanOrEqual(4);
+    for (const one of buttons) {
+      expect(one.getAttribute("data-slot"), one.outerHTML).toBe("button");
+      expect(one.textContent?.trim(), one.outerHTML).not.toBe("");
+    }
+  });
+
+  test("a field says what it accepts before anything is submitted, and a refusal says what to do", () => {
+    // What breaks if this is deleted: the format learned from a refusal, in the validator's words.
+    // Before the fix the owner read "must have required property 'Display Name'" and "must NOT have
+    // more than 120 characters". The bound is read from the schema and the grammar's sentence from
+    // the uiSchema, both under the label and both named by the input's described-by.
+    const schema: RJSFSchema = {
+      type: "object",
+      required: ["name", "code", "count"],
+      properties: {
+        name: { type: "string", title: "Display Name", maxLength: 5 },
+        code: { type: "string", title: "Code", pattern: "^[a-z]+$" },
+        count: { type: "integer", title: "Count", minimum: 1 },
+      },
+    };
+    const ui = { name: { "ui:title": "Display name" }, code: { "ui:description": "Lower-case letters only." } };
+    const submitted: unknown[] = [];
+    const { container } = render(
+      <SchemaForm caption="Words" schema={schema} uiSchema={ui} formData={{ code: "ABC", count: 0 }} onSubmit={(data) => submitted.push(data)} />,
+    );
+
+    const name = screen.getByLabelText(/^Display name/);
+    const hint = document.getElementById("root_name__description");
+    expect(hint?.textContent).toBe("Up to 5 characters.");
+    expect(name.getAttribute("aria-describedby")).toContain("root_name__description");
+    expect(document.getElementById("root_code__description")?.textContent).toBe("Lower-case letters only.");
+    expect(document.getElementById("root_count__description")?.textContent).toBe("A whole number, 1 or more.");
+
+    fireEvent.submit(container.querySelector("form") as HTMLFormElement);
+
+    expect(submitted).toHaveLength(0);
+    expect(document.getElementById("root_name__error")?.textContent).toBe("Enter the display name.");
+    expect(document.getElementById("root_code__error")?.textContent).toBe("This is not in the form described above.");
+    expect(document.getElementById("root_count__error")?.textContent).toBe("Enter 1 or more.");
+    const listed = [...(container.querySelector(".notice")?.querySelectorAll("li") ?? [])].map((one) => one.textContent);
+    expect(listed).toEqual(["Enter the display name.", "Code: This is not in the form described above.", "Count: Enter 1 or more."]);
+    expect(container.textContent).not.toMatch(/must |required property|Display Name/);
+
+    fireEvent.change(name, { target: { value: "toolong" } });
+    fireEvent.submit(container.querySelector("form") as HTMLFormElement);
+    expect(document.getElementById("root_name__error")?.textContent).toBe("Use at most 5 characters.");
+
+    // The positive sibling: the same form, answered, submits and says nothing.
+    fireEvent.change(name, { target: { value: "Ada" } });
+    fireEvent.change(screen.getByLabelText(/^Code/), { target: { value: "abc" } });
+    fireEvent.change(screen.getByLabelText(/^Count/), { target: { value: "2" } });
+    fireEvent.submit(container.querySelector("form") as HTMLFormElement);
+    expect(submitted).toEqual([{ name: "Ada", code: "abc", count: 2 }]);
+    expect(container.querySelector(".field-problems")).toBeNull();
+  });
+});
+
+describe("the form's own words", () => {
+  test("the library's strings are this console's, and one it has no words for keeps its English", () => {
+    // What breaks if this is deleted: "Add Item", "Option 1" and "clear input" back on a generated
+    // form, from a library string nobody here chose.
+    expect(libraryWords(TranslatableString.AddItemButton)).toBe("Add");
+    expect(libraryWords(TranslatableString.OptionPrefix, ["2"])).toBe("Choice 2");
+    expect(libraryWords(TranslatableString.YesLabel)).toBe("Yes");
+  });
+
+  test("a bound is stated from the schema's own keywords, and a choice or a free field states none", () => {
+    // What breaks if this is deleted: the sentence under a field and the bound the validator holds it
+    // to drift apart, which is a person told one limit and refused at another.
+    expect(boundsSentence({ type: "string", maxLength: 120 })).toBe("Up to 120 characters.");
+    expect(boundsSentence({ type: "string", minLength: 2, maxLength: 60 })).toBe("Between 2 and 60 characters.");
+    expect(boundsSentence({ type: "string", minLength: 1, maxLength: 60 })).toBe("Up to 60 characters.");
+    expect(boundsSentence({ type: "integer", minimum: 1 })).toBe("A whole number, 1 or more.");
+    expect(boundsSentence({ type: "integer", enum: [0, 1, 2] })).toBe("");
+    expect(boundsSentence({ type: "string" })).toBe("");
+  });
+
+  test("a refusal inside a list is named by the entry's words, and one for a choice asks for a choice", () => {
+    // What breaks if this is deleted: an empty entry in a list read as "Enter the this answer", or a
+    // choice asked to be typed. The words are found by walking the uiSchema down the error's path,
+    // through `items` where the path has an index.
+    const schema: RJSFSchema = {
+      type: "object",
+      properties: {
+        tools: { type: "array", items: { type: "string" } },
+        rungs: { type: "array", items: { type: "object", required: ["rung"], properties: { rung: { type: "integer", enum: [0, 1] } } } },
+      },
+    };
+    const ui = { tools: { items: { "ui:title": "Tool" } }, rungs: { items: { rung: { "ui:title": "Setting" } } } };
+    const errors = plainErrors(
+      [
+        { name: "type", property: ".tools.0", params: { type: "string" }, message: "must be string", stack: "" },
+        { name: "required", property: ".rungs.0.rung", params: { missingProperty: "rung" }, message: "x", stack: "" },
+      ],
+      ui,
+      schema,
+    );
+    expect(errors.map((one) => one.message)).toEqual(["Enter the tool, or remove it.", "Choose the setting."]);
   });
 });

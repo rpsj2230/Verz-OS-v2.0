@@ -313,7 +313,7 @@ function SourceAnswer({ name, tab }: { readonly name: string; readonly tab: stri
       footnote={
         told === null && exportFailure === null && testFailure === null && !showsTest ? undefined : (
           <div role="status" className="flex flex-col gap-2">
-            {told === null || told === "" ? null : <Note kind="works">{told}</Note>}
+            {told === null || told === "" ? null : <Note kind="done">{told}</Note>}
             {showsTest ? <ConnectionTestNote probe={test.probe} onCheckAgain={test.checkAgain} /> : null}
             {exportFailure === null ? null : <FailureNotice failure={exportFailure} title={NOT_EXPORTED} />}
             {testFailure === null ? null : <FailureNotice failure={testFailure} title={NOT_TESTED} />}

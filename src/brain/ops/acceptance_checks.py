@@ -96,7 +96,10 @@ async def asking_past_a_window_is_refused_with_a_retry_hint(h: Harness) -> None:
     from brain.ops.limits import LimitScope, request_limits, retry_after_header, retry_hint
 
     if not h.settings.valkey_url:
-        raise CheckNotRunError("this install names no cache, so there is no window to ask")
+        raise CheckNotRunError(
+            "the worker running this check was not given the cache address the application "
+            "uses, so there is no window to ask"
+        )
     client = make_client(h.settings.valkey_url)
     store = make_store(client)
     wide, tight = 1000, 2
