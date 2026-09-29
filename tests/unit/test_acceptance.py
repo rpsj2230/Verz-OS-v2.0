@@ -657,9 +657,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         acceptance_audit.A_BROWSER_SESSION_AND_A_TRACE_STORE_ARE_NOT_BUILT,
     )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
-    assert len(outcomes) == 41
+    assert len(outcomes) == 42
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 132
+    assert runs == [(2,)] and len(recorded) == 134
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }

@@ -12,6 +12,7 @@ Task ids: M39.1.1.2, M39.1.1.4, M39.1.1.5, M39.1.3.1, M39.1.3.2, M39.1.3.3, M39.
 Task ids: M39.2.1.4, M39.2.2.1, M39.2.2.2, M39.2.2.3, M39.2.2.4, M39.2.2.5
 Task ids: M39.2.3.1, M39.2.3.2, M39.2.3.3, M39.2.3.4, M39.3.1.1, M39.3.1.2, M39.3.1.3, M39.3.1.4
 Task ids: M39.4.1.1, M39.4.1.2, M39.4.1.3, M39.4.1.4, M39.4.1.5, M39.4.2.1, M39.4.2.2, M39.4.2.4
+Task ids: M39.6.1.1, M39.6.1.2, M39.6.1.3, M39.6.1.4, M39.6.1.5, M39.6.2.1, M39.6.2.2, M39.6.2.4
 """
 
 from __future__ import annotations
@@ -78,6 +79,16 @@ LEAVES = {
         "M39.4.2.1",
         "M39.4.2.2",
         "M39.4.2.4",
+    ),
+    "an_agents_automation_is_installed_started_run_and_removed": (
+        "M39.6.1.1",
+        "M39.6.1.2",
+        "M39.6.1.3",
+        "M39.6.1.4",
+        "M39.6.1.5",
+        "M39.6.2.1",
+        "M39.6.2.2",
+        "M39.6.2.4",
     ),
 }
 
@@ -345,4 +356,23 @@ def test_a_memory_offered_to_every_reader_fails_the_memory_check(
     assert run_checks(head, (by_name(name),))[name] == (
         FAILED,
         "a colleague was shown what the agent keeps about somebody else",
+    )
+
+
+@pytest.mark.needs_db
+def test_an_automation_its_owner_may_start_fails_the_automation_check(
+    head: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With the second-person rule gone, the owner may start their own automation, and the check
+    says so. Delete this and the check could pass over an install where whoever an automation
+    runs as widens its unattended schedule alone."""
+    monkeypatch.setattr(
+        "brain.console.automation_schedule.may_change_schedule",
+        lambda one, *, becomes, approved_by: True,
+    )
+    name = "an_agents_automation_is_installed_started_run_and_removed"
+
+    assert run_checks(head, (by_name(name),))[name] == (
+        FAILED,
+        "an automation's owner could start it without a second person",
     )
