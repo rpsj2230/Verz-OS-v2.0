@@ -6,19 +6,30 @@
  * budget the API could not read drawn as a budget of nothing, a share spent rounded down into
  * headroom the person does not have, and a request that names somebody.
  *
- * Task ids: M27.7.28
+ * Task ids: M27.7.28, M16.4.2
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
-import { render, waitFor } from "@testing-library/react";
+import { fireEvent, render, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
 import {
   AGENTS_CAPTION,
+  EDIT_LABEL,
+  FORGET_CONSEQUENCE,
+  FORGET_LABEL,
   ITEMS_CAPTION,
+  KEEP_IT,
+  LEARNED_CAPTION,
   NO_CEILING,
   READING_WORKSPACE,
+  SAVE_LABEL,
 } from "../src/pages/MyWorkspace";
-import { spentOf, type Workspace } from "../src/pages/myWorkspaceQuery";
+import {
+  EDIT_API_PATH,
+  FORGET_API_PATH,
+  spentOf,
+  type Workspace,
+} from "../src/pages/myWorkspaceQuery";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { declaredParameterNames } from "./support/openapi";
 
@@ -153,5 +164,129 @@ describe("what the workspace shows", () => {
     expect(
       spentOf({ period: "month", ceiling_minor: 4000, spent_minor: 1799, headroom_minor: 2201, alerts_crossed: [] }),
     ).toBe("17.99 of 40.00, 45%");
+  });
+});
+
+describe("forgetting and editing what it learned", () => {
+  interface Sent {
+    readonly method: string;
+    readonly path: string;
+    readonly body: unknown;
+  }
+
+  async function acting(
+    onPost: (path: string, body: unknown) => Response,
+  ): Promise<{ container: HTMLElement; sent: Sent[]; reads: () => number }> {
+    const sent: Sent[] = [];
+    const idp = fakeIdentityProvider({
+      api(url, init) {
+        const where = new URL(url, CONSOLE_ORIGIN).pathname;
+        const method = (init?.method ?? "GET").toUpperCase();
+        const body = typeof init?.body === "string" ? (JSON.parse(init.body) as unknown) : null;
+        sent.push({ method, path: where, body });
+        if (method === "POST") {
+          return onPost(where, body);
+        }
+        return where === OPERATION
+          ? new Response(JSON.stringify(workspace()), {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            })
+          : null;
+      },
+    });
+    const loaded = await loadConsole({ idp });
+    await signIn(loaded);
+    const { MyWorkspace } = await import("../src/pages/MyWorkspace");
+    const router = createMemoryRouter([{ path: "/me", element: <MyWorkspace /> }], {
+      initialEntries: ["/me"],
+    });
+    const { container } = render(<RouterProvider router={router} />);
+    await waitFor(() => {
+      if (!container.querySelector(`ul[aria-label="${LEARNED_CAPTION}"]`)) {
+        throw new Error("still reading");
+      }
+    });
+    const reads = () =>
+      sent.filter((one) => one.method === "GET" && one.path === OPERATION).length;
+    return { container, sent, reads };
+  }
+
+  function changed(told: string): Response {
+    return new Response(
+      JSON.stringify({ memory_id: "m_1", took_effect: true, told, replacement_id: null }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+  }
+
+  function buttonNamed(root: ParentNode, name: string): HTMLButtonElement {
+    const found = [...root.querySelectorAll("button")].find(
+      (one) => one.textContent?.trim() === name || one.getAttribute("aria-label") === name,
+    );
+    if (!found) {
+      throw new Error(`no button ${name}`);
+    }
+    return found;
+  }
+
+  function dialog(): HTMLElement {
+    const found = document.body.querySelector<HTMLElement>('[role="alertdialog"], [role="dialog"]');
+    if (!found) {
+      throw new Error("no dialog");
+    }
+    return found;
+  }
+
+  test("forgetting is confirmed in words saying the record stays, keeping it sends nothing, and the page is read again", async () => {
+    // What breaks if this is deleted: a forget with no second step, one that sends a person's name
+    // with the memory, or a page that goes on listing a memory the next answer no longer uses.
+    const { container, sent, reads } = await acting((path) => {
+      expect(path).toBe(`/api/v1${FORGET_API_PATH}`);
+      return changed("FORGOTTEN-SENTENCE");
+    });
+    const posts = () => sent.filter((one) => one.method === "POST").map((one) => [one.path, one.body]);
+    const before = reads();
+
+    fireEvent.click(buttonNamed(container, `${FORGET_LABEL} Hours before dates`));
+    expect(dialog().textContent).toContain(FORGET_CONSEQUENCE);
+    fireEvent.click(buttonNamed(dialog(), KEEP_IT));
+    expect(posts()).toEqual([]);
+
+    fireEvent.click(buttonNamed(container, `${FORGET_LABEL} Hours before dates`));
+    fireEvent.click(buttonNamed(dialog(), FORGET_LABEL));
+    await waitFor(() => {
+      expect(container.textContent).toContain("FORGOTTEN-SENTENCE");
+    });
+    expect(posts()).toEqual([[`/api/v1${FORGET_API_PATH}`, { memory_id: "m_1" }]]);
+    await waitFor(() => {
+      expect(reads()).toBeGreaterThan(before);
+    });
+  });
+
+  test("an edit sends the words written instead, for that memory alone, and the page is read again", async () => {
+    // What breaks if this is deleted: an edit that sends the old words, another memory's id, or
+    // nothing at all while the page says it was saved.
+    const { container, sent, reads } = await acting((path) => {
+      expect(path).toBe(`/api/v1${EDIT_API_PATH}`);
+      return changed("EDITED-SENTENCE");
+    });
+    const before = reads();
+
+    fireEvent.click(buttonNamed(container, `${EDIT_LABEL} Hours before dates`));
+    const form = container.querySelector<HTMLFormElement>(`form[aria-label="${EDIT_LABEL} Hours before dates"]`);
+    expect(form).not.toBeNull();
+    const field = form?.querySelector("textarea") as HTMLTextAreaElement;
+    expect(field.value).toBe("Hours before dates");
+    fireEvent.change(field, { target: { value: "  Dates before hours " } });
+    fireEvent.click(buttonNamed(form as HTMLFormElement, SAVE_LABEL));
+    await waitFor(() => {
+      expect(container.textContent).toContain("EDITED-SENTENCE");
+    });
+    expect(sent.filter((one) => one.method === "POST").map((one) => [one.path, one.body])).toEqual([
+      [`/api/v1${EDIT_API_PATH}`, { memory_id: "m_1", statement: "Dates before hours" }],
+    ]);
+    await waitFor(() => {
+      expect(reads()).toBeGreaterThan(before);
+    });
   });
 });

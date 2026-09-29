@@ -106,6 +106,7 @@ from brain.console.govern import NOWHERE, Placed
 from brain.console.govern_estate import (
     UNDO_AUTHORITY,
     LibraryItem,
+    conversation_learnings,
     departments_represented,
     learning_estate,
     learnings_in_view,
@@ -144,6 +145,7 @@ from brain.ops.memory_store import (
     inferred_named,
     learnings_named,
     learnings_of_agents,
+    learnings_of_conversations,
     stated_named,
 )
 from brain.ops.replica_store import ConsoleReads
@@ -697,6 +699,22 @@ async def remembered_about(session: AsyncSession, subject_id: str, limit: int) -
     return RememberedAbout(entries=entries, corrections=corrections_of(marks))
 
 
+async def learning_of(session: AsyncSession, memory_id: str) -> Learning | None:
+    """One memory as the domain's `Learning`, from its learning record and its row, or None.
+
+    None for a memory with no learning record, one in neither table, and one the types refuse, which
+    a route answers as it answers a memory that does not exist.
+    """
+    row = (await session.execute(learnings_named((memory_id,)))).scalars().first()
+    if row is None:
+        return None
+    stated = (await session.execute(stated_named((memory_id,)))).scalars().all()
+    inferred = (await session.execute(inferred_named((memory_id,)))).scalars().all()
+    memory_rows: list[PersistentMemoryRow | AdaptiveMemoryRow] = [*stated, *inferred]
+    memories = [found for found in (stored_memory(one) for one in memory_rows) if found]
+    return None if not memories else recorded_learning(row, memories[0][0])
+
+
 @dataclass(frozen=True)
 class StoredLearnings:
     """The agents a review was assembled over, their learnings, and the corrections naming them."""
@@ -709,20 +727,26 @@ class StoredLearnings:
 async def learnings_stored(
     session: AsyncSession, visible: Sequence[AgentRecord], limit: int
 ) -> StoredLearnings:
-    """The learnings formed while these agents ran, with their memories and corrections.
+    """The learnings formed while these agents ran, and in plain conversations, with their
+    memories and corrections.
 
     `visible` has already been narrowed to the caller's audience, so nothing is loaded about an
-    agent the caller may not see. The memories are read by id from both tables, because a learning
-    record does not say which table its memory is in, and a learning whose memory is in neither is
-    skipped: there is no formation to decide recall from.
+    agent the caller may not see. The learnings formed with no agent running are loaded beside
+    them, bounded the same way, and `learning_estate` decides which the caller is told of. The
+    memories are read by id from both tables, because a learning record does not say which table
+    its memory is in, and a learning whose memory is in neither is skipped: there is no formation
+    to decide recall from.
     """
-    if not visible:
-        return StoredLearnings(records=(), learnings=(), corrections=Corrections((), ()))
-    rows = (
-        (await session.execute(learnings_of_agents([one.agent_id for one in visible], limit)))
-        .scalars()
-        .all()
-    )
+    rows = [
+        *(
+            (await session.execute(learnings_of_agents([one.agent_id for one in visible], limit)))
+            .scalars()
+            .all()
+            if visible
+            else ()
+        ),
+        *(await session.execute(learnings_of_conversations(limit))).scalars().all(),
+    ]
     ids = [one.memory_id for one in rows]
     if not ids:
         return StoredLearnings(
@@ -1046,15 +1070,17 @@ async def undo_learning(request: Request, body: UndoAsked, asked: Asked) -> Lear
     memories = [found for found in (stored_memory(one) for one in memory_rows) if found]
     found = None if row is None or not memories else recorded_learning(row, memories[0][0])
     visible = () if record is None else visible_records((record,), asked)
+    found_here = () if found is None else (found,)
     shown = learnings_in_view(
-        records=visible,
-        learnings=() if found is None else (found,),
-        caller=asked.reach,
-        now=asked.now,
+        records=visible, learnings=found_here, caller=asked.reach, now=asked.now
     )
+    in_view = {one.memory_id for theirs in shown.values() for one in theirs} | {
+        one.memory_id
+        for one in conversation_learnings(found_here, caller=asked.reach, now=asked.now)
+    }
     if (
         found is None
-        or found.memory_id not in {one.memory_id for theirs in shown.values() for one in theirs}
+        or found.memory_id not in in_view
         or not may_undo(asked.reach, found, asked.now)
     ):
         log.info("undo not answerable", principal=asked.caller.principal.id)

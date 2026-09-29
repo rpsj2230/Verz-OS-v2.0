@@ -3,7 +3,7 @@
 - **Screens:** `/library`, `/library/:itemId`, `/library/:itemId/:view`, `/solutions`, `/learning`, `/learning/:view`, `/memory`, `/memory/:subject`, `/memory/:subject/:view`, `/records`, `/records/:entity`, `/classification`, `/classification/:entity`, `/classification/:entity/:column`, `/artifacts`
 - **Tables:** `know.item`, `know.chunk`, `know.steward_task`, `know.solution`, `mem.adaptive`, `mem.persistent`, `mem.learning`, `mem.correction`, `gate.fast_path_rule`, `gate.field_policy`, `agent.artifact`, `know.classified_table`, `know.classified_row`
 - **Installation values:** `INSTALL_VECTOR_STORE`, `INSTALL_EMBEDDING_REVISION`, `INSTALL_KNOWLEDGE_SCANNER`, `INSTALL_CLAMAV_ADDRESS`
-- **Measured here:** 32 routes, 4 called by no screen; 16 write routes, 16 with all three proofs; 7 gaps.
+- **Measured here:** 34 routes, 4 called by no screen; 18 write routes, 18 with all three proofs; 7 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -37,6 +37,8 @@
 | `POST /api/v1/knowledge/uploads` | `/library` |
 | `POST /api/v1/knowledge/uploads/queued` | `/library` |
 | `POST /api/v1/knowledge/verifications` | `/library` |
+| `POST /api/v1/me/memory/edit` | `/me` |
+| `POST /api/v1/me/memory/forget` | `/me` |
 | `PUT /api/v1/classifications/{entity}/columns/{column}/marks` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` |
 | `PUT /api/v1/classifications/{entity}/table` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` |
 
@@ -66,5 +68,7 @@
 | `POST /api/v1/knowledge/uploads` | `/library` | `test_an_administrators_upload_is_found_by_its_department_by_text_and_by_nobody_else` in `tests/unit/test_knowledge_upload_db.py` (database, in CI) | `test_an_upload_appends_one_ledger_entry_the_audit_screens_reader_finds` in `tests/unit/test_knowledge_upload_db.py` (database, in CI) | `test_a_markdown_file_is_added_to_a_department_as_its_uploader` in `tests/unit/test_knowledge_routes.py` |
 | `POST /api/v1/knowledge/uploads/queued` | `/library` | `test_a_queued_file_is_read_by_the_worker_job_and_found_by_its_department` in `tests/unit/test_knowledge_intake_db.py` (database, in CI) | `test_a_queued_files_ledger_entry_names_its_uploader_their_reach_and_its_trace` in `tests/unit/test_knowledge_intake_db.py` (database, in CI) | `test_a_queued_file_is_kept_ticketed_and_queued_and_never_parsed_in_the_request` in `tests/unit/test_knowledge_intake_routes.py` |
 | `POST /api/v1/knowledge/verifications` | `/library` | `test_several_documents_are_verified_as_several_single_verifications` in `tests/unit/test_knowledge_documents_db.py` (database, in CI) | `test_several_documents_are_verified_as_several_single_verifications` in `tests/unit/test_knowledge_documents_db.py` (database, in CI) | `test_several_documents_are_verified_as_several_single_verifications` in `tests/unit/test_knowledge_documents_db.py` (database, in CI) |
+| `POST /api/v1/me/memory/edit` | `/me` | `test_an_edit_reaches_the_rows_the_ledger_and_what_is_recalled_next` in `tests/unit/test_memory_store.py` (database, in CI) | `test_an_edit_reaches_the_rows_the_ledger_and_what_is_recalled_next` in `tests/unit/test_memory_store.py` (database, in CI) | `test_a_member_edits_a_memory_and_the_replacement_changes_the_words_and_nothing_else` in `tests/unit/test_mine_routes.py` |
+| `POST /api/v1/me/memory/forget` | `/me` | `test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next` in `tests/unit/test_memory_store.py` (database, in CI) | `test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next` in `tests/unit/test_memory_store.py` (database, in CI) | `test_a_member_forgets_a_memory_formed_from_their_own_words` in `tests/unit/test_mine_routes.py` |
 | `PUT /api/v1/classifications/{entity}/columns/{column}/marks` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` | `test_the_store_writes_and_reads_a_table_as_the_application_role` in `tests/unit/test_classified_tables.py` (database, in CI) | `test_the_store_writes_and_reads_a_table_as_the_application_role` in `tests/unit/test_classified_tables.py` (database, in CI) | `test_applying_a_mark_stores_it_and_moves_the_epoch_when_a_derivation_changes` in `tests/unit/test_classified_tables.py` |
 | `PUT /api/v1/classifications/{entity}/table` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` | `test_the_store_writes_and_reads_a_table_as_the_application_role` in `tests/unit/test_classified_tables.py` (database, in CI) | `test_the_store_writes_and_reads_a_table_as_the_application_role` in `tests/unit/test_classified_tables.py` (database, in CI) | `test_an_administrator_uploads_a_price_list_and_is_answered_its_classification` in `tests/unit/test_classified_tables.py` |
