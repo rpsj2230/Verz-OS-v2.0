@@ -13,7 +13,7 @@
  * browser's own selector engine which of them a given root element matches, which is the
  * part of the cascade that the `:not([data-theme="light"])` guard decides.
  *
- * Task ids: M32.5.1.4
+ * Task ids: M32.5.1.4, M27.15.80
  */
 
 import { describe, expect, test, vi } from "vitest";

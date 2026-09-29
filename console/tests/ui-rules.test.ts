@@ -13,7 +13,7 @@
  * 10", `document.cookie`), so the source is read with its comments removed by the TypeScript printer,
  * and class names are read from the calls and attributes that carry them, then compiled by Tailwind.
  *
- * Task ids: M27.10.2, M27.10.4
+ * Task ids: M27.10.2, M27.10.4, M27.15.76
  */
 
 import { readdirSync } from "node:fs";
