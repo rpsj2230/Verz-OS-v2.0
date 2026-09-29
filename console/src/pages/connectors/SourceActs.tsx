@@ -26,7 +26,6 @@
 import { useId, useState, type FormEvent } from "react";
 import { request } from "../../api/client";
 import type { ApiFailure, FieldProblem } from "../../api/errors";
-import { ConnectLark } from "../../components/ConnectLark";
 import { ConnectSource } from "../../components/ConnectSource";
 import { ConfirmDialog, Drawer, Fact, FactList, Note } from "../../components/kit";
 import { Button } from "../../components/ui/button";
@@ -42,8 +41,9 @@ import {
   type Connectable,
   type Connectors as ConnectorsBody,
 } from "../connectorsQuery";
-import { ACT_LABELS } from "./connectorActions";
 import { editApiPath, exportApiPath, exportFileName, keyApiPath, type SettingValue } from "./connectorSources";
+import { ACT_LABELS } from "./connectorActions";
+import { LarkFlow, type LarkStart } from "./LarkFlow";
 
 /** The drawers' and dialogs' own words. */
 export const CONNECT_TITLE = "Connect a source";
@@ -55,7 +55,6 @@ export const EDIT_TITLE = "Edit settings";
 export const EDIT_DESCRIPTION = "The source is connected again with these settings, as one change.";
 export const KEY_TITLE = "Replace key";
 export const KEY_DESCRIPTION = "A new key for this connection. Nothing else about it changes.";
-export const LARK_DESCRIPTION = "Create the Lark app, test it, and switch on what it is for.";
 export const NOT_EDITED = "The settings were not changed";
 export const NOT_REPLACED = "The key was not replaced";
 export const NOT_DISCONNECTED = "The source was not disconnected";
@@ -74,7 +73,7 @@ function settingNames(name: string): readonly string[] {
 /** The acts' drawers, which one is open, and for which source. */
 export type OpenAct =
   | { readonly act: "connect"; readonly source: string | null }
-  | { readonly act: "lark" }
+  | { readonly act: "lark"; readonly start?: LarkStart | undefined }
   | { readonly act: "edit"; readonly source: string }
   | { readonly act: "key"; readonly source: string }
   | { readonly act: "disconnect"; readonly source: string; readonly label: string };
@@ -148,21 +147,20 @@ export function ConnectDrawer({
   );
 }
 
-export function LarkDrawer({ onClose }: { readonly onClose: () => void }) {
-  return (
-    <Drawer
-      open
-      onOpenChange={(open) => {
-        if (!open) {
-          onClose();
-        }
-      }}
-      title={ACT_LABELS.connectLark}
-      description={LARK_DESCRIPTION}
-    >
-      <ConnectLark />
-    </Drawer>
-  );
+/**
+ * Connect Lark, or add a use to it, one screen at a time (`LarkFlow.tsx`). Closing keeps the place;
+ * the final save closes it and says what was switched on.
+ */
+export function LarkDialog({
+  start,
+  onClose,
+  onDone,
+}: {
+  readonly start?: LarkStart | undefined;
+  readonly onClose: () => void;
+  readonly onDone: (told: string) => void;
+}) {
+  return <LarkFlow start={start} onClose={onClose} onDone={onDone} />;
 }
 
 // --------------------------------------------------------------------------------- edit

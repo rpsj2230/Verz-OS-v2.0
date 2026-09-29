@@ -6,7 +6,7 @@
  * Task ids: none
  */
 
-import { type PageCase, UNBROKEN } from "../pageFixtures";
+import { LARK_GUIDE, type PageCase, STAFF_RUNS, UNBROKEN } from "../pageFixtures";
 
 /** One source's figures as `brain.console_stats_routes.ConnectorStatsView` sends them. */
 const CONNECTOR_STATS = {
@@ -169,34 +169,10 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     answers: {
       "/api/v1/console/connectors": { items: [CONNECTOR_ROW], next_cursor: null, total: null },
       "/api/v1/console/connectors/xero/stats": CONNECTOR_STATS,
-      // Connect Lark's guide, every drawn value the unbroken token.
-      "/api/v1/connectors/lark-app": {
-        uses: [
-          {
-            name: "staff_list",
-            label: UNBROKEN,
-            what: UNBROKEN,
-            scopes: [],
-            switched_on: true,
-            key_held: true,
-            status: UNBROKEN,
-            may_switch_on: true,
-          },
-        ],
-        chosen: ["staff_list"],
-        steps: [{ title: UNBROKEN, text: UNBROKEN }],
-        scopes: [{ name: UNBROKEN, what: UNBROKEN, read_only: true }],
-        platforms: ["larksuite.com"],
-        platform: "larksuite.com",
-        base: "",
-        developer_console: "https://open.larksuite.com/app",
-        events_address: "",
-        channel_note: UNBROKEN,
-        knowledge_note: UNBROKEN,
-        test_note: UNBROKEN,
-        staff_sources_screen: "/staff_sources",
-        vault_told: "",
-      },
+      // Connect Lark's guide with the staff list on, so Lark's connected card is drawn, and the
+      // staff list's runs the card's last sync reads.
+      "/api/v1/connectors/lark-app": LARK_GUIDE,
+      "/api/v1/govern/staff_sources/runs": STAFF_RUNS,
       "/api/v1/connectors": CONNECTORS_SCREEN,
     },
   },

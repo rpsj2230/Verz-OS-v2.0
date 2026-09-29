@@ -49,6 +49,7 @@ import {
 } from "../../components/ui/dropdown-menu";
 import { FailureNotice } from "../../ui/FailureNotice";
 import { CONNECTORS_API_PATH, when, type Connected, type Connectors as ConnectorsBody } from "../connectorsQuery";
+import { LARK_API_PATH, type LarkGuide } from "../larkConnectQuery";
 import { ACT_LABELS } from "./connectorActions";
 import { worthShowing } from "./connectorProbe";
 import { ConnectorAbout } from "./ConnectorAbout";
@@ -71,7 +72,7 @@ import {
   DisconnectDialog,
   EditDrawer,
   KeyDrawer,
-  LarkDrawer,
+  LarkDialog,
   NOT_EXPORTED,
   exportRecord,
   type OpenAct,
@@ -183,6 +184,8 @@ function SourceAnswer({ name, tab }: { readonly name: string; readonly tab: stri
   const answer = useResource<unknown>(sourceApiPath(name), version);
   const context = useResource<ConnectorsBody>(CONNECTORS_API_PATH, version);
   const detail = useMemo(() => readSourceDetail(answer.data), [answer.data]);
+  // Asked only on a source Connect Lark connects, to offer Manage Lark once anything is on.
+  const lark = useResource<LarkGuide>(detail?.source.connectFrom === "lark" ? LARK_API_PATH : null, version).data;
   const page = context.data;
   const connected = page?.connectors?.find((one) => one.name === name);
   const form = page?.connectable.find((one) => one.name === name);
@@ -273,10 +276,10 @@ function SourceAnswer({ name, tab }: { readonly name: string; readonly tab: stri
               variant="outline"
               className="min-h-11 sm:min-h-8"
               onClick={() => {
-                act({ act: "lark" });
+                act({ act: "lark", start: { at: "choose" } });
               }}
             >
-              {ACT_LABELS.connectLark}
+              {lark?.connected === true ? ACT_LABELS.manageLark : ACT_LABELS.connectLark}
             </Button>
           ) : null}
           {connected === undefined || !source.mayManage ? null : (
@@ -348,7 +351,7 @@ function SourceAnswer({ name, tab }: { readonly name: string; readonly tab: stri
       {open?.act === "connect" && page !== null ? (
         <ConnectDrawer page={page} source={open.source} onClose={close} onDone={done} />
       ) : null}
-      {open?.act === "lark" ? <LarkDrawer onClose={closeLark} /> : null}
+      {open?.act === "lark" ? <LarkDialog start={open.start} onClose={closeLark} onDone={done} /> : null}
       {open?.act === "edit" && form !== undefined ? (
         <EditDrawer
           name={source.name}
