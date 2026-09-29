@@ -101,14 +101,14 @@ def test_every_leaf_a_check_names_is_a_leaf_of_the_work_breakdown() -> None:
 
 
 def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
-    """Held per module, so a package adding checks in a module of its own changes only its own
-    line here: limits, channels and documents, then volume, refusals and a head's audit, then Lark
-    chat's three, the skill library's four, the models' eleven and the audit's one, the connectors'
-    four, the tools' three, a document's life in four, the classified tables' three, an answer's
-    evidence in four and the connector framework's eight, the modules in `CHECK_MODULES` order
-    rather than the order a process imported them. Delete this and a check can drop out of the
-    suite with the page simply listing one fewer row, or the page can lead with whichever module
-    was imported first."""
+    """Held per module, so a package adding checks in a module of its own changes only its own line
+    here: limits, channels and documents, then volume, refusals and a head's audit, then Lark
+    chat's three, the skill library's four, the models' eleven and the audit's one, the
+    connectors' four, the tools' three, a document's life in four, the classified tables' three,
+    an answer's evidence in four, the connector framework's nine and retrieval's seven, the
+    modules in `CHECK_MODULES` order rather than the order a process imported them. Delete this
+    and a check can drop out of the suite with the page simply listing one fewer row, or the page
+    can lead with whichever module was imported first."""
     by_module: dict[str, list[str]] = {}
     for one in registered():
         by_module.setdefault(one.run.__module__, []).append(one.name)
@@ -178,6 +178,21 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "a_burst_is_paced_by_the_source_s_documented_ceiling",
         "failures_open_the_breaker_and_a_refusal_is_retried_in_budget",
         "an_unreached_source_is_named_only_to_an_asker_who_could_see_it",
+        "a_source_s_live_calls_are_measured_on_its_page",
+    ]
+    # Retrieval on the install's own index; `tests/unit/test_acceptance_retrieval.py`.
+    assert by_module["brain.ops.acceptance_retrieval"] == [
+        "a_typed_row_tool_reads_only_the_callers_rows_and_columns",
+        "a_word_in_a_title_outranks_a_word_in_passing",
+        "a_documents_passages_come_back_together_in_reading_order",
+        "a_narrow_reader_is_given_their_own_passages_past_a_nearer_crowd",
+        "hybrid_search_returns_what_each_leg_finds_fused_by_rank",
+        "the_database_withholds_passages_the_statement_did_not_filter",
+        "three_readers_get_everything_in_their_scope_and_nothing_else",
+    ]
+    # Connected sources on Ask; `tests/unit/test_acceptance_sources.py`.
+    assert by_module["brain.ops.acceptance_checks_sources"] == [
+        "a_connected_source_answers_on_ask_from_its_index_and_its_source",
     ]
     assert list(by_module) == list(acceptance.CHECK_MODULES)
     oversight = {one.name: one.leaves for one in registered()}
@@ -661,9 +676,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         acceptance_audit.NO_DEPLOYMENT_IS_RECORDED_TO_KEEP_OUT,
     )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
-    assert len(outcomes) == 35
+    assert len(outcomes) == 44
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 120
+    assert runs == [(2,)] and len(recorded) == 138
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }

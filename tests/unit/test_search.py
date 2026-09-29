@@ -757,6 +757,18 @@ def test_the_vector_leg_orders_by_distance_and_limits_in_the_same_statement() ->
     assert sql.index(" ORDER BY ") < sql.index(" LIMIT ")
 
 
+def test_the_vector_leg_orders_by_the_distance_and_nothing_else() -> None:
+    """`THE_VECTOR_LEG_IS_ORDERED_BY_DISTANCE_ALONE_SO_THE_INDEX_CAN_SERVE_IT`. Until 2026-09-29
+    the statement broke ties on the chunk id, which the HNSW index cannot order by, so every
+    vector question sorted every matching chunk and the index was never walked; the test above
+    passed throughout, because the shape it reads was all there. Delete this and a tie-breaker
+    can come back, and the install check reading the plan is the only thing left to notice."""
+    statement = vector_query(AN_EMBEDDING, reach=NARROW, model=A_MODEL)
+    keys = list(statement._order_by_clauses)
+    assert len(keys) == 1
+    assert "<=>" in str(keys[0])
+
+
 def test_the_vector_leg_excludes_rows_that_have_not_been_embedded_yet() -> None:
     """A NULL distance orders last in PostgreSQL rather than being dropped, so without this a
     corpus with fewer embedded chunks than the depth returns unembedded chunks at the tail
