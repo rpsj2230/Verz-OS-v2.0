@@ -124,6 +124,13 @@ USES_EXPLAINED: Final[Mapping[tuple[str, str, str], str]] = MappingProxyType(
         ),
         ("brain.knowledge.item_store", "know.item", "SELECT"): _SET_BY_THE_CALLER,
         ("brain.knowledge.item_store", "know.item", "UPDATE"): _SET_BY_THE_CALLER,
+        ("brain.ops.trace_store", "obs.trace_step", "SELECT"): (
+            "StoredTraces.read selects the steps only after SET LOCAL ROLE brain_trace_reader in "
+            "the same transaction, and 0150 grants SELECT to that role and deliberately not to "
+            "brain_app, which may take the role and inherits nothing from it: a trace is read "
+            "under its own role, never the application's (trace_store."
+            "A_TRACE_IS_READ_UNDER_ITS_OWN_ROLE_AND_AFTER_ITS_ROW)"
+        ),
     }
 )
 
