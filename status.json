@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-29T08:34:38.984119+00:00",
-  "commit": "3cbb087c",
-  "commit_subject": "Two Wave 0 tasks close on the first staff sync: the worker borrows the source's key for one run and hands it back (#213)",
+  "generated_at": "2026-09-29T09:18:54.282003+00:00",
+  "commit": "dd6a23a9",
+  "commit_subject": "Install checks prove the connector framework: interface and health, a key by reference and leased per run, the REST adapter, scope, the throttle, live reads and the notice (#211)",
   "total": 1576,
   "done": 412,
   "percent": 26.1,
