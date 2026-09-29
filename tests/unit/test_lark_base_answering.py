@@ -202,8 +202,11 @@ def test_a_base_s_tables_are_bound_by_their_own_schema_and_offered_by_their_titl
     assert (one.entity, one.named()) == (f"lark_{TABLE.lower()}", "Accounts")
     assert [b.target for b in one.table.projected_bindings()] == ["client", "last_modified"]
     words = {w.capability.value: w.description for w in vocabulary_of(known)}
-    assert set(words) == {f"read:{one.entity}", f"read:{one.entity}.*"}
+    fields = {f"read:{one.entity}.{b.target}" for b in one.table.bindings}
+    assert set(words) == {f"read:{one.entity}", f"read:{one.entity}.*", *fields}
+    assert len(fields) == 4
     assert all("'Accounts'" in said for said in words.values())
+    assert "'Contract Value'" in words[f"read:{one.entity}.contract_value"]
 
 
 def test_an_index_run_says_what_it_did_and_names_no_base() -> None:

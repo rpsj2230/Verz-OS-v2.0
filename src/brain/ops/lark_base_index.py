@@ -20,7 +20,9 @@ asks for it and never stored. The rows go through `brain.ops.connector_sync.kept
 `record_upsert`, the sync's own two functions, so a Lark row is held to exactly the rules a Xero
 row is. See `A_BASE_IS_INDEXED_AND_NEVER_COPIED`.
 
-**Who may read a row is a grant on this install, and the index registers the words for it.**
+**Who may read a row is a grant on this install, and the index registers the words for it**
+(the owner's decision, needs-rupash 116: a Base is governed by the Brain's own roles and grants,
+default-deny, and Lark's own sharing is never read).
 `lark_base.A_SHARING_SETTING_IS_NOT_A_PERMISSION_MODEL` argues that a Base's own sharing is a list
 Lark holds and `base:record:read` cannot read, so the one fact this install can state about a row
 is which Base it came from: that is the visibility predicate every kept row carries
@@ -124,10 +126,11 @@ A_BASE_IS_INDEXED_AND_NEVER_COPIED: Final = (
 #: Why each run registers the table's capabilities under its title.
 A_TABLE_S_GRANT_IS_OFFERED_BY_ITS_TITLE: Final = (
     "A grant can name only a capability in the registry, and a table's capability is named by "
-    "its Lark id, which nobody would recognise. So each run registers read:lark_<table> and "
-    "read:lark_<table>.* with the table's own title in the description, and the grants screen "
-    "offers them in words. Registering is not granting: nobody reads a table until an "
-    "administrator grants it."
+    "its Lark id, which nobody would recognise. So each run registers read:lark_<table>, "
+    "read:lark_<table>.* and read:lark_<table>.<field> for every field, with the table's title and "
+    "the field's own name in the description, and the grants screen offers them in words: a row "
+    "grant and a column grant per table, as for every other source. Registering is not granting: "
+    "nobody reads a table or a field until an administrator grants it."
 )
 
 __all__ = [
@@ -451,6 +454,16 @@ def vocabulary_of(tables: Sequence[KnownTable]) -> tuple[Declared, ...]:
                     "from Lark when a question asks for it."
                 ),
             )
+        )
+        words.extend(
+            Declared(
+                capability=Capability(value=f"read:{one.entity}.{binding.target}"),
+                description=(
+                    f"Read the field {binding.base_field!r} of a record in the Lark Base table "
+                    f"{one.named()!r}, read from Lark when a question asks for it."
+                ),
+            )
+            for binding in one.table.bindings
         )
     return tuple(words)
 
