@@ -8,6 +8,7 @@
  */
 
 import { ANSWER_API_PATH } from "../../../src/pages/askQuery";
+import { retrievalUsesPath } from "../../../src/pages/citedDocumentQuery";
 import { correctionPath } from "../../../src/pages/threadsQuery";
 import { at, type Proofs, t, type WriteRoute } from "../auditClaims";
 
@@ -15,6 +16,16 @@ import { at, type Proofs, t, type WriteRoute } from "../auditClaims";
  * The install check marking an answer wrong as its asker, refused to anybody else, and read back as
  * the thread's note and the learning signal's one contradiction (M9.2.4).
  */
+/**
+ * The install check asking through the answer route's own logging, following a citation, and
+ * reading the kept place and the signal back (M15.3.4).
+ */
+const A_FOLLOWED_CITATION_IS_KEPT_AS_A_PLACE = t(
+  "test_acceptance_answers",
+  "test_every_answer_check_passes_on_an_install_and_leaves_nothing",
+  true,
+);
+
 const A_CORRECTION_IS_KEPT_AND_COUNTED = t(
   "test_acceptance_threads",
   "test_every_thread_check_passes_on_an_install_and_leaves_nothing",
@@ -23,6 +34,13 @@ const A_CORRECTION_IS_KEPT_AND_COUNTED = t(
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/Ask.tsx ANSWER_API_PATH": [at("POST /api/v1/answer", "ANSWER_API_PATH", ANSWER_API_PATH)],
+  "src/pages/CitedDocument.tsx retrievalUsesPath(followed.retrievalId)": [
+    at(
+      "POST /api/v1/retrievals/{event_id}/uses",
+      "retrievalUsesPath",
+      retrievalUsesPath("3a0f5c2e-1b4d-4e6f-8a9b-0c1d2e3f4a5b"),
+    ),
+  ],
   "src/pages/Ask.tsx correctionPath(thread)": [
     at(
       "POST /api/v1/threads/{thread_id}/corrections",
@@ -37,6 +55,14 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: { notApplicable: "Asking a question writes no row an administrator manages." },
     audit: { notApplicable: "Asking a question is not a change to the system." },
     behaviour: { notApplicable: "The answer is the behaviour, and tests/invariants hold it." },
+  },
+  "POST /api/v1/retrievals/{event_id}/uses": {
+    row: A_FOLLOWED_CITATION_IS_KEPT_AS_A_PLACE,
+    audit: {
+      notApplicable:
+        "A followed citation's place changes no setting and nobody's access; it is one position in a retrieval that names nobody.",
+    },
+    behaviour: A_FOLLOWED_CITATION_IS_KEPT_AS_A_PLACE,
   },
   "POST /api/v1/threads/{thread_id}/corrections": {
     row: A_CORRECTION_IS_KEPT_AND_COUNTED,

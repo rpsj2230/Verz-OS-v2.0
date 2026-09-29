@@ -125,6 +125,7 @@ from brain.tables.resolution import (
     EntityLinkRow,
 )
 from brain.tables.retention import LegalHoldRow, RetentionReleaseRow, RetentionReportRow
+from brain.tables.retrieval import RetrievalEventRow
 from brain.tables.review import ReviewDecisionRow
 from brain.tables.role_grant import RoleGrantRow
 from brain.tables.routing import ModelAttemptRow, RoutingRungRow, RoutingTierRow
@@ -409,6 +410,8 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     "agent.browser_session",
     "obs.trace_step",
     "obs.trace_read",
+    # 0151_retrieval_event. Points at nothing: it names no document, question or person.
+    "ops.retrieval_event",
 )
 
 __all__ = [
@@ -495,6 +498,7 @@ __all__ = [
     "ResidencyConstraintRow",
     "RetentionReleaseRow",
     "RetentionReportRow",
+    "RetrievalEventRow",
     "ReviewDecisionRow",
     "RoleGrantRow",
     "RoutingChangeRow",

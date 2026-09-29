@@ -769,6 +769,12 @@ export const NOT_ADMINISTERED: Readonly<Record<string, string>> = {
     "A search of a person's own questions on Ask, for them alone; nothing in it for an administrator to manage.",
   "GET /api/v1/threads/{thread_id}":
     "One of a person's own conversations reopened on Ask at the reach they hold now; nothing in it for an administrator to manage.",
+  "ops.retrieval_event":
+    "What a person was answered from, as the learning signal reads it: which retrievers ran, how many passages were shown and where a citation was followed, with no document, question or person; written by the answer route and the cited page, and nothing in it for an administrator to manage.",
+  "GET /api/v1/retrievals/signal":
+    "The ranking's learning signal, rates over recent retrievals for a knowledge administrator tuning search; it manages nothing, and no screen draws it yet.",
+  "POST /api/v1/retrievals/{event_id}/uses":
+    "The place of a passage a person followed from an answer, sent by the cited document page for the learning signal; a person's own act, not something an administrator manages.",
   "POST /api/v1/threads/{thread_id}/corrections":
     "A person marking the latest answer in their own conversation wrong, from Ask; a note in their thread the learning signal counts, and nothing in it for an administrator to manage.",
   "gate.channel_event":

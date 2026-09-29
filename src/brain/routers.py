@@ -311,6 +311,10 @@ from brain.requirement_check_routes import router as requirement_check_router
 # company-wide reader and to nobody else. See `brain.retention_routes`.
 from brain.retention_routes import router as retention_router
 
+# A followed citation's place, kept for the learning signal, and the signal read by a knowledge
+# administrator. Never a document, a question or a person. See `brain.retrieval_routes`.
+from brain.retrieval_routes import router as retrieval_router
+
 # The routing matrix. A second router rather than more routes on the first, because the
 # rules differ: `api_routes` answers about entities, where the name itself is enumerable,
 # and this one answers about the model chain, where it is not. Both take the same
