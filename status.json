@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-29T04:56:33.606983+00:00",
-  "commit": "48ba1535",
-  "commit_subject": "Eighteen Wave 2 tasks close on the install's own acceptance run: connector manifests, the minimal index, the tool catalogue and switch, and the knowledge lifecycle (#201)",
+  "generated_at": "2026-09-29T05:08:42.733622+00:00",
+  "commit": "4f13a7b9",
+  "commit_subject": "The agent builder's forms draw every control from the kit, so a tool, a connector or a test question can be added, and every label and message is in plain words (#200)",
   "total": 1576,
   "done": 410,
   "percent": 26.0,
