@@ -219,6 +219,11 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     assert by_module["brain.ops.acceptance_checks_automation"] == [
         "a_flow_step_gets_its_owner_s_rows_and_nothing_its_ceiling_adds",
     ]
+    # Escalation and sensitive topics on an install; `tests/unit/test_acceptance_escalation.py`.
+    assert by_module["brain.ops.acceptance_escalation"] == [
+        "an_escalated_question_reaches_its_person_and_times_out",
+        "a_sensitive_question_is_routed_before_any_agent_answers",
+    ]
     assert list(by_module) == list(acceptance.CHECK_MODULES)
     oversight = {one.name: one.leaves for one in registered()}
     assert oversight["unusual_volume_is_found_per_person"] == ("M23.2.1",)
@@ -725,9 +730,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     ):
         assert outcomes.pop(worker_check) == (NOT_RUN, acceptance_deployment.NOT_IN_A_WORKER)
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
-    assert len(outcomes) == 57
+    assert len(outcomes) == 59
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 182
+    assert runs == [(2,)] and len(recorded) == 186
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }

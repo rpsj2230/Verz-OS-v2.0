@@ -139,6 +139,8 @@ WIRED_BUT_NOT_SCHEDULED = frozenset({"spend_correction", "restore_drill"})
 #: from the ledger and keeps what `digest` raises for the Notifications screen.
 #: `acceptance_run` joined on 2026-09-28 the day it was registered, running the install acceptance
 #: checks once per newly deployed commit through `brain.ops.acceptance_run`.
+#: `escalation_expiry` joined on 2026-09-30 the day it was registered (`0168`, M8.3.4), marking
+#: every handoff past its deadline expired through `brain.ops.escalation_store.run_expiry_now`.
 SCHEDULED_BY_THE_WORKER = frozenset(
     {
         "retention_sweep",
@@ -155,6 +157,7 @@ SCHEDULED_BY_THE_WORKER = frozenset(
         "model_health_probes",
         "denial_digest",
         "acceptance_run",
+        "escalation_expiry",
     }
 )
 

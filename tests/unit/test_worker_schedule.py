@@ -78,6 +78,7 @@ STARTED = [
     ("denial_digest", False),
     ("directory_sync", False),
     ("knowledge_reverification", False),
+    ("escalation_expiry", False),
     ("model_health_probes", False),
     ("outbox_dispatch", False),
     ("spend_report_refresh", False),
@@ -155,16 +156,17 @@ def starts(monkeypatch: pytest.MonkeyPatch) -> Starts:
 
 
 # ------------------------------------------------------------------- without a server
-def test_the_wired_runners_are_the_fourteen_the_schedule_is_meant_to_start() -> None:
+def test_the_wired_runners_are_the_fifteen_the_schedule_is_meant_to_start() -> None:
     """Asserted against the names, so a runner wired or unwired later moves this on purpose.
 
     The webhook dispatch, the erasure queue and the permission canaries joined on 2026-09-17,
     the vault token renewal later that day, with the installer's vault, and the automation
     runner and the connector sync after it, and the vault audit shipper last. The staff sync
     joined on 2026-09-21, the model health prober on 2026-09-22, the hourly denial digest on
-    2026-09-28 and the install acceptance checks the same day, in the registry's own order.
+    2026-09-28 and the install acceptance checks the same day, and the escalation expiry on
+    2026-09-30, in the registry's own order.
 
-    Delete this and every assertion below that names the fourteen could be satisfied by a table
+    Delete this and every assertion below that names the fifteen could be satisfied by a table
     that had quietly lost one of them."""
     assert WIRED == [
         "retention_sweep",
@@ -172,6 +174,7 @@ def test_the_wired_runners_are_the_fourteen_the_schedule_is_meant_to_start() -> 
         "denial_digest",
         "directory_sync",
         "knowledge_reverification",
+        "escalation_expiry",
         "model_health_probes",
         "outbox_dispatch",
         "spend_report_refresh",
@@ -472,6 +475,7 @@ def test_a_due_control_is_started_once_and_its_run_is_recorded(starts: Starts) -
             ("denial_digest", "ok", False, "denial_digest ran"),
             ("directory_sync", "ok", False, "directory_sync ran"),
             ("erasure_queue", "ok", False, "erasure_queue ran"),
+            ("escalation_expiry", "ok", False, "escalation_expiry ran"),
             ("knowledge_reverification", "ok", False, "knowledge_reverification ran"),
             ("model_health_probes", "ok", False, "model_health_probes ran"),
             ("outbox_dispatch", "ok", False, "outbox_dispatch ran"),
@@ -563,7 +567,7 @@ def test_a_control_whose_lock_another_replica_holds_is_not_started_and_the_rest_
             found = tick(url, at=NOW)
             other.rollback()
 
-        assert starts.calls == [*STARTED[:7], *STARTED[8:]]
+        assert starts.calls == [*STARTED[:8], *STARTED[9:]]
         assert [row[0] for row in recorded(url)] == [
             "acceptance_run",
             "automation_run",
@@ -572,6 +576,7 @@ def test_a_control_whose_lock_another_replica_holds_is_not_started_and_the_rest_
             "denial_digest",
             "directory_sync",
             "erasure_queue",
+            "escalation_expiry",
             "knowledge_reverification",
             "model_health_probes",
             "outbox_dispatch",
@@ -606,6 +611,7 @@ def test_a_runner_that_raises_is_recorded_as_failed_with_its_reason_and_the_next
             ("denial_digest", "ok", "denial_digest ran"),
             ("directory_sync", "ok", "directory_sync ran"),
             ("erasure_queue", "ok", "erasure_queue ran"),
+            ("escalation_expiry", "ok", "escalation_expiry ran"),
             ("knowledge_reverification", "ok", "knowledge_reverification ran"),
             ("model_health_probes", "ok", "model_health_probes ran"),
             ("outbox_dispatch", "ok", "outbox_dispatch ran"),
@@ -672,6 +678,7 @@ def test_the_tick_records_the_re_verification_nag_through_the_real_runner(
         ("canary_run", False),
         ("denial_digest", False),
         ("directory_sync", False),
+        ("escalation_expiry", False),
         ("model_health_probes", False),
         ("outbox_dispatch", False),
         ("spend_report_refresh", False),

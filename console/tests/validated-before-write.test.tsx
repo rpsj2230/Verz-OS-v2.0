@@ -106,6 +106,11 @@ const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
     "its fields take before anything is sent, and tests/compliance-page.test.tsx submits the naming, " +
     "the opening, the assessment and a notification blank and holds that no confirmation opens and " +
     "nothing is sent.",
+  "src/pages/compliance/EscalationQueues.tsx":
+    "Naming who answers for an escalation queue is a form inside a drawer opened from the Escalation " +
+    "queues view, outside the main landmark these cases read. It says what each field takes before " +
+    "anything is sent, and tests/compliance-page.test.tsx submits it blank and holds that no " +
+    "confirmation opens and nothing is sent.",
   "src/pages/retention/RetentionActs.tsx":
     "The hold, lift and erasure forms are inside drawers opened from the Legal holds and Erasure " +
     "requests views, outside the main landmark these cases read. Each says what its fields take before " +

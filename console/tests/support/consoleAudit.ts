@@ -142,6 +142,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/govern/people/enable",
       "/api/v1/govern/service-accounts*",
       "/api/v1/access-requests*",
+      "/api/v1/escalations",
       "/api/v1/govern/roles/holders",
       "/api/v1/govern/roles/appointment",
       "/api/v1/govern/roles/deputy",
@@ -726,6 +727,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/govern/erasures",
       "/api/v1/govern/compliance*",
       "/api/v1/me/referrals*",
+      "/api/v1/govern/escalation-routes*",
     ],
     tables: [
       "ops.retention_release",
@@ -734,6 +736,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "ops.erasure_request",
       "ops.breach_case",
       "ops.sensitive_referral",
+      "gate.escalation",
     ],
     installation: [],
     gaps: [{ what: "A recovery drill cannot be started, and a restore cannot be verified, from the console.", leaf: "M30.3.9" }],

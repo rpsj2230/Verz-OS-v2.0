@@ -1616,6 +1616,20 @@ async def answered_for(
             live=live_records_of(request.app.state),
             source_policies=source_field_policies(registry),
         )
+        # An abstention under a skill that declares a queue is handed to the person named for it,
+        # and the asker is told so in one sentence, whatever the abstention was (M8.3.1). Imported
+        # here because `brain.escalation_routes` sends through `brain.channel_routes`, which
+        # imports this module.
+        from brain.escalation_routes import escalated
+
+        answered = await escalated(
+            request,
+            answered,
+            agent=agent,
+            asking=asking,
+            question=address.question,
+            trace_id=recorder.trace_id,
+        )
         if answered.text is not None:
             # An answer computed on this request at this reach, stored under the key its own
             # lookup used (M3.5.2). A hit, a refusal and a fault carry no text and are not kept.
