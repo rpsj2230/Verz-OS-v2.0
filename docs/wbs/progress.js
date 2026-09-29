@@ -530,9 +530,9 @@ const PROGRESS = {
     updated: "2026-09-28",
   },
   "M7.7.2": {
-    status: "IN PROGRESS",
-    why: "a steward per document is built (K2, merged f0722dd3); connected sources and agents have no steward yet",
-    updated: "2026-09-28",
+    status: "READY FOR TESTING",
+    why: "a steward for every document, source and agent, and the self-grant notice on Access requests (migration 0167): proved when the install check a_steward_is_named_and_told_of_access_somebody_gave_themselves passes after deploy",
+    updated: "2026-09-30",
   },
   "M7.7.3": {
     status: "IN PROGRESS",

@@ -21,6 +21,7 @@ from typing import Any, Final
 
 import psycopg
 import pytest
+from sqlalchemy import String
 
 from brain.audit.ledger import IDENTIFIER
 from brain.ops.credentials import CONNECTOR_NAME_PATTERN
@@ -57,7 +58,8 @@ def test_the_migration_copies_the_live_grammars_and_widths() -> None:
     assert migration.PACK_NAME_CHARS == PACK_NAME_CHARS
     # Held against the pack table rather than against itself, so a pack name that fits there
     # always fits here.
-    assert CapabilityPackRow.__table__.c.name.type.length == PACK_NAME_CHARS
+    column = CapabilityPackRow.__table__.c.name
+    assert isinstance(column.type, String) and column.type.length == PACK_NAME_CHARS
     listed = set(re.findall(r"'([a-z]+)'", migration.KINDS))
     assert listed == {one.value for one in SelfGrantKind}
 

@@ -131,7 +131,7 @@ from brain.api_routes import Asked, Asking
 from brain.audit.record import ConnectorChange
 from brain.connectors.contract import ConnectorContractError
 from brain.connectors.declaration import shipped
-from brain.connectors.manifest import ConnectorManifest, manifest_digest
+from brain.connectors.manifest import ConnectorManifest, digest_input, manifest_digest
 from brain.connectors.registry import may_install
 from brain.console.connector_detail import (
     LARK_SOURCES,
@@ -161,6 +161,12 @@ from brain.console.connector_trust import (
     connected_rows,
     evidence_rows,
     scope_in_words,
+)
+from brain.console.declaration_drift import (
+    A_CHANGE_IS_SHOWN_BEFORE_IT_IS_ACCEPTED,
+    ACCEPTING_A_CHANGED_DECLARATION,
+    WHAT_WAS_AGREED_WAS_NOT_KEPT,
+    drift,
 )
 from brain.console.reads import permitted
 from brain.console.screens import screen
@@ -250,6 +256,9 @@ CONNECTORS_PATH: Final = "/connectors"
 DISCONNECT_PATH: Final = CONNECTORS_PATH + "/{connector}/disconnect"
 #: Where a connected source's settings are edited, and its key replaced.
 EDIT_PATH: Final = CONNECTORS_PATH + "/{connector}/edit"
+#: Accepting a source's changed declaration, and reading what changed. See
+#: `brain.console.declaration_drift`.
+ACCEPT_PATH: Final = CONNECTORS_PATH + "/{connector}/accept"
 KEY_PATH: Final = CONNECTORS_PATH + "/{connector}/key"
 
 #: The module's list, one source's page and its export. See the module docstring for the prefix.
@@ -259,6 +268,8 @@ EXPORT_PATH: Final = SOURCE_PATH + "/export"
 #: Asking for a test, beside the other writes, and reading how it went, beside the other reads.
 PROBE_PATH: Final = CONNECTORS_PATH + "/{connector}/probe"
 PROBE_STATE_PATH: Final = SOURCE_PATH + "/probe"
+DRIFT_PATH: Final = SOURCE_PATH + "/drift"
+
 #: Where a source's steward is named (M7.7.2).
 STEWARD_PATH: Final = CONNECTORS_PATH + "/{connector}/steward"
 
@@ -553,6 +564,60 @@ class ConnectorEditAsked(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     settings: dict[str, str]
+
+
+class DriftLineView(BaseModel):
+    """One change in a source's declaration, and what it said before when it changed."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    kind: str
+    what: str
+    was: str
+
+
+class DeclarationDriftView(BaseModel):
+    """What changed in a source's declaration since its connection was agreed.
+
+    `changed` is the pill's answer; when it is False nothing else is filled in. `known` says
+    whether the agreed declaration was kept; when it was not, `now_does` lists everything the new
+    one does. The digests are for the accept, which names the one the reader saw.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    connector: str
+    changed: bool
+    known: bool
+    lines: list[DriftLineView]
+    now_does: list[str]
+    was_version: str
+    now_version: str
+    agreed_digest: str
+    current_digest: str
+    #: Whether this reader may accept the change. Their own grant; it narrows nothing.
+    may_accept: bool
+    told: str
+    confirm: str
+
+
+class ConnectorAcceptAsked(BaseModel):
+    """An accept names the digest of the declaration the reader was shown."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    digest: str
+
+
+class ConnectorAcceptedView(BaseModel):
+    """What accepting did: the source agreed again under this release's declaration, and when."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    connector: str
+    accepted_at: datetime
+    digest: str
+    told: str
 
 
 class ConnectorKeyAsked(BaseModel):
@@ -1087,6 +1152,7 @@ async def connect(request: Request, body: ConnectAsked, asked: Asked) -> JSONRes
             ent_hash=ent_hash,
             keep_key=keep_key,
             declared=declared_capabilities(manifest),
+            agreed=digest_input(manifest),
         )
     except ConnectorTakenError:
         return _problems(
@@ -1630,6 +1696,7 @@ async def edit(
             trace_id=_trace_id(),
             ent_hash=asked.reach.ent_hash(),
             declared=declared_capabilities(manifest),
+            agreed=digest_input(manifest),
         )
     except NotConnectedError as absent:
         raise _not_answerable("edit") from absent
@@ -1641,6 +1708,132 @@ async def edit(
     log.info("source edited", connector=kind.name, principal=actor)
     answered = ConnectorEditedView(
         connector=kind.name, changed_at=connection.connected_at, told=EDITED
+    )
+    return JSONResponse(status_code=200, content=answered.model_dump(mode="json"))
+
+
+#: What an accept says once it is done.
+ACCEPTED: Final = (
+    "The change is accepted. The source is agreed under this release's declaration and is read "
+    "again from its next run."
+)
+#: Why an accept that names another digest is refused.
+MOVED_AGAIN: Final = (
+    "The declaration changed again since this page read it. Read what changed again before "
+    "accepting."
+)
+#: Why an accept whose settings the new declaration refuses cannot go ahead.
+NO_LONGER_ACCEPTED: Final = (
+    "This release's declaration refuses the settings this source was connected with, so it cannot "
+    "be accepted as it is. Edit the settings instead."
+)
+#: Why an accept with nothing changed is refused.
+NOTHING_TO_ACCEPT: Final = (
+    "This source's declaration has not changed, so there is nothing to accept."
+)
+
+
+@router.get(DRIFT_PATH, response_model=DeclarationDriftView, responses=COMMON_RESPONSES)
+async def declaration_drift(request: Request, connector: str, asked: Asked) -> DeclarationDriftView:
+    """What changed in a source's declaration since its connection was agreed (M27.11.9).
+
+    Answered for every shipped source, as its page is: one this reader may not be told is
+    connected, or one whose declaration did not change, answers `changed` False and nothing else,
+    alike. See `brain.console.declaration_drift`.
+    """
+    _permitted(asked.reach, asked.now)
+    if shipped().get(connector) is None:
+        raise _not_answerable("declaration drift")
+    one = await _one_source(request, connector, asked)
+    unchanged = DeclarationDriftView(
+        connector=connector,
+        changed=False,
+        known=True,
+        lines=[],
+        now_does=[],
+        was_version="",
+        now_version="",
+        agreed_digest="",
+        current_digest="",
+        may_accept=False,
+        told="",
+        confirm="",
+    )
+    if one.live is None or one.manifest is None or not one.row.declaration_changed:
+        return unchanged
+    found = drift(one.live.agreed, one.live.digest, one.manifest)
+    return DeclarationDriftView(
+        connector=connector,
+        changed=True,
+        known=found.known,
+        lines=[DriftLineView(kind=one.kind, what=one.what, was=one.was) for one in found.lines],
+        now_does=list(found.now_does),
+        was_version=found.was_version,
+        now_version=found.now_version,
+        agreed_digest=one.live.digest,
+        current_digest=manifest_digest(one.manifest),
+        may_accept=(
+            connector in CONNECTABLE and may_connect_source(asked.reach, connector, asked.now)
+        ),
+        told=(
+            A_CHANGE_IS_SHOWN_BEFORE_IT_IS_ACCEPTED if found.known else WHAT_WAS_AGREED_WAS_NOT_KEPT
+        ),
+        confirm=ACCEPTING_A_CHANGED_DECLARATION,
+    )
+
+
+@router.post(ACCEPT_PATH, response_model=ConnectorAcceptedView, responses=_WRITE_RESPONSES)
+async def accept_declaration(
+    request: Request, connector: str, body: ConnectorAcceptAsked, asked: Asked
+) -> JSONResponse:
+    """Agree the source again under this release's declaration: the registry's deliberate upgrade.
+
+    Asked of the authority a connection asks, before anything is judged. The accept names the
+    digest of the declaration the reader was shown, and one that names another is refused, so a
+    release landing between the reading and the press cannot be accepted unseen. The settings and
+    the key are the connection's own; the ledger's two entries carry the digest before and after.
+    """
+    if not may_connect_source(asked.reach, connector, asked.now):
+        log.info("accepting a declaration not answerable", principal=asked.caller.principal.id)
+        raise _not_answerable("accept")
+    kind = CONNECTABLE.get(connector)
+    changes = changes_of(request)
+    if changes is None:
+        raise Failed("no database on this process")
+    current = await _live_connection(request, connector)
+    if kind is None or current is None:
+        raise _not_answerable("accept")
+    settings = given(kind, current.settings)
+    try:
+        manifest = kind.build(settings, key_reference(kind.name))
+    except ConnectorContractError:
+        return _problems(
+            (SettingProblem(field=SOURCE_FIELD, code="refused", message=NO_LONGER_ACCEPTED),)
+        )
+    digest = manifest_digest(manifest)
+    if digest == current.digest:
+        return _problems(
+            (SettingProblem(field=SOURCE_FIELD, code="unchanged", message=NOTHING_TO_ACCEPT),)
+        )
+    if body.digest != digest:
+        return _problems((SettingProblem(field="digest", code="moved", message=MOVED_AGAIN),))
+    actor = asked.reach.principal_id
+    try:
+        connection = await changes.reconnect(
+            connector=kind.name,
+            settings=settings,
+            digest=digest,
+            actor=actor,
+            trace_id=_trace_id(),
+            ent_hash=asked.reach.ent_hash(),
+            declared=declared_capabilities(manifest),
+            agreed=digest_input(manifest),
+        )
+    except NotConnectedError as absent:
+        raise _not_answerable("accept") from absent
+    log.info("declaration accepted", connector=kind.name, principal=actor, digest=digest[:12])
+    answered = ConnectorAcceptedView(
+        connector=kind.name, accepted_at=connection.connected_at, digest=digest, told=ACCEPTED
     )
     return JSONResponse(status_code=200, content=answered.model_dump(mode="json"))
 

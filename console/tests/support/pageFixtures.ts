@@ -311,3 +311,20 @@ export const STAFF_RUNS = {
     },
   ],
 };
+
+/** What changed in a source's declaration, as `DeclarationDriftView` sends it, for a source whose
+ * pill says it changed. Every drawn value is the unbroken token. */
+export const DECLARATION_DRIFT = {
+  connector: "xero",
+  changed: true,
+  known: true,
+  lines: [{ kind: "added", what: UNBROKEN, was: "" }, { kind: "changed", what: UNBROKEN, was: UNBROKEN }],
+  now_does: [],
+  was_version: "0.9.0",
+  now_version: "1.0.0",
+  agreed_digest: "a".repeat(64),
+  current_digest: "c".repeat(64),
+  may_accept: true,
+  told: UNBROKEN,
+  confirm: UNBROKEN,
+};

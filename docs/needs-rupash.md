@@ -2,10 +2,104 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**1 item is open: 91,** the checks only you can do on your install; it waits for the Knowledge
-upload grants (item 105) to land. Each says in plain terms what it is, what I recommend, and every step.
+**6 items are open: 121 to 125,** whose conversations an agent's page lists, where uploaded
+documents are stored, a task that names a table library, the automation canvas, and the Lark group
+for the evening digest, each with my recommendation, **and 91,** the checks only you can do on your
+install; it waits for the Knowledge upload grants (item 105) to land. Each says in plain terms what it
+is, what I recommend, and every step.
 
 # Open
+
+## 125. Which Lark group receives the evening build digest?
+
+**In plain terms:** each evening the Brain can post a short message to a Lark group: tasks closed
+that day, tasks opened, and anything overdue (M38.3.3). It needs to know which group, and the
+Brain's Lark app has to be a member of it.
+
+**My recommendation: a new group with just you in it**, so the digest never lands in a chat
+other people use for work.
+
+**What you do:**
+
+1. In Lark, create a group chat, for example "Brain daily".
+2. Open the group's settings, choose **Bots**, then **Add bot**, and pick the Brain's Lark app
+   (the same app you connected as the staff source).
+3. Reply "125: done, the group is called <its name>". The digest is still to be built; it is
+   built to post to that group, and I tell you when the first one is due.
+
+## 124. Switch on the automation canvas?
+
+**In plain terms:** the automation canvas is an optional drawing board for fixed, step-by-step
+automations (a trigger, then set steps, with no model deciding what happens next). It runs in a
+sandboxed container of its own that needs about 512 MiB of memory, and memory on your server is
+the question in item 120. Three install tasks wait on it being switched on (M32.6.1.1, M32.6.1.2
+and M32.6.1.4); everything behind it is built and tested.
+
+**Option A: not now.** Its three install tasks move to Wave 4, and it is switched on once item 120
+leaves room. **Option B: switch it on now**, and it takes 512 MiB from what item 120 is sharing out.
+
+**My recommendation: A.** Nothing you have asked for today needs it, and memory is the scarcest
+thing on the server.
+
+**What I need from you:** reply "124: A" or "124: B".
+
+## 123. May a task that names a table library be marked done by what it is for?
+
+**In plain terms:** task M32.5.2.1 says every grid in the console uses a particular table library
+(TanStack Table) with paging and filtering on the server. The console's own table deliberately
+does not use that library, to keep the pages small and fast, and every list does page and filter
+on the server, which is your requirement GAP2-24 and is tested. The library was a means; the
+paging is the end.
+
+**My recommendation: yes.** The task is marked decided by what it is for, and the requirement it
+serves stays exactly as it is.
+
+**What I need from you:** reply "123: yes", or "123: no" if you want the library used.
+
+## 122. Where are your uploaded documents stored?
+
+**In plain terms:** your requirement LIVE-01 says your install runs an object store: the place
+uploaded files, exports and backups are kept as files. Yours has none yet, so four tasks wait on it
+(M32.3.1.1 to M32.3.2.2), and everything else about it is built and tested. The product supports
+three kinds.
+
+**Option A: on your own server (SeaweedFS).** Your documents never leave your server. It needs
+about 256 MiB of memory, which is part of item 120's picture. **Option B: Cloudflare R2**, a
+bucket in a Cloudflare account, which costs a little each month and uses no memory on your server,
+but your documents are then held by Cloudflare. **Option C: Amazon S3**, the same as B at Amazon.
+
+**My recommendation: A.** The Brain is built so that your data stays on your server, and 256 MiB
+is small beside the rest of item 120.
+
+**What you do:** reply "122: A", and I add it to the server myself over the connection I already
+use, then tell you when the Health page shows it ready. For B or C, reply with the letter and I
+give you the steps to create the bucket and paste its key into the console.
+
+## 121. On an agent's page, whose conversations are listed?
+
+**In plain terms:** each agent's page is getting a Conversations list. Today every conversation
+belongs to one person: the Brain keeps a separate thread for each person, even when several people
+talk to the same agent in one Lark group, and nobody can see anybody else's. Your reference design
+(the AnyGen screenshot, requirement ANY-028) shows the list "narrowed to threads related to me",
+which implies the full list includes other people's conversations too. That would be a privacy
+change, so it is yours to decide.
+
+**Option A: each person sees only their own conversations with the agent.** Exactly how the Brain
+works today. The "related to me" filter is not needed, because everything listed is already yours.
+
+**Option B: the agent's owner and administrators also see that other people's conversations
+happened**: who, when, and whether the agent failed, but never the question or the answer. Useful
+for spotting an agent that keeps failing. The words stay private because another person's answer
+was built from what *they* may see, which may be more than the viewer may.
+
+What is **not** offered: showing other people's questions and answers. It would let anyone who can
+open an agent's page read answers built from somebody else's access, which breaks the rule that
+nobody sees through the Brain what they could not see themselves.
+
+**My recommendation: A now**, and B later if you want owners to watch an agent's failures.
+
+**What I need from you:** reply "121: A" or "121: B". Until then the list is built as A, which is
+safe either way: B only ever adds to it.
 
 ## 91. Checks only you can do on your install (about 45 minutes, one sitting)
 
@@ -50,6 +144,9 @@ need a model to answer. Tell me "checks done" and I close the tasks from your re
 7. **The remaining rows (M1.8.8, M2.3.2, M24.3.6).** On **Requirement checks**, open the
    Permissions, Departments and Observability areas. Each row still "Not checked yet" says what it
    needs; try it and record it.
+8. **Health of the vault and the worker (M32.7.2).** On **Overview**, read the health strip, then
+   open **Govern > Staff sources**: the secrets vault and the worker both show healthy and the last
+   Lark sync shows when it ran. Record what you see.
 
 The chat parts of checks 1 and 2 (binding a Lark identity with a code, the same reach in chat)
 cannot be done until Wave 2 builds the Lark chat channel; both moved there with item 97.
