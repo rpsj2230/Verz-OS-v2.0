@@ -643,6 +643,16 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.ops.queue:QueueDriver.fetch": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.ops.queue:QueueDriver.complete": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.ops.queue:QueueDriver.fail": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # The recovery sweeps. Putting a job back is work on this system's own queue, whose
+        # effects go through the doors classified here; a second put-back of a job already
+        # waiting is refused by the driver, and so is a second set-aside or settle of a row that
+        # has already moved, which each door answers as the race it is.
+        "brain.ops.recovery_run:QueueRows.running": Repeat.READS,
+        "brain.ops.recovery_run:QueueRows.failed": Repeat.READS,
+        "brain.ops.recovery_run:QueueRows.run_again": Repeat.ENQUEUES_WORK,
+        "brain.ops.recovery_run:QueueRows.set_aside": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.ops.recovery_run:OperationRecords.unsettled": Repeat.READS,
+        "brain.ops.recovery_run:OperationRecords.settle": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.ops.retention:StoreSweeper.census": Repeat.READS,
         "brain.ops.retention:StoreSweeper.expire": Repeat.SAME_RESULT_WHEN_REPEATED,
         "brain.ops.secrets:Vault.issue": Repeat.EXPIRES_ON_ITS_OWN,

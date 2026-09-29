@@ -325,15 +325,19 @@ def test_a_control_is_in_process_only_when_every_part_of_it_is_called() -> None:
     """Delete this and a system asks whether a sweep is due, for ever, and never sweeps.
 
     A control is usually a predicate plus the work, and counting it as wired because one of
-    them has a caller is the failure being avoided. `verdict_for` genuinely has a caller and
-    `redrive`, the driver that asks it, does not, so the pair measures as unreached.
+    them has a caller is the failure being avoided. `verdict_for` genuinely has a caller and the
+    calibration's `drift` does not, so the pair measures as unreached.
 
     It named the re-verification pair until 2026-09-15, when `brain.knowledge.item_store`
-    became the outer function's caller and the pair stopped being an example of anything.
+    became the outer function's caller and the pair stopped being an example of anything, and
+    `redrive` with `verdict_for` until 2026-09-30, when `brain.ops.recovery_run` became the
+    caller `redrive` lacked. The pair is now built rather than borrowed from a real control,
+    because every real control with a half-called pair has since been wired or has no caller
+    at all.
     """
-    partly = _control(symbols=("brain.ops.crash:redrive", "brain.ops.queue:verdict_for"))
+    partly = _control(symbols=("brain.resolution.calibration:drift", "brain.ops.queue:verdict_for"))
     assert call_sites("brain.ops.queue:verdict_for") != ()
-    assert call_sites("brain.ops.crash:redrive") == ()
+    assert call_sites("brain.resolution.calibration:drift") == ()
     assert measured_invocation(partly) is Invocation.NOTHING
 
 
