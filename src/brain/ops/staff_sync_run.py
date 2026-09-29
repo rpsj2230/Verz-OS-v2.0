@@ -88,6 +88,7 @@ from urllib.parse import quote, urlencode
 
 import httpx
 import structlog
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.connectors.google_service_account import (
@@ -108,6 +109,12 @@ from brain.connectors.staff_directories import (
     Outbound,
     location_problem,
     pull,
+)
+from brain.identity.departments_from import (
+    THE_CONSOLE_PLACES_PEOPLE,
+    DepartmentsFrom,
+    as_the_console_places_them,
+    departments_from,
 )
 from brain.identity.organisation_sync import sync_trace
 from brain.identity.staff_accounts import allowed_types
@@ -158,6 +165,7 @@ from brain.ops.staff_sync_store import (
 from brain.ops.standing_run import apply_standing, plan_standing
 from brain.ops.starter_pack_store import grant_starter_packs
 from brain.settings import process_environment
+from brain.tables.identity import PrincipalRow
 
 # ------------------------------------------------------------------ written-down reasons
 log = structlog.get_logger()
@@ -591,6 +599,7 @@ async def sync_staff_on(
     # Before the roster is written and outside any transaction, because they call the sign-in
     # service; see `ACCOUNTS_ARE_MADE_BEFORE_THE_ROSTER_IS_WRITTEN`. A trial plans, makes nothing.
     allowed = allowed_types(value_of(ACCOUNT_TYPES_SETTING, env))
+    console = departments_from(env)
     where = standings(members=members, writes=application.writes, people=roster.people)
     first = await _standing(sessions, chosen.name, where, allowed, now)
     accounts = await provide_accounts(
@@ -604,6 +613,7 @@ async def sync_staff_on(
         absent_is_gone=roster.may_remove() and last_applied is not None,
         trial=trial,
         keep_open=frozenset(first.kept_in) if first is not None else frozenset(),
+        place=console is DepartmentsFrom.STAFF_SOURCE,
     )
     # Planned again once the accounts step has joined its new people to their rows.
     kept = first if trial else await _standing(sessions, chosen.name, where, allowed, now)
@@ -616,6 +626,8 @@ async def sync_staff_on(
             kept = None
     said_standing = kept.sentences() if kept is not None else (STANDING_UNDECIDED,)
     report = (*report, *accounts.sentences, *said_standing)
+    if console is DepartmentsFrom.CONSOLE:
+        report = (*report, THE_CONSOLE_PLACES_PEOPLE)
     async with sessions() as session, session.begin():
         if trial:
             record = RunRecord(
@@ -651,10 +663,37 @@ async def sync_staff_on(
         # In the run's own transaction, so a leaver is never marked with their agents running.
         # See `A_LEAVERS_AGENT_STOPS_UNTIL_A_NEW_OWNER_ACCEPTS_IT`.
         await session.execute(stop_leavers_agents(now))
+    if console is DepartmentsFrom.CONSOLE:
+        # See `UNDER_THE_CONSOLE_THE_SYNC_MOVES_NOBODY`: no heads, no placements, and the pack
+        # follows the department People set.
+        await _grant_starter_packs(sessions, await _as_placed(sessions, roster), now)
+        return StaffSyncRun(outcome=outcome, detail=detail, report=report)
     await _rewrite_heads(sessions, roster, now)
     await _grant_starter_packs(sessions, roster, now)
     await _place_in_organisation(sessions, roster, last_applied, now)
     return StaffSyncRun(outcome=outcome, detail=detail, report=report)
+
+
+async def _as_placed(sessions: async_sessionmaker[AsyncSession], roster: Roster) -> Roster:
+    """The roster with each person in the department People put their Brain person in."""
+    try:
+        known = await roster_principals(sessions, roster)
+        async with sessions() as session, session.begin():
+            rows = (
+                await session.execute(
+                    select(PrincipalRow.id, PrincipalRow.primary_department).where(
+                        PrincipalRow.id.in_(sorted(set(known.values())))
+                    )
+                )
+            ).all()
+    except Exception as exc:
+        # Broad on purpose, as the heads' reach is: the roster is already committed.
+        log.warning("staff_sync.console_departments_unread", error=type(exc).__name__)
+        return as_the_console_places_them(roster, {})
+    where = {str(pid): None if slug is None else str(slug) for pid, slug in rows}
+    return as_the_console_places_them(
+        roster, {address: where.get(pid) for address, pid in known.items()}
+    )
 
 
 def _would_change(source: str, application: Application) -> str:

@@ -183,6 +183,9 @@
     "M1.6.16",
     "M1.6.17",
     "M1.6.18",
+    "M1.6.19",
+    "M1.6.20",
+    "M1.6.21",
     "M1.7.1",
     "M1.8.1",
     "M1.8.2",
@@ -244,6 +247,9 @@
     "The staff sync gives each active person of an employment type the install allows a sign-in account, found by the source's identifier or work address before one is made and bound to their Brain person, and sends nobody anything: a person sets their password with Forgot password",
     "An account the sync made is closed on the next sync when its person leaves, is suspended or is of a type no longer allowed, which disables their Brain person and ends their sessions; an account a person made is linked and never closed",
     "Proved on the install: the staff sync makes an account for a reserved person with no email sent, Forgot password sets their password and then their second factor, and a reserved leaver's account is closed on the next sync",
+    "Departments come from the staff source or are managed on People, chosen on Settings; managed on People, the staff sync gives nobody a department, moves nobody, places nobody in a team or as a lead and offers no department to found, and a Starter pack follows the department People set",
+    "People moves several people to one department at once where departments are managed there, confirmed with everybody named, all of them or none, with the mover's authority over where each sits and where they go, and each move on the ledger under the mover",
+    "Proved on the install: with departments managed on People, reserved people moved together are in their new department, each move is on the ledger under the mover, and the next sync leaves them where they were put",
     "Every capability a served route or console screen requires is in the capability registry an install is furnished with and can be granted from the console, and a sweep fails the build when one is not",
     "A person marked as external cannot be saved without an end date, and on that date every grant, session and channel binding they hold stops working",
     "A service account or API key acts at its named owner's live reach narrowed by its own declared limit, holds no grant of its own, and stops working the moment its owner loses that reach or leaves",
@@ -294,6 +300,16 @@
     "M1.6.17": {
      "status": "READY FOR TESTING",
      "why": "built (M1/staff-accounts): a leaver's or suspended person's account the sync made is closed on the next sync and their Brain sessions ended; proved on the install with a reserved leaver (M1.6.18)",
+     "updated": "2026-09-30"
+    },
+    "M1.6.19": {
+     "status": "READY FOR TESTING",
+     "why": "built (M1/departments-from): Settings, under Staff, chooses where departments come from; managed on People the staff sync places and moves nobody; proved on the install with M1.6.21",
+     "updated": "2026-09-30"
+    },
+    "M1.6.20": {
+     "status": "READY FOR TESTING",
+     "why": "built (M1/departments-from): People moves several people to a department at once, each move on the ledger under the mover (migration 0170); proved on the install with M1.6.21",
      "updated": "2026-09-30"
     },
     "M1.8.3": {
