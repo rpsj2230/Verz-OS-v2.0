@@ -28,6 +28,15 @@ and the copy is what goes stale the day a heading is renamed. A rule is generate
 restricted column too, and that is the point rather than an oversight: the rule matches for
 everybody, and whether it answers is decided by the projection for the person asking.
 
+**Two tables with a column of one name are asked in the same words, and each answers for its own
+rows.** Until 2026-09-29 the fast lane refused two rules matching one question, so a second price
+list with a sell price column made Ask answer nobody about either, which the owner's install
+showed the day a second list was uploaded. The same words for two tables are one question asked
+of two places, and `brain.gate.fast_lane.respond` now reads each at the asker's reach and answers
+from the one holding the name; a table the asker may not read contributes nothing, as a table
+never uploaded would. See `brain.gate.fast_lane`'s
+`ONE_QUESTION_ASKED_OF_SEVERAL_PLACES_IS_READ_IN_EACH`.
+
 **The lane is built per question, from the tables as they stand.** `lane_for` is pure; the
 caller reads the live tables and hands them in. A table classified a moment ago is therefore
 answered under its new classification on the next question, and the classification's policy

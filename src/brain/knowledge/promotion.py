@@ -25,6 +25,14 @@ ledger records both. The trigger refuses an approval by the person who asked, an
 document has moved since it was asked, by raising, so an approval that cannot be carried out is
 not recorded as given. See `A_WIDENING_IS_APPLIED_WHERE_IT_IS_APPROVED`.
 
+**A moved document's refusal reaches the approver as a sentence, and closes the card.** Until
+2026-09-29 the decision route turned it into a 500, and the card stayed on the screen to fail the
+same way for the next approver. `brain.gate.suspension_store` now recognises the trigger's refusal
+by `THE_DOCUMENT_MOVED` and raises `NoLongerAppliesError`, and `brain.approval_routes` answers
+that the request no longer applies and closes it as rejected under the reason no approver
+chooses, which the trigger's own hint asks for: the steward is told, and asks again for the
+document as it is now.
+
 **Nor is the person who asked ever offered their own card.** A steward who also holds
 `approve:knowledge.visibility` where their document sits reaches the card by the capability alone,
 and until 2026-09-29 the Approvals screen offered it to them: approving it met the trigger's
@@ -136,6 +144,12 @@ PROMOTION_ARGS: Final[tuple[str, ...]] = (
 
 #: What a suspension id for a promotion begins with, so a card's id says what it is.
 PROMOTION_ID_PREFIX: Final = "promotion."
+
+#: The words `0120`'s trigger refuses an approval in when the document is no longer as it was
+#: asked for: another steward, another place, a newer version, or verified past the review date.
+#: `brain.gate.suspension_store` recognises the refusal by them, so a test holds them equal to the
+#: migration's.
+THE_DOCUMENT_MOVED: Final = "the document moved after its promotion was asked for"
 
 
 class PromotionError(Exception):

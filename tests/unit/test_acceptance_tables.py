@@ -4,7 +4,7 @@ The pure half holds the three checks to the leaves they prove and to the work br
 CSV and the XLSX the checks build to the product's own reader, holds the marks the upload check
 expects to the ones a first upload gives, holds the gate the checks restate to the Classification
 routes' own function over every combination of grants, channel and sign-in, and measures the
-collision `THE_CHECK_MATCHES_ONLY_ITS_OWN_TABLE_S_QUESTIONS` exists for.
+collision `TWO_PRICE_LISTS_ARE_ASKED_IN_THE_SAME_WORDS_AND_EACH_ANSWERS` is about.
 
 The database half builds PostgreSQL to head once for the module, commits a price list of the
 install's own into it the way an administrator's upload leaves one, and runs the checks as the
@@ -221,16 +221,32 @@ class NoRows:
         return ()
 
 
-def test_two_uploaded_price_lists_are_asked_in_the_same_words_so_the_check_matches_its_own() -> (
-    None
-):
-    """`THE_CHECK_MATCHES_ONLY_ITS_OWN_TABLE_S_QUESTIONS`, measured on the product's matcher: with
-    an install's own price list beside the check's, the sell price question matches two rules and
-    the lane answers nobody, while the check's own rules match it once. Delete this and the
-    narrowing reads as a liberty the check took rather than the one thing that lets it run on an
-    install holding a price list."""
-    from brain.gate.fast_lane import entities_served, match_rule
+class OneService:
+    """A row source holding one service of one table, returning what the statement selects."""
+
+    def __init__(self, entity: str, row: Mapping[str, str]) -> None:
+        self.entity = entity
+        self.row = row
+
+    async def rows(self, query: Any) -> Sequence[Mapping[str, Any]]:
+        if query.entity != self.entity:
+            return ()
+        held = {"entity": query.entity, "id": "0", **self.row}
+        return ({one.name: held.get(one.name) for one in query.statement.selected_columns},)
+
+
+def test_two_uploaded_price_lists_are_asked_in_the_same_words_and_the_check_s_own_answers() -> None:
+    """`TWO_PRICE_LISTS_ARE_ASKED_IN_THE_SAME_WORDS_AND_EACH_ANSWERS`, measured on the product's
+    matcher: with an install's own price list beside the check's, the sell price question matches a
+    rule of each, so the collision is real on any install holding a price list, and the lane now
+    answers the check's service from the check's list for a reader of it alone. Delete this and the
+    check can go back to asking its own rules, which is how it passed an install where a second
+    price list silenced the first."""
+    from brain.core.entitlement import EntitlementSet, Grant
+    from brain.core.scope import Scope
+    from brain.gate.fast_lane import entities_served, match_rule, respond
     from brain.knowledge.classified_rows import QUESTION_SHAPES, label_of, lane_for, next_upload
+    from brain.knowledge.columns import table_capability
 
     ours, theirs = (
         next_upload(
@@ -238,14 +254,20 @@ def test_two_uploaded_price_lists_are_asked_in_the_same_words_so_the_check_match
         )
         for name in ("acceptance_pure_prices", OWN_TABLE)
     )
-    lane = lane_for([ours, theirs], NoRows())
-    served = entities_served(lane.readers)
+    row = {"name": SERVICE, "sell_price": "QZ9"}
+    lane = lane_for([ours, theirs], OneService(ours.entity, row))
     question = QUESTION_SHAPES[0].format(label=label_of(tables.SELL_PRICE), slot=SERVICE)
+    reader = EntitlementSet(
+        principal_id="acceptance.pure.a.reader",
+        grants=(Grant(capability=table_capability(ours.entity), scope=Scope.unrestricted()),),
+    )
 
-    assert match_rule(question, lane.rules, served=served) is None
-    own = tuple(rule for rule in lane.rules if rule.entity == ours.entity)
-    found = match_rule(question, own, served=served)
-    assert found is not None and found.rule.entity == ours.entity
+    assert match_rule(question, lane.rules, served=entities_served(lane.readers)) is None
+    found = asyncio.run(
+        respond(question, rules=lane.rules, readers=lane.readers, entitlement=reader, now=NOW)
+    )
+    assert found is not None and found.entity == ours.entity
+    assert [one.model_dump().get(tables.SELL_PRICE) for one in found.result.records] == ["QZ9"]
 
 
 # --------------------------------------------------------------------------- a real run
@@ -658,6 +680,18 @@ def answering(withheld_only: bool) -> Callable[[pytest.MonkeyPatch], None]:
     return breaks
 
 
+def the_same_words_refused_for_two_places(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The fast lane as it was until 2026-09-29: the same words for two places are two rules."""
+    monkeypatch.setattr("brain.gate.fast_lane.asked_of_several_places", lambda found: False)
+
+
+def a_scope_never_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The Classification routes as they were until 2026-09-29: the grants held anywhere at all."""
+    monkeypatch.setattr(
+        "brain.classification_routes.table_within_reach", lambda reach, rows, now: True
+    )
+
+
 def attributing_the_upload_alone(monkeypatch: pytest.MonkeyPatch) -> None:
     """A store that sets its writer on an upload and not on a classification, so the apply's entry
     is written under whatever the upload left standing. See
@@ -791,9 +825,24 @@ def marking_any_column(monkeypatch: pytest.MonkeyPatch) -> None:
         ),
         pytest.param(
             ASKED,
-            "a reader holding the price list was not answered a sell price",
+            "a reader holding two price lists asked in the same words was not answered each "
+            "list's sell price from its own list",
             answering(withheld_only=False),
             id="nobody-is-answered-anything",
+        ),
+        pytest.param(
+            ASKED,
+            "a reader holding two price lists asked in the same words was not answered each "
+            "list's sell price from its own list",
+            the_same_words_refused_for_two_places,
+            id="two-lists-asked-in-the-same-words-answer-nobody",
+        ),
+        pytest.param(
+            MARKED,
+            "an administrator of one department could change another department's price list, or "
+            "was refused it in other words than a price list that does not exist",
+            a_scope_never_read,
+            id="a-department-administrator-changes-another-department-s-table",
         ),
         pytest.param(
             ASKED,

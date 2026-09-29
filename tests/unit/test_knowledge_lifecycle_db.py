@@ -413,6 +413,83 @@ def test_a_promotion_approved_by_its_own_asker_or_after_the_document_moved_is_no
     assert placed == [("department",)]
 
 
+def test_approving_a_promotion_whose_document_was_superseded_is_refused_in_words_not_a_fault() -> (
+    None
+):
+    """**Found on the owner's install on 2026-09-29, through the Approvals screen's own route and
+    `0120`'s own trigger.** The steward asks for their document to be company-wide, then adds a
+    newer version of it, so the document the card names is superseded. The Super Admin's approval
+    is refused by the database, and the route answers that the request no longer applies rather
+    than a 500; the card is closed as rejected under the Super Admin's name with the reason no
+    approver chooses, the document stays in its department, and pressing again is the invented
+    id's answer. Delete this and the translation of the trigger's refusal can drift from the words
+    the trigger says, and every such card is a fault on the screen again."""
+    from brain.approval_routes import A_REQUEST_THAT_NO_LONGER_APPLIES
+
+    with company("brain_k2_promotion_moved") as url:
+
+        async def presses(client: httpx.AsyncClient) -> dict[str, Any]:
+            first = await upload(client, WEB_ADMIN, V1)
+            item = first["item_id"]
+            await verify(client, WEB_ADMIN, item)
+            asked = await client.post(
+                api(f"/knowledge/items/{item}/promotion"),
+                json={"review_by": LATER.isoformat(), "reason": "every team quotes it"},
+                headers=headers(WEB_ADMIN),
+            )
+            newer = await client.post(
+                api(f"/knowledge/items/{item}/versions"),
+                params={"review_by": LATER.isoformat()},
+                content=V2,
+                headers=file_headers(WEB_ADMIN),
+            )
+            card = asked.json()["suspension_id"]
+
+            async def approve() -> httpx.Response:
+                return await client.post(
+                    api(f"/approvals/{card}/decision"),
+                    json={"verdict": "approved"},
+                    headers=headers(SUPER),
+                )
+
+            return {
+                "item": item,
+                "card": card,
+                "asked": asked,
+                "newer": newer,
+                "decided": await approve(),
+                "again": await approve(),
+                "invented": await client.post(
+                    api("/approvals/promotion.nothing_here/decision"),
+                    json={"verdict": "approved"},
+                    headers=headers(SUPER),
+                ),
+            }
+
+        said = pressed(url, presses)
+        row = sql(
+            url,
+            "SELECT state, decided_by, verdict, reason_code FROM gate.suspension WHERE id = %s",
+            said["card"],
+        )
+        placed = sql(
+            url, "SELECT state, visibility FROM know.item WHERE item_id = %s", said["item"]
+        )
+        approvals = ledger(url, "leash:")
+
+    assert said["asked"].status_code == 201, said["asked"].text
+    assert said["newer"].status_code == 201, said["newer"].text
+    assert said["decided"].status_code == 404, said["decided"].text
+    assert said["decided"].json()["message"] == A_REQUEST_THAT_NO_LONGER_APPLIES
+    assert row == [("rejected", SUPER, "rejected", "no_longer_applies")]
+    assert placed == [("superseded", "department")]
+    assert [
+        (actor, details["verdict"], details.get("reason_code")) for actor, details in approvals
+    ] == [(SUPER, "rejected", "no_longer_applies")]
+    assert said["again"].status_code == said["invented"].status_code == 404
+    assert without_trace(said["again"].json()) == without_trace(said["invented"].json())
+
+
 # ------------------------------------------------------------------ re-verification (M7.4.6)
 def test_a_document_due_for_review_opens_a_task_for_its_steward_which_verifying_closes() -> None:
     """**M7.4.6 on a server.** A verified document's review date passes; the scheduled sweep runs

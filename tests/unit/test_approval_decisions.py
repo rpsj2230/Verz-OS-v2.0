@@ -47,7 +47,7 @@ from brain.core.errors import Absent
 from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.core.scope import Clause, Op, Scope
 from brain.gate.leash import Action, ApprovalState, SuspendedAction, render_artefact
-from brain.gate.suspension_store import StoredSuspensions
+from brain.gate.suspension_store import NoLongerAppliesError, StoredSuspensions
 from brain.identity.bearer import TokenAuthority
 from brain.session import make_app_engine, make_session_factory
 from tests.fixtures.console_http import SECOND_FACTOR
@@ -178,12 +178,18 @@ class MemoryHeld:
     """
 
     def __init__(
-        self, rows: dict[str, SuspendedAction], ledger: AuditChain, *, writes_land: bool
+        self,
+        rows: dict[str, SuspendedAction],
+        ledger: AuditChain,
+        *,
+        writes_land: bool,
+        moved: frozenset[str] = frozenset(),
     ) -> None:
         self.rows = rows
         self.ledger = ledger
         self.writes: dict[str, SuspendedAction] = {}
         self.writes_land = writes_land
+        self.moved = moved
         self.locked: list[str] = []
 
     async def lock(self, suspension_id: str) -> SuspendedAction | None:
@@ -191,6 +197,11 @@ class MemoryHeld:
         return self.rows.get(suspension_id)
 
     async def record(self, decided: SuspendedAction, entry: AuditEntry) -> AuditEntry | None:
+        if decided.id in self.moved and decided.state is ApprovalState.APPROVED:
+            # What `StoredSuspensions` raises when `0120`'s trigger refuses the approval of a
+            # promotion whose document has moved: before anything is written.
+            msg = f"suspension {decided.id!r} no longer applies"
+            raise NoLongerAppliesError(msg)
         current = self.rows.get(decided.id)
         if (
             not self.writes_land
@@ -219,6 +230,8 @@ class MemoryStore:
         self.rows: dict[str, SuspendedAction] = {one.id: one for one in held}
         self.ledger = AuditChain()
         self.writes_land = writes_land
+        #: Suspensions whose approval the database refuses because what they name has moved.
+        self.moved: frozenset[str] = frozenset()
         self.read_as: list[str] = []
         self.held_as: list[str] = []
 
@@ -229,7 +242,7 @@ class MemoryStore:
     @asynccontextmanager
     async def holding(self, reach: EntitlementSet, now: datetime) -> AsyncIterator[MemoryHeld]:
         self.held_as.append(reach.principal_id)
-        held = MemoryHeld(self.rows, self.ledger, writes_land=self.writes_land)
+        held = MemoryHeld(self.rows, self.ledger, writes_land=self.writes_land, moved=self.moved)
         yield held
         self.rows.update(held.writes)
 
@@ -466,6 +479,61 @@ def test_a_promotion_is_never_offered_to_its_asker_and_their_approval_is_a_refus
     assert [one["suspension_id"] for one in other["items"]] == [card.id]
     assert decide("u_wide", card.id).status_code == 200
     assert store.rows[card.id].decided_by == "u_wide"
+
+
+def test_approving_a_promotion_whose_document_moved_is_refused_in_words_and_closed(
+    client: TestClient, store: MemoryStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """**Found on the owner's install on 2026-09-29.** A company-wide request whose document moved
+    after it was asked for is refused by the database when it is approved, and the route turned
+    that refusal into a 500. The approver is now told in a sentence that the request no longer
+    applies, the card is closed as rejected under their name with the reason no approver chooses,
+    and pressing again gets the invented id's answer. Delete this and the Approvals screen answers
+    a fault for a card it offered, and offers it again for ever."""
+    from brain.knowledge.visibility import PROMOTION_CAPABILITY
+
+    approves = Grant(capability=PROMOTION_CAPABILITY, scope=in_department(MAINTENANCE))
+    monkeypatch.setitem(GRANTS, "u_wide", (*GRANTS["u_wide"], approves))
+    card = a_promotion("u_narrow")
+    store.rows = {card.id: card}
+    store.moved = frozenset({card.id})
+    signed = {"authorization": f"Bearer {token_for('u_wide', claims=SECOND_FACTOR)}"}
+
+    def decide(ident: str) -> Response:
+        answered: Response = client.post(
+            decision_path(ident), json={"verdict": "approved"}, headers=signed
+        )
+        return answered
+
+    refused = decide(card.id)
+    again = decide(card.id)
+    missing = decide("nothing_here")
+
+    assert refused.status_code == 404, refused.text
+    said = refused.json()["message"]
+    assert said == approval_routes.A_REQUEST_THAT_NO_LONGER_APPLIES
+    assert "no longer applies" in said and said != Absent.public_message
+    closed = store.rows[card.id]
+    assert (closed.state, closed.decided_by) == (ApprovalState.REJECTED, "u_wide")
+    [entry] = store.ledger.entries
+    assert entry.actor_id == "u_wide"
+    assert entry.details == {
+        "verdict": "rejected",
+        "action_digest": card.action_digest,
+        "reason_code": "no_longer_applies",
+    }
+    assert again.status_code == missing.status_code == 404
+    assert without_trace(again) == without_trace(missing)
+
+
+def test_the_reason_a_request_that_no_longer_applies_is_closed_with_is_no_approver_s_choice() -> (
+    None
+):
+    """The closing reason is recorded by the route and never offered: an approver who could pick it
+    would be closing a request by saying the product found it had moved. Delete this and the reason
+    joins the list a person rejects from, and the ledger can no longer tell the two apart."""
+    assert approval_routes.NO_LONGER_APPLIES == "no_longer_applies"
+    assert approval_routes.NO_LONGER_APPLIES not in {one.value for one in RejectionReason}
 
 
 def test_a_decision_the_store_would_not_write_is_a_fault_and_the_row_is_not_moved(
