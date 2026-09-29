@@ -2,13 +2,111 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**5 items are open: 121 to 124,** whose conversations an agent's page lists, where uploaded
+**8 items are open: 127 to 129,** things for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the vault open itself), **121 to 124,** whose conversations an agent's page lists, where uploaded
 documents are stored, a task that names a table library, and the automation canvas, each with my
 recommendation, **and 91,** the checks only you can do on your
 install; it waits for the Knowledge upload grants (item 105) to land. Each says in plain terms what it
 is, what I recommend, and every step.
 
 # Open
+
+## 129. Let the vault open itself after a restart (item 114's switch, still to do)
+
+**In plain terms:** item 114 decided that the secrets vault opens itself when the server restarts.
+The switch has not been run yet: on 30 September the vault still reported the old kind of lock
+(Shamir), so if the server restarted today the vault would need three of its five key pieces typed
+in before the Brain could read any key again. The pieces are safe in the root-only file the
+2026-09-21 setup wrote, so nothing is lost, but a restart would stop the Brain until someone does it.
+
+**My recommendation: let me run it for you.** It takes about two minutes, during which the vault is
+unavailable, and it keeps a dated copy of the vault's data so it can be put back.
+
+**What you do:**
+
+1. Reply "129: do it". I run the switch over the server connection I already use, check that the
+   vault reports it opens itself, and tell you it is done.
+2. Afterwards, on the server as root: copy `/etc/brain-vault/seal.key` into your password manager as
+   its own entry; move `/etc/brain-vault/recovery.key` into your password manager and delete that
+   file; delete `/root/brain-vault-init-20260921.txt`, whose pieces open nothing after the switch.
+   Keys are yours to hold: I never read or copy them.
+
+## 128. Connect Xero, HubSpot and Freshdesk (ready now)
+
+**In plain terms:** item 126 decided every service is made connectable from the console, one at a
+time. These three are ready today. Each takes about ten minutes. In the console open
+**Connectors**, press **Connect a source**, choose the service and follow its screens, which show a
+picture of each step. Paste keys only into the console, never into chat.
+
+**Xero** (invoices and contacts, read only)
+
+1. Sign in to Xero's developer portal (developer.xero.com, **My Apps**) with an account that
+   administers your organisation, and press **New app** (Xero may offer it as a custom connection).
+   Name it "Company Brain". Give it exactly two scopes, `accounting.transactions.read` and
+   `accounting.contacts.read`, and nothing ending in `.write`.
+2. Press **Authorise** for the one Xero organisation the Brain should read, then copy that
+   organisation's id (Xero may call it the tenant id) and the key Xero issues.
+3. In the console, on Connect Xero's last screen, paste the organisation id and the key and press
+   **Connect Xero**.
+
+**HubSpot** (contacts and deals, read only)
+
+1. In HubSpot, press the settings gear at the top right, then **Integrations**, **Private Apps**
+   (HubSpot may list it under **Development**, **Legacy apps**), and press **Create a private app**.
+   Name it "Company Brain".
+2. On the **Scopes** tab tick `crm.objects.contacts.read` and `crm.objects.deals.read` and nothing
+   with "write" in it or touching settings. Press **Create app**, confirm, and copy the access token.
+3. In the console, on Connect HubSpot's last screen, paste the HubSpot account id (shown in the
+   account's settings) and the token, and press **Connect HubSpot**.
+
+**Freshdesk** (tickets, read live)
+
+1. Choose the Freshdesk agent the Brain reads as: someone who sees the tickets it should answer
+   about and no more, and never an administrator.
+2. Sign in to Freshdesk as that agent, press the profile picture at the top right, open **Profile
+   settings**, and press **View API key**. Copy it.
+3. In the console, on Connect Freshdesk's last screen, type your helpdesk's address (ending
+   `.freshdesk.com`), the short name of the one department whose people may be granted its
+   tickets, paste the key, and press **Connect Freshdesk**.
+
+**After each one,** press **Test** on its card, then tell me "connected Xero" (or whichever). I
+prove it on your install and close its tasks. The next services (Google Drive, then Laravel, then
+the chat channels) are added here as each becomes connectable.
+
+## 127. Switch on the Lark app's chat channel, then add the bot to your digest group
+
+**In plain terms:** on 30 September the Brain's Lark app did not appear under **Add bot**, because
+it was connected for the staff list only. The bot, its permissions and its events belong to the
+**Chat channel** use, which the console walks you through. This is also what lets the evening digest
+(item 125), approval cards (items 117 and 118) and linked people's questions reach Lark.
+
+**What you do:**
+
+1. In the console, open **Connectors** and find the Lark card. Press **Manage Lark**, then **Add a
+   use to Lark**, tick **Chat channel**, and continue.
+2. **Turn on the bot.** In Lark's developer console, open your app, go to **Add Features** (or
+   **Features**), choose **Bot** and turn it on. This is the setting that was missing.
+3. **Add the permissions.** Press **Copy all permissions** in the console. Then in Lark, open
+   **Permissions & Scopes**, click **Batch import**, paste and confirm. Every permission is read-only
+   except `im:message:send_as_bot`, which lets the bot send its own replies.
+4. **Copy the two keys, then save.** In Lark, open **Events & Callbacks**, then the **Encryption
+   Strategy** tab. If the Encrypt Key is empty, click **Reset** to make one. Paste the **Encrypt
+   Key** and **Verification Token** into the console and press **Save the chat channel now**. Do
+   this before step 5, because Lark checks the address as soon as it is entered.
+5. **Point Lark's events at your install.** Still in **Events & Callbacks**, open **Event
+   Configuration**, choose **Request URL**, paste the events address the console shows you, and
+   save; Lark should show it as verified. Then click **Add Events**, find **Message received**
+   (`im.message.receive_v1`), tick it and add it.
+6. **Release a new version.** In Lark, open **Version Management & Release**, then **Create a
+   version**: use a version number such as 1.0.3, set who can use it to All members, then **Submit
+   for release**. It must be approved, as with 1.0.2.
+7. Back in the console, press **Test connection**, then **Save and switch on**.
+
+After that, open your "Brain daily" group, go to **Settings**, **Bots**, **Add bot**, and the
+Brain's app will appear.
+
+**Later, when I tell you approval cards are live (item 117):** in the Lark Admin console confirm that
+two-step verification is required for all members, then in the Brain's console open **Install**,
+**Settings**, the **Lark** section, and set **Approve from Lark cards** to on.
 
 ## 124. Switch on the automation canvas?
 
