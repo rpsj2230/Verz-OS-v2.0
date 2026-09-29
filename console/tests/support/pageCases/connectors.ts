@@ -30,6 +30,19 @@ const CONNECTOR_STATS = {
     live_reads: 5,
   })),
   unrecorded: [],
+  calls: {
+    window_seconds: 60,
+    requests: 12,
+    per_second: 0.2,
+    per_minute: 12,
+    concurrency: 1,
+    quota_ratio: 0.25,
+    error_ratio: 0,
+    latency_p50_ms: 140,
+    latency_p95_ms: 610,
+    quiet: false,
+  },
+  calls_told: UNBROKEN,
 };
 
 /** One source on the Connectors list, every drawn value the unbroken token. */

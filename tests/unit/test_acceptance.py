@@ -105,7 +105,7 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     here: limits, channels and documents, then volume, refusals and a head's audit, then Lark
     chat's three, the skill library's four, the models' eleven and the audit's one, the
     connectors' four, the tools' three, a document's life in four, the classified tables' three,
-    an answer's evidence in four, the connector framework's eight, retrieval's seven and the
+    an answer's evidence in four, the connector framework's nine, retrieval's seven and the
     channels' seven, the modules in `CHECK_MODULES` order rather than the order a process imported
     them. Delete this and a check can drop out of the suite with the page simply listing one fewer
     row, or the page can lead with whichever module was imported first."""
@@ -178,6 +178,7 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "a_burst_is_paced_by_the_source_s_documented_ceiling",
         "failures_open_the_breaker_and_a_refusal_is_retried_in_budget",
         "an_unreached_source_is_named_only_to_an_asker_who_could_see_it",
+        "a_source_s_live_calls_are_measured_on_its_page",
     ]
     # Retrieval on the install's own index; `tests/unit/test_acceptance_retrieval.py`.
     assert by_module["brain.ops.acceptance_retrieval"] == [
@@ -686,9 +687,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         acceptance_audit.NO_DEPLOYMENT_IS_RECORDED_TO_KEEP_OUT,
     )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
-    assert len(outcomes) == 49
+    assert len(outcomes) == 50
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 148
+    assert runs == [(2,)] and len(recorded) == 150
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }
