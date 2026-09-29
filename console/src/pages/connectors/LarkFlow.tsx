@@ -64,6 +64,7 @@ import {
   LARK_FLOW,
   LARK_TEST_API_PATH,
   larkBody,
+  skippedPages,
   startingUses,
   stepsFor,
   toggled,
@@ -620,7 +621,11 @@ function Flow({
       </div>
     ),
     wiki_spaces: (
-      <WikiSpaces tested={tested} may={guide.uses.some((one) => one.name === "knowledge_wiki" && one.may_switch_on)} />
+      <WikiSpaces
+        tested={tested}
+        may={guide.uses.some((one) => one.name === "knowledge_wiki" && one.may_switch_on)}
+        skipped={skippedPages(guide)}
+      />
     ),
     base_access: (
       <div className="flex min-w-0 flex-wrap gap-2">
