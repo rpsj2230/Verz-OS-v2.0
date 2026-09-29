@@ -11,7 +11,12 @@ import { CONNECTORS_API_PATH, disconnectApiPath } from "../../../src/pages/conne
 import { probeApiPath } from "../../../src/pages/connectors/connectorProbe";
 import { acceptApiPath } from "../../../src/pages/connectors/DeclarationDrift";
 import { editApiPath, exportApiPath, keyApiPath } from "../../../src/pages/connectors/connectorSources";
-import { LARK_API_PATH, LARK_SWITCH_OFF_API_PATH, LARK_TEST_API_PATH } from "../../../src/pages/larkConnectQuery";
+import {
+  LARK_API_PATH,
+  LARK_SWITCH_OFF_API_PATH,
+  LARK_TEST_API_PATH,
+  LARK_WIKI_SPACES_API_PATH,
+} from "../../../src/pages/larkConnectQuery";
 import {
   A_SETTING_ENTRY_NO_TEST_FOLLOWS,
   at,
@@ -69,6 +74,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
     at("POST /api/v1/connectors/lark-app/test", "LARK_TEST_API_PATH", LARK_TEST_API_PATH),
   ],
   "src/pages/connectors/LarkFlow.tsx LARK_API_PATH": [at("POST /api/v1/connectors/lark-app", "LARK_API_PATH", LARK_API_PATH)],
+  "src/pages/connectors/WikiSpaces.tsx LARK_WIKI_SPACES_API_PATH": [
+    at("POST /api/v1/connectors/lark-app/wiki-spaces", "LARK_WIKI_SPACES_API_PATH", LARK_WIKI_SPACES_API_PATH),
+  ],
   "src/pages/connectors/LarkCard.tsx LARK_SWITCH_OFF_API_PATH": [
     at("POST /api/v1/connectors/lark-app/switch-off", "LARK_SWITCH_OFF_API_PATH", LARK_SWITCH_OFF_API_PATH),
   ],
@@ -89,6 +97,11 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: t("test_lark_connect", "test_a_test_records_when_it_ran_and_each_verdict_and_nothing_it_was_sent"),
     audit: A_SETTING_ENTRY_NO_TEST_FOLLOWS,
     behaviour: t("test_lark_connect", "test_the_test_route_reports_each_use_and_writes_nothing"),
+  },
+  "POST /api/v1/connectors/lark-app/wiki-spaces": {
+    row: t("test_lark_connect", "test_declared_spaces_are_kept_in_the_settings_table_and_read_back", true),
+    audit: A_SETTING_ENTRY_NO_TEST_FOLLOWS,
+    behaviour: t("test_lark_connect", "test_a_space_is_declared_by_its_link_or_its_id_with_the_declarer_as_steward"),
   },
   "POST /api/v1/connectors/lark-app/switch-off": {
     row: t("test_lark_connect", "test_switching_a_use_off_leaves_the_others_on_and_the_key_in_the_vault"),

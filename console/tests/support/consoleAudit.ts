@@ -433,6 +433,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/connectors/lark-app",
       "/api/v1/connectors/lark-app/test",
       "/api/v1/connectors/lark-app/switch-off",
+      "/api/v1/connectors/lark-app/wiki-spaces",
       "/api/v1/channels*",
       "/api/v1/me/channels*",
       "/api/v1/console/connectors/{connector}/stats",
