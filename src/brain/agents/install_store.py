@@ -64,7 +64,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any, Final
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -74,8 +74,10 @@ from brain.agents.model import AgentAudience, AgentRecord
 from brain.agents.template import SignedManifest, TemplateError
 from brain.connectors.registry import ConnectorRegistry
 from brain.gate.injection import AutonomyTier
+from brain.identity.principal_store import PRINCIPAL_SETTING
 from brain.tables.agent import AgentRow
 from brain.tables.audit import attributed_to
+from brain.tables.channel_switch import SWITCHED_ON_WHEN_MADE, WEB_PAGE, switch_row
 from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
 from brain.tools.registry import ToolRegistry
 
@@ -243,6 +245,12 @@ def prepared(
     return replace(completed, record=disable(completed.record, now=at))
 
 
+def _as_the_session(principal_id: str) -> Any:
+    return text("SELECT set_config(:name, :value, true)").bindparams(
+        name=PRINCIPAL_SETTING, value=principal_id
+    )
+
+
 class StoredAgentInstalls:
     """The end of the install flow over this install's database."""
 
@@ -260,12 +268,15 @@ class StoredAgentInstalls:
         at: datetime,
         ent_hash: str,
         trace_id: str,
+        on_the_web: bool = False,
     ) -> Finished:
         """Write the version, the instance and the agent `prepared` decides, or nothing.
 
         `prepared` runs first and outside the transaction, so every refusal it makes is made before
         a connection is opened. `ent_hash` and `trace_id` are the request's, for `0137`'s trigger;
-        neither has a default, so a caller that has no request has to say so.
+        neither has a default, so a caller that has no request has to say so. With `on_the_web`
+        the new agent is switched on for the web page in the same transaction, in the installer's
+        name (`0159`); a caller that does not say switches nothing on.
         """
         signed = draft.offer.signed
         installation = prepared(
@@ -310,4 +321,18 @@ class StoredAgentInstalls:
             if written is None:
                 return Finished(installation=installation, created=False)
             await session.execute(insert(AgentRow).values(**agent_values(installation.record)))
+            if on_the_web:
+                await session.execute(_as_the_session(draft.installer))
+                session.add(
+                    switch_row(
+                        agent_id=installation.record.agent_id,
+                        channel=WEB_PAGE,
+                        switched_on=True,
+                        by=draft.installer,
+                        reason_code=SWITCHED_ON_WHEN_MADE,
+                        ent_hash=ent_hash,
+                        trace_id=trace_id,
+                        at=at,
+                    )
+                )
         return Finished(installation=installation, created=True)

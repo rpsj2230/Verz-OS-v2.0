@@ -148,6 +148,7 @@ MIGRATION_TRACE_AND_BROWSER_SESSION = VERSIONS / "0150_trace_store_and_browser_s
 MIGRATION_ARTIFACT_CHANGE = VERSIONS / "0153_artifact_change_and_client.py"
 MIGRATION_LEASH = VERSIONS / "0158_leash_changes_and_supervision.py"
 MIGRATION_TOOL_ATTACHMENT = VERSIONS / "0160_tool_attachments.py"
+MIGRATION_CHANNEL_SWITCH = VERSIONS / "0159_channel_switches.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -426,6 +427,8 @@ LEASH_TABLES: tuple[str, ...] = (
 )
 #: And the one 0160 adds: a tool or a connector attached to an agent, or detached.
 TOOL_ATTACHMENT_TABLES: tuple[str, ...] = ("agent.tool_attachment",)
+#: And the one 0159 adds: a channel switched on or off for an agent.
+CHANNEL_SWITCH_TABLES: tuple[str, ...] = ("agent.channel_switch",)
 
 ALL_TABLES = (
     CORE_TABLES
@@ -499,6 +502,7 @@ ALL_TABLES = (
     + ARTIFACT_CHANGE_TABLES
     + LEASH_TABLES
     + TOOL_ATTACHMENT_TABLES
+    + CHANNEL_SWITCH_TABLES
 )
 
 
@@ -1329,6 +1333,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert leash.TABLES == LEASH_TABLES
     tool_attachment = migration_module(MIGRATION_TOOL_ATTACHMENT)
     assert tool_attachment.TABLES == TOOL_ATTACHMENT_TABLES
+    channel_switch = migration_module(MIGRATION_CHANNEL_SWITCH)
+    assert channel_switch.TABLES == CHANNEL_SWITCH_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1424,6 +1430,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(artifact_change.TABLES)
         + tuple(leash.TABLES)
         + tuple(tool_attachment.TABLES)
+        + tuple(channel_switch.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1500,6 +1507,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(artifact_change.TABLES),
         set(leash.TABLES),
         set(tool_attachment.TABLES),
+        set(channel_switch.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

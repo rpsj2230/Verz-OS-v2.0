@@ -54,7 +54,14 @@ from tests.unit.test_agent_lifecycle_routes import tools
 from tests.unit.test_agent_routes import KEY
 from tests.unit.test_automation_owner_store import app_engine
 from tests.unit.test_credential_writes import entries
-from tests.unit.test_tables import DIALECT, VERSIONS, migration_module, rendered, squash
+from tests.unit.test_tables import (
+    DIALECT,
+    VERSIONS,
+    as_amended,
+    migration_module,
+    rendered,
+    squash,
+)
 
 MIGRATION = VERSIONS / "0149_agent_manifest_draft.py"
 TABLE_NAMES = ("agent.manifest_draft", "agent.manifest_revision", "agent.manifest_act")
@@ -66,9 +73,10 @@ def module() -> Any:
 
 # ------------------------------------------------------------------------ the migration's copy
 def test_the_migration_builds_the_three_tables_exactly_as_the_models_declare_them() -> None:
-    """The copy compared on rendered DDL. Delete this and the model can declare a key, a width or a
-    check the database does not enforce."""
-    emitted = squash(rendered("upgrade", MIGRATION))
+    """The copy compared on rendered DDL, as later migrations left it (`0159` adds the acts' web
+    choice). Delete this and the model can declare a key, a width or a check the database does not
+    enforce."""
+    emitted = as_amended(rendered("upgrade", MIGRATION))
     for name in TABLE_NAMES:
         table = metadata.tables[name]
         assert squash(str(CreateTable(table).compile(dialect=DIALECT))) in emitted

@@ -186,6 +186,29 @@ async def installed_agent(
     return agent_id
 
 
+async def on_the_web(h: Harness, agent_id: str, by: str) -> None:
+    """The web page switched on for a check's agent, as the create flow's ticked box switches it.
+
+    `installed_agent` and `acceptance_checks_skills._an_agent` write the rows an install writes and
+    not the switch the install route writes after them, so a check asking `/answer` through its
+    agent switches the page on here, through the store the page's own switch uses.
+    """
+    from brain.ops.acceptance_run import SET_UP_REACH
+    from brain.ops.channel_switch_store import StoredChannelSwitches
+    from brain.tables.channel_switch import SWITCHED_ON_WHEN_MADE, WEB_PAGE
+
+    await StoredChannelSwitches(h.sessions).switch(
+        agent_id=agent_id,
+        channel=WEB_PAGE,
+        switched_on=True,
+        by=by,
+        reason_code=SWITCHED_ON_WHEN_MADE,
+        ent_hash=SET_UP_REACH,
+        trace_id=h.trace_id,
+        at=h.now,
+    )
+
+
 async def stored_agent(h: Harness, agent_id: str) -> AgentRecord:
     """The agent as the workspace route reads it back, through `record_of`."""
     from brain.agent_routes import one_agent, record_of
@@ -2137,3 +2160,164 @@ async def an_agents_tools_are_attached_in_its_ceiling_and_runs_carry_them(h: Har
         (admin, "connector", "attached", FROM_THE_AGENT_PAGE),
     ]:
         raise CheckFailedError("a press did not reach the ledger naming who, which way and why")
+
+
+@check(
+    leaves=("M39.2.4.1", "M39.2.4.2"),
+    sentence=(
+        "Every agent that existed when channels arrived answers on the web page, switched on by "
+        "the upgrade with its reason on the ledger. A new agent switched on nowhere is refused on "
+        "the web page as a name nobody created is; the connector administrator switches the page "
+        "on and the answer route selects it there and on no chat; switched off, it is refused "
+        "again. Each switch is a ledger entry."
+    ),
+)
+async def an_agent_answers_only_on_the_channels_switched_on_for_it(h: Harness) -> None:
+    from types import SimpleNamespace
+
+    from brain.agent_channel_routes import FROM_THE_AGENT_PAGE, may_switch, shown_to
+    from brain.agent_roster import agent_channels_for, agent_roster_for
+    from brain.agents.channel_switches import (
+        ChannelSwitchError,
+        reachable,
+        switched_on,
+        to_switch,
+    )
+    from brain.api_routes import DEFAULT_AGENT, Answering, roster_of
+    from brain.gate.admission import Assurance, admit
+    from brain.gate.context import Channel
+    from brain.gate.select import SelectionStage, select_agent
+    from brain.identity.principal_store import StoredPrincipals
+    from brain.ops.acceptance_checks import _in
+    from brain.ops.acceptance_run import SET_UP_REACH
+    from brain.ops.channel_switch_store import StoredChannelSwitches
+    from brain.tables.channel_switch import (
+        ANSWERED_ON_THE_WEB_BEFORE_CHANNELS_EXISTED,
+        BACKFILLED_BY,
+        WEB_PAGE,
+    )
+    from brain.tools.registry import ToolRegistry
+
+    # 1. The upgrade's rows: every agent made before them has one, and each is on the ledger.
+    missed = (
+        await h.execute(
+            text(
+                "SELECT count(*) FROM agent.agent a WHERE a.created_at < (SELECT min(s.changed_at)"
+                " FROM agent.channel_switch s WHERE s.changed_by = :by) AND NOT EXISTS"
+                " (SELECT 1 FROM agent.channel_switch s WHERE s.agent_id = a.id"
+                " AND s.changed_by = :by AND s.channel = :web AND s.switched_on"
+                " AND s.reason_code = :reason)"
+            ).bindparams(
+                by=BACKFILLED_BY,
+                web=WEB_PAGE.value,
+                reason=ANSWERED_ON_THE_WEB_BEFORE_CHANNELS_EXISTED,
+            )
+        )
+    ).scalar_one()
+    unledgered = (
+        await h.execute(
+            text(
+                "SELECT count(*) FROM agent.channel_switch s WHERE s.changed_by = :by"
+                " AND NOT EXISTS (SELECT 1 FROM obs.audit_entry e WHERE e.action = 'compose_change'"
+                " AND e.actor_id = :by AND e.subject = 'agent:' || s.agent_id"
+                " AND e.details @> jsonb_build_object('part', 'channels'))"
+            ).bindparams(by=BACKFILLED_BY)
+        )
+    ).scalar_one()
+    if missed or unledgered:
+        raise CheckFailedError("an agent that existed before channels was not switched on the web")
+
+    # 2. A new agent nobody switched on is refused as a name nobody created is.
+    await h.found_departments()
+    admin, member = h.principal(A, "channels"), h.principal(A, "member")
+    await h.person(admin, department=A, grants=_in(A, "admin:connector", "read:note.body"))
+    await h.person(member, department=A, grants=_in(A, "read:note.body"))
+    agent_id = await installed_agent(h, admin, capabilities=("read:note.body",), suffix="_channels")
+    person = await StoredPrincipals(h.sessions).live_principal(member)
+    if person is None:
+        raise CheckFailedError("a reserved person was not live in the directory")
+    member_reach = admit(await h.reach(member), Channel.CONSOLE, Assurance.AUTHENTICATED)
+    admin_reach = await h.reach(admin)
+    state = SimpleNamespace(
+        agent_roster=agent_roster_for(h.sessions), agent_channels=agent_channels_for(h.sessions)
+    )
+    store = StoredChannelSwitches(h.sessions)
+
+    async def selected(channel: Channel, name: str) -> tuple[SelectionStage, str]:
+        """What `/answer` selects for the member naming `name` on `channel`."""
+        asked = Answering(principal=person, reach=member_reach, channel=channel, now=h.now)
+        roster = await roster_of(state, asked, ToolRegistry())
+        chosen = select_agent(
+            "a question",
+            channel,
+            visible_agents=roster.visible,
+            default_agent=DEFAULT_AGENT,
+            addressed=name,
+        )
+        return chosen.stage, chosen.agent_id
+
+    async def on() -> frozenset[Channel]:
+        return switched_on(await store.switches(agent_id)).get(agent_id, frozenset())
+
+    async def pressed(channel: Channel, switched: bool) -> None:
+        record = await stored_agent(h, agent_id)
+        to_switch(shown_to(record, await on(), admin_reach, h.now), channel, switched)
+        await store.switch(
+            agent_id=agent_id,
+            channel=channel,
+            switched_on=switched,
+            by=admin,
+            reason_code=FROM_THE_AGENT_PAGE,
+            ent_hash=SET_UP_REACH,
+            trace_id=h.trace_id,
+            at=h.now,
+        )
+
+    nobody = f"acceptance_{h.run}_nobody"
+    refused = await selected(Channel.CONSOLE, nobody)
+    if reachable(await on()) or await selected(Channel.CONSOLE, agent_id) != refused:
+        raise CheckFailedError("an agent switched on nowhere answered on the web page")
+    record = await stored_agent(h, agent_id)
+    if not may_switch(admin_reach, record, h.now) or may_switch(member_reach, record, h.now):
+        raise CheckFailedError("a channel could be switched by somebody other than its role")
+
+    # 3. Switched on for the web page: selected there, and on no chat.
+    await pressed(WEB_PAGE, True)
+    if await selected(Channel.CONSOLE, agent_id) != (SelectionStage.ADDRESSED, agent_id):
+        raise CheckFailedError("an agent switched on for the web page was not selected there")
+    if await selected(Channel.LARK, agent_id) != await selected(Channel.LARK, nobody):
+        raise CheckFailedError("an agent switched on for the web page answered on a chat")
+    try:
+        await pressed(WEB_PAGE, True)
+    except ChannelSwitchError:
+        pass
+    else:
+        raise CheckFailedError("a channel already on was switched on again")
+
+    # 4. Switched off: refused again, and both switches on the ledger.
+    await pressed(WEB_PAGE, False)
+    if reachable(await on()) or await selected(Channel.CONSOLE, agent_id) != refused:
+        raise CheckFailedError("an agent switched off the web page still answered there")
+    rows = (
+        await h.execute(
+            text(
+                "SELECT actor_id, details FROM obs.audit_entry WHERE action = 'compose_change'"
+                " AND subject = :subject ORDER BY seq"
+            ).bindparams(subject=f"agent:{agent_id}")
+        )
+    ).all()
+    said = [
+        (
+            str(actor),
+            dict(details)["part"],
+            dict(details)["reference"],
+            dict(details)["direction"],
+            dict(details)["reason_code"],
+        )
+        for actor, details in rows
+    ]
+    if said != [
+        (admin, "channels", WEB_PAGE.value, "attached", FROM_THE_AGENT_PAGE),
+        (admin, "channels", WEB_PAGE.value, "detached", FROM_THE_AGENT_PAGE),
+    ]:
+        raise CheckFailedError("a switch did not reach the ledger naming who, which way and why")

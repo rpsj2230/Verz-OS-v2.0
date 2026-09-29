@@ -355,6 +355,9 @@ class DraftPublishAsked(BaseModel):
     revision: int = Field(ge=FIRST_REVISION)
     #: False: the author alone. True: the author's own department.
     for_department: bool = False
+    #: For a new agent: whether it answers on the web page once published. Ticked on the page, and
+    #: it can be unticked; a publish that waits for a second person carries it on its request.
+    web: bool = True
 
 
 class DraftSavedView(BaseModel):
@@ -711,7 +714,11 @@ async def _publish(
     asked: Asking,
     key: str,
 ) -> JSONResponse:
-    """Write the agent the latest revision makes, with the acts that say so, or say why not."""
+    """Write the agent the latest revision makes, with the acts that say so, or say why not.
+
+    A new agent is switched on for the web page when the act publishing it says so
+    (`Act.on_the_web`), in the same write; an edit changes no switch.
+    """
     revision = _latest(draft)
     publisher = asked.caller.principal.id
     tools = _tools(request)
@@ -735,7 +742,10 @@ async def _publish(
             tools=tools,
             at=asked.now,
         )
-        if not await store.publish_new(draft.draft_id, acts, signed, made, by=_by(asked)):
+        web = any(one.on_the_web for one in acts if one.act is DraftAct.PUBLISHED)
+        if not await store.publish_new(
+            draft.draft_id, acts, signed, made, by=_by(asked), on_the_web=web
+        ):
             return _not_changed(MOVED, PRESS_AGAIN)
         sentence = PUBLISHED_NEW
     else:
@@ -1157,6 +1167,7 @@ async def publish_agent_draft(
             at=asked.now,
             widened=True,
             for_department=body.for_department,
+            on_the_web=body.web,
         )
         if not await store.record(draft.draft_id, asked_for, by=_by(asked)):
             return _not_changed(REFUSED, ALREADY_WAITING)
@@ -1174,6 +1185,7 @@ async def publish_agent_draft(
         actor_id=me,
         at=asked.now,
         for_department=body.for_department,
+        on_the_web=body.web,
     )
     return await _publish(request, store, draft, audience, found, (done,), asked, key)
 
@@ -1217,6 +1229,7 @@ async def approve_agent_draft(
     me = asked.caller.principal.id
     requested = _requested(draft)
     for_department = bool(requested and requested.for_department)
+    on_the_web = bool(requested and requested.on_the_web)
     acts = (
         Act(revision=body.revision, act=DraftAct.APPROVED, actor_id=me, at=asked.now, widened=True),
         Act(
@@ -1226,6 +1239,7 @@ async def approve_agent_draft(
             at=asked.now,
             widened=True,
             for_department=for_department,
+            on_the_web=on_the_web,
         ),
     )
     return await _publish(request, store, draft, audience, found, acts, asked, key)

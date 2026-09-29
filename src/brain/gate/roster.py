@@ -42,11 +42,17 @@ from brain.agents.template import config_hash
 from brain.console.workspace_capabilities import run_reach
 from brain.core.entitlement import EntitlementSet
 from brain.core.principal import Principal
+from brain.gate.context import Channel
 from brain.gate.front import AgentSetup
 
 #: How `brain.app.lifespan` hands the route the stored agents: one read per question, so an agent
 #: disabled a moment ago is not selectable on the next request.
 AgentRoster = Callable[[], Awaitable[Sequence[AgentRecord]]]
+
+#: How `brain.app.lifespan` hands the route each agent's switched-on channels, read with the roster
+#: on each question: the agents named, each mapped to the channels it answers on, and an agent
+#: switched on nowhere absent. See `brain.agents.channel_switches`.
+AgentChannels = Callable[[Sequence[str]], Awaitable[Mapping[str, frozenset[Channel]]]]
 
 
 def viewer_for(principal: Principal) -> AgentViewer:

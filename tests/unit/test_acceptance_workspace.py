@@ -17,6 +17,7 @@ Task ids: M39.5.1.1, M39.5.1.2, M39.5.1.4, M39.5.1.5, M39.5.2.1, M39.5.2.2, M39.
 Task ids: M39.5.2.5, M39.8.4, M39.8.5
 Task ids: M39.3.2.1, M39.3.2.2, M39.3.2.3, M39.3.2.4, M39.3.2.5, M39.8.2, M39.8.3
 Task ids: M39.8.6, M39.2.1.2, M39.1.1.3
+Task ids: M39.2.4.1, M39.2.4.2
 """
 
 from __future__ import annotations
@@ -125,6 +126,7 @@ LEAVES = {
         "M39.2.1.2",
         "M39.1.1.3",
     ),
+    "an_agent_answers_only_on_the_channels_switched_on_for_it": ("M39.2.4.1", "M39.2.4.2"),
 }
 
 #: The artifact check's object store in the database half: the real S3 client over a fake bucket,
@@ -571,4 +573,46 @@ def test_a_roster_that_ignores_attachments_fails_the_tools_check(
     assert run_checks(head, (by_name(TOOLS_CHECK),))[TOOLS_CHECK] == (
         FAILED,
         "a run was not handed a tool attached a moment before",
+    )
+
+
+CHANNELS_CHECK = "an_agent_answers_only_on_the_channels_switched_on_for_it"
+
+
+@pytest.mark.needs_db
+def test_a_roster_that_ignores_the_switches_fails_the_channels_check(
+    head: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With the answer route keeping every agent whatever is switched on, an agent nobody switched
+    on answers on the web page, and the check says so. Delete this and the check could pass over an
+    install where every agent answers on every channel, which is the default the owner refused."""
+    monkeypatch.setattr("brain.api_routes.answering_on", lambda records, on, channel: records)
+
+    assert run_checks(head, (by_name(CHANNELS_CHECK),))[CHANNELS_CHECK] == (
+        FAILED,
+        "an agent switched on nowhere answered on the web page",
+    )
+
+
+@pytest.mark.needs_db
+def test_a_switch_that_answers_on_every_channel_fails_the_channels_check(
+    head: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With the channels folded as switched on for every channel an agent has any switch for, the
+    web page switched on makes the agent answer on a chat, and the check says so. Delete this and
+    the check could pass over an install where switching one channel on switches them all."""
+    from brain.agents import channel_switches
+
+    real = channel_switches.switched_on
+
+    def everywhere(switches: Any) -> dict[str, frozenset[Any]]:
+        from brain.gate.context import Channel
+
+        return {agent_id: frozenset(Channel) for agent_id in real(switches)}
+
+    monkeypatch.setattr("brain.agent_roster.switched_on", everywhere)
+
+    assert run_checks(head, (by_name(CHANNELS_CHECK),))[CHANNELS_CHECK] == (
+        FAILED,
+        "an agent switched on for the web page answered on a chat",
     )

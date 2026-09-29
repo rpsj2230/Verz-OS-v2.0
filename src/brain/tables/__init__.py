@@ -64,6 +64,7 @@ from brain.tables.browsing import BrowserEnvelopeRow
 from brain.tables.budget import BudgetVersionRow
 from brain.tables.channel import ChannelDeliveryRow, ChannelRow
 from brain.tables.channel_event import ChannelEventRow
+from brain.tables.channel_switch import ChannelSwitchRow
 from brain.tables.chat import ConversationRow, MessageRole, MessageRow
 from brain.tables.classified_table import ClassifiedRecordRow, ClassifiedTableRow
 from brain.tables.compliance import BreachCaseRow, SensitiveReferralRow
@@ -427,6 +428,8 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     "agent.supervision_pin",
     # 0160_tool_attachments. Points at nothing: the agent, the tools and the person are values.
     "agent.tool_attachment",
+    # 0159_channel_switches. Points at nothing: the agent and the person are values.
+    "agent.channel_switch",
 )
 
 __all__ = [
@@ -461,6 +464,7 @@ __all__ = [
     "ChannelDeliveryRow",
     "ChannelEventRow",
     "ChannelRow",
+    "ChannelSwitchRow",
     "ClassifiedRecordRow",
     "ClassifiedTableRow",
     "ConnectorConnectionRow",

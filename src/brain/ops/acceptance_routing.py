@@ -92,7 +92,7 @@ if TYPE_CHECKING:
 
     from brain.core.errors import Degraded
     from brain.gate.answer import Answered
-    from brain.gate.roster import AgentRoster
+    from brain.gate.roster import AgentChannels, AgentRoster
     from brain.models.driver import ModelDriver
     from brain.ops.matrix_gate import RungAddition
     from brain.ops.model_service import ModelService
@@ -382,6 +382,20 @@ def roster_over(h: Harness) -> AgentRoster:
     return read
 
 
+def channels_over(h: Harness) -> AgentChannels:
+    """Which channels each agent answers on, read as `/answer` reads them, beside `roster_over`.
+
+    `brain.agent_roster.agent_channels_for`, the reader `brain.app` installs: without it the answer
+    route keeps no stored agent at all, which is `brain.api_routes.roster_of`'s rule.
+    """
+    from brain.agent_roster import agent_channels_for
+
+    read = agent_channels_for(h.sessions)
+    if read is None:  # pragma: no cover - the check always holds sessions
+        raise CheckFailedError("the check's sessions read no channels")
+    return read
+
+
 @dataclass(frozen=True)
 class StandingBy:
     """What a stand-in check starts from: a reader, their document, the responder, the executor."""
@@ -653,14 +667,15 @@ async def a_content_refusal_is_never_tried_on_another_model(h: Harness) -> None:
 async def an_agents_complex_question_uses_heavy_and_the_vault_key(h: Harness) -> None:
     from brain.models.routing import TierBasis
     from brain.ops.acceptance_checks_skills import _an_agent
+    from brain.ops.acceptance_workspace import on_the_web
     from brain.ops.model_probe_run import KeySource, worker_provider_keys
     from brain.ops.provider_keys import PROVIDER_SLOTS
 
     reader, paired = await a_reader_with_a_document(h)
     await constrained(h, ())
-    agent = await _an_agent(
-        h, h.principal(A, "library"), tier=Tier.HEAVY, capabilities=KNOWLEDGE_READS
-    )
+    owner = h.principal(A, "library")
+    agent = await _an_agent(h, owner, tier=Tier.HEAVY, capabilities=KNOWLEDGE_READS)
+    await on_the_web(h, agent, owner)
     responder = StandIns()
     reads: list[str] = []
     models = await models_for(h, standing=stand_in_drivers(h, responder), told=reads.append)
@@ -679,6 +694,7 @@ async def an_agents_complex_question_uses_heavy_and_the_vault_key(h: Harness) ->
     await pinned(h, (step(ANSWERS, tier=Tier.MAIN), heavy))
     app = await asking_app(h, models)
     app.state.agent_roster = roster_over(h)
+    app.state.agent_channels = channels_over(h)
     through = await asking(h, app, reader, paired.question, 1, agent=agent)
     if not answered(through):
         raise CheckFailedError("a question asked through an agent was not answered")

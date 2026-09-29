@@ -150,6 +150,8 @@ class Memory:
     versions: dict[str, list[int]] = field(default_factory=dict)
     published_templates: dict[str, TemplateManifest] = field(default_factory=dict)
     writers: list[Attribution] = field(default_factory=list)
+    #: Each new agent published, and whether it was switched on for the web page with it.
+    on_the_web: dict[str, bool] = field(default_factory=dict)
 
     async def draft(self, draft_id: str) -> AgentDraft | None:
         return self.drafts.get(draft_id)
@@ -208,11 +210,13 @@ class Memory:
         installation: Installation,
         *,
         by: Attribution,
+        on_the_web: bool = False,
     ) -> bool:
         agent_id = installation.record.agent_id
         if agent_id in self.agents:
             return False
         self.writers.append(by)
+        self.on_the_web[agent_id] = on_the_web
         self.agents[agent_id] = FoundAgent(
             record=installation.record,
             install=(signed, installation.instance),
@@ -591,6 +595,35 @@ def test_a_new_agent_that_reaches_anything_waits_for_a_second_person_who_is_not_
         (DraftAct.PUBLISHED, "u_prefix"),
     ]
     assert console.get("u_prefix", DRAFTS_PATH).json()["waiting_for_you"] == []
+
+
+def test_a_new_agent_answers_on_the_web_page_unless_its_author_unticks_it_even_after_a_wait(
+    console: Console,
+) -> None:
+    """**M39.2.4.1 in the create flow.** A publish that says nothing switches the web page on, as
+    the page's ticked box does; one sent with it unticked switches nothing on; and a publish that
+    waits for a second person keeps the author's untick through the approval that makes the agent.
+
+    Delete this and a new agent can be made answering nowhere with nobody having unticked
+    anything, or an approver's publish can switch the page on against its author's choice."""
+    ticked, revision = ready(console, reaching_nothing())
+    made = console.post("u_admin", at(PUBLISH_PATH, draft_id=ticked), {"revision": revision})
+    unticked, second = ready(console, reaching_nothing())
+    left = console.post(
+        "u_admin", at(PUBLISH_PATH, draft_id=unticked), {"revision": second, "web": False}
+    )
+    waited, third = ready(console, a_document())
+    asked = console.post(
+        "u_admin", at(PUBLISH_PATH, draft_id=waited), {"revision": third, "web": False}
+    )
+    approved = console.post("u_prefix", at(APPROVE_PATH, draft_id=waited), {"revision": third})
+
+    assert (made.status_code, left.status_code, asked.status_code) == (201, 201, 202)
+    assert console.memory.on_the_web == {
+        made.json()["agent_id"]: True,
+        left.json()["agent_id"]: False,
+        approved.json()["agent_id"]: False,
+    }
 
 
 def test_a_publish_sent_back_publishes_nothing_and_returns_to_its_author(console: Console) -> None:

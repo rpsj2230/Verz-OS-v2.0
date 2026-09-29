@@ -369,6 +369,9 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         # A tool or a connector attached to an agent or detached (`0160`): the person who pressed
         # is an actor, and the row is about an agent's tools, never about a person.
         "agent.tool_attachment",
+        # A channel switched on or off for an agent (`0159`): the person who pressed is an actor,
+        # and the row is about an agent's channels, never about a person.
+        "agent.channel_switch",
         "agent.skill",
         "agent.skill_assignment",
         # The categories set on a skill's name: `set_by` is an actor, not an owner (`0121`).

@@ -182,8 +182,29 @@ describe("one template's page", () => {
       expect(router.state.location.pathname).toBe("/agents/pricing_desk_1");
     });
     expect(posts(idp)).toEqual([
-      { path: "/api/v1/agent-templates/pricing_desk/versions/3/install", body: { expected_digest: DIGEST, for_department: false } },
+      { path: "/api/v1/agent-templates/pricing_desk/versions/3/install", body: { expected_digest: DIGEST, for_department: false, web: true } },
     ]);
+  });
+
+  test("the web page is ticked for a new agent, and an untick is what the install sends", async () => {
+    // What breaks if this is deleted: M39.2.4.1's install flow, where the web page is switched on
+    // where the installer can see it, and unticking it is carried to the route.
+    const { idp } = await consoleAt("/agent-templates/pricing_desk");
+    const web = screen.getByRole("checkbox", { name: "Answers on the web page" });
+    expect((web as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(web);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: ACT_LABELS.install }));
+    });
+    const dialog = await screen.findByRole("alertdialog");
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: ACT_LABELS.install }));
+    });
+    await waitFor(() => {
+      expect(posts(idp)).toEqual([
+        { path: "/api/v1/agent-templates/pricing_desk/versions/3/install", body: { expected_digest: DIGEST, for_department: false, web: false } },
+      ]);
+    });
   });
 
   test("a template with no installable version offers no install, in one sentence whatever the reason", async () => {

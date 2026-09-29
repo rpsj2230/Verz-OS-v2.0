@@ -60,6 +60,8 @@ export const INSTALLING_NEVER_WIDENS =
   "Installing never widens anyone. What a template asks for is checked against whoever calls the agent, every time.";
 export const NAME_HINT = "Up to 120 characters. Leave it as it is to use the template's own name.";
 export const DEPARTMENT_HINT = "Ticked, only people in your department can find it; otherwise only you can, until it is published.";
+export const WEB_HINT =
+  "Ticked, it answers on the web page to the people who can find it. An agent answers only where it is switched on; chats are switched on from its page.";
 export const NOT_INSTALLED = "The template was not installed";
 export const CANCEL = "Change nothing";
 export const NOTHING_LISTED = "Nothing";
@@ -106,11 +108,13 @@ function InstallCard({ template }: { readonly template: TemplateDetail }) {
   const version = useResource<TemplateVersion>(versionApiPath(entry.template_id, entry.version));
   const [name, setName] = useState(entry.display_name);
   const [forDepartment, setForDepartment] = useState(false);
+  const [web, setWeb] = useState(true);
   const [pending, setPending] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
   const nameId = useId();
   const departmentId = useId();
+  const webId = useId();
 
   if (version.busy) {
     return (
@@ -142,6 +146,7 @@ function InstallCard({ template }: { readonly template: TemplateDetail }) {
       const body = {
         expected_digest: digest,
         for_department: forDepartment,
+        web,
         ...(trimmed === "" || trimmed === entry.display_name ? {} : { display_name: trimmed }),
       };
       const result = await request<unknown>(installApiPath(entry.template_id, entry.version), { method: "POST", body });
@@ -202,6 +207,25 @@ function InstallCard({ template }: { readonly template: TemplateDetail }) {
             <Label htmlFor={departmentId}>For my department</Label>
             <p id={`${departmentId}-hint`} className="m-0 text-[12.5px] leading-snug text-dim">
               {DEPARTMENT_HINT}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-start gap-2">
+          <input
+            id={webId}
+            type="checkbox"
+            name="web"
+            className="mt-1 size-4"
+            checked={web}
+            aria-describedby={`${webId}-hint`}
+            onChange={(event) => {
+              setWeb(event.target.checked);
+            }}
+          />
+          <div className="flex flex-col gap-1">
+            <Label htmlFor={webId}>Answers on the web page</Label>
+            <p id={`${webId}-hint`} className="m-0 text-[12.5px] leading-snug text-dim">
+              {WEB_HINT}
             </p>
           </div>
         </div>

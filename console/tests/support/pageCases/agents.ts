@@ -223,6 +223,17 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
       },
       // The leash block: an entry, a move with its evidence, a trip with its metric, supervision
       // and an action waiting for a verdict, each value a token with nowhere to break.
+      // The channels block: the web page and one chat, each value a token with nowhere to break.
+      "/api/v1/agents/quote-helper/channels": {
+        agent_id: "quote-helper",
+        channels: [
+          { channel: "console", on: true, profile: null, group_installable: false },
+          { channel: UNBROKEN, on: false, profile: UNBROKEN, group_installable: false },
+        ],
+        reachable: true,
+        unreachable: null,
+        may_switch: true,
+      },
       "/api/v1/agents/quote-helper/attachments": {
         agent_id: "quote-helper",
         carried: [{ name: UNBROKEN, source: UNBROKEN, description: UNBROKEN }],

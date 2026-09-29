@@ -137,6 +137,9 @@ class ManifestActRow(Base):
     at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
+    #: For a new agent: whether it answers on the web page once it is made (`0159`). True for acts
+    #: taken before the column, which is what every agent made then did.
+    on_the_web: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
 
     __table_args__ = (
         ForeignKeyConstraint(

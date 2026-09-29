@@ -144,6 +144,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, JsonValue, StringConstraints
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from brain.agents.channel_switches import answering_on
 from brain.agents.model import AGENT_ID_CHARS, AgentRecord
 from brain.agents.template import config_hash
 from brain.api import API_PREFIX, COMMON_RESPONSES, ErrorBody, Page, bound_trace_id
@@ -177,6 +178,7 @@ from brain.gate.live_records import LiveRecords
 from brain.gate.model_lane import PASSAGE_POLICY, AgentRun, DocumentSearchTool, ModelLane
 from brain.gate.resolve import EntitlementCache, EntitlementStore, VersionSource, resolve
 from brain.gate.roster import (
+    AgentChannels,
     AgentRoster,
     AnswerRoster,
     answer_roster,
@@ -1355,9 +1357,17 @@ async def roster_of(state: Any, asked: Answering, registry: ToolRegistry) -> Ans
     The stored agents come from `brain.app.lifespan`'s `agent_roster`, read on each question so an
     agent disabled a moment ago cannot be selected; a process with no database has only the
     default. `brain.gate.roster.answer_roster` decides which of them this person may use.
+
+    **Only the agents switched on for the channel this question arrived on are kept**, read from
+    `agent_channels` beside the roster, so an agent switched off here is refused as an agent the
+    person may not use is (`brain.agents.channel_switches`). A process holding a roster and no
+    channel reader keeps no stored agent at all: an agent nothing says is switched on is off.
     """
     read: AgentRoster | None = getattr(state, "agent_roster", None)
-    records = await read() if read is not None else ()
+    stored = await read() if read is not None else ()
+    channels: AgentChannels | None = getattr(state, "agent_channels", None)
+    on = await channels([one.agent_id for one in stored]) if channels is not None else {}
+    records = answering_on(stored, on, asked.channel)
     return answer_roster(
         records,
         viewer_for(asked.principal),

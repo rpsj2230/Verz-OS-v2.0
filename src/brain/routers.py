@@ -58,6 +58,10 @@ from brain.agent_attachment_routes import router as agent_attachment_router
 from brain.agent_builder_routes import router as agent_builder_router
 from brain.agent_capability_routes import router as agent_capability_router
 
+# Switching a channel on or off for an agent from its page, the web page included, each switch on
+# the ledger; `/answer` keeps only the agents switched on for the channel a question arrived on.
+from brain.agent_channel_routes import router as agent_channel_router
+
 # One agent's leash: its rungs as they stand, every move with its evidence, a verdict that the
 # breaker reads, and the supervision pin and its reviews.
 from brain.agent_leash_routes import router as agent_leash_router

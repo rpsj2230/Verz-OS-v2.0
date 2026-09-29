@@ -1,0 +1,314 @@
+"""`0159`, `0159b`'s backfill, and the web page switched on in the write that makes an agent.
+
+The migration is read as rendered SQL without a server, as `tests/unit/test_tables.py` reads every
+migration. The backfill is run for real: a database migrated to the revision before `0159`, agents
+written into it, then `0159` run over them, so what is asserted is what an install upgrading from
+the previous release gets. The install and the draft publish are driven through their own stores as
+the application role, so `0159`'s insert policy is the one an install has. **The server half skips
+when there is no server**, and CI always has one.
+
+Task ids: M39.2.4.1, M39.2.4.2
+"""
+
+from __future__ import annotations
+
+import uuid
+from collections.abc import Iterator
+from datetime import UTC, datetime
+
+import pytest
+from sqlalchemy.schema import CreateIndex, CreateTable
+
+from brain.agents.creation import install_draft
+from brain.agents.install import InstallDraft
+from brain.agents.install_store import StoredAgentInstalls, prepared
+from brain.agents.model import AgentAudience
+from brain.agents.template import (
+    ManifestAuthority,
+    ManifestIdentity,
+    SignedManifest,
+    TemplateManifest,
+    publish,
+)
+from brain.builder.agent_drafts import Act, AgentDraft
+from brain.builder.draft_store import Attribution, StoredAgentDrafts
+from brain.builder.draft_words import DraftAct, DraftKind
+from brain.builder.drafts import FIRST_REVISION, ManifestDraft, Revision
+from brain.core.scope import Scope
+from brain.db import metadata
+from brain.gate.context import Channel
+from brain.knowledge.visibility import Visibility
+from brain.session import make_session_factory
+from brain.tables import channel_switch as table_module
+from brain.tables.identity import PRINCIPAL_ID_CHARS, one_of
+from tests.e2e.test_wave_three_installed_agent import SIGNING_KEY, serving
+from tests.fixtures.retirable import EXTENSIONS, has_pgvector, predecessor, retirable
+from tests.fixtures.scratch_postgres import drop, fresh, migrate, run, sql
+from tests.unit.test_agent_install_store import tools
+from tests.unit.test_automation_owner_store import app_engine
+from tests.unit.test_review_store import entries
+from tests.unit.test_tables import DIALECT, VERSIONS, as_amended, migration_module, rendered, squash
+
+MIGRATION = VERSIONS / "0159_channel_switches.py"
+BACKFILL = VERSIONS / "0159b_web_page_for_existing_agents.py"
+MIGRATION_0149 = VERSIONS / "0149_agent_manifest_draft.py"
+
+AGENT_COLUMNS = (
+    "INSERT INTO agent.agent (id, display_name, persona, tier, visibility, owner_id, department,"
+    " scope, capabilities, allowed_tools, required_tools, max_side_effect, created_by)"
+    " VALUES (%s, %s, 'Answer briefly.', 'main', 'company', 'u_steward', NULL,"
+    " '{\"clauses\": []}', '{}', '{}', '{}', 'none', 'u_steward')"
+)
+
+
+# ------------------------------------------------------------------------- the migration
+def test_0159_holds_the_widths_words_and_vocabulary_the_model_holds() -> None:
+    """`0159` copies the widths, the patterns, the channel vocabulary and the backfill's reason.
+    Delete this and a channel added to the enum is refused by the database on the first switch, or
+    the backfill's reason drifts from the one the module names."""
+    migration = migration_module(MIGRATION)
+
+    assert migration.TABLES == ("agent.channel_switch",)
+    assert migration.AGENT_ID_CHARS == table_module.AGENT_ID_CHARS
+    assert migration.CHANNEL_CHARS == table_module.CHANNEL_CHARS
+    assert migration.TRACE_ID_CHARS == table_module.TRACE_ID_CHARS
+    assert migration.REASON_CHARS == table_module.REASON_CHARS
+    assert migration.PRINCIPAL_ID_CHARS == PRINCIPAL_ID_CHARS
+    assert migration.ENT_HASH_PATTERN == table_module.ENT_HASH_PATTERN
+    assert migration.REASON_PATTERN == table_module.REASON_PATTERN
+    assert one_of("channel", Channel) == migration.CHANNELS
+    backfill = migration_module(BACKFILL)
+    assert backfill.down_revision == migration.revision == "0159"
+    assert backfill.WEB == table_module.WEB_PAGE.value == Channel.CONSOLE.value
+    assert backfill.BACKFILL_REASON == table_module.ANSWERED_ON_THE_WEB_BEFORE_CHANNELS_EXISTED
+    assert backfill.BACKFILL_ACTOR == table_module.BACKFILLED_BY == f"migration.{backfill.revision}"
+
+
+def test_0159_builds_the_table_as_the_model_declares_and_the_act_column_it_claims() -> None:
+    """Compared as rendered DDL: the table and its index as the model declares them, row-level
+    security on, SELECT and INSERT only in the session's own name, the ledger trigger, the backfill,
+    and the one column `AMENDS_CREATE_TABLE` says it adds to `0149`'s acts. Delete this and the
+    model can gain a column the database never has, an UPDATE grant ships, or the amendment the
+    comparison trusts claims a column the upgrade never adds."""
+    emitted = squash(rendered("upgrade", MIGRATION))
+    table = metadata.tables["agent.channel_switch"]
+    principal = "current_setting('app.principal_id', true)"
+
+    assert squash(str(CreateTable(table).compile(dialect=DIALECT))) in emitted
+    for index in table.indexes:
+        assert squash(str(CreateIndex(index).compile(dialect=DIALECT))) in emitted
+    assert "ALTER TABLE agent.channel_switch ENABLE ROW LEVEL SECURITY" in emitted
+    assert "GRANT SELECT, INSERT ON agent.channel_switch TO brain_app" in emitted
+    assert "UPDATE ON agent.channel_switch" not in emitted
+    assert "DELETE ON agent.channel_switch" not in emitted
+    assert (
+        "CREATE POLICY channel_switch_made_in_the_sessions_name ON agent.channel_switch "
+        f"FOR INSERT TO brain_app WITH CHECK (changed_by = {principal})"
+    ) in emitted
+    assert (
+        "CREATE TRIGGER channel_switch_is_audited AFTER INSERT ON agent.channel_switch "
+        "FOR EACH ROW EXECUTE FUNCTION agent.record_channel_switch()"
+    ) in emitted
+    assert squash(migration_module(BACKFILL).BACKFILL) in squash(rendered("upgrade", BACKFILL))
+    assert squash(migration_module(BACKFILL).UNDONE) in squash(rendered("downgrade", BACKFILL))
+    assert "INSERT INTO" not in emitted
+    assert (
+        "ALTER TABLE agent.manifest_act ADD COLUMN on_the_web BOOLEAN DEFAULT true NOT NULL"
+    ) in emitted
+    acts = metadata.tables["agent.manifest_act"]
+    assert squash(str(CreateTable(acts).compile(dialect=DIALECT))) in as_amended(
+        rendered("upgrade", MIGRATION_0149)
+    )
+    down = squash(rendered("downgrade", MIGRATION))
+    assert "DROP TABLE agent.channel_switch" in down
+    assert "DROP FUNCTION agent.record_channel_switch()" in down
+    assert "ALTER TABLE agent.manifest_act DROP COLUMN on_the_web" in down
+
+
+# ------------------------------------------------------------------------- on a server
+@pytest.fixture
+def before_0159() -> Iterator[tuple[str, str]]:
+    """A database at the revision `0159` follows, and its name, dropped afterwards."""
+    name = f"brain_channel_backfill_{uuid.uuid4().hex[:8]}"
+    url = fresh(name)
+    try:
+        if not has_pgvector(url):
+            pytest.skip("the full chain needs pgvector, which CI's server has")
+        for extension in EXTENSIONS:
+            sql(url, f'CREATE EXTENSION IF NOT EXISTS "{extension}"')
+        migrate(name, "stamp", "0001")
+        migrate(name, "upgrade", predecessor(MIGRATION))
+        yield name, url
+    finally:
+        drop(name)
+
+
+def test_the_upgrade_switches_the_web_page_on_for_every_agent_that_existed_and_ledgers_each(
+    before_0159: tuple[str, str],
+) -> None:
+    """**Nothing that answered stops answering.** Every agent written before `0159` runs, archived
+    included, gets one switch turning the web page on, by the migration and for the named reason,
+    and one `compose_change` entry about it naming the channels, the web page and the direction; an
+    agent written afterwards gets none; and every act already taken reads as on the web.
+
+    Delete this and an upgrade can leave every existing agent answering nowhere, switch them on
+    with nothing on the ledger, or switch on an agent made after it ran."""
+    name, url = before_0159
+    for agent_id in ("sales_desk", "help_desk", "old_desk"):
+        sql(url, AGENT_COLUMNS, agent_id, agent_id.replace("_", " ").title())
+    sql(url, "UPDATE agent.agent SET archived_at = now() WHERE id = 'old_desk'")
+
+    migrate(name, "upgrade", "head")
+    sql(url, AGENT_COLUMNS, "new_desk", "New desk")
+
+    switches = sql(
+        url,
+        "SELECT agent_id, channel, switched_on, changed_by, reason_code FROM agent.channel_switch"
+        " ORDER BY agent_id",
+    )
+    reason = "answered_on_the_web_before_channels_existed"
+    assert switches == [
+        (agent_id, "console", True, "migration.0159b", reason)
+        for agent_id in ("help_desk", "old_desk", "sales_desk")
+    ]
+    ledgered = entries(url, "compose_change")
+    assert sorted(
+        (one.actor_id, one.subject, dict(one.details)["part"], dict(one.details)["reference"])
+        for one in ledgered
+    ) == [
+        ("migration.0159b", f"agent:{agent_id}", "channels", "console")
+        for agent_id in ("help_desk", "old_desk", "sales_desk")
+    ]
+    assert {dict(one.details)["direction"] for one in ledgered} == {"attached"}
+    assert sql(
+        url,
+        "SELECT column_default FROM information_schema.columns"
+        " WHERE table_schema = 'agent' AND table_name = 'manifest_act'"
+        " AND column_name = 'on_the_web'",
+    ) == [("true",)]
+
+
+#: Far from any wall clock, for CLAUDE.md's reason.
+AT = datetime(2019, 3, 6, 9, 0, tzinfo=UTC)
+AUTHOR = "u_author"
+AUDIENCE = AgentAudience(level=Visibility.PERSONAL, owner_id=AUTHOR)
+
+
+def signed_as(template_id: str) -> SignedManifest:
+    """A template with nothing to answer, bind or reach, signed for this file alone."""
+    return publish(
+        TemplateManifest(
+            identity=ManifestIdentity(
+                template_id=template_id, version=1, published_by=AUTHOR, display_name="Desk"
+            ),
+            persona="Answers a channel switch test and nobody else.",
+            authority=ManifestAuthority(scope=Scope.unrestricted(), capabilities=()),
+        ),
+        key=SIGNING_KEY,
+        signed_by=AUTHOR,
+        at=AT,
+    )
+
+
+def made(signed: SignedManifest, agent_id: str) -> InstallDraft:
+    return install_draft(signed, agent_id=agent_id, maker_id=AUTHOR, display_name=None)
+
+
+@pytest.fixture
+def database() -> Iterator[str]:
+    with retirable(f"brain_channel_made_{uuid.uuid4().hex[:8]}") as url:
+        yield url
+
+
+def test_an_install_and_a_publish_switch_the_web_page_on_in_the_write_that_makes_the_agent(
+    database: str,
+) -> None:
+    """**M39.2.4.1 in the create flow, on PostgreSQL.** An install asked to switches the web page on
+    in its own transaction, in the installer's name, and one not asked to writes no switch; a draft
+    publish asked to does the same in the publisher's name. Each switch is one ledger entry.
+
+    Delete this and an agent made with the web page ticked answers nowhere, because the write the
+    route asked for was refused by the insert policy or never made."""
+    by = Attribution(actor_id=AUTHOR, ent_hash="e" * 32, trace_id="channel-switch-made")
+
+    async def go() -> None:
+        built = app_engine(database)
+        try:
+            sessions = make_session_factory(built)
+            installs = StoredAgentInstalls(sessions)
+            template = signed_as("desk_template")
+            for agent_id, web in (("installed_desk", True), ("quiet_desk", False)):
+                await installs.finish(
+                    made(template, agent_id),
+                    key=SIGNING_KEY,
+                    audience=AUDIENCE,
+                    registry=serving(()),
+                    tools=tools(),
+                    at=AT,
+                    ent_hash=by.ent_hash,
+                    trace_id=by.trace_id,
+                    on_the_web=web,
+                )
+            drafts = StoredAgentDrafts(sessions)
+            draft = AgentDraft(
+                draft=ManifestDraft(draft_id=str(uuid.uuid4()), owner_id=AUTHOR, created_at=AT),
+                agent_id="drafted_desk",
+                kind=DraftKind.NEW,
+                base_hash=None,
+            )
+            first = Revision(
+                draft_id=draft.draft_id,
+                number=FIRST_REVISION,
+                body="{}",
+                saved_by=AUTHOR,
+                saved_at=AT,
+            )
+            await drafts.start(draft, first, by=by)
+            done = Act(
+                revision=FIRST_REVISION,
+                act=DraftAct.PUBLISHED,
+                actor_id=AUTHOR,
+                at=AT,
+                on_the_web=True,
+            )
+            drafted = signed_as("drafted_desk")
+            installation = prepared(
+                made(drafted, "drafted_desk"),
+                key=SIGNING_KEY,
+                audience=AUDIENCE,
+                registry=serving(()),
+                tools=tools(),
+                at=AT,
+            )
+            written = await drafts.publish_new(
+                draft.draft_id,
+                (done,),
+                drafted,
+                installation,
+                by=by,
+                on_the_web=True,
+            )
+            assert written
+        finally:
+            await built.dispose()
+
+    run(go)
+
+    switches = sql(
+        database,
+        "SELECT agent_id, channel, switched_on, changed_by, reason_code FROM agent.channel_switch"
+        " WHERE changed_by = %s ORDER BY agent_id",
+        AUTHOR,
+    )
+    assert switches == [
+        ("drafted_desk", "console", True, AUTHOR, table_module.SWITCHED_ON_WHEN_PUBLISHED),
+        ("installed_desk", "console", True, AUTHOR, table_module.SWITCHED_ON_WHEN_MADE),
+    ]
+    assert sql(
+        database, "SELECT on_the_web FROM agent.manifest_act WHERE actor_id = %s", AUTHOR
+    ) == [(True,)]
+    ledgered = [one for one in entries(database, "compose_change") if one.actor_id == AUTHOR]
+    assert sorted((one.subject, dict(one.details)["part"]) for one in ledgered) == [
+        ("agent:drafted_desk", "channels"),
+        ("agent:installed_desk", "channels"),
+    ]

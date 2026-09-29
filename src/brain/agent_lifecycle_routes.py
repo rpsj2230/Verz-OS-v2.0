@@ -84,6 +84,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.agent_routes import TEMPLATE_SCREEN, _tool_registry, record_of, viewer_of
+from brain.agents.channel_switches import switched_on
 from brain.agents.creation import (
     AGENT_INSTALL_CAPABILITY,
     duplicate_draft,
@@ -127,10 +128,12 @@ from brain.core.errors import Absent, Failed
 from brain.core.principal import Principal
 from brain.gate.leash import Leash
 from brain.identity.principal_store import StoredPrincipals
+from brain.ops.channel_switch_store import switches_in
 from brain.prompt_routes import agent_scope_row, every_agent_with_install, installed, signed_of
 from brain.routing_routes import sessions_of
 from brain.tables.agent import AgentRow
 from brain.tables.audit import attributed_to
+from brain.tables.channel_switch import WEB_PAGE
 from brain.tables.template import TemplateVersionRow
 from brain.tools.registry import ToolRegistry
 
@@ -330,6 +333,8 @@ class TemplateInstallAsked(BaseModel):
     display_name: str | None = Field(default=None, max_length=DISPLAY_NAME_CHARS)
     expected_digest: str = Field(pattern=DIGEST)
     for_department: bool = False
+    #: Whether the new agent answers on the web page. Ticked on the page, and it can be unticked.
+    web: bool = True
 
 
 # ------------------------------------------------------------------------ the store
@@ -373,6 +378,7 @@ class AgentLifecycles(Protocol):
         ent_hash: str,
         trace_id: str,
         audience: AgentAudience,
+        on_the_web: bool = False,
     ) -> Finished: ...
 
 
@@ -472,6 +478,7 @@ class StoredAgentLifecycles:
         ent_hash: str,
         trace_id: str,
         audience: AgentAudience,
+        on_the_web: bool = False,
     ) -> Finished:
         return await StoredAgentInstalls(self._sessions).finish(
             draft,
@@ -482,7 +489,22 @@ class StoredAgentLifecycles:
             at=at,
             ent_hash=ent_hash,
             trace_id=trace_id,
+            on_the_web=on_the_web,
         )
+
+
+async def answers_on_the_web(request: Request, agent_id: str) -> bool:
+    """Whether this agent is switched on for the web page, which a duplicate of it copies.
+
+    A copy answers on the page when the agent it copies does, and on no chat: a chat channel is the
+    connector administrator's to switch, and making a copy is not that role. With no database, no.
+    """
+    factory = sessions_of(request)
+    if factory is None:
+        return False
+    async with factory() as session:
+        on = switched_on(await switches_in(session, (agent_id,)))
+    return WEB_PAGE in on.get(agent_id, frozenset())
 
 
 def lifecycles_of(request: Request) -> AgentLifecycles:
@@ -727,10 +749,12 @@ async def _create(
     for_department: bool,
     asked: Asking,
     source: AgentRecord | None,
+    on_the_web: bool,
 ) -> JSONResponse:
     """Make one agent from a draft, for a caller already admitted, or say why not.
 
     `draft_for` builds the draft from a minted id, so the id is minted here and nowhere else.
+    `on_the_web` switches the new agent on for the web page in the same write, in the maker's name.
     """
     key = template_key_of(request)
     if key is None:
@@ -770,6 +794,7 @@ async def _create(
             at=asked.now,
             ent_hash=asked.reach.ent_hash(),
             trace_id=_trace_id(),
+            on_the_web=on_the_web,
         )
     except (InstallStoreError, TemplateError) as refused:
         return _not_changed(REFUSED, str(refused))
@@ -827,6 +852,7 @@ async def duplicate_agent(
         for_department=body.for_department,
         asked=asked,
         source=found.record,
+        on_the_web=await answers_on_the_web(request, agent_id),
     )
 
 
@@ -901,4 +927,5 @@ async def install_version(
         for_department=body.for_department,
         asked=asked,
         source=None,
+        on_the_web=body.web,
     )

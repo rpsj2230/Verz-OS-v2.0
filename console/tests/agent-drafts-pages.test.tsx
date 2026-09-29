@@ -43,6 +43,7 @@ import {
   PROCEDURE_DESCRIPTION,
   PROCEDURE_NAME,
   PUBLISH_LABEL,
+  ON_THE_WEB_PAGE,
 } from "../src/pages/agents/DraftPage";
 import { ADD_WORDS } from "../src/components/ProcedureCanvas";
 import { ADDABLE_KINDS } from "../src/components/procedure";
@@ -427,10 +428,29 @@ describe("one draft", () => {
     fireEvent.click(button(PUBLISH_LABEL));
     await confirmIn(PUBLISH_QUESTION("Invoice helper"), PUBLISH_LABEL);
 
-    expect(posts(idp)).toEqual([{ path: `${DRAFT_API}/publish`, body: { revision: 2, for_department: true } }]);
+    expect(posts(idp)).toEqual([{ path: `${DRAFT_API}/publish`, body: { revision: 2, for_department: true, web: true } }]);
     await waitFor(() => {
       expect(document.body.textContent).toContain("It waits for a second person.");
     });
+  });
+
+  test("a new agent answers on the web page unless its author unticks it before publishing", async () => {
+    // What breaks if this is deleted: M39.2.4.1's create flow, where the web page is ticked where the
+    // author can see it and the untick is what the publish carries.
+    const { idp } = await consoleAt(draftAddress(DRAFT_ID, "publish"), {
+      [`GET ${DRAFT_API}`]: { body: aDraft({ state: "checked" }) },
+      [`POST ${DRAFT_API}/publish`]: {
+        status: 201,
+        body: { state: "published", agent_id: "invoice_helper_ab12cd", sentence: "Published.", widened: [] },
+      },
+    });
+    const web = screen.getByRole("checkbox", { name: ON_THE_WEB_PAGE });
+    expect((web as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(web);
+    fireEvent.click(button(PUBLISH_LABEL));
+    await confirmIn(PUBLISH_QUESTION("Invoice helper"), PUBLISH_LABEL);
+
+    expect(posts(idp)).toEqual([{ path: `${DRAFT_API}/publish`, body: { revision: 2, for_department: false, web: false } }]);
   });
 
   test("on an install that cannot publish, Publish is inert with the API's reason", async () => {

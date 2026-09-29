@@ -12,7 +12,7 @@ Task ids: M3.4.1, M3.5.2, M3.5.3, M3.9.8
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 
 import pytest
@@ -24,6 +24,7 @@ from brain.core.entitlement import Capability, Grant
 from brain.core.scope import Scope
 from brain.gate.answer_cache import AGE_MARKER
 from brain.gate.cache_key import CachedAnswer
+from brain.gate.context import Channel
 from brain.gate.finish import Finished
 from brain.gate.select import SelectionStage
 from brain.gate.streaming import STEP_LABELS, Progress
@@ -105,6 +106,30 @@ def roster_of(*records: AgentRecord) -> object:
         return records
 
     return read
+
+
+def channels_of(on: Mapping[str, frozenset[Channel]]) -> object:
+    """A channel reader answering from `on`, as `brain.agent_roster.agent_channels_for` does."""
+
+    async def read(agent_ids: Sequence[str]) -> Mapping[str, frozenset[Channel]]:
+        return {one: on[one] for one in agent_ids if one in on}
+
+    return read
+
+
+def answering(*records: AgentRecord, off_the_web: Sequence[str] = ()) -> dict[str, object]:
+    """The roster and its channel reader, every agent switched on for the web page but those named.
+
+    An agent named in `off_the_web` is switched on for a chat instead, so it answers somewhere and
+    not where these tests ask.
+    """
+    on = {
+        one.agent_id: frozenset({Channel.LARK})
+        if one.agent_id in off_the_web
+        else frozenset({Channel.CONSOLE})
+        for one in records
+    }
+    return {"agent_roster": roster_of(*records), "agent_channels": channels_of(on)}
 
 
 def ask(client: TestClient, question: str = QUESTION, *, who: str = READER, agent: str = "") -> str:
@@ -224,7 +249,7 @@ def test_a_person_addressing_an_agent_they_may_use_is_answered_by_that_agent(
     Delete this and the roster can go unread on `/answer`, so every name selects the default and
     the picker in the web application does nothing."""
     rows = Rows()
-    installed(client, request_recorders=(rows,), agent_roster=roster_of(an_agent("helper")))
+    installed(client, request_recorders=(rows,), **answering(an_agent("helper")))
     ask(client, agent="helper")
     (finished,) = rows.kept
     assert finished.front is not None
@@ -248,7 +273,7 @@ def test_an_agent_the_person_may_not_use_answers_as_one_that_does_not_exist(
     installed(
         client,
         request_recorders=(rows,),
-        agent_roster=roster_of(
+        **answering(
             an_agent("secret", level=Visibility.PERSONAL, owner_id="u_somebody_else"),
             an_agent("resting", disabled=True),
         ),
@@ -259,6 +284,56 @@ def test_an_agent_the_person_may_not_use_answers_as_one_that_does_not_exist(
     ]
     assert selections == [(SelectionStage.DEFAULT, "brain")] * 3
     assert texts(bodies[0]) == texts(bodies[1]) == texts(bodies[2])
+
+
+def test_an_agent_switched_off_on_this_channel_is_refused_as_one_the_person_may_not_use(
+    client: TestClient,
+) -> None:
+    """**M39.2.4.1 on `/answer`.** An agent switched on for a chat and not for the web page, asked
+    on the web page, falls to the default exactly as somebody else's personal agent and a name
+    nobody created do: the same selection and the same words.
+
+    Delete this and an agent answers on a channel nobody switched on for it, or is refused there in
+    words that tell a person it exists and answers elsewhere."""
+    rows = Rows()
+    installed(
+        client,
+        request_recorders=(rows,),
+        **answering(
+            an_agent("elsewhere"),
+            an_agent("secret", level=Visibility.PERSONAL, owner_id="u_somebody_else"),
+            off_the_web=("elsewhere",),
+        ),
+    )
+    bodies = [ask(client, agent=name) for name in ("elsewhere", "secret", "nobody")]
+    selections = [
+        (one.front.selection_stage, one.front.selected_agent) for one in rows.kept if one.front
+    ]
+    assert selections == [(SelectionStage.DEFAULT, "brain")] * 3
+    assert texts(bodies[0]) == texts(bodies[1]) == texts(bodies[2])
+
+
+def test_an_agent_switched_on_for_the_web_page_is_answered_there_and_nothing_else_is(
+    client: TestClient, transport: Scripted
+) -> None:
+    """The positive half: the same agent switched on for the web page is selected when named. And
+    a process holding a roster and no channel reader keeps no stored agent at all, because an
+    agent nothing says is switched on is off.
+
+    Delete this and every refusal above is satisfied by a roster that drops every agent, or a
+    process built without the reader answers through every agent on every channel."""
+    rows = Rows()
+    installed(client, request_recorders=(rows,), **answering(an_agent("elsewhere")))
+    ask(client, agent="elsewhere")
+    installed(client, agent_channels=None)
+    ask(client, agent="elsewhere")
+    selections = [
+        (one.front.selection_stage, one.front.selected_agent) for one in rows.kept if one.front
+    ]
+    assert selections == [
+        (SelectionStage.ADDRESSED, "elsewhere"),
+        (SelectionStage.DEFAULT, "brain"),
+    ]
 
 
 def test_a_named_agent_answers_at_the_callers_reach_narrowed_by_its_ceiling(
@@ -273,7 +348,7 @@ def test_a_named_agent_answers_at_the_callers_reach_narrowed_by_its_ceiling(
     installed(
         client,
         passage_search=search,
-        agent_roster=roster_of(an_agent("blind", capabilities=()), an_agent("helper")),
+        **answering(an_agent("blind", capabilities=()), an_agent("helper")),
     )
     ask(client, agent="blind")
     assert transport.sent == []
@@ -290,7 +365,7 @@ def test_an_answer_through_one_agent_is_not_served_through_another(
     because the agent's configuration hash is in the key.
 
     Delete this and an answer computed at one agent's reach is served through another's."""
-    installed(client, answer_store=Memory(), agent_roster=roster_of(an_agent("helper")))
+    installed(client, answer_store=Memory(), **answering(an_agent("helper")))
     ask(client, agent=agent)
     ask(client, agent="helper" if not agent else "")
     assert len(transport.sent) == 2

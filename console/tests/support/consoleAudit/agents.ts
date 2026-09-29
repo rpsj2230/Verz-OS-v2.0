@@ -19,6 +19,7 @@ import { memoryDeletionApiPath, memoryEditApiPath } from "../../../src/pages/age
 import { artifactArchiveApiPath, artifactSupersedeApiPath } from "../../../src/pages/agents/agentArtifactsQuery";
 import { leashMoveApiPath, supervisionApiPath } from "../../../src/pages/agents/agentLeashQuery";
 import { agentAttachmentsApiPath } from "../../../src/pages/agents/AgentTools";
+import { agentChannelsApiPath } from "../../../src/pages/agents/AgentChannels";
 import { UNDO_API_PATH } from "../../../src/pages/learningQuery";
 import { agentPreviewApiPath, skillAssignApiPath, skillDetachApiPath } from "../../../src/pages/agents/agentCapabilitiesQuery";
 import { agentMoveApiPath } from "../../../src/pages/agentLifecycleQuery";
@@ -70,6 +71,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   ],
   "src/pages/agents/AgentTools.tsx agentAttachmentsApiPath(agentId)": [
     at("POST /api/v1/agents/{agent_id}/attachments", "agentAttachmentsApiPath", agentAttachmentsApiPath("quote-helper")),
+  ],
+  "src/pages/agents/AgentChannels.tsx agentChannelsApiPath(agentId)": [
+    at("POST /api/v1/agents/{agent_id}/channels", "agentChannelsApiPath", agentChannelsApiPath("quote-helper")),
   ],
   "src/pages/agents/AgentLeash.tsx leashMoveApiPath(agentId)": [
     at("POST /api/v1/agents/{agent_id}/leash/moves", "leashMoveApiPath", leashMoveApiPath("quote-helper")),
@@ -195,7 +199,20 @@ const TOOLS_PRESSED = t(
   true,
 );
 
+/** A channel switched on and off over HTTP against PostgreSQL, each on the ledger, and the answer
+ * route's readers asked which agents a question keeps after each. */
+const CHANNELS_SWITCHED = t(
+  "test_agent_channel_routes",
+  "test_an_agents_channels_are_switched_by_the_connector_role_and_a_question_keeps_only_those",
+  true,
+);
+
 export const PROOFS: Readonly<Record<string, Proofs>> = {
+  "POST /api/v1/agents/{agent_id}/channels": {
+    row: CHANNELS_SWITCHED,
+    audit: CHANNELS_SWITCHED,
+    behaviour: CHANNELS_SWITCHED,
+  },
   "POST /api/v1/agents/{agent_id}/attachments": {
     row: TOOLS_PRESSED,
     audit: TOOLS_PRESSED,

@@ -14,8 +14,9 @@
  * the hand-over through the page's confirmed lifecycle act); adding a source and changing permissions
  * are changes to the agent's manifest, so each starts a draft of the agent through the page's
  * confirmed Edit as a draft. A rung is changed, and supervision pinned and reviewed, in the leash
- * block (`AgentLeash.tsx`) for a holder of the leash role. Choosing channels, changing who can find
- * it and browser use have no route and are `UnavailableAction`s with `agentActions.ts`' sentences.
+ * block (`AgentLeash.tsx`) for a holder of the leash role, and channels are switched in the channels
+ * block (`AgentChannels.tsx`) for a holder of the connector role. Changing who can find it and browser
+ * use have no route and are `UnavailableAction`s with `agentActions.ts`' sentences.
  * Computer use is a sentence, because the product has nothing behind a switch.
  *
  * **Identifiers are in the Advanced section.** The agent's slug, the steward's and builder's
@@ -49,6 +50,7 @@ import type { AgentCapabilities } from "./agentCapabilitiesQuery";
 import type { ChannelOffer, ConnectorStrip, SkillPin } from "../agentQuery";
 import { LEVEL_WORDS, RUNGS_EXPLAINED, TIER_WORDS, UNAVAILABLE, WORKS_AT } from "./agentActions";
 import { leashRowId, type HeaderFacts, type ProfileShown } from "./agentDetailQuery";
+import { AgentChannels } from "./AgentChannels";
 import { AgentLeash } from "./AgentLeash";
 import { AgentTools } from "./AgentTools";
 import { LeashPill } from "./pills";
@@ -103,7 +105,6 @@ function Capabilities({
   agentId,
   connectors,
   skills,
-  channels,
   details,
   onDetailsChanged,
   onEditDraft,
@@ -111,15 +112,11 @@ function Capabilities({
   readonly agentId: string;
   readonly connectors: ConnectorStrip;
   readonly skills: readonly SkillPin[];
-  readonly channels: readonly ChannelOffer[];
   readonly details: AgentCapabilities | null;
   readonly onDetailsChanged: () => void;
   readonly onEditDraft?: (() => void) | undefined;
 }) {
-  const detailed = details !== null && (details.connectors.length > 0 || details.skills.length > 0 || details.offers.length > 0);
-  if (!detailed && connectors.shown.length === 0 && skills.length === 0 && channels.length === 0) {
-    return null;
-  }
+  // Never absent: the web page is a channel of every agent, so the Channels row always has a row.
   return (
     <SectionCard title={CAPABILITIES_HEADING} lede="What this agent is built from. Each is a reviewed item it refers to, never a copy.">
       {details !== null && details.connectors.length > 0 ? (
@@ -206,20 +203,13 @@ function Capabilities({
           ))}
         </CapabilityRow>
       )}
-      {channels.length === 0 ? null : (
-        <CapabilityRow
-          icon={<Radio aria-hidden />}
-          label="Channels"
-          add={<UnavailableAction size="icon-sm" icon={<span aria-hidden>+</span>} label="Choose where this agent answers" reason={UNAVAILABLE.chatGroup.reason} />}
-          note={<Note>The chats and email that could carry this agent's answers to you, not the ones switched on.</Note>}
-        >
-          {channels.map((one) => (
-            <Chip key={one.channel} mono>
-              {one.channel} <span className="text-dim">as {one.profile}</span>
-            </Chip>
-          ))}
-        </CapabilityRow>
-      )}
+      <CapabilityRow
+        icon={<Radio aria-hidden />}
+        label="Channels"
+        note={<Note>Where this agent answers. An agent answers only where it is switched on, and only to people who may use it.</Note>}
+      >
+        <AgentChannels agentId={agentId} />
+      </CapabilityRow>
     </SectionCard>
   );
 }
@@ -481,7 +471,6 @@ export function AgentProfile({
   choice,
   connectors,
   skills,
-  channels,
   composition,
   divergent,
   details,
@@ -495,6 +484,7 @@ export function AgentProfile({
   readonly choice: ModelChoice | null;
   readonly connectors: ConnectorStrip;
   readonly skills: readonly SkillPin[];
+  /** The surfaces the workspace offered. The channels block reads its own route, which says which are on. */
   readonly channels: readonly ChannelOffer[];
   readonly composition: readonly DiffRow[];
   readonly divergent: readonly string[];
@@ -515,7 +505,6 @@ export function AgentProfile({
             agentId={agent.agentId}
             connectors={connectors}
             skills={skills}
-            channels={channels}
             details={details}
             onDetailsChanged={onDetailsChanged}
             onEditDraft={onEditDraft}

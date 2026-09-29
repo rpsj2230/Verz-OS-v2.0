@@ -52,7 +52,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from brain.agent_roster import agent_roster_for
+from brain.agent_roster import agent_channels_for, agent_roster_for
 from brain.api import (
     ErrorBody,
     FailureBodyMiddleware,
@@ -535,6 +535,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     # The stored agents `/answer` may select from, read once per question (M3.9.8).
     app.state.agent_roster = agent_roster_for(app.state.db_sessions)
+    app.state.agent_channels = agent_channels_for(app.state.db_sessions)
     # The model driver, assembled once over this install's database: a driver per provider this
     # product can reach, sharing one HTTP client this lifespan closes. Which rungs answer is read
     # per call from the ladder, the provider switches and the keys this process holds, so a

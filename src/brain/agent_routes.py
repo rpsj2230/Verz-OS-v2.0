@@ -113,11 +113,11 @@ list the strip's `shown` is the head of and its `overflow` counts the tail of, s
 "N more" opens the reader's own rows and never a row the strip did not already count. See
 `brain.console.workspace_capabilities.AN_OVERFLOW_COUNTS_WHAT_IS_OFF_THE_ROW_AND_NEVER_WHAT_IS_OUT_OF_REACH`.
 
-**Four things SCREEN 13 and SCREEN 4 ask for are absent rather than guessed, and each is
-absent because nothing stores it.** A channel row says which surfaces a run could be carried
-on and never whether the install has one switched on, because no table holds a per-agent
-channel enablement and a row reading "not enabled" would be an assertion nobody measured. A
-connector row carries no health, because this route probes nothing and
+**Four things SCREEN 13 and SCREEN 4 ask for are absent here rather than guessed.** A channel
+row says which surfaces a run could be carried on and never whether the install has one
+switched on: since `0159` that is stored, and `brain.agent_channel_routes` answers it from the
+switches for the Profile's channels block, so a row here reading "not enabled" would be a second
+answer read from nothing. A connector row carries no health, because this route probes nothing and
 `AN_UNPROBED_CONNECTOR_IS_NOT_A_HEALTHY_ONE` is exactly that rule. A skill chip carries no
 review state, because the approved library has no table and a chip reading approved for a
 skill nobody can read is worse than no chip. And the headline carries spend and runs and no
@@ -631,9 +631,9 @@ class ConnectorStripView(BaseModel):
 class ChannelView(BaseModel):
     """One surface a run of this agent could be carried on, and how it would be laid out.
 
-    There is no `enabled` field. See `A_FIGURE_NOTHING_STORES_IS_ABSENT_AND_NEVER_NOUGHT`:
-    nothing stores a per-agent channel enablement, and a row reading not enabled would be an
-    assertion nobody measured, drawn beside rows that are measurements.
+    There is no `enabled` field. See `A_FIGURE_NOTHING_STORES_IS_ABSENT_AND_NEVER_NOUGHT`: this
+    route reads no switch, and whether a surface is switched on is `brain.agent_channel_routes`'
+    answer, read from `agent.channel_switch`.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -1253,8 +1253,8 @@ def channel_views(record: AgentRecord, asked: Asking) -> tuple[ChannelView, ...]
     A_CHANNEL_OFFERED_AT_THE_CEILING_DESCRIBES_THE_CEILING`: the ceiling's sensitivity is a
     fact about the agent and not about the person reading the page.
 
-    No row says whether the install has a surface switched on. See
-    `A_FIGURE_NOTHING_STORES_IS_ABSENT_AND_NEVER_NOUGHT`.
+    No row says whether the install has a surface switched on: that is
+    `brain.agent_channel_routes`' answer. See `A_FIGURE_NOTHING_STORES_IS_ABSENT_AND_NEVER_NOUGHT`.
     """
     return tuple(
         ChannelView(channel=one.channel.value, profile=rendering_profile(one).value)

@@ -516,10 +516,10 @@ describe("the Profile", () => {
     // `agentActions.ts`, and pressing any of them leaves the address and the requests as they were.
     const mounted = await consoleAt("/agents/quote-helper/profile", agentAnswers("quote-helper", body()));
     const inert = [...mounted.container.querySelectorAll<HTMLButtonElement>(`[${UNAVAILABLE_MARK}]`)];
-    // Three since 2026-09-29: adding a source and changing permissions start a draft of the agent
-    // now, a preview as a person is asked of its own route, and a rung is changed in the leash
-    // block, so none of the four is among these.
-    expect(inert.length).toBeGreaterThanOrEqual(3);
+    // Two since 2026-09-29: adding a source and changing permissions start a draft of the agent
+    // now, a preview as a person is asked of its own route, a rung is changed in the leash block,
+    // and channels are switched in the channels block, so none of the five is among these.
+    expect(inert.length).toBeGreaterThanOrEqual(2);
     const permissions = [...mounted.container.querySelectorAll<HTMLButtonElement>("button")].find(
       (one) => one.textContent === "Change permissions",
     );

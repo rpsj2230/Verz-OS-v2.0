@@ -239,6 +239,7 @@ class Made:
     finished: Finished
     maker_id: str
     ent_hash: str
+    on_the_web: bool = False
 
 
 @dataclass
@@ -293,6 +294,7 @@ class Memory:
         ent_hash: str,
         trace_id: str,
         audience: AgentAudience,
+        on_the_web: bool = False,
     ) -> Finished:
         installation = prepared(
             draft, key=key, audience=audience, registry=registry, tools=tools, at=at
@@ -306,7 +308,7 @@ class Memory:
             effective_hash=installation.effective.config_hash,
         )
         finished = Finished(installation=installation, created=True)
-        self.made.append(Made(finished, draft.installer, ent_hash))
+        self.made.append(Made(finished, draft.installer, ent_hash, on_the_web))
         return finished
 
 
@@ -742,6 +744,27 @@ def test_an_installed_version_starts_disabled_and_at_shadow_on_every_target(
     }
     assert re.fullmatch(r"invoice_desk_[0-9a-f]{6}", record.agent_id)
     assert made.maker_id == "u_admin"
+
+
+def test_an_installed_agent_answers_on_the_web_page_unless_the_installer_unticks_it(
+    console: Console,
+) -> None:
+    """**M39.2.4.1 in the install flow.** An install that says nothing switches the web page on,
+    as the page's ticked box does, and one sent with it unticked switches nothing on.
+
+    Delete this and every installed agent answers nowhere until somebody finds its switch, or an
+    untick is ignored and the agent answers on the page to everybody who can see it."""
+    version = console.get(
+        "u_admin", path(VERSION_PATH, template_id=TEMPLATE_ID, version=VERSION)
+    ).json()
+    install = path(INSTALL_PATH, template_id=TEMPLATE_ID, version=VERSION)
+    ticked = console.post("u_admin", install, {"expected_digest": version["content_digest"]})
+    unticked = console.post(
+        "u_admin", install, {"expected_digest": version["content_digest"], "web": False}
+    )
+
+    assert (ticked.status_code, unticked.status_code) == (201, 201)
+    assert [one.on_the_web for one in console.memory.made] == [True, False]
 
 
 def test_a_version_whose_leash_starts_above_shadow_is_unavailable_and_installs_nothing(

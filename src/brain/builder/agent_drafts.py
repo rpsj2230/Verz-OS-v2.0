@@ -181,6 +181,9 @@ class Act:
     widened: bool = False
     #: For a new agent: seen by the author's department rather than the author alone.
     for_department: bool = False
+    #: For a new agent: switched on for the web page when it is made. False unless an act says so,
+    #: so a caller that forgets switches nothing on.
+    on_the_web: bool = False
 
 
 @dataclass(frozen=True)

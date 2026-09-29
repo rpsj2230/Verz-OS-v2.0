@@ -155,6 +155,10 @@ export const OPEN_THE_AGENT = "Open the agent";
 export const SOMETHING_DID_NOT_WORK = "Something did not work";
 export const NOTHING_CHANGED = "Nothing was changed";
 export const SAVE_LABEL = "Save";
+export const WHERE_IT_ANSWERS = "Where it answers";
+export const WHERE_IT_ANSWERS_HINT =
+  "An agent answers only where it is switched on. Chats are switched on from its page by the connector administrator.";
+export const ON_THE_WEB_PAGE = "On the web page";
 
 /** One act a person asked for, waiting for its confirmation. */
 type Pending =
@@ -187,14 +191,14 @@ function questionFor(pending: Pending, draft: Draft): { question: string; conseq
   }
 }
 
-function bodyFor(pending: Pending, draft: Draft, forDepartment: boolean): Record<string, unknown> {
+function bodyFor(pending: Pending, draft: Draft, forDepartment: boolean, web: boolean): Record<string, unknown> {
   switch (pending.verb) {
     case "revisions":
       return { document: withSection(draft.document, pending.data), base: draft.revision };
     case "procedure":
       return { drawing: pending.drawing, name: pending.name.trim(), description: pending.description.trim() };
     case "publish":
-      return { revision: draft.revision, for_department: forDepartment };
+      return { revision: draft.revision, for_department: forDepartment, web };
     default:
       return { revision: draft.revision };
   }
@@ -386,9 +390,11 @@ function DraftAnswer({ draftId, step }: { readonly draftId: string; readonly ste
   const [skillWhen, setSkillWhen] = useState("");
   const [tried, setTried] = useState(false);
   const [forDepartment, setForDepartment] = useState(false);
+  const [web, setWeb] = useState(true);
   const nameId = useId();
   const whenId = useId();
   const audienceId = useId();
+  const channelsId = useId();
 
   const ask = useCallback((next: Pending) => {
     setRefused(null);
@@ -405,7 +411,7 @@ function DraftAnswer({ draftId, step }: { readonly draftId: string; readonly ste
       const verb: DraftVerb = chosen.verb;
       const result = await request<unknown>(draftActApiPath(draftId, verb), {
         method: "POST",
-        body: bodyFor(chosen, draft, forDepartment),
+        body: bodyFor(chosen, draft, forDepartment, web),
       });
       setSending(false);
       setPending(null);
@@ -673,6 +679,25 @@ function DraftAnswer({ draftId, step }: { readonly draftId: string; readonly ste
                       }}
                     />
                     {MY_DEPARTMENT}
+                  </label>
+                </fieldset>
+              )}
+              {draft.kind !== "new" ? null : (
+                <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0" aria-describedby={channelsId}>
+                  <legend className="text-sm font-medium text-ink">{WHERE_IT_ANSWERS}</legend>
+                  <p id={channelsId} className="m-0 text-[12px] text-dim">
+                    {WHERE_IT_ANSWERS_HINT}
+                  </p>
+                  <label className="flex min-h-11 items-center gap-2 text-sm sm:min-h-8">
+                    <input
+                      type="checkbox"
+                      name="draft-web"
+                      checked={web}
+                      onChange={(event) => {
+                        setWeb(event.target.checked);
+                      }}
+                    />
+                    {ON_THE_WEB_PAGE}
                   </label>
                 </fieldset>
               )}

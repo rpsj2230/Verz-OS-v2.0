@@ -53,6 +53,7 @@ from brain.identity.principal_store import PRINCIPAL_SETTING, StoredPrincipals
 from brain.prompt_routes import every_agent_with_install, installed, signed_of
 from brain.tables.agent import AgentRow
 from brain.tables.audit import attributed_to
+from brain.tables.channel_switch import SWITCHED_ON_WHEN_PUBLISHED, WEB_PAGE, switch_row
 from brain.tables.manifest_draft import ManifestActRow, ManifestDraftRow, ManifestRevisionRow
 from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
 
@@ -109,6 +110,7 @@ class AgentDraftStore(Protocol):
         installation: Installation,
         *,
         by: Attribution,
+        on_the_web: bool = False,
     ) -> bool: ...
 
     async def publish_edit(
@@ -147,6 +149,7 @@ def act_of(row: ManifestActRow) -> Act:
         at=row.at,
         widened=row.widened,
         for_department=row.for_department,
+        on_the_web=row.on_the_web,
     )
 
 
@@ -174,6 +177,7 @@ def act_values(draft_id: str, act: Act) -> dict[str, Any]:
         "widened": act.widened,
         "for_department": act.for_department,
         "at": act.at,
+        "on_the_web": act.on_the_web,
     }
 
 
@@ -361,8 +365,13 @@ class StoredAgentDrafts:
         installation: Installation,
         *,
         by: Attribution,
+        on_the_web: bool = False,
     ) -> bool:
-        """The version, the instance, the agent and the acts, or nothing and False."""
+        """The version, the instance, the agent and the acts, or nothing and False.
+
+        With `on_the_web`, the agent is switched on for the web page in the same transaction, in
+        the publisher's name, so an agent is never made without the switch its publisher asked for.
+        """
         try:
             async with self._sessions() as session, session.begin():
                 await _acting(session, by)
@@ -381,6 +390,19 @@ class StoredAgentDrafts:
                 for act in acts:
                     await session.execute(
                         insert(ManifestActRow).values(**act_values(draft_id, act))
+                    )
+                if on_the_web:
+                    session.add(
+                        switch_row(
+                            agent_id=installation.record.agent_id,
+                            channel=WEB_PAGE,
+                            switched_on=True,
+                            by=by.actor_id,
+                            reason_code=SWITCHED_ON_WHEN_PUBLISHED,
+                            ent_hash=by.ent_hash,
+                            trace_id=by.trace_id,
+                            at=max((one.at for one in acts), default=None),
+                        )
                     )
         except _MovedError:
             return False
