@@ -389,6 +389,26 @@ const PROGRESS = {
     why: "live since d6290cb; a DeepSeek key was replaced on the install on 28 Sep, and the proof is that provider answering with it without a redeploy, once the worker fix of 2026-09-28 deploys (needs-rupash 98)",
     updated: "2026-09-28",
   },
+  "M32.1.1.1": {
+    status: "BLOCKED",
+    why: "waits on memory for Langfuse: 2,048 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-30 (needs-rupash 120, row 3)",
+    updated: "2026-09-30",
+  },
+  "M32.1.1.2": {
+    status: "BLOCKED",
+    why: "waits on memory for Langfuse: 2,048 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-30 (needs-rupash 120, row 3)",
+    updated: "2026-09-30",
+  },
+  "M32.2.1.1": {
+    status: "BLOCKED",
+    why: "waits on memory for the personal-data detector: 1,536 MB wanted, 248 MB unclaimed on the shared host, measured 2026-09-30 (needs-rupash 120, row 1)",
+    updated: "2026-09-30",
+  },
+  "M32.2.1.2": {
+    status: "BLOCKED",
+    why: "waits on memory for the model server that serves GLiNER: 3,840 MB wanted with its worker and file store, 248 MB unclaimed, measured 2026-09-30 (needs-rupash 120, row 2)",
+    updated: "2026-09-30",
+  },
   "M38.2.1.1": {
     status: "READY FOR TESTING",
     why: "WAVE_RECORDS and /build/waves are live on staging; proved when the first wave is accepted and recorded",
