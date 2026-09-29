@@ -1197,6 +1197,35 @@ def operation_for(endpoint: Endpoint, *, domain: str) -> RestOperation:
     )
 
 
+#: What one ticket read live carries: the projected fields, the record id, and the ticket's body in
+#: plain text. Read while somebody waits and never kept: `FETCHED_LIVE_INSTEAD` names why the body
+#: is never projected, and `ticket_projection` does not name it, so `kept_fields` could not keep it
+#: if something tried.
+LIVE_BODY_FIELD: Final = "description_text"
+TICKET_LIVE_MAPPING: Final[tuple[FieldMapping, ...]] = (*TICKET_MAPPING, *_mapping(LIVE_BODY_FIELD))
+
+
+def live_ticket_operation(*, domain: str) -> RestOperation:
+    """One ticket by its id, with its body, for a live read (M11.6.2, M11.9.2).
+
+    The one-ticket endpoint and not the list, because the list names no ticket by id and carries
+    no body. Its mapping is the ticket's plus the body, and it is not part of the manifest: a live
+    read keeps nothing, so a connection agreed before this read existed is not asked to agree
+    again. See `brain.connectors.declaration.A_RECORD_IS_READ_BY_THE_CALL_THAT_HOLDS_IT`.
+    """
+    shape = shape_for(Endpoint.GET_TICKET)
+    return RestOperation(
+        base_url=f"https://{domain}",
+        operation=shape.spec,
+        transport=RestTransport(
+            spec_ref=SPEC_REF,
+            operation=shape.spec.operation_id,
+            entity=TICKET,
+            fields=TICKET_LIVE_MAPPING,
+        ),
+    )
+
+
 # --------------------------------------------------------------------- the connection
 #: The two settings a connection is made with, named once for the form, the reading and tests.
 DOMAIN_SETTING: Final = "domain"
@@ -1482,6 +1511,43 @@ class FreshdeskReading:
             raise ConnectorContractError(msg)
 
 
+#: What a Freshdesk ticket id is: digits, as the helpdesk issues them.
+TICKET_ID: Final = re.compile(r"^[0-9]{1,20}$")
+
+
+class FreshdeskLiveLookup:
+    """One ticket, with its body, read from the helpdesk while somebody waits (M11.6.2, M11.9.2).
+
+    The service's credentials, declared: a connection holds one agent's API key, and no person's
+    own Freshdesk key is held for a read to run under.
+    """
+
+    def entities(self) -> tuple[str, ...]:
+        return (TICKET,)
+
+    def identity_mode(self, entity: str) -> IdentityMode:
+        del entity
+        return IdentityMode.SERVICE
+
+    def arguments_for(self, entity: str, source_id: str) -> Mapping[str, str]:
+        FreshdeskReading._assert_ticket(entity)
+        if not TICKET_ID.match(source_id):
+            msg = (
+                "a ticket id laid into the helpdesk's address is digits, and this one is not; it "
+                "is refused rather than escaped"
+            )
+            raise ConnectorContractError(msg)
+        return MappingProxyType({"id": source_id})
+
+    def operation(
+        self, entity: str, *, settings: Mapping[str, str], resolver: Resolver
+    ) -> RestOperation | None:
+        del resolver  # checked when the address is prepared
+        FreshdeskReading._assert_ticket(entity)
+        connection = FreshdeskConnection.from_settings(settings)
+        return live_ticket_operation(domain=connection.domain)
+
+
 def built_from_the_console(settings: Mapping[str, str], ref: SecretRef) -> ConnectorManifest:
     """The manifest a connection made on the Connectors screen declares."""
     connection = FreshdeskConnection.from_settings(settings)
@@ -1549,4 +1615,5 @@ CONNECTOR: Final = ConnectorDeclaration(
     ),
     recorded=Recorded(tested=True),
     reading=FreshdeskReading(),
+    live=FreshdeskLiveLookup(),
 )

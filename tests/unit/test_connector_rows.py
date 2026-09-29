@@ -51,15 +51,18 @@ def test_every_field_xero_classifies_is_classified_by_the_capability_xero_names(
         assert compiled == declared
 
 
-def test_every_field_freshdesk_keeps_is_classified_behind_its_own_capability() -> None:
-    """Held against the fields the Freshdesk index keeps. Delete this and a field the index keeps
-    can go unclassified, withheld from everybody with nothing saying why, or a new one can be
-    answered under the row's capability alone."""
+def test_every_field_freshdesk_keeps_or_reads_live_is_classified_behind_its_own_capability() -> (
+    None
+):
+    """Held against the fields the Freshdesk index keeps and the body its live read returns. Delete
+    this and a field can go unclassified, withheld from everybody with nothing saying why, or the
+    ticket's body can be answered under the row's capability alone."""
     [ticket] = freshdesk_classifications()
     kept = set(freshdesk.projected_field_names())
     columns = {rule.column: rule.required_capability.value for rule in ticket.rules}
-    assert set(columns) == kept | {SCOPED_BY[freshdesk.FRESHDESK]}
-    for name in kept:
+    read = kept | {freshdesk.LIVE_BODY_FIELD}
+    assert set(columns) == read | {SCOPED_BY[freshdesk.FRESHDESK]}
+    for name in read:
         assert columns[name] == f"read:ticket.{name}"
 
 

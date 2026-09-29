@@ -278,6 +278,15 @@ class SourceReading(Protocol):
 
 
 # ------------------------------------------------------------------ reading one record live
+#: Why a live lookup may name an operation of its own.
+A_RECORD_IS_READ_BY_THE_CALL_THAT_HOLDS_IT: Final = (
+    "A record is read live by the source's own call for one record where the source has one and "
+    "its list cannot be narrowed to one id, or does not carry what a question asks for. The "
+    "reading's interpretation of the reply is still the one used, so a record read live and a "
+    "page read on a schedule are understood the same way; only the address differs."
+)
+
+
 class LiveLookup(Protocol):
     """How one record an index row names is read from the source while somebody waits (M11.9.2).
 
@@ -301,11 +310,23 @@ class LiveLookup(Protocol):
         ...
 
     def arguments_for(self, entity: str, source_id: str) -> Mapping[str, str]:
-        """The list operation's arguments narrowed to the one record with this id.
+        """The arguments that name the one record with this id.
 
-        Raises for an id that is not the shape the source issues, because an id is laid into the
-        source's own query language, and a value that could change the query is refused here
-        rather than escaped.
+        The list operation's, narrowed, where `operation` answers None; otherwise the arguments
+        of the operation it answers. Raises for an id that is not the shape the source issues,
+        because an id is laid into the source's own query language or address, and a value that
+        could change either is refused here rather than escaped.
+        """
+        ...
+
+    def operation(
+        self, entity: str, *, settings: Mapping[str, str], resolver: Resolver
+    ) -> RestOperation | None:
+        """The operation one record is read by, or None to narrow the reading's list operation.
+
+        Its own operation where the list cannot be narrowed to one record, or does not carry the
+        values a question asks for: a helpdesk's ticket list names no ticket by id and carries no
+        body, and its one-ticket read does both. See `A_RECORD_IS_READ_BY_THE_CALL_THAT_HOLDS_IT`.
         """
         ...
 

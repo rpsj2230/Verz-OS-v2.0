@@ -613,6 +613,7 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.connectors.declaration:LiveLookup.entities": Repeat.READS,
         "brain.connectors.declaration:LiveLookup.identity_mode": Repeat.READS,
         "brain.connectors.declaration:LiveLookup.arguments_for": Repeat.READS,
+        "brain.connectors.declaration:LiveLookup.operation": Repeat.READS,
         "brain.connectors.live_read:LiveSources.reads": Repeat.READS,
         "brain.connectors.live_read:LiveSources.source_for": Repeat.READS,
         "brain.gate.live_records:LiveRecords.refresh": Repeat.READS,
