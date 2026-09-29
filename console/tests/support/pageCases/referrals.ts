@@ -27,6 +27,7 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
             handled_by: null,
           },
         ],
+        people: { [UNBROKEN]: UNBROKEN },
       },
     },
   },
