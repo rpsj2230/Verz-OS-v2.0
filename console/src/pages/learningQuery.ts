@@ -65,6 +65,27 @@ export function undoBody(memoryId: string): { readonly memory_id: string } {
 /** The console address, at the screen's own key in `brain.console.screens`. */
 export const LEARNING_PATH = "/learning";
 
+/** The views of the Learning page, in order: one per tier, then how the tiers work. */
+export const LEARNING_VIEWS = ["applied", "shadow", "waiting", "about"] as const;
+export type LearningView = (typeof LEARNING_VIEWS)[number];
+
+export const LEARNING_VIEW_LABELS: Readonly<Record<LearningView, string>> = Object.freeze({
+  applied: "Applied",
+  shadow: "Shadow",
+  waiting: "Waiting",
+  about: "About",
+});
+
+/** The console address of one view. The first is the bare address. */
+export function learningAddress(view: LearningView = "applied"): string {
+  return view === "applied" ? LEARNING_PATH : `${LEARNING_PATH}/${view}`;
+}
+
+/** The view an address segment names, or the first for anything else. */
+export function learningViewNamed(segment: string | undefined): LearningView {
+  return LEARNING_VIEWS.find((one) => one === segment) ?? "applied";
+}
+
 /** The window the design's first figure covers. */
 export const RECENT_DAYS = 7;
 

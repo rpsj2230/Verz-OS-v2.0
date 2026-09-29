@@ -11,7 +11,7 @@ import { CHECKS_API_PATH } from "../../../src/pages/requirementChecksQuery";
 import { at, type Proofs, t, type WriteRoute } from "../auditClaims";
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
-  "src/pages/RequirementChecks.tsx CHECKS_API_PATH": [
+  "src/pages/requirement-checks/RecordDrawer.tsx CHECKS_API_PATH": [
     at("POST /api/v1/requirements/checks", "CHECKS_API_PATH", CHECKS_API_PATH),
   ],
 };

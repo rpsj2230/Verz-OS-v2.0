@@ -28,6 +28,14 @@ does not carry**, because a check against nothing is a check nobody can read bac
 names an id a later release retired stays in the table, for `brain.tables.requirement_check`'s
 reason, and drops off this screen, which lists the register's rows and has no row to show it by.
 
+**Each requirement carries its proof leaves and what the install's own acceptance checks said
+about them**, so a person can see in seconds whether a row already has evidence before checking it
+by hand. The evidence is `/api/acceptance.json`'s newest run for the release this serves, read by
+the same function (`brain.acceptance_routes.newest_rows`), narrowed to the checks whose leaves meet
+the row's proof leaves. It is product data about this release, as public as that page, and it never
+records a check: only a person's sentence does that. Rejected: the console fetching the public page
+itself and matching leaves, which would be a second place deciding which check proves which row.
+
 Task ids: M1.8.8, M2.3.2, M5.6.5, M24.3.6
 """
 
@@ -38,7 +46,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated, Final, Protocol, runtime_checkable
+from typing import Annotated, Any, Final, Literal, Protocol, runtime_checkable
 
 import structlog
 from fastapi import APIRouter, Query, Request
@@ -47,10 +55,12 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from brain.acceptance_routes import newest_rows
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.errors import Absent, Failed
+from brain.ops.acceptance import Check, registered, served
 from brain.requirements import REGISTER_IN_DOCS, Register, Requirement, load_register
 from brain.routing_routes import sessions_of
 from brain.tables.requirement_check import (
@@ -110,8 +120,28 @@ class RequirementCheckView(BaseModel):
     note: str
 
 
+#: What an acceptance check came to, in `brain.ops.post_deploy`'s three words.
+AcceptanceOutcome = Literal["passed", "failed", "not run"]
+
+
+class AcceptanceEvidenceView(BaseModel):
+    """One install acceptance check proving one of a requirement's proof leaves, on this release."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    #: The sentence the check's source wrote about what it shows.
+    sentence: str
+    leaves: list[str]
+    outcome: AcceptanceOutcome
+    #: When it ran, or empty when it has not run on this release.
+    checked_at: str
+    #: The check's own reason for its outcome, or empty.
+    reason: str
+
+
 class RequirementView(BaseModel):
-    """One requirement in the owner's words, and the newest check against it, if any."""
+    """One requirement in the owner's words, its proof, and the newest check against it, if any."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -119,6 +149,10 @@ class RequirementView(BaseModel):
     requirement: str
     source: str
     latest: RequirementCheckView | None
+    #: The leaves that prove it on an install or in the browser, as the register names them.
+    proof: list[str] = Field(default_factory=list)
+    #: The acceptance checks whose leaves meet `proof`, with their newest outcome on this release.
+    evidence: list[AcceptanceEvidenceView] = Field(default_factory=list)
 
 
 class RequirementAreaView(BaseModel):
@@ -201,6 +235,33 @@ def chosen_area(register: Register, asked: str | None) -> str | None:
         if area in present:
             return area
     return register.requirements[0].area if register.requirements else None
+
+
+def evidence_for(
+    proof: Sequence[str], checks: Sequence[Mapping[str, Any]]
+) -> list[AcceptanceEvidenceView]:
+    """The served acceptance checks that name one of these proof leaves, in the suite's order."""
+    wanted = set(proof)
+    found: list[AcceptanceEvidenceView] = []
+    for one in checks:
+        leaves = [str(leaf) for leaf in one.get("leaves", ())]
+        if not wanted.intersection(leaves):
+            continue
+        said = str(one.get("outcome", ""))
+        outcome: AcceptanceOutcome = (
+            "passed" if said == "passed" else "failed" if said == "failed" else "not run"
+        )
+        found.append(
+            AcceptanceEvidenceView(
+                name=str(one.get("name", "")),
+                sentence=str(one.get("sentence", "")),
+                leaves=leaves,
+                outcome=outcome,
+                checked_at=str(one.get("checked_at", "")),
+                reason=str(one.get("reason", "")),
+            )
+        )
+    return found
 
 
 # ------------------------------------------------------------------------ the register
@@ -309,6 +370,51 @@ class StoredRequirementChecks:
             return view_of(row)
 
 
+@runtime_checkable
+class AcceptanceRuns(Protocol):
+    """Where acceptance results are read. `StoredAcceptanceRuns` over a database."""
+
+    async def newest(self, commit: str) -> Sequence[Mapping[str, Any]]:
+        """Every row of the newest run recorded for one commit, as `newest_rows` shapes them."""
+        ...
+
+
+class StoredAcceptanceRuns:
+    """`ops.acceptance_result`, read through `/api/acceptance.json`'s own function."""
+
+    def __init__(self, sessions: async_sessionmaker[AsyncSession] | None) -> None:
+        self._sessions = sessions
+
+    async def newest(self, commit: str) -> Sequence[Mapping[str, Any]]:
+        return await newest_rows(self._sessions, commit)
+
+
+def acceptance_of(request: Request) -> AcceptanceRuns:
+    """`app.state.acceptance_runs` when a test put one there, the database otherwise."""
+    found = getattr(request.app.state, "acceptance_runs", None)
+    if isinstance(found, AcceptanceRuns):
+        return found
+    return StoredAcceptanceRuns(sessions_of(request))
+
+
+def suite_of(request: Request) -> Sequence[Check]:
+    """`app.state.acceptance_suite` when a test put one there, the suite this build declares."""
+    found = getattr(request.app.state, "acceptance_suite", None)
+    if isinstance(found, tuple) and all(isinstance(one, Check) for one in found):
+        return found
+    return registered()
+
+
+def acceptance_commit_of(request: Request) -> str:
+    """The release whose acceptance run is shown, as `/api/acceptance.json` reads it by default."""
+    found = getattr(request.app.state, "release_commit", None)
+    if isinstance(found, str) and found:
+        return found
+    from brain.settings import Settings
+
+    return Settings().resolved_commit()
+
+
 def checks_of(request: Request) -> RequirementChecks:
     """`app.state.requirement_checks` when a test put one there, the database otherwise."""
     found = getattr(request.app.state, "requirement_checks", None)
@@ -355,12 +461,20 @@ async def requirement_checks(
     latest = await checks_of(request).latest()
     chosen = chosen_area(register, area)
     rows: Sequence[Requirement] = [one for one in register.requirements if one.area == chosen]
+    released = acceptance_commit_of(request)
+    acceptance = served(released, suite_of(request), await acceptance_of(request).newest(released))
+    checks: Sequence[Mapping[str, Any]] = acceptance["checks"]
     return RequirementChecksView(
         areas=areas_of(register, latest),
         area=chosen,
         requirements=[
             RequirementView(
-                id=one.id, requirement=one.requirement, source=one.source, latest=latest.get(one.id)
+                id=one.id,
+                requirement=one.requirement,
+                source=one.source,
+                latest=latest.get(one.id),
+                proof=list(one.proof),
+                evidence=evidence_for(one.proof, checks),
             )
             for one in rows
         ],

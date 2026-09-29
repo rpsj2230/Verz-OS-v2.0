@@ -70,6 +70,64 @@ export function memoryAddress(subject: string): string {
   return `${MEMORY_PATH}/${encodeURIComponent(subject)}`;
 }
 
+/** The views of one person's memory, in order. The first is the bare address. */
+export const MEMORY_VIEWS = ["remembered", "history"] as const;
+export type MemoryView = (typeof MEMORY_VIEWS)[number];
+
+export const MEMORY_VIEW_LABELS: Readonly<Record<MemoryView, string>> = Object.freeze({
+  remembered: "Remembered",
+  history: "History",
+});
+
+/** The view an address segment names, or the first for anything else. */
+export function memoryViewNamed(segment: string | undefined): MemoryView {
+  return MEMORY_VIEWS.find((one) => one === segment) ?? "remembered";
+}
+
+/** The console address of one view of one person's memory. */
+export function memoryViewAddress(subject: string, view: MemoryView): string {
+  const base = memoryAddress(subject);
+  return view === "remembered" ? base : `${base}/${view}`;
+}
+
+/** Which of the two stores a statement came from, as a person reads it. */
+export type MemoryKind = "stated" | "extracted";
+
+export const KIND_WORDS: Readonly<Record<MemoryKind, string>> = Object.freeze({
+  stated: "Stated by a person",
+  extracted: "Extracted from conversations",
+});
+
+/** One remembered statement with the store it came from, for one table over both. */
+export interface Remembered extends RememberedText {
+  readonly kind: MemoryKind;
+}
+
+/** Both stores as one list, newest first, each statement carrying where it came from. */
+export function rememberedOf(page: MemoryPage): readonly Remembered[] {
+  return [
+    ...page.curated.map((one) => ({ ...one, kind: "stated" as const })),
+    ...page.extracted.map((one) => ({ ...one, kind: "extracted" as const })),
+  ].sort((a, b) => b.formed_at.localeCompare(a.formed_at));
+}
+
+/**
+ * What one step of the history did, in words. `brain.console.reach_view.revisions` marks a step
+ * superseded when it replaced an earlier memory under a correction, and demoted when the memory
+ * stopped being recalled; a step with neither formed, or replaced one before corrections were kept.
+ */
+export function stepWords(step: Revision): string {
+  if (step.correction === "demoted") {
+    return "Stopped being recalled";
+  }
+  return step.replaced_id === null ? "Formed" : "Replaced an earlier memory";
+}
+
+/** The steps of the history that concern one memory: its own, and any that replaced it. */
+export function stepsOf(history: readonly Revision[], memoryId: string): readonly Revision[] {
+  return history.filter((one) => one.memory_id === memoryId || one.replaced_id === memoryId);
+}
+
 /** What is wrong with a typed reference, in words, or null when it may be asked about. */
 export function referenceProblem(value: string): string | null {
   if (value.length === 0) {

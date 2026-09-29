@@ -17,7 +17,7 @@ const UNDO_REACHES_THE_ROW_THE_LEDGER_AND_RECALL = t(
 );
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
-  "src/pages/Learning.tsx UNDO_API_PATH": [at("POST /api/v1/govern/learning/undo", "UNDO_API_PATH", UNDO_API_PATH)],
+  "src/pages/learning/LearningPage.tsx UNDO_API_PATH": [at("POST /api/v1/govern/learning/undo", "UNDO_API_PATH", UNDO_API_PATH)],
 };
 
 export const PROOFS: Readonly<Record<string, Proofs>> = {
