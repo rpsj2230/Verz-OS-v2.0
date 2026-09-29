@@ -40,9 +40,12 @@ import {
   ASK_HEADING,
   ASK_LABEL,
   BASED_ON,
+  HELPFUL,
+  NOT_HELPFUL,
   NOTHING_ASKED_YET,
   PROGRESS_LABEL,
   QUESTION_LABEL,
+  WAS_IT_HELPFUL,
 } from "../src/pages/Ask";
 import {
   ANSWER_API_PATH,
@@ -72,6 +75,7 @@ import { readConsoleFile } from "./support/repo";
 
 const CONSOLE_ORIGIN = "https://console.test";
 const ANSWER_API = "/api/v1/answer";
+const MARK_API = "/api/v1/answer/mark";
 const ANSWER_ROUTE = "/api/v1/answer";
 const ROSTER_API = "/api/v1/agents";
 const SHEET = "src/styles/app.css";
@@ -739,5 +743,59 @@ describe("naming the agent that answers", () => {
 
     const { container } = await askScreen(whole(answerFrames("An answer.")));
     expect(container.querySelector("select")).toBeNull();
+  });
+});
+
+describe("marking an answer", () => {
+  test("an answer is marked helpful or not with one press, sending its reference and one bit", async () => {
+    // What breaks if this is deleted: a mark that sends the answer's words or a note, a mark with
+    // no reference nobody can count against, or two buttons that stay after the mark was counted.
+    const idp = fakeIdentityProvider({
+      api(url, init) {
+        const path = new URL(url, CONSOLE_ORIGIN).pathname;
+        if (path === ANSWER_API) {
+          return new Response(answerFrames("The balance is 400."), {
+            status: 200,
+            headers: { "content-type": EVENT_STREAM, "x-trace-id": "trace-ask-1" },
+          });
+        }
+        if (path === MARK_API && init?.method === "POST") {
+          return new Response(JSON.stringify({ counted: true, told: "COUNTED-SENTENCE" }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        return null;
+      },
+    });
+    const loaded = await loadConsole({ idp, path: ASK_ADDRESS });
+    await signIn(loaded);
+    const { routes } = await import("../src/App");
+    const router = createMemoryRouter(routes, { initialEntries: [ASK_ADDRESS] });
+    const { container } = render(<RouterProvider router={router} />);
+    await waitFor(() => {
+      if (!container.querySelector("h1")) {
+        throw new Error("the page has not arrived");
+      }
+    });
+
+    ask(container, QUESTION);
+    const marks = await waitFor(() => {
+      const found = page(container).querySelector<HTMLElement>(`[aria-label="${WAS_IT_HELPFUL}"]`);
+      expect(found).not.toBeNull();
+      return found as HTMLElement;
+    });
+    const notHelpful = [...marks.querySelectorAll("button")].find((one) => one.textContent === NOT_HELPFUL);
+    fireEvent.click(notHelpful as HTMLButtonElement);
+    await waitFor(() => {
+      expect(page(container).textContent).toContain("COUNTED-SENTENCE");
+    });
+
+    const sent = idp.calls
+      .filter((call) => new URL(call.url, CONSOLE_ORIGIN).pathname === MARK_API)
+      .map((call) => JSON.parse(String(call.init?.body ?? "null")) as unknown);
+    expect(sent).toEqual([{ trace_id: "trace-ask-1", helpful: false }]);
+    expect(page(container).querySelector(`[aria-label="${WAS_IT_HELPFUL}"]`)).toBeNull();
+    expect(page(container).textContent).not.toContain(HELPFUL + NOT_HELPFUL);
   });
 });

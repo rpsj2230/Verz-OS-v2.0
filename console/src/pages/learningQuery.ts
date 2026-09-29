@@ -104,6 +104,11 @@ export interface LearningPage {
   /** What the confirmation says an undo will write, keyed by `control_writes`. */
   readonly undoSays: Readonly<Record<string, string>>;
   readonly staleness: string | null;
+  /**
+   * How the week's answers were marked, helpful and not, over the whole install (M16.7.4). Null
+   * for a reader on their own basis, to whom the API sends no count about everybody's answers.
+   */
+  readonly marks: { readonly helpful: number; readonly unhelpful: number } | null;
 }
 
 const NOTHING: LearningPage = Object.freeze({
@@ -117,6 +122,7 @@ const NOTHING: LearningPage = Object.freeze({
   // Empty on an unreadable body, so no undo can be confirmed in words the API did not send.
   undoSays: {},
   staleness: null,
+  marks: null,
 });
 
 /** Read `brain.estate_routes.LearningReviewView` out of a response body. */
@@ -134,6 +140,7 @@ export function readLearningPage(payload: unknown): LearningPage {
     considered?: unknown;
     undo_says?: unknown;
     staleness?: unknown;
+    marks?: unknown;
   };
   if (!Array.isArray(body.tier_one) || !Array.isArray(body.tier_two)) {
     return NOTHING;
@@ -149,7 +156,19 @@ export function readLearningPage(payload: unknown): LearningPage {
     considered: typeof body.considered === "number" ? body.considered : 0,
     undoSays: readUndoSays(body.undo_says),
     staleness: typeof staleness?.message === "string" ? staleness.message : null,
+    marks: readMarks(body.marks),
   };
+}
+
+/** The week's marks, or null for a body that sent none or sent something else. */
+function readMarks(payload: unknown): LearningPage["marks"] {
+  if (typeof payload !== "object" || payload === null) {
+    return null;
+  }
+  const body = payload as { helpful?: unknown; unhelpful?: unknown };
+  return typeof body.helpful === "number" && typeof body.unhelpful === "number"
+    ? { helpful: body.helpful, unhelpful: body.unhelpful }
+    : null;
 }
 
 function readUndoSays(payload: unknown): Readonly<Record<string, string>> {

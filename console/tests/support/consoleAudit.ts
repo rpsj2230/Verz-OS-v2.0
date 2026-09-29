@@ -298,6 +298,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/agents/{agent_id}/archive",
       "/api/v1/agents/{agent_id}/transfer",
       "/api/v1/agents/{agent_id}/duplicate",
+      "/api/v1/agents/{agent_id}/learning",
       "/api/v1/console/agents/{agent_id}/stats",
       "/api/v1/agent-templates",
       "/api/v1/agent-templates/{template_id}",
@@ -317,6 +318,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "agent.manifest_draft",
       "agent.manifest_revision",
       "agent.manifest_act",
+      "agent.learning_pause",
     ],
     installation: [],
     gaps: [
@@ -746,6 +748,10 @@ export const NOT_ADMINISTERED: Readonly<Record<string, string>> = {
   "/signed-out": "The page a person lands on after signing out, which asks nothing and manages nothing.",
   "/*": "The page drawn for an address the console does not have, which manages nothing.",
   "POST /api/v1/answer": "The answer lane behind Ask, which writes no row an administrator manages.",
+  "POST /api/v1/answer/mark":
+    "A person marking an answer they were given helpful or not, one bit against its reference, which no administrator manages and nothing that answers reads.",
+  "mem.mark":
+    "The marks people put on their own answers, counted and read by nothing that decides an answer; no administrator manages a person's mark.",
   "POST /api/v1/automation/tool-call":
     "Called by a running automation with its owner's reach, not by a person at a screen; installing the automation is the console's part.",
   "chat.conversation": "What a person asked and was answered belongs to them; no store queries it yet (brain.chat.threads) and usage is reported without the words.",

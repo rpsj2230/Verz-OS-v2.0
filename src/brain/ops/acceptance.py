@@ -197,6 +197,7 @@ CHECK_MODULES: Final = (
     "brain.ops.acceptance_checks_speed",
     "brain.ops.acceptance_checks_learning",
     "brain.ops.acceptance_checks_cache",
+    "brain.ops.acceptance_checks_signals",
 )
 
 

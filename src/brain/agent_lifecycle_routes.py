@@ -127,10 +127,12 @@ from brain.core.errors import Absent, Failed
 from brain.core.principal import Principal
 from brain.gate.leash import Leash
 from brain.identity.principal_store import StoredPrincipals
+from brain.ops.learning_signal_store import StoredLearningPauses
 from brain.prompt_routes import agent_scope_row, every_agent_with_install, installed, signed_of
 from brain.routing_routes import sessions_of
 from brain.tables.agent import AgentRow
 from brain.tables.audit import attributed_to
+from brain.tables.learning_signal import REASON_CHARS
 from brain.tables.template import TemplateVersionRow
 from brain.tools.registry import ToolRegistry
 
@@ -171,6 +173,7 @@ DISABLE_PATH: Final = "/agents/{agent_id}/disable"
 ARCHIVE_PATH: Final = "/agents/{agent_id}/archive"
 TRANSFER_PATH: Final = "/agents/{agent_id}/transfer"
 DUPLICATE_PATH: Final = "/agents/{agent_id}/duplicate"
+LEARNING_PATH: Final = "/agents/{agent_id}/learning"
 VERSION_PATH: Final = "/agent-templates/{template_id}/versions/{version}"
 INSTALL_PATH: Final = "/agent-templates/{template_id}/versions/{version}/install"
 
@@ -300,6 +303,24 @@ class LifecycleStateAsked(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     expected_state: Literal["enabled", "disabled", "archived"]
+
+
+class LearningSwitchAsked(BaseModel):
+    """Pause or resume what one agent's runs may teach, and why."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    paused: bool
+    reason: str = Field(min_length=1, max_length=REASON_CHARS)
+
+
+class LearningSwitchView(BaseModel):
+    """Whether one agent's runs may teach anything now."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    agent_id: str
+    paused: bool
 
 
 class TransferAsked(BaseModel):
@@ -902,3 +923,64 @@ async def install_version(
         asked=asked,
         source=None,
     )
+
+
+# -------------------------------------------------------------- the learning switch (M16.7.13)
+#: Why the switch is the lifecycle's authority and nothing new.
+WHO_MAY_SWITCH_AN_AGENT_OFF_MAY_PAUSE_WHAT_IT_LEARNS: Final = (
+    "Pausing what an agent's runs teach is a narrower act than switching the agent off, and "
+    "the person who may do the second may do the first, over the same row, by the same three "
+    "questions. So the switch asks brain.agents.lifecycle.AGENT_LIFECYCLE_CAPABILITY and adds "
+    "no capability, and a hidden agent, a missing one and one outside the caller's authority "
+    "are the one 404 the lifecycle answers."
+)
+
+
+def learning_pauses_of(request: Request) -> StoredLearningPauses:
+    """`app.state.learning_pauses` when something put one there, and the database otherwise."""
+    found = getattr(request.app.state, "learning_pauses", None)
+    if isinstance(found, StoredLearningPauses):
+        return found
+    factory = sessions_of(request)
+    if factory is None:
+        raise Failed("no database on this process")
+    return StoredLearningPauses(factory)
+
+
+@router.get(LEARNING_PATH, response_model=LearningSwitchView, responses=COMMON_RESPONSES)
+async def agent_learning(request: Request, agent_id: str, asked: Asked) -> LearningSwitchView:
+    """Whether one agent's learning is paused, for a caller who may switch the agent off."""
+    _, found = await _actionable(request, agent_id, asked, AGENT_LIFECYCLE_CAPABILITY)
+    paused = await learning_pauses_of(request).paused((found.record.agent_id,))
+    return LearningSwitchView(agent_id=found.record.agent_id, paused=bool(paused))
+
+
+@router.post(LEARNING_PATH, response_model=LearningSwitchView, responses=COMMON_RESPONSES)
+async def switch_agent_learning(
+    request: Request, agent_id: str, body: LearningSwitchAsked, asked: Asked
+) -> LearningSwitchView:
+    """Pause or resume what one agent's runs may teach, with a reason, in the caller's name.
+
+    A pause stops memories forming from the agent's runs from the next turn
+    (`brain.ops.memory_store.StoredFormations`), and nothing else, so it can only narrow what is
+    learned. See `WHO_MAY_SWITCH_AN_AGENT_OFF_MAY_PAUSE_WHAT_IT_LEARNS`.
+    """
+    _, found = await _actionable(request, agent_id, asked, AGENT_LIFECYCLE_CAPABILITY)
+    reason = body.reason.strip()
+    if not reason:
+        raise _no_agent_here(asked, "reason")
+    pauses = learning_pauses_of(request)
+    await pauses.set(
+        agent_id=found.record.agent_id,
+        paused=body.paused,
+        reason=reason,
+        by=asked.caller.principal.id,
+    )
+    log.info(
+        "agent learning switched",
+        agent=found.record.agent_id,
+        paused=body.paused,
+        principal=asked.caller.principal.id,
+    )
+    paused = await pauses.paused((found.record.agent_id,))
+    return LearningSwitchView(agent_id=found.record.agent_id, paused=bool(paused))

@@ -72,6 +72,30 @@ export const THE_ANSWER_SCREEN_COUNTS_NOTHING =
 /** Where a question is asked, under the API base. One constant, nothing interpolated. */
 export const ANSWER_API_PATH = "/answer";
 
+/** Where a person marks an answer they were given helpful or not (M16.6.4). */
+export const MARK_API_PATH = "/answer/mark";
+
+/**
+ * The body one mark is sent as: the answer's reference and one bit, and nothing else, because a
+ * box beside an answer is where the answer gets pasted (`brain.ops.feedback`). Null when there is
+ * no reference to mark, which a stream that opened without one leaves.
+ */
+export function markBody(
+  traceId: string,
+  helpful: boolean,
+): { readonly trace_id: string; readonly helpful: boolean } | null {
+  return traceId === "" ? null : { trace_id: traceId, helpful };
+}
+
+/** The sentence the API answers a counted mark with, read without trusting its shape. */
+export function readMarked(payload: unknown): string {
+  if (typeof payload !== "object" || payload === null) {
+    return "";
+  }
+  const told = (payload as { told?: unknown }).told;
+  return typeof told === "string" ? told : "";
+}
+
 /**
  * The longest question the route accepts.
  *

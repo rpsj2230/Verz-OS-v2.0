@@ -141,7 +141,7 @@ import structlog
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response, StreamingResponse
-from pydantic import BaseModel, ConfigDict, JsonValue, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, StringConstraints
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from brain.agents.model import AGENT_ID_CHARS, AgentRecord
@@ -199,6 +199,7 @@ from brain.knowledge.search import KNOWLEDGE_READ
 from brain.memory.turn import Turn, recall_place, turn_of
 from brain.ops.classification_store import classified_lane_of
 from brain.ops.denial_store import Denial, Denials, StoredDenials, record_beside
+from brain.ops.learning_signal_store import StoredMarks
 from brain.ops.limit_store import StoreVerdict, ValkeyWindowStore, make_store
 from brain.ops.limits import (
     Limit,
@@ -1566,6 +1567,74 @@ async def answered_for(
     )
 
     return answered
+
+
+# ------------------------------------------------------------------- a mark (M16.6.4)
+#: What a person is told once their mark is counted. The same sentence either way.
+MARK_COUNTED: Final = (
+    "Thank you. Your mark is counted against this answer; on its own it changes nothing the "
+    "system answers, and a correction you give is what a person reviews."
+)
+
+#: Why a mark changes nothing by itself.
+A_MARK_IS_COUNTED_AND_CHANGES_NOTHING_BY_ITSELF: Final = (
+    "A helpful or unhelpful mark is one bit from one person about one answer, and acting on it "
+    "would let one click reorder what everybody is told. So it is stored against the answer's "
+    "trace and counted, and no retrieval, memory, rule, knowledge item or agent setting reads "
+    "it; what changes behaviour is a correction a person reviews."
+)
+
+
+class MarkAsked(BaseModel):
+    """One mark on one answer: the trace it ran under and whether it helped. Nothing else."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    trace_id: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._:-]+$")
+    helpful: bool
+
+
+class MarkedView(BaseModel):
+    """What a mark came to: counted, and the one sentence a person is told."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    counted: bool
+    told: str
+
+
+def marks_of(state: Any) -> StoredMarks | None:
+    """Where marks are written: `app.state.answer_marks`, or the database's, or None."""
+    found = getattr(state, "answer_marks", None)
+    if isinstance(found, StoredMarks):
+        return found
+    sessions = getattr(state, "db_sessions", None)
+    return StoredMarks(sessions) if isinstance(sessions, async_sessionmaker) else None
+
+
+@router.post("/answer/mark", response_model=MarkedView, responses=COMMON_RESPONSES)
+async def mark_answer(request: Request, asked: Asked, body: MarkAsked) -> MarkedView:
+    """Mark one answer the caller was given helpful or unhelpful, with one action (M16.6.4).
+
+    Written against the trace and counted, and read by nothing that decides an answer, which is
+    `A_MARK_IS_COUNTED_AND_CHANGES_NOTHING_BY_ITSELF`. An answer given to somebody else, one that
+    never ran and one past `brain.ops.learning_signal_store.MARKABLE_FOR` are the one 404, which
+    is `A_MARK_IS_ON_AN_ANSWER_THE_MARKER_WAS_GIVEN`.
+    """
+    marks = marks_of(request.app.state)
+    if marks is None:
+        raise Failed("no database on this process")
+    counted = await marks.mark(
+        principal_id=asked.caller.principal.id,
+        trace_id=body.trace_id,
+        helpful=body.helpful,
+        now=asked.now,
+    )
+    if not counted:
+        log.info("mark not answerable", principal=asked.caller.principal.id)
+        raise Absent("that answer cannot be marked by this caller")
+    log.info("answer marked", principal=asked.caller.principal.id, helpful=body.helpful)
+    return MarkedView(counted=True, told=MARK_COUNTED)
 
 
 @router.post("/answer", responses=LIMITED_RESPONSES)
