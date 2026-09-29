@@ -103,9 +103,11 @@ def test_every_leaf_a_check_names_is_a_leaf_of_the_work_breakdown() -> None:
 def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     """Held per module, so a package adding checks in a module of its own changes only its own
     line here: limits, channels and documents, then volume, refusals and a head's audit, then Lark
-    chat's three and the skill library's four, the modules in `CHECK_MODULES` order rather than the
-    order a process imported them. Delete this and a check can drop out of the suite with the page
-    simply listing one fewer row, or the page can lead with whichever module was imported first."""
+    chat's three, the skill library's four, the models' eleven and the audit's one, the connectors'
+    three, the tools' three, a document's life in four and the classified tables' three, the
+    modules in `CHECK_MODULES` order rather than the order a process imported them. Delete this
+    and a check can drop out of the suite with the page simply listing one fewer row, or the page
+    can lead with whichever module was imported first."""
     by_module: dict[str, list[str]] = {}
     for one in registered():
         by_module.setdefault(one.run.__module__, []).append(one.name)
@@ -134,6 +136,27 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     assert len(by_module["brain.ops.acceptance_models"]) == 11
     assert by_module["brain.ops.acceptance_audit"] == [
         "each_audited_act_is_in_the_ledger_and_a_missing_entry_is_caught"
+    ]
+    assert by_module["brain.ops.acceptance_checks_connectors"] == [
+        "manifest_review_refuses_a_projection_that_is_more_than_a_pointer",
+        "a_sync_keeps_its_minimal_index_and_the_canary_reaches_no_table",
+        "a_changed_declaration_makes_the_next_sync_refuse",
+    ]
+    assert by_module["brain.ops.acceptance_checks_tools"] == [
+        "every_registered_tool_is_a_catalogue_row_under_the_name_grammar",
+        "a_tool_named_for_a_sensitive_effect_must_declare_it",
+        "a_switched_off_tool_is_refused_and_a_department_stops_its_own",
+    ]
+    assert by_module["brain.ops.acceptance_checks_lifecycle"] == [
+        "a_newer_version_supersedes_the_older_and_answers_use_the_newer",
+        "a_company_wide_request_waits_until_another_approver_approves_it",
+        "a_review_that_fell_due_opens_its_steward_s_task_until_verified",
+        "a_solution_answers_only_once_somebody_else_approves_it",
+    ]
+    assert by_module["brain.ops.acceptance_checks_tables"] == [
+        "a_price_list_upload_classifies_every_column",
+        "a_reader_without_the_cost_grant_is_told_the_sell_price_alone",
+        "an_applied_mark_is_in_the_ledger_under_the_administrator",
     ]
     assert list(by_module) == list(acceptance.CHECK_MODULES)
     oversight = {one.name: one.leaves for one in registered()}
@@ -466,6 +489,19 @@ WRITTEN_BY_CHECKS = (
     "ops.spend_actual",
     "ops.sensitive_read",
     "er.canonical",
+    "proj.record",
+    "ops.connector_connection",
+    "ops.connector_sync",
+    "ops.setting",
+    "agent.tool_definition",
+    "agent.tool_switch",
+    "know.steward_task",
+    "know.solution",
+    "gate.suspension",
+    "ops.outbox_event",
+    "ops.outbox_delivery",
+    "gate.grants_version",
+    "gate.policy_epoch",
     "agent.browser_envelope",
     "agent.browser_session",
     "obs.trace_step",
@@ -541,9 +577,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         acceptance_audit.NO_DEPLOYMENT_IS_RECORDED_TO_KEEP_OUT,
     )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
-    assert len(outcomes) == 11
+    assert len(outcomes) == 24
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 50
+    assert runs == [(2,)] and len(recorded) == 76
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }

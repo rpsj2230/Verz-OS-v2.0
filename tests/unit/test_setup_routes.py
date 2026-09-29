@@ -30,7 +30,7 @@ from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Final
 
 import httpx
 import pytest
@@ -968,10 +968,14 @@ def test_a_fresh_install_reaches_a_signed_in_administrator_through_the_routes_al
 # ------------------------------------------------------ an install the installer gave a vault
 
 
+#: Where the lifespan mints this install's template signing key, as kv version 2 is called.
+TEMPLATE_KEY_DATA: Final = "template_signing/data/key"
+
+
 class InstalledVault:
     """An OpenBao reached through the real client's `urlopen`, as the installer leaves one.
 
-    The three kv engines are enabled and empty, and the application's token is the one the
+    The four kv engines are enabled and empty, and the application's token is the one the
     installer minted: periodic, renewable, a whole period left. Every request is recorded by method
     and path, with the token it presented, so a test can say which token asked for what. Standing in
     at `urlopen` rather than at a client method, so every component the lifespan builds from the
@@ -982,6 +986,7 @@ class InstalledVault:
     def __init__(self, token: str) -> None:
         self.token = token
         self.held: dict[str, dict[str, str]] = {}
+        self.options: dict[str, dict[str, int]] = {}
         self.asked: list[tuple[str, str, str]] = []
 
     def urlopen(self, request: Any, timeout: float = 0) -> Any:
@@ -1000,7 +1005,9 @@ class InstalledVault:
         if path == "auth/token/lookup-self":
             answer = {"data": {"ttl": 768 * 3600, "period": 768 * 3600, "renewable": True}}
         elif method == "POST" and "/data/" in path:
-            self.held[path] = dict(jsonlib.loads(request.data)["data"])
+            sent = jsonlib.loads(request.data)
+            self.held[path] = dict(sent["data"])
+            self.options[path] = dict(sent.get("options") or {})
             answer = {"data": {"created_time": "2999-01-01T00:00:00.000000001Z", "version": 1}}
         elif method == "GET" and path in self.held:
             answer = {"data": {"data": self.held[path], "metadata": {"version": 1}}}
@@ -1031,7 +1038,9 @@ def test_a_hosted_install_named_the_installers_vault_keeps_the_key_with_no_hand_
 
     Delete this and the installer and the wizard can each be right on their own and not meet: an
     address the credential store cannot use, a token the lifespan never reads, or a finishing
-    screen asking a person serving alone to restart a system that has nothing to restart."""
+    screen asking a person serving alone to restart a system that has nothing to restart. The
+    one other slot the process writes is its template signing key, minted at start into the
+    fourth engine with the vault's create-only check-and-set (`brain.ops.template_key`)."""
     del carried
     from brain.deployment.vault_setup import APPLICATION_TOKEN, VAULT_ADDRESS
     from brain.settings import settings_from as settings_read_from
@@ -1059,7 +1068,10 @@ def test_a_hosted_install_named_the_installers_vault_keeps_the_key_with_no_hand_
     assert answer.status_code == 200, answer.text
     assert answer.json()["provider_key"] == ProviderKeyKept.IN_USE
     assert answer.json()["restart_needed"] is (not alone)
-    assert vault.held == {"providers/data/anthropic": {KEY_FIELD: KEY}}
+    assert vault.held["providers/data/anthropic"] == {KEY_FIELD: KEY}
+    assert set(vault.held) == {"providers/data/anthropic", TEMPLATE_KEY_DATA}
+    assert vault.options[TEMPLATE_KEY_DATA] == {"cas": 0}
+    assert vault.options["providers/data/anthropic"] == {}
     assert {presented for _, _, presented in vault.asked} == {minted_by_the_installer}
     assert ("GET", "auth/token/lookup-self", minted_by_the_installer) in vault.asked
     assert len(store.appointed) == 1

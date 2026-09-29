@@ -40,8 +40,8 @@ settings the screen changes, and refused with `setting_problem`'s sentence for a
 
 **The starter set is shown with the one thing it does not furnish, stated exactly.** Roles, the
 starter pack and the company scope are furnished at every start by `brain.ops.starter_store`. The
-standard agents are not installed, because an agent is an install of a signed template and the
-install has no signing key until M13.8.10 mints one; the sentence is
+standard agents are not installed, because an agent is an install of a signed template and
+furnishing does not yet sign the built-in ones with the key M13.8.10 mints; the sentence is
 `brain.ops.starter_store.NO_TEMPLATE_IS_SIGNED_BEFORE_THE_INSTALL_HOLDS_A_KEY_OF_ITS_OWN`.
 
 **Leaving is on the same screen, because it is the same authority.** The handover of this install
@@ -113,11 +113,11 @@ NOTHING_SAVED_HERE: Final = (
     "Nothing is saved for this setting on this screen, so it already reads its default."
 )
 
-#: Why the standard agents are not on a freshly furnished install. M13.8.10 is the leaf that
-#: mints the key they need.
+#: Why the standard agents are not on a freshly furnished install. M13.8.10 mints the key they
+#: need and furnishing does not yet sign them with it.
 STANDARD_AGENTS_WAIT_FOR_THE_SIGNING_KEY: Final = (
-    "The standard agents are not installed. An agent is an install of a signed template, and this "
-    "install holds no template signing key yet. "
+    "The standard agents are not installed. An agent is an install of a signed template, and "
+    "furnishing signs no built-in template yet. "
     + NO_TEMPLATE_IS_SIGNED_BEFORE_THE_INSTALL_HOLDS_A_KEY_OF_ITS_OWN
 )
 

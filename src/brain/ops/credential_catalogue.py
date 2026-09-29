@@ -161,7 +161,7 @@ LIVE_READS_SAY: Final[Mapping[LiveReads, str]] = MappingProxyType(
             "Answers cannot read connected sources live yet: the vault is still enforcing the "
             "application policy from before live reads. Three holders of the unseal pieces load "
             "the policies again with sh ops/openbao/load-policies.sh (ops/openbao/UNSEAL.md, "
-            "Finishing what the installer began, step 3)."
+            "Loading a release's policies on a running install)."
         ),
         LiveReads.UNKNOWN: "",
     }

@@ -626,3 +626,44 @@ def test_no_answer_of_the_screen_and_no_log_line_carries_a_value(
     assert stored["providers/seaweedfs"] == pair
     assert stored["connector_keys/hubspot"] == {KEY_FIELD: SENTINEL}
     assert "credential kept" in logged and "credential refused" in logged
+
+
+def test_the_vault_card_says_whether_the_template_key_is_held_and_never_the_key(
+    app: FastAPI,
+    client: TestClient,
+    capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """M13.8.10 on the console: the list and every slot's page say which state the template signing
+    key is in, in the sentence `brain.ops.template_key` gives, and a process holding the key never
+    answers with it. **The positive half:** the process holds the marker as its key, so a screen
+    that could not see the key could not pass. Delete this and the card can say held while every
+    publish is refused, or a later field can carry the key."""
+    from brain.ops.template_key import TEMPLATE_KEY_SAYS, TemplateKeyState
+
+    caplog.set_level(logging.DEBUG)
+    capsys.readouterr()
+    marker = "7e3a" * 16
+    holding(app, Slots())
+    app.state.template_key = None
+    app.state.template_key_state = TemplateKeyState.WAITING
+    waiting = get(client, "u_admin").json()["vault"]
+    app.state.template_key = marker
+    app.state.template_key_state = TemplateKeyState.HELD
+    listed = get(client, "u_admin")
+    page = get(client, "u_admin", RELAY)
+
+    assert (waiting["template_key"], waiting["template_key_told"]) == (
+        "waiting",
+        TEMPLATE_KEY_SAYS[TemplateKeyState.WAITING],
+    )
+    assert "waiting for the vault policy reload" in waiting["template_key_told"]
+    for body in (listed.json()["vault"], page.json()["vault"]):
+        assert (body["template_key"], body["template_key_told"]) == (
+            "held",
+            TEMPLATE_KEY_SAYS[TemplateKeyState.HELD],
+        )
+    written = capsys.readouterr()
+    everything = "\n".join([listed.text, page.text, written.out, written.err, caplog.text])
+    assert marker not in everything
+    assert app.state.template_key == marker

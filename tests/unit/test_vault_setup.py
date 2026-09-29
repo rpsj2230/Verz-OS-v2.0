@@ -409,14 +409,18 @@ def test_only_lite_may_decline_the_vault_as_only_its_files_run_no_worker_or_obje
     assert DECLINABLE_PROFILES == ("lite",)
 
 
-def test_the_engines_enabled_are_the_three_the_product_writes_and_the_policy_names() -> None:
+def test_the_engines_enabled_are_the_four_the_product_writes_and_the_policy_names() -> None:
     """Delete this and an engine the console writes to is one the installer never enabled, which
-    reads as the vault refusing: a 404 on a write is an engine that is not mounted."""
-    assert ENGINES == ("providers", "webhooks", "connector_keys")
+    reads as the vault refusing: a 404 on a write is an engine that is not mounted. The template
+    signing key's engine is granted on its one slot rather than on every name, which is
+    `brain.ops.template_key`'s write-once rule, so it is held to that exact path."""
+    assert ENGINES == ("providers", "webhooks", "connector_keys", "template_signing")
     assert tuple(one.rstrip("/") for one in STATIC_PREFIXES) == ENGINES
     policy = (REPO / "ops/openbao/policies/application.hcl").read_text(encoding="utf-8")
-    for engine in ENGINES:
+    for engine in ENGINES[:-1]:
         assert f'path "{engine}/data/+"' in policy
+    assert 'path "template_signing/data/key"' in policy
+    assert 'path "template_signing/data/+"' not in policy
     assert (
         f"for engine in {' '.join(ENGINES)}; do"
         in committed().splitlines()[

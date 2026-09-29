@@ -36,10 +36,11 @@ them and the test questions it would ask. It does not ask the questions: no mode
 agent yet, so there is no answer to show or judge, and it says so in `A_REHEARSAL_RUNS_NO_MODEL_YET`
 rather than drawing a result. It returns no rows, because nothing it does reads one.
 
-**Publishing needs this install's template signing key**, like installing and duplicating, and no
-setting holds one yet (`brain.agent_lifecycle_routes.INSTALLING_NEEDS_THE_KEY_THIS_INSTALL_VERIFIES_
-WITH`). So a process without one says publishing is unavailable here, before a request or an
-approval is recorded, and a draft can be written, saved, checked and rehearsed meanwhile.
+**Publishing needs this install's template signing key**, like installing and duplicating, which
+the application reads at start from its write-once vault slot (`brain.ops.template_key`,
+`brain.agent_lifecycle_routes.INSTALLING_NEEDS_THE_KEY_THIS_INSTALL_VERIFIES_WITH`). So a process
+without one says publishing is unavailable here, before a request or an approval is recorded, and a
+draft can be written, saved, checked and rehearsed meanwhile.
 
 **A new module rather than `brain.agent_lifecycle_routes`**, because that router moves an agent that
 exists and this one makes and changes one; they share its three questions and its 409 body.

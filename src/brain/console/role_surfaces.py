@@ -86,6 +86,7 @@ from brain.core.entitlement import Capability, EntitlementSet
 from brain.gate.leash import SuspendedAction
 from brain.identity.packs import assert_no_role_in_resolution
 from brain.identity.roles import IdentityError, Role
+from brain.knowledge.promotion import asked_by
 
 #: Why there is no registry keyed by role in this module.
 A_SURFACE_COMPUTED_FROM_A_ROLE_IS_THE_ONE_THING_THIS_SYSTEM_REFUSES: Final = (
@@ -314,15 +315,22 @@ def _may_approve(
     entitlement: EntitlementSet,
     now: datetime,
 ) -> bool:
-    """Whether this approver may decide this suspension, on both counts.
+    """Whether this approver may decide this suspension, on both counts, and not their own asking.
 
     Open, and within their own reach. The reach half is `scope_for` followed by
     `Scope.matches` against the target's own row, which is what
     `brain.gate.leash._capability_check` asks about the caller: holding `write:ticket.status`
     in maintenance is not holding it in finance, and an approver in finance must not be
     offered a maintenance ticket because the capability strings match.
+
+    A knowledge promotion is never offered to the person who asked for it, whatever they hold:
+    `brain.knowledge.promotion.THE_PERSON_WHO_ASKED_IS_NEVER_OFFERED_THEIR_OWN_PROMOTION`. Asked
+    here, where the queue, the single card and the decision all ask, so no screen offers what the
+    decision would refuse.
     """
     if not suspension.is_open(now):
+        return False
+    if asked_by(suspension, entitlement.principal_id):
         return False
     required = Capability(value=suspension.action.tool.required_capability)
     scope = entitlement.scope_for(required, now)

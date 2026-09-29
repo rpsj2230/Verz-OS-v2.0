@@ -50,6 +50,7 @@ from brain.gate.leash import Action, ApprovalState, SuspendedAction, render_arte
 from brain.gate.suspension_store import StoredSuspensions
 from brain.identity.bearer import TokenAuthority
 from brain.session import make_app_engine, make_session_factory
+from tests.fixtures.console_http import SECOND_FACTOR
 from tests.fixtures.http_client import Response
 from tests.unit.test_api_routes import (
     AUDIENCE,
@@ -389,6 +390,82 @@ def test_a_decided_approval_leaves_the_queue_and_its_card_no_longer_opens(
     assert [one["suspension_id"] for one in queue["items"]] == ["m_2"]
     assert client.get(f"{APPROVALS}/m_1", headers=headers("u_narrow")).status_code == 404
     assert client.get(f"{APPROVALS}/m_2", headers=headers("u_narrow")).status_code == 200
+
+
+def a_promotion(asker: str) -> SuspendedAction:
+    """A knowledge promotion raised by `asker` for a maintenance document, as the route does."""
+    from brain.knowledge.promotion import raise_promotion
+    from brain.knowledge.visibility import Visibility, propose_promotion
+
+    now = datetime.now(UTC)
+    proposal = propose_promotion(
+        item_id="upload.handover",
+        from_level=Visibility.DEPARTMENT,
+        to_level=Visibility.COMPANY,
+        proposer_id=asker,
+        owner_id=asker,
+        review_by=now + timedelta(days=180),
+        reason="every team quotes from this",
+        now=now,
+    )
+    return raise_promotion(
+        proposal,
+        title="Site handover",
+        kind=None,
+        department=MAINTENANCE,
+        reach=EntitlementSet(principal_id=asker, grants=GRANTS.get(asker, ())),
+        trace_id="trace_test",
+        now=now,
+    )
+
+
+def test_a_promotion_is_never_offered_to_its_asker_and_their_approval_is_a_refusal(
+    client: TestClient, store: MemoryStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """**Found by the install acceptance check on 2026-09-29.** The asker holds
+    approve:knowledge.visibility over the document's department. Their queue leaves their own card
+    out, the card does not open for them, and their approval is the invented id's 404, not the
+    500 the database's refusal used to become; nothing moves and nothing is written. A second
+    holder is offered it and approves it. Delete this and the asker's Approvals screen offers a
+    button that can only fail, and pressing it reports a fault."""
+    from brain.knowledge.visibility import PROMOTION_CAPABILITY
+
+    approves = Grant(capability=PROMOTION_CAPABILITY, scope=in_department(MAINTENANCE))
+    monkeypatch.setitem(GRANTS, "u_narrow", (*GRANTS["u_narrow"], approves))
+    monkeypatch.setitem(GRANTS, "u_wide", (*GRANTS["u_wide"], approves))
+    card = a_promotion("u_narrow")
+    store.rows = {card.id: card}
+    # An approval is an `approve:` verb, which only a sign-in with a second factor carries.
+    signed = {
+        pid: {"authorization": f"Bearer {token_for(pid, claims=SECOND_FACTOR)}"}
+        for pid in (
+            "u_narrow",
+            "u_wide",
+        )
+    }
+
+    def decide(pid: str, ident: str) -> Response:
+        answered: Response = client.post(
+            decision_path(ident), json={"verdict": "approved"}, headers=signed[pid]
+        )
+        return answered
+
+    queue = client.get(APPROVALS, headers=signed["u_narrow"]).json()
+    opened = client.get(f"{APPROVALS}/{card.id}", headers=signed["u_narrow"])
+    own = decide("u_narrow", card.id)
+    missing = decide("u_narrow", "nothing_here")
+
+    assert queue["items"] == []
+    assert opened.status_code == 404
+    assert own.status_code == missing.status_code == 404
+    assert without_trace(own) == without_trace(missing)
+    assert store.rows[card.id].state is ApprovalState.PENDING
+    assert store.ledger.entries == ()
+
+    other = client.get(APPROVALS, headers=signed["u_wide"]).json()
+    assert [one["suspension_id"] for one in other["items"]] == [card.id]
+    assert decide("u_wide", card.id).status_code == 200
+    assert store.rows[card.id].decided_by == "u_wide"
 
 
 def test_a_decision_the_store_would_not_write_is_a_fault_and_the_row_is_not_moved(
