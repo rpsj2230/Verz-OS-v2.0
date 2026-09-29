@@ -195,6 +195,10 @@ CHECK_MODULES: Final = (
     "brain.ops.acceptance_checks_capacity",
     "brain.ops.acceptance_retrieval",
     "brain.ops.acceptance_checks_memory",
+    "brain.ops.acceptance_checks_deployment",
+    "brain.ops.acceptance_ingest",
+    "brain.ops.acceptance_threads",
+    "brain.ops.acceptance_knowledge",
 )
 
 

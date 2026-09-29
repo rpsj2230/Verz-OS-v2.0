@@ -54,12 +54,15 @@ class _Sender:
 
     def __init__(self, *, fails: bool = False) -> None:
         self.sent: list[tuple[ChannelPayload, str]] = []
+        #: The text each send was handed, beside the payload and the chat.
+        self.bodies: list[str] = []
         self._fails = fails
 
-    def send(self, payload: ChannelPayload, *, to: str) -> None:
+    def send(self, payload: ChannelPayload, *, to: str, body: str) -> None:
         if self._fails:
             raise RuntimeError("oc_build_room is archived and the bot was removed from it")
         self.sent.append((payload, to))
+        self.bodies.append(body)
 
 
 def _digest(*, closed: tuple[str, ...] = ("M1.1",)) -> DailyDigest:
@@ -112,6 +115,20 @@ def test_a_digest_reaches_the_room_it_was_configured_for() -> None:
     assert result.outcome is DeliveryOutcome.SENT
     assert len(sender.sent) == 1
     assert sender.sent[0][1] == "oc_build_room"
+
+
+def test_the_room_is_handed_the_rendered_digest_and_not_an_empty_message() -> None:
+    """`WHAT_THE_ROOM_READS_IS_WHAT_WAS_RENDERED`: the sender receives the text `render` produced,
+    the same text the delivery records. Delete this and a wired digest posts an empty message
+    every evening while the delivery's own record, which the next test reads, says what it meant
+    to post."""
+    sender = _Sender()
+
+    result = _deliver(sender=sender)
+
+    assert sender.bodies == [result.body]
+    assert "Build digest for 2026-09-06" in sender.bodies[0]
+    assert "M1.1" in sender.bodies[0]
 
 
 def test_what_was_sent_is_what_the_digest_module_renders() -> None:
