@@ -19,6 +19,8 @@ const CREDENTIAL_VAULT = {
   token_told: UNBROKEN,
   live_reads: "waiting",
   live_reads_told: UNBROKEN,
+  template_key: "waiting",
+  template_key_told: UNBROKEN,
 };
 
 const CREDENTIAL_ROW = {

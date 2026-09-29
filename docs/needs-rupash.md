@@ -265,6 +265,8 @@ checks and goes red if one fails.
    instance and a fresh VPS (M42.5.17).
 3. **Automatic rollback (M38.1.3.4)** is proved by the CI test that fails if the rollback is removed.
 
+2026-09-29: the owner pulled the signing key forward; built in #187.
+
 ## 80. A local model for the local-only profile - DECIDED: hosted providers only
 
 You use Claude (Anthropic), OpenAI, DeepSeek and Moonshot Kimi; no local-only profile is needed.

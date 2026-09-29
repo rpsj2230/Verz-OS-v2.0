@@ -7,7 +7,7 @@
  * owner that nobody is told of, a last use that nothing records drawn as a time, and a key pair sent
  * as two writes.
  *
- * Task ids: M27.11.10, M27.15.50, M27.16.1, M27.8.7
+ * Task ids: M27.11.10, M27.15.50, M27.16.1, M27.8.7, M13.8.10
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -27,6 +27,8 @@ const SENTINEL = "sk-sentinel-never-drawn";
 const AT = "2019-03-04T05:06:07Z";
 const WAITING = "Answers cannot read connected sources live yet: load the policies again.";
 const FORMAT = "One unbroken line of at most 1,000 characters.";
+const HELD = "Template signing key: held. Agents can be published and installed from the console.";
+const KEY_WAITING = "Template signing key: not yet created, waiting for the vault policy reload.";
 
 beforeAll(async () => {
   installRadixStubs();
@@ -43,6 +45,8 @@ function vault(overrides: Record<string, unknown> = {}): Record<string, unknown>
     token_told: "",
     live_reads: "ready",
     live_reads_told: "Answers can read a connected source live.",
+    template_key: "held",
+    template_key_told: HELD,
     ...overrides,
   };
 }
@@ -184,6 +188,27 @@ describe("the list", () => {
       path === LIST ? { vault: vault(), items: [row("providers/anthropic")], next_cursor: null } : undefined,
     );
     expect(ready.container.textContent).not.toContain(WAITING);
+  });
+
+  test("the vault card says whether the template signing key is held, in the API's sentence", async () => {
+    // What breaks if this is deleted: needs-rupash 82's key waits on the owner's policy reload with
+    // nothing on the screen saying so, or the card draws a held key after the API said otherwise.
+    const waiting = await consoleAt("/credentials", (method, path) =>
+      path === LIST
+        ? { vault: vault({ template_key: "waiting", template_key_told: KEY_WAITING }), items: [row("providers/anthropic")], next_cursor: null }
+        : undefined,
+    );
+    const card = waiting.container.querySelector('[aria-label="The vault\'s state"]')?.textContent ?? "";
+    expect(card).toContain("Template signing key");
+    expect(card).toContain(KEY_WAITING);
+    expect(card).not.toContain(HELD);
+
+    const held = await consoleAt("/credentials", (method, path) =>
+      path === LIST ? { vault: vault(), items: [row("providers/anthropic")], next_cursor: null } : undefined,
+    );
+    const heldCard = held.container.querySelector('[aria-label="The vault\'s state"]')?.textContent ?? "";
+    expect(heldCard).toContain(HELD);
+    expect(heldCard).not.toContain(KEY_WAITING);
   });
 
   test("a sealed vault is said, and a slot it could not read is not known rather than empty", async () => {

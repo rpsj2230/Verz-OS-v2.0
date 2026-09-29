@@ -45,9 +45,11 @@ anybody holding a candidate, and the time it was written is what tells two saves
 **The Credentials screen reads these routes, and they cover every slot the install declares.**
 `GET /credentials` is one page of `brain.ops.credential_catalogue`'s slots on `brain.listing`'s
 contract, each with its holder, whether a value is held, when it was written and the environment
-variable that outranks it, beside the vault's seal, the policies its token carries and whether
-live reads are waiting for the policy to be loaded again. `GET /credentials/{family}/{name}` is
-one slot's page: what it is for and what to ask for, when its value was last used where anything
+variable that outranks it, beside the vault's seal, the policies its token carries, whether
+live reads are waiting for the policy to be loaded again, and whether this process holds the
+install's template signing key (`brain.ops.template_key`), as a state and never the key.
+`GET /credentials/{family}/{name}` is one slot's page: what it is for and what to ask for, when
+its value was last used where anything
 records that, and its history from the audit ledger. `PUT` writes any of them: the relay's
 password under `password`, the object store's key pair as two fields in one version, and a
 source's key or a channel's secret only once its slot holds one, because the first goes in where
@@ -61,7 +63,7 @@ a connection the Connectors screen's rule admits, a channel's last delivery for 
 reader governs. A figure left out reads as one never recorded. See
 `A_FIGURE_ABOUT_A_CONNECTION_IS_SHOWN_WHERE_THE_CONNECTION_IS`.
 
-Task ids: M27.8.7, M27.11.10, M27.15.50
+Task ids: M27.8.7, M27.11.10, M27.15.50, M13.8.10
 """
 
 from __future__ import annotations
@@ -116,6 +118,8 @@ from brain.ops.credentials import (
     told_in_use,
 )
 from brain.ops.object_store import BACKEND_SETTING
+from brain.ops.template_key import TEMPLATE_KEY_SAYS, TemplateKeyState
+from brain.ops.template_key import state_of as template_key_state_of
 from brain.ops.vault_status import Seal, SlotState, TokenPolicy, VaultStatusReader
 
 log = structlog.get_logger()
@@ -255,6 +259,10 @@ class VaultOverview(BaseModel):
     token_told: str
     live_reads: LiveReads
     live_reads_told: str
+    #: Whether this process holds the install's template signing key, and the sentence saying so.
+    #: A state and never the key: see `brain.ops.template_key`.
+    template_key: TemplateKeyState
+    template_key_told: str
 
 
 class CredentialRow(BaseModel):
@@ -416,7 +424,7 @@ SETUP_WIZARD: Final = "The setup wizard"
 NOBODY_NAMED: Final = "A person with no name on record"
 
 
-def overview(report: CatalogueReport) -> VaultOverview:
+def overview(report: CatalogueReport, template_key: TemplateKeyState) -> VaultOverview:
     return VaultOverview(
         seal=report.seal,
         told=report.told,
@@ -426,6 +434,8 @@ def overview(report: CatalogueReport) -> VaultOverview:
         token_told=report.token.told,
         live_reads=report.live_reads,
         live_reads_told=LIVE_READS_SAY[report.live_reads],
+        template_key=template_key,
+        template_key_told=TEMPLATE_KEY_SAYS[template_key],
     )
 
 
@@ -598,7 +608,8 @@ async def credentials(request: Request, asked: Asked, listed: SlotQuery) -> Cred
     report = await asyncio.to_thread(read_catalogue, reader_of(request), slots)
     store = credentials_of(request)
     page = plan.page([row_view(one, report, store) for one in slots])
-    return CredentialsPage(vault=overview(report), items=page.items, next_cursor=page.next_cursor)
+    vault = overview(report, template_key_state_of(request.app.state))
+    return CredentialsPage(vault=vault, items=page.items, next_cursor=page.next_cursor)
 
 
 @router.get(
@@ -632,7 +643,7 @@ async def credential(
     in_use = InUse.OUTRANKED if row.outranked_by is not None else one.takes_effect
     provider = one.provider
     return CredentialDetailView(
-        vault=overview(report),
+        vault=overview(report, template_key_state_of(request.app.state)),
         row=row,
         description=one.slot.description,
         fields=field_views(one),
