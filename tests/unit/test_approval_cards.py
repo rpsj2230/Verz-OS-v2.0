@@ -152,6 +152,8 @@ class World:
     ledger: MemoryLedger = field(default_factory=MemoryLedger)
     store: MemoryStore = field(default_factory=MemoryStore)
     windows: HeldCardWindows = field(default_factory=HeldCardWindows)
+    #: The install's Approve from Lark cards switch for this test. On, unless a test turns it off.
+    switched_on: bool = True
 
 
 def a_promotion(asker: str) -> SuspendedAction:
@@ -218,6 +220,8 @@ def client(world: World, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient
         app.state.chat_people = People()
         app.state.suspensions = world.store
         app.state.card_windows = world.windows
+        # The switch as `World.switched_on` says, so a test states the state it exercises.
+        app.state.approve_from_cards = world.switched_on
         yield c
 
 
@@ -296,9 +300,14 @@ def test_a_card_press_on_lark_carries_approve_and_a_message_there_does_not() -> 
     message on the same channel keeps a binding's read alone. Delete this and either a card cannot
     decide anything, or a message typed in Lark carries the approval its sender holds."""
     held = _held("read:x", "write:y", "invoke:z", "approve:v", "admin:w")
-    assert _held_values(admit_card_press(held, Channel.LARK)) == {"read:x", "approve:v"}
+    assert _held_values(admit_card_press(held, Channel.LARK, switched_on=True)) == {
+        "read:x",
+        "approve:v",
+    }
     assert _held_values(admit(held, Channel.LARK, Assurance.BOUND)) == {"read:x"}
-    assert _held_values(admit_card_press(_held("read:x"), Channel.LARK)) == {"read:x"}
+    assert _held_values(admit_card_press(_held("read:x"), Channel.LARK, switched_on=True)) == {
+        "read:x"
+    }
 
 
 @pytest.mark.parametrize(
@@ -319,8 +328,71 @@ def test_a_press_on_a_channel_that_carries_no_approval_admits_what_a_message_doe
     """The channel's ceiling still bounds a press. Delete this and a button on WhatsApp, Slack or
     Teams decides an approval their ceilings refuse, which each of those modules argues against."""
     held = _held("read:x", "approve:v")
-    assert admit_card_press(held, channel) == admit(held, channel, Assurance.BOUND)
-    assert "approve:v" not in _held_values(admit_card_press(held, channel))
+    pressed = admit_card_press(held, channel, switched_on=True)
+    assert pressed == admit(held, channel, Assurance.BOUND)
+    assert "approve:v" not in _held_values(pressed)
+
+
+def test_a_card_press_carries_approve_only_while_the_install_s_switch_is_on() -> None:
+    """Needs-rupash 117. The product cannot see whether a Lark sign-in had a second factor, so a
+    press carries `approve` only while the install's Approve from Lark cards switch is on; off, it
+    is admitted exactly what a message is. Delete this and a card approves on every install,
+    including the ones whose Lark signs people in with a password alone."""
+    held = _held("read:x", "approve:v")
+    off = admit_card_press(held, Channel.LARK, switched_on=False)
+    assert off == admit(held, Channel.LARK, Assurance.BOUND)
+    assert _held_values(off) == {"read:x"}
+    assert _held_values(admit_card_press(held, Channel.LARK, switched_on=True)) == {
+        "read:x",
+        "approve:v",
+    }
+
+
+def test_the_switch_ships_off_and_only_the_word_on_turns_it_on() -> None:
+    """Read through `value_of`, saved value first, and compared with the one word that switches it
+    on. Delete this and the default changes, or a typo in a saved row lets every card approve."""
+    from brain.approval_cards import APPROVE_FROM_CARDS, cards_may_approve
+    from brain.install import BY_NAME
+
+    assert BY_NAME[APPROVE_FROM_CARDS].default == "off"
+    assert cards_may_approve(env={}, saved={}) is False
+    assert cards_may_approve(env={}, saved={APPROVE_FROM_CARDS: "on"}) is True
+    assert cards_may_approve(env={APPROVE_FROM_CARDS: "on"}, saved={}) is True
+    assert cards_may_approve(env={APPROVE_FROM_CARDS: "on"}, saved={APPROVE_FROM_CARDS: "off"}) is (
+        False
+    )
+    for nobody_meant in ("yes", "On", "true", "1"):
+        assert cards_may_approve(env={}, saved={APPROVE_FROM_CARDS: nobody_meant}) is False
+
+
+def test_the_switch_is_changed_on_settings_as_on_or_off_and_says_why_it_is_off() -> None:
+    """Changed through the Settings screen's own audited write, which judges a value before it is
+    saved: on or off and nothing else. Its row says, in plain words, that a press rests on Lark's
+    own sign-in and carries no second factor, and to switch it on only where Lark requires
+    two-step verification. Delete this and the switch is saved as anything, or turned on by
+    somebody nothing told what it gives up."""
+    from brain.approval_cards import APPROVE_FROM_CARDS
+    from brain.console.configuration import (
+        EDITABLE_SETTINGS,
+        LABELS,
+        SECTION_OF,
+        Section,
+        row_for,
+        setting_problem,
+    )
+    from brain.install import BY_NAME
+
+    assert APPROVE_FROM_CARDS in EDITABLE_SETTINGS
+    assert SECTION_OF[APPROVE_FROM_CARDS] is Section.LARK
+    assert LABELS[APPROVE_FROM_CARDS] == "Approve from Lark cards"
+    assert setting_problem(APPROVE_FROM_CARDS, "on") == ""
+    assert setting_problem(APPROVE_FROM_CARDS, "off") == ""
+    for refused in ("yes", "enabled", "ON"):
+        assert setting_problem(APPROVE_FROM_CARDS, refused) != ""
+    row = row_for(BY_NAME[APPROVE_FROM_CARDS], env={}, saved={})
+    assert (row.value, row.editable) == ("off", True)
+    for words in ("Lark's own sign-in", "no second factor", "two-step verification"):
+        assert words in row.meaning
 
 
 def test_a_card_is_offered_only_on_a_channel_that_carries_approvals_and_cards() -> None:
@@ -694,6 +766,51 @@ def test_with_the_close_window_full_the_decision_stands_and_nothing_more_is_sent
     assert len(world.lark.sent) == sent
 
 
+def test_with_the_switch_off_the_approver_is_sent_the_card_with_no_button_and_the_console_named(
+    client: TestClient, world: World
+) -> None:
+    """The positive half of the switch being off: the approver still gets the card, its body as
+    the Approvals screen shows them, with no control to press and a last line naming the console's
+    Approvals page. Delete this and switching approvals off also stops anybody being told one is
+    waiting."""
+    world.switched_on = False
+    client.app.state.approve_from_cards = False  # type: ignore[attr-defined]
+    post(client, dm(WIDE, "approve"))
+    posted = world.lark.posted()
+    assert [(kind, where) for kind, where, _, _ in posted] == [("chat_id", DM), ("chat_id", DM)]
+    card = posted[1][3]
+    assert card is not None
+    assert [one["tag"] for one in card["elements"]] == ["div"]
+    text = posted[1][2]
+    assert "Site handover" in text
+    assert text.endswith(f"Decide this in the console: {ORIGIN}/approvals")
+    assert "Approve" not in json.dumps(card)
+
+
+def test_with_the_switch_off_a_press_decides_nothing_and_never_reaches_the_route(
+    client: TestClient, world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A card sent while the switch was on, pressed after it was turned off: the presser is told to
+    decide in the console, nothing is decided, and the Approvals route's `take_decision` is never
+    asked. Delete this and turning the switch off leaves every card already sent able to approve."""
+    import brain.approval_cards
+    from brain.approval_cards import DECIDE_IN_THE_CONSOLE_TOLD
+
+    post(client, dm(WIDE, "approve"))
+    approve, _, _ = card_values(world)
+
+    async def never(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("take_decision was reached from a card while the switch was off")
+
+    monkeypatch.setattr(brain.approval_cards, "take_decision", never)
+    client.app.state.approve_from_cards = False  # type: ignore[attr-defined]
+    answered = post(client, press(WIDE, approve))
+    assert answered.json() == {"toast": {"type": "info", "content": DECIDE_IN_THE_CONSOLE_TOLD}}
+    assert the_promotion(world).state is ApprovalState.PENDING
+    assert list(world.store.ledger.entries) == []
+    assert world.lark.edits() == []
+
+
 # ======================================================================== the pieces
 
 
@@ -758,7 +875,9 @@ def test_a_decided_card_is_patched_within_the_close_window_and_a_full_window_rai
     from brain.console.approvals import card as shown_for
 
     promotion = a_promotion("u_prefix")
-    reach = admit_card_press(EntitlementSet(principal_id="u_wide", grants=(APPROVE,)), Channel.LARK)
+    reach = admit_card_press(
+        EntitlementSet(principal_id="u_wide", grants=(APPROVE,)), Channel.LARK, switched_on=True
+    )
     now = datetime.now(UTC)
     shown = shown_for(promotion, reach, now)
     assert shown is not None

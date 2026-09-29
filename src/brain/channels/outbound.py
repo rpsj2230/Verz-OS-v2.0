@@ -38,8 +38,9 @@ nothing of the message.
 delivery posts once. A delivery whose key was already used is answered with what the first
 attempt came to and records nothing, because that attempt recorded itself.
 
-**A card is a message with controls, sent by the same step (M10.2.3).** An `Outgoing` carrying
-`actions` is built by the wire's `CardWire.card_request` instead of `request_for`, after every
+**A card is a message with controls, sent by the same step (M10.2.3).** An `Outgoing` marked
+`card`, with its `actions` or none, is built by the wire's `CardWire.card_request` instead of
+`request_for`, after every
 check above, so a card is held to its reader's reach, the channel's ceiling and its label exactly
 as a message is, and sent once and recorded the same way. A wire with no cards is refused one as
 `cannot_carry`, before its secret is borrowed.
@@ -137,12 +138,16 @@ class Outgoing:
     highest: Classification = Classification.INTERNAL
     recipient: str = ""
     planned_hash: str = ""
-    #: The controls, when this message is a card a person can press; empty for a message.
+    #: True when this message is a card rather than text, with or without controls on it.
+    card: bool = False
+    #: The controls on a card a person can press; empty for a card with nothing to press.
     actions: tuple[CardAction, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.to.strip():
             raise ValueError("a message is sent to somewhere")
+        if self.actions and not self.card:
+            raise ValueError("controls go on a card, and this message is not one")
         if bool(self.recipient) != bool(self.planned_hash):
             msg = (
                 "a message made for somebody names them and the reach it was made at, and a "
@@ -270,7 +275,7 @@ async def _attempt(
         assert_label_survives(text, outgoing.payload)
     except (DeliveryRefusedError, CardRefusedError):
         return _refused(RefusedBecause.CANNOT_CARRY)
-    if outgoing.actions and not isinstance(wire, CardWire):
+    if outgoing.card and not isinstance(wire, CardWire):
         return _refused(RefusedBecause.CANNOT_CARRY)
 
     try:
@@ -281,7 +286,7 @@ async def _attempt(
         return _refused(RefusedBecause.NO_SECRET)
 
     try:
-        if outgoing.actions and isinstance(wire, CardWire):
+        if outgoing.card and isinstance(wire, CardWire):
             request = wire.card_request(
                 to=outgoing.to,
                 text=text,

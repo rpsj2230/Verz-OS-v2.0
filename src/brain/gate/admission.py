@@ -26,11 +26,14 @@ names a Lark card as one of the three places an approval is decided. `admit_card
 admission and nothing wider: the binding's verbs and `approve`, intersected with the channel's
 own ceiling, built from the person's own grants so it can add nothing they do not hold. It is
 reached from one place, the events route's branch for a signed card press, and never from the
-text path, which keeps `admit(..., Assurance.BOUND)`. Why a press may and a message may not: a
-press arrives signed with the app's key from the tenant's own Lark client, carries the one
-suspension and action digest the card was built for and the principal it was built for, and is
-honoured only from the chat account bound to that principal, on an approval still open at that
-digest that the permission itself admits (needs-rupash 16); a message is words, which nothing
+text path, which keeps `admit(..., Assurance.BOUND)`. **And only while the install's Approve from
+Lark cards switch is on, which ships off** (needs-rupash 117): the product cannot see whether a
+Lark sign-in had a second factor, so whether a card may approve is the owner's to switch. Why a
+press may and a message may not: a press arrives signed with the app's key from the tenant's own
+Lark client, carries the one suspension and action digest the card was built for and the
+principal it was built for, and is honoured only from the chat account bound to that principal,
+on an approval still open at that digest that the permission itself admits (needs-rupash 16); a
+message is words, which nothing
 binds to one action, and "approve" typed into a chat would approve whatever the reader guessed it
 meant. What it does not carry is a second factor, which a console decision needs: that is the
 weaker half of this decision, and the named constant below writes it down so it is argued rather
@@ -205,14 +208,18 @@ A_CARD_PRESS_CARRIES_APPROVE_AND_A_MESSAGE_NEVER_DOES: Final = (
     "permission admits it. A message is words bound to no action, so the text path keeps a "
     "binding's read alone and no message decides anything. The press carries no second factor, "
     "which a console decision needs; the owner's requirement names a Lark card as a place to "
-    "decide, and this is the narrowest reading of it."
+    "decide, and this is the narrowest reading of it. It applies only while the install's Approve "
+    "from Lark cards switch is on, which ships off: switched off, a press admits exactly what a "
+    "message does, and approvals are decided in the console."
 )
 
 #: The verbs a card press carries beyond a binding's: the one it exists to exercise.
 CARD_PRESS_VERBS: Final = frozenset({"approve"})
 
 
-def admit_card_press(held: EntitlementSet, channel: Channel) -> EntitlementSet:
+def admit_card_press(
+    held: EntitlementSet, channel: Channel, *, switched_on: bool
+) -> EntitlementSet:
     """What a signed press on an approval card may exercise, here, now (M10.7.1).
 
     `admit` at `Assurance.BOUND` with `approve` added, and still under the channel's ceiling: on a
@@ -220,7 +227,14 @@ def admit_card_press(held: EntitlementSet, channel: Channel) -> EntitlementSet:
     `_ceiling_for_verbs`, from the caller's own grants, so it cannot hand anyone a capability they
     do not hold. See `A_CARD_PRESS_CARRIES_APPROVE_AND_A_MESSAGE_NEVER_DOES`; the one caller is the
     events route's press branch, through `brain.approval_cards`.
+
+    `switched_on` is the install's Approve from Lark cards switch, read by the caller through
+    `brain.install.value_of` and stated here rather than read, so this module stays a function of
+    what it is handed. Off, which is how every install ships, a press is admitted what a message
+    is and nothing more (needs-rupash 117).
     """
+    if not switched_on:
+        return admit(held, channel, Assurance.BOUND)
     allowed = verbs_for_channel(channel) & (ASSURANCE_VERBS[Assurance.BOUND] | CARD_PRESS_VERBS)
     return _ceiling_for_verbs(held, allowed, held.principal_id)
 

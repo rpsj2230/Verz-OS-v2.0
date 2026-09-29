@@ -483,6 +483,28 @@ def render_card(card: ApprovalCard) -> str:
     return body
 
 
+#: The line a card with nothing to press ends with, where approvals are decided in the console.
+DECIDE_IN_THE_CONSOLE: Final = "Decide this in the console: {where}"
+
+
+def render_for_the_console(card: ApprovalCard, where: str) -> str:
+    """The card with no decision on it: its body, and where it is decided instead.
+
+    What an approver is sent while the install's Approve from Lark cards switch is off: the same
+    body through the one renderer, so its label survives, and in place of the actions a line
+    naming the console. `where` is the install's Approvals page, or the screen's name on an install
+    that has no address of its own.
+    """
+    lines = [
+        f"Approval {card.suspension_id}",
+        render_body(card.payload),
+        DECIDE_IN_THE_CONSOLE.format(where=where),
+    ]
+    body = "\n".join(lines)
+    assert_label_survives(body, card.payload)
+    return body
+
+
 #: The line a decided card ends with instead of its actions.
 DECIDED_LINE: Final = "Decided: {state}. Nothing is left to do on this card."
 

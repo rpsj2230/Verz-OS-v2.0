@@ -23,6 +23,13 @@ so no real chat hears anything. The card ceiling's windows are `HeldCardWindows`
 application, because a check may not touch a key another caller uses
 (`WHAT_THE_DATABASE_CANNOT_ROLL_BACK_IS_REMOVED_BY_NAME`), and the install's are shared.
 
+**Both states of the install's Approve from Lark cards switch are run, on the check's own
+application** (needs-rupash 117). The switch ships off and is the owner's to turn on, so the checks
+state it on their application rather than reading or writing the install's: `state.approve_from_
+cards`, which `brain.approval_cards.ApprovalCards.of` prefers to the installation value exactly so
+that a check or a test can say which state it is exercising. Off, a card is sent with nothing to
+press and names the console, and a press decides nothing; on, what follows.
+
 **The group and policy check reuses the room check whole.** M10.7.4's sentence is three clauses;
 the first is what `a_lark_group_hears_its_floor_and_the_asker_reads_the_rest_alone` proves, so it
 is awaited as it stands rather than copied, then the ceiling is asked of the install's one send
@@ -246,6 +253,10 @@ class _Desk:
     async def asking(self) -> _Person:
         return await _as(self.h, self.steward)
 
+    def switch(self, *, on: bool) -> None:
+        """The Approve from Lark cards switch as this check's application reads it."""
+        self.chat.app.state.approve_from_cards = on
+
 
 async def desk(h: Harness) -> _Desk:
     """The cards' application over the check's transaction, and four bound reserved people."""
@@ -278,6 +289,7 @@ async def desk(h: Harness) -> _Desk:
     state.channel_transport = made.lark
     state.suspensions = StoredSuspensions(h.sessions)
     state.card_windows = HeldCardWindows()
+    made.switch(on=True)
     made.ids = {
         one: open_id() for one in (made.steward, made.approver, made.second, made.bystander)
     }
@@ -296,7 +308,8 @@ def _cards(answered: list[Any]) -> dict[str, tuple[dict[str, str], dict[str, str
     """The cards in a reply, by suspension: each one's approve and reject values."""
     found: dict[str, tuple[dict[str, str], dict[str, str]]] = {}
     for _, _, _, card in answered:
-        if card is None:
+        if card is None or len(card["elements"]) < 2:
+            # A message, or a card with nothing to press on it.
             continue
         approve, reject = card["elements"][1]["actions"]
         found[str(approve["value"]["suspension_id"])] = (approve["value"], reject["value"])
@@ -317,15 +330,18 @@ async def _decisions(h: Harness, suspension_id: str) -> list[tuple[str, Any, Any
 @check(
     leaves=("M10.7.1", "M10.2.3", "M10.7.4"),
     sentence=(
-        "Bound reserved people type approve to the Brain: in Lark the approver of a waiting "
-        "promotion is told where approvals are decided and sent one card in their own chat, never "
-        "in a group; a bystander and the asker are told the same and sent no card; on the webhook "
-        "channel it is the sentence alone; and nothing typed decides the promotion."
+        "Bound reserved people type approve: in Lark the approver of a waiting promotion is told "
+        "where approvals are decided and sent its card in their own chat, never a group, with no "
+        "button and the console named while approving from Lark is off, buttons once on; a "
+        "bystander and the asker are told the same with no card; the webhook channel gets the "
+        "sentence; nothing typed decides it."
     ),
 )
 async def typed_approve_decides_nothing_and_the_approver_gets_one_card(
     h: Harness,
 ) -> None:
+    from brain.approval_cards import THE_APPROVALS_SCREEN, approvals_link
+    from brain.channels.cards import DECIDE_IN_THE_CONSOLE
     from brain.gate.admission import admit_card_press
     from brain.gate.context import Channel
     from brain.gate.suspension_store import StoredSuspensions
@@ -335,18 +351,34 @@ async def typed_approve_decides_nothing_and_the_approver_gets_one_card(
     card, item = await made.promotion()
     told = _told()
 
+    made.switch(on=False)
+    noticed = await made.says(made.approver, "approve")
+    made.switch(on=True)
     mine = await made.says(made.approver, "approve")
-    if [(kind, where, text) for kind, where, text, _ in mine[:1]] != [("chat_id", "here", told)]:
-        raise CheckFailedError(
-            "an approver typing approve was not told where approvals are decided"
-        )
+    for answer in (noticed, mine):
+        if [(kind, where, text) for kind, where, text, _ in answer[:1]] != [
+            ("chat_id", "here", told)
+        ]:
+            raise CheckFailedError(
+                "an approver typing approve was not told where approvals are decided"
+            )
+        if [(kind, where) for kind, where, _, _ in answer] != [("chat_id", "here")] * 2 or [
+            one[3] is not None for one in answer
+        ] != [False, True]:
+            raise CheckFailedError("the approver was not sent exactly one card, in their own chat")
+    console = DECIDE_IN_THE_CONSOLE.format(where=approvals_link() or THE_APPROVALS_SCREEN)
+    notice = noticed[1][3]
+    if (
+        notice is None
+        or [one["tag"] for one in notice["elements"]] != ["div"]
+        or not noticed[1][2].endswith(console)
+    ):
+        raise CheckFailedError("with Lark approvals off the card offered a button or no console")
     offered = _cards(mine)
-    if [(kind, where) for kind, where, _, _ in mine] != [("chat_id", "here")] * 2 or list(
-        offered
-    ) != [card]:
+    if list(offered) != [card]:
         raise CheckFailedError("the approver was not sent exactly one card, in their own chat")
     approve, reject = offered[card]
-    reach = admit_card_press(await h.reach(made.approver), Channel.LARK)
+    reach = admit_card_press(await h.reach(made.approver), Channel.LARK, switched_on=True)
     stored = await StoredSuspensions(h.sessions).reading_as(reach, h.now).suspension(card)
     if (
         stored is None
@@ -426,14 +458,20 @@ async def _webhook_says(made: _Desk, text: str) -> list[str]:
 @check(
     leaves=("M10.2.3", "M10.2.4"),
     sentence=(
-        "Signed Lark card presses on three waiting promotions: a bystander's decides nothing; the "
-        "approver's approves as them, in the ledger, and the card is replaced; that press replayed "
-        "decides nothing; a press after another approver rejected in the console decides nothing; "
-        "and a rejection whose replacement Lark refuses is told in the approver's own chat."
+        "Signed Lark card presses on three waiting promotions: the approver's decides nothing "
+        "while approving from Lark is off; once on, a bystander's decides nothing, the approver's "
+        "approves as them in the ledger and the card is replaced, a replay and a press after a "
+        "console rejection decide nothing, and a rejection whose replacement Lark refuses is told "
+        "in the approver's own chat."
     ),
 )
 async def a_card_press_decides_as_its_approver_alone_and_closes_the_card(h: Harness) -> None:
-    from brain.approval_cards import CLOSED_TOLD, DECIDED_TOLD, PRESS_REFUSED_TOLD
+    from brain.approval_cards import (
+        CLOSED_TOLD,
+        DECIDE_IN_THE_CONSOLE_TOLD,
+        DECIDED_TOLD,
+        PRESS_REFUSED_TOLD,
+    )
     from brain.approval_routes import (
         DecidableVerdict,
         DecisionAsked,
@@ -455,6 +493,14 @@ async def a_card_press_decides_as_its_approver_alone_and_closes_the_card(h: Harn
     if set(offered) != {first, refused, elsewhere}:
         raise CheckFailedError("the approver was not offered a card for each waiting promotion")
     approver = made.ids[made.approver]
+
+    made.switch(on=False)
+    answered = await pressed(made.chat, lark_press(made.chat, approver, offered[first][0]))
+    if answered.get("toast", {}).get("content") != DECIDE_IN_THE_CONSOLE_TOLD or await _decisions(
+        h, first
+    ):
+        raise CheckFailedError("a press decided an approval while approving from Lark was off")
+    made.switch(on=True)
 
     by_somebody = lark_press(made.chat, made.ids[made.bystander], offered[first][0])
     answered = await pressed(made.chat, by_somebody)

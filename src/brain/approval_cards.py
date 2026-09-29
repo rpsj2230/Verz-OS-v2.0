@@ -55,6 +55,16 @@ press, which costs no call against any ceiling. Rejected: carrying the decided c
 too, which spends nothing but depends on Lark still listening. See
 `A_DECIDED_CARD_IS_PATCHED_AND_A_REFUSED_ONE_CLOSED_IN_THE_ANSWER`.
 
+**A card decides only while the install says it may, and every install ships saying it may not
+(needs-rupash 117).** A press relies on Lark's own sign-in, and the product cannot see whether that
+sign-in had a second factor, which a decision in the console asks for. So `INSTALL_LARK_CARD_
+APPROVALS` is a switch an administrator turns on Install, Settings, read here through
+`brain.install.value_of` and nowhere else, and off by default. Off, an approver who writes about
+deciding is still sent each card, with its body and no control on it, and a line saying to decide
+it in the console with the Approvals page; a press, from a card sent while the switch was on, is
+told the same and never reaches `take_decision`, and `admit_card_press` admits it read alone behind
+that. On, everything below is what happens. See `A_CARD_DECIDES_ONLY_WHILE_THE_INSTALL_SAYS_IT_MAY`.
+
 **The card windows are the install's, and a check's are its own.** On a running install a window
 lives in Valkey through `brain.ops.limit_store`, asked and recorded once through
 `brain.channels.cards.close_admitted`; a process without Valkey admits, which is
@@ -105,6 +115,7 @@ from brain.channels.cards import (
     read_press_value,
     render_card,
     render_decided,
+    render_for_the_console,
 )
 from brain.channels.inbound import (
     DECIDE_WHERE_TOLD,
@@ -125,6 +136,7 @@ from brain.gate.context import Channel
 from brain.gate.ingress import Binding, Unrecognised, identity_hash
 from brain.gate.leash import ApprovalState, SuspendedAction
 from brain.gate.resolve import resolve
+from brain.install import value_of
 from brain.ops.channel_store import ChannelRecord
 from brain.ops.idempotency import Intent
 from brain.ops.lark_connect import ASK_PATH
@@ -160,6 +172,14 @@ A_PRESS_DECIDES_ONLY_AS_THE_PERSON_THE_CARD_WAS_BUILT_FOR: Final = (
     "that person's own permission admits it, through the Approvals route's take_decision. A "
     "press by anybody else, after a decision elsewhere or after the window, or replayed, "
     "decides nothing, and every refusal is one sentence."
+)
+
+#: Why a card decides nothing unless the install's switch says it may.
+A_CARD_DECIDES_ONLY_WHILE_THE_INSTALL_SAYS_IT_MAY: Final = (
+    "A press relies on Lark's own sign-in, and the product cannot see whether it had a second "
+    "factor, which a decision in the console asks for. So a card may approve only while the "
+    "install's Approve from Lark cards switch is on, and it ships off: off, the card is sent with "
+    "no control and a line to decide it in the console, and a press never reaches take_decision."
 )
 
 #: Why a decided card is patched and a refused one closed in the callback's answer.
@@ -212,6 +232,18 @@ REJECTION_WORDS: Final[Mapping[RejectionReason, str]] = {
 #: The console's Approvals page, under the install's own address.
 APPROVALS_PATH: Final = "/approvals"
 
+#: The installation setting that lets a card decide. See the named constant above.
+APPROVE_FROM_CARDS: Final = "INSTALL_LARK_CARD_APPROVALS"
+
+#: Where a card says to decide it, on an install that names no address of its own.
+THE_APPROVALS_SCREEN: Final = "the Approvals screen"
+
+#: What a press is told while the switch is off, whoever pressed and whatever the card said.
+DECIDE_IN_THE_CONSOLE_TOLD: Final = (
+    "Approving from Lark is switched off on this install, so nothing was decided. Decide this on "
+    "the Approvals screen in the console."
+)
+
 #: The most cards one message is answered with, soonest to lapse first. A bound on what one
 #: message costs the open half of the card ceiling, and never a statement about the rest: the
 #: sentence already says the Approvals screen lists everything waiting.
@@ -258,6 +290,17 @@ class HeldCardWindows:
         if decision.allowed:
             self.state = self.state.record(now, (limit,))
         return decision
+
+
+def cards_may_approve(
+    env: Mapping[str, str] | None = None, saved: Mapping[str, str] | None = None
+) -> bool:
+    """Whether this install lets a card decide: its switch reads `on`, and nothing else does.
+
+    Read through `value_of`, the one reader of an installation value, and compared with the one
+    word that switches it on, so a value nobody meant (a typo, a blank saved row) leaves it off.
+    """
+    return value_of(APPROVE_FROM_CARDS, env, saved) == "on"
 
 
 def card_windows_of(request: Request) -> CardWindows:
@@ -423,11 +466,17 @@ class ApprovalCards:
     reach_of: ReachLoader
     windows: CardWindows
     trace_id: str
+    #: The install's Approve from Lark cards switch, as `cards_may_approve` read it.
+    switched_on: bool
     link: str = ""
 
     @classmethod
     def of(cls, request: Request, *, bindings: ChannelBindings) -> ApprovalCards:
+        """The cards for this request. The switch is `app.state.approve_from_cards` when a test or
+        an install check put a boolean there, which is how a check runs both states on its own
+        application, and the install's own setting otherwise."""
         found = suspensions_of(request)
+        stated = getattr(request.app.state, "approve_from_cards", None)
         return cls(
             bindings=bindings,
             people=people_of(request),
@@ -435,6 +484,7 @@ class ApprovalCards:
             reach_of=nominal_reach(request),
             windows=card_windows_of(request),
             trace_id=trace_of_request() or f"card-{uuid.uuid4().hex[:16]}",
+            switched_on=stated if isinstance(stated, bool) else cards_may_approve(),
             link=approvals_link(),
         )
 
@@ -479,7 +529,10 @@ class ApprovalCards:
         if self.store is None or not carries_cards(event.channel):
             return (told,)
         nominal = await self.reach_of(person.id, now)
-        reach = admit_card_press(nominal, event.channel)
+        # Who may decide each approval and what the Approvals screen shows them: the permission,
+        # under the channel's ceiling. A listing, never a decision; a press is admitted under the
+        # install's switch, in `press`.
+        reach = admit_card_press(nominal, event.channel, switched_on=True)
         waiting = await self.store.reading_as(reach, now).open_suspensions()
         offered = sorted(
             ((one, shown) for one in waiting if (shown := shown_card(one, reach, now)) is not None),
@@ -497,20 +550,40 @@ class ApprovalCards:
                 log.warning("approval card not built", suspension=suspension.id)
                 continue
             cards.append(
-                Outgoing(
-                    channel=event.channel,
-                    to=mine,
-                    intent=Intent(
-                        principal_id=person.id, intent_ref=f"approval_card.{card.card_id}"
-                    ),
-                    text=render_card(card),
-                    payload=card.payload,
-                    recipient=person.id,
-                    planned_hash=nominal.ent_hash(),
-                    actions=card_controls(card),
+                self._offered(
+                    card, channel=event.channel, to=mine, person=person.id, nominal=nominal
                 )
             )
         return (told, *cards)
+
+    def _offered(
+        self,
+        card: ApprovalCard,
+        *,
+        channel: Channel,
+        to: str,
+        person: str,
+        nominal: EntitlementSet,
+    ) -> Outgoing:
+        """One card as it is sent: with its controls while the switch is on, with none and the
+        console named in their place while it is off. Keyed apart, so switching it on sends the
+        card with controls to somebody already sent the one without."""
+        if self.switched_on:
+            kind, text, controls = "approval_card", render_card(card), card_controls(card)
+        else:
+            where = self.link or THE_APPROVALS_SCREEN
+            kind, text, controls = "approval_notice", render_for_the_console(card, where), ()
+        return Outgoing(
+            channel=channel,
+            to=to,
+            intent=Intent(principal_id=person, intent_ref=f"{kind}.{card.card_id}"),
+            text=text,
+            payload=card.payload,
+            recipient=person,
+            planned_hash=nominal.ent_hash(),
+            card=True,
+            actions=controls,
+        )
 
     # ------------------------------------------------------------------ the press
 
@@ -526,6 +599,10 @@ class ApprovalCards:
         if pressed is None:
             msg = "only a press on a card is decided here"
             raise ValueError(msg)
+        if not self.switched_on:
+            # Before anything is looked up: a press decides nothing while the switch is off,
+            # whoever pressed and whatever the card named. See the named constant.
+            return Pressed(told=DECIDE_IN_THE_CONSOLE_TOLD)
         event = inbound.event
         named = read_press_value(pressed.value)
         if named is None:
@@ -543,7 +620,7 @@ class ApprovalCards:
         if self.store is None:
             return Pressed(told=PRESS_NOT_TAKEN_TOLD)
         nominal = await self.reach_of(person.id, now)
-        reach = admit_card_press(nominal, event.channel)
+        reach = admit_card_press(nominal, event.channel, switched_on=self.switched_on)
         found = await self.store.reading_as(reach, now).suspension(named.suspension_id)
         if found is None or found.action_digest != named.action_digest:
             return Pressed(told=PRESS_REFUSED_TOLD, closed=CLOSED_TOLD)

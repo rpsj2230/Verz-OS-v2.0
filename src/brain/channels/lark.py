@@ -1048,18 +1048,18 @@ def _control(action: CardAction) -> dict[str, Any]:
 
 
 def approval_card(text: str, actions: Sequence[CardAction]) -> dict[str, Any]:
-    """An approval card: `text` as plain text, then its controls (M10.2.3).
+    """An approval card: `text` as plain text, then its controls, when it has any (M10.2.3).
 
     Plain text for `card_for`'s reason, so the label a payload carries survives exactly as the one
     renderer wrote it. `update_multi` because Lark updates only a card that declares it.
     """
+    elements: list[dict[str, Any]] = [{"tag": "div", "text": _plain(text)}]
+    if actions:
+        elements.append({"tag": "action", "actions": [_control(one) for one in actions]})
     return {
         "config": {"wide_screen_mode": True, "update_multi": True},
         "header": {"title": _plain(CLOSED_TITLE)},
-        "elements": [
-            {"tag": "div", "text": _plain(text)},
-            {"tag": "action", "actions": [_control(one) for one in actions]},
-        ],
+        "elements": elements,
     }
 
 
@@ -1290,7 +1290,7 @@ class LarkWire:
         kept = LarkSecret.parse(secret)
         host = _host(tenant)
         kind, _, rest = to.partition(":")
-        if kind not in (ROOM_ADDRESS, SENDER_ADDRESS) or not rest or not actions:
+        if kind not in (ROOM_ADDRESS, SENDER_ADDRESS) or not rest:
             raise ValueError(f"{to!r} is not an address this channel posts a card to")
         card = approval_card(text, actions)
         if len(json.dumps(card).encode("utf-8")) > MAX_CARD_BYTES:

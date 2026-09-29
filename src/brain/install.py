@@ -449,6 +449,19 @@ INSTALLATION: Final[tuple[Setting, ...]] = (
         ),
         default="unset",
     ),
+    # --- approval cards in Lark, M10.2.3 (brain.approval_cards), needs-rupash 117
+    Setting(
+        name="INSTALL_LARK_CARD_APPROVALS",
+        belongs=Belongs.CONNECTORS,
+        meaning=(
+            "Whether an approver may approve or reject with the buttons on an approval card in "
+            "Lark: `on` or `off`. A press on a card relies on Lark's own sign-in and carries no "
+            "second factor from the Brain, where a decision in the console asks for one, so switch "
+            "it on only if the company's Lark requires two-step verification. `off`, the default, "
+            "still sends the card, with no buttons and a link to decide it in the console."
+        ),
+        default="off",
+    ),
     # --- the knowledge scanner, M7.1.3 (brain.knowledge.scanners)
     Setting(
         name="INSTALL_KNOWLEDGE_SCANNER",

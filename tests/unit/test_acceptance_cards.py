@@ -260,11 +260,57 @@ def test_a_press_admitted_only_what_a_message_is_fails_the_press_check(
 
     monkeypatch.setattr(
         "brain.approval_cards.admit_card_press",
-        lambda held, channel: admit(held, channel, Assurance.BOUND),
+        lambda held, channel, switched_on: admit(held, channel, Assurance.BOUND),
     )
     assert run_checks(head, (by_name(PRESSED),))[PRESSED] == (
         FAILED,
         "the approver was not offered a card for each waiting promotion",
+    )
+
+
+@pytest.mark.needs_db
+def test_a_card_that_decides_while_the_switch_is_off_fails_the_press_check(
+    head: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With the cards reading the Approve from Lark cards switch as on whatever it says, the
+    approver's press decides while it is off, and the check says so. Delete this and the check
+    passes over an install whose cards approve with the switch the owner left off."""
+    from dataclasses import replace
+
+    from brain.approval_cards import ApprovalCards
+
+    real = ApprovalCards.of
+
+    def always_on(request: Any, *, bindings: Any) -> ApprovalCards:
+        return replace(real(request, bindings=bindings), switched_on=True)
+
+    monkeypatch.setattr(ApprovalCards, "of", staticmethod(always_on))
+    assert run_checks(head, (by_name(PRESSED),))[PRESSED] == (
+        FAILED,
+        "a press decided an approval while approving from Lark was off",
+    )
+
+
+@pytest.mark.needs_db
+def test_a_card_offered_with_buttons_while_the_switch_is_off_fails_the_typed_check(
+    head: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The typed check's half of the same switch: read as on whatever it says, the card sent
+    while it is off carries buttons, and the check says so. Delete this and the check passes over
+    cards that offer to approve on an install that switched that off."""
+    from dataclasses import replace
+
+    from brain.approval_cards import ApprovalCards
+
+    real = ApprovalCards.of
+
+    def always_on(request: Any, *, bindings: Any) -> ApprovalCards:
+        return replace(real(request, bindings=bindings), switched_on=True)
+
+    monkeypatch.setattr(ApprovalCards, "of", staticmethod(always_on))
+    assert run_checks(head, (by_name(TYPED),))[TYPED] == (
+        FAILED,
+        "with Lark approvals off the card offered a button or no console",
     )
 
 
