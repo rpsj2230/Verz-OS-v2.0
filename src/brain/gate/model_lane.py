@@ -72,10 +72,18 @@ matched no passage and every passage was withheld. `brain.knowledge.document_too
 three off the chunk row, and this policy classifies them under the body's own capability, so they
 reach the payload for whoever reads the words and never the prompt: `SHOWN_FIELDS` does not name
 them. Widening the grant to fit was rejected, because a caller holding the body over one
-department and the plane over every department would then read every department's bodies. A
-company or personal passage names no department, so a department-scoped field grant still reads
-none of those, which fails closed and is the decision left open. See
+department and the plane over every department would then read every department's bodies. See
 `A_DEPARTMENT_SCOPED_FIELD_GRANT_READS_ITS_OWN_DEPARTMENTS_PASSAGES`.
+
+**A company or personal passage names no department, and the owner decided who reads it
+(needs-rupash 106).** Left there, a department-scoped field grant read none of those, so a
+department reader was retrieved a company-wide passage and shown none of its words, and the same for
+their own personal upload. `redact_passages`, the one way a passage is redacted, redacts a
+company-wide passage and the reader's own at `passage_reach`, which reads a department-scoped field
+grant as unrestricted, and every other passage at the reader's own reach, so the answer, a cited
+document, a document's history and the install checks apply it alike. No other department's passage
+and nobody else's personal one is widened to. See
+`A_DEPARTMENT_TEXT_RIGHT_READS_COMPANY_AND_OWN_PERSONAL_PASSAGES`.
 
 **The passage policy lives here because nothing redacted a passage before.** The document tools
 return `KnowledgePassage` records and no `FieldPolicy` named them, since the only callers so far
@@ -136,7 +144,7 @@ from the payload alone, so an answer cannot cite a memory. The attempt row names
 `A_MEMORY_IS_A_HINT_THE_MODEL_READS_AND_NEVER_A_PASSAGE_IT_CITES`.
 
 Task ids: M3.9.3, M8.1.4, M9.2.1, M6.4.2, M5.4.1, M5.7.3, M5.6.4, M5.2.2, M5.5.1, M7.7.1, M8.1.2
-Task ids: M27.15.9, M16.6.3
+Task ids: M27.15.9, M15.4.3, M16.6.3
 """
 
 from __future__ import annotations
@@ -148,7 +156,7 @@ from typing import Any, Final, Protocol
 
 from brain.agents.model import AgentRecord, tool_ceiling
 from brain.console.workspace_capabilities import run_reach
-from brain.core.entitlement import EntitlementSet
+from brain.core.entitlement import EntitlementSet, Grant
 from brain.core.envelope import TypedResult
 from brain.core.field_policy import Classification, FieldPolicy, FieldRule
 from brain.core.lane import Lane
@@ -246,7 +254,7 @@ A_DEPARTMENT_SCOPED_FIELD_GRANT_READS_ITS_OWN_DEPARTMENTS_PASSAGES: Final = (
     "matches that department's passages and withholds every other department's. Treating any "
     "holding of the capability as enough was rejected, because a caller who reads bodies in one "
     "department and the plane in all of them would then read every department's bodies. A "
-    "company or personal passage names no department and is read only by a grant testing none."
+    "company or personal passage names no department, and `passage_reach` says who reads it."
 )
 
 #: Why a passage is cited as its document's passage rather than field by field.
@@ -358,6 +366,123 @@ PASSAGE_POLICY: Final = FieldPolicy(
         ),
     )
 )
+
+#: Why a department's right to read knowledge also reads company-wide passages and one's own.
+A_DEPARTMENT_TEXT_RIGHT_READS_COMPANY_AND_OWN_PERSONAL_PASSAGES: Final = (
+    "The owner decided on 2026-09-28 (needs-rupash 106) that a right to read document text in a "
+    "department also reads company-wide documents and the person's own personal ones, so "
+    "company-wide means everyone. A passage's field grant is tested against the passage's own "
+    "department, which a company or personal passage does not have, so until 2026-09-29 a "
+    "department reader was retrieved such a passage and shown none of its words. A company-wide "
+    "passage and the reader's own are redacted with the reader's department-scoped field grants "
+    "read as unrestricted, and every other passage at the reader's own reach, so no other "
+    "department's passage and nobody else's is widened to."
+)
+
+#: The two passage levels no department names, as the chunk table spells them.
+COMPANY_VISIBILITY: Final = "company"
+PERSONAL_VISIBILITY: Final = "personal"
+
+
+def passage_reach(entitlement: EntitlementSet) -> EntitlementSet | None:
+    """The reach a company-wide passage or the reader's own is redacted at, or None (M15.4.3).
+
+    The caller's grants, with each passage field grant scoped to departments alone read as
+    unrestricted, because a department's right to read the words is what decision 106 extends to
+    company-wide passages and one's own. None when no such grant is held, so there is nothing to
+    widen. See `A_DEPARTMENT_TEXT_RIGHT_READS_COMPANY_AND_OWN_PERSONAL_PASSAGES`.
+
+    **Only ever applied to passages no department names**, by `redact_passages`, never to a
+    department's passage, where the grant's department is exactly what the redactor must test.
+    A grant with any clause other than a department is left as it is: what else it narrows by is
+    not a department's right to read, and holding it beside the widened one intersects the two,
+    which is `EntitlementSet.scope_for`'s conservative reading.
+    """
+    fields = [rule.required_capability for rule in PASSAGE_POLICY.rules]
+    widened = False
+    grants: list[Grant] = []
+    for grant in entitlement.grants:
+        clauses = grant.scope.clauses
+        if (
+            clauses
+            and all(clause.field == "department" for clause in clauses)
+            and any(grant.capability.covers(one) for one in fields)
+        ):
+            grants.append(Grant(capability=grant.capability, scope=Scope.unrestricted()))
+            widened = True
+        else:
+            grants.append(grant)
+    if not widened:
+        return None
+    return entitlement.model_copy(update={"grants": tuple(grants)})
+
+
+def _shared(passage: KnowledgePassage, principal_id: str) -> bool:
+    """Whether a passage is one no department names that decision 106 lets this reader read:
+    company-wide, or their own personal upload."""
+    return passage.visibility == COMPANY_VISIBILITY or (
+        passage.visibility == PERSONAL_VISIBILITY and passage.owner_id == principal_id
+    )
+
+
+def redact_passages(
+    found: TypedResult[KnowledgePassage], *, entitlement: EntitlementSet, now: datetime | None
+) -> RedactedAnswer:
+    """Passages walked by the redactor under `PASSAGE_POLICY`: the one way a passage is redacted.
+
+    A department's passage is redacted at the caller's own reach. A company-wide passage and the
+    caller's own personal one are redacted at `passage_reach`, and the two halves are put back in
+    the order retrieval returned them, their locks and trace joined. So the answer, a cited
+    document, a document's history and the install checks apply decision 106 alike. See
+    `A_DEPARTMENT_TEXT_RIGHT_READS_COMPANY_AND_OWN_PERSONAL_PASSAGES`.
+    """
+    wide = passage_reach(entitlement)
+    shared = [one for one in found.records if _shared(one, entitlement.principal_id)]
+    if wide is None or not shared:
+        return redact(found, entitlement=entitlement, policy=PASSAGE_POLICY, now=now)
+    ordinary = [one for one in found.records if not _shared(one, entitlement.principal_id)]
+    own = redact(
+        found.model_copy(update={"records": tuple(ordinary)}),
+        entitlement=entitlement,
+        policy=PASSAGE_POLICY,
+        now=now,
+    )
+    extended = redact(
+        found.model_copy(update={"records": tuple(shared)}),
+        entitlement=wide,
+        policy=PASSAGE_POLICY,
+        now=now,
+    )
+    return _joined(found, own, extended)
+
+
+def _joined(
+    found: TypedResult[KnowledgePassage], first: RedactedAnswer, second: RedactedAnswer
+) -> RedactedAnswer:
+    """Two redactions of one result's halves, as one: records in the result's order, locks of the
+    records kept, and the trace of both under the caller's own reach hash. A dropped object's path
+    in the trace is its place in its own half, which names where it was and counts nothing."""
+    kept = {
+        str(_first(record, ID_KEYS)): record
+        for record in (*first.payload.records, *second.payload.records)
+    }
+    records = tuple(kept[one.id] for one in found.records if one.id in kept)
+    halves = (first.payload, second.payload)
+    carrying = next((one for one in halves if one.records), first.payload)
+    payload = ChannelPayload(
+        records=records,
+        locked=tuple(lock for half in halves for lock in half.locked if lock.record_id in kept),
+        source=carrying.source if records else "",
+        fetched_at=carrying.fetched_at if records else "",
+        truncated=any(one.truncated for one in halves) if records else False,
+    )
+    trace = first.trace.model_copy(
+        update={
+            "redactions": (*first.trace.redactions, *second.trace.redactions),
+            "dropped": (*first.trace.dropped, *second.trace.dropped),
+        }
+    )
+    return RedactedAnswer(payload=payload, trace=trace)
 
 
 # ------------------------------------------------------------------------------ the ports
@@ -813,7 +938,7 @@ async def draft(
     # The redactor's own trace travels to the sink with the payload, so what it withheld is
     # recorded in names and counts (M4.4.4). The payload alone reaches the prompt.
     step(GateStep.REDACT)
-    redacted = redact(found, entitlement=entitlement, policy=PASSAGE_POLICY, now=now)
+    redacted = redact_passages(found, entitlement=entitlement, now=now)
     payload = shown(redacted.payload)
     # `found` is not read again below this line. See
     # A_MODEL_IS_SHOWN_THE_REDACTED_PAYLOAD_AND_NOTHING_ELSE.

@@ -10,7 +10,7 @@ one document, in reading order, at the reach the answer was computed at.
 **It reads through the registered `knowledge.read_document` handler and the model lane's passage
 policy, and through nothing else.** The handler puts the reader's reach inside the statement and
 runs it under the row-level security `0009` put on `know.chunk`; the redactor then walks what came
-back with `brain.gate.model_lane.PASSAGE_POLICY` at the same reach. Those are the two walls the
+back with `brain.gate.model_lane.redact_passages` at the same reach. Those are the two walls the
 answer went through, so a passage the reader could have been cited is a passage they can open here,
 and nothing else is. Rejected: reading `know.chunk` from this module, which would be a third
 statement over the document plane with its own opinion of the reach. See
@@ -42,8 +42,8 @@ from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked
 from brain.core.envelope import TypedResult
 from brain.core.errors import Absent, BrainError, Failed
-from brain.core.redaction import ID_KEYS, redact
-from brain.gate.model_lane import PASSAGE_POLICY
+from brain.core.redaction import ID_KEYS
+from brain.gate.model_lane import redact_passages
 from brain.knowledge.document_tools import (
     MAX_PASSAGES,
     READ_DOCUMENT,
@@ -152,7 +152,7 @@ async def cited_document(
             entitlement=asked.reach,
             now=asked.now,
         )
-        redacted = redact(found, entitlement=asked.reach, policy=PASSAGE_POLICY, now=asked.now)
+        redacted = redact_passages(found, entitlement=asked.reach, now=asked.now)
     except BrainError:
         raise
     except Exception as exc:
