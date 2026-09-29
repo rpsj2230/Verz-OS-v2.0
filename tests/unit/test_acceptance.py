@@ -220,6 +220,7 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "typed_approve_decides_nothing_and_the_approver_gets_one_card",
         "a_card_press_decides_as_its_approver_alone_and_closes_the_card",
         "group_chat_and_channel_policy_hold_on_one_install",
+        "a_raised_approval_is_sent_to_its_approver_s_kept_address",
     ]
     assert list(by_module) == list(acceptance.CHECK_MODULES)
     oversight = {one.name: one.leaves for one in registered()}
@@ -727,9 +728,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     ):
         assert outcomes.pop(worker_check) == (NOT_RUN, acceptance_deployment.NOT_IN_A_WORKER)
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
-    assert len(outcomes) == 59
+    assert len(outcomes) == 60
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 186
+    assert runs == [(2,)] and len(recorded) == 188
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }

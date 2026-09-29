@@ -19,7 +19,7 @@ which has no row-level security, hold the other three.
 
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
-Task ids: M10.2.3, M10.2.4, M10.7.1, M10.7.4
+Task ids: M10.2.3, M10.2.4, M10.7.1, M10.7.4, M10.2.7, M10.3.5
 """
 
 from __future__ import annotations
@@ -46,12 +46,14 @@ SOURCE = ROOT / "src" / "brain" / "ops" / "acceptance_checks_cards.py"
 TYPED = "typed_approve_decides_nothing_and_the_approver_gets_one_card"
 PRESSED = "a_card_press_decides_as_its_approver_alone_and_closes_the_card"
 POLICY = "group_chat_and_channel_policy_hold_on_one_install"
+RAISED = "a_raised_approval_is_sent_to_its_approver_s_kept_address"
 
 #: Each check and the leaves it proves.
 LEAVES = {
     TYPED: ("M10.7.1", "M10.2.3", "M10.7.4"),
     PRESSED: ("M10.2.3", "M10.2.4"),
     POLICY: ("M10.7.4",),
+    RAISED: ("M10.2.7", "M10.3.5"),
 }
 
 #: What the database half hands the run: an issuer the gate is built for, and an address of the
@@ -77,7 +79,7 @@ def test_the_card_checks_are_in_the_suite_with_the_leaves_they_prove() -> None:
     drops out of the suite with the Install page simply showing one fewer row."""
     assert MODULE in CHECK_MODULES
     assert {one.name: one.leaves for one in mine()} == LEAVES
-    assert [one.name for one in mine()] == [TYPED, PRESSED, POLICY]
+    assert [one.name for one in mine()] == [TYPED, PRESSED, POLICY, RAISED]
 
 
 def test_every_leaf_the_card_checks_name_is_a_leaf_of_the_work_breakdown() -> None:
@@ -397,4 +399,45 @@ def test_a_channel_that_carries_any_class_fails_the_policy_check(
     assert run_checks(head, (by_name(POLICY),))[POLICY] == (
         FAILED,
         "Lark carried a class its ceiling excludes, or refused one it takes",
+    )
+
+
+@pytest.mark.needs_db
+def test_a_raise_that_sends_to_everybody_it_can_address_fails_the_raise_check(
+    head: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With the Approvals screen's question skipped when a card is sent on a raise, the bystander
+    whose address is kept is sent the card too, and the check says so. Delete this and the check
+    passes over an install that sends an approval to people who could never decide it."""
+    from brain.approval_routes import shown_card
+    from brain.console.approvals import Card
+
+    def to_everybody(suspension: Any, reach: Any, now: datetime) -> Card | None:
+        del reach
+        return shown_card(suspension, _holding_it(suspension), now)
+
+    monkeypatch.setattr("brain.approval_cards.shown_card", to_everybody)
+    assert run_checks(head, (by_name(RAISED),))[RAISED] == (
+        FAILED,
+        "the card was not sent to the approver's kept address alone",
+    )
+
+
+@pytest.mark.needs_db
+def test_a_route_that_keeps_no_address_fails_the_raise_check(
+    head: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With the events route keeping no address when a bound person writes, nothing can be sent on
+    a raise, and the check says so at the first place it looks. Delete this and the check passes
+    over an install where a binding made before 0166 never gains its address."""
+
+    class Forgetful:
+        async def remember(self, channel: Any, identity: str) -> bool:
+            del channel, identity
+            return False
+
+    monkeypatch.setattr("brain.channel_routes.addresses_of", lambda request: Forgetful())
+    assert run_checks(head, (by_name(RAISED),))[RAISED] == (
+        FAILED,
+        "a bound person who wrote to the Brain had no address kept",
     )
