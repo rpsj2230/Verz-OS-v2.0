@@ -9,11 +9,10 @@ are the translation from a per-class allocation into processes, and the thing th
 them is `brain.ops.worker`. Keeping them beside their consumer also means this change touches
 one fewer file that other work is in.
 
-No task ids. `brain.ops.worker` and `docker-compose.worker.yml` claim none. The process starts
-now, because the queue driver is a dependency as of 2026-09-11, and what has not happened is
-this compose file running on the host it was sized for. M32.4.1.4 is served rather than
-closed, on the same grounds `docker-compose.langfuse.yml` refuses M32.1.1.1: a compose file
-that has never run is a design. The driver's own tests are in `test_queue_driver.py`.
+No task ids here. `brain.ops.worker` claims M32.4.1.4 since the compose file ran on an install,
+and the test that proves it is the install's own check, in `test_acceptance_deployment.py`, which
+asks this module's functions of the container the suite runs in. The driver's own tests are in
+`test_queue_driver.py`.
 """
 
 from __future__ import annotations
