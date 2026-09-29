@@ -1156,14 +1156,19 @@ def policy_epoch_of(policies: Mapping[str, FieldPolicy]) -> int:
 
 
 def caching_of(
-    state: Any, policies: Mapping[str, FieldPolicy], sources: Sequence[str]
+    state: Any,
+    policies: Mapping[str, FieldPolicy],
+    sources: Sequence[str],
+    epochs: Mapping[str, int] | None = None,
 ) -> Caching | None:
     """The answer-cache lookup for this request, or None on a process with no answer store.
 
     `brain.app.lifespan` installs `ValkeyAnswerStore` only when a cache is configured. With
     none the front half still enters CACHE and misses, so the record says the step ran.
     `sources` is every source the reader reaches, so a volatile one makes the question
-    uncacheable rather than a cached answer stale.
+    uncacheable rather than a cached answer stale. `epochs` are the uploaded tables' versions
+    (`brain.knowledge.classified_rows.AN_UPLOAD_MOVES_THE_ANSWER_CACHE_KEY`); no connector
+    source records one yet, so for those the answer's age bounds staleness.
     """
     store: AnswerStore | None = getattr(state, "answer_store", None)
     if store is None:
@@ -1171,8 +1176,7 @@ def caching_of(
     return Caching(
         store=store,
         policy_epoch=policy_epoch_of(policies),
-        # No source records an epoch yet, so the key holds none and the TTL bounds staleness.
-        source_epochs={},
+        source_epochs=dict(epochs or {}),
         sources=frozenset(sources),
     )
 
@@ -1428,7 +1432,12 @@ async def answered_for(
     caching = (
         None
         if referral is not None
-        else caching_of(request.app.state, policies, sources_at(registry, asking.reach, asking.now))
+        else caching_of(
+            request.app.state,
+            policies,
+            sources_at(registry, asking.reach, asking.now),
+            tables.epochs,
+        )
     )
 
     try:
