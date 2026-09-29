@@ -205,6 +205,8 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     assert by_module["brain.ops.acceptance_threads"] == [
         "a_question_is_kept_in_its_askers_thread_and_searched_by_them",
         "a_thread_begun_in_lark_is_listed_and_continued_on_the_web",
+        "a_follow_up_is_answered_from_what_its_thread_cited",
+        "a_wrong_answer_is_kept_as_a_signal_and_no_words_with_it",
     ]
     assert list(by_module) == list(acceptance.CHECK_MODULES)
     oversight = {one.name: one.leaves for one in registered()}
@@ -685,6 +687,8 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         )
     ):
         assert outcomes.pop(model_check.name)[0] == NOT_RUN, model_check.name
+    # A follow-up is answered by a model too; `tests/unit/test_acceptance_threads.py` runs it.
+    assert outcomes.pop("a_follow_up_is_answered_from_what_its_thread_cited")[0] == NOT_RUN
     # No antivirus and no object store here; `tests/unit/test_acceptance_ingest.py` runs both.
     assert outcomes.pop("the_antivirus_test_file_is_refused_as_malware")[0] == NOT_RUN
     assert outcomes.pop("a_queued_file_is_kept_in_the_store_and_read_by_the_worker")[0] == NOT_RUN
@@ -695,9 +699,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         acceptance_audit.NO_DEPLOYMENT_IS_RECORDED_TO_KEEP_OUT,
     )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
-    assert len(outcomes) == 48
+    assert len(outcomes) == 49
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 152
+    assert runs == [(2,)] and len(recorded) == 156
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }

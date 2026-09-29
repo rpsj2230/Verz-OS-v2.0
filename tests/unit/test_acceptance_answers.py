@@ -142,6 +142,11 @@ def install() -> Iterator[str]:
 
 @pytest.fixture
 def vaulted(monkeypatch: pytest.MonkeyPatch) -> Providers:
+    """`vault_the_providers`, as a fixture."""
+    return vault_the_providers(monkeypatch)
+
+
+def vault_the_providers(monkeypatch: pytest.MonkeyPatch) -> Providers:
     """The hosted profile, every provider's key in a vault the test answers for, and the
     providers answering in the process, as `tests/unit/test_acceptance_routing.py` sets them. The
     keys are this file's test values and reach nothing, and no check here should ask a provider
@@ -331,8 +336,10 @@ def test_a_kind_the_search_ignores_fails_the_kind_check(
 
     original = api_routes.model_lane_for
 
-    def unnarrowed(state: Any, agent: Any, registry: Any, kinds: Any = ()) -> Any:
-        return original(state, agent, registry)
+    def unnarrowed(
+        state: Any, agent: Any, registry: Any, kinds: Any = (), follow_up: Any = None
+    ) -> Any:
+        return original(state, agent, registry, follow_up=follow_up)
 
     monkeypatch.setattr(api_routes, "model_lane_for", unnarrowed)
     assert "another kind" in _failed(install, KIND)

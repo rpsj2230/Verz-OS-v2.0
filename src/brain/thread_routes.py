@@ -19,7 +19,10 @@ leaves no mark where one was left out; see
 **The search reads the person's questions and nothing an answer said**; see
 `brain.chat.thread_store.SEARCH_READS_ONLY_THE_ASKERS_OWN_QUESTIONS`.
 
-Task ids: M9.1.1, M9.1.2, M9.1.3
+**A person may say the latest answer in their thread was wrong**, choosing a kind from a closed
+list and writing nothing, which is kept as a signal for learning (M9.2.4).
+
+Task ids: M9.1.1, M9.1.2, M9.1.3, M9.2.4
 """
 
 from __future__ import annotations
@@ -35,6 +38,7 @@ from brain.api_routes import Asked
 from brain.chat.remember import threads_of
 from brain.chat.thread_store import CONSOLE_SURFACE, StoredThreads, surfaces
 from brain.chat.threads import Thread
+from brain.chat.turns import CorrectionKind
 from brain.core.errors import Absent, Failed
 from brain.member_activity import continue_thread, recent_threads
 
@@ -49,6 +53,7 @@ A_HISTORY_IS_ONLY_EVER_THE_CALLERS: Final = (
 THREADS_PATH: Final = "/threads"
 THREAD_SEARCH_PATH: Final = "/threads/search"
 THREAD_PATH: Final = "/threads/{thread_id}"
+CORRECTIONS_PATH: Final = "/threads/{thread_id}/corrections"
 
 #: The longest search a person may type, which is a few words and not a paragraph.
 SEARCH_CHARS: Final = 200
@@ -87,6 +92,23 @@ class ThreadMessageView(BaseModel):
     at: datetime
     channel: str
     body: str
+
+
+class CorrectionAsked(BaseModel):
+    """A person saying the latest answer in their thread was wrong, and how. No words."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    kind: CorrectionKind
+
+
+class CorrectionView(BaseModel):
+    """What was kept: the kind, and when. Nothing about the answer or its records."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    kind: str
+    at: datetime
 
 
 class ThreadView(BaseModel):
@@ -177,3 +199,26 @@ async def my_thread(
             for one in continued.shown
         ],
     )
+
+
+@router.post(
+    CORRECTIONS_PATH, status_code=201, response_model=CorrectionView, responses=COMMON_RESPONSES
+)
+async def correct_my_thread(
+    request: Request,
+    asked: Asked,
+    thread_id: Annotated[str, Path(pattern=THREAD_ID_PATTERN)],
+    correction: CorrectionAsked,
+) -> CorrectionView:
+    """Mark the latest answer in one of the caller's threads as wrong (M9.2.4).
+
+    Kept as a signal and never as a fact: see
+    `brain.chat.thread_store.A_CORRECTION_IS_A_SIGNAL_AND_NEVER_A_FACT`. A thread that is not the
+    caller's, does not exist or holds no answer is one 404.
+    """
+    kept = await _store(request).correct(
+        asked.caller.principal.id, thread_id, correction.kind, now=asked.now
+    )
+    if kept is None:
+        raise Absent(f"thread {thread_id!r} is not answerable for this caller")
+    return CorrectionView(kind=kept.kind.value, at=kept.at)

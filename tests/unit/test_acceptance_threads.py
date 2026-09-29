@@ -13,7 +13,7 @@ reading answers.
 
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
-Task ids: M9.1.1, M9.1.2, M9.1.3
+Task ids: M9.1.1, M9.1.2, M9.1.3, M9.2.3, M9.2.4
 """
 
 from __future__ import annotations
@@ -37,21 +37,26 @@ from brain.ops import acceptance_run
 from brain.ops.acceptance import FAILED, PASSED, registered
 from brain.settings import settings_from
 from tests.unit.test_acceptance import INSTALL, at_head, counts
+from tests.unit.test_acceptance_models import Providers
 
 MODULE = "brain.ops.acceptance_threads"
 KEPT = "a_question_is_kept_in_its_askers_thread_and_searched_by_them"
 LARK = "a_thread_begun_in_lark_is_listed_and_continued_on_the_web"
+FOLLOW = "a_follow_up_is_answered_from_what_its_thread_cited"
+CORRECT = "a_wrong_answer_is_kept_as_a_signal_and_no_words_with_it"
 
 DONE = "event: done\ndata: \n\n"
 
 
 # ------------------------------------------------------------------------ the figures
 def test_the_module_declares_one_check_per_group_of_leaves() -> None:
-    """Two checks, each closing its own leaves. Delete this and a check can lose a leaf with the
+    """Four checks, each closing its own leaves. Delete this and a check can lose a leaf with the
     page showing the same rows, and the leaf closes on a check that never looked."""
     assert [(one.name, one.leaves) for one in registered((MODULE,))] == [
         (KEPT, ("M9.1.1", "M9.1.3")),
         (LARK, ("M9.1.2",)),
+        (FOLLOW, ("M9.2.3",)),
+        (CORRECT, ("M9.2.4",)),
     ]
 
 
@@ -90,7 +95,9 @@ def test_a_cited_field_is_kept_under_its_own_column_rule_and_a_passage_under_the
             _evidence({"kind": "record", "entity": "price", "record_id": "7", "field": "cost"}),
             _evidence({"kind": "record", "entity": "price", "record_id": "7", "field": "name"}),
             _evidence({"kind": "record", "entity": "price", "record_id": "7", "field": "odd"}),
-            _evidence({"kind": "document", "document_id": "upload.abc"}),
+            _evidence(
+                {"kind": "document", "document_id": "upload.abc", "anchor": "chunk=upload.abc.0002"}
+            ),
         ),
         {"price": POLICY},
     )
@@ -99,7 +106,7 @@ def test_a_cited_field_is_kept_under_its_own_column_rule_and_a_passage_under_the
         ("price", "7", "read:price.cost"),
         ("price", "7", "read:price"),
         ("price", "7", "read:price.odd"),
-        ("knowledge", "upload.abc", "read:knowledge.document"),
+        ("knowledge", "upload.abc.0002", "read:knowledge.document"),
     ]
 
 
@@ -148,6 +155,15 @@ def install() -> Iterator[str]:
 
 
 @pytest.fixture
+def vaulted(monkeypatch: pytest.MonkeyPatch) -> Providers:
+    """The hosted profile with keys and providers answering in the process, as
+    `tests/unit/test_acceptance_answers.py` sets them, so the stand-in is planned."""
+    from tests.unit.test_acceptance_answers import vault_the_providers
+
+    return vault_the_providers(monkeypatch)
+
+
+@pytest.fixture
 def issuer(monkeypatch: pytest.MonkeyPatch) -> None:
     for name, value in INSTALL.items():
         monkeypatch.setenv(name, value)
@@ -187,16 +203,18 @@ def _counts(url: str) -> dict[str, int]:
 
 @pytest.mark.needs_db
 def test_every_thread_check_passes_on_an_install_and_leaves_nothing(
-    install: str, issuer: None
+    install: str, issuer: None, vaulted: Providers
 ) -> None:
-    """**The module as the worker runs it.** Both pass and nothing a check wrote is left, the
-    threads and messages included. Delete this and a check that can never pass on a real schema,
+    """**The module as the worker runs it.** All four pass and nothing a check wrote is left, the
+    threads and messages included, and no provider of the product is asked: the follow-up's model
+    is the stand-in. Delete this and a check that can never pass on a real schema,
     or one that commits a person's transcript, reaches the owner's server first."""
     before = _counts(install)
     outcomes = run_threads(install)
     assert outcomes == dict.fromkeys(outcomes, (PASSED, "")), outcomes
-    assert len(outcomes) == 2
+    assert len(outcomes) == 4
     assert _counts(install) == before
+    assert vaulted.sent == []
 
 
 def _failed(url: str, name: str) -> str:
@@ -214,6 +232,36 @@ def test_keeping_nothing_fails_both_checks(
     monkeypatch.setattr(remember_module, "threads_of", lambda state: None)
     assert _failed(install, KEPT)
     assert _failed(install, LARK)
+
+
+@pytest.mark.needs_db
+def test_a_follow_up_without_its_thread_s_passages_fails_the_follow_up_check(
+    install: str, issuer: None, vaulted: Providers, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The route answering a follow-up from its own words alone, as it did until 2026-09-29.
+    Delete this and M9.2.3 closes on a check that a thread with no memory passes."""
+    from brain import api_routes
+
+    async def forgetful(state: Any, asking: Any, ask: Any) -> None:
+        return None
+
+    monkeypatch.setattr(api_routes, "follow_up_for", forgetful)
+    assert _failed(install, FOLLOW)
+
+
+@pytest.mark.needs_db
+def test_a_correction_kept_nowhere_fails_the_correction_check(
+    install: str, issuer: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A correction answered and written nowhere. Delete this and M9.2.4 closes on a check that
+    never saw a correction reach the learning signal."""
+    from brain.chat import thread_store
+
+    async def nowhere(self: Any, principal_id: str) -> tuple[()]:
+        return ()
+
+    monkeypatch.setattr(thread_store.StoredThreads, "corrections", nowhere)
+    assert "contradiction" in _failed(install, CORRECT)
 
 
 @pytest.mark.needs_db

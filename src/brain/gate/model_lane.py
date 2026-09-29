@@ -135,8 +135,18 @@ order `offered_cards` is. The lane hands them to `Finished`; `brain.ops.usage_st
 Counting assignments instead was rejected: an agent holding a skill no run was offered is the
 case the count exists to find.
 
+**A follow-up brings its thread's questions and the passages its thread cited, re-read now, and
+never an earlier answer (M9.2.3).** `ModelLane.follow_up` carries the person's own earlier
+questions in the thread and the chunk ids its earlier answers cited; the draft recalls those
+passages through the same search tool at the reader's reach today, ahead of the fresh search, so a
+passage whose grant has since gone is simply not recalled. The cheaper design replays the earlier
+answer as conversation history, and it was rejected twice over: an answer is text a model wrote,
+so replaying it lets one ungrounded sentence become the next answer's source, and it is text read
+under yesterday's grants, so replaying it shows a reader what they may no longer read. See
+`A_FOLLOW_UP_CARRIES_QUESTIONS_AND_CITED_PASSAGES_RE_READ_NOW`.
+
 Task ids: M3.9.3, M8.1.4, M9.2.1, M6.4.2, M5.4.1, M5.7.3, M5.6.4, M5.2.2, M5.5.1, M7.7.1, M8.1.2
-Task ids: M27.15.9, M15.4.3
+Task ids: M27.15.9, M15.4.3, M9.2.3
 """
 
 from __future__ import annotations
@@ -631,6 +641,55 @@ class ModelLane:
     #: Whether an answer nothing stands behind may be given (M8.2.4). Required unless an agent
     #: says otherwise; see `brain.gate.abstain.CitationPolicy`.
     citations: CitationPolicy = REQUIRE_CITATION
+    #: What a question continuing a thread brings with it, or None for a question on its own.
+    follow_up: FollowUp | None = None
+
+
+#: Why a follow-up carries the person's earlier questions and the passages cited, and no answer.
+A_FOLLOW_UP_CARRIES_QUESTIONS_AND_CITED_PASSAGES_RE_READ_NOW: Final = (
+    "A follow-up such as 'and who signs it' names nothing a search can find, so it brings the "
+    "person's earlier questions, which are their own words, and the passages earlier answers "
+    "cited, re-checked with context_for and re-read under the reach held now. It never brings "
+    "an earlier answer's words: those were written at an earlier reach, and a model told them "
+    "would repeat what a revoked grant once allowed."
+)
+
+#: The most earlier questions a follow-up shows the model, and the characters of each. Inside the
+#: byte bound `THE_PROMPT_FITS_ITS_TIER_BY_ITS_BYTES` holds, which a test measures with them.
+EARLIER_SHOWN: Final = 3
+EARLIER_CHARS: Final = 1_000
+
+
+@dataclass(frozen=True)
+class FollowUp:
+    """What a question continuing a thread brings (M9.2.3). See
+    `A_FOLLOW_UP_CARRIES_QUESTIONS_AND_CITED_PASSAGES_RE_READ_NOW`.
+
+    `earlier` is the person's own earlier questions, oldest first. `cited` is the passages
+    earlier answers cited that `brain.chat.turns.context_for` still admits, and `recall` reads
+    them under the caller's reach, as `brain.knowledge.document_tools.recaller` does.
+    """
+
+    earlier: tuple[str, ...] = ()
+    cited: tuple[str, ...] = ()
+    recall: Callable[..., Awaitable[TypedResult[KnowledgePassage]]] | None = None
+
+
+def with_recalled(
+    recalled: TypedResult[KnowledgePassage], found: TypedResult[KnowledgePassage]
+) -> TypedResult[KnowledgePassage]:
+    """The passages recalled for a follow-up, then the search's, each passage once."""
+    if not recalled.records:
+        return found
+    seen = {one.id for one in recalled.records}
+    records = (*recalled.records, *(one for one in found.records if one.id not in seen))
+    return found.model_copy(
+        update={
+            "records": records,
+            "source": found.source or recalled.source,
+            "fetched_at": found.fetched_at or recalled.fetched_at,
+        }
+    )
 
 
 @dataclass(frozen=True)
@@ -696,17 +755,27 @@ def cards_block(cards: Sequence[SkillCard]) -> str:
 
 
 def prompt_for(
-    question: str, payload: ChannelPayload, cards: Sequence[SkillCard] = ()
+    question: str,
+    payload: ChannelPayload,
+    cards: Sequence[SkillCard] = (),
+    *,
+    earlier: Sequence[str] = (),
 ) -> PromptLayout:
     """The whole prompt: the shared prefix, then the question, the passages and the length.
 
     Takes a `ChannelPayload` and has no parameter that could carry anything the redactor has not
-    walked. See `A_MODEL_IS_SHOWN_THE_REDACTED_PAYLOAD_AND_NOTHING_ELSE`.
+    walked. See `A_MODEL_IS_SHOWN_THE_REDACTED_PAYLOAD_AND_NOTHING_ELSE`. `earlier` is the
+    person's own earlier questions in this thread, the newest `EARLIER_SHOWN`, each cut to
+    `EARLIER_CHARS`, and never an earlier answer (M9.2.3).
     """
     passages = "\n\n".join(
         passage_block(number, record) for number, record in enumerate(payload.records, start=1)
     )
     parts = [f"Question:\n{question[:MAX_QUESTION_CHARS]}", f"Passages:\n\n{passages}"]
+    asked_before = [one[:EARLIER_CHARS] for one in list(earlier)[-EARLIER_SHOWN:]]
+    if asked_before:
+        listed = "\n".join(f"- {one}" for one in asked_before)
+        parts.insert(0, f"Earlier in this conversation the person asked:\n{listed}")
     if cards:
         parts.append(cards_block(cards))
     return lay_out(PREFIX, *parts, settings_for(Lane.ANSWER).instruction)
@@ -864,6 +933,12 @@ async def draft(
     step(GateStep.INVOKE)
     searching()
     found = await lane.search.passages(question, entitlement=entitlement, now=now)
+    follow_up = lane.follow_up
+    if follow_up is not None and follow_up.cited and follow_up.recall is not None:
+        # A follow-up names nothing a search finds; the passages its thread cited are re-read
+        # under this reach and go first. See the reason constant beside `FollowUp`.
+        recalled = await follow_up.recall(follow_up.cited, entitlement=entitlement, now=now)
+        found = with_recalled(recalled, found)
     # The redactor's own trace travels to the sink with the payload, so what it withheld is
     # recorded in names and counts (M4.4.4). The payload alone reaches the prompt.
     step(GateStep.REDACT)
@@ -882,7 +957,8 @@ async def draft(
     agent = lane.agent
     offered = () if agent is None else skills_offered(agent, caller=entitlement, now=now)
     cards = offered_cards(offered)
-    messages = messages_of(prompt_for(question, payload, cards))
+    earlier = () if follow_up is None else follow_up.earlier
+    messages = messages_of(prompt_for(question, payload, cards, earlier=earlier))
     # The model writes the prose, so its call is the composing step and follows the redactor.
     step(GateStep.COMPOSE)
     if using is not None and cards:

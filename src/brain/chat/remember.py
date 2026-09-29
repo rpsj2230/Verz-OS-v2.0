@@ -15,7 +15,8 @@ unless somebody writes that rule, so such an answer is not shown again, failing 
 `A_CITED_FIELD_IS_RE_CHECKED_UNDER_ITS_OWN_RULE`.
 
 **A cited passage is re-checked under the document's text capability**, which is what reading a
-passage needs (`brain.gate.model_lane.PASSAGE_POLICY`).
+passage needs (`brain.gate.model_lane.PASSAGE_POLICY`), and is recorded by its chunk, which is what
+a follow-up in the same thread re-reads under the reach held then (M9.2.3).
 
 **What is not recorded, and why.** A referred question: see `brain.chat.thread_store`. A window's
 refusal: nothing was answered. A cache hit: recorded with its words and with references the reader
@@ -23,7 +24,7 @@ refuses, so the question stays in the thread and the answer is never shown again
 `brain.chat.thread_store.AN_ANSWER_WHOSE_SOURCES_ARE_UNKNOWN_IS_NEVER_SHOWN_AGAIN`. An abstention
 drew on nothing and is recorded with no references.
 
-Task ids: M9.1.1, M9.1.2
+Task ids: M9.1.1, M9.1.2, M9.2.3
 """
 
 from __future__ import annotations
@@ -70,7 +71,8 @@ def refs_of(
             entity, record_id, field = view["entity"], view["record_id"], view["field"]
             required = _field_capability(entity, field, policies)
         elif kind == DOCUMENT_KIND:
-            entity, record_id = KNOWLEDGE_ENTITY, view["document_id"]
+            # The passage cited, by its chunk, which is what a follow-up re-reads (M9.2.3).
+            entity, record_id = KNOWLEDGE_ENTITY, chunk_of(view)
             required = _field_capability(KNOWLEDGE_ENTITY, "document", PASSAGES)
         else:
             # A citation of a shape this build does not write. Unknown sources: not shown again.
@@ -78,6 +80,14 @@ def refs_of(
         one = RecordRef(entity=entity, record_id=record_id, required=required)
         found.setdefault((one.entity, one.record_id, one.required.value), one)
     return tuple(found.values())
+
+
+def chunk_of(view: Mapping[str, str]) -> str:
+    """The chunk a document citation's anchor names, or the document when it names none."""
+    anchor = view.get("anchor", "")
+    first = anchor.split("&", 1)[0]
+    chunk = first.removeprefix("chunk=") if first.startswith("chunk=") else ""
+    return chunk or view["document_id"]
 
 
 def _field_capability(entity: str, field: str, policies: Mapping[str, FieldPolicy]) -> Capability:

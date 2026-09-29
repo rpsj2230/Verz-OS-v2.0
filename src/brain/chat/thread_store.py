@@ -40,7 +40,11 @@ may be ones the reader no longer reaches, and a search that matched them would s
 there. A question is the person's own words, which `brain.chat.threads.may_show` always shows.
 See `SEARCH_READS_ONLY_THE_ASKERS_OWN_QUESTIONS`.
 
-Task ids: M9.1.1, M9.1.2, M9.1.3
+**A correction is a note in the thread and a signal, never a fact.** `correct` keeps the kind of
+wrong and the answer's references, and `corrections` hands the learning signal one observation per
+note. See `A_CORRECTION_IS_A_SIGNAL_AND_NEVER_A_FACT`.
+
+Task ids: M9.1.1, M9.1.2, M9.1.3, M9.2.4
 """
 
 from __future__ import annotations
@@ -56,10 +60,11 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.channels.adapter import ChannelCapabilities
-from brain.chat.threads import Thread, ThreadMessage, refs_as_json, refs_from_json
-from brain.chat.turns import RecordRef
+from brain.chat.threads import Thread, ThreadMessage, as_turns, refs_as_json, refs_from_json
+from brain.chat.turns import Correction, CorrectionKind, RecordRef, record_correction
 from brain.core.field_policy import Classification
 from brain.gate.context import Channel
+from brain.memory.signals import Observation, Signal
 from brain.tables.chat import TITLE_CHARS, ConversationRow, MessageRole, MessageRow
 
 # ------------------------------------------------------------------ written-down reasons
@@ -103,6 +108,15 @@ THE_CONSOLE_CARRIES_WHAT_ITS_READER_MAY_READ: Final = (
     "itself narrows nothing further and is declared at the highest classification."
 )
 
+#: Why a correction keeps a kind and never what the person said the answer should have been.
+A_CORRECTION_IS_A_SIGNAL_AND_NEVER_A_FACT: Final = (
+    "A person marking an answer wrong is kept as a note in their thread naming the kind of "
+    "wrong, with the references the answer drew on so somebody can look at the same records, "
+    "and read by the learning signal as a contradiction. Nothing the person says the right "
+    "answer is gets kept, because a chat box that could write facts would be a write path into "
+    "the company's knowledge with no review, no scope and no provenance."
+)
+
 # ------------------------------------------------------------------------ the figures
 #: The namespace a chat conversation's thread id is named in. A fixed product constant, the same
 #: on every install, so a person's chat thread keeps its id across a restart.
@@ -119,6 +133,9 @@ ANSWER_AFTER_QUESTION: Final = timedelta(microseconds=1)
 #: The messages a search reads: the person's own questions, and nothing an answer said. See
 #: `SEARCH_READS_ONLY_THE_ASKERS_OWN_QUESTIONS`.
 SEARCHED_ROLES: Final[tuple[str, ...]] = (MessageRole.USER.value,)
+
+#: What a correction's note begins with, followed by its kind's word.
+CORRECTION_PREFIX: Final = "correction:"
 
 #: The most threads a list or a search returns, and the most words a search takes.
 MOST_THREADS: Final = 50
@@ -249,6 +266,71 @@ class StoredThreads:
                 return opened
         msg = "a fresh thread id was already taken, which a random UUID does not do"
         raise RuntimeError(msg)
+
+    async def correct(
+        self, principal_id: str, thread_id: str, kind: CorrectionKind, *, now: datetime
+    ) -> Correction | None:
+        """Mark the latest answer in one of this person's threads as wrong (M9.2.4).
+
+        None for a thread that is not theirs, does not exist or holds no answer, alike. The
+        correction is `brain.chat.turns.record_correction`'s, which takes the answer's instant,
+        agent and references off the answer itself, and it is kept as a system note in the
+        thread naming its kind and nothing the person said about it. See
+        `A_CORRECTION_IS_A_SIGNAL_AND_NEVER_A_FACT`.
+        """
+        found = await self.thread(principal_id, thread_id)
+        if found is None:
+            return None
+        try:
+            correction = record_correction(as_turns(found), kind, principal_id=principal_id, at=now)
+        except ValueError:
+            return None
+        wanted = parsed_thread_id(found.thread_id)
+        async with self._sessions() as session, session.begin():
+            await session.execute(_SET_PRINCIPAL, {"principal": principal_id})
+            await session.execute(
+                sa.insert(MessageRow).values(
+                    conversation_id=wanted,
+                    role=MessageRole.SYSTEM.value,
+                    channel=Channel.CONSOLE.value,
+                    body=f"{CORRECTION_PREFIX}{kind.value}",
+                    refs=refs_as_json(correction.refs),
+                    created_at=now,
+                )
+            )
+        return correction
+
+    async def corrections(self, principal_id: str) -> tuple[Observation, ...]:
+        """This person's corrections, as the learning signal reads them (M9.2.4, M16.2.3).
+
+        One `brain.memory.signals.Observation` per correction, naming the conversation and the
+        message and never the words, which is that module's
+        `A_SIGNAL_LOG_MUST_NOT_BECOME_A_SECOND_TRANSCRIPT`.
+        """
+        async with self._sessions() as session, session.begin():
+            await session.execute(_SET_PRINCIPAL, {"principal": principal_id})
+            rows = (
+                await session.execute(
+                    sa.select(MessageRow.id, MessageRow.conversation_id, MessageRow.created_at)
+                    .join(ConversationRow, ConversationRow.id == MessageRow.conversation_id)
+                    .where(
+                        ConversationRow.principal_id == principal_id,
+                        MessageRow.role == MessageRole.SYSTEM.value,
+                        MessageRow.body.startswith(CORRECTION_PREFIX, autoescape=True),
+                    )
+                    .order_by(MessageRow.created_at, MessageRow.id)
+                )
+            ).all()
+        return tuple(
+            Observation(
+                signal=Signal.CONTRADICTED,
+                conversation_id=str(conversation),
+                message_id=str(message),
+                principal_id=principal_id,
+                at=at,
+            )
+            for message, conversation, at in rows
+        )
 
     async def threads(self, principal_id: str, *, limit: int = MOST_THREADS) -> tuple[Thread, ...]:
         """This person's most recently used threads, each with its messages in order."""

@@ -9,7 +9,10 @@
  * `brain.thread_routes` declares. The header's name is read out of the Python source, so a rename
  * there fails here.
  *
- * Task ids: M9.1.1, M9.1.2, M9.1.3
+ * A wrong answer is marked with a kind and no words, at `POST /api/v1/threads/{id}/corrections`,
+ * whose kinds are the API schema's own, and a reopened thread says so in words.
+ *
+ * Task ids: M9.1.1, M9.1.2, M9.1.3, M9.2.4
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -21,11 +24,23 @@ import {
   ASK_LABEL,
   CONTINUING,
   CONVERSATIONS_HEADING,
+  MARK_WRONG,
+  MARKED_WRONG,
   NEW_CONVERSATION,
+  NOT_MARKED,
   NOTHING_FOUND_IN_CONVERSATIONS,
   SEARCH_LABEL,
+  WAS_IT_WRONG,
 } from "../src/pages/Ask";
-import { THREAD_HEADER, THREAD_SEARCH_API_PATH, THREADS_API_PATH, threadPath } from "../src/pages/threadsQuery";
+import {
+  correctionPath,
+  CORRECTION_PREFIX,
+  CORRECTION_WORDS,
+  THREAD_HEADER,
+  THREAD_SEARCH_API_PATH,
+  THREADS_API_PATH,
+  threadPath,
+} from "../src/pages/threadsQuery";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { readRepoFile } from "./support/repo";
 
@@ -58,6 +73,7 @@ const REOPENED = {
   messages: [
     { role: "user", at: "2999-01-01T09:00:00+00:00", channel: "lark", body: "who signs the checklist" },
     { role: "assistant", at: "2999-01-01T09:00:01+00:00", channel: "lark", body: "The client signs it." },
+    { role: "system", at: "2999-01-01T09:00:02+00:00", channel: "console", body: "correction:stale" },
   ],
 };
 
@@ -66,10 +82,16 @@ interface Mounted {
   readonly idp: FakeIdp;
 }
 
-async function askScreen(threads: unknown = LISTED): Promise<Mounted> {
+async function askScreen(threads: unknown = LISTED, correcting = 201): Promise<Mounted> {
   const idp = fakeIdentityProvider({
-    api(url) {
+    api(url, init) {
       const address = new URL(url, ORIGIN);
+      if (address.pathname === `${API}${correctionPath(THREAD)}` && init?.method === "POST") {
+        const sent = JSON.parse(String(init.body ?? "null")) as { kind?: string } | null;
+        return correcting === 201
+          ? json({ kind: sent?.kind ?? "", at: "2999-01-02T09:00:05+00:00" }, 201)
+          : json({ message: "I could not find that.", trace_id: "t" }, correcting);
+      }
       if (address.pathname === `${API}/answer`) {
         return new Response(FRAMES, {
           status: 200,
@@ -197,5 +219,66 @@ describe("a conversation on Ask", () => {
     const { container } = await askScreen({ items: [] });
     await waitFor(() => expect(container.querySelector("h1")).not.toBeNull());
     expect(container.textContent).not.toContain(CONVERSATIONS_HEADING);
+  });
+
+  test("the prefix the page reads a correction note by is the one the store writes", () => {
+    // What breaks if this is deleted: the store renames its prefix and a reopened thread shows the
+    // raw note, with every test here still green against a stand-in using the old one.
+    const source = readRepoFile("src/brain/chat/thread_store.py");
+    expect(source).toMatch(new RegExp(`CORRECTION_PREFIX: Final = "${CORRECTION_PREFIX}"`));
+  });
+
+  test("an answer kept in a conversation is marked wrong with a kind and no words", async () => {
+    // What breaks if this is deleted: a person has no way to say an answer was wrong, so the
+    // learning signal never hears it (M9.2.4), or the page sends words the route refuses.
+    const { container, idp } = await askScreen();
+    ask(container, QUESTION);
+    await waitFor(() => expect(container.textContent).toContain(WAS_IT_WRONG));
+    const kinds = container.querySelector<HTMLSelectElement>("select#ask-correction");
+    expect(container.querySelector('label[for="ask-correction"]')?.textContent).toBe(WAS_IT_WRONG);
+    expect([...(kinds?.options ?? [])].map((one) => one.textContent)).toEqual(Object.values(CORRECTION_WORDS));
+    fireEvent.change(kinds as HTMLSelectElement, { target: { value: "missing" } });
+    fireEvent.click(button(container, MARK_WRONG));
+    await waitFor(() => expect(container.textContent).toContain(MARKED_WRONG));
+    const sent = idp.calls.filter((call) => new URL(call.url, ORIGIN).pathname === `${API}${correctionPath(THREAD)}`);
+    expect(sent.map((call) => [call.init?.method, JSON.parse(String(call.init?.body ?? "null"))])).toEqual([
+      ["POST", { kind: "missing" }],
+    ]);
+    expect(button(container, MARK_WRONG).disabled).toBe(true);
+  });
+
+  test("a mark the route refuses says nothing was changed", async () => {
+    // The refusal's sibling: a thread that is not the person's, or holds no answer, is the route's
+    // 404, and the page says it could not be marked rather than that it was.
+    const { container } = await askScreen(LISTED, 404);
+    ask(container, QUESTION);
+    await waitFor(() => expect(container.textContent).toContain(WAS_IT_WRONG));
+    fireEvent.click(button(container, MARK_WRONG));
+    await waitFor(() => expect(container.textContent).toContain(NOT_MARKED));
+    expect(container.textContent).not.toContain(MARKED_WRONG);
+  });
+
+  test("no answer on the page, no mark to make", async () => {
+    // What breaks if this is deleted: the control is drawn before anything was answered, and marks
+    // whatever the thread last held rather than the answer the person is reading.
+    const { container } = await askScreen();
+    await waitFor(() => expect(container.querySelector("h1")).not.toBeNull());
+    expect(container.textContent).not.toContain(WAS_IT_WRONG);
+  });
+
+  test("a reopened thread says in words which kind an answer was marked", async () => {
+    // What breaks if this is deleted: a correction note reads as `correction:stale` to the person
+    // who made it.
+    const { container } = await askScreen();
+    const panel = await waitFor(() => {
+      const heading = [...container.querySelectorAll("h2")].find((one) => one.textContent === CONVERSATIONS_HEADING);
+      if (heading === undefined) {
+        throw new Error("the conversations have not arrived");
+      }
+      return heading.parentElement as HTMLElement;
+    });
+    fireEvent.click(within(panel).getByRole("button", { name: "who signs the checklist" }));
+    await waitFor(() => expect(container.textContent).toContain(CORRECTION_WORDS.stale));
+    expect(container.textContent).not.toContain("correction:stale");
   });
 });

@@ -132,7 +132,7 @@ Task ids: M31.1.4.1, M31.1.4.3, M31.1.4.4, M32.5.2.1, M1.1.7, M1.8.2, M23.1.1, M
 through `brain.chat.remember` after the lane answers, and the response names the thread in
 `THREAD_HEADER`, which a follow-up sends back as `Question.thread`.
 
-Task ids: M7.6.1, M9.1.1, M9.1.2
+Task ids: M7.6.1, M9.1.1, M9.1.2, M9.2.3
 """
 
 from __future__ import annotations
@@ -183,7 +183,13 @@ from brain.gate.fast_lane import RowReader
 from brain.gate.finish import Origin, RequestRecorder
 from brain.gate.front import AgentSetup, Caching, Choosing, remember, run_front_half
 from brain.gate.live_records import LiveRecords
-from brain.gate.model_lane import PASSAGE_POLICY, AgentRun, DocumentSearchTool, ModelLane
+from brain.gate.model_lane import (
+    PASSAGE_POLICY,
+    AgentRun,
+    DocumentSearchTool,
+    FollowUp,
+    ModelLane,
+)
 from brain.gate.resolve import EntitlementCache, EntitlementStore, VersionSource, resolve
 from brain.gate.roster import (
     AgentRoster,
@@ -1062,9 +1068,11 @@ def model_lane_for(
     agent: AgentRecord | None,
     registry: ToolRegistry,
     kinds: tuple[KnowledgeKind, ...] = (),
+    follow_up: FollowUp | None = None,
 ) -> ModelLane | None:
-    """The model step, carrying the selected agent when a stored one was chosen (M3.9.8), and
-    searching only the kinds of knowledge the person narrowed the question to (M7.6.1).
+    """The model step, carrying the selected agent when a stored one was chosen (M3.9.8),
+    searching only the kinds of knowledge the person narrowed the question to (M7.6.1), and
+    bringing what a continued thread brings (M9.2.3).
 
     The agent's tier and pinned model reach the call through `AgentRun`; its skill pins are not
     read on this route yet, so it runs with none. See `brain.gate.roster`.
@@ -1074,9 +1082,55 @@ def model_lane_for(
         return None
     if kinds and isinstance(lane.search, DocumentSearchTool):
         lane = replace(lane, search=replace(lane.search, kinds=kinds))
+    if follow_up is not None:
+        lane = replace(lane, follow_up=follow_up)
     if agent is None:
         return lane
     return replace(lane, agent=AgentRun(record=agent, pins=(), library=(), registry=registry))
+
+
+async def follow_up_for(state: Any, asking: Answering, ask: Question) -> FollowUp | None:
+    """What a question continuing one of this person's threads brings, or None (M9.2.3).
+
+    None for a question naming no thread, one naming a thread that is not theirs or holds no
+    earlier question, and on a process with no database. The passages cited are the ones
+    `brain.chat.threads.continuation_context` still admits at this reach now, and the earlier
+    questions are the person's own words. A follow-up is never looked up in or kept by the answer
+    cache, whose key knows nothing of the thread; see
+    `A_FOLLOW_UP_IS_NOT_THE_SAME_WORDS_ASKED_FRESH`.
+    """
+    from brain.chat.remember import threads_of
+    from brain.chat.threads import continuation_context
+    from brain.knowledge.document_tools import KNOWLEDGE_ENTITY, recaller
+    from brain.knowledge.row_store import SessionRowSource
+    from brain.tables.chat import MessageRole
+
+    store = threads_of(state)
+    if not ask.thread or store is None:
+        return None
+    thread = await store.thread(asking.principal.id, ask.thread)
+    if thread is None:
+        return None
+    earlier = tuple(one.body for one in thread.messages if one.role is MessageRole.USER)
+    if not earlier:
+        return None
+    cited = tuple(
+        one.record_id
+        for one in continuation_context(thread, asking.reach, now=asking.now)
+        if one.entity == KNOWLEDGE_ENTITY
+    )
+    sessions = getattr(state, "db_sessions", None)
+    recall = None if sessions is None else recaller(SessionRowSource(sessions))
+    return FollowUp(earlier=earlier, cited=cited, recall=recall)
+
+
+#: Why a follow-up skips the answer cache both ways.
+A_FOLLOW_UP_IS_NOT_THE_SAME_WORDS_ASKED_FRESH: Final = (
+    "A follow-up is answered from the thread's earlier questions and the passages it cited as "
+    "well as its own words, and the answer cache keys a question by its words alone. So a "
+    "follow-up served from the cache would be the answer to the words asked fresh, and one kept "
+    "there would answer the next person asking those words with another thread's context."
+)
 
 
 #: Why a question narrowed to kinds of knowledge skips the answer cache both ways.
@@ -1385,9 +1439,14 @@ async def answered_for(
     policies = {**field_policies(registry), **tables.policies}
     # A referred question is looked up in no store and stored in none: the step is entered and
     # misses, as it does on a process with none, so the request row reads as any other's.
+    # What a question continuing one of this person's threads brings (M9.2.3), read at their
+    # own reach before an agent narrows it, because what they may still read is theirs to judge.
+    follow_up = (
+        None if referral is not None else await follow_up_for(request.app.state, asking, ask)
+    )
     caching = (
         None
-        if referral is not None or ask.kinds
+        if referral is not None or ask.kinds or follow_up is not None
         else caching_of(request.app.state, policies, sources_at(registry, asking.reach, asking.now))
     )
 
@@ -1449,7 +1508,7 @@ async def answered_for(
             cached=front.cached,
             # Only a request the front half routed to a tier may reach a model, so no model is
             # called before ROUTE and PROJECT: a fast-lane question answers or abstains.
-            model=model_lane_for(request.app.state, agent, registry, ask.kinds)
+            model=model_lane_for(request.app.state, agent, registry, ask.kinds, follow_up)
             if front.calls_a_model
             else None,
             front=front.record(),

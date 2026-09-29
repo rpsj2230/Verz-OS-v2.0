@@ -14,8 +14,15 @@
  * under a grant since lost is absent from the messages, with no mark where it was: the person's
  * own questions always come back.
  *
- * Task ids: M9.1.1, M9.1.2, M9.1.3
+ * **A wrong answer is marked with one of four kinds and no words.** The route keeps the kind and the
+ * records the answer drew on as a note in the thread, which the learning signal counts; a sentence
+ * saying what the right answer was would be a claim nobody checked, so the page offers no field for
+ * one (`brain.chat.thread_store.A_CORRECTION_IS_A_SIGNAL_AND_NEVER_A_FACT`).
+ *
+ * Task ids: M9.1.1, M9.1.2, M9.1.3, M9.2.4
  */
+
+import type { components } from "../api/schema";
 
 /** Where the person's conversations are listed, searched and reopened, under the API base. */
 export const THREADS_API_PATH = "/threads";
@@ -113,6 +120,44 @@ export function readThread(payload: unknown): ThreadShown | null {
       return [{ role, at, channel: text(row?.["channel"]) ?? "", body: text(row?.["body"]) ?? "" }];
     }),
   };
+}
+
+/** The address the latest answer in one of the person's threads is marked wrong at. */
+export function correctionPath(threadId: string): string {
+  return `${threadPath(threadId)}/corrections`;
+}
+
+/** `brain.chat.turns.CorrectionKind`, as the API's schema names it. */
+export type CorrectionKind = components["schemas"]["CorrectionKind"];
+
+/**
+ * Every kind of wrong, in words, in the order the page offers them. Keyed by the schema's own
+ * values, so a kind the product adds is a type error here until it has words.
+ */
+export const CORRECTION_WORDS: Readonly<Record<CorrectionKind, string>> = Object.freeze({
+  wrong_fact: "It said something that is not true",
+  missing: "It left out something that matters",
+  misread_question: "It answered a different question",
+  stale: "It was true once and is out of date",
+});
+
+/** `brain.chat.thread_store.CORRECTION_PREFIX`: how a marked answer is noted in the thread. */
+export const CORRECTION_PREFIX = "correction:";
+
+/** The body the correction route answers with, or null when it is not one. */
+export function readCorrection(payload: unknown): CorrectionKind | null {
+  const kind = text((payload as Record<string, unknown> | null)?.["kind"]);
+  return kind !== null && kind in CORRECTION_WORDS ? (kind as CorrectionKind) : null;
+}
+
+/** A message's body in words: a correction note says which kind, anything else is as sent. */
+export function messageWords(body: string): string {
+  if (!body.startsWith(CORRECTION_PREFIX)) {
+    return body;
+  }
+  const kind = body.slice(CORRECTION_PREFIX.length);
+  const words = kind in CORRECTION_WORDS ? CORRECTION_WORDS[kind as CorrectionKind] : kind;
+  return `You marked the answer wrong: ${words}.`;
 }
 
 /** Where a thread was last used, in words. The channel is the product's own closed list. */

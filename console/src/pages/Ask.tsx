@@ -123,12 +123,17 @@ import {
 import { KIND_WORDS } from "./knowledgeQuery";
 import {
   channelWords,
+  CORRECTION_WORDS,
+  correctionPath,
+  messageWords,
+  readCorrection,
   readThread,
   readThreads,
   speaker,
   threadPath,
   threadSearchPath,
   THREADS_API_PATH,
+  type CorrectionKind,
   type ThreadShown,
   type ThreadSummary,
 } from "./threadsQuery";
@@ -206,6 +211,21 @@ export const NOTHING_FOUND_IN_CONVERSATIONS = "None of your questions holds thos
 /** The id tying the search to its label. */
 const SEARCH_FIELD_ID = "ask-search";
 
+/**
+ * The control under an answer kept in a conversation, marking it wrong (M9.2.4). A kind and no
+ * words: see `threadsQuery.ts` for why there is no field saying what the right answer was.
+ */
+export const WAS_IT_WRONG = "Was this answer wrong?";
+export const MARK_WRONG = "Mark it wrong";
+export const MARKED_WRONG = "Marked. Your conversation now notes that this answer was wrong.";
+export const NOT_MARKED = "That could not be marked. Nothing was changed.";
+
+/** The id tying the correction's kind to its label. */
+const CORRECTION_FIELD_ID = "ask-correction";
+
+/** The first kind offered. */
+const FIRST_CORRECTION: CorrectionKind = "wrong_fact";
+
 /** The kind picker's label, and its first choice, which searches every kind (M7.6.1). */
 export const KIND_LABEL = "Search only";
 export const ANY_KIND = "Every kind of knowledge";
@@ -271,6 +291,9 @@ export function Ask() {
   const [searching, setSearching] = useState("");
   const [found, setFound] = useState<readonly ThreadSummary[] | null>(null);
   const [reopened, setReopened] = useState<ThreadShown | null>(null);
+  // Marking the answer on the page wrong: the kind chosen, and what the route said (M9.2.4).
+  const [wrong, setWrong] = useState<CorrectionKind>(FIRST_CORRECTION);
+  const [marked, setMarked] = useState<"" | "marked" | "failed">("");
 
   // This person's conversations. A list that did not come back is no panel rather than an error:
   // the question can still be asked, and it starts a conversation of its own.
@@ -331,6 +354,7 @@ export function Ask() {
       const controller = new AbortController();
       inFlight.current = controller;
       focusWasInTheForm.current = form.current?.contains(document.activeElement) ?? false;
+      setMarked("");
       setAsking({ view: NOTHING_ASKED, busy: true, failure: null, traceId: "" });
 
       void (async () => {
@@ -503,6 +527,46 @@ export function Ask() {
         >
           {view.answer !== "" ? <p className="ask__answer">{view.answer}</p> : null}
 
+          {thread !== "" && !busy && view.answer !== "" ? (
+            <form
+              className="ask__correction"
+              onSubmit={(submitted) => {
+                submitted.preventDefault();
+                void (async () => {
+                  const sent = await request<unknown>(correctionPath(thread), {
+                    method: "POST",
+                    body: { kind: wrong },
+                  });
+                  setMarked(sent.ok && readCorrection(sent.data) !== null ? "marked" : "failed");
+                })();
+              }}
+            >
+              <label className="ask__label" htmlFor={CORRECTION_FIELD_ID}>
+                {WAS_IT_WRONG}
+              </label>
+              <select
+                id={CORRECTION_FIELD_ID}
+                className="form-control"
+                value={wrong}
+                onChange={(changed) => setWrong(changed.target.value as CorrectionKind)}
+              >
+                {(Object.keys(CORRECTION_WORDS) as CorrectionKind[]).map((one) => (
+                  <option key={one} value={one}>
+                    {CORRECTION_WORDS[one]}
+                  </option>
+                ))}
+              </select>
+              <button type="submit" className="button" disabled={marked === "marked"}>
+                {MARK_WRONG}
+              </button>
+              {marked !== "" ? (
+                <p className="note" role="status">
+                  {marked === "marked" ? MARKED_WRONG : NOT_MARKED}
+                </p>
+              ) : null}
+            </form>
+          ) : null}
+
           {view.failed !== null ? (
             <Notice title={SOMETHING_DID_NOT_WORK} traceId={traceId} withoutTrace={NO_REFERENCE_CAME_BACK}>
               <p>{view.failed}</p>
@@ -537,7 +601,7 @@ export function Ask() {
           <ol className="ask__messages">
             {reopened.messages.map((one, at) => (
               <li key={`${at}-${one.at}`}>
-                <strong>{speaker(one.role)}</strong> {channelWords(one.channel)}: {one.body}
+                <strong>{speaker(one.role)}</strong> {channelWords(one.channel)}: {messageWords(one.body)}
               </li>
             ))}
           </ol>

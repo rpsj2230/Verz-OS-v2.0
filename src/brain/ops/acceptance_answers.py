@@ -138,8 +138,11 @@ class Replies(StandIns):
     """`StandIns`, with the two replies these checks need beside the ones it answers."""
 
     said: list[str] = field(default_factory=list)
+    #: Every request body the stand-in was sent, for a check reading what a model was shown.
+    bodies: list[str] = field(default_factory=list)
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
+        self.bodies.append(request.content.decode("utf-8", "replace"))
         model = str(json.loads(request.content).get("model", ""))
         if model == SILENT:
             self.asked[(request.url.host, model)] += 1

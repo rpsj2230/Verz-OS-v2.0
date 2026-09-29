@@ -16,9 +16,11 @@
 | `GET /api/v1/threads/search` | A search of a person's own questions on Ask, for them alone; nothing in it for an administrator to manage. |
 | `POST /api/v1/answer` | The answer lane behind Ask, which writes no row an administrator manages. |
 | `POST /api/v1/automation/tool-call` | Called by a running automation with its owner's reach, not by a person at a screen; installing the automation is the console's part. |
+| `POST /api/v1/threads/{thread_id}/corrections` | A person marking the latest answer in their own conversation wrong, from Ask; a note in their thread the learning signal counts, and nothing in it for an administrator to manage. |
 
 **Every write to a route no area claims, followed to the system.**
 
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
 | `POST /api/v1/answer` | `/ask` | Not applicable: Asking a question writes no row an administrator manages. | Not applicable: Asking a question is not a change to the system. | Not applicable: The answer is the behaviour, and tests/invariants hold it. |
+| `POST /api/v1/threads/{thread_id}/corrections` | `/ask` | `test_every_thread_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_threads.py` (database, in CI) | Not applicable: Marking an answer in one's own conversation wrong changes no setting and nobody's access; the note is kept in the asker's own thread. | `test_every_thread_check_passes_on_an_install_and_leaves_nothing` in `tests/unit/test_acceptance_threads.py` (database, in CI) |

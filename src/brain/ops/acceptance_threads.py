@@ -81,8 +81,13 @@ async def _asking(h: Harness, principal_id: str) -> Any:
     reach = admit(await h.reach(principal_id), Channel.CONSOLE, Assurance.AUTHENTICATED)
     # A cast at the routes' boundary: they read these three, and a `Caller` is minted only from
     # a verified token.
+    # The wall clock, as the routes read it, for `asked_on_the_web`'s reason: what the check kept
+    # earlier was kept at the time it happened, after the check's start.
     return cast(
-        Any, SimpleNamespace(caller=SimpleNamespace(principal=person), reach=reach, now=h.now)
+        Any,
+        SimpleNamespace(
+            caller=SimpleNamespace(principal=person), reach=reach, now=datetime.now(UTC)
+        ),
     )
 
 
@@ -254,3 +259,97 @@ async def a_thread_begun_in_lark_is_listed_and_continued_on_the_web(h: Harness) 
     latest = await _listed(h, chat.app, member)
     if not latest or latest[0].thread_id != longer or latest[0].last_channel != "console":
         raise CheckFailedError("the thread list did not say the thread was last used on the web")
+
+
+# ------------------------------------------------------ 3. a follow-up's context (M9.2.3)
+@check(
+    leaves=("M9.2.3",),
+    sentence=(
+        "A member of acceptance_a asks a question their document answers, then a follow-up in the "
+        "same thread naming nothing in it: the model is shown the passage the first answer cited, "
+        "re-read under the member's reach, and their earlier question, never the earlier answer; "
+        "the same words asked fresh find nothing."
+    ),
+)
+async def a_follow_up_is_answered_from_what_its_thread_cited(h: Harness) -> None:
+    from brain.ops.acceptance_answers import asking_with_a_stand_in
+    from brain.ops.acceptance_models import pinned, shown
+    from brain.ops.acceptance_routing import ANSWERS, STAND_IN_REPLY, step
+
+    s = await asking_with_a_stand_in(h)
+    await pinned(h, (step(ANSWERS),))
+    first, thread = await asked_on_the_web(h, s.app, s.reader, s.paired.question, None, 1)
+    if first.composed is None or thread is None or s.paired.value not in shown(first):
+        raise CheckFailedError("the first question was not answered from the member's document")
+
+    follow_up = f"and what does {h.word()} say about that"
+    fresh, _ = await asked_on_the_web(h, s.app, s.reader, follow_up, None, 2)
+    if fresh.composed is not None:
+        raise CheckFailedError("a follow-up's words asked fresh were answered from something")
+    before = len(s.responder.bodies)
+    continued, same = await asked_on_the_web(h, s.app, s.reader, follow_up, thread, 3)
+    if continued.composed is None or same != thread:
+        raise CheckFailedError("a follow-up in the same thread was not answered in it")
+    if s.paired.value not in shown(continued):
+        raise CheckFailedError("a follow-up was not shown the passage its thread had cited")
+    sent = "".join(s.responder.bodies[before:])
+    if s.paired.question not in sent or STAND_IN_REPLY in sent:
+        raise CheckFailedError(
+            "a follow-up's model was not shown the earlier question, or was shown the answer"
+        )
+
+
+# ------------------------------------------------------------- 4. a correction (M9.2.4)
+@check(
+    leaves=("M9.2.4",),
+    sentence=(
+        "A member of acceptance_a marks the latest answer in their thread as a wrong fact: it is "
+        "kept as a note in the thread naming the kind and the records the answer used, and read "
+        "by the learning signal as one contradiction; nobody else can mark it, and a thread with "
+        "no answer cannot be marked."
+    ),
+)
+async def a_wrong_answer_is_kept_as_a_signal_and_no_words_with_it(h: Harness) -> None:
+    from brain.chat.thread_store import CORRECTION_PREFIX, StoredThreads
+    from brain.chat.turns import CorrectionKind
+    from brain.core.errors import Absent
+    from brain.memory.signals import Signal
+    from brain.ops.acceptance_checks import _in
+    from brain.ops.acceptance_checks_chat import uploaded
+    from brain.tables.chat import MessageRole
+    from brain.thread_routes import CorrectionAsked, correct_my_thread
+
+    await h.found_departments()
+    table = await uploaded(h)
+    member, other = h.principal(A, "member"), h.principal(B, "member")
+    await h.person(member, department=A, grants=table.reads(A, held=False))
+    await h.person(other, department=B, grants=_in(B, "read:knowledge"))
+    app = await _web(h)
+    _, thread = await asked_on_the_web(h, app, member, table.asking(table.open_column), None, 1)
+    if thread is None:
+        raise CheckFailedError("an answered question was kept in no thread")
+
+    asked = CorrectionAsked(kind=CorrectionKind.WRONG_FACT)
+    try:
+        await correct_my_thread(_request(app), await _asking(h, other), thread, asked)
+    except Absent:
+        pass
+    else:
+        raise CheckFailedError("somebody who is not the asker marked their answer wrong")
+    kept = await correct_my_thread(_request(app), await _asking(h, member), thread, asked)
+    if kept.kind != CorrectionKind.WRONG_FACT.value:
+        raise CheckFailedError("a correction was not kept with the kind it was given")
+
+    found = await _thread(h, member, thread)
+    notes = [] if found is None else [m for m in found.messages if m.role is MessageRole.SYSTEM]
+    if [m.body for m in notes] != [f"{CORRECTION_PREFIX}{CorrectionKind.WRONG_FACT.value}"]:
+        raise CheckFailedError("a correction was not kept as a note naming its kind alone")
+    if not notes[0].refs or any(one.entity != table.entity for one in notes[0].refs):
+        raise CheckFailedError("a correction did not keep the records the answer used")
+    signals = await StoredThreads(h.sessions).corrections(member)
+    if [(one.signal, one.conversation_id) for one in signals] != [(Signal.CONTRADICTED, thread)]:
+        raise CheckFailedError(
+            "the learning signal did not read the correction as one contradiction"
+        )
+    if await StoredThreads(h.sessions).corrections(other):
+        raise CheckFailedError("the learning signal read one person's correction as another's")
