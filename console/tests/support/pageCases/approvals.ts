@@ -23,12 +23,14 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     address: "/approvals",
     signedIn: true,
     drawsValues: true,
-    answers: { "/api/v1/approvals": { items: [card("sus_1")], next_cursor: null, truncated: false } },
+    answers: {
+      "/api/v1/approvals": { items: [card("sus_1")], next_cursor: null, truncated: false, people: { [UNBROKEN]: UNBROKEN } },
+    },
   },
   "/approvals/:suspensionId": {
     address: "/approvals/sus_1",
     signedIn: true,
     drawsValues: true,
-    answers: { "/api/v1/approvals/sus_1": card("sus_1") },
+    answers: { "/api/v1/approvals/sus_1": { ...card("sus_1"), people: { [UNBROKEN]: UNBROKEN } } },
   },
 };

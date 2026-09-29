@@ -53,7 +53,12 @@ export function RequestPage({ requestId }: { readonly requestId: string }) {
   const crumbs = [{ label: REVIEW_CRUMB }, { label: ELEVATION_HEADING, to: ELEVATION_PATH }];
 
   if (answer.failure !== null) {
-    return <FailureState failure={answer.failure} />;
+    return (
+      <div className="flex min-w-0 flex-col gap-4">
+        <PageHeader crumbs={crumbs} title={ELEVATION_HEADING} />
+        <FailureState failure={answer.failure} />
+      </div>
+    );
   }
   if (answer.busy && answer.data === null) {
     return <LoadingState label={READING_REQUEST} />;

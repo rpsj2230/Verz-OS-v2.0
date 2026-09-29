@@ -39,7 +39,7 @@ import { CONTROL_DIRECTORIES, everyConfirmation, everyWrite } from "./support/wr
  * why each one is not destructive.
  */
 const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
-  "src/pages/Approvals.tsx approvalDecisionApiPath(suspensionId)":
+  "src/pages/approvals/ApprovalCard.tsx approvalDecisionApiPath(suspensionId)":
     "Deciding an approval is the answer to a question the card has already asked. The artefact and " +
     "its facts are drawn above the two buttons, which tests/approvals-page.test.tsx holds, so the " +
     "card is the statement of what will happen and to what, and a second step would ask the approver " +

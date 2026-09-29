@@ -291,8 +291,8 @@ def test_a_decided_or_lapsed_approval_is_absent_from_the_queue_and_an_open_one_i
 def test_no_queue_answer_carries_a_count_of_anything(
     client: TestClient, source: MemorySource
 ) -> None:
-    """The queue has its items, a null cursor, a null total and a truncation flag, and a card
-    has no field under a name a hidden count arrives under.
+    """The queue has its items, a null cursor, a null total, a truncation flag and the names of
+    the people its cards run as, and a card has no field under a name a hidden count arrives under.
 
     Delete this and "3 of 47 approvals" is one serialiser change away."""
     source.held = [a_suspension("m_1"), a_suspension("f_1", department=FINANCE)]
@@ -300,10 +300,15 @@ def test_no_queue_answer_carries_a_count_of_anything(
 
     assert body["total"] is None
     assert body["next_cursor"] is None
-    assert set(body) == {"items", "next_cursor", "total", "truncated"}
+    assert set(body) == {"items", "next_cursor", "total", "truncated", "people"}
     assert set(body["items"][0]) == set(ApprovalCardView.model_fields)
     assert not set(ApprovalCardView.model_fields) & NAMES_THAT_WOULD_BE_A_HIDDEN_COUNT
-    assert set(ApprovalQueue.model_fields) - {"total"} == {"items", "next_cursor", "truncated"}
+    assert set(ApprovalQueue.model_fields) - {"total"} == {
+        "items",
+        "next_cursor",
+        "truncated",
+        "people",
+    }
 
 
 def test_the_queue_is_bounded_after_the_reach_filter_and_says_only_that_there_is_more() -> None:

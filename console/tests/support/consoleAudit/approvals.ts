@@ -11,7 +11,7 @@ import { approvalDecisionApiPath } from "../../../src/pages/approvalsQuery";
 import { at, type Proofs, t, type WriteRoute } from "../auditClaims";
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
-  "src/pages/Approvals.tsx approvalDecisionApiPath(suspensionId)": [
+  "src/pages/approvals/ApprovalCard.tsx approvalDecisionApiPath(suspensionId)": [
     at("POST /api/v1/approvals/{suspension_id}/decision", "approvalDecisionApiPath", approvalDecisionApiPath("sus-1")),
   ],
 };

@@ -56,7 +56,12 @@ export function HoldingPage({ kind, rowId }: { readonly kind: string; readonly r
   const crumbs = [{ label: REVIEW_CRUMB }, { label: REVIEW_HEADING, to: REVIEW_PATH }];
 
   if (answer.failure !== null) {
-    return <FailureState failure={answer.failure} />;
+    return (
+      <div className="flex min-w-0 flex-col gap-4">
+        <PageHeader crumbs={[...crumbs, { label: REVIEW_HEADING }]} title={REVIEW_HEADING} />
+        <FailureState failure={answer.failure} />
+      </div>
+    );
   }
   if (answer.busy && answer.data === null) {
     return <LoadingState label={READING_HOLDING} />;

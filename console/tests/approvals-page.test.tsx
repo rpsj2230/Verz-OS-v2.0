@@ -141,7 +141,7 @@ async function consoleAt(
     }
   });
   await waitFor(() => {
-    if (container.querySelector('p.note[role="status"]')) {
+    if (container.querySelector('[data-slot="loading-state"]')) {
       throw new Error("the page is still asking");
     }
   });
@@ -162,17 +162,22 @@ function wireCard(id: string, overrides: Record<string, unknown> = {}): Record<s
   };
 }
 
+/** The page's own landmark, which holds everything but the shell's menu and header. */
 function page(container: HTMLElement): HTMLElement {
-  const found = container.querySelector<HTMLElement>("article.page");
+  const found = container.querySelector<HTMLElement>("main");
   if (!found) {
     throw new Error("No page was rendered.");
   }
   return found;
 }
 
+/**
+ * The page's markup with the ids React mints per mount taken out, so two mounts of the same answer
+ * compare equal and a difference is one the answer made.
+ */
 async function queueMarkup(body: unknown): Promise<string> {
   const { container } = await consoleAt(APPROVALS_ADDRESS, { [QUEUE_API]: { body } });
-  return page(container).innerHTML;
+  return page(container).innerHTML.replace(/ (id|for|aria-describedby|aria-labelledby|aria-controls)="[^"]*"/g, "");
 }
 
 function textOf(markup: string): string {
@@ -339,14 +344,16 @@ describe("an approval card on a phone", () => {
     expect(artefact.declarations["overflow-wrap"]).toBe("anywhere");
     expect(baseRule(sheet, "approval-card__value").declarations["overflow-wrap"]).toBe("anywhere");
 
+    // The person a card runs as is drawn by the name the queue carries, which may be as long.
+    const name = `Name-with-no-break-${"x".repeat(80)}`;
     const { container } = await consoleAt(APPROVALS_ADDRESS, {
-      [QUEUE_API]: { body: { items: [wireCard("sus_1")] } },
+      [QUEUE_API]: { body: { items: [wireCard("sus_1")], people: { [String(wireCard("sus_1")["runs_as"])]: name } } },
     });
     const drawn = page(container).querySelector("ul.approval-list > li > article.approval-card");
     expect(drawn).not.toBeNull();
     expect(drawn?.querySelector("pre.approval-card__artefact")?.textContent).toBe(ARTEFACT);
     const values = [...(drawn?.querySelectorAll("dd.approval-card__value") ?? [])];
-    expect(values.map((value) => value.textContent)).toContain(wireCard("sus_1")["runs_as"]);
+    expect(values.map((value) => value.textContent)).toContain(name);
   });
 
   test("a card opens with what will happen, and no rule a phone applies moves it later", async () => {
