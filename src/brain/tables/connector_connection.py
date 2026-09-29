@@ -29,7 +29,11 @@ it is the record that a source was read and when that stopped.
 `brain.tables.credential` gives about `written_by`: an actor is a value, and the record of who let
 the system read a source outlives the person.
 
-Task ids: M42.6.5
+**Since `0157` a row keeps the declaration it agreed to** (`agreed`), the canonical text its digest
+is the hash of, so the screen can say what changed when a release moves a source's declaration.
+Rows older than that keep none, and are told apart from the ones that do by the column being null.
+
+Task ids: M42.6.5, M27.11.9
 """
 
 from __future__ import annotations
@@ -38,7 +42,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Final
 
-from sqlalchemy import CheckConstraint, DateTime, Index, String, Uuid, func, text
+from sqlalchemy import CheckConstraint, DateTime, Index, String, Text, Uuid, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -55,6 +59,10 @@ CONNECTOR_CHARS: Final = 64
 DIGEST_PATTERN: Final = r"^[0-9a-f]{64}$"
 
 
+#: The longest declaration text a row keeps. `0157` states the same bound; a test holds them equal.
+AGREED_MAX_CHARS: Final = 262144
+
+
 class ConnectorConnectionRow(Base):
     """`ops.connector_connection`. One source connected once, by one person, and when it stopped."""
 
@@ -69,6 +77,9 @@ class ConnectorConnectionRow(Base):
     settings: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     #: `manifest_digest` of the manifest agreed to at connect.
     digest: Mapped[str] = mapped_column(String(DIGEST_CHARS), nullable=False)
+    #: `manifest.digest_input` of that manifest, which `digest` is the SHA-256 of, or None for a
+    #: row written before `0157` kept it.
+    agreed: Mapped[str | None] = mapped_column(Text(), nullable=True)
     #: Who connected it. The ledger entry's actor, read off this column by the trigger.
     connected_by: Mapped[str] = mapped_column(String(PRINCIPAL_ID_CHARS), nullable=False)
     #: The database's clock, in the transaction the ledger entry is appended in.
@@ -83,6 +94,9 @@ class ConnectorConnectionRow(Base):
         CheckConstraint(f"connector ~ '{CONNECTOR_NAME_PATTERN}'", name="connector_shape"),
         CheckConstraint("jsonb_typeof(settings) = 'object'", name="settings_are_an_object"),
         CheckConstraint(f"digest ~ '{DIGEST_PATTERN}'", name="digest_shape"),
+        CheckConstraint(
+            f"agreed IS NULL OR length(agreed) <= {AGREED_MAX_CHARS}", name="agreed_is_bounded"
+        ),
         CheckConstraint(f"connected_by ~ '{IDENTIFIER}'", name="connected_by_shape"),
         CheckConstraint(
             f"disconnected_by IS NULL OR disconnected_by ~ '{IDENTIFIER}'",

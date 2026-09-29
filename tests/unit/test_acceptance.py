@@ -216,6 +216,10 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     assert by_module["brain.ops.acceptance_knowledge"] == [
         "a_document_is_added_answered_replaced_and_falls_due_for_review",
     ]
+    # The canvas's door; `tests/unit/test_acceptance_automation.py`.
+    assert by_module["brain.ops.acceptance_checks_automation"] == [
+        "a_flow_step_gets_its_owner_s_rows_and_nothing_its_ceiling_adds",
+    ]
     assert list(by_module) == list(acceptance.CHECK_MODULES)
     oversight = {one.name: one.leaves for one in registered()}
     assert oversight["unusual_volume_is_found_per_person"] == ("M23.2.1",)
