@@ -26,7 +26,13 @@ from typing import Any
 import pytest
 
 from brain.core.department import SLUG_PATTERN
-from brain.ops import acceptance, acceptance_audit, acceptance_run
+from brain.ops import (
+    acceptance,
+    acceptance_audit,
+    acceptance_checks_channels,
+    acceptance_checks_recovery,
+    acceptance_run,
+)
 from brain.ops import acceptance_checks_deployment as acceptance_deployment
 from brain.ops.acceptance import (
     FAILED,
@@ -245,6 +251,11 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     # The staff sync's accounts, with no sign-in service called; `test_staff_accounts_run.py`.
     assert by_module["brain.ops.acceptance_checks_accounts"] == [
         "the_staff_sync_gives_the_active_an_account_and_closes_a_leaver_s",
+    ]
+    # One per channel a vendor connects; `tests/unit/test_acceptance_channels.py` runs them.
+    assert by_module["brain.ops.acceptance_checks_channels"] == [
+        "an_email_is_taken_signed_and_answered_by_the_install_s_relay",
+        "a_slack_message_is_taken_signed_and_answered_on_the_bot_token",
     ]
     assert list(by_module) == list(acceptance.CHECK_MODULES)
     oversight = {one.name: one.leaves for one in registered()}
@@ -653,6 +664,7 @@ WRITTEN_BY_CHECKS = (
     "agent.browser_session",
     "obs.trace_step",
     "obs.trace_read",
+    "ops.operation",
 )
 
 
@@ -741,6 +753,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     )
     # No antivirus and no object store here; `tests/unit/test_acceptance_ingest.py` runs both.
     assert outcomes.pop("the_antivirus_test_file_is_refused_as_malware")[0] == NOT_RUN
+    # No relay is saved here; `tests/unit/test_acceptance_channels.py` saves one and passes.
+    email = "an_email_is_taken_signed_and_answered_by_the_install_s_relay"
+    assert outcomes.pop(email) == (NOT_RUN, acceptance_checks_channels.NO_RELAY_IS_SAVED)
     assert outcomes.pop("a_queued_file_is_kept_in_the_store_and_read_by_the_worker")[0] == NOT_RUN
     # Every act, the chain, the trace and the export were seen, and no deploy is recorded here to
     # be kept out of the export: `tests/unit/test_acceptance_audit.py` records one and passes.
@@ -756,6 +771,13 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         "the_scrub_meets_its_budget_on_this_install_s_processor",
     ):
         assert outcomes.pop(worker_check) == (NOT_RUN, acceptance_deployment.NOT_IN_A_WORKER)
+    # No worker has ticked here, so neither recovery sweep has a scheduled run to judge;
+    # `tests/unit/test_acceptance_recovery.py` records one and both pass.
+    for recovery_check in registered(("brain.ops.acceptance_checks_recovery",)):
+        assert outcomes.pop(recovery_check.name) == (
+            NOT_RUN,
+            acceptance_checks_recovery.NO_SCHEDULED_RUN_YET,
+        )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
     assert after == before
     assert runs == [(2,)] and len(recorded) == 2 * len(suite)

@@ -205,6 +205,9 @@ CHECK_MODULES: Final = (
     "brain.ops.acceptance_checks_cloudflare",
     "brain.ops.acceptance_checks_organisation",
     "brain.ops.acceptance_checks_accounts",
+    "brain.ops.acceptance_checks_channels",
+    "brain.ops.acceptance_checks_recovery",
+    "brain.ops.acceptance_checks_widget",
 )
 
 
