@@ -25,6 +25,14 @@ ledger records both. The trigger refuses an approval by the person who asked, an
 document has moved since it was asked, by raising, so an approval that cannot be carried out is
 not recorded as given. See `A_WIDENING_IS_APPLIED_WHERE_IT_IS_APPROVED`.
 
+**Nor is the person who asked ever offered their own card.** A steward who also holds
+`approve:knowledge.visibility` where their document sits reaches the card by the capability alone,
+and until 2026-09-29 the Approvals screen offered it to them: approving it met the trigger's
+refusal, which the decision route turned into a fault. `asked_by` is the question the queue, the
+single card and the decision now ask through `brain.console.role_surfaces.pending_for`, so their
+own card is absent for them in the words any card they may not decide gets, and the trigger stays
+as the database's second wall. See `THE_PERSON_WHO_ASKED_IS_NEVER_OFFERED_THEIR_OWN_PROMOTION`.
+
 **The approver reads the document's title on the card.** Nobody can judge "make this readable by
 everyone" without knowing what this is, and the card is written once, when the promotion is
 raised, and shown verbatim. The title of a department document reaches a person holding
@@ -75,6 +83,15 @@ A_WIDENING_IS_APPLIED_WHERE_IT_IS_APPROVED: Final = (
     "the approval and the widening commit together or not at all. An approval by the person who "
     "asked, or of a document that moved since, is refused by raising, so nothing is recorded as "
     "approved that could not be carried out."
+)
+
+#: Why the asker is never offered their own card.
+THE_PERSON_WHO_ASKED_IS_NEVER_OFFERED_THEIR_OWN_PROMOTION: Final = (
+    "A promotion is widened on a second person's say-so, and the trigger 0120 puts on "
+    "gate.suspension refuses an approval by the person who asked. Offering them the card anyway, "
+    "because they hold the approval where the document sits, puts a button on their screen that "
+    "can only fail. So the card is not offered to its asker at all, and they are answered as for "
+    "any card they may not decide; everybody else holding the approval there is offered it."
 )
 
 #: Why the card names the document.
@@ -235,6 +252,17 @@ def is_promotion(suspension: SuspendedAction) -> bool:
         suspension.action.agent_id == PROMOTION_AGENT
         and suspension.action.tool.required_capability == PROMOTION_CAPABILITY.value
     )
+
+
+def asked_by(suspension: SuspendedAction, principal_id: str) -> bool:
+    """Whether this suspension is a promotion this principal asked for, and so not theirs to decide.
+
+    The asker is the suspension's `principal_id`, which `raise_promotion` holds equal to the
+    proposer and which `0120`'s trigger compares the approver with. False for every suspension that
+    is not a promotion: an agent's action is approved by the person it runs for, which is what
+    Assisted means. See `THE_PERSON_WHO_ASKED_IS_NEVER_OFFERED_THEIR_OWN_PROMOTION`.
+    """
+    return is_promotion(suspension) and suspension.principal_id == principal_id
 
 
 def promoted_item(suspension: SuspendedAction) -> str:

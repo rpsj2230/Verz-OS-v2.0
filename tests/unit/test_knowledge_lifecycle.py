@@ -57,6 +57,7 @@ from brain.knowledge.promotion import (
     PROMOTION_WINDOW,
     PromotionError,
     PromotionStatus,
+    asked_by,
     is_promotion,
     promoted_item,
     raise_promotion,
@@ -414,6 +415,51 @@ def test_a_promotion_is_a_suspension_the_gates_approvers_are_offered_and_nobody_
     assert raised.principal_id == "u_steward"
     super_admin = reach("u_super", (PROMOTION_CAPABILITY, Scope.unrestricted()))
     approve_promotion(proposal, approver_id="u_super", entitlement=super_admin, now=NOW)
+
+
+def test_a_promotion_is_never_offered_to_its_asker_and_is_to_another_holder_of_the_approval() -> (
+    None
+):
+    """**Found by the install acceptance check on 2026-09-29.** A steward holding
+    approve:knowledge.visibility over their own department was offered their own card, and
+    approving it met `0120`'s refusal as a fault. Now the queue, the card and the decision all
+    leave it out for them, while a second holder of the same grant is offered it and may decide it;
+    and an agent's action is still offered to the person it runs for, which is Assisted. Delete
+    this and the asker's card comes back as a button that can only fail."""
+    from brain.audit.ledger import AuditChain
+    from brain.audit.record import ApprovalVerdict, AuditRecorder
+    from brain.console.approvals import ApprovalError, card, decide
+    from brain.console.role_surfaces import pending_for
+
+    approves_web = (PROMOTION_CAPABILITY, WEB)
+    steward = reach("u_steward", approves_web)
+    other = reach("u_other", approves_web)
+    raised = raise_promotion(
+        _proposal(),
+        title="Site handover",
+        kind=KnowledgeKind.SOP,
+        department="web",
+        reach=steward,
+        trace_id="t-promotion",
+        now=NOW,
+    )
+
+    assert asked_by(raised, "u_steward") and not asked_by(raised, "u_other")
+    assert pending_for(steward, [raised], NOW) == ()
+    assert card(raised, steward, NOW) is None
+    recorder = AuditRecorder(
+        AuditChain(), actor_id="u_steward", ent_hash="e" * 32, trace_id="t", clock=lambda: NOW
+    )
+    with pytest.raises(ApprovalError):
+        decide(raised, steward, recorder, verdict=ApprovalVerdict.APPROVED, now=NOW)
+    assert pending_for(other, [raised], NOW) == (raised,)
+    assert card(raised, other, NOW) is not None
+
+    agents = raised.model_copy(
+        update={"action": raised.action.model_copy(update={"agent_id": "agent_web"})}
+    )
+    assert not is_promotion(agents) and not asked_by(agents, "u_steward")
+    assert pending_for(steward, [agents], NOW) == (agents,)
 
 
 def test_the_card_names_the_document_and_why_and_never_carries_text() -> None:
