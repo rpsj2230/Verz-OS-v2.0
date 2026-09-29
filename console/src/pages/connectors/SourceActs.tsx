@@ -1,9 +1,9 @@
 /**
- * The acts on one source that change something: connect, edit its settings, replace its key and
- * disconnect it, plus Connect Lark and the export, which change nothing.
+ * The acts on one source that change something: edit its settings, replace its key and
+ * disconnect it, plus Connect Lark and the export. Connecting a source is `SourceFlow.tsx`.
  *
- * **Every write is sent from a confirmation.** Connecting is `components/ConnectSource.tsx`, which
- * first run uses too and which confirms in the API's words; editing, replacing a key and
+ * **Every write is sent from a confirmation.** Connecting ends in `components/ConnectSource.tsx`,
+ * which first run uses too and which confirms in the API's words; editing, replacing a key and
  * disconnecting each open `kit/ConfirmDialog` with the sentence the API serves for that act, so the
  * words a person agrees to are the words of the system that does it. `tests/destructive-confirmed.
  * test.ts` follows each write here to its `onConfirm`.
@@ -23,39 +23,26 @@
  * Task ids: M27.11.9, M11.7.7, M11.2.6
  */
 
-import { useId, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { request } from "../../api/client";
 import type { ApiFailure, FieldProblem } from "../../api/errors";
-import { ConnectLark } from "../../components/ConnectLark";
-import { ConnectSource } from "../../components/ConnectSource";
-import { ConfirmDialog, Drawer, Fact, FactList, Note } from "../../components/kit";
+import { ConfirmDialog, Drawer, Fact, FactList } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { SecretField, useSecret } from "../../components/ui/secret-field";
 import { FailureNotice } from "../../ui/FailureNotice";
 import { FieldProblems, problemAttributes } from "../../ui/FieldProblems";
-import {
-  disconnectApiPath,
-  offered,
-  readTold,
-  type Connectable,
-  type Connectors as ConnectorsBody,
-} from "../connectorsQuery";
-import { ACT_LABELS } from "./connectorActions";
+import { disconnectApiPath, readTold, type Connectable } from "../connectorsQuery";
 import { editApiPath, exportApiPath, exportFileName, keyApiPath, type SettingValue } from "./connectorSources";
+import { ACT_LABELS } from "./connectorActions";
+import { LarkFlow, type LarkStart } from "./LarkFlow";
 
 /** The drawers' and dialogs' own words. */
-export const CONNECT_TITLE = "Connect a source";
-export const CONNECT_DESCRIPTION = "Its settings are kept on this install and its key in the vault.";
-export const WHICH_SOURCE = "Source to connect";
-export const NOTHING_TO_CONNECT =
-  "There is no source here you may connect. Connecting one needs the connector installation grant over it.";
 export const EDIT_TITLE = "Edit settings";
 export const EDIT_DESCRIPTION = "The source is connected again with these settings, as one change.";
 export const KEY_TITLE = "Replace key";
 export const KEY_DESCRIPTION = "A new key for this connection. Nothing else about it changes.";
-export const LARK_DESCRIPTION = "Create the Lark app, test it, and switch on what it is for.";
 export const NOT_EDITED = "The settings were not changed";
 export const NOT_REPLACED = "The key was not replaced";
 export const NOT_DISCONNECTED = "The source was not disconnected";
@@ -73,96 +60,29 @@ function settingNames(name: string): readonly string[] {
 
 /** The acts' drawers, which one is open, and for which source. */
 export type OpenAct =
+  /** Connecting opens `SourceFlow.tsx` on this source, or on its chooser when null. */
   | { readonly act: "connect"; readonly source: string | null }
-  | { readonly act: "lark" }
+  | { readonly act: "lark"; readonly start?: LarkStart | undefined }
   | { readonly act: "edit"; readonly source: string }
   | { readonly act: "key"; readonly source: string }
   | { readonly act: "disconnect"; readonly source: string; readonly label: string };
 
-// ------------------------------------------------------------------------------ connect
+// --------------------------------------------------------------------------------- lark
 
-export function ConnectDrawer({
-  page,
-  source,
+/**
+ * Connect Lark, or add a use to it, one screen at a time (`LarkFlow.tsx`). Closing keeps the place;
+ * the final save closes it and says what was switched on.
+ */
+export function LarkDialog({
+  start,
   onClose,
   onDone,
 }: {
-  readonly page: ConnectorsBody;
-  /** The source to open on, or null to open on the first this reader may connect. */
-  readonly source: string | null;
+  readonly start?: LarkStart | undefined;
   readonly onClose: () => void;
   readonly onDone: (told: string) => void;
 }) {
-  const sources = offered(page.connectable);
-  const [chosen, setChosen] = useState(source ?? sources[0]?.name ?? "");
-  const picked = sources.find((one) => one.name === chosen);
-  const selectId = useId();
-  return (
-    <Drawer
-      open
-      onOpenChange={(open) => {
-        if (!open) {
-          onClose();
-        }
-      }}
-      title={CONNECT_TITLE}
-      description={CONNECT_DESCRIPTION}
-    >
-      <div className="flex min-w-0 flex-col gap-3">
-        {page.vault_told === "" ? null : <Note kind="not-yet">{page.vault_told}</Note>}
-        {sources.length === 0 ? (
-          <Note>{NOTHING_TO_CONNECT}</Note>
-        ) : (
-          <>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor={selectId}>{WHICH_SOURCE}</Label>
-              <select
-                id={selectId}
-                className="h-9 rounded-md border border-input bg-transparent px-2.5 text-sm text-ink"
-                value={chosen}
-                onChange={(event) => {
-                  setChosen(event.target.value);
-                }}
-              >
-                {sources.map((one) => (
-                  <option key={one.name} value={one.name}>
-                    {one.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {picked === undefined ? null : (
-              <ConnectSource
-                key={picked.name}
-                source={picked}
-                confirmation={page.confirm_connect}
-                keyMaxChars={page.key_max_chars}
-                keyBlank={page.key_blank}
-                onConnected={onDone}
-              />
-            )}
-          </>
-        )}
-      </div>
-    </Drawer>
-  );
-}
-
-export function LarkDrawer({ onClose }: { readonly onClose: () => void }) {
-  return (
-    <Drawer
-      open
-      onOpenChange={(open) => {
-        if (!open) {
-          onClose();
-        }
-      }}
-      title={ACT_LABELS.connectLark}
-      description={LARK_DESCRIPTION}
-    >
-      <ConnectLark />
-    </Drawer>
-  );
+  return <LarkFlow start={start} onClose={onClose} onDone={onDone} />;
 }
 
 // --------------------------------------------------------------------------------- edit

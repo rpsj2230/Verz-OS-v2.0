@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Final, Protocol
 
@@ -55,6 +56,7 @@ import structlog
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.api import API_PREFIX, COMMON_RESPONSES, ErrorBody, NoEchoRoute
 from brain.api_routes import Asked, Asking
@@ -69,6 +71,7 @@ from brain.core.entitlement import EntitlementSet
 from brain.core.errors import Absent, Failed
 from brain.credential_routes import credentials_of, may_manage
 from brain.gate.context import Channel
+from brain.guide_views import GuideStepView, step_view
 from brain.install import InstallError, hold_saved, value_of
 from brain.ops.channel_store import DeliveryView, channel_secret_slot
 from brain.ops.connector_admin import may_connect_source
@@ -83,11 +86,17 @@ from brain.ops.credentials import (
 )
 from brain.ops.install_settings import load, save
 from brain.ops.lark_connect import (
+    A_TEST_LEAVES_ITS_VERDICTS_AND_NOTHING_IT_READ,
+    APP_ID,
     KNOWLEDGE_IS_SWITCHED_ON_AND_NOTHING_IS_COPIED,
+    REDO_WHEN_REFUSED,
+    SWITCHING_A_USE_OFF,
+    SWITCHING_THE_STAFF_LIST_OFF,
     THE_CHANNEL_ANSWERS_AT_EACH_READERS_OWN_REACH,
     THE_CHANNEL_IS_SAVED_BEFORE_LARK_CHECKS_ITS_ADDRESS,
     THE_TEST_ONLY_READS,
     USES,
+    LastTest,
     Problem,
     Use,
     bot_open_id,
@@ -95,16 +104,23 @@ from brain.ops.lark_connect import (
     developer_console,
     events_address,
     input_problems,
+    last_test_from,
+    last_test_value,
     probe_connection,
+    redo_for,
+    scope_import,
     scopes_for,
+    settings_after_switching_off,
     settings_for,
     steps_for,
     uses_from,
     uses_switched_on,
 )
+from brain.ops.setting_store import put, read_namespace, values_under
 from brain.ops.staff_sync_run import http_fetch
 from brain.routing_routes import sessions_of
 from brain.tables.channel import DeliveryOutcome, Direction, RefusedBecause
+from brain.tables.config import SettingType
 
 log = structlog.get_logger()
 
@@ -141,6 +157,14 @@ ONE_CREDENTIAL_KEPT_WHERE_EACH_USE_ALREADY_READS_IT: Final = (
 #: path segment naming a channel is what `tests/unit/test_inbound_webhooks.py` reads as a receiver.
 LARK_PATH: Final = "/connectors/lark-app"
 LARK_TEST_PATH: Final = LARK_PATH + "/test"
+#: Not `/disconnect`: `brain.connector_routes` answers `/connectors/{connector}/disconnect` for a
+#: source connected on its own form, and this switches uses off rather than removing a connection.
+LARK_SWITCH_OFF_PATH: Final = LARK_PATH + "/switch-off"
+
+#: Where the App ID and the last test are kept, in `ops.setting`. Neither is a secret.
+FACTS_NAMESPACE: Final = "connector.lark_app"
+APP_ID_KEY: Final = FACTS_NAMESPACE + ".app_id"
+LAST_TEST_KEY: Final = FACTS_NAMESPACE + ".last_test"
 
 #: Where the staff list's runs and dry run are, the Staff sources screen's own address.
 STAFF_SOURCES_SCREEN: Final = "/staff_sources"
@@ -210,6 +234,11 @@ REPLY_TOLD: Final = {
     ),
 }
 
+SWITCHED_OFF: Final = (
+    "Switched off. The app's credential is still in the vault; remove the app in Lark's developer "
+    "console too if it should stop existing."
+)
+
 SAVED: Final = (
     "The credential is in the vault and the uses you chose are switched on. Nothing was copied "
     "from Lark."
@@ -246,13 +275,24 @@ class LarkUseView(BaseModel):
     may_switch_on: bool
 
 
-class LarkStepView(BaseModel):
-    """One thing to do in Lark."""
+class LarkVerdictView(BaseModel):
+    """What the last test found for one use, in a word."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    title: str
-    text: str
+    name: str
+    label: str
+    verdict: str
+
+
+class LarkLastTestView(BaseModel):
+    """When Lark was last tested from the console and what each use came to. Nothing read."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    at: datetime
+    accepted: bool
+    uses: list[LarkVerdictView]
 
 
 class LarkEventsView(BaseModel):
@@ -279,8 +319,14 @@ class LarkView(BaseModel):
 
     uses: list[LarkUseView]
     chosen: list[str]
-    steps: list[LarkStepView]
+    #: Whether any use is switched on, which is when the card shows the connection, not Connect.
+    connected: bool
+    #: The App ID the steps' links are built from: the one asked about, else the one saved.
+    app_id: str
+    steps: list[GuideStepView]
     scopes: list[LarkScopeView]
+    #: Every scope the chosen uses need, as the text Lark's batch import of scopes accepts.
+    scope_import: str
     platforms: list[str]
     platform: str
     #: The Base token already saved, so the form starts from it; empty when none is named.
@@ -295,6 +341,11 @@ class LarkView(BaseModel):
     test_note: str
     staff_sources_screen: str
     vault_told: str
+    #: When Lark was last tested from the console, or None when it never was.
+    last_test: LarkLastTestView | None = None
+    #: What switching a use off does, for its confirmation.
+    switch_off_note: str
+    staff_off_note: str
 
 
 class LarkAsked(BaseModel):
@@ -322,16 +373,37 @@ class LarkUseResultView(BaseModel):
     verdict: str
     told: str
     missing: list[str]
+    #: The steps to go back to, by key, in the order to do them. Empty when it works.
+    redo: list[str]
 
 
 class LarkTestView(BaseModel):
-    """The token exchange and every chosen use. Nothing was written."""
+    """The token exchange and every chosen use. Nothing was written in Lark."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     accepted: bool
     told: str
     uses: list[LarkUseResultView]
+    #: The steps to go back to when Lark refused the credential itself. Empty otherwise.
+    redo: list[str]
+
+
+class LarkSwitchOffAsked(BaseModel):
+    """The uses to switch off."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    uses: list[str]
+
+
+class LarkSwitchedOffView(BaseModel):
+    """What switching off did. The key stays in the vault; the sentence says so."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    switched_off: list[str]
+    told: str
 
 
 class LarkSavedView(BaseModel):
@@ -385,6 +457,94 @@ class StoredLarkSettings:
             saved = await load(session)
             await session.commit()
         hold_saved(saved)
+
+
+@dataclass(frozen=True)
+class LarkFacts:
+    """What Connect Lark keeps about the app that is not a setting: its App ID, its last test."""
+
+    app_id: str = ""
+    last_test: LastTest | None = None
+
+
+class LarkFactStore(Protocol):
+    """Where the App ID and the last test are kept. `StoredLarkFacts` is the real one."""
+
+    async def read(self) -> LarkFacts: ...
+
+    async def keep(
+        self, *, app_id: str | None, last_test: dict[str, object] | None, asked: Asking
+    ) -> None: ...
+
+
+class StoredLarkFacts:
+    """`ops.setting` under `FACTS_NAMESPACE`, written with the request's attribution.
+
+    Two rows and not install settings: neither is a value a person sets during setup, and
+    `brain.install` is the list somebody reads to configure a server. Every write is a `setting`
+    entry on the ledger through `0059`'s trigger, so who tested Lark and when is there too.
+    """
+
+    def __init__(self, sessions: async_sessionmaker[AsyncSession]) -> None:
+        self._sessions = sessions
+
+    async def read(self) -> LarkFacts:
+        async with self._sessions() as session:
+            rows = values_under(await read_namespace(session, FACTS_NAMESPACE), FACTS_NAMESPACE)
+        app_id = rows.get("app_id")
+        test = rows.get("last_test")
+        kept = app_id.value if app_id is not None and isinstance(app_id.value, str) else ""
+        return LarkFacts(
+            app_id=kept if APP_ID.fullmatch(kept) else "",
+            last_test=None if test is None else last_test_from(test.value),
+        )
+
+    async def keep(
+        self, *, app_id: str | None, last_test: dict[str, object] | None, asked: Asking
+    ) -> None:
+        by = asked.caller.principal.id
+        async with self._sessions() as session:
+            await attribute(session, asked)
+            if app_id is not None:
+                await put(
+                    session,
+                    APP_ID_KEY,
+                    value_type=SettingType.STRING,
+                    value=app_id,
+                    description="The App ID of the company's Lark app, which is not a secret.",
+                    updated_by=by,
+                )
+            if last_test is not None:
+                await put(
+                    session,
+                    LAST_TEST_KEY,
+                    value_type=SettingType.JSON,
+                    value=dict(last_test),
+                    description=A_TEST_LEAVES_ITS_VERDICTS_AND_NOTHING_IT_READ,
+                    updated_by=by,
+                )
+            await session.commit()
+
+
+class NoLarkFacts:
+    """A process with no database: nothing kept, nothing to read, and the save still answers."""
+
+    async def read(self) -> LarkFacts:
+        return LarkFacts()
+
+    async def keep(
+        self, *, app_id: str | None, last_test: dict[str, object] | None, asked: Asking
+    ) -> None:
+        log.info("lark facts not kept", reason="no database on this process")
+
+
+def facts_of(request: Request) -> LarkFactStore:
+    """What `app.state.lark_facts` holds, or the database, or nothing kept without one."""
+    found = getattr(request.app.state, "lark_facts", None)
+    if found is not None:
+        return found  # type: ignore[no-any-return]
+    sessions = sessions_of(request)
+    return NoLarkFacts() if sessions is None else StoredLarkFacts(sessions)
 
 
 def settings_of(request: Request) -> LarkSettings:
@@ -578,11 +738,13 @@ async def lark(
     asked: Asked,
     uses: str = Query(default=""),
     platform: str = Query(default=""),
+    app_id: str = Query(default=""),
 ) -> LarkView:
     """The guide for the uses named in `uses` (comma-separated), and where each use stands.
 
     With no `uses`, the ones already switched on are the choice, so a returning administrator sees
-    the steps for what they have.
+    the steps for what they have. `app_id`, once typed, builds every step's link to the app's own
+    page; an App ID not in Lark's shape is ignored and the saved one, if any, is used instead.
     """
     if not permitted(screen("connectors").read, asked.reach, asked.now):
         raise _not_answerable("lark")
@@ -594,6 +756,8 @@ async def lark(
     where = platform if platform in LARK_PLATFORMS else saved_platform
     where = where if where in LARK_PLATFORMS else next(iter(LARK_PLATFORMS))
     vault, held = await asyncio.to_thread(_held, credentials_of(request), on)
+    facts = await facts_of(request).read()
+    ident = app_id.strip() if APP_ID.fullmatch(app_id.strip()) else facts.app_id
     return LarkView(
         uses=[
             LarkUseView(
@@ -612,11 +776,11 @@ async def lark(
             for use in Use
         ],
         chosen=[use.value for use in chosen],
-        steps=[
-            LarkStepView(title=one.title, text=one.text)
-            for one in steps_for(chosen, platform=where)
-        ],
+        connected=bool(on),
+        app_id=ident,
+        steps=[step_view(one) for one in steps_for(chosen, platform=where, app_id=ident)],
         scopes=_scope_views(chosen),
+        scope_import=scope_import(chosen),
         platforms=list(LARK_PLATFORMS),
         platform=where,
         base="" if _saved("INSTALL_LARK_BASE") in ("", "unset") else _saved("INSTALL_LARK_BASE"),
@@ -628,6 +792,20 @@ async def lark(
         test_note=THE_TEST_ONLY_READS,
         staff_sources_screen=STAFF_SOURCES_SCREEN,
         vault_told="" if vault is VaultState.READY else TOLD[vault],
+        last_test=None if facts.last_test is None else _last_test_view(facts.last_test),
+        switch_off_note=SWITCHING_A_USE_OFF,
+        staff_off_note=SWITCHING_THE_STAFF_LIST_OFF,
+    )
+
+
+def _last_test_view(test: LastTest) -> LarkLastTestView:
+    return LarkLastTestView(
+        at=test.at,
+        accepted=test.accepted,
+        uses=[
+            LarkVerdictView(name=use.value, label=USES[use].label, verdict=verdict.value)
+            for use, verdict in test.verdicts
+        ],
     )
 
 
@@ -652,6 +830,10 @@ async def try_lark(request: Request, body: LarkAsked, asked: Asked) -> JSONRespo
         accepted=result.token_ok,
         verdicts={one.use.value: one.verdict.value for one in result.uses},
     )
+    # The verdicts and the instant, never anything sent or read. See the named constant.
+    await facts_of(request).keep(
+        app_id=None, last_test=last_test_value(result, at=asked.now), asked=asked
+    )
     told = LarkTestView(
         accepted=result.token_ok,
         told=result.told,
@@ -662,9 +844,11 @@ async def try_lark(request: Request, body: LarkAsked, asked: Asked) -> JSONRespo
                 verdict=one.verdict.value,
                 told=one.told,
                 missing=list(one.missing),
+                redo=list(redo_for(one)),
             )
             for one in result.uses
         ],
+        redo=[] if result.token_ok else list(REDO_WHEN_REFUSED),
     )
     return JSONResponse(status_code=200, content=told.model_dump(mode="json"))
 
@@ -698,6 +882,7 @@ async def save_lark(request: Request, body: LarkAsked, asked: Asked) -> JSONResp
         )
     values = settings_for(chosen, platform=body.platform, base_link=body.base_link)
     await settings_of(request).save(values, asked)
+    await facts_of(request).keep(app_id=body.app_id.strip(), last_test=None, asked=asked)
     if Use.CHANNEL in chosen:
         await _switch_the_channel_on(request, body, asked, trace_id)
     log.info(
@@ -709,6 +894,50 @@ async def save_lark(request: Request, body: LarkAsked, asked: Asked) -> JSONResp
         switched_on=[use.value for use in chosen],
         told=SAVED,
         staff_sources_screen=STAFF_SOURCES_SCREEN,
+    )
+    return JSONResponse(status_code=200, content=answered.model_dump(mode="json"))
+
+
+@router.post(LARK_SWITCH_OFF_PATH, response_model=LarkSwitchedOffView, responses=_WRITE_RESPONSES)
+async def switch_lark_off(request: Request, body: LarkSwitchOffAsked, asked: Asked) -> JSONResponse:
+    """Switch the named uses off. The credential stays in the vault; see `SWITCHING_A_USE_OFF`.
+
+    Each named use asks the authority that switches it on, so holding one does not switch
+    another off. The chat channel's record is switched off with its App ID and bot id kept, so
+    switching it on again is one save.
+    """
+    named, problems = uses_from(body.uses)
+    if problems:
+        return _problems(problems)
+    if not all(may_switch_on(asked.reach, use, asked.now) for use in named):
+        log.info("lark switch off refused", principal=asked.caller.principal.id)
+        raise _not_answerable("lark switch off")
+    values = settings_after_switching_off(
+        named,
+        saved_uses=_saved("INSTALL_LARK_USES"),
+        staff_source=_saved("INSTALL_STAFF_SOURCE"),
+    )
+    await settings_of(request).save(values, asked)
+    if Use.CHANNEL in named:
+        records = records_of(request)
+        held = await records.get(Channel.LARK)
+        if held is not None and held.enabled:
+            await records.save(
+                Channel.LARK,
+                enabled=False,
+                tenant=dict(held.tenant),
+                actor=asked.caller.principal.id,
+                ent_hash=asked.reach.ent_hash(),
+                trace_id=trace_of_request(),
+            )
+    log.info(
+        "lark uses switched off",
+        principal=asked.caller.principal.id,
+        uses=[use.value for use in named],
+    )
+    answered = LarkSwitchedOffView(
+        switched_off=[use.value for use in named],
+        told=SWITCHED_OFF,
     )
     return JSONResponse(status_code=200, content=answered.model_dump(mode="json"))
 
@@ -758,6 +987,7 @@ async def _switch_the_channel_on(
 
 __all__ = [
     "LARK_PATH",
+    "LARK_SWITCH_OFF_PATH",
     "LARK_TEST_PATH",
     "LarkAsked",
     "LarkView",
