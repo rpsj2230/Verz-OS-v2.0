@@ -156,15 +156,15 @@ EVERY_START_FURNISHES_BECAUSE_NOTHING_FURNISHED_IS_AN_ANSWER: Final = (
     "caller."
 )
 
-#: Why no built-in template is signed here.
+#: Why no built-in template is signed here, and where they are signed instead.
 NO_TEMPLATE_IS_SIGNED_BEFORE_THE_INSTALL_HOLDS_A_KEY_OF_ITS_OWN: Final = (
     "agents.template.publish signs with an HMAC key, and install verifies with the same key. Since "
     "2026-09-29 the install mints that key once into its own write-once vault slot, "
-    "template_signing/key, and the application reads it at start (brain.ops.template_key), so an "
-    "agent published from the console is signed and can be installed. Furnishing does not yet sign "
-    "the built-in templates with it: the catalogue's built-in templates stay the unsigned "
-    "manifests in code and are not offered for install, and an install with no vault holds no key "
-    "and publishes nothing."
+    "template_signing/key, and the application reads it at start (brain.ops.template_key). "
+    "Furnishing writes no template, because it runs where no key is held; each start that holds "
+    "the key signs the built-in templates with it (brain.ops.builtin_templates), so they are "
+    "offered for install, and no agent is installed until somebody chooses one. An install with "
+    "no vault holds no key and signs nothing."
 )
 
 # ------------------------------------------------------------------------------ the figures

@@ -113,6 +113,7 @@ from brain.migrate import run_migrations
 from brain.models.default_ladder import reconcile as reconcile_default_ladder
 from brain.ops.artifact_store import artifacts_for
 from brain.ops.automation_owner_store import StoredAutomations
+from brain.ops.builtin_templates import sign_built_ins
 from brain.ops.credential_write_store import credential_writes_for
 from brain.ops.credentials import credentials_at_start, keep_refreshing
 from brain.ops.default_ladder_store import SessionLadderWriter
@@ -591,6 +592,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             )
         except Exception as exc:
             log.warning("install could not be furnished", error=type(exc).__name__)
+        # The shipped templates, signed with the key this process read from its write-once slot
+        # above, so the gallery offers them to install. A version already on file is kept, so a
+        # start after the first writes nothing; never fatal, for furnishing's reason. See
+        # `brain.ops.builtin_templates`.
+        try:
+            signed = await sign_built_ins(
+                app.state.db_sessions,
+                key=app.state.template_key,
+                at=datetime.now(UTC),
+                actor=GRANTED_BY,
+                trace_id=f"{RECONCILIATION_TRACE}{uuid.uuid4().hex[:16]}",
+            )
+            log.info("built-in templates signed", written=len(signed))
+        except Exception as exc:
+            log.warning("built-in templates could not be signed", error=type(exc).__name__)
     # Approvals are read and decided on the database, whose trigger keeps each decision's ledger
     # entry. See `suspension_store_for`.
     app.state.suspensions = suspension_store_for(app.state.db_sessions)
