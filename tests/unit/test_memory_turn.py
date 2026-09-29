@@ -6,7 +6,7 @@ learning record. The first half here holds the rules; the second builds the memo
 the migrations that ship and writes a turn through the store. **The second half skips when there is
 no server**, and CI always has one.
 
-Task ids: M16.1.2, M16.1.3, M38.2.2.4
+Task ids: M16.1.2, M16.1.3, M38.2.2.4, M16.7.12, M16.6.3
 """
 
 from __future__ import annotations
@@ -22,7 +22,14 @@ from brain.gate.abstain import Abstention, AbstentionReason
 from brain.gate.answer import Answered
 from brain.memory.correction import Demotion, Supersession
 from brain.memory.digest import Learning
-from brain.memory.formation import HALF_LIFE_DAYS, RECALL_FLOOR, MemoryKind, confidence_now
+from brain.memory.formation import (
+    HALF_LIFE_DAYS,
+    RECALL_FLOOR,
+    MemoryKind,
+    confidence_now,
+    may_recall,
+    place_of,
+)
 from brain.memory.recall import recall
 from brain.memory.signals import Signal
 from brain.memory.tiers import Change, Tier
@@ -41,8 +48,10 @@ from brain.memory.turn import (
     propose_memories,
     recall_place,
     requirement_of,
+    turn_of,
+    worth_forming,
 )
-from brain.ops.memory_store import StoredFormations
+from brain.ops.memory_store import StoredFormations, StoredRecall
 from brain.session import make_session_factory
 from brain.tables import memory as memory_table
 from tests.fixtures.scratch_postgres import run, sql
@@ -66,7 +75,14 @@ def reach(*capabilities: str, pid: str = PERSON, scope: Scope | None = None) -> 
     )
 
 
-def a_turn(said: str, *, answered: bool = True, held: EntitlementSet | None = None) -> Turn:
+def a_turn(
+    said: str,
+    *,
+    answered: bool = True,
+    held: EntitlementSet | None = None,
+    refused: bool = False,
+    department: str | None = None,
+) -> Turn:
     return Turn(
         trace_id="trace-one",
         principal_id=PERSON,
@@ -75,6 +91,8 @@ def a_turn(said: str, *, answered: bool = True, held: EntitlementSet | None = No
         reach=held or reach("read:client.name", scope=WEB),
         at=NOW,
         agent_id="desk",
+        refused=refused,
+        department=department,
     )
 
 
@@ -107,13 +125,139 @@ def test_a_preference_said_in_passing_is_extracted_at_a_confidence_that_decays()
     assert confidence_now(EXTRACTED_CONFIDENCE, formed_at=NOW, now=later) < RECALL_FLOOR
 
 
-def test_a_turn_with_nothing_to_remember_or_one_that_was_not_answered_forms_nothing() -> None:
+def test_a_turn_with_nothing_to_remember_or_one_the_lane_refused_forms_nothing() -> None:
     """Delete this and every question would be kept, or the words beside a refusal would be."""
     assert propose_memories(a_turn("What is the balance on Acme?"), []).skipped == (
         NotFormed.NOTHING_TO_REMEMBER,
     )
-    refused = propose_memories(a_turn("Remember that I prefer email.", answered=False), [])
-    assert (refused.formed, refused.skipped) == ((), (NotFormed.NOT_ANSWERED,))
+    refused = propose_memories(
+        a_turn(
+            "Remember that I prefer email. I prefer short answers.", answered=False, refused=True
+        ),
+        [],
+    )
+    assert (refused.formed, refused.skipped) == ((), (NotFormed.REFUSED,))
+
+
+def test_a_stated_memory_is_kept_when_the_lane_found_nothing_and_an_inference_is_not() -> None:
+    """**The owner's install formed no memory from "remember that ...", ever.** The lane abstains
+    on a sentence that asks nothing it can find, and until 2026-09-29 a stated memory waited for an
+    answered turn, so it never formed. Now it forms from any turn the lane did not refuse, and an
+    inference still waits for an answer.
+
+    Delete this and "remember that" goes back to being a sentence the system says it could not
+    find, or an inference is kept from a question nobody was helped with."""
+    proposals = propose_memories(
+        a_turn("Remember that I prefer email. I prefer short answers.", answered=False), []
+    )
+    assert [one.statement for one in proposals.formed] == ["I prefer email"]
+    assert [one.learning.formation.kind for one in proposals.formed] == [MemoryKind.PERSISTENT]
+    assert proposals.skipped == (NotFormed.NOT_ANSWERED,)
+
+    answered = propose_memories(
+        a_turn("Remember that I prefer email. I prefer short answers.", answered=True), []
+    )
+    assert [one.statement for one in answered.formed] == [
+        "I prefer email",
+        "I prefer short answers",
+    ]
+
+
+def test_a_turn_cannot_be_both_answered_and_refused() -> None:
+    """Delete this and a turn could say both, and formation would pick whichever it read first."""
+    with pytest.raises(TurnError, match="both answered and refused"):
+        a_turn("Remember that I prefer email.", answered=True, refused=True)
+
+
+def test_a_memory_names_the_person_and_the_department_they_said_it_in() -> None:
+    """**A person whose every grant is scoped to their department read none of their own memories
+    on a screen (M16.7.12).** The Memory screen and My workspace ask recall about the place a memory
+    names, and a department-scoped grant matches no place that names no department. With the
+    department in the formation's scope the place is reached by that department's grants and by a
+    company-wide one, and not by another department's, and an answer asked from another department
+    recalls nothing of it.
+
+    Delete this and a formation can go back to naming the person alone, and every reader without a
+    company-wide grant finds nothing about themselves on the Memory screen or My workspace."""
+    theirs = reach("read:client.name", scope=WEB)
+    [one] = formed("Remember that I work from Penang on Fridays.", held=theirs, department="web")
+    assert place_of(one.formation.scope) == {"principal_id": PERSON, "department": "web"}
+
+    assert may_recall(one.formation, theirs, now=NOW)
+    assert may_recall(one.formation, theirs, now=NOW, where=recall_place(PERSON, "web"))
+    assert may_recall(one.formation, reach("read:client.name"), now=NOW)
+    ops = reach("read:client.name", scope=Scope.department("ops"))
+    assert not may_recall(one.formation, ops, now=NOW)
+    assert not may_recall(one.formation, ops, now=NOW, where=recall_place(PERSON, "ops"))
+    assert not may_recall(one.formation, theirs, now=NOW, where=recall_place("u_other", "web"))
+
+    [unplaced] = formed("Remember that I work from Penang on Fridays.", held=theirs)
+    assert place_of(unplaced.formation.scope) == {"principal_id": PERSON}
+    assert not may_recall(unplaced.formation, theirs, now=NOW)
+
+
+def test_only_words_that_could_become_a_memory_are_worth_forming() -> None:
+    """The check the answer route makes before opening any connection. Delete this and every
+    question would take a lock on its asker and read their memories, or a stated memory could be
+    judged not worth forming and never reach the store."""
+    assert worth_forming("What is the balance? Remember that I prefer email.")
+    assert worth_forming("I'd rather have the figure first.")
+    assert not worth_forming("What is the balance on Acme?")
+    assert not worth_forming("Can you remember the balance?")
+
+
+def test_the_turn_an_outcome_is_follows_the_lane_and_a_referral_is_a_refusal() -> None:
+    """`turn_of` is what the route builds: answered from the outcome, refused for a model's
+    refusal or a referral, the run's principal, and nothing at all for words that ask nothing.
+
+    Delete this and a referred question's words could be remembered, or a refusal read as found
+    nothing and its stated memory kept."""
+    held = reach("read:client.name", scope=WEB)
+    answered = Answered(frames=("data: ok",), from_cache=True)
+    nothing = Answered(
+        frames=("data: no",), abstention=Abstention(reason=AbstentionReason.NOTHING_RETRIEVED)
+    )
+    declined = Answered(
+        frames=("data: no",), abstention=Abstention(reason=AbstentionReason.REFUSED)
+    )
+
+    def made(
+        outcome: Answered, *, referred: bool = False, said: str = "Remember that I am in."
+    ) -> Turn | None:
+        return turn_of(
+            trace_id="trace-one",
+            said=said,
+            outcome=outcome,
+            referred=referred,
+            reach=held,
+            at=NOW,
+            agent_id=None,
+            department="web",
+        )
+
+    one = made(answered)
+    assert one is not None and (one.answered, one.refused, one.department) == (True, False, "web")
+    assert one.principal_id == held.principal_id
+    found = made(nothing)
+    assert found is not None and (found.answered, found.refused) == (False, False)
+    refusal = made(declined)
+    assert refusal is not None and (refusal.answered, refusal.refused) == (False, True)
+    referral = made(answered, referred=True)
+    assert referral is not None and (referral.answered, referral.refused) == (False, True)
+    assert made(answered, said="What is the balance?") is None
+    assert (
+        turn_of(
+            trace_id=" ",
+            said="Remember that I am in.",
+            outcome=answered,
+            referred=False,
+            reach=held,
+            at=NOW,
+            agent_id=None,
+            department=None,
+        )
+        is None
+    )
 
 
 def test_a_claim_about_the_company_forms_nothing_because_a_person_has_to_decide_it() -> None:
@@ -341,3 +485,110 @@ def test_a_formation_that_fails_does_not_take_the_answer_with_it() -> None:
 
     formations = StoredFormations(broken)  # type: ignore[arg-type]
     assert run(lambda: formations.after_turn(a_turn("I prefer short answers."))) is None
+
+
+# ------------------------------------------------------------------ recalling for an answer
+def recalled(url: str, reader: EntitlementSet, where: dict[str, object], now: datetime) -> object:
+    async def go() -> object:
+        built = app_engine(url)
+        try:
+            return await StoredRecall(make_session_factory(built)).recalled(
+                reader, where=where, now=now
+            )
+        finally:
+            await built.dispose()
+
+    return run(go)
+
+
+def test_an_answer_recalls_the_askers_own_memories_most_confident_first_and_nothing_else() -> None:
+    """**What a model is shown about the asker, read from the tables as the application role
+    (M16.6.3).** Their stated memory and their inference, stated first because it is certain; not
+    somebody else's; not the inference once it has decayed below the floor, while the statement
+    stays; nothing once they have moved to another department; and not a memory a correction took
+    out of recall.
+
+    Delete this and the hints could be read from the whole table, keep a decayed guess, follow a
+    person into their new department, or ignore an undo."""
+    theirs = reach("read:client.name", scope=WEB)
+    here = recall_place(PERSON, "web")
+    with through_0061("brain_memory_turn_recall") as url:
+        form(
+            url,
+            a_turn(
+                "Remember that I work from Penang on Fridays. I prefer short answers.",
+                held=theirs,
+                department="web",
+            ),
+        )
+        other = reach("read:client.name", pid="u_other", scope=WEB)
+        form(
+            url,
+            Turn(
+                trace_id="trace-other",
+                principal_id="u_other",
+                said="Remember that I work from Ipoh.",
+                answered=True,
+                reach=other,
+                at=NOW,
+                department="web",
+            ),
+        )
+        now = recalled(url, theirs, here, NOW)
+        decayed = recalled(url, theirs, here, NOW + timedelta(days=3 * HALF_LIFE_DAYS))
+        moved = recalled(
+            url,
+            reach("read:client.name", scope=Scope.department("ops")),
+            recall_place(PERSON, "ops"),
+            NOW,
+        )
+        [(stated_id,)] = sql(url, "SELECT id FROM mem.persistent WHERE principal_id = %s", PERSON)
+        sql(
+            url,
+            "INSERT INTO mem.correction (memory_id, correction, field, recorded_by, at)"
+            " VALUES (%s, 'demoted', 'statement', 'u_person', %s)",
+            stated_id,
+            NOW,
+        )
+        undone = recalled(url, theirs, here, NOW + timedelta(hours=1))
+        theirs_other = recalled(url, other, recall_place("u_other", "web"), NOW)
+
+    assert now == ("I work from Penang on Fridays", "I prefer short answers")
+    assert decayed == ("I work from Penang on Fridays",)
+    assert moved == ()
+    assert undone == ("I prefer short answers",)
+    assert theirs_other == ("I work from Ipoh",)
+
+
+def test_a_recall_that_fails_is_an_answer_with_no_hints() -> None:
+    """Delete this and a database that could not be read for hints would fail the question."""
+
+    def broken() -> object:
+        msg = "no database"
+        raise RuntimeError(msg)
+
+    recall_store = StoredRecall(broken)  # type: ignore[arg-type]
+    found = run(
+        lambda: recall_store.hints(
+            reach("read:client.name"), where={"principal_id": PERSON}, now=NOW, trace_id="t"
+        )
+    )
+    assert found == ()
+
+
+def test_formation_opens_no_connection_for_words_that_ask_nothing_or_a_refused_turn() -> None:
+    """Delete this and every question on an install would take a lock on its asker."""
+
+    def broken() -> object:
+        msg = "a connection was opened"
+        raise AssertionError(msg)
+
+    formations = StoredFormations(broken)  # type: ignore[arg-type]
+    plain = run(lambda: formations.form(a_turn("What is the balance on Acme?")))
+    refused = run(
+        lambda: formations.form(
+            a_turn("Remember that I prefer email.", answered=False, refused=True)
+        )
+    )
+    assert plain.skipped == (NotFormed.NOTHING_TO_REMEMBER,)
+    assert refused.skipped == (NotFormed.REFUSED,)
