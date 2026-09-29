@@ -70,11 +70,14 @@ class Requests:
         self.steward = steward
         self.rows: list[dict[str, Any]] = []
 
-    def answer(self, statement: Any) -> Result | None:
+    def answer(self, statement: Any) -> Result | Updated | None:
         if isinstance(statement, Insert) and statement.table.name == "access_request":
             self.rows.append({**statement.compile().params, "id": uuid.uuid4(), "handled_at": None})
             return Result([])
-        if isinstance(statement, Update) and statement.table.name == "access_request":
+        if (
+            isinstance(statement, Update)
+            and getattr(statement.table, "name", "") == "access_request"
+        ):
             # The update's own three comparisons: this id, this owner, and not handled yet.
             params = statement.compile().params
             found = [

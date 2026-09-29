@@ -22,7 +22,8 @@ import pytest
 
 from brain import certification_export_routes
 from brain.api import API_PREFIX
-from brain.govern_people_routes import GrantHolding, grants_of
+from brain.gate.review_store import GrantHolding
+from brain.govern_people_routes import grants_of, review_row
 from brain.ops.data_export_store import TakenExport
 from brain.ops.export import ExportReason
 from brain.tables.data_export import ExportDataSet, ExportForm
@@ -175,7 +176,7 @@ def test_a_cell_a_spreadsheet_would_run_is_written_as_text() -> None:
     row = a_grant_row("u_2", "read:client.name")
     row.reason = "=HYPERLINK(1)"
     held = GrantHolding(row=row, display_name="W", department="web")
-    view = certification_export_routes.review_row(held, grants_of(held), None)
+    view = review_row(held, grants_of(held), None)
     document = certification_export_routes.report([view], {})
 
     assert "'=HYPERLINK(1)" in document
