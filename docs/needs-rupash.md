@@ -10,30 +10,83 @@ is, what I recommend, and every step.
 
 # Open
 
-## 126. Which of these services does Verz use?
+## 126. Which of these services does Verz use? Steps for each one you can connect today
 
 **In plain terms:** about thirty Wave 2 tasks are channels and connectors to other services. Most
-are already built and tested in the repository; what a task needs before it counts as done is
-proof on your install, and that needs a real account for the service. The rest are not built yet,
-and building first the ones you use is the quickest way through them. So the question is simply
-which of these Verz uses.
+are built and tested in the repository; a task counts as done once it is proved on your install,
+and that needs a real account. Measured on 30 September, they fall into three groups, and only the
+first can be done by you today. **Never paste a key into chat, only into the console.**
 
-**Channels (people ask the Brain through them):** Slack; Microsoft Teams; WhatsApp; Telegram;
-email, in and out. Lark is already proved, and the website chat widget needs no account, so I
-prove that one myself.
+### Group 1: connect these yourself, today, entirely in the console
 
-**Sources (the Brain reads them to answer):** your Laravel system, through read-only database views;
-HubSpot; Google Drive or Microsoft 365 (say which); Google Workspace mail and calendar; Google
-Analytics; Google Search Console; Cloudflare; your domain registrar and hosting; Slack as a source.
-Lark Base and Lark Wiki are being built now and need nothing new from you.
+Do only the ones Verz uses. Each takes about ten minutes. In the console open **Connectors**, press
+**Connect a source**, choose the service, and follow its screens, which show a picture of each step;
+the same steps in words:
 
-**My recommendation:** tell me the ones Verz uses. Those get proved on your install first, one at
-a time, and for each I send you the steps to create a read-only access key and where to paste it
-(never to me). The ones Verz does not use move to Wave 5: their build and tests stay, and they are
-proved when a company that uses them installs the Brain.
+**Xero** (invoices and contacts, read only)
 
-**What I need from you:** reply "126:" and the names, for example "126: Laravel, HubSpot, Google
-Drive, email". Anything you leave out moves to Wave 5, and you can bring it back at any time.
+1. Sign in to Xero's developer portal (developer.xero.com, **My Apps**) with an account that
+   administers your organisation, and press **New app** (Xero may offer it as a custom connection).
+   Name it "Company Brain". Give it exactly two scopes, `accounting.transactions.read` and
+   `accounting.contacts.read`, and nothing ending in `.write`.
+2. Press **Authorise** for the one Xero organisation the Brain should read, then copy that
+   organisation's id (Xero may call it the tenant id) and the key Xero issues.
+3. In the console, on Connect Xero's last screen, paste the organisation id and the key and press
+   **Connect Xero**. The key goes straight to the vault and is never shown again.
+
+**HubSpot** (contacts and deals, read only)
+
+1. In HubSpot, press the settings gear at the top right, then **Integrations**, **Private Apps**
+   (HubSpot may list it under **Development**, **Legacy apps**), and press **Create a private app**.
+   Name it "Company Brain".
+2. On the **Scopes** tab tick `crm.objects.contacts.read` and `crm.objects.deals.read` and nothing
+   with "write" in it or touching settings. Press **Create app**, confirm, and copy the access token.
+3. In the console, on Connect HubSpot's last screen, paste the HubSpot account id (shown in the
+   account's settings) and the token, and press **Connect HubSpot**.
+
+**Freshdesk** (tickets, read live)
+
+1. Choose the Freshdesk agent the Brain reads as: someone who sees the tickets it should answer
+   about and no more, and never an administrator.
+2. Sign in to Freshdesk as that agent, press the profile picture at the top right, open **Profile
+   settings**, and press **View API key**. Copy it.
+3. In the console, on Connect Freshdesk's last screen, type your helpdesk's address (ending
+   `.freshdesk.com`), the short name of the one department whose people may be granted its
+   tickets, paste the key, and press **Connect Freshdesk**.
+
+After each one, press **Test** on its card, then tell me "126: connected Xero" (or whichever), and
+I prove it on your install and close its tasks.
+
+### Group 2: the first half is yours; the last step is being built
+
+**Google Drive** and **your Laravel system** cannot yet be finished from the console: both end with
+a step done on the server, which is itself an unfinished Wave 2 task (M11.7.7, every connector
+connectable from the console). It is being built now, so you will paste the key yourself rather
+than handing a key file to anyone. If Verz uses them, you can do the first steps now:
+
+- **Google Drive:** in Google Cloud console, **IAM & Admin**, **Service Accounts**, **Create
+  service account**, named "Company Brain", with no role and never domain-wide delegation. In the
+  same project, **APIs & Services**, **Library**, find **Google Drive API** and press **Enable**.
+  In Google Drive, right-click the one folder the Brain should read, **Share**, paste the service
+  account's email address and give it **Viewer**. Share nothing else with it.
+- **Laravel:** in your application's database, create one view for each thing the Brain should
+  read, holding only the columns it may see, and a database user with SELECT on those views only.
+  Whoever looks after that database does this; it is two SQL statements per view.
+
+### Group 3: not connectable yet on any install
+
+**Slack, Microsoft Teams, WhatsApp, Telegram and email** as channels are written and tested, but
+nothing on an install can yet receive or send through them: only Lark and the generic webhook are
+wired end to end (task M10.6.1). An account for them does nothing until that wiring is built.
+**Google Analytics, Search Console, Cloudflare, domains and hosting, Google Workspace and Slack as a
+source** are not built yet.
+
+### What I need from you
+
+Reply "126:" and the services Verz uses, for example "126: Xero, HubSpot, Google Drive, Slack".
+Group 1 you can connect straight away with the steps above. Groups 2 and 3 are built in the order
+you name them, and I send you steps as each becomes connectable. **Anything you leave out moves to
+Wave 5**: its build and tests stay, and it is proved when a company that uses it installs.
 
 ## 125. Which Lark group receives the evening build digest?
 
