@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-29T16:03:01.042695+00:00",
-  "commit": "e3c61fc8",
-  "commit_subject": "Connect Lark asks who may read each wiki space and says a Base's tables are granted per table (#247)",
+  "generated_at": "2026-09-29T16:17:40.573142+00:00",
+  "commit": "ff93eb2e",
+  "commit_subject": "An install check posts automation steps to the canvas's tool-call route: a step gets its owner's columns and nothing its ceiling adds (#237)",
   "total": 1576,
   "done": 466,
   "percent": 29.6,
