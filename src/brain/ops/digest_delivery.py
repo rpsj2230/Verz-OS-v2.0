@@ -82,6 +82,13 @@ A_CHANNEL_WITH_TWO_IDENTICAL_DIGESTS_STOPS_BEING_READ: Final = (
     "is one people learn to skip, which costs the whole feature"
 )
 
+#: Why the sender is handed the rendered text, and not only the record of what was rendered.
+WHAT_THE_ROOM_READS_IS_WHAT_WAS_RENDERED: Final = (
+    "the text render produces is the message, so it is what the sender is handed; a delivery "
+    "that kept the words in its own record and sent the channel an empty payload would report "
+    "SENT every evening over a room that received nothing"
+)
+
 #: Why a quiet day is delivered like any other.
 A_DIGEST_THAT_ONLY_ARRIVES_ON_BUSY_DAYS_CANNOT_REPORT_A_STALL: Final = (
     "not sending when nothing closed is the obvious kindness and it removes the only signal "
@@ -134,9 +141,17 @@ class DigestSender(Protocol):
     the case worth testing is a digest that should not have been sent, and that is not
     testable through something that opens a socket. It also means the digest can move to a
     second channel without this module learning about it.
+
+    **`body` is the message, and until 2026-09-29 there was no parameter for it.** The protocol
+    took a payload and a chat, the delivery handed it `ChannelPayload(label="")`, and the text
+    `render` produced went into the returned `Delivery` and nowhere else, so a wired digest would
+    have posted an empty message every evening while every test passed on the record of what it
+    meant to say. `brain.channels.lark.LarkAdapter.send` takes a composed `body` already, and a
+    body is how a text channel is handed words that are not records. See
+    `WHAT_THE_ROOM_READS_IS_WHAT_WAS_RENDERED`.
     """
 
-    def send(self, payload: ChannelPayload, *, to: str) -> None: ...
+    def send(self, payload: ChannelPayload, *, to: str, body: str) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -199,7 +214,7 @@ def deliver_digest(
     def post(_: Operation) -> CallOutcome:
         rendered.append(render(digest))
         try:
-            sender.send(ChannelPayload(label=""), to=channel.chat_id)
+            sender.send(ChannelPayload(label=""), to=channel.chat_id, body=rendered[-1])
         except Exception as exc:
             # The class name and never the message. A transport exception stringifies whatever
             # it failed on, and what it failed on here is a message naming every open task.
