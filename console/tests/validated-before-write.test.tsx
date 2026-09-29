@@ -107,6 +107,10 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
  * Checked, not trusted: an entry for a file that no longer holds both fails the first test.
  */
 const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
+  "src/pages/agents/AgentMemory.tsx":
+    "The one form corrects a memory, opened from its row in the Memory section at its own address, " +
+    "which no page case mounts. tests/agent-memory.test.tsx submits it blank and holds that nothing " +
+    "is sent and what to type is said beside it, and a correction is sent only from its confirmation.",
   "src/pages/compliance/ComplianceActs.tsx":
     "Naming a person, opening a case and each step of a case are forms inside drawers opened from the " +
     "Compliance views and a case's own page, outside the main landmark these cases read. Each says what " +
