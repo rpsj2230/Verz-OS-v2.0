@@ -61,14 +61,26 @@ sender is offered to `brain.ops.binding_store.StoredBinder` on any process with 
 binds it once against `auth.binding_code` and keeps the binding in `auth.principal_identity`
 (CH2); `bindings_of` reads the same table.
 
-Task ids: M10.2.1, M10.6.1, M10.6.3, M10.3.3, M10.4.5, M3.2.2, M10.2.6, M1.8.5
+**A request for the mail relay leaves by the relay, and every other by HTTPS.** Each delivery's
+transport is `brain.channels.relay.RelayingTransport` over the one above, so the email wire's
+`RELAY_URL` goes to the relay saved on Notifications (`relay_of`): its settings read from
+`ops.setting` on this request's event loop, its password borrowed from the vault on the send's own
+thread, and both dropped with the message. A relay not set up sends nothing and is recorded as
+refused. See `brain.channels.relay.ONE_RELAY_SERVES_EVERY_MESSAGE_THIS_INSTALL_SENDS`.
+
+**A channel's connect steps and the address to paste ride on its view.** `steps_of` serves the
+channel's `GUIDE` and `events_address_of` the events address in full, built on the install setting
+that already names this install's public address, as Lark's is; both are empty for a channel with
+none, so the console draws a flow only where one was declared.
+
+Task ids: M10.2.1, M10.6.1, M10.6.3, M10.3.3, M10.4.5, M3.2.2, M10.2.6, M1.8.5, M10.5.6
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Coroutine, Mapping
 from datetime import UTC, datetime
 from typing import Annotated, Final
 
@@ -88,6 +100,7 @@ from brain.channels.adapter import (
     VendorAnswer,
     VendorRequest,
     channel_adapters,
+    channel_guides,
     channel_wires,
 )
 from brain.channels.inbound import (
@@ -102,6 +115,7 @@ from brain.channels.inbound import (
     reply_for,
 )
 from brain.channels.outbound import Delivered, LedgerRunner, Outgoing, deliver
+from brain.channels.relay import RelayingTransport
 from brain.chat_answer import ChatAnswerer
 from brain.core.entitlement import EntitlementSet
 from brain.core.errors import Absent, Failed
@@ -109,7 +123,11 @@ from brain.credential_routes import credentials_of
 from brain.db import libpq_conninfo
 from brain.gate.context import Channel
 from brain.gate.resolve import EntitlementStore
+from brain.guide_views import GuideStepView, step_view
+from brain.install import InstallError, value_of
 from brain.install_routes import settings_of
+from brain.notification_routes import mail_password_of
+from brain.notification_routes import transport_of as mail_transport_of
 from brain.ops.binding_store import StoredBinder, StoredBindings
 from brain.ops.channel_store import (
     ChannelRecord,
@@ -134,6 +152,14 @@ from brain.ops.credentials import (
     VaultState,
 )
 from brain.ops.idempotency import Intent, Issued, OperationLedger
+from brain.ops.lark_connect import install_origin
+from brain.ops.mail import (
+    MailPasswordUnavailableError,
+    MailSettings,
+    MailTransport,
+    settings_from_rows,
+    settings_rows,
+)
 from brain.ops.openbao import OpenBaoVault
 from brain.ops.operation_store import PostgresOperationLedger
 from brain.ops.outbox import SignedRequest
@@ -212,6 +238,13 @@ KEPT_ANSWER_BYTES: Final = MAX_BODY_BYTES
 #: The longest tenant value kept: an identifier or an address, never a document.
 MAX_TENANT_VALUE_CHARS: Final = 500
 
+#: The installation setting that names this install's public address, which every events
+#: address is built on. See `brain.ops.lark_connect.events_address` for why it is this one.
+PUBLIC_ADDRESS_SETTING: Final = "INSTALL_OIDC_REDIRECT_URIS"
+
+#: How long a send's thread waits for the relay's settings to be read.
+RELAY_SETTINGS_SECONDS: Final = 10.0
+
 #: The longest destination a test message is sent to.
 MAX_TO_CHARS: Final = 255
 
@@ -273,6 +306,11 @@ class ChannelView(BaseModel):
     receives: bool
     #: Where its vendor posts, under this install's own origin; empty when it cannot receive.
     events_path: str
+    #: The same address in full, for a person to paste into the vendor; empty when this install
+    #: names no public address yet, or the channel cannot receive.
+    events_address: str
+    #: The steps that connect it, ending in its own form; empty for a channel with none yet.
+    steps: list[GuideStepView]
     #: The tenant fields its record takes.
     tenant_fields: list[str]
     configured: bool
@@ -514,6 +552,69 @@ def transport_of(request: Request) -> ChannelTransport:
     return found if found is not None else HttpsTransport()
 
 
+def relay_settings_of(
+    request: Request,
+) -> Callable[[], Coroutine[None, None, MailSettings | None]]:
+    """How the relay's settings are read: `app.state.mail_settings` for a test, `ops.setting`
+    otherwise, and none with no database."""
+    found = getattr(request.app.state, "mail_settings", None)
+
+    async def read() -> MailSettings | None:
+        if isinstance(found, MailSettings):
+            return found
+        sessions = sessions_of(request)
+        if sessions is None:
+            return None
+        async with sessions() as session:
+            return settings_from_rows(await settings_rows(session))
+
+    return read
+
+
+def relay_of(request: Request) -> Callable[[], MailTransport | None]:
+    """The mail relay a reply by mail leaves through, asked on the send's own thread.
+
+    The relay set up on Notifications, never one of a channel's own: see
+    `brain.channels.relay.ONE_RELAY_SERVES_EVERY_MESSAGE_THIS_INSTALL_SENDS`. Its settings are
+    read on this request's event loop, which is free while the send's thread waits, and its
+    password is borrowed from the vault for the one message and dropped with the transport. A
+    relay not set up, or whose password the vault will not give, answers None and sends nothing.
+    """
+    loop = asyncio.get_running_loop()
+    read_settings = relay_settings_of(request)
+    mail_password = mail_password_of(request)
+    build = mail_transport_of(request)
+
+    def relay() -> MailTransport | None:
+        if _on_a_running_loop():
+            msg = "the relay is asked on the send's thread, never on the event loop"
+            raise RuntimeError(msg)
+        settings = asyncio.run_coroutine_threadsafe(read_settings(), loop).result(
+            RELAY_SETTINGS_SECONDS
+        )
+        if settings is None:
+            return None
+        password: str | None = None
+        if settings.username:
+            try:
+                password = mail_password.read() if mail_password.configured else None
+            except MailPasswordUnavailableError:
+                return None
+            if password is None:
+                return None
+        return build(settings, password)
+
+    return relay
+
+
+def _on_a_running_loop() -> bool:
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return False
+    return True
+
+
 def ledger_of(request: Request) -> LedgerRunner:
     """How one send reaches the operation ledger: `app.state.operation_ledger` for a test, or a
     connection of its own in autocommit mode, opened for the one send on the send's thread, as
@@ -622,6 +723,37 @@ def tenant_problems(wire: ChannelWire, tenant: Mapping[str, str]) -> list[str]:
     return problems
 
 
+def _saved(name: str) -> str:
+    try:
+        return value_of(name)
+    except InstallError:
+        return ""
+
+
+def events_path_of(channel: Channel) -> str:
+    """Where a channel's vendor posts, under this install's origin; empty for one with no wire."""
+    if channel not in channel_wires():
+        return ""
+    return API_PREFIX + EVENTS_PATH.format(name=channel.value)
+
+
+def events_address_of(channel: Channel) -> str:
+    """The same address in full, for a person to paste into the vendor.
+
+    Built on the install setting that already names its public address, as Lark's is (see
+    `brain.ops.lark_connect.events_address`), so no second setting can disagree with it. Empty
+    while the install names none, rather than a relative path a vendor could not reach.
+    """
+    path = events_path_of(channel)
+    origin = install_origin(_saved(PUBLIC_ADDRESS_SETTING))
+    return f"{origin}{path}" if origin and path else ""
+
+
+def steps_of(channel: Channel) -> list[GuideStepView]:
+    """The steps that connect a channel, ending in its own form; none for a channel with none."""
+    return [step_view(one) for one in channel_guides().get(channel, ())]
+
+
 def _error(status: int, message: str) -> JSONResponse:
     body = ErrorBody(message=message, trace_id=trace_of_request())
     return JSONResponse(status_code=status, content=body.model_dump(mode="json"))
@@ -653,7 +785,9 @@ async def _view(
     return ChannelView(
         channel=channel.value,
         receives=wire is not None,
-        events_path=API_PREFIX + EVENTS_PATH.format(name=channel.value) if wire else "",
+        events_path=events_path_of(channel),
+        events_address=events_address_of(channel),
+        steps=steps_of(channel),
         tenant_fields=list(wire.tenant_fields) if wire else [],
         configured=record is not None,
         enabled=record is not None and record.enabled,
@@ -779,7 +913,7 @@ async def _deliver(
         record=record,
         secrets=secrets_of(request),
         reach=reach_of(request),
-        transport=transport_of(request),
+        transport=RelayingTransport(transport_of(request), relay_of(request)),
         ledger=ledger_of(request),
         deliveries=deliveries_of(request),
         now=now,

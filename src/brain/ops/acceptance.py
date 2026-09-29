@@ -200,8 +200,12 @@ CHECK_MODULES: Final = (
     "brain.ops.acceptance_threads",
     "brain.ops.acceptance_knowledge",
     "brain.ops.acceptance_checks_automation",
+<<<<<<< HEAD
     "brain.ops.acceptance_checks_organisation",
     "brain.ops.acceptance_checks_accounts",
+=======
+    "brain.ops.acceptance_checks_channels",
+>>>>>>> bf0efc48 (Email is a channel an install can connect: signed mail in, answers out by the install's own relay, and Connect Email one screen at a time)
 )
 
 

@@ -26,7 +26,7 @@ from typing import Any
 import pytest
 
 from brain.core.department import SLUG_PATTERN
-from brain.ops import acceptance, acceptance_audit, acceptance_run
+from brain.ops import acceptance, acceptance_audit, acceptance_checks_channels, acceptance_run
 from brain.ops import acceptance_checks_deployment as acceptance_deployment
 from brain.ops.acceptance import (
     FAILED,
@@ -214,6 +214,7 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     assert by_module["brain.ops.acceptance_checks_automation"] == [
         "a_flow_step_gets_its_owner_s_rows_and_nothing_its_ceiling_adds",
     ]
+<<<<<<< HEAD
     assert by_module["brain.ops.acceptance_checks_organisation"] == [
         "departments_a_staff_source_names_are_founded_once",
         "the_staff_sync_places_people_where_its_source_says",
@@ -221,6 +222,11 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     # The staff sync's accounts, with no sign-in service called; `test_staff_accounts_run.py`.
     assert by_module["brain.ops.acceptance_checks_accounts"] == [
         "the_staff_sync_gives_the_active_an_account_and_closes_a_leaver_s",
+=======
+    # One per channel a vendor connects; `tests/unit/test_acceptance_channels.py` runs them.
+    assert by_module["brain.ops.acceptance_checks_channels"] == [
+        "an_email_is_taken_signed_and_answered_by_the_install_s_relay",
+>>>>>>> bf0efc48 (Email is a channel an install can connect: signed mail in, answers out by the install's own relay, and Connect Email one screen at a time)
     ]
     assert list(by_module) == list(acceptance.CHECK_MODULES)
     oversight = {one.name: one.leaves for one in registered()}
@@ -716,6 +722,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     )
     # No antivirus and no object store here; `tests/unit/test_acceptance_ingest.py` runs both.
     assert outcomes.pop("the_antivirus_test_file_is_refused_as_malware")[0] == NOT_RUN
+    # No relay is saved here; `tests/unit/test_acceptance_channels.py` saves one and passes.
+    email = "an_email_is_taken_signed_and_answered_by_the_install_s_relay"
+    assert outcomes.pop(email) == (NOT_RUN, acceptance_checks_channels.NO_RELAY_IS_SAVED)
     assert outcomes.pop("a_queued_file_is_kept_in_the_store_and_read_by_the_worker")[0] == NOT_RUN
     # Every act, the chain, the trace and the export were seen, and no deploy is recorded here to
     # be kept out of the export: `tests/unit/test_acceptance_audit.py` records one and passes.
