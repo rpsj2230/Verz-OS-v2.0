@@ -26,7 +26,13 @@ from typing import Any
 import pytest
 
 from brain.core.department import SLUG_PATTERN
-from brain.ops import acceptance, acceptance_audit, acceptance_checks_channels, acceptance_run
+from brain.ops import (
+    acceptance,
+    acceptance_audit,
+    acceptance_checks_channels,
+    acceptance_checks_recovery,
+    acceptance_run,
+)
 from brain.ops import acceptance_checks_deployment as acceptance_deployment
 from brain.ops.acceptance import (
     FAILED,
@@ -642,6 +648,7 @@ WRITTEN_BY_CHECKS = (
     "agent.browser_session",
     "obs.trace_step",
     "obs.trace_read",
+    "ops.operation",
 )
 
 
@@ -748,6 +755,13 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         "the_scrub_meets_its_budget_on_this_install_s_processor",
     ):
         assert outcomes.pop(worker_check) == (NOT_RUN, acceptance_deployment.NOT_IN_A_WORKER)
+    # No worker has ticked here, so neither recovery sweep has a scheduled run to judge;
+    # `tests/unit/test_acceptance_recovery.py` records one and both pass.
+    for recovery_check in registered(("brain.ops.acceptance_checks_recovery",)):
+        assert outcomes.pop(recovery_check.name) == (
+            NOT_RUN,
+            acceptance_checks_recovery.NO_SCHEDULED_RUN_YET,
+        )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
     assert after == before
     assert runs == [(2,)] and len(recorded) == 2 * len(suite)
