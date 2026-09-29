@@ -47,7 +47,14 @@ vendor like Lark asks before every request, and `verify` hands back the request 
 vendor that encrypts. All three arrived with the Lark channel and change nothing for a wire that
 declares none of them.
 
-Task ids: M10.1.1, M10.1.2, M10.1.3, M10.1.4, M10.1.5, M10.2.1, M10.6.1, M10.2.6
+**A channel's connect steps sit beside its wire, and end in its own form.** A module with a
+`WIRE` may declare `GUIDE`, the `brain.ops.connect_steps.GuideStep` screens that walk a person
+through the vendor, and `channel_guides` finds them as `channel_wires` finds the wires. The last
+step asks for exactly the wire's tenant fields and the secret, which is what the channel's record
+takes, so a flow cannot end in a form that saves something else. See
+`A_CHANNEL_S_STEPS_END_WITH_ITS_OWN_FORM`.
+
+Task ids: M10.1.1, M10.1.2, M10.1.3, M10.1.4, M10.1.5, M10.2.1, M10.6.1, M10.2.6, M10.5.6
 """
 
 from __future__ import annotations
@@ -67,6 +74,7 @@ from brain.core.field_policy import Classification
 from brain.core.redaction import OPAQUE_LABEL, ChannelPayload
 from brain.gate.context import Channel
 from brain.gate.ingress import ChannelEvent
+from brain.ops.connect_steps import GuideStep
 from brain.ops.idempotency import Intent, Operation, operation_for
 
 
@@ -258,6 +266,19 @@ A_CHANNEL_IS_ADDED_BY_ADDING_ITS_FILE: Final = (
 #: The name a channel module gives its wire, so discovery reads one attribute and guesses nothing.
 WIRE_NAME: Final = "WIRE"
 
+#: The module attribute a channel's connect steps are declared under, beside its `WIRE`.
+GUIDE_NAME: Final = "GUIDE"
+
+#: What a channel's last connect step asks for besides its record's fields: its one secret.
+SECRET_ASK: Final = "secret"  # noqa: S105  a field name, not a secret
+
+#: Why a channel's steps end with its record's form.
+A_CHANNEL_S_STEPS_END_WITH_ITS_OWN_FORM: Final = (
+    "A channel's connect steps end on the screen that saves its record, and that screen asks for "
+    "exactly the fields its wire takes and its secret, so a field the wire gains is a field the "
+    "steps ask for too, and nothing is asked that the route would refuse."
+)
+
 #: The adapter methods a class needs to be read as an adapter. `ChannelAdapter`'s, by name.
 _ADAPTER_METHODS: Final = ("capabilities", "normalise", "send", "healthy")
 
@@ -347,6 +368,36 @@ def channel_wires() -> Mapping[Channel, ChannelWire]:
             msg = f"{channel} has a wire and no adapter to declare what it may carry"
             raise ChannelRegistryError(msg)
         found[channel] = wire
+    return MappingProxyType(found)
+
+
+def channel_guides() -> Mapping[Channel, tuple[GuideStep, ...]]:
+    """Every channel's connect steps, by channel: a module's `GUIDE`, beside its `WIRE`.
+
+    A guide in a module with no wire is refused, since there is nothing its last step could save,
+    and so is one whose last step asks for anything but the wire's fields and the secret. See
+    `A_CHANNEL_S_STEPS_END_WITH_ITS_OWN_FORM`.
+    """
+    wires = channel_wires()
+    found: dict[Channel, tuple[GuideStep, ...]] = {}
+    for module in _channel_modules():
+        guide = getattr(module, GUIDE_NAME, None)
+        if guide is None:
+            continue
+        declared: object = getattr(module, WIRE_NAME, None)
+        wire = next((one for one in wires.values() if one is declared), None)
+        if wire is None:
+            msg = f"{module.__name__} declares connect steps and no wire they could set up"
+            raise ChannelRegistryError(msg)
+        steps = tuple(guide)
+        wanted = (*wire.tenant_fields, SECRET_ASK)
+        if not steps or tuple(steps[-1].asks) != wanted:
+            msg = (
+                f"{wire.channel}'s steps end asking for {list(steps[-1].asks) if steps else []}, "
+                f"and its record takes {list(wanted)}. {A_CHANNEL_S_STEPS_END_WITH_ITS_OWN_FORM}"
+            )
+            raise ChannelRegistryError(msg)
+        found[wire.channel] = steps
     return MappingProxyType(found)
 
 

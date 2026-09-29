@@ -921,7 +921,8 @@ def test_the_module_list_is_every_channel_the_reader_manages_with_its_state_and_
     and how its deliveries say it is doing, with who changed it last. A channel with no record is
     not set up and holds no secret, rather than a secret the vault could not be asked about.
 
-    Delete this and the list can drop a channel nobody set up, or show a secret held for one."""
+    Delete this and the list can drop a channel nobody set up, or show a secret held for one,
+    or a channel's page draw steps its flow was never sent."""
     place.world.records.kept[Channel.WEBHOOK] = fresh_record()
     place.world.deliveries.entries.append(
         DeliveryEntry(Channel.WEBHOOK, Direction.INBOUND, DeliveryOutcome.ACCEPTED)
@@ -942,6 +943,11 @@ def test_the_module_list_is_every_channel_the_reader_manages_with_its_state_and_
         "not_set_up",
     )
     assert (slack["receives"], slack["tenant"], slack["changed_by"]) == (False, {}, None)
+    # A channel's connect steps ride on its row, so its page and its flow read one answer: email
+    # has its own and ends in its form, a channel with none has none, and with no public address
+    # named on this install there is no events address to paste yet.
+    assert [one["asks"] for one in rows["email"]["steps"]][-1] == ["address", "secret"]
+    assert (rows["webhook"]["steps"], rows["email"]["events_address"]) == ([], "")
     assert "next_cursor" in answer.json() and "total" not in answer.json()
 
 
