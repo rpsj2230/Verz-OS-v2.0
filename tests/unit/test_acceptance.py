@@ -215,9 +215,17 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     assert by_module["brain.ops.acceptance_knowledge"] == [
         "a_document_is_added_answered_replaced_and_falls_due_for_review",
     ]
+    # The canvas's door; `tests/unit/test_acceptance_automation.py`.
+    assert by_module["brain.ops.acceptance_checks_automation"] == [
+        "a_flow_step_gets_its_owner_s_rows_and_nothing_its_ceiling_adds",
+    ]
     assert by_module["brain.ops.acceptance_checks_organisation"] == [
         "departments_a_staff_source_names_are_founded_once",
         "the_staff_sync_places_people_where_its_source_says",
+    ]
+    # The staff sync's accounts, with no sign-in service called; `test_staff_accounts_run.py`.
+    assert by_module["brain.ops.acceptance_checks_accounts"] == [
+        "the_staff_sync_gives_the_active_an_account_and_closes_a_leaver_s",
     ]
     assert list(by_module) == list(acceptance.CHECK_MODULES)
     oversight = {one.name: one.leaves for one in registered()}
@@ -725,9 +733,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     ):
         assert outcomes.pop(worker_check) == (NOT_RUN, acceptance_deployment.NOT_IN_A_WORKER)
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
-    assert len(outcomes) == 59
+    assert len(outcomes) == 60
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 186
+    assert runs == [(2,)] and len(recorded) == 188
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }
