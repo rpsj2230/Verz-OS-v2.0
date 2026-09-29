@@ -778,6 +778,63 @@ def test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next() -> None:
     assert (may_update, may_delete) == (False, False)
 
 
+def test_an_edit_reaches_the_rows_the_ledger_and_what_is_recalled_next() -> None:
+    """A person's own Edit followed to the system, through the store `brain.mine_routes.edited`
+    writes through, as the role the application uses.
+
+    The replacement is a row of its own with a learning record naming what it replaced, the edited
+    memory is marked as replaced by it and stays on the record, the mark is a `memory` ledger entry
+    under the person and the request's trace, and recall returns the replacement in the edited
+    memory's place. Delete this and the edit control can answer success while the database kept
+    none of it. **Skips without a server.**"""
+    with through_0061("brain_memory_edit") as url:
+        seed(url)
+
+        async def walk() -> bool:
+            engine = app_engine(url)
+            try:
+                store = StoredMemoryRecords(make_session_factory(engine))
+                edited = await store.edit(
+                    learning("m_alone"),
+                    learning("m_edited", replaced_id="m_alone", at=LONG_AGO + timedelta(hours=1)),
+                    "Asks on Tuesdays.",
+                    prompted_by=Signal.REJECTED,
+                    actor="u_subject",
+                    trace_id="trace-edit",
+                    ent_hash="c" * 32,
+                )
+                return edited.took_effect
+            finally:
+                await engine.dispose()
+
+        took = run(walk)
+        kept = sql(url, "SELECT id, statement FROM mem.adaptive ORDER BY id")
+        record = sql(url, "SELECT replaced_id FROM mem.learning WHERE memory_id = 'm_edited'")
+        marks = sql(
+            url,
+            "SELECT memory_id, correction, by_id, recorded_by FROM mem.correction"
+            " WHERE memory_id = 'm_alone'",
+        )
+        chain = entries(url)
+        after = recalled_now(url)
+
+    assert took is True
+    assert kept == [
+        ("m_alone", "Asks on Mondays."),
+        ("m_edited", "Asks on Tuesdays."),
+        ("m_learnt", "Prefers the short answer."),
+    ]
+    assert record == [("m_alone",)]
+    assert marks == [("m_alone", "superseded", "m_edited", "u_subject")]
+    assert (chain[-1].subject, chain[-1].actor_id, chain[-1].trace_id) == (
+        "memory:m_alone",
+        "u_subject",
+        "trace-edit",
+    )
+    assert AuditChain(chain).verify() is None
+    assert after == ["m_edited", "m_learnt"]
+
+
 def test_the_table_refuses_a_lowered_tier_and_a_correction_of_the_wrong_shape() -> None:
     """The constraints stand for a statement written by hand, which constructs no `Proposal` and no
     correction. A scope widening claimed as tier one, a supersession naming no replacement and a

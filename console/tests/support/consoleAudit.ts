@@ -509,6 +509,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/govern/learning",
       "/api/v1/govern/learning/undo",
       "/api/v1/govern/memory",
+      "/api/v1/me/memory*",
       "/api/v1/records/{entity}",
       "/api/v1/classifications*",
       "/api/v1/govern/artifacts",

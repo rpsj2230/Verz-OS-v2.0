@@ -537,4 +537,4 @@ def test_somebody_elses_memory_is_refused_as_a_missing_one_and_reaches_no_store(
 
     assert [one.status_code for one in refused] == [404] * 5
     assert len({one.json()["message"] for one in refused[:4]}) == 1
-    assert records.undone == records.edited == []
+    assert (records.undone, records.edited) == ([], [])

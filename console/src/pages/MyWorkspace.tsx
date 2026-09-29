@@ -83,6 +83,8 @@ export const SAVE_LABEL = "Save";
 export const CANCEL_LABEL = "Cancel";
 export const KEEP_IT = "Keep it";
 export const WHAT_IT_SHOULD_SAY = "What it should say";
+export const WHAT_IT_TAKES = "One sentence about you, up to 280 characters, in your own words.";
+export const WRITE_SOMETHING = "Write what it should say before saving, or cancel to keep it.";
 export const FORGET_CONSEQUENCE =
   "It stops being used in your answers at once. The record that it was learnt stays, and if it " +
   "replaced something earlier, the earlier one is used again.";
@@ -193,26 +195,42 @@ function WhatItLearned({
 }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  const [blank, setBlank] = useState(false);
   const [forgetting, setForgetting] = useState<Learned | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const send = useCallback(
-    (path: string, body: unknown) => {
+  const settle = useCallback(
+    (result: Awaited<ReturnType<typeof request<unknown>>>) => {
+      setBusy(false);
+      setForgetting(null);
+      setEditing(null);
+      if (!result.ok) {
+        onOutcome({ said: "", failure: result.failure }, false);
+        return;
+      }
+      onOutcome({ said: readChanged(result.data).told, failure: null }, true);
+    },
+    [onOutcome],
+  );
+  const forget = useCallback(
+    (memoryId: string) => {
       setBusy(true);
       onOutcome(NO_OUTCOME, false);
       void (async () => {
-        const result = await request<unknown>(path, { method: "POST", body });
-        setBusy(false);
-        setForgetting(null);
-        setEditing(null);
-        if (!result.ok) {
-          onOutcome({ said: "", failure: result.failure }, false);
-          return;
-        }
-        onOutcome({ said: readChanged(result.data).told, failure: null }, true);
+        settle(await request<unknown>(FORGET_API_PATH, { method: "POST", body: forgetBody(memoryId) }));
       })();
     },
-    [onOutcome],
+    [onOutcome, settle],
+  );
+  const save = useCallback(
+    (memoryId: string, statement: string) => {
+      setBusy(true);
+      onOutcome(NO_OUTCOME, false);
+      void (async () => {
+        settle(await request<unknown>(EDIT_API_PATH, { method: "POST", body: editBody(memoryId, statement) }));
+      })();
+    },
+    [onOutcome, settle],
   );
 
   return (
@@ -235,9 +253,11 @@ function WhatItLearned({
                   aria-label={`${EDIT_LABEL} ${one.statement}`}
                   onSubmit={(event) => {
                     event.preventDefault();
-                    if (draft.trim() !== "") {
-                      send(EDIT_API_PATH, editBody(one.memory_id, draft));
+                    if (draft.trim() === "") {
+                      setBlank(true);
+                      return;
                     }
+                    save(one.memory_id, draft);
                   }}
                 >
                   <label>
@@ -246,11 +266,13 @@ function WhatItLearned({
                       value={draft}
                       maxLength={STATEMENT_CHARS}
                       onChange={(event) => {
+                        setBlank(false);
                         setDraft(event.target.value);
                       }}
                     />
                   </label>
-                  <Button type="submit" size="sm" disabled={busy || draft.trim() === ""}>
+                  <p className="note">{blank ? WRITE_SOMETHING : WHAT_IT_TAKES}</p>
+                  <Button type="submit" size="sm" disabled={busy}>
                     {SAVE_LABEL}
                   </Button>
                   <Button
@@ -280,6 +302,7 @@ function WhatItLearned({
                     aria-label={`${EDIT_LABEL} ${one.statement}`}
                     onClick={() => {
                       setDraft(one.statement);
+                      setBlank(false);
                       setEditing(one.memory_id);
                     }}
                   >
@@ -313,7 +336,7 @@ function WhatItLearned({
         busy={busy}
         onConfirm={() => {
           if (forgetting !== null) {
-            send(FORGET_API_PATH, forgetBody(forgetting.memory_id));
+            forget(forgetting.memory_id);
           }
         }}
         onCancel={() => {
