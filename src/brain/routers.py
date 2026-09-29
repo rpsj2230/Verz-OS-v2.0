@@ -61,6 +61,10 @@ from brain.agent_capability_routes import router as agent_capability_router
 # One agent's Conversations section: the reader's own threads it answered in, with who answered
 # and how each run ended, a failed one included.
 from brain.agent_conversation_routes import router as agent_conversation_router
+
+# One agent's leash: its rungs as they stand, every move with its evidence, a verdict that the
+# breaker reads, and the supervision pin and its reviews.
+from brain.agent_leash_routes import router as agent_leash_router
 from brain.agent_lifecycle_routes import router as agent_lifecycle_router
 from brain.agent_memory_routes import router as agent_memory_router
 

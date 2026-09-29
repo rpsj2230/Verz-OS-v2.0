@@ -1566,3 +1566,425 @@ async def an_agents_report_holds_what_its_reader_may_see_and_is_rechecked(
         pass
     else:
         raise CheckFailedError("a report was kept against a client that names nobody")
+
+
+# ------------------------------------------------ 10. the leash, moved on evidence, and supervision
+#: The two tools the leash check governs: an ordinary write, and one that moves money.
+NOTE_TARGET: Final = "note.update"
+MONEY_TARGET: Final = "invoice.pay"
+
+
+def narrower_scope() -> Scope:
+    """The narrower scope the leash check sets a stricter rung in: one region of the rows."""
+    from brain.core.scope import Clause, Op
+
+    return Scope(clauses=(Clause(field="region", op=Op.EQ, value="north"),))
+
+
+def _leash_tools() -> tuple[Any, Any, Any]:
+    """A write tool, a money tool and the policy for the one field each touches."""
+    from brain.core.envelope import IdentityMode, SideEffect, ToolDefinition
+    from brain.core.field_policy import Classification, FieldPolicy, FieldRule
+
+    write = ToolDefinition(
+        name="acceptance.update_note",
+        description="Update a note, for an install acceptance check",
+        entity="note",
+        required_capability="write:note.body",
+        side_effect=SideEffect.WRITE,
+        identity_mode=IdentityMode.DELEGATED,
+    )
+    money = ToolDefinition(
+        name="acceptance.pay_invoice",
+        description="Pay an invoice, for an install acceptance check",
+        entity="invoice",
+        required_capability="write:invoice.amount",
+        side_effect=SideEffect.MONEY,
+        identity_mode=IdentityMode.DELEGATED,
+    )
+    policy = FieldPolicy(
+        rules=(
+            FieldRule.of("note", "body", "read:note.body", Classification.INTERNAL),
+            FieldRule.of("invoice", "amount", "read:invoice.amount", Classification.CONFIDENTIAL),
+        )
+    )
+    return write, money, policy
+
+
+@check(
+    leaves=(
+        "M39.3.2.1",
+        "M39.3.2.2",
+        "M39.3.2.3",
+        "M39.3.2.4",
+        "M39.3.2.5",
+        "M39.8.2",
+        "M39.8.3",
+    ),
+    sentence=(
+        "One action runs simulated at Shadow, suspends at Assisted and proceeds at Autonomous "
+        "unless it touches money; the strictest overlapping entry wins; a department's leash "
+        "holder lowers at once and raises only on counted evidence, a money rise needing a second "
+        "person; a rejection trips the rung to Shadow naming its metric; every move is kept with "
+        "its evidence; and a pin below its bar extends."
+    ),
+)
+async def an_agents_leash_moves_on_evidence_and_its_pin_extends(h: Harness) -> None:
+    from brain.agent_leash_routes import may_move_leash
+    from brain.agents.leash_moves import (
+        THE_PROPOSER_CANNOT_CONFIRM,
+        LeashMove,
+        LeashMoveError,
+        Record,
+        breaker_for,
+        effective_leash,
+        held_while_supervised,
+        history,
+        lowering,
+        newest_by_key,
+        raising,
+        record_since,
+        rung_of,
+        tripping,
+    )
+    from brain.agents.model import entitlement_ceiling
+    from brain.agents.supervision import ShadowOutcome, ShadowPin, ShadowReview, review
+    from brain.audit.record import ApprovalVerdict
+    from brain.core.envelope import Entity, SideEffect, ToolDefinition, TypedResult
+    from brain.gate.injection import AutonomyTier, RiskAssessment
+    from brain.gate.leash import Action, Governed, Leash, Route, govern
+    from brain.ops.acceptance_checks import _HeldLedger, _in
+    from brain.ops.acceptance_run import SET_UP_REACH
+    from brain.ops.leash_store import StoredLeash, simulated_only
+    from brain.tables.leash import MoveKind, PinOutcome
+
+    await h.found_departments()
+    steward, first, second = (h.principal(A, one) for one in ("steward", "leashing", "confirming"))
+    caps = ("write:note.body", "read:note.body", "write:invoice.amount", "read:invoice.amount")
+    await h.person(steward, department=A, grants=_everywhere(*caps))
+    for holder in (first, second):
+        await h.person(holder, department=A, grants=_in(A, "admin:leash"))
+    agent_id = await installed_agent(
+        h, steward, capabilities=caps, suffix="_leash", scope=Scope.unrestricted()
+    )
+    pinned_id = await installed_agent(
+        h, steward, capabilities=caps, suffix="_pinned", scope=Scope.unrestricted()
+    )
+    ceilings = {
+        one: entitlement_ceiling(await stored_agent(h, one)) for one in (agent_id, pinned_id)
+    }
+    record = await stored_agent(h, agent_id)
+    store = StoredLeash(h.sessions)
+    write, money, policy = _leash_tools()
+    caller = await h.reach(steward)
+    everywhere = Scope.unrestricted()
+    north = narrower_scope()
+    if not may_move_leash(await h.reach(first), record, h.now) or may_move_leash(
+        caller, record, h.now
+    ):
+        raise CheckFailedError("the leash could be moved by somebody other than its role's holder")
+
+    minutes = iter(range(1, 10_000))
+
+    def tick() -> Any:
+        """The check's own clock, a minute a step from an hour ago, so every row is in order."""
+        return h.now - timedelta(hours=1) + timedelta(minutes=next(minutes))
+
+    async def leash_for(agent: str) -> Leash:
+        state = await store.state(agent)
+        return held_while_supervised(
+            effective_leash(Leash(), state.moves),
+            agent,
+            None if state.pin is None else state.pin.outcome,
+        )
+
+    async def governed(
+        agent: str, tool: ToolDefinition, target: str, n: int, *, region: str, at: Any
+    ) -> Governed[Entity]:
+        """One action of `agent`, decided and routed by the gate at its leash as it stands."""
+        field = "body" if target == NOTE_TARGET else "amount"
+        return govern(  # the tools return nothing, so the entity type is the base one
+            Action(
+                agent_id=agent,
+                tool=tool,
+                target=target,
+                touched_fields=(field,),
+                row={"region": region},
+                args={field: f"{h.run}-{n}"},
+            ),
+            caller=caller,
+            agent_ceiling=ceilings[agent],
+            policy=policy,
+            leash=await leash_for(agent),
+            assessment=RiskAssessment(score=0, matched=()),
+            trace_id=f"{h.trace_id}-leash",
+            now=at,
+            simulate=lambda one: TypedResult[Entity](),
+            execute=lambda one: TypedResult[Entity](),
+            ledger=_HeldLedger(),
+        )
+
+    async def judged(
+        agent: str,
+        tool: ToolDefinition,
+        target: str,
+        verdicts: Sequence[ApprovalVerdict],
+        *,
+        region: str = "south",
+        at: Any = None,
+    ) -> None:
+        """An action per verdict through the gate as it stands, kept, and judged by the steward."""
+        for verdict in verdicts:
+            when = at if at is not None else tick()
+            done = await governed(agent, tool, target, next(minutes), region=region, at=when)
+            await store.record_action(done.record)
+            await store.give_verdict(
+                ShadowReview(
+                    agent_id=agent,
+                    action_digest=done.record.action_digest,
+                    verdict=verdict,
+                    reviewer_id=steward,
+                    at=when + timedelta(seconds=1),
+                )
+            )
+
+    async def pressed(
+        target: str,
+        scope: Scope,
+        to: AutonomyTier,
+        by: str,
+        effect: SideEffect,
+        *,
+        agent_id: str = agent_id,
+        at: Any = None,
+    ) -> LeashMove:
+        """A press on the leash, decided and kept as the move route decides and keeps it."""
+        state = await store.state(agent_id)
+        leash = effective_leash(Leash(), state.moves)
+        newest = newest_by_key(state.moves).get((agent_id, target, scope))
+        at = at if at is not None else tick()
+        if to < rung_of(leash, agent_id, target, scope):
+            move = lowering(
+                leash, agent_id=agent_id, target=target, scope=scope, to=to, by=by, at=at
+            )
+        else:
+            move = raising(
+                leash,
+                agent_id=agent_id,
+                target=target,
+                scope=scope,
+                to=to,
+                by=by,
+                at=at,
+                effect=effect,
+                record=record_since(
+                    agent_id,
+                    target,
+                    actions=state.actions,
+                    verdicts=state.verdicts,
+                    since=None if newest is None or not newest.moves_the_rung else newest.at,
+                ),
+                pending=newest,
+                supervision=None,
+            )
+        await store.move(
+            move, reason_code="acceptance_check", ent_hash=SET_UP_REACH, trace_id=h.trace_id
+        )
+        return move
+
+    async def route(tool: ToolDefinition, target: str, *, region: str = "south") -> Route:
+        done = await governed(agent_id, tool, target, next(minutes), region=region, at=tick())
+        return done.route
+
+    approved = [ApprovalVerdict.APPROVED] * 10
+
+    # 1. Shadow simulates; ten judged unchanged raise it to Assisted, which suspends (M39.3.2.2),
+    # and ten more to Autonomous, which proceeds for a tool touching no money (M39.8.3).
+    if await route(write, NOTE_TARGET) is not Route.SIMULATE:
+        raise CheckFailedError("an action with no leash entry was not simulated")
+    await judged(agent_id, write, NOTE_TARGET, approved)
+    up = await pressed(NOTE_TARGET, everywhere, AutonomyTier.ASSISTED, first, SideEffect.WRITE)
+    if up.kind is not MoveKind.RAISED or up.promotion is None or up.promotion.approver_id != first:
+        raise CheckFailedError("a rise on a clean record was not a raise naming its approver")
+    if await route(write, NOTE_TARGET) is not Route.SUSPEND:
+        raise CheckFailedError("an action at Assisted did not wait for a person")
+    try:
+        await pressed(NOTE_TARGET, everywhere, AutonomyTier.AUTONOMOUS, first, SideEffect.WRITE)
+    except LeashMoveError:
+        pass
+    else:
+        raise CheckFailedError("a rung rose again on the record that raised it last time")
+    await judged(agent_id, write, NOTE_TARGET, approved)
+    await pressed(NOTE_TARGET, everywhere, AutonomyTier.AUTONOMOUS, first, SideEffect.WRITE)
+    if await route(write, NOTE_TARGET) is not Route.EXECUTE:
+        raise CheckFailedError("an action at Autonomous touching no money did not proceed")
+
+    # 2. The strictest overlapping entry wins: a narrower scope at Assisted holds its rows there.
+    await pressed(NOTE_TARGET, north, AutonomyTier.ASSISTED, first, SideEffect.WRITE)
+    if await route(write, NOTE_TARGET, region="north") is not Route.SUSPEND:
+        raise CheckFailedError("a stricter narrower entry did not hold its rows at its rung")
+
+    # 3. Lowered at once, with no evidence asked for.
+    down = await pressed(NOTE_TARGET, everywhere, AutonomyTier.SHADOW, second, SideEffect.WRITE)
+    if down.kind is not MoveKind.LOWERED or await route(write, NOTE_TARGET) is not Route.SIMULATE:
+        raise CheckFailedError("a lowering did not take effect at once")
+
+    # 4. Money: a proposal, the proposer refused, a second person's raise naming both (M39.3.2.4),
+    # and even at Autonomous an action touching money waits for a person.
+    await judged(agent_id, money, MONEY_TARGET, approved)
+    proposal = await pressed(
+        MONEY_TARGET, everywhere, AutonomyTier.AUTONOMOUS, first, SideEffect.MONEY
+    )
+    if (
+        proposal.kind is not MoveKind.PROPOSED
+        or rung_of(await leash_for(agent_id), agent_id, MONEY_TARGET, everywhere)
+        is not AutonomyTier.SHADOW
+    ):
+        raise CheckFailedError("a money rise moved on one person's press")
+    try:
+        await pressed(MONEY_TARGET, everywhere, AutonomyTier.AUTONOMOUS, first, SideEffect.MONEY)
+    except LeashMoveError as refused:
+        if str(refused) != THE_PROPOSER_CANNOT_CONFIRM:
+            raise CheckFailedError(
+                "the proposer's confirmation was refused for another reason"
+            ) from None
+    else:
+        raise CheckFailedError("the person who proposed a money rise could confirm it")
+    both = await pressed(
+        MONEY_TARGET, everywhere, AutonomyTier.AUTONOMOUS, second, SideEffect.MONEY
+    )
+    names = None if both.promotion is None else both.promotion
+    if (
+        both.kind is not MoveKind.RAISED
+        or names is None
+        or (names.approver_id, names.second_approver_id) != (first, second)
+    ):
+        raise CheckFailedError("a money rise was not raised by a second person naming both")
+    if await route(money, MONEY_TARGET) is not Route.SUSPEND:
+        raise CheckFailedError("an action touching money proceeded without a person")
+
+    # 5. A rejection since the rise trips the money rung to Shadow, naming its metric (M39.3.2.3).
+    await judged(agent_id, money, MONEY_TARGET, [ApprovalVerdict.REJECTED])
+    state = await store.state(agent_id)
+    leash = effective_leash(Leash(), state.moves)
+    since = newest_by_key(state.moves)[(agent_id, MONEY_TARGET, everywhere)].at
+    trip = breaker_for(
+        rung_of(leash, agent_id, MONEY_TARGET, everywhere),
+        record_since(
+            agent_id, MONEY_TARGET, actions=state.actions, verdicts=state.verdicts, since=since
+        ),
+        at=tick(),
+    )
+    if trip is None:
+        raise CheckFailedError("a rejected action did not trip the rung it ran at")
+    await store.move(
+        tripping(
+            leash, agent_id=agent_id, target=MONEY_TARGET, scope=everywhere, trip=trip, by=steward
+        ),
+        reason_code="acceptance_check",
+        ent_hash=SET_UP_REACH,
+        trace_id=h.trace_id,
+    )
+    if rung_of(await leash_for(agent_id), agent_id, MONEY_TARGET, everywhere) is not (
+        AutonomyTier.SHADOW
+    ):
+        raise CheckFailedError("a tripped breaker did not put the rung on Shadow")
+
+    # 6. Every move kept, oldest first, with its evidence, and each real one on the ledger.
+    state = await store.state(agent_id)
+    kept = history(state.moves)
+    expected = [
+        MoveKind.RAISED,
+        MoveKind.RAISED,
+        MoveKind.RAISED,
+        MoveKind.LOWERED,
+        MoveKind.PROPOSED,
+        MoveKind.RAISED,
+        MoveKind.TRIPPED,
+    ]
+    if [one.kind for one in kept] != expected or kept[-1].trip is None or kept[0].promotion is None:
+        raise CheckFailedError("the history did not hold every move with its evidence")
+    ledgered = (
+        await h.execute(
+            text(
+                "SELECT count(*) FROM obs.audit_entry WHERE action = 'leash_change'"
+                " AND subject = :subject"
+            ).bindparams(subject=f"agent:{agent_id}")
+        )
+    ).scalar_one()
+    if ledgered != len([one for one in expected if one is not MoveKind.PROPOSED]):
+        raise CheckFailedError("a leash move did not reach the ledger, or a proposal did")
+
+    # 7. A pin reviewed below its bar extends, keeps its start, and holds the agent down (M39.8.2).
+    # The pinned agent earned Assisted before its pin, so a hold is the only thing between it and
+    # a person seeing its actions.
+    started = h.now - timedelta(days=31)
+    before = started - timedelta(days=1)
+    await judged(pinned_id, write, NOTE_TARGET, approved, at=before - timedelta(hours=1))
+    await pressed(
+        NOTE_TARGET,
+        everywhere,
+        AutonomyTier.ASSISTED,
+        first,
+        SideEffect.WRITE,
+        agent_id=pinned_id,
+        at=before,
+    )
+    await store.write_pin(
+        ShadowPin(
+            agent_id=pinned_id, pinned_at=started, review_due_at=started + timedelta(days=30)
+        ),
+        PinOutcome.PINNED,
+        by=first,
+        counts=None,
+        at=started,
+        ent_hash=SET_UP_REACH,
+        trace_id=h.trace_id,
+    )
+    short = [ApprovalVerdict.APPROVED] * 8 + [ApprovalVerdict.AMENDED] * 2
+    await judged(pinned_id, write, NOTE_TARGET, short, at=started + timedelta(days=1))
+    state = await store.state(pinned_id)
+    held = await governed(pinned_id, write, NOTE_TARGET, next(minutes), region="south", at=h.now)
+    if state.pin is None or held.route is not Route.SIMULATE:
+        raise CheckFailedError("a pinned agent was not held at Shadow")
+    watched = [one for one in simulated_only(state.actions) if one.at >= started]
+    digests = {one.action_digest for one in watched}
+    found = review(
+        state.pin.pin,
+        simulated=watched,
+        reviews=[one for one in state.verdicts if one.action_digest in digests],
+        now=h.now,
+    )
+    if found.outcome is not ShadowOutcome.EXTENDED or found.pin.pinned_at != started:
+        raise CheckFailedError("a pin reviewed below its bar did not extend, keeping its start")
+    counted = found.confidence
+    await store.write_pin(
+        found.pin,
+        PinOutcome.EXTENDED,
+        by=first,
+        counts=(counted.understood, counted.reviewed, counted.simulated),
+        at=h.now,
+        ent_hash=SET_UP_REACH,
+        trace_id=h.trace_id,
+    )
+    state = await store.state(pinned_id)
+    if state.pin is None or state.pin.outcome is not PinOutcome.EXTENDED:
+        raise CheckFailedError("an extended pin was not kept with its later review")
+    try:
+        raising(
+            effective_leash(Leash(), state.moves),
+            agent_id=pinned_id,
+            target=NOTE_TARGET,
+            scope=everywhere,
+            to=AutonomyTier.ASSISTED,
+            by=first,
+            at=h.now,
+            effect=SideEffect.WRITE,
+            record=Record(clean_runs=10, agreement_rate=1.0, reviewed=10),
+            pending=None,
+            supervision=state.pin.outcome,
+        )
+    except LeashMoveError:
+        pass
+    else:
+        raise CheckFailedError("a rung rose while its agent's review had not found it ready")

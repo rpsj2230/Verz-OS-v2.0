@@ -237,6 +237,20 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         offers: [{ name: UNBROKEN, version: UNBROKEN, digest: "e".repeat(64), review: "pending", control: "review", route: "/skills/x" }],
         knowledge: { clauses: [{ field: "department", op: "eq", value: UNBROKEN }], matched: 1, verified: 1, stale: 0, unverified: 0, at_least: false },
       },
+      // The leash block: an entry, a move with its evidence, a trip with its metric, supervision
+      // and an action waiting for a verdict, each value a token with nowhere to break.
+      "/api/v1/agents/quote-helper/leash": {
+        agent_id: "quote-helper",
+        entries: [{ target: UNBROKEN, scope: { clauses: [] }, where: UNBROKEN, rung: "assisted", proposed: "autonomous" }],
+        history: [
+          { target: UNBROKEN, where: UNBROKEN, kind: "raised", was: "shadow", became: "assisted", at: "2019-03-04T09:00:00Z", approver: UNBROKEN, second_approver: UNBROKEN, clean_runs: 10, agreement_rate: 1, metric: "", measured: null, threshold: null },
+          { target: UNBROKEN, where: "", kind: "tripped", was: "assisted", became: "shadow", at: "2019-03-05T09:00:00Z", approver: "", second_approver: "", clean_runs: null, agreement_rate: null, metric: UNBROKEN, measured: 0.5, threshold: 0.9 },
+        ],
+        supervision: { pinned_at: "2019-02-01T09:00:00Z", review_due_at: "2019-03-03T09:00:00Z", outcome: "extended", understood: 8, reviewed: 10, simulated: 10, held: true, due: true },
+        awaiting: [{ action_digest: "d".repeat(64), target: UNBROKEN, route: "simulate", at: "2019-03-06T09:00:00Z" }],
+        may_move: true,
+        may_judge: true,
+      },
     },
   },
   // New agent: start from scratch, or from a template the gallery offers.

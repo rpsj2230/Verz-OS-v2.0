@@ -157,6 +157,7 @@ MIGRATION_AGENT_RUN = VERSIONS / "0188_agent_run.py"
 MIGRATION_SKILL_EXPORT = VERSIONS / "0191_skill_export_and_rehearsal.py"
 MIGRATION_RETRIEVAL_EVENT = VERSIONS / "0193_retrieval_event.py"
 MIGRATION_ARTIFACT_CHANGE = VERSIONS / "0194_artifact_change_and_client.py"
+MIGRATION_LEASH = VERSIONS / "0195_leash_changes_and_supervision.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -453,6 +454,14 @@ SKILL_EXPORT_TABLES: tuple[str, ...] = ("agent.skill_export", "agent.skill_rehea
 RETRIEVAL_EVENT_TABLES: tuple[str, ...] = ("ops.retrieval_event",)
 #: And the one 0194 adds: an artifact superseded or archived.
 ARTIFACT_CHANGE_TABLES: tuple[str, ...] = ("agent.artifact_change",)
+#: And the four 0195 adds: a rung's moves, the actions an agent took under supervision, a person's
+#: verdict on each, and the supervision pin with its reviews.
+LEASH_TABLES: tuple[str, ...] = (
+    "agent.leash_change",
+    "agent.supervised_action",
+    "agent.action_verdict",
+    "agent.supervision_pin",
+)
 
 ALL_TABLES = (
     CORE_TABLES
@@ -535,6 +544,7 @@ ALL_TABLES = (
     + SKILL_EXPORT_TABLES
     + RETRIEVAL_EVENT_TABLES
     + ARTIFACT_CHANGE_TABLES
+    + LEASH_TABLES
 )
 
 
@@ -1383,6 +1393,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert retrieval_event.TABLES == RETRIEVAL_EVENT_TABLES
     artifact_change = migration_module(MIGRATION_ARTIFACT_CHANGE)
     assert artifact_change.TABLES == ARTIFACT_CHANGE_TABLES
+    leash = migration_module(MIGRATION_LEASH)
+    assert leash.TABLES == LEASH_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1487,6 +1499,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(skill_export.TABLES)
         + tuple(retrieval_event.TABLES)
         + tuple(artifact_change.TABLES)
+        + tuple(leash.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1572,6 +1585,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(skill_export.TABLES),
         set(retrieval_event.TABLES),
         set(artifact_change.TABLES),
+        set(leash.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

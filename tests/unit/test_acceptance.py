@@ -628,6 +628,10 @@ WRITTEN_BY_CHECKS = (
     "gate.role_grant",
     "agent.artifact",
     "agent.artifact_change",
+    "agent.leash_change",
+    "agent.supervised_action",
+    "agent.action_verdict",
+    "agent.supervision_pin",
 )
 
 
