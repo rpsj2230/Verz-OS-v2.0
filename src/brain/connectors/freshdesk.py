@@ -1166,19 +1166,48 @@ FIELDS_BY_ENTITY: Final[MappingProxyType[str, tuple[FieldMapping, ...]]] = Mappi
     {TICKET: TICKET_MAPPING, CONTACT: CONTACT_MAPPING}
 )
 
+#: The field one ticket's body arrives under when it is read by its id, which is the capability's
+#: spelling the product already uses for it (`read:ticket.description`, in
+#: `brain.agents.catalogue`). Its plain text, `description_text`, rather than the HTML.
+BODY_FIELD: Final = "description"
+
+#: One ticket read by its id: the index's fields and the ticket's body. The body is read live for
+#: the question that asks for it and never stored: the list the worker reads into the index keeps
+#: `TICKET_MAPPING`, and `projected_fields` builds a kept row from the declared names alone, so a
+#: body arriving here has no path into `proj.record`. See `A_TICKET_BODY_IS_READ_BY_ITS_ID_ONLY`.
+LIVE_TICKET_MAPPING: Final[tuple[FieldMapping, ...]] = (
+    *TICKET_MAPPING,
+    FieldMapping(target=BODY_FIELD, source_path="description_text"),
+)
+
+#: The endpoints whose mapping is not their entity's. One, the ticket read by its id.
+FIELDS_BY_ENDPOINT: Final[MappingProxyType[Endpoint, tuple[FieldMapping, ...]]] = MappingProxyType(
+    {Endpoint.GET_TICKET: LIVE_TICKET_MAPPING}
+)
+
+#: Why the body is mapped on one endpoint and on no other.
+A_TICKET_BODY_IS_READ_BY_ITS_ID_ONLY: Final = (
+    "A ticket's body is what a question about a ticket most often wants and what the owner's rule "
+    "says is read live and never kept. The list the worker pages through into the index does not "
+    "map it, so no scheduled read ever carries a body; the read of one ticket by its id does, "
+    "because that read is made for one question while somebody waits and its reply is answered "
+    "from and dropped."
+)
+
 
 def transport_for(endpoint: Endpoint) -> RestTransport:
     """The declaration `brain.connectors.rest` binds to a parsed operation.
 
     The operation id comes off the endpoint's own specification rather than being written
-    again here, so the mapping cannot name an operation the shape does not describe.
+    again here, so the mapping cannot name an operation the shape does not describe. The
+    mapping is the entity's, except where `FIELDS_BY_ENDPOINT` names the endpoint.
     """
     shape = shape_for(endpoint)
     return RestTransport(
         spec_ref=SPEC_REF,
         operation=shape.spec.operation_id,
         entity=shape.entity,
-        fields=FIELDS_BY_ENTITY[shape.entity],
+        fields=FIELDS_BY_ENDPOINT.get(endpoint, FIELDS_BY_ENTITY[shape.entity]),
     )
 
 

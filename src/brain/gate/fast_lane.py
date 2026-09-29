@@ -89,7 +89,14 @@ application's pool. The first thing that composition found here was the keying d
 `entities_served`, which `tests/e2e/test_wave_one_console_question.py` reached with the seeded
 demo.
 
-Task ids: M6.1.1, M6.1.2, M6.1.4, M7.5.2
+**A question over many records has one rule shape of its own, `CountRule`, since 2026-09-29.**
+Every other rule names one record and answers with its field, so two records under a name are a
+fall-through. A count names a header value and answers with how many records hold it, read from
+the index in one read at the caller's reach, and many records are what it is for. It is written by
+code over the fields a connector declares for counting and never loaded from the rule table. See
+`A_QUESTION_OVER_MANY_RECORDS_IS_ANSWERED_FROM_THE_HEADERS`.
+
+Task ids: M6.1.1, M6.1.2, M6.1.4, M7.5.2, M11.8.3
 """
 
 from __future__ import annotations
@@ -115,7 +122,7 @@ from brain.core.fast_path import (
 )
 from brain.core.scope import Clause, Op, Scope
 from brain.gate.classify import is_a_name_not_a_phrase
-from brain.knowledge.rows import RowRecord, RowRequest
+from brain.knowledge.rows import MAX_ROW_LIMIT, RowRecord, RowRequest
 
 log = structlog.get_logger()
 
@@ -188,6 +195,16 @@ A_RULE_NAMES_A_SOURCE_AS_WELL_AS_AN_ENTITY = (
     "have been told what an absence is told. Keyed on the pair, the rule is never considered."
 )
 
+#: Why a question over many records is read from the index's headers in one read.
+A_QUESTION_OVER_MANY_RECORDS_IS_ANSWERED_FROM_THE_HEADERS: Final = (
+    "A question such as how many tickets one company has spans many records, and a connected "
+    "source's search may cap what it returns. The index holds every record's pointer fields, the "
+    "ones a connector declares for the fast lane to filter and count on, so the question is one "
+    "read of those headers at the caller's reach, and the number is how many records came back "
+    "through redaction. Reading each record live instead would spend one source call per record "
+    "on a figure the headers already carry."
+)
+
 # ---------------------------------------------------------------------- bounds
 
 #: What a slot value may be. The upper bound is `brain.gate.classify`'s own client pattern,
@@ -203,6 +220,11 @@ MAX_RULES: Final = 200
 #: How many rows a fast-lane question may fetch. Two, so that an ambiguous name is visible.
 #: See `TWO_RECORDS_MATCHING_ONE_NAME_IS_A_FALL_THROUGH`.
 FAST_LANE_ROW_LIMIT: Final = 2
+
+#: How many rows a question over many records may read from the index: the row plane's own
+#: ceiling, so a count past it is said to be at least that many rather than read without bound.
+#: See `A_QUESTION_OVER_MANY_RECORDS_IS_ANSWERED_FROM_THE_HEADERS`.
+COUNT_ROW_LIMIT: Final = MAX_ROW_LIMIT
 
 #: The fields a rule row must carry, and the only ones read off it. Named rather than
 #: splatted, so a column added to `gate.fast_path_rule` cannot reach the matcher by
@@ -299,6 +321,30 @@ class FastPathRule(BaseModel):
     def after(self) -> str:
         """The literal text after the hole. Empty when the template ends with it."""
         return literal_parts(self.template)[1]
+
+
+class CountRule(FastPathRule):
+    """A question over many records: how many carry one header value (ARC-A-099).
+
+    The same row as any rule, and the type is the whole difference: it is answered with how many
+    records the read found rather than with one record's field, and it reads the index alone. See
+    `A_QUESTION_OVER_MANY_RECORDS_IS_ANSWERED_FROM_THE_HEADERS`.
+
+    **Never loaded from the rule table.** `rules_from_rows` builds `FastPathRule` and nothing
+    else, so an operator's insert cannot become a count; a count is written by code that knows
+    which fields a connector declared for counting. `match_field` and `answer_field` name the same
+    header, because the question names the value and the answer is how many hold it.
+    """
+
+    @model_validator(mode="after")
+    def _counts_the_field_it_names(self) -> CountRule:
+        if self.match_field != self.answer_field:
+            msg = (
+                f"rule {self.rule_id}: a count names the value of one header and says how many "
+                "records hold it, so it matches and answers on the same field"
+            )
+            raise ValueError(msg)
+        return self
 
 
 def rules_from_rows(rows: Iterable[Mapping[str, Any]]) -> tuple[FastPathRule, ...]:
@@ -547,6 +593,8 @@ class FastLaneAnswer:
     source: str
     field: str
     result: TypedResult[RowRecord]
+    #: True for a `CountRule`'s answer: how many records came back, read from the index alone.
+    counted: bool = False
 
     @property
     def grounded(self) -> bool:
@@ -598,10 +646,22 @@ async def respond(
     first place's empty answer, which is the object one place gives for a name it does not hold,
     so the lane cannot say how many places were asked. See
     `ONE_QUESTION_ASKED_OF_SEVERAL_PLACES_IS_READ_IN_EACH`.
+
+    **A `CountRule` is one read of the headers, and many records are its answer rather than an
+    ambiguous name.** Only when it is the one rule the question matched: a count asked of several
+    places would be a sum across sources, which is a figure nobody wrote a rule for. See
+    `A_QUESTION_OVER_MANY_RECORDS_IS_ANSWERED_FROM_THE_HEADERS`.
     """
     found = _matches(question, rules, entities_served(readers))
     if not found:
         return None
+    if any(isinstance(match.rule, CountRule) for match in found):
+        if len(found) > 1:
+            _two_rules_matched(found)
+            return None
+        return await _read(
+            found[0], readers, entitlement=entitlement, now=now, limit=COUNT_ROW_LIMIT
+        )
     if len(found) > 1 and not asked_of_several_places(found):
         _two_rules_matched(found)
         return None
@@ -619,8 +679,12 @@ async def _read(
     *,
     entitlement: EntitlementSet,
     now: datetime | None,
+    limit: int = FAST_LANE_ROW_LIMIT,
 ) -> FastLaneAnswer:
-    """One matched rule's rows, read at this caller's reach, narrowed to the name it read."""
+    """One matched rule's rows, read at this caller's reach, narrowed to the name it read.
+
+    `limit` is `FAST_LANE_ROW_LIMIT` for a record's field and `COUNT_ROW_LIMIT` for a count.
+    """
     # **This comment said the refusal inside `reader_for` could not be reached from here, and
     # until 2026-09-14 it could.** `entities_served` keyed on the entity while `readers` is
     # keyed on the pair, so a rule for `demo.client` matched on a lane whose only client reader
@@ -636,7 +700,7 @@ async def _read(
         # is the same kind of object as the system's and is bound as a parameter by the same
         # `compile_where`. There is no shape it can take that renders as SQL text.
         filters=Scope(clauses=(Clause(field=match.rule.match_field, op=Op.EQ, value=match.value),)),
-        limit=FAST_LANE_ROW_LIMIT,
+        limit=limit,
     )
     result = await reader(request, entitlement=entitlement, now=now)
     return FastLaneAnswer(
@@ -645,6 +709,7 @@ async def _read(
         source=match.rule.source,
         field=match.rule.answer_field,
         result=result,
+        counted=isinstance(match.rule, CountRule),
     )
 
 

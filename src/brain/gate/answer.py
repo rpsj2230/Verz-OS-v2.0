@@ -149,9 +149,17 @@ when a request read none or several (`ONE_SOURCE_OR_NONE`). An uploaded table is
 own source name, `tables`, which names no connector. The skills the model step offered reach
 `Finished` the same way, from the step's own call rather than from anything the model said.
 
+**A question over many records is answered from the index's headers and reads nothing live
+(ARC-A-099, M11.8.3).** A `brain.gate.fast_lane.CountRule` answers with how many records the
+payload holds after redaction, never how many the read returned
+(`A_COUNT_IS_OF_WHAT_SURVIVED_REDACTION`), cites the one header it counted on each, and is dated
+by the oldest row it stands on, so an index the worker has not refreshed says so in the answer
+(M11.4.9). The live read is for one record's values; one call per counted record would spend a
+source's allowance on a figure the headers already carry.
+
 Task ids: M30.5.2, M21.3.4, M3.9.3, M4.4.4, M2.2.4, M3.1.2, M3.6.3, M11.9.2, M11.5.1, M11.5.5
 Task ids: M15.4.2, M8.1.3, M8.2.1, M11.4.9
-Task ids: M27.1.5, M27.15.9
+Task ids: M27.1.5, M27.15.9, M11.8.3
 """
 
 from __future__ import annotations
@@ -168,7 +176,7 @@ from brain.core.entitlement import EntitlementSet
 from brain.core.envelope import TypedResult
 from brain.core.field_policy import FieldPolicy
 from brain.core.lane import Lane
-from brain.core.redaction import ChannelPayload, redact
+from brain.core.redaction import RESERVED_KEYS, ChannelPayload, RedactedAnswer, redact
 from brain.gate.abstain import (
     Abstention,
     SearchScope,
@@ -422,11 +430,46 @@ def served_from(answer: FastLaneAnswer, payload: ChannelPayload) -> str:
     Returns the empty string when the field is not there, which the caller turns into an
     abstention. A sentence naming the field and leaving the value blank would say that the
     field exists and is not for them, which is the DENIED and ABSENT distinction rendered.
+
+    A count says how many records the payload holds with the header it counts: see
+    `A_COUNT_IS_OF_WHAT_SURVIVED_REDACTION`. At the read's limit it says at least that many,
+    which is true of every record past the limit whether or not the asker may see it.
     """
+    if answer.counted:
+        held = sum(1 for record in payload.records if answer.field in record)
+        if not held:
+            return ""
+        return f"at least {held}" if answer.result.truncated else f"{held}"
     for record in payload.records:
         if answer.field in record:
             return f"{record[answer.field]}"
     return ""
+
+
+#: Why a count is of the payload the redactor handed back and never of the rows read.
+A_COUNT_IS_OF_WHAT_SURVIVED_REDACTION: Final = (
+    "A count is how many records the asker was shown, which is the payload after redaction at "
+    "their reach. The rows the read returned can hold a record the redactor then withholds, and a "
+    "number taken from them would tell the asker how many records they may not see by "
+    "subtraction from the ones they can, which is the count of hidden items DENIED and ABSENT "
+    "forbid."
+)
+
+
+def headers_cited(redacted: RedactedAnswer, field: str) -> RedactedAnswer:
+    """A count's evidence: each record it counted, citing the header counted and nothing else.
+
+    Narrowed after redaction, so it can only withhold. Every field of every record would be a
+    citation each, and a count over forty tickets would send four hundred of them to say one
+    number; the header counted is the one the number stands on.
+    """
+    records = tuple(
+        {key: value for key, value in record.items() if key in RESERVED_KEYS or key == field}
+        for record in redacted.payload.records
+    )
+    return redacted.model_copy(
+        update={"payload": redacted.payload.model_copy(update={"records": records})}
+    )
 
 
 def route_of(meter: Meter, front: FrontRecord | None) -> ModelRoute | None:
@@ -682,7 +725,9 @@ async def _outcome(
         return _abstained(stream, frames, gaps, nothing_retrieved(scope, detail="unclassified"))
 
     read_live = False
-    if live is not None:
+    # A count is answered from the index's headers and reads nothing live. See
+    # brain.gate.fast_lane.A_QUESTION_OVER_MANY_RECORDS_IS_ANSWERED_FROM_THE_HEADERS.
+    if live is not None and not found.counted:
         # The index found the record; its source answers for it. See
         # brain.ops.live_records.THE_INDEX_FINDS_A_RECORD_AND_THE_SOURCE_ANSWERS_FOR_IT.
         refreshed = await live.refresh(
@@ -727,7 +772,8 @@ async def _outcome(
         return _abstained(stream, frames, gaps, declined)
 
     _enter(recorder, GateStep.COMPOSE)
-    composed = compose(served_from(found, payload), redacted, sink=sink, now=now)
+    cited = headers_cited(redacted, found.field) if found.counted else redacted
+    composed = compose(served_from(found, payload), cited, sink=sink, now=now)
     # The evidence from the composer's own citations, and the rule that a claim needs one
     # (M8.2.4). A sentence read out of the payload always has its field behind it, so this
     # refuses nothing today; it is here so that stops being true loudly rather than quietly.
