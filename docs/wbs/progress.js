@@ -573,7 +573,14 @@ const PROGRESS = {
 
 //: Wave number to the deployed commit it closed at: {commit, recorded, note}. Empty until a
 //: wave is accepted on staging.
-const WAVE_RECORDS = {};
+const WAVE_RECORDS = {
+  // Accepted by the owner on 2026-09-29 ("yes, cut the release"); v0.1.0 names this commit.
+  "0": {
+    commit: "dd6a23a9bc45f5fdada93069ac88fc60b4a5bcc6",
+    recorded: "2026-09-29",
+    note: "Foundation accepted on staging; first release v0.1.0 cut from this commit",
+  },
+};
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const SHA = /^[0-9a-f]{7,40}$/;
