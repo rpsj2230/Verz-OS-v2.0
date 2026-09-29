@@ -104,10 +104,11 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     """Held per module, so a package adding checks in a module of its own changes only its own
     line here: limits, channels and documents, then volume, refusals and a head's audit, then Lark
     chat's three, the skill library's four, the models' eleven and the audit's one, the connectors'
-    three, the tools' three, a document's life in four, the classified tables' three and an
-    answer's evidence in four, the modules in `CHECK_MODULES` order rather than the order a process
-    imported them. Delete this and a check can drop out of the suite with the page simply listing
-    one fewer row, or the page can lead with whichever module was imported first."""
+    four, the tools' three, a document's life in four, the classified tables' three, an answer's
+    evidence in four and the connector framework's eight, the modules in `CHECK_MODULES` order
+    rather than the order a process imported them. Delete this and a check can drop out of the
+    suite with the page simply listing one fewer row, or the page can lead with whichever module
+    was imported first."""
     by_module: dict[str, list[str]] = {}
     for one in registered():
         by_module.setdefault(one.run.__module__, []).append(one.name)
@@ -143,6 +144,7 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "manifest_review_refuses_a_projection_that_is_more_than_a_pointer",
         "a_sync_keeps_its_minimal_index_and_the_canary_reaches_no_table",
         "a_changed_declaration_makes_the_next_sync_refuse",
+        "a_source_is_connected_switched_off_and_upgraded_from_the_console",
     ]
     assert by_module["brain.ops.acceptance_checks_tools"] == [
         "every_registered_tool_is_a_catalogue_row_under_the_name_grammar",
@@ -166,6 +168,16 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "a_record_answer_cites_the_record_field_and_read_time",
         "four_kinds_of_nothing_are_kept_apart",
         "an_answer_and_a_refusal_say_what_the_asker_s_reach_covers",
+    ]
+    assert by_module["brain.ops.acceptance_checks_connector_framework"] == [
+        "a_source_is_read_by_its_declaration_and_its_key_is_in_no_table",
+        "a_rest_read_is_built_from_a_spec_and_refused_before_a_call",
+        "a_source_is_connected_to_one_named_thing_and_never_to_everything",
+        "a_run_leases_its_key_and_the_next_run_reads_a_replaced_one",
+        "a_live_read_uses_the_service_key_ends_on_time_and_is_made_once",
+        "a_burst_is_paced_by_the_source_s_documented_ceiling",
+        "failures_open_the_breaker_and_a_refusal_is_retried_in_budget",
+        "an_unreached_source_is_named_only_to_an_asker_who_could_see_it",
     ]
     assert list(by_module) == list(acceptance.CHECK_MODULES)
     oversight = {one.name: one.leaves for one in registered()}
@@ -212,6 +224,59 @@ def test_an_exception_s_message_never_reaches_a_result() -> None:
     assert reason_for(CheckFailedError("the window moved")) == (FAILED, "the window moved")
     assert reason_for(CheckNotRunError("no cache")) == (NOT_RUN, "no cache")
     assert reason_for(TimeoutError())[0] == FAILED
+
+
+def test_a_model_call_that_stopped_a_check_is_named_by_how_it_ended_and_by_nothing_it_carried() -> (
+    None
+):
+    """`A_MODEL_CALL_THAT_STOPS_A_CHECK_IS_NAMED_BY_HOW_IT_ENDED`. The moonshot check that timed
+    out on the owner's install on 2026-09-29 was recorded as "stopped on ProviderUnavailable" and
+    read as a planning fault until somebody read the worker's log. Every way a call can end has a
+    reason in the Models screen's words, a timeout says it timed out, and neither the step's
+    deployment nor the provider's own text reaches the reason. Delete this and the next provider
+    failure on the install is a type name again, or a reason starts quoting what a provider said.
+    """
+    from brain.models.driver import DriverFailure, ProviderUnavailable
+
+    said = "provider said: row 42 holds the cost 7.25"
+    shapes = [
+        DriverFailure(deployment_id="step-one", timed_out=True, detail=said),
+        DriverFailure(deployment_id="step-one", connection_failed=True, detail=said),
+        DriverFailure(deployment_id="step-one", context_exceeded=True, detail=said),
+        DriverFailure(deployment_id="step-one", refused=True, status=400, detail=said),
+        *(
+            DriverFailure(deployment_id="step-one", status=one, detail=said)
+            for one in (400, 401, 429, 503)
+        ),
+    ]
+    reasons = [reason_for(ProviderUnavailable(one)) for one in shapes]
+    assert all(outcome == FAILED for outcome, _ in reasons)
+    assert all(
+        reason.startswith(acceptance.A_MODEL_CALL_STOPPED_THE_CHECK) for _, reason in reasons
+    )
+    assert all("7.25" not in reason and "step-one" not in reason for _, reason in reasons)
+    # Eight endings, eight sentences: no two ways of failing read the same.
+    assert len({reason for _, reason in reasons}) == len(shapes)
+    assert reasons[0] == (
+        FAILED,
+        "a model call stopped the check: The provider did not answer in time.",
+    )
+
+
+def test_a_planner_that_found_no_step_is_named_by_its_own_public_sentence() -> None:
+    """The planner's refusal carries a sentence the product wrote for a person, and the reason is
+    that sentence, while the detail naming each skipped step is left out. Delete this and a check
+    stopped because no step was configured, or every step was resting, reads as a type name."""
+    from brain.models.routing import NoCompliantRoute
+
+    refused = NoCompliantRoute(
+        "tier=main has no usable rung: step-one=circuit_open",
+        public_message="No model is configured to handle that.",
+    )
+    assert reason_for(refused) == (
+        FAILED,
+        "no step of the ladder could be tried: No model is configured to handle that.",
+    )
 
 
 def test_a_run_is_owed_for_an_unchecked_commit_or_a_request_and_not_otherwise() -> None:
@@ -548,12 +613,12 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
 ) -> None:
     """**The run as the worker makes it, against PostgreSQL at head.** Twice: every check that can
     be asked without a cache passes both times, including the two Lark checks needing a bound
-    person now that the events route reads chat bindings (0118); the limits check says it was not
-    run, the skill import says this install names no public skill, which is the declared default,
-    and after
-    both runs every table a check wrote to holds what it held before, while the result rows are
-    there, one run each, keyed by the commit. Delete this and a check that commits, or one
-    that cannot pass on a real schema, reaches the owner's server first."""
+    person now that the events route reads chat bindings (0118); the two checks needing a cache
+    say they were not run, the skill import says this install names no public skill, which is
+    the declared default, and after both runs every table a check wrote to holds what it held
+    before, while the result rows are there, one run each, keyed by the commit. Delete this and
+    a check that commits, or one that cannot pass on a real schema, reaches the owner's server
+    first."""
     from tests.fixtures.scratch_postgres import sql
 
     with at_head("brain_acceptance_run") as url:
@@ -574,6 +639,7 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         assert (first.name, first.outcome) == (second.name, second.outcome)
     outcomes = {one.name: (one.outcome, one.reason) for one in waited[1]}
     assert outcomes.pop("asking_past_a_window_is_refused_with_a_retry_hint")[0] == NOT_RUN
+    assert outcomes.pop("the_rate_limits_screen_lists_the_windows_refusing_now")[0] == NOT_RUN
     assert outcomes.pop("a_skill_is_imported_from_a_github_commit_and_from_an_address") == (
         NOT_RUN,
         "this install names no public skill to import, so no import from GitHub was asked",
@@ -595,9 +661,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         acceptance_audit.A_BROWSER_SESSION_AND_A_TRACE_STORE_ARE_NOT_BUILT,
     )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
-    assert len(outcomes) == 32
+    assert len(outcomes) == 42
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 112
+    assert runs == [(2,)] and len(recorded) == 134
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }
