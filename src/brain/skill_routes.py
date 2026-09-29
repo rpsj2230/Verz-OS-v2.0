@@ -121,18 +121,19 @@ when an assignment still in force put it there, when and by whom, from
 who decided it, who retired it and who assigned it are sent as display names beside the ids the
 page used to print, read from the directory for exactly those people.
 
-**A package carries scripts and example tasks, a version with examples is rehearsed before it is
-approved, and an approved version is exported (M12.4.11, M12.3.4, M12.3.1).** Adding a zip
+**A package carries scripts and example tasks, a version is approved only once its examples are
+rehearsed, and an approved version is exported (M12.4.11, M12.3.4, M12.3.1).** Adding a zip
 reads its scripts and its `examples.json` through `read_package`, and the review pane shows each
 script's sha256 and, while the version waits for a decision, its text, so what is approved is
 code somebody could read. `POST /skills/{digest}/rehearsals` records whether each example behaved
 as expected, asked of whoever may add or review, and `POST /skills/{digest}/review` passes the
-newest rehearsal of those bytes to `decided`, which refuses to approve a version with examples
-until every one behaved; see `brain.console.skill_library.
-A_VERSION_WITH_EXAMPLES_IS_APPROVED_ONLY_AFTER_THEY_ARE_REHEARSED`. `POST /skills/{digest}/exports`
-answers the approved version as a zip another install adds through `POST /skills`, where it lands
-undecided. **An export is a POST and writes nothing**: it is an act one person takes on one
-version, asked of the skill authority before the digest is looked up as every write here is, and
+newest rehearsal of those bytes to `decided`, which refuses to approve a version with no example
+tasks or one whose examples have not all behaved; the row says which in `approval_needs`, the same
+sentence the refusal carries (`brain.console.skill_library.approval_needs`).
+`POST /skills/{digest}/exports` answers the approved version as a zip another install adds through
+`POST /skills`, where it lands undecided. **An export is a POST and writes nothing**: it is an act
+one person takes on one version, asked of the skill authority before the digest is looked up as
+every write here is, and
 the rejected read by name stays rejected, because a GET with a digest in its path is the oracle
 the writes are built not to be. Rejected: recording each export on the ledger, which would need a
 table for a fact that changes nothing anybody holds, as the routing export does not.
@@ -200,6 +201,7 @@ from brain.console.skill_library import (
     ToolReach,
     added,
     another_spelling,
+    approval_needs,
     assignment,
     awaits_rehearsal,
     categories_from,
@@ -511,6 +513,9 @@ class LibrarySkillView(BaseModel):
     rehearsal: SkillRehearsalView | None = None
     #: It carries examples and may not be approved until a rehearsal in which every one behaved.
     awaits_rehearsal: bool = False
+    #: What this waiting version still needs before it may be approved, in words, or null: example
+    #: tasks, or a passing rehearsal of them (M12.3.4). The refusal an approval would get.
+    approval_needs: str | None = None
     #: This reader may record a rehearsal of it now. Decides whether a form is drawn and nothing
     #: more.
     rehearsable: bool = False
@@ -1156,6 +1161,7 @@ def library_view(
         ),
         rehearsal=rehearsal_view(newest, named) if discloses_body and newest is not None else None,
         awaits_rehearsal=state is Review.PENDING and awaits_rehearsal(one, newest),
+        approval_needs=approval_needs(one, newest) if state is Review.PENDING else None,
         rehearsable=rehearses and state is Review.PENDING and bool(skill.examples),
         exportable=exports and state is Review.APPROVED,
     )
