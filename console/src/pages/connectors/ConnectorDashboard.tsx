@@ -19,7 +19,12 @@
  * **A source that is not connected has no figures**, and the view says how it is connected instead
  * of drawing an empty strip: from this screen, through Connect Lark, or at the server.
  *
- * Task ids: M27.11.9, M27.16.1
+ * **What questions asked of the source cost it is drawn beside the reading figures** (M11.3.4): the
+ * calls a minute, those in flight, the shares refused as over the source's limit and failed, and the
+ * latency, as the route sent them, with the route's sentence saying whose calls they are, or why a
+ * reader is shown none.
+ *
+ * Task ids: M27.11.9, M27.16.1, M11.3.4
  */
 
 import { useState } from "react";
@@ -38,6 +43,7 @@ import {
   idsWords,
   questionsWords,
   readConnectorStats,
+  shareWords,
 } from "./connectorStats";
 
 export const FIGURES_LABEL = "This source's figures";
@@ -51,6 +57,12 @@ export const INDEX_LABEL = "Index size";
 export const INDEX_SUB = "ids kept, never values";
 export const LIVE_READS_LABEL = "Live reads";
 export const LAST_LIVE_READ_LABEL = "Last live read";
+export const CALLS_LABEL = "Calls questions made";
+export const CALLS_A_MINUTE_LABEL = "Calls a minute";
+export const IN_FLIGHT_LABEL = "In flight now";
+export const REFUSED_SHARE_LABEL = "Refused as over its limit";
+export const FAILED_SHARE_LABEL = "Failed";
+export const LATENCY_LABEL = "Latency";
 export const NO_LIVE_READ = "None in 30 days";
 export const READING_HEADING = "Reading";
 export const NEXT_ATTEMPT = "Next attempt";
@@ -111,6 +123,21 @@ function Figures({ name }: { readonly name: string }) {
         <StatCard label={LIVE_READS_LABEL} value={count(figures?.liveReads)} sub={readsSub} />
         <StatCard label={LAST_LIVE_READ_LABEL} value={lastLive} sub={whose} />
       </StatsStrip>
+      {read === null || read.callsTold === undefined ? null : (
+        <SectionCard title={CALLS_LABEL} lede={read.callsTold}>
+          {read.calls === undefined ? null : (
+            <FactList>
+              <Fact label={CALLS_A_MINUTE_LABEL}>{read.calls.perMinute.toLocaleString("en-GB", { maximumFractionDigits: 1 })}</Fact>
+              <Fact label={IN_FLIGHT_LABEL}>{read.calls.concurrency.toLocaleString("en-GB")}</Fact>
+              <Fact label={REFUSED_SHARE_LABEL}>{shareWords(read.calls.quotaRatio, read.calls)}</Fact>
+              <Fact label={FAILED_SHARE_LABEL}>{shareWords(read.calls.errorRatio, read.calls)}</Fact>
+              <Fact label={LATENCY_LABEL}>
+                {`${Math.round(read.calls.latencyP50Ms).toString()} ms typical, ${Math.round(read.calls.latencyP95Ms).toString()} ms slowest`}
+              </Fact>
+            </FactList>
+          )}
+        </SectionCard>
+      )}
     </div>
   );
 }
