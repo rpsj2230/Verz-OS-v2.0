@@ -79,7 +79,8 @@ function readTold(payload: unknown): string {
   return typeof told === "string" ? told : "";
 }
 
-function SetUp({ row, onChanged }: { readonly row: ChannelRow; readonly onChanged: (told: string) => void }) {
+/** The set-up form: its identifiers, its write-only secret and its switch. The connect flow's last screen too. */
+export function SetUp({ row, onChanged }: { readonly row: ChannelRow; readonly onChanged: (told: string) => void }) {
   const [values, setValues] = useState<Record<string, string>>({ ...row.tenant });
   const [enabled, setEnabled] = useState(row.status === "on");
   const secret = useSecret();
@@ -192,7 +193,8 @@ function SetUp({ row, onChanged }: { readonly row: ChannelRow; readonly onChange
   );
 }
 
-function TestMessage({ row }: { readonly row: ChannelRow }) {
+/** One product sentence through the vendor to one destination. The connect flow offers it once saved. */
+export function TestMessage({ row }: { readonly row: ChannelRow }) {
   const [to, setTo] = useState("");
   const [blank, setBlank] = useState<FieldProblem[]>([]);
   const [failure, setFailure] = useState<ApiFailure | null>(null);

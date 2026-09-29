@@ -71,13 +71,15 @@ from brain.api import API_PREFIX, COMMON_RESPONSES, NoEchoRoute
 from brain.api_routes import Asked, Asking
 from brain.attribution import trace_of_request
 from brain.channel_routes import (
-    EVENTS_PATH,
     DeliveryRowView,
     channel_named,
     deliveries_of,
+    events_address_of,
+    events_path_of,
     may_manage,
     records_of,
     secrets_of,
+    steps_of,
 )
 from brain.channels.adapter import adapter_for, channel_adapters, channel_wires
 from brain.channels.binding import BindingCodes, BindingTable, mint_code
@@ -88,6 +90,7 @@ from brain.core.errors import Absent, Failed
 from brain.gate.admission import CHANNEL_VERBS
 from brain.gate.context import Channel
 from brain.gate.ingress import NONCE_TTL, BindingRefusedError
+from brain.guide_views import GuideStepView
 from brain.identity.oidc import TokenRefusedError
 from brain.identity.roles import IdentityError
 from brain.identity.sessions import open_session
@@ -378,6 +381,10 @@ class ChannelRowView(BaseModel):
     last_delivered_at: datetime | None
     #: Where its vendor posts, under this install's origin; empty when it cannot receive.
     events_path: str
+    #: The same address in full, to paste into the vendor; empty while the install names none.
+    events_address: str
+    #: The steps that connect it, ending in its own form; empty for a channel with none yet.
+    steps: list[GuideStepView]
     tenant_fields: list[str]
     tenant: dict[str, str]
     changed_at: datetime | None
@@ -531,7 +538,9 @@ async def _rows(request: Request, channels: list[Channel]) -> list[ChannelRowVie
                 secret=await _secret(record, secrets),
                 health=found.health,
                 last_delivered_at=max(went, default=None),
-                events_path=API_PREFIX + EVENTS_PATH.format(name=channel.value) if wire else "",
+                events_path=events_path_of(channel),
+                events_address=events_address_of(channel),
+                steps=steps_of(channel),
                 tenant_fields=list(wire.tenant_fields) if wire else [],
                 tenant=dict(record.tenant) if record else {},
                 changed_at=None if record is None else record.updated_at,
