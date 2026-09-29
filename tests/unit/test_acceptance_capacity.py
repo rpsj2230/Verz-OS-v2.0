@@ -34,7 +34,7 @@ from brain.ops import tuning
 from brain.ops.acceptance import FAILED, NOT_RUN, PASSED, Check, registered
 from brain.ops.admission import seed_budgets
 from brain.settings import settings_from
-from tests.unit.test_acceptance import at_head, counts
+from tests.unit.test_acceptance import at_head, checks_in, counts
 
 ROOT = Path(__file__).resolve().parents[2]
 MODULE = "brain.ops.acceptance_checks_capacity"
@@ -432,3 +432,16 @@ def test_the_class_check_fails_with_its_own_sentence_when_a_property_is_broken(
 
     assert outcome == (FAILED, reason)
     assert left == {}
+
+
+def test_the_capacity_checks_are_listed_in_their_page_order() -> None:
+    """Every check this module registers, in the order the Install page lists them. Held here,
+    beside the module's other tests, since 2026-09-30, so a package adding a check edits its own
+    file and never a list every package appends to. Delete this and a check can drop out of the
+    module with the page simply listing one fewer row."""
+    assert checks_in("brain.ops.acceptance_checks_capacity") == [
+        "budgets_and_windows_are_rows_saved_within_bounds_and_audited",
+        "the_rate_limits_screen_lists_the_windows_refusing_now",
+        "capacity_is_sized_for_the_busiest_minute_and_its_first_limit",
+        "three_classes_share_one_budget_and_give_way_in_order",
+    ]

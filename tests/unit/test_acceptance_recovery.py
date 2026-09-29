@@ -26,7 +26,7 @@ import pytest
 from brain.ops import acceptance_checks_recovery as recovery
 from brain.ops.acceptance import FAILED, NOT_RUN, PASSED, Check, registered
 from brain.settings import settings_from
-from tests.unit.test_acceptance import INSTALL, at_head, counts
+from tests.unit.test_acceptance import INSTALL, at_head, checks_in, counts
 
 ROOT = Path(__file__).resolve().parents[2]
 MODULE = "brain.ops.acceptance_checks_recovery"
@@ -50,6 +50,14 @@ def test_both_checks_are_registered_with_the_leaf_they_prove() -> None:
     wbs = json.loads((ROOT / "docs" / "wbs.json").read_text(encoding="utf-8"))
     leaves = {one for module in wbs["modules"] for one in module["leaf_ids"]}
     assert "M23.3.1" in leaves
+
+
+def test_the_recovery_checks_are_listed_in_their_page_order() -> None:
+    """Every check this module registers, in the order the Install page lists them: the queue's
+    sweep, then the effects'. Held here since 2026-09-30, so a package adding a check edits its own
+    file and never a list every package appends to. Delete this and a check can drop out of the
+    module with the page simply listing one fewer row."""
+    assert checks_in(MODULE) == [QUEUE, EFFECTS]
 
 
 def test_the_evidence_window_is_wider_than_the_sweeps_own_cadence() -> None:

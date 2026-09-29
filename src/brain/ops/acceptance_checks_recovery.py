@@ -57,6 +57,10 @@ from brain.ops.recovery_run import (
 
 A, _ = RESERVED_DEPARTMENTS
 
+#: Where this module's checks stand on the Install page, before every larger key. See
+#: `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
+CHECK_ORDER: Final = 250
+
 # ------------------------------------------------------------------ written-down reasons
 #: Why a run older than a few minutes is still the schedule running the sweep.
 A_TICK_RUNS_ITS_CONTROLS_ONE_AFTER_ANOTHER: Final = (

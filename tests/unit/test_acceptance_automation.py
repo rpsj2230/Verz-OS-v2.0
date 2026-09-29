@@ -25,7 +25,7 @@ import pytest
 from brain.ops import acceptance_checks_automation as automation
 from brain.ops.acceptance import FAILED, PASSED, Check, registered
 from brain.settings import settings_from
-from tests.unit.test_acceptance import INSTALL, at_head, counts
+from tests.unit.test_acceptance import INSTALL, at_head, checks_in, counts
 
 ROOT = Path(__file__).resolve().parents[2]
 MODULE = "brain.ops.acceptance_checks_automation"
@@ -167,3 +167,13 @@ def test_the_check_fails_where_the_door_is_wrong(
     check = mine()[NAME]
     with at_head("brain_acceptance_automation") as url:
         assert run_check(url, (check,)) == {NAME: (FAILED, reason)}
+
+
+def test_the_automation_checks_are_listed_in_their_page_order() -> None:
+    """Every check this module registers, in the order the Install page lists them. Held here,
+    beside the module's other tests, since 2026-09-30, so a package adding a check edits its own
+    file and never a list every package appends to. Delete this and a check can drop out of the
+    module with the page simply listing one fewer row."""
+    assert checks_in("brain.ops.acceptance_checks_automation") == [
+        "a_flow_step_gets_its_owner_s_rows_and_nothing_its_ceiling_adds",
+    ]
