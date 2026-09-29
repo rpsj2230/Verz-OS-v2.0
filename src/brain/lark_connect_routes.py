@@ -59,7 +59,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.api import API_PREFIX, COMMON_RESPONSES, ErrorBody, NoEchoRoute
-from brain.api_routes import Asked, Asking
+from brain.api_routes import Asked, Asking, wiki_withheld_of
 from brain.attribution import attribute, trace_of_request
 from brain.channel_routes import deliveries_of, records_of
 from brain.channels.adapter import BOT_ID
@@ -116,6 +116,7 @@ from brain.ops.lark_connect import (
     uses_from,
     uses_switched_on,
 )
+from brain.ops.lark_wiki_live import PAGES_SKIPPED_ARE_COUNTED_FOR_ADMINISTRATORS
 from brain.ops.setting_store import put, read_namespace, values_under
 from brain.ops.staff_sync_run import http_fetch
 from brain.routing_routes import sessions_of
@@ -343,6 +344,10 @@ class LarkView(BaseModel):
     vault_told: str
     #: When Lark was last tested from the console, or None when it never was.
     last_test: LarkLastTestView | None = None
+    #: Wiki pages questions matched and skipped on this process, for a reader who may switch the
+    #: Wiki on; None for anybody else. See `PAGES_SKIPPED_ARE_COUNTED_FOR_ADMINISTRATORS`.
+    wiki_pages_skipped: int | None = None
+    wiki_pages_skipped_note: str = ""
     #: What switching a use off does, for its confirmation.
     switch_off_note: str
     staff_off_note: str
@@ -793,6 +798,12 @@ async def lark(
         staff_sources_screen=STAFF_SOURCES_SCREEN,
         vault_told="" if vault is VaultState.READY else TOLD[vault],
         last_test=None if facts.last_test is None else _last_test_view(facts.last_test),
+        wiki_pages_skipped=(
+            wiki_withheld_of(request.app.state).total
+            if may_switch_on(asked.reach, Use.WIKI, asked.now)
+            else None
+        ),
+        wiki_pages_skipped_note=PAGES_SKIPPED_ARE_COUNTED_FOR_ADMINISTRATORS,
         switch_off_note=SWITCHING_A_USE_OFF,
         staff_off_note=SWITCHING_THE_STAFF_LIST_OFF,
     )

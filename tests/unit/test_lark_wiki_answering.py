@@ -213,11 +213,50 @@ def test_the_model_lane_reads_the_wiki_only_when_it_is_switched_on(monkeypatch: 
     models = SimpleNamespace(calls=object())
     monkeypatch.setattr(api_routes, "ModelService", SimpleNamespace)
     state = SimpleNamespace(models=models, passage_search=_NoLibrary(), db_sessions=None)
-    monkeypatch.setattr(api_routes, "wiki_passages_for", lambda sessions, vault: None)
+    monkeypatch.setattr(api_routes, "wiki_passages_for", lambda sessions, vault, **kw: None)
     lane = api_routes.model_lane_of(state)
     assert lane is not None and isinstance(lane.search, _NoLibrary)
     monkeypatch.setattr(
-        api_routes, "wiki_passages_for", lambda sessions, vault: search_over(recorded(), ())
+        api_routes, "wiki_passages_for", lambda sessions, vault, **kw: search_over(recorded(), ())
     )
     lane = api_routes.model_lane_of(state)
     assert lane is not None and isinstance(lane.search, WithWiki)
+
+
+def test_a_skipped_page_is_counted_for_the_operator_and_the_asker_is_told_nothing_of_it() -> None:
+    """`PAGES_SKIPPED_ARE_COUNTED_FOR_ADMINISTRATORS`: a page restricted in Lark is skipped, and the
+    process's tally counts it by reason, while the asker's passages hold nothing of it. Delete this
+    and the Lark screen can show an administrator no count, or a count that never moves."""
+    from brain.ops.lark_wiki_live import WithheldPages
+
+    wiki, tally = recorded(), WithheldPages()
+
+    async def spaces() -> tuple[Any, ...]:
+        return (department_space(),)
+
+    search = WikiPassages(
+        HOST,
+        spaces,
+        keys=_AppKeys(),
+        caller=wiki,
+        resolver=_Resolver(),
+        issuer=_Issuer(),
+        withheld=tally,
+    )
+    web = reader(("read:knowledge", Scope.department("web")))
+    told = asyncio.run(search.passages("renewal salaries", entitlement=web, now=LONG_AGO))
+    assert all("locked" not in one.document for one in told.records)
+    assert tally.total == 1
+    assert set(tally.by_reason) == {"node_has_its_own_permissions"}
+
+
+def test_the_lark_screen_shows_the_count_only_to_a_reader_who_may_switch_the_wiki_on() -> None:
+    """Delete this and the count of skipped pages can reach a reader who is not an administrator,
+    which is a count of pages they were not told about."""
+    import inspect
+
+    import brain.lark_connect_routes as routes
+
+    source = inspect.getsource(routes.lark)
+    assert "wiki_withheld_of(request.app.state).total" in source
+    assert "if may_switch_on(asked.reach, Use.WIKI, asked.now)" in source
