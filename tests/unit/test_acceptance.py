@@ -26,7 +26,13 @@ from typing import Any
 import pytest
 
 from brain.core.department import SLUG_PATTERN
-from brain.ops import acceptance, acceptance_audit, acceptance_run
+from brain.ops import (
+    acceptance,
+    acceptance_audit,
+    acceptance_checks_channels,
+    acceptance_checks_recovery,
+    acceptance_run,
+)
 from brain.ops import acceptance_checks_deployment as acceptance_deployment
 from brain.ops.acceptance import (
     FAILED,
@@ -50,11 +56,11 @@ from brain.settings import settings_from
 from tests.unit.test_limit_store import FakeClient
 
 ROOT = Path(__file__).resolve().parents[2]
-#: Every module a check or the harness raises a verdict from: the harness, and each module named in
-#: `CHECK_MODULES`, so a new check module is held to the literal-reason rule the day it is named.
+#: Every module a check or the harness raises a verdict from: the harness, and each module the
+#: suite finds, so a new check module is held to the literal-reason rule the day it is written.
 SOURCES = (
     ROOT / "src" / "brain" / "ops" / "acceptance_run.py",
-    *(ROOT / "src" / f"{module.replace('.', '/')}.py" for module in acceptance.CHECK_MODULES),
+    *(ROOT / "src" / f"{module.replace('.', '/')}.py" for module in acceptance.check_modules()),
 )
 
 #: Pinned far from any wall clock, for CLAUDE.md's reason about fixtures with dates in them.
@@ -101,24 +107,51 @@ def test_every_leaf_a_check_names_is_a_leaf_of_the_work_breakdown() -> None:
         assert set(one.leaves) <= leaves, one.name
 
 
-def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
-    """Held per module, so a package adding checks in a module of its own changes only its own
-    lines here, the modules in `CHECK_MODULES` order rather than the order a process imported
-    them. Delete this and a check can drop out of the suite with the page simply listing one fewer
-    row, or the page can lead with whichever module was imported first."""
+def checks_in(module: str) -> list[str]:
+    """The checks one module registers, in the order the Install page lists them.
+
+    What each check module's own test file holds its list against, so a package adding a check
+    edits its own file and never a list every package appends to.
+    """
+    return [one.name for one in registered() if one.run.__module__ == module]
+
+
+def test_the_suite_is_every_check_module_in_the_order_each_declares() -> None:
+    """`A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`, on the discovered result. The page lists the
+    modules by the key each declares, ties by name, and never in the order a process imported
+    them; every module that registers a check is in it, and every check in it is in one of them.
+    Delete this and a check module can drop out of the run with the page listing fewer rows, or
+    the page can lead with whichever module was imported first."""
+    import importlib
+
+    modules = acceptance.check_modules()
+    keys = [getattr(importlib.import_module(one), acceptance.ORDER_ATTRIBUTE) for one in modules]
+    assert list(modules) == sorted(modules, key=lambda one: (keys[modules.index(one)], one))
+    assert modules[0] == "brain.ops.acceptance_checks"
+    assert len(modules) >= 20
+    suite = registered()
     by_module: dict[str, list[str]] = {}
-    for one in registered():
+    for one in suite:
         by_module.setdefault(one.run.__module__, []).append(one.name)
-    assert by_module["brain.ops.acceptance_checks"] == [
+    assert list(by_module) == list(modules)
+    assert {one.run.__module__ for one in suite} == set(modules)
+    assert all(acceptance.is_check_module_name(one) for one in modules)
+
+
+def test_the_first_two_modules_hold_their_checks_in_order() -> None:
+    """The two modules with no test file of their own, held here. Delete this and a check can
+    drop out of either with the page listing one fewer row."""
+    assert checks_in("brain.ops.acceptance_checks") == [
         "asking_past_a_window_is_refused_with_a_retry_hint",
         "a_webhook_channel_receives_once_and_stops_both_ways",
         "documents_are_answered_in_their_department_only",
     ]
-    assert by_module["brain.ops.acceptance_oversight"] == [
+    assert checks_in("brain.ops.acceptance_oversight") == [
         "unusual_volume_is_found_per_person",
         "repeated_refusals_raise_a_denial_notice",
         "a_head_reads_their_own_peoples_audit_entries_only",
     ]
+<<<<<<< HEAD
     assert by_module["brain.ops.acceptance_checks_chat"] == [
         "a_lark_group_message_is_answered_only_when_it_names_the_bot",
         "a_person_bound_in_lark_is_given_their_web_answer_directly",
@@ -220,10 +253,30 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "each_source_is_connected_edited_and_switched_off_in_the_console",
     ]
     assert list(by_module) == list(acceptance.CHECK_MODULES)
+=======
+>>>>>>> origin/main
     oversight = {one.name: one.leaves for one in registered()}
     assert oversight["unusual_volume_is_found_per_person"] == ("M23.2.1",)
     assert oversight["repeated_refusals_raise_a_denial_notice"] == ("M23.2.2",)
     assert oversight["a_head_reads_their_own_peoples_audit_entries_only"] == ("M1.8.3",)
+
+
+def test_a_module_that_registers_checks_is_placed_or_refused_and_never_skipped() -> None:
+    """The three refusals `ordered_check_modules` makes, with its positive case beside them: a
+    module registering checks with no key, a key with no checks, and a check registered outside
+    the prefix are each refused; placed modules come back by key, ties by name. Delete this and
+    a module that forgot its key drops out of the Install page with nothing saying so."""
+    from brain.ops.acceptance import AcceptanceError, ordered_check_modules
+
+    declared = {"b.late": 20, "b.one": 10, "b.also": 10, "b.first": 5, "b.helper": None}
+    placed = ["b.late", "b.one", "b.also", "b.first"]
+    assert ordered_check_modules(declared, placed) == ("b.first", "b.also", "b.one", "b.late")
+    with pytest.raises(AcceptanceError, match="declare no CHECK_ORDER"):
+        ordered_check_modules(declared, [*placed, "b.helper"])
+    with pytest.raises(AcceptanceError, match="register no check"):
+        ordered_check_modules(declared, ["b.one", "b.also", "b.first"])
+    with pytest.raises(AcceptanceError, match="does not look in"):
+        ordered_check_modules(declared, [*placed, "elsewhere"])
 
 
 def test_every_reason_a_check_raises_is_a_literal_sentence() -> None:
@@ -626,6 +679,7 @@ WRITTEN_BY_CHECKS = (
     "agent.browser_session",
     "obs.trace_step",
     "obs.trace_read",
+    "ops.operation",
 )
 
 
@@ -656,7 +710,7 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
 ) -> None:
     """**The run as the worker makes it, against PostgreSQL at head.** Twice: every check that can
     be asked without a cache passes both times, including the two Lark checks needing a bound
-    person now that the events route reads chat bindings (0118); the two checks needing a cache
+    person now that the events route reads chat bindings (0118); the three checks needing a cache
     say they were not run, the skill import says this install names no public skill, which is
     the declared default, and after both runs every table a check wrote to holds what it held
     before, while the result rows are there, one run each, keyed by the commit. Delete this and
@@ -691,6 +745,7 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     assert list(outcomes) == suite
     assert outcomes.pop("asking_past_a_window_is_refused_with_a_retry_hint")[0] == NOT_RUN
     assert outcomes.pop("the_rate_limits_screen_lists_the_windows_refusing_now")[0] == NOT_RUN
+    assert outcomes.pop("three_classes_share_one_budget_and_give_way_in_order")[0] == NOT_RUN
     assert outcomes.pop("a_skill_is_imported_from_a_github_commit_and_from_an_address") == (
         NOT_RUN,
         "this install names no public skill to import, so no import from GitHub was asked",
@@ -713,6 +768,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     )
     # No antivirus and no object store here; `tests/unit/test_acceptance_ingest.py` runs both.
     assert outcomes.pop("the_antivirus_test_file_is_refused_as_malware")[0] == NOT_RUN
+    # No relay is saved here; `tests/unit/test_acceptance_channels.py` saves one and passes.
+    email = "an_email_is_taken_signed_and_answered_by_the_install_s_relay"
+    assert outcomes.pop(email) == (NOT_RUN, acceptance_checks_channels.NO_RELAY_IS_SAVED)
     assert outcomes.pop("a_queued_file_is_kept_in_the_store_and_read_by_the_worker")[0] == NOT_RUN
     # Every act, the chain, the trace and the export were seen, and no deploy is recorded here to
     # be kept out of the export: `tests/unit/test_acceptance_audit.py` records one and passes.
@@ -728,6 +786,13 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         "the_scrub_meets_its_budget_on_this_install_s_processor",
     ):
         assert outcomes.pop(worker_check) == (NOT_RUN, acceptance_deployment.NOT_IN_A_WORKER)
+    # No worker has ticked here, so neither recovery sweep has a scheduled run to judge;
+    # `tests/unit/test_acceptance_recovery.py` records one and both pass.
+    for recovery_check in registered(("brain.ops.acceptance_checks_recovery",)):
+        assert outcomes.pop(recovery_check.name) == (
+            NOT_RUN,
+            acceptance_checks_recovery.NO_SCHEDULED_RUN_YET,
+        )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
     assert after == before
     assert runs == [(2,)] and len(recorded) == 2 * len(suite)

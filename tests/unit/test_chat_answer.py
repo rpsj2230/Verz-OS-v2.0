@@ -460,6 +460,22 @@ def test_a_group_where_everybody_holds_the_same_is_answered_in_the_room_once(
     assert "1200" in text
 
 
+def test_the_bot_the_record_names_is_not_counted_among_a_room_s_readers(
+    client: TestClient, world: World
+) -> None:
+    """**The app is the one sending, not a reader.** Slack lists the app's own bot among a
+    channel's members, and counted as a person bound to nobody it would make every room's floor
+    nothing. With the record's bot among the members, a room where everybody holds the same is
+    answered in the room as it is without it.
+
+    Delete this and every Slack channel is answered privately, whatever its members hold."""
+    rooms(world, [WIDE, BOT_OPEN_ID])
+    post(client, in_group(WIDE, "what is the price of WEB-1001", "om_g_bot"))
+    ((kind, where, text),) = world.lark.messages()
+    assert (kind, where) == ("chat_id", GROUP)
+    assert "1200" in text
+
+
 def test_a_room_that_cannot_be_read_is_answered_as_a_floor_of_nothing(
     client: TestClient, world: World
 ) -> None:
