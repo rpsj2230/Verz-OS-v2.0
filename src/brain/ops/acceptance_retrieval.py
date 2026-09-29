@@ -322,11 +322,21 @@ def _nodes(plan: dict[str, Any]) -> list[dict[str, Any]]:
     sentence=(
         "The install's typed price list tool, asked by a seller in acceptance_a, returns that "
         "department's rows with only the columns they hold, a finance reader there gets cost and "
-        "margin too, a seller in acceptance_b only theirs; the statement binds every value, and "
-        "its plan filters on the department in the scan of the records itself."
+        "margin too, a seller in acceptance_b only theirs, and each is shown those rows through "
+        "the redactor every door uses; the statement binds every value, and its plan filters on "
+        "the department in the scan of the records itself."
     ),
 )
 async def a_typed_row_tool_reads_only_the_callers_rows_and_columns(h: Harness) -> None:
+    """**Read through the redactor as well as from the tool**, because that is what a person is
+    shown. Until 2026-09-29 this read the tool's records and stopped, and every reader here holds
+    grants scoped to one department, so the redactor judged each field's scope against a record
+    that did not carry `department` and withheld the lot: every door that redacts answered these
+    readers with nothing while this check passed. See
+    `brain.knowledge.rows.A_RECORD_CARRIES_WHAT_ITS_READERS_SCOPES_TEST`.
+    """
+    from brain.api_routes import field_policies
+    from brain.core.redaction import require_typed_result, serialise_for_channel
     from brain.knowledge.columns import PRICE_LIST
     from brain.knowledge.row_store import SessionRowSource
     from brain.knowledge.rows import RowRequest, RowTool, compile_row_query
@@ -371,21 +381,32 @@ async def a_typed_row_tool_reads_only_the_callers_rows_and_columns(h: Harness) -
             )
     # A cast at the registry's boundary, for `brain.api_routes.passage_search_for`'s reason.
     handler = cast("Callable[..., Awaitable[Any]]", registry.get(tool.name).handler)
+    policy = field_policies(registry)[PRICE_LIST.entity]
 
-    async def read(who: str) -> list[dict[str, Any]]:
-        found = await handler(RowRequest(), entitlement=await h.reach(who), now=h.now)
-        return [one.model_dump() for one in found.records]
+    async def read(who: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        reach = await h.reach(who)
+        found = await handler(RowRequest(), entitlement=reach, now=h.now)
+        shown = serialise_for_channel(
+            require_typed_result(found), entitlement=reach, policy=policy, now=h.now
+        )
+        return [one.model_dump() for one in found.records], list(shown.records)
 
     for who, department, columns in (
         (seller, A, {"name", "sell_price"}),
         (finance, A, {"name", "sell_price", "cost", "margin"}),
         (outsider, B, {"name", "sell_price"}),
     ):
-        records = await read(who)
+        records, shown = await read(who)
         if {str(one.get("name")) for one in records} != set(names[department]):
             raise CheckFailedError("a reader's typed tool returned rows outside their department")
-        if any(set(one) - {"entity", "id"} != columns for one in records):
+        # The department is carried for the redactor to judge the reader's scope by, and is
+        # the one key beyond the projection a record may hold.
+        if any(set(one) - {"entity", "id", "department"} != columns for one in records):
             raise CheckFailedError("a reader's typed tool returned columns other than they hold")
+        if {str(one.get("name")) for one in shown} != set(names[department]):
+            raise CheckFailedError("the redactor did not show a reader their own department's rows")
+        if any(set(one) - {"entity", "id"} != columns for one in shown):
+            raise CheckFailedError("the redactor showed a reader columns other than they hold")
 
     query = compile_row_query(tool, RowRequest(), entitlement=await h.reach(seller), now=h.now)
     if A in str(query.statement.compile()) or {"cost", "margin"} & set(query.columns):
