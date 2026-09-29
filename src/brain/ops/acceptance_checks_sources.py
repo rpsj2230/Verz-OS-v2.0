@@ -40,7 +40,6 @@ from brain.ops.acceptance import RESERVED_DEPARTMENTS, CheckFailedError, CheckNo
 from brain.ops.acceptance_checks_connectors import (
     A_CONNECTED_SOURCE_IS_NOT_CONNECTED_AGAIN,
     DUE_DATE,
-    SOURCE_ALREADY_CONNECTED,
     _Keys,
     _no_wait,
     _nothing_kept,
@@ -59,6 +58,12 @@ if TYPE_CHECKING:
 A, _ = RESERVED_DEPARTMENTS
 
 # ------------------------------------------------------------------ written-down reasons
+#: What the check says where the install has either source connected already.
+A_SOURCE_IS_CONNECTED_HERE_ALREADY: Final = (
+    "this install has Xero or Freshdesk connected already, so the check does not connect it "
+    "again and does not ask about it"
+)
+
 #: Why the stale ticket is read a few days before the question.
 A_TICKET_READ_DAYS_AGO_IS_ANSWERED_AS_OLD: Final = (
     "The helpdesk's ticket is read by the worker at an instant three days before the question, "
@@ -192,7 +197,7 @@ async def a_connected_source_answers_on_ask_from_its_index_and_its_source(h: Har
 
     for name in (xero.CONNECTOR_NAME, freshdesk.FRESHDESK):
         if (await h.execute(live(name))).scalar_one_or_none() is not None:
-            raise CheckNotRunError(SOURCE_ALREADY_CONNECTED)
+            raise CheckNotRunError(A_SOURCE_IS_CONNECTED_HERE_ALREADY)
     await h.found_departments()
     state = SimpleNamespace(db_sessions=h.sessions)
     if await connected_questions_of(state):

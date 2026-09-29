@@ -142,7 +142,7 @@ def test_the_sources_check_fails_where_the_path_is_broken(
 def test_the_sources_check_steps_aside_where_the_install_has_a_source_connected() -> None:
     """`A_CONNECTED_SOURCE_IS_NOT_CONNECTED_AGAIN`. Delete this and the check could move the
     owner's real connection aside, or fail on an install whose Xero is connected."""
-    from brain.ops.acceptance_checks_connectors import SOURCE_ALREADY_CONNECTED
+    from brain.ops.acceptance_checks_sources import A_SOURCE_IS_CONNECTED_HERE_ALREADY
     from tests.fixtures.scratch_postgres import sql
 
     with at_head("brain_acceptance_sources_connected") as url:
@@ -153,4 +153,4 @@ def test_the_sources_check_steps_aside_where_the_install_has_a_source_connected(
             "0" * 64,
         )
         outcome = run_checks(url, (mine()[NAME],))
-    assert outcome[NAME] == (NOT_RUN, SOURCE_ALREADY_CONNECTED)
+    assert outcome[NAME] == (NOT_RUN, A_SOURCE_IS_CONNECTED_HERE_ALREADY)
