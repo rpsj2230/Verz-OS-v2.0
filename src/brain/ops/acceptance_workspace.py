@@ -74,6 +74,9 @@ async def installed_agent(
     skills: Sequence[tuple[str, str]] = (),
     connectors: Sequence[str] = (),
     overlay: Mapping[str, JsonValue] | None = None,
+    capabilities: Sequence[str] = (),
+    allowed_tools: Sequence[str] = (),
+    suffix: str = "",
 ) -> str:
     """An agent of acceptance_a installed from a template the check signs, with `overlay` set here.
 
@@ -91,11 +94,12 @@ async def installed_agent(
         materialise,
         publish,
     )
+    from brain.core.entitlement import Capability
     from brain.knowledge.visibility import Visibility
     from brain.tables.agent import AgentRow
     from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
 
-    agent_id, key = f"acceptance_{h.run}", secrets.token_hex(32)
+    agent_id, key = f"acceptance_{h.run}{suffix}", secrets.token_hex(32)
     signed = publish(
         TemplateManifest(
             identity=ManifestIdentity(
@@ -108,7 +112,11 @@ async def installed_agent(
             persona=TEMPLATE_PERSONA,
             skills=tuple(SkillRef(name=name, digest=digest) for name, digest in skills),
             connectors=tuple(connectors),
-            authority=ManifestAuthority(scope=Scope.department(A)),
+            authority=ManifestAuthority(
+                scope=Scope.department(A),
+                capabilities=tuple(Capability(value=one) for one in capabilities),
+                allowed_tools=tuple(allowed_tools),
+            ),
         ),
         key=key,
         signed_by=owner,
@@ -456,3 +464,373 @@ async def an_agents_figures_follow_the_period_and_project_to_its_budget(
         raise CheckFailedError("the month-end projection fell below what was already spent")
     if projection_view(agent_id, ceiling=second, spend=spend, cost_basis=Basis.OWN, now=after):
         raise CheckFailedError("a reader of their own spend was given the month's projection")
+
+
+# ------------------------------------------------- 3. connectors: attached, requested, hidden
+#: The install's own source every install has: the uploaded price list, read through `local`.
+LOCAL_SOURCE: Final = "local"
+LOCAL_TOOL: Final = "local.read_price_list"
+LOCAL_READ: Final = "read:price_list"
+
+
+@check(
+    leaves=("M39.2.1.4",),
+    sentence=(
+        "An agent naming this install's own price list source shows it attached when its ceiling "
+        "allows the source's tool and requested when it does not, to a reader who may be told of "
+        "the source, and shows a reader who may not no row for it at all."
+    ),
+)
+async def an_agents_connector_is_attached_or_requested_by_its_ceiling(h: Harness) -> None:
+    from brain.agent_capability_routes import connector_details
+    from brain.agent_routes import install_for, install_of
+    from brain.ops.acceptance_checks_tools import _install_registry
+    from brain.tables.template import TemplateInstanceRow
+
+    await h.found_departments()
+    steward, outsider = h.principal(A, "steward"), h.principal(B, "outsider")
+    await h.person(steward, department=A, grants=_everywhere(LOCAL_READ))
+    await h.person(outsider, department=B)
+    registry = _install_registry(h)
+    if LOCAL_TOOL not in {one.name for one in registry.definitions()}:
+        raise CheckFailedError("the install's registry does not register its own price list tool")
+    attached_id = await installed_agent(
+        h,
+        steward,
+        connectors=(LOCAL_SOURCE,),
+        capabilities=(LOCAL_READ,),
+        allowed_tools=(LOCAL_TOOL,),
+    )
+    requested_id = await installed_agent(h, steward, connectors=(LOCAL_SOURCE,), suffix="_asks")
+
+    async def presence(agent_id: str, reader: str) -> list[tuple[str, str]]:
+        record = await stored_agent(h, agent_id)
+        async with h.sessions() as session:
+            pair = (await session.execute(install_for(agent_id))).one_or_none()
+        if pair is None or not isinstance(pair[0], TemplateInstanceRow):
+            raise CheckFailedError("the workspace route's install read found no install")
+        made = install_of(pair[0], pair[1], record)
+        rows = connector_details(made, record, registry, await h.reach(reader), h.now)
+        return [(one.source, one.presence) for one in rows]
+
+    if await presence(attached_id, steward) != [(LOCAL_SOURCE, "attached")]:
+        raise CheckFailedError("a source whose tool the ceiling allows was not shown attached")
+    if await presence(requested_id, steward) != [(LOCAL_SOURCE, "requested")]:
+        raise CheckFailedError("a source the agent names and cannot use was not shown requested")
+    if await presence(attached_id, outsider) != []:
+        raise CheckFailedError("a reader who may not be told of a source was shown its row")
+
+
+# ------------------------------------------------------- 4. skills from the approved library
+@check(
+    leaves=("M39.2.2.1", "M39.2.2.2", "M39.2.2.3", "M39.2.2.4", "M39.2.2.5"),
+    sentence=(
+        "An agent's skill chip carries the pinned skill's version, source and review state and "
+        "how often it ran; an approved library skill is offered to attach, an unreviewed one only "
+        "with the address of its review, and a skill whose description adds nothing to its name "
+        "is refused when it is assigned."
+    ),
+)
+async def an_agents_skills_are_chips_and_offers_from_the_library(
+    h: Harness,
+) -> None:
+    from brain.agent_capability_routes import invocations_of, skill_blocks
+    from brain.agent_routes import install_for, install_of
+    from brain.console.agent_tabs import AgentTabError, SkillInvocation, review_route
+    from brain.console.skill_library import SkillLibraryError, added, decided, read_package
+    from brain.console.workspace import Basis
+    from brain.ops.acceptance_checks_skills import (
+        _administrator,
+        _an_agent,
+        _assign,
+        _named,
+        _skill_md,
+        _store,
+    )
+    from brain.ops.skill_store import StoredSkills
+    from brain.tables.skill_invocation import SkillInvocationRow
+    from brain.tables.template import TemplateInstanceRow
+
+    await h.found_departments()
+    admin = await _administrator(h, "skills")
+    reach = await h.reach(admin)
+    store = StoredSkills(h.sessions)
+
+    async def approved(name: str, description: str) -> Any:
+        made = added(
+            read_package("SKILL.md", _skill_md(name, description=description)), by=admin, at=h.now
+        )
+        await _store(h, made, reach)
+        if not await store.decide(
+            decided(made, reviewer=admin, approve=True, at=h.now),
+            ent_hash=reach.ent_hash(),
+            trace_id=h.trace_id,
+        ):
+            raise CheckFailedError("an administrator could not approve a skill they imported")
+        return made
+
+    pinned_name = _named(h, "pinned")
+    pinned = await approved(pinned_name, "Use when a workspace check asks for its pinned skill")
+    spare_name = _named(h, "spare")
+    await approved(spare_name, "Use when a workspace check offers a skill to attach")
+    waiting_name = _named(h, "waiting")
+    waiting = added(
+        read_package(
+            "SKILL.md",
+            _skill_md(waiting_name, description="Use when a workspace check waits on review"),
+        ),
+        by=admin,
+        at=h.now,
+    )
+    await _store(h, waiting, reach)
+    vague_name = _named(h, "vague")
+    vague = await approved(vague_name, "Use when acceptance vague")
+
+    agent_id = await _an_agent(h, admin)
+    await _assign(h, pinned.digest, agent_id, reach)
+    try:
+        await _assign(h, vague.digest, agent_id, reach)
+    except (SkillLibraryError, AgentTabError):
+        pass
+    else:
+        raise CheckFailedError("a skill whose description adds nothing to its name was assigned")
+
+    async with h.sessions() as session:
+        await session.execute(
+            insert(SkillInvocationRow),
+            [
+                {
+                    "agent_id": agent_id,
+                    "skill_name": pinned_name,
+                    "digest": pinned.digest,
+                    "principal_id": admin,
+                    "trace_id": f"{h.trace_id}-k{n}",
+                    "used_at": h.now - timedelta(hours=n + 1),
+                }
+                for n in range(2)
+            ],
+        )
+        await session.commit()
+
+    record = await stored_agent(h, agent_id)
+    since = h.now - timedelta(days=30)
+    async with h.sessions() as session:
+        pair = (await session.execute(install_for(agent_id))).one_or_none()
+        rows = (
+            await session.execute(
+                invocations_of(agent_id, since, basis=Basis.EVERYONE, caller_id=admin)
+            )
+        ).all()
+    if pair is None or not isinstance(pair[0], TemplateInstanceRow):
+        raise CheckFailedError("the workspace route's install read found no install")
+    made = install_of(pair[0], pair[1], record)
+    chips, unused, offers = skill_blocks(
+        made,
+        record,
+        library=await store.library(),
+        invocations=[
+            SkillInvocation(agent_id=agent_id, skill_name=name, principal_id=who, at=at)
+            for who, name, at in rows
+        ],
+        reach=reach,
+        caller_id=admin,
+        basis=Basis.EVERYONE,
+        listed=True,
+        editable=True,
+        now=h.now,
+    )
+    if [(one.name, one.version, one.review, one.runs) for one in chips] != [
+        (pinned_name, "1.0.0", "approved", 2)
+    ]:
+        raise CheckFailedError("the pinned skill's chip did not carry its version, review and runs")
+    if not chips[0].source or not chips[0].detachable or unused:
+        raise CheckFailedError("the pinned skill's chip did not say where it came from")
+    offered = {one.name: (one.control, one.route) for one in offers}
+    if offered.get(spare_name) != ("attach", ""):
+        raise CheckFailedError("an approved library skill was not offered to attach")
+    if offered.get(waiting_name) != ("review", review_route(waiting_name)):
+        raise CheckFailedError("an unreviewed skill was offered without the address of its review")
+    if pinned_name in offered:
+        raise CheckFailedError("a skill the agent already runs was offered again")
+
+
+# ------------------------------------------------------------- 5. knowledge as a predicate
+@check(
+    leaves=("M39.2.3.1", "M39.2.3.2", "M39.2.3.3", "M39.2.3.4"),
+    sentence=(
+        "An agent of acceptance_a draws on knowledge by the predicate its scope is, which matches "
+        "the reader's two documents there, one verified and one not, and not the document "
+        "uploaded to acceptance_b; an upload there is reported as one the agent does not reach, "
+        "and an upload into acceptance_a as one it does."
+    ),
+)
+async def an_agents_knowledge_is_a_predicate_over_the_readers_documents(
+    h: Harness,
+) -> None:
+    from brain.agent_capability_routes import (
+        knowledge_scope_of,
+        knowledge_view,
+        reader_items,
+    )
+    from brain.console.agent_tabs import AddRoute, plan_addition
+    from brain.knowledge.ingest import MediaType, ParseFailure
+    from brain.knowledge.search import KNOWLEDGE_UPLOAD
+    from brain.ops.acceptance_checks import KNOWLEDGE_READS, _in, _upload
+    from brain.ops.acceptance_checks_lifecycle import REVIEW_AHEAD, _as, _verify
+    from brain.ops.acceptance_documents import a_markdown_document
+
+    await h.found_departments()
+    steward, elsewhere = h.principal(A, "steward"), h.principal(B, "steward")
+    await h.person(steward, department=A, grants=_in(A, *KNOWLEDGE_READS, KNOWLEDGE_UPLOAD.value))
+    await h.person(elsewhere, department=B, grants=_in(B, *KNOWLEDGE_READS, KNOWLEDGE_UPLOAD.value))
+    agent_id = await installed_agent(h, steward)
+    record = await stored_agent(h, agent_id)
+    scope = knowledge_scope_of(record)
+    if scope is None:
+        raise CheckFailedError("an agent scoped to a department had no knowledge predicate")
+
+    async def uploaded(who: str, department: str, word: str) -> str:
+        read = await _upload(
+            h,
+            who,
+            filename=f"Acceptance {word}.md",
+            declared=MediaType.MARKDOWN.value,
+            body=a_markdown_document("Acceptance workspace", f"This document says {word}."),
+            department=department,
+        )
+        if isinstance(read, ParseFailure):
+            raise CheckFailedError("a well-formed Markdown document could not be added")
+        return str(read.item.item_id)
+
+    first = await uploaded(steward, A, h.word())
+    await uploaded(steward, A, h.word())
+    await uploaded(elsewhere, B, h.word())
+    if await _verify(h, await _as(h, steward), first, review_by=h.now + REVIEW_AHEAD) is None:
+        raise CheckFailedError("the steward could not verify a document they added")
+
+    reach = await h.reach(steward)
+    items, _ = await reader_items(h.sessions, reach, h.now)
+    ours = [one for one in items if one.visibility.department == A]
+    view = knowledge_view(scope, items, at_least=False, now=h.now)
+    if [(one.field, one.value) for one in view.clauses] != [("department", A)]:
+        raise CheckFailedError("the agent's knowledge was not the predicate its scope is")
+    if (view.matched, view.verified, view.unverified, view.stale) != (len(ours), 1, 1, 0):
+        raise CheckFailedError("the slice did not count the reader's documents the predicate meets")
+    if len(ours) != 2:
+        raise CheckFailedError("the reader was not shown the two documents they added")
+
+    other_reach = await h.reach(elsewhere)
+    theirs, _ = await reader_items(h.sessions, other_reach, h.now)
+    if knowledge_view(scope, theirs, at_least=False, now=h.now).matched != 0:
+        raise CheckFailedError("a reader elsewhere was counted documents of the agent's department")
+    outside = next(iter(one for one in theirs if one.visibility.department == B), None)
+    if outside is None:
+        raise CheckFailedError("the document uploaded elsewhere did not read back to its uploader")
+    if plan_addition(scope, outside, AddRoute.UPLOAD).reached:
+        raise CheckFailedError("an upload outside the predicate was reported as reached")
+    if not plan_addition(scope, ours[0], AddRoute.UPLOAD).reached:
+        raise CheckFailedError("an upload inside the predicate was reported as not reached")
+
+
+# ------------------------------------------- 6. who can use it, its ceiling, and a preview
+@check(
+    leaves=("M39.3.1.1", "M39.3.1.2", "M39.3.1.3", "M39.3.1.4"),
+    sentence=(
+        "An agent of acceptance_a is found by its department and not by acceptance_b, saying that "
+        "finding it gives no access; its ceiling is shown whole to a reader of capabilities and "
+        "locked to others; and a preview for a person holding the price list read lists the tool "
+        "their run would reach, while a person holding nothing is told the run returns nothing."
+    ),
+)
+async def an_agent_is_found_by_its_audience_and_previewed_as_a_person(
+    h: Harness,
+) -> None:
+    from brain.agent_capability_routes import availability_view, preview_of
+    from brain.agent_routes import install_for, install_of
+    from brain.agents.model import AUDIENCE_IS_NOT_AUTHORITY
+    from brain.console.reach_view import (
+        CEILING_DISCLOSURE,
+        PREVIEW_DISCLOSURE,
+        PREVIEW_RETURNS_NOTHING,
+        ceiling_block,
+    )
+    from brain.gate.roster import viewer_for
+    from brain.identity.principal_store import StoredPrincipals
+    from brain.ops.acceptance_checks_tools import _install_registry
+    from brain.tables.template import TemplateInstanceRow
+
+    await h.found_departments()
+    steward, holder, empty, outsider = (
+        h.principal(A, "steward"),
+        h.principal(A, "holder"),
+        h.principal(A, "empty"),
+        h.principal(B, "outsider"),
+    )
+    await h.person(
+        steward,
+        department=A,
+        grants=_everywhere(CEILING_DISCLOSURE.value, PREVIEW_DISCLOSURE.value),
+    )
+    await h.person(holder, department=A, grants=_everywhere(LOCAL_READ))
+    await h.person(empty, department=A)
+    await h.person(outsider, department=B)
+    agent_id = await installed_agent(
+        h,
+        steward,
+        connectors=(LOCAL_SOURCE,),
+        capabilities=(LOCAL_READ,),
+        allowed_tools=(LOCAL_TOOL,),
+    )
+    record = await stored_agent(h, agent_id)
+
+    people = StoredPrincipals(h.sessions)
+
+    async def viewer(principal_id: str) -> Any:
+        found = await people.live_principal(principal_id)
+        if found is None:
+            raise CheckFailedError("a reserved principal did not read back as a live person")
+        return viewer_for(found)
+
+    inside = availability_view(record, await viewer(holder))
+    beyond = availability_view(record, await viewer(outsider))
+    if (inside.level, inside.department, inside.reader_is_included) != ("department", A, True):
+        raise CheckFailedError("a member of the agent's department was not in its audience")
+    if beyond.reader_is_included:
+        raise CheckFailedError("a person in another department was in the agent's audience")
+    if inside.words != AUDIENCE_IS_NOT_AUTHORITY:
+        raise CheckFailedError("the availability block did not say it gives nobody access")
+
+    shown = ceiling_block(record, await h.reach(steward), h.now)
+    locked = ceiling_block(record, await h.reach(holder), h.now)
+    if shown.locked or LOCAL_READ not in shown.capabilities:
+        raise CheckFailedError("a reader of capabilities was not shown the agent's whole ceiling")
+    if not locked.locked or locked.capabilities:
+        raise CheckFailedError("a reader who may not read capabilities was shown the ceiling")
+
+    registry = _install_registry(h)
+    async with h.sessions() as session:
+        pair = (await session.execute(install_for(agent_id))).one_or_none()
+    if pair is None or not isinstance(pair[0], TemplateInstanceRow):
+        raise CheckFailedError("the workspace route's install read found no install")
+    made = install_of(pair[0], pair[1], record)
+    previewer = await h.reach(steward)
+
+    async def preview(person: str, by: Any) -> Any:
+        return await preview_of(
+            h.sessions,
+            record=record,
+            install=made,
+            registry=registry,
+            person_id=person,
+            previewer=by,
+            now=h.now,
+        )
+
+    held = await preview(holder, previewer)
+    none = await preview(empty, previewer)
+    if held is None or [one.name for one in held.tools] != [LOCAL_TOOL] or held.rung is None:
+        raise CheckFailedError("a preview did not list the tool the person's run would reach")
+    if none is None or none.tools or none.notice != PREVIEW_RETURNS_NOTHING:
+        raise CheckFailedError("a person holding nothing was previewed as reaching something")
+    if await preview(holder, await h.reach(holder)) is not None:
+        raise CheckFailedError("a reader who may not read grants was given somebody's preview")

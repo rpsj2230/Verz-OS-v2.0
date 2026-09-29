@@ -516,9 +516,9 @@ describe("the Profile", () => {
     // `agentActions.ts`, and pressing any of them leaves the address and the requests as they were.
     const mounted = await consoleAt("/agents/quote-helper/profile", agentAnswers("quote-helper", body()));
     const inert = [...mounted.container.querySelectorAll<HTMLButtonElement>(`[${UNAVAILABLE_MARK}]`)];
-    // Five since 2026-09-29: adding a source and changing permissions start a draft of the agent
-    // now, so they are live buttons and not among these.
-    expect(inert.length).toBeGreaterThanOrEqual(5);
+    // Four since 2026-09-29: adding a source and changing permissions start a draft of the agent
+    // now, and a preview as a person is asked of its own route, so none of the three is among these.
+    expect(inert.length).toBeGreaterThanOrEqual(4);
     const permissions = [...mounted.container.querySelectorAll<HTMLButtonElement>("button")].find(
       (one) => one.textContent === "Change permissions",
     );

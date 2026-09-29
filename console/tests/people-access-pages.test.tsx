@@ -28,6 +28,7 @@ import { UNAVAILABLE } from "../src/pages/people/peopleActions";
 import { readPeople } from "../src/pages/people/peopleQuery";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { apiDocument, declaredPropertyNames, declaredRequestBodySchema } from "./support/openapi";
+import { AGENT_FORMAT } from "../src/pages/people/PersonPreview";
 import { installRadixStubs } from "./support/radix";
 import { readRepoFile } from "./support/repo";
 
@@ -450,9 +451,10 @@ describe("one person's page", () => {
     await waitFor(() => expect(writes(mounted.idp)).toEqual([{ to: `POST ${API}/govern/people/disable`, body: { principal_id: "p_ada" } }]));
   });
 
-  test("the Access view groups holdings by origin, names roles apart from grants, and draws the preview inert with its reason", async () => {
+  test("the Access view groups holdings by origin, names roles apart from grants, and offers a preview the gate computes", async () => {
     // What breaks if this is deleted: the three questions of Part 4.4 merged into one list, a role drawn
-    // beside a capability as though it implied one, or a preview computed in the browser.
+    // beside a capability as though it implied one, or a preview computed in the browser. Since
+    // 2026-09-29 the preview is `POST /agents/{agent_id}/preview`, asked for an agent the reader chooses.
     const { container } = await consoleAt("/people/p_ada/access", {
       [PERSON_API]: { body: detail() },
       [`${API}/govern/roles/holders`]: {
@@ -469,9 +471,10 @@ describe("one person's page", () => {
     expect(groups).toEqual(expect.arrayContaining(["Given by a person", "From a pack", "From an approved elevation"]));
     expect(textOf(container)).toContain("Approver");
     expect(textOf(container)).not.toContain("Auditor");
-    const inert = container.querySelector(`[${UNAVAILABLE_MARK}]`);
-    expect(inert?.textContent).toBe("Preview a run");
-    expect(textOf(container)).toContain(UNAVAILABLE.preview.reason);
+    expect(container.querySelector(`[${UNAVAILABLE_MARK}]`)).toBeNull();
+    const preview = container.querySelector('[data-slot="person-preview"]');
+    expect(preview?.querySelector("select")).not.toBeNull();
+    expect(preview?.textContent).toContain(AGENT_FORMAT);
   });
 
   test("the Sign-ins view asks the sessions and sign-in routes about this person and ends every session in one confirmed act", async () => {
@@ -832,7 +835,8 @@ describe("what the pages hold against the API", () => {
     for (const [act, { retiredBy }] of Object.entries(UNAVAILABLE)) {
       expect(paths.filter((path) => retiredBy.test(path)), act).toEqual([]);
     }
-    expect(UNAVAILABLE.preview.retiredBy.test("/api/v1/govern/directory/{principal_id}/preview")).toBe(true);
+    // The preview this table held retired with its route, which the page now calls.
+    expect(paths).toContain("/api/v1/agents/{agent_id}/preview");
   });
 
   test("each write body the new pages send carries only keys its route declares", () => {

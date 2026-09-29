@@ -48,6 +48,7 @@ from brain.agent_about_routes import router as agent_about_router
 # rehearsed and published, and the second person a wider publish waits for. See
 # `brain.agent_builder_routes`.
 from brain.agent_builder_routes import router as agent_builder_router
+from brain.agent_capability_routes import router as agent_capability_router
 
 # Enabling, disabling, archiving, handing on and duplicating an agent, and installing a
 # published template version. Its own router because these are writes and the agent router

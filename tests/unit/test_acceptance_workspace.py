@@ -9,6 +9,8 @@ the one place its sentence depends on, and fails with its own sentence.
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
 Task ids: M39.1.1.2, M39.1.1.4, M39.1.1.5, M39.1.3.1, M39.1.3.2, M39.1.3.3, M39.1.3.4
+Task ids: M39.2.1.4, M39.2.2.1, M39.2.2.2, M39.2.2.3, M39.2.2.4, M39.2.2.5
+Task ids: M39.2.3.1, M39.2.3.2, M39.2.3.3, M39.2.3.4, M39.3.1.1, M39.3.1.2, M39.3.1.3, M39.3.1.4
 """
 
 from __future__ import annotations
@@ -45,6 +47,26 @@ LEAVES = {
         "M39.1.3.2",
         "M39.1.3.3",
         "M39.1.3.4",
+    ),
+    "an_agents_connector_is_attached_or_requested_by_its_ceiling": ("M39.2.1.4",),
+    "an_agents_skills_are_chips_and_offers_from_the_library": (
+        "M39.2.2.1",
+        "M39.2.2.2",
+        "M39.2.2.3",
+        "M39.2.2.4",
+        "M39.2.2.5",
+    ),
+    "an_agents_knowledge_is_a_predicate_over_the_readers_documents": (
+        "M39.2.3.1",
+        "M39.2.3.2",
+        "M39.2.3.3",
+        "M39.2.3.4",
+    ),
+    "an_agent_is_found_by_its_audience_and_previewed_as_a_person": (
+        "M39.3.1.1",
+        "M39.3.1.2",
+        "M39.3.1.3",
+        "M39.3.1.4",
     ),
 }
 
@@ -207,4 +229,81 @@ def test_a_budget_anybody_may_set_fails_the_figures_check(
     assert run_checks(head, (by_name(name),))[name] == (
         FAILED,
         "the budget authority did not decide who may set an agent's budget",
+    )
+
+
+@pytest.mark.needs_db
+def test_a_source_told_to_everybody_fails_the_connector_check(
+    head: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With every source told to every reader, a person in the other department is shown the
+    agent's connector, and the check says so. Delete this and the check could pass over an install
+    whose capability block names sources to people who may not be told they exist."""
+    monkeypatch.setattr(
+        "brain.agent_capability_routes.sources_at", lambda registry, reach, now: ("local",)
+    )
+    name = "an_agents_connector_is_attached_or_requested_by_its_ceiling"
+
+    assert run_checks(head, (by_name(name),))[name] == (
+        FAILED,
+        "a reader who may not be told of a source was shown its row",
+    )
+
+
+@pytest.mark.needs_db
+def test_an_unreviewed_skill_offered_to_attach_fails_the_skills_check(
+    head: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With every library skill offered to attach, the unreviewed one is offered too, and the
+    check says so. Delete this and the check could pass over an install where a skill nobody
+    reviewed is one press away from an agent."""
+    from brain.console.agent_tabs import Control, SkillOffer, chip_for
+
+    monkeypatch.setattr(
+        "brain.agent_capability_routes.offer_for",
+        lambda imported, reader, now=None: SkillOffer(
+            chip=chip_for(imported), control=Control.ATTACH
+        ),
+    )
+    name = "an_agents_skills_are_chips_and_offers_from_the_library"
+
+    assert run_checks(head, (by_name(name),))[name] == (
+        FAILED,
+        "an unreviewed skill was offered without the address of its review",
+    )
+
+
+@pytest.mark.needs_db
+def test_a_predicate_that_matches_everything_fails_the_knowledge_check(
+    head: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With the predicate ignored, a reader in the other department is counted their own
+    document as the agent's, and the check says so. Delete this and the slice could be every
+    document its reader can see."""
+    monkeypatch.setattr("brain.console.agent_tabs.matching", lambda scope, items: tuple(items))
+    name = "an_agents_knowledge_is_a_predicate_over_the_readers_documents"
+
+    assert run_checks(head, (by_name(name),))[name] == (
+        FAILED,
+        "a reader elsewhere was counted documents of the agent's department",
+    )
+
+
+@pytest.mark.needs_db
+def test_a_preview_anybody_may_ask_for_fails_the_availability_check(
+    head: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With the preview's disclosure moved to the price list read, a person who may not read
+    grants previews somebody's run, and the check says so. Delete this and the check could pass
+    over an install where anybody can read what a colleague's run would reach."""
+    from brain.core.entitlement import Capability
+
+    # Both places the disclosure is asked: before anybody's grants are read, and in the preview.
+    for where in ("brain.console.reach_view", "brain.agent_capability_routes"):
+        monkeypatch.setattr(f"{where}.PREVIEW_DISCLOSURE", Capability(value="read:price_list"))
+    name = "an_agent_is_found_by_its_audience_and_previewed_as_a_person"
+
+    assert run_checks(head, (by_name(name),))[name] == (
+        FAILED,
+        "a reader who may not read grants was given somebody's preview",
     )

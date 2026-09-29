@@ -43,6 +43,8 @@ import {
 import { Button } from "../../components/ui/button";
 import { Switch } from "../../components/ui/switch";
 import type { ModelChoice } from "../agentModelPinQuery";
+import { ConnectorsDetail, KnowledgeCard, PreviewForm, SkillsDetail } from "./AgentCapabilities";
+import type { AgentCapabilities } from "./agentCapabilitiesQuery";
 import type { ChannelOffer, ConnectorStrip, SkillPin } from "../agentQuery";
 import { LEVEL_WORDS, RUNGS_EXPLAINED, TIER_WORDS, UNAVAILABLE, WORKS_AT } from "./agentActions";
 import { leashRowId, type HeaderFacts, type ProfileShown } from "./agentDetailQuery";
@@ -95,22 +97,43 @@ function CapabilityRow({
 }
 
 function Capabilities({
+  agentId,
   connectors,
   skills,
   channels,
+  details,
+  onDetailsChanged,
   onEditDraft,
 }: {
+  readonly agentId: string;
   readonly connectors: ConnectorStrip;
   readonly skills: readonly SkillPin[];
   readonly channels: readonly ChannelOffer[];
+  readonly details: AgentCapabilities | null;
+  readonly onDetailsChanged: () => void;
   readonly onEditDraft?: (() => void) | undefined;
 }) {
-  if (connectors.shown.length === 0 && skills.length === 0 && channels.length === 0) {
+  const detailed = details !== null && (details.connectors.length > 0 || details.skills.length > 0 || details.offers.length > 0);
+  if (!detailed && connectors.shown.length === 0 && skills.length === 0 && channels.length === 0) {
     return null;
   }
   return (
     <SectionCard title={CAPABILITIES_HEADING} lede="What this agent is built from. Each is a reviewed item it refers to, never a copy.">
-      {connectors.shown.length === 0 ? null : (
+      {details !== null && details.connectors.length > 0 ? (
+        <CapabilityRow
+          icon={<Plug aria-hidden />}
+          label="Connectors"
+          add={
+            onEditDraft === undefined ? null : (
+              <Button variant="ghost" size="icon-sm" className="size-11 sm:size-8" aria-label={ADD_A_SOURCE} title={ADD_A_SOURCE} onClick={onEditDraft}>
+                <span aria-hidden>+</span>
+              </Button>
+            )
+          }
+        >
+          <ConnectorsDetail connectors={details.connectors} />
+        </CapabilityRow>
+      ) : connectors.shown.length === 0 ? null : (
         <CapabilityRow
           icon={<Plug aria-hidden />}
           label="Connectors"
@@ -150,7 +173,19 @@ function Capabilities({
           {connectors.overflow > 0 ? <Chip tone="requested">{`${String(connectors.overflow)} more on this agent`}</Chip> : null}
         </CapabilityRow>
       )}
-      {skills.length === 0 ? null : (
+      {details !== null && (details.skills.length > 0 || details.offers.length > 0) ? (
+        <CapabilityRow icon={<Sparkles aria-hidden />} label="Skills">
+          <SkillsDetail
+            agentId={agentId}
+            skills={details.skills}
+            offers={details.offers}
+            editable={details.skillsEditable}
+            unused={details.unusedSkills}
+            basis={details.usageBasis}
+            onChanged={onDetailsChanged}
+          />
+        </CapabilityRow>
+      ) : skills.length === 0 ? null : (
         <CapabilityRow
           icon={<Sparkles aria-hidden />}
           label="Skills"
@@ -186,7 +221,15 @@ function Capabilities({
   );
 }
 
-function Permissions({ profile, onEditDraft }: { readonly profile: ProfileShown; readonly onEditDraft?: (() => void) | undefined }) {
+function Permissions({
+  agentId,
+  profile,
+  onEditDraft,
+}: {
+  readonly agentId: string;
+  readonly profile: ProfileShown;
+  readonly onEditDraft?: (() => void) | undefined;
+}) {
   const { ceiling } = profile;
   if (ceiling === undefined) {
     return null;
@@ -197,13 +240,15 @@ function Permissions({ profile, onEditDraft }: { readonly profile: ProfileShown;
       lede="The most this agent may ever reach. Each time it works it holds what the person it works for holds, narrowed by this. It gives nobody extra access."
       action={<ShieldCheck aria-hidden className="size-4 text-dim" />}
       footer={
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-col gap-3">
           {onEditDraft === undefined ? null : (
-            <Button variant="outline" size="sm" className="min-h-11 sm:min-h-8" title={CHANGE_THROUGH_A_DRAFT} onClick={onEditDraft}>
-              {CHANGE_PERMISSIONS}
-            </Button>
+            <div>
+              <Button variant="outline" size="sm" className="min-h-11 sm:min-h-8" title={CHANGE_THROUGH_A_DRAFT} onClick={onEditDraft}>
+                {CHANGE_PERMISSIONS}
+              </Button>
+            </div>
           )}
-          <UnavailableAction text="Preview as a person" label="Preview as a person" reason={UNAVAILABLE.preview.reason} />
+          <PreviewForm agentId={agentId} />
         </div>
       }
     >
@@ -232,12 +277,15 @@ function Permissions({ profile, onEditDraft }: { readonly profile: ProfileShown;
 function Availability({
   facts,
   profile,
+  details,
   onTransfer,
 }: {
   readonly facts: HeaderFacts;
   readonly profile: ProfileShown | null;
+  readonly details: AgentCapabilities | null;
   readonly onTransfer?: (() => void) | undefined;
 }) {
+  const availability = details?.availability;
   return (
     <SectionCard title={AVAILABILITY_HEADING} lede="Who can find and start this agent. This never gives anybody access to more information.">
       <FactList>
@@ -259,6 +307,16 @@ function Availability({
             )}
           </span>
         </Fact>
+        {availability?.department === undefined ? null : (
+          <Fact label="Department">
+            <Chip>{availability.department}</Chip>
+          </Fact>
+        )}
+        {availability === undefined ? null : (
+          <Fact label="You">
+            {availability.readerIsIncluded ? "You can find and start it." : "You are not among the people who can find it."}
+          </Fact>
+        )}
         <Fact label="People">
           <NotOffered>
             Not a list of people. Who can find it is set by the level: Personal is the steward only, Department is everyone in it, Company
@@ -417,6 +475,8 @@ export function AgentProfile({
   channels,
   composition,
   divergent,
+  details,
+  onDetailsChanged,
   onTransfer,
   onEditDraft,
 }: {
@@ -429,6 +489,10 @@ export function AgentProfile({
   readonly channels: readonly ChannelOffer[];
   readonly composition: readonly DiffRow[];
   readonly divergent: readonly string[];
+  /** The capability detail `agent_capability_routes` sent, or null while it is on its way. */
+  readonly details: AgentCapabilities | null;
+  /** Asks the detail again after a skill is attached or taken off. */
+  readonly onDetailsChanged: () => void;
   /** Opens the page's confirmed hand-over. Absent where the page offers none. */
   readonly onTransfer?: (() => void) | undefined;
   /** Opens the page's confirmed Edit as a draft. Absent where the page offers none. */
@@ -438,12 +502,21 @@ export function AgentProfile({
     <div data-slot="agent-profile" className="flex min-w-0 flex-col gap-4">
       <div className="[display:grid] min-w-0 gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
         <div className="flex min-w-0 flex-col gap-4">
-          <Capabilities connectors={connectors} skills={skills} channels={channels} onEditDraft={onEditDraft} />
-          <Availability facts={facts} profile={profile} onTransfer={onTransfer} />
+          <Capabilities
+            agentId={agent.agentId}
+            connectors={connectors}
+            skills={skills}
+            channels={channels}
+            details={details}
+            onDetailsChanged={onDetailsChanged}
+            onEditDraft={onEditDraft}
+          />
+          {details?.knowledge === undefined ? null : <KnowledgeCard knowledge={details.knowledge} onWiden={onEditDraft} />}
+          <Availability facts={facts} profile={profile} details={details} onTransfer={onTransfer} />
           <Learning />
         </div>
         <div className="flex min-w-0 flex-col gap-4">
-          {profile === null ? null : <Permissions profile={profile} onEditDraft={onEditDraft} />}
+          {profile === null ? null : <Permissions agentId={agent.agentId} profile={profile} onEditDraft={onEditDraft} />}
           {profile === null ? null : <ModelAndAutonomy agentId={agent.agentId} profile={profile} choice={choice} />}
         </div>
       </div>

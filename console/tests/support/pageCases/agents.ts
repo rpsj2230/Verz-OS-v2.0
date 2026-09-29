@@ -208,6 +208,19 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         },
       },
       "/api/v1/routing/rungs": MATRIX,
+      // The capability detail, whose widest values are a source, a projected field, a skill and a
+      // predicate value, each a token with nowhere to break.
+      "/api/v1/agents/quote-helper/capabilities": {
+        agent_id: "quote-helper",
+        availability: { level: "department", department: UNBROKEN, owner_id: UNBROKEN, reader_is_included: true, words: UNBROKEN },
+        connectors: [{ source: UNBROKEN, presence: "attached", projects: [UNBROKEN], health: "degraded", checked_at: "2019-03-04T09:00:00Z" }],
+        skills: [{ name: UNBROKEN, digest: "d".repeat(64), version: UNBROKEN, source: "upload", review: "approved", runs: 7, detachable: true }],
+        unused_skills: [],
+        usage_basis: "everyone",
+        skills_editable: true,
+        offers: [{ name: UNBROKEN, version: UNBROKEN, digest: "e".repeat(64), review: "pending", control: "review", route: "/skills/x" }],
+        knowledge: { clauses: [{ field: "department", op: "eq", value: UNBROKEN }], matched: 1, verified: 1, stale: 0, unverified: 0, at_least: false },
+      },
     },
   },
   // New agent: start from scratch, or from a template the gallery offers.

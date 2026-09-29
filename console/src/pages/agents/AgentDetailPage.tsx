@@ -77,6 +77,7 @@ import { AUTOMATIONS_TAB, automationGalleryApiPath } from "../automationGalleryQ
 import { actsFor, ACT_LABELS, type LifecycleAct } from "../agentLifecycleQuery";
 import { UNAVAILABLE, WORKS_AT } from "./agentActions";
 import { AgentAbout } from "./AgentAbout";
+import { agentCapabilitiesApiPath, readAgentCapabilities } from "./agentCapabilitiesQuery";
 import { AgentDashboard, usePeriod } from "./AgentDashboard";
 import { daysSince, readHeaderFacts, readProfile, spendIsRecorded, type HeaderFacts } from "./agentDetailQuery";
 import { AgentProfile, LEASH_ANCHOR } from "./AgentProfile";
@@ -275,6 +276,14 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
   const onShown = useCallback(() => {
     setGalleryShown(true);
   }, []);
+  // The Profile's capability detail: asked when the Profile is shown, and again under a new
+  // version after a skill is attached or taken off there.
+  const [detailVersion, setDetailVersion] = useState(0);
+  const detailAnswer = useResource<unknown>(view === "profile" ? agentCapabilitiesApiPath(agentId) : null, detailVersion);
+  const details = useMemo(() => (detailAnswer.data === null ? null : readAgentCapabilities(detailAnswer.data)), [detailAnswer.data]);
+  const onDetailsChanged = useCallback(() => {
+    setDetailVersion((count) => count + 1);
+  }, []);
   const onChanged = useCallback(() => {
     setVersion((count) => count + 1);
   }, []);
@@ -393,6 +402,8 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
           channels={workspace.channels}
           composition={workspace.composition}
           divergent={workspace.divergent}
+          details={details}
+          onDetailsChanged={onDetailsChanged}
           onTransfer={() => {
             lifecycle.choose(agentId, "transfer");
           }}

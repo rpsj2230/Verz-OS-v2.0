@@ -25,12 +25,13 @@
 import { Bot } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useResource } from "../../api/useResource";
-import { Chip, FailureState, LoadingState, Note, SectionCard, UnavailableAction } from "../../components/kit";
+import { Chip, FailureState, LoadingState, Note, SectionCard } from "../../components/kit";
 import { VERB_WORDS } from "../../layout/signInStrengthQuery";
 import { scopeLines } from "../scopeText";
 import { dayWords } from "../access/formParts";
 import { roleWords } from "../access/PersonName";
-import { A_ROLE_GRANTS_NOTHING, UNAVAILABLE, WHAT_NEEDS_A_SECOND_FACTOR, WORKS_AT } from "./peopleActions";
+import { A_ROLE_GRANTS_NOTHING, WHAT_NEEDS_A_SECOND_FACTOR, WORKS_AT } from "./peopleActions";
+import { PersonPreview } from "./PersonPreview";
 import { originWords, scopeWords } from "./PersonGrants";
 import {
   HOLDERS_API_PATH,
@@ -184,11 +185,14 @@ export function PersonAccess({ detail }: { readonly detail: PersonDetail }) {
       <SectionCard
         title={THROUGH_AN_AGENT_HEADING}
         lede="An agent reaches, for the person using it, only what that person may reach and its own limits allow."
-        action={<UnavailableAction label="Preview a run" text="Preview a run" icon={<Bot aria-hidden />} reason={UNAVAILABLE.preview.reason} />}
+        action={<Bot aria-hidden className="size-4 text-dim" />}
       >
-        <Note>
-          Who can reach something is asked of a capability over a scope, on the Capabilities screen, and never of a single record.
-        </Note>
+        <div className="flex flex-col gap-3">
+          <PersonPreview principalId={person.principalId} />
+          <Note>
+            Who can reach something is asked of a capability over a scope, on the Capabilities screen, and never of a single record.
+          </Note>
+        </div>
       </SectionCard>
     </div>
   );
