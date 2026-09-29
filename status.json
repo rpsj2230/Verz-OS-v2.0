@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-29T08:08:04.153899+00:00",
-  "commit": "cc6a9df4",
-  "commit_subject": "\"Each of the four providers answers\" moves to Wave 5 while OpenAI and DeepSeek are turned off (#208)",
+  "generated_at": "2026-09-29T08:33:56.117136+00:00",
+  "commit": "007ea74d",
+  "commit_subject": "Rate limits and capacity budgets are rows changed from the console within the product's bounds, audited and in force within a minute (#210)",
   "total": 1576,
   "done": 410,
   "percent": 26.0,
