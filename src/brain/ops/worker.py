@@ -137,17 +137,16 @@ does not tick at all; see `THE_SCHEDULE_RUNS_IN_THE_GENERAL_WORKER_AND_NOWHERE_E
 tick it makes any test of a connection a person asked for on the Connectors page
 (`brain.ops.connector_probe_run.tick_probes`), because only this process reads a source's key.
 
-Not claimed: M32.4.1.4, and the reason has narrowed again. The process starts now, lays out one
-driver worker per shard at the declared concurrency and has been watched fetching and running a
-job against a real database. What has not happened is this compose file running on the host it
-was sized for. `docker-compose.langfuse.yml` refuses M32.1.1.1 on the same grounds and in the
-same words: a compose file that has never run is a design.
+**It runs on an install now, and that is what the claim below rests on.** Until 2026-09-29 this
+paragraph declined M32.4.1.4 because the compose file had never run on the host it was sized for,
+the ground `docker-compose.langfuse.yml` still stands on for M32.1.1.1. The owner's install has run
+this container since then, printing the plan `WorkerPlan.describe` writes, one shard per traffic
+class at its declared concurrency inside the 384 MiB limit, and
+`brain.ops.acceptance_checks_deployment.the_worker_serves_each_traffic_class_from_its_own_slots`
+asks this module's own `preflight`, `declared_slots` and `plan_for` of the container the suite runs
+in on every deploy, and shows `preflight` refusing that environment with one class taken away.
 
-What this serves is the leaf named in the paragraph above, and it is deliberately not
-claimed. The id is not repeated on the line below, because that line is parsed for ids and
-a sentence saying a leaf is not claimed reads to the parser exactly like claiming it.
-
-Task ids: none
+Task ids: M32.4.1.4
 """
 
 from __future__ import annotations
