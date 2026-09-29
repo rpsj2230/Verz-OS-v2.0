@@ -544,7 +544,11 @@ describe("Backup and recovery, Rate limits and Capacity", () => {
     const body = {
       memory: { profile: "standard", host_total_mib: 16000, declared_mib: 4000, deployed_mib: null, breaches: ["BREACH-SENTENCE"], unbudgeted: [] },
       connections: [{ database: "application", admissible: 100, demand: 60, headroom: 40 }],
+      sizings: [{ name: "SIZING-NAME", peak_per_second: 2, service_seconds: 4, in_flight_at_peak: 8, slots_needed: 8, reason: "SIZING-REASON" }],
+      first_limit: "FIRST-LIMIT-SENTENCE",
     };
+    expect(Object.keys(body).sort()).toEqual(backendModelFields(INSTALL_ROUTES, "CapacityView").sort());
+    expect(Object.keys(body.sizings[0] ?? {}).sort()).toEqual(backendModelFields(INSTALL_ROUTES, "SizingView").sort());
     const { container } = await open("/connections", { "GET /api/v1/install/capacity": () => ({ body }) });
     const reserved = [...container.querySelectorAll('main [data-slot="stat-card"]')].find((card) =>
       card.textContent?.startsWith("Reserved by the compose files"),
@@ -553,6 +557,12 @@ describe("Backup and recovery, Rate limits and Capacity", () => {
     expect(reserved?.textContent).not.toContain("MiB");
     expect(mainText(container)).toContain("BREACH-SENTENCE");
     expect(mainText(container)).toContain("application");
+    // M22.3.1, M22.3.2, M22.3.4: the sizing at its busiest minute, as the API worked it, and the
+    // first limit's own sentence. What breaks if deleted: a sizing drawn from a day's total, or a
+    // figure this page computed that the admission budgets do not share.
+    expect(mainText(container)).toContain("SIZING-NAME");
+    expect(mainText(container)).toContain("2 a second");
+    expect(mainText(container)).toContain("FIRST-LIMIT-SENTENCE");
   });
 });
 
