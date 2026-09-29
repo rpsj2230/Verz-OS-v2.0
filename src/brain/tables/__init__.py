@@ -53,7 +53,7 @@ from brain.tables.agent import AgentRow
 from brain.tables.agent_automation import AgentAutomationRow
 from brain.tables.agent_run import AgentRunRow
 from brain.tables.application_log import ApplicationLogRow
-from brain.tables.artifact import ArtifactRow
+from brain.tables.artifact import ArtifactChangeRow, ArtifactRow
 from brain.tables.audit import AuditEntryRow
 from brain.tables.automation import AutomationOwnerRow
 from brain.tables.automation_change import AutomationChangeRow
@@ -457,6 +457,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     "agent.skill_rehearsal",
     # 0193_retrieval_event. Points at nothing: it names no document, question or person.
     "ops.retrieval_event",
+    # 0194_artifact_change_and_client. A change points at the artifact it changed and at the one
+    # that superseded it, which are never deleted; the person is a value.
+    "agent.artifact_change",
 )
 
 __all__ = [
@@ -470,6 +473,7 @@ __all__ = [
     "AgentRunRow",
     "ApiKeyRow",
     "ApplicationLogRow",
+    "ArtifactChangeRow",
     "ArtifactRow",
     "AuditEntryRow",
     "AutomationChangeRow",

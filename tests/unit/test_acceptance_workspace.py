@@ -13,6 +13,8 @@ Task ids: M39.2.1.4, M39.2.2.1, M39.2.2.2, M39.2.2.3, M39.2.2.4, M39.2.2.5
 Task ids: M39.2.3.1, M39.2.3.2, M39.2.3.3, M39.2.3.4, M39.3.1.1, M39.3.1.2, M39.3.1.3, M39.3.1.4
 Task ids: M39.4.1.1, M39.4.1.2, M39.4.1.3, M39.4.1.4, M39.4.1.5, M39.4.2.1, M39.4.2.2, M39.4.2.4
 Task ids: M39.6.1.1, M39.6.1.2, M39.6.1.3, M39.6.1.4, M39.6.1.5, M39.6.2.1, M39.6.2.2, M39.6.2.4
+Task ids: M39.5.1.1, M39.5.1.2, M39.5.1.4, M39.5.1.5, M39.5.2.1, M39.5.2.2, M39.5.2.3, M39.5.2.4
+Task ids: M39.5.2.5, M39.8.4, M39.8.5
 """
 
 from __future__ import annotations
@@ -29,6 +31,10 @@ import pytest
 
 from brain.ops import acceptance_workspace as workspace_checks
 from brain.ops.acceptance import FAILED, PASSED, REASON_CHARS, Check, check_modules, registered
+from brain.ops.artifact_store import ARTIFACT_BUCKET
+from brain.ops.object_store import S3Backend, StoreCredential
+from brain.ops.storage import Backend, config_for
+from tests.fixtures.fake_s3 import FakeS3
 from tests.unit.test_acceptance import at_head, checks_in
 from tests.unit.test_acceptance_lifecycle import every_count
 
@@ -90,7 +96,24 @@ LEAVES = {
         "M39.6.2.2",
         "M39.6.2.4",
     ),
+    "an_agents_report_holds_what_its_reader_may_see_and_is_rechecked": (
+        "M39.5.1.1",
+        "M39.5.1.2",
+        "M39.5.1.4",
+        "M39.5.1.5",
+        "M39.5.2.1",
+        "M39.5.2.2",
+        "M39.5.2.3",
+        "M39.5.2.4",
+        "M39.5.2.5",
+        "M39.8.4",
+        "M39.8.5",
+    ),
 }
+
+#: The artifact check's object store in the database half: the real S3 client over a fake bucket,
+#: because these tests run with no vault and the product builds its store from the vault.
+ARTIFACT_KEY = StoreCredential(access_key_id="brain-test-access", secret_access_key="brain-test")
 
 
 def mine() -> tuple[Check, ...]:
@@ -172,6 +195,19 @@ def head() -> Iterator[str]:
         yield url
 
 
+@pytest.fixture
+def bucket(monkeypatch: pytest.MonkeyPatch) -> FakeS3:
+    """The artifact check's store, over a fake bucket the test can look into afterwards."""
+    fake = FakeS3(credential=ARTIFACT_KEY).holding(ARTIFACT_BUCKET, {})
+    backend = S3Backend(
+        config_for(Backend.SEAWEEDFS, endpoint_url="http://objects.example.test:8333"),
+        ARTIFACT_KEY,
+        transport=fake.transport(),
+    )
+    monkeypatch.setattr(workspace_checks, "artifact_backend", lambda h: (backend, "brain"))
+    return fake
+
+
 def run_checks(url: str, checks: Sequence[Check]) -> dict[str, tuple[str, str]]:
     from brain.db import normalise_database_url
     from brain.ops.acceptance_run import run_suite
@@ -195,7 +231,7 @@ def run_checks(url: str, checks: Sequence[Check]) -> dict[str, tuple[str, str]]:
 
 @pytest.mark.needs_db
 def test_on_a_real_database_every_workspace_check_passes_and_leaves_nothing_behind(
-    head: str,
+    head: str, bucket: FakeS3
 ) -> None:
     """**The checks as the worker runs them, against PostgreSQL at head.** Each passes with no
     reason, and every table in the database, the agent's rows, its requests, its costs, its budget
@@ -208,6 +244,7 @@ def test_on_a_real_database_every_workspace_check_passes_and_leaves_nothing_behi
 
     assert outcomes == dict.fromkeys(LEAVES, (PASSED, ""))
     assert after == before
+    assert bucket.buckets[ARTIFACT_BUCKET] == {}
 
 
 # ------------------------------------------------------------------ each check can fail
@@ -382,4 +419,58 @@ def test_an_automation_its_owner_may_start_fails_the_automation_check(
     assert run_checks(head, (by_name(name),))[name] == (
         FAILED,
         "an automation's owner could start it without a second person",
+    )
+
+
+@pytest.mark.needs_db
+def test_an_install_with_no_object_store_fails_the_artifact_check(
+    head: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With no object store connected, the check says the install cannot keep an artifact rather
+    than keeping one somewhere the product never looks. Delete this and the check could pass on an
+    install whose Artifacts section can never hold anything."""
+    monkeypatch.setattr(workspace_checks, "artifact_backend", lambda h: (None, ""))
+    name = "an_agents_report_holds_what_its_reader_may_see_and_is_rechecked"
+
+    assert run_checks(head, (by_name(name),))[name] == (
+        FAILED,
+        "this install is not connected to its object store",
+    )
+
+
+@pytest.mark.needs_db
+def test_a_report_built_at_the_callers_own_reach_fails_the_artifact_check(
+    head: str, bucket: FakeS3, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With the report's fields decided at a reach holding every column, the person without the
+    cost is sent it, and the check says so. Delete this and the check could pass over a producer
+    that writes the rows as read."""
+    import brain.ops.artifact_report as report
+
+    monkeypatch.setattr(
+        report, "producible_fields", lambda entity, present, **kwargs: tuple(present)
+    )
+    name = "an_agents_report_holds_what_its_reader_may_see_and_is_rechecked"
+
+    assert run_checks(head, (by_name(name),))[name] == (
+        FAILED,
+        "a report for a person without the cost held the cost or margin",
+    )
+
+
+@pytest.mark.needs_db
+def test_a_download_that_trusts_its_own_person_fails_the_artifact_check(
+    head: str, bucket: FakeS3, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With a re-download no longer checked against what the content drew on, the steward can
+    fetch a report whose cost they may not read, and the check says so. Delete this and the check
+    could pass over an install where holding the Artifacts screen is holding every file on it."""
+    monkeypatch.setattr(
+        "brain.console.agent_output.still_holds", lambda drew_on, requester, now: True
+    )
+    name = "an_agents_report_holds_what_its_reader_may_see_and_is_rechecked"
+
+    assert run_checks(head, (by_name(name),))[name] == (
+        FAILED,
+        "the steward could fetch a report whose cost they may not read",
     )

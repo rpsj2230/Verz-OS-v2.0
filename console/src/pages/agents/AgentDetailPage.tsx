@@ -39,9 +39,10 @@
  * the period where it was left and asks nothing again.
  *
  * **The Memory section** (`AgentMemory.tsx`) is at `/agents/{id}/memory` for a reader whose strip
- * holds it, which the API sends for every agent to a reader of the Memory tab.
+ * holds it, which the API sends for every agent to a reader of the Memory tab. **The Artifacts
+ * section** (`AgentArtifacts.tsx`) is at `/agents/{id}/artifacts` on the same terms.
  *
- * Task ids: M39.4.1.1, M39.1.2.1, M39.1.2.2, M39.1.2.3, M39.1.2.4, M39.1.2.5, M39.6.1.3, M5.7.3, M27.10.2, M27.11.6
+ * Task ids: M39.5.2.1, M39.4.1.1, M39.1.2.1, M39.1.2.2, M39.1.2.3, M39.1.2.4, M39.1.2.5, M39.6.1.3, M5.7.3, M27.10.2, M27.11.6
  */
 
 import { ChevronDown, IdCard, Info, LayoutDashboard, MessageSquarePlus, Settings } from "lucide-react";
@@ -81,6 +82,7 @@ import { actsFor, ACT_LABELS, type LifecycleAct } from "../agentLifecycleQuery";
 import { UNAVAILABLE, WORKS_AT } from "./agentActions";
 import { AgentAbout } from "./AgentAbout";
 import { AgentConversations } from "./AgentConversations";
+import { AgentArtifacts } from "./AgentArtifacts";
 import { AgentMemory } from "./AgentMemory";
 import { agentCapabilitiesApiPath, readAgentCapabilities } from "./agentCapabilitiesQuery";
 import { AgentDashboard, usePeriod } from "./AgentDashboard";
@@ -118,11 +120,21 @@ export const CONVERSATIONS_SECTION = "Conversations";
 export const MEMORY_TAB = "memory";
 export const MEMORY_SECTION = "Memory and learning";
 
+/** The Artifacts section's key, as the API's strip spells it. */
+export const ARTIFACTS_TAB = "artifacts";
+export const ARTIFACTS_SECTION = "Artifacts";
+
 /** A section's name as the Sections menu lists it, for the sections this page draws a view of. */
 export const SECTION_LABELS: Readonly<Record<string, string>> = Object.freeze({
   [AUTOMATIONS_TAB]: AUTOMATIONS_SECTION,
   [MEMORY_TAB]: MEMORY_SECTION,
+  [ARTIFACTS_TAB]: ARTIFACTS_SECTION,
 });
+
+/** Whether an address opened one of the three views rather than a section drawn in place of one. */
+function isAgentView(one: string): one is AgentView {
+  return VIEWS.some((view) => view === one);
+}
 export const EDIT_AS_DRAFT = "Edit as a draft";
 
 /** The settings tab's key, whose content is the Profile. */
@@ -171,7 +183,7 @@ export function viewAddress(agentId: string, view: AgentView | string): string {
 export function viewFor(
   tab: string | undefined,
   sections: readonly string[],
-): AgentView | typeof AUTOMATIONS_TAB | typeof MEMORY_TAB | typeof CONVERSATIONS_TAB {
+): AgentView | typeof AUTOMATIONS_TAB | typeof MEMORY_TAB | typeof CONVERSATIONS_TAB | typeof ARTIFACTS_TAB {
   if (tab === "profile" || tab === "about") {
     return tab;
   }
@@ -186,6 +198,9 @@ export function viewFor(
   }
   if (tab === MEMORY_TAB && sections.includes(MEMORY_TAB)) {
     return MEMORY_TAB;
+  }
+  if (tab === ARTIFACTS_TAB && sections.includes(ARTIFACTS_TAB)) {
+    return ARTIFACTS_TAB;
   }
   return "dashboard";
 }
@@ -404,7 +419,7 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
     <DetailPage
       crumbs={[{ label: ROSTER_HEADING, to: ROSTER_ADDRESS }, { label: agent.displayName }]}
       header={header}
-      switcher={<ViewSwitch label={VIEWS_LABEL} views={views} current={view === AUTOMATIONS_TAB || view === MEMORY_TAB || view === CONVERSATIONS_TAB ? undefined : view} />}
+      switcher={<ViewSwitch label={VIEWS_LABEL} views={views} current={isAgentView(view) ? view : undefined} />}
       beside={<SectionsMenu agentId={agentId} sections={menuSections} />}
     >
       {lifecycle.notice}
@@ -447,6 +462,7 @@ function AgentAnswer({ agentId, tab }: { readonly agentId: string; readonly tab:
         </SectionCard>
       ) : null}
       {view === MEMORY_TAB ? <AgentMemory agentId={agentId} /> : null}
+      {view === ARTIFACTS_TAB ? <AgentArtifacts agentId={agentId} /> : null}
       {view === AUTOMATIONS_TAB ? (
         <SectionCard title={AUTOMATIONS_SECTION} lede="What this agent runs on a schedule, and what can be installed for it.">
           <div className="flex min-w-0 flex-col gap-4">
