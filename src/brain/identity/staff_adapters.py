@@ -78,6 +78,18 @@ read did not list is somebody this roster cannot name. Group membership is a sec
 every vendor's API, so its completeness is its own flag, `groups_complete`, rather than the
 roster's: a person missing from a group the walk never reached has not left it.
 
+**Every reading says what it read, in counts, and why anybody it listed is in no department.**
+On 2026-09-29 a Lark staff sync on the owner's install added 123 people and placed every one of
+them in no department, and the run said only that it had applied the list. Lark had admitted the
+department walk on `contact:department.organize:readonly` and left each department's `name` out,
+because its documentation shows a department's name only to `contact:department.base:readonly`,
+and this file read a department with no name as a department called nothing. So `ReadReport`
+carries how many departments the walk read and how many had a name, how many people it read and
+placed, and a count for each reason somebody was left unplaced, with the one action that fixes
+the source where there is one. **Counts, and never a name or an identifier**: the report is shown
+on the run record, the Staff sources screen and the job's history, and a count names nobody. See
+`A_READING_SAYS_WHAT_IT_READ_AND_WHY_NOBODY_WAS_PLACED`.
+
 Rejected: making the source string a constructor argument so that two Workspace tenants could
 be reconciled separately. Two tenants of one vendor is a real configuration and this does not
 support it, because supporting it means keying the trust table on something other than the
@@ -90,7 +102,9 @@ Task ids: M1.6.4, M1.6.5, M1.6.6
 
 from __future__ import annotations
 
+import enum
 import re
+from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Final
@@ -166,6 +180,16 @@ A_LARK_TENANT_WITHOUT_LARK_MAIL_HAS_ONLY_THE_ACCOUNT_ADDRESS: Final = (
     "company and the sync would refuse a roster of nobody on every run."
 )
 
+#: Why every reading carries a report of what it read.
+A_READING_SAYS_WHAT_IT_READ_AND_WHY_NOBODY_WAS_PLACED: Final = (
+    "A department is the scope a person's grants are bounded by, and a sync that places nobody "
+    "looks exactly like a sync that worked: the people arrive, the run applies, and every one of "
+    "them sees less than they should with nothing anywhere saying why. So a reading counts the "
+    "departments it read and how many had a name, the people it read and placed, and each reason "
+    "somebody was left unplaced, and says what to change at the source where one change fixes "
+    "it. It counts and never names, because the report is shown wherever the run is."
+)
+
 #: The source strings, which must be keys of `DEFAULT_TRUST` or the trust silently falls to
 #: existence alone. Asserted against that table rather than against themselves.
 SPREADSHEET: Final = "spreadsheet"
@@ -191,6 +215,22 @@ ADAPTER_SOURCES: Final[tuple[str, ...]] = (
 #: inside an HTTP 200. Named rather than compared to a literal, because `code == 0` reads as
 #: an error check and is the opposite one.
 LARK_SUCCESS_CODE: Final = 0
+
+#: The Lark scope that shows a department's `name`, from the field permission table of
+#: `GET /open-apis/contact/v3/departments/:department_id/children` (read 2026-09-29). The scope
+#: that admits the call, `contact:department.organize:readonly`, is not among the ones that show
+#: the name, so an app holding only that one reads every department with no name and the call
+#: still succeeds. Declared here, where the name is read, and asked for by
+#: `brain.connectors.staff_directories.LARK_SCOPES`.
+LARK_DEPARTMENT_NAME_SCOPE: Final = "contact:department.base:readonly"
+
+#: The Lark scope that shows a person's `department_ids`, from the field permission table of
+#: `GET /open-apis/contact/v3/users/find_by_department`. Without it the field is left out.
+LARK_PERSON_DEPARTMENT_SCOPE: Final = "contact:user.department:readonly"
+
+#: Lark's root department, which is the company itself rather than a department in it: its
+#: documentation gives the root the identifier `0` in either identifier type.
+LARK_ROOT_DEPARTMENT: Final = "0"
 
 #: The LDAP result code for a search the server's own administrative limit cut short. It is
 #: a partial answer rather than a failure: the entries returned are real.
@@ -218,6 +258,152 @@ class RosterUnavailableError(Exception):
     """
 
 
+class Unplaced(enum.StrEnum):
+    """Why somebody a source listed is in no department after this reading.
+
+    Five and not a free sentence, so every source says the same thing in the same words and a
+    count can be kept for each. None of them names the person, and none of them can.
+    """
+
+    #: The source gave them no department at all, or placed them at the top of the company.
+    NO_DEPARTMENT = "no_department"
+    #: The source placed them in more than one department, and guessing which bounds them is
+    #: guessing at their reach.
+    SEVERAL_DEPARTMENTS = "several_departments"
+    #: Their department was read and came back with no name, which on Lark is a missing scope.
+    UNNAMED_DEPARTMENT = "unnamed_department"
+    #: Their department is one the walk of departments did not read.
+    UNREAD_DEPARTMENT = "unread_department"
+    #: The source named a department and is not trusted to say which department anybody is in.
+    NOT_TRUSTED = "not_trusted"
+
+
+#: What each reason reads as after a count, in the order a report lists them.
+UNPLACED_WORDS: Final[Mapping[Unplaced, str]] = {
+    Unplaced.NO_DEPARTMENT: "with no department",
+    Unplaced.SEVERAL_DEPARTMENTS: "in more than one department",
+    Unplaced.UNNAMED_DEPARTMENT: "in a department that came back with no name",
+    Unplaced.UNREAD_DEPARTMENT: "in a department the read did not reach",
+    Unplaced.NOT_TRUSTED: "because this kind of source may not set a department",
+}
+
+
+def _counted(count: int, one: str, many: str) -> str:
+    return f"{count} {one if count == 1 else many}"
+
+
+@dataclass(frozen=True)
+class ReadReport:
+    """What one reading read, in counts: departments, people, who was placed and why not.
+
+    See `A_READING_SAYS_WHAT_IT_READ_AND_WHY_NOBODY_WAS_PLACED`. `departments` and `named` are
+    None for a source whose people carry their department as a field rather than as an
+    identifier a second walk names, which is every source but Lark. `placed` counts the people
+    whose department this source may assert, so a sheet with a department column places nobody
+    and says why.
+    """
+
+    #: Everybody the source listed who became a person on the roster, active or not.
+    people: int
+    #: Of those, how many are in a department the roster may keep.
+    placed: int
+    #: Entries the source listed that did not become a person: a meeting room, a guest.
+    skipped: int = 0
+    #: How many of the unplaced people there are for each reason. Only reasons that occurred.
+    unplaced: Mapping[Unplaced, int] = field(default_factory=dict)
+    #: How many departments the walk of departments read, where there is one.
+    departments: int | None = None
+    #: Of those, how many came back with a name.
+    named: int | None = None
+    #: What to change at the source, one sentence each, where one change would place people.
+    advice: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        counts = [self.people, self.placed, self.skipped, *self.unplaced.values()]
+        if any(one < 0 for one in counts) or 0 in self.unplaced.values():
+            msg = "a report counts what happened, so no count is negative and no reason is zero"
+            raise ValueError(msg)
+        if self.placed + sum(self.unplaced.values()) != self.people:
+            msg = (
+                "every person a reading listed is placed or has a reason they are not, so the "
+                "placed and the unplaced add up to the people read"
+            )
+            raise ValueError(msg)
+        if (self.departments is None) != (self.named is None) or (
+            self.departments is not None
+            and self.named is not None
+            and not 0 <= self.named <= self.departments
+        ):
+            msg = "a walk of departments says how many it read and how many of those had a name"
+            raise ValueError(msg)
+
+    def words(self) -> str:
+        """The report as one paragraph, for a connection test's sentence."""
+        return " ".join(self.sentences())
+
+    def sentences(self) -> tuple[str, ...]:
+        """The report as the sentences a run, a trial and a connection test show, one each."""
+        people = _counted(self.people, "person", "people")
+        if self.departments is not None:
+            read = (
+                f"Read {_counted(self.departments, 'department', 'departments')}, "
+                f"{self.named} with a name, and {people}"
+            )
+        else:
+            read = f"Read {people}"
+        found = [f"{read}; {self.placed} placed in a department."]
+        if self.skipped:
+            found.append(
+                f"Skipped {_counted(self.skipped, 'entry', 'entries')} that "
+                f"{'was' if self.skipped == 1 else 'were'} not a person."
+            )
+        reasons = [
+            f"{self.unplaced[one]} {UNPLACED_WORDS[one]}"
+            for one in UNPLACED_WORDS
+            if self.unplaced.get(one)
+        ]
+        if reasons:
+            found.append(f"Not placed: {', '.join(reasons)}.")
+        found.extend(self.advice)
+        return tuple(found)
+
+
+def _report(
+    people: Sequence[StaffRecord],
+    asserts: frozenset[Asserts],
+    *,
+    skipped: int,
+    why: Mapping[str, Unplaced],
+    departments: int | None,
+    named: int | None,
+    advice: Sequence[str],
+) -> ReadReport:
+    """Count who is placed and why the rest are not, against what the source may assert.
+
+    The trust decides, as it does for `departments_from`: a person carrying a department from a
+    source that may not assert one is counted as not placed, for that reason, and never as placed.
+    """
+    trusted = Asserts.DEPARTMENT in asserts
+    reasons: Counter[Unplaced] = Counter()
+    placed = 0
+    for one in people:
+        if one.department and trusted:
+            placed += 1
+        elif one.department:
+            reasons[Unplaced.NOT_TRUSTED] += 1
+        else:
+            reasons[why.get(one.work_address.casefold(), Unplaced.NO_DEPARTMENT)] += 1
+    return ReadReport(
+        people=len(people),
+        placed=placed,
+        skipped=skipped,
+        unplaced=dict(reasons),
+        departments=departments,
+        named=named,
+        advice=tuple(advice),
+    )
+
+
 @dataclass(frozen=True)
 class RosterReading:
     """One adapter's whole answer: the roster, and what a `Roster` has nowhere to put.
@@ -229,6 +415,8 @@ class RosterReading:
     """
 
     roster: Roster
+    #: What was read, in counts, and why anybody listed is in no department. See `ReadReport`.
+    report: ReadReport
     #: Casefolded work address to the identifier this source uses for that person, for the
     #: sources that have a stable one. Empty for a spreadsheet, which has nothing.
     stable_ids: Mapping[str, str] = field(default_factory=dict)
@@ -260,6 +448,10 @@ def _assemble(
     dropped: Sequence[str],
     managers: Mapping[str, str] | None = None,
     groups_complete: bool = True,
+    unplaced: Mapping[str, Unplaced] | None = None,
+    departments: int | None = None,
+    named: int | None = None,
+    advice: Sequence[str] = (),
 ) -> RosterReading:
     """Build the reading. The one place a `Roster` is constructed in this file.
 
@@ -267,13 +459,28 @@ def _assemble(
     not softened here. Which of two rows for one person survives a de-duplication decides
     what department they are in and which groups they hold, and neither row is more true than
     the other, so the honest answer is that the source is wrong and somebody has to fix it.
+
+    `unplaced` is why each casefolded address the adapter could not place is in no department,
+    for the adapters that can tell; anybody else with no department has none at the source. Every
+    entry in `dropped` is one that did not become a person, which is what the report counts as
+    skipped.
     """
+    asserts = trust_for(source, configured)
     return RosterReading(
         roster=Roster(
             source=source,
             people=tuple(people),
             complete=complete,
-            asserts=trust_for(source, configured),
+            asserts=asserts,
+        ),
+        report=_report(
+            people,
+            asserts,
+            skipped=len(dropped),
+            why=unplaced or {},
+            departments=departments,
+            named=named,
+            advice=advice,
         ),
         stable_ids=dict(stable_ids),
         aliases=dict(aliases),
@@ -752,7 +959,14 @@ class LarkSource:
     strings, and passing one through creates a department that no scope predicate matches, so
     the person sees nothing with nothing anywhere saying why. Somebody in more than one known
     department is left unplaced rather than assigned the first: guessing which of two
-    departments bounds a person's grants is guessing at their reach.
+    departments bounds a person's grants is guessing at their reach, and the report counts them.
+
+    **A department the walk read with no name is not a department called nothing.** Lark shows a
+    department's `name` only to `LARK_DEPARTMENT_NAME_SCOPE` and admits the walk without it, so
+    an app missing that one scope reads every department nameless. Until 2026-09-29 this class
+    read such a department as its name, the empty string, and placed everybody in no department
+    with nothing said; the report now counts them as `Unplaced.UNNAMED_DEPARTMENT` and names the
+    scope, and `LARK_UNNAMED_ADVICE` is the sentence.
 
     **The identifier is `union_id` and not `open_id`.** An open id is issued per application,
     so reinstalling the app renames every person in the company at once and every rename
@@ -774,6 +988,8 @@ class LarkSource:
         dropped: list[str] = []
         stable: dict[str, str] = {}
         leader_of: dict[str, str] = {}
+        why: dict[str, Unplaced] = {}
+        hidden = False
         for page in self.pages:
             code = page.get("code", LARK_SUCCESS_CODE)
             if code != LARK_SUCCESS_CODE:
@@ -787,20 +1003,13 @@ class LarkSource:
                 address = lark_work_address(one)
                 folded = address.strip().casefold()
                 status = one.get("status") or {}
-                placed = [
-                    self.department_names[at]
-                    for at in one.get("department_ids") or ()
-                    if at in self.department_names
-                ]
-                if len(placed) > 1:
-                    dropped.append(
-                        f"{address}: placed in {sorted(placed)}, so no one department bounds "
-                        "them and this reading places them nowhere rather than guessing"
-                    )
+                # Absent rather than empty is Lark leaving a field out for a missing scope.
+                hidden = hidden or "department_ids" not in one
+                department, unplaced = self._placed(one.get("department_ids") or ())
                 built = _record(
                     address,
                     str(one.get("name") or ""),
-                    department=placed[0] if len(placed) == 1 else "",
+                    department=department,
                     groups=tuple(groups_for.get(folded, ())),
                     active=(
                         not status.get("is_frozen", False)
@@ -813,6 +1022,8 @@ class LarkSource:
                     dropped.append(built)
                     continue
                 people.append(built)
+                if unplaced is not None:
+                    why[built.work_address.casefold()] = unplaced
                 identifier = str(one.get("union_id") or "")
                 if identifier:
                     stable[folded] = identifier
@@ -825,6 +1036,17 @@ class LarkSource:
             for person, leader in leader_of.items()
             if leader in address_of
         }
+        reasons = set(why.values())
+        advice = [
+            sentence
+            for reason, sentence in (
+                (Unplaced.UNNAMED_DEPARTMENT, LARK_UNNAMED_ADVICE),
+                (Unplaced.UNREAD_DEPARTMENT, LARK_UNREAD_ADVICE),
+            )
+            if reason in reasons
+        ]
+        if hidden and people:
+            advice.append(LARK_HIDDEN_DEPARTMENTS_ADVICE)
         return _assemble(
             LARK,
             people,
@@ -835,7 +1057,50 @@ class LarkSource:
             dropped=dropped,
             managers=_in_read(named, stable),
             groups_complete=self.groups_complete,
+            unplaced=why,
+            departments=len(self.department_names),
+            named=sum(1 for name in self.department_names.values() if name.strip()),
+            advice=advice,
         )
+
+    def _placed(self, listed: Sequence[Any]) -> tuple[str, Unplaced | None]:
+        """The one department's name a person is placed in, or no name and the reason.
+
+        The root is the company and not a department, so a person listed there alone is in no
+        department. More than one department the walk read is two answers to how far somebody
+        reaches, and one read with no name is a department this reading cannot name.
+        """
+        ids = [
+            str(one) for one in dict.fromkeys(listed) if str(one) not in ("", LARK_ROOT_DEPARTMENT)
+        ]
+        known = [one for one in ids if one in self.department_names]
+        if len(known) > 1:
+            return "", Unplaced.SEVERAL_DEPARTMENTS
+        if known:
+            name = self.department_names[known[0]].strip()
+            return (name, None) if name else ("", Unplaced.UNNAMED_DEPARTMENT)
+        if ids:
+            return "", Unplaced.UNREAD_DEPARTMENT
+        return "", Unplaced.NO_DEPARTMENT
+
+
+#: What a Lark report says when a department came back with no name. See `LarkSource`.
+LARK_UNNAMED_ADVICE: Final = (
+    f"Lark shows a department's name only to an app granted {LARK_DEPARTMENT_NAME_SCOPE}: add it "
+    "to the app and release a new version."
+)
+
+#: What a Lark report says when somebody is in a department the walk did not read.
+LARK_UNREAD_ADVICE: Final = (
+    "Lark lists only the departments in the app's contacts data range: set it to All members "
+    "and release a new version."
+)
+
+#: What a Lark report says when Lark left out which department people are in.
+LARK_HIDDEN_DEPARTMENTS_ADVICE: Final = (
+    f"Lark shows which department a person is in only to an app granted "
+    f"{LARK_PERSON_DEPARTMENT_SCOPE}: add it and release a new version."
+)
 
 
 def lark_work_address(person: Mapping[str, Any]) -> str:

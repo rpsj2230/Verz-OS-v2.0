@@ -567,6 +567,35 @@ describe("Departments and teams", () => {
     expect(textOf(row)).not.toMatch(/\d/);
   });
 
+  test("the departments the staff source names are created by one confirmed press that lists each and sends their short names", async () => {
+    // What breaks if this is deleted: the owner's install on 2026-09-29, eleven departments named by
+    // Lark and none on this screen, or departments created without a confirmation naming each.
+    let offered: unknown = { to_found: [{ name: "Web Development", slug: "web_development" }, { name: "设计部", slug: "department_bf7a74ff" }], registered: ["Finance"] };
+    const mounted = await consoleAt("/departments", {
+      [`${API}/govern/departments`]: { body: organisation([WEB]) },
+      [`${API}/govern/departments/from-staff-source`]: () => ({ body: offered }),
+      [`POST ${API}/govern/departments/from-staff-source`]: () => {
+        offered = { to_found: [], registered: ["Finance", "Web Development", "设计部"] };
+        return { body: { created: [{ name: "Web Development", slug: "web_development" }, { name: "设计部", slug: "department_bf7a74ff" }], not_founded: [] } };
+      },
+    });
+    const offer = await screen.findByRole("list", { name: "Departments your staff source names" });
+    expect(textOf(offer)).toContain("Web Development");
+    expect(textOf(offer)).toContain("设计部");
+    press(mounted.container, "Create the departments your staff source names");
+    const dialog = await confirmation("Create these departments?");
+    expect(textOf(dialog)).toContain("Web Development (short name web_development)");
+    expect(writes(mounted.idp)).toEqual([]);
+    press(dialog, "Create the departments your staff source names");
+    await waitFor(() =>
+      expect(writes(mounted.idp)).toEqual([
+        { to: `POST ${API}/govern/departments/from-staff-source`, body: { slugs: ["web_development", "department_bf7a74ff"] } },
+      ]),
+    );
+    await waitFor(() => expect(mounted.container.textContent).toContain("Created Web Development, 设计部."));
+    expect(asked(mounted.idp).filter((url) => url.pathname === `${API}/govern/departments`).length).toBeGreaterThanOrEqual(2);
+  });
+
   test("a short name says its form before submit, and acceptance-test is told to use an underscore without anything sent", async () => {
     // What breaks if this is deleted: the owner's case, a short name refused only after submit with
     // "not in the form this address expects".

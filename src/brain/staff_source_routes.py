@@ -40,18 +40,17 @@ on both trial routes. `dry_run` computes what a sync would change by calling
 marks leavers, and the only route here that does it is the first sync, under the two authorities
 a connection needs, calling the nightly run itself. See `NOTHING_HERE_APPLIES_A_PLAN`.
 
-**Nothing on this process can read a live staff source, and the trial says so rather than
-answering an empty one.** This is the rule the module turns on and it is
-`brain.install_routes.AN_UNREAD_SOURCE_IS_NOT_AN_EMPTY_ONE` asked about a roster. Four things a
-trial needs have no store in this repository and none of the four fails safely as a default:
-`brain.identity.staff_adapters` parses pages a caller has already fetched and there is no
-fetcher, no credential custody for one and no transport; nothing maps a work address to the
-principal this system holds, so a trial run with an empty map proposes adding every person in
-the company; nothing records when a sync was last applied; and nothing stores the group rules
-that decide which roles a roster supports. So the inputs arrive together through one protocol on
-`app.state`, absent today, and the route answers a sentence naming what is missing. The day
-somebody attaches one the trial appears with no line here changing, which is
-`brain.install_routes`' construction and the difference between a check and a comment.
+**The trial is asked of the worker, because only the worker may read the source's credential.**
+Until 2026-09-29 this route answered "This install cannot try your staff source yet. Nothing here
+fetches a list", waiting for a gatherer on `app.state` that nothing attached, and it went on saying
+so after `brain.ops.staff_sync_run` began reading every source every night. The owner's first Lark
+sync then placed 123 people in no department, which is exactly what a trial would have shown him.
+It could not be attached here: the application may write the staff source's credential and never
+read it. So pressing Try a read writes the asking down (`brain.ops.staff_trial`), the worker reads
+the source on its next pass with the credential the night's run uses, and the result is a run row
+with outcome `tried` under Recent sync runs, saying in counts what was read, who was placed and why
+not, and what a run would change. `GET` on the address says whether one is waiting. See
+`A_TRIAL_IS_ASKED_OF_THE_WORKER`.
 
 **Since 2026-09-21 a source is chosen, tested and connected on this screen, with no edit on the
 server.** Until then choosing and pointing a source were installation settings no route wrote, and
@@ -91,16 +90,10 @@ and a route here cannot acquire a subtly different one.
 **Since 2026-09-21 the scheduled sync runs, and four addresses here show and serve it.**
 `brain.ops.staff_sync_run` reads the chosen source in the worker and applies the plan; this module
 applies one only through the first sync, below. `/runs` is what each run added, marked as having
-left or held back, at the trial's plane because it names people; `/credential` says whether the
-secret the worker reads with is held and replaces it under `admin:credential` over everything,
-through the credentials screen's own write; `/transfers` lists the agents whose owner a run marked
-as having left and lets a reader who may adopt one take it on (M1.8.9). The trial below is
-unchanged.
-
-**What has never run.** No live staff source has been read by anything in this repository, so
-the trial's success path is exercised against a source built in a test and never against a
-directory. What is tested is every refusal, the order the checks happen in, and that the plan a
-wired process would produce is the plan `dry_run` produced.
+left or held back and what it read, at the trial's plane because it names people; `/credential`
+says whether the secret the worker reads with is held and replaces it under `admin:credential` over
+everything, through the credentials screen's own write; `/transfers` lists the agents whose owner a
+run marked as having left and lets a reader who may adopt one take it on (M1.8.9).
 
 **M27.7.2 is this screen.** Until 2026-09-21 it was declined here, because the leaf asks for a
 staff source to be chosen, configured and tried before it runs and the screen did none of the
@@ -116,16 +109,15 @@ that marks the leaver (`brain.ops.staff_sync_store.stop_leavers_agents`), and ta
 owner change is recorded in the audit ledger by `0105`'s trigger on `agent.agent`, under the actor
 this route attributes the transaction to.
 
-Task ids: M1.6.12, M1.8.6, M1.8.9, M27.7.2, M26.3.2
+Task ids: M1.6.11, M1.6.12, M1.8.6, M1.8.9, M27.7.2, M26.3.2
 """
 
 from __future__ import annotations
 
 import asyncio
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Annotated, Final, Protocol, cast
+from typing import Annotated, Final, cast
 
 import structlog
 from fastapi import APIRouter, Request
@@ -151,7 +143,6 @@ from brain.console.staff_source_view import (
     may_trial,
     selection,
     transfers_for,
-    trial,
 )
 from brain.core.entitlement import EntitlementSet
 from brain.core.errors import Absent, Failed
@@ -170,9 +161,7 @@ from brain.identity.staff_roster import APPLIED_OUTCOMES, Application
 from brain.identity.staff_source import (
     STAFF_SOURCE_LOCATION_SETTING,
     STAFF_SOURCE_SETTING,
-    GroupRule,
     StaffRecord,
-    StaffSource,
 )
 from brain.identity.staff_sync import SYNC_INTERVAL, DryRun
 from brain.install import hold_saved, value_of
@@ -195,8 +184,10 @@ from brain.ops.staff_connect import (
     run_first_sync,
     settings_for,
 )
-from brain.ops.staff_sync_run import SHARED_APP_SLOTS, STAFF_SOURCE_SLOT, http_fetch
-from brain.ops.staff_sync_store import RunRecord, read_leavers, read_runs
+from brain.ops.staff_sync_run import READERS, SHARED_APP_SLOTS, STAFF_SOURCE_SLOT, http_fetch
+from brain.ops.staff_sync_store import RunRecord, read_last_started, read_leavers, read_runs
+from brain.ops.staff_trial import TRIAL_WAITING, request_trial, trial_requested
+from brain.ops.staff_trial import waiting as trial_waiting
 from brain.settings_routes import may_configure
 from brain.tables.agent import AgentRow
 
@@ -245,19 +236,19 @@ NOTHING_HERE_APPLIES_A_PLAN: Final = (
     "nightly run rather than by writing anything of its own."
 )
 
-#: What the trial answers while nothing on this process can read a roster.
-#:
-#: Written as the sentence a client reads rather than as a list of module names, for the reason
-#: `brain.console.recovery_view.ANSWERS` are: the reader has a server and no source tree.
-NOTHING_HERE_READS_A_LIVE_STAFF_SOURCE: Final = (
-    "This install cannot try your staff source yet. Nothing here fetches a list from Google "
-    "Workspace, Microsoft, Lark, a sheet or a directory, nothing here knows which of the "
-    "people on such a list this system already holds, and nothing here records when a list "
-    "was last applied. A trial run without those would say that every person in your company "
-    "would be added, which is a sentence about this install rather than about your directory. "
-    "So there is no trial rather than a misleading one. The rest of this screen is real: it "
-    "says which source this install is set to read and what it is still missing."
+#: Why the console's trial is a request to the worker.
+A_TRIAL_IS_ASKED_OF_THE_WORKER: Final = (
+    "A trial reads the company's directory with the credential the staff sync keeps, and the "
+    "application may write that credential and never read it. So pressing Try a read writes when "
+    "it was asked, the worker makes the read on its next pass exactly as the night's run would and "
+    "applies nothing, and what it read is a run row on this screen. A trial that read in the "
+    "application would need the secret typed again, and would test a key the night's run never "
+    "uses."
 )
+
+#: What a trial answers to a reader who may not run one, or on an install with no database: nothing
+#: waiting, which is what an install nobody has asked a trial of says too.
+NO_TRIAL: Final = ""
 
 #: Why a source is connected from this screen and the environment file is never touched.
 A_SOURCE_IS_CONNECTED_HERE_AND_NOTHING_ON_THE_SERVER_IS_EDITED: Final = (
@@ -283,77 +274,6 @@ WHERE_A_SOURCE_IS_CHOSEN: Final = (
     "its steps, test the connection, then save it and run the first sync. Nothing on the server "
     "needs editing."
 )
-
-
-# ----------------------------------------------------------- what this process does not hold
-
-
-@dataclass(frozen=True)
-class TrialInputs:
-    """Everything one trial needs that this repository has no store for, gathered together.
-
-    Five fields and one protocol rather than five readers, because a caller holding some of
-    them would have to invent the rest and every invention fails in a direction somebody would
-    believe. An empty `known` makes a correct roster read as every person in the company
-    arriving; a `last_applied` guessed as the present makes a first run look like a second,
-    which is exactly what `THE_FIRST_RUN_OF_A_SOURCE_HAS_NOTHING_TO_BE_WRONG_AGAINST` says
-    nothing may assume; and `held` without `rules` makes `dry_run` propose removing every role
-    assertion the directory has ever conferred, because `reconcile` is a set difference and one
-    side would be empty for want of a table rather than for want of a rule.
-
-    The field names are `brain.identity.staff_sync.dry_run`'s own, so a process attaching one
-    of these is assembling the arguments the scheduled sync will assemble, rather than a shape
-    invented for a screen. That is `staff_source_view.trial`'s own argument for passing them
-    straight through: a trial and the sync that follows it read the same inputs.
-    """
-
-    #: The chosen source, already wired to whatever fetches its pages. `roster()` is what
-    #: contacts the far end and it is called inside `trial` and nowhere here.
-    source: StaffSource
-    #: Casefolded work address to the principal this system already holds for it.
-    known: Mapping[str, str]
-    #: When a sync from this source was last applied. `None` means never, which is the
-    #: first-run case and suppresses every removal.
-    last_applied: datetime | None
-    #: The group-to-role mappings this install has configured.
-    rules: tuple[GroupRule, ...] = ()
-    #: What `auth.directory_role_grant` currently holds for this source.
-    held: tuple[DirectoryAssertion, ...] = ()
-
-
-class TrialSource(Protocol):
-    """Whatever this process was built with that can gather a trial's inputs at one instant.
-
-    A protocol read off `app.state` rather than a parameter, in the shape
-    `brain.install_routes.BackupObjects` uses and for its reason: there is nothing to pass,
-    because no module in this repository fetches a roster, maps an address to a principal or
-    records an applied sync. What it buys is that the sentence above stops being returned on
-    the day somebody attaches one, with nothing here changing.
-
-    It takes `now` because `last_applied` is read against a clock somewhere and a gatherer that
-    took none would read the process's, which is the parameter every decision in this
-    repository takes rather than reads.
-    """
-
-    def __call__(self, now: datetime) -> TrialInputs: ...
-
-
-def trial_source_of(request: Request) -> TrialSource | None:
-    """The trial gatherer this process was built with, or None.
-
-    `getattr` rather than attribute access, in the shape `brain.routing_routes.sessions_of`
-    uses and for its reason: a test may construct a bare application to exercise one route, and
-    an `AttributeError` there reaches a caller as a 500 that reads like a bug in the gate
-    rather than like a process built without a gatherer.
-
-    A `cast` after a `callable` check rather than an `isinstance` against the protocol, and the
-    reason is `brain.install_routes.backup_objects_of`'s: a runtime-checkable protocol whose
-    only member is `__call__` admits every function in the process, so the check would read as
-    structural and be a callable check with more words. The attribute's name discriminates and
-    this comment is the proof the structural match was not made rather than being assumed.
-    """
-    found = getattr(request.app.state, "staff_trial_source", None)
-    return cast(TrialSource, found) if callable(found) else None
 
 
 # ------------------------------------------------------------------------ the shapes
@@ -510,8 +430,8 @@ class TrialView(BaseModel):
     Exactly one of the two is set, refused here rather than left to whatever draws it, which is
     `brain.install_routes.RecoveryView`'s construction and for the same argument: a trial
     assembled from no roster would report that every person in the company would be added,
-    which is an alarming statement about a directory nobody read. See
-    `NOTHING_HERE_READS_A_LIVE_STAFF_SOURCE`.
+    which is an alarming statement about a directory nobody read. The first-run wizard's trial
+    (`brain.setup_staff_routes`) answers in this shape; the console's is `StaffTrialView`.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -528,11 +448,25 @@ class TrialView(BaseModel):
             msg = (
                 "a trial response carries a run or the reason there is none, and never both "
                 "and never neither: both is a plan beside a refusal, and neither is a reader "
-                "looking for a setting that would not have helped. "
-                f"{NOTHING_HERE_READS_A_LIVE_STAFF_SOURCE}"
+                "looking for a setting that would not have helped"
             )
             raise ValueError(msg)
         return self
+
+
+class StaffTrialView(BaseModel):
+    """Whether a trial read asked for on this screen is still waiting for the worker.
+
+    The read's result is not here: it is a run row with outcome `tried`, under `/runs`, beside
+    every other read of the source. `requested_at` is when the newest request was made, and null
+    when none is live.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    requested_at: datetime | None
+    waiting: bool
+    told: str
 
 
 # ---------------------------------------------------------------- the projections
@@ -646,49 +580,66 @@ async def staff_sources(asked: Asked) -> StaffSourcesView:
     )
 
 
-@router.get(f"{SCREEN_PATH}/trial", response_model=TrialView, responses=COMMON_RESPONSES)
-async def staff_source_trial(request: Request, asked: Asked) -> TrialView:
-    """Read the chosen source once, change nothing, and say what a run would change.
+#: What a trial is refused with when the chosen source cannot be read by the worker.
+NOTHING_TO_TRY: Final = (
+    "No staff list is chosen, so there is nothing to read. Connect a source first."
+)
+NOT_READ_BY_THE_WORKER: Final = (
+    "A hand-kept spreadsheet is read when somebody uploads it, so the worker has nothing to read."
+)
 
-    **The reader is asked before anything is gathered, and the order is the property.**
-    `may_trial` is `staff_source_view`'s own decision about `TRIAL_READ`, asked here so that a
-    caller who reaches nothing cannot decide when this install contacts a company's directory.
-    `trial` asks the same question again, with the same function, on the same read: this is that
-    refusal moved one step earlier than the work rather than a second copy of it.
 
-    **A reader who may not reach the trial is answered exactly what an install with no gatherer
-    is answered.** One sentence, one shape, and nothing on the response that differs between
-    them. The alternative is a refusal for the first and a sentence for the second, which is the
-    difference between DENIED and ABSENT rendered as two status codes.
+def _trial_not_answerable() -> Absent:
+    return Absent("a trial read is not answerable for this caller")
 
-    **Nothing writes.** `trial` calls `roster_from`, which calls the source, and hands what
-    comes back to `dry_run`, which computes a diff by calling `reconcile` and stores nothing.
-    See `NOTHING_HERE_APPLIES_A_PLAN` for why there is no route that would.
+
+@router.get(f"{SCREEN_PATH}/trial", response_model=StaffTrialView, responses=COMMON_RESPONSES)
+async def staff_source_trial(request: Request, asked: Asked) -> StaffTrialView:
+    """Whether a trial read asked for is still waiting for the worker. Reads, and asks nothing.
+
+    **A reader who may not run a trial is answered what an install nobody asked is answered**:
+    nothing waiting, one shape. `may_trial` is `staff_source_view`'s own decision about
+    `TRIAL_READ`, asked before the database is touched, and a refusal here would tell a reader
+    apart from one who may.
+    """
+    factory = sessions_of(request)
+    if not may_trial(asked.reach, asked.now) or factory is None:
+        return StaffTrialView(requested_at=None, waiting=False, told=NO_TRIAL)
+    async with factory() as session, session.begin():
+        requested = await trial_requested(session)
+        started = await read_last_started(session) if requested is not None else None
+    if not trial_waiting(requested, started, now=asked.now):
+        return StaffTrialView(requested_at=None, waiting=False, told=NO_TRIAL)
+    return StaffTrialView(requested_at=requested, waiting=True, told=TRIAL_WAITING)
+
+
+@router.post(f"{SCREEN_PATH}/trial", response_model=StaffTrialView, responses=COMMON_RESPONSES)
+async def ask_staff_source_trial(request: Request, asked: Asked) -> JSONResponse:
+    """Ask the worker to read the chosen source now, as the night's run would, applying nothing.
+
+    Refused before anything is written for a reader who may not run a trial, the refusal the
+    other acts here raise, and in words for a source the worker cannot read. The request is
+    written attributed, so `0059`'s trigger puts who pressed it on the ledger. See
+    `A_TRIAL_IS_ASKED_OF_THE_WORKER`.
     """
     if not may_trial(asked.reach, asked.now):
-        log.info("staff source trial not answerable", principal=asked.caller.principal.id)
-        return TrialView(unread=NOTHING_HERE_READS_A_LIVE_STAFF_SOURCE)
-
-    gather = trial_source_of(request)
-    if gather is None:
-        return TrialView(unread=NOTHING_HERE_READS_A_LIVE_STAFF_SOURCE)
-
-    ready = gather(asked.now)
-    found = trial(
-        ready.source,
-        asked.reach,
-        asked.now,
-        known=ready.known,
-        last_applied=ready.last_applied,
-        rules=ready.rules,
-        held=ready.held,
-    )
-    if found is None:
-        # Unreachable through `may_trial` above and kept, because the two are the same question
-        # asked by the same function and a refactor that changed one of them would otherwise
-        # return a `TrialView` with neither half set, which the model refuses as a 500.
-        return TrialView(unread=NOTHING_HERE_READS_A_LIVE_STAFF_SOURCE)
-    return TrialView(trial=run_view(found))
+        raise _trial_not_answerable()
+    chosen = selection(asked.reach, asked.now)
+    if chosen is None or not chosen.reads_a_list:
+        return _refused(NOTHING_TO_TRY)
+    if not chosen.ready:
+        return _refused(chosen.refusal)
+    if chosen.name not in READERS:
+        return _refused(NOT_READ_BY_THE_WORKER)
+    factory = sessions_of(request)
+    if factory is None:
+        raise Failed("no database on this process")
+    async with factory() as session, session.begin():
+        await attribute(session, asked)
+        await request_trial(session, at=asked.now, by=asked.caller.principal.id)
+    log.info("staff source trial asked", source=chosen.name, principal=asked.caller.principal.id)
+    view = StaffTrialView(requested_at=asked.now, waiting=True, told=TRIAL_WAITING)
+    return JSONResponse(status_code=200, content=view.model_dump(mode="json"))
 
 
 #: What a caller may ask of this screen, named so a test can hold the two addresses to the
@@ -731,7 +682,8 @@ THE_STAFF_SOURCE_CREDENTIAL_IS_A_CREDENTIAL: Final = (
 CREDENTIAL_FORMS: Final[Mapping[str, str]] = {
     "lark": (
         "The custom app's App ID, a colon, then its App Secret. The app needs the contact "
-        "permissions to read users and departments, published."
+        "permissions to read users and departments, including contact:department.base:readonly "
+        "for department names, released in a version."
     ),
     "microsoft_entra": (
         "The application's client ID, a colon, then a client secret. Give it the application "
@@ -760,6 +712,9 @@ class StaffSyncRunView(BaseModel):
     marked_left: list[str]
     renamed: list[str]
     withheld: list[str]
+    #: What the run read, one sentence each: departments read and named, people read and placed,
+    #: why anybody is in no department and what to change at the source. Counts, never a name.
+    report: list[str]
     #: True for every outcome but applied and unchanged: the run wrote no member.
     changed_nobody: bool
 
@@ -836,6 +791,7 @@ def run_record_view(one: RunRecord) -> StaffSyncRunView:
         marked_left=list(one.marked_left),
         renamed=list(one.renamed),
         withheld=list(one.withheld),
+        report=list(one.report),
         changed_nobody=one.outcome not in APPLIED_OUTCOMES,
     )
 

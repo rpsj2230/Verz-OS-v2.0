@@ -8,13 +8,25 @@
  * drawer. Every act that changes something is confirmed through the kit's `ConfirmDialog`, and after
  * every write the page reads everything again rather than patching what it drew.
  *
+ * **Try a read asks the worker, and its answer is a run.** Since 2026-09-29 the button posts to the
+ * trial's address, the worker reads the source with the credential the night's run uses and applies
+ * nothing, and what it read arrives under Recent sync runs as a trial read. Until then the button
+ * showed "This install cannot try your staff source yet. Nothing here fetches a list", which had not
+ * been true since the nightly sync began reading one. The page asks whether the read is still
+ * waiting every few seconds, a bounded number of times, and reads the runs again when it is not.
+ *
+ * **Each run says what it read, in counts**: departments read and named, people read and placed,
+ * why anybody is in no department and what to change at the source. On 2026-09-29 a Lark sync placed
+ * 123 people nowhere and its row said "applied". These are the one figures on this screen and they
+ * are not a count of anything a reader was not shown: a run is answered whole or not at all.
+ *
  * A reader who reaches no source and an install with none are one answer from the API and are drawn
  * alike, and nothing here counts rows the reader may not see. Identifiers are in `Advanced` only.
  *
  * Task ids: M1.6.12, M1.8.6, M1.8.9, M27.7.2, M27.16.1
  */
 
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { request } from "../../api/client";
 import type { ApiFailure } from "../../api/errors";
 import { useResource } from "../../api/useResource";
@@ -41,18 +53,17 @@ import {
   readRuns,
   readStaffSources,
   readTransfers,
-  readTrial,
+  readStaffTrial,
   RUNS_API_PATH,
   STAFF_SOURCES_API_PATH,
   STAFF_SOURCES_LABEL,
   TRANSFERS_API_PATH,
   TRIAL_API_PATH,
-  wasRead,
+  TRIAL_POLL_MS,
+  TRIAL_POLLS,
+  TRIED,
   type Guides,
-  type Read,
   type SyncRun,
-  type TrialAnswer,
-  type TrialRun,
 } from "../staffSourcesQuery";
 import { ConnectDrawer } from "./ConnectDrawer";
 import { Names, Problem } from "./parts";
@@ -87,15 +98,11 @@ export const SOURCE_LABEL = "Source";
 export const MEANING_LABEL = "What it means";
 export const NO_SOURCE = "No staff source to show.";
 export const TRY_A_READ = "Try a read";
-export const READING = "Reading the source.";
-export const CHANGES_NOTHING = "A run would change nothing.";
-export const WOULD_ADD_LABEL = "People a run would add";
-export const ABSENT_LABEL = "People the source did not list";
-export const WOULD_REMOVE_LABEL = "People a run would remove";
-export const WOULD_DEACTIVATE_LABEL = "People the source says have left";
-export const WITHHELD_LABEL = "Why fewer people would be removed";
-export const REFUSALS_LABEL = "What a run would refuse";
-export const GAPS_LABEL = "What is wrong with this source";
+export const ASKING = "Asking the worker to read the source.";
+export const TRIAL_READ =
+  "The worker has read your staff source and changed nobody. What it read is the newest trial read under Recent sync runs.";
+export const TRIAL_NOT_YET =
+  "The worker has not read the source yet. When it does, what it read appears under Recent sync runs as a trial read.";
 
 export const RUNS_HEADING = "Recent sync runs";
 export const RUNS_LEDE = "What each scheduled run changed. Somebody who leaves is marked, never deleted.";
@@ -105,93 +112,105 @@ export const RUN_ADDED_LABEL = "Added";
 export const RUN_MARKED_LEFT_LABEL = "Marked as having left";
 export const RUN_RENAMED_LABEL = "Address moved";
 export const RUN_WITHHELD_LABEL = "Held back";
+export const RUN_REPORT_LABEL = "What was read";
 
 export const ADVANCED_SOURCE = "Source key";
 export const ADVANCED_NEEDS = "Settings it needs";
 export const ADVANCED_UNSET = "Settings still to set";
 export const ADVANCED_SLOT = "Credential slot";
 export const ADVANCED_AGENTS = "Agents waiting";
-export const ADVANCED_ROLES = "Roles the last trial read proposed";
 
-/** The trial: asked for when somebody presses the button, and never with the page. */
-function useTrial(): {
-  readonly busy: boolean;
+/** Where a trial stands on this page: never asked, being asked, waiting for the worker, or read. */
+type TrialState =
+  | { readonly kind: "idle" }
+  | { readonly kind: "asking" }
+  | { readonly kind: "waiting"; readonly told: string; readonly polls: number }
+  | { readonly kind: "read" }
+  | { readonly kind: "not_yet" };
+
+/**
+ * The trial: asked for when somebody presses the button, and never with the page. While the worker
+ * has not read, the page asks the trial's address whether it still waits, every `TRIAL_POLL_MS`, at
+ * most `TRIAL_POLLS` times, and calls `onRead` once it does not so the runs are read again.
+ */
+function useTrial(onRead: () => void): {
+  readonly state: TrialState;
   readonly failure: ApiFailure | null;
-  readonly read: Read<TrialRun> | null;
   readonly run: () => void;
 } {
-  const [read, setRead] = useState<Read<TrialRun> | null>(null);
+  const [state, setState] = useState<TrialState>({ kind: "idle" });
   const [failure, setFailure] = useState<ApiFailure | null>(null);
-  const [busy, setBusy] = useState(false);
   const run = useCallback(() => {
-    setBusy(true);
+    setState({ kind: "asking" });
     void (async () => {
-      const result = await request<TrialAnswer>(TRIAL_API_PATH);
-      setBusy(false);
+      const result = await request<unknown>(TRIAL_API_PATH, { method: "POST", body: {} });
       if (!result.ok) {
         setFailure(result.failure);
+        setState({ kind: "idle" });
         return;
       }
       setFailure(null);
-      setRead(readTrial(result.data));
+      const asked = readStaffTrial(result.data);
+      setState({ kind: "waiting", told: asked.told, polls: 0 });
     })();
   }, []);
-  return { busy, failure, read, run };
+  const polls = state.kind === "waiting" ? state.polls : -1;
+  const told = state.kind === "waiting" ? state.told : "";
+  useEffect(() => {
+    if (polls < 0) {
+      return undefined;
+    }
+    if (polls >= TRIAL_POLLS) {
+      setState({ kind: "not_yet" });
+      return undefined;
+    }
+    const timer = setTimeout(() => {
+      void (async () => {
+        const result = await request<unknown>(TRIAL_API_PATH);
+        if (result.ok && !readStaffTrial(result.data).waiting) {
+          setState({ kind: "read" });
+          onRead();
+          return;
+        }
+        setState({ kind: "waiting", told, polls: polls + 1 });
+      })();
+    }, TRIAL_POLL_MS);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [polls, told, onRead]);
+  return { state, failure, run };
 }
 
-/** What a trial read: a plan as lists of people, or why there is none. */
-function TrialResult({ trial }: { readonly trial: ReturnType<typeof useTrial> }) {
-  if (trial.busy) {
-    return (
-      <p role="status" className="m-0 text-[12.5px] text-dim">
-        {READING}
-      </p>
-    );
-  }
+/** Where the trial stands, in words. What it read is a run, drawn with the others. */
+function TrialStatus({ trial }: { readonly trial: ReturnType<typeof useTrial> }) {
   if (trial.failure !== null) {
     return <FailureNotice failure={trial.failure} />;
   }
-  if (trial.read === null) {
-    return null;
+  switch (trial.state.kind) {
+    case "asking":
+      return (
+        <p role="status" className="m-0 text-[12.5px] text-dim">
+          {ASKING}
+        </p>
+      );
+    case "waiting":
+      return (
+        <div role="status">
+          <Note>{trial.state.told}</Note>
+        </div>
+      );
+    case "read":
+      return (
+        <div role="status">
+          <Note kind="done">{TRIAL_READ}</Note>
+        </div>
+      );
+    case "not_yet":
+      return <Note>{TRIAL_NOT_YET}</Note>;
+    default:
+      return null;
   }
-  if (!wasRead(trial.read)) {
-    return <Note>{trial.read.unread}</Note>;
-  }
-  const plan = trial.read.panel.plan;
-  if (plan === null || plan === undefined) {
-    return (
-      <div className="flex min-w-0 flex-col gap-1.5">
-        {trial.read.panel.refusals.map((why) => (
-          <Problem key={why}>{why}</Problem>
-        ))}
-      </div>
-    );
-  }
-  return (
-    <div className="flex min-w-0 flex-col gap-3">
-      {plan.changes_nothing ? <Note>{CHANGES_NOTHING}</Note> : null}
-      <Names label={REFUSALS_LABEL} names={plan.refusals} />
-      <Names label={GAPS_LABEL} names={plan.gaps} />
-      <Names
-        label={WOULD_ADD_LABEL}
-        names={plan.would_add.map((person) => (
-          <span key={person.work_address} className="inline-flex min-w-0 flex-wrap items-center gap-1.5">
-            <span>{person.display_name}</span>
-            <span className="text-dim">{person.work_address}</span>
-            {[person.department, ...person.groups]
-              .filter((one) => one !== "")
-              .map((one) => (
-                <Chip key={one}>{one}</Chip>
-              ))}
-          </span>
-        ))}
-      />
-      <Names label={ABSENT_LABEL} names={plan.absent} />
-      <Names label={WOULD_REMOVE_LABEL} names={plan.would_remove} />
-      <Names label={WITHHELD_LABEL} names={plan.withheld} />
-      <Names label={WOULD_DEACTIVATE_LABEL} names={plan.would_deactivate} />
-    </div>
-  );
 }
 
 /** One scheduled run: when, what came of it, the API's sentence, and who it changed by name. */
@@ -207,6 +226,8 @@ function Run({ run, guides }: { readonly run: SyncRun; readonly guides: Guides |
       </div>
       {run.detail === "" ? null : <p className="m-0 text-[12.5px] leading-snug text-dim">{run.detail}</p>}
       {run.changed_nobody ? <Note>{CHANGED_NOBODY}</Note> : null}
+      {/* An API from before `0155` sends no report, which is drawn as nothing. */}
+      <Names label={RUN_REPORT_LABEL} names={run.report ?? []} />
       <Names label={RUN_ADDED_LABEL} names={run.added} />
       <Names label={RUN_MARKED_LEFT_LABEL} names={run.marked_left} />
       <Names label={RUN_RENAMED_LABEL} names={run.renamed} />
@@ -224,30 +245,29 @@ export function StaffSourcesPage() {
   const credentialAnswer = useResource<unknown>(CREDENTIAL_API_PATH, version);
   const transfersAnswer = useResource<unknown>(TRANSFERS_API_PATH, version);
   const guides = readGuides(useResource<unknown>(GUIDES_API_PATH).data);
-  const trial = useTrial();
 
   // After every write: say what the API said, and read everything again.
   const done = useCallback((sentence: string) => {
     setTold(sentence);
     setVersion((one) => one + 1);
   }, []);
+  // After the worker has read a trial: read everything again, so the trial's run is drawn.
+  const reread = useCallback(() => {
+    setVersion((one) => one + 1);
+  }, []);
+  const trial = useTrial(reread);
 
   const body = readStaffSources(page.data);
   const selection = body.selection ?? null;
   const chosen = body.options.find((one) => one.chosen);
   const runs = readRuns(runsAnswer.data);
-  const last = runs[0];
+  // A trial read is not a sync, so the status's last sync is the newest run that was one.
+  const last = runs.find((one) => one.outcome !== TRIED);
   // Left out for a reader the API does not answer, whatever the reason.
   const credential = readCredential(credentialAnswer.data);
   const waiting = readTransfers(transfersAnswer.data);
   const title = selection === null ? NONE_CHOSEN : sourceTitle(selection.name, guides);
-  const trialRun = trial.read !== null && wasRead(trial.read) ? trial.read.panel : null;
-  const roles = [
-    ...(trialRun?.plan?.role_grants_to_add ?? []).map((one) => `Add ${one.role} to ${one.principal_id}, from ${one.source_group}`),
-    ...(trialRun?.plan?.role_grants_to_remove ?? []).map(
-      (one) => `Remove ${one.role} from ${one.principal_id}, from ${one.source_group}`,
-    ),
-  ];
+  const pending = trial.state.kind === "asking" || trial.state.kind === "waiting";
 
   let content: ReactNode;
   if (page.failure !== null) {
@@ -290,7 +310,7 @@ export function StaffSourcesPage() {
               variant="outline"
               size="sm"
               className="min-h-11 sm:min-h-8"
-              disabled={trial.busy}
+              disabled={pending}
               onClick={trial.run}
             >
               {TRY_A_READ}
@@ -309,7 +329,7 @@ export function StaffSourcesPage() {
             {selection === null || selection.ready || selection.refusal === "" ? null : (
               <Problem>{selection.refusal}</Problem>
             )}
-            <TrialResult trial={trial} />
+            <TrialStatus trial={trial} />
           </div>
         </SectionCard>
 
@@ -375,11 +395,6 @@ export function StaffSourcesPage() {
                   label={ADVANCED_AGENTS}
                   names={waiting.map((one) => `${one.display_name}: ${one.agent_id}, owned by ${one.owner_id}`)}
                 />
-              </Fact>
-            )}
-            {roles.length === 0 ? null : (
-              <Fact label={ADVANCED_ROLES}>
-                <Names label={ADVANCED_ROLES} names={roles} />
               </Fact>
             )}
           </FactList>

@@ -17,7 +17,10 @@
  * are created, renamed and retired on the Scopes tab of Roles and permissions, and listed on each
  * department's page), the four paragraphs about who may change what, and the crumb spelled as text.
  *
- * Task ids: M27.11.1, M27.15.22, M27.16.1
+ * **The departments a staff source names are offered above the list** (M27.7.4, since 2026-09-29), to
+ * the same readers who may create a department, as one confirmed act: see `SourceDepartments.tsx`.
+ *
+ * Task ids: M27.11.1, M27.15.22, M27.16.1, M27.7.4
  */
 
 import { Building2, MoreHorizontal, Plus } from "lucide-react";
@@ -41,6 +44,7 @@ import {
   readOrganisation,
   type DepartmentRow,
 } from "./departmentsQuery";
+import { SourceDepartments } from "./SourceDepartments";
 import { NewDepartmentDrawer, RenameDrawer, RetireDialog, type Target } from "./StructureDrawers";
 
 export const DEPARTMENTS_HEADING = "Departments and teams";
@@ -48,7 +52,7 @@ export const DEPARTMENTS_LEDE = "Every department you may see, who leads it and 
 export const LOADING_DEPARTMENTS = "Loading departments.";
 export const NO_DEPARTMENTS = "No departments to show";
 export const NO_DEPARTMENTS_DESCRIPTION =
-  "A department appears here once somebody who governs the whole company creates it here, or the staff source's organisation plan is applied.";
+  "A department appears here once somebody who governs the whole company creates it here, one at a time or from the names your staff source uses.";
 export const DEPARTMENTS_LIST_LABEL = "Departments you may see";
 export const FILTERS_LABEL = "Narrow the departments";
 export const SEARCH_HINT = "Search departments, teams or people";
@@ -180,6 +184,7 @@ export function DepartmentsPage() {
             </Button>
           ) : undefined
         }
+        notice={organisation.mayFound ? <SourceDepartments version={version} onWritten={written} /> : undefined}
         listing={listing}
         rows={rows}
         filtersLabel={FILTERS_LABEL}

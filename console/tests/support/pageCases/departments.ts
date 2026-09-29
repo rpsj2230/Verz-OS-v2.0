@@ -33,7 +33,15 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     address: "/departments",
     signedIn: true,
     drawsValues: true,
-    answers: { "/api/v1/govern/departments": DEPARTMENTS },
+    answers: {
+      "/api/v1/govern/departments": DEPARTMENTS,
+      // The names a staff source uses, one unbroken, offered above the list to a reader who may
+      // create departments; the offer must wrap like every other served sentence.
+      "/api/v1/govern/departments/from-staff-source": {
+        to_found: [{ name: UNBROKEN, slug: "web_development" }],
+        registered: [],
+      },
+    },
   },
   // One department's page at its Overview, and at Scopes, which asks the scopes that name it.
   "/departments/:slug": {
