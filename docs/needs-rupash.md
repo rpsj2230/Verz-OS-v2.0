@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**13 items are open: 132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
+**14 items are open: 133,** Search Console's indexing issues, **132,** connecting the email channel, **130,** whether a staff list anybody with its link can edit makes sign-in accounts, **131,** making staff accounts work on your install, **127 to 129,** things
 for you to do (switch on the Lark chat channel, connect Xero, HubSpot and Freshdesk, and let the
 vault open itself), **119 to 124,** how large an upload may be, memory on your server and what gets
 it first, whose conversations an agent's page lists, where uploaded documents are stored, a task
@@ -11,6 +11,24 @@ checks only you can do on your install; it waits for the Knowledge upload grants
 Each says in plain terms what it is, what I recommend, and every step.
 
 # Open
+
+## 133. Search Console's indexing issues: counts from the sitemaps, not a page-by-page report
+
+**In plain terms:** your task for Search Console (M11.7.2) asks for a site's indexing issues.
+Google's Search Console API has no Page indexing report: the only way to ask about one page is a
+separate inspection call per page, which is slow and rationed. So the connector reports indexing
+issues as the error and warning counts Google gives for each of the site's sitemaps, and the answer
+says that is what it is. Everything else in the task (queries, pages, clicks and impressions, for
+any range you name) is read in full.
+
+**Option A: accept the sitemap counts,** with the answer naming them as sitemap counts.
+**Option B: also inspect named pages on request,** one call per page, only when somebody asks about
+specific pages, slower and within Google's daily allowance.
+
+**My recommendation: A now.** It answers "is anything wrong with indexing" straight away, and B can
+be added the day someone needs page-by-page detail.
+
+**What I need from you:** reply "133: A" or "133: B".
 
 ## 132. Connect the email channel (ready now if your domain is on Cloudflare)
 
