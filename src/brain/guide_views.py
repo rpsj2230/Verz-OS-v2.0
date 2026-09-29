@@ -5,7 +5,7 @@ it, so Connect Lark and every other connector's flow are one schema and the cons
 one component. A field here is a field there and nothing else: the picture stays a description the
 console draws (see `brain.ops.connect_steps.A_PICTURE_IS_AN_OUTLINE_THAT_NAMES_WHERE_TO_PRESS`).
 
-Task ids: M11.9.4, M27.11.9
+Task ids: M11.9.4, M27.11.9, M10.5.6
 """
 
 from __future__ import annotations
@@ -55,6 +55,9 @@ class GuideStepView(BaseModel):
     link_label: str
     #: The values this screen collects, by the names the route that receives them judges.
     asks: list[str]
+    #: A text to paste into the vendor whole, and its button's words; empty when none.
+    copy_text: str = ""
+    copy_label: str = ""
 
 
 def sketch_view(sketch: Sketch) -> SketchView:
@@ -82,4 +85,6 @@ def step_view(step: GuideStep) -> GuideStepView:
         link=step.link,
         link_label=step.link_label,
         asks=list(step.asks),
+        copy_text=step.copy_text,
+        copy_label=step.copy_label,
     )
