@@ -128,6 +128,15 @@ class StoredStewardship:
         async with self._sessions() as session:
             return await steward_in(session)
 
+    async def steward_of(self, connector: str, *, connected_by: str) -> str:
+        """Who stewards this source now. See `source_steward`."""
+        return source_steward(
+            connector,
+            named=await self.named_stewards(),
+            data_steward=await self.data_steward(),
+            connected_by=connected_by,
+        )
+
     async def name(
         self, connector: str, steward_id: str, *, by: str, ent_hash: str, trace_id: str
     ) -> NamedSteward:

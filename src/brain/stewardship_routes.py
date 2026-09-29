@@ -28,6 +28,7 @@ Task ids: M7.7.2
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Final
 
@@ -39,7 +40,7 @@ from brain.agents.creation import AGENT_INSTALL_CAPABILITY
 from brain.agents.lifecycle import AGENT_LIFECYCLE_CAPABILITY
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked, Asking
-from brain.connector_routes import manifest_or_none, records_of, steward_of, stewardship_of
+from brain.connector_routes import manifest_or_none, records_of, stewardship_of
 from brain.connectors.declaration import shipped
 from brain.connectors.registry import INSTALL_AUTHORITY
 from brain.core.entitlement import Capability
@@ -53,9 +54,11 @@ from brain.identity.stewardship import (
     StewardNotice,
     notices_for,
 )
+from brain.knowledge.lifecycle import Authority
 from brain.knowledge.search import KNOWLEDGE_READ, KNOWLEDGE_UPLOAD
 from brain.knowledge_lifecycle_routes import authority_of
 from brain.ops.connector_admin import SOURCE_FIELD
+from brain.ops.connector_store import Connection
 from brain.ops.stewardship_store import StoredStewardship
 from brain.prompt_routes import INSTRUCTIONS_AUTHORITY, agent_scope_row
 from brain.routing_routes import sessions_of
@@ -124,12 +127,19 @@ def _store(request: Request) -> StoredStewardship:
     return found
 
 
-async def stewarded_by(request: Request, asked: Asking) -> tuple[Stewarded, ...]:
-    """Every document, source and agent the caller stewards, as far as their own reach reads it."""
-    me = asked.caller.principal.id
-    store = _store(request)
+async def things_stewarded(
+    store: StoredStewardship,
+    connected: Sequence[Connection],
+    me: str,
+    authority: Authority,
+) -> tuple[Stewarded, ...]:
+    """Every document, source and agent `me` stewards, as far as their own reach reads it.
+
+    Given the store, the live connections and the person's authority rather than the request, so
+    the install acceptance check builds a steward's list with this function and not a copy of it.
+    """
     things: list[Stewarded] = []
-    for item in await store.documents_stewarded(me, await authority_of(request, asked)):
+    for item in await store.documents_stewarded(me, authority):
         row = {
             "document_id": item.item_id,
             "visibility": item.visibility.level.value,
@@ -147,9 +157,8 @@ async def stewarded_by(request: Request, asked: Asking) -> tuple[Stewarded, ...]
                 reached_by=DOCUMENT_REACHED_BY,
             )
         )
-    records = records_of(request)
-    for live in () if records is None else await records.connected():
-        if await steward_of(request, live) != me:
+    for live in connected:
+        if await store.steward_of(live.connector, connected_by=live.connected_by) != me:
             continue
         manifest = manifest_or_none(live)
         declared = () if manifest is None else declared_capabilities(manifest)
@@ -180,6 +189,15 @@ async def stewarded_by(request: Request, asked: Asking) -> tuple[Stewarded, ...]
             )
         )
     return tuple(things)
+
+
+async def stewarded_by(request: Request, asked: Asking) -> tuple[Stewarded, ...]:
+    """What the caller stewards: `things_stewarded` over this process's store and connections."""
+    records = records_of(request)
+    connected = () if records is None else await records.connected()
+    return await things_stewarded(
+        _store(request), connected, asked.caller.principal.id, await authority_of(request, asked)
+    )
 
 
 def notice_view(notice: StewardNotice, names: dict[str, str]) -> SelfGrantNoticeView:

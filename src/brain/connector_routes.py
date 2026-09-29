@@ -114,6 +114,7 @@ import structlog
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.agent_routes import (
     _tool_registry,
@@ -232,7 +233,7 @@ from brain.ops.credentials import (
     connector_key_slot,
 )
 from brain.ops.lark_connect import uses_switched_on
-from brain.ops.stewardship_store import NamedSteward, StoredStewardship, source_steward
+from brain.ops.stewardship_store import NamedSteward, StoredStewardship
 from brain.routing_routes import sessions_of
 from brain.skill_routes import SkillLibrary
 
@@ -1516,22 +1517,20 @@ async def steward_of(request: Request, live: Connection) -> str:
     store = stewardship_of(request)
     if store is None:
         return live.connected_by
-    return source_steward(
-        live.connector,
-        named=await store.named_stewards(),
-        data_steward=await store.data_steward(),
-        connected_by=live.connected_by,
-    )
+    return await store.steward_of(live.connector, connected_by=live.connected_by)
 
 
-async def may_steward(request: Request, principal_id: str, live: Connection, now: datetime) -> bool:
+async def may_steward(
+    sessions: async_sessionmaker[AsyncSession], principal_id: str, live: Connection, now: datetime
+) -> bool:
     """Whether this person may steward this source. See
-    `A_STEWARD_IS_SOMEBODY_WHO_CAN_REACH_THE_SOURCE`."""
+    `A_STEWARD_IS_SOMEBODY_WHO_CAN_REACH_THE_SOURCE`.
+
+    Given the sessions rather than the request, so the install acceptance check asks the route's
+    own question rather than a copy of it.
+    """
     from brain.knowledge_lifecycle_routes import entitlement_of
 
-    sessions = sessions_of(request)
-    if sessions is None:
-        raise Failed("no database on this process")
     if await StoredPrincipals(sessions).live_principal(principal_id) is None:
         return False
     async with sessions() as session, session.begin():
@@ -1565,7 +1564,10 @@ async def name_steward(
         return _problems(
             (SettingProblem(field="steward_id", code="unchanged", message=ALREADY_STEWARD),)
         )
-    if not await may_steward(request, body.steward_id, live, asked.now):
+    sessions = sessions_of(request)
+    if sessions is None:
+        raise Failed("no database on this process")
+    if not await may_steward(sessions, body.steward_id, live, asked.now):
         return _problems(
             (SettingProblem(field="steward_id", code="not_a_steward", message=STEWARD_REFUSED),)
         )

@@ -31,6 +31,19 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         truncated: true,
         people: { [UNBROKEN]: UNBROKEN },
       },
+      "/api/v1/stewardship/self-grants": {
+        items: [
+          {
+            at: "2019-03-04T09:00:00Z",
+            person_id: UNBROKEN,
+            person_name: UNBROKEN,
+            pack: UNBROKEN,
+            capabilities: [UNBROKEN],
+            reached: [{ kind: "source", object_id: UNBROKEN, label: UNBROKEN }],
+          },
+        ],
+        told: UNBROKEN,
+      },
     },
   },
 };

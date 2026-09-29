@@ -1,9 +1,9 @@
 ### People, roles, permissions and access control
 
 - **Screens:** `/people`, `/people/:personId`, `/people/:personId/:view`, `/roles`, `/capabilities`, `/scopes`, `/packs`, `/access_review`, `/access_review/:kind/:rowId`, `/elevation`, `/elevation/:requestId`, `/sessions`, `/sign-in-links`, `/staff_sources`, `/access-requests`, `/service-accounts`, `/service-accounts/:clientId`
-- **Tables:** `auth.principal`, `auth.principal_identity`, `auth.session`, `auth.directory_role_grant`, `gate.capability_grant`, `gate.capability_pack`, `gate.capability_pack_assignment`, `gate.capability_registry`, `gate.scope`, `gate.grants_version`, `gate.policy_epoch`, `gate.review_decision`, `gate.elevation_request`, `auth.staff_member`, `auth.staff_sync_run`, `auth.service_account`, `auth.api_key`, `gate.access_request`, `gate.access_request_handled`, `gate.role_grant`, `auth.group_role_rule`, `gate.break_glass_notice`
+- **Tables:** `auth.principal`, `auth.principal_identity`, `auth.session`, `auth.directory_role_grant`, `gate.capability_grant`, `gate.capability_pack`, `gate.capability_pack_assignment`, `gate.capability_registry`, `gate.scope`, `gate.grants_version`, `gate.policy_epoch`, `gate.review_decision`, `gate.elevation_request`, `auth.staff_member`, `auth.staff_sync_run`, `auth.service_account`, `auth.api_key`, `gate.access_request`, `gate.access_request_handled`, `gate.role_grant`, `auth.group_role_rule`, `gate.break_glass_notice`, `gate.self_grant`, `ops.connector_steward`
 - **Installation values:** `INSTALL_OIDC_ISSUER`, `INSTALL_OIDC_REALM`, `INSTALL_OIDC_CLIENT_ID`, `INSTALL_OIDC_REDIRECT_URIS`, `INSTALL_BROKERED_DIRECTORY`, `INSTALL_STAFF_SOURCE`, `INSTALL_STAFF_SOURCE_LOCATION`, `INSTALL_BROKERED_CLIENT_ID`
-- **Measured here:** 65 routes, 1 called by no screen; 38 write routes, 38 with all three proofs; 6 gaps.
+- **Measured here:** 66 routes, 1 called by no screen; 38 write routes, 38 with all three proofs; 6 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -34,6 +34,7 @@
 | `GET /api/v1/govern/staff_sources/transfers` | `/people/:personId`, `/staff_sources` |
 | `GET /api/v1/govern/staff_sources/trial` | `/staff_sources` |
 | `GET /api/v1/me` | `/` |
+| `GET /api/v1/stewardship/self-grants` | `/access-requests` |
 | `POST /api/v1/access-requests` | `/access-requests` |
 | `POST /api/v1/access-requests/{request_id}/handled` | `/access-requests` |
 | `POST /api/v1/govern/access-review/decision` | `/access_review`, `/access_review/:kind/:rowId`, `/people`, `/people/:personId`, `/people/:personId/:view` |
