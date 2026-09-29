@@ -199,6 +199,7 @@ CHECK_MODULES: Final = (
     "brain.ops.acceptance_ingest",
     "brain.ops.acceptance_threads",
     "brain.ops.acceptance_knowledge",
+    "brain.ops.acceptance_checks_sources",
     "brain.ops.acceptance_checks_automation",
     "brain.ops.acceptance_checks_console_connect",
 )
