@@ -7,7 +7,9 @@
  */
 
 import type { PageRoutes } from "../routes/page";
-import { Audit, AuditSubject, VerifyLedger } from "./Audit";
+import { Audit } from "./Audit";
+import { AuditSubject } from "./Audit";
+import { VerifyLedger } from "./Audit";
 
 export const routes: PageRoutes = [
   { path: "audit", element: <Audit /> },

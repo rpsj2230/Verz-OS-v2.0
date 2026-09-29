@@ -6,7 +6,8 @@
  */
 
 import type { PageRoutes } from "../routes/page";
-import { AccessReview, Holding } from "./AccessReview";
+import { AccessReview } from "./AccessReview";
+import { Holding } from "./AccessReview";
 
 export const routes: PageRoutes = [
   { path: "access_review", element: <AccessReview /> },

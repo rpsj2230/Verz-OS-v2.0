@@ -39,8 +39,10 @@ const BREACH_STEP: Proofs = {
 };
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
-  "src/pages/compliance/ComplianceActs.tsx path": [
+  "src/pages/compliance/ComplianceActs.tsx topicApiPath(topic.topic)": [
     at("PUT /api/v1/govern/compliance/topics/{topic}", "topicApiPath", topicApiPath("grievance")),
+  ],
+  "src/pages/compliance/ComplianceActs.tsx path": [
     at("POST /api/v1/govern/compliance/breaches", "BREACHES_API_PATH", BREACHES_API_PATH),
     at(
       "POST /api/v1/govern/compliance/breaches/{case_id}/assessment",

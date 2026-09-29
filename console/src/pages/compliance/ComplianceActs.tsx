@@ -90,19 +90,15 @@ function stamp(payload: unknown, key: string): string {
   return typeof found === "string" ? found : "";
 }
 
-/** One write in flight and its refusal. `path` and `method` are the write's; the page confirms first. */
+/** One breach write in flight and its refusal. The page confirms before calling `send`. */
 export function useComplianceWrite(onDone: (told: string) => void) {
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
   const send = useCallback(
-    (path: string, method: "POST" | "PUT", body: unknown, told: (payload: unknown) => string, after: () => void) => {
+    (path: string, body: unknown, told: (payload: unknown) => string, after: () => void) => {
       setBusy(true);
       void (async () => {
-        // Each method spelled where it is sent, so the write list read from the source sees both.
-        const result =
-          method === "PUT"
-            ? await request<unknown>(path, { method: "PUT", body })
-            : await request<unknown>(path, { method: "POST", body });
+        const result = await request<unknown>(path, { method: "POST", body });
         setBusy(false);
         after();
         if (!result.ok) {
@@ -246,7 +242,7 @@ export function OpenCaseDrawer({ onClose, onDone }: { readonly onClose: () => vo
         cancelLabel={DO_NOT_OPEN}
         busy={write.busy}
         onConfirm={() => {
-          write.send(BREACHES_API_PATH, "POST", body, () => `A breach case was opened for evidence ${body.evidence_reference}.`, () => {
+          write.send(BREACHES_API_PATH, body, () => `A breach case was opened for evidence ${body.evidence_reference}.`, () => {
             setConfirming(false);
           });
         }}
@@ -263,10 +259,26 @@ export function NameDrawer({ topic, onClose, onDone, people }: { readonly topic:
   const [principalId, setPrincipalId] = useState("");
   const [problems, setProblems] = useState<readonly string[]>([]);
   const [confirming, setConfirming] = useState(false);
-  const write = useComplianceWrite(onDone);
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
   const current = topic.named === null ? null : nameOf(people, topic.named.principal_id);
+  // Its own write rather than the breach one: it is a PUT to the topic, replacing whoever was named.
+  const name = useCallback(() => {
+    setBusy(true);
+    void (async () => {
+      const result = await request<unknown>(topicApiPath(topic.topic), { method: "PUT", body: nameBody({ topic: topic.topic, principalId }) });
+      setBusy(false);
+      setConfirming(false);
+      if (!result.ok) {
+        setFailure(result.failure);
+        return;
+      }
+      setFailure(null);
+      onDone(`Somebody was named for ${topic.label} at ${whenWords(stamp(result.data, "named_at"))}.`);
+    })();
+  }, [onDone, principalId, topic]);
   return (
-    <Frame title={`${NAME_FORM_LABEL}: ${topic.label}`} description="Notes that somebody asked about this topic go to this person, and to nobody else." formId="name-topic" busy={write.busy} cancel={KEEP_NAMED} submit={NAME_LABEL} onClose={onClose}>
+    <Frame title={`${NAME_FORM_LABEL}: ${topic.label}`} description="Notes that somebody asked about this topic go to this person, and to nobody else." formId="name-topic" busy={busy} cancel={KEEP_NAMED} submit={NAME_LABEL} onClose={onClose}>
       <form
         id="name-topic"
         aria-label={NAME_FORM_LABEL}
@@ -277,12 +289,12 @@ export function NameDrawer({ topic, onClose, onDone, people }: { readonly topic:
           const found = nameProblems({ topic: topic.topic, principalId }, [topic.topic]);
           setProblems(found);
           if (found.length === 0) {
-            write.setFailure(null);
+            setFailure(null);
             setConfirming(true);
           }
         }}
       >
-        {write.failure === null ? null : <FailureState failure={write.failure} />}
+        {failure === null ? null : <FailureState failure={failure} />}
         <Field label="Person, by reference" hint={HINTS.principalId}>
           {({ id, describedBy }) => <Input id={id} name="principal_id" autoComplete="off" aria-describedby={describedBy || undefined} value={principalId} onChange={(event) => setPrincipalId(event.target.value)} />}
         </Field>
@@ -294,12 +306,8 @@ export function NameDrawer({ topic, onClose, onDone, people }: { readonly topic:
         consequence={`From now, a note that somebody asked about ${topic.label}, without what they wrote, goes to ${principalId.trim()}${current === null ? "." : `, in place of ${current}.`}`}
         confirmLabel={NAME_LABEL}
         cancelLabel={KEEP_NAMED}
-        busy={write.busy}
-        onConfirm={() => {
-          write.send(topicApiPath(topic.topic), "PUT", nameBody({ topic: topic.topic, principalId }), (payload) => `Somebody was named for ${topic.label} at ${whenWords(stamp(payload, "named_at"))}.`, () => {
-            setConfirming(false);
-          });
-        }}
+        busy={busy}
+        onConfirm={name}
         onCancel={() => {
           setConfirming(false);
         }}
@@ -410,7 +418,7 @@ export function StepDrawer({ one, step, onClose, onDone }: { readonly one: Breac
         cancelLabel={DO_NOT_RECORD}
         busy={write.busy}
         onConfirm={() => {
-          write.send(breachStepApiPath(one.case_id, step), "POST", body, () => `Breach case ${name}: ${STEP_LABELS[step].toLowerCase()}, done.`, () => {
+          write.send(breachStepApiPath(one.case_id, step), body, () => `Breach case ${name}: ${STEP_LABELS[step].toLowerCase()}, done.`, () => {
             setConfirming(false);
           });
         }}
@@ -437,7 +445,7 @@ export function useClose(one: Breach, onDone: (told: string) => void): { readonl
         cancelLabel={KEEP_OPEN}
         busy={write.busy}
         onConfirm={() => {
-          write.send(breachStepApiPath(one.case_id, "close"), "POST", undefined, () => `Breach case ${one.evidence_reference} is closed.`, () => {
+          write.send(breachStepApiPath(one.case_id, "close"), undefined, () => `Breach case ${one.evidence_reference} is closed.`, () => {
             setConfirming(false);
           });
         }}

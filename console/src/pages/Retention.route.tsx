@@ -6,7 +6,9 @@
  */
 
 import type { PageRoutes } from "../routes/page";
-import { ErasureRequest, LegalHold, Retention } from "./Retention";
+import { ErasureRequest } from "./Retention";
+import { LegalHold } from "./Retention";
+import { Retention } from "./Retention";
 
 export const routes: PageRoutes = [
   { path: "retention", element: <Retention /> },

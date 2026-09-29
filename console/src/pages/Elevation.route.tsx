@@ -5,7 +5,8 @@
  */
 
 import type { PageRoutes } from "../routes/page";
-import { Elevation, ElevationRequest } from "./Elevation";
+import { Elevation } from "./Elevation";
+import { ElevationRequest } from "./Elevation";
 
 export const routes: PageRoutes = [
   { path: "elevation", element: <Elevation /> },

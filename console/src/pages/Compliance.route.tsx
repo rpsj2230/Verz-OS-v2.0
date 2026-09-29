@@ -6,7 +6,8 @@
  */
 
 import type { PageRoutes } from "../routes/page";
-import { BreachCase, Compliance } from "./Compliance";
+import { BreachCase } from "./Compliance";
+import { Compliance } from "./Compliance";
 
 export const routes: PageRoutes = [
   { path: "compliance", element: <Compliance /> },
