@@ -152,10 +152,17 @@ chooses its own in the same place.
 
 **What you do:**
 
-1. In Lark, create a group chat with just you in it, for example "Brain daily".
-2. Open the group's settings, choose **Bots**, then **Add bot**, and pick the Brain's Lark app (the
-   same app you connected as the staff source).
-3. When the digest is built I tell you, and you choose that group under **Send the evening digest
+1. **Switch on the Lark app's chat channel first**, or the app does not appear under Add bot (you
+   found this on 2026-09-30: the app was set up for the staff list only). In the console open
+   **Connectors**, press **Manage Lark** on the Lark card, then **Add a use to Lark**, tick **Chat
+   channel**, and follow its screens: turn on the app's **Bot** feature in Lark, batch-import the
+   permissions, paste the **Encrypt Key** and **Verification Token** and save, point Lark's
+   **Request URL** at the address the console shows and add the **Message received** event,
+   release a new version and have it approved, then **Test connection** and **Save and switch on**.
+   This also lets linked people ask the Brain in Lark.
+2. In Lark, create a group chat with just you in it, for example "Brain daily".
+3. Open the group's settings, choose **Bots**, then **Add bot**, and pick the Brain's Lark app.
+4. When the digest is built I tell you, and you choose that group under **Send the evening digest
    to** in the console. Nothing to reply with now.
 
 ## 126. Every service connectable from the console, one at a time - DECIDED 2026-09-30
