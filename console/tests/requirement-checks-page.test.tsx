@@ -170,10 +170,10 @@ describe("the requirement checks screen", () => {
 
 describe("the audit screen's verification card", () => {
   async function auditPage(sent: Sent[], verification: unknown): Promise<HTMLElement> {
-    const { Audit } = await import("../src/pages/Audit");
+    const { VerifyLedger } = await import("../src/pages/Audit");
     return mount(
-      "/audit",
-      <Audit />,
+      "/audit/verify",
+      <VerifyLedger />,
       (url) => {
         if (url.pathname === VERIFY) {
           return json(verification);

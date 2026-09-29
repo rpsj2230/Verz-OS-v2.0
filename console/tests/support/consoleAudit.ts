@@ -640,7 +640,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "The audit trail: who changed what, and when": {
-    screens: ["/audit", "/requirement-checks"],
+    screens: ["/audit", "/audit/verify", "/audit/subject/:kind/:id", "/audit/subject/:kind/:id/:view", "/requirement-checks"],
     routes: ["/api/v1/audit*", "/api/v1/requirements/checks"],
     tables: ["obs.audit_entry", "ops.sensitive_read", "ops.requirement_check"],
     installation: [],

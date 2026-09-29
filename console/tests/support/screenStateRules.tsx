@@ -55,6 +55,9 @@ export const ASKS_NOTHING_ON_ARRIVAL: Readonly<Record<string, string>> = {
   "/classification":
     "The bare address is a form that names a document and opens /classification/:entity, which " +
     "asks and is held here.",
+  "/audit/verify":
+    "Verifying the ledger asks nothing until somebody walks it; what the walk says when it is refused " +
+    "or cannot reach the API is held in tests/requirement-checks-page.test.tsx.",
   "/memory":
     "The bare address is a form that names a person and opens /memory/:subject, which asks and is " +
     "held here.",

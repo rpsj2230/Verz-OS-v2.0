@@ -142,7 +142,12 @@ export function periodSince(period: Period, now: Date): Date | null {
  * Only parameters `GET /api/v1/audit` declares, which the test reads out of the API's document.
  * `since` is sent with its offset, because the route refuses a naive instant.
  */
-export function auditApiPath(filters: AuditFilters, now: Date, cursor: string | null): string {
+export function auditApiPath(
+  filters: AuditFilters,
+  now: Date,
+  cursor: string | null,
+  subject: { readonly kind: string; readonly id: string } | null = null,
+): string {
   const query = new URLSearchParams();
   query.set("limit", String(AUDIT_PAGE_SIZE));
   query.set("order", filters.order);
@@ -152,7 +157,10 @@ export function auditApiPath(filters: AuditFilters, now: Date, cursor: string | 
   if (filters.action !== "") {
     query.set("action", filters.action);
   }
-  if (filters.kind !== "") {
+  if (subject !== null) {
+    query.set("subject_kind", subject.kind);
+    query.set("subject_id", subject.id);
+  } else if (filters.kind !== "") {
     query.set("subject_kind", filters.kind);
   }
   if (filters.actor !== "") {
@@ -195,6 +203,8 @@ export interface LedgerPage {
   readonly actions: readonly string[];
   readonly kinds: readonly string[];
   readonly actors: readonly string[];
+  /** The names of the people on these rows, by principal id, as `brain.people_names` sends them. */
+  readonly people: Readonly<Record<string, string>>;
 }
 
 const NO_PAGE: LedgerPage = Object.freeze({
@@ -203,7 +213,20 @@ const NO_PAGE: LedgerPage = Object.freeze({
   actions: [],
   kinds: [],
   actors: [],
+  people: {},
 });
+
+/** A map of names, keeping only string values, from a body that may not carry one. */
+export function namesIn(value: unknown): Readonly<Record<string, string>> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return {};
+  }
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string",
+    ),
+  );
+}
 
 function strings(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((one): one is string => typeof one === "string") : [];
@@ -225,6 +248,7 @@ export function readLedgerPage(payload: unknown): LedgerPage {
     actions?: unknown;
     subject_kinds?: unknown;
     actors?: unknown;
+    people?: unknown;
   };
   if (!Array.isArray(body.items)) {
     return NO_PAGE;
@@ -235,6 +259,7 @@ export function readLedgerPage(payload: unknown): LedgerPage {
     actions: strings(body.actions),
     kinds: strings(body.subject_kinds),
     actors: strings(body.actors),
+    people: namesIn(body.people),
   };
 }
 
@@ -242,17 +267,19 @@ export function readLedgerPage(payload: unknown): LedgerPage {
 export interface History {
   readonly events: readonly PermissionEvent[];
   readonly full: boolean;
+  readonly people: Readonly<Record<string, string>>;
 }
 
 /** Read `PermissionHistoryView` out of a response body. */
 export function readHistory(payload: unknown): History {
   if (typeof payload !== "object" || payload === null) {
-    return { events: [], full: false };
+    return { events: [], full: false, people: {} };
   }
-  const body = payload as { events?: unknown; full?: unknown };
+  const body = payload as { events?: unknown; full?: unknown; people?: unknown };
   return {
     events: Array.isArray(body.events) ? (body.events as PermissionEvent[]) : [],
     full: body.full === true,
+    people: namesIn(body.people),
   };
 }
 
@@ -359,11 +386,19 @@ export function subjectLabel(kind: string, id: string): string {
   return `${kind} ${id}`;
 }
 
-/** The address that opens one subject's history, keeping the filters already chosen. */
-export function historyAddress(search: URLSearchParams, kind: string, id: string): string {
-  const next = new URLSearchParams(search);
-  next.set(ADDRESS_PARAMETERS.subject, `${kind}:${id}`);
-  return `${AUDIT_PATH}?${next.toString()}`;
+/** The address of one subject's page: every entry about it, and what changed its reach. */
+export function subjectAddress(kind: string, id: string, view?: string): string {
+  const base = `${AUDIT_PATH}/subject/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`;
+  return view === undefined ? base : `${base}/${encodeURIComponent(view)}`;
+}
+
+/**
+ * The address that opens one subject, which was a query parameter of the ledger's own address until
+ * the subject had a page. The search is ignored and kept in the signature for the callers that pass
+ * the ledger's filters; an old link carrying `?subject=` is sent to the page by `AuditPage`.
+ */
+export function historyAddress(_search: URLSearchParams, kind: string, id: string): string {
+  return subjectAddress(kind, id);
 }
 
 /** The address with one filter changed, or removed when the value is empty. */
