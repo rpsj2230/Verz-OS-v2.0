@@ -394,10 +394,10 @@ def test_only_the_step_that_hands_over_the_setup_code_prints_a_value() -> None:
     leaking = [one.name for one in install_plan() if value_leaks_in(one.run)]
 
     assert leaking == ["present the setup code, once"]
-    # The vault's unseal pieces are the second declared exception, and the name check cannot see
-    # them: see `test_deployment_installer.py` and `test_vault_setup.py`.
+    # The vault's recovery pieces, on the stricter choice, are the second declared exception, and
+    # the name check cannot see them: see `test_deployment_installer.py` and `test_vault_setup.py`.
     assert [one.name for one in install_plan() if one.presents_once] == [
-        "initialise the secrets vault and show its unseal pieces, once",
+        "initialise the secrets vault and keep its recovery key",
         *leaking,
     ]
 

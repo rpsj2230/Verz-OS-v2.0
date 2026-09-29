@@ -3870,6 +3870,16 @@
      "why": "engine tests pass for session and transaction pooling; closing needs PgBouncer on the install (M0.3.4)",
      "updated": "2026-09-21"
     },
+    "M31.3.2.1": {
+     "status": "READY FOR TESTING",
+     "why": "the vault opens itself from a root-only seal key and recovery pieces are an install choice (needs-rupash 114); proved when the owner's install is moved with ops/openbao/switch-to-auto-unseal.sh and reopens by itself after a restart",
+     "updated": "2026-09-29"
+    },
+    "M31.3.2.2": {
+     "status": "READY FOR TESTING",
+     "why": "every release applies its own vault policies, engines and roles with a root-only deploy token (needs-rupash 114); proved when the first deploy after the owner's move prints the vault in-force line",
+     "updated": "2026-09-29"
+    },
     "M31.3.2.3": {
      "status": "BLOCKED",
      "why": "live since d6290cb; the proof is one connector sync on the install and none is connected yet: connecting Lark (needs-rupash 91, before you start) proves it",
