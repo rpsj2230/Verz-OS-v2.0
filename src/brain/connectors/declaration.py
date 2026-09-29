@@ -56,10 +56,16 @@ that holds its form, asking for exactly the form's settings and its key, so the 
 form cannot drift apart; a source connected at the server ends with the hand-over and asks for
 nothing. See `A_GUIDE_ENDS_WHERE_THE_SOURCE_IS_CONNECTED`.
 
+**A reading may list one entity under each record of another (M11.7.3).** Cloudflare lists a DNS
+record only under its zone, so its reading says so with `ListedUnder`, the worker reads the entity
+once per parent it kept earlier in the same run, and the index names each record by both ids. The
+capability is optional and asked with `isinstance` (`ReadsListedUnder`), so no other reading
+changes. See `A_RECORD_LISTED_UNDER_ANOTHER_IS_NAMED_BY_BOTH`.
+
 Scope: domain logic. Nothing here opens a connection or reads a table; `shipped` imports the modules
 of one package, and that is all it does.
 
-Task ids: M11.1.1, M11.1.6, M11.9.1, M11.6.2, M11.9.2, M11.2.5, M27.11.9, M11.7.7
+Task ids: M11.1.1, M11.1.6, M11.9.1, M11.6.2, M11.9.2, M11.2.5, M27.11.9, M11.7.7, M11.7.3
 """
 
 from __future__ import annotations
@@ -74,7 +80,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import cache
 from types import MappingProxyType, ModuleType
-from typing import Any, Final, Protocol
+from typing import Any, Final, Protocol, runtime_checkable
 
 import brain.connectors
 from brain.connectors.contract import ConnectorContractError
@@ -329,6 +335,104 @@ class SourceReading(Protocol):
         ...
 
 
+# ---------------------------------------------------------- a record listed under another
+#: Why an entity may be read under each record of another, and is named by both ids.
+A_RECORD_LISTED_UNDER_ANOTHER_IS_NAMED_BY_BOTH: Final = (
+    "Some sources list a record only under another: Cloudflare lists a DNS record under its zone, "
+    "and neither its list nor its one-record call can be reached without the zone's id. So the "
+    "worker reads such an entity once under each record of its parent kept earlier in the same "
+    "run, with the parent's id laid into the path, and the index names the record by both ids, "
+    "the parent's first. A question then reads the record live from its index row alone, and the "
+    "record read live is named the same way, so the one is matched to the other."
+)
+
+#: What joins a parent's id to the record's own in the id the index keeps.
+LISTED_UNDER_SEPARATOR: Final = "/"
+
+
+@dataclass(frozen=True)
+class ListedUnder:
+    """Where one entity's records are listed: under each record of `parent`, by `parameter`.
+
+    See `A_RECORD_LISTED_UNDER_ANOTHER_IS_NAMED_BY_BOTH`. The id both halves agree on is built and
+    taken apart here and nowhere else, so the worker's walk and the live read cannot come to name
+    one record two ways.
+    """
+
+    parent: str
+    #: The path parameter the parent's id is laid into, and the field it is carried in on a row.
+    parameter: str
+
+    def __post_init__(self) -> None:
+        for one in (self.parent, self.parameter):
+            if not _NAME_RE.match(one):
+                msg = f"{one!r} is not a name, and a record listed under another is named by it"
+                raise DeclarationError(msg)
+
+    def source_id(self, parent_id: str, own_id: str) -> str:
+        """The id the index keeps for a record of this entity read under `parent_id`."""
+        for one in (parent_id, own_id):
+            if not one.strip() or LISTED_UNDER_SEPARATOR in one:
+                msg = (
+                    "an id holding nothing or the separator cannot be joined, because the joined "
+                    "id would be taken apart differently. "
+                    f"{A_RECORD_LISTED_UNDER_ANOTHER_IS_NAMED_BY_BOTH}"
+                )
+                raise ConnectorContractError(msg)
+        return f"{parent_id}{LISTED_UNDER_SEPARATOR}{own_id}"
+
+    def split(self, source_id: str) -> tuple[str, str]:
+        """The parent's id and the record's own, from the id the index keeps."""
+        parent_id, joined, own_id = source_id.partition(LISTED_UNDER_SEPARATOR)
+        if not (joined and parent_id.strip() and own_id.strip()) or (
+            LISTED_UNDER_SEPARATOR in own_id
+        ):
+            msg = (
+                f"an id of a {self.parent}'s record names its {self.parent} and itself, and this "
+                "one does not"
+            )
+            raise ConnectorContractError(msg)
+        return parent_id, own_id
+
+    def named(self, rows: TypedResult[SourceRecord], parent_id: str) -> TypedResult[SourceRecord]:
+        """Rows read under `parent_id`, each named by both ids and carrying the parent's id."""
+        return TypedResult[SourceRecord](
+            records=tuple(
+                SourceRecord.model_validate(
+                    {
+                        **one.model_dump(),
+                        "id": self.source_id(parent_id, one.id),
+                        self.parameter: parent_id,
+                    }
+                )
+                for one in rows.records
+            ),
+            source=rows.source,
+            fetched_at=rows.fetched_at,
+            truncated=rows.truncated,
+        )
+
+
+@runtime_checkable
+class ReadsListedUnder(Protocol):
+    """A reading one of whose entities is listed under each record of another.
+
+    Optional, and asked with `isinstance`, so a reading whose every entity is listed on its own
+    says nothing and needs no change.
+    """
+
+    def listed_under(self, entity: str) -> ListedUnder | None:
+        """Where `entity` is listed, or None for an entity listed on its own."""
+        ...
+
+
+def listed_under(reading: object, entity: str) -> ListedUnder | None:
+    """How this reading lists `entity`: under a parent, or on its own (None)."""
+    if isinstance(reading, ReadsListedUnder):
+        return reading.listed_under(entity)
+    return None
+
+
 # ------------------------------------------------------------------ reading one record live
 #: Why a live lookup may name an operation of its own.
 A_RECORD_IS_READ_BY_THE_CALL_THAT_HOLDS_IT: Final = (
@@ -446,6 +550,17 @@ class ConnectorDeclaration:
                 "live is read through the reading's operation and interpretation"
             )
             raise DeclarationError(msg)
+        if self.reading is not None:
+            read = self.reading.entities()
+            for index, entity in enumerate(read):
+                under = listed_under(self.reading, entity)
+                if under is not None and under.parent not in read[:index]:
+                    msg = (
+                        f"connector {self.name!r} lists {entity!r} under {under.parent!r}, which "
+                        "it does not read first, so the walk would have no parent to list it "
+                        f"under. {A_RECORD_LISTED_UNDER_ANOTHER_IS_NAMED_BY_BOTH}"
+                    )
+                    raise DeclarationError(msg)
 
 
 # ------------------------------------------------------------------------ discovery
