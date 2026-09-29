@@ -32,9 +32,20 @@ Xero's `X-DayLimit-Remaining`, is what catches the calls other integrations made
 `brain.ops.webhook_delivery` sends through, for its reason: a name that answered outside to the
 check and inside to the connection is the ordinary way past the rule.
 
-**A page is written when it is read.** Each page's records are upserted in a transaction of their
-own before the next page is asked for, so a run that fails on page four keeps pages one to three,
-with the reading time each was read at.
+**A page is written when it is read, and the read's place moves with it.** Each page's records are
+upserted in a transaction of their own before the next page is asked for, so a run that fails on
+page four keeps pages one to three, with the reading time each was read at, and the attempt's row
+records that page four is where the next attempt starts (`brain.ops.connector_sync.
+A_READ_CUT_SHORT_CARRIES_ON_WHERE_IT_STOPPED`). The first page a read asks is the one
+`brain.ops.connector_sync.next_read` decides: where the last attempt stopped, the source's changes
+since the last complete read, or everything.
+
+**A page that changes what the index says advances the source's epoch in its own transaction**,
+and a complete read of everything retires, in one more, the rows it did not see. The comparison is
+with the live rows the page names, read in the same transaction just before they are written, so
+a page that only confirms them moves no epoch. See
+`brain.ops.connector_sync.A_CHANGED_READ_ADVANCES_ITS_SOURCE_S_EPOCH` and
+`WHAT_A_COMPLETE_READ_OF_EVERYTHING_DID_NOT_RETURN_IS_RETIRED`.
 
 **What is written is the minimal index and nothing else.** Every record passes
 `brain.ops.connector_sync.kept_fields` before its page is written, and the run hands nothing to the
@@ -48,7 +59,7 @@ closures take. It carries no headers and no status, so a key cannot be sent thro
 cannot come back through it as anything but an exception, which is the collapse
 `xero.AN_UNREACHABLE_LEDGER_IS_NOT_AN_EMPTY_ONE` refuses.
 
-Task ids: M42.6.5, M31.3.2.3, M31.3.2.4, M11.9.1, M11.6.2
+Task ids: M42.6.5, M31.3.2.3, M31.3.2.4, M11.9.1, M11.6.2, M11.4.6, M11.4.8, M11.8.4, M11.8.11
 """
 
 from __future__ import annotations
@@ -61,7 +72,7 @@ import ssl
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
-from typing import Any, Final, Protocol
+from typing import TYPE_CHECKING, Any, Final, Protocol, cast
 from urllib.parse import urlsplit
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -92,22 +103,32 @@ from brain.ops.connector_sync import (
     VAULT_REFUSED,
     VAULT_UNREACHABLE,
     Attempt,
+    ReadPass,
+    ReadState,
     SourceReading,
     StoredValue,
     SyncOutcome,
     SyncPlan,
     SyncState,
     after_attempt,
+    after_the_read,
+    changed,
     failure_detail,
     kept_fields,
+    next_read,
+    page_cursor,
+    page_to_ask,
     plan_for,
 )
 from brain.ops.connector_sync_store import (
     LiveConnection,
+    advance_epoch,
     attempt_row,
+    live_fields,
     read_live,
     read_states,
     record_upsert,
+    retire_unseen,
 )
 from brain.ops.credentials import KEY_FIELD
 from brain.ops.leases import SealedSecret
@@ -122,6 +143,9 @@ from brain.ops.openbao import (
 from brain.ops.secrets import SecretRef, SecretsUnavailableError, VaultRole
 from brain.ops.webhook_delivery import HTTPS_PORT, SystemResolver, _PinnedHTTPSConnection
 from brain.tools.fetch import Resolver, UnsafeAddressError
+
+if TYPE_CHECKING:
+    from sqlalchemy.engine import CursorResult
 
 # ------------------------------------------------------------------ written-down reasons
 
@@ -477,9 +501,26 @@ class _Reading:
 
     plan: SyncPlan
     started_at: datetime
+    #: The read this attempt makes or carries on, moved on page by page.
+    read: ReadPass
+    #: Where reading stood before this attempt, from the newest attempt that recorded it.
+    before: ReadState | None = None
     records: int = 0
     cut_short: bool = False
     waited: float = 0.0
+
+
+def _state_after(one: _Reading, entities: Sequence[str]) -> ReadState | None:
+    """What this attempt leaves as the read's place: moved on, or as it found it.
+
+    An attempt that read no page and carried on nothing, a key the vault would not give, leaves the
+    state it found rather than a read begun at its own instant, so the cursor a later read of
+    changes asks from is never moved by an attempt that asked the source nothing.
+    """
+    carried = one.before is not None and one.before.walking is not None
+    if not one.read.walks and not carried:
+        return one.before
+    return after_the_read(one.before, one.read, entities)
 
 
 def _finish(
@@ -506,18 +547,60 @@ def _finish(
         retry_after_seconds=retry_after_seconds,
         records=one.records,
         cut_short=one.cut_short,
+        read_state=_state_after(one, reading.entities()),
     )
 
 
 async def _write_page(
     sessions: async_sessionmaker[AsyncSession],
+    source: str,
+    entity: str,
     kept: Sequence[tuple[ProjectedRecord, Mapping[str, StoredValue]]],
-) -> None:
+) -> bool:
+    """Write one page's index rows, and advance the source's epoch if that changed any.
+
+    One transaction: the live rows the page names are read, the page is written over them, and
+    the epoch moves with them or not at all. See
+    `brain.ops.connector_sync.A_CHANGED_READ_ADVANCES_ITS_SOURCE_S_EPOCH`.
+    """
     if not kept:
-        return
+        return False
     async with sessions() as session, session.begin():
+        found = await session.execute(
+            live_fields(source, entity, [record.source_id for record, _ in kept])
+        )
+        held = {str(source_id): dict(fields) for source_id, fields in found.all()}
         for record, fields in kept:
             await session.execute(record_upsert(record, fields))
+        moved = changed(held, kept)
+        if moved:
+            await session.execute(advance_epoch(source))
+    return moved
+
+
+async def _retire(
+    sessions: async_sessionmaker[AsyncSession],
+    source: str,
+    entities: Sequence[str],
+    before: datetime,
+) -> int:
+    """Retire what a complete read of everything did not see, and advance the epoch if it did.
+
+    See `brain.ops.connector_sync.WHAT_A_COMPLETE_READ_OF_EVERYTHING_DID_NOT_RETURN_IS_RETIRED`.
+    """
+    retired = 0
+    async with sessions() as session, session.begin():
+        for entity in entities:
+            # A cast at the driver's boundary: an UPDATE's result is a cursor result, which is
+            # what carries the count, and `execute` is typed as the base result it returns for
+            # every statement.
+            done = cast(
+                "CursorResult[Any]", await session.execute(retire_unseen(source, entity, before))
+            )
+            retired += done.rowcount
+        if retired:
+            await session.execute(advance_epoch(source))
+    return retired
 
 
 async def attempt(
@@ -572,7 +655,15 @@ async def _read_under(
     """Read one connection to the end, or as far as it can be read, and say what that came to."""
     manifest, reading = plan.manifest, plan.reading
     assert manifest is not None and reading is not None  # SyncPlan holds this for a runnable plan
-    one = _Reading(plan=plan, started_at=clock())
+    started_at = clock()
+    before = None if previous is None else previous.read_state
+    try:
+        read = next_read(reading, before, now=started_at)
+    except Exception:
+        # A subscription the reading could not build: everything is read, which asks for at
+        # least what any cursor would have and loses nothing.
+        read = ReadPass(started_at=started_at)
+    one = _Reading(plan=plan, started_at=started_at, read=read, before=before)
 
     def finish(
         outcome: SyncOutcome,
@@ -597,19 +688,24 @@ async def _read_under(
         return finish(SyncOutcome.FAILED, key_detail(unavailable))
     headers = call_headers(reading, live.connection.settings, key)
     limiter = LimiterState()
+    entities = reading.entities()
 
-    for entity in reading.entities():
+    for entity in entities:
+        walk = one.read.walk(plan.connector, entity)
+        if walk.exhausted:
+            # Read to its last page by an earlier attempt of this read.
+            continue
         try:
             operation = reading.operation(
                 entity, settings=live.connection.settings, resolver=resolver
             )
+            arguments = page_to_ask(reading, one.read, walk)
         except UnsafeAddressError:
             # The specification's own server is checked when it is loaded, before any path is
             # built, so a source whose name answers inside the network is refused here first.
             return finish(SyncOutcome.FAILED, ADDRESS_REFUSED)
         except Exception:
             return finish(SyncOutcome.FAILED, SHAPE_DISAGREED)
-        arguments: Mapping[str, str] | None = reading.first_page(entity)
         pages = 0
         while arguments is not None:
             if pages >= MAX_PAGES_PER_ENTITY:
@@ -667,17 +763,27 @@ async def _read_under(
                     if projected is not None:
                         kept.append((projected, kept_fields(projected, manifest)))
                 returned = len(operation.project(body))
+                following = reading.next_page(entity, arguments, body, returned)
+                # Refuses a next page that is the page just read, which is a loop.
+                walk = walk.advance(
+                    cursor="" if following is None else page_cursor(following),
+                    returned=returned,
+                    exhausted=following is None,
+                )
             except Exception:
                 # Broad on purpose, and the type is not kept either: a refusal raised while reading
                 # a row can quote the row. Nothing from this page was written.
                 return finish(SyncOutcome.FAILED, SHAPE_DISAGREED)
-            await _write_page(sessions, kept)
+            await _write_page(sessions, plan.connector, entity, kept)
             one.records += len(kept)
+            one.read = one.read.advanced(walk)
             pages += 1
-            arguments = reading.next_page(entity, arguments, body, returned)
+            arguments = following
             if arguments is not None and reading.allowance_spent(said):
                 return finish(SyncOutcome.QUOTA, SOURCE_ALLOWANCE_REFUSED)
 
+    if one.read.everything and one.read.complete(entities):
+        await _retire(sessions, plan.connector, entities, one.read.started_at)
     detail = READ_BUT_CUT_SHORT if one.cut_short else READ_TO_THE_END
     return finish(SyncOutcome.SYNCED, detail)
 

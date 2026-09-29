@@ -106,7 +106,12 @@ OTHER_TENANT: Final = "99999999-8888-7777-6666-555555555555"
 PUBLIC: Final = "93.184.216.34"
 
 #: The tables a sync reads and writes.
-SYNC_TABLES: Final = ("ops.connector_connection", "ops.connector_sync", "proj.record")
+SYNC_TABLES: Final = (
+    "ops.connector_connection",
+    "ops.connector_sync",
+    "proj.record",
+    "proj.source_epoch",
+)
 
 #: What connecting through `StoredConnections.connect` reads besides the connection: the data
 #: steward's appointment, which a connection grants to in its own transaction, and the principals
@@ -464,7 +469,7 @@ def test_a_connected_source_is_read_and_once_disconnected_it_is_never_read_again
     routes. Connected through the store the route writes with, the source is read on the next run
     and its attempt is listed for the Connectors screen; disconnected through the same store, the
     next run calls nothing, records nothing, and the screen's read lists no attempt for it, while
-    the records it already wrote stay, ageing, as `A_SYNC_RETIRES_NOTHING` says.
+    the records it already wrote stay, ageing: nothing reads the source, so nothing retires them.
 
     Delete this and a disconnected source could go on being read with the key its administrator
     was told to revoke, or a connected one could be listed and never read."""
@@ -647,12 +652,14 @@ def test_a_source_nothing_may_read_is_counted_as_such_and_never_called() -> None
 
 
 @pytest.mark.needs_db
-def test_a_record_somebody_retired_stays_retired_whatever_the_source_still_says() -> None:
-    """An erasure retires a projected record, and the source still lists it. The next sync leaves it
-    retired, with the fields it was retired with, and reads the rest of the page as usual.
+def test_a_retired_record_the_source_returns_is_a_new_live_row_and_the_retired_one_stays() -> None:
+    """**M11.8.11's last clause.** A record retired a day ago, and the source lists it again. The
+    next read writes it as a new live row carrying this reading, which a reader in its tenant is
+    handed, and the retired row keeps the fields, the last reading and the retirement it had.
 
-    Delete this and a sync undoes an erasure on its next run, silently, as the worker, which is the
-    one thing `A_RETIRED_RECORD_STAYS_RETIRED_WHATEVER_THE_SOURCE_SAYS` exists to refuse."""
+    Delete this and a sync can revive a retired row, rewriting when it was noticed gone, or leave a
+    record the source returned out of every answer for good, which is the one thing
+    `A_RETIRED_ROW_STAYS_AS_IT_WAS_RETIRED_AND_A_RETURNED_RECORD_IS_NEW` exists to refuse."""
     with a_database("brain_connector_sync_retired") as url:
         connect(url)
         sql(
@@ -668,11 +675,17 @@ def test_a_record_somebody_retired_stays_retired_whatever_the_source_still_says(
         after = read_as(url, ENTITLED)
 
     assert ran.read == 1
-    ((_, _, _, fields, last_seen_at, deleted_at),) = rows
+    retired = [row for row in rows if row[5] is not None]
+    live = [row for row in rows if row[5] is None]
+    ((_, _, _, fields, last_seen_at, deleted_at),) = retired
     assert fields == {}
     assert last_seen_at == NOW - timedelta(days=30)
     assert deleted_at == NOW - timedelta(days=1)
-    assert after["records"] == []
+    ((_, _, source_id, kept, seen, _),) = live
+    assert source_id == INVOICE_ID
+    assert kept["tenant_id"] == TENANT
+    assert seen >= NOW
+    assert [one["id"] for one in after["records"]] == [INVOICE_ID]
 
 
 @pytest.mark.needs_db

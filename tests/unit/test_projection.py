@@ -18,7 +18,11 @@ was true when it was fetched. The tests that matter here are the ones asserting 
 is *still served* and *never silent*: either half on its own is a design somebody would
 recognise as wrong, and it is the pair that is easy to break one at a time.
 
-Task ids: M11.4.1, M11.4.9
+Since `0152` the table is two migrations deep, so it is compared with both: `0008` built every
+column but one and the constraints, and `0152` added the minted key, the unique index over live
+rows, and `proj.source_epoch` beside it.
+
+Task ids: M11.4.1, M11.4.9, M11.8.11, M11.8.4
 """
 
 from __future__ import annotations
@@ -36,7 +40,7 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import CheckConstraint, Table, create_engine
 from sqlalchemy.pool import NullPool
-from sqlalchemy.schema import CreateIndex, CreateTable
+from sqlalchemy.schema import CreateColumn, CreateIndex, CreateTable
 
 from brain.connectors.manifest import ChangeSignal
 from brain.connectors.projection import (
@@ -52,14 +56,18 @@ from brain.db import metadata
 from brain.gate.provenance import Freshness
 from brain.tables.projection import (
     FIELDS_WITHIN_THE_CAP,
+    LIVE,
+    LIVE_RECORD_INDEX,
     LOCAL_ID_CHARS,
     SOURCE_ID_CHARS,
     ProjectedRecordRow,
+    SourceEpochRow,
 )
 
 REPO = Path(__file__).resolve().parents[2]
 VERSIONS = REPO / "migrations" / "versions"
 MIGRATION = VERSIONS / "0008_projection.py"
+LIVES = VERSIONS / "0152_record_lives_and_source_epochs.py"
 
 NOW = datetime(2026, 9, 6, 9, 0, tzinfo=UTC)
 
@@ -108,15 +116,15 @@ def hourly() -> RefreshPromise:
     return RefreshPromise(signal=ChangeSignal.UPDATED_SINCE, interval=HOURLY)
 
 
-def _migration() -> ModuleType:
-    spec = importlib.util.spec_from_file_location("m0008", MIGRATION)
+def _migration(path: Path = MIGRATION) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(f"m{path.name[:4]}", path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
 
-def _rendered(direction: str) -> str:
+def _rendered(direction: str, path: Path = MIGRATION) -> str:
     """The SQL the migration emits, rendered without a database.
 
     Alembic's `--sql` mode driven in-process. It matters that the tests read this rather than
@@ -129,7 +137,7 @@ def _rendered(direction: str) -> str:
         opts={"as_sql": True, "output_buffer": buffer, "target_metadata": metadata},
     )
     with Operations.context(context):
-        getattr(_migration(), direction)()
+        getattr(_migration(path), direction)()
     return buffer.getvalue()
 
 
@@ -535,13 +543,21 @@ def test_the_notice_is_reached_through_the_disclosable_set_and_not_a_flag() -> N
 
 
 # ------------------------------------------------------------------- the table (M11.4.1)
-def test_the_key_is_the_source_the_entity_kind_and_the_source_id() -> None:
-    """A surrogate key would let one source record be projected twice, and the second row
-    goes on serving the value it was written with while the first is refreshed. Every count
-    the fast lane makes is then wrong, with nothing reporting it.
+def test_one_live_row_per_source_entity_and_source_id_and_a_retired_row_beside_it() -> None:
+    """Two live rows for one record would let the second go on serving the value it was written
+    with while the first is refreshed, and every count the fast lane makes would be wrong with
+    nothing reporting it; so the triple is unique among live rows. And only among live rows, since
+    `0152`, because a record the source returns after it was retired is a new live row beside the
+    retired one (M11.8.11). The primary key is a value the database mints, which nothing reads.
 
-    Delete this test and a `uuid` primary key looks like a tidy-up."""
-    assert [c.name for c in _table().primary_key.columns] == ["source", "entity", "source_id"]
+    Delete this and the index can lose its predicate, which refuses every returned record, or lose
+    a column, which lets one record be projected twice."""
+    [index] = [one for one in _table().indexes if one.name == LIVE_RECORD_INDEX]
+    assert index.unique
+    assert [c.name for c in index.columns] == ["source", "entity", "source_id"]
+    assert str(index.dialect_options["postgresql"]["where"]) == LIVE == "deleted_at IS NULL"
+    assert [c.name for c in _table().primary_key.columns] == ["id"]
+    assert "gen_random_uuid()" in str(CreateColumn(_table().c.id).compile(dialect=_DIALECT))
 
 
 def test_the_local_id_is_a_column_and_never_part_of_the_key() -> None:
@@ -627,12 +643,63 @@ def test_the_migration_builds_the_table_the_model_declares() -> None:
     indexes are compared too: `SoftDeleteMixin` declares one that is easy to leave out of a
     migration, and an index the model believes exists is a query plan nobody measured."""
     assert _migration().TABLES == ("proj.record",)
-    upgrade = _squash(_rendered("upgrade"))
-    assert _squash(str(CreateTable(_table()).compile(dialect=_DIALECT))) in upgrade
-    indexes = sorted(_table().indexes, key=lambda i: i.name or "")
-    assert [i.name for i in indexes] == ["ix_proj_record_deleted_at", "ix_record_local_id_live"]
+    built = _squash(_rendered("upgrade"))
+    amended = _squash(_rendered("upgrade", LIVES))
+    table = _table()
+    # Every column but the minted key is 0008's, each exactly as the model renders it.
+    for column in table.columns:
+        rendered = _squash(str(CreateColumn(column).compile(dialect=_DIALECT)))
+        if column.name == "id":
+            assert f"ALTER TABLE proj.record ADD COLUMN {rendered}" in amended
+        else:
+            assert f"{rendered}," in built, column.name
+    for constraint in table.constraints:
+        if isinstance(constraint, CheckConstraint):
+            assert f"CONSTRAINT {constraint.name} CHECK ({constraint.sqltext})" in built
+    # The key 0008 built, and the one 0152 put in its place.
+    assert "PRIMARY KEY (source, entity, source_id)" in built
+    assert "ALTER TABLE proj.record DROP CONSTRAINT pk_record" in amended
+    assert "ALTER TABLE proj.record ADD CONSTRAINT pk_record PRIMARY KEY (id)" in amended
+    indexes = sorted(table.indexes, key=lambda i: i.name or "")
+    assert [i.name for i in indexes] == [
+        "ix_proj_record_deleted_at",
+        "ix_record_local_id_live",
+        LIVE_RECORD_INDEX,
+    ]
     for index in indexes:
-        assert _squash(str(CreateIndex(index).compile(dialect=_DIALECT))) in upgrade
+        assert _squash(str(CreateIndex(index).compile(dialect=_DIALECT))) in f"{built} {amended}"
+
+
+def test_0152_copies_the_live_predicate_and_the_index_name_the_model_uses() -> None:
+    """The upsert names the index by its predicate, and an `ON CONFLICT` whose predicate is not the
+    index's infers no index, so every write fails. The migration copies both rather than importing
+    them, for `0008`'s reason; this holds the copies equal. Delete this and the two drift apart in
+    silence until the first sync after a deploy."""
+    lives = _migration(LIVES)
+    assert (lives.LIVE, lives.LIVE_RECORD_INDEX) == (LIVE, LIVE_RECORD_INDEX)
+    assert (lives.revision, lives.down_revision) == ("0152", "0150")
+
+
+def test_the_source_epoch_table_is_built_as_the_model_declares_it_and_never_deleted_from() -> None:
+    """`proj.source_epoch`, M11.8.4's counter, compared on rendered DDL with the model, with
+    row-level security on, a policy for the application, and no DELETE grant: a counter that could
+    be removed could start again under an answer it once invalidated. Delete this and the counter
+    can be built wider than the model, or become deletable, with nothing noticing."""
+    epoch = SourceEpochRow.__table__
+    assert isinstance(epoch, Table)
+    upgrade = _squash(_rendered("upgrade", LIVES))
+    assert _squash(str(CreateTable(epoch).compile(dialect=_DIALECT))) in upgrade
+    lives = _migration(LIVES)
+    assert lives.TABLES == ("proj.source_epoch",)
+    assert "ALTER TABLE proj.source_epoch ENABLE ROW LEVEL SECURITY" in upgrade
+    assert "CREATE POLICY source_epoch_visible ON proj.source_epoch FOR ALL TO brain_app" in upgrade
+    assert lives.GRANTS == ("GRANT SELECT, INSERT, UPDATE ON proj.source_epoch TO brain_app",)
+    down = _squash(_rendered("downgrade", LIVES))
+    assert "DROP TABLE proj.source_epoch" in down
+    assert (
+        "ALTER TABLE proj.record ADD CONSTRAINT pk_record PRIMARY KEY (source, entity, source_id)"
+        in down
+    )
 
 
 def test_the_migration_enables_row_level_security() -> None:

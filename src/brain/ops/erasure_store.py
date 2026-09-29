@@ -426,6 +426,8 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "ops.webhook_change",
         "ops.webhook_subscriber",
         "proj.record",
+        # A source's name and how many times its rows changed: `0152` keeps no principal.
+        "proj.source_epoch",
         # A channel's record names the administrator who last switched it, an actor and not an
         # owner, and a delivery keeps a channel, an outcome and a reason and never a sender or a
         # message (`0114`), so neither is anybody's.

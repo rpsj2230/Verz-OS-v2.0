@@ -102,6 +102,29 @@ A_RESTRICTION_ON_A_COLUMN_THE_PREVIOUS_RELEASE_NEVER_WRITES_IS_NOT_A_NARROWING: 
     "column from not null, since the previous release could write nothing else."
 )
 
+#: Why a unique index over the columns of a key the same body drops is not a narrowing.
+A_UNIQUENESS_A_DROPPED_KEY_HELD_OVER_EVERY_ROW_REFUSES_NOTHING: Final = (
+    "A unique index or key written over exactly the columns of a primary or unique key the same "
+    "body drops holds unique, at most, the rows the old key already held unique over every row, "
+    "so it refuses nothing the previous release could write, partial or not. Both halves are "
+    "read: the drop in the upgrade says a key was there, and the key the downgrade puts back says "
+    "over which columns. Neither alone is enough, because a downgrade can be written to put back "
+    "a key the table never had."
+)
+
+#: Why a key over a column this body added with a minted default is not a narrowing.
+A_KEY_OVER_A_VALUE_THE_DATABASE_MINTS_FOR_EVERY_ROW_REFUSES_NOTHING: Final = (
+    "The previous release never names a column this body adds, so every row it writes takes the "
+    "column's default, and a default of gen_random_uuid() is a fresh random value for each row. "
+    "A key over such columns refuses nothing that release writes. A constant default is not "
+    "this, because the second row the previous release writes collides with the first."
+)
+
+#: The one default read as minting a fresh value for every row. A random UUID, which is what every
+#: generated key in this repository is; a sequence would qualify on the same argument and none is
+#: written here to read.
+MINTED_DEFAULT: Final = "gen_random_uuid()"
+
 #: Why a policy dropped and written again is unreadable rather than breaking.
 A_POLICY_REPLACED_IN_THE_SAME_BODY_CANNOT_BE_ORDERED: Final = (
     "A policy dropped and written again in one body changes which rows each command admits, "
@@ -813,12 +836,111 @@ def _never_written(
     return column in widened if head.group(2) else column in added
 
 
+def _key_columns(call: _Call) -> tuple[str, tuple[str, ...]] | None:
+    """`schema.table` and the sorted columns one key or unique index is written over, or None.
+
+    Sorted, because a key over `(a, b)` holds exactly the uniqueness a key over `(b, a)` does.
+    """
+    node = call.node
+    if len(node.args) < 3 or not isinstance(node.args[2], ast.List | ast.Tuple):
+        return None
+    table = _one(node.args[1], call.names)
+    schema = _one(_keyword(node, "schema"), call.names)
+    columns = [_one(one, call.names) for one in node.args[2].elts]
+    named = [one for one in columns if isinstance(one, str)]
+    if not (isinstance(table, str) and isinstance(schema, str)) or len(named) != len(columns):
+        return None
+    if not named:
+        return None
+    return f"{schema}.{table}".lower(), tuple(sorted(one.lower() for one in named))
+
+
+def _keys_held_before(
+    applying: tuple[_Call, ...], reversing: tuple[_Call, ...]
+) -> frozenset[tuple[str, tuple[str, ...]]]:
+    """The keys the previous schema held over every row, as far as one file can say.
+
+    See `A_UNIQUENESS_A_DROPPED_KEY_HELD_OVER_EVERY_ROW_REFUSES_NOTHING`: a primary or unique key
+    the applying body drops from a table, over the columns the reversing body puts one back on.
+    """
+    dropped: set[str] = set()
+    for call in applying:
+        if call.name != "drop_constraint" or len(call.node.args) < 2:
+            continue
+        if _one(_keyword(call.node, "type_"), call.names) not in {"primary", "unique"}:
+            continue
+        table = _one(call.node.args[1], call.names)
+        schema = _one(_keyword(call.node, "schema"), call.names)
+        if isinstance(table, str) and isinstance(schema, str):
+            dropped.add(f"{schema}.{table}".lower())
+    held: set[tuple[str, tuple[str, ...]]] = set()
+    for call in reversing:
+        if call.name not in {"create_primary_key", "create_unique_constraint"}:
+            continue
+        key = _key_columns(call)
+        if key is not None and key[0] in dropped:
+            held.add(key)
+    return frozenset(held)
+
+
+def _minted(calls: tuple[_Call, ...]) -> frozenset[str]:
+    """`schema.table.column` for every column this body adds with `MINTED_DEFAULT` as its default.
+
+    See `A_KEY_OVER_A_VALUE_THE_DATABASE_MINTS_FOR_EVERY_ROW_REFUSES_NOTHING`.
+    """
+    found: set[str] = set()
+    for call in calls:
+        if call.name != "add_column" or len(call.node.args) < 2:
+            continue
+        column = call.node.args[1]
+        if not (isinstance(column, ast.Call) and column.args):
+            continue
+        default = _keyword(column, "server_default")
+        if default is None or MINTED_DEFAULT not in ast.unparse(default):
+            continue
+        table = _one(call.node.args[0], call.names)
+        schema = _one(_keyword(call.node, "schema"), call.names)
+        named = _one(column.args[0], call.names)
+        if isinstance(table, str) and isinstance(schema, str) and isinstance(named, str):
+            found.add(f"{schema}.{table}.{named}".lower())
+    return frozenset(found)
+
+
+def _uniqueness_already_held(
+    call: _Call,
+    held: frozenset[tuple[str, tuple[str, ...]]],
+    minted: frozenset[str],
+) -> Change | None:
+    """A unique index or key the previous release's writes cannot trip, or None when it may."""
+    key = _key_columns(call)
+    if key is None:
+        return None
+    table, columns = key
+    if key in held:
+        return Change(
+            Verdict.SAFE,
+            "uniqueness a dropped key held over every row",
+            f"{ast.unparse(call.node)}. "
+            f"{A_UNIQUENESS_A_DROPPED_KEY_HELD_OVER_EVERY_ROW_REFUSES_NOTHING}",
+        )
+    if all(f"{table}.{one}" in minted for one in columns):
+        return Change(
+            Verdict.SAFE,
+            "key over a value the database mints for every row",
+            f"{ast.unparse(call.node)}. "
+            f"{A_KEY_OVER_A_VALUE_THE_DATABASE_MINTS_FOR_EVERY_ROW_REFUSES_NOTHING}",
+        )
+    return None
+
+
 def _from_call(
     call: _Call,
     made: frozenset[str],
     reversed_by: dict[tuple[str, str, str], str],
     added: frozenset[str] = frozenset(),
     widened: frozenset[str] = frozenset(),
+    held: frozenset[tuple[str, tuple[str, ...]]] = frozenset(),
+    minted: frozenset[str] = frozenset(),
 ) -> Change:
     """One `op.<something>` call that is not `execute`."""
     node = call.node
@@ -846,8 +968,16 @@ def _from_call(
     if call.name == "create_index":
         if _one(_keyword(node, "unique"), names) is not True:
             return Change(Verdict.SAFE, "op.create_index", ast.unparse(node))
+        already = _uniqueness_already_held(call, held, minted)
+        if already is not None:
+            return already
         return _restriction(node, _one(_keyword(node, "schema"), names), _at(node, 1, names), made)
-    if call.name in {"create_unique_constraint", "create_primary_key", "create_foreign_key"}:
+    if call.name in {"create_unique_constraint", "create_primary_key"}:
+        already = _uniqueness_already_held(call, held, minted)
+        if already is not None:
+            return already
+        return _restriction(node, _one(_keyword(node, "schema"), names), _at(node, 1, names), made)
+    if call.name == "create_foreign_key":
         return _restriction(node, _one(_keyword(node, "schema"), names), _at(node, 1, names), made)
     if call.name == "add_column":
         return _from_add_column(node, names)
@@ -980,8 +1110,9 @@ def changes_in(
 ) -> tuple[Change, ...]:
     """Every operation `applying` performs, judged against the release before it.
 
-    `reversing` is read for one thing only: the predicate a replaced check constraint used to
-    hold, which lives nowhere else inside a single file. Swapping the two names asks the
+    `reversing` is read for two things only: the predicate a replaced check constraint used to
+    hold, and the columns a dropped key was held over, which live nowhere else inside a single
+    file. Swapping the two names asks the
     other direction, and that is the whole of how `0022` is tested from both sides.
     """
     try:
@@ -1003,6 +1134,8 @@ def changes_in(
     reversed_by = _check_predicates(counterpart)
     added = _columns(calls, "add_column", "nullable", True)
     widened = _columns(calls, "alter_column", "nullable", True)
+    held = _keys_held_before(calls, counterpart)
+    minted = _minted(calls)
     out: list[Change] = []
     if not complete:
         out.append(
@@ -1015,7 +1148,7 @@ def changes_in(
         )
     for call in calls:
         if call.name != "execute":
-            out.append(_from_call(call, made, reversed_by, added, widened))
+            out.append(_from_call(call, made, reversed_by, added, widened, held, minted))
             continue
         if not call.readable:
             out.append(

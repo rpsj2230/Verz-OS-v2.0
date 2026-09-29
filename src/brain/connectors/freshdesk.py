@@ -98,7 +98,7 @@ Rejected: the helpdesk itself as the predicate, as Xero pins its tenant. No gran
 install is scoped by a helpdesk, so every ticket would be reachable by the data steward and
 nobody else until somebody wrote a grant no screen can write.
 
-Task ids: M11.6.2, M11.9.6
+Task ids: M11.6.2, M11.9.6, M11.4.6
 """
 
 from __future__ import annotations
@@ -109,11 +109,15 @@ import math
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from types import MappingProxyType
 from typing import Any, Final, Protocol, Self
 
-from brain.connectors.change_signal import ChangeSubscription, DeletionCheck
+from brain.connectors.change_signal import (
+    MAX_RECONCILE_INTERVAL,
+    ChangeSubscription,
+    DeletionCheck,
+)
 from brain.connectors.contract import (
     ConnectorContractError,
     ConnectorScope,
@@ -337,6 +341,17 @@ READING_INTERVAL: Final = timedelta(minutes=15)
 #: created in the last thirty days, silently; with a date before any helpdesk existed it
 #: returns all of them, newest first (https://developers.freshdesk.com/api/#list_all_tickets).
 EVERY_TICKET_SINCE: Final = "2000-01-01T00:00:00Z"
+
+#: How `updated_since` is written: whole seconds in UTC with a `Z`, as the vendor's own examples
+#: and `EVERY_TICKET_SINCE` write it. An instant is cut down to its second rather than rounded, so a
+#: read asks from no later than the instant it was handed and never misses a ticket for a fraction.
+UPDATED_SINCE_FORMAT: Final = "%Y-%m-%dT%H:%M:%SZ"
+
+#: How often a helpdesk read only for its changes is read whole anyway, which is where a ticket
+#: deleted in the helpdesk is noticed (`change_signal.A_CURSOR_CANNOT_SEE_A_DELETION`). The floor
+#: every subscription carries, and deliberately that: a day is how long a deletion may go unnoticed,
+#: and a whole read of fifty pages a day is a fraction of the lowest plan's hourly allowance.
+RECONCILE_EVERY: Final = MAX_RECONCILE_INTERVAL
 
 #: The ordering every reading asks for, which is also the vendor's default: newest first, so a
 #: run cut short at its page bound has indexed the tickets people are asking about, and a ticket
@@ -1415,6 +1430,27 @@ class FreshdeskReading:
         return MappingProxyType(
             first_page(Endpoint.LIST_TICKETS, arguments=arguments).as_arguments()
         )
+
+    def changed_since(self, entity: str, since: datetime) -> Mapping[str, str]:
+        """The first page of the tickets updated since `since`, newest first (M11.4.6).
+
+        The vendor's own filter on the endpoint the whole read walks, so a read of changes and a
+        read of everything differ in one argument and page identically.
+        """
+        self._assert_ticket(entity)
+        if since.tzinfo is None:
+            msg = "a ticket read since a naive instant would ask from the server's local time"
+            raise ConnectorContractError(msg)
+        stamp = since.astimezone(UTC).strftime(UPDATED_SINCE_FORMAT)
+        arguments = (("updated_since", stamp), *LIST_ORDER)
+        return MappingProxyType(
+            first_page(Endpoint.LIST_TICKETS, arguments=arguments).as_arguments()
+        )
+
+    def subscription(self, entity: str) -> ChangeSubscription:
+        """Polled every `READING_INTERVAL` and read whole every `RECONCILE_EVERY`."""
+        self._assert_ticket(entity)
+        return subscription(notify_within=READING_INTERVAL, reconcile_every=RECONCILE_EVERY)
 
     def next_page(
         self, entity: str, asked: Mapping[str, str], body: Any, returned: int

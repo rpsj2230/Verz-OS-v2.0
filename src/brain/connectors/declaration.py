@@ -51,7 +51,7 @@ See `A_READING_NAMES_HOW_ITS_KEY_IS_SENT_AND_NEVER_HOLDS_IT`.
 Scope: domain logic. Nothing here opens a connection or reads a table; `shipped` imports the modules
 of one package, and that is all it does.
 
-Task ids: M11.1.1, M11.1.6, M11.9.1, M11.6.2, M11.9.2, M11.2.5
+Task ids: M11.1.1, M11.1.6, M11.9.1, M11.6.2, M11.9.2, M11.2.5, M11.4.6
 """
 
 from __future__ import annotations
@@ -66,9 +66,10 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import cache
 from types import MappingProxyType, ModuleType
-from typing import Any, Final, Protocol
+from typing import Any, Final, Protocol, runtime_checkable
 
 import brain.connectors
+from brain.connectors.change_signal import ChangeSubscription
 from brain.connectors.contract import ConnectorContractError
 from brain.connectors.manifest import ConnectorManifest
 from brain.connectors.projection import ProjectedRecord
@@ -274,6 +275,33 @@ class SourceReading(Protocol):
         self, entity: str, row: Mapping[str, Any], *, seen_at: datetime
     ) -> ProjectedRecord | None:
         """The index entry kept for one row, or None for a row with nothing to keep."""
+        ...
+
+
+# ------------------------------------------------------------- reading only what changed
+@runtime_checkable
+class ChangedSince(Protocol):
+    """A reading whose source can be asked for only what changed since an instant (M11.4.6).
+
+    Its own protocol beside `SourceReading` rather than two more methods on it, because most
+    sources this release reads cannot be asked that through the arguments of a page: Xero's is a
+    header, `If-Modified-Since`, and a reading passes arguments and never headers per call. A
+    reading that cannot is read to the end every time, which is a read of everything and the one
+    kind that may retire what it did not return
+    (`brain.ops.connector_sync.WHAT_A_COMPLETE_READ_OF_EVERYTHING_DID_NOT_RETURN_IS_RETIRED`).
+
+    The subscription travels with it because a cursor cannot see a deletion
+    (`brain.connectors.change_signal.A_CURSOR_CANNOT_SEE_A_DELETION`): a source asked only for
+    changes is still read whole once its subscription's reconciliation falls due, and that read
+    is where a removal is noticed.
+    """
+
+    def changed_since(self, entity: str, since: datetime) -> Mapping[str, str]:
+        """The arguments of the first page of what changed in one entity kind since `since`."""
+        ...
+
+    def subscription(self, entity: str) -> ChangeSubscription:
+        """How this source tells us one entity kind moved, with the reconciliation it owes."""
         ...
 
 

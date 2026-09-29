@@ -1013,3 +1013,48 @@ def test_a_restriction_on_a_column_this_migration_added_binds_nothing_the_last_r
         + ' schema="s")\n'
     )
     assert _verdicts(narrowing)[2:] == [Verdict.BREAKING] * 3
+
+
+def test_a_unique_index_over_a_dropped_key_s_columns_refuses_nothing_the_key_admitted() -> None:
+    """`A_UNIQUENESS_A_DROPPED_KEY_HELD_OVER_EVERY_ROW_REFUSES_NOTHING`, both ways. A unique index,
+    partial or not, over exactly the columns of a primary key the same body drops and its
+    downgrade puts back is safe; the same index with no key dropped, or over columns the key did
+    not cover, or with a downgrade that puts back a key the upgrade never dropped, is still a
+    restriction on a table that was already there. Delete this and the rule can pass any unique
+    index a downgrade vouches for, which is a narrowing waved through by a file's own say-so."""
+    drop = '    op.drop_constraint("pk_t", "t", schema="s", type_="primary")\n'
+    put_back = '    op.create_primary_key("pk_t", "t", ["name", "team"], schema="s")\n'
+    index = (
+        '    op.create_index("ux", "t", ["team", "name"], unique=True, schema="s",'
+        ' postgresql_where=sa.text("gone IS NULL"))\n'
+    )
+    safe = _migration(index + drop, put_back)
+    assert _verdicts(safe) == [Verdict.SAFE, Verdict.SAFE]
+    assert "uniqueness a dropped key held over every row" in _rules(changes_in(safe))
+    assert _verdicts(_migration(index, put_back)) == [Verdict.BREAKING]
+    other_columns = index.replace('["team", "name"]', '["name"]')
+    assert _verdicts(_migration(other_columns + drop, put_back)) == [
+        Verdict.BREAKING,
+        Verdict.SAFE,
+    ]
+    assert _verdicts(_migration(index + drop)) == [Verdict.BREAKING, Verdict.SAFE]
+
+
+def test_a_key_over_a_column_the_database_mints_for_every_row_refuses_nothing() -> None:
+    """`A_KEY_OVER_A_VALUE_THE_DATABASE_MINTS_FOR_EVERY_ROW_REFUSES_NOTHING`, both ways. A primary
+    key over a column this body added with `gen_random_uuid()` as its default is safe; over a column
+    added with a constant default, or over a column the table already had, it is a restriction the
+    previous release's second insert trips. Delete this and the rule can pass a key over a default
+    every row shares, which refuses the previous release's second write."""
+    minted = (
+        '    op.add_column("t", sa.Column("id", sa.Uuid(),'
+        ' server_default=sa.text("gen_random_uuid()"), nullable=False), schema="s")\n'
+    )
+    key = '    op.create_primary_key("pk_t", "t", ["id"], schema="s")\n'
+    assert _verdicts(_migration(minted + key)) == [Verdict.SAFE, Verdict.SAFE]
+    assert "key over a value the database mints for every row" in _rules(
+        changes_in(_migration(minted + key))
+    )
+    constant = minted.replace('sa.text("gen_random_uuid()")', 'sa.text("1")')
+    assert _verdicts(_migration(constant + key)) == [Verdict.SAFE, Verdict.BREAKING]
+    assert _verdicts(_migration(key)) == [Verdict.BREAKING]
