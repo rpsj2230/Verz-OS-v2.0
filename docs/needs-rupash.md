@@ -2,13 +2,38 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**6 items are open: 121 to 125,** whose conversations an agent's page lists, where uploaded
+**7 items are open: 126,** which services Verz uses, **121 to 125,** whose conversations an agent's page lists, where uploaded
 documents are stored, a task that names a table library, the automation canvas, and the Lark group
 for the evening digest, each with my recommendation, **and 91,** the checks only you can do on your
 install; it waits for the Knowledge upload grants (item 105) to land. Each says in plain terms what it
 is, what I recommend, and every step.
 
 # Open
+
+## 126. Which of these services does Verz use?
+
+**In plain terms:** about thirty Wave 2 tasks are channels and connectors to other services. Most
+are already built and tested in the repository; what a task needs before it counts as done is
+proof on your install, and that needs a real account for the service. The rest are not built yet,
+and building first the ones you use is the quickest way through them. So the question is simply
+which of these Verz uses.
+
+**Channels (people ask the Brain through them):** Slack; Microsoft Teams; WhatsApp; Telegram;
+email, in and out. Lark is already proved, and the website chat widget needs no account, so I
+prove that one myself.
+
+**Sources (the Brain reads them to answer):** your Laravel system, through read-only database views;
+HubSpot; Google Drive or Microsoft 365 (say which); Google Workspace mail and calendar; Google
+Analytics; Google Search Console; Cloudflare; your domain registrar and hosting; Slack as a source.
+Lark Base and Lark Wiki are being built now and need nothing new from you.
+
+**My recommendation:** tell me the ones Verz uses. Those get proved on your install first, one at
+a time, and for each I send you the steps to create a read-only access key and where to paste it
+(never to me). The ones Verz does not use move to Wave 5: their build and tests stay, and they are
+proved when a company that uses them installs the Brain.
+
+**What I need from you:** reply "126:" and the names, for example "126: Laravel, HubSpot, Google
+Drive, email". Anything you leave out moves to Wave 5, and you can bring it back at any time.
 
 ## 125. Which Lark group receives the evening build digest?
 
