@@ -666,6 +666,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/retention/holds/:holdId",
       "/retention/erasures/:requestId",
       "/compliance",
+      "/compliance/:view",
+      "/compliance/breaches/:caseId",
       "/referrals",
     ],
     routes: [

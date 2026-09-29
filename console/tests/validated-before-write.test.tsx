@@ -91,15 +91,6 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
   "src/pages/RequirementChecks.tsx": [{ pattern: "/requirement-checks", index: 0, writes: true }],
   // The connect form is in a drawer, judged below; the credential form is the one form on the page.
   "src/pages/staff-sources/SyncCredential.tsx": [{ pattern: "/staff_sources", index: 0, writes: true }],
-  // The naming form, then the four forms of the one open case, then the form that opens a case.
-  "src/pages/Compliance.tsx": [
-    { pattern: "/compliance", index: 0, writes: true },
-    { pattern: "/compliance", index: 1, writes: true },
-    { pattern: "/compliance", index: 2, writes: true },
-    { pattern: "/compliance", index: 3, writes: true },
-    { pattern: "/compliance", index: 4, writes: true },
-    { pattern: "/compliance", index: 5, writes: true },
-  ],
   // A channel's Profile is a view at its own address: its set-up form, then its test message.
   "src/pages/channels/ChannelProfile.tsx": [
     { pattern: "/channels/:name/:view", index: 0, writes: true },
@@ -113,6 +104,12 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
  * Checked, not trusted: an entry for a file that no longer holds both fails the first test.
  */
 const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
+  "src/pages/compliance/ComplianceActs.tsx":
+    "Naming a person, opening a case and each step of a case are forms inside drawers opened from the " +
+    "Compliance views and a case's own page, outside the main landmark these cases read. Each says what " +
+    "its fields take before anything is sent, and tests/compliance-page.test.tsx submits the naming, " +
+    "the opening, the assessment and a notification blank and holds that no confirmation opens and " +
+    "nothing is sent.",
   "src/pages/retention/RetentionActs.tsx":
     "The hold, lift and erasure forms are inside drawers opened from the Legal holds and Erasure " +
     "requests views, outside the main landmark these cases read. Each says what its fields take before " +
