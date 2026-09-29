@@ -66,7 +66,7 @@ that changes once per install is the cost this repository refuses everywhere els
 Rejected: environment first, database second. It reads as the safer order and it is the one
 that would make this whole change invisible. See the named constant.
 
-Task ids: M42.5.10, M42.5.14, M31.3.1.4, M27.12.7
+Task ids: M42.5.10, M42.5.14, M31.3.1.4, M27.12.7, M22.4.1
 """
 
 from __future__ import annotations
@@ -82,6 +82,8 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.install import BY_NAME, INSTALL_PREFIX, InstallError, hold_saved, saved_values
+from brain.ops.tuning import hold as hold_tuned
+from brain.ops.tuning import load as load_tuned
 from brain.tables.config import SettingRow, SettingType
 
 log = structlog.get_logger(__name__)
@@ -305,7 +307,10 @@ async def refresh(sessions: async_sessionmaker[AsyncSession]) -> Mapping[str, st
     """
     async with sessions() as session, session.begin():
         found = await load(session)
+    tuned = await _tuned_from(sessions)
     hold_saved(found)
+    if tuned is not None:
+        hold_tuned(tuned)
     log.info("installation settings loaded", settings=sorted(found))
     return found
 
@@ -321,9 +326,41 @@ async def refresh_changed(sessions: async_sessionmaker[AsyncSession]) -> tuple[s
     """
     async with sessions() as session, session.begin():
         found = await load(session)
+    tuned = await _tuned_from(sessions)
     before = hold_saved(found)
     held = saved_values()
-    return tuple(sorted(n for n in set(before) | set(held) if before.get(n) != held.get(n)))
+    changed = {n for n in set(before) | set(held) if before.get(n) != held.get(n)}
+    if tuned is not None:
+        was = hold_tuned(tuned)
+        changed |= {f"tuning.{n}" for n in set(was) | set(tuned) if was.get(n) != tuned.get(n)}
+    return tuple(sorted(changed))
+
+
+async def read_tuned(session: AsyncSession) -> dict[str, int]:
+    """The saved budgets and rate limits, as every reload of saved values reads them.
+
+    Every reload of saved values is a reload of these too, so the application at its start and
+    every minute, and the worker before every tick, hold what the Rate limits screen saved. See
+    `brain.ops.tuning.A_TUNED_VALUE_REACHES_EVERY_PROCESS_WITHIN_A_MINUTE`. A function of its own
+    so the install's acceptance check reads its uncommitted rows through the reload's own reader.
+    """
+    return await load_tuned(session)
+
+
+async def _tuned_from(sessions: async_sessionmaker[AsyncSession]) -> dict[str, int] | None:
+    """`read_tuned` in a transaction of its own, or None when the rows could not be read.
+
+    Its own transaction, after the installation values have been read, so a namespace that
+    cannot be read leaves those loaded and what is held of these unchanged, rather than failing
+    the reload they ride on. Broad for `keep_holding`'s reason: whatever stopped this read once is
+    not a reason to stop following the table; it is said by the exception's type and never a value.
+    """
+    try:
+        async with sessions() as session, session.begin():
+            return await read_tuned(session)
+    except Exception as exc:
+        log.warning("saved limits not re-read", error=type(exc).__name__)
+        return None
 
 
 async def keep_holding(

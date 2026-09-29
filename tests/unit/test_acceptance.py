@@ -554,12 +554,12 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
 ) -> None:
     """**The run as the worker makes it, against PostgreSQL at head.** Twice: every check that can
     be asked without a cache passes both times, including the two Lark checks needing a bound
-    person now that the events route reads chat bindings (0118); the limits check says it was not
-    run, the skill import says this install names no public skill, which is the declared default,
-    and after
-    both runs every table a check wrote to holds what it held before, while the result rows are
-    there, one run each, keyed by the commit. Delete this and a check that commits, or one
-    that cannot pass on a real schema, reaches the owner's server first."""
+    person now that the events route reads chat bindings (0118); the two checks needing a cache
+    say they were not run, the skill import says this install names no public skill, which is
+    the declared default, and after both runs every table a check wrote to holds what it held
+    before, while the result rows are there, one run each, keyed by the commit. Delete this and
+    a check that commits, or one that cannot pass on a real schema, reaches the owner's server
+    first."""
     from tests.fixtures.scratch_postgres import sql
 
     with at_head("brain_acceptance_run") as url:
@@ -580,6 +580,7 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         assert (first.name, first.outcome) == (second.name, second.outcome)
     outcomes = {one.name: (one.outcome, one.reason) for one in waited[1]}
     assert outcomes.pop("asking_past_a_window_is_refused_with_a_retry_hint")[0] == NOT_RUN
+    assert outcomes.pop("the_rate_limits_screen_lists_the_windows_refusing_now")[0] == NOT_RUN
     assert outcomes.pop("a_skill_is_imported_from_a_github_commit_and_from_an_address") == (
         NOT_RUN,
         "this install names no public skill to import, so no import from GitHub was asked",
@@ -601,9 +602,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         acceptance_audit.A_BROWSER_SESSION_AND_A_TRACE_STORE_ARE_NOT_BUILT,
     )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
-    assert len(outcomes) == 32
+    assert len(outcomes) == 33
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 112
+    assert runs == [(2,)] and len(recorded) == 116
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }
