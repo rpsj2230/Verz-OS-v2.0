@@ -61,6 +61,14 @@ stops a pinned one too: a refusal from the pinned model is not tried on the tier
 **Each try records what categories of data it sent** (M5.6.4), as the caller named them, on the
 attempt row. See `brain.models.disclosure`.
 
+**Every try carries its lane's pinned effort** (M6.4.4). `brain.gate.effort.settings_for` pins one
+effort per lane, and `ModelSettings.as_extra` states it in the shape `DriverRequest.extra` takes,
+and until 2026-09-29 nothing called either, so no provider was ever told one and a model that
+always thinks thought at its maximum. It is attached here, from the lane every call already names,
+rather than by each caller, so the answer lane, the Models screen's check and the matrix gate's
+trials cannot differ; `brain.models.wire` decides whether a model is sent it and in which words.
+See `EVERY_TRY_CARRIES_ITS_LANES_EFFORT`.
+
 **The tier is classified here, against the table, when the caller hands the request** (M5.2.2).
 A caller passing `routing` rather than `tier` has its tier decided by `routing.classify_tier` with
 the windows and headroom `ops.routing_tier` holds, read in the same read as the ladder
@@ -93,7 +101,7 @@ The callers are the Models screen's provider check, the matrix gate
 fast-path rule answers.
 
 Task ids: M27.7.14, M27.8.8, M5.3.4, M5.4.6, M5.1.3, M5.7.3, M5.6.4, M5.7.2
-Task ids: M5.2.2, M5.4.3, M5.4.7, M5.4.8, M5.5.1, M3.6.3
+Task ids: M5.2.2, M5.4.3, M5.4.7, M5.4.8, M5.5.1, M3.6.3, M6.4.4, M5.6.1
 """
 
 from __future__ import annotations
@@ -106,6 +114,7 @@ from typing import Final, Protocol
 
 from brain.core.lane import Lane
 from brain.core.scope import Scope
+from brain.gate.effort import settings_for
 from brain.models.assembly import Assembly, LadderRung, assemble
 from brain.models.disclosure import DataCategory
 from brain.models.driver import (
@@ -172,6 +181,15 @@ HALF_OPEN_ADMITS_ONE_REQUEST_PER_PROCESS: Final = (
     "attempts, so without a claim every request in the process would be that one request. A "
     "walk claims the deployment before sending and the attempt's return releases it; a claim "
     "nobody returns expires after the breaker's own claim lifetime."
+)
+
+#: Why the lane's effort goes on every try, and from here rather than from each caller.
+EVERY_TRY_CARRIES_ITS_LANES_EFFORT: Final = (
+    "Every call names its lane, and the lane pins an effort, so the executor puts that effort on "
+    "every try it sends. A caller asked to pass it would be one more argument for the next "
+    "caller to leave out, and a model that always thinks, sent none, thinks at its provider's "
+    "maximum while a person waits. Whether a model is sent it, and in which words, is the "
+    "wire's decision, and a model not known to take one is sent nothing."
 )
 
 #: The breaker outcomes a walk treats as the provider failing. See `brain.models.evidence`.
@@ -457,6 +475,7 @@ class ModelCalls:
             lane=lane,
             categories=tuple(sorted({one.value for one in categories})),
             health=self._health,
+            extra=settings_for(lane).as_extra(),
         )
         try:
             return await self._walked(walk, chain, tier, residency, pin)
@@ -581,8 +600,11 @@ class _Walk:
         lane: Lane = Lane.ANSWER,
         categories: tuple[str, ...] = (),
         health: HealthLog | None = None,
+        extra: Mapping[str, str] | None = None,
     ) -> None:
         self.assembly = assembly
+        #: The lane's call settings every try carries. See `EVERY_TRY_CARRIES_ITS_LANES_EFFORT`.
+        self.extra: Mapping[str, str] = {} if extra is None else extra
         self.health: HealthLog = NoHealthLog() if health is None else health
         #: Each tier walked, in order, with the rungs tried and the rungs its selection fenced off.
         self.tiers: dict[Tier, tuple[list[ChainAttempt], tuple[SkippedRung, ...]]] = {}
@@ -726,6 +748,7 @@ class _Walk:
             messages=self.messages,
             timeout_seconds=self.policy(rung).timeout_seconds,
             max_output_tokens=self.max_output_tokens,
+            extra=self.extra,
         )
         driver = self.assembly.drivers[rung.deployment.provider]
         try:
