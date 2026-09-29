@@ -44,7 +44,7 @@
  * and `freshnessWords` puts the API's freshness beside the date. See
  * `A_CITATION_IS_DRAWN_AS_A_LINK_TO_WHAT_IT_NAMES`.
  *
- * Task ids: M42.6.3, M3.9.8, M8.1.1, M8.1.2, M8.1.3, M7.4.7, M7.6.1
+ * Task ids: M42.6.3, M3.9.8, M8.1.1, M8.1.2, M8.1.3, M7.4.7, M7.6.1, M9.1.1
  */
 
 import type { AnswerEvent } from "../api/events";
@@ -100,7 +100,13 @@ export function askBody(
   question: string,
   agent = "",
   kind = "",
-): { readonly question: string; readonly agent?: string; readonly kinds?: readonly string[] } | null {
+  thread = "",
+): {
+  readonly question: string;
+  readonly agent?: string;
+  readonly kinds?: readonly string[];
+  readonly thread?: string;
+} | null {
   const asked = question.trim();
   if (asked === "" || asked.length > MAX_QUESTION_CHARS) {
     return null;
@@ -111,7 +117,9 @@ export function askBody(
   // The kind of knowledge the question is narrowed to (M7.6.1), sent only when one was chosen
   // and only when it is a kind the API stores, so a stale option never becomes a refused request.
   const narrowed = kind !== "" && kind in KIND_WORDS ? { kinds: [kind] } : {};
-  return { question: asked, ...(named === "" ? {} : { agent: named }), ...narrowed };
+  // The conversation this question continues (M9.1.1), sent only when there is one.
+  const continued = thread === "" ? {} : { thread };
+  return { question: asked, ...(named === "" ? {} : { agent: named }), ...narrowed, ...continued };
 }
 
 /** Written down because a citation that cannot be followed is one nobody checks. */
