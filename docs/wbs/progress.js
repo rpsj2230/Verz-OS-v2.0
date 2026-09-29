@@ -430,9 +430,9 @@ const PROGRESS = {
     updated: "2026-09-29",
   },
   "M5.7.1": {
-    status: "READY FOR TESTING",
-    why: "Models and health shows all four providers with Add key, Test and Turn off (PR #100); proved when each answers on the install (needs-rupash 98)",
-    updated: "2026-09-28",
+    status: "OPEN",
+    why: "moved to Wave 5 (needs-rupash 113): Anthropic and Moonshot answer on the install; OpenAI and DeepSeek are turned off until their accounts are funded",
+    updated: "2026-09-29",
   },
   "M7.1.1": {
     status: "READY FOR TESTING",

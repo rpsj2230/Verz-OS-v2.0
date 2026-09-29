@@ -44,6 +44,9 @@ module.exports = {
     // 80 permissions rows are proved in Wave 3). Each moves to the wave of its area's last proof:
     // owner, 2026-09-29, item 112.
     "M5.6.5":3, "M1.8.8":4, "M2.3.2":4, "M24.3.6":5,
+    // "Each of OpenAI, Anthropic, Moonshot and DeepSeek answers": the owner turned OpenAI and DeepSeek
+    // off on 2026-09-29 until their accounts are funded, to use them later: owner, 2026-09-29, item 113.
+    "M5.7.1":5,
     // The full profile needs presidio, which the redactor (M4) uses: owner, 2026-09-21, item 77.
     "M0.4.2":1,
     // Ignoring a duplicate chat delivery needs Wave 2's inbound chat route: owner, 2026-09-22, item 95.
