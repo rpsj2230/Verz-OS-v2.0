@@ -17,6 +17,7 @@ import { modelPinApiPath } from "../../../src/pages/agentModelPinQuery";
 import { agentBudgetApiPath } from "../../../src/pages/agents/AgentSpend";
 import { memoryDeletionApiPath, memoryEditApiPath } from "../../../src/pages/agents/agentMemoryQuery";
 import { artifactArchiveApiPath, artifactSupersedeApiPath } from "../../../src/pages/agents/agentArtifactsQuery";
+import { leashMoveApiPath, supervisionApiPath } from "../../../src/pages/agents/agentLeashQuery";
 import { UNDO_API_PATH } from "../../../src/pages/learningQuery";
 import { agentPreviewApiPath, skillAssignApiPath, skillDetachApiPath } from "../../../src/pages/agents/agentCapabilitiesQuery";
 import { agentMoveApiPath } from "../../../src/pages/agentLifecycleQuery";
@@ -65,6 +66,16 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   ],
   "src/pages/agents/AgentCapabilities.tsx agentPreviewApiPath(agentId)": [
     at("POST /api/v1/agents/{agent_id}/preview", "agentPreviewApiPath", agentPreviewApiPath("quote-helper")),
+  ],
+  "src/pages/agents/AgentLeash.tsx leashMoveApiPath(agentId)": [
+    at("POST /api/v1/agents/{agent_id}/leash/moves", "leashMoveApiPath", leashMoveApiPath("quote-helper")),
+  ],
+  'src/pages/agents/AgentLeash.tsx supervisionApiPath(agentId, "verdicts")': [
+    at("POST /api/v1/agents/{agent_id}/supervision/verdicts", "supervisionApiPath", supervisionApiPath("quote-helper", "verdicts")),
+  ],
+  "src/pages/agents/AgentLeash.tsx supervisionApiPath(agentId, one.kind)": [
+    at("POST /api/v1/agents/{agent_id}/supervision/pin", "supervisionApiPath", supervisionApiPath("quote-helper", "pin")),
+    at("POST /api/v1/agents/{agent_id}/supervision/review", "supervisionApiPath", supervisionApiPath("quote-helper", "review")),
   ],
   "src/pages/agents/AgentArtifacts.tsx artifactArchiveApiPath(agentId, one.item.artifactId)": [
     at(
@@ -155,7 +166,45 @@ const ARTIFACT_CHANGED = t(
 const AN_ARTIFACT_CHANGE_IS_ITS_OWN_RECORD =
   "Superseding or archiving an artifact changes nobody's access, which is what the ledger records; the change is a row of agent.artifact_change naming who, at what reach, in which request and when (0153).";
 
+/** Rungs moved, proposed, raised by a second person and tripped by a verdict, over HTTP against PostgreSQL. */
+const LEASH_MOVED = t(
+  "test_agent_leash_routes",
+  "test_a_rung_rises_on_counted_evidence_by_two_people_falls_at_once_and_trips_on_a_verdict",
+  true,
+);
+
+/** A pin written, a review refused early, and one extended, over HTTP against PostgreSQL. */
+const SUPERVISION_REVIEWED = t(
+  "test_agent_leash_routes",
+  "test_a_pin_holds_the_agent_down_is_not_reviewed_early_and_extends_when_nobody_judged",
+  true,
+);
+
+/** Why a verdict, a pin and a review write no ledger entry. */
+const A_SUPERVISION_ROW_IS_ITS_OWN_RECORD =
+  "A verdict, a pin and a review change nobody's access, which is what the ledger records; each is a row of 0158's naming who and when, and a rung that moves because of one is a leash move, which is on the ledger.";
+
 export const PROOFS: Readonly<Record<string, Proofs>> = {
+  "POST /api/v1/agents/{agent_id}/leash/moves": {
+    row: LEASH_MOVED,
+    audit: LEASH_MOVED,
+    behaviour: LEASH_MOVED,
+  },
+  "POST /api/v1/agents/{agent_id}/supervision/verdicts": {
+    row: LEASH_MOVED,
+    audit: { notApplicable: A_SUPERVISION_ROW_IS_ITS_OWN_RECORD },
+    behaviour: LEASH_MOVED,
+  },
+  "POST /api/v1/agents/{agent_id}/supervision/pin": {
+    row: SUPERVISION_REVIEWED,
+    audit: { notApplicable: A_SUPERVISION_ROW_IS_ITS_OWN_RECORD },
+    behaviour: SUPERVISION_REVIEWED,
+  },
+  "POST /api/v1/agents/{agent_id}/supervision/review": {
+    row: SUPERVISION_REVIEWED,
+    audit: { notApplicable: A_SUPERVISION_ROW_IS_ITS_OWN_RECORD },
+    behaviour: SUPERVISION_REVIEWED,
+  },
   "POST /api/v1/agents/{agent_id}/artifacts/{artifact_id}/archive": {
     row: ARTIFACT_CHANGED,
     audit: { notApplicable: AN_ARTIFACT_CHANGE_IS_ITS_OWN_RECORD },

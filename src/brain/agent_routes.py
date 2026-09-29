@@ -203,6 +203,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.agents.catalogue import CATALOGUE
 from brain.agents.install import bind_tools, bound_leash
+from brain.agents.leash_moves import LeashMove, effective_leash, held_while_supervised
 from brain.agents.model import (
     AgentAudience,
     AgentAuthority,
@@ -269,10 +270,12 @@ from brain.knowledge.visibility import Visibility
 from brain.listing import Column, ListAsked, Listing, Plan
 from brain.models.registry import ModelPin
 from brain.models.routing import Tier
+from brain.ops.leash_store import moves_in, pin_in
 from brain.ops.spend import Actual, SpendError
 from brain.routing_routes import sessions_of
 from brain.tables.agent import AgentRow
 from brain.tables.identity import PrincipalRow
+from brain.tables.leash import PinOutcome
 from brain.tables.spend import SpendActualRow
 from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
 from brain.tools.registry import ToolRegistry
@@ -1417,13 +1420,24 @@ class Configured:
 
 
 def configured(
-    record: AgentRecord, install: Install | None, registry: ToolRegistry | None
+    record: AgentRecord,
+    install: Install | None,
+    registry: ToolRegistry | None,
+    *,
+    moves: Sequence[LeashMove] = (),
+    supervision: PinOutcome | None = None,
 ) -> Configured:
-    """The agent's tools and leash rows, computed once for the header and the Profile alike."""
+    """The agent's tools and leash rows, computed once for the header and the Profile alike.
+
+    The leash is the install's with every stored move applied and the supervision hold on top,
+    which is the leash a run is governed by (`brain.agents.leash_moves`). An agent nothing has
+    moved and nobody pinned has the install's leash, as it always had.
+    """
     tools = tool_rows(record.authority, registered_tools(record, registry))
-    rows = leash_rows(
-        leash_of(install, registry), record.agent_id, (one.name for one in tools if one.acts)
+    leash = held_while_supervised(
+        effective_leash(leash_of(install, registry), moves), record.agent_id, supervision
     )
+    rows = leash_rows(leash, record.agent_id, (one.name for one in tools if one.acts))
     return Configured(tools=tools, leash=rows)
 
 
@@ -1490,6 +1504,8 @@ def workspace(
     spend: Sequence[Actual] = (),
     created_at: datetime | None = None,
     owner_name: str | None = None,
+    moves: Sequence[LeashMove] = (),
+    supervision: PinOutcome | None = None,
 ) -> WorkspaceView:
     """One visible agent's workspace at this caller's reach.
 
@@ -1516,7 +1532,11 @@ def workspace(
     # One name for "there is an install and this reader may read its configuration", so the
     # three blocks below cannot come apart by somebody editing one condition of three.
     settings = install if install is not None and reads_settings else None
-    setup = configured(record, install, registry) if reads_settings else None
+    setup = (
+        configured(record, install, registry, moves=moves, supervision=supervision)
+        if reads_settings
+        else None
+    )
     may_read_skills = permitted(screen(SKILL_SCREEN).read, asked.reach, asked.now)
     highest = None if setup is None else leash_up_to(setup.leash)
     return WorkspaceView(
@@ -1767,6 +1787,8 @@ async def agent_workspace(request: Request, agent_id: str, asked: Asked) -> Work
         pair = (await session.execute(install_for(agent_id))).one_or_none()
         costs = (await session.execute(spend_for(agent_id, since))).scalars().all()
         names = await steward_names(session, [record.audience.owner_id])
+        moves = await moves_in(session, agent_id)
+        held = await pin_in(session, agent_id)
     install = install_of(pair[0], pair[1], record) if pair is not None else None
     spend = [one for one in (actual_of(row) for row in costs) if one is not None]
     return workspace(
@@ -1777,6 +1799,8 @@ async def agent_workspace(request: Request, agent_id: str, asked: Asked) -> Work
         spend=spend,
         created_at=created_at,
         owner_name=names.get(record.audience.owner_id),
+        moves=moves,
+        supervision=None if held is None else held.outcome,
     )
 
 

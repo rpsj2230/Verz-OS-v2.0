@@ -15,6 +15,7 @@ Task ids: M39.4.1.1, M39.4.1.2, M39.4.1.3, M39.4.1.4, M39.4.1.5, M39.4.2.1, M39.
 Task ids: M39.6.1.1, M39.6.1.2, M39.6.1.3, M39.6.1.4, M39.6.1.5, M39.6.2.1, M39.6.2.2, M39.6.2.4
 Task ids: M39.5.1.1, M39.5.1.2, M39.5.1.4, M39.5.1.5, M39.5.2.1, M39.5.2.2, M39.5.2.3, M39.5.2.4
 Task ids: M39.5.2.5, M39.8.4, M39.8.5
+Task ids: M39.3.2.1, M39.3.2.2, M39.3.2.3, M39.3.2.4, M39.3.2.5, M39.8.2, M39.8.3
 """
 
 from __future__ import annotations
@@ -108,6 +109,15 @@ LEAVES = {
         "M39.5.2.5",
         "M39.8.4",
         "M39.8.5",
+    ),
+    "an_agents_leash_moves_on_evidence_and_its_pin_extends": (
+        "M39.3.2.1",
+        "M39.3.2.2",
+        "M39.3.2.3",
+        "M39.3.2.4",
+        "M39.3.2.5",
+        "M39.8.2",
+        "M39.8.3",
     ),
 }
 
@@ -466,4 +476,60 @@ def test_a_download_that_trusts_its_own_person_fails_the_artifact_check(
     assert run_checks(head, (by_name(name),))[name] == (
         FAILED,
         "the steward could fetch a report whose cost they may not read",
+    )
+
+
+LEASH_CHECK = "an_agents_leash_moves_on_evidence_and_its_pin_extends"
+
+
+@pytest.mark.needs_db
+def test_a_money_rise_one_person_can_make_fails_the_leash_check(
+    head: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With no effect counted as irreversible and the second signature not asked for, one
+    person's press raises a money rung, and the check says so. Both, because `may_raise` asks for
+    the second signature again on its own and refuses the press when only the first is gone.
+    Delete this and the check could pass over an install where a single leash holder moves an
+    agent that spends money onto its own."""
+    monkeypatch.setattr("brain.agents.leash_moves.IRREVERSIBLE", frozenset())
+    monkeypatch.setattr("brain.agents.leash_moves.may_raise", lambda **kwargs: True)
+
+    assert run_checks(head, (by_name(LEASH_CHECK),))[LEASH_CHECK] == (
+        FAILED,
+        "a money rise moved on one person's press",
+    )
+
+
+@pytest.mark.needs_db
+def test_a_breaker_that_never_trips_fails_the_leash_check(
+    head: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With the breaker answering that nothing trips, a rejected action leaves the rung where it
+    was, and the check says so. Delete this and the check could pass over a breaker that is
+    inert, which looks exactly like an estate behaving well."""
+    import brain.agents.leash_moves as moves
+
+    monkeypatch.setattr(moves, "breaker_trips", lambda **kwargs: None)
+
+    assert run_checks(head, (by_name(LEASH_CHECK),))[LEASH_CHECK] == (
+        FAILED,
+        "a rejected action did not trip the rung it ran at",
+    )
+
+
+@pytest.mark.needs_db
+def test_a_pin_that_holds_nothing_fails_the_leash_check(
+    head: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With supervision holding no rung down, the pinned agent's Assisted rung suspends its
+    action rather than simulating it, and the check says so. Delete this and the check could pass
+    over an install where a pin is a row nothing reads."""
+    import brain.agents.leash_moves as moves
+    from brain.gate.injection import AutonomyTier
+
+    monkeypatch.setattr(moves, "HELD_AT_WHILE_SUPERVISED", AutonomyTier.AUTONOMOUS)
+
+    assert run_checks(head, (by_name(LEASH_CHECK),))[LEASH_CHECK] == (
+        FAILED,
+        "a pinned agent was not held at Shadow",
     )

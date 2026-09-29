@@ -99,6 +99,12 @@ from brain.tables.identity import (
 from brain.tables.knowledge import KnowledgeItemRow
 from brain.tables.knowledge_lifecycle import SolutionRow, StewardTaskRow
 from brain.tables.learning import CorrectionRow, LearningRow
+from brain.tables.leash import (
+    ActionVerdictRow,
+    LeashChangeRow,
+    SupervisedActionRow,
+    SupervisionPinRow,
+)
 from brain.tables.manifest_draft import (
     ManifestActRow,
     ManifestDraftRow,
@@ -412,6 +418,12 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0153_artifact_change_and_client. A change points at the artifact it changed and at the one
     # that superseded it, which are never deleted; the person is a value.
     "agent.artifact_change",
+    # 0158_leash_changes_and_supervision. A move, an action, a verdict and a pin point at
+    # nothing: the agent, the action and the people are values, so the record outlives them.
+    "agent.leash_change",
+    "agent.supervised_action",
+    "agent.action_verdict",
+    "agent.supervision_pin",
 )
 
 __all__ = [
@@ -419,6 +431,7 @@ __all__ = [
     "AcceptanceResultRow",
     "AccessRequestHandledRow",
     "AccessRequestRow",
+    "ActionVerdictRow",
     "AdaptiveMemoryRow",
     "AgentAutomationRow",
     "AgentRow",
@@ -472,6 +485,7 @@ __all__ = [
     "HaltRow",
     "KnowledgeItemRow",
     "LearningRow",
+    "LeashChangeRow",
     "LegalHoldRow",
     "ManifestActRow",
     "ManifestDraftRow",
@@ -522,6 +536,8 @@ __all__ = [
     "StaffMemberRow",
     "StaffSyncRunRow",
     "StewardTaskRow",
+    "SupervisedActionRow",
+    "SupervisionPinRow",
     "SuspensionRow",
     "TeamMembershipRow",
     "TeamRow",

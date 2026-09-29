@@ -614,6 +614,10 @@ WRITTEN_BY_CHECKS = (
     "ops.budget_version",
     "agent.artifact",
     "agent.artifact_change",
+    "agent.leash_change",
+    "agent.supervised_action",
+    "agent.action_verdict",
+    "agent.supervision_pin",
 )
 
 
@@ -693,9 +697,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         acceptance_audit.NO_DEPLOYMENT_IS_RECORDED_TO_KEEP_OUT,
     )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
-    assert len(outcomes) == 56
+    assert len(outcomes) == 57
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 162
+    assert runs == [(2,)] and len(recorded) == 164
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }

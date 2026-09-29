@@ -35,10 +35,6 @@ export const UNAVAILABLE = Object.freeze({
     reason: "Coming soon: changing who can find this agent.",
     retiredBy: /^\/api\/v1\/agents\/\{[^}]+\}\/(audience|availability)\b/,
   },
-  leash: {
-    reason: "Coming soon: changing how much a person is involved before an action.",
-    retiredBy: /^\/api\/v1\/agents\/\{[^}]+\}\/leash\b/,
-  },
   browser: {
     reason: "Not available yet: browser use. It is built and tested, and has never been switched on for any agent.",
     retiredBy: /^\/api\/v1\/agents\/\{[^}]+\}\/browser\b/,

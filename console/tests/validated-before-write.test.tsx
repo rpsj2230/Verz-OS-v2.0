@@ -107,6 +107,11 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
  * Checked, not trusted: an entry for a file that no longer holds both fails the first test.
  */
 const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
+  "src/pages/agents/AgentLeash.tsx":
+    "Both forms are choices from lists the API sent, a setting and a rung, and a verdict from the " +
+    "ledger's four; nothing is typed, so nothing can be sent blank, and Change is disabled until a " +
+    "different rung is chosen. tests/agent-leash.test.tsx holds that every write is sent only from " +
+    "its confirmation, and the leash block is inside the Profile, whose page case mounts no leash.",
   "src/pages/agents/AgentMemory.tsx":
     "The one form corrects a memory, opened from its row in the Memory section at its own address, " +
     "which no page case mounts. tests/agent-memory.test.tsx submits it blank and holds that nothing " +
