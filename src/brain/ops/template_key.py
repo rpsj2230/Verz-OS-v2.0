@@ -24,11 +24,11 @@ once the policy's missing update applies), and both then read the slot and use w
 process ever signs with the value it minted unless the vault kept that value. See
 `THE_KEY_USED_IS_THE_KEY_THE_VAULT_HOLDS`.
 
-**A slot that held a key and holds none now is not refilled.** Only somebody with the unseal
-pieces can delete a version, because no policy here grants delete, and a key minted again after
-that would be a replacement by another route. The vault refuses the create, by the missing update
-or by the check-and-set, because the slot has a version history, and the state is `UNUSABLE`, said
-in words.
+**A slot that held a key and holds none now is not refilled.** Only somebody holding a root token
+made from the recovery key can delete a version, because no policy here grants delete, and a key
+minted again after that would be a replacement by another route. The vault refuses the create, by
+the missing update or by the check-and-set, because the slot has a version history, and the state is
+`UNUSABLE`, said in words.
 
 **The key never leaves the vault except into this process's memory.** It is carried as a
 `brain.ops.leases.SealedSecret`, whose every rendering is the seal, until `hold` puts the characters
@@ -152,10 +152,11 @@ TEMPLATE_KEY_SAYS: Final[Mapping[TemplateKeyState, str]] = MappingProxyType(
             "each version signed with this install's own key."
         ),
         TemplateKeyState.WAITING: (
-            "Template signing key: not yet created, waiting for the vault policy reload. Until "
-            "three holders of the unseal pieces load this release's policies "
-            "(ops/openbao/UNSEAL.md, Loading a release's policies on a running install) and the "
-            "application restarts, publishing and installing agents are unavailable."
+            "Template signing key: not yet created, waiting for the vault policy reload. Each "
+            "deploy applies its release's policies itself; a vault still opened by people moves "
+            "first with ops/openbao/switch-to-auto-unseal.sh (ops/openbao/UNSEAL.md, Moving an "
+            "older install). Until the policy is in force and the application restarts, "
+            "publishing and installing agents are unavailable."
         ),
         TemplateKeyState.NO_VAULT: (
             "Template signing key: none. This install runs no secrets vault and the key is kept "

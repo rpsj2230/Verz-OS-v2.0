@@ -376,7 +376,9 @@ def test_live_reads_are_said_to_wait_until_the_loaded_policy_allows_the_one_mint
         "waiting",
         LIVE_READS_SAY[LiveReads.WAITING],
     )
-    assert "load-policies.sh" in before["live_reads_told"]
+    # What moves it on, named: a deploy applies a release's policies itself, and an install whose
+    # vault is still opened by people moves with the switch (needs-rupash 114).
+    assert "switch-to-auto-unseal.sh" in before["live_reads_told"]
     assert (after["live_reads"], after["live_reads_told"]) == (
         "ready",
         LIVE_READS_SAY[LiveReads.READY],

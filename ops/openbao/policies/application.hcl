@@ -125,8 +125,9 @@ path "auth/token/create/connector-run" {
 # whenever the slot already holds a version, so without it nothing this token does can replace the
 # key, whatever the request carries. read, because this process signs and verifies with it. One
 # exact path and no wildcard, no delete, no destroy and no metadata, so its version history cannot
-# be erased from here either. The engine is enabled by the installer; on an install made before it,
-# by the step in ops/openbao/UNSEAL.md, Loading a release's policies on a running install.
+# be erased from here either. The engine is enabled by every release's deploy
+# (ops/openbao/apply-release.sh); an install whose vault is still opened by people moves first
+# (ops/openbao/UNSEAL.md, Moving an older install).
 path "template_signing/data/key" {
   capabilities = ["create", "read"]
 }

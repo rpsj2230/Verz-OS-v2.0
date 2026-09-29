@@ -67,15 +67,17 @@ until an audit asked.
 
 **The installer does every step of this on a fresh install**, and of the two sections below
 about signing secrets and a connected source's key, since 2026-09-17: see `UNSEAL.md`, under
-First install, which the installer now does for you. These are the same steps by hand, for an
-install made before it did, or a `lite` install run with `--no-vault` that later wants a vault.
-Done once, by whoever holds a token that may write policy, which during first setup is the root
-token before `UNSEAL.md` step 6 revokes it. No value in these steps belongs to any particular
-install, and none is written into this repository.
+First install, which the installer does for you. And since 2026-09-29 every release applies its
+own engines, policies, token role and slots with `ops/openbao/apply-release.sh` (the same
+`UNSEAL.md`, under Every release keeps the vault up to date by itself), so the engine and policy
+steps below are what that script does. These are the steps by hand, for a `lite` install run with
+`--no-vault` that later wants a vault. Done once, by whoever holds a token that may write policy,
+which is a root token made from the recovery key (`UNSEAL.md`, In an emergency). No value in these
+steps belongs to any particular install, and none is written into this repository.
 
 1. Enable a version 2 kv engine at the prefix the code reads: `bao secrets enable -path=providers kv-v2`.
-2. Load the policies, which now include the provider slots in `application.hcl`:
-   `sh ops/openbao/load-policies.sh`.
+2. Load the policies, which include the provider slots in `application.hcl`:
+   `sh ops/openbao/apply-release.sh`, which enables every engine and loads every policy.
 3. Mint the application's token against that policy alone, as an orphan with a period, and
    read it once from the terminal: `bao token create -orphan -policy=application -period=768h`.
    The application renews it itself while it runs, once less than half the period is left
@@ -153,7 +155,7 @@ naming the two settings, which the Webhooks screen shows.
 To let the application keep them, once per install that runs a vault:
 
 1. Enable a version 2 kv engine at that prefix: `bao secrets enable -path=webhooks kv-v2`.
-2. Load the policies: `sh ops/openbao/load-policies.sh`.
+2. Load the policies: `sh ops/openbao/apply-release.sh`.
 3. Mint the worker's token against its policy: `bao token create -orphan -policy=worker -period=768h`, and
    append it to the install's environment file as `BRAIN_WORKER_VAULT_TOKEN`. On `standard` and
    `full` the installer, the update and the rollback then compose `docker-compose.vault.worker.yml`
@@ -190,7 +192,8 @@ has no vault, and the Connectors screen shows it.
 To let the application keep them and the worker read them, once per install that runs a vault:
 
 1. Enable a version 2 kv engine at that prefix: `bao secrets enable -path=connector_keys kv-v2`.
-2. Load the policies: `sh ops/openbao/load-policies.sh`, which also loads `connector-run.hcl`.
+2. Load the policies: `sh ops/openbao/apply-release.sh`, which also loads `connector-run.hcl` and
+   does steps 3 and 4 below.
 3. Create the token role the worker mints against, exactly as the installer does:
    `bao write auth/token/roles/connector-run allowed_policies=connector-run orphan=false renewable=false token_no_default_policy=true token_explicit_max_ttl=3600`.
 4. Define every source's slot with its scopes and no key, as the installer does, one
@@ -297,14 +300,14 @@ are unavailable. A lite install run with `--no-vault` stays that way until it ru
 
 **On an install made before 2026-09-29** the engine is not enabled and the loaded policy does not
 grant the slot, so the card says the key waits for the vault policy reload. `UNSEAL.md`, under
-Loading a release's policies on a running install, is the one sitting that enables the engine,
-loads the policies and restarts the application, and it also puts live reads (needs-rupash 99) in
-force.
+Moving an older install, is the one command that moves its vault onto the seal that opens itself,
+enables the engine, loads the policies and restarts the application, and it also puts live reads
+(needs-rupash 99) in force. Every release after it does the same by itself.
 
 **If the card says "not used"**, the slot holds a value the application will not sign with, or held
 a key that somebody holding a root token deleted. The application never fills it again, because a
 key minted after a deletion is a replacement by another route, and every version signed with the
-old key would stop installing. Deciding what to do is an operator's with the unseal pieces: the
+old key would stop installing. Deciding what to do is an operator's with the recovery key: the
 old key's versions are lost to installs either way.
 
 ## Three things worth deciding before the keys are issued, not after

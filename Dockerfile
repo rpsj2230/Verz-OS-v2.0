@@ -109,6 +109,12 @@ COPY --chown=brain:brain docs /app/docs
 # the whole of `ops/`, because the rest of that directory is runbooks and host scripts that
 # have no business in a container that serves requests.
 COPY --chown=brain:brain ops/keycloak/realm-export.json /app/ops/keycloak/realm-export.json
+# The release's vault changes: the script that applies them and the policy files it loads. Nothing
+# in the image runs them; the server's deploy hook (ops/deploy/brain-deploy) copies them out of a
+# new image before starting it and applies them with the deploy token it keeps root-only, so a
+# release's policies arrive with the release on a server that has no checkout (needs-rupash 114).
+COPY --chown=brain:brain ops/openbao/apply-release.sh /app/ops/openbao/apply-release.sh
+COPY --chown=brain:brain ops/openbao/policies /app/ops/openbao/policies
 # The built console, which this application serves at the root of the install's web address.
 # `brain.console_static` looks for it here and serves nothing at all when it is absent, so a
 # local `docker build` that dropped this line would produce an image whose only symptom is a

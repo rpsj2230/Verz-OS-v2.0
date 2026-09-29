@@ -79,7 +79,7 @@ class Seal(enum.StrEnum):
     UNREACHABLE = "unreachable"
     #: The vault answered and has never been initialised.
     UNINITIALISED = "uninitialised"
-    #: Initialised and sealed: it opens with three of its five pieces.
+    #: Initialised and sealed: a vault that opens itself should never be seen here for long.
     SEALED = "sealed"
     #: Initialised and open.
     OPEN = "open"
@@ -100,8 +100,9 @@ SEAL_SAYS: Final[Mapping[Seal, str]] = MappingProxyType(
             "steps did not finish: ops/openbao/UNSEAL.md, under Finishing what the installer began."
         ),
         Seal.SEALED: (
-            "The secrets vault is sealed, so nothing can read or keep a credential until three "
-            "holders of its unseal pieces open it: ops/openbao/UNSEAL.md, under After a restart."
+            "The secrets vault is sealed, so nothing can read or keep a credential. It opens "
+            "itself from its seal key when it starts, so a vault that stays sealed cannot read "
+            "that key: ops/openbao/UNSEAL.md, under If the vault stays sealed."
         ),
         Seal.OPEN: "The secrets vault is open.",
     }

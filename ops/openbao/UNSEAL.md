@@ -1,297 +1,243 @@
-# The secrets vault: setting it up, and opening it after a restart
+# The secrets vault: what it does by itself, what you keep, and what to do when it goes wrong
 
-For whoever operates the Company Brain. Written to be followed by someone who has not read
-the code.
+For whoever runs the Company Brain on their own server. Written to be followed by someone who has
+not read the code.
 
-Task ids: M31.3.2.1, M42.6.2
+Task ids: M31.3.2.1, M31.3.2.2, M42.6.2
 
 ---
 
 ## What this is, in one paragraph
 
-The vault holds the passwords and API keys the system uses to reach Xero, Lark, Freshdesk
-and its own database. It exists so those keys are not sitting in configuration files, where
-they live as long as the server and appear in every backup and every screen-share.
+The vault holds the passwords and keys the system uses to reach your model provider, your mail
+relay, Lark, Xero, Freshdesk and the rest. It keeps them out of configuration files, where they
+would live as long as the server and appear in every backup and every screen-share. The console
+only ever writes a key into it; nothing shows a key back.
 
-The vault starts **sealed**. Sealed means locked: it is running, it will answer that it is
-alive, and it cannot read a single one of its own secrets until somebody opens it. That
-happens on first install and again after every restart of the vault container.
+## What happens when the server or the vault restarts
 
-**While it is sealed, the system cannot reach any connector.** The Brain will start, the
-console will load, and questions that need Xero or Lark will say the source could not be
-reached. That is the correct behaviour, and it is also the symptom you will see if nobody
-noticed a restart.
+**Nothing you need to do.** The vault opens itself. When its container starts it reads a key file
+that only root on this server can read, `/etc/brain-vault/seal.key`, and uses it to unlock its own
+data. A reboot, `docker restart brain-vault` or an update all come back with the vault open and
+nobody typing anything.
 
----
+**The trade-off, said plainly** (your decision of 2026-09-29, Needs Rupash item 114): anyone who
+has root on this server can open the vault. On one server that person can already read the
+running application's memory, where every key the vault hands out ends up, so pieces held by five
+people bought a ceremony at every restart rather than protection. It is reversible: see the last
+section.
 
-## Before you start: the three decisions, and where they now live
+## What to keep, and where
 
-These were item 17 on the Needs Rupash page and they are settled.
+Two things leave the server. Nothing else needs keeping.
 
-1. **How many key pieces, and how many are needed to open it: five pieces, any three open
-   it.** Three people have to agree, and you survive losing two.
-2. **Who holds a piece: five people, named in the policy.** They should not all be reachable
-   through the same laptop, the same phone or the same building, and at least one must be
-   someone who is never on call, so a piece exists outside the group that would be handling
-   an incident.
-3. **The root token is destroyed after setup.** It can do anything, including undo every
-   policy in this directory. Step 6 destroys it.
+1. **The seal key, `/etc/brain-vault/seal.key`.** Without it the vault's data can never be opened
+   again, by anybody, and every key in it has to be issued again by hand. Copy it into your
+   password manager as its own entry (it is 32 bytes: `sudo base64 /etc/brain-vault/seal.key`
+   prints it in a form you can paste, and `base64 -d` turns it back), or into your company's own
+   key store. **Never put it beside a backup of the vault's data**: whoever holds both can open
+   that copy. The product's own nightly backup copies the database and never this directory.
+2. **The recovery key, `/etc/brain-vault/recovery.key`.** It does not open the vault. It makes a
+   root token in an emergency (below). Move it into your password manager, then delete the file:
+   `sudo shred -u /etc/brain-vault/recovery.key`. If your install chose five recovery pieces
+   instead (see the numbers, below), there is no file: five people hold one piece each.
 
-**None of these numbers is typed into this page.** They live in `brain.ops.vault_quorum`,
-which is where they get reviewed and where the five holders are named, and every command
-below is printed by that module. Two numbers on one shell line have no way of refusing a
-combination that is arithmetically fine and operationally ruinous, and three of those exist:
-a threshold of one hands every holder a key that opens the vault alone; a threshold equal to
-the share count means one lost laptop destroys the vault permanently; and one person holding
-two pieces makes a three-of-five secretly a two-of-four. The module refuses all three, and a
-test compares what it prints against this page, so the two cannot drift apart.
+**What stays on the server, root-only, and needs nothing from you:** the seal key itself (the vault
+reads it at every start) and `/etc/brain-vault/deploy.token`, which lets each release apply its own
+vault changes. The directory is mode `0700` and each file `0400`.
 
-To see the numbers and the commands, and to check whether the five holders have actually
-been named yet:
+The application's and the worker's own tokens are in `/opt/brain/.env` (or your hosting panel's
+settings) and renew themselves while they run.
+
+## The numbers, and where they live
+
+The vault is initialised once, with a recovery split. The default is one recovery key; a company
+that wants no single person able to make a root token chooses five pieces, any three of which are
+needed, with `--recovery-split` on the installer. **Neither number is typed into this page.** They
+live in `brain.ops.vault_quorum`, which refuses the combinations that initialise perfectly and ruin
+you later (five pieces any one of which works alone; five pieces all of which are needed), and a
+test compares what it prints against this page. To see both choices and every command below:
 
     uv run python -m brain.ops.vault_quorum
 
-It exits non-zero while any holder slot is still `UNASSIGNED`. That is not a bug to work
-around: a vault whose custodians have not been chosen is not ready to be initialised, and
-initialising it anyway hands five pieces to nobody in particular.
+The default, which the installer runs:
 
-**Changing the split later is not an edit.** The split is fixed at `bao operator init`. The
-only way to change it afterwards is `bao operator rekey`, which itself needs three of the
-current five holders to take part. Editing the policy after initialisation changes what this
-page says and nothing about the running vault.
+    docker exec -it brain-vault bao operator init -recovery-shares=1 -recovery-threshold=1
 
----
+The stricter choice:
 
-## First install, which the installer now does for you
+    docker exec -it brain-vault bao operator init -recovery-shares=5 -recovery-threshold=3
 
-Since 2026-09-17 `ops/install/install.sh` runs the vault on every profile (a `lite` install may
-decline it with `--no-vault`), and it does steps 1 to 6 below itself, in four steps of its own:
-it starts the vault, initialises it with the split above, **prints the five pieces once at the
-terminal**, opens it with three of them, turns on both audit devices, enables the `providers`,
-`webhooks`, `connector_keys` and `template_signing` engines, loads the policies, creates the `connector-run` token
-role a connector run's token is minted against, defines every source's key slot with its scopes and
-no key, mints the application's token and,
-on a profile with a worker, the worker's, each with a period of 768 hours, appends them and the
-vault's address to `/opt/brain/.env`, and revokes the root token. `brain.deployment.vault_setup`
-is the code and the argument.
+**Changing the split later is not an edit.** It is `bao operator rekey -target=recovery`, which
+needs the current recovery key or pieces.
 
-**What you keep is the five pieces, and nothing else.**
+## First install, which the installer does for you
 
-- Each piece with a different person, handed over before you press Enter at the installer's
-  prompt, and none of them anywhere on the server. The installer writes them nowhere, and
-  nothing can show them again.
-- Who holds which piece is your company's decision and is recorded outside this repository. The
-  installer prints them as piece 1 to piece 5 and names nobody.
-- Nothing about the root token: it no longer exists when the installer finishes. If one is ever
-  needed, three holders generate a new one (see step 6).
-- The two tokens are in `/opt/brain/.env` beside the database password, under the same mode, and
-  the application and the worker renew their own while they run. Nothing to keep.
-
-If the terminal was recorded, or the install was run through `tee` or into a log, that record
-holds the pieces. Destroy it.
-
-## Finishing what the installer began
-
-The root token existed only in the shell that initialised the vault. So if the install stopped
-after it printed the pieces and before `/opt/brain/.env` held the tokens, a second run of the
-installer stops at the same place and sends you here. What is left is done by hand, by the
-person running the install with three of the holders:
-
-1. Open the vault, three times, with three different pieces:
-   `docker exec -it brain-vault bao operator unseal`.
-2. Generate a root token with the same three holders: `docker exec -it brain-vault bao operator
-   generate-root -init`, then the steps it prints. It leaves a record that it happened.
-3. With that token, do what the installer did not: enable any
-   of `providers`, `webhooks`, `connector_keys` and `template_signing` that `bao secrets list` does
-   not show, each as
-   `bao secrets enable -path=<name> kv-v2`; `sh ops/openbao/load-policies.sh`; then the
-   `connector-run` token role and the source slots, steps 3 and 4 of "A connected source's key" in
-   `ops/openbao/credential-slots.md`.
-4. Mint the tokens as `ops/openbao/credential-slots.md` says, and append `BRAIN_VAULT_ADDRESS`,
-   `BRAIN_VAULT_TOKEN` and, on `standard` or `full`, `BRAIN_WORKER_VAULT_TOKEN` to
-   `/opt/brain/.env`.
-5. Revoke the root token (step 6 below), and run the installer again: every step already done
-   says so and skips.
-
-If the installer says the root token could not be revoked, only step 5 is left: generate a new
-one with three holders, revoke the old one by its accessor from `bao list auth/token/accessors`,
-then revoke the new one with step 6.
-
-## Loading a release's policies on a running install
-
-A release that changes a file in `ops/openbao/policies`, or adds an engine, is not in force on a
-running vault: the vault goes on enforcing the policies it loaded until somebody with three unseal
-pieces loads them again. On an install made before 2026-09-29 two changes wait on this, and one
-sitting does both:
-
-- **Answers reading a connected source live** (needs-rupash 99): the application's policy now lets
-  it mint the one-read `connector-run` token. Until the reload, the Credentials screen's vault card
-  says "Answers cannot read connected sources live yet".
-- **The template signing key** (needs-rupash 82): a new engine, `template_signing`, and create and
-  read on its one slot, so the application can mint the key once and read it. Until the reload the
-  card says "Template signing key: not yet created, waiting for the vault policy reload", and
-  publishing and installing agents are unavailable.
-
-You need three of the five holders, each with their own piece; a shell on the server as a user
-that may run `docker`; and the release's `ops/openbao/` directory on that server (on an install
-made by the installer, `/opt/brain/ops/openbao`, which each update replaces with the release's own).
-Nothing below is typed into a file, and the root token exists from step 4 to step 7 only.
-
-1. On the console, open **Credentials**. The vault card must show a **Template signing key** line.
-   If it does not, the install is not on this release yet: update it first, then start here.
-2. On the server, go to the directory that holds this release's `ops/openbao/` (on an install made
-   by the installer, `cd /opt/brain`).
-3. Start a root token: `docker exec -it brain-vault bao operator generate-root -init`. It prints a
-   **Nonce** and an **OTP**. Leave both on this screen; nothing else needs them.
-4. Each of the three holders in turn runs
-   `docker exec -it brain-vault bao operator generate-root -nonce=<the Nonce from step 3>` and types
-   their own piece at the prompt, which does not show it. The third run prints an **Encoded Token**.
-   Put the root token into this shell without it reaching the screen:
-   `export BAO_TOKEN="$(docker exec brain-vault bao operator generate-root -decode=<the Encoded Token> -otp=<the OTP from step 3>)"`.
-5. Enable the new engine: `docker exec -e BAO_TOKEN brain-vault bao secrets list`. If
-   `template_signing/` is not in the list, run
-   `docker exec -e BAO_TOKEN brain-vault bao secrets enable -path=template_signing kv-v2`.
-   Enabling it again when it is listed is refused and changes nothing.
-6. Load the policies: `sh ops/openbao/load-policies.sh`. It prints `loaded application` and one
-   line for every other policy, then the list the vault holds. Confirm the two changes are in force:
-   `docker exec -e BAO_TOKEN brain-vault bao policy read application` shows
-   `path "template_signing/data/key"` with `["create", "read"]` and
-   `path "auth/token/create/connector-run"` with `["create", "update"]`. Confirm the token role live
-   reads mint against is there: `docker exec -e BAO_TOKEN brain-vault bao read
-   auth/token/roles/connector-run` shows `allowed_policies` as `[connector-run]`; if it says no value
-   was found, create it with step 3 of "A connected source's key" in `credential-slots.md`.
-7. Revoke the root token and clear it from the shell:
-   `docker exec -e BAO_TOKEN brain-vault bao token revoke -self`, then `unset BAO_TOKEN`.
-8. Restart the application, which mints the key into its empty slot and reads it back: on an
-   install made by the installer, `docker compose <your profile's -f files> restart app` from
-   `/opt/brain`; on a deployment panel, restart the application there. The worker needs no restart.
-9. Confirm on the console: **Credentials**, the vault card says "Template signing key: held" and no
-   longer says answers cannot read connected sources live. The application's log has a
-   `template signing key held` line per process and never the key. Live reads needed no restart:
-   the vault applies a reloaded policy to the tokens already out.
-
-If step 9 still says waiting, step 5 or 6 did not take: `bao secrets list` and `bao policy read
-application` under a new root token (steps 3 and 4) say which, and step 7 revokes it again.
+`ops/install/install.sh` runs the vault on every profile (a `lite` install may decline it with
+`--no-vault`). In five steps of its own it writes the seal key, starts the vault, initialises it
+and keeps the recovery key, configures it and hands out its tokens, and applies the release's vault
+changes with the deploy token to prove that works. `brain.deployment.vault_setup` is the code and
+the argument. What you do afterwards is the two copies under "What to keep".
 
 ## First install by hand
 
-For a server where the installer cannot run. Every step below is one the installer makes.
+For a server where the installer does not run, a hosting panel for instance. Each step is one the
+installer makes, and the order matters: the seal key has to exist before the vault first starts.
 
-**Before step 1: swap.** The vault keeps decrypted keys in memory and OpenBao 2.4 no longer
-locks that memory, so swap can write them to disk. Best is `cat /proc/swaps` listing nothing,
-or only dm-crypt (`/dev/dm-N` whose `/sys/block/dm-N/dm/uuid` starts `CRYPT-`) or zram devices:
-turn swap off (`swapoff -a`, and remove the line from `/etc/fstab`) or encrypt it. A plain swap
-file is a risk you can accept; the installer asks for `yes`, or `--accept-unencrypted-swap`.
+1. The seal key, root-only: `sudo install -d -m 0700 /etc/brain-vault`, then
+   `sudo sh -c 'head -c 32 /dev/urandom > /etc/brain-vault/seal.key && chmod 0400 /etc/brain-vault/seal.key'`.
+2. The network and the vault: `docker network create brain-vault`, then
+   `docker compose -f ops/openbao/compose.yml up -d`.
+3. Initialise it once, with the line under "The numbers" above. It prints a recovery key (or five
+   pieces) and a root token, once. Keep the recovery key as "What to keep" says, and put the root
+   token into this shell without it reaching the screen: `read -rs BAO_TOKEN; export BAO_TOKEN`,
+   then paste it.
+4. The release's engines, policies, token role and slots: `sudo -E sh ops/openbao/apply-release.sh`.
+5. The token method's ceiling, so the deploy token lives a year between releases:
+   `docker exec -e BAO_TOKEN brain-vault bao auth tune -max-lease-ttl=8760h token/`.
+6. The application's and the worker's tokens, as `ops/openbao/credential-slots.md` says, handed to
+   the application with the vault's address `http://vault:8200`; and the deploy token, as step 4 of
+   "In an emergency" below says.
+7. Step 5 of "In an emergency": revoke the root token.
 
-**Step 1. Start the vault.**
+## Every release keeps the vault up to date by itself
 
-    docker compose -f ops/openbao/compose.yml up -d
+A release can change a policy (what the application or the worker may read) or add an engine (a
+new kind of secret). Each release carries its own `ops/openbao/apply-release.sh` and policy files,
+and its deploy runs them with the deploy token before the new application starts:
 
-You should see one container running and reporting itself as sealed. Its two audit devices,
-`file/` (the log volume, read by the worker) and `stdout/` (the docker log), are declared in the
-compose file and come up with it: OpenBao 2.4 refuses to enable an audit device over the API, so
-there is no step for them, and recreating the container keeps them. `BAO_ADDR` is set in the
-container, so `docker exec brain-vault bao ...` needs no address.
+- on a server that updates with `ops/update/update.sh`, step "apply this release's vault
+  policies, engines and roles";
+- on a server that deploys itself on a timer (`ops/deploy/brain-deploy`), from inside the new
+  image, before anything runs it.
 
-**Step 2. Initialise it. This happens exactly once, ever.**
+It enables any engine the release adds, loads every policy, defines the connector-run token role
+and the source slots, reads every one back, and prints one line:
 
-The line below is the one `brain.ops.vault_quorum` prints. Do not retype it from memory and
-do not adjust the numbers here; if they need to change, change the policy and this page will
-be updated with it, because a test fails when they disagree.
+    vault: in force: 4 engines, 5 policies, the connector-run token role and 8 credential slots
 
-    docker exec -it brain-vault bao operator init -key-shares=5 -key-threshold=3
+It never removes anything and never reads a secret. A release that changed nothing changes nothing.
 
-The screen will print **five unseal key pieces and one root token**. This is the only time
-they are ever shown. Nobody can recover them later, including the vault itself.
+### When a release's vault changes do not take
 
-**Step 3. Distribute the pieces, now, before doing anything else.**
+The deploy stops (a timer deploy holds the new image back; an update stops before recreating the
+containers) and the lines above it name what did not take. What they mean:
 
-Each of the five people takes one piece, in the order the policy names them. Send each piece
-to its holder **individually and through a different channel from the one you used to tell
-them it was coming**: not all five in one group chat, and not in the same thread that says
-what they are for.
+- **"the vault refused the token this ran with"**: the deploy token has lapsed (it lives a year and
+  every deploy renews it) or was revoked. Make a new one: "In an emergency", then step 4 there.
+- **"this release changes the deploy token's own policy"**: the one policy a deploy may not load
+  itself, so a deploy can never widen its own reach. Load it with a root token: "In an emergency".
+- **"not running, or is sealed"**: see "If the vault stays sealed".
+- anything else names an engine, a policy or a slot; running the step again is safe.
 
-Do not put the pieces in the Brain. Do not put them in a document in the same Google account
-that the Brain can reach. The whole point is that they live somewhere the system does not.
+To check by hand at any time, as root in the release directory:
 
-**Step 4. Open it for the first time.** Run this once per piece, with three different
-pieces:
+    sh ops/openbao/apply-release.sh --check
 
-    docker exec -it brain-vault bao operator unseal
+## If the vault stays sealed
 
-It will ask for a key, and tell you how many more it needs. After the third, it reports
-`Sealed: false`.
+`docker exec brain-vault bao status` says `Sealed true` and does not change. The vault could not
+read its seal key:
 
-**Step 5. Load the policies.**
+1. `sudo ls -l /etc/brain-vault/seal.key` must show `-r-------- 1 root root 32`. If the file is
+   missing, put your copy back (`base64 -d` from your password manager entry into that path, then
+   `sudo chmod 0400` it), then `docker restart brain-vault`.
+2. `docker logs brain-vault` names the fault if the file is there but wrong: a key that is not the
+   one the vault was initialised with cannot open it, and nothing but the right key will.
 
-    sh ops/openbao/load-policies.sh
+The console's Credentials screen says the same thing in words while it lasts.
 
-**Step 6, `revoke_root`. Check that a normal role works, then destroy the root token.**
+## In an emergency: a root token from the recovery key
 
-Confirm the application can get a lease using its own policy, and confirm whichever admin
-login you will use from now on actually works. Then, and only then:
+Needed only for the two cases above (a lapsed deploy token, a change to the deploy token's own
+policy) or to finish an interrupted install. The root token can do anything, so it lives for this
+sitting only.
 
-    docker exec -it brain-vault bao token revoke -self
+1. Start: `docker exec -it brain-vault bao operator generate-root -init`. It prints a **Nonce** and
+   an **OTP**. Leave both on the screen.
+2. Give the recovery key: `docker exec -it brain-vault bao operator generate-root -nonce=<the Nonce>`
+   and paste it at the prompt, which does not show it. With five pieces, three people do this in
+   turn. The last one prints an **Encoded Token**.
+3. Put the root token into this shell without it reaching the screen, the encoded token on standard
+   input so no process list ever holds both halves:
+   `export BAO_TOKEN="$(printf '%s' '<the Encoded Token>' | docker exec -i brain-vault bao operator generate-root -decode=- -otp=<the OTP>)"`.
+   Step 5 revokes it, which makes anything left in this shell's history useless.
+4. Do what you came for:
+   - a new deploy token: `docker exec -e BAO_TOKEN brain-vault bao token create -policy=deploy -no-default-policy -orphan -period=8760h -field=token | sudo tee /etc/brain-vault/deploy.token >/dev/null`,
+     then `sudo chmod 0400 /etc/brain-vault/deploy.token`;
+   - a release's deploy policy: `sudo sh ops/openbao/apply-release.sh` from the release directory,
+     which uses `BAO_TOKEN` when it is set.
+5. Step `revoke_root`. Revoke the root token and clear it:
 
-From this point nothing holds unlimited power over the vault. That is the intended state.
+       docker exec -it brain-vault bao token revoke -self
 
-**Why this step is not optional, and why it is not enough to just put the token somewhere
-safe.** A root token that still exists is a credential that bypasses every policy in
-`ops/openbao/policies`, and the audit log cannot tell you when it was used: an entry records
-a token accessor as an HMAC, with no field marking one as root, so "somebody used the root
-token" and "an administrator did their job" are the same line in the log. Locking the token
-in a drawer or a sealed envelope does not change either fact. It protects the paper, not the
-token, and the token was also in whatever terminal scrollback, screen recording or shell
-history existed when step 2 printed it, so the envelope was never the only copy.
+   then `unset BAO_TOKEN`.
 
-**If a root token is genuinely needed again**, it is regenerated rather than retrieved:
+**Why the root token is never kept, not even in an envelope.** It bypasses every policy in
+`ops/openbao/policies`, and the audit log cannot tell its use from an administrator's: an entry
+records a token as an HMAC with no field marking it as root. An envelope protects the paper, not
+the token. The recovery key makes a new one whenever it is needed, and leaves a record that it did.
 
-    docker exec -it brain-vault bao operator generate-root
+## Finishing what the installer began
 
-That needs three of the five holders, which is the same three people who could open the
-vault anyway, and it leaves a record that it happened. Nothing an envelope offers is
-missing, and the permanent unattributable bypass is.
+The root token existed only in the shell that initialised the vault. If the install stopped after
+"initialise the secrets vault and keep its recovery key" and before `/opt/brain/.env` held the
+tokens, a second run stops at the same place and sends you here:
 
----
+1. Make a root token from `/etc/brain-vault/recovery.key`: "In an emergency", steps 1 to 3.
+2. Apply the release's vault changes as root: `sudo -E sh ops/openbao/apply-release.sh` from
+   `/opt/brain`.
+3. Mint the tokens as `ops/openbao/credential-slots.md` says, append `BRAIN_VAULT_ADDRESS`,
+   `BRAIN_VAULT_TOKEN` and, on `standard` or `full`, `BRAIN_WORKER_VAULT_TOKEN` to `/opt/brain/.env`,
+   and mint the deploy token (step 4 above).
+4. Revoke the root token (step 5 above) and run the installer again: every step already done says
+   so and skips.
 
-## After a restart
+## Moving an older install
 
-This is the one you will actually do, and it is short.
+An install made before 2026-09-29 has a vault that people unseal, and its releases' vault changes
+wait for three of them. One command moves it onto the seal that opens itself, in place: every
+secret, engine and token stays exactly as it is, so nothing that hands the application its token
+(a hosting panel's stored settings, `/opt/brain/.env`) changes. It needs three of the vault's
+unseal pieces, in a file shaped as `bao operator init` printed them (`Unseal Key 1: ...` lines).
 
-**How you will know.** Questions that need an outside system start answering "I could not
-reach one of the systems needed to answer that". The vault container will be running.
+As root on the server, from this release's `ops/openbao` directory:
 
-**What to do.** Three of the five holders each run:
+    sudo bash switch-to-auto-unseal.sh --pieces-file <the file holding the pieces>
 
-    docker exec -it brain-vault bao operator unseal
+It proves the pieces against the running vault before changing anything, stops the vault for
+under a minute, keeps a dated copy of its data under `/root/brain-vault-backups`, moves the seal,
+restarts the vault once to prove it opens itself, rekeys the old pieces into one recovery key
+(`--recovery-split` keeps them as five recovery pieces instead), applies the release's vault
+changes, mints the deploy token, checks every token the containers hold, restarts them, and prints
+what to keep. The old pieces open nothing afterwards. It is safe to run again.
 
-Once the third piece goes in, it opens. A connector's next request reconnects on its own.
+**To go back**, while that dated copy exists:
 
-**If the whole server restarted, restart the application as well, after the vault is open.**
-The application reads the provider keys and the object store's key from the vault once, as it
-starts, so an application that started while the vault was sealed answers without them until it
-is started again: `docker compose <your profile's files> restart app`, from `/opt/brain`. An
-application that was already running when only the vault restarted still holds them.
+    sudo bash switch-to-auto-unseal.sh --rollback --pieces-file <the same file>
 
-**How long it takes:** about two minutes, most of which is reaching three people.
+It restores the data as it was before the move and opens it with the pieces, as before. Anything
+written to the vault after the move is lost, and it says so first.
 
----
+### If the pieces are lost
+
+The in-place move needs three pieces and refuses without them. A vault whose pieces are gone keeps
+working for as long as its container is never restarted, because it is open now; a restart seals
+it for good. Do not restart it, and ask for the rebuild described in Needs Rupash item 114: a new
+vault beside it, the secrets copied by the tokens that can read them, and new tokens handed to the
+application, which is the one change a hosting panel's stored settings would need.
 
 ## Things worth knowing before they happen
 
-**Losing three pieces means losing the vault.** Not the data the Brain holds, which is in
-Postgres, but every credential stored here. Recovery means re-issuing every API key from
-every provider by hand. This is the reason for five pieces rather than three.
+**Losing the seal key means losing the vault.** Not the data the Brain holds, which is in
+Postgres, but every credential stored here: every key re-issued by hand from every provider.
+That is the reason for the copy under "What to keep".
 
-**A restart is not an emergency, but it is silent.** The vault does not announce that it
-sealed. The first sign is a connector failing. Worth knowing so that the answer is "somebody
-restarted the vault" rather than an hour spent looking at Xero.
+**The seal key and a copy of the vault's data are two halves of the same key.** Keep them apart.
 
-**Automatic unsealing exists and is deliberately not used here.** It works by keeping the
-key somewhere the machine can read it, which means a vault that opens itself for anyone who
-gets the machine. That trade is right for a large estate with hardware key storage. It is
-not right for one server holding one company's credentials.
+**The deploy token can widen what the application's tokens reach**, because it loads their
+policies, so it is as sensitive as the vault and lives beside the seal key. It cannot read a
+secret, write one, mint a token, remove anything, or change its own policy.
 
-**The root token is not a spare key.** If it still exists, it is a permanent way around
-every policy in this directory. That is why step 6 destroys it, and why a new one has to be
-generated by the same people who hold the unseal pieces if it is ever genuinely needed.
+**Going back to pieces held by people** is `bao operator rekey` and a seal migration the other way,
+with the recovery key. Ask for it and it will be written up; nothing about this install stops it.

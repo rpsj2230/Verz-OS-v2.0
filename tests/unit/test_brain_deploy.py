@@ -13,7 +13,12 @@ about a sequence the stub was told to expect.
 
 Skipped where there is no `bash`; CI's runner has one.
 
-Task ids: M38.1.3.3, M38.1.3.4, M38.1.3.5
+Since 2026-09-29 (needs-rupash 114) it also applies the new release's own vault changes, read out
+of the new image, with the deploy token the server keeps root-only, before anything runs that
+image. The stub carries a stand-in for the image's `ops/openbao` directory whose apply script
+records that it ran and exits as the scenario says.
+
+Task ids: M38.1.3.3, M38.1.3.4, M38.1.3.5, M31.3.2.2
 """
 
 from __future__ import annotations
@@ -132,7 +137,11 @@ case "$1" in
   tag) echo "$2" > "$S/tag"; exit 0 ;;
   compose) cp "$S/tag" "$S/running"; exit 0 ;;
   create) echo cid ;;
-  cp) printf '{\n  "task_ids": [\n    "M1.1.1",\n    "M2.2.2"\n  ]\n}\n' ;;
+  cp)
+    case "$2" in
+      *:/app/ops/openbao/.) [ -d "$S/openbao" ] || exit 1; cp -R "$S/openbao/." "$3"; exit 0 ;;
+    esac
+    printf '{\n  "task_ids": [\n    "M1.1.1",\n    "M2.2.2"\n  ]\n}\n' ;;
 esac
 exit 0
 """
@@ -146,6 +155,7 @@ class Ran:
     running: str
     published: str
     output: str
+    applied: str
     containers: dict[str, list[str]]
 
 
@@ -164,8 +174,15 @@ def deploy(
     networks: tuple[tuple[str, str], ...] = ONE_NETWORK,
     containers: tuple[str, ...] = (),
     broken: tuple[str, ...] = (),
+    deploy_token: bool = False,
+    apply_exit: int | None = None,
 ) -> Ran:
-    """Run the real script once: the app runs `running`, the registry's tag is `NEW`."""
+    """Run the real script once: the app runs `running`, the registry's tag is `NEW`.
+
+    `deploy_token` puts a deploy token file where the script looks; `apply_exit` gives the new
+    image an `ops/openbao/apply-release.sh` that exits with it, and None gives it none, as an image
+    from before the vault changes shipped in it.
+    """
     state = tmp_path / "state"
     bin_dir = tmp_path / "bin"
     service = tmp_path / "service"
@@ -196,6 +213,18 @@ def deploy(
         faildir.mkdir()
         (faildir / "sha256_new").write_text(f"{failed_before}\n", encoding="utf-8", newline="\n")
     record = tmp_path / "deployments.jsonl"
+    token = tmp_path / "deploy.token"
+    if deploy_token:
+        token.write_text("a-deploy-token", encoding="utf-8", newline="\n")
+    if apply_exit is not None:
+        carried = state / "openbao"
+        carried.mkdir()
+        (carried / "apply-release.sh").write_text(
+            f'#!/bin/sh\necho "applied with $BRAIN_VAULT_DEPLOY_TOKEN_FILE" > "{state}/applied"\n'
+            f"exit {apply_exit}\n",
+            encoding="utf-8",
+            newline="\n",
+        )
 
     env = {
         **os.environ,
@@ -207,6 +236,7 @@ def deploy(
         "BRAIN_DEPLOY_FAILDIR": faildir.as_posix(),
         "BRAIN_DEPLOY_READY_TRIES": "2",
         "BRAIN_DEPLOY_READY_GAP": "0",
+        "BRAIN_DEPLOY_VAULT_TOKEN_FILE": token.as_posix(),
     }
     assert BASH is not None
     done = subprocess.run(
@@ -214,6 +244,7 @@ def deploy(
     )
     lines = record.read_text(encoding="utf-8").splitlines() if record.exists() else []
     published = state / "published"
+    applied = state / "applied"
     return Ran(
         code=done.returncode,
         calls=(state / "calls").read_text(encoding="utf-8").splitlines(),
@@ -221,6 +252,7 @@ def deploy(
         running=(state / "running").read_text(encoding="utf-8").strip(),
         published=published.read_text(encoding="utf-8") if published.exists() else "",
         output=done.stdout + done.stderr,
+        applied=applied.read_text(encoding="utf-8").strip() if applied.exists() else "",
         containers={
             line.split()[0]: line.split()
             for line in (state / "containers").read_text(encoding="utf-8").splitlines()
@@ -530,3 +562,63 @@ def test_an_image_the_gate_held_back_never_reaches_the_workers(tmp_path: Path) -
     assert ran.code == 1
     assert ran.containers[f"brain-worker-{UUID}"][4] == OLD
     assert not any(call.startswith("compose") for call in ran.calls)
+
+
+# ------------------------------------------------------------------ the vault (M31.3.2.2)
+def test_a_release_applies_its_own_vault_changes_before_anything_runs_its_image(
+    tmp_path: Path,
+) -> None:
+    """Owner decision 2 of needs-rupash 114: the new image's own apply script, copied out of the
+    image, runs with the deploy token before the candidate starts, so the application that passes
+    the gate is the one written against those policies. Delete this and the apply can drift after
+    the gate, where an application needing a new grant is held back for want of it, or stop reading
+    the token from where the server keeps it."""
+    ran = deploy(tmp_path, running=OLD, good={OLD, NEW}, deploy_token=True, apply_exit=0)
+
+    assert ran.code == 0, ran.output
+    assert ran.applied == f"applied with {(tmp_path / 'deploy.token').as_posix()}"
+    copied = next(
+        i for i, call in enumerate(ran.calls) if call.startswith("cp cid:/app/ops/openbao/.")
+    )
+    started = first(ran.calls, "run -d --name brain-candidate-")
+    assert copied < started
+    assert ran.running == NEW
+    assert [one["outcome"] for one in ran.records] == ["deployed"]
+    assert "a-deploy-token" not in ran.output
+
+
+def test_a_release_whose_vault_changes_do_not_take_is_held_back_before_the_gate(
+    tmp_path: Path,
+) -> None:
+    """Refused loudly: the image is held back exactly as one that never answers ready, the app is
+    untouched and no candidate is started. Delete this and a release can go live against a vault
+    that refused its policies, and fail at its first secret instead of at the deploy."""
+    ran = deploy(tmp_path, running=OLD, good={OLD, NEW}, deploy_token=True, apply_exit=1)
+
+    assert ran.code == 1
+    assert "vault policies, engines or roles did not take" in ran.output
+    assert not any(call.startswith(("run ", "compose")) for call in ran.calls)
+    assert ran.running == OLD
+    assert [one["outcome"] for one in ran.records] == ["held_back"]
+
+
+def test_a_server_with_no_deploy_token_says_so_and_deploys_as_before(tmp_path: Path) -> None:
+    """An install whose vault is still opened by people has no deploy token, and its deploys must go
+    on. Delete this and every deploy on such a server stops until somebody moves its vault, or the
+    note that its vault changes were not applied disappears."""
+    ran = deploy(tmp_path, running=OLD, good={OLD, NEW}, deploy_token=False, apply_exit=0)
+
+    assert ran.code == 0, ran.output
+    assert "no deploy token" in ran.output
+    assert ran.applied == ""
+    assert ran.running == NEW
+
+
+def test_an_image_from_before_the_vault_changes_shipped_deploys_as_before(tmp_path: Path) -> None:
+    """An older image carries no `ops/openbao`, which is not a failure: it has nothing to apply.
+    Delete this and a rollback to an older image is held back by the vault step for ever."""
+    ran = deploy(tmp_path, running=OLD, good={OLD, NEW}, deploy_token=True, apply_exit=None)
+
+    assert ran.code == 0, ran.output
+    assert "carries no vault changes" in ran.output
+    assert ran.running == NEW

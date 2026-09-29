@@ -261,7 +261,9 @@ def test_every_step_that_writes_something_says_when_it_is_already_done() -> None
 
     Delete this and a step added next year makes the whole installer unsafe to re-run, with
     nothing to say which one."""
-    assert len(PLAN) == 21
+    # 23 since 2026-09-29: the vault's seal key and the release's vault changes are steps of
+    # their own (needs-rupash 114), and both write, so both carry a done test.
+    assert len(PLAN) == 23
     for step in PLAN:
         if step.changes:
             assert step.already_done.strip(), f"{step.name} writes and cannot say it is done"
@@ -336,11 +338,13 @@ def test_printing_something_that_is_not_a_credential_is_not_a_leak() -> None:
     assert value_leaks_in('POSTGRES_PASSWORD="$(openssl rand -hex 32)"') == ()
 
 
-def test_exactly_two_steps_present_a_value_the_setup_code_and_the_vaults_unseal_pieces() -> None:
+def test_exactly_two_steps_present_a_value_the_setup_code_and_the_vaults_recovery_pieces() -> None:
     """The two deliberate exceptions. The setup code has to reach the person standing at the
     console or nobody can become the first administrator, which `brain.firstrun` already
-    argues; and the vault's unseal pieces have to reach the people who will hold them, once,
-    because nothing can show them again, which `brain.deployment.vault_setup` argues. What
+    argues; and on the stricter recovery choice the vault's five recovery pieces have to reach the
+    people who will hold them, once, because nothing can show them again, which
+    `brain.deployment.vault_setup` argues. The default single recovery key is written to a
+    root-only file and printed nowhere. What
     matters is that each is a declared flag on one step rather than a value that got through
     because its name happened not to match a pattern.
 
@@ -351,7 +355,7 @@ def test_exactly_two_steps_present_a_value_the_setup_code_and_the_vaults_unseal_
     Delete this and the exception spreads to whichever step somebody finds inconvenient."""
     presenting = [one for one in PLAN if one.presents_once]
     assert [one.name for one in presenting] == [
-        "initialise the secrets vault and show its unseal pieces, once",
+        "initialise the secrets vault and keep its recovery key",
         "present the setup code, once",
     ]
     assert value_leaks_in(presenting[1].run), "the exception is not being exercised"

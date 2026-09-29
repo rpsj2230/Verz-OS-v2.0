@@ -827,8 +827,8 @@ CONTROLS: Final[tuple[Control, ...]] = (
             "Nothing reads the vault on the path of an ordinary question, so a lapsed token is "
             "found weeks later: the console refuses to keep a key, the worker's deliveries all "
             "fail naming the vault, and the next restart loads no provider key at all. A lapsed "
-            "token cannot be renewed, only minted again under a root token that three holders "
-            "of the unseal pieces have to generate."
+            "token cannot be renewed, only minted again under a root token made from the vault's "
+            "recovery key (ops/openbao/UNSEAL.md, In an emergency)."
         ),
         every=VAULT_TOKEN_CHECK_EVERY,
         cadence_from="brain.ops.vault_renewal:CHECK_EVERY",

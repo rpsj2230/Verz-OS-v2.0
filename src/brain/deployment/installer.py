@@ -712,15 +712,30 @@ PLAN: Final[tuple[Step, ...]] = (
         already_done=(f'grep -q "^POSTGRES_PASSWORD=." "{INSTALL_HOME}/{INSTALL_ENV_FILE}"'),
     ),
     # The secrets vault, between minting the install's own credentials and anything that composes
-    # the stack, because the last of these four decides which files every later compose command
-    # reads. See `brain.deployment.vault_setup`, which owns the shell and the argument.
+    # the stack, because the last of these decides which files every later compose command reads.
+    # See `brain.deployment.vault_setup`, which owns the shell and the argument.
+    Step(
+        name="make the secrets vault's seal key",
+        run=vault_setup.seal_key_run(),
+        why=(
+            "the vault opens itself from this key whenever it starts, so no restart needs anybody. "
+            "32 random bytes in a root-only file outside the release directory. See "
+            "vault_setup.THE_VAULT_OPENS_ITSELF_FROM_A_KEY_ONLY_ROOT_CAN_READ"
+        ),
+        on_failure=(
+            "check this runs as root and /etc is writable, then run this again. Nothing else has "
+            "been made yet"
+        ),
+        changes=True,
+        already_done=vault_setup.seal_key_done(),
+    ),
     Step(
         name="start the secrets vault",
         run=vault_setup.start_run(INSTALL_HOME),
         why=(
             "every profile keeps credentials put in from a browser, and the vault is the one "
             "place they are kept. Its own compose project, so a deploy of the application never "
-            "restarts and seals it. See vault_setup.THE_VAULT_RUNS_WHEREVER_A_CREDENTIAL_IS_KEPT"
+            "restarts it. See vault_setup.THE_VAULT_RUNS_WHEREVER_A_CREDENTIAL_IS_KEPT"
         ),
         on_failure=(
             "read `docker logs brain-vault`. Nothing secret has been made yet, so running this "
@@ -730,19 +745,19 @@ PLAN: Final[tuple[Step, ...]] = (
         already_done=vault_setup.start_done(INSTALL_HOME),
     ),
     Step(
-        # `presents_once` for the second of the two values that have to reach the person at the
-        # terminal. See `vault_setup.THE_UNSEAL_PIECES_ARE_SHOWN_ONCE_AND_KEPT_BY_PEOPLE`.
-        name="initialise the secrets vault and show its unseal pieces, once",
+        # `presents_once` for the stricter recovery choice, whose five pieces have to reach five
+        # people. The default writes its one key to a root-only file and prints only where.
+        name="initialise the secrets vault and keep its recovery key",
         run=vault_setup.initialise_run(),
         why=(
-            "the vault makes its unseal pieces once, ever, and nothing can show them again. They "
-            "are printed here and written nowhere, and the root token stays in this shell for "
-            "the next step alone. See "
-            "vault_setup.THE_UNSEAL_PIECES_ARE_SHOWN_ONCE_AND_KEPT_BY_PEOPLE"
+            "the vault makes its recovery key and its root token once, ever. The recovery key "
+            "does not open the vault; it makes a root token in an emergency. The root token stays "
+            "in this shell for the next step alone. See "
+            "vault_setup.THE_RECOVERY_KEY_IS_AN_EMERGENCY_SPARE"
         ),
         on_failure=(
-            "if no piece was printed, nothing was made: read `docker logs brain-vault` and run "
-            "this again. If pieces were printed, keep them, and finish by hand with "
+            "if no key was written or printed, nothing was made: read `docker logs brain-vault` "
+            "and run this again. If one was, keep it, and finish by hand with "
             "ops/openbao/UNSEAL.md under Finishing what the installer began"
         ),
         changes=True,
@@ -750,14 +765,13 @@ PLAN: Final[tuple[Step, ...]] = (
         presents_once=True,
     ),
     Step(
-        name="open the secrets vault and give this install its tokens",
-        run=vault_setup.open_run(INSTALL_HOME, INSTALL_ENV_FILE),
+        name="configure the secrets vault and give this install its tokens",
+        run=vault_setup.configure_run(INSTALL_HOME, INSTALL_ENV_FILE),
         why=(
-            "opens the vault with the pieces just made, enables the engines the product writes "
-            "to, loads the policies, mints the application's and the "
-            "worker's tokens with a period, appends them to the environment file with the "
-            "vault's address, and revokes the root token. See "
-            "vault_setup.THE_ROOT_CREDENTIAL_LIVES_FOR_ONE_STEP"
+            "waits for the vault to open itself, applies this release's engines, policies, token "
+            "role and slots under the root token, mints the application's and the worker's "
+            "tokens into the environment file and the deploy token into its root-only file, and "
+            "revokes the root token. See vault_setup.A_RELEASE_APPLIES_ITS_OWN_VAULT_CHANGES"
         ),
         on_failure=(
             "the root token existed only in the run that initialised the vault, so this step "
@@ -765,7 +779,25 @@ PLAN: Final[tuple[Step, ...]] = (
             "Finishing what the installer began"
         ),
         changes=True,
-        already_done=vault_setup.open_done(INSTALL_HOME, INSTALL_ENV_FILE),
+        already_done=vault_setup.configure_done(INSTALL_HOME, INSTALL_ENV_FILE),
+    ),
+    Step(
+        # The update and the rollback take this step by name, so an install and every release
+        # after it apply a release's vault changes in exactly one way.
+        name="apply this release's vault policies, engines and roles",
+        run=vault_setup.apply_run(INSTALL_HOME),
+        why=(
+            "every release carries its own vault policies and engines, and they take effect here, "
+            "with the deploy token, rather than when somebody finds a root token. Read back and "
+            "refused loudly if one did not take. See "
+            "vault_setup.A_RELEASE_APPLIES_ITS_OWN_VAULT_CHANGES"
+        ),
+        on_failure=(
+            "the lines above name what did not take. ops/openbao/UNSEAL.md, under When a "
+            "release's vault changes do not take, says what to do; running this again is safe"
+        ),
+        changes=True,
+        already_done=vault_setup.apply_done(INSTALL_HOME, INSTALL_ENV_FILE),
     ),
     Step(
         name="compose the secrets vault in",
@@ -942,8 +974,8 @@ PLAN: Final[tuple[Step, ...]] = (
             "application. See brain.ops.template_key"
         ),
         on_failure=(
-            "the line above says why. If the vault refused, load this release's policies with "
-            "ops/openbao/UNSEAL.md under Loading a release's policies on a running install, then "
+            "the line above says why. If the vault refused, this release's policies are not in "
+            "force: ops/openbao/UNSEAL.md, under When a release's vault changes do not take, then "
             "run this again; a second run never replaces a key the first one kept"
         ),
         changes=True,
