@@ -1,40 +1,41 @@
 /**
- * The Compliance screen: who each sensitive topic is routed to and the naming of a person, the
- * processing register, and breach cases opened, moved step by step and closed.
+ * Compliance on the page kit: breach cases and each case's own page, sensitive topics, and the
+ * processing register.
  *
- * Mounted directly on a memory router at its own address, for the reason
- * `tests/sessions-page.test.tsx` gives. The failures worth testing are the ones that look like the
- * screen working: a write sent without its confirmation, a reference that fails the route's own
- * pattern only after it was sent, an estimate opened without its earliest moment, a close offered
- * on a case the API says is not closable, and a suppressed tally drawn as a number.
+ * Mounted through the page's own route file. The failures worth testing: a record that cannot be
+ * taken back sent without its confirmation, a form judged only after the confirmation, a step offered
+ * on a case that no longer takes it, a principal id where a person's name belongs, and a count of
+ * intercepted questions small enough to point at somebody.
  *
- * **What each form sends is read against the route's own request body**, so a key or a pattern this
- * console invented is a failure here rather than a 422 in front of the person recording a breach.
- *
- * Task ids: M24.2.2, M24.2.3, M24.2.4
+ * Task ids: M24.2.2, M24.2.3, M24.2.4, M27.16.1
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
-import { fireEvent, render, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
 import {
-  ASSESS_FORM_LABEL,
   ASSESS_LABEL,
   CLOSE_LABEL,
-  COMMISSION_FORM_LABEL,
   COMMISSION_LABEL,
   EXCEPTION_FORM_LABEL,
-  INDIVIDUALS_FORM_LABEL,
+  INDIVIDUALS_LABEL,
   NAME_FORM_LABEL,
   NAME_LABEL,
-  NOBODY_NAMED,
-  NOTHING_CONNECTED,
-  NO_CASES,
   OPENING,
   OPEN_FORM_LABEL,
   OPEN_LABEL,
+  REVIEW_CASE,
+} from "../src/pages/compliance/ComplianceActs";
+import { NO_CASE } from "../src/pages/compliance/BreachPage";
+import {
+  caseAddress,
+  NAME_A_PERSON,
+  NOBODY_NAMED,
+  NOTHING_CONNECTED,
+  NO_CASES,
   READING_COMPLIANCE,
-} from "../src/pages/Compliance";
+  viewAddress,
+} from "../src/pages/compliance/CompliancePage";
 import {
   IDENTIFIER_PATTERN,
   assessBody,
@@ -51,6 +52,8 @@ import {
 } from "../src/pages/complianceQuery";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { declaredPropertySchema, declaredRequestBodySchema } from "./support/openapi";
+import { installRadixStubs } from "./support/radix";
+import { chooseInMenu, confirmWith } from "./support/rowMenu";
 
 const CONSOLE_ORIGIN = "https://console.test";
 const TOPICS_OPERATION = "/api/v1/govern/compliance/topics";
@@ -59,6 +62,7 @@ const BREACHES_OPERATION = "/api/v1/govern/compliance/breaches";
 const CASE = "11111111-1111-4111-8111-111111111111";
 
 beforeAll(async () => {
+  installRadixStubs();
   await import("../src/pages/Compliance");
 }, 60_000);
 
@@ -75,6 +79,7 @@ function topics(overrides: Partial<TopicsAnswer> = {}): TopicsAnswer {
     tally: { period: "2019-03", total: null, by_topic: null, suppressed: true },
     referral: "REFERRAL-SENTENCE",
     routing: "ROUTING-SENTENCE",
+    people: { u_hr: "Hana HR", u_admin: "Adam Admin" },
     ...overrides,
   };
 }
@@ -139,10 +144,7 @@ function breach(overrides: Partial<Breach> = {}): Breach {
 }
 
 function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json" },
-  });
+  return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 }
 
 interface Stand {
@@ -151,38 +153,32 @@ interface Stand {
   breaches?: BreachesAnswer;
 }
 
-async function mount(stand: Stand = {}): Promise<{ container: HTMLElement; idp: FakeIdp }> {
-  const cases = stand.breaches ?? { cases: [breach()], closing: "CLOSING-SENTENCE" };
+async function mount(path: string, stand: Stand = {}): Promise<{ container: HTMLElement; idp: FakeIdp }> {
+  const cases = stand.breaches ?? { cases: [breach()], closing: "CLOSING-SENTENCE", people: { u_dpo: "Dana DPO" } };
   const idp = fakeIdentityProvider({
     api(url, init) {
-      const path = new URL(url, CONSOLE_ORIGIN).pathname;
+      const at = new URL(url, CONSOLE_ORIGIN).pathname;
       if (init?.method === "PUT") {
         return json({ principal_id: "u_new", named_by: "u_admin", named_at: "2019-03-05T10:00:00Z" });
       }
       if (init?.method === "POST") {
         return json(breach({ case_id: "22222222-2222-4222-8222-222222222222" }));
       }
-      if (path === TOPICS_OPERATION) {
-        return json(stand.topics ?? topics());
-      }
-      if (path === REGISTER_OPERATION) {
-        return json(stand.register ?? register());
-      }
-      if (path === BREACHES_OPERATION) {
-        return json(cases);
-      }
-      return null;
+      const reads: Record<string, unknown> = {
+        [TOPICS_OPERATION]: stand.topics ?? topics(),
+        [REGISTER_OPERATION]: stand.register ?? register(),
+        [BREACHES_OPERATION]: cases,
+      };
+      return at in reads ? json(reads[at]) : null;
     },
   });
   const loaded = await loadConsole({ idp });
   await signIn(loaded);
-  const { Compliance } = await import("../src/pages/Compliance");
-  const router = createMemoryRouter([{ path: "/compliance", element: <Compliance /> }], {
-    initialEntries: ["/compliance"],
-  });
+  const { routes } = await import("../src/pages/Compliance.route");
+  const router = createMemoryRouter(routes.map((one) => ({ path: `/${one.path}`, element: one.element })), { initialEntries: [path] });
   const { container } = render(<RouterProvider router={router} />);
   await waitFor(() => {
-    if (container.textContent?.includes(READING_COMPLIANCE) || !container.querySelector("h2")) {
+    if ((container.textContent ?? "").includes(READING_COMPLIANCE) || container.querySelector("h1") === null) {
       throw new Error("still reading");
     }
   });
@@ -191,12 +187,7 @@ async function mount(stand: Stand = {}): Promise<{ container: HTMLElement; idp: 
 
 function writes(idp: FakeIdp): { method: string; path: string; body: unknown }[] {
   return idp.calls
-    .filter(
-      (call) =>
-        call.init?.method !== undefined &&
-        call.init.method !== "GET" &&
-        new URL(call.url, CONSOLE_ORIGIN).pathname.startsWith("/api/"),
-    )
+    .filter((call) => call.init?.method !== undefined && call.init.method !== "GET" && new URL(call.url, CONSOLE_ORIGIN).pathname.startsWith("/api/"))
     .map((call) => ({
       method: call.init?.method ?? "",
       path: new URL(call.url, CONSOLE_ORIGIN).pathname,
@@ -204,34 +195,14 @@ function writes(idp: FakeIdp): { method: string; path: string; body: unknown }[]
     }));
 }
 
-function formNamed(container: HTMLElement, label: string): HTMLFormElement {
-  const found = container.querySelector(`form[aria-label="${label}"]`);
-  if (found === null) {
-    throw new Error(`no form labelled ${label}`);
-  }
-  return found as HTMLFormElement;
+function type(form: HTMLElement, name: string, value: string): void {
+  fireEvent.change(form.querySelector(`[name="${name}"]`) as HTMLInputElement, { target: { value } });
 }
 
-function field(form: Element, label: string): HTMLInputElement | HTMLSelectElement {
-  const found = [...form.querySelectorAll("label")].find((one) => one.textContent?.startsWith(label));
-  const control = found?.querySelector("input, select, textarea");
-  if (control === null || control === undefined) {
-    throw new Error(`no field labelled ${label}`);
-  }
-  return control as HTMLInputElement;
-}
-
-function confirm(container: HTMLElement, label: string): void {
-  fireEvent.click(
-    [...container.querySelectorAll(".confirm button")].find((one) => one.textContent === label) as HTMLButtonElement,
-  );
-}
-
-function button(container: HTMLElement, name: string): HTMLButtonElement | null {
-  return (
-    ([...container.querySelectorAll("button")].find((one) => one.textContent === name) as HTMLButtonElement | undefined) ??
-    null
-  );
+function choose(form: HTMLElement, label: string, value: string): void {
+  const found = [...form.querySelectorAll("label")].find((one) => one.textContent === label);
+  const select = form.ownerDocument.getElementById(found?.htmlFor ?? "") as HTMLSelectElement;
+  fireEvent.change(select, { target: { value } });
 }
 
 describe("what the compliance screen agrees with the API about", () => {
@@ -306,217 +277,172 @@ describe("what the compliance screen agrees with the API about", () => {
 });
 
 describe("sensitive topics", () => {
-  test("each topic, its named person or nobody, the tally, and both served sentences are drawn", async () => {
-    // What breaks if this is deleted: a topic with nobody named drawn as blank, or the page dropping
-    // the sentence that tells the administrator what the asker is told.
-    const { container } = await mount();
-    const rows = [...container.querySelectorAll("table[aria-label='Who each sensitive topic is routed to'] tbody tr")];
-    expect(rows).toHaveLength(2);
-    expect(rows[0]?.textContent).toContain("u_hr");
-    expect(rows[1]?.textContent).toContain(NOBODY_NAMED);
+  test("each topic names its person by name or says nobody, with the tally and both served sentences", async () => {
+    // What breaks if this is deleted: a principal id drawn where the reader needs a name, or the
+    // sentence the asker is told dropped.
+    const { container } = await mount(viewAddress("topics"));
+    expect(container.textContent).toContain("Hana HR");
+    expect(container.textContent).toContain("Adam Admin");
+    expect(container.textContent).not.toContain("u_hr");
+    expect(container.textContent).toContain(NOBODY_NAMED);
     expect(container.textContent).toContain("REFERRAL-SENTENCE");
     expect(container.textContent).toContain("ROUTING-SENTENCE");
-    expect(container.textContent).toContain("the count is suppressed");
+    expect(container.textContent).toContain("suppressed");
   });
 
-  test("a person without a reference is refused before anything is asked", async () => {
-    const { container, idp } = await mount();
-    const form = formNamed(container, NAME_FORM_LABEL);
-    fireEvent.change(field(form, "Topic"), { target: { value: "salary" } });
-    fireEvent.change(field(form, "Person, by reference"), { target: { value: "Jane Smith" } });
+  test("naming a person says what it takes, refuses a blank one, and is confirmed with whom it replaces before the PUT", async () => {
+    const { idp } = await mount(viewAddress("topics"));
+    await chooseInMenu(screen.getByRole("button", { name: "Actions for Grievances" }), NAME_A_PERSON);
+    const form = (await screen.findByRole("form", { name: NAME_FORM_LABEL })) as HTMLFormElement;
+    expect(form.textContent).toContain("with no spaces");
     fireEvent.submit(form);
-    expect(container.querySelector("[role='alert']")?.textContent).toContain("reference");
-    expect(container.querySelector(".confirm")).toBeNull();
-    expect(writes(idp)).toEqual([]);
-  });
-
-  test("naming a person is confirmed with whom it replaces, then sent as a PUT to the topic", async () => {
-    // What breaks if this is deleted: a person named on the first click, or a confirmation that does
-    // not say whose notes stop, which is the grievance handler replaced unread.
-    const { container, idp } = await mount();
-    const form = formNamed(container, NAME_FORM_LABEL);
-    fireEvent.change(field(form, "Topic"), { target: { value: "grievance" } });
-    fireEvent.change(field(form, "Person, by reference"), { target: { value: " u_new " } });
-    fireEvent.submit(form);
-    const confirmation = container.querySelector(".confirm")?.textContent ?? "";
-    expect(confirmation).toContain("Route Grievances questions to u_new?");
-    expect(confirmation).toContain("in place of u_hr");
-    expect(writes(idp)).toEqual([]);
-
-    confirm(container, NAME_LABEL);
     await waitFor(() => {
-      expect(writes(idp)).toEqual([
-        { method: "PUT", path: `${TOPICS_OPERATION}/grievance`, body: { principal_id: "u_new" } },
-      ]);
+      expect(form.textContent).toContain("Give the person's reference");
     });
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+
+    type(form, "principal_id", " u_new ");
+    fireEvent.submit(form);
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog.textContent).toContain("in place of Hana HR");
+    expect(writes(idp)).toEqual([]);
+    await confirmWith(NAME_LABEL);
     await waitFor(() => {
-      expect(container.textContent).toContain("u_new was named for Grievances at");
+      expect(writes(idp)).toEqual([{ method: "PUT", path: `${TOPICS_OPERATION}/grievance`, body: { principal_id: "u_new" } }]);
     });
   });
 });
 
 describe("the processing register", () => {
   test("a connector is drawn with what it reads per entity, its categories, its counts and its problem", async () => {
-    // What breaks if this is deleted: the register drops the fields a source reads, or a count not
-    // yet taken is drawn as zero, which reads as a source that read nothing.
-    const { container } = await mount();
-    const text = container.textContent ?? "";
-    expect(text).toContain("COUNTS-SENTENCE");
-    expect(text).toContain("Xero");
-    expect(text).toContain("amount, contact");
-    expect(text).toContain("projected");
-    expect(text).toContain("financial");
-    expect(text).toContain("42");
-    expect(text).toContain("Not read yet.");
-    expect(text).toContain("No, it only reads.");
-    expect(text).toContain("PROBLEM-SENTENCE");
+    const { container } = await mount(viewAddress("register"), { register: { ...register(), people: { u_admin: "Adam Admin" } } as RegisterAnswer });
+    expect(container.textContent).toContain("Xero");
+    expect(container.textContent).toContain("invoice");
+    expect(container.textContent).toContain("financial");
+    expect(container.textContent).toContain("42");
+    expect(container.textContent).toContain("PROBLEM-SENTENCE");
+    expect(container.textContent).toContain("Adam Admin");
   });
 
   test("an install with nothing connected says so rather than drawing an empty register", async () => {
-    const { container } = await mount({ register: register({ connectors: [] }) });
+    const { container } = await mount(viewAddress("register"), { register: register({ connectors: [] }) });
     expect(container.textContent).toContain(NOTHING_CONNECTED);
-    expect(container.textContent).toContain("COUNTS-SENTENCE");
   });
 });
 
 describe("breach cases", () => {
-  test("a case draws its clock, its obligations with their flags, and its findings as served", async () => {
-    // What breaks if this is deleted: the clock drawn from the estimate rather than the earliest
-    // moment, or an overdue obligation and the case's findings missing from the page.
-    const { container } = await mount();
-    const card = container.querySelector(`section[aria-label="Breach case ${CASE}"]`);
-    expect(card).not.toBeNull();
-    expect(card?.textContent).toContain("The clock starts");
-    expect(card?.querySelector(`ul[aria-label="What breach case ${CASE} owes"]`)?.textContent).toContain("overdue");
-    expect(card?.textContent).toContain("FINDING-SENTENCE");
+  test("the list draws each case by its evidence reference and whether it is overdue", async () => {
+    const { container } = await mount(viewAddress("breaches"));
+    const table = within(container.querySelector("table") as HTMLElement);
+    expect(table.getByText("INC-7")).toBeTruthy();
+    expect(table.getByText("Overdue")).toBeTruthy();
+
+    const none = await mount(viewAddress("breaches"), { breaches: { cases: [], closing: "", people: {} } as BreachesAnswer });
+    expect(none.container.textContent).toContain(NO_CASES);
   });
 
-  test("close is disabled with the route's sentence until the case is closable, then confirmed and sent", async () => {
-    // What breaks if this is deleted: a close offered on a case whose assessment is not made, which
-    // the route refuses after the confirmation, or a close sent on the first click.
-    const first = await mount();
-    expect(button(first.container, CLOSE_LABEL)?.disabled).toBe(true);
-    expect(first.container.textContent).toContain("CLOSING-SENTENCE");
+  test("a case's page draws its clock, its obligations with their flags, and its findings as served", async () => {
+    const { container } = await mount(caseAddress(CASE));
+    expect(container.querySelector("h1")?.textContent).toBe("Breach case INC-7");
+    expect(container.textContent).toContain("overdue");
+    expect(container.textContent).toContain("FINDING-SENTENCE");
+    expect(container.textContent).toContain("Dana DPO");
+    expect(container.querySelector('[data-slot="advanced"]')?.textContent).toContain("u_dpo");
 
-    const { container, idp } = await mount({
-      breaches: { cases: [breach({ assessed_at: "2019-03-04T12:00:00Z", closable: true })], closing: "CLOSING-SENTENCE" },
-    });
-    const close = [...container.querySelectorAll(`section[aria-label="Breach case ${CASE}"] button`)].find(
-      (one) => one.textContent === CLOSE_LABEL,
-    ) as HTMLButtonElement;
-    expect(close.disabled).toBe(false);
-    fireEvent.click(close);
-    expect(container.querySelector(".confirm")?.textContent).toContain(`Close breach case ${CASE}?`);
-    expect(writes(idp)).toEqual([]);
-    confirm(container, CLOSE_LABEL);
+    const absent = await mount(caseAddress("33333333-3333-4333-8333-333333333333"));
+    expect(absent.container.querySelector("h1")?.textContent).toBe(NO_CASE);
+  });
+
+  test("close is inert with the route's sentence until the case is closable, then confirmed and sent", async () => {
+    // What breaks if this is deleted: a case closed before its assessment, or closed on one press.
+    const inert = await mount(caseAddress(CASE));
+    const unavailable = within(inert.container).getByRole("button", { name: CLOSE_LABEL });
+    expect(unavailable.getAttribute("aria-disabled")).toBe("true");
+    expect(inert.container.textContent).toContain("CLOSING-SENTENCE");
+
+    const closable = await mount(caseAddress(CASE), { breaches: { cases: [breach({ closable: true })], closing: "CLOSING-SENTENCE", people: {} } as BreachesAnswer });
+    fireEvent.click(within(closable.container).getByRole("button", { name: CLOSE_LABEL }));
+    expect(writes(closable.idp)).toEqual([]);
+    await confirmWith(CLOSE_LABEL);
     await waitFor(() => {
-      expect(writes(idp)).toEqual([{ method: "POST", path: `${BREACHES_OPERATION}/${CASE}/close`, body: undefined }]);
+      expect(writes(closable.idp)).toEqual([{ method: "POST", path: `${BREACHES_OPERATION}/${CASE}/close`, body: undefined }]);
     });
   });
 
   test("an assessment is judged, confirmed with the judgement, then sent to the case", async () => {
-    const { container, idp } = await mount();
-    const form = formNamed(container, ASSESS_FORM_LABEL);
+    const { idp } = await mount(caseAddress(CASE));
+    fireEvent.click(screen.getByRole("button", { name: ASSESS_LABEL }));
+    const form = (await screen.findByRole("form", { name: ASSESS_LABEL })) as HTMLFormElement;
     fireEvent.submit(form);
-    expect(form.querySelector("[role='alert']")?.textContent).toContain("significant harm");
-    expect(container.querySelector(".confirm")).toBeNull();
+    await waitFor(() => {
+      expect(form.textContent).toContain("Say whether the breach is likely to result in significant harm.");
+    });
+    expect(screen.queryByRole("alertdialog")).toBeNull();
 
-    fireEvent.change(field(form, "Likely to result in significant harm"), { target: { value: "yes" } });
-    fireEvent.change(field(form, "Where the reasoning is written"), { target: { value: "DPO-MEMO-3" } });
-    fireEvent.change(field(form, "How many people are affected"), { target: { value: "12" } });
+    choose(form, "Likely to result in significant harm", "yes");
+    type(form, "rationale_reference", "DPIA-3");
     fireEvent.submit(form);
-    const confirmation = container.querySelector(".confirm")?.textContent ?? "";
-    expect(confirmation).toContain("is likely to result in significant harm?");
-    expect(confirmation).toContain("12 people affected");
-    expect(writes(idp)).toEqual([]);
-
-    confirm(container, ASSESS_LABEL);
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog.textContent).toContain("is likely to result in significant harm?");
+    await confirmWith(ASSESS_LABEL);
     await waitFor(() => {
       expect(writes(idp)).toEqual([
-        {
-          method: "POST",
-          path: `${BREACHES_OPERATION}/${CASE}/assessment`,
-          body: { significant_harm: true, rationale_reference: "DPO-MEMO-3", affected_count: 12 },
-        },
+        { method: "POST", path: `${BREACHES_OPERATION}/${CASE}/assessment`, body: { significant_harm: true, rationale_reference: "DPIA-3", affected_count: null } },
       ]);
     });
   });
 
   test("a notification needs its moment, and is sent as that instant with a zone", async () => {
-    const { container, idp } = await mount();
-    const form = formNamed(container, COMMISSION_FORM_LABEL);
+    const { idp } = await mount(caseAddress(CASE));
+    fireEvent.click(screen.getByRole("button", { name: COMMISSION_LABEL }));
+    const form = (await screen.findByRole("form", { name: COMMISSION_LABEL })) as HTMLFormElement;
     fireEvent.submit(form);
-    expect(form.querySelector("[role='alert']")?.textContent).toContain("date and time");
-
-    fireEvent.change(field(form, "When the Commission was notified"), { target: { value: "2019-03-04T15:30" } });
-    fireEvent.submit(form);
-    confirm(container, COMMISSION_LABEL);
     await waitFor(() => {
-      expect(writes(idp)).toEqual([
-        {
-          method: "POST",
-          path: `${BREACHES_OPERATION}/${CASE}/commission`,
-          body: { at: new Date("2019-03-04T15:30").toISOString() },
-        },
-      ]);
+      expect(form.textContent).toContain("Give the date and time the notification was made.");
     });
+    type(form, "at", "2019-03-04T10:00");
+    fireEvent.submit(form);
+    await confirmWith(COMMISSION_LABEL);
+    await waitFor(() => {
+      expect(writes(idp)).toHaveLength(1);
+    });
+    const sent = writes(idp)[0]?.body as { at: string };
+    expect(sent.at).toBe(new Date("2019-03-04T10:00").toISOString());
   });
 
-  test("an excused case offers neither the individuals' notification nor a second exception, and a closed one offers nothing", async () => {
-    // What breaks if this is deleted: a case with a recorded decision not to notify offered the
-    // notification anyway, or a closed case drawn with controls the route refuses.
-    const excused = await mount({
-      breaches: { cases: [breach({ exception_ground: "remedial_action" })], closing: "CLOSING-SENTENCE" },
-    });
-    expect(excused.container.querySelector(`form[aria-label="${INDIVIDUALS_FORM_LABEL}"]`)).toBeNull();
-    expect(excused.container.querySelector(`form[aria-label="${EXCEPTION_FORM_LABEL}"]`)).toBeNull();
-    expect(excused.container.textContent).toContain("Remedial action made significant harm unlikely");
+  test("an excused case offers neither the individuals' notification nor a second exception, and a closed one offers no step", async () => {
+    const excused = await mount(caseAddress(CASE), { breaches: { cases: [breach({ exception_ground: "remedial_action" })], closing: "", people: {} } as BreachesAnswer });
+    expect(within(excused.container).queryByRole("button", { name: INDIVIDUALS_LABEL })).toBeNull();
+    expect(within(excused.container).queryByRole("button", { name: EXCEPTION_FORM_LABEL })).toBeNull();
+    expect(within(excused.container).getByRole("button", { name: COMMISSION_LABEL })).toBeTruthy();
 
-    const closed = await mount({
-      breaches: { cases: [breach({ closed_at: "2019-03-05T09:00:00Z", closed_by: "u_dpo" })], closing: "CLOSING-SENTENCE" },
-    });
-    const card = closed.container.querySelector(`section[aria-label="Breach case ${CASE}"]`);
-    expect(card?.querySelector("form")).toBeNull();
-    expect(card?.querySelector("button")).toBeNull();
+    const closed = await mount(caseAddress(CASE), { breaches: { cases: [breach({ closed_at: "2019-03-06T10:00:00Z" })], closing: "", people: {} } as BreachesAnswer });
+    expect(within(closed.container).queryByRole("button", { name: ASSESS_LABEL })).toBeNull();
+    expect(within(closed.container).queryByRole("button", { name: CLOSE_LABEL })).toBeNull();
   });
 
   test("opening a case is judged, confirmed with what the clock runs from, then sent", async () => {
-    // What breaks if this is deleted: a case opened on the first click, or opened as an estimate with
-    // no earliest moment, which the route refuses after the confirmation.
-    const { container, idp } = await mount({ breaches: { cases: [], closing: "CLOSING-SENTENCE" } });
-    expect(container.textContent).toContain(NO_CASES);
-    const form = formNamed(container, OPEN_FORM_LABEL);
-    fireEvent.change(field(form, "When there was first reason to believe it"), { target: { value: "2019-03-04T09:00" } });
-    fireEvent.change(field(form, "How that moment is known"), { target: { value: "estimated" } });
-    fireEvent.change(field(form, "Where the reason to believe came from"), { target: { value: "staff_report" } });
-    fireEvent.change(field(form, "Where the evidence is"), { target: { value: "INC-7" } });
-    fireEvent.submit(form);
-    expect(form.querySelector("[role='alert']")?.textContent).toContain("earliest moment");
-    expect(container.querySelector(".confirm")).toBeNull();
-
-    fireEvent.change(field(form, "The earliest it could have been"), { target: { value: "2019-03-04T08:00" } });
-    fireEvent.submit(form);
-    expect(container.querySelector(".confirm")?.textContent).toContain(OPENING);
-    expect(writes(idp)).toEqual([]);
-
-    confirm(container, OPEN_LABEL);
+    const { idp } = await mount(viewAddress("breaches"));
+    fireEvent.click(screen.getByRole("button", { name: OPEN_FORM_LABEL }));
+    const form = (await screen.findByRole("form", { name: OPEN_FORM_LABEL })) as HTMLFormElement;
+    expect(form.textContent).toContain("such as the alert or ticket number");
+    fireEvent.click(screen.getByRole("button", { name: REVIEW_CASE }));
     await waitFor(() => {
-      expect(writes(idp)).toEqual([
-        {
-          method: "POST",
-          path: BREACHES_OPERATION,
-          body: {
-            became_aware_at: new Date("2019-03-04T09:00").toISOString(),
-            basis: "estimated",
-            source: "staff_report",
-            evidence_reference: "INC-7",
-            earliest_possible_at: new Date("2019-03-04T08:00").toISOString(),
-          },
-        },
-      ]);
+      expect(form.textContent).toContain("Give the date and time there was first reason to believe");
     });
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+
+    type(form, "became_aware_at", "2019-03-04T09:00");
+    choose(form, "How that moment is known", "observed");
+    choose(form, "Where it came from", "staff_report");
+    type(form, "evidence_reference", "INC-9");
+    fireEvent.submit(form);
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog.textContent).toContain(OPENING);
+    await confirmWith(OPEN_LABEL);
     await waitFor(() => {
-      expect(container.textContent).toContain("Breach case 22222222-2222-4222-8222-222222222222 was opened.");
+      expect(writes(idp)).toHaveLength(1);
     });
+    expect(writes(idp)[0]?.body).toEqual({ became_aware_at: new Date("2019-03-04T09:00").toISOString(), basis: "observed", source: "staff_report", evidence_reference: "INC-9" });
   });
 });

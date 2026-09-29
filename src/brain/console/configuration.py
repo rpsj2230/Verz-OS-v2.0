@@ -136,7 +136,8 @@ A_VALUE_SAVED_HERE_APPLIES_HERE_AT_ONCE_IN_THE_WORKER_WITHIN_A_MINUTE: Final = (
 #: Added to the profile sentence when the local profile is chosen and nothing local can answer.
 LOCAL_PROFILE_HAS_NO_MODEL_THAT_ANSWERS: Final = (
     "The inference server this release ships serves no model that writes an answer, so "
-    "questions reach no model until one is served there or the profile is hosted."
+    "questions reach no model until one is served there or answers are made by a hosted "
+    "provider."
 )
 
 #: Said on a required identity setting nobody supplied.
@@ -532,9 +533,12 @@ def profile_told(
 ) -> str:
     """What the model profile means for where text goes, in `brain.models.assembly`'s own rule."""
     profile = resolved("INSTALL_MODEL_PROFILE", env, saved).value
+    # Named by the setting's own words rather than "the profile", which the Capacity screen uses
+    # for the install's size: two Platform screens meant two things by one word until 2026-09-29.
+    setting = LABELS["INSTALL_MODEL_PROFILE"]
     if local_only(profile):
         told = (
-            f"The profile is {profile!r}, so no text leaves this install: every hosted provider "
+            f"{setting} is {profile!r}, so no text leaves this install: every hosted provider "
             "is skipped whatever the Models screen switches, and questions go to the inference "
             "server alone."
         )
@@ -542,7 +546,7 @@ def profile_told(
             told if local_model_answers() else f"{told} {LOCAL_PROFILE_HAS_NO_MODEL_THAT_ANSWERS}"
         )
     return (
-        f"The profile is {profile!r}, so a hosted provider the Models screen switches on may be "
+        f"{setting} is {profile!r}, so a hosted provider the Models screen switches on may be "
         "sent text."
     )
 

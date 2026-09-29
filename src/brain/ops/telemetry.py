@@ -999,6 +999,31 @@ class MeteredRequest:
             raise TelemetryError(msg)
 
 
+@dataclass(frozen=True)
+class UnplacedQuestion:
+    """A question a person asked whose asker had no department on record when they asked.
+
+    `brain.ops.question_store.QuestionRecorder` keeps a question only with the department the
+    directory gave its asker, so a person with none, such as the administrator who installed the
+    product, asks questions the request ledger records and the question ledger does not. The
+    usage screen counts these for a reader whose grant has no clause on the place, under a line
+    of its own, so the screen and the Dashboard count one population. See
+    `brain.console.usage_screen.A_QUESTION_IS_A_REQUEST_A_PERSON_MADE_WHEREVER_THEY_SIT`.
+    """
+
+    trace_id: str
+    principal: str
+    #: The ledger's traffic class, a person's by construction of the read.
+    traffic: TrafficClass
+    #: When the gate judged the request, the instant a window is taken on.
+    at: datetime
+
+    def __post_init__(self) -> None:
+        if self.at.tzinfo is None:
+            msg = f"{self.trace_id} carries a naive instant, which lands it in the wrong window"
+            raise TelemetryError(msg)
+
+
 # ------------------------------------------------------------ a question's shape (M21.3.4)
 
 #: What a question's shape is: the lane it ran in and how many tool calls it made.

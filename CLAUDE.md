@@ -64,6 +64,31 @@ name its decision, and the item it names has to exist.
 
 ---
 
+## Before building a task, find what already exists
+
+Much of this product was written before anything could reach it: a domain module with a `Task ids:`
+line and no route calling it, a component no page renders, a store no caller writes through. Measured on
+2026-09-29, the console alone had about twenty-five such functions (`workspace.projection`,
+`reach_view.run_preview`, `agent_tabs.attach`, `agent_output.supersede`, all of `builder/coauthor.py`,
+`TraceGraph.tsx`), and nothing called `StoredFormations.after_turn`, so no install ever formed a memory.
+**The owner asked on 2026-09-29 that every task start from that code rather than beside it**, because
+wiring what exists is faster than writing it again.
+
+So, before writing anything for a leaf:
+
+1. `git grep -n "<leaf id>"` for every leaf in the brief, and read what claims it, including code that
+   no route or page reaches yet.
+2. **Reuse it only if it is right.** Hold it against the leaf's own text, its row in
+   `docs/requirements/register.json` and the owner's brief, and run its tests before relying on them.
+   Existing code can be correct and still wrong for the owner: `models/default_ladder.py` argued well
+   for writing no failover step while the owner's own screenshot drew three per level.
+3. **Wire it rather than rewrite it**: a route, a page, a caller. Replace it only where it contradicts
+   the requirement, and say so in the commit.
+4. Every report on a task ends with a `Reused:` line naming the existing code used, and anything
+   replaced with the reason. A report without one has not done this step.
+
+---
+
 ## A problem found on an install: is the fix the product's or that install's?
 
 The owner runs an install of this product as a staging server, and problems found there arrive

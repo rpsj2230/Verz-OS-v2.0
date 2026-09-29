@@ -11,8 +11,10 @@
  * label.** When no release is named the API's reason stands where the release would be.
  *
  * **Nothing waits for the release list.** The API answers from the last finished look, so the first
- * load after a start may say no look has finished; that is one of its answers and is drawn once,
- * under the standing, rather than a second time in an empty "newest release" card.
+ * load after a start may say no look has finished. That is drawn in the "newest release" card from
+ * the API's `look` sentence: until 2026-09-29 it was drawn only under the standing, and an install
+ * running `:latest` has a standing about its running release instead, so on the owner's install
+ * the check was switched on and the page said nothing about it at all.
  *
  * **What was removed**: the lede about asking outside the network (the release check is now a
  * Features switch that says so where it is turned on) and the instruction drawn twice.
@@ -85,6 +87,11 @@ function Panel({ panel }: { readonly panel: UpdatesPanel }) {
       {!told && unanswered ? (
         <SectionCard title={NEWEST_RELEASE} action={<Chip>{unanswered.why}</Chip>}>
           <p className="m-0 text-[12.5px] text-dim">{unanswered.detail}</p>
+        </SectionCard>
+      ) : null}
+      {!told && !unanswered && panel.look ? (
+        <SectionCard title={NEWEST_RELEASE}>
+          <p className="m-0 text-[12.5px] text-dim">{panel.look}</p>
         </SectionCard>
       ) : null}
 

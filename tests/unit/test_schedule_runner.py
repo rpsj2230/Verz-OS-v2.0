@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import ast
 import inspect
+import re
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
@@ -227,6 +228,24 @@ def test_every_control_this_process_schedules_has_a_runner_saying_what_it_needs(
     it."""
     assert {one.name for one in RUNNERS} == {one.name for one in schedulable()}
     assert "audit_anchor" not in {one.name for one in RUNNERS}, "an external timer runs it"
+
+
+def test_what_a_job_waits_for_is_written_for_an_administrator() -> None:
+    """Found on the owner's install on 2026-09-29: the restore rehearsal's page read "Needs Rupash
+    item 44", two function names and "option C". Every waiting sentence is shown on a job's page
+    on every install, so none names a code name, a person's item, a task id or an option.
+
+    Delete this and a developer's note goes back onto an administrator's screen."""
+    waiting = [one for one in RUNNERS if one.run is None]
+    assert waiting, "a check over nothing proves nothing"
+    for runner in waiting:
+        said = runner.needs
+        assert "`" not in said, runner.name
+        assert "_" not in said, runner.name
+        assert not re.search(r"\bM\d+(\.\d+)+\b", said), runner.name
+        assert not re.search(r"\b(item|option)\s+\w+", said, re.IGNORECASE), runner.name
+        assert "Needs" not in said, runner.name
+        assert said[:1].islower() and not said.endswith("."), runner.name
 
 
 def test_every_control_the_schedule_cannot_start_yet_says_what_it_is_waiting_for() -> None:

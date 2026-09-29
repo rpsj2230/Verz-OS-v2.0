@@ -12,6 +12,7 @@ BRAIN_CONSOLE_ADDRESS=""
 BRAIN_INSTALL_DOCKER="yes"
 BRAIN_VAULT="yes"
 BRAIN_ACCEPT_SWAP="no"
+BRAIN_VAULT_RECOVERY="single"
 BRAIN_REFUSALS=0
 
 say() { printf "%s\n" "$1"; }
@@ -36,6 +37,7 @@ usage() {
   say "  --no-install-docker        do not install Docker, say what to run instead"
   say "  --no-vault                 run no secrets vault, accepted only for: lite"
   say "  --accept-unencrypted-swap  go ahead although the vault's memory can reach plain swap"
+  say "  --recovery-split           five recovery pieces, any three, printed once for five people, rather than one key"
   say "  --help                     print this and stop"
   say ""
   say "  BRAIN_RELEASE_URL must be set in the environment: it is the address of the release archive."
@@ -49,6 +51,7 @@ while test "$#" -gt 0; do
     --no-install-docker) BRAIN_INSTALL_DOCKER="no"; shift ;;
     --no-vault) BRAIN_VAULT="no"; shift ;;
     --accept-unencrypted-swap) BRAIN_ACCEPT_SWAP="yes"; shift ;;
+    --recovery-split) BRAIN_VAULT_RECOVERY="split"; shift ;;
     --help|-h) usage; exit 0 ;;
     *) usage >&2; fail "unknown option: $1" ;;
   esac
@@ -78,10 +81,10 @@ if test "$BRAIN_VAULT" = "no"; then
 fi
 BRAIN_RELEASE_URL="${BRAIN_RELEASE_URL:?set BRAIN_RELEASE_URL to the release archive for $BRAIN_RELEASE}"
 
-say "Installing the $BRAIN_PROFILE profile of $BRAIN_RELEASE into $BRAIN_HOME, 25 steps."
+say "Installing the $BRAIN_PROFILE profile of $BRAIN_RELEASE into $BRAIN_HOME, 27 steps."
 
-# step 1 of 25: check this machine can run it
-say "step 1 of 25: check this machine can run it"
+# step 1 of 27: check this machine can run it
+say "step 1 of 27: check this machine can run it"
 say "  checking this machine against the requirements every install has"
 test "$(uname -s)" = "Linux" || refuse "this machine runs $(uname -s). every container image this deployment pulls is linux/amd64 or linux/arm64, and the memory ceilings are enforced by the kernel rather than by docker"
 case "$(uname -m)" in
@@ -116,11 +119,11 @@ fi
 say "  note: a reverse proxy terminating TLS on 443 is part of this install and nothing running on this machine can check for it. Every service uses \`expose\` and none uses \`ports\`, so after a complete install the console is reachable from other containers and from nowhere else. That is right for the database, the cache and the pooler, and it means the reverse proxy holding the certificate is part of the install rather than an optional extra. No compose file in this repository declares one, so it is a requirement on the server and not on the stack. See docs/install/network.md."
 test "$BRAIN_REFUSALS" -eq 0 || fail "this machine cannot run it yet, for the reasons above. Nothing has been written. When a reason is one you cannot fix on this machine, docs/install/install.md has the sequence by hand"
 
-# step 2 of 25: install docker if it is missing
+# step 2 of 27: install docker if it is missing
 if test "$BRAIN_INSTALL_DOCKER" = "no" || { command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; }; then
-  say "step 2 of 25: install docker if it is missing - already done, skipping"
+  say "step 2 of 27: install docker if it is missing - already done, skipping"
 else
-  say "step 2 of 25: install docker if it is missing"
+  say "step 2 of 27: install docker if it is missing"
   test -r "/etc/os-release" || fail "there is no /etc/os-release on this machine, so nothing here can tell which install route Docker documents for it. Install Docker Engine and the compose plugin yourself: https://docs.docker.com/engine/install/"
   BRAIN_OS_ID="$(. /etc/os-release && printf "%s" "${ID:-} ${ID_LIKE:-}")"
   test "$(id -u)" -eq 0 || fail "installing Docker needs root and this is not a root shell. Run this again with sudo, or install Docker Engine and the compose plugin yourself: https://docs.docker.com/engine/install/"
@@ -156,8 +159,8 @@ else
   systemctl enable --now docker || fail "Docker installed and its daemon would not start. Read the output of systemctl status docker, start it, then run this again. Nothing of this install has been written yet"
 fi
 
-# step 3 of 25: check the docker on this machine is new enough
-say "step 3 of 25: check the docker on this machine is new enough"
+# step 3 of 27: check the docker on this machine is new enough
+say "step 3 of 27: check the docker on this machine is new enough"
 BRAIN_ENGINE="$(docker version --format "{{.Server.Version}}" 2>/dev/null || true)"
 if test -z "$BRAIN_ENGINE"; then
   refuse "the docker daemon on this machine is not answering, and 24.0 or newer is needed. the compose files use the Compose specification's \`deploy\` block, healthcheck \`start_period\` and \`depends_on\` conditions, and an older engine starts the dependent container before its dependency is ready"
@@ -172,51 +175,51 @@ elif ! at_least "$BRAIN_COMPOSE_VERSION" "2.10"; then
 fi
 test "$BRAIN_REFUSALS" -eq 0 || fail "the Docker on this machine is not one this deployment can run, for the reasons above. Nothing has been written"
 
-# step 4 of 25: check the machine
-say "step 4 of 25: check the machine"
+# step 4 of 27: check the machine
+say "step 4 of 27: check the machine"
 command -v docker >/dev/null || fail "docker is not installed"
 docker compose version >/dev/null 2>&1 || fail "docker compose v2 is not installed"
 
-# step 5 of 25: check the machine is large enough
-say "step 5 of 25: check the machine is large enough"
+# step 5 of 27: check the machine is large enough
+say "step 5 of 27: check the machine is large enough"
 available=$(awk '/MemTotal/ {print int($2 / 1024)}' /proc/meminfo)
 test "$available" -ge "$BRAIN_MEMORY_MIB" || fail "this profile needs $BRAIN_MEMORY_MIB MiB and this machine has $available MiB"
 
-# step 6 of 25: create the install directory
+# step 6 of 27: create the install directory
 if test -d "/opt/brain"; then
-  say "step 6 of 25: create the install directory - already done, skipping"
+  say "step 6 of 27: create the install directory - already done, skipping"
 else
-  say "step 6 of 25: create the install directory"
+  say "step 6 of 27: create the install directory"
   mkdir -p "/opt/brain"
 fi
 
-# step 7 of 25: download and unpack the release
+# step 7 of 27: download and unpack the release
 if test -f "/opt/brain/RELEASE" && test "$(cat "/opt/brain/RELEASE")" = "$BRAIN_RELEASE"; then
-  say "step 7 of 25: download and unpack the release - already done, skipping"
+  say "step 7 of 27: download and unpack the release - already done, skipping"
 else
-  say "step 7 of 25: download and unpack the release"
+  say "step 7 of 27: download and unpack the release"
   curl -fsSL "$BRAIN_RELEASE_URL" -o "/opt/brain/release.tar.gz"
   tar -xzf "/opt/brain/release.tar.gz" -C "/opt/brain" --strip-components=1
   printf "%s\n" "$BRAIN_RELEASE" > "/opt/brain/RELEASE"
 fi
 
-# step 8 of 25: change into the release directory
-say "step 8 of 25: change into the release directory"
+# step 8 of 27: change into the release directory
+say "step 8 of 27: change into the release directory"
 cd "/opt/brain" || fail "the release did not unpack into /opt/brain"
 
-# step 9 of 25: write the environment file from the template
+# step 9 of 27: write the environment file from the template
 if test -f "/opt/brain/.env"; then
-  say "step 9 of 25: write the environment file from the template - already done, skipping"
+  say "step 9 of 27: write the environment file from the template - already done, skipping"
 else
-  say "step 9 of 25: write the environment file from the template"
+  say "step 9 of 27: write the environment file from the template"
   test -f "/opt/brain/.env" || cp "/opt/brain/.env.example" "/opt/brain/.env"
 fi
 
-# step 10 of 25: pin the image this install runs
+# step 10 of 27: pin the image this install runs
 if grep -qxF "APP_IMAGE=$BRAIN_REPOSITORY:$BRAIN_RELEASE" "/opt/brain/.env"; then
-  say "step 10 of 25: pin the image this install runs - already done, skipping"
+  say "step 10 of 27: pin the image this install runs - already done, skipping"
 else
-  say "step 10 of 25: pin the image this install runs"
+  say "step 10 of 27: pin the image this install runs"
   umask 077
   {
     grep -v "^APP_IMAGE=" "/opt/brain/.env" || true
@@ -225,11 +228,11 @@ else
   mv "/opt/brain/.env.pinned" "/opt/brain/.env"
 fi
 
-# step 11 of 25: create the settings the containers mount
+# step 11 of 27: create the settings the containers mount
 if test -f "/opt/brain/settings/automation/egress.conf" && test -f "/opt/brain/settings/langfuse/clickhouse-memory.xml" && test -f "/opt/brain/settings/seaweedfs/provision.sh" && test -f "/opt/brain/settings/seaweedfs/s3.json"; then
-  say "step 11 of 25: create the settings the containers mount - already done, skipping"
+  say "step 11 of 27: create the settings the containers mount - already done, skipping"
 else
-  say "step 11 of 25: create the settings the containers mount"
+  say "step 11 of 27: create the settings the containers mount"
   mkdir -p "/opt/brain/settings/automation" "/opt/brain/settings/langfuse" "/opt/brain/settings/seaweedfs"
   test -f "/opt/brain/settings/automation/egress.conf" || cp "/opt/brain/ops/automation/egress.conf" "/opt/brain/settings/automation/egress.conf"
   test -f "/opt/brain/settings/langfuse/clickhouse-memory.xml" || cp "/opt/brain/ops/langfuse/clickhouse-memory.xml" "/opt/brain/settings/langfuse/clickhouse-memory.xml"
@@ -237,11 +240,11 @@ else
   test -f "/opt/brain/settings/seaweedfs/s3.json" || cp "/opt/brain/ops/seaweedfs/s3.json" "/opt/brain/settings/seaweedfs/s3.json"
 fi
 
-# step 12 of 25: mint this installation's secrets
+# step 12 of 27: mint this installation's secrets
 if grep -q "^POSTGRES_PASSWORD=." "/opt/brain/.env"; then
-  say "step 12 of 25: mint this installation's secrets - already done, skipping"
+  say "step 12 of 27: mint this installation's secrets - already done, skipping"
 else
-  say "step 12 of 25: mint this installation's secrets"
+  say "step 12 of 27: mint this installation's secrets"
   umask 077
   {
     printf "POSTGRES_PASSWORD=%s\n" "$(openssl rand -hex 32)"
@@ -251,11 +254,27 @@ else
   } >> "/opt/brain/.env"
 fi
 
-# step 13 of 25: start the secrets vault
-if test "${BRAIN_VAULT:-yes}" = "no" || docker compose -f "/opt/brain/ops/openbao/compose.yml" ps --status running --services | grep -qx vault; then
-  say "step 13 of 25: start the secrets vault - already done, skipping"
+# step 13 of 27: make the secrets vault's seal key
+if test "${BRAIN_VAULT:-yes}" = "no" || test -s /etc/brain-vault/seal.key || docker exec -e BAO_ADDR=http://127.0.0.1:8200 brain-vault bao operator init -status >/dev/null 2>&1; then
+  say "step 13 of 27: make the secrets vault's seal key - already done, skipping"
 else
-  say "step 13 of 25: start the secrets vault"
+  say "step 13 of 27: make the secrets vault's seal key"
+  umask 077
+  mkdir -p /etc/brain-vault
+  chmod 0700 /etc/brain-vault
+  head -c 32 /dev/urandom > /etc/brain-vault/seal.key.new
+  test "$(wc -c < /etc/brain-vault/seal.key.new)" -eq 32 || fail "the seal key came out short; nothing has been started. Run this again"
+  chmod 0400 /etc/brain-vault/seal.key.new
+  mv /etc/brain-vault/seal.key.new /etc/brain-vault/seal.key
+  say "The vault's seal key is in /etc/brain-vault/seal.key, readable only by root. Copy it somewhere off this server that is not beside a backup of the vault: without it the vault can never be opened again. ops/openbao/UNSEAL.md says where."
+fi
+
+# step 14 of 27: start the secrets vault
+if test "${BRAIN_VAULT:-yes}" = "no" || docker compose -f "/opt/brain/ops/openbao/compose.yml" ps --status running --services | grep -qx vault; then
+  say "step 14 of 27: start the secrets vault - already done, skipping"
+else
+  say "step 14 of 27: start the secrets vault"
+  docker network inspect brain-vault >/dev/null 2>&1 || docker network create brain-vault >/dev/null
   docker compose -f "/opt/brain/ops/openbao/compose.yml" up -d
   BRAIN_VAULT_ANSWER=1
   for _ in $(seq 1 30); do
@@ -267,64 +286,58 @@ else
   test "$BRAIN_VAULT_ANSWER" -ne 1 || fail "the secrets vault started and never answered. Read docker logs brain-vault, then run this again"
 fi
 
-# step 14 of 25: initialise the secrets vault and show its unseal pieces, once
+# step 15 of 27: initialise the secrets vault and keep its recovery key
 if test "${BRAIN_VAULT:-yes}" = "no" || docker exec -e BAO_ADDR=http://127.0.0.1:8200 brain-vault bao operator init -status >/dev/null 2>&1; then
-  say "step 14 of 25: initialise the secrets vault and show its unseal pieces, once - already done, skipping"
+  say "step 15 of 27: initialise the secrets vault and keep its recovery key - already done, skipping"
 else
-  say "step 14 of 25: initialise the secrets vault and show its unseal pieces, once"
-  BRAIN_VAULT_INIT="$(docker exec -e BAO_ADDR=http://127.0.0.1:8200 brain-vault bao operator init -key-shares=5 -key-threshold=3)" || fail "the secrets vault refused to initialise, so no piece was made and nothing is lost. Read docker logs brain-vault, then run this again"
-  say ""
-  say "The secrets vault's unseal key, in 5 pieces. Any 3 of them open the vault."
-  say "This is the only time they are shown. Nothing on this server keeps them, and nothing can show them again."
-  if test "$(printf "%s\n" "$BRAIN_VAULT_INIT" | grep -c "^Unseal Key ")" -eq 5; then
-    printf "%s\n" "$BRAIN_VAULT_INIT" | sed -n "s/^Unseal Key \([0-9]*\): /  piece \1 of 5: /p"
+  say "step 15 of 27: initialise the secrets vault and keep its recovery key"
+  if test "${BRAIN_VAULT_RECOVERY:-single}" = "split"; then
+    BRAIN_VAULT_INIT="$(docker exec -e BAO_ADDR=http://127.0.0.1:8200 brain-vault bao operator init -recovery-shares=5 -recovery-threshold=3)" || fail "the secrets vault refused to initialise, so no key was made and nothing is lost. Read docker logs brain-vault, then run this again"
+    say ""
+    say "The secrets vault's recovery key, in 5 pieces. Any 3 of them make a root token in an emergency; none of them is needed to open the vault."
+    say "This is the only time they are shown. Nothing on this server keeps them, and nothing can show them again."
+    if test "$(printf "%s\n" "$BRAIN_VAULT_INIT" | grep -c "^Recovery Key ")" -eq 5; then
+      printf "%s\n" "$BRAIN_VAULT_INIT" | sed -n "s/^Recovery Key \([0-9]*\): /  piece \1 of 5: /p"
+    else
+      say "The vault answered in a shape this installer cannot read, so its whole answer is below: the pieces and the root token are in it. Keep the pieces as the next lines say, and finish by hand with ops/openbao/UNSEAL.md."
+      printf "%s\n" "$BRAIN_VAULT_INIT"
+      fail "the vault is initialised and this installer could not read its answer. Finish by hand with ops/openbao/UNSEAL.md, under Finishing what the installer began"
+    fi
+    say ""
+    say "Give each piece to a different person now, each by a different route, and keep none of them on this server: ops/openbao/UNSEAL.md, under In an emergency."
+    say "If this terminal is being recorded, or this run is going through tee or into a log, that record now holds the pieces. Destroy it."
+    if test -t 0; then
+      printf "%s " "Press Enter once every piece is somewhere other than this server:" >&2
+      read -r BRAIN_ANSWER
+    fi
   else
-    say "The vault answered in a shape this installer cannot read, so its whole answer is below: the pieces and the root token are in it. Keep the pieces as the next lines say, and finish by hand with ops/openbao/UNSEAL.md."
-    printf "%s\n" "$BRAIN_VAULT_INIT"
-    fail "the vault is initialised and this installer could not read its answer. Finish by hand with ops/openbao/UNSEAL.md, under Finishing what the installer began"
-  fi
-  say ""
-  say "Give each piece to a different person now, each by a different route, and keep none of them on this server. After any restart of the vault, 3 of those people open it again: ops/openbao/UNSEAL.md, under After a restart."
-  say "If this terminal is being recorded, or this run is going through tee or into a log, that record now holds the pieces. Destroy it."
-  if test -t 0; then
-    printf "%s " "Press Enter once every piece is somewhere other than this server:" >&2
-    read -r BRAIN_ANSWER
+    BRAIN_VAULT_INIT="$(docker exec -e BAO_ADDR=http://127.0.0.1:8200 brain-vault bao operator init -recovery-shares=1 -recovery-threshold=1)" || fail "the secrets vault refused to initialise, so no key was made and nothing is lost. Read docker logs brain-vault, then run this again"
+    umask 077
+    mkdir -p /etc/brain-vault
+    printf "%s\n" "$BRAIN_VAULT_INIT" | sed -n "s/^Recovery Key 1: //p" > /etc/brain-vault/recovery.key.new
+    test -s /etc/brain-vault/recovery.key.new || fail "the vault is initialised and this installer could not read its recovery key out of the answer. Finish by hand with ops/openbao/UNSEAL.md, under Finishing what the installer began"
+    chmod 0400 /etc/brain-vault/recovery.key.new
+    mv /etc/brain-vault/recovery.key.new /etc/brain-vault/recovery.key
+    say "The vault's recovery key is in /etc/brain-vault/recovery.key, readable only by root. It does not open the vault, which opens itself; it makes a root token in an emergency. Move it into your password manager, then delete the file."
   fi
 fi
 
-# step 15 of 25: open the secrets vault and give this install its tokens
+# step 16 of 27: configure the secrets vault and give this install its tokens
 if test "${BRAIN_VAULT:-yes}" = "no" || { grep -q "^BRAIN_VAULT_ADDRESS=." "/opt/brain/.env" && grep -q "^BRAIN_VAULT_TOKEN=." "/opt/brain/.env" && { test -z "${BRAIN_WORKER_VAULT_FILES:-}" || grep -q "^BRAIN_WORKER_VAULT_TOKEN=." "/opt/brain/.env"; }; }; then
-  say "step 15 of 25: open the secrets vault and give this install its tokens - already done, skipping"
+  say "step 16 of 27: configure the secrets vault and give this install its tokens - already done, skipping"
 else
-  say "step 15 of 25: open the secrets vault and give this install its tokens"
+  say "step 16 of 27: configure the secrets vault and give this install its tokens"
   test -n "${BRAIN_VAULT_INIT:-}" || fail "the secrets vault on this server was initialised by an earlier run that stopped before this step, and the root token this step needs existed only in that run. Finish it by hand with ops/openbao/UNSEAL.md, under Finishing what the installer began"
-  vault_piece() { printf "%s\n" "$BRAIN_VAULT_INIT" | sed -n "s/^Unseal Key $1: //p"; }
   vault_root() { printf "%s\n" "$BRAIN_VAULT_INIT" | sed -n "s/^Initial Root Token: //p"; }
   as_vault_root() { BAO_TOKEN="$(vault_root)" docker exec -e BAO_TOKEN -e BAO_ADDR=http://127.0.0.1:8200 brain-vault bao "$@" </dev/null; }
-  as_vault_root_reading() { BAO_TOKEN="$(vault_root)" docker exec -i -e BAO_TOKEN -e BAO_ADDR=http://127.0.0.1:8200 brain-vault bao "$@"; }
-  for piece in $(seq 1 3); do
-    printf "%s" "$(vault_piece "$piece")" | docker exec -i -e BAO_ADDR=http://127.0.0.1:8200 brain-vault bao write sys/unseal key=- >/dev/null
+  BRAIN_VAULT_OPEN=no
+  for _ in $(seq 1 30); do
+    docker exec -e BAO_ADDR=http://127.0.0.1:8200 brain-vault bao status >/dev/null 2>&1 && { BRAIN_VAULT_OPEN=yes; break; }
+    sleep 2
   done
-  docker exec -e BAO_ADDR=http://127.0.0.1:8200 brain-vault bao status >/dev/null 2>&1 || fail "the vault is still sealed after 3 of its pieces. Nothing has been written to the environment file. Open it with ops/openbao/UNSEAL.md, then finish by hand under Finishing what the installer began"
-  BRAIN_VAULT_ENGINES="$(as_vault_root secrets list)" || fail "the vault would not list its engines under the root token. Finish by hand with ops/openbao/UNSEAL.md, under Finishing what the installer began"
-  for engine in providers webhooks connector_keys template_signing; do
-    case "$BRAIN_VAULT_ENGINES" in
-      *"$engine/ "*) ;;
-      *) as_vault_root secrets enable -path="$engine" kv-v2 >/dev/null ;;
-    esac
-  done
-  for policy in "/opt/brain/ops/openbao/policies/"*.hcl; do
-    tr -d "\015" < "$policy" | as_vault_root_reading policy write "$(basename "$policy" .hcl)" - >/dev/null
-  done
-  as_vault_root write auth/token/roles/connector-run allowed_policies=connector-run orphan=false renewable=false token_no_default_policy=true token_explicit_max_ttl=3600 >/dev/null || fail "the vault would not create the connector-run token role. Finish by hand with ops/openbao/UNSEAL.md, under Finishing what the installer began"
-  as_vault_root kv metadata put -mount=connector_keys -custom-metadata='scopes=an agent API key with read access' -custom-metadata='not_requested=an admin key, which can change SLAs and delete tickets' freshdesk >/dev/null || fail "the vault would not define the credential slot for freshdesk. Finish by hand with ops/openbao/credential-slots.md"
-  as_vault_root kv metadata put -mount=connector_keys -custom-metadata='scopes=read on the named shared drive only' -custom-metadata='not_requested=domain-wide delegation' google_drive >/dev/null || fail "the vault would not define the credential slot for google_drive. Finish by hand with ops/openbao/credential-slots.md"
-  as_vault_root kv metadata put -mount=connector_keys -custom-metadata='scopes=crm.objects.contacts.read; crm.objects.deals.read' -custom-metadata='not_requested=crm.objects.*.write; anything touching settings' hubspot >/dev/null || fail "the vault would not define the credential slot for hubspot. Finish by hand with ops/openbao/credential-slots.md"
-  as_vault_root kv metadata put -mount=connector_keys -custom-metadata='scopes=SELECT on the allowlisted views only' -custom-metadata='not_requested=SELECT on tables; any write' laravel >/dev/null || fail "the vault would not define the credential slot for laravel. Finish by hand with ops/openbao/credential-slots.md"
-  as_vault_root kv metadata put -mount=connector_keys -custom-metadata='scopes=bitable:app:readonly; base:record:read' -custom-metadata='not_requested=base:record:write; drive:drive' lark_base >/dev/null || fail "the vault would not define the credential slot for lark_base. Finish by hand with ops/openbao/credential-slots.md"
-  as_vault_root kv metadata put -mount=connector_keys -custom-metadata='scopes=wiki:wiki:readonly' -custom-metadata='not_requested=docs:document edit scopes' lark_wiki >/dev/null || fail "the vault would not define the credential slot for lark_wiki. Finish by hand with ops/openbao/credential-slots.md"
-  as_vault_root kv metadata put -mount=connector_keys -custom-metadata='scopes=read on the staff directory only; for LDAP a service account that may bind and search and nothing more' -custom-metadata='not_requested=any write; for LDAP an administrator or an account that may reset passwords or groups' staff_source >/dev/null || fail "the vault would not define the credential slot for staff_source. Finish by hand with ops/openbao/credential-slots.md"
-  as_vault_root kv metadata put -mount=connector_keys -custom-metadata='scopes=accounting.transactions.read; accounting.contacts.read' -custom-metadata='not_requested=any .write scope' xero >/dev/null || fail "the vault would not define the credential slot for xero. Finish by hand with ops/openbao/credential-slots.md"
+  test "$BRAIN_VAULT_OPEN" = "yes" || fail "the vault did not open itself from its seal key. Read docker logs brain-vault; nothing has been written to the environment file"
+  BAO_TOKEN="$(vault_root)" sh "/opt/brain/ops/openbao/apply-release.sh" || fail "this release's vault policies, engines and roles did not take under the root token; the lines above say which. Finish by hand with ops/openbao/UNSEAL.md, under Finishing what the installer began"
+  as_vault_root auth tune -max-lease-ttl=8760h token/ >/dev/null || fail "the vault would not raise the token method's ceiling for the deploy token. Finish by hand with ops/openbao/UNSEAL.md, under Finishing what the installer began"
   BRAIN_VAULT_APP_TOKEN="$(as_vault_root token create -policy=application -orphan -period=768h -field=token)" || fail "the vault would not mint the application's token. Finish by hand with ops/openbao/UNSEAL.md, under Finishing what the installer began"
   BRAIN_VAULT_WORKER_TOKEN=""
   if test -n "${BRAIN_WORKER_VAULT_FILES:-}"; then
@@ -332,6 +345,10 @@ else
   fi
   BAO_TOKEN="$BRAIN_VAULT_APP_TOKEN" docker exec -e BAO_TOKEN -e BAO_ADDR=http://127.0.0.1:8200 brain-vault bao token lookup >/dev/null </dev/null || fail "the application's new token was refused by the vault that minted it. Nothing has been written; finish by hand with ops/openbao/UNSEAL.md"
   umask 077
+  mkdir -p /etc/brain-vault
+  as_vault_root token create -policy=deploy -no-default-policy -orphan -period=8760h -field=token > /etc/brain-vault/deploy.token.new || fail "the vault would not mint the deploy token. Finish by hand with ops/openbao/UNSEAL.md, under Finishing what the installer began"
+  chmod 0400 /etc/brain-vault/deploy.token.new
+  mv /etc/brain-vault/deploy.token.new /etc/brain-vault/deploy.token
   {
     printf "BRAIN_VAULT_ADDRESS=%s\n" "http://vault:8200"
     printf "BRAIN_VAULT_TOKEN=%s\n" "$BRAIN_VAULT_APP_TOKEN"
@@ -343,33 +360,47 @@ else
   unset BRAIN_VAULT_INIT BRAIN_VAULT_APP_TOKEN BRAIN_VAULT_WORKER_TOKEN
 fi
 
-# step 16 of 25: compose the secrets vault in
-say "step 16 of 25: compose the secrets vault in"
+# step 17 of 27: apply this release's vault policies, engines and roles
+if ! grep -q "^BRAIN_VAULT_ADDRESS=." "/opt/brain/.env" 2>/dev/null || sh "/opt/brain/ops/openbao/apply-release.sh" --check >/dev/null 2>&1; then
+  say "step 17 of 27: apply this release's vault policies, engines and roles - already done, skipping"
+else
+  say "step 17 of 27: apply this release's vault policies, engines and roles"
+  BRAIN_VAULT_APPLIED=0
+  sh "/opt/brain/ops/openbao/apply-release.sh" || BRAIN_VAULT_APPLIED="$?"
+  if test "$BRAIN_VAULT_APPLIED" -eq 3; then
+    say "This install's vault has no deploy token, so this release's vault policies are not applied. It was made before the vault opened itself: ops/openbao/UNSEAL.md, under Moving an older install, moves it with one command."
+  elif test "$BRAIN_VAULT_APPLIED" -ne 0; then
+    fail "this release's vault policies, engines or roles did not take; the lines above say which. ops/openbao/UNSEAL.md, under When a release's vault changes do not take"
+  fi
+fi
+
+# step 18 of 27: compose the secrets vault in
+say "step 18 of 27: compose the secrets vault in"
 if grep -q "^BRAIN_VAULT_ADDRESS=." "/opt/brain/.env" 2>/dev/null; then BRAIN_COMPOSE_FILES="$BRAIN_COMPOSE_FILES -f /opt/brain/docker-compose.vault.yml"; say "The environment file names a secrets vault, so the vault overlay is composed in."; fi
 if test -n "${BRAIN_WORKER_VAULT_FILES:-}" && grep -q "^BRAIN_WORKER_VAULT_TOKEN=." "/opt/brain/.env" 2>/dev/null; then BRAIN_COMPOSE_FILES="$BRAIN_COMPOSE_FILES $BRAIN_WORKER_VAULT_FILES"; say "The environment file holds the worker's vault token, so its overlay is composed in."; fi
 
-# step 17 of 25: pull the images this profile runs
+# step 19 of 27: pull the images this profile runs
 if docker compose $BRAIN_COMPOSE_FILES images --quiet | grep -q .; then
-  say "step 17 of 25: pull the images this profile runs - already done, skipping"
+  say "step 19 of 27: pull the images this profile runs - already done, skipping"
 else
-  say "step 17 of 25: pull the images this profile runs"
+  say "step 19 of 27: pull the images this profile runs"
   docker compose $BRAIN_COMPOSE_FILES pull --quiet
 fi
 
-# step 18 of 25: start the database and wait for it
+# step 20 of 27: start the database and wait for it
 if docker compose $BRAIN_COMPOSE_FILES ps --status running --services | grep -qx db; then
-  say "step 18 of 25: start the database and wait for it - already done, skipping"
+  say "step 20 of 27: start the database and wait for it - already done, skipping"
 else
-  say "step 18 of 25: start the database and wait for it"
+  say "step 20 of 27: start the database and wait for it"
   docker compose $BRAIN_COMPOSE_FILES up -d db
   docker compose $BRAIN_COMPOSE_FILES exec -T db sh -c 'until pg_isready -U brain -d brain; do sleep 2; done'
 fi
 
-# step 19 of 25: create the databases the compose files do not
+# step 21 of 27: create the databases the compose files do not
 if ! docker compose $BRAIN_COMPOSE_FILES config --services | grep -qx langfuse-web || docker compose $BRAIN_COMPOSE_FILES exec -T db psql -tAc "select 1 from pg_database where datname = 'langfuse'" -U brain -d brain | grep -qx 1; then
-  say "step 19 of 25: create the databases the compose files do not - already done, skipping"
+  say "step 21 of 27: create the databases the compose files do not - already done, skipping"
 else
-  say "step 19 of 25: create the databases the compose files do not"
+  say "step 21 of 27: create the databases the compose files do not"
   if docker compose $BRAIN_COMPOSE_FILES config --services | grep -qx langfuse-web; then
     grep -q "^LANGFUSE_POSTGRES_PASSWORD=." "/opt/brain/.env" || fail "set LANGFUSE_POSTGRES_PASSWORD in /opt/brain/.env: this profile runs the trace ledger and it signs in with it"
     docker compose $BRAIN_COMPOSE_FILES exec -T db psql -tAc "select 1 from pg_roles where rolname = 'langfuse'" -U brain -d brain | grep -qx 1 || sed -n "s/^LANGFUSE_POSTGRES_PASSWORD=\(.*\)/create role langfuse login password '\1';/p" "/opt/brain/.env" | docker compose $BRAIN_COMPOSE_FILES exec -T db psql -v ON_ERROR_STOP=1 -U brain -d brain
@@ -377,45 +408,45 @@ else
   fi
 fi
 
-# step 20 of 25: start everything else
+# step 22 of 27: start everything else
 if test "$(docker compose $BRAIN_COMPOSE_FILES ps --status running --services | wc -l)" -ge "$BRAIN_SERVICES"; then
-  say "step 20 of 25: start everything else - already done, skipping"
+  say "step 22 of 27: start everything else - already done, skipping"
 else
-  say "step 20 of 25: start everything else"
+  say "step 22 of 27: start everything else"
   docker compose $BRAIN_COMPOSE_FILES up -d
 fi
 
-# step 21 of 25: wait for the application to report ready
-say "step 21 of 25: wait for the application to report ready"
+# step 23 of 27: wait for the application to report ready
+say "step 23 of 27: wait for the application to report ready"
 for _ in $(seq 1 60); do
   docker compose $BRAIN_COMPOSE_FILES exec -T app python -c 'import urllib.request,sys; sys.exit(0 if urllib.request.urlopen("http://127.0.0.1:8000/health/ready",timeout=4).status==200 else 1)' && break
   sleep 5
 done
 docker compose $BRAIN_COMPOSE_FILES exec -T app python -c 'import urllib.request,sys; sys.exit(0 if urllib.request.urlopen("http://127.0.0.1:8000/health/ready",timeout=4).status==200 else 1)' || fail "the application never reported ready"
 
-# step 22 of 25: furnish the install
+# step 24 of 27: furnish the install
 if docker compose $BRAIN_COMPOSE_FILES exec -T db psql -tAc "select 1 from ops.setting where key = 'starter.furnished'" -U brain -d brain | grep -qx 1; then
-  say "step 22 of 25: furnish the install - already done, skipping"
+  say "step 24 of 27: furnish the install - already done, skipping"
 else
-  say "step 22 of 25: furnish the install"
+  say "step 24 of 27: furnish the install"
   docker compose $BRAIN_COMPOSE_FILES exec -T app python -m brain.ops.starter_store
 fi
 
-# step 23 of 25: keep this install's template signing key
+# step 25 of 27: keep this install's template signing key
 if test "${BRAIN_VAULT:-yes}" = "no" || docker compose $BRAIN_COMPOSE_FILES exec -T app python -m brain.ops.template_key --held; then
-  say "step 23 of 25: keep this install's template signing key - already done, skipping"
+  say "step 25 of 27: keep this install's template signing key - already done, skipping"
 else
-  say "step 23 of 25: keep this install's template signing key"
+  say "step 25 of 27: keep this install's template signing key"
   docker compose $BRAIN_COMPOSE_FILES exec -T app python -m brain.ops.template_key
 fi
 
-# step 24 of 25: present the setup code, once
-say "step 24 of 25: present the setup code, once"
+# step 26 of 27: present the setup code, once
+say "step 26 of 27: present the setup code, once"
 printf "setup code: %s\n" "$(grep BRAIN_SETUP_SECRET "/opt/brain/.env" | cut -d= -f2)"
 printf "%s\n" "Open the console and enter it on the first screen. It is required before anybody can claim this system."
 
-# step 25 of 25: say where to go next
-say "step 25 of 25: say where to go next"
+# step 27 of 27: say where to go next
+say "step 27 of 27: say where to go next"
 say ""
 if test -n "$BRAIN_CONSOLE_ADDRESS"; then
   printf "Open %s/first-run and enter the code above.\n" "${BRAIN_CONSOLE_ADDRESS%/}"

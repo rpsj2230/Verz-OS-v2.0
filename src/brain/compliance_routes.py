@@ -24,12 +24,17 @@ them. What anybody else gets from it is their own empty list.
 the control ran this month through `InterceptionTally.report`, which releases nothing below a
 cohort and no breakdown that a total could complete.
 
-Task ids: M24.2.2, M24.2.3, M24.2.4
+**People by name.** Each answer carries the names of the people on its own rows, as the named
+person, the one who named them, the asker, the handler, who connected a source and who recorded or
+closed a case (`brain.people_names`), so the Compliance and Referred to me pages print no id.
+
+Task ids: M24.2.2, M24.2.3, M24.2.4, M27.16.1
 """
 
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any, Final
 
@@ -74,6 +79,7 @@ from brain.ops.sensitive_referral_store import (
     SensitiveReferrals,
     StoredSensitiveReferrals,
 )
+from brain.people_names import names_for
 from brain.routing_routes import sessions_of
 
 log = structlog.get_logger()
@@ -200,6 +206,8 @@ class TopicsView(BaseModel):
     tally: TallyView
     referral: str
     routing: str
+    #: The names of the people named for topics and who named them (`brain.people_names`).
+    people: dict[str, str] = Field(default_factory=dict)
 
 
 class NameBody(BaseModel):
@@ -226,6 +234,8 @@ class ReferralsView(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     referrals: list[ReferralView]
+    #: The names of who asked and who handled each referral (`brain.people_names`).
+    people: dict[str, str] = Field(default_factory=dict)
 
 
 class RegisterEntityView(BaseModel):
@@ -260,6 +270,8 @@ class RegisterView(BaseModel):
 
     connectors: list[RegisterRowView]
     counts: str
+    #: The names of who connected each source (`brain.people_names`).
+    people: dict[str, str] = Field(default_factory=dict)
 
 
 class ObligationView(BaseModel):
@@ -305,6 +317,8 @@ class BreachesView(BaseModel):
 
     cases: list[BreachView]
     closing: str
+    #: The names of who recorded and who closed each case (`brain.people_names`).
+    people: dict[str, str] = Field(default_factory=dict)
 
 
 class OpenBody(BaseModel):
@@ -348,6 +362,16 @@ def named_view(one: NamedPerson | None) -> NamedView | None:
     if one is None:
         return None
     return NamedView(principal_id=one.principal_id, named_by=one.named_by, named_at=one.named_at)
+
+
+async def referrals_named(request: Request, found: Sequence[Referral]) -> ReferralsView:
+    """The referrals, with the names of who asked and who handled each."""
+    named = {one.asked_by for one in found} | {
+        one.handled_by for one in found if one.handled_by is not None
+    }
+    return ReferralsView(
+        referrals=[referral_view(one) for one in found], people=await names_for(request, named)
+    )
 
 
 def referral_view(one: Referral) -> ReferralView:
@@ -441,6 +465,7 @@ async def topics(request: Request, asked: Asked) -> TopicsView:
     store = referrals_of(request)
     named = await store.named()
     report = (await store.tally(asked.now.strftime("%Y-%m"))).report()
+    people = {one.principal_id for one in named.values()} | {one.named_by for one in named.values()}
     return TopicsView(
         topics=[
             TopicView(topic=t.value, label=TOPIC_LABELS[t], named=named_view(named.get(t)))
@@ -458,6 +483,7 @@ async def topics(request: Request, asked: Asked) -> TopicsView:
         ),
         referral=REFERRAL_TEXT,
         routing=ROUTING_IS_BESIDE_THE_CONVERSATION,
+        people=await names_for(request, people),
     )
 
 
@@ -487,7 +513,7 @@ async def name_person(request: Request, topic: str, body: NameBody, asked: Asked
 async def my_referrals(request: Request, asked: Asked) -> ReferralsView:
     """The referrals routed to this caller, newest first. The database decides which."""
     found = await referrals_of(request).mine(asked.reach.principal_id)
-    return ReferralsView(referrals=[referral_view(one) for one in found])
+    return await referrals_named(request, found)
 
 
 @router.post(
@@ -508,7 +534,7 @@ async def handled(request: Request, referral_id: uuid.UUID, asked: Asked) -> Ref
     if not done:
         raise Absent("that referral is not open for this caller")
     found = await store.mine(asked.reach.principal_id)
-    return ReferralsView(referrals=[referral_view(one) for one in found])
+    return await referrals_named(request, found)
 
 
 # ----------------------------------------------------------- processing register (M24.2.3)
@@ -518,9 +544,11 @@ async def register(request: Request, asked: Asked) -> RegisterView:
     _govern(asked)
     connections = await connections_of(request).connected()
     counts = await read_counts_of(request).counts() if connections else {}
+    rows = [register_view(row) for row in register_rows(connections, counts)]
     return RegisterView(
-        connectors=[register_view(row) for row in register_rows(connections, counts)],
+        connectors=rows,
         counts=THE_COUNTS_ARE_WHAT_WAS_READ,
+        people=await names_for(request, {one.connected_by for one in rows}),
     )
 
 
@@ -530,9 +558,14 @@ async def breaches(request: Request, asked: Asked) -> BreachesView:
     """Every case, newest awareness first, with its clock as at now."""
     _govern(asked)
     found = await breaches_of(request).cases()
+    cases = [breach_view(one, asked.now) for one in found]
+    named = {one.recorded_by for one in cases} | {
+        one.closed_by for one in cases if one.closed_by is not None
+    }
     return BreachesView(
-        cases=[breach_view(one, asked.now) for one in found],
+        cases=cases,
         closing=CLOSING_NEEDS_A_MADE_ASSESSMENT,
+        people=await names_for(request, named),
     )
 
 

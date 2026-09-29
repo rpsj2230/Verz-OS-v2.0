@@ -236,6 +236,14 @@ function proposals(idp: FakeIdp): { url: string; body: unknown }[] {
     .map((call) => ({ url: call.url, body: JSON.parse(String(call.init?.body ?? "null")) }));
 }
 
+/**
+ * Markup with the ids React mints per mount taken out, so two mounts of the same page compare equal
+ * and a difference is one the answer made. The kit's headed cards name their headings by such ids.
+ */
+function withoutMintedIds(markup: string): string {
+  return markup.replace(/ (id|for|aria-describedby|aria-labelledby|aria-controls)="[^"]*"/g, "");
+}
+
 /** The column headings on the screen, in the order they are rendered. */
 function headings(container: HTMLElement): string[] {
   return [...container.querySelectorAll(".grid__table th")].map((cell) => cell.textContent ?? "");
@@ -369,10 +377,10 @@ describe("the guard in the browser", () => {
 
     expect(headings(hidden.container)).not.toContain(EDIT_COLUMN);
     expect(headings(shown.container)).toContain(EDIT_COLUMN);
-    // The screen carries the entity form as well, so an editor is a second form rather than
-    // the only one. Counting them is what distinguishes the two states.
-    expect(hidden.container.querySelectorAll(".form")).toHaveLength(1);
-    expect(shown.container.querySelectorAll(".form")).toHaveLength(2);
+    // A table's page carries no other form since it moved to the kit (the name form is on the
+    // module's first page), so the editor is the one form. Counting them tells the states apart.
+    expect(hidden.container.querySelectorAll(".form")).toHaveLength(0);
+    expect(shown.container.querySelectorAll(".form")).toHaveLength(1);
   });
 
   test("a caller who may not propose is told nothing about why the editor is absent", async () => {
@@ -388,7 +396,7 @@ describe("the guard in the browser", () => {
       classification: classification(priceList(), { editable: false }),
     });
 
-    expect(opened.container.innerHTML).toBe(closed.container.innerHTML);
+    expect(withoutMintedIds(opened.container.innerHTML)).toBe(withoutMintedIds(closed.container.innerHTML));
   });
 });
 
@@ -426,7 +434,7 @@ describe("what the screen shows", () => {
     // person who copies it onto a screen where the collection is filtered. Everything outside
     // the table body is compared byte for byte between a classification of five columns and
     // one of two, so a number anywhere on the screen fails this.
-    const chrome = (markup: string) => markup.replace(/<tbody>[\s\S]*?<\/tbody>/, "<tbody/>");
+    const chrome = (markup: string) => withoutMintedIds(markup.replace(/<tbody>[\s\S]*?<\/tbody>/, "<tbody/>"));
     const five = await consoleAt(`/classification/${ENTITY}`, {
       classification: classification(priceList()),
     });
@@ -485,7 +493,7 @@ describe("what the screen shows", () => {
     });
 
     expect(container.textContent).toContain(NO_SUCH_COLUMN);
-    expect(container.querySelectorAll(".form")).toHaveLength(1);
+    expect(container.querySelectorAll(".form")).toHaveLength(0);
     expect(requests(idp)).toHaveLength(1);
   });
 
@@ -828,7 +836,7 @@ describe("what a review says", () => {
     expect(container.querySelector(".form .notice__body")?.textContent).toBe(
       "I could not find that.",
     );
-    expect(container.querySelectorAll(".form")).toHaveLength(2);
+    expect(container.querySelectorAll(".form")).toHaveLength(1);
     expect(container.textContent).not.toContain(IT_WIDENS);
     expect(container.textContent).not.toContain(IT_DOES_NOT_WIDEN);
   });

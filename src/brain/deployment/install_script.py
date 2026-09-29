@@ -157,6 +157,10 @@ FLAGS: Final[tuple[tuple[str, str], ...]] = (
         f"run no secrets vault, accepted only for: {' '.join(vault_setup.DECLINABLE_PROFILES)}",
     ),
     ("--accept-unencrypted-swap", "go ahead although the vault's memory can reach plain swap"),
+    (
+        vault_setup.RECOVERY_SPLIT_FLAG,
+        "five recovery pieces, any three, printed once for five people, rather than one key",
+    ),
     ("--help", "print this and stop"),
 )
 
@@ -871,6 +875,7 @@ def _arguments(profiles: Sequence[str] = PROFILES) -> tuple[str, ...]:
         '    --no-install-docker) BRAIN_INSTALL_DOCKER="no"; shift ;;',
         f'    {vault_setup.DECLINE_FLAG}) BRAIN_VAULT="no"; shift ;;',
         f'    {SWAP_FLAG}) BRAIN_ACCEPT_SWAP="yes"; shift ;;',
+        f'    {vault_setup.RECOVERY_SPLIT_FLAG}) {vault_setup.RECOVERY_VARIABLE}="split"; shift ;;',
         "    --help|-h) usage; exit 0 ;;",
         '    *) usage >&2; fail "unknown option: $1" ;;',
         "  esac",
@@ -968,6 +973,7 @@ def render_install(
         'BRAIN_INSTALL_DOCKER="yes"',
         'BRAIN_VAULT="yes"',
         'BRAIN_ACCEPT_SWAP="no"',
+        f'{vault_setup.RECOVERY_VARIABLE}="single"',
         "BRAIN_REFUSALS=0",
         "",
         *_helpers(),

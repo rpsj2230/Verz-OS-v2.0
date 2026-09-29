@@ -195,7 +195,7 @@ def test_0150_copies_each_rule_it_holds_from_the_code_that_owns_it() -> None:
     assert m.SUPERSEDES == {m.NARROWER_ACTIONS: m.WIDENED_ACTIONS}
     assert m.READER_ROLE == TRACE_READER_ROLE
     assert f"SET LOCAL ROLE {TRACE_READER_ROLE}" == SET_TRACE_READER_ROLE
-    assert m.down_revision == "0149"
+    assert m.down_revision == "0146"
 
 
 @pytest.mark.parametrize("qualified", ("agent.browser_session", "obs.trace_step", "obs.trace_read"))

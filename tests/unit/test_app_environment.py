@@ -358,3 +358,14 @@ def test_the_vault_steps_name_the_overlay_and_the_line_that_chooses_it() -> None
     configuration = (REPO / "docs" / "install" / "configuration.md").read_text(encoding="utf-8")
     [row] = [one for one in configuration.splitlines() if one.startswith(f"| `{VAULT_CHOICE}` |")]
     assert VAULT_OVERLAY in row
+
+
+def test_the_vault_network_is_the_default_of_a_variable_and_otherwise_the_name_as_written() -> None:
+    """The vault's compose file names its network `${BRAIN_VAULT_NETWORK:-brain-vault}` so the
+    switch can bring a vault up on the network an older one is on; an install sets no variable and
+    gets the default. Delete this and the reader can return the unexpanded text, which no overlay
+    matches, or expand a literal name it should have left alone."""
+    assert vault_network_of({"networks": {"n": {"name": "${SOME_NET:-a-net}"}}}) == "a-net"
+    assert vault_network_of({"networks": {"n": {"name": "literal"}}}) == "literal"
+    assert vault_network_of({"networks": {"n": {"name": "${SOME_NET}"}}}) == "${SOME_NET}"
+    assert vault_network_of({"networks": {"n": {}}}) == "n"

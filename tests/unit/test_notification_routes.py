@@ -33,6 +33,7 @@ from brain.notification_routes import (
     NOTHING_TO_REMOVE,
     NOTIFICATION_AUTHORITY,
     NOTIFICATIONS_PATH,
+    ONLY_THE_LAST_CHANGE_IS_SHOWN,
     PASSWORD_PATH,
     REMOVAL_PATH,
     THE_ALERT_STORE_DID_NOT_ANSWER,
@@ -590,3 +591,21 @@ def test_a_cache_that_does_not_answer_is_said_rather_than_failing_the_screen(
     assert body["alerts"] is None
     assert body["alerts_unread"] == THE_ALERT_STORE_DID_NOT_ANSWER
     assert body["notices"]
+
+
+def test_the_screens_sentences_point_the_right_way_and_name_no_table(
+    served: tuple[TestClient, Stub],
+) -> None:
+    """Found on the owner's install on 2026-09-29: the relay card said the notices were "below"
+    when they are drawn above it, and the line under the notices named a table and a migration.
+
+    Delete this and either sentence can go back to what the walk found."""
+    client, _ = served
+    attach(client, Vault())
+    body = get(client, "u_admin", PAGE).json()
+
+    assert "above" in body["email_used_for"] and "below" not in body["email_used_for"]
+    said = body["only_the_last_change_is_kept"]
+    assert said == ONLY_THE_LAST_CHANGE_IS_SHOWN
+    assert "ops." not in said and "trigger" not in said
+    assert not any(ch.isdigit() for ch in said)

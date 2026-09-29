@@ -106,7 +106,7 @@ export function ProviderDashboard({
         </FactList>
         {checked === null ? null : (
           <div role="status" className="mt-3 flex flex-col gap-1">
-            <Note kind={checked.answered ? "works" : "info"}>{checked.told}</Note>
+            <Note kind={checked.answered ? "done" : "info"}>{checked.told}</Note>
             {checked.answered ? <Note>{checkServedSentence(checked)}</Note> : null}
           </div>
         )}

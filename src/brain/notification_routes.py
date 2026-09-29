@@ -119,7 +119,6 @@ from brain.ops.openbao import OpenBaoVault
 from brain.ops.operation_store import PostgresOperationLedger
 from brain.ops.secrets import VaultRole
 from brain.ops.setting_store import (
-    A_SWITCH_SHOWS_ITS_LAST_CHANGE_AND_THE_LEDGER_KEEPS_EVERY_ONE,
     SettingState,
 )
 from brain.routing_routes import names_of, sessions_of
@@ -151,8 +150,8 @@ SAVING_EMAIL: Final = (
     "another test message."
 )
 KEEPING_THE_RELAY_CREDENTIAL: Final = (
-    "The relay's password is replaced in the vault and used for every message from now on. It "
-    "cannot be shown or restored from here."
+    "The relay's password is kept in the vault, in place of any it held, and used for every "
+    "message from now on. It cannot be shown or restored from here."
 )
 REMOVING_THE_RELAY: Final = (
     "No mail is sent from now on, and a test message is refused until a relay is saved again. The "
@@ -166,8 +165,16 @@ SENDING_TRIAL: Final = (
 
 #: What a person is told about who sends email today.
 WHAT_EMAIL_IS_USED_FOR: Final = (
-    "Email is used by the test message on this screen today. No notice is sent by email yet: each "
-    "notice below says how it would reach people and whether anything sends it."
+    "Email is used by the test message on this screen today. No notice is sent by email yet: the "
+    "notices above say how each would reach people and whether anything sends it."
+)
+
+#: What the notices list says under it about who changed a switch. The reason is
+#: `brain.ops.setting_store.A_SWITCH_SHOWS_ITS_LAST_CHANGE_AND_THE_LEDGER_KEEPS_EVERY_ONE`; this
+#: is the sentence, which until 2026-09-29 was that reason, naming a table and a migration.
+ONLY_THE_LAST_CHANGE_IS_SHOWN: Final = (
+    "Each switch shows who changed it last. Every change, and who made it, is kept in the audit "
+    "log."
 )
 
 #: What a person is told about subscribers, which are managed on their own screen.
@@ -561,7 +568,7 @@ async def notifications(request: Request, asked: Asked) -> NotificationsPage:
         email_used_for=WHAT_EMAIL_IS_USED_FOR,
         subscribers=SUBSCRIBERS_ARE_ON_THE_WEBHOOKS_SCREEN,
         ships_on=A_NOTICE_SHIPS_ON,
-        only_the_last_change_is_kept=A_SWITCH_SHOWS_ITS_LAST_CHANGE_AND_THE_LEDGER_KEEPS_EVERY_ONE,
+        only_the_last_change_is_kept=ONLY_THE_LAST_CHANGE_IS_SHOWN,
         switching_off=SWITCHING_OFF,
         switching_on=SWITCHING_ON,
         saving_email=SAVING_EMAIL,

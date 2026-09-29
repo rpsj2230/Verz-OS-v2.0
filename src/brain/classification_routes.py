@@ -54,6 +54,31 @@ statement whose ledger entry `0116`'s trigger writes under the administrator's n
 `AN_APPLIED_MARK_IS_STORED_AND_LEDGERED`. Ask reads the stored tables on the next question,
 through `brain.ops.classification_store.classified_lane_of`.
 
+**An uploaded table is changed only by somebody whose grants admit every row it holds, and until
+2026-09-29 the scope of those grants was never read.** `_may_change` asks whether both
+classification grants are held at all, which is the right first question and was the only one, so
+a department's administrator could upload over, review and mark any department's price list. A
+classification decides what everybody may see of every row of its table, so a change to one is an
+act over all of those rows, and `table_within_reach` asks both grants at each of them with
+`brain.console.govern._in_reach`, the narrowing every scoped console write uses: a department's
+administrator changes a table whose rows are all their department's, an install-wide one changes
+any, and a table with no department on its rows is the whole company's. An upload is asked at the
+rows it brings as well as the rows it replaces. **A table out of reach is refused in the words a
+table that does not exist gets**, so the refusal says nothing about another department's tables.
+See `A_TABLE_IS_CHANGED_BY_SOMEBODY_WHOSE_GRANTS_ADMIT_EVERY_ROW_IT_HOLDS`. Rejected: placing a
+table in the uploader's department, which would let a web administrator classify rows they
+uploaded for finance, and move the table whenever its uploader moved. Built-in classifications
+keep the first question alone: a review of one stores nothing, and changing one is a release.
+
+**Reading an uploaded table's classification is scoped as changing it is, since 2026-09-29.** Until
+then the read grant held anywhere answered any table's column rules, so a department's reader could
+learn which columns another department keeps confidential, and that it holds a table by that name,
+one guessed name at a time. `table_within_reach` is asked with `TO_READ`, the read grant at every
+row, and a table out of reach gets the refusal a missing one gets. A built-in classification is
+still read by anybody holding the read grant: it is the product's own rules for its own entities,
+the same on every install, and no department's rows. See
+`A_TABLE_OUT_OF_REACH_IS_UNREAD_AS_A_MISSING_ONE`.
+
 **An upload never widens anything, and a name the product classifies cannot be uploaded.**
 Every column of a new table starts restricted unless `PRICE_LIST` already gives it a mark (see
 `brain.knowledge.columns.first_classification`), and a second upload keeps the marks that
@@ -118,6 +143,8 @@ import base64
 import binascii
 import enum
 import re
+from collections.abc import Iterable, Mapping
+from datetime import datetime
 from typing import Annotated, Final
 
 import structlog
@@ -127,7 +154,8 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked, Asking
 from brain.attribution import trace_of_request
-from brain.core.entitlement import CAPABILITY_RE, Capability
+from brain.console.govern import NOWHERE, _in_reach
+from brain.core.entitlement import CAPABILITY_RE, Capability, EntitlementSet
 from brain.core.envelope import OBJECT_NAME_PATTERN
 from brain.core.errors import Absent, Failed
 from brain.core.field_policy import Classification
@@ -194,6 +222,26 @@ AN_APPLIED_MARK_IS_STORED_AND_LEDGERED: Final = (
     "the review, so a review can never be the thing that changed who may see a column, and the "
     "answer to it carries the same verdict a review would have given, so the widening is named "
     "in the response that made it as well as in the one that proposed it."
+)
+
+#: Why a change to an uploaded table is judged at every row it governs.
+A_TABLE_IS_CHANGED_BY_SOMEBODY_WHOSE_GRANTS_ADMIT_EVERY_ROW_IT_HOLDS: Final = (
+    "A table's classification decides what everybody may see of every one of its rows, so a "
+    "change to it is an act over all of them. Both classification grants are asked at each row "
+    "the table holds, and at each row an upload would bring, as every scoped console write asks "
+    "its grant at the place it acts: a department's administrator changes a table whose rows are "
+    "all their department's, an install-wide administrator changes any. A table out of reach is "
+    "refused exactly as a table that does not exist, so the refusal names nothing another "
+    "department holds."
+)
+
+#: Why reading an uploaded table's classification is scoped as changing it is.
+A_TABLE_OUT_OF_REACH_IS_UNREAD_AS_A_MISSING_ONE: Final = (
+    "An uploaded table's column rules say which of a department's columns it keeps from whom, and "
+    "that the department holds a table under that name at all. So reading them takes the read "
+    "grant at every row the table holds, as changing them takes both grants there, and a table "
+    "out of reach is answered with the very body a name no table has gets. There is no route that "
+    "lists uploaded tables, so no list can name one either, and nothing counts them."
 )
 
 #: Why a classification is answered whole rather than narrowed to the caller.
@@ -691,9 +739,40 @@ def _writer(asked: Asking) -> Writer:
 
 
 def _may_change(asked: Asking) -> bool:
-    """Both capabilities, which every route that reviews or writes requires alike."""
+    """Both capabilities, which every route that reviews or writes requires alike.
+
+    Held anywhere at all, asked before anything is looked up, so a stranger's request never
+    reaches a query. Where they are held is asked of an uploaded table by `table_within_reach`.
+    """
     return asked.reach.holds(CLASSIFICATION_READ, asked.now) and asked.reach.holds(
         CLASSIFICATION_WRITE, asked.now
+    )
+
+
+#: The grants a change to an uploaded table needs at every row it holds, and a read of one.
+TO_CHANGE: Final = (CLASSIFICATION_READ, CLASSIFICATION_WRITE)
+TO_READ: Final = (CLASSIFICATION_READ,)
+
+
+def table_within_reach(
+    reach: EntitlementSet,
+    rows: Iterable[Mapping[str, str]],
+    now: datetime | None,
+    needing: tuple[Capability, ...] = TO_CHANGE,
+) -> bool:
+    """Whether every grant `needing` names admits every row of this table: both, for a change.
+
+    `brain.console.govern._in_reach` at each row, which is `scope_for` followed by `matches`, so a
+    row with no department fails a department grant and an unrestricted grant admits every row. A
+    table with no rows is asked at `NOWHERE`, which only an unrestricted grant admits, so an empty
+    table is never anybody's by default. See
+    `A_TABLE_IS_CHANGED_BY_SOMEBODY_WHOSE_GRANTS_ADMIT_EVERY_ROW_IT_HOLDS`, and
+    `A_TABLE_OUT_OF_REACH_IS_UNREAD_AS_A_MISSING_ONE` for the read, which needs the read grant
+    alone.
+    """
+    places = tuple(rows) or (NOWHERE,)
+    return all(
+        _in_reach(reach, capability, place, now) for capability in needing for place in places
     )
 
 
@@ -722,6 +801,10 @@ async def classification(request: Request, entity: str, asked: Asked) -> Classif
     check fires and swapping the two lines changes no response. The order is kept because the
     entity is now looked up in a database for an uploaded table, and a lookup made before the
     capability is checked is a query a stranger can time.
+
+    An uploaded table is read only where the read grant admits every row it holds, and refused
+    otherwise exactly as a table that does not exist. See
+    `A_TABLE_OUT_OF_REACH_IS_UNREAD_AS_A_MISSING_ONE`.
     """
     if not asked.reach.holds(CLASSIFICATION_READ, asked.now):
         log.info("classification not answerable", principal=asked.caller.principal.id)
@@ -733,11 +816,16 @@ async def classification(request: Request, entity: str, asked: Asked) -> Classif
         raise _no_classification_here()
 
     classification, stored = found
-    return view_of(
-        classification,
-        editable=asked.reach.holds(CLASSIFICATION_WRITE, asked.now),
-        stored=stored,
-    )
+    editable = asked.reach.holds(CLASSIFICATION_WRITE, asked.now)
+    if stored is not None:
+        rows = await _tables_or_fault(request).rows_of(stored)
+        if not table_within_reach(asked.reach, rows, asked.now, TO_READ):
+            log.info("classification out of reach", principal=asked.caller.principal.id)
+            raise _no_classification_here()
+        # Presentation, and still honest: a control the review would refuse is not drawn. See
+        # AN_EDITABLE_FLAG_DECIDES_WHAT_IS_DRAWN_AND_NOTHING_ELSE.
+        editable = editable and table_within_reach(asked.reach, rows, asked.now)
+    return view_of(classification, editable=editable, stored=stored)
 
 
 @router.post(
@@ -765,8 +853,14 @@ async def review_column(
     if found is None:
         log.info("classification not found", entity=entity)
         raise _no_classification_here()
+    classification, stored = found
+    if stored is not None and not await _in_reach_of(request, asked, stored):
+        # The refusal a missing table gets. See
+        # A_TABLE_IS_CHANGED_BY_SOMEBODY_WHOSE_GRANTS_ADMIT_EVERY_ROW_IT_HOLDS.
+        log.info("classification out of reach", principal=asked.caller.principal.id)
+        raise _no_classification_here()
 
-    return review_against(found[0], column, edit)
+    return review_against(classification, column, edit)
 
 
 # --------------------------------------------------------- an uploaded table (M7.5.3)
@@ -879,6 +973,12 @@ async def upload_table(
             return TableUploaded(refused="no heading in the file is the key column named")
 
     existing = await tables.table(entity)
+    replaced = () if existing is None else await tables.rows_of(existing)
+    if not table_within_reach(asked.reach, (*parsed.rows, *replaced), asked.now):
+        # The rows it brings and the rows it replaces, refused as a table out of reach is. See
+        # A_TABLE_IS_CHANGED_BY_SOMEBODY_WHOSE_GRANTS_ADMIT_EVERY_ROW_IT_HOLDS.
+        log.info("classified table out of reach", principal=asked.caller.principal.id)
+        raise _no_classification_here()
     try:
         table = next_upload(
             existing,
@@ -913,7 +1013,7 @@ async def review_mark(
     if not _may_change(asked):
         log.info("mark not reviewable", principal=asked.caller.principal.id)
         raise _no_classification_here()
-    stored = await _stored_or_absent(request, entity)
+    stored = await _changeable_or_absent(request, entity, asked)
     return _mark_review(stored, column, mark)
 
 
@@ -934,7 +1034,7 @@ async def apply_mark(
         log.info("mark not appliable", principal=asked.caller.principal.id)
         raise _no_classification_here()
     tables = _tables_or_fault(request)
-    stored = await _stored_or_absent(request, entity)
+    stored = await _changeable_or_absent(request, entity, asked)
     verdict = _mark_review(stored, column, mark)
     if verdict.would_not_load:
         return MarkApplied(
@@ -955,14 +1055,27 @@ async def apply_mark(
     )
 
 
-async def _stored_or_absent(request: Request, entity: str) -> StoredTable:
-    """The uploaded table with this name, or the one refusal this router makes."""
+async def _changeable_or_absent(request: Request, entity: str, asked: Asking) -> StoredTable:
+    """The uploaded table with this name if this caller may change it, or the one refusal.
+
+    One refusal for a table that does not exist and one out of this caller's reach. See
+    `A_TABLE_IS_CHANGED_BY_SOMEBODY_WHOSE_GRANTS_ADMIT_EVERY_ROW_IT_HOLDS`.
+    """
     tables = _tables_or_fault(request)
     stored = await tables.table(entity) if _ENTITY_RE.match(entity) else None
     if stored is None:
         log.info("classified table not found", entity=entity)
         raise _no_classification_here()
+    if not await _in_reach_of(request, asked, stored):
+        log.info("classified table out of reach", principal=asked.caller.principal.id)
+        raise _no_classification_here()
     return stored
+
+
+async def _in_reach_of(request: Request, asked: Asking, stored: StoredTable) -> bool:
+    """Whether this caller's grants admit every row of this uploaded table's live upload."""
+    rows = await _tables_or_fault(request).rows_of(stored)
+    return table_within_reach(asked.reach, rows, asked.now)
 
 
 def _mark_review(stored: StoredTable, column: str, mark: ColumnMark) -> ReviewView:

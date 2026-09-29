@@ -64,12 +64,12 @@ BROKERED_BY: Final[Mapping[str, str]] = MappingProxyType(
 NOT_BROKERED_BY_THIS_RELEASE: Final[Mapping[str, str]] = MappingProxyType(
     {
         "lark": (
-            "Keycloak has no Lark broker and Lark's sign-in is not standard OpenID Connect, so "
-            "this release cannot broker it."
+            "Lark's sign-in is not the standard kind this product's sign-in service can hand "
+            "people over to, so this release cannot sign people in through Lark."
         ),
         "ldap": (
-            "LDAP needs a bind account and a search base this release has no settings for, so "
-            "it is not federated."
+            "Signing in through an LDAP directory needs an account to search it with, which this "
+            "release has no settings for, so it cannot sign people in through one."
         ),
     }
 )
@@ -123,8 +123,9 @@ def brokering(*, directory: str, client_id: str, staff_source: str, location: st
     if chosen in NOT_BROKERED_BY_THIS_RELEASE:
         return Brokering(
             problem=(
-                f"{DIRECTORY_SETTING} is {chosen!r}. {NOT_BROKERED_BY_THIS_RELEASE[chosen]} "
-                "People sign in with accounts held in the realm."
+                f"The company directory used for sign-in is {chosen!r}. "
+                f"{NOT_BROKERED_BY_THIS_RELEASE[chosen]} People sign in with accounts held in "
+                "this install instead."
             )
         )
     if chosen not in BROKERED_BY:

@@ -25,7 +25,7 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     signedIn: true,
     drawsValues: true,
     answers: {
-      "/api/v1/approvals": { items: [card("sus_1")], next_cursor: null, truncated: false },
+      "/api/v1/approvals": { items: [card("sus_1")], next_cursor: null, truncated: false, people: { [UNBROKEN]: UNBROKEN } },
       // The agent publishes waiting for this reader as the second person, drawn below the cards.
       "/api/v1/agent-drafts": { items: [], waiting_for_you: [DRAFT_SUMMARY] },
     },
@@ -34,6 +34,6 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     address: "/approvals/sus_1",
     signedIn: true,
     drawsValues: true,
-    answers: { "/api/v1/approvals/sus_1": card("sus_1") },
+    answers: { "/api/v1/approvals/sus_1": { ...card("sus_1"), people: { [UNBROKEN]: UNBROKEN } } },
   },
 };

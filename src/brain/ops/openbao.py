@@ -75,9 +75,9 @@ which OpenBao answers for anybody, so a console can say sealed, open or silent e
 it holds has lapsed, which is exactly when somebody needs to know which of the three it is.
 
 **Whether the policy the vault loaded is this release's is asked of the vault.** A change to
-`ops/openbao/policies/application.hcl` takes effect only once somebody holding the unseal pieces
-loads the policies again, so `capabilities_self` asks what the loaded policy lets this token do on
-one path. The Credentials screen asks it of the one mint live reads need.
+`ops/openbao/policies/application.hcl` takes effect only once a deploy step applies it with the
+deploy token (`ops/openbao/apply-release.sh`), so `capabilities_self` asks what the loaded policy
+lets this token do on one path. The Credentials screen asks it of the one mint live reads need.
 
 **A fourth prefix, `template_signing/`, holds one key that is created once and never written
 over.** The install's template signing key (`brain.ops.template_key`) signs every template version

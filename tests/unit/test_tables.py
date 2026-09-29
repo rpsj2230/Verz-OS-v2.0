@@ -141,6 +141,9 @@ MIGRATION_BINDING_CODE = VERSIONS / "0118_channel_binding_codes.py"
 MIGRATION_SKILL_LIFECYCLE = VERSIONS / "0139_skill_retirement_and_detachment.py"
 MIGRATION_AUTOMATION_CHANGE = VERSIONS / "0145_automation_change.py"
 MIGRATION_MANIFEST_DRAFT = VERSIONS / "0149_agent_manifest_draft.py"
+MIGRATION_ACCESS_REQUEST_HANDLED = (
+    VERSIONS / "0146_access_request_handled_and_certification_export.py"
+)
 MIGRATION_TRACE_AND_BROWSER_SESSION = VERSIONS / "0150_trace_store_and_browser_session.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
@@ -384,6 +387,8 @@ MANIFEST_DRAFT_TABLES: tuple[str, ...] = (
     "agent.manifest_revision",
     "agent.manifest_act",
 )
+#: And the one 0146 adds: an access request its owner has marked handled.
+ACCESS_REQUEST_HANDLED_TABLES: tuple[str, ...] = ("gate.access_request_handled",)
 
 SENSITIVE_READ_TABLES: tuple[str, ...] = ("ops.sensitive_read",)
 
@@ -474,6 +479,7 @@ ALL_TABLES = (
     + SKILL_LIFECYCLE_TABLES
     + AUTOMATION_CHANGE_TABLES
     + MANIFEST_DRAFT_TABLES
+    + ACCESS_REQUEST_HANDLED_TABLES
     + TRACE_AND_BROWSER_SESSION_TABLES
 )
 
@@ -1295,6 +1301,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert automation_change.TABLES == AUTOMATION_CHANGE_TABLES
     manifest_draft = migration_module(MIGRATION_MANIFEST_DRAFT)
     assert manifest_draft.TABLES == MANIFEST_DRAFT_TABLES
+    access_request_handled = migration_module(MIGRATION_ACCESS_REQUEST_HANDLED)
+    assert access_request_handled.TABLES == ACCESS_REQUEST_HANDLED_TABLES
     trace_and_browser_session = migration_module(MIGRATION_TRACE_AND_BROWSER_SESSION)
     assert trace_and_browser_session.TABLES == TRACE_AND_BROWSER_SESSION_TABLES
     assert core.TABLES == CORE_TABLES
@@ -1387,6 +1395,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(skill_lifecycle.TABLES)
         + tuple(automation_change.TABLES)
         + tuple(manifest_draft.TABLES)
+        + tuple(access_request_handled.TABLES)
         + tuple(trace_and_browser_session.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
@@ -1459,6 +1468,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(skill_lifecycle.TABLES),
         set(automation_change.TABLES),
         set(manifest_draft.TABLES),
+        set(access_request_handled.TABLES),
         set(trace_and_browser_session.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
@@ -2406,6 +2416,24 @@ def test_0101_builds_the_access_request_table_exactly_as_the_model_declares_it()
     assert "CREATE INDEX ix_gate_access_request_owner_id" in up
     assert "DROP TABLE gate.access_request" in squash(
         rendered("downgrade", MIGRATION_ACCESS_REQUEST)
+    )
+
+
+def test_0146_builds_the_handled_mark_exactly_as_the_model_declares_it() -> None:
+    """The handled table's DDL, from the model, appears in 0146's rendered upgrade, its key and
+    its reference to the request included, and the downgrade takes it away again.
+
+    Delete this and the model and the migration can disagree about what a mark points at, or
+    whether a request can be marked twice."""
+    expected = squash(
+        str(CreateTable(table("gate.access_request_handled")).compile(dialect=DIALECT))
+    )
+    up = squash(rendered("upgrade", MIGRATION_ACCESS_REQUEST_HANDLED))
+    assert expected in up
+    assert "PRIMARY KEY (request_id)" in expected
+    assert "REFERENCES gate.access_request (id) ON DELETE RESTRICT" in expected
+    assert "DROP TABLE gate.access_request_handled" in squash(
+        rendered("downgrade", MIGRATION_ACCESS_REQUEST_HANDLED)
     )
 
 

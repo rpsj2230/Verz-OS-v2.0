@@ -33,7 +33,11 @@ view would never have shown them.
 person's newest exports, and `brain.erasure_routes` hands each to
 `brain.console.govern_surfaces.export_log`, which decides who may be told that it happened.
 
-Task ids: M27.8.16, M27.7.24, M27.9.4
+**A report taken from its own screen is only recorded here** (`ReportRecords.record_report`): the
+route holds the rows and the document, and the record commits before the document is handed over,
+which keeps `THE_ROW_AND_THE_DOCUMENT_COMMIT_TOGETHER` for it too.
+
+Task ids: M27.8.16, M27.7.24, M27.9.4, M27.15.21
 """
 
 from __future__ import annotations
@@ -141,6 +145,32 @@ class ExportLog(Protocol):
         ...
 
 
+@runtime_checkable
+class ReportRecords(Protocol):
+    """What a report taken from its own screen needs from the database. `StoredExports` is one.
+
+    The access certification report (`brain.certification_export_routes`) is built from rows the
+    route already holds, so the store only records it: a readable export, with no window and no
+    verdict, committed before the route hands the document over.
+    """
+
+    async def record_report(
+        self,
+        *,
+        data_set: ExportDataSet,
+        actor: str,
+        ent_hash: str,
+        trace_id: str,
+        reason: ExportReason,
+        reason_reference: str,
+        at: datetime,
+        entries: int,
+        document_digest: str,
+    ) -> TakenExport:
+        """Record one report taken, attributed to its exporter, and commit."""
+        ...
+
+
 def _set_config(name: str, value: str) -> Any:
     # `set_config(..., true)` is transaction-scoped, which is what a pooled connection needs.
     return text("SELECT set_config(:name, :value, true)").bindparams(name=name, value=value)
@@ -241,6 +271,41 @@ class StoredExports:
             await session.flush()
             taken = taken_from(record)
         return taken, produced
+
+    async def record_report(
+        self,
+        *,
+        data_set: ExportDataSet,
+        actor: str,
+        ent_hash: str,
+        trace_id: str,
+        reason: ExportReason,
+        reason_reference: str,
+        at: datetime,
+        entries: int,
+        document_digest: str,
+    ) -> TakenExport:
+        async with self._sessions() as session, session.begin():
+            await session.execute(_set_config(ACTOR_SETTING, actor))
+            await session.execute(_set_config(ENT_HASH_SETTING, ent_hash))
+            await session.execute(_set_config(TRACE_ID_SETTING, trace_id))
+            record = DataExportRow(
+                export_id=uuid.uuid4(),
+                data_set=data_set.value,
+                requested_by=actor,
+                reason=reason.value,
+                reason_reference=reason_reference,
+                produced_at=at,
+                form=ExportForm.READABLE.value,
+                first_seq=None,
+                last_seq=None,
+                entries=entries,
+                verified=None,
+                document_digest=document_digest,
+            )
+            session.add(record)
+            await session.flush()
+            return taken_from(record)
 
     async def taken_by(self, principal_id: str, *, limit: int) -> tuple[TakenExport, ...]:
         async with self._sessions() as session, session.begin():

@@ -117,6 +117,8 @@ class Stored:
         self.canary_runs: tuple[tuple[Any, ...], ...] = ()
         #: Ledger rows whose tokens were counted: trace, principal, model, agent, in, out.
         self.metered: tuple[tuple[Any, ...], ...] = ()
+        #: Questions from people with no department: trace, principal, traffic class, instant.
+        self.unplaced: tuple[tuple[Any, ...], ...] = ()
         #: The directory's names: principal id and display name.
         self.names: tuple[tuple[str, str], ...] = ()
         self.statements: list[str] = []
@@ -150,6 +152,8 @@ class StubSession(AsyncSession):
         text = str(statement)
         _STORED.statements.append(text)
         _STORED.executed.append(statement)
+        if "obs.request_telemetry" in text and "auth.principal" in text:
+            return StubResult(_STORED.unplaced)
         if "auth.principal" in text:
             return StubResult(_STORED.names)
         if "gate.department" in text:
@@ -233,6 +237,11 @@ def unwired() -> Iterator[TestClient]:
         yield c
 
 
+def names_read(statement: str) -> bool:
+    """Whether a statement is the directory's read of names, and not the unplaced questions'."""
+    return "auth.principal" in statement and "obs.request_telemetry" not in statement
+
+
 def get(c: TestClient, path: str, pid: str, **params: Any) -> Response:
     token = token_for(pid, claims=SECOND_FACTOR)
     response: Response = c.get(path, headers={"authorization": f"Bearer {token}"}, params=params)
@@ -313,7 +322,7 @@ def test_a_person_line_carries_the_directorys_name_read_only_for_the_people_on_t
         ("u_ana", "Ana Lim"),
         ("u_ben", "Ben Tan"),
     ]
-    (asked,) = [one for one in stored.executed if "auth.principal" in str(one)]
+    (asked,) = [one for one in stored.executed if names_read(str(one))]
     listed = [value for value in asked.compile().params.values() if isinstance(value, list)]
     assert listed == [["u_ana", "u_ben"]]
 
@@ -336,7 +345,7 @@ def test_a_reader_shown_no_person_is_asked_no_name(client: TestClient, stored: S
 
     get(client, USAGE_PATH, "u_none")
 
-    assert not any("auth.principal" in one for one in stored.statements)
+    assert not any(names_read(one) for one in stored.statements)
 
 
 def test_a_department_scoped_reader_is_shown_that_department_on_both_tables(
@@ -440,13 +449,54 @@ def test_usage_reads_the_directory_and_then_the_questions_for_every_reader(
     for pid in ("u_wide", "u_none"):
         stored.statements.clear()
         get(client, USAGE_PATH, pid)
-        before = stored.statements[:3]
-        assert ["gate.department" in one for one in before] == [True, False, False]
+        before = stored.statements[:4]
+        assert ["gate.department" in one for one in before] == [True, False, False, False]
         assert "ops.question_asked" in before[1]
         assert "obs.request_telemetry" in before[2]
-        after = stored.statements[3:]
-        assert all("auth.principal" in one for one in after)
+        assert "obs.request_telemetry" in before[3] and "auth.principal" in before[3]
+        after = stored.statements[4:]
+        assert all(names_read(one) for one in after)
         assert len(after) == (1 if pid == "u_wide" else 0)
+
+
+def test_a_question_from_somebody_with_no_department_is_counted_for_a_company_wide_reader(
+    client: TestClient, stored: Stored
+) -> None:
+    """Found on the owner's install on 2026-09-29: Usage said nought for seven, thirty and ninety
+    days while the Dashboard counted four answered, because every question there was asked by the
+    administrator who installed it, whom the directory placed in no department.
+
+    What breaks if this is deleted: the route stops handing the request ledger's unplaced
+    questions to the screen and Usage goes back to counting fewer questions than the Dashboard.
+    """
+    seed_questions(stored)
+    at = datetime.now(UTC) - timedelta(hours=2)
+    stored.unplaced = (("t9", "u_owner", "human_interactive", at),)
+
+    body = get(client, USAGE_PATH, "u_wide").json()
+
+    assert body["questions"] == 5
+    assert {"department": "No department", "questions": 1, "people": 1} in body["departments"]
+    assert {"person": "u_owner", "questions": 1, "name": None} in body["people"]
+
+
+def test_a_department_reader_is_not_told_of_a_question_from_somebody_with_no_department(
+    client: TestClient, stored: Stored
+) -> None:
+    """The sibling: a department's administrator is shown exactly what they were shown before.
+
+    What breaks if this is deleted: a department-scoped reader is shown a line for questions in
+    no department of theirs, and the difference between two readers' totals is a count of them.
+    """
+    seed_questions(stored)
+    without = get(client, USAGE_PATH, "u_narrow").json()
+    stored.unplaced = (("t9", "u_owner", "human_interactive", datetime.now(UTC)),)
+
+    shown = get(client, USAGE_PATH, "u_narrow").json()
+
+    assert {k: v for k, v in shown.items() if k not in ("start", "end")} == {
+        k: v for k, v in without.items() if k not in ("start", "end")
+    }
 
 
 def test_tokens_are_joined_to_the_questions_the_reader_is_shown_and_totalled_by_the_api(

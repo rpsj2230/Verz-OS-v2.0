@@ -1,9 +1,12 @@
-"""The unseal quorum. Every test here is a way the vault gets initialised wrong once, forever.
+"""The recovery quorum. Every test here is a way the vault gets initialised wrong once, forever.
 
 `bao operator init` runs a single time in the life of a vault and there is no second attempt:
-the pieces are printed, distributed and never shown again. So every refusal in
-`brain.ops.vault_quorum` guards a decision that cannot be revisited by editing a file, and
-every test here is the last thing standing between a bad combination and a permanent one.
+the pieces are printed, distributed and never shown again. Since 2026-09-29 (needs-rupash 114)
+the vault opens itself and the pieces are recovery pieces, which make a root token in an
+emergency, and the split is an install choice: one key by default, three of five on request. So
+every refusal in `brain.ops.vault_quorum` still guards a decision that cannot be revisited by
+editing a file, and every test here is the last thing standing between a bad combination and a
+permanent one.
 
 Task ids: M31.3.2.1
 """
@@ -19,11 +22,15 @@ from brain.ops.vault_quorum import (
     DEFAULT_POLICY,
     PLACEHOLDER_NAME,
     PRINT_COMMAND,
+    RECOVERY_SPLIT,
+    SINGLE_RECOVERY_KEY,
     Holder,
     QuorumPolicy,
     QuorumPolicyError,
+    generate_root_command,
     init_args,
     init_command,
+    main,
     revoke_root_command,
 )
 
@@ -162,25 +169,50 @@ def test_a_quorum_entirely_inside_the_on_call_rota_is_refused() -> None:
 
 
 # ------------------------------------------------------------ placeholders
-def test_the_shipped_policy_is_five_pieces_and_any_three() -> None:
-    """The decision, recorded where changing it fails a test rather than passing as an edit.
-    `docs/needs-rupash.md` item 17: five pieces, any three open it, so three people have to
-    agree and the company survives losing two. Deleting this test lets somebody tidy the
-    numbers into a two-of-three without anybody re-deciding."""
-    assert DEFAULT_POLICY.shares == 5
-    assert DEFAULT_POLICY.threshold == 3
-    assert DEFAULT_POLICY.survivable_losses == 2
-    assert len(DEFAULT_POLICY.holders) == 5
+def test_the_stricter_choice_is_five_pieces_and_any_three() -> None:
+    """The decision of item 17, kept as the stricter choice by item 114 and recorded where changing
+    it fails a test rather than passing as an edit: five pieces, any three, so three people have to
+    agree and the company survives losing two. Deleting this test lets somebody tidy the numbers
+    into a two-of-three without anybody re-deciding."""
+    assert RECOVERY_SPLIT.shares == 5
+    assert RECOVERY_SPLIT.threshold == 3
+    assert RECOVERY_SPLIT.survivable_losses == 2
+    assert len(RECOVERY_SPLIT.holders) == 5
+    assert not RECOVERY_SPLIT.is_single_key
 
 
-def test_the_shipped_policy_is_refused_until_real_people_are_named() -> None:
+def test_the_default_is_one_recovery_key_as_the_owner_decided() -> None:
+    """Item 114: one recovery key, kept by whoever installs. Asserted against the literal numbers
+    and against the split, so a default quietly pointed back at the split, or a single key made a
+    two-of-two, fails here rather than printing five pieces at somebody's install.
+
+    Deleting this test lets the default drift back to the ceremony the owner decided against."""
+    assert DEFAULT_POLICY is SINGLE_RECOVERY_KEY
+    assert (DEFAULT_POLICY.shares, DEFAULT_POLICY.threshold) == (1, 1)
+    assert DEFAULT_POLICY.is_single_key
+    assert DEFAULT_POLICY != RECOVERY_SPLIT
+
+
+def test_one_key_is_accepted_only_as_one_key_with_one_holder() -> None:
+    """The positive half of the single-key exception, and its edge. One key with one holder is the
+    default; one key with two holders is a piece nobody is named against; a threshold of one over
+    two pieces is still two copies of one key. Delete this and the exception can widen into a hole
+    in the rule that five copies of one key are refused."""
+    assert QuorumPolicy(shares=1, threshold=1, holders=_holders(1)).is_single_key
+    with pytest.raises(QuorumPolicyError, match="named holders"):
+        QuorumPolicy(shares=1, threshold=1, holders=_holders(2))
+    with pytest.raises(QuorumPolicyError, match="not a split"):
+        QuorumPolicy(shares=2, threshold=1, holders=_holders(2))
+
+
+def test_the_split_is_refused_until_real_people_are_named() -> None:
     """The one that stops a placeholder being mistaken for a configuration. Five slots reading
     `UNASSIGNED` look filled in at a glance, and a vault initialised against them hands five
     pieces to nobody in particular. Deleting this test makes "shipped with placeholders" and
     "custody decided" indistinguishable to every caller."""
-    assert not DEFAULT_POLICY.is_configured
+    assert not RECOVERY_SPLIT.is_configured
     with pytest.raises(QuorumPolicyError, match="names nobody yet"):
-        DEFAULT_POLICY.assert_configured()
+        RECOVERY_SPLIT.assert_configured()
 
 
 def test_half_filling_a_holder_slot_still_counts_as_unnamed() -> None:
@@ -244,8 +276,9 @@ def test_the_init_arguments_are_exactly_the_policy_numbers() -> None:
     is what lets the Python object and the shell command drift apart, which is the entire
     reason the module exists."""
     seven_of_four = QuorumPolicy(shares=7, threshold=4, holders=_holders(7))
-    assert init_args(seven_of_four) == ("-key-shares=7", "-key-threshold=4")
-    assert init_args(DEFAULT_POLICY) == ("-key-shares=5", "-key-threshold=3")
+    assert init_args(seven_of_four) == ("-recovery-shares=7", "-recovery-threshold=4")
+    assert init_args(RECOVERY_SPLIT) == ("-recovery-shares=5", "-recovery-threshold=3")
+    assert init_args(DEFAULT_POLICY) == ("-recovery-shares=1", "-recovery-threshold=1")
 
 
 def test_the_runbook_quotes_the_command_this_module_renders() -> None:
@@ -257,9 +290,10 @@ def test_the_runbook_quotes_the_command_this_module_renders() -> None:
     Only the command is checked here. Whether the page says where the numbers came from is a
     separate claim that can be lost on its own, and it has its own test below."""
     text = UNSEAL.read_text(encoding="utf-8")
-    assert init_command() in text, (
-        f"UNSEAL.md does not contain the command this module renders:\n  {init_command()}"
-    )
+    for policy in (DEFAULT_POLICY, RECOVERY_SPLIT):
+        assert init_command(policy) in text, (
+            f"UNSEAL.md does not contain the command this module renders:\n  {init_command(policy)}"
+        )
 
 
 def test_the_runbook_says_where_the_numbers_come_from_and_how_to_print_them() -> None:
@@ -300,8 +334,13 @@ def test_the_runbook_names_no_share_count_other_than_this_one() -> None:
     following the page reads whichever one they reach first. Deleting this test lets a stale
     second copy sit beside a correct first one, which is worse than either alone."""
     text = UNSEAL.read_text(encoding="utf-8")
-    assert set(re.findall(r"-key-shares=(\d+)", text)) == {str(DEFAULT_POLICY.shares)}
-    assert set(re.findall(r"-key-threshold=(\d+)", text)) == {str(DEFAULT_POLICY.threshold)}
+    choices = (DEFAULT_POLICY, RECOVERY_SPLIT)
+    assert set(re.findall(r"-recovery-shares=(\d+)", text)) == {str(p.shares) for p in choices}
+    assert set(re.findall(r"-recovery-threshold=(\d+)", text)) == {
+        str(p.threshold) for p in choices
+    }
+    # The old unseal split has no place on the page: a vault that opens itself splits nothing.
+    assert not re.findall(r"-key-(?:shares|threshold)=", text)
 
 
 def test_the_runbook_carries_the_root_token_revocation_step() -> None:
@@ -319,3 +358,27 @@ def test_the_runbook_carries_the_root_token_revocation_step() -> None:
         f"UNSEAL.md does not contain the revocation command this module renders:\n"
         f"  {revoke_root_command()}"
     )
+
+
+def test_the_runbook_carries_the_emergency_root_token_route() -> None:
+    """The recovery key exists for one thing, a root token when the deploy token has lapsed or the
+    deploy policy itself changes, and the page is where somebody finds out how at the worst moment.
+    Delete this and the route can be edited out of the page while the key stays in a password
+    manager with nothing saying what it is for."""
+    text = UNSEAL.read_text(encoding="utf-8")
+    assert generate_root_command() in text
+    assert "In an emergency" in text
+
+
+def test_the_printout_shows_both_choices_and_exits_cleanly(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """What `UNSEAL.md` tells an operator to run. It exits zero now, because the default needs
+    nobody named; the split's slots are listed with the unnamed ones marked. Delete this and the
+    printout can lose the stricter choice, or go back to failing on a default that names nobody by
+    design."""
+    assert main() == 0
+    out = capsys.readouterr().out
+    assert init_command(DEFAULT_POLICY) in out
+    assert init_command(RECOVERY_SPLIT) in out
+    assert out.count("nobody named yet") == RECOVERY_SPLIT.shares

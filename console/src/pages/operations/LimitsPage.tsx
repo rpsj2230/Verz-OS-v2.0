@@ -51,7 +51,13 @@ export const NOBODY_IS_BEHIND_A_CEILING_MORE = "A window appears here while it i
 export const WINDOWS_HEADING = "Windows";
 export const NO_WINDOWS = "No windows declared";
 export const CEILINGS_HEADING = "Ceilings of connected systems";
-export const NO_CEILINGS = "No ceilings declared";
+export const NO_CEILINGS = "No connected source";
+/**
+ * Said under the empty ceilings list. Found on the owner's install on 2026-09-29: the list named
+ * xero, freshdesk and lark_base by their codes with nothing connected; it now holds only the
+ * sources this reader may be told are connected, by name (`brain.install_routes`).
+ */
+export const NO_CEILINGS_MORE = "A source's own limit on requests appears here once it is connected on Connectors.";
 export const UNUSUAL_HEADING = "Asking far more than usual";
 export const NOTHING_COUNTED = "Nothing here has counted who is asking more than usual";
 export const NOBODY_IS_UNUSUAL = "Nobody is asking far more than usual";
@@ -190,6 +196,7 @@ export function LimitsPage() {
               rowId={(row) => row.name}
               rowLabel={(row) => row.name}
               empty={NO_CEILINGS}
+              emptyDescription={NO_CEILINGS_MORE}
             />
             {wasRead(unusual) ? (
               <WholeList

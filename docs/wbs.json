@@ -235,7 +235,8 @@
     "A record's access view, showing who can see that record, opens only for someone who can already see it"
    ],
    "leaf_waves": {
-    "M1.8.5": 2
+    "M1.8.5": 2,
+    "M1.8.8": 4
    },
    "leaf_acts": {},
    "leaf_decided": {
@@ -262,9 +263,9 @@
      "updated": "2026-09-28"
     },
     "M1.8.8": {
-     "status": "BLOCKED",
-     "why": "the owner records the remaining permissions rows on Requirement checks (needs-rupash 91, check 7)",
-     "updated": "2026-09-28"
+     "status": "OPEN",
+     "why": "moved to Wave 4 (needs-rupash 112): closes when every permissions requirement row has its proof on the install",
+     "updated": "2026-09-29"
     }
    }
   },
@@ -299,7 +300,8 @@
     "Every departments requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves"
    ],
    "leaf_waves": {
-    "M2.3.1": 2
+    "M2.3.1": 2,
+    "M2.3.2": 4
    },
    "leaf_acts": {},
    "leaf_decided": {
@@ -328,9 +330,9 @@
      "updated": "2026-09-28"
     },
     "M2.3.2": {
-     "status": "BLOCKED",
-     "why": "the owner records the remaining departments rows on Requirement checks (needs-rupash 91, check 7)",
-     "updated": "2026-09-28"
+     "status": "OPEN",
+     "why": "moved to Wave 4 (needs-rupash 112): closes when every departments requirement row has its proof on the install",
+     "updated": "2026-09-29"
     }
    }
   },
@@ -572,6 +574,7 @@
     "An agent uses a model level by default, and an administrator may pin a specific provider and model for it, tried first with the level's fallback behind it"
    ],
    "leaf_waves": {
+    "M5.6.5": 3,
     "M5.7.3": 3
    },
    "leaf_acts": {},
@@ -594,9 +597,9 @@
      "updated": "2026-09-28"
     },
     "M5.6.5": {
-     "status": "BLOCKED",
-     "why": "the owner's models check on the install (needs-rupash 91, check 6), once the providers answer (needs-rupash 98)",
-     "updated": "2026-09-28"
+     "status": "OPEN",
+     "why": "moved to Wave 3 (needs-rupash 112): closes when every models requirement row has its proof on the install",
+     "updated": "2026-09-29"
     },
     "M5.7.1": {
      "status": "READY FOR TESTING",
@@ -2752,7 +2755,9 @@
     "Every observability requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves",
     "Writing a budget version or a pack assignment leaves a ledger entry, proved by an invariant over the tables."
    ],
-   "leaf_waves": {},
+   "leaf_waves": {
+    "M24.3.6": 5
+   },
    "leaf_acts": {},
    "leaf_decided": {
     "M24.3.5": {
@@ -2768,9 +2773,9 @@
      "updated": "2026-09-28"
     },
     "M24.3.6": {
-     "status": "BLOCKED",
-     "why": "the owner records the remaining observability rows on Requirement checks (needs-rupash 91, check 7)",
-     "updated": "2026-09-28"
+     "status": "OPEN",
+     "why": "moved to Wave 5 (needs-rupash 112): closes when every observability requirement row has its proof on the install",
+     "updated": "2026-09-29"
     }
    }
   },
@@ -3869,6 +3874,16 @@
      "status": "READY FOR TESTING",
      "why": "engine tests pass for session and transaction pooling; closing needs PgBouncer on the install (M0.3.4)",
      "updated": "2026-09-21"
+    },
+    "M31.3.2.1": {
+     "status": "READY FOR TESTING",
+     "why": "the vault opens itself from a root-only seal key and recovery pieces are an install choice (needs-rupash 114); proved when the owner's install is moved with ops/openbao/switch-to-auto-unseal.sh and reopens by itself after a restart",
+     "updated": "2026-09-29"
+    },
+    "M31.3.2.2": {
+     "status": "READY FOR TESTING",
+     "why": "every release applies its own vault policies, engines and roles with a root-only deploy token (needs-rupash 114); proved when the first deploy after the owner's move prints the vault in-force line",
+     "updated": "2026-09-29"
     },
     "M31.3.2.3": {
      "status": "BLOCKED",

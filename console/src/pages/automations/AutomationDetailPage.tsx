@@ -186,7 +186,7 @@ function AutomationAnswer({ id, tab }: { readonly id: string; readonly tab: stri
           <div className="flex flex-col gap-1.5">
             {told === null ? null : (
               <div role="status">
-                <Note kind="works">{told}</Note>
+                <Note kind="done">{told}</Note>
               </div>
             )}
             {detail.stoppedBecause === undefined ? null : <Note>{detail.stoppedBecause}</Note>}

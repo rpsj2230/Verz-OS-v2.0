@@ -14,7 +14,7 @@
  * that show the comparison would have caught a difference. These tests hold the mechanisms that
  * measurement depended on.
  *
- * Task ids: M27.10.2
+ * Task ids: M27.10.2, M27.15.77
  */
 
 import { readdirSync, readFileSync, statSync } from "node:fs";

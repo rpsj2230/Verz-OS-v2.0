@@ -7,11 +7,15 @@
  * sentence, and a summary into "healthy" would compose a verdict out of three kinds of statement.
  * No refresh control and no timestamp: the facts do not move without a deploy.
  *
+ * **A setting is named in words, and its variable is under Advanced.** Until 2026-09-29 the list
+ * read raw `INSTALL_*` names to an administrator; the API now names each by the Settings screen's
+ * own words and sends the variable beside it for whoever supports the install.
+ *
  * Task ids: M27.7.25, M27.16.1
  */
 
 import { useResource } from "../../api/useResource";
-import { FailureState, LoadingState, PageHeader, SectionCard } from "../../components/kit";
+import { Advanced, Fact, FactList, FailureState, LoadingState, PageHeader, SectionCard } from "../../components/kit";
 import { factsOf, INSTALL_API_PATH, type InstallFacts as InstallBody } from "../installQuery";
 import { InstallFacts } from "./InstallFacts";
 
@@ -28,7 +32,24 @@ export function InstallPage() {
   } else if (answer.failure !== null) {
     content = <FailureState failure={answer.failure} />;
   } else {
-    content = <InstallFacts facts={factsOf(answer.data)} label={WHAT_IS_RUNNING} />;
+    const facts = factsOf(answer.data);
+    const settings = facts.filter((one) => (one.setting ?? "") !== "");
+    content = (
+      <>
+        <InstallFacts facts={facts} label={WHAT_IS_RUNNING} />
+        {settings.length === 0 ? null : (
+          <Advanced>
+            <FactList>
+              {settings.map((one) => (
+                <Fact key={one.name} label={one.name}>
+                  <span className="font-mono text-[12px]">{one.setting}</span>
+                </Fact>
+              ))}
+            </FactList>
+          </Advanced>
+        )}
+      </>
+    );
   }
   return (
     <div data-slot="install-page" className="flex min-w-0 flex-col gap-4">

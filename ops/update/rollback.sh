@@ -31,55 +31,55 @@ if test -n "${BRAIN_WORKER_VAULT_FILES:-}" && grep -q "^BRAIN_WORKER_VAULT_TOKEN
 
 say "Going back one release on the $BRAIN_PROFILE profile in $BRAIN_HOME."
 
-# step 1 of 13: check this directory holds an install
-say "step 1 of 13: check this directory holds an install"
+# step 1 of 14: check this directory holds an install
+say "step 1 of 14: check this directory holds an install"
 test -s "/opt/brain/RELEASE" || fail "there is no release marker here, so this directory is not an install this script can move. Install first"
 test -s "/opt/brain/.env" || fail "there is no environment file here, and the pin is written into it. Install first, or put the file back from your own copy of it"
 
-# step 2 of 13: refuse without a record of the release being left
-say "step 2 of 13: refuse without a record of the release being left"
+# step 2 of 14: refuse without a record of the release being left
+say "step 2 of 14: refuse without a record of the release being left"
 test -s "/opt/brain/PREVIOUS_RELEASE" || fail "nothing here records the release this install was on before its last update, so there is no release to go back to. Update once with the update script, which writes it, or install the tag you want by name"
 
-# step 3 of 13: read the release this rollback goes back to
-say "step 3 of 13: read the release this rollback goes back to"
+# step 3 of 14: read the release this rollback goes back to
+say "step 3 of 14: read the release this rollback goes back to"
 BRAIN_RELEASE="$(cat "/opt/brain/PREVIOUS_RELEASE")"
 say "going back to $BRAIN_RELEASE"
 test "$BRAIN_RELEASE" != "latest" || fail "the release recorded here is latest, which is not a release: going back to it would leave this install unpinned. Name the tag you want instead"
 test -n "${BRAIN_RELEASE_URL:-}" || fail "set BRAIN_RELEASE_URL to the archive of the release printed above and run this again"
 
-# step 4 of 13: fetch the archive of that release
+# step 4 of 14: fetch the archive of that release
 if test -s "/opt/brain/going-back-$BRAIN_RELEASE.tar.gz"; then
-  say "step 4 of 13: fetch the archive of that release - already done, skipping"
+  say "step 4 of 14: fetch the archive of that release - already done, skipping"
 else
-  say "step 4 of 13: fetch the archive of that release"
+  say "step 4 of 14: fetch the archive of that release"
   curl -fsSL "$BRAIN_RELEASE_URL" -o "/opt/brain/going-back-$BRAIN_RELEASE.tar.gz.part"
   mv "/opt/brain/going-back-$BRAIN_RELEASE.tar.gz.part" "/opt/brain/going-back-$BRAIN_RELEASE.tar.gz"
 fi
 
-# step 5 of 13: check the database is not past that release
-say "step 5 of 13: check the database is not past that release"
+# step 5 of 14: check the database is not past that release
+say "step 5 of 14: check the database is not past that release"
 applied="$(docker compose $BRAIN_COMPOSE_FILES exec -T db psql -qtAX -U brain -d brain -c "select version_num from public.alembic_version")"
 test -n "$applied" || fail "the database did not answer with the migration revision it is on, so nothing here can say whether it is past the release you are going back to. Check the database container is running"
 tar -xzOf "/opt/brain/going-back-$BRAIN_RELEASE.tar.gz" --wildcards "*/migrations/versions/*.py" | grep -qxF "revision = \"$applied\"" || fail "this database has been migrated past what the release you are going back to carries, so re-pinning it would put older code in front of a newer schema. Nothing has been changed. Going back from here means the backup taken before the update that moved it"
 
-# step 6 of 13: unpack it and record which release this install is on
+# step 6 of 14: unpack it and record which release this install is on
 if test "$(cat "/opt/brain/RELEASE")" = "$BRAIN_RELEASE"; then
-  say "step 6 of 13: unpack it and record which release this install is on - already done, skipping"
+  say "step 6 of 14: unpack it and record which release this install is on - already done, skipping"
 else
-  say "step 6 of 13: unpack it and record which release this install is on"
+  say "step 6 of 14: unpack it and record which release this install is on"
   tar -xzf "/opt/brain/going-back-$BRAIN_RELEASE.tar.gz" -C "/opt/brain" --strip-components=1
   printf "%s\n" "$BRAIN_RELEASE" > "/opt/brain/RELEASE"
 fi
 
-# step 7 of 13: change into the release directory
-say "step 7 of 13: change into the release directory"
+# step 7 of 14: change into the release directory
+say "step 7 of 14: change into the release directory"
 cd "/opt/brain" || fail "the release did not unpack into /opt/brain"
 
-# step 8 of 13: create the settings the containers mount
+# step 8 of 14: create the settings the containers mount
 if test -f "/opt/brain/settings/automation/egress.conf" && test -f "/opt/brain/settings/langfuse/clickhouse-memory.xml" && test -f "/opt/brain/settings/seaweedfs/provision.sh" && test -f "/opt/brain/settings/seaweedfs/s3.json"; then
-  say "step 8 of 13: create the settings the containers mount - already done, skipping"
+  say "step 8 of 14: create the settings the containers mount - already done, skipping"
 else
-  say "step 8 of 13: create the settings the containers mount"
+  say "step 8 of 14: create the settings the containers mount"
   mkdir -p "/opt/brain/settings/automation" "/opt/brain/settings/langfuse" "/opt/brain/settings/seaweedfs"
   test -f "/opt/brain/settings/automation/egress.conf" || cp "/opt/brain/ops/automation/egress.conf" "/opt/brain/settings/automation/egress.conf"
   test -f "/opt/brain/settings/langfuse/clickhouse-memory.xml" || cp "/opt/brain/ops/langfuse/clickhouse-memory.xml" "/opt/brain/settings/langfuse/clickhouse-memory.xml"
@@ -87,11 +87,11 @@ else
   test -f "/opt/brain/settings/seaweedfs/s3.json" || cp "/opt/brain/ops/seaweedfs/s3.json" "/opt/brain/settings/seaweedfs/s3.json"
 fi
 
-# step 9 of 13: pin the image this install runs
+# step 9 of 14: pin the image this install runs
 if grep -qxF "APP_IMAGE=$BRAIN_REPOSITORY:$BRAIN_RELEASE" "/opt/brain/.env"; then
-  say "step 9 of 13: pin the image this install runs - already done, skipping"
+  say "step 9 of 14: pin the image this install runs - already done, skipping"
 else
-  say "step 9 of 13: pin the image this install runs"
+  say "step 9 of 14: pin the image this install runs"
   umask 077
   {
     grep -v "^APP_IMAGE=" "/opt/brain/.env" || true
@@ -100,35 +100,49 @@ else
   mv "/opt/brain/.env.pinned" "/opt/brain/.env"
 fi
 
-# step 10 of 13: pull the image this release publishes
+# step 10 of 14: pull the image this release publishes
 if docker image inspect "$BRAIN_REPOSITORY:$BRAIN_RELEASE" >/dev/null 2>&1; then
-  say "step 10 of 13: pull the image this release publishes - already done, skipping"
+  say "step 10 of 14: pull the image this release publishes - already done, skipping"
 else
-  say "step 10 of 13: pull the image this release publishes"
+  say "step 10 of 14: pull the image this release publishes"
   docker compose $BRAIN_COMPOSE_FILES pull --quiet
 fi
 
-# step 11 of 13: recreate the containers on the pinned image
-if running_images | grep -qxF "$BRAIN_REPOSITORY:$BRAIN_RELEASE" && test -z "$(off_the_pin)"; then
-  say "step 11 of 13: recreate the containers on the pinned image - already done, skipping"
+# step 11 of 14: apply this release's vault policies, engines and roles
+if ! grep -q "^BRAIN_VAULT_ADDRESS=." "/opt/brain/.env" 2>/dev/null || sh "/opt/brain/ops/openbao/apply-release.sh" --check >/dev/null 2>&1; then
+  say "step 11 of 14: apply this release's vault policies, engines and roles - already done, skipping"
 else
-  say "step 11 of 13: recreate the containers on the pinned image"
+  say "step 11 of 14: apply this release's vault policies, engines and roles"
+  BRAIN_VAULT_APPLIED=0
+  sh "/opt/brain/ops/openbao/apply-release.sh" || BRAIN_VAULT_APPLIED="$?"
+  if test "$BRAIN_VAULT_APPLIED" -eq 3; then
+    say "This install's vault has no deploy token, so this release's vault policies are not applied. It was made before the vault opened itself: ops/openbao/UNSEAL.md, under Moving an older install, moves it with one command."
+  elif test "$BRAIN_VAULT_APPLIED" -ne 0; then
+    fail "this release's vault policies, engines or roles did not take; the lines above say which. ops/openbao/UNSEAL.md, under When a release's vault changes do not take"
+  fi
+fi
+
+# step 12 of 14: recreate the containers on the pinned image
+if running_images | grep -qxF "$BRAIN_REPOSITORY:$BRAIN_RELEASE" && test -z "$(off_the_pin)"; then
+  say "step 12 of 14: recreate the containers on the pinned image - already done, skipping"
+else
+  say "step 12 of 14: recreate the containers on the pinned image"
   docker compose $BRAIN_COMPOSE_FILES up -d
 fi
 
-# step 12 of 13: wait for the application to report ready
-say "step 12 of 13: wait for the application to report ready"
+# step 13 of 14: wait for the application to report ready
+say "step 13 of 14: wait for the application to report ready"
 for _ in $(seq 1 60); do
   docker compose $BRAIN_COMPOSE_FILES exec -T app python -c 'import urllib.request,sys; sys.exit(0 if urllib.request.urlopen("http://127.0.0.1:8000/health/ready",timeout=4).status==200 else 1)' && break
   sleep 5
 done
 docker compose $BRAIN_COMPOSE_FILES exec -T app python -c 'import urllib.request,sys; sys.exit(0 if urllib.request.urlopen("http://127.0.0.1:8000/health/ready",timeout=4).status==200 else 1)' || fail "the application never reported ready"
 
-# step 13 of 13: forget the release this rollback left
+# step 14 of 14: forget the release this rollback left
 if test ! -f "/opt/brain/PREVIOUS_RELEASE"; then
-  say "step 13 of 13: forget the release this rollback left - already done, skipping"
+  say "step 14 of 14: forget the release this rollback left - already done, skipping"
 else
-  say "step 13 of 13: forget the release this rollback left"
+  say "step 14 of 14: forget the release this rollback left"
   rm -f "/opt/brain/PREVIOUS_RELEASE"
 fi
 

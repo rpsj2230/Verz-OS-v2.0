@@ -108,10 +108,17 @@ const OVERVIEW_CARDS: Readonly<Record<string, string>> = {
   "/roles": "/people",
   "/departments/:slug": "/departments",
   "/departments/:slug/:view": "/scopes",
+  "/audit/subject/:kind/:id/:view": "/audit/subject/:kind/:id",
+  "/access_review/:kind/:rowId": "/access_review",
+  "/elevation/:requestId": "/elevation",
   // New agent offers the gallery's first page as the templates a draft can start from, and links
   // to the gallery, which pages, searches and filters the same route.
   "/agents/new": "/agent-templates",
 };
+
+const ONE_HOLDING_IS_DECIDED_ON_ITS_OWN_PAGE =
+  "This page is one holding, and keeping or removing it is one decision; several are kept or " +
+  "removed together from the Access review list, which selects them.";
 const AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST =
   "This screen is an overview, and the list it borrows is one card on it with a link to the screen " +
   "that pages, searches, filters and orders the same route; drawing a second set of controls on the " +
@@ -305,7 +312,16 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
   "/sessions": {},
   "/sign-in-links": {},
   "/service-accounts": {},
-  "/audit": { bulk: READ_ONLY },
+  "/audit": {},
+  // One subject's page pages, searches, filters and orders the ledger narrowed to that subject.
+  "/audit/subject/:kind/:id": {},
+  // Its access changes view reads the ledger only for the header's newest entry.
+  "/audit/subject/:kind/:id/:view": {
+    page: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    search: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    filter: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    sort: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+  },
   "/credentials": {},
   "/departments": {},
   // One department's page asks the list route for its own row, and its Scopes view the scopes naming
@@ -324,9 +340,25 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
     sort: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
     bulk: A_ROW_IS_A_DEPARTMENT_AND_A_PLACEMENT_NAMES_A_PERSON,
   },
-  "/elevation": { bulk: AN_ELEVATION_IS_DECIDED_ON_ITS_OWN_REASON },
+  "/elevation": {},
+  // One request's page asks the requests list for that row by id; Elevation requests pages it.
+  "/elevation/:requestId": {
+    page: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    search: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    filter: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    sort: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    bulk: AN_ELEVATION_IS_DECIDED_ON_ITS_OWN_REASON,
+  },
   "/access_review": {},
-  "/access-requests": { bulk: READ_ONLY },
+  // One holding's page asks the review for that row by id; Access review pages it.
+  "/access_review/:kind/:rowId": {
+    page: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    search: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    filter: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    sort: AN_OVERVIEW_CARD_LINKS_TO_ITS_LIST,
+    bulk: ONE_HOLDING_IS_DECIDED_ON_ITS_OWN_PAGE,
+  },
+  "/access-requests": {},
   "/channels": {},
   "/channels/:name": { bulk: AN_UNBINDING_IS_ONE_PERSONS_CHAT },
 };
@@ -341,7 +373,17 @@ const CLOSED_VOCABULARIES: Readonly<Record<string, Readonly<Record<string, strin
       "Due and not due are the product's own two words, the same in every install, and each row " +
       "carries one of them, so offering the other names nothing about what exists.",
   },
+  "/access-requests": {
+    "Where it stands":
+      "Open and handled are the route's own two words, the same in every install, and each row " +
+      "carries one of them, so offering the other names nothing about what exists.",
+  },
   "/audit": {
+    When:
+      "The periods are the console's own four windows, the same in every install, and a window " +
+      "with nothing in it is the same answer as a window the reader may see nothing in.",
+  },
+  "/audit/subject/:kind/:id": {
     When:
       "The periods are the console's own four windows, the same in every install, and a window " +
       "with nothing in it is the same answer as a window the reader may see nothing in.",

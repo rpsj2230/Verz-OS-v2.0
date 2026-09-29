@@ -134,7 +134,10 @@ def test_the_count_is_carried_somewhere_a_test_can_read() -> None:
     ("decided", "phrase"),
     [
         ("every push", "deploys on every push rather than from a tag"),
-        ("five unseal pieces", "the vault split is five pieces, any three"),
+        # Decided again on 2026-09-29 (needs-rupash 114): the vault opens itself, and the split of
+        # item 17 became the stricter recovery choice. Both halves are held.
+        ("the vault opens itself", "the vault opens itself from a root-only seal key"),
+        ("five pieces any three", "five recovery pieces, any three, are still offered"),
     ],
 )
 def test_a_settled_decision_is_not_still_described_as_open(decided: str, phrase: str) -> None:

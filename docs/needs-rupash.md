@@ -56,6 +56,60 @@ cannot be done until Wave 2 builds the Lark chat channel; both moved there with 
 
 # Answered
 
+## 114. The vault opens itself, and every release keeps it up to date - DECIDED 2026-09-29
+
+**In plain terms:** the secrets vault used to need three of five key pieces after every restart,
+and a release that changed what the application may read waited until three people made a root
+token. On 29 September two such changes waited and the pieces could not be found. **Your answer,
+2026-09-29: "okay build them".** What was decided, and built:
+
+1. **The vault opens itself when the server starts**, from a key file only root on the server can
+   read (`/etc/brain-vault/seal.key`). A restart or a reboot needs nobody.
+2. **Every release applies its own vault policies, engines and roles during its deploy**, with a
+   deploy token kept root-only beside the seal key, reads each back, and stops the deploy loudly if
+   one did not take. No people, no pieces. The deploy token cannot widen its own policy.
+3. **Recovery pieces are an optional emergency spare, chosen at install**: one recovery key by
+   default, written to a root-only file for you to move into your password manager; five pieces,
+   any three, still offered with `--recovery-split`. A recovery key never opens the vault; it makes
+   a root token in an emergency.
+4. **Nothing you see shows a key.** The console stays write-only.
+
+**The trade-off you accepted:** anyone with root on the server can open the vault. On one server
+that person can already read the running application's memory, where every key the vault hands out
+ends up, so the pieces bought a ceremony at every restart rather than protection. **Reversible:**
+say so and the vault moves back to pieces held by people (a rekey and a seal migration the other
+way, with the recovery key).
+
+**What was measured on the way, and changed the plan for your server.** OpenBao 2.4.1 refuses to
+recreate a token under an id beginning `s.`, which every token it mints has, so a new vault beside
+the old one could never take over the application's and the worker's tokens; those live in your
+hosting panel's stored settings, which were not to change. The move is therefore made in place: the
+same vault, the same tokens and secrets, with only what locks its data changed. That needs three of
+its unseal pieces, and they exist in the file the 2026-09-21 setup wrote. Without pieces there is no
+in-place move; the rebuild (a new vault, secrets copied across, new tokens written into the hosting
+panel) is not built, because it changes the one thing that was not to change. Ask for it if a vault
+ever loses its pieces.
+
+**What you do, once (about two minutes of the vault being unavailable):** on the server, as root,
+from the copy of this release's `ops/openbao` directory the pull request says where to find, run
+`bash switch-to-auto-unseal.sh --pieces-file <the 2026-09-21 setup file>`. It proves the pieces
+before changing anything, keeps a dated copy of the vault's data under `/root/brain-vault-backups`,
+and ends with a short summary. Then: copy `/etc/brain-vault/seal.key` into your password manager as
+its own entry, move `/etc/brain-vault/recovery.key` into it and delete that file, and delete the
+setup file too: after the move its pieces open nothing. `--rollback` puts everything back while the
+dated copy exists. Rehearsed end to end on throwaway containers on your server on 2026-09-29, never
+touching the running vault. `ops/openbao/UNSEAL.md` is the plain-words guide.
+
+## 112. The four "every requirement in an area is demonstrated" tasks move to their proofs' wave - DECIDED 2026-09-29
+
+M1.8.8 (permissions), M2.3.2 (departments), M5.6.5 (models) and M24.3.6 (observability) each close only
+when every requirement row of their area has its proof on the install. Measured on 2026-09-29, none of
+the 188 rows had all its proof tasks done, and most of those proofs are later waves' work (69 of the 80
+permissions rows are proved in Wave 3). They sat in Wave 1, where nobody could finish them. **Your
+answer, 2026-09-29: "yes move them".** Models moves to Wave 3, permissions and departments to Wave 4,
+observability to Wave 5, the wave of each area's last proof. Nothing is removed from the programme and
+the total is unchanged; reversible: say so and they move back.
+
 ## 111. Promoting knowledge company-wide still takes two people - DECIDED 2026-09-29
 
 K2: a Super Admin cannot approve their own promotion of knowledge to company-wide, so an install with

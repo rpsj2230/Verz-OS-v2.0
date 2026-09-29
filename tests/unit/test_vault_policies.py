@@ -162,12 +162,17 @@ def test_the_worker_reaches_named_connectors_and_never_a_wildcard() -> None:
 def test_the_loader_reads_the_directory_rather_than_a_list_of_names() -> None:
     """A loader naming its three files loads three files. Adding a fourth policy then needs
     two edits, one of which is in a shell script nobody opens, and the policy that does not
-    get loaded is the new one.
+    get loaded is the new one. The loader is `apply-release.sh` since 2026-09-29, which every
+    release's deploy runs (needs-rupash 114); `load-policies.sh`, which needed a root token, is
+    gone.
 
     Asserted on the script because there is no vault here to load into.
     """
-    loader = (REPO / "ops" / "openbao" / "load-policies.sh").read_text(encoding="utf-8")
-    assert "policies/*.hcl" in loader, "the loader no longer globs the policy directory"
+    loader = (REPO / "ops" / "openbao" / "apply-release.sh").read_text(encoding="utf-8")
+    assert 'for file in "$HERE"/policies/*.hcl; do' in loader.splitlines(), (
+        "the loader no longer globs the policy directory"
+    )
+    assert not (REPO / "ops" / "openbao" / "load-policies.sh").exists()
 
 
 # ------------------------------------------- a slot per connector and provider (M38.4.1.3)

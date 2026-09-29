@@ -199,6 +199,7 @@ from brain.listing import MAX_SEVERAL, Column, ListAsked, Listing, each_of
 from brain.ops.outbox import EventKind, Subscriber, may_manage
 from brain.ops.outbox_store import last_delivered, subscribers
 from brain.ops.replica_store import ConsoleReads, Served
+from brain.people_names import names_for
 from brain.routing_routes import sessions_of
 from brain.tables.elevation import (
     EXPLANATION_CHARS,
@@ -695,6 +696,8 @@ class ElevationPage(BaseModel):
     recorded: str = WHAT_IS_RECORDED_ABOUT_AN_ELEVATION
     notified: str = WHO_IS_TOLD_ABOUT_AN_ELEVATION
     authorising: str = AUTHORISING_IS_THE_ACCESS_REVIEW_AUTHORITY
+    #: The names of who decided the requests above, by principal id (`brain.people_names`).
+    people: dict[str, str] = Field(default_factory=dict)
 
 
 class ElevationAsked(BaseModel):
@@ -755,6 +758,8 @@ class BreakGlassNotices(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     items: tuple[BreakGlassNoticeView, ...]
+    #: The names of the people on these notices, by principal id (`brain.people_names`).
+    people: dict[str, str] = Field(default_factory=dict)
 
 
 class HoldingKind(enum.StrEnum):
@@ -797,6 +802,9 @@ class ReviewPage(BaseModel):
     shows: str = WHAT_A_REVIEW_SHOWS
     keeping: str = KEEPING_A_GRANT_RECORDS_THE_DECISION
     removing: str = REMOVING_A_GRANT_TAKES_IT_AWAY
+    #: The names of who granted and who last decided each row, by principal id. See
+    #: `brain.people_names`.
+    people: dict[str, str] = Field(default_factory=dict)
 
 
 class ReviewDecisionAsked(BaseModel):
@@ -1275,6 +1283,8 @@ ELEVATIONS: Final[Listing[ElevationRequestView]] = Listing(
         Column("decidable", lambda row: row.decidable, filter=True),
         Column("requested_at", lambda row: row.requested_at, sort=True),
         Column("lapses_at", lambda row: row.lapses_at, sort=True),
+        # One request's own page asks for it by id, over the rows this reader is shown.
+        Column("request_id", lambda row: row.request_id, filter=True),
     ),
     key=lambda row: row.request_id,
     order="-requested_at",
@@ -1302,6 +1312,8 @@ REVIEW: Final[Listing[ReviewRowView]] = Listing(
         Column("granted_at", lambda row: row.granted_at, sort=True),
         Column("lapses_at", lambda row: row.lapses_at, sort=True),
         Column("last_decided_at", lambda row: row.last_decided_at, sort=True),
+        # One holding's own page asks for it by id, over the rows this reviewer is shown.
+        Column("row_id", lambda row: row.row_id, filter=True),
     ),
     key=lambda row: f"{row.kind.value}:{row.row_id}",
     order="principal_id",
@@ -1885,6 +1897,7 @@ async def elevation_page(request: Request, asked: Asked, listed: ElevationsQuery
     page = plan.page(
         [request_view(by_id[one.request_id], asked.reach, asked.now) for one in visible]
     )
+    deciders = {one.decided_by for one in page.items if one.decided_by is not None}
     return ElevationPage(
         prompt=requester_prompt(shown),
         holds_nothing_standing=shown.holds_nothing_standing,
@@ -1894,6 +1907,7 @@ async def elevation_page(request: Request, asked: Asked, listed: ElevationsQuery
         items=list(page.items),
         next_cursor=page.next_cursor,
         truncated=full,
+        people=await names_for(request, deciders),
     )
 
 
@@ -2016,6 +2030,7 @@ async def break_glass_notices(request: Request, asked: Asked) -> BreakGlassNotic
     reader who was told nothing is shown nothing, identically to one who may not be told.
     """
     rows = await notice_records_of(request).addressed_to(asked.caller.principal.id, limit=MAX_ROWS)
+    mine = [row for row in rows if row.recipient_id == asked.caller.principal.id]
     return BreakGlassNotices(
         items=tuple(
             BreakGlassNoticeView(
@@ -2026,9 +2041,11 @@ async def break_glass_notices(request: Request, asked: Asked) -> BreakGlassNotic
                 lapses_at=row.lapses_at,
                 told_at=row.created_at,
             )
-            for row in rows
-            if row.recipient_id == asked.caller.principal.id
-        )
+            for row in mine
+        ),
+        people=await names_for(
+            request, {row.principal_id for row in mine} | {row.authorised_by for row in mine}
+        ),
     )
 
 
@@ -2050,7 +2067,15 @@ async def access_review_page(request: Request, asked: Asked, listed: ReviewQuery
             continue
         items.append(review_row(holding, grants, decided.get(holding.row.id)))
     page = plan.page(items)
-    return ReviewPage(items=list(page.items), next_cursor=page.next_cursor, truncated=full)
+    named = {one.granted_by for one in page.items} | {
+        one.last_decided_by for one in page.items if one.last_decided_by is not None
+    }
+    return ReviewPage(
+        items=list(page.items),
+        next_cursor=page.next_cursor,
+        truncated=full,
+        people=await names_for(request, named),
+    )
 
 
 def _may_decide_holding(

@@ -197,7 +197,7 @@ function ChannelAnswer({ name, tab }: { readonly name: string; readonly tab: str
       footnote={
         told === null && failure === null ? undefined : (
           <div role="status" className="flex flex-col gap-2">
-            {told === null || told === "" ? null : <Note kind="works">{told}</Note>}
+            {told === null || told === "" ? null : <Note kind="done">{told}</Note>}
             {failure === null ? null : <FailureNotice failure={failure} title={NOT_SWITCHED} />}
           </div>
         )
