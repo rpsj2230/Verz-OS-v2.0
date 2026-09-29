@@ -59,12 +59,12 @@ through `brain.knowledge.search.reach_for` over each item's visibility, and a pe
 figure (retrievals, citations) has no table recording it, so the page would be a 404 rule and
 nothing to show.
 
-Task ids: M27.15.8, M27.15.9, M27.15.27, M27.15.33
+Task ids: M27.15.8, M27.15.9, M27.15.27, M27.15.33, M39.1.3.1, M39.1.3.2, M39.1.3.3, M39.1.3.4
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict
 from datetime import datetime
 from typing import Annotated, Final
@@ -81,6 +81,7 @@ from brain.agent_routes import (
     actual_of,
     record_of,
     spend_for,
+    steward_names,
 )
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked, Asking
@@ -104,10 +105,12 @@ from brain.console.entity_stats import (
     Run,
     SkillRun,
     Unrecorded,
+    agent_periods,
     attempt_figures,
     bound_people,
     counted,
     delivery_figures,
+    earliest,
     last_active,
     newest,
     periods,
@@ -119,17 +122,28 @@ from brain.console.entity_stats import (
 from brain.console.reads import permitted
 from brain.console.screens import screen
 from brain.console.skill_library import may_read_library
-from brain.console.workspace import Basis, basis_for, headline, window
+from brain.console.workspace import (
+    Basis,
+    Range,
+    basis_for,
+    by_caller,
+    headline,
+    projection,
+    visible_actuals,
+    window,
+)
 from brain.core.entitlement import EntitlementSet
 from brain.core.errors import Failed
 from brain.core.scope_sql import compile_where
-from brain.gate.context import Channel
+from brain.gate.context import Channel, TrafficClass
 from brain.knowledge.rows import NOTHING, RECORD, ROW_LAYOUT, SCOPE_PREFIX, row_scope_for
+from brain.ops.budget_store import in_force
+from brain.ops.budgets import Allowance, BudgetLevel, BudgetPeriod, BudgetRow
 from brain.ops.connectable import NotConnectableError, manifest_for
 from brain.ops.connector_store import Connection
 from brain.ops.connector_sync import SyncOutcome
 from brain.ops.skill_store import MAX_LIBRARY
-from brain.ops.spend import Actual
+from brain.ops.spend import Actual, total_minor
 from brain.ops.telemetry import RequestStatus
 from brain.report_routes import money_and_clock
 from brain.skill_routes import (
@@ -158,6 +172,12 @@ log = structlog.get_logger()
 PEOPLE_SCREEN: Final = "people"
 
 AGENT_STATS_PATH: Final = "/console/agents/{agent_id}/stats"
+
+#: The traffic classes whose request a person sent, which is what an agent's message count counts.
+#: See `brain.console.entity_stats.A_MESSAGE_IS_A_RUN_A_PERSON_STARTED`.
+PERSON_TRAFFIC: Final[frozenset[str]] = frozenset(
+    {TrafficClass.HUMAN_INTERACTIVE.value, TrafficClass.HUMAN_ASYNC.value}
+)
 SKILL_STATS_PATH: Final = "/console/skills/{skill_name}/stats"
 CONNECTOR_STATS_PATH: Final = "/console/connectors/{connector}/stats"
 CHANNEL_STATS_PATH: Final = "/console/channels/{name}/stats"
@@ -178,12 +198,28 @@ class UnrecordedView(BaseModel):
     why: str
 
 
+class CallerSpendView(BaseModel):
+    """One person's spend through this agent over one period (M39.1.3.3).
+
+    A person and an amount, heaviest first, and never a share: a share is the amount divided by
+    a total the reader was not shown. `name` is the directory's, null for an id it does not hold.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    principal_id: str
+    name: str | None = None
+    spend_minor: int
+
+
 class AgentPeriodView(BaseModel):
     """One agent's figures over one period.
 
     `nothing_returned` is refused and abstained together, never split; see
     `brain.console.entity_stats.A_REFUSAL_AND_AN_ABSENCE_ARE_ONE_FIGURE`. `cost_minor` is in
-    the install's minor units and null while nothing records a run's cost.
+    the install's minor units and null while nothing records a run's cost. `messages` are the
+    runs a person started (`brain.console.entity_stats.A_MESSAGE_IS_A_RUN_A_PERSON_STARTED`).
+    `callers` is the cost per person at `cost_basis`, empty while nothing records a run's cost.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -192,10 +228,27 @@ class AgentPeriodView(BaseModel):
     since: datetime
     until: datetime
     runs: int
+    messages: int = 0
     answered: int
     nothing_returned: int
     p50_latency_ms: float | None
     cost_minor: int | None
+    callers: list[CallerSpendView] = []
+
+
+class ProjectionView(BaseModel):
+    """Where this agent's month ends against its own monthly budget if nothing changes.
+
+    Sent only to a reader of everybody's spend, because the spend to date is everybody's, and
+    only when the agent has a monthly budget in force. See `brain.console.workspace.projection`.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    spent_minor: int
+    projected_minor: int
+    ceiling_minor: int
+    over_ceiling: bool
 
 
 class AgentStatsView(BaseModel):
@@ -203,7 +256,8 @@ class AgentStatsView(BaseModel):
 
     `basis` is the requests' and `cost_basis` the cost's, each `own` or `everyone`, carried so
     a reader shown their own figures does not read them as the agent's. `at_least` says the
-    requests were read to their bound, so the figures are at least these.
+    requests were read to their bound, so the figures are at least these. `projection` is the
+    month-end projection against the agent's own monthly budget, or null (M39.1.3.4).
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -216,6 +270,7 @@ class AgentStatsView(BaseModel):
     at_least: bool
     periods: list[AgentPeriodView]
     unrecorded: list[UnrecordedView]
+    projection: ProjectionView | None = None
 
 
 class SkillPeriodView(BaseModel):
@@ -340,7 +395,7 @@ def _unrecorded(rows: Sequence[Unrecorded]) -> list[UnrecordedView]:
 # ------------------------------------------------------------------------- the statements
 def agent_requests(
     agent_id: str, since: datetime, *, basis: Basis, caller_id: str
-) -> Select[tuple[str, datetime, str, float]]:
+) -> Select[tuple[str, datetime, str, float, str]]:
     """The requests that chose this agent since an instant, newest first and bounded.
 
     On the narrower basis the caller is in the WHERE clause, so nobody else's request reaches
@@ -351,6 +406,7 @@ def agent_requests(
         RequestTelemetryRow.received_at,
         RequestTelemetryRow.status,
         RequestTelemetryRow.duration_ms,
+        RequestTelemetryRow.traffic_class,
     ).where(
         RequestTelemetryRow.selected_agent == agent_id,
         RequestTelemetryRow.received_at >= since,
@@ -494,7 +550,7 @@ async def _agent_runs(
         await session.execute(agent_requests(agent_id, since, basis=basis, caller_id=caller_id))
     ).all()
     runs: list[Run] = []
-    for principal, at, status, duration in rows:
+    for principal, at, status, duration, traffic in rows:
         try:
             runs.append(
                 Run(
@@ -502,6 +558,7 @@ async def _agent_runs(
                     at=at,
                     status=RequestStatus(status),
                     duration_ms=duration,
+                    by_a_person=traffic in PERSON_TRAFFIC,
                 )
             )
         except ValueError:
@@ -514,28 +571,30 @@ async def _agent_runs(
 router = APIRouter(prefix=API_PREFIX, tags=["console"])
 
 
-@router.get(AGENT_STATS_PATH, response_model=AgentStatsView, responses=COMMON_RESPONSES)
-async def agent_stats(request: Request, agent_id: Named, asked: Asked) -> AgentStatsView:
-    """One agent's requests, answers, nothing returned, median time, cost and last activity.
+def agent_period_views(
+    agent_id: str,
+    *,
+    runs: Sequence[Run],
+    spend: Sequence[Actual],
+    caller_id: str,
+    basis: Basis,
+    cost_basis: Basis,
+    names: Mapping[str, str],
+    now: datetime,
+) -> list[AgentPeriodView]:
+    """An agent's figures over each of its four periods, each at the basis its rows are read at.
 
-    The audience admits the caller before anything else about the agent is read, so an agent
-    they may not see answers exactly as one that does not exist and nothing is fetched for it.
+    The runs at the usage basis and the cost at the budget basis, as the headline has always
+    been; the cost per person is `brain.console.workspace.by_caller` at the cost's basis, so on
+    the narrower basis it is the reader's own row and nobody else's.
     """
-    factory = _require_session_factory(request)
-    caller_id = asked.caller.principal.id
-    basis = usage_basis(asked.reach, asked.now)
-    cost_basis = basis_for(asked.reach, asked.now)
-    since, _ = window(LONGEST, asked.now)
-    async with factory() as session:
-        await _visible_record(session, agent_id, asked)
-        runs = await _agent_runs(session, agent_id, since, basis=basis, caller_id=caller_id)
-        costs = (await session.execute(spend_for(agent_id, since))).scalars().all()
-    spend: list[Actual] = [one for one in (actual_of(row) for row in costs) if one is not None]
-    code, _ = money_and_clock()
     views: list[AgentPeriodView] = []
-    for one, start, end in periods(asked.now):
+    for one, start, end in agent_periods(now):
         figures = run_figures(runs, caller_id=caller_id, basis=basis, since=start, until=end)
         cost = headline(
+            agent_id, caller_id=caller_id, basis=cost_basis, actuals=spend, since=start, until=end
+        )
+        heaviest = by_caller(
             agent_id, caller_id=caller_id, basis=cost_basis, actuals=spend, since=start, until=end
         )
         views.append(
@@ -544,12 +603,89 @@ async def agent_stats(request: Request, agent_id: Named, asked: Asked) -> AgentS
                 since=start,
                 until=end,
                 runs=figures.runs,
+                messages=figures.messages,
                 answered=figures.answered,
                 nothing_returned=figures.nothing_returned,
                 p50_latency_ms=figures.p50_latency_ms,
                 cost_minor=cost.spend_minor if RUN_SPEND_IS_RECORDED else None,
+                callers=[
+                    CallerSpendView(
+                        principal_id=row.principal_id,
+                        name=names.get(row.principal_id),
+                        spend_minor=row.spend_minor,
+                    )
+                    for row in heaviest
+                ]
+                if RUN_SPEND_IS_RECORDED
+                else [],
             )
         )
+    return views
+
+
+def projection_view(
+    agent_id: str,
+    *,
+    ceiling: BudgetRow | None,
+    spend: Sequence[Actual],
+    cost_basis: Basis,
+    now: datetime,
+) -> ProjectionView | None:
+    """The month-end projection against the agent's monthly budget, or None (M39.1.3.4).
+
+    None with no monthly budget in force, while nothing records a run's cost, and on the
+    narrower basis, where `projection` withholds rather than narrows. The month to date is
+    everybody's spend, read through `visible_actuals` on the wider basis the projection needs.
+    """
+    if ceiling is None or not RUN_SPEND_IS_RECORDED or cost_basis is not Basis.EVERYONE:
+        return None
+    since, until = window(Range.MONTH_TO_DATE, now)
+    spent = total_minor(
+        visible_actuals(
+            agent_id, spend, caller_id="", basis=Basis.EVERYONE, since=since, until=until
+        )
+    )
+    made = projection(
+        agent_id, allowance=Allowance(row=ceiling, spent_minor=spent), basis=cost_basis, now=now
+    )
+    if made is None:
+        return None
+    return ProjectionView(
+        spent_minor=made.spent_minor,
+        projected_minor=made.projected_minor,
+        ceiling_minor=made.ceiling_minor,
+        over_ceiling=made.over_ceiling,
+    )
+
+
+@router.get(AGENT_STATS_PATH, response_model=AgentStatsView, responses=COMMON_RESPONSES)
+async def agent_stats(request: Request, agent_id: Named, asked: Asked) -> AgentStatsView:
+    """One agent's requests, messages, answers, nothing returned, median time, cost, the cost
+    per person, last activity and the month-end projection, over its four periods.
+
+    The audience admits the caller before anything else about the agent is read, so an agent
+    they may not see answers exactly as one that does not exist and nothing is fetched for it.
+    """
+    factory = _require_session_factory(request)
+    caller_id = asked.caller.principal.id
+    basis = usage_basis(asked.reach, asked.now)
+    cost_basis = basis_for(asked.reach, asked.now)
+    since = earliest(agent_periods(asked.now))
+    async with factory() as session:
+        await _visible_record(session, agent_id, asked)
+        runs = await _agent_runs(session, agent_id, since, basis=basis, caller_id=caller_id)
+        costs = (await session.execute(spend_for(agent_id, since))).scalars().all()
+        spend: list[Actual] = [one for one in (actual_of(row) for row in costs) if one is not None]
+        names = await steward_names(
+            session,
+            sorted({one.principal_id for one in spend})
+            if cost_basis is Basis.EVERYONE
+            else [caller_id],
+        )
+        ceiling = await in_force(
+            session, (BudgetLevel.AGENT, agent_id, BudgetPeriod.MONTH), asked.now
+        )
+    code, _ = money_and_clock()
     return AgentStatsView(
         agent_id=agent_id,
         basis=basis.value,
@@ -559,8 +695,20 @@ async def agent_stats(request: Request, agent_id: Named, asked: Asked) -> AgentS
             runs, caller_id=caller_id, basis=basis, since=since, until=asked.now
         ),
         at_least=len(runs) >= MAX_ACTIVITY_ROWS,
-        periods=views,
+        periods=agent_period_views(
+            agent_id,
+            runs=runs,
+            spend=spend,
+            caller_id=caller_id,
+            basis=basis,
+            cost_basis=cost_basis,
+            names=names,
+            now=asked.now,
+        ),
         unrecorded=_unrecorded(() if RUN_SPEND_IS_RECORDED else (RUN_COST_IS_NOT_RECORDED,)),
+        projection=projection_view(
+            agent_id, ceiling=ceiling, spend=spend, cost_basis=cost_basis, now=asked.now
+        ),
     )
 
 
