@@ -43,6 +43,7 @@ if TYPE_CHECKING:
     from pydantic import JsonValue
 
     from brain.agents.model import AgentRecord
+    from brain.ops.storage import StorageBackend
 
 #: Where this module's checks stand on the Install page: after every module that was there before
 #: it. See `brain.ops.acceptance.A_CHECK_MODULE_IS_FOUND_AND_PLACES_ITSELF`.
@@ -1243,3 +1244,315 @@ async def an_agents_automation_is_installed_started_run_and_removed(
         entitlements=StoredEntitlements(h.sessions),
     ):
         raise CheckFailedError("a removed automation ran again")
+
+
+# -------------------------------------------- 9. what an agent produced, kept and fetched back
+#: Why the artifact check fails on an install with no object store rather than skipping.
+AN_ARTIFACT_NEEDS_THE_INSTALLS_OWN_OBJECT_STORE: Final = (
+    "An artifact is bytes in the install's object store and a row pointing at them, so an install "
+    "that cannot reach its store cannot keep one, and the check says so rather than keeping the "
+    "bytes somewhere the product never looks."
+)
+
+
+def artifact_backend(h: Harness) -> tuple[StorageBackend | None, str]:
+    """The install's object store as the application builds it, and its prefix.
+
+    A function of its own so a test can hand the check a store: the database half of the tests
+    runs with no vault, and the product builds its store from the vault. See
+    `AN_ARTIFACT_NEEDS_THE_INSTALLS_OWN_OBJECT_STORE`.
+    """
+    from brain.ops.object_store import object_store_at_start
+
+    made = object_store_at_start(h.settings.vault_address, h.settings.vault_token)
+    return made.backend, made.prefix
+
+
+def tab_read_of_artifacts() -> str:
+    """The Artifacts tab's own read, which the steward holds."""
+    from brain.console.workspace import Tab, tab
+
+    return tab(Tab.ARTIFACTS).read.requires.value
+
+
+def report_cells(found: bytes) -> list[list[str]]:
+    """A kept report parsed back as rows of cells, so a value is found in its cell."""
+    import csv
+    import io
+
+    return list(csv.reader(io.StringIO(found.decode("utf-8"))))
+
+
+@check(
+    leaves=(
+        "M39.5.1.1",
+        "M39.5.1.2",
+        "M39.5.1.4",
+        "M39.5.1.5",
+        "M39.5.2.1",
+        "M39.5.2.2",
+        "M39.5.2.3",
+        "M39.5.2.4",
+        "M39.5.2.5",
+        "M39.8.4",
+        "M39.8.5",
+    ),
+    sentence=(
+        "A report over an uploaded price list, produced through an agent for two people, holds "
+        "the cost only for the one who may read it, keeps its run, version, reach and its most "
+        "sensitive input's window, and is fetched only while its requester holds what it drew on; "
+        "it is listed, filtered and counted, superseded rather than edited, and found as the "
+        "latest for a merged client by its person alone."
+    ),
+)
+async def an_agents_report_holds_what_its_reader_may_see_and_is_rechecked(
+    h: Harness,
+) -> None:
+    import asyncio
+    from functools import partial
+
+    from brain.agent_artifact_routes import may_read_artifacts_at, may_retire
+    from brain.console.agent_output import (
+        ARTIFACTS_SCREEN,
+        Artifact,
+        ArtifactError,
+        ArtifactInput,
+        ArtifactKind,
+        ArtifactState,
+        basis_over,
+        may_download,
+        provenance_for,
+        retention_class_for,
+        storage_summary,
+        visible_artifacts,
+    )
+    from brain.console.reach_view import run_reach
+    from brain.core.field_policy import Classification
+    from brain.govern_routes import retire_grant
+    from brain.knowledge.columns import column_capability, table_capability
+    from brain.ops.acceptance_checks import _in
+    from brain.ops.acceptance_checks_tables import (
+        PRICE_LIST_COLUMNS,
+        PRICE_LIST_HEADINGS,
+        _administrator,
+        _price_list,
+        _tables,
+        _upload,
+        price_list_csv,
+    )
+    from brain.ops.artifact_report import Records, produce_report
+    from brain.ops.artifact_store import ARTIFACT_BUCKET, StoredArtifacts, object_key
+    from brain.ops.retention import DataClass, horizon_for
+
+    await h.found_departments()
+    backend, prefix = await asyncio.to_thread(artifact_backend, h)
+    if backend is None:
+        raise CheckFailedError("this install is not connected to its object store")
+    store = StoredArtifacts(h.sessions, backend, prefix)
+
+    # A price list the product classifies, uploaded by a department's administrator.
+    admin = await _administrator(h)
+    prices = _price_list(h, "artifacts", PRICE_LIST_HEADINGS, PRICE_LIST_COLUMNS)
+    body = price_list_csv(
+        prices.headings, [[row[one] for one in prices.columns] for row in prices.rows]
+    )
+    uploaded, _ = await _upload(h, admin, prices, filename="prices.csv", content=body)
+    rows = await _tables(h).rows_of(uploaded)
+    entity = prices.entity
+    table = table_capability(entity)
+    cost, margin = column_capability(entity, "cost"), column_capability(entity, "margin")
+
+    steward, costing, pricing = (h.principal(A, one) for one in ("steward", "costing", "pricing"))
+    await h.person(steward, department=A, grants=_everywhere(tab_read_of_artifacts(), *_planes()))
+    await h.person(costing, department=A, grants=_in(A, table.value, cost.value, margin.value))
+    await h.person(pricing, department=A, grants=_in(A, table.value))
+    agent_id = await installed_agent(
+        h, steward, capabilities=(table.value, cost.value, margin.value), suffix="_artifacts"
+    )
+    record = await stored_agent(h, agent_id)
+    records = Records(
+        entity=entity,
+        rows=tuple(rows),
+        policy=uploaded.classification.policy(),
+        read_as=table,
+        source=entity,
+    )
+    # The rows the run read are its payload and its most sensitive input; the persona lasts longer.
+    inputs = (
+        ArtifactInput(
+            label="the price list rows the run read",
+            data_class=DataClass.PAYLOAD,
+            classification=Classification.RESTRICTED,
+        ),
+        ArtifactInput(
+            label="the agent's persona",
+            data_class=DataClass.BUSINESS_RECORD,
+            classification=Classification.INTERNAL,
+        ),
+    )
+    keys: list[str] = []
+
+    async def produced(
+        who: str, run: str, *, client_id: str = "", supersedes: str = ""
+    ) -> Artifact:
+        made = await produce_report(
+            store,
+            records,
+            caller=await h.reach(who),
+            agent=record,
+            agent_version="1",
+            run_id=f"{h.trace_id}-{run}",
+            inputs=inputs,
+            at=h.now,
+            client_id=client_id,
+            supersedes=supersedes,
+        )
+        key = object_key(prefix, made)
+        keys.append(key)
+        h.removes(partial(backend.delete_object, ARTIFACT_BUCKET, key))
+        return made
+
+    # Two clients of the check's own, one merged into the other.
+    kept_client, gone_client = f"acceptance_{h.run}_client", f"acceptance_{h.run}_merged"
+    await h.execute(
+        *h.attributed(steward),
+        *(
+            text(
+                "INSERT INTO er.canonical (entity_id, entity_type, created_by,"
+                " created_from_source, created_from_entity, created_from_source_id)"
+                " VALUES (:entity, 'company', :by, 'acceptance', 'acceptance', :entity)"
+            ).bindparams(entity=one, by=steward)
+            for one in (kept_client, gone_client)
+        ),
+        text(
+            "UPDATE er.canonical SET merged_into = :kept, merged_at = now() WHERE entity_id = :gone"
+        ).bindparams(kept=kept_client, gone=gone_client),
+    )
+
+    full = await produced(costing, "costing")
+    part = await produced(pricing, "pricing", client_id=gone_client)
+
+    # 1. Each file holds what its person may read through this agent, and no more (M39.5.1.4).
+    held: dict[str, list[list[str]]] = {}
+    for made in (full, part):
+        found = await store.one(made.artifact_id)
+        if found is None:
+            raise CheckFailedError("an artifact the check kept did not read back from its table")
+        held[made.artifact_id] = report_cells(await store.bytes_of(found))
+    costs = {row["cost"] for row in prices.rows} | {row["margin"] for row in prices.rows}
+    names = {row["name"] for row in prices.rows}
+    full_cells = {one for line in held[full.artifact_id][1:] for one in line}
+    part_cells = {one for line in held[part.artifact_id][1:] for one in line}
+    if not costs <= full_cells or not names <= full_cells:
+        raise CheckFailedError("a report for a person holding the cost did not hold the cost")
+    if costs & part_cells or not names <= part_cells:
+        raise CheckFailedError("a report for a person without the cost held the cost or margin")
+    if "cost" in held[part.artifact_id][0] or "notes" in held[full.artifact_id][0]:
+        raise CheckFailedError("a report named a column its person may never read")
+
+    # 2. The record: its run, version, person, reach and window (M39.5.1.1, M39.5.1.2).
+    costing_reach = await h.reach(costing)
+    named = (full.run_id, full.agent_version, full.caller_id, full.kind)
+    if named != (f"{h.trace_id}-costing", "1", costing, ArtifactKind.REPORT) or (
+        full.entitlement_hash != run_reach(costing_reach, record).ent_hash()
+    ):
+        raise CheckFailedError("an artifact did not name its run, version, person and reach")
+    window = horizon_for(DataClass.PAYLOAD).days
+    if (
+        full.data_class is not retention_class_for(inputs)
+        or full.data_class is not DataClass.PAYLOAD
+        or window is None
+        or f"/artifacts/{DataClass.PAYLOAD.value}/" not in keys[0]
+    ):
+        raise CheckFailedError("an artifact was not kept under its most sensitive input's class")
+
+    # 3. The list, its filters, its source and its figures, as the steward reads them (M39.5.2).
+    steward_reach = await h.reach(steward)
+    if not may_read_artifacts_at(steward_reach, h.now):
+        raise CheckFailedError("the agent's steward could not open its Artifacts section")
+    entries = await store.of_agent(agent_id)
+    listed = visible_artifacts(entries, steward_reach, h.now, agent_id=agent_id)
+    if {one.artifact_id for one in listed} != {full.artifact_id, part.artifact_id}:
+        raise CheckFailedError("the Artifacts section did not list what the agent produced")
+    only = visible_artifacts(entries, steward_reach, h.now, agent_id=agent_id, caller_id=pricing)
+    decks = visible_artifacts(
+        entries, steward_reach, h.now, agent_id=agent_id, kinds=(ArtifactKind.DECK,)
+    )
+    later = visible_artifacts(
+        entries, steward_reach, h.now, agent_id=agent_id, since=h.now + timedelta(seconds=1)
+    )
+    if [one.artifact_id for one in only] != [part.artifact_id] or decks or later:
+        raise CheckFailedError("a filter on the Artifacts section did not narrow the list")
+    shown = provenance_for(full, visible_sources=(entity,), visible_items=())
+    hidden = provenance_for(full, visible_sources=(), visible_items=())
+    if shown.sources != (entity,) or hidden.sources:
+        raise CheckFailedError("an artifact's source was not shown only to who may see it")
+    summary = storage_summary(
+        agent_id,
+        entries,
+        steward_reach,
+        basis=basis_over(ARTIFACTS_SCREEN, steward_reach, h.now),
+        now=h.now,
+    )
+    if (summary.count, summary.bytes_stored) != (2, full.bytes_stored + part.bytes_stored) or (
+        summary.expires_soonest_at != h.now + timedelta(days=window)
+    ):
+        raise CheckFailedError("the artifact count and storage did not match what was kept")
+
+    # 4. Its window, then who may fetch it back as they are now (M39.5.1.5, M39.8.4).
+    lasting = steward_reach.model_copy(update={"not_after": None})
+    inside, past = h.now + timedelta(days=window - 1), h.now + timedelta(days=window, minutes=1)
+    if not visible_artifacts(entries, lasting, inside, agent_id=agent_id) or visible_artifacts(
+        entries, lasting, past, agent_id=agent_id
+    ):
+        raise CheckFailedError("an artifact was listed past its window, or not inside it")
+    if may_download(full, steward_reach, h.now):
+        raise CheckFailedError("the steward could fetch a report whose cost they may not read")
+    pricing_reach = await h.reach(pricing)
+    if not may_download(full, costing_reach, h.now) or not may_download(part, pricing_reach, h.now):
+        raise CheckFailedError("the person a report was produced for could not fetch it")
+    await h.execute(*h.attributed(admin.principal_id), retire_grant(costing, cost.value))
+    if may_download(full, await h.reach(costing), h.now):
+        raise CheckFailedError("a report was fetched after its person lost the grant it drew on")
+
+    # 5. A new version supersedes and the steward archives; nothing is edited (M39.5.2.4).
+    newer = await produced(
+        pricing, "pricing-again", client_id=gone_client, supersedes=part.artifact_id
+    )
+    older = await store.one(part.artifact_id)
+    if (
+        older is None
+        or older.artifact.state is not ArtifactState.SUPERSEDED
+        or older.artifact.superseded_by != newer.artifact_id
+        or older.artifact.bytes_stored != part.bytes_stored
+    ):
+        raise CheckFailedError("a new version did not supersede the report it replaced")
+    asking = run_reach(pricing_reach, record)
+    latest = await store.latest_for(kept_client, ArtifactKind.REPORT, asking, h.now)
+    if latest is None or latest.artifact_id != newer.artifact_id:
+        raise CheckFailedError("the latest report for a client was not found through its merge")
+    if await store.latest_for(
+        kept_client, ArtifactKind.REPORT, run_reach(costing_reach, record), h.now
+    ):
+        raise CheckFailedError("the latest report for a client was given to somebody else")
+    if may_retire(newer, record, costing) or not may_retire(newer, record, steward):
+        raise CheckFailedError("an artifact could be retired by somebody other than who may")
+    await store.change(
+        newer.artifact_id,
+        to=ArtifactState.ARCHIVED,
+        by=steward,
+        ent_hash=steward_reach.ent_hash(),
+        trace_id=h.trace_id,
+    )
+    if await store.latest_for(kept_client, ArtifactKind.REPORT, asking, h.now):
+        raise CheckFailedError("an archived report was still the latest for its client")
+    if len(await store.of_agent(agent_id)) != 3:
+        raise CheckFailedError("superseding or archiving removed an artifact's row")
+
+    # 6. A client that resolves to nothing is refused, and its bytes are taken back.
+    try:
+        await produced(pricing, "nobody", client_id=f"acceptance_{h.run}_nobody")
+    except ArtifactError:
+        pass
+    else:
+        raise CheckFailedError("a report was kept against a client that names nobody")

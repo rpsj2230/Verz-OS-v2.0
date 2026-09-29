@@ -1,7 +1,7 @@
 ### Knowledge bases, documents and data sources
 
 - **Screens:** `/library`, `/library/:itemId`, `/library/:itemId/:view`, `/solutions`, `/learning`, `/learning/:view`, `/memory`, `/memory/:subject`, `/memory/:subject/:view`, `/records`, `/records/:entity`, `/classification`, `/classification/:entity`, `/classification/:entity/:column`, `/duplicates`, `/artifacts`
-- **Tables:** `know.item`, `know.chunk`, `know.steward_task`, `know.solution`, `mem.adaptive`, `mem.persistent`, `mem.learning`, `mem.correction`, `gate.fast_path_rule`, `gate.field_policy`, `agent.artifact`, `know.classified_table`, `know.classified_row`, `er.review_item`, `er.merge`, `er.unmerge`, `er.observation`, `er.blocked_value`
+- **Tables:** `know.item`, `know.chunk`, `know.steward_task`, `know.solution`, `mem.adaptive`, `mem.persistent`, `mem.learning`, `mem.correction`, `gate.fast_path_rule`, `gate.field_policy`, `agent.artifact`, `agent.artifact_change`, `know.classified_table`, `know.classified_row`, `er.review_item`, `er.merge`, `er.unmerge`, `er.observation`, `er.blocked_value`
 - **Installation values:** `INSTALL_VECTOR_STORE`, `INSTALL_EMBEDDING_REVISION`, `INSTALL_KNOWLEDGE_SCANNER`, `INSTALL_CLAMAV_ADDRESS`
 - **Measured here:** 41 routes, 6 called by no screen; 21 write routes, 21 with all three proofs; 7 gaps.
 

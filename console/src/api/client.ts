@@ -248,3 +248,44 @@ export async function openStream(
     threadId: response.headers.get("x-thread-id") ?? "",
   };
 }
+
+/** A file the API handed back, or the failure that came instead. */
+export type FileResult =
+  | { readonly ok: true; readonly body: Blob; readonly type: string }
+  | { readonly ok: false; readonly failure: ApiFailure; readonly body: unknown };
+
+/**
+ * One GET whose answer is a file rather than a document: an agent's artifact.
+ *
+ * **A third function, for the reason there are two**: the split is the response. `request` reads
+ * JSON and a CSV or a PDF is not JSON, so reading one through it is a parse error that drops the
+ * file. The token, the omitted ambient credentials, the 401 that forgets the session and
+ * `failureFrom` are the same calls `request` makes. A GET only, and nothing is sent: the route
+ * decides from the requester's reach whether the file is theirs to fetch, and a refusal is the
+ * API's own sentence, as every other failure is.
+ */
+export async function requestFile(path: string): Promise<FileResult> {
+  const token = await accessToken();
+  const headers: Record<string, string> = { accept: "*/*" };
+  if (token) {
+    headers["authorization"] = `Bearer ${token}`;
+  }
+  let response: Response;
+  try {
+    // Ambient credentials are omitted for the reason `request` omits them.
+    response = await fetch(urlFor(path, false), { method: "GET", headers, credentials: "omit" });
+  } catch (error) {
+    return { ok: false, failure: transportFailure(error), body: null };
+  }
+  if (response.status === 401) {
+    forgetSession();
+  } else if (token && response.ok) {
+    sessionAccepted();
+  }
+  if (!response.ok) {
+    const payload: unknown = await response.json().catch(() => null);
+    return { ok: false, failure: failureFrom(response, payload), body: payload };
+  }
+  const body = await response.blob();
+  return { ok: true, body, type: response.headers.get("content-type") ?? body.type };
+}
