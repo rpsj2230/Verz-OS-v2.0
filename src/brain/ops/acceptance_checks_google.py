@@ -38,7 +38,7 @@ import secrets
 import uuid
 from dataclasses import dataclass, field
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Any, Final, cast
 
 from brain.core.scope import Scope
 from brain.ops.acceptance import RESERVED_DEPARTMENTS, CheckFailedError, CheckNotRunError, check
@@ -53,11 +53,13 @@ from brain.ops.acceptance_checks_sources import _connection
 from brain.ops.acceptance_run import SET_UP_REACH, Harness
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Awaitable, Callable, Mapping
     from datetime import datetime
 
     from brain.core.entitlement import EntitlementSet
+    from brain.core.envelope import TypedResult
     from brain.gate.answer import Answered
+    from brain.knowledge.rows import RowRecord
     from brain.ops.connector_lease import LeaseOutcome
     from brain.ops.connector_sync_run import SourceAnswer
     from brain.ops.secrets import SecretRef
@@ -76,6 +78,10 @@ __all__ = ["ANALYTICS_IS_CONNECTED_HERE_ALREADY", "A_CONNECTED_SOURCE_IS_NOT_CON
 # ------------------------------------------------------------------------ the figures
 #: The range and figure the check asks for, as a question names them.
 ASKED_FIGURE: Final = "sessions_last_28_days"
+
+#: The figure the check asks its figure tool for, over the period it names.
+RANGE_FIGURE: Final = "sessions"
+TOOL_PERIOD: Final = "last month"
 
 
 # ------------------------------------------------------------------------ the helpers
@@ -139,6 +145,7 @@ class _Google:
     display_name: str
     figures: Mapping[str, str]
     reports: int = 0
+    ranges: list[tuple[str, str]] = field(default_factory=list)
     tokens: list[bytes] = field(default_factory=list, repr=False)
     headers: list[dict[str, str]] = field(default_factory=list, repr=False)
 
@@ -180,8 +187,21 @@ class _Google:
         self.headers.append(dict(headers))
         if url.endswith(f"/v1beta/properties/{self.property_id}:runReport"):
             self.reports += 1
-            return SourceAnswer(status=200, headers={}, body=json.dumps(self._report()).encode())
+            ranges = json.loads(body)["dateRanges"]
+            answered = self._report() if len(ranges) > 1 else self._one_range(ranges[0])
+            return SourceAnswer(status=200, headers={}, body=json.dumps(answered).encode())
         return SourceAnswer(status=404, headers={}, body=b"{}")
+
+    def _one_range(self, asked: Mapping[str, str]) -> dict[str, Any]:
+        """A figure tool's one range, its sessions the check's figure for the days asked."""
+        from brain.connectors.google_analytics import FIGURES
+
+        self.ranges.append((asked["startDate"], asked["endDate"]))
+        figure = self.figures.get(RANGE_FIGURE, "0")
+        return {
+            "metricHeaders": [{"name": name} for name in FIGURES],
+            "rows": [{"metricValues": [{"value": figure}, {"value": "0"}, {"value": "0"}]}],
+        }
 
     def reports_asked(self) -> int:
         """How many reports were asked for so far. A method so the count is read when asked."""
@@ -204,6 +224,14 @@ class _Google:
                 for one in RANGES
             ],
         }
+
+
+def google_analytics_tool() -> str:
+    """The figure tool's name, as `brain.knowledge.connector_figures` registers it."""
+    from brain.connectors.google_analytics import GOOGLE_ANALYTICS
+    from brain.knowledge.connector_figures import FIGURE_TOOL_NAMES
+
+    return FIGURE_TOOL_NAMES[GOOGLE_ANALYTICS]
 
 
 def _prose(answered: Answered) -> str:
@@ -230,9 +258,9 @@ def _no_subject(form: bytes) -> bool:
     leaves=("M11.7.1",),
     sentence=(
         "A Google Analytics property made up for the check is connected and its name read by the "
-        "worker with a token its key file bought. Asked on Ask, readers without the property are "
-        "told what a missing property is told, the granted reader is told the sessions for the "
-        "last 28 days from a report read when asked, and that figure is in no table."
+        "worker with a token its key file bought. On Ask, and through its figure tool for last "
+        "month, readers without the property get what a missing property gets, the granted reader "
+        "gets sessions read from a report when asked, and no figure is in any table."
     ),
 )
 async def an_analytics_property_answers_its_figures_live_and_keeps_none(
@@ -271,7 +299,12 @@ async def an_analytics_property_answers_its_figures_live_and_keeps_none(
     property_id = str(10**8 + secrets.randbelow(9 * 10**8))
     name = h.word()
     canary = str(10**14 + secrets.randbelow(9 * 10**14))
-    google = _Google(property_id=property_id, display_name=name, figures={ASKED_FIGURE: canary})
+    ranged = str(10**14 + secrets.randbelow(9 * 10**14))
+    google = _Google(
+        property_id=property_id,
+        display_name=name,
+        figures={ASKED_FIGURE: canary, RANGE_FIGURE: ranged},
+    )
     keys = _KeyFiles(a_key_file())
     connection = _connection(
         h,
@@ -385,6 +418,31 @@ async def an_analytics_property_answers_its_figures_live_and_keeps_none(
     if google.reports_asked() != 1:
         raise CheckFailedError("the figure was not read from Google when it was asked")
 
-    # Nothing the report returned was kept anywhere.
-    if await _search(h, canary):
+    # The figure tool, as a workflow's step calls it: last month, read live, at the caller's reach.
+    from brain.connectors.date_range import RangeRequest, window_of
+
+    tools = build_registry(
+        source=h.settings.tool_source, records=SessionRowSource(h.sessions), figures=live_records
+    )
+    # A cast at the registry's boundary, for `brain.api_routes.passage_search_for`'s reason: the
+    # registry holds handlers of more than one shape, and the name selects the one this is.
+    tool = cast(
+        "Callable[..., Awaitable[TypedResult[RowRecord]]]",
+        tools.get(google_analytics_tool()).handler,
+    )
+    for reader in (without, elsewhere):
+        reach = await _console(h, reader, second_factor=False)
+        found = await tool(RangeRequest(period=TOOL_PERIOD), entitlement=reach, now=h.now)
+        if found.records:
+            raise CheckFailedError("the figure tool read a property for a reader not granted it")
+    reach = await _console(h, granted, second_factor=False)
+    found = await tool(RangeRequest(period=TOOL_PERIOD), entitlement=reach, now=h.now)
+    period = window_of(TOOL_PERIOD, today=h.now.date())
+    if google.ranges != [(period.start.isoformat(), period.end.isoformat())]:
+        raise CheckFailedError("the figure tool did not ask Google for the range it was given")
+    if [one.model_dump().get(RANGE_FIGURE) for one in found.records] != [ranged]:
+        raise CheckFailedError("the figure tool did not hand back the range's figure")
+
+    # Nothing either report returned was kept anywhere.
+    if await _search(h, canary) or await _search(h, ranged):
         raise CheckFailedError("a figure read live was found in a table")

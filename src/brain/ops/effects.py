@@ -637,6 +637,9 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.connectors.declaration:LiveReport.identity_mode": Repeat.READS,
         "brain.connectors.declaration:LiveReport.request_for": Repeat.READS,
         "brain.connectors.declaration:LiveReport.interpret": Repeat.READS,
+        # A figure tool's live reads for one range (M11.7.1): the same executor a question's
+        # refresh uses, reading and keeping nothing.
+        "brain.knowledge.connector_figures:LiveFigures.figures": Repeat.READS,
         # Reading a connected source while somebody waits (M11.9.2). Which records are read live,
         # under whose credentials and narrowed how are computed from what they are handed, and the
         # source handed back is a GET this connection may only read, so a repeat is a second read.

@@ -94,6 +94,7 @@ from typing import Any, Final, Protocol, runtime_checkable
 
 import brain.connectors
 from brain.connectors.contract import ConnectorContractError
+from brain.connectors.date_range import DateWindow
 from brain.connectors.manifest import ConnectorManifest
 from brain.connectors.projection import ProjectedRecord
 from brain.connectors.rest import RestOperation
@@ -417,25 +418,39 @@ class LiveLookup(Protocol):
 
 
 # ---------------------------------------------------------- reading one record's figures live
+#: Why a report may be several calls, and what one of them failing means.
+A_REPORT_S_CALLS_ARE_MADE_AT_ONCE_AND_ANSWER_TOGETHER: Final = (
+    "A source can need more than one call to answer one record's figures, reading its totals and "
+    "its lists from different endpoints. The calls are made at once, so a report costs its "
+    "slowest call rather than their sum, and a report any of whose calls did not answer is not "
+    "answered: it is never shown with some of its figures missing, which would read as figures "
+    "that are nought."
+)
+
+
 @dataclass(frozen=True)
 class ReportCall:
-    """One report asked for: where, and the JSON body saying what. The address is not yet checked.
+    """One call of a report: where, and the JSON body saying what, or none for a read by GET.
 
     The connector builds it and never resolves or connects; the run that holds the key checks the
     address with `brain.tools.fetch.assert_fetchable` before anything is sent.
     """
 
     url: str
-    body: bytes = field(repr=False)
+    body: bytes | None = field(default=None, repr=False)
 
 
 class LiveReport(Protocol):
     """How the figures one index row names are read from the source while somebody waits (M11.7.1).
 
-    The report is asked for once per record, with the record's id and the day it is asked on, and
-    interpreted into one `SourceRecord` whose id is that record's, so the lane lays its figures over
-    the index row exactly as it lays a live record's fields. See
-    `A_FIGURE_IS_READ_BY_A_REPORT_AND_A_RECORD_BY_ITS_OWN_ENDPOINT`.
+    The report is asked for once per record, with the record's id, the day it is asked on and the
+    range, as the calls it takes, made at once; when every call answered, their bodies are
+    interpreted into one `SourceRecord` whose id is that record's, so the lane lays its figures
+    over the index row exactly as it lays a live record's fields. With no range it is the report a
+    question on Ask reads, every range its fields name; with a `DateWindow` it is that one range,
+    which is what a figure tool asks for (`brain.knowledge.connector_figures`). See
+    `A_FIGURE_IS_READ_BY_A_REPORT_AND_A_RECORD_BY_ITS_OWN_ENDPOINT` and
+    `A_REPORT_S_CALLS_ARE_MADE_AT_ONCE_AND_ANSWER_TOGETHER`.
     """
 
     def entities(self) -> tuple[str, ...]:
@@ -447,19 +462,38 @@ class LiveReport(Protocol):
         ...
 
     def request_for(
-        self, entity: str, source_id: str, *, settings: Mapping[str, str], today: date
-    ) -> ReportCall:
-        """The one report for the record with this id, as of `today`.
+        self,
+        entity: str,
+        source_id: str,
+        *,
+        settings: Mapping[str, str],
+        today: date,
+        window: DateWindow | None,
+    ) -> tuple[ReportCall, ...]:
+        """The calls the report for the record with this id is, as of `today`, in order: for the
+        ranges a question names when `window` is None, or for that one window.
 
         Raises for an id that is not the shape the source issues, because an id is laid into the
-        report's address, and a value that could change which report is read is refused here.
+        report's addresses, and a value that could change which report is read is refused here.
         """
         ...
 
     def interpret(
-        self, entity: str, source_id: str, *, status: int, body: Any, fetched_at: str
+        self,
+        entity: str,
+        source_id: str,
+        *,
+        answers: tuple[Any, ...],
+        today: date,
+        window: DateWindow | None,
+        fetched_at: str,
     ) -> PageReply:
-        """One answered report, as one record carrying this id and the figures, or a refusal."""
+        """Every call's decoded body, in the order asked, as one record with this id and figures.
+
+        `today` is the day the calls were built for, handed back so a report that counts days does
+        not keep it between the two. Called only when every call answered; a reply this does not
+        read raises.
+        """
         ...
 
 

@@ -10,11 +10,14 @@ Task ids: M11.7.1
 from __future__ import annotations
 
 import json
+from datetime import date
 from typing import Final
 
 from brain.connectors import google_analytics, google_token
+from brain.connectors.date_range import DateWindow
+from brain.connectors.declaration import PageReply
 from brain.connectors.manifest import ConnectorManifest
-from brain.connectors.throttle import CallOutcome
+from brain.connectors.throttle import CallOutcome, classify
 from tests.fixtures.cassettes._types import (
     DOCUMENTED,
     FETCHED_AT,
@@ -43,6 +46,9 @@ TOKEN_DOC = "https://developers.google.com/identity/protocols/oauth2/service-acc
 
 #: The made-up property every recording is of. The replay reads it as the connected one.
 PROPERTY: Final = "123456789"
+
+#: The one range the recorded single-range report was asked for.
+ONE_RANGE: Final = DateWindow(start=date(2019, 5, 1), end=date(2019, 5, 31))
 
 
 def _report_row(named: str, sessions: str, users: str, conversions: str) -> dict[str, object]:
@@ -109,6 +115,30 @@ CASSETTES: Final[tuple[Cassette, ...]] = (
         },
         why="Four date ranges in one report: Google adds a dateRange dimension valued by each "
         "range's name, and the metrics come back as strings in the order they were asked for.",
+        kind=Kind.READ,
+        tools=("google_analytics.read_traffic",),
+        expect=Expect.ANSWERED,
+        origin=DOCUMENTED,
+        reference=RUN_REPORT_DOC,
+    ),
+    Cassette(
+        cid="GA-200-range-report",
+        source=SOURCE,
+        request=f"POST /v1beta/properties/{PROPERTY}:runReport one range",
+        status=200,
+        body={
+            "metricHeaders": [
+                {"name": "sessions", "type": "TYPE_INTEGER"},
+                {"name": "totalUsers", "type": "TYPE_INTEGER"},
+                {"name": "keyEvents", "type": "TYPE_FLOAT"},
+            ],
+            "rows": [{"metricValues": [{"value": "5120"}, {"value": "4033"}, {"value": "161"}]}],
+            "rowCount": 1,
+            "metadata": {"currencyCode": "USD", "timeZone": "Etc/UTC"},
+            "kind": "analyticsData#runReport",
+        },
+        why="One date range a figure tool named: Google adds no dateRange dimension for a single "
+        "range, so the report is one row of the figures asked for.",
         kind=Kind.READ,
         tools=("google_analytics.read_traffic",),
         expect=Expect.ANSWERED,
@@ -234,14 +264,21 @@ def replay(recorded: Cassette) -> Replayed:
             return Replayed(unreachable_or_quota(refused.call))
         return Replayed(Expect.ANSWERED)
     settings = {"property": PROPERTY, "department": "marketing"}
-    if recorded.request.endswith(":runReport"):
-        reply = google_analytics.AnalyticsReport().interpret(
-            google_analytics.ENTITY_PROPERTY,
-            PROPERTY,
-            status=recorded.status,
-            body=recorded.body,
-            fetched_at=FETCHED_AT,
-        )
+    if ":runReport" in recorded.request:
+        # A report's status is classified by the live read before the connector reads its body.
+        call = classify(status=recorded.status)
+        if call is not CallOutcome.OK:
+            reply = PageReply(call=call, rows=None)
+        else:
+            one_range = recorded.request.endswith("one range")
+            reply = google_analytics.AnalyticsReport().interpret(
+                google_analytics.ENTITY_PROPERTY,
+                PROPERTY,
+                answers=(recorded.body,),
+                today=SEEN_AT.date(),
+                window=ONE_RANGE if one_range else None,
+                fetched_at=FETCHED_AT,
+            )
     else:
         reading = google_analytics.AnalyticsReading()
         operation = reading.operation(
@@ -258,7 +295,7 @@ def replay(recorded: Cassette) -> Replayed:
     rows = [one.model_dump() for one in reply.rows.records]
     if not rows:
         return Replayed(Expect.ABSENT)
-    if recorded.request.endswith(":runReport"):
+    if ":runReport" in recorded.request:
         # A report's figures are read for a question and kept by nothing, so nothing is kept here.
         return Replayed(Expect.ANSWERED)
     kept = tuple(

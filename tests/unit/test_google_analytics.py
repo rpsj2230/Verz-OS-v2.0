@@ -15,7 +15,7 @@ import asyncio
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Final
 
 import pytest
@@ -37,6 +37,7 @@ from brain.connectors.google_analytics import (
     FIGURES,
     MAX_DATE_RANGES_PER_REPORT,
     PROPERTY_SETTING,
+    RANGE_FIGURE_FIELDS,
     RANGES,
     REPORT_BODY,
     SCOPE,
@@ -249,12 +250,17 @@ def test_a_report_is_asked_of_the_data_api_for_the_connected_property_only() -> 
 
     Delete this and an index row naming another property the account can reach would be read."""
     report = AnalyticsReport()
-    call = report.request_for(ENTITY_PROPERTY, PROPERTY, settings=SETTINGS, today=NOW.date())
+    (call,) = report.request_for(
+        ENTITY_PROPERTY, PROPERTY, settings=SETTINGS, today=NOW.date(), window=None
+    )
 
     assert call.url == f"{DATA_API_URL}/v1beta/properties/{PROPERTY}:runReport"
+    assert call.body is not None
     assert json.loads(call.body) == json.loads(json.dumps(dict(REPORT_BODY)))
     with pytest.raises(AnalyticsShapeError, match="connected"):
-        report.request_for(ENTITY_PROPERTY, "987654321", settings=SETTINGS, today=NOW.date())
+        report.request_for(
+            ENTITY_PROPERTY, "987654321", settings=SETTINGS, today=NOW.date(), window=None
+        )
     assert "connected" in A_REPORT_READS_ONLY_THE_CONNECTED_PROPERTY
 
 
@@ -266,8 +272,9 @@ def test_a_recorded_report_is_one_record_of_every_figure_for_every_range_named_a
     reply = AnalyticsReport().interpret(
         ENTITY_PROPERTY,
         PROPERTY,
-        status=200,
-        body=recorded("GA-200-report").body,
+        answers=(recorded("GA-200-report").body,),
+        today=NOW.date(),
+        window=None,
         fetched_at=FETCHED_AT,
     )
 
@@ -370,15 +377,24 @@ def test_a_range_the_report_leaves_out_contributes_nothing_rather_than_a_nought(
         ("GA-500-report", CallOutcome.UNAVAILABLE),
     ],
 )
-def test_a_refused_or_failed_report_carries_no_rows(cid: str, call: CallOutcome) -> None:
-    """Absent, refused and unreachable stay three answers: a failure is its outcome and no rows.
+def test_a_refused_or_failed_report_carries_no_rows(
+    key: rsa.RSAPrivateKey, cid: str, call: CallOutcome
+) -> None:
+    """Absent, refused and unreachable stay three answers: a recorded failure read live is its
+    outcome and no rows, and a report answered as more than one call is not read at all.
 
     Delete this and a quota refusal could be answered as a property with no traffic."""
-    one = recorded(cid)
-    reply = AnalyticsReport().interpret(
-        ENTITY_PROPERTY, PROPERTY, status=one.status, body=one.body, fetched_at=FETCHED_AT
-    )
-    assert (reply.call, reply.rows) == (call, None)
+    reply = read(connected(Google(report=cid), KeyFiles(key_file(key))))
+    assert (reply.outcome, reply.rows) == (call, None)
+    with pytest.raises(AnalyticsShapeError):
+        AnalyticsReport().interpret(
+            ENTITY_PROPERTY,
+            PROPERTY,
+            answers=({}, {}),
+            today=NOW.date(),
+            window=None,
+            fetched_at=FETCHED_AT,
+        )
 
 
 def test_a_wait_google_states_is_read_in_any_case_and_a_missing_or_bad_one_is_none() -> None:
@@ -616,3 +632,208 @@ def test_the_recordings_name_nothing_that_is_not_a_documented_shape() -> None:
     assert recorded("GA-200-token").body["token_type"] == "Bearer"
     with pytest.raises(ConnectorContractError):
         AnalyticsReading().projected("site", {}, seen_at=SEEN_AT)
+
+
+# ------------------------------------------------------------------ the figure tool
+@dataclass
+class IndexedProperty:
+    """A row source holding the connected property's index row, noting whether it was asked."""
+
+    asked: list[Any] = field(default_factory=list)
+
+    async def rows(self, query: Any) -> list[dict[str, Any]]:
+        self.asked.append(query)
+        row = {
+            "entity": ENTITY_PROPERTY,
+            "id": PROPERTY,
+            "display_name": "Example Store",
+            "department": "marketing",
+        }
+        return [{name: row.get(name) for name in ("entity", "id", *query.columns, *query.carried)}]
+
+
+def a_reader(*reads: str, department: str = "marketing") -> Any:
+    from brain.core.entitlement import Capability, EntitlementSet, Grant
+
+    return EntitlementSet(
+        principal_id="p_reader",
+        grants=tuple(
+            Grant(capability=Capability(value=one), scope=Scope.department(department))
+            for one in reads
+        ),
+    )
+
+
+GRANTED: Final = (
+    f"read:{ENTITY_PROPERTY}",
+    f"read:{ENTITY_PROPERTY}.display_name",
+    *(f"read:{ENTITY_PROPERTY}.{name}" for name in RANGE_FIGURE_FIELDS),
+)
+
+
+def the_tool(google: Google, keys: KeyFiles, rows: IndexedProperty) -> Any:
+    from brain.ops.live_records import SourceRecords
+    from brain.tools.startup import build_registry
+
+    sources = connected(google, keys)
+
+    async def connected_now() -> Any:
+        return sources
+
+    figures = SourceRecords(connected=connected_now, clock=lambda: NOW)
+    registry = build_registry(source="local", records=rows, figures=figures)
+    return registry.get("google_analytics.read_traffic").handler
+
+
+def asked_range(google: Google) -> list[dict[str, str]]:
+    """The date ranges of the first report Google was asked for."""
+    body = next(body for url, _, body in google.posts if url.endswith(":runReport"))
+    ranges: list[dict[str, str]] = json.loads(body)["dateRanges"]
+    return ranges
+
+
+@pytest.mark.parametrize(
+    ("asked", "start", "end"),
+    [
+        ({"start": "2998-11-01", "end": "2998-11-30"}, "2998-11-01", "2998-11-30"),
+        ({"period": "last month"}, "2998-12-01", "2998-12-31"),
+        ({"period": "since 2998-10-05"}, "2998-10-05", "2999-01-01"),
+    ],
+)
+def test_a_figure_tool_reads_the_range_it_is_asked_for_live_from_google(
+    key: rsa.RSAPrivateKey, asked: dict[str, str], start: str, end: str
+) -> None:
+    """The tool path, end to end: a first and last day, "last month" and "since a date" each reach
+    the report as its one date range, and the figures come back laid over the property the reader
+    reaches, with the range's days beside them.
+
+    Delete this and a workflow's range could be dropped on the way to Google and answered for the
+    last 28 days instead, with nothing saying so."""
+    from brain.connectors.date_range import RangeRequest
+
+    google, rows = Google(report="GA-200-range-report"), IndexedProperty()
+    read = the_tool(google, KeyFiles(key_file(key)), rows)
+
+    request = RangeRequest.model_validate(asked)
+    result = asyncio.run(read(request, entitlement=a_reader(*GRANTED), now=NOW))
+
+    assert asked_range(google) == [{"startDate": start, "endDate": end}]
+    (row,) = result.records
+    figures = row.model_dump()
+    assert (row.id, figures["display_name"]) == (PROPERTY, "Example Store")
+    assert (figures["start_date"], figures["end_date"]) == (start, end)
+    assert (figures["sessions"], figures["users"], figures["conversions"]) == (
+        "5120",
+        "4033",
+        "161",
+    )
+
+
+def test_a_range_past_sixteen_months_is_refused_before_anything_is_read(
+    key: rsa.RSAPrivateKey,
+) -> None:
+    """The cap on the tool path: a range starting a day before the earliest is refused in the
+    range module's sentence, before the index is read or Google is asked, and the earliest start
+    itself is read.
+
+    Delete this and a range Google does not hold could be asked for and answered with noughts."""
+    from brain.connectors.date_range import (
+        A_RANGE_STARTS_WITHIN_SIXTEEN_MONTHS,
+        RangeRefusedError,
+        RangeRequest,
+        earliest_start,
+    )
+
+    edge = earliest_start(NOW.date())
+    google, rows = Google(report="GA-200-range-report"), IndexedProperty()
+    read = the_tool(google, KeyFiles(key_file(key)), rows)
+    too_far = RangeRequest(start=edge - timedelta(days=1), end=edge)
+
+    with pytest.raises(RangeRefusedError) as refused:
+        asyncio.run(read(too_far, entitlement=a_reader(*GRANTED), now=NOW))
+    assert refused.value.public_message == A_RANGE_STARTS_WITHIN_SIXTEEN_MONTHS
+    assert (rows.asked, google.posts) == ([], [])
+
+    asyncio.run(read(RangeRequest(start=edge, end=edge), entitlement=a_reader(*GRANTED), now=NOW))
+    assert asked_range(google) == [{"startDate": edge.isoformat(), "endDate": edge.isoformat()}]
+
+
+def test_a_reader_without_the_property_is_handed_what_a_reader_of_nothing_is_handed(
+    key: rsa.RSAPrivateKey,
+) -> None:
+    """`connector_figures.A_FIGURE_TOOL_READS_ONLY_WHAT_ITS_CALLER_REACHES`: a reader holding every
+    figure's grant but not the property's own read, and one holding nothing, find no row, ask
+    Google nothing, and get the same empty result, which is what an agent whose ceiling does not
+    bind the property gets. The granted reader above is the positive case; a reader granted the
+    property in another department is the install check's, where the row plane runs its SQL.
+
+    Delete this and a caller without the property could read its traffic through the tool."""
+    from brain.connectors.date_range import RangeRequest
+
+    asked = RangeRequest(period="last month")
+    answers = []
+    for reader in (a_reader(*GRANTED[1:]), a_reader()):
+        google = Google(report="GA-200-range-report")
+        read = the_tool(google, KeyFiles(key_file(key)), IndexedProperty())
+        result = asyncio.run(read(asked, entitlement=reader, now=NOW))
+        answers.append(result.records)
+        assert google.posts == []
+    assert answers == [(), ()]
+
+
+def test_the_figure_tool_is_registered_beside_the_row_tool_and_is_not_a_row_reader(
+    key: rsa.RSAPrivateKey,
+) -> None:
+    """The figure tool shares its row tool's source and entity, requires the property's own read,
+    and is told apart from the row tool by name, so the fast lane and the records route keep
+    calling the row tool with a row request.
+
+    Delete this and the fast lane could call the figure tool with a row request, or the records
+    route read two tools for one entity as a misconfigured install."""
+    from brain.api_routes import row_readers
+    from brain.knowledge.rows import is_row_tool
+    from brain.ops.live_records import SourceRecords
+    from brain.tools.startup import build_registry
+
+    async def nothing() -> Any:
+        return connected(Google(), KeyFiles(key_file(key)))
+
+    registry = build_registry(
+        source="local", records=IndexedProperty(), figures=SourceRecords(connected=nothing)
+    )
+    figure = registry.get("google_analytics.read_traffic").definition
+    row = registry.get(f"google_analytics.read_{ENTITY_PROPERTY}").definition
+
+    assert (figure.source, figure.entity) == (row.source, row.entity)
+    assert figure.required_capability == f"read:{ENTITY_PROPERTY}"
+    assert (is_row_tool(figure), is_row_tool(row)) == (False, True)
+    assert row_readers(registry)[(CONNECTOR_NAME, ENTITY_PROPERTY)] is (
+        registry.get(row.name).handler
+    )
+    assert not build_registry(source="local", records=IndexedProperty()).has(figure.name)
+
+
+def test_a_one_range_report_is_one_record_of_the_range_s_days_and_figures() -> None:
+    """The recorded one-range report through the connector: the range's days and each figure by
+    the name its header states, and a report of more than one row refused.
+
+    Delete this and a one-range report could be read as the four-range one and answer nothing."""
+    from datetime import date
+
+    from brain.connectors.date_range import DateWindow
+    from brain.connectors.google_analytics import AnalyticsShapeError, range_figures_of
+
+    one = DateWindow(start=date(2998, 1, 1), end=date(2998, 1, 31))
+    body = recorded("GA-200-range-report").body
+    (row,) = range_figures_of(body, source_id=PROPERTY, window=one, fetched_at=FETCHED_AT).records
+    assert row.model_dump(exclude={"entity", "id"}) == {
+        "start_date": "2998-01-01",
+        "end_date": "2998-01-31",
+        "sessions": "5120",
+        "users": "4033",
+        "conversions": "161",
+    }
+    with pytest.raises(AnalyticsShapeError):
+        range_figures_of(
+            {**body, "rows": body["rows"] * 2}, source_id=PROPERTY, window=one, fetched_at=""
+        )
