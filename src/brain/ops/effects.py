@@ -261,6 +261,12 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # version reads metadata only.
         "brain.ops.credentials:CredentialVault.static_kv_version": Repeat.READS,
         "brain.ops.credentials:CredentialVault.write_static_kv": Repeat.SAME_RESULT_WHEN_REPEATED,
+        # The template signing key's slot: a create the vault accepts only while the slot never
+        # held a version, so a repeat is refused and leaves the first key in place; the read reads.
+        "brain.ops.template_key:TemplateKeyVault.create_static_kv_once": (
+            Repeat.SAME_RESULT_WHEN_REPEATED
+        ),
+        "brain.ops.template_key:TemplateKeyVault.read_static_kv": Repeat.READS,
         # The record of a kept key (0054): a row in this system's own table, whose trigger appends
         # the ledger entry. A repeat is a second row and a second entry, which is right, because a
         # repeated call follows a second write to the vault.

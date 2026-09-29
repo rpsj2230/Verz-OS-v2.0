@@ -44,14 +44,13 @@ Prompts screen tells `0059`'s. An install and a duplicate are recorded as `creat
 own `created_by`, which is the caller. A transfer is recorded by `0105`'s trigger as
 `agent_owner`, with both owners, and not a second time by `0137`'s.
 
-**Installing and duplicating need this install's template signing key, and no setting holds
-one yet.** `brain.agents.template.install` verifies a version's signature at the moment it
-becomes configuration, with the key that signed it, and `brain.ops.starter_store.
-NO_TEMPLATE_IS_SIGNED_BEFORE_THE_INSTALL_HOLDS_A_KEY_OF_ITS_OWN` records that choosing where that
-key lives is a decision about the vault nobody has made. So the key is read from
-`app.state.template_key`, which nothing in `brain.app` sets, and both routes answer a process
-without one with `NO_SIGNING_KEY_HERE` rather than signing with a key kept somewhere weaker. The
-tests set it. See `INSTALLING_NEEDS_THE_KEY_THIS_INSTALL_VERIFIES_WITH`.
+**Installing and duplicating need this install's template signing key.**
+`brain.agents.template.install` verifies a version's signature at the moment it becomes
+configuration, with the key that signed it. The key is read from `app.state.template_key`, which
+`brain.app`'s lifespan fills from the install's write-once vault slot (`brain.ops.template_key`,
+since 2026-09-29), and both routes answer a process without one, on an install with no vault or
+one whose policy was not reloaded, with `NO_SIGNING_KEY_HERE` rather than signing with a key kept
+somewhere weaker. See `INSTALLING_NEEDS_THE_KEY_THIS_INSTALL_VERIFIES_WITH`.
 
 **What an install is told about connectors, and what it is not.** `complete` reads connector
 readiness from a `brain.connectors.registry.ConnectorRegistry`, and this process holds none, so
@@ -158,9 +157,9 @@ WHAT_YOU_SAW_IS_NOT_WHAT_IS_THERE: Final = (
 #: Why installing is unavailable on a process with no key, and not made available with another one.
 INSTALLING_NEEDS_THE_KEY_THIS_INSTALL_VERIFIES_WITH: Final = (
     "A version becomes an agent only after its signature is verified with the key this install "
-    "signs with. No setting holds that key yet, and choosing where it lives is a decision about "
-    "the vault, so a process without one says installing is unavailable here rather than verifying "
-    "with a key kept somewhere weaker."
+    "signs with. That key lives only in the install's write-once vault slot, so a process that "
+    "holds none, with no vault or before the vault's policy was reloaded, says installing is "
+    "unavailable here rather than verifying with a key kept somewhere weaker."
 )
 
 # ------------------------------------------------------------------------------ the figures

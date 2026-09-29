@@ -13,7 +13,7 @@
  * the API left out is left out of the page rather than drawn as a default. A figure the API sent as
  * null is "not recorded yet" on the page, never nought.
  *
- * Task ids: M27.11.10, M27.15.50
+ * Task ids: M27.11.10, M27.15.50, M13.8.10
  */
 
 /** Where the API keeps the list; one slot is below it as `{family}/{name}`. */
@@ -42,6 +42,9 @@ export interface VaultOverview {
   readonly tokenTold: string;
   readonly liveReads: string;
   readonly liveReadsTold: string;
+  /** Whether the server holds the install's template signing key: a state, never the key. */
+  readonly templateKey: string;
+  readonly templateKeyTold: string;
 }
 
 /** One slot on the list. */
@@ -125,6 +128,8 @@ export function readVaultOverview(payload: unknown): VaultOverview | null {
     tokenTold: text(vault["token_told"]),
     liveReads: text(vault["live_reads"]),
     liveReadsTold: text(vault["live_reads_told"]),
+    templateKey: text(vault["template_key"]),
+    templateKeyTold: text(vault["template_key_told"]),
   };
 }
 

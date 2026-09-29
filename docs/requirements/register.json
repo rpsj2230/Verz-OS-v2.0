@@ -13690,7 +13690,7 @@
     "M39.7.2",
     "M27.14.2"
    ],
-   "decision": null
+   "decision": "needs-rupash 82: on 2026-09-29 the owner pulled the template signing key (M13.8.10) forward from Wave 3 into Wave 2, so agents can be published from the console"
   },
   {
    "id": "GAP-11",

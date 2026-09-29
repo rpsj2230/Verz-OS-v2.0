@@ -158,15 +158,13 @@ EVERY_START_FURNISHES_BECAUSE_NOTHING_FURNISHED_IS_AN_ANSWER: Final = (
 
 #: Why no built-in template is signed here.
 NO_TEMPLATE_IS_SIGNED_BEFORE_THE_INSTALL_HOLDS_A_KEY_OF_ITS_OWN: Final = (
-    "agents.template.publish signs with an HMAC key, and install verifies with the same key, so "
-    "the key has to be minted on the install, kept where the application can read it back, and "
-    "never replaced while a signed row exists. No vault path the application policy grants is "
-    "for that: providers/ holds provider keys a person supplies, webhooks/ holds subscribers' "
-    "secrets, connector_keys/ holds vendors' keys. Choosing the path, the policy grant, a "
-    "write-once rule and what a lite install without a vault says is a design decision on the "
-    "vault and its policy, which the vault that runs at install since 0c4b5f8 did not make. So "
-    "furnishing signs nothing, the catalogue stays the unsigned manifests in code, and install "
-    "stays unoffered, which is what agent_routes already says."
+    "agents.template.publish signs with an HMAC key, and install verifies with the same key. Since "
+    "2026-09-29 the install mints that key once into its own write-once vault slot, "
+    "template_signing/key, and the application reads it at start (brain.ops.template_key), so an "
+    "agent published from the console is signed and can be installed. Furnishing does not yet sign "
+    "the built-in templates with it: the catalogue's built-in templates stay the unsigned "
+    "manifests in code and are not offered for install, and an install with no vault holds no key "
+    "and publishes nothing."
 )
 
 # ------------------------------------------------------------------------------ the figures
