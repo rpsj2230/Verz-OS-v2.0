@@ -214,6 +214,59 @@ def test_an_exception_s_message_never_reaches_a_result() -> None:
     assert reason_for(TimeoutError())[0] == FAILED
 
 
+def test_a_model_call_that_stopped_a_check_is_named_by_how_it_ended_and_by_nothing_it_carried() -> (
+    None
+):
+    """`A_MODEL_CALL_THAT_STOPS_A_CHECK_IS_NAMED_BY_HOW_IT_ENDED`. The moonshot check that timed
+    out on the owner's install on 2026-09-29 was recorded as "stopped on ProviderUnavailable" and
+    read as a planning fault until somebody read the worker's log. Every way a call can end has a
+    reason in the Models screen's words, a timeout says it timed out, and neither the step's
+    deployment nor the provider's own text reaches the reason. Delete this and the next provider
+    failure on the install is a type name again, or a reason starts quoting what a provider said.
+    """
+    from brain.models.driver import DriverFailure, ProviderUnavailable
+
+    said = "provider said: row 42 holds the cost 7.25"
+    shapes = [
+        DriverFailure(deployment_id="step-one", timed_out=True, detail=said),
+        DriverFailure(deployment_id="step-one", connection_failed=True, detail=said),
+        DriverFailure(deployment_id="step-one", context_exceeded=True, detail=said),
+        DriverFailure(deployment_id="step-one", refused=True, status=400, detail=said),
+        *(
+            DriverFailure(deployment_id="step-one", status=one, detail=said)
+            for one in (400, 401, 429, 503)
+        ),
+    ]
+    reasons = [reason_for(ProviderUnavailable(one)) for one in shapes]
+    assert all(outcome == FAILED for outcome, _ in reasons)
+    assert all(
+        reason.startswith(acceptance.A_MODEL_CALL_STOPPED_THE_CHECK) for _, reason in reasons
+    )
+    assert all("7.25" not in reason and "step-one" not in reason for _, reason in reasons)
+    # Eight endings, eight sentences: no two ways of failing read the same.
+    assert len({reason for _, reason in reasons}) == len(shapes)
+    assert reasons[0] == (
+        FAILED,
+        "a model call stopped the check: The provider did not answer in time.",
+    )
+
+
+def test_a_planner_that_found_no_step_is_named_by_its_own_public_sentence() -> None:
+    """The planner's refusal carries a sentence the product wrote for a person, and the reason is
+    that sentence, while the detail naming each skipped step is left out. Delete this and a check
+    stopped because no step was configured, or every step was resting, reads as a type name."""
+    from brain.models.routing import NoCompliantRoute
+
+    refused = NoCompliantRoute(
+        "tier=main has no usable rung: step-one=circuit_open",
+        public_message="No model is configured to handle that.",
+    )
+    assert reason_for(refused) == (
+        FAILED,
+        "no step of the ladder could be tried: No model is configured to handle that.",
+    )
+
+
 def test_a_run_is_owed_for_an_unchecked_commit_or_a_request_and_not_otherwise() -> None:
     """`ONE_RUN_PER_DEPLOYED_COMMIT`. Delete this and the worker checks every five minutes for ever,
     or never checks a new deploy, or ignores a Super Admin pressing run now."""
