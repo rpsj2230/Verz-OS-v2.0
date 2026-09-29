@@ -1255,6 +1255,15 @@ def lexical_legs(question: str) -> tuple[str, ...]:
     return tuple(found) or ("tsv",)
 
 
+#: Why the vector leg has no tie-breaker in its ORDER BY.
+THE_VECTOR_LEG_IS_ORDERED_BY_DISTANCE_ALONE_SO_THE_INDEX_CAN_SERVE_IT: Final = (
+    "pgvector reaches an HNSW index only through ORDER BY the distance LIMIT n. A second sort key "
+    "is an order the index cannot give, so the planner reads every matching chunk and sorts, "
+    "which returns the right passages and never walks the index or its iterative scan, and it "
+    "cannot be told from a correct query by its output. So the distance is the only key."
+)
+
+
 def vector_query(
     embedding: Sequence[float],
     *,
@@ -1294,7 +1303,13 @@ def vector_query(
                 CHUNK.c[EMBEDDING_MODEL_FIELD] == sa.bindparam(MODEL_PARAM, model),
             )
         )
-        .order_by(distance.asc(), CHUNK.c.chunk_id.asc())
+        # The distance alone. A second key, the chunk id the lexical legs break ties on, cannot be
+        # served by the HNSW index, whose order is the distance and nothing else, so the planner
+        # sorted every matching chunk instead and the index and its iterative scan were never
+        # walked. Found on 2026-09-29 by the install check reading this statement's plan. Two
+        # passages at one distance come back in the index's order, which fusion ranks as a tie.
+        # See `THE_VECTOR_LEG_IS_ORDERED_BY_DISTANCE_ALONE_SO_THE_INDEX_CAN_SERVE_IT`.
+        .order_by(distance.asc())
         .limit(_depth(depth))
     )
 
