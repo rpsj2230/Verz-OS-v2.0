@@ -675,6 +675,30 @@ def test_the_screen_lists_every_shipped_connector_from_its_own_declaration(
         assert (label, why) == (declared[name].label, declared[name].not_from_the_console)
 
 
+def test_every_source_is_served_with_the_steps_of_its_connect_flow(
+    app: FastAPI, client: TestClient
+) -> None:
+    """The console draws each source's connect flow from these steps, so they are served with the
+    form: a console source's last step asks for its form's fields and its key, a server source's
+    for nothing. Delete this and the flow has nothing to draw, or draws steps the route never
+    sent."""
+    from brain.connectors.declaration import shipped
+
+    attach(app, None, held_vault())
+    body = get(client, "u_admin").json()
+    declared = shipped()
+    for one in body["connectable"]:
+        keys = [step["key"] for step in one["steps"]]
+        assert keys == [step.key for step in declared[one["name"]].guide]
+        assert one["steps"][-1]["asks"] == [
+            *(setting["name"] for setting in one["settings"]),
+            "credential",
+        ]
+        assert all(step["sketch"]["heading"] for step in one["steps"])
+    drive = next(one for one in body["not_connectable"] if one["name"] == "google_drive")
+    assert drive["steps"][-1]["asks"] == [] and len(drive["steps"]) == 4
+
+
 def test_the_authority_to_connect_is_a_fact_about_the_reader_and_narrows_nothing(
     app: FastAPI, client: TestClient
 ) -> None:
