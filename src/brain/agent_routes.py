@@ -201,6 +201,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import Select, and_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from brain.agents.attachments import narrowed
 from brain.agents.catalogue import CATALOGUE
 from brain.agents.install import bind_tools, bound_leash
 from brain.agents.model import (
@@ -273,6 +274,7 @@ from brain.knowledge.visibility import Visibility
 from brain.listing import Column, ListAsked, Listing, Plan
 from brain.models.registry import ModelPin
 from brain.models.routing import Tier
+from brain.ops.attachment_store import changes_in
 from brain.ops.builtin_templates import is_built_in
 from brain.ops.spend import Actual, SpendError
 from brain.routing_routes import sessions_of
@@ -1807,6 +1809,8 @@ async def agent_workspace(request: Request, agent_id: str, asked: Asked) -> Work
         pair = (await session.execute(install_for(agent_id))).one_or_none()
         costs = (await session.execute(spend_for(agent_id, since))).scalars().all()
         names = await steward_names(session, [record.audience.owner_id])
+        # The tools it carries now, so the Profile and the header show what a run is handed.
+        record = narrowed(record, await changes_in(session, (agent_id,)))
     install = install_of(pair[0], pair[1], record) if pair is not None else None
     spend = [one for one in (actual_of(row) for row in costs) if one is not None]
     registry = _tool_registry(request)

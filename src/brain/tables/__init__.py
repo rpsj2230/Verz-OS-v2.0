@@ -53,6 +53,7 @@ from brain.tables.agent import AgentRow
 from brain.tables.agent_automation import AgentAutomationRow
 from brain.tables.application_log import ApplicationLogRow
 from brain.tables.artifact import ArtifactRow
+from brain.tables.attachment import ToolAttachmentRow
 from brain.tables.audit import AuditEntryRow
 from brain.tables.automation import AutomationOwnerRow
 from brain.tables.automation_change import AutomationChangeRow
@@ -445,6 +446,8 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0184_entity_review_items. Points at nothing: the records and entities are values, so an item
     # outlives a merge or an unmerge of what it names.
     "er.review_item",
+    # 0196_tool_attachments. Points at nothing: the agent, the tools and the person are values.
+    "agent.tool_attachment",
 )
 
 __all__ = [
@@ -572,6 +575,7 @@ __all__ = [
     "TeamRow",
     "TemplateInstanceRow",
     "TemplateVersionRow",
+    "ToolAttachmentRow",
     "ToolDefinitionRow",
     "ToolSwitchRow",
     "UpgradeDeclineRow",

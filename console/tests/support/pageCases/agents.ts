@@ -221,6 +221,16 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         offers: [{ name: UNBROKEN, version: UNBROKEN, digest: "e".repeat(64), review: "pending", control: "review", route: "/skills/x" }],
         knowledge: { clauses: [{ field: "department", op: "eq", value: UNBROKEN }], matched: 1, verified: 1, stale: 0, unverified: 0, at_least: false },
       },
+      // The tools block: what it carries and what may be attached, each value a token.
+      "/api/v1/agents/quote-helper/attachments": {
+        agent_id: "quote-helper",
+        carried: [{ name: UNBROKEN, source: UNBROKEN, description: UNBROKEN }],
+        carried_connectors: [UNBROKEN],
+        tools: [{ name: UNBROKEN, source: UNBROKEN, description: UNBROKEN }],
+        connectors: [UNBROKEN],
+        may_change_tools: true,
+        may_change_connectors: true,
+      },
     },
   },
   // New agent: start from scratch, or from a template the gallery offers.

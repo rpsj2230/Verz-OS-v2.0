@@ -16,6 +16,7 @@ import {
 import { modelPinApiPath } from "../../../src/pages/agentModelPinQuery";
 import { agentBudgetApiPath } from "../../../src/pages/agents/AgentSpend";
 import { memoryDeletionApiPath, memoryEditApiPath } from "../../../src/pages/agents/agentMemoryQuery";
+import { agentAttachmentsApiPath } from "../../../src/pages/agents/AgentTools";
 import { UNDO_API_PATH } from "../../../src/pages/learningQuery";
 import { agentPreviewApiPath, skillAssignApiPath, skillDetachApiPath } from "../../../src/pages/agents/agentCapabilitiesQuery";
 import { agentMoveApiPath } from "../../../src/pages/agentLifecycleQuery";
@@ -64,6 +65,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   ],
   "src/pages/agents/AgentCapabilities.tsx agentPreviewApiPath(agentId)": [
     at("POST /api/v1/agents/{agent_id}/preview", "agentPreviewApiPath", agentPreviewApiPath("quote-helper")),
+  ],
+  "src/pages/agents/AgentTools.tsx agentAttachmentsApiPath(agentId)": [
+    at("POST /api/v1/agents/{agent_id}/attachments", "agentAttachmentsApiPath", agentAttachmentsApiPath("quote-helper")),
   ],
   "src/pages/agents/AgentMemory.tsx memoryDeletionApiPath(agentId, one.item.memoryId)": [
     at("POST /api/v1/agents/{agent_id}/memory/{memory_id}/deletion", "memoryDeletionApiPath", memoryDeletionApiPath("quote-helper", "m1")),
@@ -129,7 +133,19 @@ const MEMORY_CHANGED = t(
   true,
 );
 
+/** Tools and a connector attached and detached over HTTP against PostgreSQL, each on the ledger. */
+const TOOLS_PRESSED = t(
+  "test_agent_attachment_routes",
+  "test_tools_and_connectors_are_attached_within_the_ceiling_and_a_run_carries_only_those",
+  true,
+);
+
 export const PROOFS: Readonly<Record<string, Proofs>> = {
+  "POST /api/v1/agents/{agent_id}/attachments": {
+    row: TOOLS_PRESSED,
+    audit: TOOLS_PRESSED,
+    behaviour: TOOLS_PRESSED,
+  },
   "POST /api/v1/agents/{agent_id}/memory/{memory_id}/deletion": {
     row: MEMORY_CHANGED,
     audit: MEMORY_CHANGED,

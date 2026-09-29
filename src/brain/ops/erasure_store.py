@@ -363,6 +363,9 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         # Every pause, resume, schedule change, removal and adoption (`0145`): the person who made
         # it is an actor, and an adopter is the automation's new owner, never a subject of it.
         "agent.automation_change",
+        # A tool attached to an agent or detached (`0196`): the person who pressed is an actor,
+        # and the row is about an agent's tools, never about a person.
+        "agent.tool_attachment",
         "agent.skill",
         "agent.skill_assignment",
         # The categories set on a skill's name: `set_by` is an actor, not an owner (`0121`).

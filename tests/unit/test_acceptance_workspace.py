@@ -13,6 +13,7 @@ Task ids: M39.2.1.4, M39.2.2.1, M39.2.2.2, M39.2.2.3, M39.2.2.4, M39.2.2.5
 Task ids: M39.2.3.1, M39.2.3.2, M39.2.3.3, M39.2.3.4, M39.3.1.1, M39.3.1.2, M39.3.1.3, M39.3.1.4
 Task ids: M39.4.1.1, M39.4.1.2, M39.4.1.3, M39.4.1.4, M39.4.1.5, M39.4.2.1, M39.4.2.2, M39.4.2.4
 Task ids: M39.6.1.1, M39.6.1.2, M39.6.1.3, M39.6.1.4, M39.6.1.5, M39.6.2.1, M39.6.2.2, M39.6.2.4
+Task ids: M39.8.6, M39.2.1.2, M39.1.1.3
 """
 
 from __future__ import annotations
@@ -89,6 +90,11 @@ LEAVES = {
         "M39.6.2.1",
         "M39.6.2.2",
         "M39.6.2.4",
+    ),
+    "an_agents_tools_are_attached_in_its_ceiling_and_runs_carry_them": (
+        "M39.8.6",
+        "M39.2.1.2",
+        "M39.1.1.3",
     ),
 }
 
@@ -382,4 +388,54 @@ def test_an_automation_its_owner_may_start_fails_the_automation_check(
     assert run_checks(head, (by_name(name),))[name] == (
         FAILED,
         "an automation's owner could start it without a second person",
+    )
+
+
+TOOLS_CHECK = "an_agents_tools_are_attached_in_its_ceiling_and_runs_carry_them"
+
+
+@pytest.mark.needs_db
+def test_a_tool_above_the_ceiling_attached_fails_the_tools_check(
+    head: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With the ceiling's half of the attach check gone, a write above the agent's largest effect
+    is attached, and the check says so. Delete this and the check could pass over an install where
+    a tool no run could call is attached and shown as the agent's."""
+    monkeypatch.setattr("brain.agents.attachments.within_ceiling", lambda tool, record: True)
+
+    assert run_checks(head, (by_name(TOOLS_CHECK),))[TOOLS_CHECK] == (
+        FAILED,
+        "a tool outside the agent's ceiling was attached",
+    )
+
+
+@pytest.mark.needs_db
+def test_a_roster_that_ignores_attachments_fails_the_tools_check(
+    head: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With the answer route's roster reading records as the manifest wrote them, an attached tool
+    never reaches a run, and the check says so. Delete this and the check could pass over an
+    install whose Profile shows a tool no run is ever handed."""
+    monkeypatch.setattr("brain.agent_roster.narrowed", lambda record, changes: record)
+
+    assert run_checks(head, (by_name(TOOLS_CHECK),))[TOOLS_CHECK] == (
+        FAILED,
+        "a run was not handed a tool attached a moment before",
+    )
+
+
+@pytest.mark.needs_db
+def test_a_ceiling_that_ignores_the_connector_list_fails_the_tools_check(
+    head: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With the binding keeping every capability whatever the agent names, an agent naming no
+    connector reads the connected source, and the check says so. Delete this and the check could
+    pass over an install where binding and unbinding a connector changes no run at all."""
+    monkeypatch.setattr(
+        "brain.agents.binding.bound_capabilities", lambda capabilities, connectors: capabilities
+    )
+
+    assert run_checks(head, (by_name(TOOLS_CHECK),))[TOOLS_CHECK] == (
+        FAILED,
+        "an agent naming no connector read a connected source",
     )

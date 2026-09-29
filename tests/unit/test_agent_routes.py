@@ -93,6 +93,7 @@ from brain.knowledge.visibility import Visibility
 from brain.models.routing import DEFAULT_TIER
 from brain.ops.jobs import NAMES_THAT_WOULD_BE_A_HIDDEN_COUNT, hidden_count_fields
 from brain.tables.agent import AgentRow
+from brain.tables.attachment import ToolAttachmentRow
 from brain.tables.identity import PrincipalRow
 from brain.tables.spend import SpendActualRow
 from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
@@ -415,6 +416,9 @@ class StubSession(AsyncSession):
             return StubResult(list(_STORED.spend))
         if entity is TemplateVersionRow:
             return StubResult(list(_STORED.versions))
+        if entity is ToolAttachmentRow:
+            # Nothing attached or detached: the manifest's own tools, as the tests above expect.
+            return StubResult([])
         if statement.whereclause is None:
             return StubResult([_STORED.agents[key] for key in sorted(_STORED.agents)])
         row = _STORED.agents.get(_asked_for(statement))
@@ -843,7 +847,13 @@ def test_the_install_of_an_agent_the_caller_may_not_see_is_never_read(
 
     stored.statements.clear()
     assert workspace_of(client, "u_wide", "their_notes").status_code == 200
-    assert tables() == ["AgentRow", "TemplateVersionRow", "SpendActualRow", "PrincipalRow"]
+    assert tables() == [
+        "AgentRow",
+        "TemplateVersionRow",
+        "SpendActualRow",
+        "PrincipalRow",
+        "ToolAttachmentRow",
+    ]
 
 
 def test_the_header_is_the_agent_its_steward_and_its_lineage_whoever_may_open_it(

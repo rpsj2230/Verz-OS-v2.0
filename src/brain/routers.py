@@ -44,6 +44,10 @@ from brain.access_request_routes import router as access_request_router
 # workspace's router without an import cycle. The same audience and the same one 404.
 from brain.agent_about_routes import router as agent_about_router
 
+# Attaching a tool or a connector to an agent from its page, and detaching one, each checked when
+# it is pressed and written to the ledger with who, when and why.
+from brain.agent_attachment_routes import router as agent_attachment_router
+
 # New agent and Edit as a draft: the builder's form, drafts saved as revisions, checked,
 # rehearsed and published, and the second person a wider publish waits for. See
 # `brain.agent_builder_routes`.
