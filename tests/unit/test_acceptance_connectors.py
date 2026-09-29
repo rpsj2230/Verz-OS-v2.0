@@ -15,7 +15,7 @@ fails, and against an install with the source connected, which is not run.
 
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
-Task ids: M38.5.1
+Task ids: M38.5.1, M11.1.6
 """
 
 from __future__ import annotations
@@ -54,6 +54,7 @@ LEAVES = {
         "M11.8.2",
     ),
     "a_changed_declaration_makes_the_next_sync_refuse": ("M11.1.7",),
+    "a_source_is_connected_switched_off_and_upgraded_from_the_console": ("M11.1.6",),
 }
 
 #: Every table the connector checks write to, which must hold afterwards what it held before.
@@ -321,3 +322,64 @@ def test_the_sync_check_reads_only_through_the_recorded_caller() -> None:
     assert (two.status, two.body) == (200, b'{"Contacts": []}')
     assert other.status == 404
     assert len(caller.asked) == 3
+
+
+def lifecycle() -> Check:
+    return mine()["a_source_is_connected_switched_off_and_upgraded_from_the_console"]
+
+
+@pytest.mark.needs_db
+@pytest.mark.parametrize(
+    ("broken", "reason"),
+    [
+        ("off", "a source switched off from the console was still read"),
+        ("pin", "a source pinned to an older declaration was read before upgrade"),
+        ("ledger", "a step in the source's life is missing from the audit ledger"),
+    ],
+)
+def test_the_lifecycle_check_fails_when_a_step_does_not_take(
+    monkeypatch: pytest.MonkeyPatch, broken: str, reason: str
+) -> None:
+    """M11.1.6 broken three ways, each the way it would break in practice: a switch-off that
+    writes nothing, a plan that reads under any declaration, and a reconnection that bypasses the
+    audited row. Each fails the check with its own sentence. Delete this and the check can pass
+    with a source that cannot be switched off, or an upgrade nobody can find in the ledger."""
+    import brain.ops.connector_store as store
+    import brain.ops.connector_sync as sync
+
+    if broken == "off":
+
+        async def nothing(self: Any, connector: str, **kwargs: Any) -> Any:
+            del self, connector, kwargs
+            return LONG_AGO
+
+        monkeypatch.setattr(store.StoredConnections, "disconnect", nothing)
+    elif broken == "pin":
+        monkeypatch.setattr(sync, "plan_for", ignoring_the_pin(sync.plan_for))
+    else:
+        from sqlalchemy import text
+
+        original = store.StoredConnections.reconnect
+
+        async def unaudited(self: Any, **kwargs: Any) -> Any:
+            async with self._sessions() as session, session.begin():
+                await session.execute(text("RESET ROLE"))
+                await session.execute(
+                    text("ALTER TABLE ops.connector_connection DISABLE TRIGGER USER")
+                )
+            try:
+                return await original(self, **kwargs)
+            finally:
+                async with self._sessions() as session, session.begin():
+                    await session.execute(text("RESET ROLE"))
+                    await session.execute(
+                        text("ALTER TABLE ops.connector_connection ENABLE TRIGGER USER")
+                    )
+
+        monkeypatch.setattr(store.StoredConnections, "reconnect", unaudited)
+    with at_head(f"brain_acceptance_connectors_life_{broken}") as url:
+        before = connector_counts(url)
+        outcome = run_checks(url, (lifecycle(),))
+        after = connector_counts(url)
+    assert outcome[lifecycle().name] == (FAILED, reason)
+    assert after == before

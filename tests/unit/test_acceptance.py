@@ -104,7 +104,7 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     """Held per module, so a package adding checks in a module of its own changes only its own
     line here: limits, channels and documents, then volume, refusals and a head's audit, then Lark
     chat's three, the skill library's four, the models' eleven and the audit's one, the connectors'
-    three, the tools' three, a document's life in four, the classified tables' three, an answer's
+    four, the tools' three, a document's life in four, the classified tables' three, an answer's
     evidence in four and the connector framework's eight, the modules in `CHECK_MODULES` order
     rather than the order a process imported them. Delete this and a check can drop out of the
     suite with the page simply listing one fewer row, or the page can lead with whichever module
@@ -144,6 +144,7 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "manifest_review_refuses_a_projection_that_is_more_than_a_pointer",
         "a_sync_keeps_its_minimal_index_and_the_canary_reaches_no_table",
         "a_changed_declaration_makes_the_next_sync_refuse",
+        "a_source_is_connected_switched_off_and_upgraded_from_the_console",
     ]
     assert by_module["brain.ops.acceptance_checks_tools"] == [
         "every_registered_tool_is_a_catalogue_row_under_the_name_grammar",
@@ -655,9 +656,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         acceptance_audit.A_BROWSER_SESSION_AND_A_TRACE_STORE_ARE_NOT_BUILT,
     )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
-    assert len(outcomes) == 33
+    assert len(outcomes) == 34
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 116
+    assert runs == [(2,)] and len(recorded) == 118
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }
