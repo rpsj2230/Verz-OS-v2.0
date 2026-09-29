@@ -363,6 +363,10 @@ from brain.staff_source_routes import router as staff_source_router
 # `brain.storage_routes`.
 from brain.storage_routes import router as storage_router
 
+# A person's own threads, listed, searched and reopened at the reach held now. See
+# `brain.thread_routes`.
+from brain.thread_routes import router as thread_router
+
 # The Tools screen: every tool with what it needs and does, and the switch that stops one for
 # the install or one department's people, behind `admin:tool`. See `brain.tool_routes`.
 from brain.tool_routes import router as tool_router
