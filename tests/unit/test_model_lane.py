@@ -49,12 +49,16 @@ from brain.gate.fast_lane import FastPathRule
 from brain.gate.finish import Finished, Origin
 from brain.gate.model_lane import (
     A_DEPARTMENT_SCOPED_FIELD_GRANT_READS_ITS_OWN_DEPARTMENTS_PASSAGES,
+    HINTS_HEADING,
+    MAX_HINTS_SHOWN,
     PASSAGE_POLICY,
     PASSAGES_SHOWN,
     PREFIX,
     SHOWN_FIELDS,
     DocumentSearchTool,
+    FixedHints,
     ModelLane,
+    hints_block,
     messages_of,
     prompt_bytes,
     prompt_for,
@@ -203,6 +207,7 @@ def ask(
     entitlement: EntitlementSet = CALLER,
     rules: Sequence[FastPathRule] = (HOURS,),
     rows: Rows | None = None,
+    hints: tuple[str, ...] = (),
 ) -> Run:
     """The lane, with a model step whose model is a real executor over a recording transport."""
     transport = Scripted(completion() if reply is None else reply)
@@ -237,7 +242,11 @@ def ask(
                     sink=sink,
                     now=NOW,
                     clock=lambda: NOW,
-                    model=ModelLane(search=found, model=calls) if with_model else None,
+                    model=ModelLane(
+                        search=found, model=calls, hints=FixedHints(hints) if hints else None
+                    )
+                    if with_model
+                    else None,
                 )
             )
         except ProviderUnavailable as exc:
@@ -611,6 +620,60 @@ def test_the_largest_prompt_the_lane_can_build_fits_the_answer_tier_by_its_bytes
 
     assert prompt_bytes(messages) <= ESCALATION_HEADROOM * TIER_CONTEXT_WINDOW[tier]
     assert tier_for(messages) is tier is DEFAULT_TIER
+
+
+def test_the_largest_prompt_with_every_hint_shown_still_fits_the_answer_tier() -> None:
+    """The same measurement with the most hints a prompt carries, each longer than a hint may be:
+    they are cut to `HINT_CHARS` and counted to `MAX_HINTS_SHOWN`, so the ceiling holds.
+
+    Delete this and a person's edited memory of four thousand characters, or a recall returning
+    more than it should, can push a legitimate question past what the provider accepts."""
+    wide = "\N{GRINNING FACE}"
+    passage = {
+        "entity": KNOWLEDGE_ENTITY,
+        "id": "c_wide",
+        **dict.fromkeys(SHOWN_FIELDS, wide * 10_000),
+    }
+    payload = ChannelPayload(records=tuple(dict(passage) for _ in range(PASSAGES_SHOWN * 2)))
+    hints = tuple(wide * 4_000 for _ in range(MAX_HINTS_SHOWN * 3))
+    layout = prompt_for(wide * (MAX_QUESTION_CHARS * 2), shown(payload), (), hints)
+    messages = messages_of(layout)
+    tier = classify_tier(RoutingRequest(lane=Lane.ANSWER)).tier
+
+    assert hints_block(hints).count("\n- ") == MAX_HINTS_SHOWN
+    assert prompt_bytes(messages) <= ESCALATION_HEADROOM * TIER_CONTEXT_WINDOW[tier]
+    assert tier_for(messages) is tier is DEFAULT_TIER
+
+
+def test_the_askers_hints_are_shown_after_the_question_and_nothing_cites_one() -> None:
+    """**What the asker said about themselves reaches the model as a hint and never as a source
+    (M16.6.3).** The hint is in the request's own turn, after the question and before the passages,
+    under the heading that says what it is; the shared prefix every caller's prompt starts with is
+    byte for byte what it was; the attempt row names the category; and the answer cites the passage
+    and nothing else.
+
+    Delete this and a memory could be put in the payload, where a citation could name it, or in the
+    shared region, where it would change the cached prefix every other caller shares."""
+    hint = "I prefer the figure first HINTVERMILION"
+    run = ask(hints=(hint,))
+
+    [request] = run.sent
+    system, user = request.messages
+    assert system.content == PREFIX.text
+    assert hint not in system.content
+    assert user.content.index("Question:") < user.content.index(HINTS_HEADING)
+    assert user.content.index(f"- {hint}") < user.content.index("Passages:")
+    assert run.answered is not None and run.answered.composed is not None
+    assert {one.record_id for one in run.answered.composed.citations} == {VISIBLE.id}
+    assert "HINTVERMILION" not in "".join(run.answered.frames)
+    [categories] = [row["categories"] for row in run.attempts.rows.values()]
+    assert categories == ("document_passages", "memory_hints", "question")
+
+    plain = ask()
+    [unhinted] = plain.sent
+    assert HINTS_HEADING not in unhinted.messages[1].content
+    [bare] = [row["categories"] for row in plain.attempts.rows.values()]
+    assert bare == ("document_passages", "question")
 
 
 def test_a_search_returning_more_than_asked_for_is_cut_before_the_model_and_the_citations() -> None:
