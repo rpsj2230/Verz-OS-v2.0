@@ -58,6 +58,9 @@ from tests.unit.test_automation_owner_store import app_engine
 from tests.unit.test_credentials import Vault
 from tests.unit.test_tables import VERSIONS, migration_module, rendered, squash
 
+#: `0157`, which keeps the agreed declaration and names the digest in each entry.
+AGREED_MIGRATION: Final = VERSIONS / "0157_connector_agreed_declaration.py"
+
 DIALECT = create_engine("postgresql+psycopg://", poolclass=NullPool).dialect
 
 MIGRATION: Final = VERSIONS / "0057_connector_connection.py"
@@ -135,8 +138,20 @@ def test_the_migration_builds_the_table_and_its_index_exactly_as_the_model_decla
     old way, and the first write after deploy is where it shows."""
     emitted = squash(rendered("upgrade", MIGRATION))
     mapped = metadata.tables["ops.connector_connection"]
-
-    assert squash(str(CreateTable(mapped).compile(dialect=DIALECT))) in emitted
+    model = squash(str(CreateTable(mapped).compile(dialect=DIALECT)))
+    # `0157` adds the agreed declaration and its bound; the rest is `0057`'s table, exactly.
+    added = (
+        " agreed TEXT,",
+        " CONSTRAINT ck_connector_connection_agreed_is_bounded CHECK (agreed IS NULL OR "
+        "length(agreed) <= 262144),",
+    )
+    assert all(one in model for one in added)
+    assert squash(model.replace(added[0], "").replace(added[1], "")) in emitted
+    assert (
+        "ALTER TABLE ops.connector_connection ADD COLUMN agreed TEXT CONSTRAINT "
+        "ck_connector_connection_agreed_is_bounded CHECK (agreed IS NULL OR length(agreed) <= "
+        "262144);"
+    ) in squash(rendered("upgrade", AGREED_MIGRATION))
     [index] = mapped.indexes
     assert squash(str(CreateIndex(index).compile(dialect=DIALECT))) in emitted
     assert "WHERE disconnected_at IS NULL" in squash(
@@ -184,12 +199,20 @@ def test_nothing_the_table_or_the_store_takes_has_anywhere_to_put_a_key() -> Non
         "connector",
         "settings",
         "digest",
+        "agreed",
         "connected_by",
         "connected_at",
         "disconnected_by",
         "disconnected_at",
     }
-    assert set(statement.compile().params) == {"connector", "settings", "digest", "connected_by"}
+    # `agreed` is the declaration's own text, which `digest` is the hash of; never a key.
+    assert set(statement.compile().params) == {
+        "connector",
+        "settings",
+        "digest",
+        "agreed",
+        "connected_by",
+    }
     assert set(disconnection("xero", "u_admin").compile().params) >= {"disconnected_by"}
 
 
@@ -404,14 +427,18 @@ def test_the_statements_name_the_live_row_of_one_source_and_the_lock_is_not_the_
 
 @contextmanager
 def through_0057(database: str) -> Iterator[str]:
-    """A database with `0057` applied. Without pgvector, `retirable` stops at `0048`; `0049` is run
-    for real, `0050` to `0053` are stamped, and `0054` to `0057` are run for real, as
-    `tests/unit/test_agent_automation_store.py` runs `0055`."""
+    """A database with `0057` and `0157` applied, the table and the declaration it keeps. Without
+    pgvector, `retirable` stops at `0048`; `0049` is run for real, `0050` to `0053` are stamped,
+    `0054` to `0057` are run for real, as `tests/unit/test_agent_automation_store.py` runs `0055`,
+    and `0157` is run over a stamp, since it needs only `0057`'s table and function. With it,
+    `retirable` is at head, which holds both."""
     with retirable(database) as url:
         if not has_pgvector(url):
             migrate(database, "upgrade", "0049")
             migrate(database, "stamp", "0053")
             migrate(database, "upgrade", "0057")
+            migrate(database, "stamp", "0150")
+            migrate(database, "upgrade", "0157")
         yield url
 
 
@@ -498,8 +525,8 @@ def test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_rec
     assert rows == [("xero", SETTINGS, DIGEST, "u_admin", "u_other", True)]
     assert [(one.action.value, one.subject, one.actor_id, one.details) for one in chain] == [
         ("credential", "credential:connector_keys.xero", "u_admin", {}),
-        ("connector", "connector:xero", "u_admin", {"change": "connected"}),
-        ("connector", "connector:xero", "u_other", {"change": "disconnected"}),
+        ("connector", "connector:xero", "u_admin", {"change": "connected", "digest": DIGEST}),
+        ("connector", "connector:xero", "u_other", {"change": "disconnected", "digest": DIGEST}),
     ]
     assert [one.trace_id for one in chain[1:]] == ["trace-connect", "trace-disconnect"]
     assert AuditChain(chain).verify() is None
@@ -640,9 +667,92 @@ def test_an_edit_leaves_two_rows_one_live_two_ledger_entries_and_no_key_write() 
     ]
     assert [(one.action.value, one.actor_id, one.details) for one in chain] == [
         ("credential", "u_admin", {}),
-        ("connector", "u_admin", {"change": "connected"}),
-        ("connector", "u_other", {"change": "disconnected"}),
-        ("connector", "u_other", {"change": "connected"}),
+        ("connector", "u_admin", {"change": "connected", "digest": DIGEST}),
+        ("connector", "u_other", {"change": "disconnected", "digest": DIGEST}),
+        ("connector", "u_other", {"change": "connected", "digest": "b" * 64}),
     ]
     assert [one.trace_id for one in chain[2:]] == ["trace-edit", "trace-edit"]
+    assert AuditChain(chain).verify() is None
+
+
+def test_the_recorder_and_0157_s_trigger_name_the_digest_beside_the_change() -> None:
+    """The entry the application's recorder writes and the one `0157`'s trigger appends name the
+    row's digest; `0057`'s put back on a downgrade does not. Delete this and the two can come apart,
+    and a chain verified anywhere else stops matching the database's."""
+    entry = recorder().connector(connector="xero", change=ConnectorChange.CONNECTED, digest=DIGEST)
+    assert entry.details == {"change": "connected", "digest": DIGEST}
+    module = migration_module(AGREED_MIGRATION)
+    body = " ".join(module.CONNECTOR_CONNECTION_TRIGGER_FUNCTION.split())
+    before = " ".join(module.PREVIOUS_CONNECTOR_CONNECTION_TRIGGER_FUNCTION.split())
+    assert "v_details := jsonb_build_object('change', v_changes[i], 'digest', NEW.digest);" in body
+    assert "v_details := jsonb_build_object('change', v_changes[i]);" in before
+    assert module.AGREED_MAX_CHARS == table_module.AGREED_MAX_CHARS
+
+
+def test_accepting_a_changed_declaration_keeps_its_text_and_the_ledger_names_both_digests() -> None:
+    """The accept followed to the system as the application's role: the first connection keeps
+    the declaration text it agreed to, the reconnection under the new digest keeps the new text,
+    only the new row is live, and the two entries the accept appends name the digest before and
+    the one after under one trace. Delete this and the drift view reads a column nothing writes,
+    or the ledger records an accept without saying what was accepted. **Skips without a server.**"""
+    new_digest = "b" * 64
+    with through_0057("brain_connector_connection_accept") as url:
+
+        async def walk() -> tuple[Any, ...]:
+            engine = app_engine(url)
+            try:
+                sessions = make_session_factory(engine)
+                credentials = Credentials(
+                    Vault(), environ={}, writes=StoredCredentialWrites(sessions)
+                )
+                store = StoredConnections(sessions)
+
+                async def keep_key() -> datetime | None:
+                    kept = await credentials.keep(
+                        connector_key_slot("xero"),
+                        KEY,
+                        actor="u_admin",
+                        trace_id="trace-connect",
+                        ent_hash="c" * 32,
+                    )
+                    return kept.set_at
+
+                await store.connect(
+                    connector="xero",
+                    settings=SETTINGS,
+                    digest=DIGEST,
+                    actor="u_admin",
+                    trace_id="trace-connect",
+                    ent_hash="c" * 32,
+                    keep_key=keep_key,
+                    agreed='{"version":"1"}',
+                )
+                await store.reconnect(
+                    connector="xero",
+                    settings=SETTINGS,
+                    digest=new_digest,
+                    actor="u_other",
+                    trace_id="trace-accept",
+                    ent_hash="e" * 32,
+                    agreed='{"version":"2"}',
+                )
+                return await store.connected()
+            finally:
+                await engine.dispose()
+
+        live = run(walk)
+        rows = sql(
+            url,
+            "SELECT digest, agreed, disconnected_at IS NULL FROM ops.connector_connection"
+            " ORDER BY connected_at, disconnected_at NULLS LAST",
+        )
+        chain = entries(url)
+
+    assert [(one.digest, one.agreed) for one in live] == [(new_digest, '{"version":"2"}')]
+    assert rows == [(DIGEST, '{"version":"1"}', False), (new_digest, '{"version":"2"}', True)]
+    accepted = [one for one in chain if one.trace_id == "trace-accept"]
+    assert [one.details for one in accepted] == [
+        {"change": "disconnected", "digest": DIGEST},
+        {"change": "connected", "digest": new_digest},
+    ]
     assert AuditChain(chain).verify() is None

@@ -64,6 +64,7 @@ from brain.attribution import attribute, trace_of_request
 from brain.channel_routes import deliveries_of, records_of
 from brain.channels.adapter import BOT_ID
 from brain.channels.lark import APP_ID_FIELD, PLATFORM_FIELD, LarkSecret
+from brain.connectors.lark_wiki import SpaceDeclaration
 from brain.connectors.staff_directories import LARK_PLATFORMS, Fetch
 from brain.console.reads import permitted
 from brain.console.screens import screen
@@ -116,8 +117,18 @@ from brain.ops.lark_connect import (
     uses_from,
     uses_switched_on,
 )
+from brain.ops.lark_wiki_spaces import (
+    A_SPACE_IS_READ_ONLY_WHERE_SOMEBODY_DECLARED_ITS_REACH,
+    DEPARTMENT,
+    REACHES,
+    declare_space,
+    declared_spaces,
+    readable,
+    space_id_of,
+)
 from brain.ops.setting_store import put, read_namespace, values_under
 from brain.ops.staff_sync_run import http_fetch
+from brain.people_names import names_for
 from brain.routing_routes import sessions_of
 from brain.tables.channel import DeliveryOutcome, Direction, RefusedBecause
 from brain.tables.config import SettingType
@@ -160,6 +171,11 @@ LARK_TEST_PATH: Final = LARK_PATH + "/test"
 #: Not `/disconnect`: `brain.connector_routes` answers `/connectors/{connector}/disconnect` for a
 #: source connected on its own form, and this switches uses off rather than removing a connection.
 LARK_SWITCH_OFF_PATH: Final = LARK_PATH + "/switch-off"
+#: The wiki spaces declared on this install, and declaring more. See `brain.ops.lark_wiki_spaces`.
+LARK_WIKI_SPACES_PATH: Final = LARK_PATH + "/wiki-spaces"
+
+#: The most spaces one save declares, which is more than the test lists.
+MOST_SPACES_A_SAVE: Final = 100
 
 #: Where the App ID and the last test are kept, in `ops.setting`. Neither is a secret.
 FACTS_NAMESPACE: Final = "connector.lark_app"
@@ -363,6 +379,15 @@ class LarkAsked(BaseModel):
     verification_token: str = ""
 
 
+class LarkSpaceView(BaseModel):
+    """One wiki space Lark showed the app: its id and its name. Nothing of its pages."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    space_id: str
+    name: str
+
+
 class LarkUseResultView(BaseModel):
     """What testing one use came to."""
 
@@ -373,6 +398,8 @@ class LarkUseResultView(BaseModel):
     verdict: str
     told: str
     missing: list[str]
+    #: The wiki spaces Lark showed the app, for the step that declares them; empty for others.
+    spaces: list[LarkSpaceView] = []
     #: The steps to go back to, by key, in the order to do them. Empty when it works.
     redo: list[str]
 
@@ -387,6 +414,57 @@ class LarkTestView(BaseModel):
     uses: list[LarkUseResultView]
     #: The steps to go back to when Lark refused the credential itself. Empty otherwise.
     redo: list[str]
+
+
+class DeclaredSpaceView(BaseModel):
+    """One declared wiki space: its id, its reach, and its steward by name."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    space_id: str
+    reach: str
+    #: The department's short name for a department reach; empty for the whole company.
+    department: str
+    #: The steward's display name, or empty when the directory names nobody for them.
+    steward: str
+
+
+class DeclaredSpacesView(BaseModel):
+    """The spaces declared on this install, and whether this reader may declare more."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    spaces: list[DeclaredSpaceView]
+    may_declare: bool
+    #: Why a space is read only where somebody declared it, for the step's screen.
+    told: str
+
+
+class SpaceAsked(BaseModel):
+    """One space to declare: its id or its settings link, a reach, and for one, a department."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    space: str
+    reach: str
+    department: str = ""
+
+
+class SpacesAsked(BaseModel):
+    """The spaces one save declares."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    spaces: list[SpaceAsked]
+
+
+class SpacesDeclaredView(BaseModel):
+    """What a save declared, by id."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    declared: list[str]
+    told: str
 
 
 class LarkSwitchOffAsked(BaseModel):
@@ -545,6 +623,57 @@ def facts_of(request: Request) -> LarkFactStore:
         return found  # type: ignore[no-any-return]
     sessions = sessions_of(request)
     return NoLarkFacts() if sessions is None else StoredLarkFacts(sessions)
+
+
+@dataclass(frozen=True)
+class SpaceEntry:
+    """One space a save declares, once its id is read out of what was typed."""
+
+    space_id: str
+    reach: str
+    department: str
+
+
+class WikiSpaceStore(Protocol):
+    """Where the declared wiki spaces are kept. `StoredWikiSpaces` is the real one."""
+
+    async def declared(self) -> tuple[SpaceDeclaration, ...]: ...
+
+    async def declare(self, entries: Sequence[SpaceEntry], asked: Asking) -> None: ...
+
+
+class StoredWikiSpaces:
+    """`brain.ops.lark_wiki_spaces` over this install's database, attributed to the request."""
+
+    def __init__(self, sessions: async_sessionmaker[AsyncSession]) -> None:
+        self._sessions = sessions
+
+    async def declared(self) -> tuple[SpaceDeclaration, ...]:
+        return await declared_spaces(self._sessions)
+
+    async def declare(self, entries: Sequence[SpaceEntry], asked: Asking) -> None:
+        async with self._sessions() as session:
+            await attribute(session, asked)
+            for one in entries:
+                await declare_space(
+                    session,
+                    one.space_id,
+                    reach=one.reach,
+                    department=one.department,
+                    updated_by=asked.caller.principal.id,
+                )
+            await session.commit()
+
+
+def spaces_of(request: Request) -> WikiSpaceStore:
+    """What `app.state.lark_wiki_spaces` holds, or the database; a 500 without either."""
+    found = getattr(request.app.state, "lark_wiki_spaces", None)
+    if found is not None:
+        return found  # type: ignore[no-any-return]
+    sessions = sessions_of(request)
+    if sessions is None:
+        raise Failed("no database on this process")
+    return StoredWikiSpaces(sessions)
 
 
 def settings_of(request: Request) -> LarkSettings:
@@ -845,6 +974,7 @@ async def try_lark(request: Request, body: LarkAsked, asked: Asked) -> JSONRespo
                 told=one.told,
                 missing=list(one.missing),
                 redo=list(redo_for(one)),
+                spaces=[LarkSpaceView(space_id=sid, name=name) for sid, name in one.spaces],
             )
             for one in result.uses
         ],
@@ -942,6 +1072,107 @@ async def switch_lark_off(request: Request, body: LarkSwitchOffAsked, asked: Ask
     return JSONResponse(status_code=200, content=answered.model_dump(mode="json"))
 
 
+SPACES_DECLARED: Final = (
+    "The spaces are declared. The Brain answers from their pages at the reach you chose, and you "
+    "are their steward."
+)
+
+
+@router.get(LARK_WIKI_SPACES_PATH, response_model=DeclaredSpacesView, responses=COMMON_RESPONSES)
+async def lark_wiki_spaces(request: Request, asked: Asked) -> DeclaredSpacesView:
+    """The wiki spaces declared on this install, each with its reach and its steward's name."""
+    if not permitted(screen("connectors").read, asked.reach, asked.now):
+        raise _not_answerable("lark wiki spaces")
+    declared = await spaces_of(request).declared()
+    names = await names_for(request, {one.owner_id for one in declared})
+    return DeclaredSpacesView(
+        spaces=[
+            DeclaredSpaceView(
+                space_id=one.space_id,
+                reach=one.visibility.level.value,
+                department=one.visibility.department or "",
+                steward=names.get(one.owner_id, ""),
+            )
+            for one in declared
+        ],
+        may_declare=may_switch_on(asked.reach, Use.WIKI, asked.now),
+        told=A_SPACE_IS_READ_ONLY_WHERE_SOMEBODY_DECLARED_ITS_REACH,
+    )
+
+
+def space_problems(body: SpacesAsked, by: str) -> tuple[list[SpaceEntry], list[Problem]]:
+    """The spaces read out of what was typed, and a problem by field for each that cannot be.
+
+    A space is judged by `brain.ops.lark_wiki_spaces.readable`, the check its writer makes, so a
+    save either declares every space it names or none of them.
+    """
+    if not body.spaces:
+        return [], [Problem("spaces", "blank", "Choose at least one space to declare.")]
+    if len(body.spaces) > MOST_SPACES_A_SAVE:
+        return [], [
+            Problem("spaces", "too_many", f"Declare at most {MOST_SPACES_A_SAVE} spaces at once.")
+        ]
+    entries: dict[str, SpaceEntry] = {}
+    problems: list[Problem] = []
+    for index, one in enumerate(body.spaces):
+        where = f"spaces.{index}"
+        space_id = space_id_of(one.space)
+        reach = one.reach.strip()
+        department = one.department.strip()
+        if not space_id:
+            problems.append(
+                Problem(
+                    f"{where}.space",
+                    "shape",
+                    "Paste the link of the space's settings page, which contains /wiki/space/ "
+                    "and a number, or the number itself.",
+                )
+            )
+            continue
+        if reach not in REACHES:
+            problems.append(
+                Problem(f"{where}.reach", "unknown", "Choose the whole company or one department.")
+            )
+            continue
+        if reach == DEPARTMENT and not department:
+            problems.append(
+                Problem(
+                    f"{where}.department",
+                    "blank",
+                    "Choose the department whose people may be told this space's pages.",
+                )
+            )
+            continue
+        if not readable(space_id, reach, department, by=by):
+            problems.append(
+                Problem(
+                    f"{where}.department",
+                    "shape",
+                    "That is not a department's short name. Choose one from the list.",
+                )
+            )
+            continue
+        entries[space_id] = SpaceEntry(space_id, reach, department if reach == DEPARTMENT else "")
+    return list(entries.values()), problems
+
+
+@router.post(LARK_WIKI_SPACES_PATH, response_model=SpacesDeclaredView, responses=_WRITE_RESPONSES)
+async def declare_lark_wiki_spaces(
+    request: Request, body: SpacesAsked, asked: Asked
+) -> JSONResponse:
+    """Declare wiki spaces: each one's reach, with the caller as its steward. See the module."""
+    if not may_switch_on(asked.reach, Use.WIKI, asked.now):
+        log.info("lark wiki spaces refused", principal=asked.caller.principal.id)
+        raise _not_answerable("lark wiki spaces")
+    entries, problems = space_problems(body, asked.caller.principal.id)
+    if problems:
+        return _problems(problems)
+    await spaces_of(request).declare(entries, asked)
+    log.info("lark wiki spaces declared", principal=asked.caller.principal.id, count=len(entries))
+    answered = SpacesDeclaredView(declared=[one.space_id for one in entries], told=SPACES_DECLARED)
+    return JSONResponse(status_code=200, content=answered.model_dump(mode="json"))
+
+
 def _kept_for(use: Use, body: LarkAsked) -> str:
     """The value kept for a use: the chat channel's three secrets together, or the credential."""
     if use is Use.CHANNEL:
@@ -989,6 +1220,7 @@ __all__ = [
     "LARK_PATH",
     "LARK_SWITCH_OFF_PATH",
     "LARK_TEST_PATH",
+    "LARK_WIKI_SPACES_PATH",
     "LarkAsked",
     "LarkView",
     "router",
