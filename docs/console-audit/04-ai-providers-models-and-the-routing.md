@@ -16,7 +16,7 @@
 | `GET /api/v1/routing/export` | **no screen** |
 | `GET /api/v1/routing/golden-questions` | `/routing`, `/routing/:rungId` |
 | `GET /api/v1/routing/golden-questions/askers` | `/routing`, `/routing/:rungId` |
-| `GET /api/v1/routing/rungs` | `/agents/:agentId/:tab`, `/routing`, `/routing/:rungId` |
+| `GET /api/v1/routing/rungs` | `/agents/:agentId/:tab`, `/models`, `/routing`, `/routing/:rungId` |
 | `PATCH /api/v1/routing/rungs/{rung_id}` | `/routing`, `/routing/:rungId` |
 | `POST /api/v1/models/providers` | `/models` |
 | `POST /api/v1/models/providers/{provider}/check` | `/models`, `/models/:provider`, `/models/:provider/:view` |

@@ -64,22 +64,17 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
   // both, and tests/govern-people-pages.test.tsx submits the team's blank.
   "src/pages/Elevation.tsx": [{ pattern: "/elevation", index: 0, writes: true }],
   "src/pages/AccessRequests.tsx": [{ pattern: "/access-requests", index: 0, writes: true }],
-  // Index 0 on the Routing page is the matrix's search form, which only narrows. On a step's page its
-  // numbers and then where it sits follow; the golden question and the residency rule come after.
-  "src/pages/models/RungEditor.tsx": [
-    { pattern: "/routing/:rungId", index: 1, writes: true },
-    { pattern: "/routing/:rungId", index: 2, writes: true },
-  ],
-  "src/pages/models/GoldenQuestions.tsx": [{ pattern: "/routing", index: 1, writes: true }],
+  // The Routing page draws the matrix whole, with no search form, so the golden question is first.
+  "src/pages/models/GoldenQuestions.tsx": [{ pattern: "/routing", index: 0, writes: true }],
   // Add a step opens above the matrix, so it is then the first form.
   "src/pages/models/AddStep.tsx": [{ pattern: "/routing", opener: "Add a step", index: 0, writes: true }],
   // Under Advanced after the golden question: the residency rule, and a level's numbers once opened,
   // which draws above the residency form.
   "src/components/RoutingSettings.tsx": [
-    { pattern: "/routing", index: 2, writes: true },
-    { pattern: "/routing", opener: "Edit numbers", index: 2, writes: true },
+    { pattern: "/routing", index: 1, writes: true },
+    { pattern: "/routing", opener: "Edit numbers", index: 1, writes: true },
   ],
-  // Adding a provider opens above the list, whose search form then follows it.
+  // Adding a provider opens above the provider cards.
   "src/pages/models/AddProvider.tsx": [{ pattern: "/models", opener: "Add a provider", index: 0, writes: true }],
   // A provider's Profile: the terms form, and the key form above it once Replace key is pressed.
   "src/pages/models/ProviderProfile.tsx": [{ pattern: "/models/:provider/:view", index: 0, writes: true }],
@@ -87,9 +82,9 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
   "src/pages/credentials/SetValueForm.tsx": [{ pattern: "/credentials/:family/:name/:view", index: 0, writes: true }],
   // The Profile is a view at its own address, so the pin's form is on that page case with no opener.
   "src/components/AgentModelPin.tsx": [{ pattern: "/agents/:agentId/:tab", index: 0, writes: true }],
-  // A model's price opens on its row in the prices card, above the register's forms (M27.12.5).
-  // The prices card is under the providers list, after the list's search form.
-  "src/components/ModelPrices.tsx": [{ pattern: "/models", opener: "Set price", index: 1, writes: true }],
+  // A model's price opens on its row in the prices card, under the providers and the matrix, which
+  // draw no form of their own (M27.12.5).
+  "src/components/ModelPrices.tsx": [{ pattern: "/models", opener: "Set price", index: 0, writes: true }],
   // The grant and pack forms of an open subject, then the grant to several, which is drawn under
   // the list once it is opened and so sits after the list's search.
   "src/pages/prompts/PromptsPage.tsx": [{ pattern: "/prompts", opener: "Edit instructions", index: 0, writes: true }],
@@ -123,6 +118,11 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
  * Checked, not trusted: an entry for a file that no longer holds both fails the first test.
  */
 const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
+  "src/pages/models/RungEditor.tsx":
+    "A step's numbers and where it sits are two forms inside the step's drawer, opened at its own address " +
+    "over the matrix and drawn outside the main landmark these cases read. tests/models-module.test.tsx " +
+    "submits each blank and holds that no confirmation opens, nothing is sent, and what to fill in is " +
+    "said beside the field.",
   "src/pages/webhooks/WebhookActs.tsx":
     "The registration and the secret replacement are inside drawers opened from the page header or a " +
     "subscriber's page, outside the main landmark these cases read. tests/webhooks-page.test.tsx submits " +

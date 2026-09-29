@@ -50,6 +50,9 @@ import { StepsToPass } from "./HeldChange";
 
 const FORM = "golden";
 
+/** The question's field, which the Routing page's "Add a golden question" takes the reader to. */
+export const GOLDEN_QUESTION_FIELD = `${FORM}-question`;
+
 export const LOADING_GOLDEN = "Loading the golden questions.";
 export const QUESTION_HINT = "The question as a person would ask it, up to 2000 characters.";
 export const ASKED_AS_HINT = "The person it is asked as. It is answered only from what they may read.";

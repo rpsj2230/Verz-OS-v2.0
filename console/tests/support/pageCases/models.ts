@@ -6,7 +6,7 @@
  * Task ids: none
  */
 
-import { type PageCase, PROVIDERS_ANSWER, UNBROKEN } from "../pageFixtures";
+import { MATRIX, type PageCase, PROVIDERS_ANSWER, UNBROKEN } from "../pageFixtures";
 
 /** One provider's figures: what it answered, with failures and cost named as not recorded. */
 const PROVIDER_STATS = {
@@ -42,6 +42,8 @@ const PROVIDER_HISTORY = {
 
 const MODELS_AND_HEALTH = {
   "/api/v1/models/providers": PROVIDERS_ANSWER,
+  // The owner's failover matrix, drawn under the provider cards from the Routing page's own route.
+  "/api/v1/routing/rungs": MATRIX,
   // One model priced and one not, so both the figures and the unpriced sentence are drawn.
   "/api/v1/models/prices": {
     currency: "SGD",
