@@ -363,6 +363,41 @@ def test_every_filter_narrows_to_exactly_what_it_names(client: TestClient) -> No
     assert [one[2] for one in by_window] == ["connector:xero", "artifact:report_1"]
 
 
+def test_changes_only_leaves_out_reads_refusals_and_vault_calls_and_keeps_every_change(
+    client: TestClient, ledger: Ledger
+) -> None:
+    """Found on the owner's install on 2026-09-29: the Dashboard's six newest entries were all
+    "Answered a call about a credential", and the grants and settings a person had changed were
+    pushed off the card. The Dashboard asks for changes only.
+
+    Delete this and the filter can be accepted and ignored, which is the flooded card again, or
+    drop a change with the reads, which is a card that hides what somebody did."""
+    for minute, action in ((10, AuditAction.VAULT_ACCESS), (11, AuditAction.RECORD_READ)):
+        entry = chain_of([(action, "u_admin", "credential:providers.one", {})])[0]
+        row = stored(entry)
+        row.at = BEGAN + timedelta(minutes=minute)
+        ledger.rows.append(row)
+
+    changes = seen(get(client, "u_admin", changes_only="true"))
+    everything = seen(get(client, "u_admin"))
+
+    assert [one[0] for one in changes] == ["sign_in", "revoke", "leash_change", "publish", "grant"]
+    assert {one[0] for one in everything} >= {"vault_access", "deny"}
+
+
+def test_changes_only_with_an_action_that_is_not_a_change_is_an_empty_page(
+    client: TestClient,
+) -> None:
+    """An empty action set means every action, so a read asked for with changes only must come
+    back empty rather than widened to the whole ledger.
+
+    Delete this and `action=deny&changes_only=true` answers with every entry."""
+    assert seen(get(client, "u_admin", action="deny", changes_only="true")) == []
+    assert seen(get(client, "u_admin", action="revoke", changes_only="true")) == [
+        ("revoke", "u_admin", "principal:u_narrow")
+    ]
+
+
 def test_a_search_reads_what_a_visible_row_says_and_never_an_entry_the_reader_may_not_see(
     client: TestClient,
 ) -> None:

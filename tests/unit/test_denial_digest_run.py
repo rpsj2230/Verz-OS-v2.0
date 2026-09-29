@@ -30,6 +30,7 @@ from brain.ops.denial_digest_run import (
     denials_between,
     digest_pass,
     patterns_from,
+    THE_WORKER_WAS_GIVEN_NO_CACHE_ADDRESS,
     run_denial_digest_now,
 )
 from brain.ops.limits import DENIALS_WORTH_NOTICING, ENUMERATION_DISTINCT_TARGETS, DenialShape
@@ -140,6 +141,22 @@ def test_an_install_with_no_cache_refuses_the_pass_rather_than_raising_into_noth
     Delete this and the control reads as working on every install without a cache."""
     with pytest.raises(DenialDigestError):
         run_denial_digest_now("postgresql://unused", now=NOW, valkey_url="")
+
+
+def test_a_worker_given_no_cache_says_which_line_it_is_missing() -> None:
+    """The refusal names the worker and the line to add, not an install with no cache.
+
+    Found on the owner's install on 2026-09-29: the digest failed every hour with "no cache is
+    configured", while the Dashboard showed the cache ready, because the application is given the
+    cache address and the worker, in a deployment tool's stored copy of the compose file, was not.
+    Delete this and the failure goes back to naming a fault the install does not have."""
+    with pytest.raises(DenialDigestError) as refused:
+        run_denial_digest_now("postgresql://unused", now=NOW, valkey_url="")
+    said = str(refused.value)
+    assert said == THE_WORKER_WAS_GIVEN_NO_CACHE_ADDRESS
+    assert "worker" in said
+    assert "VALKEY_URL" in said
+    assert "no cache is configured" not in said
 
 
 # --------------------------------------------------------------------- against the ledger

@@ -100,6 +100,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Final
 
+from brain.console.configuration import LABELS
 from brain.console.screens import screen
 from brain.core.entitlement import EntitlementSet
 from brain.core.scope import Scope
@@ -141,6 +142,35 @@ A_BACKUP_TIMESTAMP_IS_NOT_A_VERIFIED_RESTORE: Final = (
     "the age of the newest object in a bucket under that heading would answer the question "
     "it was not asked, in the reassuring direction, to the one reader who will act on it, so "
     "brain.console.recovery_view shows the absence of a verified restore as an alarm."
+)
+
+#: What the database version says on the screen, in words for an administrator. The reason
+#: below is the argument; this is the sentence, found on the owner's install on 2026-09-29 to
+#: have been the argument, naming a function, until then.
+THE_DATABASE_VERSION_THIS_RELEASE_EXPECTS: Final = (
+    "The database version this release expects. The application moves the database to it when "
+    "it starts, before it answers anything; this screen does not ask the database itself."
+)
+
+#: What the commit a build came from says on the screen.
+THE_COMMIT_A_BUILD_CAME_FROM: Final = (
+    "The code this build was made from. It is not a release: a release is the name given to a "
+    "build, shown above."
+)
+
+#: What the release says when the containers were started from a release tag.
+THE_RELEASE_THE_CONTAINERS_WERE_STARTED_FROM: Final = (
+    "The release this install's containers were started from."
+)
+
+#: Why /install and /updates say one thing about the release. Found on the owner's install on
+#: 2026-09-29: /install showed the build's commit under "release" while /updates said the
+#: install names no release, about the same running containers.
+ONE_ANSWER_TO_WHICH_RELEASE_IS_RUNNING: Final = (
+    "The release is brain.console.version_view.running_release's answer on both install "
+    "screens, and the commit a build came from is shown under its own name on both. A commit "
+    "under the heading release is a second answer to the question, and it contradicted the "
+    "Version and updates screen beside it."
 )
 
 #: Why the migration level is not read out of the source tree.
@@ -408,6 +438,17 @@ NAMEABLE_SURFACES: Final[tuple[Belongs, ...]] = (
 )
 
 
+#: What the size an install was deployed at is called on the screens, which is not "profile":
+#: the Settings screen's model setting is also a profile, and two Platform screens used the one
+#: word for two different things until 2026-09-29.
+INSTALL_SIZE_FACT: Final = "install size"
+
+#: The commit a build came from, under its own name and never under "release".
+BUILT_FROM_FACT: Final = "built from commit"
+
+#: The database's version, in words, rather than "migration level".
+DATABASE_VERSION_FACT: Final = "database version"
+
 def install_facts(
     *,
     profile: str,
@@ -415,6 +456,7 @@ def install_facts(
     revisions: Sequence[Revision],
     pending: Sequence[str] | None = None,
     env: Mapping[str, str] | None = None,
+    pinned_image: str = "",
 ) -> tuple[Fact, ...]:
     """What is actually running, each fact labelled with how firmly it is known (M27.6.1).
 
@@ -427,6 +469,10 @@ def install_facts(
     the one reader of an installation value in this repository. Nothing here reads the
     environment and `brain.ops.independence.second_readers` is what holds that.
 
+    `pinned_image` is the image reference the containers were started from, and the release is
+    `brain.console.version_view.running_release`'s answer over it and the manifest, so this
+    screen and Version and updates say one thing. See `ONE_ANSWER_TO_WHICH_RELEASE_IS_RUNNING`.
+
     Identity settings are not named. See `NAMEABLE_SURFACES`.
 
     **This is the one function here that has to check the profile itself.** It puts the
@@ -434,14 +480,31 @@ def install_facts(
     check a mistyped deployment variable would be reported back as a fact about the install,
     and the screen would be the thing confirming the typo.
     """
+    # Imported here because `version_view` imports `Fact` and `Source` from this module.
+    from brain.console.version_view import running_release
+
     assert_known_profile(profile)
     facts: list[Fact] = [
-        Fact(name="profile", source=Source.DECLARED, value=profile),
+        Fact(name=INSTALL_SIZE_FACT, source=Source.DECLARED, value=profile),
     ]
-    if manifest is None:
+    running = running_release(
+        pinned_image=pinned_image, built_commit="" if manifest is None else manifest.commit
+    )
+    if running.tag:
         facts.append(
             Fact(
                 name="release",
+                source=Source.DECLARED,
+                value=running.tag,
+                because=THE_RELEASE_THE_CONTAINERS_WERE_STARTED_FROM,
+            )
+        )
+    else:
+        facts.append(Fact(name="release", source=Source.UNKNOWN, because=running.cannot_say))
+    if manifest is None:
+        facts.append(
+            Fact(
+                name=BUILT_FROM_FACT,
                 source=Source.UNKNOWN,
                 because=(
                     "no release manifest was written into this image, so nothing here can "
@@ -450,7 +513,14 @@ def install_facts(
             )
         )
     else:
-        facts.append(Fact(name="release", source=Source.MEASURED, value=manifest.commit))
+        facts.append(
+            Fact(
+                name=BUILT_FROM_FACT,
+                source=Source.MEASURED,
+                value=manifest.commit,
+                because=THE_COMMIT_A_BUILD_CAME_FROM,
+            )
+        )
         facts.append(
             Fact(
                 name="built at",
@@ -462,7 +532,7 @@ def install_facts(
     if level.source is Source.UNKNOWN:
         facts.append(
             Fact(
-                name="migration level",
+                name=DATABASE_VERSION_FACT,
                 source=Source.UNKNOWN,
                 because=(
                     "the declared revisions are not a single line, so there is more than one "
@@ -473,10 +543,10 @@ def install_facts(
     elif level.source is Source.DECLARED:
         facts.append(
             Fact(
-                name="migration level",
+                name=DATABASE_VERSION_FACT,
                 source=Source.DECLARED,
                 value=level.head,
-                because=THE_HEAD_THE_CODE_CARRIES_IS_NOT_THE_REVISION_THE_DATABASE_IS_ON,
+                because=THE_DATABASE_VERSION_THIS_RELEASE_EXPECTS,
             )
         )
     elif not level.revision:
@@ -485,16 +555,20 @@ def install_facts(
         # so the screen raised on exactly the install that most needs to be told where it is.
         facts.append(
             Fact(
-                name="migration level",
+                name=DATABASE_VERSION_FACT,
                 source=Source.MEASURED,
                 value=f"no migration applied, {level.pending} waiting",
             )
         )
     else:
-        facts.append(Fact(name="migration level", source=Source.MEASURED, value=level.revision))
+        facts.append(
+            Fact(name=DATABASE_VERSION_FACT, source=Source.MEASURED, value=level.revision)
+        )
     for surface in NAMEABLE_SURFACES:
         for name, value in sorted(belonging_to(surface, env).items()):
-            facts.append(Fact(name=name, source=Source.DECLARED, value=value))
+            facts.append(
+                Fact(name=LABELS.get(name, name), source=Source.DECLARED, value=value)
+            )
     return tuple(facts)
 
 

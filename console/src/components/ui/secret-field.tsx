@@ -21,10 +21,17 @@
  * is the same whatever is stored, so it carries neither the length nor the last four characters.
  * `tests/ui-controls.test.tsx` holds the exact list of what the component can be told.
  *
- * **A text field, not a password field.** `scripts/check-boundaries.mjs` refuses a password input
- * anywhere in the console, for the reason written there, so the field is `type="text"` with
- * autocomplete, spelling and capitalisation off, as the three pages already do. What that costs is
- * that the characters are visible while they are typed, which is the trade those pages already made.
+ * **A masked field, and the only one in the console.** Until 2026-09-29 this was `type="text"`, so
+ * a pasted API key showed in clear on the Credentials screen of the owner's install, which he
+ * found unacceptable. It is `type="password"` now, with autocomplete, spelling and capitalisation
+ * off and the password managers' own opt-outs, and `scripts/check-boundaries.mjs` allows a
+ * password input in this file and nowhere else: a masked input anywhere else would be a sign-in
+ * form collecting a credential the realm refuses to accept that way, and a credential typed
+ * anywhere else would miss the rules below. `tests/secret-inputs.test.ts` holds every input a
+ * credential is typed into to this component.
+ *
+ * **`id` is the one addition since, and it cannot carry a value.** A form that names its fields
+ * for its problems (Connect Lark, the first-run staff list check) keeps its field's address.
  *
  * Task ids: M27.10.2
  */
@@ -50,6 +57,11 @@ export interface SecretHandle {
   readonly ref: RefObject<HTMLInputElement | null>;
   /** The value typed, with the field emptied in the same call. Empty when nothing was typed. */
   take(): string;
+  /**
+   * The value typed, left in the field, for a test that sends it once before the save that takes
+   * it. Still never held in React: the caller sends it and keeps nothing.
+   */
+  peek(): string;
 }
 
 export function useSecret(): SecretHandle {
@@ -68,6 +80,9 @@ export function useSecret(): SecretHandle {
         input.dispatchEvent(new Event("input", { bubbles: true }));
         return value;
       },
+      peek() {
+        return ref.current?.value ?? "";
+      },
     }),
     [],
   );
@@ -83,6 +98,7 @@ function SecretField({
   describedBy,
   onPresenceChange,
   className,
+  id: named,
 }: {
   /** The handle from `useSecret`, which is the only way to read what was typed. */
   secret: SecretHandle;
@@ -97,8 +113,11 @@ function SecretField({
   /** Whether anything is typed, for a submit button, without the value leaving the field. */
   onPresenceChange?: (present: boolean) => void;
   className?: string;
+  /** The field's address, for a form that names its fields; generated when not given. */
+  id?: string;
 }) {
-  const id = useId();
+  const generated = useId();
+  const id = named ?? generated;
   const statusId = `${id}-status`;
   const descriptionId = `${id}-description`;
   const described = [statusId, description === undefined ? null : descriptionId, describedBy ?? null]
@@ -110,8 +129,12 @@ function SecretField({
       <Input
         id={id}
         ref={secret.ref}
-        type="text"
+        type="password"
         autoComplete="off"
+        data-1p-ignore=""
+        data-lpignore="true"
+        data-bwignore=""
+        data-form-type="other"
         autoCapitalize="off"
         autoCorrect="off"
         spellCheck={false}

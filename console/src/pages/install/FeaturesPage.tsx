@@ -152,6 +152,7 @@ function FeatureList({ body, onSwitched }: { readonly body: FeaturesBody; readon
         details={failure === null ? undefined : <FailureState failure={failure} title={NOT_SWITCHED} />}
         confirmLabel={confirming?.on === true ? SWITCH_OFF : SWITCH_ON}
         cancelLabel={KEEP_IT}
+        tone={confirming?.on === true ? "danger" : "plain"}
         busy={busy}
         onConfirm={() => {
           if (confirming !== null) {
@@ -196,7 +197,7 @@ export function FeaturesPage() {
       <PageHeader crumbs={[{ label: FEATURES_LABEL }]} title={FEATURES_LABEL} lede={FEATURES_LEDE} />
       {told === null ? null : (
         <div role="status">
-          <Note kind="works">{told}</Note>
+          <Note kind="done">{told}</Note>
         </div>
       )}
       {content}

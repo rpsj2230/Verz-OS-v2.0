@@ -319,7 +319,7 @@ export function SkillsPage() {
     <>
       {told === null ? null : (
         <div role={told.ok ? "status" : "alert"}>
-          <Note kind={told.ok ? "works" : "info"}>{told.sentence}</Note>
+          <Note kind={told.ok ? "done" : "info"}>{told.sentence}</Note>
         </div>
       )}
       <QueueCard page={page} listing={listing} />

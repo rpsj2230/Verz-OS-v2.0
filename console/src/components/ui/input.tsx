@@ -6,8 +6,8 @@
  * measured against every surface (`brain.locale.READ_PAIRS`).
  *
  * **A password field is not a variant of this.** `scripts/check-boundaries.mjs` refuses a password
- * input anywhere in the console, and a credential is typed into `secret-field.tsx`, which is written
- * so that its value is never read back into the page.
+ * input anywhere in the console but `secret-field.tsx`, which is where a credential is typed: masked,
+ * and written so that its value is never read back into the page.
  *
  * Task ids: M27.10.2
  */

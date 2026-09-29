@@ -157,6 +157,23 @@ A_READING_CEILING_SAYS_WHERE_IT_STOPPED_AND_NEVER_HOW_MUCH_IT_PASSED: Final = (
 #: The screen whose read decides whether this ledger opens at all.
 AUDIT_SCREEN: Final = "audit"
 
+#: The actions that record something happening within the permissions rather than a change to
+#: them: a refusal, a read of a declared record, and the vault answering a call.
+NOT_A_CHANGE: Final[frozenset[AuditAction]] = frozenset(
+    {AuditAction.DENY, AuditAction.RECORD_READ, AuditAction.VAULT_ACCESS}
+)
+
+#: Why the Dashboard asks for changes only. Found on the owner's install on 2026-09-29: six of
+#: the six newest entries read "Answered a call about a credential", the vault's own record of
+#: the application reading its keys, and every change a person had made was pushed off the card.
+RECENT_ACTIVITY_IS_CHANGES_AND_NOT_READS: Final = (
+    "The Dashboard's recent activity is the newest changes to who may do what and to what is "
+    "configured. The ledger also records reads, refusals and the vault answering calls, which "
+    "arrive by the hundred and change nothing, so the card asks for changes only and the Audit "
+    "screen keeps everything. The filter is in the statement and in the view, like every other "
+    "filter here, so a page of changes is a full page rather than six reads filtered to none."
+)
+
 #: How many rows one statement loads. A resource bound, not a permission one.
 LOAD_CHUNK: Final = 500
 
@@ -468,20 +485,37 @@ async def audit_page(
     cursor: Annotated[str | None, Query(max_length=512)] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
     q: Annotated[str, Query(max_length=MAX_SEARCH_CHARS)] = "",
+    changes_only: bool = False,
 ) -> AuditLedgerPage:
     """One page of the ledger this reader may see, narrowed by exact filters.
 
     The screen's question first, then the filter the view would refuse, then the database. A
     subject kind outside `SUBJECT_KINDS`, a naive or inverted date range and a malformed cursor
     are the 422 a malformed parameter always is.
+
+    `changes_only` leaves out `NOT_A_CHANGE`, for the Dashboard's recent activity; see
+    `RECENT_ACTIVITY_IS_CHANGES_AND_NOT_READS`. Asked with an action that is not a change, it
+    is an empty page rather than every action, because an empty action set means all of them.
     """
     if not permitted(screen(AUDIT_SCREEN).read, asked.reach, asked.now):
         log.info("audit screen not answerable", principal=asked.caller.principal.id)
         raise _not_answerable()
 
+    chosen = frozenset({action}) if action is not None else frozenset(AuditAction)
+    if changes_only:
+        chosen = chosen - NOT_A_CHANGE
+        if not chosen:
+            return AuditLedgerPage(
+                items=[],
+                next_cursor=None,
+                order=order,
+                actions=list(AuditAction),
+                subject_kinds=sorted(SUBJECT_KINDS),
+                actors=[],
+            )
     try:
         criteria = AuditFilter(
-            actions=frozenset({action}) if action is not None else frozenset(),
+            actions=chosen if (changes_only or action is not None) else frozenset(),
             subject_kinds=frozenset({subject_kind}) if subject_kind is not None else frozenset(),
             actors=frozenset({actor}) if actor is not None else frozenset(),
             since=since,

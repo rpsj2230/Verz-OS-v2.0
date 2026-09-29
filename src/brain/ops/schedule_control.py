@@ -118,16 +118,17 @@ def control_refusal(
 
     A name the worker does not tick, and a control with nothing to run, each in words a person
     can act on. The runner's `needs` is its own sentence, so the refusal says what the product
-    still lacks rather than that something went wrong.
+    still lacks rather than that something went wrong. The job is "this job" rather than its
+    internal name, because the sentence is shown on the job's own page.
     """
     if name not in {one.name for one in schedulable(controls)}:
-        return f"{name} is not started by the worker's schedule, so there is nothing here to pause"
+        return "This job is not started by the worker's schedule, so there is nothing to pause."
     for runner in runners:
         if runner.name == name:
             if runner.run is None:
-                return f"{name} has nothing to run yet: it needs {runner.needs}"
+                return f"This job has nothing to run yet: it needs {runner.needs}."
             return ""
-    return f"{name} has no runner, so the worker never starts it"
+    return "This job has nothing that starts it, so the worker never runs it."
 
 
 def paused_in(states: Mapping[str, SettingState]) -> frozenset[str]:

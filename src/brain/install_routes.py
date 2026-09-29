@@ -137,7 +137,7 @@ Task ids: M27.7.25, M27.7.27, M42.3.9, M38.1.3.5, M23.1.1, M23.2.1, M27.15.51
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime
 from typing import Final, Protocol, cast
 
@@ -149,6 +149,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked, Asking, limit_store_of
+from brain.connector_routes import records_of
+from brain.connectors.declaration import shipped
+from brain.console.connector_trust import admitted_connections
 from brain.console.installation import (
     ConnectionCapacity,
     Fact,
@@ -167,7 +170,7 @@ from brain.console.recovery_view import Panel as RecoveryPanel
 from brain.console.recovery_view import panel as recovery_panel
 from brain.console.screens import screen
 from brain.console.version_view import Panel as UpdatesPanel
-from brain.console.version_view import Running, Told, Unanswered, running_release
+from brain.console.version_view import Running, Told, Unanswered, look_words, running_release
 from brain.console.version_view import panel as updates_panel
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.errors import Absent, Failed
@@ -657,6 +660,9 @@ class UpdatesView(BaseModel):
     goes_off_after_days: int
     #: What went out on this install, newest first (M38.1.3.5). Set by the route on every answer.
     history: DeploymentHistoryView | None = None
+    #: What is said about the newest release when neither `told` nor `unanswered` is set: the
+    #: check is on and its look has not finished. `brain.console.version_view.look_words`.
+    look: str = ""
 
 
 class CopyStateView(BaseModel):
@@ -970,6 +976,7 @@ def updates_view(one: UpdatesPanel) -> UpdatesView:
         what_to_do=one.answer.what_to_do,
         told_days_ago=one.told_days_ago,
         goes_off_after_days=one.goes_off_after_days,
+        look=look_words(one.told, one.standing),
     )
 
 
@@ -1043,10 +1050,44 @@ def recovery_panel_view(one: RecoveryPanel) -> RecoveryPanelView:
     )
 
 
-def ceiling_view(one: Ceiling) -> CeilingView:
-    return CeilingView(
-        name=one.name, per_day=one.per_day, raisable=one.raisable, derived=one.derived
-    )
+def ceiling_view(one: Ceiling, sources: Mapping[str, str] | None = None) -> CeilingView:
+    """One ceiling, named by the words its source is called by when those are known."""
+    name = one.name if sources is None else sources.get(one.name, one.name)
+    return CeilingView(name=name, per_day=one.per_day, raisable=one.raisable, derived=one.derived)
+
+
+#: Why the Limits screen lists the ceilings of connected sources only. Found on the owner's
+#: install on 2026-09-29: "Ceilings of connected systems" listed xero, freshdesk and lark_base by
+#: their internal names on an install with no source connected.
+A_CEILING_IS_LISTED_FOR_A_SOURCE_THIS_INSTALL_READS: Final = (
+    "A source's ceiling limits this install only once the source is connected, so the list is "
+    "the sources the Connectors screen would tell this reader are connected, in the words that "
+    "screen calls them, through its own read and its own narrowing. A source nobody connected, "
+    "and one this reader may not be told of, are both left out, and alike."
+)
+
+
+async def connected_sources_of(request: Request, asked: Asking) -> Mapping[str, str]:
+    """The sources connected here that this reader may be told of, by name, with their words.
+
+    `brain.connector_routes.records_of` and `admitted_connections`, the Connectors screen's own
+    read and decision. A process with no database, or a read the database refused, names none:
+    the list is then empty, which is the list of an install with nothing connected, and the
+    windows and ceilings a person reads stop at what this install is known to run into.
+    """
+    records = records_of(request)
+    if records is None:
+        return {}
+    try:
+        found = await records.connected()
+    except SQLAlchemyError as exc:
+        log.warning("connected sources not read for the limits screen", error=type(exc).__name__)
+        return {}
+    labels = {name: one.label for name, one in shipped().items()}
+    return {
+        one.connector: labels.get(one.connector, one.connector)
+        for one in admitted_connections(found, asked.reach, asked.now)
+    }
 
 
 def window_view(one: DeclaredWindow) -> WindowView:
@@ -1156,6 +1197,7 @@ async def install(request: Request, asked: Asked) -> InstallView:
         manifest=read_manifest(),
         revisions=read_plan().revisions,
         pending=None,
+        pinned_image=settings.app_image,
     )
     return InstallView(facts=[fact_view(one) for one in facts])
 
@@ -1291,8 +1333,9 @@ async def limits(request: Request, asked: Asked) -> LimitsView:
     from the request ledger, with its own two sentences.
     """
     _permitted(asked.reach, "limits", asked.now)
-    declared = [ceiling_view(one) for one in ceilings()]
-    windows = [window_view(one) for one in declared_windows()]
+    sources = await connected_sources_of(request, asked)
+    declared = [ceiling_view(one, sources) for one in ceilings() if one.name in sources]
+    windows = [window_view(one) for one in declared_windows(sources)]
     unusual, unusual_unread = await _unusual(request, asked)
     source = throttle_source_of(request)
     if source is None:
