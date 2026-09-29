@@ -179,6 +179,14 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "failures_open_the_breaker_and_a_refusal_is_retried_in_budget",
         "an_unreached_source_is_named_only_to_an_asker_who_could_see_it",
     ]
+    # Connected sources on Ask; `tests/unit/test_acceptance_sources.py`.
+    assert by_module["brain.ops.acceptance_checks_sources"] == [
+        "a_connected_source_answers_on_ask_from_its_index_and_its_source",
+    ]
+    # A switched-on Lark Base on Ask; `tests/unit/test_acceptance_lark_base.py`.
+    assert by_module["brain.ops.acceptance_checks_lark_base"] == [
+        "a_lark_base_answers_on_ask_from_its_index_and_lark",
+    ]
     assert list(by_module) == list(acceptance.CHECK_MODULES)
     oversight = {one.name: one.leaves for one in registered()}
     assert oversight["unusual_volume_is_found_per_person"] == ("M23.2.1",)
@@ -661,9 +669,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         acceptance_audit.NO_DEPLOYMENT_IS_RECORDED_TO_KEEP_OUT,
     )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
-    assert len(outcomes) == 35
+    assert len(outcomes) == 36
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 120
+    assert runs == [(2,)] and len(recorded) == 122
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }

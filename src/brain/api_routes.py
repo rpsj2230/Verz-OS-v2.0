@@ -190,6 +190,8 @@ from brain.identity.roles import NoStandingEntitlement
 from brain.identity.sessions import reach_for
 from brain.knowledge.connector_rows import connected_questions
 from brain.knowledge.document_tools import SEARCH_DOCUMENTS, KnowledgePassage
+from brain.knowledge.lark_base_rows import BaseLane, lane_for_base
+from brain.knowledge.row_store import SessionRowSource
 from brain.knowledge.rows import (
     DEFAULT_ROW_LIMIT,
     MAX_ROW_LIMIT,
@@ -201,6 +203,8 @@ from brain.knowledge.search import KNOWLEDGE_READ
 from brain.ops.classification_store import classified_lane_of
 from brain.ops.connector_store import StoredConnections
 from brain.ops.denial_store import Denial, Denials, StoredDenials, record_beside
+from brain.ops.lark_base_index import LarkBaseUse, switched_on
+from brain.ops.lark_base_live import BaseSchema
 from brain.ops.limit_store import StoreVerdict, ValkeyWindowStore, make_store
 from brain.ops.limits import (
     Limit,
@@ -209,7 +213,7 @@ from brain.ops.limits import (
     retry_after_header,
     retry_hint,
 )
-from brain.ops.live_read_run import live_records_for
+from brain.ops.live_read_run import base_schema_for, live_records_for
 from brain.ops.model_service import ModelService
 from brain.ops.sensitive_referral_store import SensitiveReferrals, StoredSensitiveReferrals
 from brain.ops.trace_sink import CountingTraceSink
@@ -994,6 +998,39 @@ async def connected_questions_of(state: Any) -> tuple[FastPathRule, ...]:
     return connected_questions(one.connector for one in connected)
 
 
+def base_schema_of(state: Any) -> BaseSchema:
+    """This process's one reading of a switched-on Lark Base's schema, kept on the state.
+
+    One per process, so the question's lane and its live read see the same tables and the schema
+    read for one question spares the next the listings (`brain.ops.lark_base_live.BaseSchema`).
+    """
+    found = getattr(state, "lark_base_schema", None)
+    if isinstance(found, BaseSchema):
+        return found
+    built = base_schema_for(getattr(state, "vault", None))
+    state.lark_base_schema = built
+    return built
+
+
+async def base_lane_for(use: LarkBaseUse | None, schema: BaseSchema, sessions: Any) -> BaseLane:
+    """The Base's tables as Ask reads them, or an empty lane with no Base or no database."""
+    if use is None or not isinstance(sessions, async_sessionmaker):
+        return BaseLane()
+    known = await schema.tables(use)
+    return lane_for_base([(one.table, one.named()) for one in known], SessionRowSource(sessions))
+
+
+async def base_lane_of(state: Any) -> BaseLane:
+    """The switched-on Lark Base's question shapes, readers and policies (M11.6.3, M11.6.5).
+
+    Read on each question, as `classified_lane_of` reads the uploaded tables: a Base switched on
+    in Connect Lark answers from the next question and one switched off contributes nothing.
+    """
+    return await base_lane_for(
+        switched_on(), base_schema_of(state), getattr(state, "db_sessions", None)
+    )
+
+
 def live_records_of(state: Any) -> LiveRecords | None:
     """What reads a connected source's records live for this process, or None where nothing can.
 
@@ -1008,7 +1045,7 @@ def live_records_of(state: Any) -> LiveRecords | None:
     sessions = getattr(state, "db_sessions", None)
     if not isinstance(sessions, async_sessionmaker):
         return None
-    built = live_records_for(sessions, getattr(state, "vault", None))
+    built = live_records_for(sessions, getattr(state, "vault", None), schema=base_schema_of(state))
     state.live_records = built
     return built
 
@@ -1329,7 +1366,14 @@ async def answered_for(
     tables = await classified_lane_of(request.app.state)
     # And every connected source's records, asked in the same words (M11.6.5, M11.6.2).
     sourced = await connected_questions_of(request.app.state)
-    rules = (*getattr(request.app.state, "fast_path_rules", ()), *tables.rules, *sourced)
+    # And a Lark Base switched on in Connect Lark, table by table (M11.6.3).
+    base = await base_lane_of(request.app.state)
+    rules = (
+        *getattr(request.app.state, "fast_path_rules", ()),
+        *tables.rules,
+        *sourced,
+        *base.rules,
+    )
     sink = getattr(request.app.state, "trace_sink", None) or CountingTraceSink()
     # What a finished request owes, installed by `brain.app.lifespan` through
     # `request_recorders_for`. Empty on a process with no database, which has nowhere to hold
@@ -1364,7 +1408,7 @@ async def answered_for(
     referral = await referred(request, asking.reach, ask.question)
 
     address = from_web(ask.question, ask.agent)
-    policies = {**field_policies(registry), **tables.policies}
+    policies = {**field_policies(registry), **tables.policies, **base.policies}
     # A referred question is looked up in no store and stored in none: the step is entered and
     # misses, as it does on a process with none, so the request row reads as any other's.
     caching = (
@@ -1417,7 +1461,7 @@ async def answered_for(
             origin=origin,
             recorders=recorders,
             rules=rules,
-            readers={**row_readers(registry), **tables.readers},
+            readers={**row_readers(registry), **tables.readers, **base.readers},
             entitlement=reach,
             policies=policies,
             reachable_sources=sources,
@@ -1441,7 +1485,7 @@ async def answered_for(
             # A connected source's record is read from it while the asker waits (M11.9.2), and
             # each source's rows are redacted by its own classification (M15.4.2).
             live=live_records_of(request.app.state),
-            source_policies=source_field_policies(registry),
+            source_policies={**source_field_policies(registry), **base.source_policies},
         )
         if answered.text is not None:
             # An answer computed on this request at this reach, stored under the key its own

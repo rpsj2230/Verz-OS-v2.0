@@ -35,7 +35,7 @@ Scope: every part that touches the world is handed in (the keys, the caller, the
 clock), so the tests drive it over recorded replies, and `live_records_for` is the one place the
 real ones are chosen.
 
-Task ids: M11.9.2, M11.5.1, M11.2.5
+Task ids: M11.9.2, M11.5.1, M11.2.5, M11.6.3
 """
 
 from __future__ import annotations
@@ -73,6 +73,8 @@ from brain.ops.connector_sync_run import (
     WorkerConnectorKeys,
     authorization,
 )
+from brain.ops.lark_base_index import HttpsTokenIssuer, switched_on
+from brain.ops.lark_base_live import BaseSchema, with_base
 from brain.ops.live_records import SourceRecords
 from brain.ops.secrets import SecretsUnavailableError
 from brain.ops.webhook_delivery import SystemResolver
@@ -228,15 +230,31 @@ def _utc_now() -> datetime:
     return datetime.now(tz=UTC)
 
 
+def base_schema_for(vault: RunTokenVault | None) -> BaseSchema:
+    """The process's one reading of a switched-on Lark Base's schema, over its vault."""
+    return BaseSchema(
+        keys=WorkerConnectorKeys(vault),
+        caller=HttpsSourceCaller(timeout_seconds=LIVE_READ_TIMEOUT_MS / 1000),
+        resolver=SystemResolver(),
+        issuer=HttpsTokenIssuer(),
+        clock=_utc_now,
+    )
+
+
 def live_records_for(
-    sessions: async_sessionmaker[AsyncSession] | None, vault: RunTokenVault | None
+    sessions: async_sessionmaker[AsyncSession] | None,
+    vault: RunTokenVault | None,
+    *,
+    schema: BaseSchema | None = None,
 ) -> SourceRecords | None:
     """The live reads this process makes, over its database and its vault, or None with no database.
 
     None leaves the answer lane answering from the rows it has, which is every process with no
     connection table to read. A process with no vault still reads its connections and refuses each
     read for want of a key, so the answer says the source could not be reached rather than
-    answering from the index.
+    answering from the index. A Lark Base switched on in Connect Lark is read beside the connected
+    sources (`brain.ops.lark_base_live`), its schema from `schema`, which the answer route shares
+    so that the question and its live read see the same tables.
     """
     if sessions is None:
         return None
@@ -244,14 +262,27 @@ def live_records_for(
     caller = HttpsSourceCaller(timeout_seconds=LIVE_READ_TIMEOUT_MS / 1000)
     resolver = SystemResolver()
     stored = StoredConnections(sessions)
+    tables = base_schema_for(vault) if schema is None else schema
+    issuer = HttpsTokenIssuer()
 
     async def connected() -> LiveSources:
         rows = await stored.connected()
-        return ConnectedSources(
+        sources = ConnectedSources(
             {one.connector: one for one in rows},
             keys=keys,
             caller=caller,
             resolver=resolver,
+            clock=_utc_now,
+        )
+        use = switched_on()
+        return with_base(
+            sources,
+            use,
+            () if use is None else await tables.tables(use),
+            keys=keys,
+            caller=caller,
+            resolver=resolver,
+            issuer=issuer,
             clock=_utc_now,
         )
 
