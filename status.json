@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-29T06:30:44.870129+00:00",
-  "commit": "537f6a4f",
-  "commit_subject": "A department reader reads only the classifications of tables within their reach, and every other table reads as missing (#204)",
+  "generated_at": "2026-09-29T06:35:43.704984+00:00",
+  "commit": "20d405c0",
+  "commit_subject": "Every task starts from the code already written for it, and the four area-wide requirement checks move to the wave of their last proof (#196)",
   "total": 1576,
   "done": 410,
   "percent": 26.0,
@@ -25,12 +25,12 @@
     {
       "wave": 1,
       "name": "The gate",
-      "total": 160,
+      "total": 156,
       "done": 151,
-      "percent": 94.4,
+      "percent": 96.8,
       "in_progress": 0,
       "ready_for_testing": 2,
-      "blocked": 7,
+      "blocked": 3,
       "open": 0,
       "acts": 1,
       "decided": 7
@@ -51,39 +51,39 @@
     {
       "wave": 3,
       "name": "Agents, knowledge, console",
-      "total": 575,
+      "total": 576,
       "done": 41,
       "percent": 7.1,
       "in_progress": 1,
       "ready_for_testing": 0,
       "blocked": 0,
-      "open": 533,
+      "open": 534,
       "acts": 1,
       "decided": 56
     },
     {
       "wave": 4,
       "name": "Doing, lifecycle, extensions",
-      "total": 227,
+      "total": 229,
       "done": 4,
-      "percent": 1.8,
+      "percent": 1.7,
       "in_progress": 0,
       "ready_for_testing": 0,
       "blocked": 0,
-      "open": 223,
+      "open": 225,
       "acts": 0,
       "decided": 23
     },
     {
       "wave": 5,
       "name": "Hands, delivery, go-live",
-      "total": 215,
+      "total": 216,
       "done": 23,
-      "percent": 10.7,
+      "percent": 10.6,
       "in_progress": 0,
       "ready_for_testing": 0,
       "blocked": 0,
-      "open": 192,
+      "open": 193,
       "acts": 42,
       "decided": 18
     },
@@ -922,9 +922,9 @@
       "updated": "2026-09-28"
     },
     "M1.8.8": {
-      "status": "BLOCKED",
-      "why": "the owner records the remaining permissions rows on Requirement checks (needs-rupash 91, check 7)",
-      "updated": "2026-09-28"
+      "status": "OPEN",
+      "why": "moved to Wave 4 (needs-rupash 112): closes when every permissions requirement row has its proof on the install",
+      "updated": "2026-09-29"
     },
     "M2.3.1": {
       "status": "BLOCKED",
@@ -932,9 +932,9 @@
       "updated": "2026-09-28"
     },
     "M2.3.2": {
-      "status": "BLOCKED",
-      "why": "the owner records the remaining departments rows on Requirement checks (needs-rupash 91, check 7)",
-      "updated": "2026-09-28"
+      "status": "OPEN",
+      "why": "moved to Wave 4 (needs-rupash 112): closes when every departments requirement row has its proof on the install",
+      "updated": "2026-09-29"
     },
     "M5.6.1": {
       "status": "BLOCKED",
@@ -947,9 +947,9 @@
       "updated": "2026-09-28"
     },
     "M5.6.5": {
-      "status": "BLOCKED",
-      "why": "the owner's models check on the install (needs-rupash 91, check 6), once the providers answer (needs-rupash 98)",
-      "updated": "2026-09-28"
+      "status": "OPEN",
+      "why": "moved to Wave 3 (needs-rupash 112): closes when every models requirement row has its proof on the install",
+      "updated": "2026-09-29"
     },
     "M5.7.1": {
       "status": "READY FOR TESTING",
@@ -1087,9 +1087,9 @@
       "updated": "2026-09-28"
     },
     "M24.3.6": {
-      "status": "BLOCKED",
-      "why": "the owner records the remaining observability rows on Requirement checks (needs-rupash 91, check 7)",
-      "updated": "2026-09-28"
+      "status": "OPEN",
+      "why": "moved to Wave 5 (needs-rupash 112): closes when every observability requirement row has its proof on the install",
+      "updated": "2026-09-29"
     },
     "M31.2.1.4": {
       "status": "READY FOR TESTING",
