@@ -174,6 +174,17 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "a_burst_is_paced_by_the_source_s_documented_ceiling",
         "failures_open_the_breaker_and_a_refusal_is_retried_in_budget",
         "an_unreached_source_is_named_only_to_an_asker_who_could_see_it",
+        "a_source_s_live_calls_are_measured_on_its_page",
+    ]
+    # Retrieval on the install's own index; `tests/unit/test_acceptance_retrieval.py`.
+    assert by_module["brain.ops.acceptance_retrieval"] == [
+        "a_typed_row_tool_reads_only_the_callers_rows_and_columns",
+        "a_word_in_a_title_outranks_a_word_in_passing",
+        "a_documents_passages_come_back_together_in_reading_order",
+        "a_narrow_reader_is_given_their_own_passages_past_a_nearer_crowd",
+        "hybrid_search_returns_what_each_leg_finds_fused_by_rank",
+        "the_database_withholds_passages_the_statement_did_not_filter",
+        "three_readers_get_everything_in_their_scope_and_nothing_else",
     ]
     assert list(by_module) == list(acceptance.CHECK_MODULES)
     oversight = {one.name: one.leaves for one in registered()}
@@ -574,6 +585,10 @@ WRITTEN_BY_CHECKS = (
     "ops.outbox_delivery",
     "gate.grants_version",
     "gate.policy_epoch",
+    "mem.persistent",
+    "mem.adaptive",
+    "mem.learning",
+    "mem.correction",
     "agent.browser_envelope",
     "agent.browser_session",
     "obs.trace_step",
