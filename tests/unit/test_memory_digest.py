@@ -508,10 +508,11 @@ def test_the_digest_period_is_short_enough_that_undo_still_does_something(
     than a habit.**
 
     A digest reporting learnings that have already decayed below `formation.RECALL_FLOOR` is a
-    list of undo buttons that change nothing anybody would notice, so a memory formed at the
-    start of the window has to still be reachable at the end of it. That property reads
-    `HALF_LIFE_DAYS` and `RECALL_FLOOR` from another module, so it cannot be satisfied by
-    moving `DIGEST_PERIOD` and the assertion together.
+    list of undo buttons that change nothing anybody would notice, so an inference formed at the
+    start of the window has to still be reachable at the end of it, at the shortest half-life an
+    administrator may save. That property reads the knob's bound, `EXTRACTED_CONFIDENCE` and
+    `RECALL_FLOOR` from other modules, so it cannot be satisfied by moving `DIGEST_PERIOD` and
+    the assertion together.
 
     The second half watches the diagnostic actually report something. A `digest_gaps` nobody
     has seen return a row is a `digest_gaps` nobody can rely on, and this check is the one
@@ -519,7 +520,19 @@ def test_the_digest_period_is_short_enough_that_undo_still_does_something(
 
     Delete this and the period can be lengthened to a month for convenience, and the oldest
     entries in every email will be for memories the system stopped using before it sent it."""
-    assert confidence_now(1.0, formed_at=NOW - DIGEST_PERIOD, now=NOW) >= RECALL_FLOOR
+    from brain.memory.turn import EXTRACTED_CONFIDENCE
+    from brain.ops.tuning import INFERRED_HALF_LIFE, KNOB_BY_NAME
+
+    shortest = float(KNOB_BY_NAME[INFERRED_HALF_LIFE].lowest)
+    assert (
+        confidence_now(
+            EXTRACTED_CONFIDENCE,
+            formed_at=NOW - DIGEST_PERIOD,
+            now=NOW,
+            half_life_days=shortest,
+        )
+        >= RECALL_FLOOR
+    )
 
     monkeypatch.setattr("brain.memory.digest.DIGEST_PERIOD", timedelta(days=90))
 
