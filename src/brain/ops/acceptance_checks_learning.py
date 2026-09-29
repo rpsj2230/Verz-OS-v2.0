@@ -19,7 +19,7 @@ runs, and the product's own readers are then asked under them through
 `brain.ops.tuning.reading`, which lends the rows to the check's task alone, so no other request the
 process serves decays a memory at a figure that is about to be rolled back.
 
-Task ids: M16.3.5, M16.3.6, M16.4.2, M16.5.3, M16.5.4, M16.6.8, M27.7.21, M33.3.1.4
+Task ids: M16.3.4, M16.3.5, M16.3.6, M16.4.2, M16.5.3, M16.5.4, M16.6.8, M27.7.21, M33.3.1.4
 """
 
 from __future__ import annotations
@@ -599,3 +599,108 @@ async def the_waiting_queue_alarms_past_one_sitting_of_review(h: Harness) -> Non
         raise CheckFailedError("the Waiting view did not raise its alarm past one sitting")
     if await waiting(of_b) not in ((None, None), (0, False)):
         raise CheckFailedError("another department's administrator was shown gated changes")
+
+
+# ------------------------------------------- M16.3.4 ready for review, and applied by nobody
+#: What a scheduled job would have to name to put a learned rule into effect by itself: the rule
+#: table's row, the learning record, or the promotion verdict.
+PUTS_A_RULE_INTO_EFFECT: Final[frozenset[str]] = frozenset(
+    {"FastPathRuleRow", "LearningRow", "may_promote", "tier_two_rows"}
+)
+
+#: The same, written as a statement rather than through a model: a write to either table. A
+#: mention of a table's name is not one, which is what the erasure store's list of tables is.
+WRITES_A_RULE_IN_SQL: Final[tuple[str, ...]] = (
+    "insert into gate.fast_path_rule",
+    "update gate.fast_path_rule",
+    "insert into mem.learning",
+    "update mem.learning",
+)
+
+
+@check(
+    leaves=("M16.3.4",),
+    sentence=(
+        "A tier-two rule two separate conversations agree on is offered for review at the "
+        "agreement in force and not below it, and afterwards it is still only a proposal: no "
+        "fast-lane rule row holds it, and none of the jobs this install's scheduler can start "
+        "names a rule row, a learning record or the promotion verdict."
+    ),
+)
+async def a_ready_rule_waits_for_a_person_and_no_job_applies_it(h: Harness) -> None:
+    import ast
+    import importlib
+    import inspect
+
+    from brain.console.reach_view import tier_two_rows
+    from brain.core.entitlement import Capability
+    from brain.core.scope import Scope
+    from brain.memory.digest import Learning
+    from brain.memory.formation import Formation, MemoryKind
+    from brain.memory.tiers import Change, Occurrence, propose
+    from brain.ops.controls import CONTROLS
+    from brain.ops.schedule_runner import RUNNERS
+    from brain.ops.tuning import PROMOTION_AGREEMENT_KNOB, promotion_agreement, reading
+
+    subject = f"acceptance_rule_{h.run}"
+    rule = Learning(
+        memory_id=f"acceptance_ready_{h.run}",
+        proposal=propose(Change.FAST_PATH_RULE, subject=subject),
+        formation=Formation(
+            principal_id=h.principal(A, "rule_writer"),
+            capabilities=(Capability(value=LEARNING_READ),),
+            scope=Scope.unrestricted(),
+            ent_hash="0" * 32,
+            formed_at=h.now,
+            kind=MemoryKind.ADAPTIVE,
+        ),
+        agent_id=f"acceptance_agent_{h.run}",
+    )
+
+    def ready(agreeing: int) -> bool:
+        seen = {
+            rule.memory_id: tuple(
+                Occurrence(conversation_id=f"{h.run}_{n}", on=h.now) for n in range(agreeing)
+            )
+        }
+        rows = tier_two_rows((rule,), agent_id=rule.agent_id or "", occurrences=seen, now=h.now)
+        return bool(rows) and rows[0].promote_ready
+
+    with reading({PROMOTION_AGREEMENT_KNOB: 2}):
+        at = promotion_agreement()
+        if ready(at - 1) or not ready(at):
+            raise CheckFailedError("a rule was offered for review below or not at the agreement")
+
+    held = (
+        await h.execute(
+            text(
+                "SELECT count(*) FROM gate.fast_path_rule WHERE position(:s in template) > 0"
+            ).bindparams(s=subject)
+        )
+    ).scalar_one()
+    if held:
+        raise CheckFailedError("a rule offered for review was put into effect without a person")
+
+    runnable = {one.name for one in RUNNERS if one.run is not None}
+    for control in CONTROLS:
+        if control.name not in runnable:
+            continue
+        module = importlib.import_module(control.symbols[0].split(":", 1)[0])
+        tree = ast.parse(inspect.getsource(module))
+        named = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
+        named |= {node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute)}
+        named |= {
+            alias.name
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom)
+            for alias in node.names
+        }
+        statements = {
+            " ".join(node.value.lower().split())
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Constant) and isinstance(node.value, str)
+        }
+        if named & PUTS_A_RULE_INTO_EFFECT or any(
+            write in one for one in statements for write in WRITES_A_RULE_IN_SQL
+        ):
+            raise CheckFailedError("a scheduled job could put a learned rule into effect")

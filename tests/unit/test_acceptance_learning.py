@@ -1,6 +1,6 @@
 """The learning install acceptance checks: registered, passing on PostgreSQL, and able to fail.
 
-The pure half holds the six checks to the leaves they prove and to the work breakdown. The
+The pure half holds the seven checks to the leaves they prove and to the work breakdown. The
 database half builds PostgreSQL to head once for the module and runs the checks as the worker would:
 each passes, and every table they write to holds, row for row, what it held before. Then the
 property each check proves is broken, one at a time, by replacing the product function the check
@@ -8,7 +8,7 @@ relies on where the product looks it up, and the check fails with its own senten
 
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
-Task ids: M16.3.5, M16.3.6, M16.4.2, M16.5.3, M16.5.4, M16.6.8, M27.7.21, M33.3.1.4
+Task ids: M16.3.4, M16.3.5, M16.3.6, M16.4.2, M16.5.3, M16.5.4, M16.6.8, M27.7.21, M33.3.1.4
 """
 
 from __future__ import annotations
@@ -34,6 +34,7 @@ LEAVES = {
     "learning_figures_are_set_in_bounds_and_move_no_tier": ("M16.6.8",),
     "a_department_admin_reads_their_own_department_s_memory": ("M16.5.3",),
     "the_waiting_queue_alarms_past_one_sitting_of_review": ("M16.5.4",),
+    "a_ready_rule_waits_for_a_person_and_no_job_applies_it": ("M16.3.4",),
 }
 
 #: Every table the learning checks write to, which must hold afterwards exactly what it held before.
@@ -138,7 +139,7 @@ def contents(url: str) -> dict[str, tuple[int, str]]:
 def test_on_a_real_database_every_learning_check_passes_and_leaves_nothing_behind(
     database: str,
 ) -> None:
-    """**The six checks as the worker runs them, against PostgreSQL at head.** Each passes with
+    """**The seven checks as the worker runs them, against PostgreSQL at head.** Each passes with
     no reason, and every table any of them wrote to holds row for row what it held before. Delete
     this and a check that cannot pass on the real schema, or one that commits a correction to a
     client's install, reaches the owner's server first."""
@@ -311,4 +312,53 @@ def test_the_waiting_check_fails_when_the_alarm_never_raises(
     assert refused(database, "the_waiting_queue_alarms_past_one_sitting_of_review") == (
         FAILED,
         "the Waiting view did not raise its alarm past one sitting",
+    )
+
+
+@pytest.mark.needs_db
+def test_the_ready_rule_check_fails_when_one_conversation_is_agreement_enough(
+    database: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A verdict that counts any agreement at all offers a rule on one person's phrasing. Delete
+    this and the check can pass on an install whose Learning screen does."""
+    from brain.console import reach_view
+
+    monkeypatch.setattr(
+        reach_view, "may_promote", lambda proposal, seen, *, now, agreement, **kw: bool(seen)
+    )
+
+    assert refused(database, "a_ready_rule_waits_for_a_person_and_no_job_applies_it") == (
+        FAILED,
+        "a rule was offered for review below or not at the agreement",
+    )
+
+
+@pytest.mark.needs_db
+def test_the_ready_rule_check_fails_when_a_scheduled_job_writes_learning_records(
+    database: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A job the scheduler starts that writes the learning table is the job the leaf says does not
+    exist. Delete this and the check can pass on an install that has one."""
+    import dataclasses
+
+    from brain.ops import controls, schedule_runner
+
+    writer = dataclasses.replace(
+        controls.CONTROLS[0],
+        name="acceptance_rule_writer",
+        symbols=("brain.ops.memory_store:learning_row",),
+    )
+    monkeypatch.setattr(controls, "CONTROLS", (*controls.CONTROLS, writer))
+    monkeypatch.setattr(
+        schedule_runner,
+        "RUNNERS",
+        (
+            *schedule_runner.RUNNERS,
+            schedule_runner.Runner(name="acceptance_rule_writer", run=schedule_runner.canary_run),
+        ),
+    )
+
+    assert refused(database, "a_ready_rule_waits_for_a_person_and_no_job_applies_it") == (
+        FAILED,
+        "a scheduled job could put a learned rule into effect",
     )
