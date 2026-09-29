@@ -707,11 +707,20 @@ def test_no_second_caller_of_a_memory_listing_has_arrived_unargued() -> None:
     `test_a_member_forgets_a_memory_formed_from_their_own_words` in
     `tests/unit/test_mine_routes.py`.
 
+    **`brain.estate_routes` calls `review.review_queue` since 2026-09-29**, for M16.5.4, the
+    Waiting view's alarm. It hands the queue only the learnings the page already lists as tier
+    three, which `learning_estate` decided at the reach the caller's run of each agent has, so the
+    queue's own reach filter can only agree, and the alarm is raised on nothing the reader is not
+    shown. Its sibling is
+    `test_the_waiting_alarm_is_raised_past_one_sitting_of_the_rows_listed_and_no_others` in
+    `tests/unit/test_estate_routes.py`.
+
     Delete this and the gap stops being visible, and a listing gets wired at the wrong reach
     by somebody who saw that a caller already existed and assumed the question was settled."""
     assert _callers_of("brain.memory.review") == [
         "brain.console.govern_estate",
         "brain.console.own_things",
+        "brain.estate_routes",
         "brain.ops.memory_store",
     ]
     assert _callers_of("brain.memory.digest") == [

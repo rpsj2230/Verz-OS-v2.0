@@ -12,7 +12,7 @@
  * **What the API sends is compared with the Python models, not with this file's copy of them**, and
  * the bounds a request must respect are read out of the API's own document.
  *
- * Task ids: M27.7.21, M27.7.22, M27.16.1, M16.6.8
+ * Task ids: M27.7.21, M27.7.22, M27.16.1, M16.6.8, M16.5.4
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -204,7 +204,7 @@ function viewLinks(container: HTMLElement): string[] {
 describe("the Learning page", () => {
   test("every field the API sends about the review is read", () => {
     // What breaks if this is deleted: a field added to the review arrives and is dropped.
-    const read = ["basis", "as_of", "tier_one", "tier_two", "tier_three", "tiers", "considered", "undo_says", "staleness"];
+    const read = ["basis", "as_of", "tier_one", "tier_two", "tier_three", "tiers", "considered", "undo_says", "staleness", "queue_alarm"];
     expect(backendModelFields(ROUTES, "LearningReviewView").sort()).toEqual([...read].sort());
   });
 
@@ -308,6 +308,25 @@ describe("the Learning page", () => {
     const waiting = await consoleAt("/learning/waiting", reviewing(learningBody({ tier_three: [{ memory_id: "m3", department: "maintenance", back_to: "a1" }] })));
     expect(waiting.container.querySelector(`[${UNAVAILABLE_MARK}]`)?.textContent).toBe(UNAVAILABLE.decide.label);
     expect(mainText(waiting.container)).toContain("maintenance");
+  });
+
+  test("the Waiting view raises the queue's alarm in the API's words when it is raised, and says nothing when it is not", async () => {
+    // What breaks if this is deleted: an alarm the API raised over the gated changes waiting is
+    // dropped on the way to the page, or one it did not raise is drawn from this console's own count.
+    const routed = [{ memory_id: "m3", department: "maintenance", back_to: "a1" }];
+    const raised = await consoleAt(
+      "/learning/waiting",
+      reviewing(learningBody({ tier_three: routed, queue_alarm: { raised: true, says: sentinel("queue-alarm") } })),
+    );
+    expect(raised.container.querySelector('[data-slot="queue-alarm"]')?.textContent).toBe(sentinel("queue-alarm"));
+    expect(raised.container.querySelector('[data-slot="queue-alarm"]')?.getAttribute("role")).toBe("alert");
+
+    const quiet = await consoleAt(
+      "/learning/waiting",
+      reviewing(learningBody({ tier_three: routed, queue_alarm: { raised: false, says: sentinel("quiet") } })),
+    );
+    expect(quiet.container.querySelector('[data-slot="queue-alarm"]')).toBeNull();
+    expect(mainText(quiet.container)).not.toContain(sentinel("quiet"));
   });
 
   test("tier three withheld is left out of the switch, and its address says why, which an empty tier does not", async () => {

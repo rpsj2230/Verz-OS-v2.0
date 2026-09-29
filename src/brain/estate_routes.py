@@ -81,7 +81,15 @@ one without.
 **Nothing here computes a reach.** There is no `.intersect(` in this module.
 `brain.console.workspace.intersections_in` is run over this source by its test.
 
-Task ids: M27.7.20, M27.7.21, M27.7.22, M27.8.6, M7.6.1
+**The Waiting view carries the review queue's alarm, raised on the rows it lists (M16.5.4).**
+`brain.memory.review.review_queue` decides whether the gated changes waiting have grown past one
+sitting of review, and it is handed the learnings the page lists as tier three and no others, so
+the alarm is a statement about what this reader was shown. Handing it every stored learning
+would raise an alarm on rows the reader may not see, which is a count of them arriving as a
+banner. The alarm carries a sentence and no figure, and is absent wherever tier three is. See
+`brain.memory.review.THE_ALARM_IS_RAISED_ON_WHAT_THE_READER_CAN_SEE`.
+
+Task ids: M27.7.20, M27.7.21, M27.7.22, M27.8.6, M7.6.1, M16.5.4
 """
 
 from __future__ import annotations
@@ -119,13 +127,14 @@ from brain.console.reach_view import (
     MemoryText,
     MemoryViewError,
     Revision,
+    TierThreeRouting,
     provenance_of,
 )
 from brain.console.read_replica import StalenessBanner
 from brain.console.reads import permitted
 from brain.console.screens import screen
 from brain.console.workspace import Basis
-from brain.core.entitlement import Capability
+from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.errors import Absent, Failed
 from brain.core.scope import Scope
 from brain.knowledge.kinds import KnowledgeKind
@@ -134,6 +143,7 @@ from brain.listing import Column, ListAsked, Listing
 from brain.memory.correction import Correction, Supersession
 from brain.memory.digest import Learning, Undo
 from brain.memory.formation import Formation, MemoryKind
+from brain.memory.review import review_queue
 from brain.memory.signals import Signal
 from brain.memory.tiers import BLAST_RADIUS, Change, Proposal, Tier, TierError
 from brain.ops.memory_store import (
@@ -381,6 +391,22 @@ class LearningReviewView(BaseModel):
     #: What the confirmation says an undo will do, keyed by `control_writes`. See `UNDO_SAYS`.
     undo_says: dict[str, str]
     staleness: StalenessBanner | None = None
+    #: The review queue's alarm over the tier-three rows above (M16.5.4), null where they are.
+    queue_alarm: QueueAlarmView | None = None
+
+
+class QueueAlarmView(BaseModel):
+    """Whether the gated changes this reader is shown have grown past one sitting of review.
+
+    A sentence and no figure, for `brain.memory.review.QueueAlarm`'s reasons: a queue length
+    beside a filtered list is a subtraction, and a number is the part of an alarm that gets
+    forwarded out of context.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    raised: bool
+    says: str
 
 
 class UndoAsked(BaseModel):
@@ -1025,7 +1051,33 @@ async def learning(request: Request, asked: Asked) -> LearningReviewView:
         tiers=tier_rules(),
         undo_says={correction.value: said for correction, said in UNDO_SAYS.items()},
         staleness=served.banner,
+        queue_alarm=waiting_alarm(
+            review.tier_three, stored.learnings, reader=asked.reach, now=asked.now
+        ),
     )
+
+
+def waiting_alarm(
+    tier_three: Sequence[TierThreeRouting] | None,
+    learnings: Sequence[Learning],
+    *,
+    reader: EntitlementSet,
+    now: datetime,
+) -> QueueAlarmView | None:
+    """The review queue's alarm over the tier-three rows the page lists, or None with none listed.
+
+    `brain.memory.review.review_queue` decides, over the learnings named by those rows and no
+    others, so the alarm reads exactly what this reader is shown. The sentence is the domain's,
+    made one a page can print.
+    """
+    if tier_three is None:
+        return None
+    shown = {one.memory_id for one in tier_three}
+    queue = review_queue(
+        now=now, caller=reader, learnings=[one for one in learnings if one.memory_id in shown]
+    )
+    said = queue.alarm.reason
+    return QueueAlarmView(raised=queue.alarm.raised, says=f"{said[:1].upper()}{said[1:]}.")
 
 
 @router.post(UNDO_PATH, response_model=LearningUndoneView, responses=COMMON_RESPONSES)

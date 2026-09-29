@@ -19,7 +19,7 @@ runs, and the product's own readers are then asked under them through
 `brain.ops.tuning.reading`, which lends the rows to the check's task alone, so no other request the
 process serves decays a memory at a figure that is about to be rolled back.
 
-Task ids: M16.3.5, M16.3.6, M16.4.2, M16.6.8, M27.7.21, M33.3.1.4
+Task ids: M16.3.5, M16.3.6, M16.4.2, M16.5.3, M16.5.4, M16.6.8, M27.7.21, M33.3.1.4
 """
 
 from __future__ import annotations
@@ -442,3 +442,160 @@ async def learning_figures_are_set_in_bounds_and_move_no_tier(h: Harness) -> Non
 
     if dict(held()) != before:
         raise CheckFailedError("the check changed what the process running it holds")
+
+
+# ------------------------------------------------ M16.5.3 a department's memory, its admin's
+@check(
+    leaves=("M16.5.3",),
+    sentence=(
+        "What a person of acceptance_a asked Ask to remember is read on the Memory screen by an "
+        "administrator of acceptance_a holding the screen's grant in their department, and not by "
+        "one of acceptance_b holding the same grant in theirs."
+    ),
+)
+async def a_department_admin_reads_their_own_department_s_memory(h: Harness) -> None:
+    from brain.console.reads import permitted, plane_capability
+    from brain.console.screens import screen
+    from brain.ops.acceptance_checks import KNOWLEDGE_READS
+
+    placed = await people(h)
+    words = f"I sign as {h.word()}"
+    await stated_memory(h, placed.member, words, 1)
+    memory_read = screen("memory").read
+    readers: dict[str, Any] = {}
+    for department in (A, B):
+        made = h.principal(department, "memory_admin")
+        await h.person(
+            made,
+            department=department,
+            grants=_in(
+                department,
+                memory_read.requires.value,
+                plane_capability(memory_read.plane).value,
+                *KNOWLEDGE_READS,
+            ),
+        )
+        readers[department] = await h.reach(made)
+        if not permitted(memory_read, readers[department], h.now):
+            raise CheckFailedError("a department administrator could not open the Memory screen")
+    if words not in await shown_about(h, placed.member, readers[A], h.now):
+        raise CheckFailedError(
+            "a department administrator was not shown their own department's memory"
+        )
+    if await shown_about(h, placed.member, readers[B], h.now):
+        raise CheckFailedError("another department's administrator was shown a person's memory")
+
+
+# ------------------------------------------- M16.5.4 the Waiting queue and its alarm
+@check(
+    leaves=("M16.5.4",),
+    sentence=(
+        "Changes that would widen who sees what, learned by an agent of acceptance_a, are listed "
+        "on the Learning screen's Waiting view of an administrator over every department, with "
+        "its alarm quiet at one sitting's worth and raised at one more; an administrator of "
+        "acceptance_b is shown none of them and no alarm."
+    ),
+)
+async def the_waiting_queue_alarms_past_one_sitting_of_review(h: Harness) -> None:
+    from sqlalchemy import select
+
+    from brain.agent_routes import record_of
+    from brain.agents.model import visible_agent_ids
+    from brain.console.govern_estate import learning_estate, spans_departments
+    from brain.console.reads import plane_capability
+    from brain.console.screens import screen
+    from brain.core.entitlement import Capability
+    from brain.core.scope import Scope
+    from brain.estate_routes import MAX_LEARNINGS_CONSIDERED, learnings_stored, waiting_alarm
+    from brain.gate.roster import viewer_for
+    from brain.identity.principal_store import StoredPrincipals
+    from brain.memory.digest import Learning
+    from brain.memory.formation import Formation, MemoryKind
+    from brain.memory.review import QUEUE_ALARM_AT
+    from brain.memory.tiers import Change, propose
+    from brain.memory.turn import MEMORY_ID_PREFIX
+    from brain.ops.acceptance_checks import KNOWLEDGE_READS
+    from brain.ops.acceptance_checks_skills import _an_agent
+    from brain.ops.memory_store import learning_row, memory_row
+    from brain.tables.agent import AgentRow
+
+    placed = await people(h)
+    steward = h.principal(A, "queue_steward")
+    await h.person(steward, department=A, grants=_in(A, *KNOWLEDGE_READS))
+    agent = await _an_agent(h, steward, capabilities=KNOWLEDGE_READS)
+    spans, learning_read = screen("scopes").read, screen("learning").read
+    over_everything = h.principal(A, "queue_admin")
+    await h.person(
+        over_everything,
+        department=A,
+        grants=tuple(
+            (one, Scope.unrestricted())
+            for one in (
+                spans.requires.value,
+                plane_capability(spans.plane).value,
+                learning_read.requires.value,
+                plane_capability(learning_read.plane).value,
+                *KNOWLEDGE_READS,
+            )
+        ),
+    )
+    of_b = h.principal(B, "queue_admin")
+    await h.person(
+        of_b, department=B, grants=_in(B, learning_read.requires.value, *KNOWLEDGE_READS)
+    )
+
+    async def gated(number: int) -> None:
+        learning = Learning(
+            memory_id=f"{MEMORY_ID_PREFIX}{h.run}q{number:02d}",
+            proposal=propose(Change.SCOPE_WIDENING, subject=f"acceptance_{h.run}_{number}"),
+            formation=Formation(
+                principal_id=placed.member,
+                capabilities=(Capability(value=KNOWLEDGE_READS[0]),),
+                scope=Scope.department(A),
+                ent_hash=(await h.reach(placed.member)).ent_hash(),
+                formed_at=h.now,
+                kind=MemoryKind.ADAPTIVE,
+            ),
+            formed_confidence=0.9,
+            agent_id=agent,
+        )
+        await h.execute(memory_row(learning, f"a gated change {number}"), learning_row(learning))
+
+    async def waiting(principal_id: str) -> tuple[int | None, bool | None]:
+        """How many rows the Waiting view lists, and whether its alarm is raised, as the route
+        decides both, or None for each where the view is withheld."""
+        person = await StoredPrincipals(h.sessions).live_principal(principal_id)
+        if person is None:
+            raise CheckFailedError("a reserved person was not live in the directory")
+        reach = await h.reach(principal_id)
+        async with h.sessions() as session:
+            rows = (await session.execute(select(AgentRow).where(AgentRow.id == agent))).scalars()
+            records = [one for one in map(record_of, rows) if one is not None]
+            seen = visible_agent_ids(records, viewer_for(person))
+            stored = await learnings_stored(
+                session,
+                tuple(one for one in records if one.agent_id in seen),
+                MAX_LEARNINGS_CONSIDERED,
+            )
+        review = learning_estate(
+            basis=spans_departments(reach, h.now),
+            records=stored.records,
+            learnings=stored.learnings,
+            caller=reach,
+            now=h.now,
+            supersessions=stored.corrections.supersessions,
+            demotions=stored.corrections.demotions,
+        )
+        alarm = waiting_alarm(review.tier_three, stored.learnings, reader=reach, now=h.now)
+        listed = None if review.tier_three is None else len(review.tier_three)
+        return listed, None if alarm is None else alarm.raised
+
+    for number in range(QUEUE_ALARM_AT):
+        await gated(number)
+    if await waiting(over_everything) != (QUEUE_ALARM_AT, False):
+        raise CheckFailedError("one sitting's worth of gated changes was not listed quietly")
+    await gated(QUEUE_ALARM_AT)
+    if await waiting(over_everything) != (QUEUE_ALARM_AT + 1, True):
+        raise CheckFailedError("the Waiting view did not raise its alarm past one sitting")
+    if await waiting(of_b) not in ((None, None), (0, False)):
+        raise CheckFailedError("another department's administrator was shown gated changes")
