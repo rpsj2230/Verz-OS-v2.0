@@ -51,6 +51,19 @@ only distinguishing feature is that message, so on that provider an overflow sto
 instead of escalating a tier; that is the conservative direction and it is stated rather than
 papered over with a string match. See `A_PROVIDERS_SENTENCE_DECIDES_NOTHING`.
 
+**A model known to take a reasoning effort is sent its lane's, in its own words, and every other
+model is sent none.** The executor puts the lane's pinned effort (`brain.gate.effort`) on every
+request, and `request_body` is where it becomes a field or nothing. Moonshot's `kimi-k3` always
+thinks, spends its whole reasoning before the first word of the answer, and thinks at its maximum
+when it is sent no effort, which is what every call sent it until 2026-09-29, when an install's
+check pinned a question to it and it ran past its step's twelve seconds on one sentence. A model
+`EFFORT_WORDS` does not name is sent nothing, exactly as before, because a provider answers a
+field or a value it does not know with a 400, and a 400 stops the chain rather than falling back.
+The cost is stated: a thinking model an administrator adds is sent no effort until a release
+names it here. Rejected: sending the product's word to every chat completions model, which puts
+`medium` in front of a model whose words are `low`, `high` and `max`. See
+`A_MODEL_THAT_ALWAYS_THINKS_IS_TOLD_THE_LANES_EFFORT`.
+
 What was rejected. *Installing LiteLLM after all.* It is a second dependency tree the size of
 this repository's, the routing it offers is refused by `driver.LITELLM_IS_A_DRIVER_NOT_A_PROXY`,
 and what is left of it is two POST requests. *The providers' own SDKs.* Neither is a dependency,
@@ -60,7 +73,7 @@ exceptions, which is the leak `NOTHING_FROM_THE_REQUEST_IN_AN_EXCEPTION` names. 
 client.* `ModelDriver` is synchronous on purpose and the executor runs a call in a worker thread,
 so a synchronous client is the one that matches the seam.
 
-Task ids: M5.1.1, M5.1.2, M5.7.1, M5.7.2
+Task ids: M5.1.1, M5.1.2, M5.7.1, M5.7.2, M5.6.1, M6.4.4
 """
 
 from __future__ import annotations
@@ -117,6 +130,16 @@ A_PROVIDERS_SENTENCE_DECIDES_NOTHING: Final = (
     "the chain rather than retrying it."
 )
 
+#: Why a model known to take a reasoning effort is sent the lane's, and every other model none.
+A_MODEL_THAT_ALWAYS_THINKS_IS_TOLD_THE_LANES_EFFORT: Final = (
+    "A model that always thinks spends its whole reasoning before the first word of its answer, "
+    "and one sent no effort thinks at its provider's default, which for kimi-k3 is its maximum "
+    "and ran past a waited-on step's twelve seconds on a one-sentence question. So the lane's "
+    "pinned effort is sent to a model known to take one, in that model's own words, and nothing "
+    "is sent to any other, because a provider refuses a field or a value it does not know with "
+    "a 400 and a 400 stops the chain."
+)
+
 # --------------------------------------------------------------------------- the figures
 
 #: The version of Anthropic's Messages API this transport writes. A header the provider
@@ -147,6 +170,23 @@ CONTEXT_EXCEEDED_CODES: Final[frozenset[str]] = frozenset({"context_length_excee
 
 #: Error codes that mean the provider declined on content grounds rather than failing.
 REFUSAL_CODES: Final[frozenset[str]] = frozenset({"content_filter", "content_policy_violation"})
+
+#: The field a reasoning effort travels under, in `DriverRequest.extra` and in a chat completions
+#: body alike. It is `brain.gate.effort.EFFORT_PARAMETER`, and a test holds the two equal; it is
+#: not imported, because the gate sits above this module.
+EFFORT_FIELD: Final = "reasoning_effort"
+
+#: The models known to take a reasoning effort, by provider and model, and the word each of the
+#: product's efforts (`brain.gate.effort.Effort`) is sent as. A model not named here is sent no
+#: effort. See `A_MODEL_THAT_ALWAYS_THINKS_IS_TOLD_THE_LANES_EFFORT`.
+EFFORT_WORDS: Final[Mapping[tuple[str, str], Mapping[str, str]]] = MappingProxyType(
+    {
+        # Kimi's K3 quickstart: K3 always thinks and takes low, high or max, max when sent none.
+        # Its low is already a whole reasoning pass, so the answer lane's medium, where a person
+        # is waiting, is its low; the task lane's high is its high; and no lane asks for max.
+        ("moonshot", "kimi-k3"): MappingProxyType({"low": "low", "medium": "low", "high": "high"}),
+    }
+)
 
 
 class Wire(enum.StrEnum):
@@ -302,20 +342,37 @@ def _system_and_turns(request: DriverRequest) -> tuple[str, list[dict[str, str]]
     return system, turns
 
 
+def effort_word(provider: str, model: str, effort: str | None) -> str | None:
+    """The word `model` is sent as its reasoning effort for the product's `effort`, or None.
+
+    None for a model `EFFORT_WORDS` does not name, and for a request carrying no effort. See
+    `A_MODEL_THAT_ALWAYS_THINKS_IS_TOLD_THE_LANES_EFFORT`.
+    """
+    words = EFFORT_WORDS.get((provider, model))
+    if words is None or effort is None:
+        return None
+    return words.get(effort)
+
+
 def request_body(wire: ProviderWire, request: DriverRequest) -> dict[str, Any]:
     """The JSON body one call posts. The provider's knobs in `extra` are passed through.
 
     `extra` is added last and cannot replace the model, the messages or the output limit: a
     caller-supplied `model` would answer from a deployment the router never chose, which is the
-    second router `DriverRequest` exists to refuse.
+    second router `DriverRequest` exists to refuse. The one knob that is not passed through is
+    the lane's effort, which is sent in the model's own words to a model known to take one and
+    left out for every other (`effort_word`).
     """
     limit = request.max_output_tokens or DEFAULT_MAX_OUTPUT_TOKENS
     system, turns = _system_and_turns(request)
     body: dict[str, Any] = {
         key: value
         for key, value in request.extra.items()
-        if key not in {"model", "messages", "system", wire.output_limit}
+        if key not in {"model", "messages", "system", wire.output_limit, EFFORT_FIELD}
     }
+    word = effort_word(wire.provider, request.model, request.extra.get(EFFORT_FIELD))
+    if word is not None:
+        body[EFFORT_FIELD] = word
     if wire.wire is Wire.ANTHROPIC_MESSAGES:
         body.update({"model": request.model, "max_tokens": limit, "messages": turns})
         if system:
