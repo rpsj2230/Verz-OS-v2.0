@@ -3,8 +3,8 @@ and each owner reading only what was addressed to them.
 
 Driven through the real application with the steward lookup and the request table held in memory.
 The stub answers the steward's select, records every insert, answers the owner's list from the
-rows it recorded and applies the handled mark's update by its own comparisons, so which requests
-were stored and marked is read off the statements the route made.
+rows it recorded by the statement's own comparisons, and keeps each handled mark by its key, so
+which requests were stored and marked is read off the statements the route made.
 
 Task ids: M4.3.4, M2.2.4, M27.16.1
 """
@@ -18,7 +18,8 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy.sql.dml import Insert, Update
+from sqlalchemy.sql.dml import Insert
+from sqlalchemy.sql.elements import BooleanClauseList
 from sqlalchemy.sql.selectable import Select
 
 from brain.api import API_PREFIX
@@ -56,58 +57,59 @@ GRANTS = {
 NAMES = {"u_narrow": "Nadia Narrow", "u_wide": "Wes Wide"}
 
 
-class Updated:
-    """Enough of an update's result for `mark_handled`: how many rows it changed."""
-
-    def __init__(self, rowcount: int) -> None:
-        self.rowcount = rowcount
+def _holds(clause: Any, row: dict[str, Any]) -> bool:
+    """A where clause of comparisons and conjunctions, applied to one row by its own operators."""
+    if isinstance(clause, BooleanClauseList):
+        return all(_holds(one, row) for one in clause.clauses)
+    return bool(clause.operator(row[clause.left.name], clause.right.value))
 
 
 class Requests:
-    """The steward's grant row and the request table, in memory."""
+    """The steward's grant row, the request table and its handled marks, in memory."""
 
     def __init__(self, steward: str | None = STEWARD) -> None:
         self.steward = steward
         self.rows: list[dict[str, Any]] = []
+        self.marks: dict[uuid.UUID, dict[str, Any]] = {}
 
-    def answer(self, statement: Any) -> Result | Updated | None:
+    def answer(self, statement: Any) -> Result | None:
         if isinstance(statement, Insert) and statement.table.name == "access_request":
-            self.rows.append({**statement.compile().params, "id": uuid.uuid4(), "handled_at": None})
+            self.rows.append({**statement.compile().params, "id": uuid.uuid4()})
             return Result([])
-        if (
-            isinstance(statement, Update)
-            and getattr(statement.table, "name", "") == "access_request"
-        ):
-            # The update's own three comparisons: this id, this owner, and not handled yet.
+        if isinstance(statement, Insert) and statement.table.name == "access_request_handled":
+            # The table's key: a second mark on one request is a conflict and inserts nothing.
             params = statement.compile().params
-            found = [
-                row
-                for row in self.rows
-                if row["id"] == params["id_1"]
-                and row["owner_id"] == params["owner_id_1"]
-                and row["handled_at"] is None
-            ]
-            for row in found:
-                row["handled_at"], row["handled_by"] = params["handled_at"], params["handled_by"]
-            return Updated(len(found))
+            if params["request_id"] in self.marks:
+                return Result([])
+            self.marks[params["request_id"]] = params
+            return Result([params["request_id"]])
         if isinstance(statement, Select):
             tables = {getattr(one, "name", "") for one in statement.get_final_froms()}
             if "capability_grant" in tables:
                 return Result([self.steward] if self.steward else [])
             if "principal" in tables:
                 return Result(list(NAMES.items()))
+            if "access_request_handled" in tables:
+                wanted = statement.whereclause.right.value  # type: ignore[union-attr]
+                return Result(
+                    (key, mark["handled_at"]) for key, mark in self.marks.items() if key in wanted
+                )
             if "access_request" in tables:
+                clause = statement.whereclause
+                assert clause is not None
+                if len(statement.selected_columns) == 1:
+                    # `mark_handled`'s own check: this id, addressed to this owner.
+                    return Result(row["id"] for row in self.rows if _holds(clause, row))
                 # The statement's own comparison, applied to the rows, so a list narrowed by
                 # anything but equality with the caller is caught here and not only in CI.
-                clause = statement.whereclause
-                assert clause is not None and clause.left.name == "owner_id"
+                assert clause.left.name == "owner_id"
                 return Result(
                     AccessRequestRow(
                         requested_at=datetime(2999, 1, 1, tzinfo=UTC),
-                        **{k: v for k, v in row.items() if k not in ("requested_at", "handled_by")},
+                        **{k: v for k, v in row.items() if k != "requested_at"},
                     )
                     for row in self.rows
-                    if clause.operator(row["owner_id"], clause.right.value)
+                    if _holds(clause, row)
                 )
         return None
 
@@ -244,7 +246,7 @@ def test_the_owner_marks_a_request_handled_once_and_nobody_else_may(
 
     assert by_owner.status_code == 200, by_owner.text
     assert by_owner.json()["request_id"] == str(row["id"])
-    assert row["handled_by"] == STEWARD
+    assert table.marks[row["id"]]["handled_by"] == STEWARD
     assert by_asker.status_code == again.status_code == missing.status_code == 404
     assert by_asker.json()["message"] == missing.json()["message"]
     (item,) = listed["items"]

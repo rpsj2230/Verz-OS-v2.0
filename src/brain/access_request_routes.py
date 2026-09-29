@@ -57,7 +57,7 @@ from brain.knowledge.rows import row_scope_for
 from brain.knowledge.search import KNOWLEDGE_READ
 from brain.listing import Column, ListAsked, Listing
 from brain.ops.access_request_store import Request as Stored
-from brain.ops.access_request_store import addressed_to, mark_handled, record
+from brain.ops.access_request_store import addressed_to, handled_among, mark_handled, record
 from brain.people_names import names_for
 from brain.routing_routes import sessions_of
 from brain.tables.access_request import NAME_PATTERN, QUESTION_CHARS
@@ -255,6 +255,7 @@ async def access_requests(
         raise Failed("no database on this process")
     async with sessions() as session:
         rows = await addressed_to(session, asked.caller.principal.id, limit=MAX_LOADED)
+        marks = await handled_among(session, [row.id for row in rows])
     views = [
         AccessRequestView(
             request_id=str(row.id),
@@ -265,7 +266,7 @@ async def access_requests(
             question=row.question,
             requested_capability=row.requested_capability,
             requested_at=row.requested_at,
-            handled_at=row.handled_at,
+            handled_at=marks.get(row.id),
         )
         for row in rows
     ]

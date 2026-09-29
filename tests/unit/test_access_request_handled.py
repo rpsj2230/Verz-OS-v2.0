@@ -2,9 +2,9 @@
 certification report is recorded as an export with its ledger entry.
 
 Every migration is run to head (`tests.fixtures.retirable`, which needs pgvector, as CI and the
-local server have), and every write is made as `brain_app` through `app_engine`, so the column
-grant, the policy and the checks are what is exercised rather than the owner's bypass. Skipped where
-no server answers or pgvector is missing.
+local server have), and every write is made as `brain_app` through `app_engine`, so the grant, the
+insert policy and the table's key are what is exercised rather than the owner's bypass. Skipped
+where no server answers or pgvector is missing.
 
 Task ids: M4.3.4, M27.15.21, M27.16.1
 """
@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from brain.ops.access_request_store import mark_handled
+from brain.ops.access_request_store import handled_among, mark_handled
 from brain.ops.data_export_store import StoredExports
 from brain.ops.export import ExportReason
 from brain.session import make_session_factory
@@ -64,10 +64,23 @@ def marked(url: str, request_id: uuid.UUID, owner: str) -> bool:
     return run(go)
 
 
+def read_marks(url: str, request_ids: list[uuid.UUID]) -> dict[uuid.UUID, datetime]:
+    async def go() -> dict[uuid.UUID, datetime]:
+        engine = app_engine(url)
+        try:
+            async with make_session_factory(engine)() as session:
+                return await handled_among(session, request_ids)
+        finally:
+            await engine.dispose()
+
+    return run(go)
+
+
 def test_the_owner_marks_a_request_handled_once_and_nobody_else_may(database: str) -> None:
     """Needs-rupash gap (a), at the database. Delete this and the grant or the policy can be
     missing, so every mark is a 500, or the mark can be put on by a stranger or twice."""
     request_id = a_request(database)
+    untouched = a_request(database)
 
     stranger = marked(database, request_id, "u_one")
     owner = marked(database, request_id, "u_steward")
@@ -75,32 +88,39 @@ def test_the_owner_marks_a_request_handled_once_and_nobody_else_may(database: st
 
     assert (stranger, owner, again) == (False, True, False)
     assert sql(
-        database, "SELECT handled_by FROM gate.access_request WHERE id = %s", str(request_id)
+        database,
+        "SELECT handled_by FROM gate.access_request_handled WHERE request_id = %s",
+        str(request_id),
     ) == [("u_steward",)]
+    assert read_marks(database, [request_id, untouched]) == {request_id: AT}
 
 
 def test_the_application_may_change_nothing_else_and_mark_nobody_but_the_owner(
     database: str,
 ) -> None:
-    """The column grant and the policy. Delete this and the application role can rewrite the
-    question a person asked, or record another person as having handled it."""
+    """The grants and the insert policy. Delete this and the application role can rewrite the
+    question a person asked, move or clear a mark, or record another person as having handled a
+    request, each of which the list would then report as fact."""
     from psycopg import errors  # Imported here: the driver loads only where a server runs.
 
     request_id = a_request(database)
+    marked(database, request_id, "u_steward")
     with pytest.raises(errors.InsufficientPrivilege):
         sql(database, "SET ROLE brain_app; UPDATE gate.access_request SET question = 'changed'")
-    with pytest.raises((errors.InsufficientPrivilege, errors.CheckViolation)):
-        # Every open row, this one among them: two commands cannot carry a bound parameter.
+    with pytest.raises(errors.InsufficientPrivilege):
         sql(
             database,
-            "SET ROLE brain_app; UPDATE gate.access_request SET handled_at = now(),"
-            " handled_by = 'u_other'",
+            "SET ROLE brain_app; UPDATE gate.access_request_handled SET handled_at = now()",
         )
-    with pytest.raises(errors.CheckViolation):
+    with pytest.raises(errors.InsufficientPrivilege):
+        sql(database, "SET ROLE brain_app; DELETE FROM gate.access_request_handled")
+    with pytest.raises(errors.InsufficientPrivilege):
+        # The policy's refusal: a mark naming anybody but the request's owner. Every request,
+        # this one's second among them: two commands cannot carry a bound parameter.
         sql(
             database,
-            "UPDATE gate.access_request SET handled_at = now() WHERE id = %s",
-            str(request_id),
+            "SET ROLE brain_app; INSERT INTO gate.access_request_handled (request_id, handled_by)"
+            " SELECT id, 'u_other' FROM gate.access_request",
         )
 
 

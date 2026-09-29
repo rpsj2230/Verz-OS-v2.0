@@ -1,8 +1,8 @@
 """A routed access request is stored as the application role, and read back by its owner alone.
 
-The shape half runs everywhere. The database half needs a server: every migration to head, since
-`0146` added the handled columns the model now reads, written and read as `brain_app` so the grant
-and the row-level security policies are what is exercised, not the owner's bypass.
+The shape half runs everywhere. The database half needs a server and runs in CI: `0101` for real
+on a fresh database, written and read as `brain_app` so the grant and the row-level security
+policies are what is exercised, not the owner's bypass.
 
 Task ids: M4.3.4
 """
@@ -17,8 +17,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from brain.ops.access_request_store import Request, addressed_to, record
-from tests.fixtures.retirable import has_pgvector, retirable
-from tests.fixtures.scratch_postgres import engine, run, sql
+from tests.fixtures.scratch_postgres import drop, engine, fresh, migrate, run, sql
 
 AT = datetime(2999, 3, 1, 9, 0, tzinfo=UTC)
 FIELD = Request(
@@ -60,11 +59,14 @@ DATABASE = "brain_test_m434_access_request"
 
 @pytest.fixture(scope="module")
 def database() -> Iterator[str]:
-    """Every migration to head, which `0146`'s columns on the table need."""
-    with retirable(DATABASE) as url:
-        if not has_pgvector(url):
-            pytest.skip("the chain to head needs pgvector")
-        yield url
+    """`0101` run for real on a database stamped at the revision before it."""
+    scratch = fresh(DATABASE)
+    try:
+        migrate(DATABASE, "stamp", "0100")
+        migrate(DATABASE, "upgrade", "0101")
+        yield scratch
+    finally:
+        drop(DATABASE)
 
 
 def test_a_request_is_stored_and_its_owner_reads_it_back_as_the_application_role(

@@ -13,10 +13,14 @@ refuses a row naming both or neither, so a request cannot be about something unn
 for this reason, and the reason is the question; see `brain.core.redaction.OwnerNotice`. It is
 read by the owner's list and by nothing that reaches the asker, whose reply is a constant.
 
-**Insert and read, and marked handled once; never deleted.** A request is a record that it was
-made; a decision is a grant written on the People or Roles screens, which is where an owner acts on
-it. Since `0146` its owner may mark it handled, once: `handled_at` and `handled_by` are the only
-columns the application may update, both or neither, and only to the owner's own id.
+**Insert and read, never update or delete.** A request is a record that it was made; a decision is
+a grant written on the People or Roles screens, which is where an owner acts on it.
+
+**Handled is a row of its own, `gate.access_request_handled`** (`0146`, needs-rupash gap (a)). Its
+owner marks a request handled once, by inserting one row keyed by the request, so the request row
+is never updated and a mark cannot be moved or cleared. Rejected: two columns on the request with a
+column grant and an update policy, which gave the application an UPDATE on a table built insert
+only, and put a restriction on a table the release before already writes.
 
 Task ids: M4.3.4, M2.2.4, M27.16.1
 """
@@ -27,7 +31,7 @@ import uuid
 from datetime import datetime
 from typing import Final
 
-from sqlalchemy import CheckConstraint, DateTime, String, Uuid, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from brain.db import Base
@@ -45,11 +49,6 @@ ONE_SUBJECT: Final = (
     "(entity IS NOT NULL AND field IS NOT NULL AND department IS NULL) OR "
     "(entity IS NULL AND field IS NULL AND department IS NOT NULL)"
 )
-
-
-#: A request is handled whole, and only by its own owner (`0146`).
-HANDLED_WHOLE: Final = "(handled_at IS NULL) = (handled_by IS NULL)"
-HANDLED_BY_ITS_OWNER: Final = "handled_by IS NULL OR handled_by = owner_id"
 
 
 class AccessRequestRow(Base):
@@ -70,9 +69,6 @@ class AccessRequestRow(Base):
     requested_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    #: When its owner marked it handled, and who; both or neither, and only the owner (`0146`).
-    handled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    handled_by: Mapped[str | None] = mapped_column(String(PRINCIPAL_ID_CHARS), nullable=True)
 
     __table_args__ = (
         CheckConstraint(ONE_SUBJECT, name="one_subject"),
@@ -85,7 +81,27 @@ class AccessRequestRow(Base):
         CheckConstraint(
             f"requested_capability ~ '{CAPABILITY_PATTERN}'", name="requested_capability_grammar"
         ),
-        CheckConstraint(HANDLED_WHOLE, name="handled_whole"),
-        CheckConstraint(HANDLED_BY_ITS_OWNER, name="handled_by_its_owner"),
         {"schema": "gate"},
     )
+
+
+class AccessRequestHandledRow(Base):
+    """`gate.access_request_handled`. One request marked handled by its owner, once (`0146`).
+
+    Keyed by the request, so a second mark is a conflict rather than a second row. `0146`'s insert
+    policy admits a row only when `handled_by` is the owner of the request it names.
+    """
+
+    __tablename__ = "access_request_handled"
+
+    request_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("gate.access_request.id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+    handled_by: Mapped[str] = mapped_column(String(PRINCIPAL_ID_CHARS), nullable=False)
+    handled_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = ({"schema": "gate"},)

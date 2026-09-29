@@ -47,7 +47,7 @@ from __future__ import annotations
 # line the table is absent from `Base.metadata` and autogenerate proposes dropping it.
 from brain.knowledge import search as _search  # noqa: F401
 from brain.tables.acceptance import AcceptanceResultRow
-from brain.tables.access_request import AccessRequestRow
+from brain.tables.access_request import AccessRequestHandledRow, AccessRequestRow
 from brain.tables.adoption import QuestionAskedRow
 from brain.tables.agent import AgentRow
 from brain.tables.agent_automation import AgentAutomationRow
@@ -401,11 +401,15 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     "agent.manifest_draft",
     "agent.manifest_revision",
     "agent.manifest_act",
+    # 0146_access_request_handled_and_certification_export. A mark points at the request it
+    # marks, which is never deleted.
+    "gate.access_request_handled",
 )
 
 __all__ = [
     "TABLES_IN_DEPENDENCY_ORDER",
     "AcceptanceResultRow",
+    "AccessRequestHandledRow",
     "AccessRequestRow",
     "AdaptiveMemoryRow",
     "AgentAutomationRow",

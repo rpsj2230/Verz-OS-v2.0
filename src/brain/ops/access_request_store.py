@@ -1,15 +1,16 @@
 """Writing a routed access request, and reading the ones addressed to one owner.
 
-Two functions over `gate.access_request`, neither of which commits: the caller owns the
-transaction, for `brain.ops.telemetry_store.record`'s reason.
+Functions over `gate.access_request` and its handled marks, none of which commits: the caller owns
+the transaction, for `brain.ops.telemetry_store.record`'s reason.
 
 **An owner reads their own and nobody else's.** `addressed_to` takes the owner's principal id and
 selects by it; there is no parameter that could name somebody else's list, and no count of rows
 addressed elsewhere is computed.
 
-**An owner marks their own handled, once.** `mark_handled` updates only a row addressed to the
-owner it is given and not handled yet, and sets only the two columns `0146` grants; a row that is
-somebody else's, already handled or missing changes nothing and is one answer, False.
+**An owner marks their own handled, once.** `mark_handled` inserts a row into `0146`'s
+`gate.access_request_handled` only for a request addressed to the owner it is given, and a second
+mark is a conflict that inserts nothing; a request that is somebody else's, already handled or
+missing is one answer, False. The request row itself is never updated.
 
 Task ids: M4.3.4, M27.16.1
 """
@@ -17,14 +18,15 @@ Task ids: M4.3.4, M27.16.1
 from __future__ import annotations
 
 import uuid
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import insert, select, update
+from sqlalchemy import insert, select
+from sqlalchemy.dialects.postgresql import insert as insert_or_skip
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from brain.tables.access_request import AccessRequestRow
+from brain.tables.access_request import AccessRequestHandledRow, AccessRequestRow
 
 
 @dataclass(frozen=True)
@@ -81,14 +83,36 @@ async def mark_handled(
 ) -> bool:
     """Mark one request handled by its owner. False when it is not theirs or is handled already.
 
-    Does not commit. The same answer for a row addressed elsewhere, one handled already and one
-    that does not exist, so a caller cannot ask it which requests exist.
+    Does not commit. The same answer for a request addressed elsewhere, one handled already and
+    one that does not exist, so a caller cannot ask it which requests exist. `0146`'s insert
+    policy refuses a mark naming anybody but the request's owner even if this check were gone.
     """
-    done = await session.execute(
-        update(AccessRequestRow)
+    addressed = await session.execute(
+        select(AccessRequestRow.id)
         .where(AccessRequestRow.id == request_id)
         .where(AccessRequestRow.owner_id == owner_id)
-        .where(AccessRequestRow.handled_at.is_(None))
-        .values(handled_at=at, handled_by=owner_id)
     )
-    return bool(done.rowcount)  # type: ignore[attr-defined]
+    if addressed.scalar_one_or_none() is None:
+        return False
+    # What the insert returns, not its row count, which a skipped conflict does not zero here.
+    done = await session.execute(
+        insert_or_skip(AccessRequestHandledRow)
+        .values(request_id=request_id, handled_by=owner_id, handled_at=at)
+        .on_conflict_do_nothing(index_elements=[AccessRequestHandledRow.request_id])
+        .returning(AccessRequestHandledRow.request_id)
+    )
+    return done.scalar_one_or_none() is not None
+
+
+async def handled_among(
+    session: AsyncSession, request_ids: Collection[uuid.UUID]
+) -> dict[uuid.UUID, datetime]:
+    """When each of these requests was marked handled, for those that were. Does not commit."""
+    if not request_ids:
+        return {}
+    found = await session.execute(
+        select(AccessRequestHandledRow.request_id, AccessRequestHandledRow.handled_at).where(
+            AccessRequestHandledRow.request_id.in_(list(request_ids))
+        )
+    )
+    return {row[0]: row[1] for row in found.all()}
