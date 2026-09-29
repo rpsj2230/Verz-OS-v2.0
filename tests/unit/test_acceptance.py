@@ -518,6 +518,8 @@ WRITTEN_BY_CHECKS = (
     "mem.learning",
     "mem.correction",
     "gate.fast_path_rule",
+    "mem.mark",
+    "agent.learning_pause",
 )
 
 

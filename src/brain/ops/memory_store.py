@@ -49,6 +49,12 @@ person, asks `brain.memory.turn.propose_memories`, and writes each memory beside
 row, which is the revision record the Memory screen reads. No correction is written, because nothing
 was replaced.
 
+**An agent whose learning is paused forms nothing from its runs** (M16.7.13).
+`StoredFormations.form` reads the agent's latest `agent.learning_pause` row in the transaction
+that would write, before the lock on the person, and a paused agent's turn is answered
+`NotFormed.PAUSED`. The pause stops formation and nothing else, so it can narrow what is learned
+and never widen it.
+
 **A turn is formed from by the answer route since 2026-09-29, and read back for a model.** Nothing
 called `StoredFormations.after_turn` until then, so no install ever formed a memory and the Memory
 and Learning screens could only be empty; `brain.api_routes.answered_for` now hands it every turn
@@ -57,7 +63,7 @@ memories, read and decided by `brain.memory.recall.recall` at the run's reach an
 asker is now, whose statements a model is shown as hints. See
 `A_MODEL_IS_SHOWN_ONLY_WHAT_THE_ASKER_MAY_RECALL_ABOUT_THEMSELVES`.
 
-Task ids: M27.7.21, M27.7.22, M38.2.2.4, M16.6.3
+Task ids: M27.7.21, M27.7.22, M38.2.2.4, M16.6.3, M16.7.13
 """
 
 from __future__ import annotations
@@ -80,6 +86,7 @@ from brain.memory.recall import recall
 from brain.memory.review import Edit, edit
 from brain.memory.signals import Signal
 from brain.memory.turn import Held, NotFormed, Turn, propose_memories, worth_forming
+from brain.ops.learning_signal_store import paused_in
 from brain.tables.audit import ENT_HASH_SETTING, TRACE_ID_SETTING
 from brain.tables.learning import CorrectionRow, LearningRow
 from brain.tables.memory import AdaptiveMemoryRow, PersistentMemoryRow
@@ -453,6 +460,10 @@ class StoredFormations:
         if not worth_forming(turn.said):
             return Formed(memory_ids=(), skipped=(NotFormed.NOTHING_TO_REMEMBER,))
         async with self._sessions() as session, session.begin():
+            # An agent whose learning is paused teaches nothing from its runs (M16.7.13). Read in
+            # the transaction that would write, so a pause set a moment ago is honoured.
+            if turn.agent_id is not None and await paused_in(session, (turn.agent_id,)):
+                return Formed(memory_ids=(), skipped=(NotFormed.PAUSED,))
             await session.execute(lock_on_person(turn.principal_id))
             held = [
                 Held(memory_id=row[0], kind=MemoryKind(row[1]), statement=row[2])
