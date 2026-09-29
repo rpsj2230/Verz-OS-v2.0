@@ -20,6 +20,24 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         ],
         unread: "",
       },
+      "/api/v1/install/tuning": {
+        knobs: [
+          {
+            name: "person_per_minute",
+            kind: "rate",
+            label: UNBROKEN,
+            unit: "a minute",
+            value: 30,
+            default: 30,
+            lowest: 5,
+            highest: 120,
+            saved: false,
+            bounds_because: UNBROKEN,
+          },
+        ],
+        may_change: true,
+        in_force: UNBROKEN,
+      },
     },
   },
 };
