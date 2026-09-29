@@ -81,10 +81,13 @@ from brain.ops.acceptance_checks import KNOWLEDGE_READS, _in, _upload
 from brain.ops.acceptance_run import Harness
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from fastapi import FastAPI
 
     from brain.gate.answer import Answered
     from brain.models.calls import Planned
+    from brain.models.driver import ModelDriver
     from brain.ops.matrix_gate import RungAddition
     from brain.ops.model_service import ModelService
 
@@ -167,19 +170,30 @@ def _client() -> httpx.Client:
     return httpx.Client(follow_redirects=False)
 
 
-async def models_for(h: Harness, *, stand_in: bool = False) -> ModelService:
+async def models_for(
+    h: Harness,
+    *,
+    stand_in: bool = False,
+    standing: Mapping[str, ModelDriver] | None = None,
+    clock: Callable[[], datetime] | None = None,
+    told: Callable[[str], None] | None = None,
+) -> ModelService:
     """The executor over the check's transaction, with keys read as the prober reads them.
 
     The drivers are the product's, one per provider this product reaches, each handed its key as
     a lookup; which keys are held is asked once, off the event loop, because asking may read the
     vault. `stand_in` adds the step nobody can reach, for the fallback check. See
     `A_MODEL_CHECK_READS_KEYS_AS_THE_PROBER_DOES`.
+
+    For the routing checks (`brain.ops.acceptance_routing`): `standing` adds drivers answering in
+    the process, each held as if keyed; `clock` is the executor's clock, so a breaker's cooldown
+    can pass without anybody waiting for it; and `told` hears a provider's name each time a call
+    reads its key, and never the key.
     """
     from brain.install import value_of
     from brain.models.adapter import SdkDriver
     from brain.models.calls import ModelCalls
-    from brain.models.driver import ModelDriver
-    from brain.models.wire import PROVIDER_WIRES, added_wire, http_transport
+    from brain.models.wire import PROVIDER_WIRES, KeyLookup, added_wire, http_transport
     from brain.ops.model_probe_run import worker_provider_keys
     from brain.ops.model_service import ModelService, SessionAttempts, SessionLadder, wall_clock
     from brain.ops.provider_health_store import SessionDepthAlerts, SessionHealth
@@ -190,10 +204,22 @@ async def models_for(h: Harness, *, stand_in: bool = False) -> ModelService:
     client = _client()
     h.removes(client.close)
     slots = {one.slug: one for one in PROVIDER_SLOTS}
+
+    def key_of(slug: str) -> KeyLookup:
+        lookup = keys.lookup(slots[slug])
+        if told is None:
+            return lookup
+
+        def read() -> str | None:
+            told(slug)
+            return lookup()
+
+        return read
+
     drivers: dict[str, ModelDriver] = {
         slug: SdkDriver(
             provider=slug,
-            transport=http_transport(wire, client=client, key=keys.lookup(slots[slug])),
+            transport=http_transport(wire, client=client, key=key_of(slug)),
         )
         for slug, wire in PROVIDER_WIRES.items()
         if slug in slots
@@ -205,6 +231,10 @@ async def models_for(h: Harness, *, stand_in: bool = False) -> ModelService:
             transport=http_transport(wire, client=client, key=lambda: STAND_IN_BEARER),
         )
         held = held | {STAND_IN}
+    # Never over a product driver: a stand-in named like a provider would answer for it.
+    extra = {slug: one for slug, one in (standing or {}).items() if slug not in PROVIDER_WIRES}
+    drivers.update(extra)
+    held = held | frozenset(extra)
 
     def profile() -> str:
         try:
@@ -219,7 +249,7 @@ async def models_for(h: Harness, *, stand_in: bool = False) -> ModelService:
         drivers=drivers,
         profile=profile,
         held=lambda: held,
-        clock=wall_clock,
+        clock=wall_clock if clock is None else clock,
         health=SessionHealth(h.sessions),
         alerts=SessionDepthAlerts(h.sessions),
     )
@@ -391,12 +421,21 @@ async def asking_app(h: Harness, models: ModelService) -> FastAPI:
     return app
 
 
-async def asked(h: Harness, app: FastAPI, principal_id: str, question: str, n: int) -> Answered:
+async def asked(
+    h: Harness,
+    app: FastAPI,
+    principal_id: str,
+    question: str,
+    n: int,
+    *,
+    agent: str | None = None,
+) -> Answered:
     """One question through `/answer`'s own function, as `principal_id` in the console.
 
     `brain.api_routes.answered_for` for the reserved person at the reach the console admits a
     signed-in person, under a trace of this check's own, which the request row and every attempt
-    row then carry. A window refusing it is a failure: the check installs no windows.
+    row then carry. A window refusing it is a failure: the check installs no windows. `agent` is
+    the agent picked beside the question, as the web application sends it.
     """
     from starlette.requests import Request
 
@@ -415,7 +454,7 @@ async def asked(h: Harness, app: FastAPI, principal_id: str, question: str, n: i
         request,
         open_trace(trace_of(h, n), h.now, Channel.CONSOLE),
         Answering(principal=person, reach=reach, channel=Channel.CONSOLE, now=h.now),
-        Question(question=question),
+        Question(question=question, agent=agent),
     )
     if not isinstance(outcome, Answered):
         raise CheckFailedError("a question was refused by a window the check never installs")
