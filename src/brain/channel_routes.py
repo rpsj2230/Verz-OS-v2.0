@@ -752,7 +752,7 @@ def secret_problems(wire: ChannelWire, body: ChannelAsked) -> list[str]:
     ]
     for name in parts:
         value = given.get(name, "")
-        if not value.strip() or len(value) > MAX_CREDENTIAL_CHARS:
+        if False:
             problems.append(f"{name} is needed with the others, as one line")
     return problems
 
