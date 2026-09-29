@@ -56,6 +56,10 @@ that holds its form, asking for exactly the form's settings and its key, so the 
 form cannot drift apart; a source connected at the server ends with the hand-over and asks for
 nothing. See `A_GUIDE_ENDS_WHERE_THE_SOURCE_IS_CONNECTED`.
 
+**A write a connector can make is a grant of its own (M11.7.3).** `writes` declares each, with the
+key it asks for and what an approver is told without it; the key is kept in a slot of its own and
+the grant is off until it is given. See `A_WRITE_IS_A_GRANT_OF_ITS_OWN_WITH_A_KEY_OF_ITS_OWN`.
+
 **A reading may list one entity under each record of another (M11.7.3).** Cloudflare lists a DNS
 record only under its zone, so its reading says so with `ListedUnder`, the worker reads the entity
 once per parent it kept earlier in the same run, and the index names each record by both ids. The
@@ -80,7 +84,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import cache
 from types import MappingProxyType, ModuleType
-from typing import Any, Final, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Final, Protocol, runtime_checkable
 
 import brain.connectors
 from brain.connectors.contract import ConnectorContractError
@@ -94,6 +98,9 @@ from brain.core.envelope import OBJECT_NAME_PATTERN, IdentityMode, TypedResult
 from brain.ops.connect_steps import GuideStep
 from brain.ops.secrets import SecretRef
 from brain.tools.fetch import Resolver
+
+if TYPE_CHECKING:
+    from brain.gate.leash import Action
 
 # ------------------------------------------------------------------ written-down reasons
 #: The owner's rule, stated on 18 and 21 September and restated in every connector brief since.
@@ -490,6 +497,85 @@ class LiveLookup(Protocol):
         ...
 
 
+# ------------------------------------------------------------------ a write, granted apart
+#: Why a connector's write is a grant of its own, with a key of its own.
+A_WRITE_IS_A_GRANT_OF_ITS_OWN_WITH_A_KEY_OF_ITS_OWN: Final = (
+    "A connection reads with a key that can only read, and the guide, the form and the vault slot "
+    "say so. A write the connector can make is a separate, deliberate grant: its own step on the "
+    "source's page, its own key in its own slot, off until that key is given, and used only to "
+    "send a change a person approved, which is then read back with the read key before it is "
+    "reported done. One key for both would make every read a call made with the power to change "
+    "the source, and the approval would be the only thing standing between a question and a write."
+)
+
+
+@dataclass(frozen=True)
+class WriteCall:
+    """One approved change as the call that sends it and the record it is read back by.
+
+    `operation` is the source's own write, built from its specification like every read, so its
+    address is prepared and checked by the same rule; `source_id` is the index id the change is
+    read back by, through the connector's live lookup, with the read key.
+    """
+
+    operation: RestOperation
+    arguments: Mapping[str, str]
+    body: Mapping[str, Any]
+    entity: str
+    source_id: str
+
+
+class PreparesWrite(Protocol):
+    """How a connector turns an approved action into its call, and judges the record read back."""
+
+    def call_for(self, action: Action) -> WriteCall:
+        """The call that sends this approved action. Raises for an action it cannot send.
+
+        Builds the call and sends nothing, which is why it is not named `call`: `brain.ops.effects`
+        presumes a method of that name issues, and this one only reads the action.
+        """
+        ...
+
+    def differs(self, action: Action, found: Mapping[str, Any]) -> tuple[str, ...]:
+        """The names of the fields the record read back holds other than the action set them."""
+        ...
+
+
+@dataclass(frozen=True)
+class WriteGrant:
+    """A write a connector can be allowed to make, off until its own key is given (M11.7.3).
+
+    `tools` are the prepared actions the grant sends; `not_allowed` is what an approver is told
+    about one of them on an install that has not given the key. See
+    `A_WRITE_IS_A_GRANT_OF_ITS_OWN_WITH_A_KEY_OF_ITS_OWN`.
+    """
+
+    name: str
+    label: str
+    tools: tuple[str, ...]
+    credential_label: str
+    credential_hint: str
+    not_allowed: str
+    #: How an approved action becomes its call and how the record read back is judged.
+    prepares: PreparesWrite
+    credential_shape: CredentialShape = CredentialShape.KEY
+
+    def __post_init__(self) -> None:
+        if not _NAME_RE.match(self.name):
+            msg = f"write grant {self.name!r} is not a name, and its key slot is named by it"
+            raise DeclarationError(msg)
+        if not self.tools:
+            msg = f"write grant {self.name!r} sends no tool, so the key it asks for sends nothing"
+            raise DeclarationError(msg)
+        for one in (self.label, self.credential_label, self.credential_hint, self.not_allowed):
+            if not one.strip():
+                msg = (
+                    f"write grant {self.name!r} must say what it allows, which key it asks for "
+                    "and what an approver is told without it"
+                )
+                raise DeclarationError(msg)
+
+
 # ------------------------------------------------------------------------ the declaration
 @dataclass(frozen=True)
 class ConnectorDeclaration:
@@ -514,6 +600,8 @@ class ConnectorDeclaration:
     live: LiveLookup | None = None
     #: The screens the console's connect flow shows for it. See the module docstring.
     guide: tuple[GuideStep, ...] = ()
+    #: The writes it can be allowed to make, each off until its own key is given. See `WriteGrant`.
+    writes: tuple[WriteGrant, ...] = ()
 
     def __post_init__(self) -> None:
         if not _NAME_RE.match(self.name):
@@ -552,6 +640,16 @@ class ConnectorDeclaration:
                 f"connector {self.name!r} declares a live lookup and no reading; a record read "
                 "live is read through the reading's operation and interpretation"
             )
+            raise DeclarationError(msg)
+        if self.writes and self.console is None:
+            msg = (
+                f"connector {self.name!r} declares a write and no console form; a write is granted "
+                f"to a connection. {A_WRITE_IS_A_GRANT_OF_ITS_OWN_WITH_A_KEY_OF_ITS_OWN}"
+            )
+            raise DeclarationError(msg)
+        granted = [one.name for one in self.writes]
+        if len(granted) != len(set(granted)):
+            msg = f"connector {self.name!r} declares one write grant twice"
             raise DeclarationError(msg)
         if self.reading is not None:
             read = self.reading.entities()
@@ -600,6 +698,15 @@ def discover(package: ModuleType) -> Mapping[str, ConnectorDeclaration]:
 def shipped() -> Mapping[str, ConnectorDeclaration]:
     """Every connector this release ships. Found once per process, at start-up."""
     return discover(brain.connectors)
+
+
+def write_grant_for(tool: str) -> tuple[str, WriteGrant] | None:
+    """The shipped connector and the write grant that sends `tool`, or None for any other tool."""
+    for name, declared in shipped().items():
+        for grant in declared.writes:
+            if tool in grant.tools:
+                return name, grant
+    return None
 
 
 def read_backs() -> Mapping[str, ReadBack]:

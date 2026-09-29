@@ -445,6 +445,34 @@ class HttpsSourceCaller:
     def get(
         self, url: str, *, address: str, headers: Mapping[str, str], max_bytes: int
     ) -> SourceAnswer:
+        return self._exchange("GET", url, address=address, headers=headers, max_bytes=max_bytes)
+
+    def send(
+        self,
+        method: str,
+        url: str,
+        *,
+        address: str,
+        headers: Mapping[str, str],
+        body: bytes,
+        max_bytes: int,
+    ) -> SourceAnswer:
+        """One approved change, with its body, to the checked address (M11.7.3). See
+        `brain.ops.connector_write_run`, the only caller, which sends a change a person approved."""
+        return self._exchange(
+            method, url, address=address, headers=headers, max_bytes=max_bytes, body=body
+        )
+
+    def _exchange(
+        self,
+        method: str,
+        url: str,
+        *,
+        address: str,
+        headers: Mapping[str, str],
+        max_bytes: int,
+        body: bytes | None = None,
+    ) -> SourceAnswer:
         parts = urlsplit(url)
         host = parts.hostname
         if parts.scheme != "https" or not host:
@@ -458,7 +486,9 @@ class HttpsSourceCaller:
             context=self._context,
         )
         try:
-            connection.request("GET", path, headers={**headers, "User-Agent": USER_AGENT})
+            connection.request(
+                method, path, body=body, headers={**headers, "User-Agent": USER_AGENT}
+            )
             answer = connection.getresponse()
             body = answer.read(max_bytes + 1)
             if len(body) > max_bytes:

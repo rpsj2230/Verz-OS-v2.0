@@ -39,7 +39,6 @@ import pytest
 
 from brain.connectors import cloudflare
 from brain.connectors.cloudflare import (
-    A_DNS_CHANGE_WAITS_FOR_THE_OWNER_TO_ISSUE_A_WRITE_KEY,
     CLOUDFLARE,
     CONNECTOR,
     DNS_CHANGE_TOOL,
@@ -55,7 +54,6 @@ from brain.connectors.cloudflare import (
     CloudflareLiveLookup,
     CloudflareReading,
     DnsChange,
-    DnsChangeWaitsForTheOwnerError,
     SecurityWindow,
 )
 from brain.connectors.contract import AccessMode, ConnectorContractError, CredentialBinding
@@ -91,6 +89,7 @@ from brain.ops.acceptance_checks import _HeldLedger
 from brain.ops.connectable import connectable, key_reference, manifest_for, settings_problems
 from brain.ops.connector_slots import SLOT_SCOPES
 from brain.ops.connector_sync_run import authorization
+from brain.ops.credentials import connector_write_slot
 from brain.ops.limits import CLOUDFLARE_CALLS_PER_FIVE_MINUTES, connector_ceiling
 from brain.tools.registry import (
     SensitiveEffect,
@@ -590,8 +589,8 @@ def test_events_are_answered_and_a_refusal_inside_a_200_is_never_an_empty_list()
 
 
 # ------------------------------------------------------------------ a DNS change, prepared only
-def a_change(**changed: str) -> DnsChange:
-    values = {"record": INDEXED, "name": "www.example.com", "record_type": "A"}
+def a_change(**changed: Any) -> DnsChange:
+    values: dict[str, Any] = {"record": INDEXED, "name": "www.example.com", "record_type": "A"}
     values["content"] = "192.0.2.10"
     values.update(changed)
     return DnsChange(**values)
@@ -724,13 +723,14 @@ def test_a_dns_change_is_simulated_with_no_leash_and_refused_to_somebody_without
     assert executed.calls == []
 
 
-def test_an_approved_dns_change_still_sends_nothing_and_says_it_waits_for_the_owner() -> None:
-    """**`A_DNS_CHANGE_WAITS_FOR_THE_OWNER_TO_ISSUE_A_WRITE_KEY`.** A person approves the prepared
-    change and it is resumed with the connector's own execution, which refuses with the owner's
-    question and sends nothing; an unapproved one is not even tried. Delete this and an approved
-    change can be sent with the read token, or with no read-back, before the owner decided."""
+def test_an_unapproved_dns_change_is_not_resumed_whatever_its_execution_would_do() -> None:
+    """The leash's own rule, held for this change: an approval that has not been given resumes
+    nothing, so an execution, however it sends, is never called. The send path's own properties are
+    `tests/unit/test_connector_write_run.py`. Delete this and a pending change could run."""
     done = governed(OPERATOR, AUTONOMOUS, Recorder(), Recorder())
     assert done.suspension is not None
+    executed = Recorder()
+
     pending = resume(
         done.suspension,
         caller=OPERATOR,
@@ -740,27 +740,45 @@ def test_an_approved_dns_change_still_sends_nothing_and_says_it_waits_for_the_ow
         assessment=CALM,
         trace_id="t-resume",
         now=NOW,
-        execute=cloudflare.execute_dns_change,
+        execute=executed,
         ledger=_HeldLedger(),
     )
-    approved = done.suspension.approved_by("u_approver", NOW)
+    approved = resume(
+        done.suspension.approved_by("u_approver", NOW),
+        caller=OPERATOR,
+        agent_ceiling=CEILING,
+        policy=POLICY,
+        leash=AUTONOMOUS,
+        assessment=CALM,
+        trace_id="t-resume",
+        now=NOW,
+        execute=executed,
+        ledger=_HeldLedger(),
+    )
 
     assert (pending.resumed, pending.refusal) == (False, ResumeRefusal.NOT_APPROVED)
-    with pytest.raises(DnsChangeWaitsForTheOwnerError) as waits:
-        resume(
-            approved,
-            caller=OPERATOR,
-            agent_ceiling=CEILING,
-            policy=POLICY,
-            leash=AUTONOMOUS,
-            assessment=CALM,
-            trace_id="t-resume",
-            now=NOW,
-            execute=cloudflare.execute_dns_change,
-            ledger=_HeldLedger(),
-        )
-    assert str(waits.value) == A_DNS_CHANGE_WAITS_FOR_THE_OWNER_TO_ISSUE_A_WRITE_KEY
-    assert "should approved DNS changes be sent" in str(waits.value)
+    assert approved.resumed and executed.calls == [DNS_CHANGE_TOOL.name]
+
+
+def test_sending_an_approved_change_is_a_grant_of_its_own_whose_key_can_edit_dns() -> None:
+    """**The second key.** Cloudflare declares one write grant, sending the DNS change, off until
+    its own key is given: that key's slot is not the read key's, its hint and its vault slot ask for
+    DNS Edit, and the read token's hint and slot still refuse DNS Write. The grant's sentence for an
+    approver says the install has not allowed DNS changes. Delete this and one token could come to
+    do both, or the read guidance could start asking for a write permission."""
+    (grant,) = CONNECTOR.writes
+    form = CONNECTOR.console
+    assert form is not None
+
+    assert grant is cloudflare.DNS_CHANGES
+    assert grant.tools == (DNS_CHANGE_TOOL.name,)
+    assert connector_write_slot(CLOUDFLARE, grant.name).path != key_reference(CLOUDFLARE).path
+    assert SLOT_SCOPES[f"{CLOUDFLARE}_{grant.name}"].request == (cloudflare.EDIT_PERMISSION,)
+    assert cloudflare.EDIT_PERMISSION in grant.credential_hint
+    assert cloudflare.EDIT_PERMISSION not in SLOT_SCOPES[CLOUDFLARE].request
+    assert WRITE_PERMISSION in SLOT_SCOPES[CLOUDFLARE].refuse
+    assert "this install has not allowed DNS changes" in grant.not_allowed
+    assert grant.not_allowed == cloudflare.THIS_INSTALL_HAS_NOT_ALLOWED_DNS_CHANGES
 
 
 @pytest.mark.parametrize(
@@ -785,10 +803,11 @@ def test_a_change_whose_content_is_not_its_types_is_refused_before_anybody_is_as
     assert why
 
 
-def test_a_change_of_each_type_whose_content_fits_is_prepared_and_would_patch_that_record() -> None:
-    """The positive sibling: an A, an AAAA, a CNAME and a TXT change each fit, and what sending one
-    would be is a PATCH of that record's content at its zone. Delete this and the checks above pass
-    by refusing everything."""
+def test_a_change_of_each_type_whose_content_fits_is_prepared_and_patches_that_record() -> None:
+    """The positive sibling: an A, an AAAA, a CNAME and a TXT change each fit, and sending one is a
+    PATCH of exactly the fields it set at that record's zone, read back by the record's index id.
+    Delete this and the checks above pass by refusing everything."""
+    writes = cloudflare.DnsChangeWrites()
     for record_type, content in (
         ("A", "192.0.2.10"),
         ("AAAA", "2001:db8::1"),
@@ -796,8 +815,50 @@ def test_a_change_of_each_type_whose_content_fits_is_prepared_and_would_patch_th
         ("TXT", "v=spf1 -all"),
     ):
         change = a_change(record_type=record_type, content=content)
-        method, url, body = cloudflare.dns_change_call(change)
-        assert (method, dict(body)) == ("PATCH", {"content": content})
-        assert url == f"{cloudflare.API_BASE}/zones/{ZONE_ID}/dns_records/{RECORD}"
+        call = writes.call_for(
+            cloudflare.prepare_dns_change(change, agent_id=AGENT, department="ops")
+        )
+        assert call.operation.operation.method == "patch"
+        assert call.operation.url_for(call.arguments) == (
+            f"{cloudflare.API_BASE}/zones/{ZONE_ID}/dns_records/{RECORD}"
+        )
+        assert dict(call.body) == {
+            "name": "www.example.com",
+            "type": record_type,
+            "content": content,
+        }
+        assert (call.entity, call.source_id) == (DNS_RECORD, INDEXED)
     with pytest.raises(ConnectorContractError):
         cloudflare.prepare_dns_change(a_change(), agent_id=AGENT, department="Ops Team")
+
+
+def test_a_time_to_live_and_proxying_are_sent_and_judged_only_when_the_change_sets_them() -> None:
+    """A change that sets the time to live and proxying sends both and is judged on both; one that
+    does not neither sends them nor fails because Cloudflare's own values differ. The judgement
+    names every field the record holds otherwise, and none when it holds what was set. Delete this
+    and a change is reported failed for a TTL it never asked for, or done with the wrong content."""
+    writes = cloudflare.DnsChangeWrites()
+    plain = cloudflare.prepare_dns_change(a_change(), agent_id=AGENT, department="ops")
+    tuned = cloudflare.prepare_dns_change(
+        DnsChange(
+            record=INDEXED,
+            name="www.example.com",
+            record_type="A",
+            content="192.0.2.10",
+            ttl=300,
+            proxied=True,
+        ),
+        agent_id=AGENT,
+        department="ops",
+    )
+    held = {"name": "www.example.com", "type": "A", "content": "192.0.2.10"}
+
+    assert dict(writes.call_for(tuned).body) == {**held, "ttl": 300, "proxied": True}
+    assert writes.differs(plain, {**held, "ttl": 1, "proxied": False}) == ()
+    assert writes.differs(tuned, {**held, "ttl": 300, "proxied": True}) == ()
+    assert writes.differs(tuned, {**held, "ttl": 1, "proxied": True}) == ("ttl",)
+    assert writes.differs(plain, {**held, "content": "192.0.2.99"}) == ("content",)
+    assert writes.differs(plain, {"name": "www.example.com"}) == ("content", "type")
+    for wrong in ({"ttl": 30}, {"ttl": 86_401}, {"proxied": True, "record_type": "TXT"}):
+        with pytest.raises(ConnectorContractError):
+            a_change(**wrong)

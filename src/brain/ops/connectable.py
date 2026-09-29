@@ -49,7 +49,13 @@ from types import MappingProxyType
 from typing import Final
 
 from brain.connectors.contract import ConnectorContractError
-from brain.connectors.declaration import CredentialShape, Setting, SettingRefusedError, shipped
+from brain.connectors.declaration import (
+    CredentialShape,
+    Setting,
+    SettingRefusedError,
+    WriteGrant,
+    shipped,
+)
 from brain.connectors.manifest import ConnectorManifest
 from brain.ops.connect_steps import GuideStep
 from brain.ops.credentials import connector_key_slot
@@ -93,6 +99,8 @@ class Connectable:
     guide: tuple[GuideStep, ...] = ()
     #: How the credential is asked for and kept (M11.7.7).
     credential_shape: CredentialShape = CredentialShape.KEY
+    #: The writes it can be allowed to make, each with a key of its own (M11.7.3).
+    writes: tuple[WriteGrant, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -132,6 +140,7 @@ CONNECTABLE: Final[Mapping[str, Connectable]] = MappingProxyType(
             build=one.console.build,
             guide=one.guide,
             credential_shape=one.console.credential_shape,
+            writes=one.writes,
         )
         for name, one in shipped().items()
         if one.console is not None

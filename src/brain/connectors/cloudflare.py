@@ -9,6 +9,16 @@ never made with it and never made directly**: it is a prepared action a person a
 the gate like every action with one of the owner's sensitive effects (`DNS_CHANGE_TOOL`,
 `prepare_dns_change`). See `A_DNS_CHANGE_IS_ONLY_EVER_PREPARED_FOR_A_PERSON`.
 
+**Sending an approved change is a grant of its own, off until its own key is given** (`DNS_CHANGES`,
+the owner's register rows OWN-24, OWN-141 and ARC-A-140). The source's page offers "Allow approved
+DNS changes", which asks for a second token with DNS Edit over the same zones and keeps it in a
+vault slot of its own; the read token's guidance still refuses every write permission. With the
+key, an approved change is sent with it by `brain.ops.connector_write_run`, once, and read back
+with the read token by the one-record call before it is reported done (`DnsChangeWrites`). Without
+it, the change is held and approved exactly as before and nothing is sent, and the approval card
+says `THIS_INSTALL_HAS_NOT_ALLOWED_DNS_CHANGES`. Rejected: one token for both, which makes every
+read a call with the power to change DNS.
+
 **This connector keeps a minimal index and reads every value live.** What it keeps of a zone is its
 id, its name, its status and the account it belongs to; of a DNS record, its id, its zone, its name
 and its type. A record's content, its time to live and whether it is proxied are read from
@@ -55,13 +65,9 @@ the question. The events a question is told carry what happened, where and to wh
 deliberately not the visitor's address or user agent: see
 `A_SECURITY_EVENT_IS_READ_WITHOUT_ITS_VISITOR`.
 
-**What waits for the owner, stated once.** Executing an approved DNS change needs a second token
-with `DNS Write`, which the owner would have to issue and this release does not ask for, and a
-read-back that confirms the change landed. Nothing here sends a change: `execute_dns_change`
-refuses, and nothing in the product resumes an approved one. The question for the owner is in
-`A_DNS_CHANGE_WAITS_FOR_THE_OWNER_TO_ISSUE_A_WRITE_KEY`. And a security event has no question on Ask
-yet: the live read executor calls a source with GET, the GraphQL API takes POST, and a question
-naming a window has no question shape; the request and its reading are built and tested here.
+**What is not done, stated once.** A security event has no question on Ask yet: the live read
+executor calls a source with GET, the GraphQL API takes POST, and a question naming a window has no
+question shape; the request and its reading are built and tested here.
 
 Scope: domain logic. Nothing here opens a socket, resolves a name or reads a clock; the instant a
 window ends at is a parameter.
@@ -96,6 +102,8 @@ from brain.connectors.declaration import (
     Recorded,
     Setting,
     SettingRefusedError,
+    WriteCall,
+    WriteGrant,
 )
 from brain.connectors.manifest import (
     ChangeSignal,
@@ -109,10 +117,10 @@ from brain.connectors.manifest import (
 from brain.connectors.projection import ProjectedRecord, ProjectedValue
 from brain.connectors.rest import OperationSpec, ParameterSpec, RestOperation
 from brain.connectors.throttle import CallOutcome, classify
-from brain.connectors.transports import FieldMapping, RestTransport, SourceRecord, normalise
+from brain.connectors.transports import FieldMapping, RestTransport, normalise
 from brain.connectors.write_verification import ReadBack, Reading, unreadable
 from brain.core.department import SLUG_RE
-from brain.core.envelope import IdentityMode, SideEffect, ToolDefinition, TypedResult
+from brain.core.envelope import IdentityMode, SideEffect, ToolDefinition
 from brain.core.projection import MAX_LABEL_CHARS
 from brain.core.scope import Clause, Op, Scope
 from brain.gate.leash import Action
@@ -131,14 +139,13 @@ A_DNS_CHANGE_IS_ONLY_EVER_PREPARED_FOR_A_PERSON: Final = (
     "an approver who holds write:dns_record in the record's department is shown what would change."
 )
 
-#: What executing an approved change needs, as the owner's question.
-A_DNS_CHANGE_WAITS_FOR_THE_OWNER_TO_ISSUE_A_WRITE_KEY: Final = (
-    "An approved DNS change is not sent by this release. Sending it needs a second Cloudflare "
-    "token with DNS Write over the same zones, which only the owner can decide to issue, kept in "
-    "a slot of its own and never the read token's, and a read-back that reads the record again "
-    "and reports the change done only when the content it holds is the content approved. The "
-    "question for the owner: should approved DNS changes be sent by this system with a DNS Write "
-    "token he issues, or stay prepared and approved here and be made by a person in Cloudflare?"
+#: Why an approved change is sent with a key of its own and read back with the read key.
+A_DNS_CHANGE_IS_SENT_WITH_ITS_OWN_KEY_AND_READ_BACK_WITH_THE_READ_KEY: Final = (
+    "An approved DNS change is sent with the second token the install gave for DNS changes, never "
+    "with the read token, and the record is then read again with the read token by its one-record "
+    "call. It is reported done only when every field the change set holds what was approved: the "
+    "name, the type, the content, and the time to live and proxying where the change set them. "
+    "A record read back otherwise is reported failed, naming the fields that differ."
 )
 
 #: Why a zone of another account stops a read rather than being left out.
@@ -240,6 +247,9 @@ ACCOUNT_FIELD: Final = "account_id"
 
 #: The path parameter a zone's id goes into, and the field a record carries it in.
 ZONE_PARAMETER: Final = "zone_id"
+
+#: The field a prepared change's row carries the record's index id in.
+RECORD_KEY: Final = "record"
 
 #: How a DNS record is listed: under each zone, by the zone's id.
 DNS_RECORD_LISTING: Final = ListedUnder(parent=ZONE, parameter=ZONE_PARAMETER)
@@ -908,25 +918,30 @@ DNS_CHANGE_TOOL: Final = ToolDefinition(
 )
 
 
-class DnsChangeWaitsForTheOwnerError(ConnectorContractError):
-    """An approved DNS change was asked to run.
+#: The shortest and longest time to live Cloudflare takes, and the one meaning "automatic".
+MIN_TTL: Final = 60
+MAX_TTL: Final = 86_400
+AUTOMATIC_TTL: Final = 1
 
-    See `A_DNS_CHANGE_WAITS_FOR_THE_OWNER_TO_ISSUE_A_WRITE_KEY`.
-    """
+#: The record types Cloudflare can proxy.
+PROXIABLE_TYPES: Final = frozenset({"A", "AAAA", "CNAME"})
 
 
 @dataclass(frozen=True)
 class DnsChange:
-    """One record's new content, checked against its type before anything is prepared.
+    """One record's new values, checked against its type before anything is prepared.
 
     `record` is the id the index keeps, the zone's and the record's own, so a change names exactly
-    the record a question found.
+    the record a question found. `ttl` and `proxied` are changed only when given: a change that
+    leaves them as they are neither sends nor reads them back.
     """
 
     record: str
     name: str
     record_type: str
     content: str
+    ttl: int | None = None
+    proxied: bool | None = None
 
     def __post_init__(self) -> None:
         for one in DNS_RECORD_LISTING.split(self.record):
@@ -945,6 +960,14 @@ class DnsChange:
         if not content_fits(self.record_type, self.content):
             msg = f"that content is not a {self.record_type} record's"
             raise ConnectorContractError(msg)
+        if self.ttl is not None and not (
+            self.ttl == AUTOMATIC_TTL or MIN_TTL <= self.ttl <= MAX_TTL
+        ):
+            msg = f"a time to live is {AUTOMATIC_TTL} for automatic or {MIN_TTL} to {MAX_TTL}"
+            raise ConnectorContractError(msg)
+        if self.proxied is not None and self.record_type not in PROXIABLE_TYPES:
+            msg = f"only {sorted(PROXIABLE_TYPES)} records can be proxied"
+            raise ConnectorContractError(msg)
 
     @property
     def zone_id(self) -> str:
@@ -953,6 +976,19 @@ class DnsChange:
     @property
     def record_id(self) -> str:
         return DNS_RECORD_LISTING.split(self.record)[1]
+
+    def values(self) -> dict[str, str | int | bool]:
+        """Every field this change sets, in Cloudflare's names and types: sent, then checked."""
+        values: dict[str, str | int | bool] = {
+            "name": self.name,
+            "type": self.record_type,
+            "content": self.content,
+        }
+        if self.ttl is not None:
+            values["ttl"] = self.ttl
+        if self.proxied is not None:
+            values["proxied"] = self.proxied
+        return values
 
 
 def content_fits(record_type: str, content: str) -> bool:
@@ -978,47 +1014,132 @@ def _address(content: str, kind: type[ipaddress.IPv4Address | ipaddress.IPv6Addr
     return True
 
 
+def _said(value: str | int | bool) -> str:
+    """One value as the artefact and the digest carry it: a boolean as `true` or `false`."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
+
+
 def prepare_dns_change(change: DnsChange, *, agent_id: str, department: str) -> Action:
-    """The action a person approves: this record, in this department, to this content (M11.7.3).
+    """The action a person approves: this record, in this department, to these values (M11.7.3).
 
     The record's name and type travel with the new content, so the artefact an approver reads says
-    which record changes and to what, and the row carries the department the approver's grant is
-    matched against. Nothing read live is in it: the content is the one asked for, not the one
-    Cloudflare holds.
+    which record changes and to what, and the row carries the record's index id and the department
+    the approver's grant is matched against. Nothing read live is in it: the values are the ones
+    asked for, not the ones Cloudflare holds.
     """
     if not SLUG_RE.fullmatch(department):
         msg = "a department's short name is what an approver's grant is matched against"
         raise ConnectorContractError(msg)
-    args = {"name": change.name, "type": change.record_type, "content": change.content}
+    args = {name: _said(value) for name, value in change.values().items()}
     return Action(
         agent_id=agent_id,
         tool=DNS_CHANGE_TOOL,
         target=DNS_RECORD,
         touched_fields=tuple(args),
-        row={DEPARTMENT_SETTING: department, ZONE_PARAMETER: change.zone_id, **args},
+        row={
+            DEPARTMENT_SETTING: department,
+            ZONE_PARAMETER: change.zone_id,
+            RECORD_KEY: change.record,
+            **args,
+        },
         args=args,
     )
 
 
-def dns_change_call(change: DnsChange) -> tuple[str, str, Mapping[str, str]]:
-    """What sending an approved change would be: its method, address and body. Never sent."""
-    path = PATCH_DNS_RECORD.path.replace("{zone_id}", change.zone_id).replace(
-        "{dns_record_id}", change.record_id
-    )
-    return (
-        PATCH_DNS_RECORD.method.upper(),
-        f"{API_BASE}{path}",
-        MappingProxyType({"content": change.content}),
-    )
+def dns_change_of(action: Action) -> DnsChange:
+    """The change an approved action names, rebuilt from the action and checked again.
 
-
-def execute_dns_change(action: Action) -> TypedResult[SourceRecord]:
-    """What the gate is handed to run an approved change with. It refuses, and sends nothing.
-
-    See `A_DNS_CHANGE_WAITS_FOR_THE_OWNER_TO_ISSUE_A_WRITE_KEY`.
+    Refused for an action that is not this connector's change, so a write key is never handed an
+    action it was not granted for.
     """
-    del action
-    raise DnsChangeWaitsForTheOwnerError(A_DNS_CHANGE_WAITS_FOR_THE_OWNER_TO_ISSUE_A_WRITE_KEY)
+    if action.tool.name != DNS_CHANGE_TOOL.name:
+        msg = f"{action.tool.name!r} is not a DNS change"
+        raise ConnectorContractError(msg)
+    args = action.args
+    ttl = args.get("ttl")
+    proxied = args.get("proxied")
+    if proxied not in (None, "true", "false"):
+        msg = "a change's proxying is true or false"
+        raise ConnectorContractError(msg)
+    return DnsChange(
+        record=action.row.get(RECORD_KEY, ""),
+        name=args.get("name", ""),
+        record_type=args.get("type", ""),
+        content=args.get("content", ""),
+        ttl=None if ttl is None else int(ttl),
+        proxied=None if proxied is None else proxied == "true",
+    )
+
+
+def dns_change_operation() -> RestOperation:
+    """The one-record PATCH, reading its reply with the live mapping."""
+    return _operation(PATCH_DNS_RECORD, DNS_RECORD, DNS_LIVE_MAPPING)
+
+
+class DnsChangeWrites:
+    """How an approved DNS change is sent and how the record read back is judged (M11.7.3).
+
+    The body is exactly the fields the change set, and the judgement compares exactly those: a
+    change that did not set the time to live does not fail because Cloudflare's is automatic.
+    """
+
+    def call_for(self, action: Action) -> WriteCall:
+        change = dns_change_of(action)
+        return WriteCall(
+            operation=dns_change_operation(),
+            arguments=MappingProxyType(
+                {ZONE_PARAMETER: change.zone_id, "dns_record_id": change.record_id}
+            ),
+            body=MappingProxyType(change.values()),
+            entity=DNS_RECORD,
+            source_id=change.record,
+        )
+
+    def differs(self, action: Action, found: Mapping[str, Any]) -> tuple[str, ...]:
+        wanted = dns_change_of(action).values()
+        return tuple(
+            sorted(
+                name
+                for name, value in wanted.items()
+                if _said_or_none(found.get(name)) != _said(value)
+            )
+        )
+
+
+def _said_or_none(value: object) -> str | None:
+    if isinstance(value, str | int | bool):
+        return _said(value)
+    return None
+
+
+#: What an approver of a DNS change is told on an install that has not given the write key.
+THIS_INSTALL_HAS_NOT_ALLOWED_DNS_CHANGES: Final = (
+    "Approving this changes nothing in Cloudflare: this install has not allowed DNS changes. An "
+    "administrator allows them on the Cloudflare source's page with a token that can edit DNS."
+)
+
+#: The permission the write key is created with, in the dashboard's own words.
+EDIT_PERMISSION: Final = "DNS Edit"
+
+#: The grant that lets an approved DNS change be sent. Off until its key is given.
+DNS_CHANGES: Final = WriteGrant(
+    name="dns_changes",
+    label="Allow approved DNS changes",
+    tools=(DNS_CHANGE_TOOL.name,),
+    credential_label="A second Cloudflare API token that can edit DNS",
+    credential_hint=(
+        "Create a second custom token in Cloudflare (My Profile, API Tokens, Create Token) with "
+        "one permission, DNS Edit (Zone, DNS, Edit, listed as DNS Write in Cloudflare's permission "
+        "reference), over all zones from the same account and nothing else. It is kept in a vault "
+        "slot of its own, apart from the read token, and used only to send a DNS change a person "
+        "in the zones' department approved, which is then read back before it is reported done. "
+        "Never Zone Edit, any Account permission or the Global API Key."
+    ),
+    not_allowed=THIS_INSTALL_HAS_NOT_ALLOWED_DNS_CHANGES,
+    prepares=DnsChangeWrites(),
+)
 
 
 # ------------------------------------------------------------------ what this connector declares
@@ -1175,4 +1296,5 @@ CONNECTOR: Final = ConnectorDeclaration(
     recorded=Recorded(tested=True),
     reading=CloudflareReading(),
     live=CloudflareLiveLookup(),
+    writes=(DNS_CHANGES,),
 )
