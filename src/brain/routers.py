@@ -165,6 +165,11 @@ from brain.data_steward_routes import router as data_steward_router
 # `brain.data_transfer_routes`.
 from brain.data_transfer_routes import router as data_transfer_router
 
+# Send the evening digest to: the one setting naming a connected channel and a conversation in it,
+# chosen from what each channel offers now and saved as the Settings screen saves. See
+# `brain.digest_routes`.
+from brain.digest_routes import router as digest_router
+
 # Every person this install knows, one person's page, and a person added by hand where no staff
 # list is read (M27.11.2, M27.15.19). See `brain.directory_routes`.
 from brain.directory_routes import router as directory_router
