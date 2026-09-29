@@ -230,6 +230,9 @@ SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
         # `0067` grants no way for a row to leave, so an erasure keeps these and reports them kept.
         "agent.automation_run": "principal_id",
         "agent.browser_envelope": "asked_by",
+        # An action an agent took or simulated, for the person it ran for (`0195`). `0195` grants
+        # no way for a row to leave, so an erasure keeps these and reports them kept.
+        "agent.supervised_action": "principal_id",
         # A draft of an agent, for the person who started it (`0149`), as `agent.agent` is its
         # owner's. `0149` grants no way for a row to leave, so an erasure keeps these and reports
         # them kept, and the ledger entries each row appended were never the erasure's to reach.
@@ -334,6 +337,11 @@ THROUGH: Final[Mapping[str, Through]] = MappingProxyType(
         "agent.artifact_change": Through(
             parent="agent.artifact", key="artifact_id", parent_key="artifact_id"
         ),
+        # A verdict on an action is the person's the action ran for, through the action (`0195`):
+        # the reviewer is an actor, not an owner. Kept, as the action is.
+        "agent.action_verdict": Through(
+            parent="agent.supervised_action", key="action_digest", parent_key="action_digest"
+        ),
         # A request's handled mark is the asker's through the request it marks (`0146`): the owner
         # who marked it is an actor, not an owner. `0146` grants no way for a row to leave, so an
         # erasure keeps these and reports them kept, as it keeps the request.
@@ -370,6 +378,10 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         # Every pause, resume, schedule change, removal and adoption (`0145`): the person who made
         # it is an actor, and an adopter is the automation's new owner, never a subject of it.
         "agent.automation_change",
+        # A rung moved and a supervision pin reviewed (`0195`): the changer, the approvers and the
+        # reviewer are actors, and each row is about an agent's leash, never about a person.
+        "agent.leash_change",
+        "agent.supervision_pin",
         "agent.skill",
         "agent.skill_assignment",
         # The categories set on a skill's name: `set_by` is an actor, not an owner (`0121`).

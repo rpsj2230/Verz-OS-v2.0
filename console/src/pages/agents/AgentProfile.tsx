@@ -13,9 +13,10 @@
  * agent on have routes and work (the skill on the Skills page, where an approved skill is chosen, and
  * the hand-over through the page's confirmed lifecycle act); adding a source and changing permissions
  * are changes to the agent's manifest, so each starts a draft of the agent through the page's
- * confirmed Edit as a draft. Choosing channels, changing who can find it, previewing as a person,
- * changing a rung and browser use have no route and are `UnavailableAction`s with `agentActions.ts`'
- * sentences. Computer use is a sentence, because the product has nothing behind a switch.
+ * confirmed Edit as a draft. A rung is changed, and supervision pinned and reviewed, in the leash
+ * block (`AgentLeash.tsx`) for a holder of the leash role. Choosing channels, changing who can find
+ * it and browser use have no route and are `UnavailableAction`s with `agentActions.ts`' sentences.
+ * Computer use is a sentence, because the product has nothing behind a switch.
  *
  * **Identifiers are in the Advanced section.** The agent's slug, the steward's and builder's
  * principal ids and the template's id are how the system names them; the cards show names and
@@ -48,6 +49,7 @@ import type { AgentCapabilities } from "./agentCapabilitiesQuery";
 import type { ChannelOffer, ConnectorStrip, SkillPin } from "../agentQuery";
 import { LEVEL_WORDS, RUNGS_EXPLAINED, rungWords, TIER_WORDS, UNAVAILABLE, WORKS_AT } from "./agentActions";
 import { leashRowId, type HeaderFacts, type ProfileShown } from "./agentDetailQuery";
+import { AgentLeash } from "./AgentLeash";
 import { LeashPill } from "./pills";
 
 export const CAPABILITIES_HEADING = "Capabilities";
@@ -385,7 +387,6 @@ function ModelAndAutonomy({
       <div id={LEASH_ANCHOR} className="mt-3 scroll-mt-24">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <span className="text-[13px] font-medium text-ink">Approval setting, by action</span>
-          <UnavailableAction size="xs" text="Change" label="Change an approval setting" reason={UNAVAILABLE.leash.reason} />
         </div>
         {profile.leash.length === 0 ? (
           <Note>It takes no action, so there is nothing for a person to approve.</Note>
@@ -418,6 +419,9 @@ function ModelAndAutonomy({
         )}
         <div className="mt-2">
           <Note>{RUNGS_EXPLAINED}</Note>
+        </div>
+        <div className="mt-3">
+          <AgentLeash agentId={agentId} unnamed={profile.leash.filter((one) => one.acts && !one.configured).map((one) => one.target)} />
         </div>
       </div>
     </SectionCard>
