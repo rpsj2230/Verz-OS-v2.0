@@ -147,6 +147,7 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "every_registered_tool_is_a_catalogue_row_under_the_name_grammar",
         "a_tool_named_for_a_sensitive_effect_must_declare_it",
         "a_switched_off_tool_is_refused_and_a_department_stops_its_own",
+        "a_tool_s_side_effect_holds_the_rung_an_agent_runs_at",
     ]
     assert by_module["brain.ops.acceptance_checks_lifecycle"] == [
         "a_newer_version_supersedes_the_older_and_answers_use_the_newer",
