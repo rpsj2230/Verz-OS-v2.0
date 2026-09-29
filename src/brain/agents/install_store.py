@@ -50,9 +50,9 @@ not the transaction.
 
 **What calls this, said plainly.** `brain.agent_lifecycle_routes`, for an install of a published
 version and for a duplicate, which is an install of the same version with another agent's overlay.
-Both need this install's template signing key, and no setting holds one yet
-(`brain.ops.starter_store.NO_TEMPLATE_IS_SIGNED_BEFORE_THE_INSTALL_HOLDS_A_KEY_OF_ITS_OWN`), so on a
-real install both routes say so; the tests drive it with a key of their own.
+Both need this install's template signing key, which the application reads at start from its
+write-once vault slot (`brain.ops.template_key`); a process holding none says so, and the tests
+drive it with a key of their own.
 
 Task ids: M13.3.6, M13.3.7, M38.2.2.4, M27.11.6, M27.11.7
 """

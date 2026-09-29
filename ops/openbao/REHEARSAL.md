@@ -1,6 +1,6 @@
 # Rehearsing the installer's secrets vault on a server that can run it
 
-Task ids: M42.6.2, M42.5.14
+Task ids: M42.6.2, M42.5.14, M13.8.10
 
 The vault steps of `ops/install/install.sh` are read by `tests/unit/test_vault_setup.py` and run
 there against a stand-in `docker` that answers as `bao` does. Neither is OpenBao. What only a
@@ -42,8 +42,8 @@ docker exec -e BAO_TOKEN=<that token> brain-vault bao token lookup -accessor <ea
 
 Expected: no token with policy `root` other than the one just generated; one with policies
 `application, default` and one with `default, worker`, each `period 768h`, `renewable true`,
-`orphan true`. `bao secrets list` shows `providers/`, `webhooks/` and `connector_keys/` as `kv`
-version 2, `bao audit list` shows `file/` and `stdout/`, `bao policy list` shows every file in
+`orphan true`. `bao secrets list` shows `providers/`, `webhooks/`, `connector_keys/` and
+`template_signing/` as `kv` version 2, `bao audit list` shows `file/` and `stdout/`, `bao policy list` shows every file in
 `ops/openbao/policies`. Revoke the generated token.
 
 ## 3. The wizard keeps the key with no hand edit (M42.6.2)
@@ -67,6 +67,23 @@ get providers/anthropic` shows version 1. Nothing was typed into `/opt/brain/.en
   vault_token_renewal` (or wait for the schedule) and the Scheduled jobs screen shows
   `vault_token_renewal` as ok with `not owed a renewal: 767h left`.
 
+## 5b. The template signing key is minted once and cannot be replaced (M13.8.10)
+
+- The installer printed `step N of M: keep this install's template signing key - already done,
+  skipping` (the application minted it at start), or ran it and printed `Template signing key:
+  held.`
+- With a regenerated root token: `docker exec -e BAO_TOKEN brain-vault bao kv metadata get
+  -mount=template_signing key` shows `current_version 1`.
+- The application's token cannot write it again: pipe `{"data":{"key":"x"}}` into
+  `docker exec -i -e BAO_TOKEN=<the application's token from /opt/brain/.env> brain-vault bao write
+  template_signing/data/key -`. It is refused with `permission denied`, because a write to a slot
+  that holds a version needs `update`, and the metadata still shows version 1.
+- `docker compose <files> restart app`, then the metadata still shows version 1 and the log shows
+  `template signing key held minted_here=False` for every process.
+- **Credentials** says "Template signing key: held"; publish an agent from a draft and install it.
+- Search the application's log and the docker log for the key read under the root token with
+  `bao kv get`: it appears nowhere. Revoke the root token.
+
 ## 6. A restart, then an update
 
 - `docker restart brain-vault`, unseal with three pieces, and confirm the application still
@@ -75,6 +92,11 @@ get providers/anthropic` shows version 1. Nothing was typed into `/opt/brain/.en
   are on the `brain-vault` network afterwards: `docker network inspect brain-vault`.
 
 ## What stays open until this has run
+
+- **M13.8.10**, the half that is a server: that OpenBao 2.4.1 answers a create carrying `cas: 0`
+  on a new slot, refuses the application's second write for want of `update`, and that the
+  owner's install, reloaded with `UNSEAL.md` under Loading a release's policies on a running
+  install, mints and holds its key.
 
 - **M42.6.2**, the half that is a server: that OpenBao 2.4.1 answers `bao operator init` in the
   table shape the script reads, accepts a piece on `bao write sys/unseal key=-`, and mints the

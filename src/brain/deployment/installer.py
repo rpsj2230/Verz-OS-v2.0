@@ -77,7 +77,7 @@ Rejected: `git clone` for the release. It is one line shorter and it is the shap
 `brain.ops.independence.duplication_gaps` refuses in a build input, for the reason that ends
 with a client running a copy nobody fixed. The installer fetches one archive of one tag.
 
-Task ids: M42.1.3, M42.1.4, M42.3.1, M42.3.4, M42.5.3, M42.5.15, M30.2.5, M42.6.2
+Task ids: M42.1.3, M42.1.4, M42.3.1, M42.3.4, M42.5.3, M42.5.15, M30.2.5, M42.6.2, M13.8.10
 """
 
 from __future__ import annotations
@@ -263,6 +263,12 @@ TRACE_LEDGER_ROLE: Final = "langfuse"
 #: by a test and not imported from it, because that module brings the console's screen registry
 #: and the template catalogue with it and this one is imported by the install script.
 FURNISHED_SETTING: Final = "starter.furnished"
+
+#: The module the template signing key step runs in the application container, and the flag that
+#: makes it read without writing. Both held equal to `brain.ops.template_key` by a test rather than
+#: imported, for `FURNISHED_SETTING`'s reason.
+TEMPLATE_KEY_COMMAND: Final = "brain.ops.template_key"
+TEMPLATE_KEY_HELD_FLAG: Final = "--held"
 
 #: The variable carrying the trace ledger's password. Named here because the step reads it
 #: twice, once to refuse an install that has not set one and once to build the statement
@@ -919,6 +925,31 @@ PLAN: Final[tuple[Step, ...]] = (
         # counts as furnished here, which is what the store itself decides from the ledger.
         already_done=_in_the_database(
             f"select 1 from ops.setting where key = '{FURNISHED_SETTING}'"  # noqa: S608
+        ),
+    ),
+    Step(
+        # After readiness, like furnishing, because the application mints the key itself when it
+        # starts and finds the slot empty, so on a healthy install this finds it held and is
+        # skipped; it is here for the install whose start could not, where a log line becomes a
+        # failed step with a sentence. The done test reads the slot and writes nothing.
+        name="keep this install's template signing key",
+        run=f"docker compose $BRAIN_COMPOSE_FILES exec -T app python -m {TEMPLATE_KEY_COMMAND}",
+        why=(
+            "every agent version this install publishes is signed with its own key and every "
+            "install of one is verified with it, so without it the console can neither publish "
+            "nor install an agent. The key is minted once into its own vault slot, which the "
+            "vault never lets anything write over, and it never leaves the vault but into the "
+            "application. See brain.ops.template_key"
+        ),
+        on_failure=(
+            "the line above says why. If the vault refused, load this release's policies with "
+            "ops/openbao/UNSEAL.md under Loading a release's policies on a running install, then "
+            "run this again; a second run never replaces a key the first one kept"
+        ),
+        changes=True,
+        already_done=(
+            'test "${BRAIN_VAULT:-yes}" = "no" || docker compose $BRAIN_COMPOSE_FILES exec -T app '
+            f"python -m {TEMPLATE_KEY_COMMAND} {TEMPLATE_KEY_HELD_FLAG}"
         ),
     ),
     Step(

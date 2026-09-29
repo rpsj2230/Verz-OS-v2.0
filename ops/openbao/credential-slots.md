@@ -1,6 +1,6 @@
 # Credential slots: what each connector needs, and what it must not be given
 
-Task ids: M38.4.1.3, M5.1.2
+Task ids: M38.4.1.3, M5.1.2, M13.8.10
 
 Every slot below is **defined and empty**. The path exists, the policy that reaches it
 exists, and there is no credential in it until go-live. That ordering is the point: the
@@ -258,6 +258,54 @@ Once per install that runs a vault, with a token that may write the slot:
    write to the slot above, typing both values at the prompt from where you generated them rather
    than into a file or a command someone could read back from the shell history.
 3. Restart the application. Its log says `object store connected`, or the Storage screen says why not.
+
+## The template signing key
+
+Every agent version this install publishes from the console is signed with a key of the install's
+own, and every install of a version is verified with it (`brain.agents.template`). Nobody supplies
+this key and no vendor issues it: the application mints it, 32 random bytes, the first time it
+starts and finds its slot empty, and reads it back on every start after
+(`brain.ops.template_key`). The installer's step `keep this install's template signing key` runs the
+same command in the application container, so a fresh install that could not mint at start fails
+out loud rather than in a log line.
+
+| Slot | Holds | Written by | Deliberately NOT |
+|---|---|---|---|
+| `template_signing/key` | one field, `key`: 64 hexadecimal characters | the application, once, when the slot has never held a version | update, delete, destroy or metadata for anybody but an operator holding a root token |
+
+**It is written once and never written over, and three things keep it so.** The application's
+policy grants `create` and `read` on `template_signing/data/key` and nothing else under that engine:
+kv version 2 asks for `update` whenever a slot already holds a version, so the vault refuses a
+second write from the application whatever the request says. The one write the code makes carries
+kv's own check-and-set at version 0 (`options.cas = 0`), which the vault accepts only while the slot
+has never held a version, so even a wider token cannot overwrite it through this code. And the
+ordinary credential write, `OpenBaoVault.write_static_kv`, refuses the prefix outright. No other
+policy names the engine: the worker, a connector run and the browser runner neither sign nor verify.
+
+**Several application processes starting together mint once.** Each finds the slot empty and tries
+to create it; the vault keeps one value and refuses the rest, and every process then reads the slot
+and uses what it holds.
+
+**The key never leaves the vault except into the application's memory.** No log line, response or
+console page carries it; the Credentials screen's vault card says only which state it is in:
+held; not yet created, waiting for the vault policy reload; none, on an install with no vault; not
+read yet, while the vault is sealed (asked again every minute); or not used, when the slot holds
+something that is not a key this product made.
+
+**An install with no vault keeps no key anywhere**, and publishing and installing agents say they
+are unavailable. A lite install run with `--no-vault` stays that way until it runs a vault.
+
+**On an install made before 2026-09-29** the engine is not enabled and the loaded policy does not
+grant the slot, so the card says the key waits for the vault policy reload. `UNSEAL.md`, under
+Loading a release's policies on a running install, is the one sitting that enables the engine,
+loads the policies and restarts the application, and it also puts live reads (needs-rupash 99) in
+force.
+
+**If the card says "not used"**, the slot holds a value the application will not sign with, or held
+a key that somebody holding a root token deleted. The application never fills it again, because a
+key minted after a deletion is a replacement by another route, and every version signed with the
+old key would stop installing. Deciding what to do is an operator's with the unseal pieces: the
+old key's versions are lost to installs either way.
 
 ## Three things worth deciding before the keys are issued, not after
 

@@ -2,16 +2,18 @@
  * The small parts the Credentials pages share: a slot's state as a pill, the environment variable
  * that outranks it, and the vault's state above the list and on every slot's page.
  *
- * **The vault card says three things and no more.** Whether the vault is sealed, which policies the
- * application's token carries, and, only when it is true, that answers are waiting for the owner to
- * load the vault's policies again before they can read a connected source live (needs-rupash 99).
+ * **The vault card says four things and no more.** Whether the vault is sealed, which policies the
+ * application's token carries, whether the server holds the install's template signing key, in the
+ * API's sentence and never the key (needs-rupash 82), and, only when it is true, that answers are
+ * waiting for the owner to load the vault's policies again before they can read a connected source
+ * live (needs-rupash 99).
  * The run-token leases and the shipping of the vault's own log are on the Vault activity tab, so
  * they are not drawn twice.
  *
  * A word this console has not heard of is drawn as itself in the plain tone, `agents/pills.tsx`'
  * rule: inventing a meaning for an unknown state is the guess that fails in the wrong direction.
  *
- * Task ids: M27.11.10, M27.15.50
+ * Task ids: M27.11.10, M27.15.50, M13.8.10
  */
 
 import { Link } from "react-router-dom";
@@ -56,6 +58,13 @@ export const VAULT_CARD_LABEL = "The vault's state";
 export const POLICIES_LABEL = "Policies loaded";
 export const STATE_LABEL = "State";
 export const NO_POLICIES_SAID = "Not known";
+export const TEMPLATE_KEY_LABEL = "Template signing key";
+
+const TEMPLATE_KEY_TONE: Readonly<Record<string, string>> = {
+  held: "text-ok",
+  waiting: "text-warn",
+  unusable: "text-warn",
+};
 export const VAULT_ACTIVITY_LINK = "Vault activity";
 
 /** The vault's seal, its token's policies, and the live-read sentence when there is one. */
@@ -89,6 +98,13 @@ export function VaultCard({ vault }: { readonly vault: VaultOverview }) {
               <span className="mt-1 block text-[12px] text-warn">{vault.tokenTold}</span>
             ) : null}
           </Fact>
+          {vault.templateKeyTold === "" ? null : (
+            <Fact label={TEMPLATE_KEY_LABEL}>
+              <span data-slot="template-key" className={cn("block text-[12.5px]", TEMPLATE_KEY_TONE[vault.templateKey] ?? "text-dim")}>
+                {vault.templateKeyTold}
+              </span>
+            </Fact>
+          )}
         </FactList>
       </SectionCard>
     </div>

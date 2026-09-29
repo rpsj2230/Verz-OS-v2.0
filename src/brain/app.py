@@ -133,6 +133,8 @@ from brain.ops.secrets import VaultRole
 from brain.ops.sensitive_read_store import SensitiveReadRecorder
 from brain.ops.starter_store import furnish as furnish_install
 from brain.ops.telemetry_store import TelemetryRecorder
+from brain.ops.template_key import TemplateKeyState, keep_trying, template_key_at_start
+from brain.ops.template_key import hold as hold_template_key
 from brain.ops.tool_store import SessionSwitchSource, record_catalogue
 from brain.ops.trace_sink import CountingTraceSink
 from brain.ops.usage_store import UsageRecorder
@@ -295,6 +297,27 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     renewer = renewer_at_start(settings.vault_address, settings.vault_token)
     # The one vault client the screens read through, under the application's role.
     app.state.vault = vault_at_start(settings.vault_address, settings.vault_token)
+    # This install's template signing key, read from its write-once slot and minted there first
+    # if the slot has never held one, onto `template_key` where the agent routes read it. A vault
+    # that was sealed or silent is asked again every minute. See `brain.ops.template_key`.
+    hold_template_key(
+        app.state,
+        await asyncio.to_thread(
+            template_key_at_start, settings.vault_address, settings.vault_token
+        ),
+    )
+    trying = (
+        asyncio.create_task(
+            keep_trying(
+                lambda: asyncio.to_thread(
+                    template_key_at_start, settings.vault_address, settings.vault_token
+                ),
+                lambda found: hold_template_key(app.state, found),
+            )
+        )
+        if app.state.template_key_state is TemplateKeyState.UNREAD
+        else None
+    )
     # A vault the install names decides readiness; one it does not name is shown as not
     # configured. See `brain.readiness.A_PART_NOBODY_CONFIGURED_IS_NAMED_AND_NEVER_COUNTED`.
     if vault_configured(settings.vault_address, settings.vault_token):
@@ -653,6 +676,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             refreshing.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await refreshing
+        if trying is not None:
+            trying.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await trying
         if priming is not None:
             priming.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -941,6 +968,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.credentials = None
     # The same, for where a webhook subscriber's signing secret is kept. See `brain.webhook_routes`.
     app.state.signing_secrets = None
+    # The same, for this install's template signing key and whether it is held. `lifespan` reads it
+    # from the vault; a process that never did holds none, and every agent route says so. See
+    # `brain.ops.template_key`.
+    app.state.template_key = None
+    app.state.template_key_state = TemplateKeyState.NO_VAULT
     # The same, for the object store and what is built over it: the backup bucket's reader and the
     # artifact store. A route reading None answers that nothing here looked. See
     # `brain.ops.object_store`.

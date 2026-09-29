@@ -79,7 +79,17 @@ it holds has lapsed, which is exactly when somebody needs to know which of the t
 loads the policies again, so `capabilities_self` asks what the loaded policy lets this token do on
 one path. The Credentials screen asks it of the one mint live reads need.
 
-Task ids: M31.3.2.3, M31.3.2.4, M27.8.7, M27.8.12, M42.6.5, M42.6.2, M27.15.50
+**A fourth prefix, `template_signing/`, holds one key that is created once and never written
+over.** The install's template signing key (`brain.ops.template_key`) signs every template version
+it publishes and verifies every one it installs, so a key replaced under a signed version makes
+that version uninstallable, and a key somebody chose would let them sign templates. So nothing
+here writes that prefix the ordinary way: `write_static_kv` refuses it, and `create_static_kv_once`
+sends kv version 2's own check-and-set at version 0, which the vault accepts only while the slot
+has never held a version. The policy grants create and read there and no update, so the vault
+refuses an overwrite even from a caller that left the check-and-set out. See
+`A_KEY_WRITTEN_ONCE_HAS_NO_WRITER_THAT_REPLACES_IT`.
+
+Task ids: M31.3.2.3, M31.3.2.4, M27.8.7, M27.8.12, M42.6.5, M42.6.2, M27.15.50, M13.8.10
 """
 
 from __future__ import annotations
@@ -115,8 +125,26 @@ SIGNING_PREFIX = "webhooks/"
 #: `A_KEY_A_VENDOR_ISSUED_IS_STORED_BECAUSE_NOTHING_CAN_MINT_IT`.
 CONNECTOR_KEY_PREFIX = "connector_keys/"
 
+#: The install's template signing key, created once and never written over. See
+#: `A_KEY_WRITTEN_ONCE_HAS_NO_WRITER_THAT_REPLACES_IT`.
+TEMPLATE_KEY_PREFIX = "template_signing/"
+
 #: Every prefix the kv methods admit, and nothing else in the vault is stored rather than leased.
-STATIC_PREFIXES = (STATIC_PREFIX, SIGNING_PREFIX, CONNECTOR_KEY_PREFIX)
+STATIC_PREFIXES = (STATIC_PREFIX, SIGNING_PREFIX, CONNECTOR_KEY_PREFIX, TEMPLATE_KEY_PREFIX)
+
+#: The check-and-set version that makes a kv version 2 write a create: the vault accepts it only
+#: while the slot has never held a version, and answers 400 otherwise.
+CREATE_ONLY_VERSION = 0
+
+#: Why the template key's prefix has no ordinary writer.
+A_KEY_WRITTEN_ONCE_HAS_NO_WRITER_THAT_REPLACES_IT = (
+    "The template signing key signs every template version this install publishes and verifies "
+    "every one it installs. Replaced, every signed version stops installing, and replaced with a "
+    "value somebody chose, it signs whatever they write. So the ordinary write refuses its prefix, "
+    "the one writer sends the vault's check-and-set at version 0, which the vault accepts only "
+    "while the slot has never held a version, and the policy grants create without update, so "
+    "the vault refuses an overwrite even from a caller that left the check-and-set out."
+)
 
 #: Why a subscriber's signing secret is kept in kv rather than leased like a connector's.
 A_SIGNING_KEY_EVERY_RECEIVER_CHECKS_CANNOT_BE_MINTED = (
@@ -245,13 +273,16 @@ def assert_static_path(path: str) -> None:
     Public and separate so the refusal can be tested directly rather than only through a
     call that needs a server. `providers/anthropic` is a key nobody can lease;
     `connectors/creds/xero` is one somebody should, and reading the second one this way
-    would work perfectly and be invisible. `webhooks/` and `connector_keys/` are the two other
-    prefixes admitted; see `A_SIGNING_KEY_EVERY_RECEIVER_CHECKS_CANNOT_BE_MINTED` and
-    `A_KEY_A_VENDOR_ISSUED_IS_STORED_BECAUSE_NOTHING_CAN_MINT_IT`.
+    would work perfectly and be invisible. `webhooks/`, `connector_keys/` and `template_signing/`
+    are the three other prefixes admitted; see
+    `A_SIGNING_KEY_EVERY_RECEIVER_CHECKS_CANNOT_BE_MINTED`,
+    `A_KEY_A_VENDOR_ISSUED_IS_STORED_BECAUSE_NOTHING_CAN_MINT_IT` and
+    `A_KEY_WRITTEN_ONCE_HAS_NO_WRITER_THAT_REPLACES_IT`.
     """
     if not any(path.startswith(prefix) for prefix in STATIC_PREFIXES):
         msg = (
-            f"{path!r} is not a provider key, a signing secret or a connected source's key. "
+            f"{path!r} is not a provider key, a signing secret, a connected source's key or the "
+            "template signing key. "
             "Everything outside "
             f"{list(STATIC_PREFIXES)!r} is leased "
             "through brain.ops.secrets.borrow, which revokes it when the run ends; reading "
@@ -427,13 +458,41 @@ class OpenBaoVault:
         The prefix refusal is `assert_static_path`, the read's own, because a writer that could
         reach `connectors/creds/xero` would be storing a value over a path the leasing design
         says the vault mints. kv version 2 takes writes on `<mount>/data/<rest>` and wraps the
-        fields in `data`, which is the shape `read_static_kv` unwraps.
+        fields in `data`, which is the shape `read_static_kv` unwraps. The template key's prefix is
+        refused: see `A_KEY_WRITTEN_ONCE_HAS_NO_WRITER_THAT_REPLACES_IT`.
         """
         assert_static_path(path)
+        if path.startswith(TEMPLATE_KEY_PREFIX):
+            msg = (
+                f"{path!r} is written once, by create_static_kv_once, and never written over. "
+                f"{A_KEY_WRITTEN_ONCE_HAS_NO_WRITER_THAT_REPLACES_IT}"
+            )
+            raise SecretsUnavailableError(msg)
         mount, _, rest = path.partition("/")
         payload = self._call("POST", f"{mount}/data/{rest}", {"data": dict(fields)})
         data = payload.get("data")
         return _instant(data.get("created_time")) if isinstance(data, dict) else None
+
+    def create_static_kv_once(self, path: str, fields: Mapping[str, str]) -> bool:
+        """Put one slot's fields in only if the slot has never held a version: True when this call
+        created it, False when the vault says a version is already there.
+
+        kv version 2's check-and-set at `CREATE_ONLY_VERSION` is the vault's own create-only rule,
+        and the vault answers a mismatch with 400. Every other refusal is raised, because a 403 is
+        a policy or a race and a 404 an engine that is not mounted, and the caller tells which by
+        reading the slot again. Not retried, for `write_static_kv`'s reason. Returns no field it
+        was handed. See `A_KEY_WRITTEN_ONCE_HAS_NO_WRITER_THAT_REPLACES_IT`.
+        """
+        assert_static_path(path)
+        mount, _, rest = path.partition("/")
+        body = {"options": {"cas": CREATE_ONLY_VERSION}, "data": dict(fields)}
+        try:
+            self._call("POST", f"{mount}/data/{rest}", body)
+        except VaultRefusedError as refused:
+            if refused.status == 400:
+                return False
+            raise
+        return True
 
     def static_kv_version(self, path: str) -> StaticVersion | None:
         """The slot's current version, or None when it holds nothing.

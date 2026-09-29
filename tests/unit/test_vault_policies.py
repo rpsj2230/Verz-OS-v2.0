@@ -531,3 +531,33 @@ def test_the_key_slot_table_is_the_catalogue_the_installer_defines() -> None:
     assert rows == {
         one.path: ("; ".join(one.request), "; ".join(one.refuse)) for one in SLOT_SCOPES.values()
     }
+
+
+# ------------------------------------------ the template signing key, created once (M13.8.10)
+def test_the_application_may_create_and_read_the_template_key_and_never_replace_it() -> None:
+    """One exact rule under the template signing engine: create, so the application mints the key
+    into an empty slot, and read, so it signs and verifies with it. No update, which is what the
+    vault asks for whenever a kv version 2 slot already holds a version, so nothing this token does
+    can replace the key; no delete, patch or metadata, so its history cannot be erased from here
+    either; and no wildcard, so no second slot beside it is writable. See
+    `brain.ops.template_key.THE_TEMPLATE_KEY_IS_CREATED_ONCE_AND_NEVER_WRITTEN_OVER`.
+
+    Delete this and `update` can be added in a debugging session, and the key every signed
+    version is verified with becomes one a request can replace."""
+    from brain.ops.template_key import TEMPLATE_KEY_SLOT
+
+    granted = _granted_paths(_policy_file(VaultRole.APPLICATION).read_text(encoding="utf-8"))
+    template = {
+        path: sorted(caps) for path, caps in granted.items() if path.startswith("template_signing")
+    }
+    mount, _, rest = TEMPLATE_KEY_SLOT.partition("/")
+    assert template == {f"{mount}/data/{rest}": ["create", "read"]}
+
+
+def test_no_other_role_reaches_the_template_signing_engine() -> None:
+    """The worker, a connector run and the browser runner neither sign nor verify a template, and
+    any grant there would be a second writer of a key that must have none. Delete this and a copy
+    of the application's rule into another policy reads as consistency."""
+    for name in ("worker", "connector-run", "browser-runner"):
+        granted = _granted_paths((POLICIES / f"{name}.hcl").read_text(encoding="utf-8"))
+        assert not [path for path in granted if path.startswith("template_signing")], name

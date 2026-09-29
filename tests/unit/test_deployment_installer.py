@@ -261,7 +261,7 @@ def test_every_step_that_writes_something_says_when_it_is_already_done() -> None
 
     Delete this and a step added next year makes the whole installer unsafe to re-run, with
     nothing to say which one."""
-    assert len(PLAN) == 20
+    assert len(PLAN) == 21
     for step in PLAN:
         if step.changes:
             assert step.already_done.strip(), f"{step.name} writes and cannot say it is done"

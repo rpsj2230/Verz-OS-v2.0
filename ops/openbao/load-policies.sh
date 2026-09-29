@@ -7,7 +7,9 @@
 #
 # Needs a token that may write policy, which in practice means the root token during first
 # setup. That is the whole reason UNSEAL.md destroys the root token only at step 6, after
-# this has run.
+# this has run. A token exported as BAO_TOKEN in this shell is handed to the vault's command
+# line by name, never as a value on an argument list, which is how UNSEAL.md's "Loading a
+# release's policies on a running install" runs it with a root token generated for that alone.
 
 set -eu
 
@@ -29,10 +31,10 @@ for file in "$HERE"/policies/*.hcl; do
   # Piped through `tr -d` for the same reason the deploy watcher is: this repo is edited on
   # Windows and git gives the working tree CRLF, which the vault's HCL parser rejects with a
   # message about an unexpected character rather than about line endings.
-  tr -d '\015' < "$file" | docker exec -i "$CONTAINER" bao policy write "$name" -
+  tr -d '\015' < "$file" | docker exec -i ${BAO_TOKEN:+-e BAO_TOKEN} "$CONTAINER" bao policy write "$name" -
   echo "loaded $name"
 done
 
 echo
 echo "policies now in the vault:"
-docker exec "$CONTAINER" bao policy list
+docker exec ${BAO_TOKEN:+-e BAO_TOKEN} "$CONTAINER" bao policy list
