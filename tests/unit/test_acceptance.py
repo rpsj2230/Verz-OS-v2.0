@@ -26,7 +26,7 @@ from typing import Any
 import pytest
 
 from brain.core.department import SLUG_PATTERN
-from brain.ops import acceptance, acceptance_audit, acceptance_run
+from brain.ops import acceptance, acceptance_audit, acceptance_checks_channels, acceptance_run
 from brain.ops import acceptance_checks_deployment as acceptance_deployment
 from brain.ops.acceptance import (
     FAILED,
@@ -657,6 +657,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     )
     # No antivirus and no object store here; `tests/unit/test_acceptance_ingest.py` runs both.
     assert outcomes.pop("the_antivirus_test_file_is_refused_as_malware")[0] == NOT_RUN
+    # No relay is saved here; `tests/unit/test_acceptance_channels.py` saves one and passes.
+    email = "an_email_is_taken_signed_and_answered_by_the_install_s_relay"
+    assert outcomes.pop(email) == (NOT_RUN, acceptance_checks_channels.NO_RELAY_IS_SAVED)
     assert outcomes.pop("a_queued_file_is_kept_in_the_store_and_read_by_the_worker")[0] == NOT_RUN
     # Every act, the chain, the trace and the export were seen, and no deploy is recorded here to
     # be kept out of the export: `tests/unit/test_acceptance_audit.py` records one and passes.
