@@ -334,6 +334,7 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # The answer lane's model step: passages found at a reach, and a model that answers and
         # forgets, whose attempt rows are written through `AttemptLog`'s own doors.
         "brain.gate.model_lane:PassageSearch.passages": Repeat.READS,
+        "brain.gate.model_lane:AskerHints.hints": Repeat.READS,
         "brain.gate.model_lane:AnswerModel.complete": Repeat.NO_EFFECT_AT_THE_FAR_END,
         # The items behind cited documents, read for their badges at the reader's reach.
         "brain.gate.model_lane:ItemLookup.items": Repeat.READS,

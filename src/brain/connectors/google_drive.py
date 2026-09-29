@@ -2220,6 +2220,12 @@ NOT_FROM_THE_CONSOLE_SAYS: Final = (
     "account key file rather than one unbroken key. This screen takes neither yet, so "
     "it is connected at the server."
 )
+#: Google Cloud console's service accounts page. Google's for every install.
+SERVICE_ACCOUNTS_URL: Final = "https://console.cloud.google.com/iam-admin/serviceaccounts"
+
+#: Where the Google Drive API is switched on for a project. Google's for every install.
+DRIVE_API_LIBRARY_URL: Final = "https://console.cloud.google.com/apis/library/drive.googleapis.com"
+
 #: The screens that prepare Google Drive for this system, ending where the server takes over:
 #: this screen takes no key file yet, which the last step says in the declaration's own words.
 GUIDE: Final = keyed(
@@ -2241,7 +2247,7 @@ GUIDE: Final = keyed(
                 lines=(SketchLine(LineKind.TEXT, "No domain-wide delegation"),),
                 button="Create service account",
             ),
-            link="https://console.cloud.google.com/iam-admin/serviceaccounts",
+            link=SERVICE_ACCOUNTS_URL,
             link_label="Open Service Accounts",
         ),
         GuideStep(
@@ -2256,7 +2262,7 @@ GUIDE: Final = keyed(
                 heading="Google Drive API",
                 button="Enable",
             ),
-            link="https://console.cloud.google.com/apis/library/drive.googleapis.com",
+            link=DRIVE_API_LIBRARY_URL,
             link_label="Open the Google Drive API",
         ),
         GuideStep(

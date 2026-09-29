@@ -41,12 +41,20 @@ person, asks `brain.memory.turn.propose_memories`, and writes each memory beside
 row, which is the revision record the Memory screen reads. No correction is written, because nothing
 was replaced.
 
-Task ids: M27.7.21, M27.7.22, M38.2.2.4
+**A turn is formed from by the answer route since 2026-09-29, and read back for a model.** Nothing
+called `StoredFormations.after_turn` until then, so no install ever formed a memory and the Memory
+and Learning screens could only be empty; `brain.api_routes.answered_for` now hands it every turn
+whose words ask anything to be remembered. `StoredRecall` is the other direction: the asker's own
+memories, read and decided by `brain.memory.recall.recall` at the run's reach and the place the
+asker is now, whose statements a model is shown as hints. See
+`A_MODEL_IS_SHOWN_ONLY_WHAT_THE_ASKER_MAY_RECALL_ABOUT_THEMSELVES`.
+
+Task ids: M27.7.21, M27.7.22, M38.2.2.4, M16.6.3
 """
 
 from __future__ import annotations
 
-from collections.abc import Collection, Iterable
+from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Final, Protocol, runtime_checkable
@@ -55,12 +63,15 @@ import structlog
 from sqlalchemy import Insert, Select, func, insert, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from brain.core.entitlement import Capability, EntitlementSet
+from brain.core.scope import Scope
 from brain.memory.correction import Correction, Demotion, Supersession
 from brain.memory.digest import Learning, Undo, undo
-from brain.memory.formation import MemoryKind
+from brain.memory.formation import Formation, MemoryKind
+from brain.memory.recall import recall
 from brain.memory.review import Edit, edit
 from brain.memory.signals import Signal
-from brain.memory.turn import Held, NotFormed, Turn, propose_memories
+from brain.memory.turn import Held, NotFormed, Turn, propose_memories, worth_forming
 from brain.tables.audit import ENT_HASH_SETTING, TRACE_ID_SETTING
 from brain.tables.learning import CorrectionRow, LearningRow
 from brain.tables.memory import AdaptiveMemoryRow, PersistentMemoryRow
@@ -407,10 +418,13 @@ class StoredFormations:
     async def form(self, turn: Turn) -> Formed:
         """Write what this turn proposes, each memory with its learning record, in one transaction.
 
-        Raises what the database raises. `after_turn` is the call that must not.
+        Raises what the database raises. `after_turn` is the call that must not. A refused turn,
+        and one with nothing in it to remember, are answered before any connection is opened.
         """
-        if not turn.answered:
-            return Formed(memory_ids=(), skipped=(NotFormed.NOT_ANSWERED,))
+        if turn.refused:
+            return Formed(memory_ids=(), skipped=(NotFormed.REFUSED,))
+        if not worth_forming(turn.said):
+            return Formed(memory_ids=(), skipped=(NotFormed.NOTHING_TO_REMEMBER,))
         async with self._sessions() as session, session.begin():
             await session.execute(lock_on_person(turn.principal_id))
             held = [
@@ -451,3 +465,167 @@ class StoredFormations:
             # Broad on purpose: whatever the store raised, the answer has already been given.
             log.warning("memory formation failed", trace=turn.trace_id, error=type(exc).__name__)
             return None
+
+
+# ------------------------------------------------------------------ recalling for an answer
+#: How many memories a model is shown about the person asking. A handful of sentences is what a
+#: person tells a colleague about how they like to be answered; more is a profile, and every hint
+#: is a sentence sent to a provider.
+MAX_HINTS: Final = 5
+
+#: How many of each table's rows a recall reads for one person, newest first. Bounded so a person
+#: with years of memories costs one bounded read, and far above what `MAX_HINTS` shows.
+MAX_READ_FOR_RECALL: Final = 200
+
+#: Why recall for an answer reads nothing but the asker's own memories.
+A_MODEL_IS_SHOWN_ONLY_WHAT_THE_ASKER_MAY_RECALL_ABOUT_THEMSELVES: Final = (
+    "The memories read for an answer are the asker's own, and each one is shown only when "
+    "brain.memory.recall admits it at the run's reach, at the place the asker is now, after the "
+    "corrections are read. A memory formed in another department, under a grant since removed, "
+    "undone by a person, or decayed below the floor is not shown, and nothing says one was left "
+    "out."
+)
+
+
+@dataclass(frozen=True)
+class Kept:
+    """One stored memory as recall reads it, with the words it keeps."""
+
+    memory_id: str
+    formation: Formation
+    formed_confidence: float
+    statement: str
+
+
+def formation_of(row: PersistentMemoryRow | AdaptiveMemoryRow) -> Formation:
+    """The formation a stored row records. Raises `ValueError` for a row the types refuse.
+
+    A kind no `MemoryKind` names, a capability tag the grammar refuses and a scope the model
+    refuses are each possible on disk, since a tag column is bounded only by width and `kind` by
+    no check constraint, and each is refused here rather than recalled on a reading of it.
+    """
+    return Formation(
+        principal_id=row.principal_id,
+        capabilities=tuple(Capability(value=one) for one in row.capability_tags),
+        scope=Scope.model_validate(row.scope),
+        ent_hash=row.ent_hash,
+        formed_at=row.formed_at,
+        kind=MemoryKind(row.kind),
+    )
+
+
+def kept_of(row: PersistentMemoryRow | AdaptiveMemoryRow) -> Kept | None:
+    """One row as recall reads it, or None for a row the types refuse or a session kind.
+
+    A stated row is recalled at the confidence it was formed with, which is certain, since the
+    stated table keeps no confidence: `brain.memory.formation.A_STATED_MEMORY_DOES_NOT_DECAY`.
+    """
+    try:
+        formation = formation_of(row)
+    except ValueError as exc:
+        log.warning("memory row does not construct", memory=row.id, error=type(exc).__name__)
+        return None
+    if formation.kind is MemoryKind.SESSION:
+        return None
+    confidence = row.formed_confidence if isinstance(row, AdaptiveMemoryRow) else 1.0
+    return Kept(
+        memory_id=row.id,
+        formation=formation,
+        formed_confidence=confidence,
+        statement=row.statement,
+    )
+
+
+def stated_rows_of(principal_id: str, limit: int) -> Select[tuple[PersistentMemoryRow]]:
+    """What this person stated, newest first, bounded."""
+    return (
+        select(PersistentMemoryRow)
+        .where(PersistentMemoryRow.principal_id == principal_id)
+        .order_by(PersistentMemoryRow.formed_at.desc(), PersistentMemoryRow.id)
+        .limit(limit)
+    )
+
+
+def inferred_rows_of(principal_id: str, limit: int) -> Select[tuple[AdaptiveMemoryRow]]:
+    """What the system inferred about this person, newest first, bounded."""
+    return (
+        select(AdaptiveMemoryRow)
+        .where(AdaptiveMemoryRow.principal_id == principal_id)
+        .order_by(AdaptiveMemoryRow.formed_at.desc(), AdaptiveMemoryRow.id)
+        .limit(limit)
+    )
+
+
+class StoredRecall:
+    """The memories a model answering one person may be shown about them, as hints.
+
+    See `A_MODEL_IS_SHOWN_ONLY_WHAT_THE_ASKER_MAY_RECALL_ABOUT_THEMSELVES`. The decision is
+    `brain.memory.recall.recall`, called and never restated; this reads the rows and the
+    corrections naming them and hands over the words of what it admitted, most confident first.
+    """
+
+    def __init__(self, sessions: async_sessionmaker[AsyncSession]) -> None:
+        self._sessions = sessions
+
+    async def recalled(
+        self,
+        reader: EntitlementSet,
+        *,
+        where: Mapping[str, object],
+        now: datetime,
+        limit: int = MAX_HINTS,
+    ) -> tuple[str, ...]:
+        """The statements of the reader's own memories they may recall now, at most `limit`.
+
+        Raises what the database raises. `hints` is the call that must not.
+        """
+        async with self._sessions() as session:
+            rows: list[PersistentMemoryRow | AdaptiveMemoryRow] = [
+                *(
+                    await session.execute(stated_rows_of(reader.principal_id, MAX_READ_FOR_RECALL))
+                ).scalars(),
+                *(
+                    await session.execute(
+                        inferred_rows_of(reader.principal_id, MAX_READ_FOR_RECALL)
+                    )
+                ).scalars(),
+            ]
+            kept = [one for one in map(kept_of, rows) if one is not None]
+            marks = (
+                (await session.execute(corrections_naming([one.memory_id for one in kept])))
+                .scalars()
+                .all()
+                if kept
+                else []
+            )
+        found = corrections_of(marks)
+        said = {one.memory_id: one.statement for one in kept}
+        admitted = recall(
+            kept,
+            reader,
+            now=now,
+            supersessions=found.supersessions,
+            demotions=found.demotions,
+            where=where,
+        )
+        return tuple(said[one.memory_id] for one in admitted[:limit])
+
+    async def hints(
+        self,
+        reader: EntitlementSet,
+        *,
+        where: Mapping[str, object],
+        now: datetime,
+        trace_id: str,
+    ) -> tuple[str, ...]:
+        """`recalled`, for the answer lane's caller, which must never fail an answer over a hint.
+
+        A failure is logged with the trace and the exception's type and answered with no hints,
+        for `StoredFormations.after_turn`'s reason: the answer does not depend on them.
+        """
+        try:
+            return await self.recalled(reader, where=where, now=now)
+        except Exception as exc:
+            # Broad on purpose: whatever the store raised, the question is answered without hints.
+            log.warning("memory recall failed", trace=trace_id, error=type(exc).__name__)
+            return ()
