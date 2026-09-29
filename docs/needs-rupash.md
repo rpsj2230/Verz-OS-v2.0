@@ -100,6 +100,15 @@ setup file too: after the move its pieces open nothing. `--rollback` puts everyt
 dated copy exists. Rehearsed end to end on throwaway containers on your server on 2026-09-29, never
 touching the running vault. `ops/openbao/UNSEAL.md` is the plain-words guide.
 
+## 113. "Each of the four providers answers" waits until OpenAI and DeepSeek are used again - DECIDED 2026-09-29
+
+M5.7.1 names all four providers and asks that each answers on the install. On 2026-09-29 Anthropic and
+Moonshot answered; OpenAI refused with 429 and DeepSeek with 402 (no balance). **Your answer, 2026-09-29:**
+"you can ignore them as I will deactivate them for now and will use it later". Both were turned off on
+Models and health the same day, so M5.6.1 (every provider that is switched on answers) closes on Anthropic
+and Moonshot, and M5.7.1 moves to Wave 5, when the other two are funded and switched on again. Nothing is
+removed; reversible: switch them on and it moves back.
+
 ## 112. The four "every requirement in an area is demonstrated" tasks move to their proofs' wave - DECIDED 2026-09-29
 
 M1.8.8 (permissions), M2.3.2 (departments), M5.6.5 (models) and M24.3.6 (observability) each close only
