@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-09-29T17:11:20.508186+00:00",
-  "commit": "3812d36f",
-  "commit_subject": "The evening digest goes wherever the owner points it, on any connected channel (#277)",
+  "generated_at": "2026-09-29T17:20:24.107441+00:00",
+  "commit": "f914ed6f",
+  "commit_subject": "Three tasks close on what the install recorded: the template signing key and the signed built-ins, a worker run's one-read lease on a connector key, and the canvas's deterministic-only rule (#273)",
   "total": 1576,
-  "done": 466,
-  "percent": 29.6,
+  "done": 469,
+  "percent": 29.8,
   "acts": 47,
   "decided": 131,
   "current_wave": 2,
@@ -39,12 +39,12 @@
       "wave": 2,
       "name": "Data, channels, retrieval",
       "total": 265,
-      "done": 114,
-      "percent": 43.0,
+      "done": 117,
+      "percent": 44.2,
       "in_progress": 13,
       "ready_for_testing": 2,
       "blocked": 2,
-      "open": 134,
+      "open": 131,
       "acts": 0,
       "decided": 20
     },
@@ -224,7 +224,7 @@
       "name": "Agents and templates",
       "wave": 3,
       "total": 69,
-      "done": 0,
+      "done": 1,
       "acts": 0,
       "decided": 16
     },
@@ -395,7 +395,7 @@
       "name": "Component deployment and wiring",
       "wave": 2,
       "total": 44,
-      "done": 14,
+      "done": 16,
       "acts": 0,
       "decided": 3
     },
@@ -631,6 +631,7 @@
     "M12.4.13",
     "M12.4.3",
     "M12.4.6",
+    "M13.8.10",
     "M14.4.5",
     "M15.1.1",
     "M15.1.2",
@@ -815,6 +816,8 @@
     "M32.5.1.2",
     "M32.5.1.3",
     "M32.5.2.4",
+    "M32.6.2.1",
+    "M32.7.1",
     "M32.7.3",
     "M33.4.1.4",
     "M33.5.1.4",
@@ -1095,7 +1098,7 @@
       "note": "Foundation accepted on staging; first release v0.1.0 cut from this commit"
     }
   },
-  "closed_today": 96,
+  "closed_today": 99,
   "next_up": [
     "M1.8.5",
     "M2.3.1",
@@ -1104,6 +1107,12 @@
     "M7.1.4"
   ],
   "recent": [
+    {
+      "sha": "f914ed6",
+      "at": "2026-09-29T17:14:02+00:00",
+      "subject": "Three tasks close on what the install recorded: the template signing key and the signed built-ins, a worker run's one-read lease on a connector key, and the canvas's deterministic-only rule (#273)",
+      "closed": "M13.8.10,M32.6.2.1,M32.7.1"
+    },
     {
       "sha": "daf971a",
       "at": "2026-09-29T15:26:04+00:00",
@@ -1217,12 +1226,6 @@
       "at": "2026-09-22T02:13:24+00:00",
       "subject": "Models and health has a field to paste a provider's key, sent once from a confirmation and never drawn back",
       "closed": "M27.8.8"
-    },
-    {
-      "sha": "44562ec",
-      "at": "2026-09-22T02:05:16+00:00",
-      "subject": "Needs you records items 93, 95 and 96 as decided, two tasks move waves, and item 85's steps name the real key field",
-      "closed": "M1.1.5"
     }
   ]
 }
