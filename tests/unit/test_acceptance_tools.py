@@ -3,7 +3,7 @@
 The pure half holds the checks to the suite and runs the sensitive-effect check, which reads no
 table, against the install's own registry and against a registry broken two ways: one that no
 longer asks a tool named for an effect to declare it, and one that lets a declared tool rise past a
-person. The database half builds PostgreSQL to head and runs the three checks as the worker would:
+person. The database half builds PostgreSQL to head and runs the four checks as the worker would:
 they pass, and the catalogue, the switches and the ledger hold afterwards what they held before.
 Then each database check is run against the install broken in the way its sentence rules out: a
 start-up write that writes nothing, a catalogue table without its name constraint, a guard that no
@@ -39,12 +39,14 @@ MODULE = "brain.ops.acceptance_checks_tools"
 CATALOGUE = "every_registered_tool_is_a_catalogue_row_under_the_name_grammar"
 SENSITIVE = "a_tool_named_for_a_sensitive_effect_must_declare_it"
 SWITCH = "a_switched_off_tool_is_refused_and_a_department_stops_its_own"
+LEASH = "a_tool_s_side_effect_holds_the_rung_an_agent_runs_at"
 
 #: Each check and the leaves it proves, as the coordinator scoped them.
 LEAVES = {
     CATALOGUE: ("M12.1.1", "M12.1.4"),
     SENSITIVE: ("M12.3.8",),
     SWITCH: ("M12.4.3",),
+    LEASH: ("M12.1.3",),
 }
 
 #: Every table the tool checks write to, which must hold afterwards what it held before.
@@ -148,7 +150,7 @@ def tool_counts(url: str) -> dict[str, int]:
 
 @pytest.mark.needs_db
 def test_on_a_real_database_every_tool_check_passes_and_leaves_nothing_behind() -> None:
-    """**The three checks as the worker runs them, against PostgreSQL at head.** Each passes with
+    """**The four checks as the worker runs them, against PostgreSQL at head.** Each passes with
     no reason, and the catalogue, the switches, the people, the grants and the ledger hold exactly
     what they held before. Delete this and a check that cannot pass on the real schema, or one
     that commits a stop on a client's tool, reaches the owner's server first."""

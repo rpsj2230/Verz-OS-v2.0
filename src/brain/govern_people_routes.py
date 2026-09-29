@@ -85,6 +85,12 @@ the page showed having moved is said only to a caller who governs the scope. `01
 move as `renamed`. The Departments listing filters by `slug`, so the console opens one department
 by `filter=slug:<slug>`.
 
+**The departments a staff source names are offered from this screen, since 2026-09-29.**
+`/govern/departments/from-staff-source` lists, to a reader who may found departments, each
+department name the chosen staff source's roster carries that no registered department answers
+to, with the short name it would get; a `POST` founds the ones the reader confirmed, each through
+the screen's own founding write. See `brain.ops.source_organisation`.
+
 Task ids: M27.7.4, M27.7.8, M27.7.9, M27.7.12, M27.8.6, M1.2.3, M1.2.5, M27.11.1, M27.15.22
 """
 
@@ -193,12 +199,15 @@ from brain.identity.organisation_store import (
 from brain.identity.packs import SubjectGrant
 from brain.identity.principal_state_store import A_DISABLE_IS_REVERSIBLE_AND_A_LEAVER_IS_NOT
 from brain.identity.roles import BREAK_GLASS_MAX, BreakGlassReason, IdentityError, RoleGrant
+from brain.identity.staff_source import STAFF_SOURCE_SETTING
 from brain.identity.teams import PrincipalSubject
 from brain.identity.teams import Team as TeamRecord
+from brain.install import value_of
 from brain.listing import MAX_SEVERAL, Column, ListAsked, Listing, each_of
 from brain.ops.outbox import EventKind, Subscriber, may_manage
 from brain.ops.outbox_store import last_delivered, subscribers
 from brain.ops.replica_store import ConsoleReads, Served
+from brain.ops.source_organisation import found_named, named_departments
 from brain.people_names import names_for
 from brain.routing_routes import sessions_of
 from brain.tables.elevation import (
@@ -1588,6 +1597,102 @@ async def found_department(
         department=department, scope=scope, by=_by(asked)
     )
     return _structured(outcome, asked, kind="department", slug=body.slug, change="created")
+
+
+class SourceDepartmentView(BaseModel):
+    """One department the staff source names: as it spells it, and the short name it would get."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    slug: str
+
+
+class SourceDepartmentsView(BaseModel):
+    """The departments the staff source names that no registered department answers to.
+
+    Empty for a reader who may not found departments, which is also what an install whose source
+    names none is answered. `registered` is the source's names a department already answers to,
+    so the page can say a second press would found nothing. No count of people.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    to_found: list[SourceDepartmentView]
+    registered: list[str]
+
+
+class SourceDepartmentsFounding(BaseModel):
+    """The short names the reader confirmed, as the page listed them."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    slugs: list[Slug] = Field(min_length=1, max_length=200)
+
+
+class SourceDepartmentsFounded(BaseModel):
+    """What one press founded, and the names it could not."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    created: list[SourceDepartmentView]
+    not_founded: list[str]
+
+
+SOURCE_DEPARTMENTS_PATH = "/govern/departments/from-staff-source"
+
+
+@router.get(
+    SOURCE_DEPARTMENTS_PATH, response_model=SourceDepartmentsView, responses=COMMON_RESPONSES
+)
+async def source_departments(request: Request, asked: Asked) -> SourceDepartmentsView:
+    """The departments the chosen staff source names that are not founded yet. Reads only.
+
+    Answered to a reader who may found departments and to nobody else, who is answered what an
+    install whose source names nothing is: an empty list, one shape. `named_departments` reads the
+    live roster rows of the chosen source, whose department a row keeps only when the source is
+    trusted to say it.
+    """
+    factory = sessions_of(request)
+    if not may_found_or_retire_departments(asked.reach, asked.now) or factory is None:
+        return SourceDepartmentsView(to_found=[], registered=[])
+    named = await named_departments(factory, value_of(STAFF_SOURCE_SETTING))
+    return SourceDepartmentsView(
+        to_found=[SourceDepartmentView(name=one.name, slug=one.slug) for one in named.to_found],
+        registered=list(named.registered),
+    )
+
+
+@router.post(
+    SOURCE_DEPARTMENTS_PATH, response_model=SourceDepartmentsFounded, responses=COMMON_RESPONSES
+)
+async def found_source_departments(
+    request: Request, body: SourceDepartmentsFounding, asked: Asked
+) -> SourceDepartmentsFounded:
+    """Found each department the reader confirmed that the staff source still names unfounded.
+
+    The whole company's authority, asked before anything is read, as the single founding asks it.
+    What is founded is recomputed here and never taken from the page: a confirmed short name the
+    source no longer offers is not founded, and each department is founded by the screen's own
+    write, attributed to the reader, so each department and its scope is a ledger entry of theirs.
+    """
+    _founding_refused(asked)
+    factory = sessions_of(request)
+    if factory is None:
+        raise Failed("no database on this process")
+    named = await named_departments(factory, value_of(STAFF_SOURCE_SETTING))
+    done = await found_named(
+        structure_records_of(request), named, confirmed=frozenset(body.slugs), by=_by(asked)
+    )
+    log.info(
+        "departments founded from the staff source",
+        principal=asked.caller.principal.id,
+        created=[one.slug for one in done.created],
+    )
+    return SourceDepartmentsFounded(
+        created=[SourceDepartmentView(name=one.name, slug=one.slug) for one in done.created],
+        not_founded=list(done.not_founded),
+    )
 
 
 @router.post(

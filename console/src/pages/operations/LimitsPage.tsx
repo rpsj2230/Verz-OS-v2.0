@@ -20,17 +20,24 @@
  * **What was removed.** Raw `true` and `false` cells and bare seconds (words now), and the
  * paragraphs explaining why each table is a plain table.
  *
- * Task ids: M27.7.27, M23.1.1, M23.2.1, M27.16.1, M22.4.1
+ * **Deferred now names the kinds of work waiting for room** (M22.1.5): the shed plan over the work
+ * in progress the install's cache counts, each row a kind of work and the budget whose share it has
+ * used, in the order the kinds give way. No figure for what is in use, and none is sent; a process
+ * with no cache is the API's sentence under the heading, never an empty table.
+ *
+ * Task ids: M27.7.27, M23.1.1, M23.2.1, M27.16.1, M22.4.1, M22.1.5
  */
 
 import { useResource } from "../../api/useResource";
 import { SectionCard, type EntityColumn } from "../../components/kit";
 import {
   LIMITS_API_PATH,
+  readDeferred,
   readThrottled,
   readUnusual,
   wasRead,
   type Ceiling,
+  type Deferred,
   type Limits as LimitsBody,
   type Throttled,
   type Unusual,
@@ -58,6 +65,10 @@ export const NO_CEILINGS = "No connected source";
  * sources this reader may be told are connected, by name (`brain.install_routes`).
  */
 export const NO_CEILINGS_MORE = "A source's own limit on requests appears here once it is connected on Connectors.";
+export const DEFERRED_HEADING = "Deferred now";
+export const NOTHING_COUNTS_WORK = "Nothing here counts the work in progress";
+export const NOTHING_IS_DEFERRED = "Nothing is deferred";
+export const NOTHING_IS_DEFERRED_MORE = "A kind of work appears here while it has used its share of a budget and waits for room.";
 export const UNUSUAL_HEADING = "Asking far more than usual";
 export const NOTHING_COUNTED = "Nothing here has counted who is asking more than usual";
 export const NOBODY_IS_UNUSUAL = "Nobody is asking far more than usual";
@@ -125,6 +136,19 @@ const CEILING_COLUMNS: readonly EntityColumn<Ceiling>[] = [
   },
 ];
 
+const DEFERRED_COLUMNS: readonly EntityColumn<Deferred>[] = [
+  { id: "work", header: "Work", hideable: false, cell: (row) => row.work, text: (row) => row.work },
+  { id: "budget", header: "Budget", cell: (row) => row.budget, text: (row) => row.budget },
+  {
+    id: "share",
+    header: "Its share",
+    cell: (row) => `${row.share.toLocaleString("en-GB")} of ${row.limit.toLocaleString("en-GB")}`,
+    text: (row) => `${String(row.share)} of ${String(row.limit)}`,
+  },
+  { id: "said", header: "What is deferred", hidden: true, cell: (row) => row.said, text: (row) => row.said },
+  { id: "class", header: "Class", hidden: true, cell: (row) => row.workload_class, text: (row) => row.workload_class },
+];
+
 const UNUSUAL_COLUMNS: readonly EntityColumn<Unusual>[] = [
   { id: "subject", header: "Who", hideable: false, cell: (row) => row.subject, text: (row) => row.subject },
   {
@@ -151,6 +175,7 @@ export function LimitsPage() {
       {(page) => {
         const throttled = readThrottled(page);
         const unusual = readUnusual(page);
+        const deferred = readDeferred(page);
         return (
           <>
             {wasRead(throttled) ? (
@@ -170,6 +195,23 @@ export function LimitsPage() {
                 <Line>{throttled.unread}</Line>
               </SectionCard>
             )}
+            {wasRead(deferred) ? (
+              <WholeList
+                title={DEFERRED_HEADING}
+                caption={DEFERRED_HEADING}
+                columns={DEFERRED_COLUMNS}
+                rows={deferred.panel}
+                rowId={(row) => `${row.workload_class}:${row.budget}`}
+                rowLabel={(row) => row.said}
+                empty={NOTHING_IS_DEFERRED}
+                emptyDescription={NOTHING_IS_DEFERRED_MORE}
+              />
+            ) : deferred.unread ? (
+              <SectionCard title={DEFERRED_HEADING}>
+                <p className="m-0 text-sm font-medium text-ink">{NOTHING_COUNTS_WORK}</p>
+                <Line>{deferred.unread}</Line>
+              </SectionCard>
+            ) : null}
             <WholeList
               title={WINDOWS_HEADING}
               caption={WINDOWS_HEADING}

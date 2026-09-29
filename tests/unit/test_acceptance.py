@@ -147,6 +147,7 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "every_registered_tool_is_a_catalogue_row_under_the_name_grammar",
         "a_tool_named_for_a_sensitive_effect_must_declare_it",
         "a_switched_off_tool_is_refused_and_a_department_stops_its_own",
+        "a_tool_s_side_effect_holds_the_rung_an_agent_runs_at",
     ]
     assert by_module["brain.ops.acceptance_checks_lifecycle"] == [
         "a_newer_version_supersedes_the_older_and_answers_use_the_newer",
@@ -178,6 +179,14 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "failures_open_the_breaker_and_a_refusal_is_retried_in_budget",
         "an_unreached_source_is_named_only_to_an_asker_who_could_see_it",
         "a_source_s_live_calls_are_measured_on_its_page",
+    ]
+    # Capacity as rows, the screens that read it, and the classes sharing one budget in the cache;
+    # `tests/unit/test_acceptance_capacity.py`.
+    assert by_module["brain.ops.acceptance_checks_capacity"] == [
+        "budgets_and_windows_are_rows_saved_within_bounds_and_audited",
+        "the_rate_limits_screen_lists_the_windows_refusing_now",
+        "capacity_is_sized_for_the_busiest_minute_and_its_first_limit",
+        "three_classes_share_one_budget_and_give_way_in_order",
     ]
     # Retrieval on the install's own index; `tests/unit/test_acceptance_retrieval.py`.
     assert by_module["brain.ops.acceptance_retrieval"] == [
@@ -213,6 +222,14 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     # The canvas's door; `tests/unit/test_acceptance_automation.py`.
     assert by_module["brain.ops.acceptance_checks_automation"] == [
         "a_flow_step_gets_its_owner_s_rows_and_nothing_its_ceiling_adds",
+    ]
+    assert by_module["brain.ops.acceptance_checks_organisation"] == [
+        "departments_a_staff_source_names_are_founded_once",
+        "the_staff_sync_places_people_where_its_source_says",
+    ]
+    # The staff sync's accounts, with no sign-in service called; `test_staff_accounts_run.py`.
+    assert by_module["brain.ops.acceptance_checks_accounts"] == [
+        "the_staff_sync_gives_the_active_an_account_and_closes_a_leaver_s",
     ]
     # One per channel a vendor connects; `tests/unit/test_acceptance_channels.py` runs them.
     assert by_module["brain.ops.acceptance_checks_channels"] == [
@@ -655,7 +672,7 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
 ) -> None:
     """**The run as the worker makes it, against PostgreSQL at head.** Twice: every check that can
     be asked without a cache passes both times, including the two Lark checks needing a bound
-    person now that the events route reads chat bindings (0118); the two checks needing a cache
+    person now that the events route reads chat bindings (0118); the three checks needing a cache
     say they were not run, the skill import says this install names no public skill, which is
     the declared default, and after both runs every table a check wrote to holds what it held
     before, while the result rows are there, one run each, keyed by the commit. Delete this and
@@ -690,6 +707,7 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     assert list(outcomes) == suite
     assert outcomes.pop("asking_past_a_window_is_refused_with_a_retry_hint")[0] == NOT_RUN
     assert outcomes.pop("the_rate_limits_screen_lists_the_windows_refusing_now")[0] == NOT_RUN
+    assert outcomes.pop("three_classes_share_one_budget_and_give_way_in_order")[0] == NOT_RUN
     assert outcomes.pop("a_skill_is_imported_from_a_github_commit_and_from_an_address") == (
         NOT_RUN,
         "this install names no public skill to import, so no import from GitHub was asked",
