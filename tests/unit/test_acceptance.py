@@ -692,9 +692,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     ):
         assert outcomes.pop(worker_check) == (NOT_RUN, acceptance_deployment.NOT_IN_A_WORKER)
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
-    assert len(outcomes) == 44
+    assert len(outcomes) == 45
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 144
+    assert runs == [(2,)] and len(recorded) == 146
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }
