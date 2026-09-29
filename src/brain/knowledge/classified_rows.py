@@ -43,11 +43,21 @@ answered under its new classification on the next question, and the classificati
 goes into the answer cache's epoch beside every other entity's, so an answer computed under
 the old rule is never served under the new one.
 
+**And each table's upload is a source epoch of its own** (M6.5.2). Until 2026-09-29 the answer
+cache's key carried no source epoch at all, so a price list uploaded again with a new price was
+answered with the old one from the cache until the answer aged out: the policy had not changed,
+only the rows had. `ClassifiedLane.epochs` names every live table by its upload's version, the
+answer route hands them to the cache as source epochs, and the key of every question moves the
+moment any table is uploaded again. Every question rather than only the ones about that table,
+because which table answers is decided after the lookup, and a key narrowed to a guess about it
+would be a guess that can be wrong in the direction that serves a stale price. See
+`AN_UPLOAD_MOVES_THE_ANSWER_CACHE_KEY`.
+
 Rejected: registering a `RowTool` per uploaded table at startup. The registry is frozen when
 the process starts, so an upload would reach Ask only after a restart, and the tool would read
 `proj.record`, which holds none of these rows.
 
-Task ids: M7.5.2, M7.7.3
+Task ids: M7.5.2, M7.7.3, M6.5.2
 """
 
 from __future__ import annotations
@@ -376,6 +386,9 @@ class ClassifiedLane:
     rules: tuple[FastPathRule, ...] = ()
     readers: Mapping[tuple[str, str], RowReader] = field(default_factory=dict)
     policies: Mapping[str, FieldPolicy] = field(default_factory=dict)
+    #: Every live table's upload, as the answer cache's source epochs. See
+    #: `AN_UPLOAD_MOVES_THE_ANSWER_CACHE_KEY`.
+    epochs: Mapping[str, int] = field(default_factory=dict)
 
 
 def lane_for(tables: Sequence[StoredTable], records: RowSource) -> ClassifiedLane:
@@ -389,6 +402,7 @@ def lane_for(tables: Sequence[StoredTable], records: RowSource) -> ClassifiedLan
     rules: list[FastPathRule] = []
     readers: dict[tuple[str, str], RowReader] = {}
     policies: dict[str, FieldPolicy] = {}
+    epochs: dict[str, int] = {}
     for table in tables:
         if table.entity in policies:
             log.warning("classified_rows.entity_twice", entity=table.entity)
@@ -396,4 +410,19 @@ def lane_for(tables: Sequence[StoredTable], records: RowSource) -> ClassifiedLan
         rules.extend(questions_for(table))
         readers[(TABLES_SOURCE, table.entity)] = table_reader(table, records)
         policies[table.entity] = table.classification.policy()
-    return ClassifiedLane(rules=tuple(rules), readers=readers, policies=policies)
+        epochs[epoch_name(table.entity)] = table.version
+    return ClassifiedLane(rules=tuple(rules), readers=readers, policies=policies, epochs=epochs)
+
+
+#: Why an upload moves the key of every cached answer.
+AN_UPLOAD_MOVES_THE_ANSWER_CACHE_KEY: Final = (
+    "A price list uploaded again changes what a question about it answers and changes no policy, "
+    "so a key carrying only the policy epoch served the old price until the answer aged out. "
+    "Every live table's upload version is a source epoch in every question's key, so the next "
+    "question after any upload is answered from the rows as they now stand."
+)
+
+
+def epoch_name(entity: str) -> str:
+    """The source epoch one uploaded table is named by in an answer's cache key."""
+    return f"{TABLES_SOURCE}.{entity}"
