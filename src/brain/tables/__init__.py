@@ -401,6 +401,11 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     "agent.manifest_draft",
     "agent.manifest_revision",
     "agent.manifest_act",
+    # 0150_trace_store_and_browser_session. A session points at the envelope its run was sealed
+    # under; a trace step and a trace read point at nothing, because a trace id is a value.
+    "agent.browser_session",
+    "obs.trace_step",
+    "obs.trace_read",
 )
 
 __all__ = [

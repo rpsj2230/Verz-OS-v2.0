@@ -47,7 +47,9 @@ depends_on = None
 
 #: The function as it is now, rendered from the module that owns the rule, for the reason
 #: `0028` gives: a literal here would be a second copy of a decision that goes stale.
-from brain.core.scope_sql import DELEGATED_REACH_SQL  # noqa: E402 - after the revision identifiers, on purpose
+from brain.core.scope_sql import (
+    DELEGATED_REACH_SQL,
+)
 
 #: `gate.delegated_reach` exactly as `0028` installed it, which is `DELEGATED_REACH_SQL` in
 #: `brain.core.scope_sql` at commit 60087ad. Frozen on purpose; see the module docstring.

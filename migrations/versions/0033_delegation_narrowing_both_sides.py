@@ -39,7 +39,9 @@ branch_labels = None
 depends_on = None
 
 #: The function as it is now, rendered from the module that owns the rule.
-from brain.core.scope_sql import NARROWING_REFUSALS_SQL  # noqa: E402 - after the revision identifiers, on purpose
+from brain.core.scope_sql import (
+    NARROWING_REFUSALS_SQL,
+)
 
 #: `gate.narrowing_refusals` exactly as it shipped before this revision, which is
 #: `NARROWING_REFUSALS_SQL` in `brain.core.scope_sql` at commit 77c7313. Frozen on purpose; see

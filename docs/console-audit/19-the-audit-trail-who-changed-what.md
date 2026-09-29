@@ -1,9 +1,9 @@
 ### The audit trail: who changed what, and when
 
 - **Screens:** `/audit`, `/requirement-checks`
-- **Tables:** `obs.audit_entry`, `ops.sensitive_read`, `ops.requirement_check`
+- **Tables:** `obs.audit_entry`, `ops.sensitive_read`, `ops.requirement_check`, `agent.browser_session`, `obs.trace_step`, `obs.trace_read`
 - **Installation values:** none
-- **Measured here:** 5 routes, 0 called by no screen; 2 write routes, 1 with all three proofs; 0 gaps.
+- **Measured here:** 5 routes, 0 called by no screen; 2 write routes, 1 with all three proofs; 1 gaps.
 
 | Route | Called by |
 | --- | --- |
@@ -13,7 +13,7 @@
 | `POST /api/v1/audit/verification` | `/audit` |
 | `POST /api/v1/requirements/checks` | `/requirement-checks` |
 
-No gap recorded.
+- **Gap.** A run's trace graph is stored masked and read only under its own role, and no screen reads it: TraceGraph draws a completed run and no route serves one. Open leaf `M20.2.1`.
 
 **Every write to this area, followed to the system.**
 
