@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-29T06:35:43.704984+00:00",
-  "commit": "20d405c0",
-  "commit_subject": "Every task starts from the code already written for it, and the four area-wide requirement checks move to the wave of their last proof (#196)",
+  "generated_at": "2026-09-29T06:39:48.474926+00:00",
+  "commit": "67b83bab",
+  "commit_subject": "Governance is rebuilt on the page kit: Audit log, Approvals, Access review, Elevation, Access requests, Retention, Compliance, Referrals and Fields and records (#189)",
   "total": 1576,
   "done": 410,
   "percent": 26.0,
