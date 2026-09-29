@@ -214,6 +214,14 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     assert by_module["brain.ops.acceptance_checks_automation"] == [
         "a_flow_step_gets_its_owner_s_rows_and_nothing_its_ceiling_adds",
     ]
+    assert by_module["brain.ops.acceptance_checks_organisation"] == [
+        "departments_a_staff_source_names_are_founded_once",
+        "the_staff_sync_places_people_where_its_source_says",
+    ]
+    # The staff sync's accounts, with no sign-in service called; `test_staff_accounts_run.py`.
+    assert by_module["brain.ops.acceptance_checks_accounts"] == [
+        "the_staff_sync_gives_the_active_an_account_and_closes_a_leaver_s",
+    ]
     assert list(by_module) == list(acceptance.CHECK_MODULES)
     oversight = {one.name: one.leaves for one in registered()}
     assert oversight["unusual_volume_is_found_per_person"] == ("M23.2.1",)
