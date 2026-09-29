@@ -18,13 +18,13 @@ reachable only through its conversation, which is its owner's (`0005`).
 
 **The downgrade drops the index, the checks and the columns**, and what they held goes with them.
 
-Written over 0150, main's newest migration when this was written; whoever lands it re-points
+Written over 0157, main's newest migration when this was written; whoever lands it re-points
 `down_revision` to main's head then and nothing else.
 
 Task ids: M39.8.9
 
 Revision ID: 0161
-Revises: 0150
+Revises: 0157
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0161"
-down_revision = "0150"
+down_revision = "0157"
 branch_labels = None
 depends_on = None
 
