@@ -40,6 +40,8 @@ class DataCategory(enum.StrEnum):
     CHECK_SENTENCE = "check_sentence"
     #: A golden question the matrix gate asks before a routing change takes traffic.
     GOLDEN_QUESTION = "golden_question"
+    #: What the person asking said about themselves and may still recall, sent as hints.
+    MEMORY_HINTS = "memory_hints"
 
 
 #: What each category is called on the console and in the exported record.
@@ -50,6 +52,7 @@ TOLD: Final[Mapping[DataCategory, str]] = MappingProxyType(
         DataCategory.SKILL_DESCRIPTIONS: "Descriptions of an agent's skills",
         DataCategory.CHECK_SENTENCE: "The fixed provider-check sentence (no company data)",
         DataCategory.GOLDEN_QUESTION: "Golden questions asked before a routing change",
+        DataCategory.MEMORY_HINTS: "What the person asking said about themselves, as hints",
     }
 )
 
