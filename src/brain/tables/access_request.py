@@ -13,10 +13,12 @@ refuses a row naming both or neither, so a request cannot be about something unn
 for this reason, and the reason is the question; see `brain.core.redaction.OwnerNotice`. It is
 read by the owner's list and by nothing that reaches the asker, whose reply is a constant.
 
-**Insert and read, never update or delete.** A request is a record that it was made; a decision is
-a grant written on the Roles screen, which is where an owner acts on it.
+**Insert and read, and marked handled once; never deleted.** A request is a record that it was
+made; a decision is a grant written on the People or Roles screens, which is where an owner acts on
+it. Since `0146` its owner may mark it handled, once: `handled_at` and `handled_by` are the only
+columns the application may update, both or neither, and only to the owner's own id.
 
-Task ids: M4.3.4, M2.2.4
+Task ids: M4.3.4, M2.2.4, M27.16.1
 """
 
 from __future__ import annotations
@@ -45,6 +47,11 @@ ONE_SUBJECT: Final = (
 )
 
 
+#: A request is handled whole, and only by its own owner (`0146`).
+HANDLED_WHOLE: Final = "(handled_at IS NULL) = (handled_by IS NULL)"
+HANDLED_BY_ITS_OWNER: Final = "handled_by IS NULL OR handled_by = owner_id"
+
+
 class AccessRequestRow(Base):
     """`gate.access_request`. One request, addressed to one owner."""
 
@@ -63,6 +70,9 @@ class AccessRequestRow(Base):
     requested_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+    #: When its owner marked it handled, and who; both or neither, and only the owner (`0146`).
+    handled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    handled_by: Mapped[str | None] = mapped_column(String(PRINCIPAL_ID_CHARS), nullable=True)
 
     __table_args__ = (
         CheckConstraint(ONE_SUBJECT, name="one_subject"),
@@ -75,5 +85,7 @@ class AccessRequestRow(Base):
         CheckConstraint(
             f"requested_capability ~ '{CAPABILITY_PATTERN}'", name="requested_capability_grammar"
         ),
+        CheckConstraint(HANDLED_WHOLE, name="handled_whole"),
+        CheckConstraint(HANDLED_BY_ITS_OWNER, name="handled_by_its_owner"),
         {"schema": "gate"},
     )

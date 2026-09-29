@@ -139,7 +139,7 @@ def test_nobody_is_shown_a_notice_addressed_to_somebody_else(
     notices.add("u_admin")
     answered = client.get(f"{API}/govern/elevation/notices", headers=headers("u_wide"))
     assert answered.status_code == 200
-    assert answered.json() == {"items": []}
+    assert answered.json() == {"items": [], "people": {}}
     assert notices.asked == ["u_wide"]
 
 

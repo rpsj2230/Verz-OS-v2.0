@@ -7,16 +7,21 @@ transaction, for `brain.ops.telemetry_store.record`'s reason.
 selects by it; there is no parameter that could name somebody else's list, and no count of rows
 addressed elsewhere is computed.
 
-Task ids: M4.3.4
+**An owner marks their own handled, once.** `mark_handled` updates only a row addressed to the
+owner it is given and not handled yet, and sets only the two columns `0146` grants; a row that is
+somebody else's, already handled or missing changes nothing and is one answer, False.
+
+Task ids: M4.3.4, M27.16.1
 """
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import insert, select
+from sqlalchemy import insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from brain.tables.access_request import AccessRequestRow
@@ -69,3 +74,21 @@ async def addressed_to(
         .limit(limit)
     )
     return found.scalars().all()
+
+
+async def mark_handled(
+    session: AsyncSession, request_id: uuid.UUID, *, owner_id: str, at: datetime
+) -> bool:
+    """Mark one request handled by its owner. False when it is not theirs or is handled already.
+
+    Does not commit. The same answer for a row addressed elsewhere, one handled already and one
+    that does not exist, so a caller cannot ask it which requests exist.
+    """
+    done = await session.execute(
+        update(AccessRequestRow)
+        .where(AccessRequestRow.id == request_id)
+        .where(AccessRequestRow.owner_id == owner_id)
+        .where(AccessRequestRow.handled_at.is_(None))
+        .values(handled_at=at, handled_by=owner_id)
+    )
+    return bool(done.rowcount)  # type: ignore[attr-defined]
