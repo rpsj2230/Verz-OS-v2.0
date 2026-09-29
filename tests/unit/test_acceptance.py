@@ -104,10 +104,10 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     """Held per module, so a package adding checks in a module of its own changes only its own
     line here: limits, channels and documents, then volume, refusals and a head's audit, then Lark
     chat's three, the skill library's four, the models' eleven and the audit's one, the connectors'
-    three, the tools' three, a document's life in four and the classified tables' three, the
-    modules in `CHECK_MODULES` order rather than the order a process imported them. Delete this
-    and a check can drop out of the suite with the page simply listing one fewer row, or the page
-    can lead with whichever module was imported first."""
+    three, the tools' three, a document's life in four, the classified tables' three and an
+    answer's evidence in four, the modules in `CHECK_MODULES` order rather than the order a process
+    imported them. Delete this and a check can drop out of the suite with the page simply listing
+    one fewer row, or the page can lead with whichever module was imported first."""
     by_module: dict[str, list[str]] = {}
     for one in registered():
         by_module.setdefault(one.run.__module__, []).append(one.name)
@@ -159,6 +159,13 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "a_price_list_upload_classifies_every_column",
         "a_reader_without_the_cost_grant_is_told_the_sell_price_alone",
         "an_applied_mark_is_in_the_ledger_under_the_administrator",
+    ]
+    # What an answer stands on and how it declines; `tests/unit/test_acceptance_answers.py`.
+    assert by_module["brain.ops.acceptance_answers"] == [
+        "a_document_answer_cites_the_passage_it_was_shown_with_its_badge",
+        "a_record_answer_cites_the_record_field_and_read_time",
+        "four_kinds_of_nothing_are_kept_apart",
+        "an_answer_and_a_refusal_say_what_the_asker_s_reach_covers",
     ]
     assert list(by_module) == list(acceptance.CHECK_MODULES)
     oversight = {one.name: one.leaves for one in registered()}
@@ -572,8 +579,15 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         "this install names no public skill to import, so no import from GitHub was asked",
     )
     # No key and no hosted profile here, so every check that reaches a model says it was not run;
-    # `tests/unit/test_acceptance_models.py` runs them against providers that answer.
-    for model_check in registered(("brain.ops.acceptance_models", "brain.ops.acceptance_routing")):
+    # `tests/unit/test_acceptance_models.py` runs them against providers that answer, and
+    # `tests/unit/test_acceptance_answers.py` the answer checks against the stand-in.
+    for model_check in registered(
+        (
+            "brain.ops.acceptance_models",
+            "brain.ops.acceptance_routing",
+            "brain.ops.acceptance_answers",
+        )
+    ):
         assert outcomes.pop(model_check.name)[0] == NOT_RUN, model_check.name
     # Every act that exists was seen, and the leaf still cannot close: see its module.
     assert outcomes.pop("each_audited_act_is_in_the_ledger_and_a_missing_entry_is_caught") == (
