@@ -8,7 +8,7 @@
  * shipped, not a model of it. What jsdom cannot check, a focus ring being drawn, is held against the
  * compiled stylesheet in `tests/ui-structure.test.tsx`.
  *
- * Task ids: M27.10.2
+ * Task ids: M27.10.2, M27.15.78
  */
 
 import { act, fireEvent, render, screen } from "@testing-library/react";
