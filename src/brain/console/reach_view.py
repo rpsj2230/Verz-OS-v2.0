@@ -163,7 +163,6 @@ from brain.memory.formation import Formation, MemoryKind, Recollection, may_reca
 from brain.memory.recall import standing
 from brain.memory.signals import Signal
 from brain.memory.tiers import (
-    PROMOTION_AGREEMENT,
     Change,
     Occurrence,
     Tier,
@@ -1473,7 +1472,7 @@ def tier_two_rows(
     agent_id: str,
     occurrences: Mapping[str, Sequence[Occurrence]] | None = None,
     now: datetime,
-    agreement: int = PROMOTION_AGREEMENT,
+    agreement: int | None = None,
 ) -> tuple[TierTwoRow, ...]:
     """Every proposed rule, with its evidence and whether it may be promoted (M39.4.2.3).
 
@@ -1482,8 +1481,15 @@ def tier_two_rows(
     none, and defaulting the other way would make a missing lookup read as consensus.
 
     The counting is `brain.memory.tiers.may_promote`'s, so independence stays defined in one
-    place and this surface only carries the verdict across.
+    place and this surface only carries the verdict across. `agreement` absent is the figure an
+    administrator saved on the Learning screen (M16.6.8), within the product's bounds, and the
+    product's `PROMOTION_AGREEMENT` where nobody saved one; imported when asked, because the
+    tuning module reads the memory package at load.
     """
+    if agreement is None:
+        from brain.ops.tuning import promotion_agreement
+
+        agreement = promotion_agreement()
     counted = occurrences or {}
     found = [
         one for one in learnings if one.agent_id == agent_id and one.proposal.tier is Tier.PROMOTED

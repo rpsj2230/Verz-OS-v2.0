@@ -13,7 +13,13 @@ carries a check constraint generated from `brain.memory.tiers.BLAST_RADIUS`, so 
 at a tier lower than its reach needs is refused by the install's own table whoever writes it. The
 check tries every change at every tier inside a savepoint of its own and reads the refusal.
 
-Task ids: M16.3.5, M16.3.6, M16.4.2, M27.7.21, M33.3.1.4
+**The Learning screen's two figures are proved without changing what the install holds.** They are
+saved in the check's transaction as the route saves them and read back by the reload every process
+runs, and the product's own readers are then asked under them through
+`brain.ops.tuning.reading`, which lends the rows to the check's task alone, so no other request the
+process serves decays a memory at a figure that is about to be rolled back.
+
+Task ids: M16.3.5, M16.3.6, M16.4.2, M16.6.8, M27.7.21, M33.3.1.4
 """
 
 from __future__ import annotations
@@ -270,3 +276,169 @@ async def a_conversation_learning_is_reviewed_and_undone(h: Harness) -> None:
     member = await h.reach(placed.member)
     if await recalled_for(h, member, A, h.now):
         raise CheckFailedError("a person's answers still used a learning an administrator undid")
+
+
+# ------------------------------------------------ M16.6.8 the Learning screen's two figures
+@check(
+    leaves=("M16.6.8",),
+    sentence=(
+        "An administrator saves how long an inferred memory lasts and how many conversations "
+        "must agree before a rule is offered for review: figures out of bounds or naming a tier "
+        "are refused, saves are audited and reloaded, an inference formed on Ask lapses at the "
+        "saved lifetime and not the product's, two agreeing conversations ready a rule, and no "
+        "figure promotes a gated change."
+    ),
+)
+async def learning_figures_are_set_in_bounds_and_move_no_tier(h: Harness) -> None:
+    from datetime import timedelta
+
+    from brain.console.reach_view import tier_two_rows
+    from brain.core.entitlement import Capability
+    from brain.core.scope import Scope
+    from brain.memory.digest import Learning
+    from brain.memory.formation import Formation, MemoryKind
+    from brain.memory.tiers import Change, Occurrence, Tier, blast_radius, may_promote, propose
+    from brain.ops.acceptance_checks_capacity import CHANGES_LIMITS, _setting_entries
+    from brain.ops.acceptance_checks_memory import (
+        PREFERENCE_QUESTION,
+        KeptPrompts,
+        a_document,
+        unending,
+    )
+    from brain.ops.install_settings import read_tuned
+    from brain.ops.tuning import (
+        INFERRED_HALF_LIFE,
+        KNOB_BY_NAME,
+        LEARNING_KINDS,
+        NOT_A_KNOB,
+        PROMOTION_AGREEMENT_KNOB,
+        TuningRefusedError,
+        held,
+        inferred_lifetime_days,
+        promotion_agreement,
+        reading,
+        save,
+        value,
+    )
+    from brain.settings_routes import may_configure
+    from brain.tables.audit import attributed_to
+    from brain.tuning_routes import problem_on
+
+    before = dict(held())
+    placed = await people(h)
+    admin = h.principal(A, "learning_figures")
+    await h.person(admin, department=A, grants=((CHANGES_LIMITS, Scope.unrestricted()),))
+    if not may_configure(await h.reach(admin), h.now):
+        raise CheckFailedError("the route's own question refused the Settings authority")
+
+    half, agree = KNOB_BY_NAME[INFERRED_HALF_LIFE], KNOB_BY_NAME[PROMOTION_AGREEMENT_KNOB]
+    # Outside the bounds: refused by the route's judgement and by the write beneath it.
+    for name, refused in (
+        (half.name, half.lowest - 1),
+        (half.name, half.highest + 1),
+        (agree.name, agree.lowest - 1),
+        (agree.name, agree.highest + 1),
+    ):
+        if not problem_on(name, refused, LEARNING_KINDS):
+            raise CheckFailedError("a learning figure outside the product's bounds was not refused")
+        try:
+            async with h.sessions() as session:
+                await save(session, name, refused, updated_by=admin)
+                await session.commit()
+        except TuningRefusedError:
+            continue
+        raise CheckFailedError("a learning figure outside the product's bounds was written")
+    # A figure naming a tier, or another screen's limit, is not a figure this screen sets.
+    for name in (*(f"tier_{one.value}" for one in Change), "person_per_minute"):
+        if problem_on(name, 1, LEARNING_KINDS) != NOT_A_KNOB:
+            raise CheckFailedError("the Learning screen would set a figure that is not learning's")
+
+    wanted = {half.name: half.lowest, agree.name: agree.lowest}
+    async with h.sessions() as session:
+        reach = await h.reach(admin)
+        for statement in attributed_to(
+            actor_id=admin, ent_hash=reach.ent_hash(), trace_id=h.trace_id
+        ):
+            await session.execute(statement)
+        for name, amount in wanted.items():
+            await save(session, name, amount, updated_by=admin)
+        await session.commit()
+    async with h.sessions() as session:
+        saved = await read_tuned(session)
+        await session.commit()
+    if any(saved.get(name) != amount for name, amount in wanted.items()):
+        raise CheckFailedError("the reload every process runs did not read back what was saved")
+    for key in (half.key, agree.key):
+        entries = await _setting_entries(h, key)
+        if not entries or entries[-1][0] != admin:
+            raise CheckFailedError("a saved learning figure is not in the ledger under its saver")
+
+    # An inference formed on Ask, read by the recall a model's hints use, under each figure.
+    words = await a_document(h)
+    stand_in = KeptPrompts()
+    app = await memory_app(h, stand_in)
+    answered = await ask(
+        h, app, placed.member, PREFERENCE_QUESTION.format(pref=words.pref, key=words.key), 1
+    )
+    if answered.composed is None or not stand_in.sent:
+        raise CheckFailedError("a question the check's document answers was not answered")
+    inferred = f"I prefer {words.pref} answers"
+    member = unending(await h.reach(placed.member))
+    shortest = inferred_lifetime_days(float(value(half.name, saved)))
+    if shortest >= inferred_lifetime_days(float(half.default)):
+        raise CheckFailedError("the shortest lifetime is not shorter than the product's")
+    later = h.now + timedelta(days=shortest + 1)
+    with reading({}):
+        at_default = await recalled_for(h, member, A, later)
+    with reading(saved):
+        at_saved = await recalled_for(h, member, A, later)
+        on_screen = await shown_about(h, placed.member, member, later)
+    if inferred not in at_default:
+        raise CheckFailedError("an inference was not recalled inside the product's lifetime")
+    if inferred in at_saved or inferred in on_screen:
+        raise CheckFailedError("an inference was still recalled past the saved lifetime")
+
+    # A tier-two rule two conversations agree on: ready at the saved figure, not the product's.
+    rule = Learning(
+        memory_id=f"acceptance_rule_{h.run}",
+        proposal=propose(Change.FAST_PATH_RULE, subject=f"acceptance_subject_{h.run}"),
+        formation=Formation(
+            principal_id=placed.member,
+            capabilities=(Capability(value=LEARNING_READ),),
+            scope=Scope.unrestricted(),
+            ent_hash=member.ent_hash(),
+            formed_at=h.now,
+            kind=MemoryKind.ADAPTIVE,
+        ),
+        agent_id=f"acceptance_agent_{h.run}",
+    )
+    two = {
+        rule.memory_id: tuple(
+            Occurrence(conversation_id=f"{h.run}_{n}", on=h.now) for n in range(2)
+        )
+    }
+
+    def ready() -> bool:
+        rows = tier_two_rows((rule,), agent_id=rule.agent_id or "", occurrences=two, now=h.now)
+        return bool(rows) and rows[0].promote_ready
+
+    with reading({}):
+        ready_at_default = ready()
+    with reading(saved):
+        ready_at_saved = ready()
+        plenty = [Occurrence(conversation_id=f"{h.run}_{n}", on=h.now) for n in range(20)]
+        promoted_wrongly = [
+            one.value
+            for one in Change
+            if may_promote(
+                propose(one, subject=one.value), plenty, now=h.now, agreement=promotion_agreement()
+            )
+            is not (blast_radius(one) is Tier.PROMOTED)
+        ]
+    if ready_at_default or not ready_at_saved:
+        raise CheckFailedError("a rule's readiness for review did not follow the saved agreement")
+    if promoted_wrongly:
+        raise CheckFailedError("a saved figure let a change be promoted its tier does not allow")
+
+    if dict(held()) != before:
+        raise CheckFailedError("the check changed what the process running it holds")

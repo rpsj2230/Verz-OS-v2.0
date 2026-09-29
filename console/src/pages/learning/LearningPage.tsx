@@ -24,7 +24,7 @@
  * the paragraph explaining where undo is offered, the three stacked tables on one page, and the
  * sentence under the figures.
  *
- * Task ids: M27.7.21, M27.16.1
+ * Task ids: M27.7.21, M27.16.1, M16.6.8
  */
 
 import { BookOpenCheck, CircleSlash, Hourglass, Info, Undo2 } from "lucide-react";
@@ -61,6 +61,7 @@ import { cn } from "../../lib/utils";
 import { dayWords, whenWords } from "../access/formParts";
 import {
   LEARNING_API_PATH,
+  LEARNING_SETTINGS,
   LEARNING_VIEWS,
   LEARNING_VIEW_LABELS,
   RECENT_DAYS,
@@ -78,6 +79,7 @@ import {
   type TierThree,
   type TierTwo,
 } from "../learningQuery";
+import { LimitSettings } from "../operations/LimitSettings";
 import { Narrowing } from "../requirement-checks/Narrowing";
 import { UNAVAILABLE, changeWords, undoWritesWords } from "./learningActions";
 
@@ -465,6 +467,7 @@ function About({ review }: { readonly review: Review }) {
           What a learning says is read on <Link to="/memory" className="text-acc-text underline-offset-4 hover:underline">Memory</Link>, one person at a time.
         </p>
       </SectionCard>
+      <LimitSettings screen={LEARNING_SETTINGS} />
     </div>
   );
 }

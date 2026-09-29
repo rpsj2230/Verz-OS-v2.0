@@ -27,10 +27,28 @@
  *
  * Served by `brain.console.govern_estate`, through `brain.estate_routes`.
  *
- * Task ids: M27.7.21
+ * **How long an inference lasts and how many conversations must agree are set here too** (M16.6.8),
+ * on the About view, by the Rate limits screen's card over `LEARNING_SETTINGS_API_PATH`.
+ * The figures are the whole install's, so the card draws a control only for a reader the answer
+ * says may change them, and no figure is a tier: which oversight a change needs is not a setting.
+ *
+ * Task ids: M27.7.21, M16.6.8
  */
 
 import type { components } from "../api/schema";
+import type { KnobScreen } from "./tuningQuery";
+
+/** Where the Learning screen's two figures are read, and one is set. `brain.tuning_routes`. */
+export const LEARNING_SETTINGS_API_PATH = "/govern/learning/settings";
+
+/** The Learning screen's figures, drawn by the Rate limits screen's card. */
+export const LEARNING_SETTINGS: KnobScreen = {
+  path: LEARNING_SETTINGS_API_PATH,
+  heading: "How learning is tuned",
+  lede: "How long an inference is recalled, and how much agreement a learned rule needs before a person is asked to review it. A person still approves every rule, and no figure here changes who has to agree to a change. Each figure is between bounds the product fixes, and a change is recorded in the audit trail under your name.",
+  column: "Setting",
+  exportName: "learning-settings",
+};
 
 export type TierOne = components["schemas"]["TierOneView"];
 export type TierTwo = components["schemas"]["TierTwoView"];

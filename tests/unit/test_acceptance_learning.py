@@ -1,6 +1,6 @@
 """The learning install acceptance checks: registered, passing on PostgreSQL, and able to fail.
 
-The pure half holds the three checks to the leaves they prove and to the work breakdown. The
+The pure half holds the four checks to the leaves they prove and to the work breakdown. The
 database half builds PostgreSQL to head once for the module and runs the checks as the worker would:
 each passes, and every table they write to holds, row for row, what it held before. Then the
 property each check proves is broken, one at a time, by replacing the product function the check
@@ -8,7 +8,7 @@ relies on where the product looks it up, and the check fails with its own senten
 
 Skipped halves: the database tests skip when `DATABASE_URL` is unset, as every `needs_db` test does.
 
-Task ids: M16.3.5, M16.3.6, M16.4.2, M27.7.21, M33.3.1.4
+Task ids: M16.3.5, M16.3.6, M16.4.2, M16.6.8, M27.7.21, M33.3.1.4
 """
 
 from __future__ import annotations
@@ -31,6 +31,7 @@ LEAVES = {
     "a_person_edits_and_forgets_their_own_memory": ("M16.4.2", "M33.3.1.4"),
     "every_learned_change_is_held_at_the_tier_its_reach_needs": ("M16.3.5", "M16.3.6"),
     "a_conversation_learning_is_reviewed_and_undone": ("M27.7.21",),
+    "learning_figures_are_set_in_bounds_and_move_no_tier": ("M16.6.8",),
 }
 
 #: Every table the learning checks write to, which must hold afterwards exactly what it held before.
@@ -42,6 +43,9 @@ WRITTEN_BY_LEARNING_CHECKS = (
     "gate.grants_version",
     "gate.policy_epoch",
     "obs.audit_entry",
+    "ops.setting",
+    "know.item",
+    "know.chunk",
     "mem.persistent",
     "mem.adaptive",
     "mem.learning",
@@ -129,7 +133,7 @@ def contents(url: str) -> dict[str, tuple[int, str]]:
 def test_on_a_real_database_every_learning_check_passes_and_leaves_nothing_behind(
     database: str,
 ) -> None:
-    """**The three checks as the worker runs them, against PostgreSQL at head.** Each passes with
+    """**The four checks as the worker runs them, against PostgreSQL at head.** Each passes with
     no reason, and every table any of them wrote to holds row for row what it held before. Delete
     this and a check that cannot pass on the real schema, or one that commits a correction to a
     client's install, reaches the owner's server first."""
@@ -216,4 +220,40 @@ def test_the_review_check_fails_when_a_conversations_learning_is_left_off_the_sc
         FAILED,
         "a learning a person's conversation formed was not on their department's Learning "
         "screen, in effect and undoable",
+    )
+
+
+@pytest.mark.needs_db
+def test_the_figures_check_fails_when_recall_ignores_the_saved_half_life(
+    database: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Recall decaying at the product's figure whatever was saved is the defect this leaf exists to
+    prevent. Delete this and the check can pass on an install where the Learning screen's figure
+    reaches the table and nothing that reads memories."""
+    from brain.memory import formation
+
+    monkeypatch.setattr(formation, "in_force_half_life_days", lambda: formation.HALF_LIFE_DAYS)
+
+    assert refused(database, "learning_figures_are_set_in_bounds_and_move_no_tier") == (
+        FAILED,
+        "an inference was still recalled past the saved lifetime",
+    )
+
+
+@pytest.mark.needs_db
+def test_the_figures_check_fails_when_agreement_can_promote_a_gated_change(
+    database: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A promotion that counts agreement for any tier lets a saved figure of two open a scope
+    widening. Delete this and the check can pass on an install where it does."""
+    from brain.memory import tiers
+
+    def any_tier(proposal: Any, occurrences: Any, *, now: Any, agreement: int, **kw: Any) -> bool:
+        return tiers.independent(occurrences, now=now) >= agreement
+
+    monkeypatch.setattr(tiers, "may_promote", any_tier)
+
+    assert refused(database, "learning_figures_are_set_in_bounds_and_move_no_tier") == (
+        FAILED,
+        "a saved figure let a change be promoted its tier does not allow",
     )
