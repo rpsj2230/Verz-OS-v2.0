@@ -135,6 +135,7 @@ from brain.ops.starter_store import furnish as furnish_install
 from brain.ops.telemetry_store import TelemetryRecorder
 from brain.ops.tool_store import SessionSwitchSource, record_catalogue
 from brain.ops.trace_sink import CountingTraceSink
+from brain.ops.trace_store import TraceRecorder
 from brain.ops.usage_store import UsageRecorder
 from brain.ops.vault_renewal import keep_renewing, renewer_at_start
 from brain.ops.webhook_admin import signing_secrets_at_start
@@ -499,9 +500,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # destination available today is the application log and a post-redaction payload there is
     # readable by whoever can read logs, which is not who could read the records. See
     # `trace_sink.THE_LOG_IS_NOT_A_TRACE_STORE`. It is installed unconditionally, unlike the
-    # rules, because a lane with no sink cannot compose at all.
+    # rules, because a lane with no sink cannot compose at all. A run's masked trace graph goes to
+    # the payload store through `TraceRecorder` among the recorders below (M24.3.4).
     app.state.trace_sink = CountingTraceSink()
-    app.state.request_recorders = request_recorders_for(app.state.db_sessions)
+    app.state.request_recorders = request_recorders_for(
+        app.state.db_sessions, environment=settings.env
+    )
     # The stored agents `/answer` may select from, read once per question (M3.9.8).
     app.state.agent_roster = agent_roster_for(app.state.db_sessions)
     # The model driver, assembled once over this install's database: a driver per provider this
@@ -818,6 +822,8 @@ async def keep_watching(
 
 def request_recorders_for(
     sessions: async_sessionmaker[AsyncSession] | None,
+    *,
+    environment: str,
 ) -> tuple[RequestRecorder, ...]:
     """What a finished request is recorded to on this process. See `brain.gate.finish`.
 
@@ -831,15 +837,17 @@ def request_recorders_for(
     """
     if sessions is None:
         return ()
-    # The sensitive read recorder last: it raises on a failed write, and the measurements before
-    # it catch their own. See `brain.ops.sensitive_read_store`. The usage recorder writes a
-    # request's cost and its skill uses (M27.12.5, M27.15.9), and catches its own failures.
+    # The sensitive read recorder before the trace: it raises on a failed write, and the
+    # measurements before it catch their own. See `brain.ops.sensitive_read_store`. The usage
+    # recorder writes a request's cost and its skill uses (M27.12.5, M27.15.9), and catches its own
+    # failures. The trace recorder writes the run's graph, masked, and catches its own (M24.3.4).
     return (
         QuestionRecorder(sessions),
         TelemetryRecorder(sessions),
         GapRecorder(sessions),
         UsageRecorder(sessions),
         SensitiveReadRecorder(sessions),
+        TraceRecorder(sessions, environment=environment),
     )
 
 

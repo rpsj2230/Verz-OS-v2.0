@@ -321,6 +321,8 @@ export const ACTION_PHRASES: Readonly<Record<string, string>> = Object.freeze({
   halt: "stopped or resumed work under",
   channel_binding: "bound or unbound a chat account of",
   pack: "changed the pack",
+  // An agent's browser run opened or closed on its sealed envelope (0150); the subject is the run.
+  browser_session: "opened or closed a browser for",
 });
 
 /** The phrase for each change an action's entries record in `details.change`, by action. */
@@ -344,6 +346,10 @@ export const CHANGE_PHRASES: Readonly<Record<string, Readonly<Record<string, str
     created: "created the pack",
     versioned: "made a new version of the pack",
     retired: "retired the pack",
+  }),
+  browser_session: Object.freeze({
+    started: "opened a browser for",
+    ended: "closed the browser for",
   }),
 });
 

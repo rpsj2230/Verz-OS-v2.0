@@ -181,9 +181,11 @@ here. Every one is a name, so the row says why a question ran where it did
 without holding a sentence, and nothing is recomputed afterwards by a classifier that may have
 changed. See `ROUTE_FIELDS`.
 
-What is still not built, said rather than left to be inferred. There is **no payload store**:
-`brain.ops.trace_sink` drops the payload because there is nowhere with the right permissions to
-put it. And `open_request` still has no caller, for the reason above.
+What is still not built, said rather than left to be inferred. `open_request` still has no caller,
+for the reason above. **The payload store is `brain.ops.trace_store`** since 2026-09-29: a run's
+graph masked by `tracing.mask`, read under its own role and after a `tracing.PayloadRead` row, in
+the order `read_payload_with_role` states; `brain.ops.trace_sink` still drops what `compose` hands
+it, because that reference is not the trace id and the store is keyed by the trace.
 
 Task ids: M27.1.1, M27.1.2, M27.1.3, M27.1.4, M27.1.5, M27.1.6, M30.5.2, M21.3.4, M3.4.2
 Task ids: M3.6.3
