@@ -50,6 +50,8 @@ from brain.gate.finish import Finished, Origin
 from brain.gate.model_lane import (
     A_DEPARTMENT_SCOPED_FIELD_GRANT_READS_ITS_OWN_DEPARTMENTS_PASSAGES,
     A_DEPARTMENT_TEXT_RIGHT_READS_COMPANY_AND_OWN_PERSONAL_PASSAGES,
+    EARLIER_CHARS,
+    EARLIER_SHOWN,
     PASSAGE_POLICY,
     PASSAGES_SHOWN,
     PREFIX,
@@ -595,10 +597,11 @@ def test_a_model_that_cannot_be_reached_is_degraded_and_the_request_is_still_rec
 
 
 def test_the_largest_prompt_the_lane_can_build_fits_the_answer_tier_by_its_bytes() -> None:
-    """**Measured, not estimated.** The largest question the answer route admits and the most
-    passages the lane shows, every character of each four bytes wide, give a prompt whose UTF-8
-    length fits inside the answer tier's escalation headroom, so `classify_tier` keeps it on that
-    tier and no tokeniser can find it too long.
+    """**Measured, not estimated.** The largest question the answer route admits, the most
+    passages the lane shows and the most of a follow-up's earlier questions it repeats (M9.2.3),
+    every character of each four bytes wide, give a prompt whose UTF-8 length fits inside the
+    answer tier's escalation headroom, so `classify_tier` keeps it on that tier and no tokeniser
+    can find it too long.
 
     Delete this and a cap can be raised until a legitimate question is refused by the provider as
     too long, which the chain reads as a 400 and stops on."""
@@ -609,11 +612,30 @@ def test_the_largest_prompt_the_lane_can_build_fits_the_answer_tier_by_its_bytes
         **dict.fromkeys(SHOWN_FIELDS, wide * 10_000),
     }
     payload = ChannelPayload(records=tuple(dict(passage) for _ in range(PASSAGES_SHOWN * 2)))
-    messages = messages_of(prompt_for(wide * (MAX_QUESTION_CHARS * 2), shown(payload)))
+    earlier = [wide * (EARLIER_CHARS * 2)] * (EARLIER_SHOWN * 2)
+    messages = messages_of(
+        prompt_for(wide * (MAX_QUESTION_CHARS * 2), shown(payload), earlier=earlier)
+    )
     tier = classify_tier(RoutingRequest(lane=Lane.ANSWER)).tier
 
     assert prompt_bytes(messages) <= ESCALATION_HEADROOM * TIER_CONTEXT_WINDOW[tier]
     assert tier_for(messages) is tier is DEFAULT_TIER
+
+
+def test_a_follow_up_s_prompt_repeats_the_newest_earlier_questions_each_cut_to_its_length() -> None:
+    """The prompt names the person's newest `EARLIER_SHOWN` earlier questions, oldest first, each
+    cut to `EARLIER_CHARS`, before the question; a question on its own names none (M9.2.3).
+
+    Delete this and the cap the byte bound above is measured with can stop being the cap the
+    prompt applies, or a follow-up can lose the words that say what "it" was."""
+    earlier = [f"question {number} " + "x" * (EARLIER_CHARS * 2) for number in range(5)]
+    text = "\n\n".join(prompt_for("and who signs it", ChannelPayload(), earlier=earlier).variable)
+    listed = text.split("Earlier in this conversation the person asked:\n", 1)[1]
+    lines = listed.split("\n\n", 1)[0].split("\n")
+    assert lines == [f"- {one[:EARLIER_CHARS]}" for one in earlier[-EARLIER_SHOWN:]]
+    assert text.index("Earlier in this conversation") < text.index("Question:")
+    alone = "\n\n".join(prompt_for("and who signs it", ChannelPayload()).variable)
+    assert "Earlier in this conversation" not in alone
 
 
 def test_a_search_returning_more_than_asked_for_is_cut_before_the_model_and_the_citations() -> None:
