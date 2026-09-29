@@ -84,6 +84,7 @@ export function useJobActs(onChanged: () => void): JobActs {
         details={warning === undefined ? undefined : <p className="m-0">{warning}</p>}
         confirmLabel={ACTION_LABELS[pending.action]}
         cancelLabel={KEEP_IT}
+        danger={pending.action === "pause"}
         busy={busy}
         onConfirm={() => {
           confirm(pending);

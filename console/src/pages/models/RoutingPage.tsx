@@ -241,7 +241,7 @@ export function RoutingPage() {
         </section>
       ) : (
         <div role="status">
-          <Note kind="works">{`${changeWords(decided.kind)}: applied. The next question uses it.`}</Note>
+          <Note kind="done">{`${changeWords(decided.kind)}: applied. The next question uses it.`}</Note>
         </div>
       )}
       {failure === null ? null : <FailureState failure={failure} />}

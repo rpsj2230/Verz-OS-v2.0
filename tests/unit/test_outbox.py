@@ -470,8 +470,21 @@ def test_a_kind_nobody_takes_is_reported_rather_than_raised() -> None:
     an integration is quiet, and an exception would make an ordinary configuration
     unloadable."""
     findings = outbox.subscriber_gaps([a_subscriber()])
-    assert any(EventKind.APPROVAL_REQUESTED.value in f for f in findings)
-    assert not any(EventKind.AUTOMATION_RUN_FINISHED.value in f for f in findings)
+    assert any(outbox.EVENT_WORDS[EventKind.APPROVAL_REQUESTED] in f for f in findings)
+    assert not any(outbox.EVENT_WORDS[EventKind.AUTOMATION_RUN_FINISHED] in f for f in findings)
+
+
+def test_the_gaps_are_sentences_an_administrator_reads_and_name_no_event_by_its_code() -> None:
+    """Found on the owner's install on 2026-09-29: the Subscribers screen read "nothing takes
+    automation.run_finished" four times, on an install with no subscriber at all.
+
+    Delete this and the codes go back onto the screen, and an install with none registered is
+    told once per kind that nobody is told."""
+    assert outbox.subscriber_gaps([]) == ()
+    findings = outbox.subscriber_gaps([a_subscriber()])
+    assert findings
+    assert not any(kind.value in f for f in findings for kind in EventKind)
+    assert set(outbox.EVENT_WORDS) == set(EventKind)
 
 
 # ------------------------------------------- retry, backoff and the guarantee (M17.5.1)

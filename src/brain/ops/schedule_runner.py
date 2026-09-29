@@ -594,31 +594,44 @@ def acceptance_run(now: datetime, report_only: bool, database_url: str) -> str:
     )
 
 
+#: Why a runner's `needs` names no function, task, person or decision.
+A_JOBS_NEEDS_IS_WRITTEN_FOR_AN_ADMINISTRATOR: Final = (
+    "A job's page shows what it is waiting for under Cannot start yet, on every install. Found "
+    "on the owner's install on 2026-09-29: the restore rehearsal's sentence named the owner, two "
+    "functions and an option letter. So the sentence says what is missing in words an "
+    "administrator reads, and what a developer needs to build it is a comment in the source."
+)
+
+
 #: What each schedulable control still needs before it can be started, by name.
 #:
 #: Thirteen with a `run` since 2026-09-28, which the worker's schedule starts, and the rest saying
-#: what they wait for, which is the point of the module header. Each sentence is a piece of work
-#: somebody can pick up, written from reading the entry point's own signature rather than from a
-#: guess about it.
+#: what they wait for, which is the point of the module header. Each `needs` is shown to an
+#: administrator on the job's page, so since 2026-09-29 it is one plain sentence with no person,
+#: code name or option letter in it (`A_JOBS_NEEDS_IS_WRITTEN_FOR_AN_ADMINISTRATOR`), and the
+#: piece of work behind it, read from the entry point's own signature, is the comment above it.
 RUNNERS: Final[tuple[Runner, ...]] = (
     Runner(name="retention_sweep", run=retention_sweep),
     # Wired on 2026-09-17. The askers are every live reach through the one resolver and one
     # the directory does not hold, and what they are compared over is the answer lane itself:
     # `brain.ops.canary_run` says why the store scan is the fixture suite's and not this run's.
     Runner(name="canary_run", run=canary_run),
+    # For whoever builds it: `drill_due` takes the last verification and `verification_of` reads
+    # one, and no backup or verification is written by anything yet; needs-rupash item 44.
     Runner(
         name="restore_drill",
         needs=(
-            "somewhere a drill's result is recorded. `drill_due` takes the last verification "
-            "and `verification_of` reads one, and no backup or verification is written by "
-            "anything: Needs Rupash item 44 is that work and its option C was chosen"
+            "a record of each restore rehearsal and whether the copy it used could be read "
+            "back, which this install does not keep yet"
         ),
     ),
+    # For whoever builds it: the backup and verification sequences `alerts` takes, the rows the
+    # nightly dump of needs-rupash item 44 would produce.
     Runner(
         name="backup_exposure",
         needs=(
-            "the backup and verification sequences `alerts` takes, which are the same rows "
-            "item 44's nightly dump would produce"
+            "a record of each backup taken and each check that one can be read back, which "
+            "this install does not keep yet"
         ),
     ),
     # Wired on 2026-09-28: `brain.ops.denial_digest_run` reads the hour's refusals from the
@@ -631,42 +644,46 @@ RUNNERS: Final[tuple[Runner, ...]] = (
     # this sentence asked for is `brain.knowledge.item_store.route_for`. What it still does not
     # do is send: `brain.knowledge.item_store.NOTHING_SENDS_A_NAG_YET`.
     Runner(name="knowledge_reverification", run=knowledge_reverification),
+    # For whoever builds it: the feature observations `drift` measures over, which are
+    # resolution decisions nobody records for this purpose yet. The fit is weekly.
     Runner(
         name="resolution_calibration",
         needs=(
-            "the feature observations `drift` measures over. The fit is weekly and the "
-            "observations are resolution decisions nobody records for this purpose yet"
+            "a record of the decisions made when two records were matched as the same person or "
+            "company, which this install does not keep yet"
         ),
     ),
+    # For whoever builds it: `verdict_for` decides what to do with a stuck job and `redrive`
+    # acts on the verdict; the queue arrived with M32.4.1.1, and nothing asks either yet.
     Runner(
         name="queue_redrive",
         needs=(
-            "a caller. `verdict_for` decides what to do with a stuck job and `redrive` acts "
-            "on the verdict. The queue they need arrived with M32.4.1.1 on 2026-09-11, which "
-            "is why this sentence no longer says both workers exit at startup: they run. What "
-            "is missing is the tick that asks either function anything"
+            "the part that finds background work left stuck when a worker stopped and starts it "
+            "again, which is not built yet"
         ),
     ),
+    # For whoever builds it: a tick that reads the records `resume` decides over and a read-back
+    # to settle them. `brain.ops.idempotency.issue_once` writes every side effect into
+    # `ops.operation` since 0051; nothing lists the unsettled ones or calls a read-back yet.
     Runner(
         name="side_effect_resume",
         needs=(
-            "a tick that reads the records `resume` decides over, and a read-back to settle them. "
-            "The queue half of this sentence was answered by M32.4.1.1, and the records by "
-            "M17.3.1: `brain.ops.idempotency.issue_once` writes every side effect into "
-            "`ops.operation` since 0051. Nothing yet lists the records left sent, unknown or "
-            "verifying, and no connector's read-back is called by anything"
+            "the part that checks with the other system whether an action left part-way through, "
+            "such as a message whose delivery was never confirmed, really happened, which is "
+            "not built yet"
         ),
     ),
     # Wired on 2026-09-22 with `ops.provider_health` and the worker's read of the model provider
     # slots. See `brain.ops.model_probe_run`.
     Runner(name="model_health_probes", run=model_health_probes),
+    # For whoever builds it: the closest to wireable. `correct` already has a caller in
+    # `brain.console.spend_view`; the estimate and actual figures for the period are assembled
+    # when somebody opens the usage screen and by nothing on a schedule.
     Runner(
         name="spend_correction",
         needs=(
-            "nothing new, and it is the closest to wireable. `correct` already has a caller "
-            "in `brain.console.spend_view`, so what it needs is the estimate and actual "
-            "figures for the period, which the usage screen assembles when somebody opens it "
-            "and nothing assembles on a schedule"
+            "each period's estimated and actual spend, side by side, which is put together today "
+            "only when somebody opens the Usage screen"
         ),
     ),
     # Wired on 2026-09-17, with the sender, the worker's reader of signing secrets and the

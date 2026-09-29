@@ -240,7 +240,7 @@ export function WebhooksPage() {
             </Button>
           ) : undefined
         }
-        notice={told === null || told === "" ? undefined : <Note kind="works">{told}</Note>}
+        notice={told === null || told === "" ? undefined : <Note kind="done">{told}</Note>}
         loading={READING_WEBHOOKS}
         busy={answer.busy}
         failure={answer.failure}

@@ -380,7 +380,7 @@ export function SettingsPage() {
     content = (
       <>
         <div role="status">
-          <Note kind="works">{written.told}</Note>
+          <Note kind="done">{written.told}</Note>
         </div>
         <SettingsView body={written.body} onSaved={onSaved} />
       </>

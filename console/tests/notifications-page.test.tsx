@@ -21,6 +21,7 @@ import {
   REMOVE_LABEL,
   SAVE_PASSWORD_LABEL,
   SAVE_RELAY_LABEL,
+  SET_PASSWORD_LABEL,
   SWITCH_OFF_LABEL,
   TRIAL_LABEL,
 } from "../src/pages/notifications/RelayActs";
@@ -34,7 +35,7 @@ const CONSOLE_ORIGIN = "https://console.test";
 const SECRET = "relay-PASSWORD-SENTINEL-0123456789";
 const SWITCHING_OFF = "Nobody is sent this notice from now on.";
 const SAVING = "Mail is sent through this relay from now on.";
-const KEEPING = "The relay's password is replaced in the vault.";
+const KEEPING = "The relay's password is kept in the vault.";
 const REMOVING = "No mail is sent from now on, and a test message is refused until a relay is saved again.";
 
 beforeAll(async () => {
@@ -271,6 +272,29 @@ describe("the Notifications page", () => {
       expect(posts(sent)).toEqual([["/api/v1/notifications/relay/password", { password: SECRET }]]);
     });
     expect(document.body.innerHTML).not.toContain(SECRET);
+  });
+
+  test("with no password held the act is to set one, not to replace one", async () => {
+    // Found on the owner's install on 2026-09-29: "Replace password" beside "No relay is saved".
+    // What breaks if this is deleted: the page offers to replace a password that does not exist.
+    const unsaved = page({
+      email: {
+        ...page().email,
+        configured: false,
+        host: null,
+        port: null,
+        sender: null,
+        username: null,
+        changed_by: null,
+        changed_at: null,
+        password: { held: false, written_at: null, vault: "ready", vault_told: "The vault answered." },
+      },
+    });
+    const { container } = await consoleAt("/notifications", { "/api/v1/notifications": unsaved });
+    expect(() => button(container, PASSWORD_LABEL)).toThrow();
+    fireEvent.click(button(container, SET_PASSWORD_LABEL));
+    const form = await drawerForm("Save the relay's password");
+    expect(form.closest('[role="dialog"]')?.textContent).toContain(SET_PASSWORD_LABEL);
   });
 
   test("a test message says what it accepts, and blank it says what to fill in and sends nothing", async () => {

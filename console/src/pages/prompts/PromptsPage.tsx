@@ -363,7 +363,7 @@ export function PromptsPage() {
       <PageHeader crumbs={[{ label: PROMPTS_LABEL }]} title={PROMPTS_LABEL} lede={PROMPTS_LEDE} />
       {told === null ? null : (
         <div role="status">
-          <Note kind="works">{told}</Note>
+          <Note kind="done">{told}</Note>
         </div>
       )}
       {content}

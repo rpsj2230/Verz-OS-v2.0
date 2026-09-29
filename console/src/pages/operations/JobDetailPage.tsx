@@ -13,7 +13,9 @@
  *
  * **Every act whose route exists works.** Pause, resume and run now are confirmed through
  * `JobActs.tsx`; stopping a run already going has no route and is `kit/UnavailableAction` with the
- * sentence `operationsActions.ts` gives. The identifier is in Advanced.
+ * sentence `operationsActions.ts` gives, drawn only while a run is going (`runIsGoing`): a job with
+ * no run in progress has nothing to stop, and offering to stop one read as a live button beside a
+ * sentence saying it was not available. The identifier is in Advanced.
  *
  * **Nothing here decides who may see a job.** A job this reader may not see and a name nothing
  * registers are the same 404, drawn in the API's words.
@@ -61,6 +63,7 @@ import {
   JOBS_LABEL,
   JOBS_PATH,
   lastRunWords,
+  runIsGoing,
   MESSAGE_KEPT_ON_THE_SERVER,
   NEVER_SUCCEEDED,
   NO_RUN_CAN_BE_STOPPED,
@@ -378,12 +381,14 @@ export function JobDetailPage({ control, tab }: { readonly control: string; read
                   {ACTION_LABELS[action]}
                 </Button>
               ))}
-              <UnavailableAction
-                label={UNAVAILABLE.stopRun.label}
-                text={UNAVAILABLE.stopRun.label}
-                icon={<Ban aria-hidden />}
-                reason={UNAVAILABLE.stopRun.reason}
-              />
+              {runIsGoing(job) ? (
+                <UnavailableAction
+                  label={UNAVAILABLE.stopRun.label}
+                  text={UNAVAILABLE.stopRun.label}
+                  icon={<Ban aria-hidden />}
+                  reason={UNAVAILABLE.stopRun.reason}
+                />
+              ) : null}
             </>
           }
           figures={

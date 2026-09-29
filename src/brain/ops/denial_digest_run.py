@@ -74,6 +74,16 @@ NOTHING_WORTH_RAISING: Final = "no pattern of refusals in the window was worth r
 NOBODY_NEW_TO_TELL: Final = "patterns were found and everybody entitled has already been told"
 RAISED: Final = "alerts were raised and kept for the people entitled to them"
 
+#: Why a pass is refused on a worker with no cache address, in the words the Errors and Jobs
+#: screens show. Found on the owner's install on 2026-09-29: the old sentence said "no cache is
+#: configured" beside a Dashboard showing the cache ready, because the application is given the
+#: address and a deployment tool's stored copy of the compose file had not given the worker it.
+THE_WORKER_WAS_GIVEN_NO_CACHE_ADDRESS: Final = (
+    "this worker was not given the cache address the application uses, so there is nowhere to "
+    "keep an alert. Add the application's VALKEY_URL line under the worker in the compose file "
+    "this install runs, then restart the worker"
+)
+
 
 class DenialDigestError(Exception):
     """The pass could not be run. The text names nothing, because it is stored as a run's detail."""
@@ -197,16 +207,16 @@ def run_denial_digest_now(
 ) -> str:
     """`run_denial_digest` from a thread with no event loop of its own, with the worker's parts.
 
-    An install with no cache has nowhere to keep an alert, so the pass is refused rather than
-    run: a pass that raised alerts into nothing would record a success for telling nobody.
+    A worker with no cache address has nowhere to keep an alert, so the pass is refused rather
+    than run: a pass that raised alerts into nothing would record a success for telling nobody.
+    See `THE_WORKER_WAS_GIVEN_NO_CACHE_ADDRESS` for what the refusal says.
     """
     from brain.cache import make_client
     from brain.ops.denial_alert_store import make_alert_store
     from brain.session import make_app_engine, make_session_factory
 
     if not valkey_url:
-        msg = "no cache is configured, so there is nowhere to keep an alert"
-        raise DenialDigestError(msg)
+        raise DenialDigestError(THE_WORKER_WAS_GIVEN_NO_CACHE_ADDRESS)
     client = make_client(valkey_url)
 
     async def once() -> str:

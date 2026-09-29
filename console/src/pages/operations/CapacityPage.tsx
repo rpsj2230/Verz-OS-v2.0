@@ -11,6 +11,11 @@
  * be this console deciding what counts as close to a ceiling. The budget findings are the API's own
  * sentences, listed rather than counted, because the useful thing about one is which part it names.
  *
+ * **The size this install was deployed at is its "install size", never its "profile".** The Settings
+ * screen's model setting is also called a profile, and until 2026-09-29 the two Platform screens
+ * used the one word for two things. A size that declares no memory says so rather than "0 MiB",
+ * which read as a measurement of nothing.
+ *
  * Task ids: M27.7.27, M27.16.1
  */
 
@@ -20,7 +25,12 @@ import { CAPACITY_API_PATH, type Capacity as CapacityBody, type Connection } fro
 import { OpsPage, PLATFORM, WholeList } from "./parts";
 
 export const CAPACITY_HEADING = "Capacity";
-export const CAPACITY_LEDE = "What this profile wants against what the host has, and what each database will admit.";
+export const CAPACITY_LEDE = "What this install's size wants against what the host has, and what each database will admit.";
+export const INSTALL_SIZE_LABEL = "Install size";
+export const DECLARED_LABEL = "Declared by this install size";
+/** Said where the install size declares no memory figure, instead of drawing nought. */
+export const DECLARES_NO_FIGURE = "Declares no figure";
+export const DECLARES_NO_FIGURE_MORE = "This install size sets no memory figure of its own to compare with.";
 export const READING_CAPACITY = "Loading the capacity figures.";
 export const MEMORY_LABEL = "Memory";
 export const WHAT_DOES_NOT_ADD_UP = "What does not add up";
@@ -59,9 +69,13 @@ export function CapacityPage() {
         return (
           <>
             <KpiStrip label={MEMORY_LABEL} count={4}>
-              <StatCard label="Profile" value={page.memory.profile} />
+              <StatCard label={INSTALL_SIZE_LABEL} value={page.memory.profile} />
               <StatCard label="Host memory" value={mib(page.memory.host_total_mib)} />
-              <StatCard label="Declared by this profile" value={mib(page.memory.declared_mib)} />
+              {page.memory.declared_mib > 0 ? (
+                <StatCard label={DECLARED_LABEL} value={mib(page.memory.declared_mib)} />
+              ) : (
+                <StatCard label={DECLARED_LABEL} value={DECLARES_NO_FIGURE} sub={DECLARES_NO_FIGURE_MORE} />
+              )}
               <StatCard
                 label="Reserved by the compose files"
                 value={reserved === null || reserved === undefined ? undefined : mib(reserved)}
