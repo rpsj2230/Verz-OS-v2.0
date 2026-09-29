@@ -108,6 +108,7 @@ from brain.identity.principal_store import StoredPrincipals
 from brain.identity.roles import IdentityError
 from brain.identity.sign_in_binding import sign_in_bindings
 from brain.install import InstallError, installed_name, value_of
+from brain.knowledge.app_parse_budget import app_parse_gaps
 from brain.knowledge.row_store import SessionRowSource
 from brain.migrate import run_migrations
 from brain.models.default_ladder import reconcile as reconcile_default_ladder
@@ -271,6 +272,10 @@ class Health(BaseModel):
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings: Settings = app.state.settings
     log.info("starting", env=settings.env, commit=settings.resolved_commit())
+    # What a document read in this container may cost, and whether the door admits more than
+    # that, said once where an operator reads it. See `brain.knowledge.app_parse_budget`.
+    for finding in app_parse_gaps():
+        log.warning("in-app parse budget", finding=finding)
     # The four handles attach here: the database pool (`db_engine`, `db_sessions`), Valkey
     # (`valkey`), the OpenBao client (`vault`) and the model registry (`models`). The first three
     # are named parts on readiness; the models are not, as a driver per provider is built whatever
