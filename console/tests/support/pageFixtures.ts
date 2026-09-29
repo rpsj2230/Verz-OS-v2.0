@@ -239,3 +239,92 @@ export const DEPARTMENTS = {
   retiring_team: UNBROKEN,
   retiring_scope: UNBROKEN,
 };
+
+/**
+ * Connect Lark's guide with the staff list switched on, as `brain.lark_connect_routes.LarkView`
+ * sends it, so the Connectors and Staff sources pages draw Lark's connected card. Every drawn value
+ * is the unbroken token.
+ */
+export const LARK_GUIDE = {
+  uses: [
+    {
+      name: "staff_list",
+      label: UNBROKEN,
+      what: UNBROKEN,
+      scopes: [],
+      switched_on: true,
+      key_held: true,
+      status: UNBROKEN,
+      may_switch_on: true,
+    },
+  ],
+  chosen: ["staff_list"],
+  connected: true,
+  app_id: UNBROKEN,
+  steps: [
+    {
+      key: "choose",
+      title: UNBROKEN,
+      text: UNBROKEN,
+      sketch: { place: UNBROKEN, heading: UNBROKEN, menu: [], menu_mark: "", tabs: [], tab_mark: "", lines: [], button: "" },
+      link: "",
+      link_label: "",
+      asks: [],
+    },
+  ],
+  scopes: [{ name: UNBROKEN, what: UNBROKEN, read_only: true }],
+  scope_import: UNBROKEN,
+  platforms: ["larksuite.com"],
+  platform: "larksuite.com",
+  base: "",
+  developer_console: "https://open.larksuite.com/app",
+  events_address: "",
+  channel_note: UNBROKEN,
+  events: null,
+  knowledge_note: UNBROKEN,
+  test_note: UNBROKEN,
+  staff_sources_screen: "/staff_sources",
+  vault_told: "",
+  last_test: {
+    at: "2999-03-02T02:00:00Z",
+    accepted: true,
+    uses: [{ name: "staff_list", label: UNBROKEN, verdict: "working" }],
+  },
+  switch_off_note: UNBROKEN,
+  staff_off_note: UNBROKEN,
+};
+
+/** The staff list's runs, as the Lark card's last sync reads them. */
+export const STAFF_RUNS = {
+  runs: [
+    {
+      source: UNBROKEN,
+      started_at: "2999-03-02T02:00:00Z",
+      finished_at: "2999-03-02T02:00:05Z",
+      outcome: UNBROKEN,
+      detail: UNBROKEN,
+      added: [UNBROKEN],
+      marked_left: [],
+      renamed: [],
+      withheld: [],
+      changed_nobody: false,
+    },
+  ],
+};
+
+/** What changed in a source's declaration, as `DeclarationDriftView` sends it, for a source whose
+ * pill says it changed. Every drawn value is the unbroken token. */
+export const DECLARATION_DRIFT = {
+  connector: "xero",
+  changed: true,
+  known: true,
+  lines: [{ kind: "added", what: UNBROKEN, was: "" }, { kind: "changed", what: UNBROKEN, was: UNBROKEN }],
+  now_does: [],
+  was_version: "0.9.0",
+  now_version: "1.0.0",
+  agreed_digest: "a".repeat(64),
+  current_digest: "c".repeat(64),
+  may_accept: true,
+  told: UNBROKEN,
+  confirm: UNBROKEN,
+};

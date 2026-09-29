@@ -25,6 +25,7 @@ from brain.knowledge import text_path
 from brain.knowledge.ingest import SCAN_CAUSE_TEXT, ParseCause, ScanCause
 from brain.knowledge.ingest_queue import INGEST_TASK, TOO_LARGE_TO_QUEUE, get_ticket, put_ticket
 from brain.knowledge.text_path import STRUCTURAL_CHECK
+from brain.knowledge.uploads import TABLE_OFFER_TEXT
 from brain.knowledge_intake_routes import (
     LINKS_PATH,
     QUEUED_PATH,
@@ -32,7 +33,7 @@ from brain.knowledge_intake_routes import (
     THE_QUEUE_DID_NOT_ANSWER,
     LinkAsked,
 )
-from brain.knowledge_routes import FOUND_BY_TEXT, NAME_HEADER
+from brain.knowledge_routes import FOUND_BY_TEXT, NAME_HEADER, OFFERED_AS_A_TABLE
 from brain.ops.object_store import ObjectStore, unconnected
 from brain.ops.queue import Job
 from brain.tables.audit import ACTOR_SETTING, TRACE_ID_SETTING
@@ -344,6 +345,34 @@ def test_an_install_with_no_object_store_is_told_queued_uploads_need_one(served:
     assert code == "no_object_store"
     assert said.startswith(QUEUED_UPLOADS_NEED_THE_STORE)
     assert "holds no key" in said
+
+
+def test_a_spreadsheet_is_offered_to_classification_at_the_queue_and_by_a_link(
+    served: Served,
+) -> None:
+    """`A_TABLE_FILE_IS_OFFERED_FOR_CONVERSION_AND_NEVER_INDEXED_AS_TEXT` at the two doors beside
+    the single upload (M7.7.3). A CSV queued is offered before the store is even asked, so an
+    install with no store gives the useful answer; a link answering with a spreadsheet's address is
+    offered once fetched and never read. Nothing is kept or queued. Delete this and a price list
+    reaches the corpus as text through whichever door was not the one tested."""
+    served.use_store(unconnected("the vault holds no key for the store"))
+    code, said = problem(
+        queue(served, "u_admin", b"a,b\n1,2\n", name="Prices.csv", media_type="text/csv")
+    )
+    assert (code, said) == (OFFERED_AS_A_TABLE, TABLE_OFFER_TEXT)
+
+    sheet = "https://prices.example.com/list.csv"
+    served.site.pages[sheet] = b"name,sell,cost\nAudit,900,400\n"
+    code, said = problem(add_link(served, "u_admin", sheet))
+    assert (code, said) == (OFFERED_AS_A_TABLE, TABLE_OFFER_TEXT)
+    assert served.kept.stored == [] and served.queue.jobs == []
+
+
+def test_a_link_to_a_page_is_still_added_beside_the_spreadsheet_offer(served: Served) -> None:
+    """The sibling: the offer keys on the address's ending, so a page is added. Delete this and the
+    offer can widen to every link, which is adding nothing by its link."""
+    response = add_link(served, "u_admin")
+    assert response.status_code == 201, response.text
 
 
 def test_a_queue_that_does_not_answer_is_told_and_nothing_is_kept(served: Served) -> None:

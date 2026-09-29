@@ -392,6 +392,10 @@ class Answered:
     #: What stands behind the answer, as its citation frames carried it, present only beside
     #: `composed`. For a channel that draws its own citations rather than writing the frames.
     provenance: Provenance | None = None
+    #: True when the sensitive-topic interception answered with its referral, which is recorded
+    #: by that path without the question's words and must be written down nowhere else, a
+    #: person's thread included (M24.2.2, M9.1.1).
+    referred: bool = False
 
     def __post_init__(self) -> None:
         if not self.frames:
@@ -795,7 +799,8 @@ def _referred(referral: str) -> Answered:
             stream.step(Progress.READING),
             stream.text(referral),
             stream.done(),
-        )
+        ),
+        referred=True,
     )
 
 
@@ -862,7 +867,8 @@ async def _answered_by_model(
         frames.append(stream.step(Progress.COMPOSING))
     if isinstance(drafted.outcome, Abstention):
         return _abstained(stream, frames, gaps, drafted.outcome)
-    return _answered(stream, frames, gaps, drafted.outcome, scope, drafted.provenance)
+    said = "" if drafted.trimmed is None else drafted.trimmed.sentence()
+    return _answered(stream, frames, gaps, drafted.outcome, scope, drafted.provenance, said=said)
 
 
 def _withheld_or_absent(
@@ -948,6 +954,7 @@ def _answered(
     provenance: Provenance,
     *,
     kept: bool = True,
+    said: str = "",
 ) -> Answered:
     """Close the stream with the evidence, then the prose, then done.
 
@@ -956,9 +963,12 @@ def _answered(
     which carries no text for the cache: see `A_LIVE_VALUE_IS_NOT_KEPT_FOR_THE_NEXT_ASKER`. Each
     citation goes out as its evidence, with its freshness and badge (M8.1.1 to M8.1.3, M7.4.7), and
     the text carries the sentence about the weakest of them (M11.4.9), or says nothing stands
-    behind it (M8.2.4).
+    behind it (M8.2.4). `said` is what the lane adds about how it answered, such as drawing on
+    fewer passages than were found (M15.4.1), after the evidence notice.
     """
-    text = _with_gaps(_with_scope(with_evidence_notice(composed.text, provenance), scope), gaps)
+    noticed = with_evidence_notice(composed.text, provenance)
+    noticed = f"{noticed} {said}" if said else noticed
+    text = _with_gaps(_with_scope(noticed, scope), gaps)
     for one in provenance.evidence:
         frames.append(stream.evidence(one))
     frames.append(stream.text(text))

@@ -33,6 +33,14 @@ exactly like a scope never added. So a test where no chosen use got any scope re
 not yet released and says both remedies in order, and a partial one names the scopes and reminds
 that each addition needs a new version. See `A_SCOPE_NOT_RELEASED_LOOKS_LIKE_A_SCOPE_NOT_ADDED`.
 
+**A scope Lark checks per field is tested by reading the field, because the call succeeds without
+it.** The staff list's test read one person and called it working. On 2026-09-29 the owner's app
+passed that and the night's sync then placed 123 people in no department: Lark admits the
+department walk without `contact:department.base:readonly` and leaves each department's `name`
+out. So the test reads one department as the sync does and names that scope when the name is
+missing, and a refused department walk (the "no dept authority" the owner's first sync met) is
+the data range, reported as such rather than hidden behind a person the root could list.
+
 **Knowledge is switched on as configuration and never copied.** The owner's rule is that a
 connector keeps a minimal index and reads content live at question time. Switching knowledge on
 here writes which Base and which platform, as installation settings, and keeps the credential in
@@ -64,9 +72,11 @@ Task ids: M11.9.4, M11.9.1, M10.6.3, M10.4.3
 from __future__ import annotations
 
 import enum
+import json
 import re
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import datetime
 from types import MappingProxyType
 from typing import Any, Final
 from urllib.parse import quote, urlencode, urlsplit
@@ -80,6 +90,8 @@ from brain.connectors.staff_directories import (
     Fetch,
     Outbound,
 )
+from brain.identity.staff_adapters import LARK_DEPARTMENT_NAME_SCOPE
+from brain.ops.connect_steps import GuideStep, LineKind, Sketch, SketchLine, keyed
 
 # ------------------------------------------------------------------ written-down reasons
 
@@ -93,8 +105,10 @@ A_SCOPE_IS_ASKED_FOR_ONLY_BY_A_USE_THAT_NEEDS_IT: Final = (
 #: What the test may send, and what it may not.
 THE_TEST_ONLY_READS: Final = (
     "The test exchanges the app's identifier and secret for a tenant token, which changes nothing "
-    "in Lark, and then makes small GET requests: a page size of one, and a document's metadata "
-    "rather than its body. It writes nothing here or in Lark and keeps nothing it read."
+    "in Lark, and then makes small GET requests: a page size of one (the wiki's spaces are listed "
+    "so they can be named), and a document's metadata rather than its body. It writes nothing "
+    "in Lark and keeps nothing it read. Here it records only when it ran and each use's verdict "
+    "in a word, so the card can say when Lark was last tested."
 )
 
 #: Why a test where nothing was granted reads as a version not released.
@@ -158,6 +172,10 @@ _BASE_IN_LINK: Final = re.compile(r"/base/([A-Za-z0-9]{8,64})")
 
 #: A scope name as Lark writes it inside a refusal: words joined by colons.
 _SCOPE_IN_TEXT: Final = re.compile(r"[a-z]+(?::[a-z_.]+)+")
+
+#: How many of the app's wiki spaces the test lists, for the step that declares each one. A
+#: space beyond these is declared by pasting its link.
+SPACES_LISTED: Final = 50
 
 #: A chat id that names no chat, which the chat channel's test asks the members of. See `_channel`.
 MEMBERS_CHECK_CHAT: Final = "oc_brain_connect_check"
@@ -349,19 +367,97 @@ USES: Final[Mapping[Use, UseSpec]] = MappingProxyType(
 
 # ------------------------------------------------------------------------ the steps
 
+#: Why the flow asks for the App ID third, before anything else is done in Lark.
+THE_APP_ID_OPENS_EVERY_LATER_PAGE: Final = (
+    "Lark's developer console gives each app its own pages under the App ID. Asked for as soon as "
+    "the app exists, it turns every later step into a link that opens the exact page, so nobody "
+    "has to find the app again in a list and then the menu entry inside it."
+)
 
-@dataclass(frozen=True)
-class Step:
-    """One thing to do in Lark: a short title and what to click, in Lark's own names."""
+#: Why a permission needs a released version, said on the steps that add one.
+A_PERMISSION_WORKS_ONLY_ONCE_ITS_VERSION_IS_APPROVED: Final = (
+    "A permission added in Lark takes effect only once a new version of the app is released and "
+    "approved, so every addition is followed by the release step, and a test that finds a "
+    "permission missing sends you to both."
+)
 
-    title: str
-    text: str
+
+class StepKey(enum.StrEnum):
+    """Every screen of Connect Lark, by the key a test's verdict sends a person back to."""
+
+    CHOOSE = "choose"
+    CREATE = "create"
+    CREDENTIALS = "credentials"
+    BOT = "bot"
+    PERMISSIONS = "permissions"
+    EVENTS_KEYS = "events_keys"
+    EVENTS_ADDRESS = "events_address"
+    RELEASE = "release"
+    SHARE_WIKI = "share_wiki"
+    SHARE_BASE = "share_base"
+    TEST = "test"
+    WIKI_SPACES = "wiki_spaces"
+    BASE_ACCESS = "base_access"
+
+
+#: The developer console's own page for each step, under an app's id, as its address bar shows
+#: them in September 2026. Every step still names the menu entry in words, so a page Lark moves
+#: is found by its name; the link only saves the search.
+APP_PAGES: Final[Mapping[StepKey, str]] = MappingProxyType(
+    {
+        StepKey.CREDENTIALS: "baseinfo",
+        StepKey.BOT: "bot",
+        StepKey.PERMISSIONS: "auth",
+        StepKey.EVENTS_KEYS: "event",
+        StepKey.EVENTS_ADDRESS: "event",
+        StepKey.RELEASE: "version",
+    }
+)
+
+#: The left menu of an app in Lark's developer console, in the order it is drawn.
+CONSOLE_MENU: Final = (
+    "Credentials & Basic Info",
+    "Add Features",
+    "Permissions & Scopes",
+    "Events & Callbacks",
+    "Version Management & Release",
+)
+
+#: The two tabs of Events & Callbacks a step sends somebody to.
+EVENT_TABS: Final = ("Event Configuration", "Encryption Strategy")
+
+#: What each screen collects, by the field names the routes judge. See `brain.ops.connect_steps`.
+ASKS: Final[Mapping[StepKey, tuple[str, ...]]] = MappingProxyType(
+    {
+        StepKey.CHOOSE: ("uses", "platform"),
+        StepKey.CREDENTIALS: ("app_id", "app_secret"),
+        StepKey.PERMISSIONS: ("scopes",),
+        StepKey.EVENTS_KEYS: ("encrypt_key", "verification_token", "save_channel"),
+        StepKey.EVENTS_ADDRESS: ("events_address",),
+        StepKey.SHARE_BASE: ("base_link",),
+        StepKey.TEST: ("test", "save"),
+        StepKey.WIKI_SPACES: ("spaces",),
+    }
+)
 
 
 def developer_console(platform: str) -> str:
     """The developer console's address on the chosen platform, or Lark's when none is chosen."""
     _, open_host = LARK_PLATFORMS.get(platform, LARK_PLATFORMS["larksuite.com"])
     return f"https://{open_host}/app"
+
+
+def app_page(platform: str, app_id: str, step: StepKey) -> str:
+    """The app's own page for a step, or the console's app list until a real App ID is known.
+
+    An App ID that is not the shape Lark prints is never put into an address, so what somebody
+    typed cannot become a link somewhere else. See `THE_APP_ID_OPENS_EVERY_LATER_PAGE`.
+    """
+    page = APP_PAGES.get(step)
+    ident = app_id.strip()
+    if page is None or not APP_ID.fullmatch(ident):
+        return developer_console(platform)
+    return f"{developer_console(platform)}/{ident}/{page}"
 
 
 def scopes_for(uses: Iterable[Use]) -> tuple[Scope, ...]:
@@ -374,87 +470,391 @@ def scopes_for(uses: Iterable[Use]) -> tuple[Scope, ...]:
     return tuple(seen.values())
 
 
-def steps_for(uses: Sequence[Use], *, platform: str) -> tuple[Step, ...]:
-    """The steps from nothing to a released app, for the uses chosen, in click order."""
-    chosen = [use for use in Use if use in set(uses)]
-    scope_names = ", ".join(one.name for one in scopes_for(chosen)) or "none yet: choose a use"
-    found = [
-        Step(
-            "Open Lark's developer console",
-            f"Go to {developer_console(platform)} and sign in with a Lark account that may "
-            "create apps for your company, usually a Lark administrator.",
-        ),
-        Step(
-            "Create the app",
-            "Click Create Custom App. Give it the name your staff will see when it answers, a "
-            "one-line description such as 'Answers questions from our own documents', and an "
-            "icon if you have one. Click Create.",
-        ),
-        Step(
-            "Copy its App ID and App Secret",
-            "In the left menu open Credentials & Basic Info. Copy the App ID (it starts with "
-            "cli_) and the App Secret (click the eye or the copy icon). Keep the page open: you "
-            "paste both into this screen below, where the secret goes into the vault and is "
-            "never shown again.",
-        ),
-    ]
-    if Use.CHANNEL in chosen:
-        found.append(Step("Turn on the bot", USES[Use.CHANNEL].extra[0]))
-    found.append(
-        Step(
-            "Add the scopes",
-            "In the left menu open Permissions & Scopes. For each scope below, search its exact "
-            "name and click Add (or tick it and click Add Scopes). Each is read-only except "
-            f"im:message:send_as_bot, which only sends the bot's own replies: {scope_names}.",
-        )
+#: The shape Lark's batch import of scopes reads, which is the shape its own export writes: the
+#: app's scopes under `tenant`, and none under `user`, because the Brain asks for no user scope.
+SCOPE_IMPORT_KEYS: Final = ("scopes", "tenant", "user")
+
+
+def scope_import(uses: Iterable[Use]) -> str:
+    """Every scope the chosen uses need, as the text Lark's batch import of scopes accepts.
+
+    Pasted once instead of adding each scope by hand. The list is `scopes_for`, so it is exactly
+    what the test checks and what the one-by-one list beside it shows.
+    """
+    scopes, tenant, user = SCOPE_IMPORT_KEYS
+    names = [one.name for one in scopes_for(uses)]
+    return json.dumps({scopes: {tenant: names, user: []}}, indent=2)
+
+
+def _console_sketch(
+    menu_mark: str,
+    heading: str,
+    *,
+    lines: tuple[SketchLine, ...] = (),
+    button: str = "",
+    tabs: tuple[str, ...] = (),
+    tab_mark: str = "",
+) -> Sketch:
+    return Sketch(
+        place="Lark developer console",
+        heading=heading,
+        menu=CONSOLE_MENU,
+        menu_mark=menu_mark,
+        tabs=tabs,
+        tab_mark=tab_mark,
+        lines=lines,
+        button=button,
     )
-    if Use.STAFF_LIST in chosen:
-        found.append(Step("Let it read everyone", USES[Use.STAFF_LIST].extra[0]))
-    if Use.CHANNEL in chosen:
-        chat = USES[Use.CHANNEL].extra
-        found += [
-            Step("Copy the Encrypt Key and Verification Token", chat[1]),
-            Step("Save here first", chat[2]),
-            Step("Point Lark's events at this install", chat[3]),
-            Step(f"Subscribe to {MESSAGE_EVENT}", chat[4]),
-        ]
-    found += [
-        Step(
-            "Release a version",
-            "In the left menu open Version Management & Release and click Create a version. "
+
+
+def _choose(chosen: Sequence[Use]) -> GuideStep:
+    return GuideStep(
+        key=StepKey.CHOOSE,
+        title="Choose what the Lark app is for",
+        text=(
+            "Tick each thing the Lark app should do here. One app does all of them, and you can "
+            "add another use later from the same card. Choose feishu.cn if your company's Lark "
+            "is Feishu."
+        ),
+        sketch=Sketch(
+            place="Company Brain",
+            heading="What the Lark app is for",
+            lines=tuple(
+                SketchLine(LineKind.ITEM, USES[use].label, mark=use in chosen) for use in Use
+            ),
+        ),
+        asks=ASKS[StepKey.CHOOSE],
+    )
+
+
+def _create(platform: str) -> GuideStep:
+    return GuideStep(
+        key=StepKey.CREATE,
+        title="Create the app in Lark",
+        text=(
+            "Open Lark's developer console and sign in with an account that may create apps for "
+            "your company, usually a Lark administrator. Click Create Custom App, give it the "
+            "name your staff will see when it answers and a one-line description such as "
+            "'Answers questions from our own documents', then click Create."
+        ),
+        sketch=Sketch(
+            place="Lark developer console",
+            heading="My apps",
+            lines=(SketchLine(LineKind.TEXT, "Custom apps"),),
+            button="Create Custom App",
+        ),
+        link=developer_console(platform),
+        link_label="Open Lark's developer console",
+    )
+
+
+def _credentials(platform: str, app_id: str) -> GuideStep:
+    return GuideStep(
+        key=StepKey.CREDENTIALS,
+        title="Paste the App ID and App Secret",
+        text=(
+            "In the app's left menu open Credentials & Basic Info. Copy the App ID (it starts with "
+            "cli_) and the App Secret (click the eye or the copy icon) and paste both here. With "
+            "the App ID, every later step opens its own page in Lark. The secret goes to the vault "
+            "when you save and is never shown again, and it is not kept by this page if you close "
+            "it."
+        ),
+        sketch=_console_sketch(
+            "Credentials & Basic Info",
+            "Credentials & Basic Info",
+            lines=(
+                SketchLine(LineKind.FIELD, "App ID", "cli_...", mark=True),
+                SketchLine(LineKind.FIELD, "App Secret", "********", mark=True),
+            ),
+        ),
+        link=app_page(platform, app_id, StepKey.CREDENTIALS),
+        link_label="Open Credentials & Basic Info",
+        asks=ASKS[StepKey.CREDENTIALS],
+    )
+
+
+def _bot(platform: str, app_id: str) -> GuideStep:
+    return GuideStep(
+        key=StepKey.BOT,
+        title="Turn on the bot",
+        text=USES[Use.CHANNEL].extra[0],
+        sketch=_console_sketch(
+            "Add Features",
+            "Add Features",
+            lines=(SketchLine(LineKind.ITEM, "Bot", mark=True),),
+            button="Add",
+        ),
+        link=app_page(platform, app_id, StepKey.BOT),
+        link_label="Open Add Features",
+    )
+
+
+def _permissions(chosen: Sequence[Use], platform: str, app_id: str) -> GuideStep:
+    staff = Use.STAFF_LIST in chosen
+    names = [one.name for one in scopes_for(chosen)]
+    shown = tuple(SketchLine(LineKind.ITEM, name) for name in names[:3])
+    more = (SketchLine(LineKind.TEXT, f"and {len(names) - 3} more"),) if len(names) > 3 else ()
+    staff_range = (
+        (SketchLine(LineKind.FIELD, "Contacts range", "All members", mark=True),) if staff else ()
+    )
+    return GuideStep(
+        key=StepKey.PERMISSIONS,
+        title="Add the permissions",
+        text=(
+            "In the app's left menu open Permissions & Scopes. Press Copy all permissions below, "
+            "then in Lark click Batch import (Lark may call it Import scopes), paste, and confirm. "
+            "If your Lark offers no batch import, add each permission in the list below: search "
+            "its exact name and click Add. Every one only reads except im:message:send_as_bot, "
+            "which sends the bot's own replies."
+            + (" " + USES[Use.STAFF_LIST].extra[0] if staff else "")
+            + " "
+            + A_PERMISSION_WORKS_ONLY_ONCE_ITS_VERSION_IS_APPROVED
+        ),
+        sketch=_console_sketch(
+            "Permissions & Scopes",
+            "Permissions & Scopes",
+            lines=shown + more + staff_range,
+            button="Batch import",
+        ),
+        link=app_page(platform, app_id, StepKey.PERMISSIONS),
+        link_label="Open Permissions & Scopes",
+        asks=ASKS[StepKey.PERMISSIONS],
+    )
+
+
+def _events_keys(platform: str, app_id: str) -> GuideStep:
+    return GuideStep(
+        key=StepKey.EVENTS_KEYS,
+        title="Copy the chat channel's two keys, then save it here",
+        text=(
+            "In the app's left menu open Events & Callbacks, then the Encryption Strategy tab. If "
+            "the Encrypt Key is empty, click Reset to make one. Paste the Encrypt Key and the "
+            "Verification Token here, then press Save the chat channel now. "
+            + THE_CHANNEL_IS_SAVED_BEFORE_LARK_CHECKS_ITS_ADDRESS
+        ),
+        sketch=_console_sketch(
+            "Events & Callbacks",
+            "Events & Callbacks",
+            tabs=EVENT_TABS,
+            tab_mark="Encryption Strategy",
+            lines=(
+                SketchLine(LineKind.FIELD, "Encrypt Key", "********", mark=True),
+                SketchLine(LineKind.FIELD, "Verification Token", "********", mark=True),
+            ),
+            button="Reset",
+        ),
+        link=app_page(platform, app_id, StepKey.EVENTS_KEYS),
+        link_label="Open Events & Callbacks",
+        asks=ASKS[StepKey.EVENTS_KEYS],
+    )
+
+
+def _events_address(platform: str, app_id: str) -> GuideStep:
+    return GuideStep(
+        key=StepKey.EVENTS_ADDRESS,
+        title="Point Lark's events at this install",
+        text=(
+            "Still in Events & Callbacks, open the Event Configuration tab. Choose to send events "
+            "to the developer server (Lark calls it Request URL), paste this install's events "
+            "address shown below and click Save; Lark checks it at once and shows it as verified. "
+            f"Then click Add Events, search for {MESSAGE_EVENT} (Lark lists it as Message "
+            "received), tick it and click Add. It is the only event the Brain needs; if Lark asks "
+            "to add the scopes it requires, accept."
+        ),
+        sketch=_console_sketch(
+            "Events & Callbacks",
+            "Events & Callbacks",
+            tabs=EVENT_TABS,
+            tab_mark="Event Configuration",
+            lines=(
+                SketchLine(LineKind.FIELD, "Request URL", "Your events address", mark=True),
+                SketchLine(LineKind.ITEM, MESSAGE_EVENT),
+            ),
+            button="Add Events",
+        ),
+        link=app_page(platform, app_id, StepKey.EVENTS_ADDRESS),
+        link_label="Open Events & Callbacks",
+        asks=ASKS[StepKey.EVENTS_ADDRESS],
+    )
+
+
+def _release(platform: str, app_id: str) -> GuideStep:
+    return GuideStep(
+        key=StepKey.RELEASE,
+        title="Release a version and have it approved",
+        text=(
+            "In the app's left menu open Version Management & Release and click Create a version. "
             "Enter a version number such as 1.0.0, set who may use the app to All members, write "
             "a short note such as 'Company Brain, read-only', then Save and Submit for release. "
-            "Every later change to the scopes needs a new version released the same way.",
+            "Lark sends it to your workspace administrator, who approves it in the Lark Admin "
+            "Console under app review; if you are the administrator, Lark may release it at once. "
+            "Permissions take effect only after approval, and every later change to them needs a "
+            "new version released the same way."
         ),
-        Step(
-            "Have it approved",
-            "Lark sends the release to your workspace administrator. They approve it in the Lark "
-            "Admin Console, under the app review page. If you are the administrator, Lark may "
-            "release it at once. Scopes take effect only after approval.",
-        ),
-    ]
-    if Use.WIKI in chosen:
-        found.append(Step("Share your wiki spaces with it", USES[Use.WIKI].extra[0]))
-    if Use.BASE in chosen:
-        found.append(Step("Share the Base with it", USES[Use.BASE].extra[0]))
-        found.append(Step("Copy the Base's link", USES[Use.BASE].extra[1]))
-    found.append(
-        Step(
-            "Test, then save",
-            "Paste the App ID and App Secret below and press Test connection. Each use you chose "
-            "says it works or exactly what to add. When they work, press Save to switch them on."
-            + (
-                " For the chat channel, paste the Encrypt Key and Verification Token again and "
-                "save once more after the version is approved: that save records the bot's own "
-                "id, which is how a group message is known to be for it."
-                if Use.CHANNEL in chosen
-                else ""
+        sketch=_console_sketch(
+            "Version Management & Release",
+            "Version Management & Release",
+            lines=(
+                SketchLine(LineKind.FIELD, "Version", "1.0.0"),
+                SketchLine(LineKind.FIELD, "Availability", "All members", mark=True),
             ),
-        )
+            button="Create a version",
+        ),
+        link=app_page(platform, app_id, StepKey.RELEASE),
+        link_label="Open Version Management & Release",
     )
-    if Use.CHANNEL in chosen:
-        found.append(Step("Ask the bot", USES[Use.CHANNEL].extra[5]))
-    return tuple(found)
+
+
+def _share_wiki() -> GuideStep:
+    return GuideStep(
+        key=StepKey.SHARE_WIKI,
+        title="Share your wiki spaces with the app",
+        text=USES[Use.WIKI].extra[0],
+        sketch=Sketch(
+            place="Lark Wiki",
+            heading="Space settings",
+            tabs=("Basic settings", "Member settings"),
+            tab_mark="Member settings",
+            lines=(SketchLine(LineKind.ITEM, "Group with the app's bot", "Can view", mark=True),),
+            button="Add members",
+        ),
+    )
+
+
+def _share_base() -> GuideStep:
+    scopes = " and ".join(one.name for one in USES[Use.BASE].scopes)
+    return GuideStep(
+        key=StepKey.SHARE_BASE,
+        title="Share the Base with the app and paste its link",
+        text=(
+            f"The app reads a Base with {scopes}, which the permissions you added include, and "
+            "only once a version with them is released. "
+            f"{USES[Use.BASE].extra[0]} {USES[Use.BASE].extra[1]} Knowledge from Base must be "
+            "ticked on the first step; the Base is switched on when you save on the test step."
+        ),
+        sketch=Sketch(
+            place="Lark Base",
+            heading="More",
+            lines=(
+                SketchLine(LineKind.ITEM, "Add document app", mark=True),
+                SketchLine(LineKind.FIELD, "Link", ".../base/...", mark=True),
+            ),
+            button="Add",
+        ),
+        asks=ASKS[StepKey.SHARE_BASE],
+    )
+
+
+def _test(chosen: Sequence[Use]) -> GuideStep:
+    chat = Use.CHANNEL in chosen
+    return GuideStep(
+        key=StepKey.TEST,
+        title="Test, then save",
+        text=(
+            "Press Test connection. Each use you chose says it works, or which step to go back to "
+            "and what to change there. When they work, press Save and switch on."
+            + (
+                " For the chat channel this save also records the bot's own id, which is how a "
+                "group message is known to be for it. Then open Lark, search for the app by its "
+                "name, open a chat with its bot and send hello: it answers once with how to link "
+                "your account."
+                if chat
+                else ""
+            )
+        ),
+        sketch=Sketch(
+            place="Company Brain",
+            heading="Test, then save",
+            lines=tuple(
+                SketchLine(LineKind.ITEM, USES[use].label, "Working", mark=True)
+                for use in Use
+                if use in chosen
+            ),
+            button="Test connection",
+        ),
+        asks=ASKS[StepKey.TEST],
+    )
+
+
+def _wiki_spaces() -> GuideStep:
+    return GuideStep(
+        key=StepKey.WIKI_SPACES,
+        title="Say who may read each wiki space",
+        text=(
+            "For each wiki space shared with the app, choose who on this install may be told "
+            "its pages: the whole company, or one department. A space nobody declares here is "
+            "never read, and you are the steward of each space you declare. The test lists the "
+            "spaces Lark shows the app; for one it does not show, paste the link of the space's "
+            "settings page, which contains /wiki/space/ and a number."
+        ),
+        sketch=Sketch(
+            place="Company Brain",
+            heading="Wiki spaces",
+            lines=(
+                SketchLine(LineKind.FIELD, "A shared space", "The whole company", mark=True),
+                SketchLine(LineKind.FIELD, "Another space", "One department", mark=True),
+            ),
+            button="Save the spaces",
+        ),
+        asks=ASKS[StepKey.WIKI_SPACES],
+    )
+
+
+#: Where a person is granted a Base's tables, and where each table is listed by its title.
+PEOPLE_SCREEN: Final = "/people"
+CAPABILITIES_SCREEN: Final = "/capabilities"
+
+
+def _base_access() -> GuideStep:
+    return GuideStep(
+        key=StepKey.BASE_ACCESS,
+        title="Grant each table to the people who may read it",
+        text=(
+            "Within about five minutes of saving, the worker indexes the Base: the ids, names "
+            "and dates of its records, never their values. Nobody reads a table until they are "
+            "granted it. On Capabilities each table is listed by its own title, as "
+            "read:lark_<table> to find its records and read:lark_<table>.* to read their values; "
+            "grant them to a person from their page on People."
+        ),
+        sketch=Sketch(
+            place="Company Brain",
+            heading="Capabilities",
+            lines=(
+                SketchLine(LineKind.ITEM, "read:lark_<table>", "Find records", mark=True),
+                SketchLine(LineKind.ITEM, "read:lark_<table>.*", "Read values", mark=True),
+            ),
+            button="Grant",
+        ),
+    )
+
+
+def steps_for(uses: Sequence[Use], *, platform: str, app_id: str = "") -> tuple[GuideStep, ...]:
+    """The screens from nothing to a working connection, for the uses chosen, in order.
+
+    Fewer than the list they replace, because a screen now holds everything done on one Lark page:
+    creating the app and opening the console are one, copying the credentials is pasting them,
+    the contacts range is on the permissions page, and releasing and approving are one version.
+    Once `app_id` is a real App ID, every step on one of the app's pages links straight to it.
+    """
+    chosen = [use for use in Use if use in set(uses)]
+    chat = Use.CHANNEL in chosen
+    found = [_choose(chosen), _create(platform), _credentials(platform, app_id)]
+    if chat:
+        found.append(_bot(platform, app_id))
+    found.append(_permissions(chosen, platform, app_id))
+    if chat:
+        found += [_events_keys(platform, app_id), _events_address(platform, app_id)]
+    found.append(_release(platform, app_id))
+    if Use.WIKI in chosen:
+        found.append(_share_wiki())
+    if Use.BASE in chosen:
+        found.append(_share_base())
+    found.append(_test(chosen))
+    if Use.WIKI in chosen:
+        found.append(_wiki_spaces())
+    if Use.BASE in chosen:
+        found.append(_base_access())
+    return keyed(tuple(found))
 
 
 def _origin(redirect_uris: str) -> str:
@@ -625,6 +1025,11 @@ class UseResult:
     verdict: Verdict
     told: str
     missing: tuple[str, ...] = ()
+    #: True when every call was answered and a field was left out, which is a scope Lark checks
+    #: per field. Lark granted something, so this is never read as a version not released.
+    answered: bool = False
+    #: The wiki spaces Lark showed the app, as (id, name), for the step that declares them.
+    spaces: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -733,8 +1138,8 @@ async def _staff(fetch: Fetch, base: str, token: str) -> UseResult:
     refused = _refused_or_other(spec, people, not_shared=range_sentence)
     if refused is not None:
         return refused
-    if _items(people):
-        return UseResult(spec.use, Verdict.WORKING, "Working: the app can read the staff list.")
+    # The department walk is the sync's first call, so it is read even when a person was: the
+    # root can list people while the walk is refused, and a department can come back unnamed.
     departments = await _get(
         fetch,
         base,
@@ -746,7 +1151,10 @@ async def _staff(fetch: Fetch, base: str, token: str) -> UseResult:
     refused = _refused_or_other(spec, departments, not_shared=range_sentence)
     if refused is not None:
         return refused
-    if _items(departments):
+    found = _items(departments)
+    if found and not str(found[0].get("name") or "").strip():
+        return replace(_missing(spec, (LARK_DEPARTMENT_NAME_SCOPE,)), answered=True)
+    if found or _items(people):
         return UseResult(spec.use, Verdict.WORKING, "Working: the app can read the staff list.")
     return UseResult(spec.use, Verdict.NOT_SHARED, range_sentence)
 
@@ -754,11 +1162,18 @@ async def _staff(fetch: Fetch, base: str, token: str) -> UseResult:
 async def _wiki(fetch: Fetch, base: str, token: str) -> UseResult:
     spec = USES[Use.WIKI]
     unshared = "The app is in no wiki space yet. " + spec.extra[0]
-    spaces = await _get(fetch, base, "/open-apis/wiki/v2/spaces", token, page_size="1")
+    spaces = await _get(
+        fetch, base, "/open-apis/wiki/v2/spaces", token, page_size=str(SPACES_LISTED)
+    )
     refused = _refused_or_other(spec, spaces, not_shared=unshared)
     if refused is not None:
         return refused
-    space = next((str(one.get("space_id") or "") for one in _items(spaces)), "")
+    seen = tuple(
+        (str(one.get("space_id") or ""), str(one.get("name") or ""))
+        for one in _items(spaces)
+        if one.get("space_id")
+    )
+    space = seen[0][0] if seen else ""
     if not space:
         return UseResult(spec.use, Verdict.NOT_SHARED, unshared)
     nodes = await _get(
@@ -777,6 +1192,7 @@ async def _wiki(fetch: Fetch, base: str, token: str) -> UseResult:
             spec.use,
             Verdict.WORKING,
             "Working: the app can list a wiki space, which has no page yet to check further.",
+            spaces=seen,
         )
     node_token = str(node.get("node_token") or "")
     # The call `brain.connectors.lark_wiki.read_live` makes before it answers from a page.
@@ -810,6 +1226,7 @@ async def _wiki(fetch: Fetch, base: str, token: str) -> UseResult:
         Verdict.WORKING,
         "Working: the app can list the wiki, see whether a page was restricted, and read a "
         "page's details.",
+        spaces=seen,
     )
 
 
@@ -917,7 +1334,9 @@ async def bot_open_id(
 
 def _released(results: Sequence[UseResult]) -> tuple[UseResult, ...]:
     """Every result, with an all-missing test read as a version not released. See the constant."""
-    if not results or any(one.verdict is not Verdict.MISSING_SCOPE for one in results):
+    if not results or any(
+        one.verdict is not Verdict.MISSING_SCOPE or one.answered for one in results
+    ):
         return tuple(results)
     return tuple(
         UseResult(
@@ -931,6 +1350,45 @@ def _released(results: Sequence[UseResult]) -> tuple[UseResult, ...]:
         )
         for one in results
     )
+
+
+#: Where a use's verdict sends a person back to, when the verdict means the same for every use.
+_REDO: Final[Mapping[Verdict, tuple[StepKey, ...]]] = MappingProxyType(
+    {
+        Verdict.CREDENTIAL_REFUSED: (StepKey.CREDENTIALS,),
+        Verdict.MISSING_SCOPE: (StepKey.PERMISSIONS, StepKey.RELEASE),
+        Verdict.NOT_RELEASED: (StepKey.RELEASE,),
+    }
+)
+
+#: Where "not shared" sends a person back to, which depends on what the use needed shared.
+_NOT_SHARED_REDO: Final[Mapping[Use, tuple[StepKey, ...]]] = MappingProxyType(
+    {
+        Use.STAFF_LIST: (StepKey.PERMISSIONS, StepKey.RELEASE),
+        Use.WIKI: (StepKey.SHARE_WIKI,),
+        Use.BASE: (StepKey.SHARE_BASE,),
+        Use.CHANNEL: (StepKey.BOT, StepKey.RELEASE),
+    }
+)
+
+#: Where a refused App ID and App Secret send a person back to: the credentials, then the platform.
+REDO_WHEN_REFUSED: Final = (StepKey.CREDENTIALS, StepKey.CHOOSE)
+
+
+def redo_for(result: UseResult) -> tuple[StepKey, ...]:
+    """The steps to go back to for one use's verdict, in the order to do them. None when working.
+
+    A missing scope sends a person to the permissions and then to the release, because Lark cannot
+    say whether the scope was never added or added and not yet released (see
+    `A_SCOPE_NOT_RELEASED_LOOKS_LIKE_A_SCOPE_NOT_ADDED`). The contacts range and the bot are the
+    app's configuration too, so each is followed by a new release.
+    """
+    if result.verdict is Verdict.NOT_SHARED:
+        return _NOT_SHARED_REDO[result.use]
+    if result.verdict is Verdict.NEEDS_SETTING:
+        # Only the Base asks for a setting of its own: its link, pasted on the sharing step.
+        return (StepKey.SHARE_BASE,) if result.use is Use.BASE else ()
+    return _REDO.get(result.verdict, ())
 
 
 async def probe_connection(
@@ -1008,3 +1466,91 @@ def uses_switched_on(saved: str) -> tuple[Use, ...]:
     """The uses a saved `INSTALL_LARK_USES` names, ignoring anything else in it."""
     names = {one.strip() for one in saved.split(",")}
     return tuple(use for use in Use if use.value in names)
+
+
+# ------------------------------------------------------------------------ the last test
+
+#: Why a test leaves a record at all, and why the record is so small.
+A_TEST_LEAVES_ITS_VERDICTS_AND_NOTHING_IT_READ: Final = (
+    "Once Lark is connected the card says when it was last tested and what each use came to, so "
+    "an administrator sees a use that stopped working without testing again. What is kept is the "
+    "instant, whether Lark accepted the credential, and one verdict word per use: never the "
+    "secret, never a scope list Lark sent, never anything read from Lark."
+)
+
+
+@dataclass(frozen=True)
+class LastTest:
+    """When Lark was last tested from the console, and each use's verdict in a word."""
+
+    at: datetime
+    accepted: bool
+    verdicts: tuple[tuple[Use, Verdict], ...]
+
+
+def last_test_value(result: ProbeResult, *, at: datetime) -> dict[str, Any]:
+    """The record a test leaves. See `A_TEST_LEAVES_ITS_VERDICTS_AND_NOTHING_IT_READ`."""
+    if at.tzinfo is None:
+        msg = "a test recorded at a naive instant is read back an offset early or late"
+        raise ValueError(msg)
+    return {
+        "at": at.isoformat(),
+        "accepted": result.token_ok,
+        "uses": {one.use.value: one.verdict.value for one in result.uses},
+    }
+
+
+def last_test_from(value: object) -> LastTest | None:
+    """A recorded test read back, or None for a record in any other shape."""
+    if not isinstance(value, Mapping):
+        return None
+    at, accepted, uses = value.get("at"), value.get("accepted"), value.get("uses")
+    if not isinstance(at, str) or not isinstance(accepted, bool) or not isinstance(uses, Mapping):
+        return None
+    try:
+        when = datetime.fromisoformat(at)
+    except ValueError:
+        return None
+    if when.tzinfo is None:
+        return None
+    known = {one.value: one for one in Use}
+    verdicts = {one.value: one for one in Verdict}
+    found = tuple(
+        (known[name], verdicts[word])
+        for name, word in uses.items()
+        if name in known and isinstance(word, str) and word in verdicts
+    )
+    return LastTest(at=when, accepted=accepted, verdicts=found)
+
+
+# ------------------------------------------------------------------------ switching off
+
+#: What switching a use off does, said on its confirmation.
+SWITCHING_A_USE_OFF: Final = (
+    "Each use you chose is switched off here now and stops being read; the ledger records it. The "
+    "app's credential stays in the vault, because this system may write a key and may not delete "
+    "one, so remove the app or its permissions in Lark's developer console as well. Switching a "
+    "use on again asks for the App Secret again."
+)
+
+#: What switching the staff list off does to the staff source.
+SWITCHING_THE_STAFF_LIST_OFF: Final = (
+    "Switching the staff list off leaves this install with no staff source: nobody joins or "
+    "leaves from Lark until a source is chosen on Staff sources, and nobody already here is "
+    "removed."
+)
+
+
+def settings_after_switching_off(
+    off: Sequence[Use], *, saved_uses: str, staff_source: str
+) -> dict[str, str]:
+    """The installation settings switching `off` writes. The key is left where it is.
+
+    The staff list hands the staff source back to nothing only when Lark is the source it names,
+    so switching Lark's staff list off never unsets a source the Staff sources screen chose since.
+    """
+    still = [use for use in uses_switched_on(saved_uses) if use not in set(off)]
+    values = {"INSTALL_LARK_USES": ",".join(use.value for use in still) or "none"}
+    if Use.STAFF_LIST in off and staff_source == "lark":
+        values["INSTALL_STAFF_SOURCE"] = "none"
+    return values

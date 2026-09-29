@@ -364,6 +364,14 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # Connect Lark's settings: installation rows upserted on their live key, so a second save
         # writes the same values over the first.
         "brain.lark_connect_routes:LarkSettings.save": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # The App ID and the last test: two `ops.setting` rows upserted on their live keys, so a
+        # second keep writes over the first and reading them changes nothing.
+        "brain.lark_connect_routes:LarkFactStore.read": Repeat.READS,
+        "brain.lark_connect_routes:LarkFactStore.keep": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # The declared wiki spaces: one `ops.setting` row a space, upserted on its live key, so a
+        # second declaration of a space writes over the first.
+        "brain.lark_connect_routes:WikiSpaceStore.declared": Repeat.READS,
+        "brain.lark_connect_routes:WikiSpaceStore.declare": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.knowledge.scanning:Parser.parse": Repeat.NO_EFFECT_AT_THE_FAR_END,
         "brain.member.connections:TokenRevoker.revoke": Repeat.SAME_RESULT_WHEN_REPEATED,
         # The model executor: the ladder is read on every call, and each attempt is one row in
@@ -564,6 +572,19 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # The Limits screen's walk over the windows, which writes nothing.
         "brain.ops.limit_store:WindowClient.scan_iter": Repeat.READS,
         "brain.ops.limit_store:WindowClient.zrange": Repeat.READS,
+        # The capacity ledger's slots and places: a count kept in the cache, where a slot taken
+        # twice under one name is one slot and a slot taken twice under two lapses with its lease.
+        # See `brain.ops.capacity_ledger.A_SLOT_NOBODY_GAVE_BACK_IS_FREED_BY_ITS_LEASE`.
+        "brain.ops.capacity_ledger:LedgerPipeline.watch": Repeat.DERIVED_STATE,
+        "brain.ops.capacity_ledger:LedgerPipeline.multi": Repeat.DERIVED_STATE,
+        "brain.ops.capacity_ledger:LedgerPipeline.execute": Repeat.DERIVED_STATE,
+        "brain.ops.capacity_ledger:LedgerPipeline.zrange": Repeat.READS,
+        "brain.ops.capacity_ledger:LedgerPipeline.zremrangebyscore": Repeat.DERIVED_STATE,
+        "brain.ops.capacity_ledger:LedgerPipeline.zadd": Repeat.DERIVED_STATE,
+        "brain.ops.capacity_ledger:LedgerPipeline.zrem": Repeat.SAME_RESULT_WHEN_REPEATED,
+        "brain.ops.capacity_ledger:LedgerPipeline.expire": Repeat.DERIVED_STATE,
+        "brain.ops.capacity_ledger:LedgerClient.pipeline": Repeat.READS,
+        "brain.ops.capacity_ledger:LedgerClient.zrange": Repeat.READS,
         # The denial alerts kept for each recipient: every write is a put by content, so a pass
         # run twice leaves the store as one pass did. See `brain.ops.denial_alert_store`.
         "brain.ops.denial_alert_store:AlertClient.scan_iter": Repeat.READS,

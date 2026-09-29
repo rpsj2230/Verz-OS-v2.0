@@ -272,6 +272,26 @@ async def _acted_on(
         return None
 
 
+async def _handed_over(h: Harness, by: _Person, item_id: str, to: str) -> StoredItem | None:
+    """The hand-over route's act (M7.7.2): the named person's authority read as it stands, the
+    hand-over judged, then recorded. None where the route refuses."""
+    from brain.knowledge.lifecycle import assert_may_hand_over, authority_for
+    from brain.knowledge.lifecycle_store import as_person, record_steward
+    from brain.knowledge_lifecycle_routes import entitlement_of
+    from brain.knowledge_routes import live_departments
+
+    registry = await live_departments(h.sessions)
+
+    async def act(session: AsyncSession, item: StoredItem) -> None:
+        theirs = await entitlement_of(session, to, h.now)
+        await as_person(session, by.authority)
+        named = authority_for(theirs, departments=registry, now=h.now)
+        assert_may_hand_over(item, to=to, theirs=named)
+        await record_steward(session, item, to=to)
+
+    return await _acted_on(h, by, item_id, act)
+
+
 async def _verify(
     h: Harness,
     person: _Person,

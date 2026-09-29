@@ -109,6 +109,10 @@ COPY --chown=brain:brain docs /app/docs
 # the whole of `ops/`, because the rest of that directory is runbooks and host scripts that
 # have no business in a container that serves requests.
 COPY --chown=brain:brain ops/keycloak/realm-export.json /app/ops/keycloak/realm-export.json
+# The staff sync's accounts client, set up by the server's deploy hook after a release is ready:
+# ops/deploy/brain-deploy copies this out of the running application and runs it on the host,
+# because only the host reaches both Keycloak's container and this one. Nothing in the image runs it.
+COPY --chown=brain:brain ops/keycloak/accounts-client.sh /app/ops/keycloak/accounts-client.sh
 # The release's vault changes: the script that applies them and the policy files it loads. Nothing
 # in the image runs them; the server's deploy hook (ops/deploy/brain-deploy) copies them out of a
 # new image before starting it and applies them with the deploy token it keeps root-only, so a

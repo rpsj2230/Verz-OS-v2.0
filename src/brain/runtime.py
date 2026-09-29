@@ -51,6 +51,29 @@ class ProcessProfile:
     reason: str
 
 
+#: Left out of the memory ceiling for the runtime itself before any worker is counted.
+RUNTIME_HEADROOM_MB = 256
+
+
+def workers_by_memory(memory_mb: int) -> int:
+    """The memory ceiling on workers alone."""
+    return max(1, (memory_mb - RUNTIME_HEADROOM_MB) // WORKER_MB)
+
+
+def most_workers(memory_mb: int, pool_slots: int = 200) -> int:
+    """The most workers a container of this size can start, whatever its cores.
+
+    The memory and pooler ceilings, which are the two `choose_workers` takes the fewest of
+    before the cores; the cores can only lower the count. A function of its own because
+    `brain.knowledge.app_parse_budget` shares a container's spare memory among exactly these
+    processes, and a second copy of the arithmetic there would be a second place for the count
+    to be wrong. The memory ceiling alone is not it: a larger container would start more
+    processes than the pooler lets it, and each would be budgeted a share it never gets.
+    """
+    # Each worker keeps a pool; leave most of the pooler's slots for actual queries.
+    return min(workers_by_memory(memory_mb), max(1, pool_slots // 20))
+
+
 def choose_workers(*, memory_mb: int, cores: int, pool_slots: int = 200) -> int:
     """Fewest of three ceilings: memory, cores, and the pooler's client slots.
 
@@ -58,11 +81,8 @@ def choose_workers(*, memory_mb: int, cores: int, pool_slots: int = 200) -> int:
     Nine workers on a four-core host is fine for CPU and fatal for a database configured
     for a hundred connections.
     """
-    by_memory = max(1, (memory_mb - 256) // WORKER_MB)  # 256 MB headroom for the runtime
     by_cores = max(1, 2 * cores + 1)
-    # Each worker keeps a pool; leave most of the pooler's slots for actual queries.
-    by_pool = max(1, pool_slots // 20)
-    return min(by_memory, by_cores, by_pool)
+    return min(most_workers(memory_mb, pool_slots), by_cores)
 
 
 def profile_for(
@@ -87,7 +107,7 @@ def profile_for(
         limit_concurrency=workers * 40,
         reason=(
             f"{workers} workers: memory allows "
-            f"{max(1, (memory_mb - 256) // WORKER_MB)}, cores allow {max(1, 2 * cores + 1)}, "
+            f"{workers_by_memory(memory_mb)}, cores allow {max(1, 2 * cores + 1)}, "
             f"pooler allows 10. Graceful {graceful}s covers a "
             f"{slowest_request_seconds:.0f}s request inside Docker's {DOCKER_STOP_TIMEOUT}s stop."
         ),

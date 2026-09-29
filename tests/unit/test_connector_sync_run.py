@@ -21,7 +21,7 @@ owner's rule: `brain.ops.connector_sync.A_SYNC_KEEPS_NO_BODY`.
 No test here calls a live API. The key is a sentinel, the call is a replay, and the address is the
 one a stand-in resolver hands out.
 
-Task ids: M42.6.5, M31.3.2.3, M31.3.2.4, M11.8.2, M11.9.1
+Task ids: M42.6.5, M31.3.2.3, M31.3.2.4, M11.8.2, M11.9.1, M32.7.1
 """
 
 from __future__ import annotations

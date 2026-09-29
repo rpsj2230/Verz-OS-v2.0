@@ -181,6 +181,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "INSTALL_STAFF_SOURCE",
       "INSTALL_STAFF_SOURCE_LOCATION",
       "INSTALL_BROKERED_CLIENT_ID",
+      "INSTALL_ACCOUNT_EMPLOYMENT_TYPES",
     ],
     gaps: [
       {
@@ -426,12 +427,16 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/connectors/{connector}/edit",
       "/api/v1/connectors/{connector}/key",
       "/api/v1/connectors/{connector}/probe",
+      "/api/v1/connectors/{connector}/accept",
       "/api/v1/console/connectors",
       "/api/v1/console/connectors/{connector}",
       "/api/v1/console/connectors/{connector}/export",
       "/api/v1/console/connectors/{connector}/probe",
+      "/api/v1/console/connectors/{connector}/drift",
       "/api/v1/connectors/lark-app",
       "/api/v1/connectors/lark-app/test",
+      "/api/v1/connectors/lark-app/switch-off",
+      "/api/v1/connectors/lark-app/wiki-spaces",
       "/api/v1/channels*",
       "/api/v1/me/channels*",
       "/api/v1/console/connectors/{connector}/stats",
@@ -678,7 +683,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
   },
   "The audit trail: who changed what, and when": {
     screens: ["/audit", "/audit/verify", "/audit/subject/:kind/:id", "/audit/subject/:kind/:id/:view", "/requirement-checks"],
-    routes: ["/api/v1/audit*", "/api/v1/requirements/checks"],
+    routes: ["/api/v1/audit*", "/api/v1/requirements/checks", "/api/v1/traces*"],
     tables: [
       "obs.audit_entry",
       "ops.sensitive_read",
@@ -690,7 +695,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
     installation: [],
     gaps: [
       {
-        what: "A run's trace graph is stored masked and read only under its own role, and no screen reads it: TraceGraph draws a completed run and no route serves one.",
+        what: "A run's trace graph is stored masked and read only under the payload role, and no screen reads it: the read route serves one to a holder of that role, and no page calls it for TraceGraph to draw.",
         leaf: "M20.2.1",
       },
     ],
@@ -767,8 +772,17 @@ export const NOT_ADMINISTERED: Readonly<Record<string, string>> = {
     "The marks people put on their own answers, counted and read by nothing that decides an answer; no administrator manages a person's mark.",
   "POST /api/v1/automation/tool-call":
     "Called by a running automation with its owner's reach, not by a person at a screen; installing the automation is the console's part.",
-  "chat.conversation": "What a person asked and was answered belongs to them; no store queries it yet (brain.chat.threads) and usage is reported without the words.",
+  "chat.conversation":
+    "What a person asked and was answered belongs to them: kept by brain.chat.thread_store, listed, searched and reopened on Ask for that person alone, and never managed by anybody else.",
   "chat.message": "The same as chat.conversation: a person's own words, reported on and never managed.",
+  "GET /api/v1/threads":
+    "A person's own conversations on Ask, for them alone and never anybody else's; nothing in it for an administrator to manage.",
+  "GET /api/v1/threads/search":
+    "A search of a person's own questions on Ask, for them alone; nothing in it for an administrator to manage.",
+  "GET /api/v1/threads/{thread_id}":
+    "One of a person's own conversations reopened on Ask at the reach they hold now; nothing in it for an administrator to manage.",
+  "POST /api/v1/threads/{thread_id}/corrections":
+    "A person marking the latest answer in their own conversation wrong, from Ask; a note in their thread the learning signal counts, and nothing in it for an administrator to manage.",
   "gate.channel_event":
     "The dedupe key of each inbound channel message, claimed once by brain.gate.event_store.first_delivery and read by nothing else; there is nothing in it for anybody to manage.",
   "/ask/documents/:documentId":

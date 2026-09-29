@@ -27,6 +27,7 @@ import pytest
 
 from brain.core.department import SLUG_PATTERN
 from brain.ops import acceptance, acceptance_audit, acceptance_run
+from brain.ops import acceptance_checks_deployment as acceptance_deployment
 from brain.ops.acceptance import (
     FAILED,
     NOT_RUN,
@@ -101,14 +102,10 @@ def test_every_leaf_a_check_names_is_a_leaf_of_the_work_breakdown() -> None:
 
 
 def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
-    """Held per module, so a package adding checks in a module of its own changes only its own line
-    here: limits, channels and documents, then volume, refusals and a head's audit, then Lark
-    chat's three, the skill library's four, the models' eleven and the audit's one, the
-    connectors' four, the tools' three, a document's life in four, the classified tables' three,
-    an answer's evidence in four, the connector framework's nine and retrieval's seven, the
-    modules in `CHECK_MODULES` order rather than the order a process imported them. Delete this
-    and a check can drop out of the suite with the page simply listing one fewer row, or the page
-    can lead with whichever module was imported first."""
+    """Held per module, so a package adding checks in a module of its own changes only its own
+    lines here, the modules in `CHECK_MODULES` order rather than the order a process imported
+    them. Delete this and a check can drop out of the suite with the page simply listing one fewer
+    row, or the page can lead with whichever module was imported first."""
     by_module: dict[str, list[str]] = {}
     for one in registered():
         by_module.setdefault(one.run.__module__, []).append(one.name)
@@ -150,6 +147,7 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "every_registered_tool_is_a_catalogue_row_under_the_name_grammar",
         "a_tool_named_for_a_sensitive_effect_must_declare_it",
         "a_switched_off_tool_is_refused_and_a_department_stops_its_own",
+        "a_tool_s_side_effect_holds_the_rung_an_agent_runs_at",
     ]
     assert by_module["brain.ops.acceptance_checks_lifecycle"] == [
         "a_newer_version_supersedes_the_older_and_answers_use_the_newer",
@@ -168,6 +166,8 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "a_record_answer_cites_the_record_field_and_read_time",
         "four_kinds_of_nothing_are_kept_apart",
         "an_answer_and_a_refusal_say_what_the_asker_s_reach_covers",
+        "a_question_narrowed_to_a_kind_is_answered_from_that_kind_alone",
+        "a_prompt_too_long_for_every_model_is_answered_from_fewer",
     ]
     assert by_module["brain.ops.acceptance_checks_connector_framework"] == [
         "a_source_is_read_by_its_declaration_and_its_key_is_in_no_table",
@@ -180,6 +180,14 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "an_unreached_source_is_named_only_to_an_asker_who_could_see_it",
         "a_source_s_live_calls_are_measured_on_its_page",
     ]
+    # Capacity as rows, the screens that read it, and the classes sharing one budget in the cache;
+    # `tests/unit/test_acceptance_capacity.py`.
+    assert by_module["brain.ops.acceptance_checks_capacity"] == [
+        "budgets_and_windows_are_rows_saved_within_bounds_and_audited",
+        "the_rate_limits_screen_lists_the_windows_refusing_now",
+        "capacity_is_sized_for_the_busiest_minute_and_its_first_limit",
+        "three_classes_share_one_budget_and_give_way_in_order",
+    ]
     # Retrieval on the install's own index; `tests/unit/test_acceptance_retrieval.py`.
     assert by_module["brain.ops.acceptance_retrieval"] == [
         "a_typed_row_tool_reads_only_the_callers_rows_and_columns",
@@ -189,6 +197,62 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "hybrid_search_returns_what_each_leg_finds_fused_by_rank",
         "the_database_withholds_passages_the_statement_did_not_filter",
         "three_readers_get_everything_in_their_scope_and_nothing_else",
+    ]
+    # Getting a document in; `tests/unit/test_acceptance_ingest.py`.
+    assert by_module["brain.ops.acceptance_ingest"] == [
+        "a_file_carrying_script_or_macros_is_refused_before_it_is_read",
+        "the_antivirus_test_file_is_refused_as_malware",
+        "a_link_is_fetched_read_and_found_in_its_department",
+        "a_full_ingestion_queue_refuses_with_a_retry_hint",
+        "a_queued_file_is_kept_in_the_store_and_read_by_the_worker",
+        "the_embedding_width_is_the_installs_and_held_under_vectors",
+        "a_price_list_sent_as_a_document_is_offered_to_classification",
+    ]
+    # A person's threads; `tests/unit/test_acceptance_threads.py`.
+    assert by_module["brain.ops.acceptance_threads"] == [
+        "a_question_is_kept_in_its_askers_thread_and_searched_by_them",
+        "a_thread_begun_in_lark_is_listed_and_continued_on_the_web",
+        "a_follow_up_is_answered_from_what_its_thread_cited",
+        "a_wrong_answer_is_kept_as_a_signal_and_no_words_with_it",
+    ]
+    # A document's whole life, walked as one flow; `tests/unit/test_acceptance_knowledge.py`.
+    assert by_module["brain.ops.acceptance_knowledge"] == [
+        "a_document_is_added_answered_replaced_and_falls_due_for_review",
+    ]
+    # The canvas's door; `tests/unit/test_acceptance_automation.py`.
+    assert by_module["brain.ops.acceptance_checks_automation"] == [
+        "a_flow_step_gets_its_owner_s_rows_and_nothing_its_ceiling_adds",
+    ]
+    assert by_module["brain.ops.acceptance_checks_organisation"] == [
+        "departments_a_staff_source_names_are_founded_once",
+        "the_staff_sync_places_people_where_its_source_says",
+    ]
+    # The staff sync's accounts, with no sign-in service called; `test_staff_accounts_run.py`.
+    assert by_module["brain.ops.acceptance_checks_accounts"] == [
+        "the_staff_sync_gives_the_active_an_account_and_closes_a_leaver_s",
+    ]
+    # Speed, learning, the cache and marks; each module's own test names its leaves.
+    assert by_module["brain.ops.acceptance_checks_speed"] == [
+        "a_rule_row_answers_on_the_fast_lane_with_no_model",
+        "the_fast_lane_share_counts_people_and_not_machines",
+        "an_answer_streams_steps_then_citations_then_prose",
+        "every_prompt_opens_with_the_same_bytes_and_one_length",
+    ]
+    assert by_module["brain.ops.acceptance_checks_learning"] == [
+        "a_person_edits_and_forgets_their_own_memory",
+        "every_learned_change_is_held_at_the_tier_its_reach_needs",
+        "a_conversation_learning_is_reviewed_and_undone",
+        "learning_figures_are_set_in_bounds_and_move_no_tier",
+        "a_department_admin_reads_their_own_department_s_memory",
+        "the_waiting_queue_alarms_past_one_sitting_of_review",
+        "a_ready_rule_waits_for_a_person_and_no_job_applies_it",
+    ]
+    assert by_module["brain.ops.acceptance_checks_cache"] == [
+        "a_cached_answer_reaches_only_the_reach_it_was_computed_for",
+    ]
+    assert by_module["brain.ops.acceptance_checks_signals"] == [
+        "a_mark_is_counted_and_changes_nothing",
+        "pausing_an_agent_stops_what_its_runs_teach",
     ]
     assert list(by_module) == list(acceptance.CHECK_MODULES)
     oversight = {one.name: one.leaves for one in registered()}
@@ -630,18 +694,22 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
 ) -> None:
     """**The run as the worker makes it, against PostgreSQL at head.** Twice: every check that can
     be asked without a cache passes both times, including the two Lark checks needing a bound
-    person now that the events route reads chat bindings (0118); the two checks needing a cache
+    person now that the events route reads chat bindings (0118); the three checks needing a cache
     say they were not run, the skill import says this install names no public skill, which is
     the declared default, and after both runs every table a check wrote to holds what it held
     before, while the result rows are there, one run each, keyed by the commit. Delete this and
     a check that commits, or one that cannot pass on a real schema, reaches the owner's server
     first."""
     from tests.fixtures.scratch_postgres import sql
+    from tests.unit.test_acceptance_ingest import offline_install
 
     with at_head("brain_acceptance_run") as url:
         before = counts(url)
         for name, value in INSTALL.items():
             monkeypatch.setenv(name, value)
+        # The link answered by a recorded page and the queue driver's count stood in, as
+        # `tests/unit/test_acceptance_ingest.py` runs them: a test never asks the network.
+        offline_install(monkeypatch)
         waited = run_on(url, {})
         bound = run_on(url, {})
         after = counts(url)
@@ -655,10 +723,13 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     for first, second in zip(waited[1], bound[1], strict=True):
         assert (first.name, first.outcome) == (second.name, second.outcome)
     outcomes = {one.name: (one.outcome, one.reason) for one in waited[1]}
+    # Every registered check ran, by name, and nothing else did: derived rather than counted,
+    # so a package adding a check changes no line here.
+    suite = [one.name for one in registered()]
+    assert list(outcomes) == suite
     assert outcomes.pop("asking_past_a_window_is_refused_with_a_retry_hint")[0] == NOT_RUN
     assert outcomes.pop("the_rate_limits_screen_lists_the_windows_refusing_now")[0] == NOT_RUN
-    # No cache here either; `tests/unit/test_acceptance_cache.py` runs it with a store in its place.
-    assert outcomes.pop("a_cached_answer_reaches_only_the_reach_it_was_computed_for")[0] == NOT_RUN
+    assert outcomes.pop("three_classes_share_one_budget_and_give_way_in_order")[0] == NOT_RUN
     assert outcomes.pop("a_skill_is_imported_from_a_github_commit_and_from_an_address") == (
         NOT_RUN,
         "this install names no public skill to import, so no import from GitHub was asked",
@@ -674,16 +745,31 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         )
     ):
         assert outcomes.pop(model_check.name)[0] == NOT_RUN, model_check.name
+    # A follow-up is answered by a model too; `tests/unit/test_acceptance_threads.py` runs it.
+    assert outcomes.pop("a_follow_up_is_answered_from_what_its_thread_cited")[0] == NOT_RUN
+    assert (
+        outcomes.pop("a_document_is_added_answered_replaced_and_falls_due_for_review")[0] == NOT_RUN
+    )
+    # No antivirus and no object store here; `tests/unit/test_acceptance_ingest.py` runs both.
+    assert outcomes.pop("the_antivirus_test_file_is_refused_as_malware")[0] == NOT_RUN
+    assert outcomes.pop("a_queued_file_is_kept_in_the_store_and_read_by_the_worker")[0] == NOT_RUN
     # Every act, the chain, the trace and the export were seen, and no deploy is recorded here to
     # be kept out of the export: `tests/unit/test_acceptance_audit.py` records one and passes.
     assert outcomes.pop("each_audited_act_is_in_the_ledger_and_a_missing_entry_is_caught") == (
         NOT_RUN,
         acceptance_audit.NO_DEPLOYMENT_IS_RECORDED_TO_KEEP_OUT,
     )
+    # The test process is not a worker container, so the checks that read the worker they run
+    # in say so; `tests/unit/test_acceptance_deployment.py` runs them in a worker's environment.
+    for worker_check in (
+        "the_worker_serves_each_traffic_class_from_its_own_slots",
+        "every_database_client_is_bounded_within_the_install_s_ceiling",
+        "the_scrub_meets_its_budget_on_this_install_s_processor",
+    ):
+        assert outcomes.pop(worker_check) == (NOT_RUN, acceptance_deployment.NOT_IN_A_WORKER)
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
-    assert len(outcomes) == 60
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 172
+    assert runs == [(2,)] and len(recorded) == 2 * len(suite)
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }

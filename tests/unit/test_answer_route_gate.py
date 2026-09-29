@@ -5,9 +5,10 @@ and a passage search, as `tests/unit/test_answer_route_model.py` builds them. Wh
 is what the front half does on that route: the injection score of the question reaching the
 request row (M3.4.1), an answer stored after it was computed and served with its age on the next
 asking (M3.5.2, M3.5.3), and the agent roster read on the route so a person can address any agent
-they may use and none they may not (M3.9.8).
+they may use and none they may not (M3.9.8). A question continuing a thread, or narrowed to kinds of
+knowledge, is neither served from the cache nor kept there (M9.2.3, M7.6.1).
 
-Task ids: M3.4.1, M3.5.2, M3.5.3, M3.9.8
+Task ids: M3.4.1, M3.5.2, M3.5.3, M3.9.8, M9.2.3, M7.6.1
 """
 
 from __future__ import annotations
@@ -192,6 +193,120 @@ def test_an_answer_stored_for_one_reach_is_not_served_to_another(
     ask(client)
     ask(client, who=OTHER)
     assert len(transport.sent) == 2
+
+
+def test_a_follow_up_and_a_narrowed_question_are_neither_served_from_the_cache_nor_kept(
+    client: TestClient, transport: Scripted, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The same words asked in a thread, and asked narrowed to one kind of knowledge, each reach the
+    model every time and are stored nowhere; the same words asked plainly are stored, the positive
+    case beside them. `A_FOLLOW_UP_IS_NOT_THE_SAME_WORDS_ASKED_FRESH` and
+    `A_NARROWED_QUESTION_IS_NOT_THE_UNNARROWED_ONE`.
+
+    Delete this and a follow-up's answer, drawn from one person's thread, is kept under its words
+    alone and served to the next person asking them, or a question narrowed to policies is served
+    the answer drawn from every kind."""
+    from brain import api_routes
+    from brain.gate.model_lane import FollowUp
+
+    async def following(state: object, asking: object, asked: api_routes.Question) -> object:
+        return FollowUp(earlier=("an earlier question",)) if asked.thread else None
+
+    monkeypatch.setattr(api_routes, "follow_up_for", following)
+    store = Memory()
+    installed(client, answer_store=store)
+    thread = "3a0f5c2e-1b4d-4e6f-8a9b-0c1d2e3f4a5b"
+    for body in (
+        {"question": QUESTION, "thread": thread},
+        {"question": QUESTION, "thread": thread},
+        {"question": QUESTION, "kinds": ["policy"]},
+        {"question": QUESTION, "kinds": ["policy"]},
+    ):
+        sent = client.post(f"{API_PREFIX}/answer", headers=headers(READER), json=body)
+        assert sent.status_code == 200
+    assert store.stored == 0
+    assert len(transport.sent) == 4
+    ask(client)
+    assert store.stored == 1
+
+
+def test_a_follow_up_brings_its_askers_questions_and_only_the_passages_they_still_reach(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`follow_up_for` reads the thread as the asker, brings their own earlier questions and never
+    an answer, and cites a passage an earlier answer drew on only while the asker still holds what
+    it needed; a question naming no thread, or a thread the store does not give them, brings
+    nothing. `A_FOLLOW_UP_CARRIES_QUESTIONS_AND_CITED_PASSAGES_RE_READ_NOW`.
+
+    Delete this and a follow-up can put a passage in front of the model after the grant that let
+    the asker see it was revoked, with the recall's own reach the only wall left, or replay an
+    earlier answer's words as though the asker had said them."""
+    import asyncio
+
+    from brain import api_routes
+    from brain.chat import remember
+    from brain.chat.threads import Thread, ThreadMessage
+    from brain.chat.turns import RecordRef
+    from brain.core.entitlement import EntitlementSet
+    from brain.core.principal import Employment, Principal, PrincipalKind
+    from brain.gate.context import Channel
+    from brain.tables.chat import MessageRole
+
+    at = datetime(2999, 1, 1, tzinfo=UTC)
+    kept = Capability(value="read:knowledge.document")
+    lost = Capability(value="read:knowledge.board_papers")
+    thread = Thread(
+        thread_id="3a0f5c2e-1b4d-4e6f-8a9b-0c1d2e3f4a5b",
+        owner_id=READER,
+        title="who signs the checklist",
+        messages=(
+            ThreadMessage(role=MessageRole.USER, at=at, channel=Channel.CONSOLE, body="who signs"),
+            ThreadMessage(
+                role=MessageRole.ASSISTANT,
+                at=at,
+                channel=Channel.CONSOLE,
+                body="An earlier answer.",
+                refs=(
+                    RecordRef("knowledge", "upload.a.0001", kept),
+                    RecordRef("knowledge", "upload.b.0001", lost),
+                    RecordRef("price", "7", kept),
+                ),
+            ),
+        ),
+    )
+    read_as: list[tuple[str, str]] = []
+
+    class Store:
+        async def thread(self, principal_id: str, thread_id: str) -> Thread | None:
+            read_as.append((principal_id, thread_id))
+            return thread if thread_id == thread.thread_id else None
+
+    monkeypatch.setattr(remember, "threads_of", lambda state: Store())
+    asking = api_routes.Answering(
+        principal=Principal(
+            id=READER,
+            kind=PrincipalKind.HUMAN,
+            employment=Employment.STAFF,
+            display_name="Reader",
+        ),
+        reach=EntitlementSet(
+            principal_id=READER, grants=(Grant(capability=kept, scope=Scope.unrestricted()),)
+        ),
+        channel=Channel.CONSOLE,
+        now=at,
+    )
+
+    def brought(**asked: object) -> object:
+        question = api_routes.Question(question="and when", **asked)  # type: ignore[arg-type]
+        return asyncio.run(api_routes.follow_up_for(object(), asking, question))
+
+    follow_up = brought(thread=thread.thread_id)
+    assert follow_up is not None
+    assert follow_up.earlier == ("who signs",)  # type: ignore[attr-defined]
+    assert follow_up.cited == ("upload.a.0001",)  # type: ignore[attr-defined]
+    assert read_as == [(READER, thread.thread_id)]
+    assert brought() is None
+    assert brought(thread="9f8e7d6c-5b4a-4938-8271-605f4e3d2c1b") is None
 
 
 def test_a_refusal_and_a_volatile_question_are_never_stored(

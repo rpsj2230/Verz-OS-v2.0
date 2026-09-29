@@ -363,9 +363,17 @@ from brain.staff_source_routes import router as staff_source_router
 # `brain.storage_routes`.
 from brain.storage_routes import router as storage_router
 
+# A person's own threads, listed, searched and reopened at the reach held now. See
+# `brain.thread_routes`.
+from brain.thread_routes import router as thread_router
+
 # The Tools screen: every tool with what it needs and does, and the switch that stops one for
 # the install or one department's people, behind `admin:tool`. See `brain.tool_routes`.
 from brain.tool_routes import router as tool_router
+
+# One run's stored trace, read under the payload role the caller's own token carries, with the
+# read on record before it happens. See `brain.trace_routes`.
+from brain.trace_routes import router as trace_router
 
 # Every budget and request window a person may set from the Rate limits screen, within the
 # product's bounds, and one set, behind `admin:install_setting`. See `brain.tuning_routes`.

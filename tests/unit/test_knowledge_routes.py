@@ -28,10 +28,11 @@ from brain.knowledge.ingest import CAUSE_TEXT, ParseCause
 from brain.knowledge.kinds import KIND_LABELS, uploadable_kinds
 from brain.knowledge.search import KNOWLEDGE_READ, KNOWLEDGE_UPLOAD
 from brain.knowledge.text_path import STRUCTURAL_CHECK
-from brain.knowledge.uploads import ReadUpload
+from brain.knowledge.uploads import TABLE_OFFER_TEXT, ReadUpload
 from brain.knowledge_routes import (
     FOUND_BY_TEXT,
     NAME_HEADER,
+    OFFERED_AS_A_TABLE,
     UPLOAD_OPTIONS_PATH,
     UPLOADS_PATH,
 )
@@ -180,6 +181,7 @@ def test_an_administrator_is_offered_every_uploadable_kind_and_every_department(
     }
     assert body["found_by"] == FOUND_BY_TEXT
     assert body["checked_by"] == STRUCTURAL_CHECK
+    assert body["offered_as_tables"] == [".csv", ".xlsx"]
 
 
 def test_a_department_administrator_is_offered_their_own_department_and_their_own_level(
@@ -323,6 +325,33 @@ def test_an_approved_solution_is_refused(served: tuple[TestClient, Stub], kept: 
     """Delete this and an upload carries the approved-solution label with no approval behind it."""
     client, _ = served
     assert "approv" in problem(upload(client, "u_admin", MARKDOWN, kind="approved_solution"))
+
+
+def test_a_spreadsheet_is_offered_to_classification_and_never_read_as_a_document(
+    served: tuple[TestClient, Stub], kept: Kept
+) -> None:
+    """`A_TABLE_FILE_IS_OFFERED_FOR_CONVERSION_AND_NEVER_INDEXED_AS_TEXT` (M7.7.3): a CSV and a
+    workbook, by their names or by their declared types, are answered with the offer under their
+    own code and nothing is stored. Delete this and a price list is indexed as text, cost and
+    margin in passages a department's readers are shown."""
+    client, _ = served
+    for name, media_type in (
+        ("Prices.csv", "text/csv"),
+        ("Prices.xlsx", "text/plain"),
+        ("Prices.txt", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+    ):
+        response = upload(client, "u_admin", b"a,b\n1,2\n", name=name, media_type=media_type)
+        assert problem(response) == TABLE_OFFER_TEXT
+        assert response.json()["problems"][0]["code"] == OFFERED_AS_A_TABLE
+    assert kept.stored == []
+
+
+def test_a_document_is_not_offered_as_a_table(served: tuple[TestClient, Stub], kept: Kept) -> None:
+    """The sibling: a Markdown file whose name merely mentions a spreadsheet is added. Delete this
+    and the offer can widen to every file, which is the Knowledge page adding nothing."""
+    client, _ = served
+    response = upload(client, "u_admin", MARKDOWN, name="Prices csv notes.md")
+    assert response.status_code == 201, response.text
 
 
 def test_an_image_is_refused_before_it_is_read(served: tuple[TestClient, Stub], kept: Kept) -> None:
