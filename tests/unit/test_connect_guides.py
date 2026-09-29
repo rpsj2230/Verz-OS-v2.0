@@ -16,6 +16,7 @@ import pytest
 from brain.connectors.declaration import (
     CREDENTIAL_ASK,
     ConnectorDeclaration,
+    CredentialShape,
     DeclarationError,
     Recorded,
     shipped,
@@ -101,7 +102,9 @@ def test_a_console_source_ends_with_its_form_and_a_server_source_asks_for_nothin
     the last screen of a server source asks for nothing. Delete this and a setting added to a
     form has no step saying where to find it, or a server source draws a form nobody can send."""
     for name, kind in CONNECTABLE.items():
-        assert kind.guide[-1].asks == (*(one.name for one in kind.settings), CREDENTIAL_ASK), name
+        # A source that takes no key (M11.7.4) asks for its settings alone.
+        key = () if kind.credential_shape is CredentialShape.NONE else (CREDENTIAL_ASK,)
+        assert kind.guide[-1].asks == (*(one.name for one in kind.settings), *key), name
         assert all(one.asks == () for one in kind.guide[:-1]), name
     for name, server in NOT_FROM_THE_CONSOLE.items():
         assert all(one.asks == () for one in server.guide), name

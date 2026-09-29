@@ -150,12 +150,14 @@ IDENTIFIERS: Final[Mapping[str, str]] = {
     "freshdesk": "example.freshdesk.com",
     "google_drive": "1AbCdEfGhIjKlMnOpQrStUv",
     "laravel": "portal",
+    "domains": "example.com, example.org",
 }
 
 #: The settings after the first that a source asks for, for the sources that ask for more than one.
 FURTHER_SETTINGS: Final[Mapping[str, Mapping[str, str]]] = {
     "freshdesk": {"department": "support"},
     "google_drive": {"domain": "example.com", "department": "operations", "steward": "u_steward"},
+    "domains": {"department": "operations"},
     "laravel": {
         "client_rule": "department = sales",
         "user_rule": "department in sales, operations",
@@ -713,9 +715,11 @@ def test_every_source_is_served_with_the_steps_of_its_connect_flow(
     for one in body["connectable"]:
         keys = [step["key"] for step in one["steps"]]
         assert keys == [step.key for step in declared[one["name"]].guide]
+        # A source that takes no key (M11.7.4) asks for its settings alone.
+        key = [] if one["credential_shape"] == "none" else ["credential"]
         assert one["steps"][-1]["asks"] == [
             *(setting["name"] for setting in one["settings"]),
-            "credential",
+            *key,
         ]
         assert all(step["sketch"]["heading"] for step in one["steps"])
     # Since 2026-09-30 (M11.7.7) the only sources not connected here are Lark's, whose flow is
@@ -744,6 +748,7 @@ def test_the_authority_to_connect_is_a_fact_about_the_reader_and_narrows_nothing
         "freshdesk": False,
         "google_drive": False,
         "laravel": False,
+        "domains": False,
     }
 
 
