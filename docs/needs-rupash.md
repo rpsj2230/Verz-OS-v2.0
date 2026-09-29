@@ -88,29 +88,35 @@ until they are granted.
 **What you do:** after the Lark Base connection is live, grant each table on the console as you do any
 other source. I will tell you when it is ready and where.
 
-## 115. How the people on your Lark staff list become Brain users - DECIDED 2026-09-29: B now, A next
+## 115. How the people on your Lark staff list become Brain users - DECIDED 2026-09-29: B now, A next, and no emails sent
 
 **In plain terms:** the staff sync reads your people from Lark and places them in departments, but it
 created no Brain accounts, so none of them could sign in. **Your answer, 2026-09-29:** "I will go with
 your recommendation: B now, A next. B gets your people onto the Brain soonest and suits any company.
-A then gives Lark companies one-click sign-in without passwords."
+A then gives Lark companies one-click sign-in without passwords." **And then:** "do remember not to
+send the Link to them ... they need to click Forget Password on the login page and then they will get
+the link. I don't want to send the bulk email to all. Only those who click forget password will get
+the link."
 
 What is being built, in this order:
 
-1. **B, now: the sync creates each active person's Brain account and emails them an invitation** to
-   set their password and second factor, through the sign-in service's own email (the one "Forgot
-   password" uses). Suspended people and leavers get no account; outsourced people get none unless an
-   administrator allows their employment type. When someone leaves or is suspended in Lark, the next
-   sync closes their account. It works the same for any company, whatever its staff source.
+1. **B, now: the sync creates each active person's Brain account, and sends nobody anything.** No
+   invitation and no bulk email, ever. A person who wants to start presses **Forgot password** on the
+   sign-in page, enters their work email, and only then gets a link to set their password; at their
+   first sign-in they set up their second factor. Suspended people and leavers get no account;
+   outsourced people get none unless an administrator allows their employment type. When someone
+   leaves or is suspended in Lark, the next sync closes their account. It works the same for any
+   company, whatever its staff source.
 2. **Then the work this was holding up:** each person's status and employment type on People,
    suspended and outsourced people kept out of the Brain, and the choice of where departments come
    from (Lark's, or your own with people assigned to them).
 3. **A, next: sign in with Lark**, as a second way in for companies whose staff list is Lark, with no
-   password. It needs each person's Lark address stored (item 118's option B).
+   password. It uses each person's stored Lark address (item 118).
 
-**What you will need to do:** nothing yet. If the sign-in service has no email settings on your
-install, the first sync that invites anybody says so on the staff source's page and tells you what
-to fill in.
+**What you will need to do:** tell people their account is ready and to use **Forgot password** on
+the sign-in page the first time; People will show that sentence ready to copy. If the sign-in
+service has no email settings on your install, Forgot password cannot send its link, and the staff
+source's page will say so and tell you what to fill in.
 
 ## 117. Approving by pressing a button on a Lark card - DECIDED 2026-09-29: yes, once Lark requires two-step verification
 
