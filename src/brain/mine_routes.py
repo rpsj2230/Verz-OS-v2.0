@@ -558,15 +558,17 @@ def replacement_for(
     )
 
 
-async def own_learning(
-    sessions: async_sessionmaker[AsyncSession], principal_id: str, memory_id: str
+async def stored_learning(
+    sessions: async_sessionmaker[AsyncSession], memory_id: str
 ) -> Learning | None:
-    """The memory asked about, when it was formed from this person's own words, or None."""
+    """The memory asked about, as the domain's `Learning`, or None when there is no such memory.
+
+    Whose it is is not asked here: `brain.console.own_things.delete_own_memory` and
+    `edit_own_memory` ask it, so ownership is decided in one place rather than in two that could
+    disagree, and a memory of somebody else's is refused by them in the words a missing one is.
+    """
     async with sessions() as session:
-        found = await learning_of(session, memory_id)
-    if found is None or not is_own(principal_id, found.formation.principal_id):
-        return None
-    return found
+        return await learning_of(session, memory_id)
 
 
 async def forgotten(
@@ -585,7 +587,7 @@ async def forgotten(
     store writes it under the lock the Learning screen's undo takes. The body of
     `forget_my_memory`, and what the install's acceptance check calls.
     """
-    found = await own_learning(sessions, principal_id, memory_id)
+    found = await stored_learning(sessions, memory_id)
     if found is None:
         return None
     try:
@@ -616,7 +618,7 @@ async def edited(
     supersession in one transaction. The body of `edit_my_memory`.
     """
     said = statement.strip()
-    found = None if not said else await own_learning(sessions, principal_id, memory_id)
+    found = None if not said else await stored_learning(sessions, memory_id)
     if found is None:
         return None
     replacement = replacement_for(found, principal_id=principal_id, statement=said, at=now)
