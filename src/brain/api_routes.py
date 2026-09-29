@@ -196,6 +196,7 @@ from brain.knowledge.rows import (
     row_scope_for,
 )
 from brain.knowledge.search import KNOWLEDGE_READ
+from brain.memory.turn import Turn, recall_place, turn_of
 from brain.ops.classification_store import classified_lane_of
 from brain.ops.denial_store import Denial, Denials, StoredDenials, record_beside
 from brain.ops.limit_store import StoreVerdict, ValkeyWindowStore, make_store
@@ -207,6 +208,7 @@ from brain.ops.limits import (
     retry_hint,
 )
 from brain.ops.live_read_run import live_records_for
+from brain.ops.memory_store import StoredFormations, StoredRecall
 from brain.ops.model_service import ModelService
 from brain.ops.sensitive_referral_store import SensitiveReferrals, StoredSensitiveReferrals
 from brain.ops.trace_sink import CountingTraceSink
@@ -1045,6 +1047,87 @@ def model_lane_for(
     return replace(lane, agent=AgentRun(record=agent, pins=(), library=(), registry=registry))
 
 
+def formations_of(state: Any) -> StoredFormations | None:
+    """Where a turn's memories are written: `app.state.memory_formations`, or the database's.
+
+    None on a process with no database, which has nowhere to keep a memory and forms none.
+    """
+    found = getattr(state, "memory_formations", None)
+    if isinstance(found, StoredFormations):
+        return found
+    sessions = getattr(state, "db_sessions", None)
+    return StoredFormations(sessions) if isinstance(sessions, async_sessionmaker) else None
+
+
+def recall_of(state: Any) -> StoredRecall | None:
+    """Where the asker's memories are read for a model: `app.state.memory_recall`, or the
+    database's, or None on a process with no database."""
+    found = getattr(state, "memory_recall", None)
+    if isinstance(found, StoredRecall):
+        return found
+    sessions = getattr(state, "db_sessions", None)
+    return StoredRecall(sessions) if isinstance(sessions, async_sessionmaker) else None
+
+
+async def formed_after(state: Any, turn: Turn | None) -> None:
+    """Form what a turn asked to be remembered, when it asked anything and there is a store.
+
+    `StoredFormations.after_turn` never raises, so an answer is never failed by a memory.
+    """
+    formations = formations_of(state)
+    if turn is None or formations is None:
+        return
+    await formations.after_turn(turn)
+
+
+@dataclass(frozen=True)
+class RecalledHints:
+    """`brain.gate.model_lane.AskerHints` over the recall store, bound to one run and one place.
+
+    Read only when the model step is about to ask a model, so a fast-lane answer and a question
+    nothing was retrieved for cost no read of anybody's memories.
+    """
+
+    recall: StoredRecall
+    reach: EntitlementSet
+    where: Mapping[str, object]
+    now: datetime
+    trace_id: str
+
+    async def hints(self) -> tuple[str, ...]:
+        return await self.recall.hints(
+            self.reach, where=self.where, now=self.now, trace_id=self.trace_id
+        )
+
+
+def with_hints(
+    state: Any,
+    lane: ModelLane | None,
+    *,
+    reach: EntitlementSet,
+    principal: Principal,
+    now: datetime,
+    trace_id: str,
+) -> ModelLane | None:
+    """The model step carrying what the asker may still recall about themselves (M16.6.3).
+
+    Recalled at the run's reach and at the place the asker is now, which is
+    `brain.memory.turn.recall_place`, so a memory formed in a department they have left, under a
+    grant since removed, or by anybody else is not shown. A failed read is no hints and an answer.
+    """
+    recall = recall_of(state)
+    if lane is None or recall is None:
+        return lane
+    bound = RecalledHints(
+        recall=recall,
+        reach=reach,
+        where=recall_place(reach.principal_id, principal.primary_department),
+        now=now,
+        trace_id=trace_id,
+    )
+    return replace(lane, hints=bound)
+
+
 def default_agents(registry: ToolRegistry) -> dict[str, AgentSetup]:
     """The one agent the front half may select on `/answer`, keyed by its id.
 
@@ -1387,6 +1470,19 @@ async def answered_for(
         sources = covered_at(
             registry, reach, asking.now, tables=[entity for _, entity in tables.readers]
         )
+        # Only a request the front half routed to a tier may reach a model, so no model is
+        # called before ROUTE and PROJECT: a fast-lane question answers or abstains. The model
+        # is shown what the asker said about themselves and may still recall (M16.6.3).
+        model = model_lane_for(request.app.state, agent, registry) if front.calls_a_model else None
+        if referral is None:
+            model = with_hints(
+                request.app.state,
+                model,
+                reach=reach,
+                principal=asking.principal,
+                now=asking.now,
+                trace_id=recorder.trace_id,
+            )
         answered = await answer_lane(
             address.question,
             origin=origin,
@@ -1404,11 +1500,7 @@ async def answered_for(
             # answering, and ends before the frames are written.
             clock=lambda: datetime.now(UTC),
             cached=front.cached,
-            # Only a request the front half routed to a tier may reach a model, so no model is
-            # called before ROUTE and PROJECT: a fast-lane question answers or abstains.
-            model=model_lane_for(request.app.state, agent, registry)
-            if front.calls_a_model
-            else None,
+            model=model,
             front=front.record(),
             gaps=gaps_for_question(address.question, reach.scope_for(KNOWLEDGE_READ, asking.now)),
             recorder=recorder,
@@ -1429,6 +1521,21 @@ async def answered_for(
                 caching=caching,
                 now=asking.now,
             )
+        # What the person asked to be remembered, formed at the run's reach once the answer
+        # exists, from web and chat alike, and never failing it. See `brain.memory.turn`.
+        await formed_after(
+            request.app.state,
+            turn_of(
+                trace_id=recorder.trace_id,
+                said=address.question,
+                outcome=answered,
+                referred=referral is not None,
+                reach=reach,
+                at=asking.now,
+                agent_id=None if agent is None else agent.agent_id,
+                department=asking.principal.primary_department,
+            ),
+        )
     except BrainError:
         # Already in the taxonomy, already has a public message, already maps to a status.
         raise
