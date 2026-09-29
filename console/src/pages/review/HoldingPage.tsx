@@ -21,12 +21,12 @@ import {
   Chip,
   DetailHeader,
   DetailPage,
-  EmptyState,
   Fact,
   FactList,
   FailureState,
   KpiStrip,
   LoadingState,
+  PageHeader,
   SectionCard,
   StatCard,
 } from "../../components/kit";
@@ -64,17 +64,19 @@ export function HoldingPage({ kind, rowId }: { readonly kind: string; readonly r
   const row = review.rows[0];
   if (row === undefined) {
     return (
-      <DetailPage crumbs={[...crumbs, { label: NO_HOLDING }]} header={acts.drawn}>
-        <EmptyState
+      <div className="flex min-w-0 flex-col gap-4">
+        <PageHeader
+          crumbs={[...crumbs, { label: NO_HOLDING }]}
           title={NO_HOLDING}
-          description={NO_HOLDING_MORE}
-          action={
-            <Button asChild variant="outline" className="text-ink no-underline">
+          lede={NO_HOLDING_MORE}
+          actions={
+            <Button asChild variant="outline" size="sm" className="min-h-11 text-ink no-underline sm:min-h-8">
               <Link to={REVIEW_PATH}>{REVIEW_HEADING}</Link>
             </Button>
           }
         />
-      </DetailPage>
+        {acts.drawn}
+      </div>
     );
   }
   const holder = nameOf(people, row.principal_id, row.display_name);

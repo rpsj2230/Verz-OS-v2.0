@@ -18,12 +18,12 @@ import {
   Chip,
   DetailHeader,
   DetailPage,
-  EmptyState,
   Fact,
   FactList,
   FailureState,
   KpiStrip,
   LoadingState,
+  PageHeader,
   SectionCard,
   StatCard,
 } from "../../components/kit";
@@ -61,17 +61,19 @@ export function RequestPage({ requestId }: { readonly requestId: string }) {
   const row = page?.items?.[0];
   if (row === undefined) {
     return (
-      <DetailPage crumbs={[...crumbs, { label: NO_REQUEST }]} header={decisions.drawn}>
-        <EmptyState
+      <div className="flex min-w-0 flex-col gap-4">
+        <PageHeader
+          crumbs={[...crumbs, { label: NO_REQUEST }]}
           title={NO_REQUEST}
-          description={NO_REQUEST_MORE}
-          action={
-            <Button asChild variant="outline" className="text-ink no-underline">
+          lede={NO_REQUEST_MORE}
+          actions={
+            <Button asChild variant="outline" size="sm" className="min-h-11 text-ink no-underline sm:min-h-8">
               <Link to={ELEVATION_PATH}>{ELEVATION_HEADING}</Link>
             </Button>
           }
         />
-      </DetailPage>
+        {decisions.drawn}
+      </div>
     );
   }
   const who = nameOf(people, row.principal_id, row.display_name);

@@ -59,8 +59,6 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
   // team, creating a department and drawing a scope. The rename form is one form in the source,
   // drawn for a department or a team, and opens above the lead's form; the department's stands for
   // both, and tests/govern-people-pages.test.tsx submits the team's blank.
-  "src/pages/Elevation.tsx": [{ pattern: "/elevation", index: 0, writes: true }],
-  "src/pages/AccessRequests.tsx": [{ pattern: "/access-requests", index: 0, writes: true }],
   // Index 0 on the Routing page is the matrix's search form, which only narrows. On a step's page its
   // numbers and then where it sits follow; the golden question and the residency rule come after.
   "src/pages/models/RungEditor.tsx": [
@@ -120,6 +118,19 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
  * Checked, not trusted: an entry for a file that no longer holds both fails the first test.
  */
 const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
+  "src/pages/review/ElevationActs.tsx":
+    "The ask form is inside the Ask for access drawer opened from the page header, outside the main " +
+    "landmark these cases read. It says what each field takes before anything is sent, and " +
+    "tests/review-pages.test.tsx submits it blank and holds that no confirmation opens, nothing is sent " +
+    "and each blank field is named beside it.",
+  "src/pages/review/CertificationExport.tsx":
+    "The export form is inside the drawer opened from the Access review header, outside the main " +
+    "landmark these cases read. tests/review-pages.test.tsx submits it blank and holds that no " +
+    "confirmation opens, nothing is sent and the reason and the reference are each said to be needed.",
+  "src/pages/access-requests/AccessRequestsPage.tsx":
+    "The ask form is inside the Ask for access drawer opened from the page header, outside the main " +
+    "landmark these cases read. tests/access-requests-page.test.tsx submits it blank and holds that " +
+    "nothing is sent and the blank field is named beside it.",
   "src/pages/webhooks/WebhookActs.tsx":
     "The registration and the secret replacement are inside drawers opened from the page header or a " +
     "subscriber's page, outside the main landmark these cases read. tests/webhooks-page.test.tsx submits " +

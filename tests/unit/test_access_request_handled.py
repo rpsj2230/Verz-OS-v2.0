@@ -90,11 +90,11 @@ def test_the_application_may_change_nothing_else_and_mark_nobody_but_the_owner(
     with pytest.raises(errors.InsufficientPrivilege):
         sql(database, "SET ROLE brain_app; UPDATE gate.access_request SET question = 'changed'")
     with pytest.raises((errors.InsufficientPrivilege, errors.CheckViolation)):
-        # A uuid the test minted, inlined: two commands cannot carry a bound parameter.
+        # Every open row, this one among them: two commands cannot carry a bound parameter.
         sql(
             database,
             "SET ROLE brain_app; UPDATE gate.access_request SET handled_at = now(),"
-            f" handled_by = 'u_other' WHERE id = '{request_id}'",
+            " handled_by = 'u_other'",
         )
     with pytest.raises(errors.CheckViolation):
         sql(

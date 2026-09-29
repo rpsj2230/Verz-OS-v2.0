@@ -119,7 +119,7 @@ const ONCE_BY_THE_WIZARD =
 /** Every area of the standard, keyed by the standard's own words. */
 export const AREAS: Readonly<Record<string, Area>> = {
   "People, roles, permissions and access control": {
-    screens: ["/people", "/people/:personId", "/people/:personId/:view", "/roles", "/capabilities", "/scopes", "/packs", "/access_review", "/elevation", "/sessions", "/sign-in-links", "/staff_sources", "/access-requests", "/service-accounts", "/service-accounts/:clientId"],
+    screens: ["/people", "/people/:personId", "/people/:personId/:view", "/roles", "/capabilities", "/scopes", "/packs", "/access_review", "/access_review/:kind/:rowId", "/elevation", "/elevation/:requestId", "/sessions", "/sign-in-links", "/staff_sources", "/access-requests", "/service-accounts", "/service-accounts/:clientId"],
     routes: [
       "/api/v1/me",
       "/api/v1/console/navigation",
@@ -141,7 +141,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/govern/people/disable",
       "/api/v1/govern/people/enable",
       "/api/v1/govern/service-accounts*",
-      "/api/v1/access-requests",
+      "/api/v1/access-requests*",
       "/api/v1/govern/roles/holders",
       "/api/v1/govern/roles/appointment",
       "/api/v1/govern/roles/deputy",
