@@ -230,7 +230,7 @@ def test_a_declaration_gives_a_console_form_or_a_reason_and_never_both_or_neithe
     with pytest.raises(DeclarationError, match="both or neither"):
         replace(declared, console=None, reading=None)
     explained = replace(
-        declared, console=None, reading=None, live=None, not_from_the_console="Not yet."
+        declared, console=None, reading=None, live=None, guide=(), not_from_the_console="Not yet."
     )
     assert explained.console is None and explained.not_from_the_console == "Not yet."
 
