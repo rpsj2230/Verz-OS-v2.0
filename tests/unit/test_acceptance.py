@@ -221,6 +221,7 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     # The staff sync's accounts, with no sign-in service called; `test_staff_accounts_run.py`.
     assert by_module["brain.ops.acceptance_checks_accounts"] == [
         "the_staff_sync_gives_the_active_an_account_and_closes_a_leaver_s",
+        "the_staff_list_keeps_out_whom_it_names_and_lets_back_its_own",
     ]
     assert list(by_module) == list(acceptance.CHECK_MODULES)
     oversight = {one.name: one.leaves for one in registered()}

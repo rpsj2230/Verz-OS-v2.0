@@ -5,7 +5,7 @@
 to the tables and the triggers they drive, which the pure plan in `tests/unit/test_standing.py`
 cannot. CI sets `DATABASE_URL` and has pgvector; without either every test here skips.
 
-Task ids: M1.6.14
+Task ids: M1.6.14, M1.6.15
 """
 
 from __future__ import annotations

@@ -233,7 +233,7 @@ async def the_staff_sync_gives_the_active_an_account_and_closes_a_leaver_s(h: Ha
         "somebody the list says is working is never touched."
     ),
 )
-async def the_staff_list_keeps_out_whom_it_says_and_lets_back_only_whom_it_kept_out(
+async def the_staff_list_keeps_out_whom_it_names_and_lets_back_its_own(
     h: Harness,
 ) -> None:
     first, second = RESERVED_DEPARTMENTS
