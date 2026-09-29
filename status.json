@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-29T17:03:21.382402+00:00",
-  "commit": "48ac7743",
-  "commit_subject": "Item 126 gives the owner the steps for every service he can connect today, and says plainly which cannot be connected yet (#274)",
+  "generated_at": "2026-09-29T17:08:19.064943+00:00",
+  "commit": "10a46616",
+  "commit_subject": "The owner decides every service is made connectable from the console, one at a time (#275)",
   "total": 1576,
   "done": 466,
   "percent": 29.6,
