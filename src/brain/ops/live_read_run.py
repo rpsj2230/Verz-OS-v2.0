@@ -75,7 +75,7 @@ from brain.ops.connector_sync_run import (
 )
 from brain.ops.lark_base_index import HttpsTokenIssuer, switched_on
 from brain.ops.lark_base_live import BaseSchema, with_base
-from brain.ops.lark_wiki_live import WikiPassages, declared_spaces, wiki_host
+from brain.ops.lark_wiki_live import WikiPassages, WithheldPages, declared_spaces, wiki_host
 from brain.ops.live_records import SourceRecords
 from brain.ops.secrets import SecretsUnavailableError
 from brain.ops.webhook_delivery import SystemResolver
@@ -243,7 +243,10 @@ def base_schema_for(vault: RunTokenVault | None) -> BaseSchema:
 
 
 def wiki_passages_for(
-    sessions: async_sessionmaker[AsyncSession] | None, vault: RunTokenVault | None
+    sessions: async_sessionmaker[AsyncSession] | None,
+    vault: RunTokenVault | None,
+    *,
+    withheld: WithheldPages | None = None,
 ) -> WikiPassages | None:
     """The Wiki's passages for the answer lane's model step, or None with no Wiki switched on.
 
@@ -261,6 +264,7 @@ def wiki_passages_for(
         caller=HttpsSourceCaller(timeout_seconds=LIVE_READ_TIMEOUT_MS / 1000),
         resolver=SystemResolver(),
         issuer=HttpsTokenIssuer(),
+        withheld=withheld,
     )
 
 

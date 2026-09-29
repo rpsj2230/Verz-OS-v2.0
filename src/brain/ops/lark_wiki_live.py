@@ -26,6 +26,11 @@ search uses (`brain.knowledge.search.Reach.admits`), so a department-reach page 
 department and a company page every reader of the knowledge plane. See
 `A_WIKI_PAGE_IS_TOLD_ONLY_TO_A_READER_ITS_REACH_ADMITS`.
 
+**Reading a page's own Lark lock is consistent with the owner's decision on visibility**
+(needs-rupash 116: who may see is the Brain's own grants), because the lock only ever withholds
+more: a page restricted in Lark is never read, so it can never widen what a grant admits. Pages a
+question skipped are counted for an administrator (`WithheldPages`), never for the asker.
+
 **Nothing is kept.** Pages are found by walking the declared spaces live and matching titles, and
 each is read live when a question needs it (`lark_wiki.A_PAGE_IS_READ_LIVE_AND_NEVER_KEPT`): no
 title, no path and no text reaches a table. The owner's rule is that a connector keeps a minimal
@@ -38,6 +43,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+from collections import Counter
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -328,6 +334,35 @@ def passage_of(document: WikiDocument, *, now: datetime) -> KnowledgePassage:
     )
 
 
+#: What the Connect Lark screen says beside the count of pages skipped, to an administrator.
+PAGES_SKIPPED_ARE_COUNTED_FOR_ADMINISTRATORS: Final = (
+    "Wiki pages a question matched and did not read, because the page or one above it is "
+    "restricted in Lark, its permission settings could not be read, or its space was not declared, "
+    "counted by this application process since it started. Shown to an administrator and never to "
+    "a person asking: to them a skipped page reads exactly as a page that is not there."
+)
+
+
+@dataclass
+class WithheldPages:
+    """How many matched pages this process skipped, by reason. One per process, on its state.
+
+    For an administrator (`PAGES_SKIPPED_ARE_COUNTED_FOR_ADMINISTRATORS`). A count of what one
+    person was not told is exactly what `DENIED and ABSENT must be indistinguishable` forbids
+    showing them; this is the operator's count over every question, which names no page, no space
+    and no asker.
+    """
+
+    by_reason: Counter[str] = field(default_factory=Counter)
+
+    def note(self, reason: str) -> None:
+        self.by_reason[reason] += 1
+
+    @property
+    def total(self) -> int:
+        return sum(self.by_reason.values())
+
+
 class WikiPassages:
     """`brain.gate.model_lane.PassageSearch` over the declared spaces, read live for each question.
 
@@ -346,6 +381,7 @@ class WikiPassages:
         resolver: Resolver,
         issuer: TokenIssuer,
         budget: Callable[[], MinuteBudget] = fair_share_budget,
+        withheld: WithheldPages | None = None,
     ) -> None:
         self._host = host
         self._spaces = spaces
@@ -354,6 +390,7 @@ class WikiPassages:
         self._resolver = resolver
         self._issuer = issuer
         self._budget = budget
+        self._withheld = WithheldPages() if withheld is None else withheld
 
     def __repr__(self) -> str:
         return "WikiPassages()"
@@ -415,6 +452,7 @@ class WikiPassages:
                     except lark_wiki.PageWithheldError as withheld:
                         # For an operator; to the asker, exactly a page that is not there.
                         log.info("lark_wiki.page_withheld", reason=withheld.reason.value)
+                        self._withheld.note(withheld.reason.value)
                         continue
                     spent = read.budget
                     if read.document is not None:

@@ -206,7 +206,7 @@ from brain.ops.connector_store import StoredConnections
 from brain.ops.denial_store import Denial, Denials, StoredDenials, record_beside
 from brain.ops.lark_base_index import LarkBaseUse, switched_on
 from brain.ops.lark_base_live import BaseSchema
-from brain.ops.lark_wiki_live import WithWiki
+from brain.ops.lark_wiki_live import WithheldPages, WithWiki
 from brain.ops.limit_store import StoreVerdict, ValkeyWindowStore, make_store
 from brain.ops.limits import (
     Limit,
@@ -1071,6 +1071,16 @@ def passage_search_for(registry: ToolRegistry) -> DocumentSearchTool | None:
     return DocumentSearchTool(handler=handler)
 
 
+def wiki_withheld_of(state: Any) -> WithheldPages:
+    """This process's count of Wiki pages questions skipped, on the state for the Lark screen."""
+    found = getattr(state, "wiki_withheld", None)
+    if isinstance(found, WithheldPages):
+        return found
+    built = WithheldPages()
+    state.wiki_withheld = built
+    return built
+
+
 def model_lane_of(state: Any) -> ModelLane | None:
     """The model step this process hands the answer lane, or None where it has nothing to hand.
 
@@ -1087,7 +1097,11 @@ def model_lane_of(state: Any) -> ModelLane | None:
     if not isinstance(models, ModelService) or search is None:
         return None
     # And a Lark Wiki switched on in Connect Lark, its declared spaces read live (M11.6.4).
-    wiki = wiki_passages_for(getattr(state, "db_sessions", None), getattr(state, "vault", None))
+    wiki = wiki_passages_for(
+        getattr(state, "db_sessions", None),
+        getattr(state, "vault", None),
+        withheld=wiki_withheld_of(state),
+    )
     if wiki is not None:
         search = WithWiki(search, wiki)
     return ModelLane(search=search, model=models.calls, items=item_lookup_of(state))
