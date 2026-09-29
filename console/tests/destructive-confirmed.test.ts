@@ -182,10 +182,11 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "Sends the connection test and the first sync's dry run, which keep nothing: no setting, no " +
     "credential and no member is written, which tests/unit/test_staff_connect.py holds for both. " +
     "Saving the connection and applying the first sync have their own requests and are confirmed.",
-  "src/components/ConnectLark.tsx LARK_TEST_API_PATH":
+  "src/pages/connectors/LarkFlow.tsx LARK_TEST_API_PATH":
     "Testing a Lark connection exchanges the pasted credential for a token and makes small reads; " +
-    "it writes nothing here or in Lark and keeps nothing it read, which " +
-    "tests/unit/test_lark_connect.py holds over the requests a fake Lark server received.",
+    "it writes nothing in Lark and keeps nothing it read, which tests/unit/test_lark_connect.py " +
+    "holds over the requests a fake Lark server received. Here it records only when it ran and a " +
+    "verdict word per use, superseding the previous test's own record, with every one on the ledger.",
   "src/pages/channels/ChannelProfile.tsx testApiPath(row.channel)":
     "A test message is one product sentence to one destination, sent once per channel record and " +
     "destination, which tests/unit/test_channel_pipeline.py holds; it ends and replaces nothing.",
