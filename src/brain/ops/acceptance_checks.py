@@ -383,9 +383,11 @@ async def _upload(
     declared: str,
     body: bytes,
     department: str = A,
+    level: Any = None,
 ) -> Any:
     """The upload route's own sequence, as `uploader`: placed in `department`, admitted, read,
-    then stored."""
+    then stored. `level` is the `Visibility` the upload asks for, the department's unless
+    said, and a personal upload is placed at the uploader's own level as the route places it."""
     from brain.knowledge.chunk_store import ingest_document
     from brain.knowledge.embed_policy import REVISION_SETTING, REVISION_UNSET
     from brain.knowledge.ingest import ParseFailure, admit_upload, ceiling_for
@@ -408,7 +410,7 @@ async def _upload(
 
     reach = await h.reach(uploader)
     placement = placement_for_upload(
-        Visibility.DEPARTMENT,
+        Visibility.DEPARTMENT if level is None else level,
         department=department,
         owner_id=uploader,
         may_add=may_add(reach, await live_departments(h.sessions), h.now),
@@ -450,8 +452,7 @@ async def _upload(
 
 async def _found(h: Harness, reader: str, word: str) -> tuple[Any, list[dict[str, Any]]]:
     """A text search for `word` as `reader`, and what the passage policy lets them read of it."""
-    from brain.core.redaction import redact
-    from brain.gate.model_lane import PASSAGE_POLICY
+    from brain.gate.model_lane import redact_passages
     from brain.knowledge.document_tools import DocumentSearch, searcher
     from brain.knowledge.row_store import SessionRowSource
 
@@ -459,7 +460,7 @@ async def _found(h: Harness, reader: str, word: str) -> tuple[Any, list[dict[str
     found = await searcher(SessionRowSource(h.sessions))(
         DocumentSearch(question=word), entitlement=reach, now=h.now
     )
-    kept = redact(found, entitlement=reach, policy=PASSAGE_POLICY, now=h.now).payload
+    kept = redact_passages(found, entitlement=reach, now=h.now).payload
     return found, [dict(one) for one in kept.records]
 
 
