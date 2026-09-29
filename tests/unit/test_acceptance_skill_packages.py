@@ -109,6 +109,15 @@ def _without_the_rehearsal_gate(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(skill_library, "awaits_rehearsal", lambda one, newest: False)
 
 
+def _without_the_example_requirement(monkeypatch: pytest.MonkeyPatch) -> None:
+    held = skill_library.approval_needs
+
+    def lenient(one: Any, newest: Any) -> str | None:
+        return None if not one.imported.skill.examples else held(one, newest)
+
+    monkeypatch.setattr(skill_library, "approval_needs", lenient)
+
+
 def _without_the_manifest_comparison(monkeypatch: pytest.MonkeyPatch) -> None:
     def trusting(raw: bytes, skill: Any, refuse: Any) -> str:
         return str(skill.digest())
@@ -131,6 +140,11 @@ def _without_the_manifest_comparison(monkeypatch: pytest.MonkeyPatch) -> None:
             "a version with example tasks was approved before it was rehearsed",
         ),
         (
+            "a_version_with_examples_is_approved_only_once_rehearsed",
+            _without_the_example_requirement,
+            "a version with no example tasks was approved",
+        ),
+        (
             "an_approved_skill_is_exported_and_a_changed_package_is_refused",
             _without_the_manifest_comparison,
             "a package changed after it was exported was accepted",
@@ -143,12 +157,13 @@ def test_each_check_fails_with_its_own_sentence_when_its_property_is_broken(
     breaks: Callable[[pytest.MonkeyPatch], None],
     sentence: str,
 ) -> None:
-    """The byte comparison `plan_run` makes, the rehearsal gate `decided` applies and the manifest
-    comparison `read_package` makes, each removed from the product in turn: the check proving it
+    """The byte comparison `plan_run` makes, the example requirement and the rehearsal gate
+    `decided` applies, and the manifest comparison `read_package` makes, each removed from the
+    product in turn: the check proving it
     fails, with the sentence written for exactly that break. Delete this and a check can pass for
     a product that no longer has the property, which is a check that proves nothing."""
     [one] = [candidate for candidate in mine() if candidate.name == check]
-    with at_head(f"brain_acceptance_packages_{check[:12]}") as url:
+    with at_head(f"brain_acceptance_packages_{check[:12]}_{breaks.__name__[-12:]}") as url:
         breaks(monkeypatch)
         outcomes = run_checks(url, (one,))
 

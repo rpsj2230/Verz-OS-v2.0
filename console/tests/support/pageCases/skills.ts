@@ -51,6 +51,7 @@ const SKILL_VERSION = {
     rehearsed_by_name: UNBROKEN,
   },
   awaits_rehearsal: false,
+  approval_needs: null,
   rehearsable: true,
   exportable: true,
 };

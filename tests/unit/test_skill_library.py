@@ -18,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import inspect
 import io
+import json
 import zipfile
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
@@ -51,6 +52,7 @@ from brain.console.skill_library import (
     SKILL_AUTHORITY,
     SKILLS_PATH,
     LibrarySkill,
+    Rehearsal,
     SkillLibraryError,
     ToolReach,
     added,
@@ -66,6 +68,7 @@ from brain.console.skill_library import (
     queue_entries,
     reach_through,
     read_package,
+    rehearsal,
     trusted_reach,
 )
 from brain.console.workspace import intersections_in
@@ -139,14 +142,35 @@ def reach(
     )
 
 
+#: The example task a skill carries so it may be approved at all (M12.3.4).
+EXAMPLE = {"task": "A client asks when their domain renews", "expected": "Names the renewal date"}
+
+
 def a_library_skill(
-    text: str = SKILL_MD, *, by: str = IMPORTER, at: datetime = NOW
+    text: str = SKILL_MD, *, by: str = IMPORTER, at: datetime = NOW, examples: bool = False
 ) -> LibrarySkill:
-    return added(read_package("SKILL.md", text.encode("utf-8")), by=by, at=at)
+    """A pasted `SKILL.md`, or with `examples` a zip holding it and one example task, added."""
+    if not examples:
+        return added(read_package("SKILL.md", text.encode("utf-8")), by=by, at=at)
+    archive = a_zip(
+        {"SKILL.md": text.encode("utf-8"), "examples.json": json.dumps([EXAMPLE]).encode("utf-8")}
+    )
+    return added(read_package("hosting-expiry.zip", archive), by=by, at=at)
+
+
+def passing(one: LibrarySkill, *, by: str = REVIEWER) -> Rehearsal:
+    """A rehearsal of `one` in which every example behaved, which an approval stands on."""
+    return rehearsal(one, [True] * len(one.imported.skill.examples), by=by, at=NOW)
+
+
+def approving(one: LibrarySkill, *, reviewer: str = REVIEWER, approve: bool = True) -> LibrarySkill:
+    """`decided`, with the passing rehearsal an approval of a version with examples needs."""
+    rehearsed = passing(one) if one.imported.skill.examples else None
+    return decided(one, reviewer=reviewer, approve=approve, at=NOW, rehearsal=rehearsed)
 
 
 def an_approved_skill(text: str = SKILL_MD) -> LibrarySkill:
-    return decided(a_library_skill(text), reviewer=REVIEWER, approve=True, at=NOW)
+    return approving(a_library_skill(text, examples=True))
 
 
 # ------------------------------------------------------------------------- the registry
@@ -414,15 +438,15 @@ def test_the_importer_may_decide_about_their_own_skill_and_it_is_marked_as_their
     Delete this and either the refusal D4 overturned comes back, so an administrator cannot approve
     the skill they imported, or a self-approval is recorded as an ordinary one and the audit screen
     cannot list it."""
-    own = decided(a_library_skill(), reviewer=IMPORTER, approve=approve, at=NOW)
-    other = decided(a_library_skill(), reviewer=REVIEWER, approve=approve, at=NOW)
+    own = approving(a_library_skill(examples=True), reviewer=IMPORTER, approve=approve)
+    other = approving(a_library_skill(examples=True), reviewer=REVIEWER, approve=approve)
 
     assert own.imported.reviewer == IMPORTER
     assert own.imported.state is (SkillState.APPROVED if approve else SkillState.REJECTED)
     assert own.imported.is_executable() is approve
     assert (own.self_decided, other.self_decided) == (True, False)
     assert other.imported.reviewer == REVIEWER
-    assert own.digest == other.digest == a_library_skill().digest
+    assert own.digest == other.digest == a_library_skill(examples=True).digest
     assert own.submitted_by == other.submitted_by == IMPORTER
 
 
@@ -490,12 +514,11 @@ def test_the_queue_is_every_undecided_skill_oldest_first_and_an_edit_is_diffed()
     Delete this and the queue can drop an edit, sort by name, or show an edit as a first
     submission, which asks a reviewer to read a whole skill for a one-line change or to skim one
     that is new."""
-    approved = decided(
-        a_library_skill(at=NOW - timedelta(days=9)), reviewer=REVIEWER, approve=True, at=NOW
-    )
+    approved = approving(a_library_skill(at=NOW - timedelta(days=9), examples=True))
     edit = a_library_skill(
         text_with(description="Use when a client asks whether their domain renews within a month"),
         at=NOW - timedelta(days=2),
+        examples=True,
     )
     new = a_library_skill(
         text_with(

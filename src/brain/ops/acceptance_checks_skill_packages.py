@@ -86,8 +86,9 @@ EXAMPLES: Final = (
 
 
 # ------------------------------------------------------------------------ the helpers
-def _package_zip(name: str, *, script: bytes | None = SCRIPT, examples: bool = False) -> bytes:
-    """A zip an administrator would upload: the `SKILL.md`, its script and its examples."""
+def _package_zip(name: str, *, script: bytes | None = SCRIPT, examples: bool = True) -> bytes:
+    """A zip an administrator would upload: the `SKILL.md`, its script and its examples. With
+    examples unless asked otherwise, because a version with none is not approvable (M12.3.4)."""
     extra = (f"scripts: [{SCRIPT_PATH}]",) if script is not None else ()
     members: dict[str, bytes] = {"SKILL.md": _skill_md(name, extra=extra)}
     if script is not None:
@@ -121,13 +122,22 @@ def _read(file_name: str, content: bytes) -> Package | None:
 
 
 async def _approved(h: Harness, admin: str, one: LibrarySkill) -> LibrarySkill:
-    """The review route's approval of `one`, by the person who added it, read back as stored."""
-    from brain.console.skill_library import SkillLibraryError, decided
+    """The review route's approval of `one`, by the person who added it, read back as stored.
+
+    A version with examples and no rehearsal yet is rehearsed first, every example behaving, as a
+    person would record it on the Skills screen; the approval then stands on the newest rehearsal,
+    which is what the review route hands `decided`.
+    """
+    from brain.console.skill_library import SkillLibraryError, decided, rehearsal
     from brain.ops.skill_store import StoredSkills
 
     store = StoredSkills(h.sessions)
     reach = await h.reach(admin)
     newest = (await store.rehearsals([one.digest])).get(one.digest)
+    if newest is None and one.imported.skill.examples:
+        done = rehearsal(one, [True] * len(one.imported.skill.examples), by=admin, at=h.now)
+        await store.rehearse(done, ent_hash=reach.ent_hash(), trace_id=h.trace_id)
+        newest = (await store.rehearsals([one.digest])).get(one.digest)
     try:
         own = decided(one, reviewer=admin, approve=True, at=h.now, rehearsal=newest)
     except SkillLibraryError:
@@ -269,16 +279,19 @@ async def a_script_changed_after_approval_is_refused_before_it_runs(h: Harness) 
 @check(
     leaves=("M12.3.4",),
     sentence=(
-        "A skill uploaded with two example tasks is refused approval unrehearsed and after a "
-        "rehearsal in which one misbehaved, then approved once every example behaved; the ledger "
-        "records both rehearsals, and an edit carries the examples and waits for its own."
+        "A skill with no example tasks is refused approval and says what is missing; one with two "
+        "is refused unrehearsed and after a rehearsal in which one misbehaved, then approved once "
+        "every example behaved; the ledger records both rehearsals, and an edit carries the "
+        "examples and waits for its own."
     ),
 )
 async def a_version_with_examples_is_approved_only_once_rehearsed(h: Harness) -> None:
     from brain.audit.record import RehearsalOutcome
     from brain.console.skill_library import (
+        A_VERSION_WITHOUT_EXAMPLE_TASKS_IS_NOT_APPROVED,
         SkillLibraryError,
         added,
+        approval_needs,
         decided,
         edited,
         may_rehearse,
@@ -287,7 +300,7 @@ async def a_version_with_examples_is_approved_only_once_rehearsed(h: Harness) ->
     from brain.ops.skill_store import StoredSkills
 
     name = _named(h, "rehearsed")
-    package = _read(f"{name}.zip", _package_zip(name, script=None, examples=True))
+    package = _read(f"{name}.zip", _package_zip(name, script=None))
     if package is None:
         raise CheckFailedError("a skill carrying example tasks was refused")
     await h.found_departments()
@@ -310,6 +323,19 @@ async def a_version_with_examples_is_approved_only_once_rehearsed(h: Harness) ->
         except SkillLibraryError:
             return True
         return False
+
+    bare = _read(f"{name}_bare.zip", _package_zip(f"{name}_bare", script=None, examples=False))
+    if bare is None:
+        raise CheckFailedError("a well-formed skill with no example tasks was refused at the door")
+    await _store(h, added(bare, by=admin, at=h.now), reach)
+    kept_bare = await store.skill(bare.skill.digest())
+    if kept_bare is None:
+        raise CheckFailedError("a skill with no example tasks was not kept to wait for them")
+    if not refused(kept_bare, None):
+        raise CheckFailedError("a version with no example tasks was approved")
+    missing = approval_needs(kept_bare, None)
+    if missing is None or A_VERSION_WITHOUT_EXAMPLE_TASKS_IS_NOT_APPROVED not in missing:
+        raise CheckFailedError("a version with no example tasks did not say what it is missing")
 
     if not refused(kept, None):
         raise CheckFailedError("a version with example tasks was approved before it was rehearsed")
@@ -372,7 +398,7 @@ async def an_approved_skill_is_exported_and_a_changed_package_is_refused(h: Harn
     from brain.tools.skills import SkillState
 
     name = _named(h, "exported")
-    package = _read(f"{name}.zip", _package_zip(name, examples=True))
+    package = _read(f"{name}.zip", _package_zip(name))
     if package is None:
         raise CheckFailedError("a skill carrying a script and example tasks was refused")
     await h.found_departments()

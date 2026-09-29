@@ -20,8 +20,9 @@
  *
  * **A version shows its scripts, its example tasks and its newest rehearsal** (M12.4.11, M12.3.4).
  * A waiting version's script is readable here, because approving it approves those bytes; each
- * script's sha256 is in Advanced. A version with examples draws Rehearse examples, and no Approve
- * until a rehearsal in which every one behaved, saying so. **An approved version draws Export
+ * script's sha256 is in Advanced. A version with examples draws Rehearse examples. No Approve is
+ * drawn while the API says a version still needs something, example tasks or a passing rehearsal
+ * of them, and its sentence is drawn in its place (`approval_needs`). **An approved version draws Export
  * package** (M12.3.1), which saves the zip another install adds; it ends nothing, so it is not
  * confirmed, and `tests/destructive-confirmed.test.ts` records why.
  *
@@ -54,7 +55,6 @@ import {
   EXPORT_WORDS,
   exportedSentence,
   exportsPath,
-  REHEARSE_BEFORE_APPROVING,
   rehearsalWords,
   reinstatementPath,
   retirementPath,
@@ -309,12 +309,14 @@ function Decide({ one, onTold }: { readonly one: LibrarySkill; readonly onTold: 
     }
   }
 
-  const waits = one.awaits_rehearsal === true;
+  // What the API says this version still needs before it may be approved: example tasks, or a
+  // passing rehearsal of them (M12.3.4). The same sentence an approval would be refused with.
+  const needs = one.approval_needs ?? null;
   return (
     <>
       {failure === null ? null : <FailureNotice failure={failure} />}
-      {waits ? (
-        <Note>{REHEARSE_BEFORE_APPROVING}</Note>
+      {needs !== null ? (
+        <Note>{needs}</Note>
       ) : (
         <Button
           size="sm"

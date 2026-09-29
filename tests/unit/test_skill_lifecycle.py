@@ -35,7 +35,6 @@ from brain.console.skill_library import (
     SkillLibraryError,
     assignment,
     current_assignments,
-    decided,
     detachment,
     edited,
     holding,
@@ -59,11 +58,11 @@ from tests.unit.test_skill_library import (
     AGENT,
     AUDIENCE,
     IMPORTER,
-    REVIEWER,
     a_library_skill,
     a_recorder,
     an_approved_skill,
     an_install,
+    approving,
     reach,
     text_with,
 )
@@ -72,8 +71,10 @@ from tests.unit.test_skill_routes import (
     SKILLS,
     Stored,
     a_package,
+    an_approvable_package,
     an_assignable_agent,
     an_edit,
+    approve,
     get,
     post,
     screen_refusal,
@@ -354,8 +355,8 @@ def test_an_edit_of_a_version_still_waiting_is_counted_as_an_edit() -> None:
 def an_assigned_skill(c: TestClient, store: Stored, agent_id: str = "company_desk") -> str:
     """A skill added, approved by a second person and assigned to one agent; its digest."""
     an_assignable_agent(store, agent_id)
-    digest = str(post(c, "u_admin", SKILLS, a_package()).json()["digest"])
-    post(c, "u_wide", f"{SKILLS}/{digest}/review", {"decision": "approve"})
+    digest = str(post(c, "u_admin", SKILLS, an_approvable_package()).json()["digest"])
+    approve(c, "u_wide", digest)
     assigned = post(c, "u_admin", f"{SKILLS}/{digest}/assignments", {"agent_id": agent_id})
     assert assigned.status_code == 201, assigned.text
     return digest
@@ -547,8 +548,8 @@ def test_a_detachment_and_a_retirement_each_write_rows_and_entries_through_the_s
 
     Delete this and the detachment's lock, its lookup of the assignment it ends and both triggers
     are claims about SQL nobody has run."""
-    one = a_library_skill()
-    good = decided(one, reviewer=REVIEWER, approve=True, at=NOW)
+    one = a_library_skill(examples=True)
+    good = approving(one)
     admin = reach(SKILL_AUTHORITY.value)
 
     async def go() -> tuple[Any, ...]:
@@ -653,8 +654,10 @@ def test_the_tables_refuse_a_second_end_to_one_assignment_and_a_row_in_another_s
     an update of a retirement are each refused by the database itself.
 
     Delete this and every rule here is a claim about a table definition nobody has run."""
-    one = a_library_skill(text_with(name="quote-format", description="Use when asked to quote"))
-    good = decided(one, reviewer=REVIEWER, approve=True, at=NOW)
+    one = a_library_skill(
+        text_with(name="quote-format", description="Use when asked to quote"), examples=True
+    )
+    good = approving(one)
 
     async def seed() -> None:
         built = app_engine(database)

@@ -12,6 +12,7 @@ Task ids: M42.6.4
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -92,8 +93,18 @@ def a_skill(text: str = SKILL_MD) -> LibrarySkill:
     return added(read_package("SKILL.md", text.encode("utf-8")), by=IMPORTER, at=NOW)
 
 
+def as_approved(one: LibrarySkill, reviewer: str = REVIEWER) -> LibrarySkill:
+    """`one` with an approval on it as the tables hold one.
+
+    Built past `decided`, whose rule that a version carries example tasks and a passing rehearsal
+    of them (M12.3.4) is `tests/unit/test_skill_packages.py`'s to test: what is tested here is what
+    the store writes and reads for a decision, and a pasted `SKILL.md` keeps these rows the ones
+    `0056` wrote."""
+    return dataclasses.replace(one, imported=one.imported.approved_by(reviewer, NOW))
+
+
 def approved(text: str = SKILL_MD) -> LibrarySkill:
-    return decided(a_skill(text), reviewer=REVIEWER, approve=True, at=NOW)
+    return as_approved(a_skill(text))
 
 
 def rows_for(one: LibrarySkill) -> tuple[SkillRow, SkillReviewRow | None]:
@@ -516,7 +527,7 @@ def test_an_import_and_a_decision_each_write_one_row_and_one_entry_through_the_s
     writing nothing. **Skips without a server.**"""
     with through_0056("brain_skill_library") as url:
         one = a_skill()
-        good = decided(one, reviewer=REVIEWER, approve=True, at=NOW)
+        good = as_approved(one)
 
         async def writes() -> tuple[bool, bool, bool, tuple[LibrarySkill, ...]]:
             engine = app_engine(url)
@@ -871,7 +882,7 @@ def test_every_way_in_an_edit_a_self_approval_and_categories_reach_the_ledger() 
     )
     new_text = text_with(version="1.1.0").replace("open a ticket", "call the client")
     edit = edited(github, new_text, by=IMPORTER, at=NOW, library=(github,))
-    own = decided(edit, reviewer=IMPORTER, approve=True, at=NOW)
+    own = as_approved(edit, reviewer=IMPORTER)
 
     with through_0121("brain_skill_library_0121") as url:
 

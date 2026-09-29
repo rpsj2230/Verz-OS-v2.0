@@ -61,7 +61,7 @@ from brain.ops.acceptance import (
 from brain.ops.acceptance_run import Harness
 
 if TYPE_CHECKING:
-    from brain.console.skill_library import Assignment, LibrarySkill
+    from brain.console.skill_library import Assignment, LibrarySkill, Rehearsal
     from brain.core.entitlement import EntitlementSet
     from brain.tools.fetch import FetchedBytes, Fetcher, Resolver
 
@@ -179,6 +179,36 @@ def _zip(member: str, content: bytes) -> bytes:
     with zipfile.ZipFile(out, "w") as archive:
         archive.writestr(member, content)
     return out.getvalue()
+
+
+#: The one example task a skill the checks approve carries, because a version with none is not
+#: approvable (M12.3.4); see `brain.console.skill_library`'s rule on example tasks.
+EXAMPLE: Final = {"task": "An acceptance check asks for its skill", "expected": "Answers it"}
+
+
+def _with_example(skill_md: bytes) -> bytes:
+    """A zip holding a `SKILL.md` and an `examples.json` with `EXAMPLE`, as an upload would."""
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w") as archive:
+        archive.writestr("SKILL.md", skill_md)
+        archive.writestr("examples.json", json.dumps([EXAMPLE]))
+    return out.getvalue()
+
+
+async def _rehearsed(h: Harness, one: LibrarySkill, by: str) -> Rehearsal:
+    """A rehearsal of `one` in which every example behaved, recorded as the route records it,
+    and read back as the newest, which is what the review route hands `decided`."""
+    from brain.console.skill_library import rehearsal
+    from brain.ops.skill_store import StoredSkills
+
+    store = StoredSkills(h.sessions)
+    reach = await h.reach(by)
+    done = rehearsal(one, [True] * len(one.imported.skill.examples), by=by, at=h.now)
+    await store.rehearse(done, ent_hash=reach.ent_hash(), trace_id=h.trace_id)
+    newest = (await store.rehearsals([one.digest])).get(one.digest)
+    if newest is None or not newest.passed:
+        raise CheckFailedError("a rehearsal in which every example behaved did not read back")
+    return newest
 
 
 def _refuses(file_name: str, content: bytes) -> bool:
@@ -646,10 +676,11 @@ async def _pins(h: Harness, agent_id: str) -> dict[str, str]:
 @check(
     leaves=("M12.2.6", "M12.3.2", "M12.4.6"),
     sentence=(
-        "An administrator approves a skill they imported and the ledger says self_approved; an "
-        "edit by somebody who may not review is a new undecided version beside the old one, which "
-        "stays readable; the review shows the changed description and body lines; an agent in "
-        "acceptance_a keeps the old version until it is reassigned."
+        "An administrator approves a skill they imported, once its example is rehearsed, and the "
+        "ledger says self_approved; an edit by somebody who may not review is a new undecided "
+        "version beside the old one, which stays readable; the review shows the changed "
+        "description and body lines; an agent in acceptance_a keeps the old version until it is "
+        "reassigned."
     ),
 )
 async def an_edit_is_a_new_version_and_moves_no_agent_until_reassigned(h: Harness) -> None:
@@ -682,9 +713,11 @@ async def an_edit_is_a_new_version_and_moves_no_agent_until_reassigned(h: Harnes
         raise CheckFailedError("a person holding the review authority over everything may not")
     store = StoredSkills(h.sessions)
     name = _named(h, "edited")
-    first = added(read_package("SKILL.md", _skill_md(name)), by=admin, at=h.now)
+    first = added(read_package(f"{name}.zip", _with_example(_skill_md(name))), by=admin, at=h.now)
     await _store(h, first, admin_reach)
-    own = decided(first, reviewer=admin, approve=True, at=h.now)
+    own = decided(
+        first, reviewer=admin, approve=True, at=h.now, rehearsal=await _rehearsed(h, first, admin)
+    )
     if not own.self_decided or not await store.decide(
         own, ent_hash=admin_reach.ent_hash(), trace_id=h.trace_id
     ):
@@ -775,7 +808,9 @@ async def an_edit_is_a_new_version_and_moves_no_agent_until_reassigned(h: Harnes
         pass
     else:
         raise CheckFailedError("an edit nobody had reviewed was assigned to an agent")
-    reviewed = decided(new, reviewer=admin, approve=True, at=h.now)
+    reviewed = decided(
+        new, reviewer=admin, approve=True, at=h.now, rehearsal=await _rehearsed(h, new, admin)
+    )
     if reviewed.self_decided or not await store.decide(
         reviewed, ent_hash=admin_reach.ent_hash(), trace_id=h.trace_id
     ):
@@ -789,8 +824,10 @@ async def an_edit_is_a_new_version_and_moves_no_agent_until_reassigned(h: Harnes
     said = [(actor, d.get("change")) for actor, d in await _changes(h, f"skill:{name}")]
     if said != [
         (admin, "imported"),
+        (admin, "rehearsed"),
         (admin, "self_approved"),
         (editor, "edited"),
+        (admin, "rehearsed"),
         (admin, "approved"),
     ]:
         raise CheckFailedError("the ledger did not record the self-approval, the edit and review")

@@ -25,8 +25,12 @@ Task ids: M42.6.4
 from __future__ import annotations
 
 import ast
+import base64
 import hashlib
 import inspect
+import io
+import json
+import zipfile
 from collections.abc import Iterator, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
@@ -145,7 +149,7 @@ from tests.unit.test_api_routes import (
     token_for,
     verifier,
 )
-from tests.unit.test_skill_library import SKILL_MD, a_registry, text_with
+from tests.unit.test_skill_library import EXAMPLE, SKILL_MD, a_registry, text_with
 
 SKILLS = f"{API_PREFIX}/skills"
 
@@ -1004,7 +1008,7 @@ def test_every_undecided_skill_in_the_library_is_submitted_for_review() -> None:
             at=NOW,
         ),
         reviewer="u_wide",
-        approve=True,
+        approve=False,
         at=NOW,
     )
 
@@ -1278,6 +1282,27 @@ def a_package(text: str = SKILL_MD) -> dict[str, str]:
     return {"file_name": "SKILL.md", "content": text, "encoding": "text"}
 
 
+def an_approvable_package(text: str = SKILL_MD) -> dict[str, str]:
+    """The `SKILL.md` in a zip beside one example task, because a version with none is not
+    approvable (M12.3.4): what an administrator adds when they mean to approve it."""
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, "w") as packed:
+        packed.writestr("SKILL.md", text.encode("utf-8"))
+        packed.writestr("examples.json", json.dumps([EXAMPLE]))
+    return {
+        "file_name": "hosting-expiry.zip",
+        "content": base64.b64encode(archive.getvalue()).decode("ascii"),
+        "encoding": "base64",
+    }
+
+
+def approve(c: TestClient, pid: str, digest: str) -> Response:
+    """The review route's approval, after the rehearsal it needs, both asked as `pid`: a caller
+    who may not rehearse is refused the rehearsal and then the decision, each as the route says."""
+    post(c, pid, f"{SKILLS}/{digest}/rehearsals", {"behaved": [True]})
+    return post(c, pid, f"{SKILLS}/{digest}/review", {"decision": "approve"})
+
+
 def an_assignable_agent(stored: Stored, agent_id: str = "company_desk", **row: Any) -> None:
     """An agent whose ceiling reads client names through the client tool, with an install."""
     stored.agents[agent_id] = agent_row(
@@ -1304,7 +1329,7 @@ def test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_ass
     an assignment that writes an install the screen does not read."""
     an_assignable_agent(stored)
 
-    added_skill = post(client, "u_admin", SKILLS, a_package())
+    added_skill = post(client, "u_admin", SKILLS, an_approvable_package())
     assert added_skill.status_code == 201, added_skill.text
     row = added_skill.json()
     digest = row["digest"]
@@ -1328,7 +1353,7 @@ def test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_ass
     assert early.status_code == 404
     assert stored.library.assigned == []
 
-    reviewed = post(client, "u_wide", f"{SKILLS}/{digest}/review", {"decision": "approve"})
+    reviewed = approve(client, "u_wide", digest)
     assert reviewed.status_code == 200, reviewed.text
     assert (reviewed.json()["review"], reviewed.json()["reviewer"]) == ("approved", "u_wide")
 
@@ -1374,7 +1399,7 @@ def test_a_caller_without_the_authority_is_refused_every_write_before_anything_i
 
     refusals = [
         post(client, "u_narrow", SKILLS, a_package()),
-        post(client, "u_narrow", f"{SKILLS}/{digest}/review", {"decision": "approve"}),
+        approve(client, "u_narrow", digest),
         post(client, "u_narrow", f"{SKILLS}/{digest}/assignments", {"agent_id": "company_desk"}),
         post(client, "u_wide", SKILLS, a_package()),
     ]
@@ -1408,11 +1433,11 @@ def test_the_reviewer_approves_and_a_reader_who_only_adds_is_refused_the_decisio
 
     Delete this and the authority to add a skill is an authority to approve one, and the queue is
     reviewed by the people filling it."""
-    digest = post(client, "u_admin", SKILLS, a_package()).json()["digest"]
+    digest = post(client, "u_admin", SKILLS, an_approvable_package()).json()["digest"]
 
     refused = post(client, "u_elsewhere", f"{SKILLS}/{digest}/review", {"decision": "reject"})
     rejected = post(client, "u_wide", f"{SKILLS}/{digest}/review", {"decision": "reject"})
-    twice = post(client, "u_wide", f"{SKILLS}/{digest}/review", {"decision": "approve"})
+    twice = approve(client, "u_wide", digest)
 
     assert refused.status_code == 404
     assert rejected.status_code == 200
@@ -1452,8 +1477,8 @@ def test_an_agent_outside_the_audience_or_the_authority_is_refused_as_one_that_d
     an_assignable_agent(stored, "finance_desk", level=Visibility.DEPARTMENT, department="finance")
     an_assignable_agent(stored, "web_desk", level=Visibility.DEPARTMENT, department="web")
     an_assignable_agent(stored, "company_desk")
-    digest = post(client, "u_admin", SKILLS, a_package()).json()["digest"]
-    post(client, "u_wide", f"{SKILLS}/{digest}/review", {"decision": "approve"})
+    digest = post(client, "u_admin", SKILLS, an_approvable_package()).json()["digest"]
+    approve(client, "u_wide", digest)
 
     def assign(agent_id: str) -> Response:
         return post(client, "u_elsewhere", f"{SKILLS}/{digest}/assignments", {"agent_id": agent_id})
@@ -1479,8 +1504,8 @@ def test_an_agent_the_authority_covers_and_the_audience_does_not_is_refused_as_a
     configures, an agent the roster never listed to them."""
     an_assignable_agent(stored, "sales_desk", level=Visibility.DEPARTMENT, department="sales")
     an_assignable_agent(stored, "company_desk")
-    digest = post(client, "u_admin", SKILLS, a_package()).json()["digest"]
-    post(client, "u_wide", f"{SKILLS}/{digest}/review", {"decision": "approve"})
+    digest = post(client, "u_admin", SKILLS, an_approvable_package()).json()["digest"]
+    approve(client, "u_wide", digest)
 
     hidden = post(client, "u_admin", f"{SKILLS}/{digest}/assignments", {"agent_id": "sales_desk"})
     seen = post(client, "u_admin", f"{SKILLS}/{digest}/assignments", {"agent_id": "company_desk"})
@@ -1556,8 +1581,8 @@ def test_an_install_changed_since_it_was_read_is_refused_and_the_change_is_kept(
 
     Delete this and an assignment overwrites an instruction edit made while it was being decided."""
     an_assignable_agent(stored)
-    digest = post(client, "u_admin", SKILLS, a_package()).json()["digest"]
-    post(client, "u_wide", f"{SKILLS}/{digest}/review", {"decision": "approve"})
+    digest = post(client, "u_admin", SKILLS, an_approvable_package()).json()["digest"]
+    approve(client, "u_wide", digest)
 
     class Moving(Installs):
         async def agent(self, agent_id: str) -> FoundAgent | None:
@@ -1715,13 +1740,13 @@ def test_an_administrator_approves_the_skill_they_imported_and_the_answer_says_i
     Delete this and either D4 is undone and the administrator is refused, or a self-approval reaches
     the store looking like any other and the ledger cannot record it as one."""
     an_assignable_agent(stored)
-    own = post(client, "u_admin", SKILLS, a_package()).json()["digest"]
-    other = post(client, "u_admin", SKILLS, a_package(text_with(name="quote-format"))).json()[
-        "digest"
-    ]
+    own = post(client, "u_admin", SKILLS, an_approvable_package()).json()["digest"]
+    other = post(
+        client, "u_admin", SKILLS, an_approvable_package(text_with(name="quote-format"))
+    ).json()["digest"]
 
-    approved = post(client, "u_admin", f"{SKILLS}/{own}/review", {"decision": "approve"})
-    reviewed = post(client, "u_wide", f"{SKILLS}/{other}/review", {"decision": "approve"})
+    approved = approve(client, "u_admin", own)
+    reviewed = approve(client, "u_wide", other)
 
     assert approved.status_code == 200, approved.text
     assert (approved.json()["review"], approved.json()["reviewer"]) == ("approved", "u_admin")
@@ -1736,9 +1761,9 @@ def test_somebody_who_may_add_and_may_not_review_still_needs_somebody_else(
 ) -> None:
     """`u_elsewhere` holds the skill authority in finance and no review authority. Delete this and
     D4's exception reads as "the importer may decide", which is wider than the owner's decision."""
-    digest = post(client, "u_admin", SKILLS, a_package()).json()["digest"]
+    digest = post(client, "u_admin", SKILLS, an_approvable_package()).json()["digest"]
 
-    refused = post(client, "u_elsewhere", f"{SKILLS}/{digest}/review", {"decision": "approve"})
+    refused = approve(client, "u_elsewhere", digest)
 
     assert refused.status_code == 404
     assert refused.json()["message"] == screen_refusal(client)
@@ -1763,8 +1788,8 @@ def test_an_edit_waits_for_review_as_a_new_version_while_the_agent_keeps_its_pin
     Delete this and an edit can move a running agent onto words nobody reviewed, or replace the
     version it was made from so the words the agent was tested with are gone."""
     an_assignable_agent(stored)
-    first = post(client, "u_admin", SKILLS, a_package()).json()["digest"]
-    post(client, "u_wide", f"{SKILLS}/{first}/review", {"decision": "approve"})
+    first = post(client, "u_admin", SKILLS, an_approvable_package()).json()["digest"]
+    approve(client, "u_wide", first)
     post(client, "u_admin", f"{SKILLS}/{first}/assignments", {"agent_id": "company_desk"})
 
     saved = post(client, "u_admin", f"{SKILLS}/{first}/versions", {"content": an_edit()})
@@ -1789,7 +1814,7 @@ def test_an_edit_waits_for_review_as_a_new_version_while_the_agent_keeps_its_pin
         (second["digest"], ["body", "version"])
     ]
 
-    post(client, "u_wide", f"{SKILLS}/{second['digest']}/review", {"decision": "approve"})
+    approve(client, "u_wide", second["digest"])
     moved = post(
         client, "u_admin", f"{SKILLS}/{second['digest']}/assignments", {"agent_id": "company_desk"}
     )

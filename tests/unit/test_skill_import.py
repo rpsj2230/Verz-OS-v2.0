@@ -34,7 +34,6 @@ from brain.console.skill_library import (
     categories_from,
     chips,
     compared_with,
-    decided,
     edited,
     github_source,
     read_github,
@@ -65,7 +64,13 @@ from tests.fixtures.skill_sources import (
     raw_url,
     tarball,
 )
-from tests.unit.test_skill_library import IMPORTER, REVIEWER, SKILL_MD, text_with
+from tests.unit.test_skill_library import (
+    IMPORTER,
+    SKILL_MD,
+    a_library_skill,
+    approving,
+    text_with,
+)
 
 #: Far outside any plausible wall clock, for CLAUDE.md's reason about a fixture that is a clock.
 NOW = datetime(2019, 3, 6, 9, 0, tzinfo=UTC)
@@ -319,7 +324,7 @@ def edit_of(one: LibrarySkill, **lines: str) -> str:
 def test_an_edit_is_a_new_undecided_version_naming_the_one_it_came_from() -> None:
     """**M12.3.2.** Delete this and an edit can overwrite the approved version, or arrive already
     approved, or lose the record of which version it was made from."""
-    approved = decided(pasted(), reviewer=REVIEWER, approve=True, at=NOW)
+    approved = approving(a_library_skill(examples=True))
 
     new = edited(approved, edit_of(approved), by=EDITOR, at=LATER, library=(approved,))
 
@@ -437,7 +442,7 @@ def test_an_unchanged_body_is_every_line_kept_and_no_field_named() -> None:
 def test_a_version_is_compared_with_the_newest_approved_before_it_or_else_its_parent() -> None:
     """What the review pane diffs against. Delete this and an edit is compared with itself, with a
     version added after it, or with nothing when an approved version exists."""
-    first = decided(pasted(), reviewer=REVIEWER, approve=True, at=NOW)
+    first = approving(a_library_skill(examples=True))
     second = edited(first, edit_of(first), by=EDITOR, at=LATER, library=(first,))
     third = edited(
         second,

@@ -474,11 +474,6 @@ export const REHEARSAL_IS_A_PERSON_S_VERDICT =
   "instructions, or trying it yourself, and saying whether it behaved as expected. It is recorded " +
   "under your name for exactly this version.";
 
-/** Why Approve is not drawn yet for a version with examples. */
-export const REHEARSE_BEFORE_APPROVING =
-  "This version has example tasks, so it can be approved only after a rehearsal in which every " +
-  "example behaved as expected. Reject is still open.";
-
 /** The rehearsal a person sends: one verdict per example, in order. */
 export function rehearsalBody(behaved: readonly boolean[]): RehearsalBody {
   return { behaved: [...behaved] };
@@ -495,9 +490,9 @@ export function rehearsalWords(done: SkillRehearsal): string {
 
 /** The sentence after a rehearsal was recorded. */
 export function rehearsedSentence(one: LibrarySkill): string {
-  return one.awaits_rehearsal === true
-    ? `The rehearsal of ${one.name} ${one.version} was recorded. Not every example behaved, so it cannot be approved yet.`
-    : `The rehearsal of ${one.name} ${one.version} was recorded. It can now be approved.`;
+  return one.approval_needs === null || one.approval_needs === undefined
+    ? `The rehearsal of ${one.name} ${one.version} was recorded. It can now be approved.`
+    : `The rehearsal of ${one.name} ${one.version} was recorded. Not every example behaved, so it cannot be approved yet.`;
 }
 
 /** What exporting does, said on the button's page before it is pressed. */

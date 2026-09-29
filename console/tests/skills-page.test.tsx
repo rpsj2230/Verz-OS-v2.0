@@ -37,7 +37,6 @@ import {
   exportsPath,
   LIBRARY_API_PATH,
   MAX_PACKAGE_BYTES,
-  REHEARSE_BEFORE_APPROVING,
   rehearsalsPath,
   reinstatementPath,
   retirementPath,
@@ -156,11 +155,18 @@ function version(overrides: Record<string, unknown> = {}): Record<string, unknow
     examples: [],
     rehearsal: null,
     awaits_rehearsal: false,
+    approval_needs: null,
     rehearsable: false,
     exportable: false,
     ...overrides,
   };
 }
+
+/** What the API says a version with examples still needs, as `approval_needs` sends it. */
+const NEEDS_A_REHEARSAL = "hosting-expiry 1.1.0 has not been rehearsed against its example tasks with every one behaving as expected.";
+
+/** What it says of a version with no example tasks at all. */
+const NEEDS_EXAMPLES = "hosting-expiry 1.1.0 has no example tasks. Add it again as a .zip holding its SKILL.md and an examples.json.";
 
 /** A waiting version carrying a script and two example tasks, not yet rehearsed (M12.3.4). */
 function waitingWithExamples(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -177,6 +183,7 @@ function waitingWithExamples(overrides: Record<string, unknown> = {}): Record<st
       { task: "A client asks twice", expected: "Answers the same way twice" },
     ],
     awaits_rehearsal: true,
+    approval_needs: NEEDS_A_REHEARSAL,
     rehearsable: true,
     ...overrides,
   });
@@ -545,7 +552,7 @@ describe("one skill's page", () => {
     expect(page.textContent).toContain("A client asks when their domain expires");
     expect(page.textContent).toContain("Names the expiry date");
     expect(page.textContent).toContain("print('checked')");
-    expect(page.textContent).toContain(REHEARSE_BEFORE_APPROVING);
+    expect(page.textContent).toContain(NEEDS_A_REHEARSAL);
     expect([...page.querySelectorAll("button")].some((one) => one.textContent === APPROVE)).toBe(false);
     expect([...page.querySelectorAll("button")].some((one) => one.textContent === REJECT)).toBe(true);
     const advanced = page.querySelector('[data-slot="advanced"]') as HTMLElement;
@@ -553,17 +560,33 @@ describe("one skill's page", () => {
 
     const rehearsed = await consoleAt(
       `${skillAddress(NAME)}/profile`,
-      skillAnswers([waitingWithExamples({ awaits_rehearsal: false, rehearsal: { behaved: [true, true], passed: true, rehearsed_at: "2019-03-05T11:00:00Z", rehearsed_by: "u_reviewer", rehearsed_by_name: "Rex Reviewer" } })], []),
+      skillAnswers([waitingWithExamples({ awaits_rehearsal: false, approval_needs: null, rehearsal: { behaved: [true, true], passed: true, rehearsed_at: "2019-03-05T11:00:00Z", rehearsed_by: "u_reviewer", rehearsed_by_name: "Rex Reviewer" } })], []),
     );
     expect(rehearsed.container.textContent).toContain("Rehearsed by Rex Reviewer: every example behaved as expected.");
     expect([...rehearsed.container.querySelectorAll("button")].some((one) => one.textContent === APPROVE)).toBe(true);
+  });
+
+  test("a version with no example tasks draws what it is missing and no Approve or Rehearse", async () => {
+    // What breaks if this is deleted: a pasted skill whose Approve is refused on every press, with
+    // nothing on the page saying it needs example tasks (M12.3.4).
+    const { container } = await consoleAt(
+      `${skillAddress(NAME)}/profile`,
+      skillAnswers([waitingWithExamples({ examples: [], scripts: [], awaits_rehearsal: false, rehearsable: false, approval_needs: NEEDS_EXAMPLES })], []),
+    );
+
+    const page = container.querySelector('[data-slot="skill-profile"]') as HTMLElement;
+    expect(page.textContent).toContain(NEEDS_EXAMPLES);
+    const buttons = [...page.querySelectorAll("button")].map((one) => one.textContent ?? "");
+    expect(buttons.some((one) => one === APPROVE)).toBe(false);
+    expect(buttons.some((one) => one.includes(REHEARSE))).toBe(false);
+    expect(buttons.some((one) => one === REJECT)).toBe(true);
   });
 
   test("a rehearsal sends one verdict per example, and only once every example has one", async () => {
     // What breaks if this is deleted: a rehearsal sent with an example nobody answered, recorded
     // as not behaving, or verdicts sent out of the examples' order (M12.3.4).
     const { container, sent } = await consoleAt(`${skillAddress(NAME)}/profile`, skillAnswers([waitingWithExamples()], [], {
-      [`POST ${API}${rehearsalsPath(DIGEST)}`]: { status: 201, body: waitingWithExamples({ awaits_rehearsal: false }) },
+      [`POST ${API}${rehearsalsPath(DIGEST)}`]: { status: 201, body: waitingWithExamples({ awaits_rehearsal: false, approval_needs: null }) },
     }));
 
     pressed(`${REHEARSE} of ${NAME}`, container);

@@ -38,10 +38,15 @@ connection. A repository folder commonly holds a licence or a readme beside its 
 refusing those would refuse most repositories, so they are left where they are and never stored,
 which is the zip's rule by a gentler route: no byte the digest does not cover is kept.
 
-**A version with example tasks is approved only once they have been rehearsed against it
-(M12.3.4).** `rehearsal` records, for exactly one digest, whether each example behaved as expected,
-in the name of the person who rehearsed it, and `decided` refuses to approve a version with
-examples until the newest rehearsal of those bytes says every one did. **A rehearsal is a person's
+**A version is approved only once it carries example tasks and they have been rehearsed against
+it (M12.3.4).** The coordinator decided on 2026-09-29 that the leaf is built as written: a skill
+carries example tasks, so a version with none is not approvable at all, and it lands and waits
+saying what is missing (`approval_needs`), which is `A_VERSION_WITHOUT_EXAMPLE_TASKS_IS_NOT_
+APPROVED`. `rehearsal` records, for exactly one digest, whether each example behaved as expected,
+in the name of the person who rehearsed it, and `decided` refuses to approve until the newest
+rehearsal of those bytes says every one did. A skill approved before this rule keeps its approval,
+because the rule is asked when a decision is made and never of one already recorded. **A
+rehearsal is a person's
 verdict today, and it says so**: nothing on an install asks a model to carry out a skill yet
 (`brain.agent_builder_routes.A_REHEARSAL_RUNS_NO_MODEL_YET`), so the record is somebody reading
 each example against these instructions, or trying it, and saying whether it behaved. See
@@ -190,6 +195,14 @@ A_PACKAGE_KEEPS_ONLY_WHAT_ITS_DIGEST_COVERS: Final = (
     "so a file that is none of those is refused rather than skipped, and a script the SKILL.md "
     "declares and the package does not hold is refused too: a byte the digest does not cover is "
     "a byte nobody approved, and a script approved by its name alone is code nobody read."
+)
+
+#: Why a version with no example tasks is not approved at all (M12.3.4). The sentence its page
+#: shows, so it says what is missing and what to do about it.
+A_VERSION_WITHOUT_EXAMPLE_TASKS_IS_NOT_APPROVED: Final = (
+    "A skill carries example tasks with the behaviour expected of it, and this version has none, "
+    "so it cannot be approved. Add it again as a .zip holding its SKILL.md and an examples.json "
+    "listing each task and what is expected, then rehearse the examples and approve that version."
 )
 
 #: Why approving a version with examples waits for a rehearsal of exactly those bytes (M12.3.4).
@@ -1092,22 +1105,20 @@ def decided(
     is recorded against the key and would approve something nobody read. The second-decision
     refusal and the named-person refusal are `ImportedSkill`'s own.
 
-    **An approval of a version with example tasks needs `rehearsal`, the newest rehearsal of these
-    bytes, and every example in it behaved as expected.** None is the default, so a caller that
-    forgets to pass one is refused rather than let through. A rejection needs none. See
-    `A_VERSION_WITH_EXAMPLES_IS_APPROVED_ONLY_AFTER_THEY_ARE_REHEARSED`.
+    **An approval needs example tasks, and `rehearsal`, the newest rehearsal of these bytes, in
+    which every example behaved as expected** (M12.3.4). None is the default, so a caller that
+    forgets to pass one is refused rather than let through. A rejection needs neither, and a
+    version already decided is refused as such first, so the second-decision refusal is not hidden
+    behind a rehearsal it no longer needs. See `approval_needs`.
     """
     if one.moved:
         raise SkillLibraryError(
             f"nothing was decided: the stored text of {one.name!r} no longer matches the version "
             "it was added as, so an approval would be of words nobody added; add it again"
         )
-    if approve and awaits_rehearsal(one, rehearsal):
-        raise SkillLibraryError(
-            f"nothing was decided: {one.name} {one.imported.skill.version} carries example tasks "
-            "and has not been rehearsed against them with every one behaving as expected. "
-            f"{A_VERSION_WITH_EXAMPLES_IS_APPROVED_ONLY_AFTER_THEY_ARE_REHEARSED}"
-        )
+    needs = approval_needs(one, rehearsal) if approve else None
+    if needs is not None:
+        raise SkillLibraryError(f"nothing was decided: {needs}")
     try:
         imported = (
             one.imported.approved_by(reviewer, at)
@@ -1186,12 +1197,39 @@ def rehearsal(one: LibrarySkill, behaved: Sequence[bool], *, by: str, at: dateti
     return Rehearsal(digest=one.digest, behaved=tuple(behaved), rehearsed_by=by, at=at)
 
 
+def approval_needs(one: LibrarySkill, newest: Rehearsal | None) -> str | None:
+    """What this undecided version still needs before it may be approved, in words, or None.
+
+    Example tasks, when it has none: `A_VERSION_WITHOUT_EXAMPLE_TASKS_IS_NOT_APPROVED`. A passing
+    rehearsal of exactly these bytes, when it has examples and no such rehearsal:
+    `A_VERSION_WITH_EXAMPLES_IS_APPROVED_ONLY_AFTER_THEY_ARE_REHEARSED`. A version already decided
+    needs nothing from here; the decision it has is its answer. The sentence is drawn on the
+    version's page and is the refusal an approval gets, so the two can never say different things.
+    """
+    if one.imported.state is not SkillState.IMPORTED:
+        return None
+    skill = one.imported.skill
+    if not skill.examples:
+        return (
+            f"{one.name} {skill.version} has no example tasks. "
+            f"{A_VERSION_WITHOUT_EXAMPLE_TASKS_IS_NOT_APPROVED}"
+        )
+    if awaits_rehearsal(one, newest):
+        return (
+            f"{one.name} {skill.version} has not been rehearsed against its example tasks with "
+            "every one behaving as expected. "
+            f"{A_VERSION_WITH_EXAMPLES_IS_APPROVED_ONLY_AFTER_THEY_ARE_REHEARSED}"
+        )
+    return None
+
+
 def awaits_rehearsal(one: LibrarySkill, newest: Rehearsal | None) -> bool:
     """Whether this version may not be approved yet for want of a passing rehearsal of it.
 
     `newest` is the newest rehearsal recorded for these bytes, as the store reads it. A version
-    with no examples never waits; one with examples waits until the newest rehearsal of exactly
-    its digest has a verdict per example and every one behaved.
+    with no examples has nothing to rehearse and does not wait for a rehearsal; it waits for
+    examples, which `approval_needs` says. One with examples waits until the newest rehearsal of
+    exactly its digest has a verdict per example and every one behaved.
     """
     examples = one.imported.skill.examples
     if not examples:

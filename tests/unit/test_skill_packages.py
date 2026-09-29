@@ -40,6 +40,7 @@ from brain.console import skill_library as library_module
 from brain.console.skill_library import (
     A_PACKAGE_KEEPS_ONLY_WHAT_ITS_DIGEST_COVERS,
     A_VERSION_WITH_EXAMPLES_IS_APPROVED_ONLY_AFTER_THEY_ARE_REHEARSED,
+    A_VERSION_WITHOUT_EXAMPLE_TASKS_IS_NOT_APPROVED,
     AN_EXPORTED_PACKAGE_LANDS_UNREVIEWED_AND_ONLY_IF_ITS_BYTES_MATCH_ITS_DIGEST,
     EXAMPLES_FILE,
     MANIFEST_FILE,
@@ -50,6 +51,7 @@ from brain.console.skill_library import (
     Rehearsal,
     SkillLibraryError,
     added,
+    approval_needs,
     awaits_rehearsal,
     decided,
     edited,
@@ -477,7 +479,7 @@ def test_a_package_that_carries_what_it_does_not_declare_or_reaches_outside_is_r
 def test_a_version_with_examples_is_approved_only_once_every_example_behaved() -> None:
     """**M12.3.4.** No rehearsal, a rehearsal where one misbehaved, and a passing rehearsal of
     other bytes are each refused with the reason; a passing rehearsal of these bytes approves; a
-    rejection needs none; and a version with no examples is approved as it always was.
+    rejection needs none.
 
     Delete this and `decided` can drop the gate, or accept a rehearsal of the version before."""
     one = a_packaged_skill()
@@ -498,8 +500,51 @@ def test_a_version_with_examples_is_approved_only_once_every_example_behaved() -
     assert approved.imported.is_executable()
     rejected = decided(one, reviewer=REVIEWER, approve=False, at=NOW)
     assert rejected.imported.state is SkillState.REJECTED
-    no_examples = a_packaged_skill(examples=False)
-    assert decided(no_examples, reviewer=REVIEWER, approve=True, at=NOW).imported.is_executable()
+
+
+def test_a_version_with_no_example_tasks_is_refused_approval_saying_what_is_missing() -> None:
+    """**M12.3.4 as written: a skill carries example tasks.** A version with none is refused
+    approval with the sentence that says what is missing and what to do, which is also what its
+    row says (`approval_needs`); it can still be rejected, and a version already decided needs
+    nothing. The positive sibling: one example and a passing rehearsal of it approve.
+
+    Delete this and a skill with no examples is approved without any rehearsal at all, which is
+    the gate with nothing to guard."""
+    bare = a_packaged_skill(examples=False)
+
+    for newest in (
+        None,
+        Rehearsal(digest=bare.digest, behaved=(True,), rehearsed_by=REVIEWER, at=NOW),
+    ):
+        with pytest.raises(SkillLibraryError) as refused:
+            decided(bare, reviewer=REVIEWER, approve=True, at=NOW, rehearsal=newest)
+        assert A_VERSION_WITHOUT_EXAMPLE_TASKS_IS_NOT_APPROVED in str(refused.value)
+        assert "has no example tasks" in str(refused.value)
+    needs = approval_needs(bare, None)
+    assert needs is not None and A_VERSION_WITHOUT_EXAMPLE_TASKS_IS_NOT_APPROVED in needs
+    assert decided(bare, reviewer=REVIEWER, approve=False, at=NOW).imported.state is (
+        SkillState.REJECTED
+    )
+    assert approval_needs(decided(bare, reviewer=REVIEWER, approve=False, at=NOW), None) is None
+
+    one_example = added(
+        read_package(
+            "hosting-expiry.zip",
+            a_zip(
+                {
+                    "SKILL.md": skill_md(scripts=False).encode("utf-8"),
+                    EXAMPLES_FILE: json.dumps([EXAMPLES[0]]).encode("utf-8"),
+                }
+            ),
+        ),
+        by=IMPORTER,
+        at=NOW,
+    )
+    assert approval_needs(one_example, passing(one_example)) is None
+    approved = decided(
+        one_example, reviewer=REVIEWER, approve=True, at=NOW, rehearsal=passing(one_example)
+    )
+    assert approved.imported.is_executable()
 
 
 def test_a_rehearsal_is_one_verdict_per_example_of_an_undecided_version_that_has_some() -> None:
@@ -978,6 +1023,33 @@ def library_row(c: TestClient, pid: str, digest: str) -> dict[str, Any]:
     return next(one for one in rows if one["digest"] == digest)
 
 
+def test_a_pasted_skill_with_no_examples_waits_and_its_page_says_what_is_missing(
+    client: TestClient, stored: Stored
+) -> None:
+    """**M12.3.4 as written, through the application.** A `SKILL.md` pasted with no example tasks
+    lands undecided, its row says in words that it has none and what to do, it offers no rehearsal,
+    and approving it is refused with the same sentence; nothing was decided.
+
+    Delete this and a pasted skill can be approved with no example ever rehearsed, or wait with a
+    page that never says why."""
+    added_ = post(
+        client,
+        "u_admin",
+        SKILLS,
+        {"file_name": "SKILL.md", "content": skill_md(scripts=False), "encoding": "text"},
+    )
+    assert added_.status_code == 201, added_.text
+    digest = added_.json()["digest"]
+    row = library_row(client, "u_admin", digest)
+
+    assert row["review"] == "pending" and row["rehearsable"] is False
+    assert A_VERSION_WITHOUT_EXAMPLE_TASKS_IS_NOT_APPROVED in row["approval_needs"]
+    refused = post(client, "u_wide", f"{SKILLS}/{digest}/review", {"decision": "approve"})
+    assert refused.status_code == 404
+    assert A_VERSION_WITHOUT_EXAMPLE_TASKS_IS_NOT_APPROVED in refused.json()["message"]
+    assert "decide" not in stored.library.calls
+
+
 def test_a_version_with_examples_is_rehearsed_then_approved_through_the_routes(
     client: TestClient, stored: Stored
 ) -> None:
@@ -1024,8 +1096,10 @@ def test_a_version_with_examples_is_rehearsed_then_approved_through_the_routes(
     assert failing.json()["rehearsal"]["passed"] is False
     wrong = post(client, "u_wide", f"{SKILLS}/{digest}/rehearsals", {"behaved": [True]})
     assert wrong.status_code == 404 and "carries 2 example tasks" in wrong.json()["message"]
+    assert failing.json()["approval_needs"] is not None
     good = post(client, "u_wide", f"{SKILLS}/{digest}/rehearsals", {"behaved": [True, True]})
     assert good.json()["awaits_rehearsal"] is False
+    assert good.json()["approval_needs"] is None
     approved = post(client, "u_wide", f"{SKILLS}/{digest}/review", {"decision": "approve"})
     assert approved.status_code == 200, approved.text
     assert approved.json()["review"] == "approved"
