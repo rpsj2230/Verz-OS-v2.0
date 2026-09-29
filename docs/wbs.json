@@ -1258,10 +1258,15 @@
      "why": "channel pipeline (PR #105, merged, migration 0114): proved on the install with the signed webhook channel, set up, refused, delivered once and switched off",
      "updated": "2026-09-28"
     },
+    "M10.5.6": {
+     "status": "READY FOR TESTING",
+     "why": "email is connectable (M10/channel-email): a signed envelope in, a reply out by the install's own relay, Connect Email steps with the receiving script, and an install check; the owner's real mail proves the vendor's half",
+     "updated": "2026-09-30"
+    },
     "M10.6.1": {
      "status": "IN PROGRESS",
-     "why": "the webhook and Lark wires are live (PR #105; L1, merged d426e3d3); every other vendor's wire comes with its own package",
-     "updated": "2026-09-28"
+     "why": "the webhook, Lark and email wires are live (PR #105; L1, merged d426e3d3; M10/channel-email); Slack, Teams, Telegram and WhatsApp each come with their own package",
+     "updated": "2026-09-30"
     },
     "M10.6.3": {
      "status": "READY FOR TESTING",

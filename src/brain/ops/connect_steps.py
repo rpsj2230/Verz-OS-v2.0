@@ -25,12 +25,17 @@ the product's own colours. Three things follow and each was the reason:
 Rejected: SVG files beside the console, one per step. The picture and the step's words would live
 in two trees, and a step reworded here would keep an old picture there.
 
+**A step may carry one text to copy**, such as a script or an app manifest the vendor accepts
+pasted whole (`copy_text`, with `copy_label` on its button), so a screen that would otherwise be ten
+clicks through a vendor's form is one paste. The text is the product's, the same on every install,
+and never a secret: a secret is typed into the console's own field and nowhere else.
+
 **A step says which values it collects and nothing about how they are typed.** `asks` names the
 fields a screen gathers (an App ID, a key, a setting); the console owns the inputs and the secret
 field, and the route that receives them judges them. So a step definition can never become a
 second validator.
 
-Task ids: M11.9.4, M27.11.9
+Task ids: M11.9.4, M27.11.9, M10.5.6
 """
 
 from __future__ import annotations
@@ -51,6 +56,9 @@ A_PICTURE_IS_AN_OUTLINE_THAT_NAMES_WHERE_TO_PRESS: Final = (
 
 #: The longest text a picture's element holds. A picture labels, it does not explain.
 MAX_SKETCH_WORDS: Final = 48
+
+#: The longest text a step offers to copy. A script or a manifest, not a document.
+MAX_COPY_CHARS: Final = 8000
 
 
 class LineKind(enum.StrEnum):
@@ -136,6 +144,9 @@ class GuideStep:
     link: str = ""
     link_label: str = ""
     asks: tuple[str, ...] = ()
+    #: A text the person pastes into the vendor whole, and what its button says. Never a secret.
+    copy_text: str = ""
+    copy_label: str = ""
 
     def __post_init__(self) -> None:
         if not (self.key.strip() and self.title.strip() and self.text.strip()):
@@ -146,6 +157,14 @@ class GuideStep:
             raise ValueError(msg)
         if bool(self.link) != bool(self.link_label.strip()):
             msg = f"step {self.key!r} must say what its link opens, and only when it has one"
+            raise ValueError(msg)
+        if bool(self.copy_text) != bool(self.copy_label.strip()):
+            msg = (
+                f"step {self.key!r} must say what its copy button copies, and only when it has one"
+            )
+            raise ValueError(msg)
+        if len(self.copy_text) > MAX_COPY_CHARS:
+            msg = f"step {self.key!r} offers {len(self.copy_text)} characters to copy"
             raise ValueError(msg)
 
 
