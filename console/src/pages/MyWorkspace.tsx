@@ -19,24 +19,40 @@
  * nothing on an install records them. `brain.console.own_things` names the decisions each would
  * need.
  *
+ * **What it learned about me can be edited and forgotten here** (M16.4.2): each item has Edit,
+ * which keeps what the person writes instead, and Forget, confirmed in words that say the record
+ * stays. Both are the API's routes for the person's own memories, and the page is read again after
+ * either, so what is shown is what the next answer uses.
+ *
  * Imported statically rather than split: it mounts neither heavy library and no stylesheet.
  *
- * Task ids: M27.7.28
+ * Task ids: M27.7.28, M16.4.2
  */
 
+import { useCallback, useState } from "react";
+import { request } from "../api/client";
+import type { ApiFailure } from "../api/errors";
 import { useResource } from "../api/useResource";
 import { MyChannels } from "../components/MyChannels";
+import { ConfirmDialog } from "../components/kit";
+import { Button } from "../components/ui/button";
 import { FailureNotice } from "../ui/FailureNotice";
 import { when } from "./artifactsQuery";
 import {
+  EDIT_API_PATH,
+  FORGET_API_PATH,
   PROVISION_WORDS,
   WORKSPACE_API_PATH,
+  editBody,
+  forgetBody,
   monthly,
   ownAgents,
   readBudget,
   spentOf,
   wasRead,
+  readChanged,
   whereItRuns,
+  type Learned,
   type Workspace,
 } from "./myWorkspaceQuery";
 
@@ -60,6 +76,19 @@ export const NO_CEILING = "No budget of your own is set.";
 export const NOTHING_LEARNED = "Nothing learnt about you is shown.";
 export const NO_ITEMS = "You do not look after any knowledge items.";
 export const MORE_ITEMS = "You look after more items than this page reads at once.";
+
+export const EDIT_LABEL = "Edit";
+export const FORGET_LABEL = "Forget";
+export const SAVE_LABEL = "Save";
+export const CANCEL_LABEL = "Cancel";
+export const KEEP_IT = "Keep it";
+export const WHAT_IT_SHOULD_SAY = "What it should say";
+export const FORGET_CONSEQUENCE =
+  "It stops being used in your answers at once. The record that it was learnt stays, and if it " +
+  "replaced something earlier, the earlier one is used again.";
+
+/** The longest statement the API keeps: `brain.memory.turn.MAX_STATEMENT_CHARS`. */
+export const STATEMENT_CHARS = 280;
 
 export const AGENTS_CAPTION = "Agents I can call";
 export const ITEMS_CAPTION = "Knowledge I own";
@@ -145,25 +174,152 @@ function MyAgents({ workspace }: { readonly workspace: Workspace }) {
   );
 }
 
-function WhatItLearned({ workspace }: { readonly workspace: Workspace }) {
+/** What the last forget or edit came to, held above the card so a re-read keeps it on screen. */
+interface Outcome {
+  readonly said: string;
+  readonly failure: ApiFailure | null;
+}
+
+const NO_OUTCOME: Outcome = { said: "", failure: null };
+
+function WhatItLearned({
+  workspace,
+  outcome,
+  onOutcome,
+}: {
+  readonly workspace: Workspace;
+  readonly outcome: Outcome;
+  readonly onOutcome: (outcome: Outcome, reread: boolean) => void;
+}) {
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const [forgetting, setForgetting] = useState<Learned | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const send = useCallback(
+    (path: string, body: unknown) => {
+      setBusy(true);
+      onOutcome(NO_OUTCOME, false);
+      void (async () => {
+        const result = await request<unknown>(path, { method: "POST", body });
+        setBusy(false);
+        setForgetting(null);
+        setEditing(null);
+        if (!result.ok) {
+          onOutcome({ said: "", failure: result.failure }, false);
+          return;
+        }
+        onOutcome({ said: readChanged(result.data).told, failure: null }, true);
+      })();
+    },
+    [onOutcome],
+  );
+
   return (
     <section className="card">
       <h2>{LEARNED_CAPTION}</h2>
+      {outcome.said === "" ? null : (
+        <p className="note" role="status">
+          {outcome.said}
+        </p>
+      )}
+      {outcome.failure === null ? null : <FailureNotice failure={outcome.failure} />}
       {workspace.learned.length === 0 ? (
         <p className="note">{NOTHING_LEARNED}</p>
       ) : (
         <ul aria-label={LEARNED_CAPTION}>
           {workspace.learned.map((one) => (
             <li key={one.memory_id}>
-              <strong>{one.statement}</strong>
+              {editing === one.memory_id ? (
+                <form
+                  aria-label={`${EDIT_LABEL} ${one.statement}`}
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    if (draft.trim() !== "") {
+                      send(EDIT_API_PATH, editBody(one.memory_id, draft));
+                    }
+                  }}
+                >
+                  <label>
+                    {WHAT_IT_SHOULD_SAY}
+                    <textarea
+                      value={draft}
+                      maxLength={STATEMENT_CHARS}
+                      onChange={(event) => {
+                        setDraft(event.target.value);
+                      }}
+                    />
+                  </label>
+                  <Button type="submit" size="sm" disabled={busy || draft.trim() === ""}>
+                    {SAVE_LABEL}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setEditing(null);
+                    }}
+                  >
+                    {CANCEL_LABEL}
+                  </Button>
+                </form>
+              ) : (
+                <strong>{one.statement}</strong>
+              )}
               <p className="note">
                 {`${one.stated ? "You said this" : "Inferred"}, ${when(one.formed_at)}`}
               </p>
+              {editing === one.memory_id ? null : (
+                <div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    aria-label={`${EDIT_LABEL} ${one.statement}`}
+                    onClick={() => {
+                      setDraft(one.statement);
+                      setEditing(one.memory_id);
+                    }}
+                  >
+                    {EDIT_LABEL}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    aria-label={`${FORGET_LABEL} ${one.statement}`}
+                    onClick={() => {
+                      setForgetting(one);
+                    }}
+                  >
+                    {FORGET_LABEL}
+                  </Button>
+                </div>
+              )}
             </li>
           ))}
         </ul>
       )}
       <p className="note">{workspace.learned_undo}</p>
+      <ConfirmDialog
+        open={forgetting !== null}
+        question={forgetting === null ? "" : `${FORGET_LABEL} "${forgetting.statement}"?`}
+        consequence={FORGET_CONSEQUENCE}
+        confirmLabel={FORGET_LABEL}
+        cancelLabel={KEEP_IT}
+        busy={busy}
+        onConfirm={() => {
+          if (forgetting !== null) {
+            send(FORGET_API_PATH, forgetBody(forgetting.memory_id));
+          }
+        }}
+        onCancel={() => {
+          setForgetting(null);
+        }}
+      />
     </section>
   );
 }
@@ -206,7 +362,15 @@ function KnowledgeIOwn({ workspace }: { readonly workspace: Workspace }) {
 }
 
 export function MyWorkspace() {
-  const answer = useResource<Workspace>(WORKSPACE_API_PATH);
+  const [version, setVersion] = useState(0);
+  const answer = useResource<Workspace>(WORKSPACE_API_PATH, version);
+  const [outcome, setOutcome] = useState<Outcome>(NO_OUTCOME);
+  const settled = useCallback((next: Outcome, reread: boolean) => {
+    setOutcome(next);
+    if (reread) {
+      setVersion((count) => count + 1);
+    }
+  }, []);
 
   return (
     <article className="page">
@@ -240,7 +404,7 @@ export function MyWorkspace() {
           <p>{`Signed in as ${answer.data.display_name}.`}</p>
           <Figures workspace={answer.data} />
           <MyAgents workspace={answer.data} />
-          <WhatItLearned workspace={answer.data} />
+          <WhatItLearned workspace={answer.data} outcome={outcome} onOutcome={settled} />
           <KnowledgeIOwn workspace={answer.data} />
           <section className="card">
             <h2>Connected accounts</h2>

@@ -267,7 +267,8 @@ class _Session:
         if "pg_advisory_xact_lock" in text:
             self.log.append(f"lock {params['lock_class']} {params['memory_id']}")
             return _Result(None)
-        if text.startswith("SELECT now()"):
+        if text.startswith("SELECT statement_timestamp()"):
+            # Read after the lock: `A_REVISION_IS_STAMPED_WHEN_IT_IS_DECIDED`.
             self.log.append("clock")
             return _Result(LATER)
         if text.startswith("SELECT") and "FROM mem.correction" in text:

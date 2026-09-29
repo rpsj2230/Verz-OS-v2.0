@@ -357,6 +357,9 @@ def _holds(clause: Any, row: Any) -> bool:
         return bool(value == clause.right.value)
     if clause.operator is operators.in_op:
         return value in clause.right.value
+    if clause.operator is operators.is_:
+        # `IS NULL`, which is how the review asks for the learnings no agent formed.
+        return value is None
     raise AssertionError(f"a clause nothing here expects: {clause}")
 
 
@@ -857,6 +860,41 @@ def test_a_visible_agents_tier_one_learning_is_listed_with_its_undo_offered_to_i
     ]
     assert ids(body["tier_two"]) == ["m_rule"]
     assert body["tier_three"] == []
+
+
+def test_a_learning_formed_in_a_plain_conversation_is_reviewed_and_undone_like_an_agents(
+    client: TestClient, stored: Stored
+) -> None:
+    """**The Learning screen was empty on every install where people asked Ask directly**, because
+    what they asked to be remembered is recorded with no agent and the review was built agent by
+    agent. Now such a learning is listed in tier one at the caller's own reach, with its undo
+    offered to an administrator, and the undo writes the correction a learning of an agent's does;
+    a reader who may not recall the memory is shown nothing and refused the undo in the words a
+    missing memory is.
+
+    Delete this and the review can go back to listing only stored agents' learnings, and the
+    screen goes back to being empty on the install where it matters most."""
+    stored.inferred = [inferred("m_asked", "Prefers the figure first", formed_at=ago(hours=1))]
+    stored.learnings = [learnt("m_asked", agent_id=None)]
+
+    body = get_strongly(client, "u_admin", LEARNING).json()
+    narrow = get(client, "u_narrow", LEARNING).json()
+    refused = post(client, "u_narrow", UNDO, {"memory_id": "m_asked"})
+    undone = post(client, "u_admin", UNDO, {"memory_id": "m_asked"})
+    after = get_strongly(client, "u_admin", LEARNING).json()
+
+    assert [(one["memory_id"], one["undo_offered"]) for one in body["tier_one"]] == [
+        ("m_asked", True)
+    ]
+    assert narrow["tier_one"] == []
+    assert refused.status_code == 404
+    assert undone.status_code == 200, undone.text
+    assert undone.json()["took_effect"] is True
+    [insert] = writes(stored)
+    assert insert.compile().params["memory_id"] == "m_asked"
+    assert [(one["memory_id"], one["in_effect"]) for one in after["tier_one"]] == [
+        ("m_asked", False)
+    ]
 
 
 def test_a_learning_the_reader_may_not_recall_is_absent_from_the_review_and_cannot_be_undone(

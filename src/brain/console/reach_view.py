@@ -1422,11 +1422,14 @@ BACK_LINK: Final = "agent:{agent_id}/learning"
 def tier_one_rows(
     learnings: Sequence[Learning],
     *,
-    agent_id: str,
+    agent_id: str | None,
     supersessions: Iterable[Supersession] = (),
     demotions: Iterable[Demotion] = (),
 ) -> tuple[TierOneRow, ...]:
     """Every automatic change this agent made, newest first (M39.4.2.2).
+
+    `agent_id` None is the learnings formed with no agent running, which the Learning screen
+    reviews at the caller's own reach (`brain.console.govern_estate.conversation_learnings`).
 
     Newest first, which is the opposite of the review queue and for the opposite reason: these
     have already happened, so the one somebody wants to undo is the one that just changed an
