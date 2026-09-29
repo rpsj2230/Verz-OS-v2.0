@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-29T15:47:11.352438+00:00",
-  "commit": "daf971af",
-  "commit_subject": "Wave 1 is complete: Moonshot answers end to end on the install, and six deployment tasks close on the same run (#262)",
+  "generated_at": "2026-09-29T16:03:01.042695+00:00",
+  "commit": "e3c61fc8",
+  "commit_subject": "Connect Lark asks who may read each wiki space and says a Base's tables are granted per table (#247)",
   "total": 1576,
   "done": 466,
   "percent": 29.6,
