@@ -205,6 +205,7 @@ from brain.ops.connector_store import StoredConnections
 from brain.ops.denial_store import Denial, Denials, StoredDenials, record_beside
 from brain.ops.lark_base_index import LarkBaseUse, switched_on
 from brain.ops.lark_base_live import BaseSchema
+from brain.ops.lark_wiki_live import WithWiki
 from brain.ops.limit_store import StoreVerdict, ValkeyWindowStore, make_store
 from brain.ops.limits import (
     Limit,
@@ -213,7 +214,7 @@ from brain.ops.limits import (
     retry_after_header,
     retry_hint,
 )
-from brain.ops.live_read_run import base_schema_for, live_records_for
+from brain.ops.live_read_run import base_schema_for, live_records_for, wiki_passages_for
 from brain.ops.model_service import ModelService
 from brain.ops.sensitive_referral_store import SensitiveReferrals, StoredSensitiveReferrals
 from brain.ops.trace_sink import CountingTraceSink
@@ -1083,6 +1084,10 @@ def model_lane_of(state: Any) -> ModelLane | None:
     search = getattr(state, "passage_search", None)
     if not isinstance(models, ModelService) or search is None:
         return None
+    # And a Lark Wiki switched on in Connect Lark, its declared spaces read live (M11.6.4).
+    wiki = wiki_passages_for(getattr(state, "db_sessions", None), getattr(state, "vault", None))
+    if wiki is not None:
+        search = WithWiki(search, wiki)
     return ModelLane(search=search, model=models.calls, items=item_lookup_of(state))
 
 

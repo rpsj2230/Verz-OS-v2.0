@@ -35,7 +35,7 @@ Scope: every part that touches the world is handed in (the keys, the caller, the
 clock), so the tests drive it over recorded replies, and `live_records_for` is the one place the
 real ones are chosen.
 
-Task ids: M11.9.2, M11.5.1, M11.2.5, M11.6.3
+Task ids: M11.9.2, M11.5.1, M11.2.5, M11.6.3, M11.6.4
 """
 
 from __future__ import annotations
@@ -75,6 +75,7 @@ from brain.ops.connector_sync_run import (
 )
 from brain.ops.lark_base_index import HttpsTokenIssuer, switched_on
 from brain.ops.lark_base_live import BaseSchema, with_base
+from brain.ops.lark_wiki_live import WikiPassages, declared_spaces, wiki_host
 from brain.ops.live_records import SourceRecords
 from brain.ops.secrets import SecretsUnavailableError
 from brain.ops.webhook_delivery import SystemResolver
@@ -238,6 +239,28 @@ def base_schema_for(vault: RunTokenVault | None) -> BaseSchema:
         resolver=SystemResolver(),
         issuer=HttpsTokenIssuer(),
         clock=_utc_now,
+    )
+
+
+def wiki_passages_for(
+    sessions: async_sessionmaker[AsyncSession] | None, vault: RunTokenVault | None
+) -> WikiPassages | None:
+    """The Wiki's passages for the answer lane's model step, or None with no Wiki switched on.
+
+    Asked on each question, so a Wiki switched on or off in Connect Lark is read or not from the
+    next one, and its declared spaces are read from the database on each question too
+    (`brain.ops.lark_wiki_live.declared_spaces`).
+    """
+    host = wiki_host()
+    if sessions is None or host is None:
+        return None
+    return WikiPassages(
+        host,
+        lambda: declared_spaces(sessions),
+        keys=WorkerConnectorKeys(vault),
+        caller=HttpsSourceCaller(timeout_seconds=LIVE_READ_TIMEOUT_MS / 1000),
+        resolver=SystemResolver(),
+        issuer=HttpsTokenIssuer(),
     )
 
 

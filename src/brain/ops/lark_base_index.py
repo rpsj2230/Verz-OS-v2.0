@@ -97,6 +97,7 @@ from brain.tools.fetch import Resolver, assert_fetchable
 
 if TYPE_CHECKING:
     from brain.ops.connector_sync_run import ConnectorKeys
+    from brain.ops.secrets import SecretRef
     from brain.ops.starter import Declared
 
 log = structlog.get_logger()
@@ -331,6 +332,42 @@ class TableReader:
         return self.reads._get(operation.url_for(arguments_for(self.table, cursor)))
 
 
+@dataclass(frozen=True)
+class Exchanged:
+    """A tenant token exchanged for one run. Never kept past the run that asked for it."""
+
+    token: str = field(repr=False)
+
+
+@contextmanager
+def tenant_token(
+    ref: SecretRef,
+    host: str,
+    *,
+    keys: ConnectorKeys,
+    issuer: TokenIssuer,
+    now: datetime,
+) -> Iterator[Exchanged | str]:
+    """A tenant token exchanged for one run from the key at `ref`, or the sentence saying why not.
+
+    The key is leased for the run and given back when the block ends, whatever happened inside
+    it, which is `brain.ops.live_read_run.A_QUESTION_BORROWS_A_KEY_FOR_ONE_READ` for Lark. Shared
+    by the Base and the Wiki, whose keys Connect Lark keeps in slots of their own.
+    """
+    lease = keys.lease(ref, now=now)
+    try:
+        try:
+            kept = lease.key()
+        except SecretsUnavailableError:
+            yield NO_KEY_FOR_THE_BASE
+            return
+        pair = app_credential(kept)
+        token = None if pair is None else issuer.issue(host, app_id=pair[0], app_secret=pair[1])
+        yield NO_TOKEN_FOR_THE_BASE if token is None else Exchanged(token=token)
+    finally:
+        lease.close(now)
+
+
 @contextmanager
 def opened(
     use: LarkBaseUse,
@@ -341,26 +378,14 @@ def opened(
     issuer: TokenIssuer,
     now: datetime,
 ) -> Iterator[LarkReads | str]:
-    """The run's reads over a token exchanged for it, or the sentence saying why there are none.
-
-    The key is leased for the run and given back when the block ends, whatever happened inside
-    it, which is `brain.ops.live_read_run.A_QUESTION_BORROWS_A_KEY_FOR_ONE_READ` for a Base.
-    """
-    lease = keys.lease(use.credential().ref, now=now)
-    try:
-        try:
-            kept = lease.key()
-        except SecretsUnavailableError:
-            yield NO_KEY_FOR_THE_BASE
+    """The run's reads over a token exchanged for it, or the sentence saying why there are none."""
+    with tenant_token(
+        use.credential().ref, use.host, keys=keys, issuer=issuer, now=now
+    ) as exchanged:
+        if isinstance(exchanged, str):
+            yield exchanged
             return
-        pair = app_credential(kept)
-        token = None if pair is None else issuer.issue(use.host, app_id=pair[0], app_secret=pair[1])
-        if token is None:
-            yield NO_TOKEN_FOR_THE_BASE
-            return
-        yield LarkReads(use=use, caller=caller, resolver=resolver, token=token)
-    finally:
-        lease.close(now)
+        yield LarkReads(use=use, caller=caller, resolver=resolver, token=exchanged.token)
 
 
 # ------------------------------------------------------------------------ the schema

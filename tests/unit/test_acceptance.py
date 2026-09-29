@@ -187,6 +187,10 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     assert by_module["brain.ops.acceptance_checks_lark_base"] == [
         "a_lark_base_answers_on_ask_from_its_index_and_lark",
     ]
+    # A switched-on Lark Wiki on Ask; `tests/unit/test_acceptance_lark_wiki.py`.
+    assert by_module["brain.ops.acceptance_checks_lark_wiki"] == [
+        "a_lark_wiki_page_is_told_only_to_a_reader_its_space_admits",
+    ]
     assert list(by_module) == list(acceptance.CHECK_MODULES)
     oversight = {one.name: one.leaves for one in registered()}
     assert oversight["unusual_volume_is_found_per_person"] == ("M23.2.1",)

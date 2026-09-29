@@ -195,6 +195,7 @@ CHECK_MODULES: Final = (
     "brain.ops.acceptance_checks_capacity",
     "brain.ops.acceptance_checks_sources",
     "brain.ops.acceptance_checks_lark_base",
+    "brain.ops.acceptance_checks_lark_wiki",
 )
 
 
