@@ -78,9 +78,11 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
   "src/components/ProviderKeyForm.tsx": [{ pattern: "/models/:provider/:view", opener: "Replace key", index: 0, writes: true }],
   "src/pages/credentials/SetValueForm.tsx": [{ pattern: "/credentials/:family/:name/:view", index: 0, writes: true }],
   // The Profile is a view at its own address, so the pin's form is on that page case with no opener.
-  // The preview as a person is in the Permissions card, above the model card, so the pin's is second.
-  "src/components/AgentModelPin.tsx": [{ pattern: "/agents/:agentId/:tab", index: 1, writes: true }],
-  "src/pages/agents/AgentCapabilities.tsx": [{ pattern: "/agents/:agentId/:tab", index: 0, writes: true }],
+  // The Permissions card draws the tools block's three choices (judged elsewhere) and then the
+  // preview as a person in its footer, above the model card, so the preview is fourth and the pin
+  // fifth.
+  "src/components/AgentModelPin.tsx": [{ pattern: "/agents/:agentId/:tab", index: 4, writes: true }],
+  "src/pages/agents/AgentCapabilities.tsx": [{ pattern: "/agents/:agentId/:tab", index: 3, writes: true }],
   // A person's Access view: the preview through an agent, under the grants, roles and placements.
   "src/pages/people/PersonPreview.tsx": [{ pattern: "/people/:personId/:view", index: 0, writes: true }],
   // The Dashboard opens first, and its one form is the monthly budget, drawn for a reader of
@@ -112,6 +114,11 @@ const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
     "ledger's four; nothing is typed, so nothing can be sent blank, and Change is disabled until a " +
     "different rung is chosen. tests/agent-leash.test.tsx holds that every write is sent only from " +
     "its confirmation, and the leash block is inside the Profile, whose page case mounts no leash.",
+  "src/pages/agents/AgentTools.tsx":
+    "Its forms are choices from lists the API sent, a tool or a connector the reader may attach or " +
+    "detach; nothing is typed, so nothing can be sent blank. tests/agent-tools.test.tsx holds that " +
+    "every press is sent only from its confirmation, and the block is inside the Profile, whose page " +
+    "case mounts it with nothing typed.",
   "src/pages/agents/AgentMemory.tsx":
     "The one form corrects a memory, opened from its row in the Memory section at its own address, " +
     "which no page case mounts. tests/agent-memory.test.tsx submits it blank and holds that nothing " +

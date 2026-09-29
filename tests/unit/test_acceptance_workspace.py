@@ -16,6 +16,7 @@ Task ids: M39.6.1.1, M39.6.1.2, M39.6.1.3, M39.6.1.4, M39.6.1.5, M39.6.2.1, M39.
 Task ids: M39.5.1.1, M39.5.1.2, M39.5.1.4, M39.5.1.5, M39.5.2.1, M39.5.2.2, M39.5.2.3, M39.5.2.4
 Task ids: M39.5.2.5, M39.8.4, M39.8.5
 Task ids: M39.3.2.1, M39.3.2.2, M39.3.2.3, M39.3.2.4, M39.3.2.5, M39.8.2, M39.8.3
+Task ids: M39.8.6, M39.2.1.2, M39.1.1.3
 """
 
 from __future__ import annotations
@@ -118,6 +119,11 @@ LEAVES = {
         "M39.3.2.5",
         "M39.8.2",
         "M39.8.3",
+    ),
+    "an_agents_tools_are_attached_in_its_ceiling_and_runs_carry_them": (
+        "M39.8.6",
+        "M39.2.1.2",
+        "M39.1.1.3",
     ),
 }
 
@@ -532,4 +538,37 @@ def test_a_pin_that_holds_nothing_fails_the_leash_check(
     assert run_checks(head, (by_name(LEASH_CHECK),))[LEASH_CHECK] == (
         FAILED,
         "a pinned agent was not held at Shadow",
+    )
+
+
+TOOLS_CHECK = "an_agents_tools_are_attached_in_its_ceiling_and_runs_carry_them"
+
+
+@pytest.mark.needs_db
+def test_a_tool_above_the_ceiling_attached_fails_the_tools_check(
+    head: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With the ceiling's half of the attach check gone, a write above the agent's largest effect
+    is attached, and the check says so. Delete this and the check could pass over an install where
+    a tool no run could call is attached and shown as the agent's."""
+    monkeypatch.setattr("brain.agents.attachments.within_ceiling", lambda tool, record: True)
+
+    assert run_checks(head, (by_name(TOOLS_CHECK),))[TOOLS_CHECK] == (
+        FAILED,
+        "a tool outside the agent's ceiling was attached",
+    )
+
+
+@pytest.mark.needs_db
+def test_a_roster_that_ignores_attachments_fails_the_tools_check(
+    head: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With the answer route's roster reading records as the manifest wrote them, an attached tool
+    never reaches a run, and the check says so. Delete this and the check could pass over an
+    install whose Profile shows a tool no run is ever handed."""
+    monkeypatch.setattr("brain.agent_roster.narrowed", lambda record, changes: record)
+
+    assert run_checks(head, (by_name(TOOLS_CHECK),))[TOOLS_CHECK] == (
+        FAILED,
+        "a run was not handed a tool attached a moment before",
     )

@@ -53,6 +53,7 @@ from brain.tables.agent import AgentRow
 from brain.tables.agent_automation import AgentAutomationRow
 from brain.tables.application_log import ApplicationLogRow
 from brain.tables.artifact import ArtifactChangeRow, ArtifactRow
+from brain.tables.attachment import ToolAttachmentRow
 from brain.tables.audit import AuditEntryRow
 from brain.tables.automation import AutomationOwnerRow
 from brain.tables.automation_change import AutomationChangeRow
@@ -424,6 +425,8 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     "agent.supervised_action",
     "agent.action_verdict",
     "agent.supervision_pin",
+    # 0160_tool_attachments. Points at nothing: the agent, the tools and the person are values.
+    "agent.tool_attachment",
 )
 
 __all__ = [
@@ -543,6 +546,7 @@ __all__ = [
     "TeamRow",
     "TemplateInstanceRow",
     "TemplateVersionRow",
+    "ToolAttachmentRow",
     "ToolDefinitionRow",
     "ToolSwitchRow",
     "UpgradeDeclineRow",

@@ -1974,3 +1974,166 @@ async def an_agents_leash_moves_on_evidence_and_its_pin_extends(h: Harness) -> N
         pass
     else:
         raise CheckFailedError("a rung rose while its agent's review had not found it ready")
+
+
+# ---------------------------------------------- 11. tools and connectors attached, and what runs
+def _attachable_tools() -> tuple[Any, ...]:
+    """The check's own tools: two reads, a write above the ceiling, and one outside it."""
+    from brain.core.envelope import IdentityMode, SideEffect, ToolDefinition
+
+    def made(name: str, capability: str, effect: SideEffect = SideEffect.NONE) -> Any:
+        return ToolDefinition(
+            name=name,
+            description=f"Declared by an install acceptance check as {name}",
+            entity=name.split(".", 1)[1].split("_", 1)[1],
+            required_capability=capability,
+            side_effect=effect,
+            identity_mode=IdentityMode.DELEGATED,
+            source=name.split(".", 1)[0],
+        )
+
+    return (
+        made("acceptance.read_note", "read:note.body"),
+        made("acceptance.read_deal", "read:deal.stage"),
+        made("acceptance.update_deal", "write:deal.stage", SideEffect.WRITE),
+        made("elsewhere.read_ticket", "read:ticket.status"),
+    )
+
+
+@check(
+    leaves=("M39.8.6", "M39.2.1.2", "M39.1.1.3"),
+    sentence=(
+        "A department's tool administrator attaches a tool the agent's ceiling and their own reach "
+        "admit and is refused one above either; a connector's tools are detached and attached "
+        "together; each press is a ledger entry naming who, which way and why; and the answer "
+        "route's own roster hands a run exactly the tools the agent carries after each press."
+    ),
+)
+async def an_agents_tools_are_attached_in_its_ceiling_and_runs_carry_them(h: Harness) -> None:
+    from brain.agent_attachment_routes import FROM_THE_AGENT_PAGE, may_press
+    from brain.agent_roster import agent_roster_for
+    from brain.agents.attachments import AttachmentError, narrowed, to_attach, to_detach
+    from brain.gate.roster import setup_of
+    from brain.ops.acceptance_checks import _in
+    from brain.ops.acceptance_run import SET_UP_REACH
+    from brain.ops.attachment_store import StoredAttachments
+    from brain.tables.attachment import AttachmentPart
+
+    await h.found_departments()
+    admin, member = h.principal(A, "tooling"), h.principal(A, "member")
+    reaches = ("read:note.body", "read:deal.stage", "write:deal.stage", "read:ticket.status")
+    await h.person(
+        admin,
+        department=A,
+        grants=(*_in(A, "admin:tool", "admin:connector"), *_everywhere(*reaches)),
+    )
+    await h.person(member, department=A, grants=_everywhere(*reaches))
+    agent_id = await installed_agent(
+        h,
+        admin,
+        capabilities=("read:note.body", "read:deal.stage", "write:deal.stage"),
+        allowed_tools=("acceptance.read_note",),
+        suffix="_tools",
+        scope=Scope.unrestricted(),
+    )
+    registered = _attachable_tools()
+    names = [one.name for one in registered]
+    admin_reach, member_reach = await h.reach(admin), await h.reach(member)
+    store = StoredAttachments(h.sessions)
+    roster = agent_roster_for(h.sessions)
+    if roster is None:
+        raise CheckFailedError("the answer route's roster reads nothing on this install")
+
+    async def carried() -> frozenset[str]:
+        """What a run of the agent is handed now, as the answer route builds it."""
+        found = {one.agent_id: one for one in await roster()}.get(agent_id)
+        if found is None:
+            raise CheckFailedError("the check's agent was not in the answer route's roster")
+        return setup_of(found, names).ceiling.allowed_tools
+
+    async def pressed(part: AttachmentPart, reference: str, attached: bool) -> tuple[str, ...]:
+        record = await stored_agent(h, agent_id)
+        record = narrowed(record, await store.changes(agent_id))
+        now_carried = record.authority.allowed_tools
+        tools = (
+            to_attach(
+                part,
+                reference,
+                record=record,
+                carried=now_carried,
+                registered=registered,
+                by=admin_reach,
+                now=h.now,
+            )
+            if attached
+            else to_detach(
+                part, reference, record=record, carried=now_carried, registered=registered
+            )
+        )
+        await store.press(
+            agent_id=agent_id,
+            part=part,
+            reference=reference,
+            attached=attached,
+            tools=tools,
+            by=admin,
+            reason_code=FROM_THE_AGENT_PAGE,
+            ent_hash=SET_UP_REACH,
+            trace_id=h.trace_id,
+            at=h.now,
+        )
+        return tools
+
+    record = await stored_agent(h, agent_id)
+    if not may_press(AttachmentPart.TOOL, admin_reach, record, h.now) or may_press(
+        AttachmentPart.TOOL, member_reach, record, h.now
+    ):
+        raise CheckFailedError("a tool could be attached by somebody other than its role's holder")
+    if await carried() != {"acceptance.read_note"}:
+        raise CheckFailedError("a run was not handed the tools the agent's manifest names")
+
+    # 1. A tool within the ceiling is attached; one above it, and one outside it, are refused.
+    await pressed(AttachmentPart.TOOL, "acceptance.read_deal", True)
+    for refused in ("acceptance.update_deal", "elsewhere.read_ticket"):
+        try:
+            await pressed(AttachmentPart.TOOL, refused, True)
+        except AttachmentError:
+            continue
+        raise CheckFailedError("a tool outside the agent's ceiling was attached")
+    if await carried() != {"acceptance.read_note", "acceptance.read_deal"}:
+        raise CheckFailedError("a run was not handed a tool attached a moment before")
+
+    # 2. A connector's tools go and come back together.
+    await pressed(AttachmentPart.CONNECTOR, "acceptance", False)
+    if await carried():
+        raise CheckFailedError("a run was still handed a detached connector's tools")
+    moved = await pressed(AttachmentPart.CONNECTOR, "acceptance", True)
+    if set(moved) != {"acceptance.read_note", "acceptance.read_deal"} or await carried() != set(
+        moved
+    ):
+        raise CheckFailedError("attaching a connector did not bring back its attachable tools")
+
+    # 3. Every press on the ledger: who, which way, and why.
+    rows = (
+        await h.execute(
+            text(
+                "SELECT actor_id, details FROM obs.audit_entry WHERE action = 'compose_change'"
+                " AND subject = :subject ORDER BY seq"
+            ).bindparams(subject=f"agent:{agent_id}")
+        )
+    ).all()
+    said = [
+        (
+            str(actor),
+            dict(details)["part"],
+            dict(details)["direction"],
+            dict(details)["reason_code"],
+        )
+        for actor, details in rows
+    ]
+    if said != [
+        (admin, "tool", "attached", FROM_THE_AGENT_PAGE),
+        (admin, "connector", "detached", FROM_THE_AGENT_PAGE),
+        (admin, "connector", "attached", FROM_THE_AGENT_PAGE),
+    ]:
+        raise CheckFailedError("a press did not reach the ledger naming who, which way and why")

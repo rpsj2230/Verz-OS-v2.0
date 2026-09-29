@@ -223,6 +223,15 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
       },
       // The leash block: an entry, a move with its evidence, a trip with its metric, supervision
       // and an action waiting for a verdict, each value a token with nowhere to break.
+      "/api/v1/agents/quote-helper/attachments": {
+        agent_id: "quote-helper",
+        carried: [{ name: UNBROKEN, source: UNBROKEN, description: UNBROKEN }],
+        carried_connectors: [UNBROKEN],
+        tools: [{ name: UNBROKEN, source: UNBROKEN, description: UNBROKEN }],
+        connectors: [UNBROKEN],
+        may_change_tools: true,
+        may_change_connectors: true,
+      },
       "/api/v1/agents/quote-helper/leash": {
         agent_id: "quote-helper",
         entries: [{ target: UNBROKEN, scope: { clauses: [] }, where: UNBROKEN, rung: "assisted", proposed: "autonomous" }],

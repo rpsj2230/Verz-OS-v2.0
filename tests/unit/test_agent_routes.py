@@ -90,6 +90,7 @@ from brain.knowledge.visibility import Visibility
 from brain.models.routing import DEFAULT_TIER
 from brain.ops.jobs import NAMES_THAT_WOULD_BE_A_HIDDEN_COUNT, hidden_count_fields
 from brain.tables.agent import AgentRow
+from brain.tables.attachment import ToolAttachmentRow
 from brain.tables.identity import PrincipalRow
 from brain.tables.leash import LeashChangeRow, SupervisionPinRow
 from brain.tables.spend import SpendActualRow
@@ -410,7 +411,7 @@ class StubSession(AsyncSession):
             return StubResult(list(_STORED.spend))
         if entity is TemplateVersionRow:
             return StubResult(list(_STORED.versions))
-        if entity in (LeashChangeRow, SupervisionPinRow):
+        if entity in (LeashChangeRow, SupervisionPinRow, ToolAttachmentRow):
             # Nothing moved and nobody pinned: the install's own leash, as the tests above expect.
             return StubResult([])
         if statement.whereclause is None:
@@ -848,6 +849,7 @@ def test_the_install_of_an_agent_the_caller_may_not_see_is_never_read(
         "PrincipalRow",
         "LeashChangeRow",
         "SupervisionPinRow",
+        "ToolAttachmentRow",
     ]
 
 
