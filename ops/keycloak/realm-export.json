@@ -245,7 +245,14 @@
       "the composites below would land on a role nobody holds.",
       "",
       "None of these is a capability. They decide what a person may do to their own account in",
-      "Keycloak's Account Console and nothing in this system reads them."
+      "Keycloak's Account Console and nothing in this system reads them.",
+      "",
+      "brain-langfuse-payload is the one realm role this system does read, and it is not a",
+      "capability either: it admits reading a run's stored trace, which is masked, and nothing",
+      "else (brain.ops.tracing.PAYLOAD_ROLE). It is given to an operator for an incident and",
+      "taken away after, and every read under it is recorded before it happens. It reaches a",
+      "token through the payload role mapper on brain-identity, which scopeMappings restricts",
+      "to this role alone."
     ],
     "realm": [
       {
@@ -253,6 +260,11 @@
         "description": "${role_default-roles}",
         "composite": true,
         "composites": { "client": { "account": ["view-profile", "manage-account"] } }
+      },
+      {
+        "name": "brain-langfuse-payload",
+        "description": "Reads a run's stored trace. Held for an incident and taken away after.",
+        "composite": false
       }
     ],
     "client": {
@@ -345,8 +357,30 @@
             "access.token.claim": "true"
           },
           "_comment": "Without an explicit audience mapper, a token minted for the console carries no aud for the API, and validate_token refuses it. That refusal is correct: a token is issued for a party, and accepting one issued for somebody else is the confused deputy. This sits on the brain-identity client scope rather than on brain-api's own protocolMappers, where it was first written. A dedicated mapper applies to tokens issued FOR that client, and brain-api has standardFlow, directAccess, serviceAccounts and implicit all disabled, so no token is ever issued for it and the mapper could never fire. The comment above described precisely the failure its own placement guaranteed: every console sign-in would have completed at Keycloak and then been refused by validate_token for WRONG_AUDIENCE. brain-console carries brain-identity as a default client scope, so here it applies to exactly the tokens that need it."
+        },
+        {
+          "name": "payload role",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "config": {
+            "claim.name": "realm_access.roles",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "false"
+          },
+          "_comment": "Writes the realm roles in the token's scope into realm_access.roles, and the scope holds one: brain-console has fullScopeAllowed false and scopeMappings below maps brain-identity to brain-langfuse-payload alone, so a console token carries that role when its holder has it and no realm role otherwise. brain.trace_routes.payload_roles_of reads it for a payload read, and nothing else in this system reads a Keycloak role. Access token only, for the reason the amr mapper gives."
         }
       ]
+    }
+  ],
+
+  "scopeMappings": [
+    {
+      "clientScope": "brain-identity",
+      "roles": ["brain-langfuse-payload"],
+      "_comment": "The one realm role a product token may carry. Without this and fullScopeAllowed false on brain-console, the payload role mapper would write every realm role the holder has, default-roles-brain among them, which is a claim nothing asked for."
     }
   ],
 
@@ -357,6 +391,7 @@
       "description": "The browser app. Public client, authorisation code with PKCE.",
       "enabled": true,
       "publicClient": true,
+      "fullScopeAllowed": false,
       "protocol": "openid-connect",
       "standardFlowEnabled": true,
       "implicitFlowEnabled": false,
