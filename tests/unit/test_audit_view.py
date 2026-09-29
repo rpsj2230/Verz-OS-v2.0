@@ -41,6 +41,7 @@ from brain.audit.record import (
     ApprovalVerdict,
     AuditRecorder,
     BreachChange,
+    BrowserSessionChange,
     ChannelBindingChange,
     ConnectorChange,
     DenyReason,
@@ -407,6 +408,11 @@ CALLS: dict[str, dict[str, object]] = {
         "change": ChannelBindingChange.BOUND,
     },
     "pack": {"name": "helpdesk", "change": PackChange.VERSIONED, "version": 2},
+    "browser_session": {
+        "run_id": "run-1",
+        "change": BrowserSessionChange.ENDED,
+        "recording": "d" * 64,
+    },
     "certification": {
         "grant_id": "1f0e6a4c-2b8d-4f7a-9c1e-5d3b2a7f8e90",
         "decision": ReviewDecision.KEEP,

@@ -578,6 +578,10 @@ WRITTEN_BY_CHECKS = (
     "ops.outbox_delivery",
     "gate.grants_version",
     "gate.policy_epoch",
+    "agent.browser_envelope",
+    "agent.browser_session",
+    "obs.trace_step",
+    "obs.trace_read",
     "ops.budget_version",
 )
 
@@ -651,10 +655,11 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         )
     ):
         assert outcomes.pop(model_check.name)[0] == NOT_RUN, model_check.name
-    # Every act that exists was seen, and the leaf still cannot close: see its module.
+    # Every act, the chain, the trace and the export were seen, and no deploy is recorded here to
+    # be kept out of the export: `tests/unit/test_acceptance_audit.py` records one and passes.
     assert outcomes.pop("each_audited_act_is_in_the_ledger_and_a_missing_entry_is_caught") == (
         NOT_RUN,
-        acceptance_audit.A_BROWSER_SESSION_AND_A_TRACE_STORE_ARE_NOT_BUILT,
+        acceptance_audit.NO_DEPLOYMENT_IS_RECORDED_TO_KEEP_OUT,
     )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
     assert len(outcomes) == 41
