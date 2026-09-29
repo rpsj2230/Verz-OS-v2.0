@@ -102,15 +102,10 @@ def test_every_leaf_a_check_names_is_a_leaf_of_the_work_breakdown() -> None:
 
 
 def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
-    """Held per module, so a package adding checks in a module of its own changes only its own line
-    here: limits, channels and documents, then volume, refusals and a head's audit, then Lark
-    chat's three, the skill library's four, the models' eleven and the audit's one, the
-    connectors' four, the tools' four, a document's life in four, the classified tables' three,
-    an answer's evidence in six, the connector framework's nine, retrieval's seven,
-    ingestion's seven, threads' four and a document's whole life in one, the modules in
-    `CHECK_MODULES` order rather than the order a process imported them. Delete this and a
-    check can drop out of the suite with the page simply listing one fewer row, or the page can
-    lead with whichever module was imported first."""
+    """Held per module, so a package adding checks in a module of its own changes only its own
+    lines here, the modules in `CHECK_MODULES` order rather than the order a process imported
+    them. Delete this and a check can drop out of the suite with the page simply listing one fewer
+    row, or the page can lead with whichever module was imported first."""
     by_module: dict[str, list[str]] = {}
     for one in registered():
         by_module.setdefault(one.run.__module__, []).append(one.name)
@@ -219,6 +214,14 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
     # The canvas's door; `tests/unit/test_acceptance_automation.py`.
     assert by_module["brain.ops.acceptance_checks_automation"] == [
         "a_flow_step_gets_its_owner_s_rows_and_nothing_its_ceiling_adds",
+    ]
+    assert by_module["brain.ops.acceptance_checks_organisation"] == [
+        "departments_a_staff_source_names_are_founded_once",
+        "the_staff_sync_places_people_where_its_source_says",
+    ]
+    # The staff sync's accounts, with no sign-in service called; `test_staff_accounts_run.py`.
+    assert by_module["brain.ops.acceptance_checks_accounts"] == [
+        "the_staff_sync_gives_the_active_an_account_and_closes_a_leaver_s",
     ]
     assert list(by_module) == list(acceptance.CHECK_MODULES)
     oversight = {one.name: one.leaves for one in registered()}
@@ -686,6 +689,10 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     for first, second in zip(waited[1], bound[1], strict=True):
         assert (first.name, first.outcome) == (second.name, second.outcome)
     outcomes = {one.name: (one.outcome, one.reason) for one in waited[1]}
+    # Every registered check ran, by name, and nothing else did: derived rather than counted,
+    # so a package adding a check changes no line here.
+    suite = [one.name for one in registered()]
+    assert list(outcomes) == suite
     assert outcomes.pop("asking_past_a_window_is_refused_with_a_retry_hint")[0] == NOT_RUN
     assert outcomes.pop("the_rate_limits_screen_lists_the_windows_refusing_now")[0] == NOT_RUN
     assert outcomes.pop("a_skill_is_imported_from_a_github_commit_and_from_an_address") == (
@@ -726,9 +733,8 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     ):
         assert outcomes.pop(worker_check) == (NOT_RUN, acceptance_deployment.NOT_IN_A_WORKER)
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
-    assert len(outcomes) == 58
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 184
+    assert runs == [(2,)] and len(recorded) == 2 * len(suite)
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }

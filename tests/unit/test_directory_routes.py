@@ -366,6 +366,7 @@ def test_every_person_is_listed_whether_or_not_they_hold_a_grant(
         False,
     )
     assert page["adding"] == routes.ADDING_A_PERSON_GRANTS_NOTHING
+    assert page["account_ready"] is None
     assert page["next_cursor"] is None
 
 
@@ -709,6 +710,11 @@ def test_beside_a_staff_list_nobody_is_added_and_a_holder_is_told_why(
     assert (nothing.status_code, nothing.json()["message"]) == (404, Absent.public_message)
     assert not [one for one in held.statements if one.startswith("INSERT")]
     assert (page["may_add"], page["adding"]) == (False, routes.PEOPLE_ARRIVE_FROM_THE_STAFF_SOURCE)
+    # The sentence the owner asked for, written out here so it cannot drift with its constant.
+    assert page["account_ready"] == (
+        "Your account is ready. Go to the sign-in page, press Forgot password and enter your "
+        "work email."
+    )
 
 
 def test_an_install_reading_no_list_is_told_apart_from_one_reading_any() -> None:

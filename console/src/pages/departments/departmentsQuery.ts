@@ -38,6 +38,39 @@ export {
   type UnplacedRow,
 } from "../governPeopleQuery";
 
+/**
+ * The departments the staff source names that are not created yet, and creating the confirmed ones
+ * (M27.7.4). Read for a reader who may create departments; everybody else is answered none.
+ */
+export const SOURCE_DEPARTMENTS_API_PATH = "/govern/departments/from-staff-source";
+
+/** One department the staff source names, as it spells it, with the short name it would get. */
+export interface SourceDepartment {
+  readonly name: string;
+  readonly slug: string;
+}
+
+/** What is offered, or nothing for an unreadable body. */
+export function readSourceDepartments(payload: unknown): { readonly to_found: readonly SourceDepartment[] } {
+  if (typeof payload !== "object" || payload === null) {
+    return { to_found: [] };
+  }
+  const found = (payload as { to_found?: unknown }).to_found;
+  return { to_found: Array.isArray(found) ? (found as SourceDepartment[]) : [] };
+}
+
+/** What one press created and the names it could not, or neither for an unreadable body. */
+export function readFounded(payload: unknown): { readonly created: readonly SourceDepartment[]; readonly missed: readonly string[] } {
+  if (typeof payload !== "object" || payload === null) {
+    return { created: [], missed: [] };
+  }
+  const body = payload as { created?: unknown; not_founded?: unknown };
+  return {
+    created: Array.isArray(body.created) ? (body.created as SourceDepartment[]) : [],
+    missed: Array.isArray(body.not_founded) ? (body.not_founded as string[]) : [],
+  };
+}
+
 /** Renaming a scope's label (M27.11.1). Its short name never changes. */
 export const RENAME_SCOPE_API_PATH = "/govern/departments/scopes/rename";
 export const SCOPES_API_PATH = "/govern/scopes";
