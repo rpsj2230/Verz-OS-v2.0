@@ -128,7 +128,11 @@ search through `model_lane_for`, and a narrowed question is neither looked up in
 answer cache, whose key has no kind. See `A_NARROWED_QUESTION_IS_NOT_THE_UNNARROWED_ONE`.
 
 Task ids: M31.1.4.1, M31.1.4.3, M31.1.4.4, M32.5.2.1, M1.1.7, M1.8.2, M23.1.1, M23.1.5, M8.2.2
-Task ids: M7.6.1
+**An answered question is kept in its asker's thread (M9.1.1).** `remembered` writes the exchange
+through `brain.chat.remember` after the lane answers, and the response names the thread in
+`THREAD_HEADER`, which a follow-up sends back as `Question.thread`.
+
+Task ids: M7.6.1, M9.1.1, M9.1.2
 """
 
 from __future__ import annotations
@@ -822,6 +826,13 @@ AN_ANSWER_IS_COMPUTED_FOR_ONE_REACH_AND_CACHED_BY_NOBODY: Final = (
 )
 
 
+#: The response header naming the thread an answer was kept in.
+THREAD_HEADER: Final = "x-thread-id"
+
+#: The longest thread id a question may name: a UUID's text.
+THREAD_ID_CHARS: Final = 36
+
+
 class Question(BaseModel):
     """One question, bounded the way the cache bounds one.
 
@@ -844,6 +855,10 @@ class Question(BaseModel):
     #: narrowed question is not looked up in or kept by the answer cache, whose key has no kind:
     #: see `A_NARROWED_QUESTION_IS_NOT_THE_UNNARROWED_ONE`.
     kinds: tuple[KnowledgeKind, ...] = Field(default=(), max_length=len(KnowledgeKind))
+    #: The thread this question continues, as the page holds its id, or None for a new one
+    #: (M9.1.1, M9.1.2). An id that is not this person's starts a new thread and says nothing
+    #: about the id: see `brain.chat.thread_store.AN_ID_THAT_IS_NOT_YOURS_STARTS_A_NEW_THREAD`.
+    thread: Annotated[str, StringConstraints(max_length=THREAD_ID_CHARS)] | None = None
 
 
 def row_readers(registry: ToolRegistry) -> dict[tuple[str, str], RowReader]:
@@ -1480,6 +1495,40 @@ async def answered_for(
     return answered
 
 
+async def remembered(
+    request: Request, asking: Answering, ask: Question, answered: Answered
+) -> str | None:
+    """Keep this exchange in the asker's thread, and say which thread (M9.1.1).
+
+    `brain.chat.remember.remember` over this process's store, with the policies the answer was
+    redacted under, which are what a stored answer's references are re-checked against. A
+    failure to keep it is logged and the answer still goes out: the person asked a question, and
+    losing its transcript is not a reason to withhold the answer.
+    """
+    from brain.chat.remember import remember, threads_of
+
+    registry = getattr(request.app.state, "tools", None)
+    try:
+        tables = await classified_lane_of(request.app.state)
+        policies = {
+            **(field_policies(registry) if isinstance(registry, ToolRegistry) else {}),
+            **tables.policies,
+        }
+        return await remember(
+            threads_of(request.app.state),
+            principal_id=asking.principal.id,
+            thread_id=ask.thread,
+            channel=asking.channel,
+            question=ask.question,
+            answered=answered,
+            policies=policies,
+            now=asking.now,
+        )
+    except Exception as exc:
+        log.warning("thread.not_kept", error=type(exc).__name__)
+        return None
+
+
 @router.post("/answer", responses=LIMITED_RESPONSES)
 async def answer(request: Request, recorder: Ingress, asked: Asked, ask: Question) -> Response:
     """One question, answered as a stream of events, at this caller's reach.
@@ -1508,10 +1557,14 @@ async def answer(request: Request, recorder: Ingress, asked: Asked, ask: Questio
     outcome = await answered_for(request, recorder, Answering.of(asked), ask)
     if isinstance(outcome, StoreVerdict):
         return asked_too_often(request, outcome)
+    thread = await remembered(request, Answering.of(asked), ask, outcome)
     return StreamingResponse(
         frames_of(outcome),
         media_type=EVENT_STREAM,
         headers={
+            # The thread the exchange was kept in, which the page continues by (M9.1.1). Empty
+            # when nothing was kept: a referred question, or a process with no database.
+            THREAD_HEADER: thread or "",
             # A permission requirement rather than a performance note. See the constant above.
             "Cache-Control": "no-store",
             # nginx buffers a proxied response by default, which turns a stream into one
