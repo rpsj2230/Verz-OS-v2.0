@@ -129,16 +129,40 @@ export function testProblems(to: string): FieldProblem[] {
   return to.trim() === "" ? [{ field: "to", code: "blank", message: "Say where the test message goes, in the vendor's terms." }] : [];
 }
 
+/**
+ * Every part of a secret left empty while another was typed. A secret of parts is saved whole,
+ * every part at once or none to keep the ones held, which is
+ * `brain.channels.adapter.SEVERAL_PARTS_ARE_WRITTEN_AS_ONE` said beside the fields.
+ */
+export function partProblems(parts: readonly string[], typed: Readonly<Record<string, string>>): FieldProblem[] {
+  const given = parts.filter((part) => (typed[part] ?? "") !== "");
+  if (given.length === 0 || given.length === parts.length) {
+    return [];
+  }
+  return parts
+    .filter((part) => (typed[part] ?? "") === "")
+    .map((part) => ({
+      field: part,
+      code: "blank",
+      message: `Paste ${part} too: every part of the secret is saved at once, or leave them all empty to keep the ones held.`,
+    }));
+}
+
 /** The body of one set-up, as `brain.channel_routes.ChannelAsked` declares it. */
 export function setupBody(
   enabled: boolean,
   fields: readonly string[],
   values: Readonly<Record<string, string>>,
   secret: string,
-): { enabled: boolean; tenant: Record<string, string>; secret?: string } {
+  parts: Readonly<Record<string, string>> = {},
+): { enabled: boolean; tenant: Record<string, string>; secret?: string; secret_parts?: Record<string, string> } {
   const tenant: Record<string, string> = {};
   for (const field of fields) {
     tenant[field] = (values[field] ?? "").trim();
+  }
+  const typed = Object.values(parts).some((one) => one !== "");
+  if (typed) {
+    return { enabled, tenant, secret_parts: { ...parts } };
   }
   return secret === "" ? { enabled, tenant } : { enabled, tenant, secret };
 }

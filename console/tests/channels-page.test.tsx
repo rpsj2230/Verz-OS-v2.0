@@ -20,7 +20,7 @@ import { TENANT_FORMAT } from "../src/pages/channelsQuery";
 import { ACT_LABELS, UNAVAILABLE } from "../src/pages/channels/channelActions";
 import { SWITCH_OFF_CONSEQUENCE } from "../src/pages/channels/ChannelDetailPage";
 import { UNBIND_CONSEQUENCE } from "../src/pages/channels/ChannelDashboard";
-import { SECRET_FORMAT } from "../src/pages/channels/ChannelProfile";
+import { partLabel, SECRET_FORMAT } from "../src/pages/channels/ChannelProfile";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { apiDocument } from "./support/openapi";
 import { PAGES } from "./support/pageCases";
@@ -51,6 +51,7 @@ function row(overrides: Record<string, unknown> = {}): Record<string, unknown> {
     events_address: "",
     steps: [],
     tenant_fields: ["reply_url"],
+    secret_parts: [],
     tenant: { reply_url: "https://hooks.example.test/reply" },
     changed_at: AT,
     changed_by: "u_ada",
@@ -475,6 +476,70 @@ describe("connecting a channel one screen at a time", () => {
       expect(flow().querySelector('form[aria-label="Send test message on Email"]')).not.toBeNull();
     });
     expect(document.body.innerHTML).not.toContain(SECRET_TYPED);
+  });
+
+  test("a secret of two parts is typed in two fields and sent whole, never one part alone", async () => {
+    // What breaks if this is deleted: Slack's form takes one secret field that no wire can read, or
+    // saves a new signing secret beside an old token, which verifies and then cannot send.
+    const slack = row({
+      channel: "slack",
+      label: "Slack",
+      status: "not_set_up",
+      secret: "none",
+      health: "not_set_up",
+      last_delivered_at: null,
+      events_path: "/api/v1/channels/slack/events",
+      events_address: "https://brain.example.test/api/v1/channels/slack/events",
+      tenant_fields: ["bot_id"],
+      secret_parts: ["signing_secret", "bot_token"],
+      tenant: {},
+      changed_at: null,
+      changed_by: null,
+      changed_by_name: null,
+      steps: [
+        aStep("create", { asks: ["events_address"], copy_text: "{}", copy_label: "Copy the app manifest" }),
+        aStep("save", { asks: ["bot_id", "signing_secret", "bot_token"] }),
+        aStep("verify"),
+      ],
+    });
+    const read = answers({
+      "/api/v1/console/channels/slack": slack,
+      "/api/v1/console/channels/slack/stats": { ...stats(), channel: "slack" },
+      "/api/v1/channels/slack/health": { ...HEALTH, channel: "slack" },
+      "/api/v1/channels/slack/bindings": { ...BOUND, channel: "slack", items: [] },
+      "/api/v1/channels/slack/deliveries": { channel: "slack", deliveries: [] },
+    });
+    const { container, sent } = await consoleAt("/channels/slack", read);
+    fireEvent.click(button(container, "Connect Slack"));
+    fireEvent.click(button(flow(), "Step 2 of 3"));
+    const form = flow().querySelector<HTMLFormElement>('form[aria-label="Set up Slack"]') as HTMLFormElement;
+    const secrets = [...form.querySelectorAll<HTMLInputElement>('[data-slot="secret-field"] input')];
+    expect(secrets).toHaveLength(2);
+    expect(form.textContent).toContain(partLabel("signing_secret"));
+    expect(form.textContent).toContain(partLabel("bot_token"));
+    fireEvent.change(form.querySelector('input[name="bot_id"]') as HTMLInputElement, { target: { value: "U0BRAINBOT" } });
+    fireEvent.input(secrets[0] as HTMLInputElement, { target: { value: SECRET_TYPED } });
+    fireEvent.click(button(form, ACT_LABELS.save));
+    expect(form.querySelector('[aria-label="Problems with bot_token"]')?.textContent).toContain("Paste bot_token too");
+    expect(document.body.querySelector('[data-slot="confirm-dialog"]')).toBeNull();
+
+    fireEvent.input(secrets[1] as HTMLInputElement, { target: { value: "xoxb-typed-in-0123" } });
+    fireEvent.click(button(form, ACT_LABELS.save));
+    fireEvent.click(button(dialog(), ACT_LABELS.save));
+    await waitFor(() => {
+      expect(sent.filter((one) => one.method === "PUT").map((one) => [one.path, one.body])).toEqual([
+        [
+          "/api/v1/channels/slack",
+          {
+            enabled: false,
+            tenant: { bot_id: "U0BRAINBOT" },
+            secret_parts: { signing_secret: SECRET_TYPED, bot_token: "xoxb-typed-in-0123" },
+          },
+        ],
+      ]);
+    });
+    expect(document.body.innerHTML).not.toContain(SECRET_TYPED);
+    expect(document.body.innerHTML).not.toContain("xoxb-typed-in-0123");
   });
 
   test("a channel with no steps offers no connect button", async () => {
