@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-29T17:20:24.107441+00:00",
-  "commit": "f914ed6f",
-  "commit_subject": "Three tasks close on what the install recorded: the template signing key and the signed built-ins, a worker run's one-read lease on a connector key, and the canvas's deterministic-only rule (#273)",
+  "generated_at": "2026-09-29T17:21:15.994005+00:00",
+  "commit": "7e9d101f",
+  "commit_subject": "Three things for the owner to do go on his page: the Lark chat channel, connecting three sources, and the vault switch (#280)",
   "total": 1576,
   "done": 469,
   "percent": 29.8,
