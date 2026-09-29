@@ -32,6 +32,7 @@ export const ACTION_LABELS: Readonly<Record<string, string>> = Object.freeze({
   compose_change: "Agent's tools or sources changed",
   approval: "Approval decided",
   record_read: "Protected record read",
+  browser_session: "Agent browser session",
   sign_in: "Sign-in link changed",
   session_end: "Session ended",
   certification: "Access reviewed",
