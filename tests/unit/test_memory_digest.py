@@ -698,6 +698,15 @@ def test_no_second_caller_of_a_memory_listing_has_arrived_unargued() -> None:
     `test_an_undo_locks_the_memory_reads_its_marks_and_the_clock_then_writes_one_correction` in
     `tests/unit/test_memory_store.py`.
 
+    **`brain.mine_routes` arrived on 2026-09-29**, for M16.4.2 and M33.3.1.4, a person editing
+    and forgetting what is remembered about them. It builds a `Learning` from the person's own
+    stored rows and hands it to the store's undo and edit, as `brain.estate_routes` does, and
+    lists nothing. Like `brain.console.own_things`, which decides it, this is not a reach
+    question: the row is admitted by authorship, so a memory formed from somebody else's words is
+    refused as if it were not there. Its sibling is
+    `test_a_member_forgets_a_memory_formed_from_their_own_words` in
+    `tests/unit/test_mine_routes.py`.
+
     Delete this and the gap stops being visible, and a listing gets wired at the wrong reach
     by somebody who saw that a caller already existed and assumed the question was settled."""
     assert _callers_of("brain.memory.review") == [
@@ -711,6 +720,7 @@ def test_no_second_caller_of_a_memory_listing_has_arrived_unargued() -> None:
         "brain.console.reach_view",
         "brain.estate_routes",
         "brain.member_activity",
+        "brain.mine_routes",
         "brain.ops.memory_store",
     ]
 
