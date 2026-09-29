@@ -2,12 +2,126 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**5 items are open: 115 to 118,** four decisions about Lark sign-in, Lark Base visibility and approving
-from Lark cards, each with my recommendation, **and 91,** the checks only you can do on your install; it
-waits for the Knowledge upload grants (item 105) to land. Each says in plain terms what it is, what I
-recommend, and every step.
+**7 items are open: 115 to 120,** six decisions, each with my recommendation: Lark sign-in, Lark Base
+visibility, approving from Lark cards, how large an upload may be, and memory on your server for ten
+document tasks; **and 91,** the checks only you can do on your install, which waits for the Knowledge
+upload grants (item 105) to land. Each says in plain terms what it is, what I recommend, and every
+step.
 
 # Open
+
+## 120. Ten document tasks need 3,840 MB your server does not have free
+
+**In plain terms:** ten Wave 2 tasks read documents properly: tables and page layout in PDFs, scanned
+pages, Excel and PowerPoint, and search by meaning rather than by matching words. They all need one
+new service, the model server (decided in item 31), plus the worker that feeds it and a store for
+the original files. Together those need **3,840 MB**: 3,072 for the model server, 512 for the
+worker and 256 for the file store. Your server has **248 MB** that nothing has claimed. The tasks
+are M7.2.1, M7.2.3, M7.2.4, M7.2.6, M7.3.3, M7.3.4, M7.3.5, M7.7.8, M7.7.9 and M7.7.10.
+
+**What I measured today (29 September), read-only, on the live server.** The machine has 11,960 MB,
+as it did on 6 September. The figure that decides this is not what is free at this moment but what
+each container is allowed to take, because a container can take its allowance the moment it gets
+busy. Those allowances add up to 11,456 MB:
+
+| Whose | Containers | Allowed |
+|---|---|---|
+| The Company Brain | 9: the program, its database, cache, worker, two connection poolers, the vault, and Keycloak with its database | 5,440 MB |
+| Your other project: Dify | 10 | 3,712 MB |
+| Your other project: the old Langfuse | 2 | 1,280 MB |
+| Your other project: the old v1 worker (`verz-brain-worker-1`) | 1 | 1,024 MB |
+
+The other project's three rows are the same 6,016 MB as in item 25; nothing there has changed. Two
+more containers have no allowance and use real memory: Activepieces (827 MB right now) and Coolify
+with its proxy (about 610 MB). The server keeps 256 MB for itself, so 11,960 less 11,456 less 256
+leaves the 248 MB above. It is also already using 1,233 MB of its 2,047 MB of swap, which means it
+has run short of real memory at some point.
+
+**Which of the other project's containers are in use.** Lines each wrote to its log in the last 24
+hours: Dify's API 0, the old Langfuse 0, the old v1 worker 1 (a timeout warning), Activepieces
+17,414.
+So Activepieces is in use and I leave it out of every option below. v1's nightly Laravel sync is a
+separate run at 02:15, allowed 768 MB for the few minutes it runs, and does not use the old worker.
+
+**Option A: take down Dify, the old Langfuse and the old v1 worker.** That frees their 6,016 MB, so
+6,264 MB is unclaimed and the ten tasks fit with **2,424 MB to spare**. Counting what Activepieces and
+Coolify use today, about 990 MB to spare, and about 220 MB during the few minutes of v1's nightly
+sync. It costs nothing, and it can be undone: their data stays on
+disk, and one command brings each back. Only you know whether anything of v1 still needs them.
+
+**Option B: a larger server, for example 24 GB instead of 12.** Everything fits and the other
+project is untouched. It costs a monthly fee and a restart while your provider resizes it.
+
+**Option C: move the ten tasks to a later wave.** Wave 2 closes without them. Until then the console
+reads plain text, Markdown, PDF and Word files as text only: tables inside a PDF, scanned pages and
+pictures are not read, Excel and PowerPoint files are not accepted, and search matches words rather
+than meaning. Nothing else in Wave 2 waits on these ten.
+
+**My recommendation: A**, if nothing you still use needs those three. It is free, it can be undone,
+and it is the only option that lets the ten tasks go ahead this week. If you are not sure about v1,
+choose C rather than B: B pays for room that A gives for nothing. Whichever you choose, building the
+model server itself is my work and needs nothing more from you. One thing A does not solve: the
+Brain's personal-data detector (1,536 MB, a later task) would still not fit beside these. That is a
+separate question for later.
+
+**What I need from you:** reply "120: A", "120: B" or "120: C". If A, these are the steps (about
+five minutes):
+
+1. On your Mac, open **Terminal**.
+2. Type `ssh verz-vps` and press Return. You are now on your server.
+3. Take down Dify: type `cd /opt/verz-dify/dify/docker && docker compose down` and press Return. It
+   stops and removes Dify's ten containers. Its data stays in that folder.
+4. Take down the old Langfuse: type `cd /opt/verz-langfuse && docker compose down` and press Return.
+5. Stop the old v1 worker, and only the worker: type `cd /opt/verz-brain/infra/vps && docker compose
+   stop worker` and press Return. The nightly Laravel sync in the same folder carries on as before.
+6. Type `exit` and press Return.
+7. Tell me "120: A done". I will measure the server again and record the new figure in the product's
+   budget, so the model server is sized against what is really there.
+
+To undo any of it later, run `docker compose up -d` in the same folder (or `docker compose start
+worker` for step 5).
+
+## 119. How large a file may people upload?
+
+**In plain terms:** the Brain sets a size limit on each type of file people can add to Knowledge.
+Today the console takes PDFs up to 50 MB, Word files up to 25 MB, and plain text and Markdown up to
+5 MB. The limits also list PowerPoint at 50 MB, Excel at 25, and CSV and images at 10; those are
+accepted once the model server (item 120) runs. The limit you choose decides how much memory the
+model server needs to read the largest file, so it is yours to choose.
+
+**What I measured.** Reading a file takes several times its size in memory. The product's own rule
+of thumb is six times for a PDF and eight for Word, Excel and PowerPoint, so a 50 MB PDF needs about
+300 MB, and a 50 MB PowerPoint about 400 MB. The model server is sized at 3,072 MB. Its three models
+take 2,496 MB of that and the program around them 512, which leaves **64 MB for one document at a
+time**. That reads a PDF of about 10 MB, or a Word file of about 8 MB. None of these figures has been
+measured on a real file yet, because the model server has never run; they are the product's
+arithmetic.
+
+**Until the model server runs,** PDF and Word files are read by the Brain's own program, which is
+allowed 1,024 MB. Today it was using 845 MB, with a peak of 955 MB, so it has room for a PDF of about
+10 to 30 MB. I also found a fault: the Brain checks such a file against the budget of a different
+container (448 MB), so a large PDF could run the program out of memory. That is the product's fault
+to fix, not yours to decide. I have recorded it as its own task, and it needs nothing from you.
+
+**Option A: 25 MB for every document type.** Word and Excel stay where they are; PDF and PowerPoint
+come down from 50. The model server grows by 136 MB, to 3,208 MB. Anything over 25 MB is refused
+with a message asking the person to split it.
+
+**Option B: keep 50 MB.** The model server grows by 336 MB, to 3,408 MB.
+
+**Option C: keep the model server's size and lower the limit to 10 MB** (8 MB for Word, Excel and
+PowerPoint). No extra memory, and ordinary PDFs of 15 to 30 MB are refused.
+
+**Option D: keep 50 MB and read large files a few pages at a time.** No extra memory, and more to
+build. It is simple for PDFs and much harder for PowerPoint.
+
+**My recommendation: A.** One figure for every document is easy for people to remember. 25 MB covers
+nearly all everyday documents, and it costs the least memory of the options that do not refuse
+ordinary files. B asks for 336 MB on a server that has 248 MB unclaimed (item 120). D is build
+effort for rare files.
+
+**What I need from you:** reply "119: A", "119: B", "119: C" or "119: D", or give a different figure
+in MB. Nothing on your server changes; I size the model server from your answer.
 
 ## 118. Should an approval card reach the approver in Lark as soon as it is raised?
 
