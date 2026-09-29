@@ -16,11 +16,16 @@ half is proved against a stand-in Keycloak in `tests/unit/test_sign_in_accounts.
 every principal is a reserved one, found through a roster join the check writes, so no person is
 made; and the account identifiers are the run's own and name no account on any sign-in service.
 
+**The second check is the standing step (package 2 of item 115)**: reserved people joined to the
+list, one suspended, one of a type not allowed, one an administrator disabled, and one working; it
+shows who cannot sign in or ask, through the same live-principal read the gate makes, and who is let
+back in and who is not.
+
 Rejected: calling the install's Keycloak with the release's accounts client and a reserved person,
 which would make a real account on the owner's sign-in service, and a real reset email if anybody
 pressed Forgot password for it. The coordinator's rule for this check was that it must not.
 
-Task ids: M38.5.1, M1.6.16, M1.6.17
+Task ids: M38.5.1, M1.6.16, M1.6.17, M1.6.14, M1.6.15
 """
 
 from __future__ import annotations
@@ -33,6 +38,8 @@ from brain.gate.admission import Assurance
 from brain.gate.context import Channel
 from brain.identity.organisation_sync import sync_actor
 from brain.identity.principal_directory import SIGN_IN_CHANNEL, subject_digest
+from brain.identity.principal_state_store import StoredPrincipalStates
+from brain.identity.principal_store import StoredPrincipals
 from brain.identity.staff_accounts import (
     DEFAULT_ALLOWED,
     AccountRefusal,
@@ -47,10 +54,12 @@ from brain.identity.staff_source import (
     Roster,
     StaffRecord,
 )
+from brain.identity.standing import standings
 from brain.install import InstallError, value_of
 from brain.ops.acceptance import RESERVED_DEPARTMENTS, CheckFailedError, check
 from brain.ops.acceptance_run import Harness
-from brain.ops.staff_accounts_run import open_or_close_person, person_for
+from brain.ops.staff_accounts_run import person_for
+from brain.ops.standing_run import apply_standing, plan_standing
 from brain.tables.identity import PrincipalIdentityRow, PrincipalRow
 
 #: The staff source the check lists people from. No install chooses a source by this name.
@@ -191,15 +200,13 @@ async def the_staff_sync_gives_the_active_an_account_and_closes_a_leaver_s(h: Ha
     if await _signs_in_as(h, issuer, made) != joiner:
         raise CheckFailedError("the new account signs in as somebody other than the joiner")
 
-    for account in plan.to_disable:
-        await open_or_close_person(
-            h.sessions,
-            issuer=issuer,
-            account=account,
-            disabled=True,
-            actor=actor,
-            trace_id=h.trace_id,
-        )
+    # The standing step the run applies after the accounts step: the leaver and the outsourced
+    # person kept out, the two still working let alone.
+    where = standings(members=(), writes=(), people=roster.people)
+    kept = await plan_standing(
+        h.sessions, source=SOURCE, standings=where, allowed=DEFAULT_ALLOWED, now=h.now
+    )
+    await apply_standing(h.sessions, kept, source=SOURCE, now=h.now)
     if not await _disabled(h, leaver):
         raise CheckFailedError("the leaver's Brain person was not disabled")
     if await _disabled(h, joiner) or await _disabled(h, by_hand):
@@ -215,3 +222,82 @@ async def the_staff_sync_gives_the_active_an_account_and_closes_a_leaver_s(h: Ha
     )
     if strangers.first() is not None:
         raise CheckFailedError("an account was bound to a person the check did not make")
+
+
+@check(
+    leaves=("M1.6.14", "M1.6.15"),
+    sentence=(
+        "On reserved people joined to a staff list: one it says is suspended and one of a type the "
+        "install does not allow cannot sign in or ask; when it lists the first as active again "
+        "they can; one an administrator disabled stays disabled whatever the list says; and "
+        "somebody the list says is working is never touched."
+    ),
+)
+async def the_staff_list_keeps_out_whom_it_names_and_lets_back_its_own(
+    h: Harness,
+) -> None:
+    first, second = RESERVED_DEPARTMENTS
+    suspended, working = h.principal(first, "one"), h.principal(first, "two")
+    outsourced, by_hand = h.principal(second, "one"), h.principal(second, "two")
+    for pid, department in (
+        (suspended, first),
+        (working, first),
+        (outsourced, second),
+        (by_hand, second),
+    ):
+        await h.person(pid, department=department)
+        await _joined(h, pid)
+    await StoredPrincipalStates(h.sessions).set_disabled(
+        by_hand,
+        disabled=True,
+        may=lambda _department: True,
+        by=h.actor,
+        ent_hash="0" * 32,
+        trace_id=h.trace_id,
+    )
+
+    def listed(pid: str, status: EmploymentStatus, kind: EmploymentType) -> StaffRecord:
+        return StaffRecord(
+            _address(h, pid),
+            "Acceptance check",
+            active=status is EmploymentStatus.ACTIVE,
+            status=status,
+            employment_type=kind,
+        )
+
+    active, regular = EmploymentStatus.ACTIVE, EmploymentType.REGULAR
+    before = (
+        listed(suspended, EmploymentStatus.SUSPENDED, regular),
+        listed(working, active, regular),
+        listed(outsourced, active, EmploymentType.OUTSOURCED),
+        listed(by_hand, active, regular),
+    )
+    once = await plan_standing(
+        h.sessions,
+        source=SOURCE,
+        standings=standings(members=(), writes=(), people=before),
+        allowed=DEFAULT_ALLOWED,
+        now=h.now,
+    )
+    await apply_standing(h.sessions, once, source=SOURCE, now=h.now)
+    principals = StoredPrincipals(h.sessions)
+    if await principals.live_principal(suspended) is not None:
+        raise CheckFailedError("somebody the list says is suspended can still sign in and ask")
+    if await principals.live_principal(outsourced) is not None:
+        raise CheckFailedError("somebody of a type the install does not allow can still ask")
+    if await principals.live_principal(working) is None:
+        raise CheckFailedError("somebody the list says is working was kept out")
+
+    after = (listed(suspended, active, regular), *before[1:])
+    again = await plan_standing(
+        h.sessions,
+        source=SOURCE,
+        standings=standings(members=(), writes=(), people=after),
+        allowed=DEFAULT_ALLOWED,
+        now=h.now,
+    )
+    await apply_standing(h.sessions, again, source=SOURCE, now=h.now)
+    if await principals.live_principal(suspended) is None:
+        raise CheckFailedError("somebody the list lets back in is still kept out")
+    if await principals.live_principal(by_hand) is not None:
+        raise CheckFailedError("the list let back in somebody an administrator had disabled")
