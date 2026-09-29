@@ -9,6 +9,7 @@
 
 import { CONNECTORS_API_PATH, disconnectApiPath } from "../../../src/pages/connectorsQuery";
 import { probeApiPath } from "../../../src/pages/connectors/connectorProbe";
+import { acceptApiPath } from "../../../src/pages/connectors/DeclarationDrift";
 import { editApiPath, exportApiPath, keyApiPath } from "../../../src/pages/connectors/connectorSources";
 import { LARK_API_PATH, LARK_SWITCH_OFF_API_PATH, LARK_TEST_API_PATH } from "../../../src/pages/larkConnectQuery";
 import {
@@ -57,6 +58,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/connectors/SourceActs.tsx keyApiPath(name)": [
     at("POST /api/v1/connectors/{connector}/key", "keyApiPath", keyApiPath("xero")),
   ],
+  "src/pages/connectors/DeclarationDrift.tsx acceptApiPath(name)": [
+    at("POST /api/v1/connectors/{connector}/accept", "acceptApiPath", acceptApiPath("xero")),
+  ],
   "src/pages/connectors/TestConnection.tsx probeApiPath(name)": [
     at("POST /api/v1/connectors/{connector}/probe", "probeApiPath", probeApiPath("xero")),
   ],
@@ -90,6 +94,19 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: t("test_lark_connect", "test_switching_a_use_off_leaves_the_others_on_and_the_key_in_the_vault"),
     audit: A_SETTING_ENTRY_NO_TEST_FOLLOWS,
     behaviour: t("test_lark_connect", "test_switching_the_chat_channel_off_switches_its_record_off_and_keeps_its_ids"),
+  },
+  "POST /api/v1/connectors/{connector}/accept": {
+    row: t(
+      "test_connector_store",
+      "test_accepting_a_changed_declaration_keeps_its_text_and_the_ledger_names_both_digests",
+      true,
+    ),
+    audit: t(
+      "test_connector_store",
+      "test_accepting_a_changed_declaration_keeps_its_text_and_the_ledger_names_both_digests",
+      true,
+    ),
+    behaviour: t("test_connector_routes", "test_accepting_repins_the_declaration_and_the_source_is_read_again"),
   },
   "POST /api/v1/connectors/{connector}/disconnect": {
     row: CONNECTION_REACHES_THE_ROW_AND_THE_LEDGER,
