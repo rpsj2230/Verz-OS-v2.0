@@ -144,6 +144,7 @@ MIGRATION_MANIFEST_DRAFT = VERSIONS / "0149_agent_manifest_draft.py"
 MIGRATION_ACCESS_REQUEST_HANDLED = (
     VERSIONS / "0146_access_request_handled_and_certification_export.py"
 )
+MIGRATION_TRACE_AND_BROWSER_SESSION = VERSIONS / "0150_trace_store_and_browser_session.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -403,6 +404,13 @@ ACCEPTANCE_TABLES: tuple[str, ...] = ("ops.acceptance_result",)
 HALT_TABLES: tuple[str, ...] = ("ops.halt",)
 #: And the one 0145 adds: every pause, resume, reschedule, removal and adoption of an automation.
 AUTOMATION_CHANGE_TABLES: tuple[str, ...] = ("agent.automation_change",)
+#: And the three 0150 adds: a browser session on a sealed run, a run's trace graph, and each read of
+#: one.
+TRACE_AND_BROWSER_SESSION_TABLES: tuple[str, ...] = (
+    "agent.browser_session",
+    "obs.trace_step",
+    "obs.trace_read",
+)
 
 ALL_TABLES = (
     CORE_TABLES
@@ -472,6 +480,7 @@ ALL_TABLES = (
     + AUTOMATION_CHANGE_TABLES
     + MANIFEST_DRAFT_TABLES
     + ACCESS_REQUEST_HANDLED_TABLES
+    + TRACE_AND_BROWSER_SESSION_TABLES
 )
 
 
@@ -1294,6 +1303,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert manifest_draft.TABLES == MANIFEST_DRAFT_TABLES
     access_request_handled = migration_module(MIGRATION_ACCESS_REQUEST_HANDLED)
     assert access_request_handled.TABLES == ACCESS_REQUEST_HANDLED_TABLES
+    trace_and_browser_session = migration_module(MIGRATION_TRACE_AND_BROWSER_SESSION)
+    assert trace_and_browser_session.TABLES == TRACE_AND_BROWSER_SESSION_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1385,6 +1396,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(automation_change.TABLES)
         + tuple(manifest_draft.TABLES)
         + tuple(access_request_handled.TABLES)
+        + tuple(trace_and_browser_session.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1457,6 +1469,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(automation_change.TABLES),
         set(manifest_draft.TABLES),
         set(access_request_handled.TABLES),
+        set(trace_and_browser_session.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

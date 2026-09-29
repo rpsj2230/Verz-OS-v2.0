@@ -14,7 +14,7 @@ weak. So the screen is not a read every administrator's screen list carries; it 
 other administration capabilities, and `brain.identity.administration_reconciliation` grants it to
 an administrator appointed before it existed.
 
-**Every area can be checked, and four are named.** `CHECKED_BY` maps an area to the leaf that asks
+**Every area can be checked, and six are named.** `CHECKED_BY` maps an area to the leaf that asks
 for its checks, so the screen can say which task a row's check proves; an area with no leaf is
 still checkable, because M24.3.4 asks for its audit and tracing checks to be "recorded" in the same
 sense and a mechanism that refused an area would be a narrowing nobody asked for.
@@ -36,7 +36,7 @@ the row's proof leaves. It is product data about this release, as public as that
 records a check: only a person's sentence does that. Rejected: the console fetching the public page
 itself and matching leaves, which would be a second place deciding which check proves which row.
 
-Task ids: M1.8.8, M2.3.2, M5.6.5, M24.3.6
+Task ids: M1.8.8, M2.3.2, M5.6.5, M24.3.6, M11.8.13, M12.4.15
 """
 
 from __future__ import annotations
@@ -87,6 +87,8 @@ CHECKED_BY: Final[Mapping[str, str]] = {
     "Departments": "M2.3.2",
     "Models": "M5.6.5",
     "Observability": "M24.3.6",
+    "Connectors": "M11.8.13",
+    "Tools": "M12.4.15",
 }
 
 #: Where the register lives in the image, and in a checkout: `docs/` beside `src/`.

@@ -26,7 +26,15 @@ permitted, and a finished run is still a run somebody may ask about. The asker a
 are values, for the reason `0014` gives: a key into `auth.principal` would make deleting a
 person delete what was permitted in their name.
 
-Task ids: M19.2.3
+**A session is a row of its own, keyed by the run and pointing at its envelope** (M24.3.4). The
+envelope is what a run was permitted; `agent.browser_session` is a browser actually opened on it,
+under which trace, when it ended and the digest of the recording it kept. The key into the
+envelope is the one foreign key here and it is the point: a session can start only on a sealed
+envelope, so the agent and the person it ran for are read off that envelope rather than written a
+second time, and `0150`'s trigger names them in the ledger entry each end of a session leaves.
+`RESTRICT`, so the permission a session ran under cannot be deleted from under its record.
+
+Task ids: M19.2.3, M24.3.4
 """
 
 from __future__ import annotations
@@ -34,10 +42,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import CheckConstraint, DateTime, String
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
+from brain.audit.ledger import TRACE_ID
 from brain.browsing.targets import NAME_RE
 from brain.db import Base, TimestampMixin
 from brain.gate.leash import DIGEST, IDENTIFIER, ApprovalState
@@ -49,6 +58,7 @@ TARGET_CHARS = 64
 PRINCIPAL_CHARS = 128
 DIGEST_CHARS = 64
 STATE_CHARS = 16
+TRACE_ID_CHARS = 64
 
 
 class BrowserEnvelopeRow(TimestampMixin, Base):
@@ -92,6 +102,43 @@ class BrowserEnvelopeRow(TimestampMixin, Base):
         CheckConstraint(
             "(decided_by IS NULL) = (approval_state IS NULL OR approval_state = 'pending')",
             name="only_a_decided_approval_names_its_decider",
+        ),
+        {"schema": "agent"},
+    )
+
+
+class BrowserSessionRow(Base):
+    """`agent.browser_session`. One browser opened on a sealed envelope's run, and how it ended.
+
+    Inserted when the session starts and updated once, when it ends. See the module docstring.
+    """
+
+    __tablename__ = "browser_session"
+
+    run_id: Mapped[str] = mapped_column(
+        String(RUN_ID_CHARS),
+        ForeignKey("agent.browser_envelope.run_id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+    #: The run's trace, which its trace graph is keyed by and its ledger entries carry.
+    trace_id: Mapped[str] = mapped_column(String(TRACE_ID_CHARS), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: The sha256 of the transcript `brain.browsing.recording.write` stored, when it kept one.
+    recording_digest: Mapped[str | None] = mapped_column(String(DIGEST_CHARS), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(f"trace_id ~ '{TRACE_ID}'", name="trace_id_shape"),
+        CheckConstraint(
+            "ended_at IS NULL OR ended_at >= started_at", name="a_session_ends_after_it_starts"
+        ),
+        CheckConstraint(
+            f"recording_digest IS NULL OR recording_digest ~ '{DIGEST}'",
+            name="recording_digest_shape",
+        ),
+        CheckConstraint(
+            "recording_digest IS NULL OR ended_at IS NOT NULL",
+            name="a_recording_is_named_when_the_session_ends",
         ),
         {"schema": "agent"},
     )

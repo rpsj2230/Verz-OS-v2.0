@@ -101,14 +101,14 @@ def test_every_leaf_a_check_names_is_a_leaf_of_the_work_breakdown() -> None:
 
 
 def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
-    """Held per module, so a package adding checks in a module of its own changes only its own
-    line here: limits, channels and documents, then volume, refusals and a head's audit, then Lark
-    chat's three, the skill library's four, the models' eleven and the audit's one, the connectors'
-    three, the tools' three, a document's life in four, the classified tables' three, an answer's
-    evidence in four and the connector framework's nine, the modules in `CHECK_MODULES` order
-    rather than the order a process imported them. Delete this and a check can drop out of the
-    suite with the page simply listing one fewer row, or the page can lead with whichever module
-    was imported first."""
+    """Held per module, so a package adding checks in a module of its own changes only its own line
+    here: limits, channels and documents, then volume, refusals and a head's audit, then Lark
+    chat's three, the skill library's four, the models' eleven and the audit's one, the
+    connectors' four, the tools' three, a document's life in four, the classified tables' three,
+    an answer's evidence in four, the connector framework's nine and retrieval's seven, the
+    modules in `CHECK_MODULES` order rather than the order a process imported them. Delete this
+    and a check can drop out of the suite with the page simply listing one fewer row, or the page
+    can lead with whichever module was imported first."""
     by_module: dict[str, list[str]] = {}
     for one in registered():
         by_module.setdefault(one.run.__module__, []).append(one.name)
@@ -144,6 +144,7 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "manifest_review_refuses_a_projection_that_is_more_than_a_pointer",
         "a_sync_keeps_its_minimal_index_and_the_canary_reaches_no_table",
         "a_changed_declaration_makes_the_next_sync_refuse",
+        "a_source_is_connected_switched_off_and_upgraded_from_the_console",
     ]
     assert by_module["brain.ops.acceptance_checks_tools"] == [
         "every_registered_tool_is_a_catalogue_row_under_the_name_grammar",
@@ -178,6 +179,16 @@ def test_each_module_of_the_suite_declares_its_checks_in_order() -> None:
         "failures_open_the_breaker_and_a_refusal_is_retried_in_budget",
         "an_unreached_source_is_named_only_to_an_asker_who_could_see_it",
         "a_source_s_live_calls_are_measured_on_its_page",
+    ]
+    # Retrieval on the install's own index; `tests/unit/test_acceptance_retrieval.py`.
+    assert by_module["brain.ops.acceptance_retrieval"] == [
+        "a_typed_row_tool_reads_only_the_callers_rows_and_columns",
+        "a_word_in_a_title_outranks_a_word_in_passing",
+        "a_documents_passages_come_back_together_in_reading_order",
+        "a_narrow_reader_is_given_their_own_passages_past_a_nearer_crowd",
+        "hybrid_search_returns_what_each_leg_finds_fused_by_rank",
+        "the_database_withholds_passages_the_statement_did_not_filter",
+        "three_readers_get_everything_in_their_scope_and_nothing_else",
     ]
     assert list(by_module) == list(acceptance.CHECK_MODULES)
     oversight = {one.name: one.leaves for one in registered()}
@@ -224,6 +235,59 @@ def test_an_exception_s_message_never_reaches_a_result() -> None:
     assert reason_for(CheckFailedError("the window moved")) == (FAILED, "the window moved")
     assert reason_for(CheckNotRunError("no cache")) == (NOT_RUN, "no cache")
     assert reason_for(TimeoutError())[0] == FAILED
+
+
+def test_a_model_call_that_stopped_a_check_is_named_by_how_it_ended_and_by_nothing_it_carried() -> (
+    None
+):
+    """`A_MODEL_CALL_THAT_STOPS_A_CHECK_IS_NAMED_BY_HOW_IT_ENDED`. The moonshot check that timed
+    out on the owner's install on 2026-09-29 was recorded as "stopped on ProviderUnavailable" and
+    read as a planning fault until somebody read the worker's log. Every way a call can end has a
+    reason in the Models screen's words, a timeout says it timed out, and neither the step's
+    deployment nor the provider's own text reaches the reason. Delete this and the next provider
+    failure on the install is a type name again, or a reason starts quoting what a provider said.
+    """
+    from brain.models.driver import DriverFailure, ProviderUnavailable
+
+    said = "provider said: row 42 holds the cost 7.25"
+    shapes = [
+        DriverFailure(deployment_id="step-one", timed_out=True, detail=said),
+        DriverFailure(deployment_id="step-one", connection_failed=True, detail=said),
+        DriverFailure(deployment_id="step-one", context_exceeded=True, detail=said),
+        DriverFailure(deployment_id="step-one", refused=True, status=400, detail=said),
+        *(
+            DriverFailure(deployment_id="step-one", status=one, detail=said)
+            for one in (400, 401, 429, 503)
+        ),
+    ]
+    reasons = [reason_for(ProviderUnavailable(one)) for one in shapes]
+    assert all(outcome == FAILED for outcome, _ in reasons)
+    assert all(
+        reason.startswith(acceptance.A_MODEL_CALL_STOPPED_THE_CHECK) for _, reason in reasons
+    )
+    assert all("7.25" not in reason and "step-one" not in reason for _, reason in reasons)
+    # Eight endings, eight sentences: no two ways of failing read the same.
+    assert len({reason for _, reason in reasons}) == len(shapes)
+    assert reasons[0] == (
+        FAILED,
+        "a model call stopped the check: The provider did not answer in time.",
+    )
+
+
+def test_a_planner_that_found_no_step_is_named_by_its_own_public_sentence() -> None:
+    """The planner's refusal carries a sentence the product wrote for a person, and the reason is
+    that sentence, while the detail naming each skipped step is left out. Delete this and a check
+    stopped because no step was configured, or every step was resting, reads as a type name."""
+    from brain.models.routing import NoCompliantRoute
+
+    refused = NoCompliantRoute(
+        "tier=main has no usable rung: step-one=circuit_open",
+        public_message="No model is configured to handle that.",
+    )
+    assert reason_for(refused) == (
+        FAILED,
+        "no step of the ladder could be tried: No model is configured to handle that.",
+    )
 
 
 def test_a_run_is_owed_for_an_unchecked_commit_or_a_request_and_not_otherwise() -> None:
@@ -525,6 +589,10 @@ WRITTEN_BY_CHECKS = (
     "ops.outbox_delivery",
     "gate.grants_version",
     "gate.policy_epoch",
+    "agent.browser_envelope",
+    "agent.browser_session",
+    "obs.trace_step",
+    "obs.trace_read",
 )
 
 
@@ -597,15 +665,16 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         )
     ):
         assert outcomes.pop(model_check.name)[0] == NOT_RUN, model_check.name
-    # Every act that exists was seen, and the leaf still cannot close: see its module.
+    # Every act, the chain, the trace and the export were seen, and no deploy is recorded here to
+    # be kept out of the export: `tests/unit/test_acceptance_audit.py` records one and passes.
     assert outcomes.pop("each_audited_act_is_in_the_ledger_and_a_missing_entry_is_caught") == (
         NOT_RUN,
-        acceptance_audit.A_BROWSER_SESSION_AND_A_TRACE_STORE_ARE_NOT_BUILT,
+        acceptance_audit.NO_DEPLOYMENT_IS_RECORDED_TO_KEEP_OUT,
     )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
-    assert len(outcomes) == 34
+    assert len(outcomes) == 43
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 118
+    assert runs == [(2,)] and len(recorded) == 136
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }
