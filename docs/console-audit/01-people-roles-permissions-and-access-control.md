@@ -30,7 +30,7 @@
 | `GET /api/v1/govern/staff_sources` | `/staff_sources` |
 | `GET /api/v1/govern/staff_sources/credential` | `/staff_sources` |
 | `GET /api/v1/govern/staff_sources/guides` | `/staff_sources` |
-| `GET /api/v1/govern/staff_sources/runs` | `/staff_sources` |
+| `GET /api/v1/govern/staff_sources/runs` | `/connectors`, `/staff_sources` |
 | `GET /api/v1/govern/staff_sources/transfers` | `/people/:personId`, `/staff_sources` |
 | `GET /api/v1/govern/staff_sources/trial` | `/staff_sources` |
 | `GET /api/v1/me` | `/` |

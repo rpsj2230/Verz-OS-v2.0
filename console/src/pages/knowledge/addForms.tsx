@@ -7,10 +7,15 @@
  * refused is said beside its field and not sent, and a refusal the API makes is its own sentence.
  * Adding ends nothing, so nothing here asks to be confirmed (`tests/destructive-confirmed.test.ts`).
  *
- * Task ids: M7.1.2, M7.1.5, M7.6.3, M27.16.1
+ * **A spreadsheet chosen as a document is offered to Classification** (M7.7.3), by the endings the
+ * options name, beside the field and with a link there, and is not sent; the API makes the same
+ * offer by name and declared type for anything that reaches it.
+ *
+ * Task ids: M7.1.2, M7.1.5, M7.6.3, M27.16.1, M7.7.3
  */
 
 import { useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { request } from "../../api/client";
 import type { ApiFailure } from "../../api/errors";
 import { Button } from "../../components/ui/button";
@@ -27,9 +32,11 @@ import {
   type LinkProblem,
   type Queued,
 } from "../knowledgeIntakeQuery";
+import { CLASSIFICATION_PATH } from "../classificationQuery";
 import {
   acceptOf,
   addedSentence,
+  isOfferedAsTable,
   readUploaded,
   typeOf,
   uploadPath,
@@ -41,6 +48,7 @@ import {
   ADD_FILE,
   ADD_LINK,
   ADDING,
+  ADD_IT_ON_CLASSIFICATION,
   ADDRESS_HINT,
   ADDRESS_LABEL,
   CHECK_AGAIN,
@@ -54,7 +62,9 @@ import {
   LEVEL_LABEL,
   NOT_SENT_QUEUE_FULL,
   NOT_SENT_SIZE,
+  NOT_SENT_TABLE,
   NOT_SENT_TYPE,
+  OFFERED_AS_A_TABLE,
   PROBLEMS,
   QUEUE_FILES,
   QUEUEING,
@@ -185,8 +195,17 @@ export function AddFileForm({ options, onAdded }: { readonly options: UploadOpti
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const type = file === null ? null : typeOf(file.name, options.types);
+    const table = file !== null && isOfferedAsTable(file.name, options);
     const found = [
-      ...(file === null ? [PROBLEMS.file] : type === null ? [PROBLEMS.type] : file.size > type.maxBytes ? [PROBLEMS.size] : []),
+      ...(file === null
+        ? [PROBLEMS.file]
+        : table
+          ? [OFFERED_AS_A_TABLE]
+          : type === null
+            ? [PROBLEMS.type]
+            : file.size > type.maxBytes
+              ? [PROBLEMS.size]
+              : []),
       ...placeProblems(place),
     ];
     setProblems(found);
@@ -215,7 +234,13 @@ export function AddFileForm({ options, onAdded }: { readonly options: UploadOpti
       {failure === null ? null : <FailureNotice failure={failure} fields={["file", "kind", "level", "department"]} />}
       {said === "" ? null : <Status>{said}</Status>}
       {busy ? <Status>{ADDING}</Status> : null}
-      <Field label={FILE_LABEL} hint={acceptsWords(options.types)} problems={problems.filter((one) => one === PROBLEMS.file || one === PROBLEMS.type || one === PROBLEMS.size)}>
+      <Field
+        label={FILE_LABEL}
+        hint={acceptsWords(options.types)}
+        problems={problems.filter(
+          (one) => one === PROBLEMS.file || one === PROBLEMS.type || one === PROBLEMS.size || one === OFFERED_AS_A_TABLE,
+        )}
+      >
         {(id, describedBy) => (
           <Input
             id={id}
@@ -230,6 +255,11 @@ export function AddFileForm({ options, onAdded }: { readonly options: UploadOpti
           />
         )}
       </Field>
+      {problems.includes(OFFERED_AS_A_TABLE) ? (
+        <p className="m-0 text-[12.5px]">
+          <Link to={CLASSIFICATION_PATH}>{ADD_IT_ON_CLASSIFICATION}</Link>
+        </p>
+      ) : null}
       <PlaceFields options={options} place={place} onChange={setPlace} problems={problems} />
       <p className="m-0 text-[12px] text-dim">
         Checked by the {options.checkedBy} before it is read, and found by {options.foundBy}.
@@ -330,6 +360,8 @@ export function AddManyForm({ options, onAdded }: { readonly options: UploadOpti
         const type = typeOf(file.name, options.types);
         if (full) {
           told.push({ name: file.name, said: `${file.name}: ${NOT_SENT_QUEUE_FULL}`, queued: null });
+        } else if (isOfferedAsTable(file.name, options)) {
+          told.push({ name: file.name, said: `${file.name}: ${NOT_SENT_TABLE}`, queued: null });
         } else if (type === null) {
           told.push({ name: file.name, said: `${file.name}: ${NOT_SENT_TYPE}`, queued: null });
         } else if (file.size > type.maxBytes) {

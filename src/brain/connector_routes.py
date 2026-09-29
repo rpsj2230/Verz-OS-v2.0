@@ -156,6 +156,7 @@ from brain.console.skill_library import may_read_library
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.errors import Absent, BrainError, Failed
 from brain.credential_routes import credentials_of
+from brain.guide_views import GuideStepView, step_view
 from brain.identity.data_steward import declared_capabilities
 from brain.install import InstallError, value_of
 from brain.listing import Column, ListAsked, Listing
@@ -360,6 +361,8 @@ class ConnectableView(BaseModel):
     credential_hint: str
     #: Whether this reader may connect it. Their own grant over this source.
     may_connect: bool
+    #: The screens of its connect flow, the form last. The same on every install.
+    steps: list[GuideStepView]
 
 
 class NotConnectableView(BaseModel):
@@ -370,6 +373,8 @@ class NotConnectableView(BaseModel):
     name: str
     label: str
     why: str
+    #: The screens that prepare it at the vendor and hand it to the server; empty when none.
+    steps: list[GuideStepView]
 
 
 class EvidenceView(BaseModel):
@@ -906,11 +911,17 @@ def _page(
                 credential_label=kind.credential_label,
                 credential_hint=kind.credential_hint,
                 may_connect=may_connect_source(reach, kind.name, now),
+                steps=[step_view(step) for step in kind.guide],
             )
             for kind in CONNECTABLE.values()
         ],
         not_connectable=[
-            NotConnectableView(name=one.name, label=one.label, why=one.why)
+            NotConnectableView(
+                name=one.name,
+                label=one.label,
+                why=one.why,
+                steps=[step_view(step) for step in one.guide],
+            )
             for one in NOT_FROM_THE_CONSOLE.values()
         ],
         evidence=evidence,

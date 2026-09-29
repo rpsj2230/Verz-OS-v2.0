@@ -11,6 +11,10 @@
  * A reader who reaches no source and an install with none are one answer from the API and are drawn
  * alike, and nothing here counts rows the reader may not see. Identifiers are in `Advanced` only.
  *
+ * **A staff list read through Connect Lark shows Lark's card here too**, with the same Test, Manage
+ * and Disconnect as the Connectors screen (`connectors/LarkCard.tsx`), and Connect Lark is offered
+ * only while Lark is not connected; once it is, the offer is adding the staff list to it.
+ *
  * Task ids: M1.6.12, M1.8.6, M1.8.9, M27.7.2, M27.16.1
  */
 
@@ -54,6 +58,11 @@ import {
   type TrialAnswer,
   type TrialRun,
 } from "../staffSourcesQuery";
+import { LARK_API_PATH, type LarkGuide } from "../larkConnectQuery";
+import { LarkCard } from "../connectors/LarkCard";
+import type { LarkStart } from "../connectors/LarkFlow";
+import { LarkDialog } from "../connectors/SourceActs";
+import { ACT_LABELS } from "../connectors/connectorActions";
 import { ConnectDrawer } from "./ConnectDrawer";
 import { Names, Problem } from "./parts";
 import { outcomeWords, sourceTitle, when } from "./staffSourceWords";
@@ -219,6 +228,9 @@ export function StaffSourcesPage() {
   const [version, setVersion] = useState(0);
   const [told, setTold] = useState("");
   const [connecting, setConnecting] = useState(false);
+  const [lark, setLark] = useState<LarkStart | null>(null);
+  const larkGuide = useResource<LarkGuide>(LARK_API_PATH, version).data;
+  const larkStaff = larkGuide?.uses.find((one) => one.name === "staff_list");
   const page = useResource<unknown>(STAFF_SOURCES_API_PATH, version);
   const runsAnswer = useResource<unknown>(RUNS_API_PATH, version);
   const credentialAnswer = useResource<unknown>(CREDENTIAL_API_PATH, version);
@@ -313,6 +325,10 @@ export function StaffSourcesPage() {
           </div>
         </SectionCard>
 
+        {larkGuide !== null && larkStaff?.switched_on === true ? (
+          <LarkCard guide={larkGuide} onOpen={setLark} onDone={done} staffSourcesLink={false} />
+        ) : null}
+
         {credential === null ? null : <SyncCredential credential={credential} onDone={done} />}
 
         <SectionCard title={RUNS_HEADING} lede={RUNS_LEDE}>
@@ -405,15 +421,48 @@ export function StaffSourcesPage() {
       </Button>
     );
 
+  // Offered to a reader who may switch Lark's staff list on, until it is on; the card then has it.
+  const larkAction =
+    larkGuide === null || larkStaff === undefined || larkStaff.switched_on || !larkStaff.may_switch_on ? undefined : (
+      <Button
+        variant="outline"
+        className="min-h-11 sm:min-h-8"
+        onClick={() => {
+          setLark({ at: "choose", add: ["staff_list"] });
+        }}
+      >
+        {larkGuide.connected ? ACT_LABELS.addLarkUse : ACT_LABELS.connectLark}
+      </Button>
+    );
+
   return (
     <div data-slot="staff-sources-page" className="flex min-w-0 flex-col gap-4">
-      <PageHeader crumbs={[{ label: STAFF_SOURCES_HEADING }]} title={STAFF_SOURCES_HEADING} lede={STAFF_SOURCES_LEDE} primary={primary} />
+      <PageHeader
+        crumbs={[{ label: STAFF_SOURCES_HEADING }]}
+        title={STAFF_SOURCES_HEADING}
+        lede={STAFF_SOURCES_LEDE}
+        primary={primary}
+        actions={larkAction}
+      />
       {told === "" ? null : (
         <div role="status">
           <Note kind="done">{told}</Note>
         </div>
       )}
       {content}
+      {lark === null ? null : (
+        <LarkDialog
+          start={lark}
+          onClose={() => {
+            setLark(null);
+            setVersion((one) => one + 1);
+          }}
+          onDone={(sentence) => {
+            setLark(null);
+            done(sentence);
+          }}
+        />
+      )}
       {connecting ? (
         <ConnectDrawer
           onClose={() => {

@@ -88,6 +88,9 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
   "src/pages/Ask.tsx ANSWER_API_PATH":
     "Asking a question changes nothing an administrator manages: the answer is computed for the " +
     "reader and nothing they hold is ended or replaced.",
+  "src/pages/Ask.tsx correctionPath(thread)":
+    "Marking an answer wrong adds a note to the person's own conversation naming the kind; the " +
+    "answer, its records and everything else in the thread stay as they were, so nothing is ended.",
   "src/pages/classification/ClassificationPage.tsx mark === null ? reviewApiPath(entity, row.column) : markReviewApiPath(entity, row.column)":
     "A review of a rule or of a mark is a dry run. brain.classification_routes stores nothing on " +
     "either, which tests/unit/test_classification_routes.py and tests/unit/test_classified_tables.py " +
@@ -179,10 +182,11 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
     "Sends the connection test and the first sync's dry run, which keep nothing: no setting, no " +
     "credential and no member is written, which tests/unit/test_staff_connect.py holds for both. " +
     "Saving the connection and applying the first sync have their own requests and are confirmed.",
-  "src/components/ConnectLark.tsx LARK_TEST_API_PATH":
+  "src/pages/connectors/LarkFlow.tsx LARK_TEST_API_PATH":
     "Testing a Lark connection exchanges the pasted credential for a token and makes small reads; " +
-    "it writes nothing here or in Lark and keeps nothing it read, which " +
-    "tests/unit/test_lark_connect.py holds over the requests a fake Lark server received.",
+    "it writes nothing in Lark and keeps nothing it read, which tests/unit/test_lark_connect.py " +
+    "holds over the requests a fake Lark server received. Here it records only when it ran and a " +
+    "verdict word per use, superseding the previous test's own record, with every one on the ledger.",
   "src/pages/channels/ChannelProfile.tsx testApiPath(row.channel)":
     "A test message is one product sentence to one destination, sent once per channel record and " +
     "destination, which tests/unit/test_channel_pipeline.py holds; it ends and replaces nothing.",
