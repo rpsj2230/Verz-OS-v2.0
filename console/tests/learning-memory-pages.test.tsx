@@ -12,7 +12,7 @@
  * **What the API sends is compared with the Python models, not with this file's copy of them**, and
  * the bounds a request must respect are read out of the API's own document.
  *
- * Task ids: M27.7.21, M27.7.22, M27.16.1
+ * Task ids: M27.7.21, M27.7.22, M27.16.1, M16.6.8, M16.5.4
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -21,7 +21,15 @@ import { beforeAll, describe, expect, test } from "vitest";
 import { UNAVAILABLE_MARK } from "../src/components/kit";
 import { UNAVAILABLE } from "../src/pages/learning/learningActions";
 import { KEEP_IT, TIER_THREE_WITHHELD, UNDO_LABEL, UNDONE } from "../src/pages/learning/LearningPage";
-import { LEARNING_API_PATH, UNDO_API_PATH, consideredSentence, learnedRecently, readLearningPage } from "../src/pages/learningQuery";
+import {
+  LEARNING_API_PATH,
+  LEARNING_SETTINGS,
+  LEARNING_SETTINGS_API_PATH,
+  UNDO_API_PATH,
+  consideredSentence,
+  learnedRecently,
+  readLearningPage,
+} from "../src/pages/learningQuery";
 import { NOTHING_TO_READ_DESCRIPTION } from "../src/pages/memory/MemoryDetailPage";
 import { CHOOSE_HEADING } from "../src/pages/memory/MemoryPage";
 import {
@@ -196,7 +204,7 @@ function viewLinks(container: HTMLElement): string[] {
 describe("the Learning page", () => {
   test("every field the API sends about the review is read", () => {
     // What breaks if this is deleted: a field added to the review arrives and is dropped.
-    const read = ["basis", "as_of", "tier_one", "tier_two", "tier_three", "tiers", "considered", "undo_says", "staleness"];
+    const read = ["basis", "as_of", "tier_one", "tier_two", "tier_three", "tiers", "considered", "undo_says", "staleness", "queue_alarm"];
     expect(backendModelFields(ROUTES, "LearningReviewView").sort()).toEqual([...read].sort());
   });
 
@@ -302,6 +310,25 @@ describe("the Learning page", () => {
     expect(mainText(waiting.container)).toContain("maintenance");
   });
 
+  test("the Waiting view raises the queue's alarm in the API's words when it is raised, and says nothing when it is not", async () => {
+    // What breaks if this is deleted: an alarm the API raised over the gated changes waiting is
+    // dropped on the way to the page, or one it did not raise is drawn from this console's own count.
+    const routed = [{ memory_id: "m3", department: "maintenance", back_to: "a1" }];
+    const raised = await consoleAt(
+      "/learning/waiting",
+      reviewing(learningBody({ tier_three: routed, queue_alarm: { raised: true, says: sentinel("queue-alarm") } })),
+    );
+    expect(raised.container.querySelector('[data-slot="queue-alarm"]')?.textContent).toBe(sentinel("queue-alarm"));
+    expect(raised.container.querySelector('[data-slot="queue-alarm"]')?.getAttribute("role")).toBe("alert");
+
+    const quiet = await consoleAt(
+      "/learning/waiting",
+      reviewing(learningBody({ tier_three: routed, queue_alarm: { raised: false, says: sentinel("quiet") } })),
+    );
+    expect(quiet.container.querySelector('[data-slot="queue-alarm"]')).toBeNull();
+    expect(mainText(quiet.container)).not.toContain(sentinel("quiet"));
+  });
+
   test("tier three withheld is left out of the switch, and its address says why, which an empty tier does not", async () => {
     // What breaks if this is deleted: a reader who may not be told where gated changes went shown an
     // empty Waiting view, which says none went anywhere.
@@ -320,6 +347,58 @@ describe("the Learning page", () => {
     const { container } = await consoleAt("/learning/about", reviewing(learningBody()));
     expect(mainText(container)).toContain("Tier one sentinel");
     expect(mainText(container)).toContain(consideredSentence(500));
+  });
+
+  test("About shows how learning is tuned, and a changed figure is checked, confirmed and sent to the Learning screen's own route", async () => {
+    // What breaks if this is deleted: the learning figures sent through the Rate limits route,
+    // which refuses them, a figure outside the bounds sent anyway, or no control drawn for the
+    // administrator the write admits.
+    const label = "Days an inferred memory takes to lose half its weight";
+    const settings = (value: number, saved: boolean) => ({
+      knobs: [
+        { name: "inferred_memory_half_life_days", kind: "learning", label, unit: "days", value, default: 30, lowest: 10, highest: 365, saved, bounds_because: sentinel("bounds") },
+      ],
+      may_change: true,
+      in_force: sentinel("lasts"),
+    });
+    const settingsPath = `${API}${LEARNING_SETTINGS_API_PATH}`;
+    const answer: Answer = (path, method, body) => {
+      if (path === settingsPath && method === "GET") {
+        return json(settings(30, false));
+      }
+      if (path === `${settingsPath}/inferred_memory_half_life_days` && method === "PUT") {
+        return json(settings(10, true));
+      }
+      return reviewing(learningBody())(path, method, body);
+    };
+    const { container, sent } = await consoleAt("/learning/about", answer);
+    await waitFor(() => {
+      if (!mainText(container).includes(sentinel("lasts"))) {
+        throw new Error("the settings have not arrived");
+      }
+    });
+    expect(mainText(container)).toContain(LEARNING_SETTINGS.heading);
+    expect(mainText(container)).toContain("30 days");
+
+    fireEvent.click(button(container, `Change: ${label}`));
+    const form = container.querySelector(`form[aria-label="${label}"]`) as HTMLFormElement;
+    const input = form.querySelector("input") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "9" } });
+    fireEvent.submit(form);
+    expect(document.body.querySelector('[data-slot="confirm-dialog"]')).toBeNull();
+
+    fireEvent.change(input, { target: { value: "10" } });
+    fireEvent.submit(form);
+    await waitFor(() => dialog());
+    fireEvent.click(button(dialog(), "Save the new figure"));
+    await waitFor(() => {
+      if (!mainText(container).includes(`${label} is now 10 days.`)) {
+        throw new Error("the change has not been told");
+      }
+    });
+    expect(sent.filter((one) => one.method === "PUT")).toEqual([
+      { method: "PUT", path: `${settingsPath}/inferred_memory_half_life_days`, body: { value: 10 } },
+    ]);
   });
 
   test("an act listed as not built yet has no route in the API document, and each pattern matches its path", () => {

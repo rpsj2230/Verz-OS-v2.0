@@ -593,6 +593,7 @@ WRITTEN_BY_CHECKS = (
     "mem.adaptive",
     "mem.learning",
     "mem.correction",
+    "gate.fast_path_rule",
     "agent.browser_envelope",
     "agent.browser_session",
     "obs.trace_step",
@@ -654,6 +655,8 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
     outcomes = {one.name: (one.outcome, one.reason) for one in waited[1]}
     assert outcomes.pop("asking_past_a_window_is_refused_with_a_retry_hint")[0] == NOT_RUN
     assert outcomes.pop("the_rate_limits_screen_lists_the_windows_refusing_now")[0] == NOT_RUN
+    # No cache here either; `tests/unit/test_acceptance_cache.py` runs it with a store in its place.
+    assert outcomes.pop("a_cached_answer_reaches_only_the_reach_it_was_computed_for")[0] == NOT_RUN
     assert outcomes.pop("a_skill_is_imported_from_a_github_commit_and_from_an_address") == (
         NOT_RUN,
         "this install names no public skill to import, so no import from GitHub was asked",
@@ -676,9 +679,9 @@ def test_on_a_real_database_the_checks_pass_and_leave_nothing_but_their_results(
         acceptance_audit.NO_DEPLOYMENT_IS_RECORDED_TO_KEEP_OUT,
     )
     assert outcomes == dict.fromkeys(outcomes, (PASSED, ""))
-    assert len(outcomes) == 47
+    assert len(outcomes) == 57
     assert after == before
-    assert runs == [(2,)] and len(recorded) == 144
+    assert runs == [(2,)] and len(recorded) == 166
     assert {row[0] for row in recorded} == {"abc1234"} and {row[1] for row in recorded} == {
         "request"
     }

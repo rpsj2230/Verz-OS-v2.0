@@ -24,10 +24,10 @@
  * the paragraph explaining where undo is offered, the three stacked tables on one page, and the
  * sentence under the figures.
  *
- * Task ids: M27.7.21, M27.16.1
+ * Task ids: M27.7.21, M27.16.1, M16.6.8, M16.5.4
  */
 
-import { BookOpenCheck, CircleSlash, Hourglass, Info, Undo2 } from "lucide-react";
+import { BookOpenCheck, CircleSlash, Hourglass, Info, TriangleAlert, Undo2 } from "lucide-react";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { request } from "../../api/client";
@@ -61,6 +61,7 @@ import { cn } from "../../lib/utils";
 import { dayWords, whenWords } from "../access/formParts";
 import {
   LEARNING_API_PATH,
+  LEARNING_SETTINGS,
   LEARNING_VIEWS,
   LEARNING_VIEW_LABELS,
   RECENT_DAYS,
@@ -78,6 +79,7 @@ import {
   type TierThree,
   type TierTwo,
 } from "../learningQuery";
+import { LimitSettings } from "../operations/LimitSettings";
 import { Narrowing } from "../requirement-checks/Narrowing";
 import { UNAVAILABLE, changeWords, undoWritesWords } from "./learningActions";
 
@@ -402,6 +404,12 @@ function Waiting({ review, onOpen }: { readonly review: Review; readonly onOpen:
       lede="Changes that would widen who sees what, routed to the department that decides each."
       action={<UnavailableAction label={UNAVAILABLE.decide.label} text={UNAVAILABLE.decide.label} reason={UNAVAILABLE.decide.reason} />}
     >
+      {review.queueAlarm?.raised === true ? (
+        <p role="alert" data-slot="queue-alarm" className="m-0 mb-3 flex items-start gap-2 rounded-md bg-warn-wash px-3 py-2 text-[13px] text-warn">
+          <TriangleAlert aria-hidden className="mt-[2px] size-4 shrink-0" />
+          <span className="min-w-0">{review.queueAlarm.says}</span>
+        </p>
+      ) : null}
       {waiting.length === 0 ? (
         <EmptyState title={NOTHING_IN_TIER} description="A learned change that would widen who sees what waits here for a person." icon={<Hourglass aria-hidden />} />
       ) : (
@@ -465,6 +473,7 @@ function About({ review }: { readonly review: Review }) {
           What a learning says is read on <Link to="/memory" className="text-acc-text underline-offset-4 hover:underline">Memory</Link>, one person at a time.
         </p>
       </SectionCard>
+      <LimitSettings screen={LEARNING_SETTINGS} />
     </div>
   );
 }

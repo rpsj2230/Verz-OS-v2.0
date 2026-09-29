@@ -27,10 +27,28 @@
  *
  * Served by `brain.console.govern_estate`, through `brain.estate_routes`.
  *
- * Task ids: M27.7.21
+ * **How long an inference lasts and how many conversations must agree are set here too** (M16.6.8),
+ * on the About view, by the Rate limits screen's card over `LEARNING_SETTINGS_API_PATH`.
+ * The figures are the whole install's, so the card draws a control only for a reader the answer
+ * says may change them, and no figure is a tier: which oversight a change needs is not a setting.
+ *
+ * Task ids: M27.7.21, M16.6.8, M16.5.4
  */
 
 import type { components } from "../api/schema";
+import type { KnobScreen } from "./tuningQuery";
+
+/** Where the Learning screen's two figures are read, and one is set. `brain.tuning_routes`. */
+export const LEARNING_SETTINGS_API_PATH = "/govern/learning/settings";
+
+/** The Learning screen's figures, drawn by the Rate limits screen's card. */
+export const LEARNING_SETTINGS: KnobScreen = {
+  path: LEARNING_SETTINGS_API_PATH,
+  heading: "How learning is tuned",
+  lede: "How long an inference is recalled, and how much agreement a learned rule needs before a person is asked to review it. A person still approves every rule, and no figure here changes who has to agree to a change. Each figure is between bounds the product fixes, and a change is recorded in the audit trail under your name.",
+  column: "Setting",
+  exportName: "learning-settings",
+};
 
 export type TierOne = components["schemas"]["TierOneView"];
 export type TierTwo = components["schemas"]["TierTwoView"];
@@ -104,6 +122,12 @@ export interface LearningPage {
   /** What the confirmation says an undo will write, keyed by `control_writes`. */
   readonly undoSays: Readonly<Record<string, string>>;
   readonly staleness: string | null;
+  /**
+   * The review queue's alarm over the tier-three rows above (M16.5.4): raised when more gated
+   * changes are listed than a person reviews in one sitting. A sentence and no figure, and null
+   * wherever tier three is.
+   */
+  readonly queueAlarm: { readonly raised: boolean; readonly says: string } | null;
 }
 
 const NOTHING: LearningPage = Object.freeze({
@@ -117,6 +141,7 @@ const NOTHING: LearningPage = Object.freeze({
   // Empty on an unreadable body, so no undo can be confirmed in words the API did not send.
   undoSays: {},
   staleness: null,
+  queueAlarm: null,
 });
 
 /** Read `brain.estate_routes.LearningReviewView` out of a response body. */
@@ -134,6 +159,7 @@ export function readLearningPage(payload: unknown): LearningPage {
     considered?: unknown;
     undo_says?: unknown;
     staleness?: unknown;
+    queue_alarm?: unknown;
   };
   if (!Array.isArray(body.tier_one) || !Array.isArray(body.tier_two)) {
     return NOTHING;
@@ -149,7 +175,17 @@ export function readLearningPage(payload: unknown): LearningPage {
     considered: typeof body.considered === "number" ? body.considered : 0,
     undoSays: readUndoSays(body.undo_says),
     staleness: typeof staleness?.message === "string" ? staleness.message : null,
+    queueAlarm: readQueueAlarm(body.queue_alarm),
   };
+}
+
+/** The queue's alarm, or null for a body that sent none or sent something else. */
+function readQueueAlarm(payload: unknown): LearningPage["queueAlarm"] {
+  if (typeof payload !== "object" || payload === null) {
+    return null;
+  }
+  const body = payload as { raised?: unknown; says?: unknown };
+  return typeof body.raised === "boolean" && typeof body.says === "string" ? { raised: body.raised, says: body.says } : null;
 }
 
 function readUndoSays(payload: unknown): Readonly<Record<string, string>> {
