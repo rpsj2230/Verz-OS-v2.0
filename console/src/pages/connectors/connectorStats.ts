@@ -19,7 +19,12 @@
  * the reader may read, which is the minimal index the owner's rule allows, and never a count of
  * what the reader was not shown: the route counts under the reader's own scope.
  *
- * Task ids: M27.11.9, M27.16.1
+ * **The calls questions made to the source are the live reader's own figures** (`calls`, M11.3.4):
+ * requests a second and a minute, those in flight, the shares refused as over the source's limit and
+ * failed, and the latency. They are everybody's questions' calls on this application process, so a
+ * reader who may see only their own usage is sent none and `callsTold` says why, which is drawn.
+ *
+ * Task ids: M27.11.9, M27.16.1, M11.3.4
  */
 
 import { statsApiPath } from "../agents/agentStats";
@@ -45,6 +50,20 @@ export interface ConnectorPeriod {
   readonly liveReads?: number;
 }
 
+/** The calls questions made to the source on this process, over the route's window. */
+export interface ConnectorCalls {
+  readonly windowSeconds: number;
+  readonly requests: number;
+  readonly perSecond: number;
+  readonly perMinute: number;
+  readonly concurrency: number;
+  readonly quotaRatio: number;
+  readonly errorRatio: number;
+  readonly latencyP50Ms: number;
+  readonly latencyP95Ms: number;
+  readonly quiet: boolean;
+}
+
 export interface Unrecorded {
   readonly figure: string;
   readonly why: string;
@@ -66,6 +85,9 @@ export interface ConnectorStats {
   readonly atLeast: boolean;
   readonly periods: readonly ConnectorPeriod[];
   readonly unrecorded: readonly Unrecorded[];
+  /** The calls questions made, or absent with `callsTold` saying why. */
+  readonly calls?: ConnectorCalls;
+  readonly callsTold?: string;
 }
 
 type Fields = Readonly<Record<string, unknown>>;
@@ -89,6 +111,55 @@ function said(value: unknown): string | undefined {
 function instant(value: unknown): string | undefined {
   const text = said(value);
   return text !== undefined && !Number.isNaN(Date.parse(text)) ? text : undefined;
+}
+
+function figure(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+function readCalls(value: unknown): ConnectorCalls | undefined {
+  const fields = fieldsOf(value);
+  if (fields === null) {
+    return undefined;
+  }
+  const numbers = [
+    figure(fields["window_seconds"]),
+    counted(fields["requests"]),
+    figure(fields["per_second"]),
+    figure(fields["per_minute"]),
+    counted(fields["concurrency"]),
+    figure(fields["quota_ratio"]),
+    figure(fields["error_ratio"]),
+    figure(fields["latency_p50_ms"]),
+    figure(fields["latency_p95_ms"]),
+  ];
+  const [windowSeconds, requests, perSecond, perMinute, concurrency, quotaRatio, errorRatio, latencyP50Ms, latencyP95Ms] =
+    numbers;
+  if (
+    windowSeconds === undefined ||
+    requests === undefined ||
+    perSecond === undefined ||
+    perMinute === undefined ||
+    concurrency === undefined ||
+    quotaRatio === undefined ||
+    errorRatio === undefined ||
+    latencyP50Ms === undefined ||
+    latencyP95Ms === undefined
+  ) {
+    return undefined;
+  }
+  return {
+    windowSeconds,
+    requests,
+    perSecond,
+    perMinute,
+    concurrency,
+    quotaRatio,
+    errorRatio,
+    latencyP50Ms,
+    latencyP95Ms,
+    quiet: fields["quiet"] === true,
+  };
 }
 
 function listOf(value: unknown): readonly unknown[] {
@@ -146,6 +217,8 @@ export function readConnectorStats(payload: unknown): ConnectorStats | null {
   const indexIds = counted(fields["index_ids"]);
   const liveReadBasis = said(fields["live_read_basis"]);
   const lastLiveRead = fields["last_live_read"] === null ? null : instant(fields["last_live_read"]);
+  const calls = readCalls(fields["calls"]);
+  const callsTold = said(fields["calls_told"]);
   return {
     ...(health === undefined ? {} : { health }),
     ...(lastAttempt === undefined ? {} : { lastAttempt }),
@@ -157,7 +230,14 @@ export function readConnectorStats(payload: unknown): ConnectorStats | null {
     atLeast: fields["at_least"] === true,
     periods,
     unrecorded,
+    ...(calls === undefined ? {} : { calls }),
+    ...(callsTold === undefined ? {} : { callsTold }),
   };
+}
+
+/** A share of calls as a page draws it, or the sentence that there were too few to mean one. */
+export function shareWords(ratio: number, calls: ConnectorCalls): string {
+  return calls.quiet ? "Too few calls to say" : `${Math.round(ratio * 100).toString()}%`;
 }
 
 /** One period's figures, or the first sent when that period was not. */
