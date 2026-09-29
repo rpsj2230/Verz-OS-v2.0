@@ -9,12 +9,12 @@ Nothing here has called a Keycloak; `tests/fixtures/stand_in_keycloak.py` says w
 
 CI sets `DATABASE_URL` and has pgvector; without either every test that needs the database skips.
 
-Task ids: M1.6.16, M1.6.17
+Task ids: M1.6.16, M1.6.17, M1.6.19
 """
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Iterator
+from collections.abc import Awaitable, Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -23,10 +23,13 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.connectors.staff_directories import Answer, Outbound
+from brain.console.organisation import founded
 from brain.gate.admission import Assurance
 from brain.gate.context import Channel
+from brain.identity.departments_from import THE_CONSOLE_PLACES_PEOPLE
+from brain.identity.organisation_store import Attribution, StoredOrganisation
 from brain.identity.principal_directory import SIGN_IN_CHANNEL, subject_digest
-from brain.identity.staff_accounts import AccountRefusal
+from brain.identity.staff_accounts import DEFAULT_ALLOWED, AccountRefusal
 from brain.identity.staff_roster import RunOutcome, digest_of
 from brain.identity.staff_source import (
     DEFAULT_TRUST,
@@ -35,6 +38,8 @@ from brain.identity.staff_source import (
     Roster,
     StaffRecord,
 )
+from brain.identity.standing import standings
+from brain.ops import staff_sync_run
 from brain.ops.connectable import key_reference
 from brain.ops.connector_sync_run import ConnectorKeyAbsentError
 from brain.ops.secrets import SecretRef
@@ -46,6 +51,7 @@ from brain.ops.staff_accounts_run import (
     provide_accounts,
 )
 from brain.ops.staff_sync_run import sync_staff_on
+from brain.ops.standing_run import apply_standing, plan_standing
 from brain.session import make_app_engine, make_session_factory
 from tests.fixtures.scratch_postgres import run, sql
 from tests.fixtures.stand_in_keycloak import ISSUER, SECRET, StandInKeycloak, User
@@ -119,9 +125,10 @@ def provide(
     absent_is_gone: bool = False,
     given: Keys | None = None,
 ) -> AccountRun:
-    return through(
-        url,
-        lambda sessions: provide_accounts(
+    """The accounts step, then the standing step the run applies after it (unless a trial)."""
+
+    async def both(sessions: async_sessionmaker[AsyncSession]) -> AccountRun:
+        ran = await provide_accounts(
             sessions=sessions,
             roster=roster,
             stable_ids=stable(*(one.work_address.split("@")[0] for one in roster.people)),
@@ -131,8 +138,16 @@ def provide(
             now=at,
             absent_is_gone=absent_is_gone,
             trial=trial,
-        ),
-    )
+        )
+        if not trial:
+            where = standings(members=(), writes=(), people=roster.people)
+            plan = await plan_standing(
+                sessions, source=roster.source, standings=where, allowed=DEFAULT_ALLOWED, now=at
+            )
+            await apply_standing(sessions, plan, source=roster.source, now=at)
+        return ran
+
+    return through(url, both)
 
 
 def signed_in_as(url: str, account_id: str) -> list[tuple[Any, ...]]:
@@ -225,9 +240,9 @@ def test_a_leaver_s_account_is_closed_their_sessions_ended_and_their_person_disa
     url: str,
 ) -> None:
     """The next sync after somebody leaves: the account the sync made is disabled and signed out,
-    and the Brain person behind it is disabled, which ends their Brain sessions. When the source
-    lists them as active again both are opened. Delete this and a leaver keeps a way in, or stays
-    locked out after they come back."""
+    and the standing step disables the Brain person behind it, which ends their Brain sessions.
+    When the source lists them as active again both are opened. Delete this and a leaver keeps a
+    way in, or stays locked out after they come back."""
     keycloak = StandInKeycloak()
     provide(url, keycloak, listed(person("di")))
     di = account_of(keycloak, "di@example.test")
@@ -246,8 +261,10 @@ def test_a_leaver_s_account_is_closed_their_sessions_ended_and_their_person_disa
 
 def test_an_account_somebody_made_by_hand_is_linked_once_and_never_closed(url: str) -> None:
     """The first administrator's account, or one made before the sync: linked to a Brain person and
-    marked with the source, not duplicated, and left open when the source says the person left.
-    Delete this and the sync can lock a company out of its own install."""
+    marked with the source, not duplicated, and left open at the sign-in service when the source
+    says the person left. Whether they may still use the Brain is the standing step's, which keeps
+    a leaver out (and never the last administrator: `tests/unit/test_standing_run.py`). Delete
+    this and the sync can close accounts it never made."""
     keycloak = StandInKeycloak()
     by_hand = User(id="by-hand", username="fe@example.test", email="fe@example.test")
     keycloak.users[by_hand.id] = by_hand
@@ -259,7 +276,7 @@ def test_an_account_somebody_made_by_hand_is_linked_once_and_never_closed(url: s
 
     provide(url, keycloak, listed(person("fe", status=EmploymentStatus.LEFT)), at=LATER)
     assert by_hand.enabled is True
-    assert [row[1] for row in signed_in_as(url, "by-hand")] == [False]
+    assert [row[1] for row in signed_in_as(url, "by-hand")] == [True]
 
 
 def test_a_trial_says_what_a_run_would_do_and_makes_nobody(url: str) -> None:
@@ -398,3 +415,95 @@ def test_a_scheduled_run_makes_the_accounts_before_the_roster_and_says_so_on_its
     assert "Sign-in accounts: 2 made, 0 opened again, 0 closed." in report
     assert HOW_PEOPLE_GET_IN in report
     assert tuple(report) == ran.report
+
+
+def run_lark_sync(url: str, env: Mapping[str, str]) -> Any:
+    """One scheduled run over the Lark stand-in with both keys, as the worker makes it."""
+    vault = ByPath(
+        {
+            key_reference("staff_source").path: Lease(f"{APP_ID}:{APP_SECRET}"),
+            key_reference("sign_in_accounts").path: Lease(f"brain-accounts:{SECRET}"),
+        }
+    )
+    return through(
+        url,
+        lambda sessions: sync_staff_on(
+            sessions=sessions,
+            now=NOW,
+            env={**LARK_ENV, **ENV, **env},
+            keys=vault,
+            fetch=Both(),
+            clock=lambda: NOW + timedelta(seconds=5),
+        ),
+    )
+
+
+def with_departments(url: str) -> None:
+    """The two departments the Lark stand-in names, founded as Departments and teams founds one."""
+
+    async def go(sessions: async_sessionmaker[AsyncSession]) -> None:
+        store = StoredOrganisation(sessions)
+        by = Attribution(actor="u_admin", ent_hash="a" * 32, trace_id="trace-founding")
+        for slug in ("engineering", "finance"):
+            department, scope = founded(slug, slug.title())
+            await store.found_department(department=department, scope=scope, by=by)
+
+    through(url, go)
+
+
+def departments_of_people(url: str) -> list[tuple[Any, ...]]:
+    return sql(
+        url,
+        "SELECT p.display_name, p.primary_department FROM auth.principal p"
+        " WHERE p.id LIKE 'u\\_%%' ORDER BY 1",
+    )
+
+
+def test_under_the_console_the_run_gives_new_people_no_department_and_says_so(
+    url: str,
+) -> None:
+    """M1.6.19 on a real database: with departments managed on People, the people the run makes
+    sit in no department and its row says the run placed and moved nobody; with the staff list,
+    the same run puts them in the department Lark names. Delete this and a company managing
+    departments by hand has the nightly run overwrite where People put everybody."""
+    with at_head("brain_test_staff_accounts_console") as console:
+        with_departments(console)
+        ran = run_lark_sync(console, {"INSTALL_DEPARTMENTS_FROM": "console"})
+        placed = departments_of_people(console)
+        memberships = sql(console, "SELECT count(*) FROM gate.team_membership")
+        # People moves Ada; what the Starter pack step then reads is where People put her.
+        sql(
+            console,
+            "UPDATE auth.principal SET primary_department = 'finance'"
+            " WHERE display_name = 'Ada Lovelace'",
+        )
+        as_placed = through(
+            console,
+            lambda sessions: staff_sync_run._as_placed(
+                sessions,
+                Roster(
+                    source="lark",
+                    complete=True,
+                    asserts=DEFAULT_TRUST["lark"],
+                    people=(
+                        StaffRecord("ada@example.com", "Ada", department="Engineering", leads=True),
+                        StaffRecord("katherine@example.com", "Katherine", department="Finance"),
+                    ),
+                ),
+            ),
+        )
+    assert [(one.department, one.leads) for one in as_placed.people] == [
+        ("finance", False),
+        ("", False),
+    ]
+    assert ran.outcome is RunOutcome.APPLIED
+    assert THE_CONSOLE_PLACES_PEOPLE in ran.report
+    assert placed == [("Ada Lovelace", None), ("Katherine Johnson", None)]
+    assert memberships == [(0,)]
+
+    with at_head("brain_test_staff_accounts_listed") as listed:
+        with_departments(listed)
+        from_the_list = run_lark_sync(listed, {"INSTALL_DEPARTMENTS_FROM": "staff_source"})
+        placed = departments_of_people(listed)
+    assert THE_CONSOLE_PLACES_PEOPLE not in from_the_list.report
+    assert placed == [("Ada Lovelace", "engineering"), ("Katherine Johnson", "finance")]

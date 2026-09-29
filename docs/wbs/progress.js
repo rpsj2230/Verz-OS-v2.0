@@ -44,6 +44,26 @@ const PROGRESS = {
     why: "Google Workspace, Entra and Lark staff lists built (PR #97); proved when the owner connects Lark as the staff source and the first sync lists people with their departments (needs-rupash 91)",
     updated: "2026-09-28",
   },
+  "M1.6.13": {
+    status: "READY FOR TESTING",
+    why: "built (M1/people-status): People shows where the staff list puts each person and their employment type, with filters; proved on the install with M1.6.15",
+    updated: "2026-09-30",
+  },
+  "M1.6.14": {
+    status: "READY FOR TESTING",
+    why: "built (M1/people-status): somebody the list says is suspended, gone or never activated, or of a type not allowed, is disabled on the next sync and their page says why; the last administrator is never kept out; proved on the install with M1.6.15",
+    updated: "2026-09-30",
+  },
+  "M1.6.19": {
+    status: "READY FOR TESTING",
+    why: "built (M1/departments-from): Settings, under Staff, chooses where departments come from; managed on People the staff sync places and moves nobody; proved on the install with M1.6.21",
+    updated: "2026-09-30",
+  },
+  "M1.6.20": {
+    status: "READY FOR TESTING",
+    why: "built (M1/departments-from): People moves several people to a department at once, each move on the ledger under the mover (migration 0170); proved on the install with M1.6.21",
+    updated: "2026-09-30",
+  },
   "M1.6.16": {
     status: "READY FOR TESTING",
     why: "built (M1/staff-accounts): the staff sync makes each active person's sign-in account and sends nobody anything; proved when a release has set up the accounts client and a reserved person's Forgot password sets their password and second factor (M1.6.18)",

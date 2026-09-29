@@ -80,7 +80,7 @@ from __future__ import annotations
 import asyncio
 import re
 import time
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Collection, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Final, Protocol
@@ -88,6 +88,7 @@ from urllib.parse import quote, urlencode
 
 import httpx
 import structlog
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.connectors.google_service_account import (
@@ -109,7 +110,14 @@ from brain.connectors.staff_directories import (
     location_problem,
     pull,
 )
+from brain.identity.departments_from import (
+    THE_CONSOLE_PLACES_PEOPLE,
+    DepartmentsFrom,
+    as_the_console_places_them,
+    departments_from,
+)
 from brain.identity.organisation_sync import sync_trace
+from brain.identity.staff_accounts import allowed_types
 from brain.identity.staff_adapters import (
     GOOGLE_SHEET,
     GOOGLE_WORKSPACE,
@@ -123,12 +131,14 @@ from brain.identity.staff_adapters import (
 from brain.identity.staff_roster import Application, RunOutcome, application_for, digest_of
 from brain.identity.staff_source import (
     STAFF_SOURCE_LOCATION_SETTING,
+    EmploymentType,
     Roster,
     StaffSource,
     StaffSourceError,
     roster_from,
     selected_source,
 )
+from brain.identity.standing import Standing, StandingPlan, standings
 from brain.install import value_of
 from brain.ops.connectable import key_reference
 from brain.ops.connector_sync_run import (
@@ -143,7 +153,7 @@ from brain.ops.openbao import VaultUnreachableError
 from brain.ops.safe_error import redact
 from brain.ops.secrets import SecretsUnavailableError
 from brain.ops.source_organisation import apply_organisation
-from brain.ops.staff_accounts_run import provide_accounts
+from brain.ops.staff_accounts_run import ACCOUNT_TYPES_SETTING, provide_accounts
 from brain.ops.staff_sync_store import (
     RunRecord,
     read_last_applied,
@@ -152,8 +162,10 @@ from brain.ops.staff_sync_store import (
     stop_leavers_agents,
     write_application,
 )
+from brain.ops.standing_run import apply_standing, plan_standing
 from brain.ops.starter_pack_store import grant_starter_packs
 from brain.settings import process_environment
+from brain.tables.identity import PrincipalRow
 
 # ------------------------------------------------------------------ written-down reasons
 log = structlog.get_logger()
@@ -584,8 +596,12 @@ async def sync_staff_on(
         async with sessions() as session, session.begin():
             await session.execute(run_row(record))
         return StaffSyncRun(outcome=record.outcome, detail=detail, report=report)
-    # Before the roster is written and outside any transaction, because it calls the sign-in
+    # Before the roster is written and outside any transaction, because they call the sign-in
     # service; see `ACCOUNTS_ARE_MADE_BEFORE_THE_ROSTER_IS_WRITTEN`. A trial plans, makes nothing.
+    allowed = allowed_types(value_of(ACCOUNT_TYPES_SETTING, env))
+    console = departments_from(env)
+    where = standings(members=members, writes=application.writes, people=roster.people)
+    first = await _standing(sessions, chosen.name, where, allowed, now)
     accounts = await provide_accounts(
         sessions=sessions,
         roster=roster,
@@ -596,8 +612,22 @@ async def sync_staff_on(
         now=now,
         absent_is_gone=roster.may_remove() and last_applied is not None,
         trial=trial,
+        keep_open=frozenset(first.kept_in) if first is not None else frozenset(),
+        place=console is DepartmentsFrom.STAFF_SOURCE,
     )
-    report = (*report, *accounts.sentences)
+    # Planned again once the accounts step has joined its new people to their rows.
+    kept = first if trial else await _standing(sessions, chosen.name, where, allowed, now)
+    if kept is not None and not trial:
+        try:
+            await apply_standing(sessions, kept, source=chosen.name, now=now)
+        except Exception as exc:
+            # Broad on purpose, for `A_HEADS_REACH_NEVER_UNDOES_THE_ROSTER`'s reason.
+            log.warning("staff_sync.standing_unapplied", error=type(exc).__name__)
+            kept = None
+    said_standing = kept.sentences() if kept is not None else (STANDING_UNDECIDED,)
+    report = (*report, *accounts.sentences, *said_standing)
+    if console is DepartmentsFrom.CONSOLE:
+        report = (*report, THE_CONSOLE_PLACES_PEOPLE)
     async with sessions() as session, session.begin():
         if trial:
             record = RunRecord(
@@ -633,10 +663,37 @@ async def sync_staff_on(
         # In the run's own transaction, so a leaver is never marked with their agents running.
         # See `A_LEAVERS_AGENT_STOPS_UNTIL_A_NEW_OWNER_ACCEPTS_IT`.
         await session.execute(stop_leavers_agents(now))
+    if console is DepartmentsFrom.CONSOLE:
+        # See `UNDER_THE_CONSOLE_THE_SYNC_MOVES_NOBODY`: no heads, no placements, and the pack
+        # follows the department People set.
+        await _grant_starter_packs(sessions, await _as_placed(sessions, roster), now)
+        return StaffSyncRun(outcome=outcome, detail=detail, report=report)
     await _rewrite_heads(sessions, roster, now)
     await _grant_starter_packs(sessions, roster, now)
     await _place_in_organisation(sessions, roster, last_applied, now)
     return StaffSyncRun(outcome=outcome, detail=detail, report=report)
+
+
+async def _as_placed(sessions: async_sessionmaker[AsyncSession], roster: Roster) -> Roster:
+    """The roster with each person in the department People put their Brain person in."""
+    try:
+        known = await roster_principals(sessions, roster)
+        async with sessions() as session, session.begin():
+            rows = (
+                await session.execute(
+                    select(PrincipalRow.id, PrincipalRow.primary_department).where(
+                        PrincipalRow.id.in_(sorted(set(known.values())))
+                    )
+                )
+            ).all()
+    except Exception as exc:
+        # Broad on purpose, as the heads' reach is: the roster is already committed.
+        log.warning("staff_sync.console_departments_unread", error=type(exc).__name__)
+        return as_the_console_places_them(roster, {})
+    where = {str(pid): None if slug is None else str(slug) for pid, slug in rows}
+    return as_the_console_places_them(
+        roster, {address: where.get(pid) for address, pid in known.items()}
+    )
 
 
 def _would_change(source: str, application: Application) -> str:
@@ -646,6 +703,30 @@ def _would_change(source: str, application: Application) -> str:
         f"{len(application.marked_left)} as having left and move {len(application.renamed)} to a "
         f"new address. {NOBODY_CHANGED}"
     )
+
+
+#: What a run says when it could not decide who the list keeps out.
+STANDING_UNDECIDED: Final = (
+    "Who is kept out of the Brain was not decided this run; the next run tries again."
+)
+
+
+async def _standing(
+    sessions: async_sessionmaker[AsyncSession],
+    source: str,
+    where: Mapping[str, Standing],
+    allowed: Collection[EmploymentType],
+    now: datetime,
+) -> StandingPlan | None:
+    """The standing step's plan, or None when it could not be read. Never raises."""
+    try:
+        return await plan_standing(
+            sessions, source=source, standings=where, allowed=allowed, now=now
+        )
+    except Exception as exc:
+        # Broad on purpose, for `A_HEADS_REACH_NEVER_UNDOES_THE_ROSTER`'s reason.
+        log.warning("staff_sync.standing_unplanned", error=type(exc).__name__)
+        return None
 
 
 #: Why the accounts step comes before the roster is written rather than after it.

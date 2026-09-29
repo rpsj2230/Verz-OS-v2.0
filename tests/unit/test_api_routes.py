@@ -85,6 +85,8 @@ SUBJECTS: dict[str, str] = {
     "u_admin": "1f2e3d4c-0000-4000-8000-00000000000e",
     "u_elsewhere": "1f2e3d4c-0000-4000-8000-00000000000f",
     "u_admin_only": "1f2e3d4c-0000-4000-8000-000000000010",
+    # People's move test: names everybody, organises one department (test_directory_routes).
+    "u_mover": "1f2e3d4c-0000-4000-8000-000000000011",
 }
 
 #: Two seeded rows, one in each prefix, so a scope that admits one of them can be shown to

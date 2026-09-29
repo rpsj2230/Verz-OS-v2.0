@@ -156,6 +156,10 @@ export interface PersonRow {
   readonly secondFactor?: boolean;
   readonly lastSignedInAt?: string;
   readonly packs: readonly string[];
+  /** Where the staff list says they stand, when a list is read and names them (M1.6.13). */
+  readonly staffStatus?: string;
+  /** The employment type the staff list records, when it records one. */
+  readonly employmentType?: string;
 }
 
 export function readPerson(value: unknown): PersonRow | null {
@@ -170,6 +174,8 @@ export function readPerson(value: unknown): PersonRow | null {
   const employment = said(entry["employment"]);
   const lastSignedInAt = said(entry["last_signed_in_at"]);
   const secondFactor = entry["second_factor"];
+  const staffStatus = said(entry["staff_status"]);
+  const employmentType = said(entry["employment_type"]);
   return {
     principalId,
     displayName,
@@ -180,6 +186,8 @@ export function readPerson(value: unknown): PersonRow | null {
     ...(typeof secondFactor === "boolean" ? { secondFactor } : {}),
     ...(lastSignedInAt === undefined ? {} : { lastSignedInAt }),
     packs: words(entry["packs"]),
+    ...(staffStatus === undefined ? {} : { staffStatus }),
+    ...(employmentType === undefined ? {} : { employmentType }),
   };
 }
 
@@ -207,6 +215,8 @@ export interface DirectoryFacts {
   readonly disabling?: string;
   /** With a staff list read: the sentence to pass on to somebody whose account the sync made. */
   readonly accountReady?: string;
+  /** Several people may be moved to a department (departments managed on People, M1.6.20). */
+  readonly mayMove: boolean;
 }
 
 export function readDirectoryFacts(payload: unknown): DirectoryFacts {
@@ -218,6 +228,7 @@ export function readDirectoryFacts(payload: unknown): DirectoryFacts {
     editable: body?.["editable"] === true,
     mayDisable: body?.["may_disable"] === true,
     mayAdd: body?.["may_add"] === true,
+    mayMove: body?.["may_move"] === true,
     ...(adding === undefined ? {} : { adding }),
     ...(disabling === undefined ? {} : { disabling }),
     ...(accountReady === undefined ? {} : { accountReady }),
@@ -259,6 +270,10 @@ export interface PersonDetail {
   readonly mayOrganise: boolean;
   readonly disabling?: string;
   readonly fromAPack?: string;
+  /** Why the staff list keeps them from signing in or asking, in the API's words (M1.6.14). */
+  readonly keptOut?: string;
+  /** Departments are managed on People on this install (M1.6.19). */
+  readonly departmentSetOnPeople: boolean;
 }
 
 function readPlacements(value: unknown): Placements {
@@ -334,6 +349,7 @@ export function readPersonDetail(payload: unknown): PersonDetail | null {
   }
   const disabling = said(body["disabling"]);
   const fromAPack = said(body["from_a_pack"]);
+  const keptOut = said(body["kept_out"]);
   return {
     person,
     placements: readPlacements(body["placements"]),
@@ -343,8 +359,10 @@ export function readPersonDetail(payload: unknown): PersonDetail | null {
     editable: body["editable"] === true,
     mayDisable: body["may_disable"] === true,
     mayOrganise: body["may_organise"] === true,
+    departmentSetOnPeople: body["department_set_on_people"] === true,
     ...(disabling === undefined ? {} : { disabling }),
     ...(fromAPack === undefined ? {} : { fromAPack }),
+    ...(keptOut === undefined ? {} : { keptOut }),
   };
 }
 
@@ -356,6 +374,25 @@ export function fromElevation(held: Held): boolean {
 // ------------------------------------------------------------------------------ the list's controls
 
 export const STANDING_WORDS: Readonly<Record<string, string>> = Object.freeze({ live: "Live", disabled: "Disabled" });
+
+/** Where the staff list says somebody stands, as `brain.identity.staff_source.EmploymentStatus`. */
+export const STAFF_STATUS_WORDS: Readonly<Record<string, string>> = Object.freeze({
+  active: "Active",
+  suspended: "Suspended",
+  left: "Left",
+  not_activated: "Not activated",
+});
+
+/** The employment types the staff list records, as `brain.identity.staff_source.EmploymentType`. */
+export const EMPLOYMENT_TYPE_WORDS: Readonly<Record<string, string>> = Object.freeze({
+  regular: "Regular",
+  intern: "Intern",
+  outsourced: "Outsourced",
+  labour_dispatch: "Labour dispatch",
+  consultant: "Consultant",
+  contractor: "Contractor",
+  other: "Other",
+});
 
 export const PEOPLE_FILTERS: readonly FilterChoice<PersonRow>[] = [
   {
@@ -370,6 +407,20 @@ export const PEOPLE_FILTERS: readonly FilterChoice<PersonRow>[] = [
     everything: "Any standing",
     read: (row) => row.standing,
     describe: (value) => STANDING_WORDS[value] ?? value,
+  },
+  {
+    column: "staff_status",
+    label: "On the staff list",
+    everything: "Any status",
+    read: (row) => row.staffStatus,
+    describe: (value) => STAFF_STATUS_WORDS[value] ?? value,
+  },
+  {
+    column: "employment_type",
+    label: "Employment type",
+    everything: "Any type",
+    read: (row) => row.employmentType,
+    describe: (value) => EMPLOYMENT_TYPE_WORDS[value] ?? value,
   },
   {
     column: "second_factor",

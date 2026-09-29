@@ -178,7 +178,8 @@ def person(pid: str) -> Principal:
         kind=PrincipalKind.HUMAN,
         employment=Employment.STAFF,
         display_name=f"Person {pid}",
-        primary_department=DEPARTMENTS[pid],
+        # `.get`: a module borrowing this directory may add a reader who sits nowhere.
+        primary_department=DEPARTMENTS.get(pid),
     )
 
 

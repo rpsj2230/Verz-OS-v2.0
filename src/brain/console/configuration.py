@@ -72,6 +72,7 @@ from typing import Final
 from urllib.parse import urlsplit, urlunsplit
 from zoneinfo import ZoneInfo
 
+from brain.identity.departments_from import DepartmentsFrom
 from brain.identity.staff_accounts import NOBODY
 from brain.identity.staff_source import EmploymentType
 from brain.install import BY_NAME, INSTALLATION, Belongs, Setting, saved_values
@@ -215,6 +216,7 @@ SECTION_OF: Final[Mapping[str, Section]] = MappingProxyType(
         "INSTALL_STAFF_SOURCE": Section.STAFF,
         "INSTALL_STAFF_SOURCE_LOCATION": Section.STAFF,
         "INSTALL_ACCOUNT_EMPLOYMENT_TYPES": Section.STAFF,
+        "INSTALL_DEPARTMENTS_FROM": Section.STAFF,
         "INSTALL_OBJECT_STORE_URL": Section.FILES,
         "INSTALL_OBJECT_STORE_PREFIX": Section.FILES,
         "INSTALL_OBJECT_STORE_BACKEND": Section.FILES,
@@ -252,6 +254,7 @@ LABELS: Final[Mapping[str, str]] = MappingProxyType(
         "INSTALL_STAFF_SOURCE": "Where the staff list comes from",
         "INSTALL_STAFF_SOURCE_LOCATION": "Where that staff list is",
         "INSTALL_ACCOUNT_EMPLOYMENT_TYPES": "Employment types that may use the Brain",
+        "INSTALL_DEPARTMENTS_FROM": "Departments come from",
         "INSTALL_OBJECT_STORE_URL": "File store address",
         "INSTALL_OBJECT_STORE_PREFIX": "Folder in the file store",
         "INSTALL_OBJECT_STORE_BACKEND": "Kind of file store",
@@ -277,6 +280,7 @@ EDITABLE_SETTINGS: Final[frozenset[str]] = frozenset(
         "INSTALL_TIME_ZONE",
         "INSTALL_MODEL_PROFILE",
         "INSTALL_ACCOUNT_EMPLOYMENT_TYPES",
+        "INSTALL_DEPARTMENTS_FROM",
     }
 )
 
@@ -379,6 +383,7 @@ READ_BY: Final[Mapping[str, tuple[str, ...]]] = {
     "INSTALL_STAFF_SOURCE": ("brain.identity.staff_source", "brain.ops.realm_import"),
     "INSTALL_STAFF_SOURCE_LOCATION": ("brain.identity.staff_source", "brain.ops.realm_import"),
     "INSTALL_ACCOUNT_EMPLOYMENT_TYPES": ("brain.ops.staff_accounts_run",),
+    "INSTALL_DEPARTMENTS_FROM": ("brain.identity.departments_from",),
     "INSTALL_MODEL_PROFILE": ("brain.ops.model_service", "brain.app"),
     "INSTALL_MODEL_ENDPOINT": ("brain.knowledge.embed_policy",),
     "INSTALL_EMBEDDING_DIMENSIONS": ("brain.knowledge.search",),
@@ -652,6 +657,13 @@ def setting_problem(name: str, value: str) -> str:
         return _zone_problem(written)
     if name == "INSTALL_ACCOUNT_EMPLOYMENT_TYPES":
         return _employment_types_problem(written)
+    if name == "INSTALL_DEPARTMENTS_FROM" and written.strip().casefold() not in {
+        one.value for one in DepartmentsFrom
+    }:
+        return (
+            f"Choose {DepartmentsFrom.STAFF_SOURCE.value}, for the department the staff list "
+            f"names, or {DepartmentsFrom.CONSOLE.value}, to set departments on People."
+        )
     if name == "INSTALL_MODEL_PROFILE" and written not in MODEL_PROFILES:
         return (
             f"Choose {LOCAL_PROFILE}, to keep answers on this server, or {HOSTED_PROFILE}, to "

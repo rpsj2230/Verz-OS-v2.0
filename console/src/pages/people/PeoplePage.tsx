@@ -39,7 +39,7 @@ import { useCallback, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useListing } from "../../components/useListing";
 import { DataStewardCard } from "../../components/DataStewardCard";
-import { Chip, ListPage, type EntityColumn } from "../../components/kit";
+import { Chip, ListPage, Note, type EntityColumn } from "../../components/kit";
 import { Button } from "../../components/ui/button";
 import {
   DropdownMenu,
@@ -49,8 +49,9 @@ import {
 } from "../../components/ui/dropdown-menu";
 import { dayWords } from "../access/formParts";
 import { AccountReady } from "./AccountReady";
+import { MOVE_SELECTED, MoveDrawer } from "./MoveDrawer";
 import { AddPersonDrawer, SeveralDrawer } from "./GrantDrawers";
-import { SecondFactorPill, StandingPill } from "./pills";
+import { SecondFactorPill, StaffStatusPill, StandingPill } from "./pills";
 import {
   DIRECTORY_API_PATH,
   PEOPLE_FILTERS,
@@ -59,6 +60,8 @@ import {
   readDirectoryFacts,
   readPeople,
   type PersonRow,
+  EMPLOYMENT_TYPE_WORDS,
+  STAFF_STATUS_WORDS,
 } from "./peopleQuery";
 
 export const PEOPLE_HEADING = "People";
@@ -77,6 +80,8 @@ export const GRANT_SELECTED = "Grant to selected";
 export const NAME_COLUMN = "Name";
 export const DEPARTMENT_COLUMN = "Department";
 export const STANDING_COLUMN = "Standing";
+export const STAFF_STATUS_COLUMN = "On the staff list";
+export const EMPLOYMENT_TYPE_COLUMN = "Employment type";
 export const SECOND_FACTOR_COLUMN = "Second factor";
 export const PACKS_COLUMN = "Packs";
 export const LAST_SIGN_IN_COLUMN = "Last sign-in";
@@ -116,6 +121,8 @@ export function PeoplePage() {
   const facts = useMemo(() => readDirectoryFacts(listing.body), [listing.body]);
   const [adding, setAdding] = useState(false);
   const [granting, setGranting] = useState<readonly PersonRow[] | null>(null);
+  const [moving, setMoving] = useState<readonly PersonRow[] | null>(null);
+  const [told, setTold] = useState("");
   const [cleared, setCleared] = useState<(() => void) | null>(null);
 
   const written = useCallback(() => {
@@ -167,6 +174,18 @@ export function PeoplePage() {
       header: STANDING_COLUMN,
       cell: (row) => <StandingPill standing={row.standing} />,
       text: (row) => (row.standing === "disabled" ? "Disabled" : "Live"),
+    },
+    {
+      id: "staff_status",
+      header: STAFF_STATUS_COLUMN,
+      cell: (row) => (row.staffStatus === undefined ? null : <StaffStatusPill status={row.staffStatus} />),
+      text: (row) => (row.staffStatus === undefined ? "" : (STAFF_STATUS_WORDS[row.staffStatus] ?? row.staffStatus)),
+    },
+    {
+      id: "employment_type",
+      header: EMPLOYMENT_TYPE_COLUMN,
+      cell: (row) => (row.employmentType === undefined ? null : (EMPLOYMENT_TYPE_WORDS[row.employmentType] ?? row.employmentType)),
+      text: (row) => (row.employmentType === undefined ? "" : (EMPLOYMENT_TYPE_WORDS[row.employmentType] ?? row.employmentType)),
     },
     {
       id: "second_factor",
@@ -228,17 +247,33 @@ export function PeoplePage() {
         rowLabel={(row) => row.displayName}
         rowActions={(row) => <RowMenu row={row} />}
         bulkActions={
-          facts.editable
+          facts.editable || facts.mayMove
             ? (selected, clear) => (
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    setGranting(selected);
-                    setCleared(() => clear);
-                  }}
-                >
-                  {GRANT_SELECTED}
-                </Button>
+                <>
+                  {facts.editable ? (
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setGranting(selected);
+                        setCleared(() => clear);
+                      }}
+                    >
+                      {GRANT_SELECTED}
+                    </Button>
+                  ) : null}
+                  {facts.mayMove ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setMoving(selected);
+                        setCleared(() => clear);
+                      }}
+                    >
+                      {MOVE_SELECTED}
+                    </Button>
+                  ) : null}
+                </>
               )
             : undefined
         }
@@ -249,6 +284,7 @@ export function PeoplePage() {
         emptyIcon={<Users aria-hidden />}
         footer={
           <>
+            {told === "" ? null : <Note kind="done">{told}</Note>}
             {facts.accountReady === undefined ? null : <AccountReady sentence={facts.accountReady} />}
             <DataStewardCard />
           </>
@@ -264,6 +300,20 @@ export function PeoplePage() {
         chosen={granting ?? []}
         onWritten={() => {
           cleared?.();
+          written();
+        }}
+      />
+      <MoveDrawer
+        open={moving !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setMoving(null);
+          }
+        }}
+        chosen={moving ?? []}
+        onWritten={(sentence) => {
+          cleared?.();
+          setTold(sentence);
           written();
         }}
       />

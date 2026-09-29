@@ -80,6 +80,7 @@ from brain.console.organisation import (
     ORGANISING_AUTHORITY,
     Member,
     may_add_person,
+    may_organise,
     nameable,
     placed,
 )
@@ -93,13 +94,27 @@ from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.core.scope import Scope
 from brain.core.scope_sql import PredicateRefusedError
 from brain.gate.admission import Assurance
-from brain.identity.organisation_store import one_department
+from brain.gate.context import Channel
+from brain.identity.departments_from import (
+    DEPARTMENTS_COME_FROM_THE_STAFF_LIST,
+    DepartmentsFrom,
+    departments_from,
+)
+from brain.identity.organisation_store import moving_people, one_department
 from brain.identity.principal_state_store import A_DISABLE_IS_REVERSIBLE_AND_A_LEAVER_IS_NOT
-from brain.identity.staff_accounts import YOUR_ACCOUNT_IS_READY
-from brain.identity.staff_source import SELECTABLE, STAFF_SOURCE_SETTING
+from brain.identity.staff_accounts import YOUR_ACCOUNT_IS_READY, allowed_types
+from brain.identity.staff_source import (
+    SELECTABLE,
+    STAFF_SOURCE_SETTING,
+    EmploymentStatus,
+    EmploymentType,
+)
+from brain.identity.standing import WHY_KEPT_OUT, kept_out_because
+from brain.identity.standing import Standing as ListStanding
 from brain.install import InstallError, value_of
 from brain.listing import Column, ListAsked, Listing
 from brain.ops.replica_store import ConsoleReads
+from brain.ops.staff_accounts_run import ACCOUNT_TYPES_SETTING
 from brain.routing_routes import sessions_of
 from brain.setup_routes import new_principal_id
 from brain.tables.gate import (
@@ -111,8 +126,15 @@ from brain.tables.gate import (
     ScopeRow,
     TeamRow,
 )
-from brain.tables.identity import DISPLAY_NAME_CHARS, PRINCIPAL_ID_CHARS, PrincipalRow, SessionRow
+from brain.tables.identity import (
+    DISPLAY_NAME_CHARS,
+    PRINCIPAL_ID_CHARS,
+    PrincipalIdentityRow,
+    PrincipalRow,
+    SessionRow,
+)
 from brain.tables.organisation import DepartmentLeadRow, TeamMembershipRow
+from brain.tables.staff import StaffMemberRow
 
 log = structlog.get_logger()
 
@@ -229,6 +251,11 @@ class DirectoryPersonView(BaseModel):
     last_signed_in_at: datetime | None
     #: The live packs assigned to them, by slug. Empty when not told or none.
     packs: list[str]
+    #: Where the staff list says they stand: active, suspended, left or not_activated. Null for
+    #: somebody the list does not name, or an install that reads no list (M1.6.13).
+    staff_status: str | None = None
+    #: The employment type the staff list records for them, or null when it records none.
+    employment_type: str | None = None
 
 
 class DirectoryPage(BaseModel):
@@ -251,6 +278,9 @@ class DirectoryPage(BaseModel):
     adding: str
     #: With a staff list read: the sentence to pass on to somebody whose account the sync made.
     account_ready: str | None = None
+    #: Several people may be moved to a department: departments are managed on People and the
+    #: organising authority is held somewhere (M1.6.20). Presentation only; the route asks again.
+    may_move: bool = False
     disabling: str = A_DISABLE_IS_REVERSIBLE_AND_A_LEAVER_IS_NOT
     staleness: StalenessBanner | None = None
 
@@ -318,6 +348,12 @@ class PersonDetail(BaseModel):
     disabling: str = A_DISABLE_IS_REVERSIBLE_AND_A_LEAVER_IS_NOT
     from_a_pack: str = A_CAPABILITY_FROM_A_PACK_GOES_WITH_THE_PACK
     staleness: StalenessBanner | None = None
+    #: Why the staff list keeps them from signing in or asking, or null when it does not
+    #: (`brain.identity.standing.WHY_KEPT_OUT`, M1.6.14).
+    kept_out: str | None = None
+    #: Departments are managed on People on this install, so their department is set there and
+    #: not at the staff source (M1.6.19). Presentation only.
+    department_set_on_people: bool = False
 
 
 #: A person's name as a person reads it, trimmed, as `auth.principal.display_name_present` requires.
@@ -372,6 +408,47 @@ class PersonAdded(BaseModel):
     created_at: datetime
 
 
+#: Where several people are moved to one department.
+MOVING_PATH: Final = "/govern/directory/department"
+
+#: The most people one move carries. A bound on the request, as `/govern/grants/several` has one.
+MAX_MOVED: Final = 200
+
+
+#: A person's id as a move names one.
+PersonId = Annotated[str, StringConstraints(min_length=1, max_length=PRINCIPAL_ID_CHARS)]
+
+
+class DepartmentMoving(BaseModel):
+    """Several people to put in one department, on an install that manages departments on People.
+
+    `extra="forbid"`, so a body naming anything else is refused rather than ignored.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    principal_ids: list[PersonId] = Field(min_length=1, max_length=MAX_MOVED)
+    department: DepartmentSlug
+
+
+class DepartmentMoved(BaseModel):
+    """Who was moved. Somebody already in the department is not a move, and is not listed."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    department: str
+    moved: list[str]
+    told: str
+
+
+#: Why a move is all of the people named or none of them.
+A_MOVE_IS_EVERYBODY_OR_NOBODY: Final = (
+    "Several people are moved in one statement or not at all. A move that went through for some of "
+    "them would leave the page showing a selection the database no longer matches, and the one "
+    "refusal for any of them says nothing about which person this reader may not move."
+)
+
+
 # ---------------------------------------------------------------- the statements
 
 
@@ -406,6 +483,27 @@ def one_person(principal_id: str) -> Select[tuple[str, str, str | None, str, dat
         PrincipalRow.id == principal_id,
         PrincipalRow.deleted_at.is_(None),
         PrincipalRow.kind == PrincipalKind.HUMAN.value,
+    )
+
+
+def people_by_id(
+    principal_ids: Sequence[str],
+) -> Select[tuple[str, str, str | None, str, datetime | None]]:
+    """These live people, as `one_person` reads one, in id order."""
+    return (
+        select(
+            PrincipalRow.id,
+            PrincipalRow.display_name,
+            PrincipalRow.primary_department,
+            PrincipalRow.employment,
+            PrincipalRow.disabled_at,
+        )
+        .where(
+            PrincipalRow.id.in_(list(principal_ids)),
+            PrincipalRow.deleted_at.is_(None),
+            PrincipalRow.kind == PrincipalKind.HUMAN.value,
+        )
+        .order_by(PrincipalRow.id)
     )
 
 
@@ -568,6 +666,8 @@ class Loaded:
     packs: tuple[str, ...]
     #: When the most recent session began and how strongly, or None.
     sign_in: tuple[datetime, int] | None
+    #: Where the staff list says they stand and their employment type, or None when not named.
+    standing: tuple[str, str | None] | None = None
 
 
 def department_names(rows: Sequence[Any]) -> dict[str, str]:
@@ -604,7 +704,72 @@ def person_view(one: Loaded) -> DirectoryPersonView:
         second_factor=None if one.sign_in is None else one.sign_in[1] >= Assurance.STRONG,
         last_signed_in_at=None if one.sign_in is None else one.sign_in[0],
         packs=list(one.packs),
+        staff_status=None if one.standing is None else one.standing[0],
+        employment_type=None if one.standing is None else one.standing[1],
     )
+
+
+def the_list_read() -> str | None:
+    """The staff source this install reads its people from, or None when it reads none."""
+    try:
+        named = value_of(STAFF_SOURCE_SETTING)
+    except InstallError:
+        return None
+    chosen = {one.name: one for one in SELECTABLE}.get(named)
+    return named if chosen is not None and chosen.reads_a_list else None
+
+
+def standing_of(
+    principal_ids: Sequence[str], source: str
+) -> Select[tuple[str, str, str | None, datetime | None]]:
+    """Where the list names these people: whose, their status, type and when they left.
+
+    Joined through the roster's email binding, the one join between a person and their row.
+    """
+    return (
+        select(
+            PrincipalIdentityRow.principal_id,
+            StaffMemberRow.status,
+            StaffMemberRow.employment_type,
+            StaffMemberRow.left_at,
+        )
+        .join(StaffMemberRow, StaffMemberRow.address_hash == PrincipalIdentityRow.identity_hash)
+        .where(
+            PrincipalIdentityRow.channel == Channel.EMAIL.value,
+            PrincipalIdentityRow.deleted_at.is_(None),
+            PrincipalIdentityRow.principal_id.in_(list(principal_ids)),
+            StaffMemberRow.source == source,
+        )
+    )
+
+
+def standings_by_person(rows: Sequence[Any]) -> dict[str, tuple[str, str | None]]:
+    """Each person's status and type. A row the list marked left with no status of its own, which
+    a row written before `0156` is, reads as left."""
+    found: dict[str, tuple[str, str | None]] = {}
+    for pid, status, kind, left_at in rows:
+        shown = (
+            EmploymentStatus.LEFT.value if left_at is not None and status == "active" else status
+        )
+        found[str(pid)] = (str(shown), None if kind is None else str(kind))
+    return found
+
+
+def kept_out_sentence(standing: tuple[str, str | None] | None) -> str | None:
+    """What a person's page says about why the list keeps them out, or None."""
+    if standing is None:
+        return None
+    try:
+        why = kept_out_because(
+            ListStanding(
+                EmploymentStatus(standing[0]),
+                None if standing[1] is None else EmploymentType(standing[1]),
+            ),
+            allowed_types(value_of(ACCOUNT_TYPES_SETTING)),
+        )
+    except (ValueError, InstallError):
+        return None
+    return None if why is None else WHY_KEPT_OUT[why]
 
 
 def reads_a_staff_list(
@@ -675,6 +840,8 @@ DIRECTORY: Final[Listing[DirectoryPersonView]] = Listing(
         Column("second_factor", lambda row: row.second_factor, filter=True),
         Column("last_signed_in_at", lambda row: row.last_signed_in_at, sort=True),
         Column("packs", lambda row: tuple(row.packs), search=True, filter=True),
+        Column("staff_status", lambda row: row.staff_status, filter=True, sort=True),
+        Column("employment_type", lambda row: row.employment_type, filter=True, sort=True),
     ),
     key=lambda row: row.principal_id,
     order="display_name",
@@ -699,6 +866,7 @@ async def directory(request: Request, asked: Asked, listed: DirectoryQuery) -> D
         raise _not_answerable()
     plan = DIRECTORY.plan(listed, reader=asked.caller.principal.id)
     named = may_name_capabilities(reach, now)
+    source = the_list_read()
 
     async def load(session: AsyncSession) -> tuple[list[Loaded], bool]:
         rows = (await session.execute(live_people(MAX_PEOPLE))).all()
@@ -724,6 +892,9 @@ async def directory(request: Request, asked: Asked, listed: DirectoryQuery) -> D
                 pid: (started, assurance)
                 for pid, started, assurance in (await session.execute(last_sessions(told))).all()
             }
+        standing: dict[str, tuple[str, str | None]] = {}
+        if source is not None:
+            standing = standings_by_person((await session.execute(standing_of(ids, source))).all())
         return [
             Loaded(
                 member=one,
@@ -731,6 +902,7 @@ async def directory(request: Request, asked: Asked, listed: DirectoryQuery) -> D
                 department_name=None if one.department is None else names.get(one.department),
                 packs=tuple(packs.get(one.principal_id, ())),
                 sign_in=signed.get(one.principal_id),
+                standing=standing.get(one.principal_id),
             )
             for one in shown
         ], len(rows) >= MAX_PEOPLE
@@ -750,6 +922,8 @@ async def directory(request: Request, asked: Asked, listed: DirectoryQuery) -> D
         if from_a_list
         else ADDING_A_PERSON_GRANTS_NOTHING,
         account_ready=YOUR_ACCOUNT_IS_READY if from_a_list else None,
+        may_move=departments_from() is DepartmentsFrom.CONSOLE
+        and reach.scope_for(ORGANISING_AUTHORITY, now) is not None,
         staleness=served.banner,
     )
 
@@ -860,6 +1034,7 @@ async def person_page(
         log.info("person not answerable", principal=asked.caller.principal.id)
         raise _no_person_here()
     named = may_name_capabilities(reach, now)
+    source = the_list_read()
 
     async def load(session: AsyncSession) -> LoadedPerson | None:
         row = (await session.execute(one_person(principal_id))).one_or_none()
@@ -937,6 +1112,13 @@ async def person_page(
         if may_show_sign_in(placed(member).where, reach, now):
             last = (await session.execute(last_sessions([member.principal_id]))).all()
             sign_in = (last[0][1], last[0][2]) if last else None
+        standing = (
+            standings_by_person(
+                (await session.execute(standing_of([member.principal_id], source))).all()
+            ).get(member.principal_id)
+            if source is not None
+            else None
+        )
         return LoadedPerson(
             person=Loaded(
                 member=member,
@@ -944,6 +1126,7 @@ async def person_page(
                 department_name=None if home is None else departments.get(home),
                 packs=tuple(dict.fromkeys(pack.name for _, pack in assignments)),
                 sign_in=sign_in,
+                standing=standing,
             ),
             placements=placements,
             held=held,
@@ -962,6 +1145,8 @@ async def person_page(
         may_disable=reach.scope_for(GOVERNANCE_CONTROL, now) is not None,
         may_organise=reach.scope_for(ORGANISING_AUTHORITY, now) is not None,
         staleness=served.banner,
+        kept_out=kept_out_sentence(found.person.standing),
+        department_set_on_people=departments_from() is DepartmentsFrom.CONSOLE,
     )
 
 
@@ -1011,4 +1196,66 @@ async def add_person(request: Request, body: PersonAdding, asked: Asked) -> Pers
         display_name=body.display_name,
         department=body.department,
         created_at=created,
+    )
+
+
+# -------------------------------------------------------------------- moving (M1.6.20)
+
+
+def _no_person_to_move() -> Absent:
+    """The one refusal a move makes to a caller who is told nothing more."""
+    return Absent("those people are not movable here by this caller")
+
+
+@router.post(MOVING_PATH, response_model=DepartmentMoved, responses=COMMON_RESPONSES)
+async def move_people(request: Request, body: DepartmentMoving, asked: Asked) -> DepartmentMoved:
+    """Put several people in one department, on an install that manages departments on People.
+
+    The authority anywhere first, so a caller holding it nowhere learns nothing, not even where
+    departments come from; then the setting, said to a holder in a sentence; then the authority over
+    the department they go to, before the database; then the department, which must be live, and
+    every person, each of whom this reader must be able to name and to organise where they sit now
+    and where they are going (`may_organise`). One refusal for any of them, and nobody moves; see
+    `A_MOVE_IS_EVERYBODY_OR_NOBODY`. The update is attributed so `0170`'s trigger records each move
+    under the caller.
+    """
+    reach, now = asked.reach, asked.now
+    if reach.scope_for(ORGANISING_AUTHORITY, now) is None:
+        log.info("people not movable", principal=asked.caller.principal.id)
+        raise _no_person_to_move()
+    if departments_from() is not DepartmentsFrom.CONSOLE:
+        raise _said(DEPARTMENTS_COME_FROM_THE_STAFF_LIST)
+    if not may_add_person(reach, department=body.department, now=now):
+        log.info("people not movable there", principal=asked.caller.principal.id)
+        raise _no_person_to_move()
+    wanted = sorted(set(body.principal_ids))
+    async with _sessions(request)() as session:
+        if (await session.execute(one_department(body.department))).first() is None:
+            await session.rollback()
+            raise _said(A_DEPARTMENT_NAMED_IS_NOT_LIVE)
+        members = [member_of(row) for row in (await session.execute(people_by_id(wanted))).all()]
+        shown = {one.principal_id for one in nameable(members, reach, now)}
+        if [one.principal_id for one in members] != wanted or not all(
+            one.principal_id in shown
+            and may_organise(reach, department=body.department, person=one, now=now)
+            for one in members
+        ):
+            await session.rollback()
+            log.info("people not movable", principal=asked.caller.principal.id)
+            raise _no_person_to_move()
+        moving = [one.principal_id for one in members if one.department != body.department]
+        if moving:
+            await attribute(session, asked)
+            await session.execute(moving_people(moving, body.department))
+        await session.commit()
+    log.info(
+        "people moved", principal=asked.caller.principal.id, moved=len(moving), to=body.department
+    )
+    return DepartmentMoved(
+        department=body.department,
+        moved=moving,
+        told=(
+            f"Moved {len(moving)} {'person' if len(moving) == 1 else 'people'}. Their access has "
+            "not changed: what they may see is still only what their grants say."
+        ),
     )
