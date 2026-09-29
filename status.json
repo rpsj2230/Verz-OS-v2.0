@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-09-29T08:33:56.117136+00:00",
-  "commit": "007ea74d",
-  "commit_subject": "Rate limits and capacity budgets are rows changed from the console within the product's bounds, audited and in force within a minute (#210)",
+  "generated_at": "2026-09-29T08:34:38.984119+00:00",
+  "commit": "3cbb087c",
+  "commit_subject": "Two Wave 0 tasks close on the first staff sync: the worker borrows the source's key for one run and hands it back (#213)",
   "total": 1576,
-  "done": 410,
-  "percent": 26.0,
+  "done": 412,
+  "percent": 26.1,
   "acts": 47,
   "decided": 131,
   "current_wave": 0,
@@ -13,11 +13,11 @@
       "wave": 0,
       "name": "Foundation",
       "total": 128,
-      "done": 124,
-      "percent": 96.9,
+      "done": 126,
+      "percent": 98.4,
       "in_progress": 0,
       "ready_for_testing": 1,
-      "blocked": 3,
+      "blocked": 1,
       "open": 0,
       "acts": 3,
       "decided": 7
@@ -386,7 +386,7 @@
       "name": "Application scaffold and runtime",
       "wave": 0,
       "total": 38,
-      "done": 36,
+      "done": 38,
       "acts": 0,
       "decided": 2
     },
@@ -761,6 +761,8 @@
     "M31.3.1.4",
     "M31.3.2.1",
     "M31.3.2.2",
+    "M31.3.2.3",
+    "M31.3.2.4",
     "M31.3.2.5",
     "M31.3.2.6",
     "M31.4.1",
@@ -1096,16 +1098,6 @@
       "why": "engine tests pass for session and transaction pooling; closing needs PgBouncer on the install (M0.3.4)",
       "updated": "2026-09-21"
     },
-    "M31.3.2.3": {
-      "status": "BLOCKED",
-      "why": "live since d6290cb; the proof is one connector sync on the install and none is connected yet: connecting Lark (needs-rupash 91, before you start) proves it",
-      "updated": "2026-09-28"
-    },
-    "M31.3.2.4": {
-      "status": "BLOCKED",
-      "why": "live since d6290cb; the proof is the lease revoked at the end of a connector sync on the install, which waits for the first connection (needs-rupash 91)",
-      "updated": "2026-09-28"
-    },
     "M38.2.1.1": {
       "status": "READY FOR TESTING",
       "why": "WAVE_RECORDS and /build/waves are live on staging; proved when the first wave is accepted and recorded",
@@ -1123,14 +1115,18 @@
     }
   },
   "wave_records": {},
-  "closed_today": 40,
+  "closed_today": 42,
   "next_up": [
-    "M31.3.2.3",
-    "M31.3.2.4",
     "M38.2.1.1",
     "M41.3.1"
   ],
   "recent": [
+    {
+      "sha": "3cbb087",
+      "at": "2026-09-29T08:30:41+00:00",
+      "subject": "Two Wave 0 tasks close on the first staff sync: the worker borrows the source's key for one run and hands it back (#213)",
+      "closed": "M31.3.2.3,M31.3.2.4"
+    },
     {
       "sha": "48ba153",
       "at": "2026-09-29T04:55:32+00:00",
@@ -1244,12 +1240,6 @@
       "at": "2026-09-21T17:52:56+00:00",
       "subject": "The gate records from arrival, serves stored answers with their age, and answers as the agent a person names",
       "closed": "M3.1.2,M3.1.3,M3.4.1,M3.5.2,M3.5.3,M3.9.8"
-    },
-    {
-      "sha": "ee259fe",
-      "at": "2026-09-21T17:18:55+00:00",
-      "subject": "A staff source is chosen, tested and connected from the console, and a leaver's agents stop",
-      "closed": "M1.8.9"
     }
   ]
 }
