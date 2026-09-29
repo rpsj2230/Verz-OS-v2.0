@@ -241,6 +241,8 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.audit.chain_check:LedgerSequence.after": Repeat.READS,
         "brain.audit.chain_check:LedgerSequence.at_seq": Repeat.READS,
         "brain.audit.chain_check:LedgerSequence.newest": Repeat.READS,
+        # The acceptance results a requirement row shows as its evidence, read and never written.
+        "brain.requirement_check_routes:AcceptanceRuns.newest": Repeat.READS,
         # A requirement check (0099) is an append with no key: a second press is a second check,
         # which is what it is, since a later check supersedes and never edits an earlier one.
         "brain.requirement_check_routes:RequirementChecks.latest": Repeat.READS,

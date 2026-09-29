@@ -15,18 +15,21 @@
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
 import { NOT_RECORDED } from "../src/components/kit";
 import { UNAVAILABLE } from "../src/pages/models/modelsActions";
-import { LAST_TEST_COLUMN, PROVIDERS_LEDE, readProviderRows } from "../src/pages/models/ProvidersPage";
+import { ABOUT_THE_MATRIX, FAILOVER_MATRIX, MATRIX_EXPLAINED } from "../src/pages/models/FailoverMatrixCard";
+import { GOLDEN_QUESTION_FIELD } from "../src/pages/models/GoldenQuestions";
+import { PROVIDERS_LEDE, readProviderRows } from "../src/pages/models/ProvidersPage";
 import { ANSWERED_LABEL, COST_LABEL, FAILURES_LABEL, NO_SUCH_PROVIDER } from "../src/pages/models/ProviderDetailPage";
 import { lastTestWords } from "../src/pages/models/providerWords";
-import { FAILOVER_MATRIX, HELD_HEADING } from "../src/pages/models/RoutingPage";
-import { matrixLines } from "../src/pages/models/routingWords";
+import { HELD_HEADING } from "../src/pages/models/RoutingPage";
+import { editorTitle } from "../src/pages/models/RungEditor";
+import { ADD_A_GOLDEN_QUESTION, HELD_UNTIL_A_GOLDEN_QUESTION, matrixLines } from "../src/pages/models/routingWords";
 import type { RungRow } from "../src/pages/matrixQuery";
 import { fakeIdentityProvider, loadConsole, signIn } from "./support/auth";
-import { apiDocument, declaredQueryParameters } from "./support/openapi";
+import { apiDocument } from "./support/openapi";
 import { installRadixStubs } from "./support/radix";
 
 const ORIGIN = "https://console.test";
@@ -50,7 +53,10 @@ interface Sent {
 
 type Answers = Readonly<Record<string, (body: unknown) => unknown>>;
 
-async function consoleAt(address: string, answers: Answers): Promise<{ container: HTMLElement; sent: Sent[] }> {
+async function consoleAt(
+  address: string,
+  answers: Answers,
+): Promise<{ container: HTMLElement; sent: Sent[]; router: ReturnType<typeof createMemoryRouter> }> {
   const sent: Sent[] = [];
   const idp = fakeIdentityProvider({
     api(url, init) {
@@ -75,7 +81,7 @@ async function consoleAt(address: string, answers: Answers): Promise<{ container
       throw new Error("the page has not arrived");
     }
   });
-  return { container, sent };
+  return { container, sent, router };
 }
 
 function writes(sent: readonly Sent[]): Sent[] {
@@ -163,54 +169,118 @@ function rung(id: string, tier: string, position: number, slug: string, model: s
 
 // ------------------------------------------------------------------------------ the providers
 
-describe("the providers list", () => {
-  test("each provider is a row by the name a person knows, with on or off, its key, its last test and its models", async () => {
-    // What breaks if this is deleted: the owner's list drawn with slugs, a test result nobody reads,
-    // or the models column empty for a provider every question uses.
+/** The rows of the owner's table, one per step or empty level, never the phone's level headings. */
+function matrixRowsOf(root: ParentNode): HTMLElement[] {
+  return [...root.querySelectorAll<HTMLElement>('[data-slot="failover-matrix"] [data-slot="matrix-row"]')];
+}
+
+/** A matrix row as it reads at a desktop's width: level, step, provider, model and role. */
+function cellsOf(row: HTMLElement): (string | null)[] {
+  const cells = [...row.querySelectorAll("td")];
+  if (cells.length < 5) {
+    return cells.map((cell) => cell.textContent);
+  }
+  return [cells[0]?.textContent ?? null, cells[1]?.textContent ?? null, cells[2]?.textContent ?? null, cells[3]?.firstElementChild?.textContent ?? null, cells[4]?.textContent ?? null];
+}
+
+/** Opens a row's menu from the keyboard and chooses one item, as a keyboard user would. */
+async function chooseOnRow(name: string, label: string): Promise<void> {
+  const trigger = screen.getByRole("button", { name });
+  trigger.focus();
+  await act(async () => {
+    fireEvent.keyDown(trigger, { key: "Enter" });
+  });
+  const menu = await screen.findByRole("menu");
+  const item = within(menu).getByRole("menuitem", { name: label });
+  item.focus();
+  await act(async () => {
+    fireEvent.keyDown(item, { key: "Enter" });
+  });
+}
+
+describe("the providers", () => {
+  test("each provider is a compact card by the name a person knows, with its status, key, last test and acts", async () => {
+    // What breaks if this is deleted: the owner's cards drawn with slugs, a test result nobody reads,
+    // or the three everyday acts (a key, a test, the switch) missing from the card that needs them.
     const { container } = await consoleAt("/models", {
       [`GET ${PROVIDERS}`]: () =>
         plan(
           [
-            provider("openai", { last_check: { answered: true, outcome: "answered", model: "gpt-5-mini", at: "2019-03-04T09:00:00Z" } }),
+            provider("openai", {
+              last_check: { answered: true, outcome: "answered", model: "gpt-5-mini", at: "2019-03-04T09:00:00Z" },
+              credential: { slot: "providers/openai", description: "OpenAI key", held: true, set_at: null },
+            }),
             provider("anthropic", { switched_on: false, key_held: false }),
           ],
           [step(RUNG_A, "main", 0, "openai", "gpt-5-mini")],
         ),
+      [`GET ${RUNGS}`]: () => ({ items: [rung(RUNG_A, "main", 0, "openai", "gpt-5-mini")], next_cursor: null, total: null, truncated: false, editable: true }),
     });
 
     expect(container.textContent).toContain(PROVIDERS_LEDE);
-    const rows = [...container.querySelectorAll('[data-slot="entity-table"] tbody tr')].map((row) => row.textContent ?? "");
-    expect(rows).toHaveLength(2);
-    expect(rows[0]).toContain("OpenAI");
-    expect(rows[0]).toContain("On");
-    expect(rows[0]).toContain("Answered, 4 Mar 2019");
-    expect(rows[0]).toContain("gpt-5-mini");
-    expect(rows[1]).toContain("Anthropic (Claude)");
-    expect(rows[1]).toContain("Off");
-    expect(rows[1]).toContain("Not held");
-    expect(rows[1]).toContain(lastTestWords(null));
-    const links = [...container.querySelectorAll('[data-slot="entity-table"] tbody a')].map((one) => one.getAttribute("href"));
-    expect(links).toEqual(["/models/openai", "/models/anthropic"]);
-    expect(container.textContent).toContain(LAST_TEST_COLUMN);
+    const cards = [...container.querySelectorAll<HTMLElement>('[data-slot="provider-card"]')];
+    expect(cards.map((one) => one.querySelector("a")?.textContent)).toEqual(["OpenAI", "Anthropic (Claude)"]);
+    expect(cards.map((one) => one.querySelector("a")?.getAttribute("href"))).toEqual(["/models/openai", "/models/anthropic"]);
+    expect(cards[0]?.textContent).toContain("Key:Held");
+    expect(cards[0]?.textContent).toContain("Last test:Answered, 4 Mar 2019");
+    expect([...(cards[0]?.querySelectorAll("button, a") ?? [])].map((one) => one.textContent).slice(1)).toEqual(["Replace key", "Test", "Turn off"]);
+    expect(cards[1]?.textContent).toContain("Not held");
+    expect(cards[1]?.textContent).toContain(lastTestWords(null));
+    expect([...(cards[1]?.querySelectorAll("button") ?? [])].map((one) => one.textContent)).toEqual(["Test", "Turn on"]);
   });
 
-  test("a search and a filter are sent to the route as parameters it declares", async () => {
-    // What breaks if this is deleted: a search box whose words the route ignores, which is a control
-    // that does nothing, the thing the owner asked the console to stop drawing.
+  test("the Models page is the providers and then the owner's matrix, each asked whole with no search or filter", async () => {
+    // What breaks if this is deleted: the Models screen going back to a providers list with no matrix,
+    // which is how the owner found it, or a search box the owner's design does not have.
     const { container, sent } = await consoleAt("/models", {
-      [`GET ${PROVIDERS}`]: () => plan([provider("openai"), provider("moonshot", { switched_on: false })]),
+      [`GET ${PROVIDERS}`]: () => plan([provider("anthropic"), provider("moonshot")], [step(RUNG_A, "main", 0, "anthropic", "claude-sonnet-5")]),
+      [`GET ${RUNGS}`]: () => ({ items: [rung(RUNG_A, "main", 0, "anthropic", "claude-sonnet-5")], next_cursor: null, total: null, truncated: false, editable: true }),
     });
-    fireEvent.change(container.querySelector('input[type="search"]') as HTMLInputElement, { target: { value: "moon" } });
     await waitFor(() => {
-      expect(sent.some((one) => one.path.includes("q=moon"))).toBe(true);
+      expect(matrixRowsOf(container).map(cellsOf)[1]?.[3]).toBe("claude-sonnet-5");
     });
-    const names = declaredQueryParameters(PROVIDERS, "get");
-    expect(names).toEqual(expect.arrayContaining(["q", "filter", "cursor", "sort", "limit"]));
-    for (const one of sent) {
-      for (const name of new URL(one.path, ORIGIN).searchParams.keys()) {
-        expect(names).toContain(name);
-      }
+
+    const cards = container.querySelector('[data-slot="provider-card"]') as HTMLElement;
+    const matrix = container.querySelector('[data-slot="failover-matrix"]') as HTMLElement;
+    expect(cards.compareDocumentPosition(matrix) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(matrix.querySelector("h2")?.textContent).toBe(FAILOVER_MATRIX);
+    expect(container.querySelector('input[type="search"]')).toBeNull();
+    expect(container.querySelector('[data-slot="entity-table"]')).toBeNull();
+    for (const one of sent.filter((request) => request.method === "GET" && [PROVIDERS, RUNGS].includes(request.path.split("?")[0] ?? ""))) {
+      const asked = new URL(one.path, ORIGIN).searchParams;
+      expect([asked.has("q"), asked.has("filter")], one.path).toEqual([false, false]);
     }
+    expect(sent.some((one) => one.path.startsWith(`${RUNGS}?`) && new URL(one.path, ORIGIN).searchParams.get("limit") === "200")).toBe(true);
+  });
+
+  test("a step pressed on the Models page opens its editor on the Routing page, and the menu there offers Edit alone", async () => {
+    // What breaks if this is deleted: a matrix on the Models screen that looks editable and is not,
+    // or one that moves and retires steps with no golden questions and changes in view.
+    const { container, router } = await consoleAt("/models", {
+      [`GET ${PROVIDERS}`]: () => plan([provider("anthropic")], [step(RUNG_A, "main", 0, "anthropic", "claude-sonnet-5")]),
+      [`GET ${RUNGS}`]: () => ({ items: [rung(RUNG_A, "main", 0, "anthropic", "claude-sonnet-5")], next_cursor: null, total: null, truncated: false, editable: true }),
+      ["GET /api/v1/routing/changes"]: () => ({ items: [] }),
+      ["GET /api/v1/routing/golden-questions"]: () => ({ items: [] }),
+      ["GET /api/v1/routing/golden-questions/askers"]: () => ({ items: [], truncated: false }),
+    });
+    await waitFor(() => {
+      expect(matrixRowsOf(container).map(cellsOf)[1]?.[3]).toBe("claude-sonnet-5");
+    });
+    const trigger = screen.getByRole("button", { name: "Actions for step 1 of Anthropic (Claude) claude-sonnet-5" });
+    trigger.focus();
+    await act(async () => {
+      fireEvent.keyDown(trigger, { key: "Enter" });
+    });
+    const menu = await screen.findByRole("menu");
+    const items = within(menu).getAllByRole("menuitem");
+    expect(items.map((one) => one.textContent)).toEqual(["Edit"]);
+    items[0]?.focus();
+    await act(async () => {
+      fireEvent.keyDown(items[0] as HTMLElement, { key: "Enter" });
+    });
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe(`/routing/${RUNG_A}`);
+    });
   });
 
   test("a row the API sends without a provider is not drawn, and a repeated one is drawn once", () => {
@@ -412,15 +482,124 @@ describe("the routing page", () => {
       "Model",
       "Role",
     ]);
-    const rows = [...(table?.querySelectorAll("tbody tr") ?? [])].map((row) => [...row.querySelectorAll("td")].slice(0, 5).map((cell) => cell.textContent));
-    expect(rows).toEqual([
+    expect(matrixRowsOf(container).map(cellsOf)).toEqual([
       ["Simple", "", "No model is set up for this level."],
       ["Medium", "1", "Anthropic (Claude)", "claude-sonnet-5", "default"],
       ["", "2", "Moonshot (Kimi)", "kimi-k3", "next provider"],
       ["Complex", "1", "OpenAI", "gpt-5", "default"],
     ]);
+    // A phone names each level on a row of its own, displayed only below the Provider column's width.
+    expect([...container.querySelectorAll('[data-slot="level-row"]')].map((one) => one.textContent)).toEqual(["Simple", "Medium", "Complex"]);
     expect(table?.textContent).not.toContain(RUNG_A);
     expect(container.textContent ?? "").not.toMatch(/\b(rungs?|ladders?|tiers?|lanes?|slots?)\b/i);
+  });
+
+  test("the matrix card is drawn as the screenshot: a title and its information mark, no lede, no toolbar, no column of buttons", async () => {
+    // What breaks if this is deleted: the card regrowing the lede, the search and filters, the square
+    // pill or a visible Actions column the owner's screenshot does not have.
+    const { container } = await consoleAt("/routing", matrixAnswers());
+    const card = container.querySelector('[data-slot="failover-matrix"]') as HTMLElement;
+    const header = card.firstElementChild as HTMLElement;
+
+    expect([...header.children].map((one) => one.tagName)).toEqual(["H2", "BUTTON", "SPAN"]);
+    expect(within(header).getByRole("button", { name: ABOUT_THE_MATRIX }).getAttribute("aria-describedby")).toBe(header.querySelector("span.sr-only")?.id);
+    expect(header.querySelector("span.sr-only")?.textContent).toBe(MATRIX_EXPLAINED);
+    expect(card.querySelector('input, select, [data-slot="list-toolbar"]')).toBeNull();
+    expect(card.querySelector("p")).toBeNull();
+    const heads = [...card.querySelectorAll("thead th")];
+    expect(heads[5]?.textContent).toBe("Actions");
+    expect(heads[5]?.firstElementChild?.className).toBe("sr-only");
+    const pill = card.querySelector('[data-slot="role-pill"]') as HTMLElement;
+    expect(pill.textContent).toBe("default");
+    expect(pill.className).toContain("rounded-full");
+    expect(pill.querySelector("span[aria-hidden]")?.className).toContain("rounded-full");
+    const later = matrixRowsOf(container)[2]?.querySelector('[data-slot="role-pill"]') as HTMLElement;
+    expect(later.className).toContain("text-dim");
+    expect(later.className).not.toContain("rounded-full");
+  });
+
+  test("with no golden question recorded an editor is told before trying, and the link takes them to the question", async () => {
+    // What breaks if this is deleted: the owner learning that every change is held only from the
+    // first refusal, which is how he found it on 2026-09-28, or a link that goes nowhere.
+    const none = await consoleAt("/routing", matrixAnswers());
+    await waitFor(() => {
+      expect(none.container.querySelector('[data-slot="golden-first"]')?.textContent).toContain(HELD_UNTIL_A_GOLDEN_QUESTION);
+    });
+    const line = none.container.querySelector('[data-slot="golden-first"]') as HTMLElement;
+    const card = none.container.querySelector('[data-slot="failover-matrix"]') as HTMLElement;
+    expect(line.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(within(line).getByRole("button", { name: ADD_A_GOLDEN_QUESTION }));
+    expect(document.activeElement?.id).toBe(GOLDEN_QUESTION_FIELD);
+
+    fireEvent.click(within(none.container).getByRole("button", { name: /Add a step/ }));
+    const form = none.container.querySelector('form[aria-label="Add a step"]') as HTMLFormElement;
+    expect(form.textContent).toContain(HELD_UNTIL_A_GOLDEN_QUESTION);
+  });
+
+  test("with a golden question recorded the line is not drawn, and a reader who may not change the matrix never sees it", async () => {
+    // Positive sibling of the test above. What breaks if this is deleted: the line drawn for ever,
+    // which is a warning nobody reads, or drawn to a reader who can do nothing about it.
+    const recorded = await consoleAt(
+      "/routing",
+      matrixAnswers({
+        ["GET /api/v1/routing/golden-questions"]: () => ({
+          items: [{ id: "q1", question: "How much leave?", asked_as: "p_priya", asked_as_name: "Priya Shah", expect: "answer", created_by: "p" }],
+        }),
+      }),
+    );
+    await waitFor(() => {
+      expect(recorded.container.textContent).toContain("How much leave?");
+    });
+    expect(recorded.container.querySelector('[data-slot="golden-first"]')).toBeNull();
+  });
+
+  test("pressing a step opens its editor in a drawer at its own address, and its menu does not", async () => {
+    // What breaks if this is deleted: the editor drawn as a panel under the table again, or a press
+    // on the row's menu opening the drawer behind the menu.
+    const { container, router } = await consoleAt("/routing", matrixAnswers());
+    await chooseOnRow("Actions for step 2 of Moonshot (Kimi) kimi-k3", "Retire");
+    await screen.findByRole("alertdialog");
+    expect(document.querySelector('[data-slot="drawer"]')).toBeNull();
+    fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Keep the step" }));
+
+    fireEvent.click(matrixRowsOf(container)[2]?.querySelectorAll("td")[3] as HTMLElement);
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe(`/routing/${RUNG_B}`);
+    });
+    const drawer = await waitFor(() => {
+      const found = document.querySelector<HTMLElement>('[data-slot="drawer"]');
+      if (found === null) {
+        throw new Error("the drawer has not opened");
+      }
+      return found;
+    });
+    expect(within(drawer).getByRole("heading", { level: 2 }).textContent).toBe(editorTitle(matrixLines(MATRIX_ROWS, [], [])[2] as never));
+    expect(matrixRowsOf(container)[2]?.getAttribute("data-state")).toBe("selected");
+  });
+
+  test("a step's two forms in the drawer, submitted blank, ask nothing and say what to fill in", async () => {
+    // What breaks if this is deleted: tests/validated-before-write.test.tsx excuses the drawer's forms
+    // on the strength of this test, so without it a blank edit could open a confirmation or be sent.
+    const { sent } = await consoleAt(`/routing/${RUNG_B}`, matrixAnswers());
+    const drawer = await waitFor(() => {
+      const found = document.querySelector<HTMLElement>('[data-slot="drawer"]');
+      if (found === null) {
+        throw new Error("the drawer has not opened");
+      }
+      return found;
+    });
+    const numbers = drawer.querySelector('form[aria-label^="Numbers for step 2"]') as HTMLFormElement;
+    for (const name of ["attempts", "timeout_seconds", "max_concurrency"]) {
+      fireEvent.change(numbers.querySelector(`input[name="${name}"]`) as HTMLInputElement, { target: { value: "" } });
+    }
+    fireEvent.submit(numbers);
+    expect(numbers.textContent).toContain("Give a whole number of tries");
+    const move = drawer.querySelector('form[aria-label^="Move step 2"]') as HTMLFormElement;
+    fireEvent.change(move.querySelector('input[name="step"]') as HTMLInputElement, { target: { value: "" } });
+    fireEvent.submit(move);
+    expect(move.textContent).toContain("Give the step number it moves to");
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(writes(sent)).toEqual([]);
   });
 
   test("a step is moved and retired only from a confirmation, and a held change says why and the way through", async () => {
@@ -439,14 +618,20 @@ describe("the routing page", () => {
       decided_at: "2019-03-04T09:00:00Z",
       rung: null,
     };
-    const { container, sent } = await consoleAt(
+    const { container, sent, router } = await consoleAt(
       `/routing/${RUNG_B}`,
       matrixAnswers({
         [`POST ${RUNGS}/${RUNG_B}/move`]: () => held,
         [`POST ${RUNGS}/${RUNG_B}/retire`]: () => ({ ...held, kind: "retire" }),
       }),
     );
-    const move = container.querySelector('form[aria-label^="Move step 2"]') as HTMLFormElement;
+    const move = await waitFor(() => {
+      const found = document.querySelector<HTMLFormElement>('[data-slot="drawer"] form[aria-label^="Move step 2"]');
+      if (found === null) {
+        throw new Error("the drawer has not opened");
+      }
+      return found;
+    });
     fireEvent.change(move.querySelector('input[name="step"]') as HTMLInputElement, { target: { value: "1" } });
     fireEvent.submit(move);
     expect(writes(sent)).toEqual([]);
@@ -457,13 +642,17 @@ describe("the routing page", () => {
     await waitFor(() => {
       expect(container.querySelector(`[aria-label="${HELD_HEADING}"]`)).not.toBeNull();
     });
+    expect(router.state.location.pathname).toBe("/routing");
     const panel = container.querySelector(`[aria-label="${HELD_HEADING}"]`) as HTMLElement;
     expect(panel.textContent).toContain("The move was held and the step stays where it was.");
     expect(panel.textContent).toContain("To get a change through:");
     expect(panel.textContent).not.toContain("p_admin_1");
 
-    const retire = [...container.querySelectorAll("button")].find((one) => one.textContent === "Retire") as HTMLButtonElement;
-    fireEvent.click(retire);
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "Actions for step 2 of Moonshot (Kimi) kimi-k3" })).not.toBeNull();
+    });
+    await chooseOnRow("Actions for step 2 of Moonshot (Kimi) kimi-k3", "Retire");
+    expect(writes(sent).map((one) => one.path)).not.toContain(`${RUNGS}/${RUNG_B}/retire`);
     await confirm("Retire");
     await waitFor(() => {
       expect(writes(sent).map((one) => one.path)).toContain(`${RUNGS}/${RUNG_B}/retire`);

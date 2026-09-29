@@ -314,6 +314,27 @@ def test_a_fast_lane_question_reaches_no_model_even_when_no_rule_answers_it(
     assert transport.sent == []
 
 
+def test_a_question_no_model_was_asked_for_carries_the_tier_the_front_half_routed_it_to(
+    client: TestClient, transport: Scripted
+) -> None:
+    """M3.6.3 on the path every question on the owner's install took until 2026-09-29: the fast
+    lane reaches no model, and the row still holds the tier ROUTE decided, none, and the step that
+    settled it, beside the lane and the rule that chose it. `none` and `fast_lane` are what only
+    the front half's own decision holds; nothing on the row could be derived into them.
+
+    Delete this and a question answered or refused without a model reaches the row with a lane
+    and no tier, which is what every such row on the install was."""
+    rows = Rows()
+    client.app.state.request_recorders = (rows,)  # type: ignore[attr-defined]
+    assert _ask(client, FAST_LANE_QUESTION) == 200
+    assert transport.sent == []
+    (finished,) = rows.kept
+    row = request_telemetry_of(finished).ledger_row()
+    assert (row["routed_lane"], row["lane_basis"]) == (Lane.FAST, LaneBasis.EXACT_INTENT)
+    assert (row["routed_tier"], row["tier_basis"]) == (Tier.NONE, TierBasis.FAST_LANE)
+    assert row["model"] is None and row["lane"] is Lane.FAST
+
+
 def test_the_request_row_carries_what_the_front_half_decided(client: TestClient) -> None:
     """M3.4.2 and M3.6.3 through the route: the finished request holds the score, the routed
     lane, the stage and the agent the chain decided, which is what the row is written from."""

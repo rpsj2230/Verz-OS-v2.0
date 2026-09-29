@@ -9,10 +9,11 @@ Task ids: M1.8.8, M2.3.2, M5.6.5, M24.3.6
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi import FastAPI
@@ -27,6 +28,7 @@ from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.core.scope import Scope
 from brain.identity.bearer import TokenAuthority
 from brain.identity.first_administrator import ADMINISTRATION
+from brain.ops.acceptance import Check
 from brain.requirement_check_routes import (
     CHECKED_BY,
     DOCS,
@@ -75,6 +77,33 @@ REGISTER = Register(
         row("LIVE2-03", "Models"),
     )
 )
+
+
+async def _nothing(harness: Any) -> None:
+    return None
+
+
+#: Two acceptance checks: one proving the leaf every row above names as its proof, one proving a
+#: leaf no row names. The second is the sibling that shows evidence is chosen by leaf and not whole.
+SUITE = (
+    Check(
+        name="grant_is_refused",
+        leaves=("M1.8.8",),
+        sentence="A refusal names nothing.",
+        run=_nothing,
+    ),
+    Check(name="unrelated_check", leaves=("M9.9.9",), sentence="Something else.", run=_nothing),
+)
+
+
+@dataclass
+class Runs:
+    """`AcceptanceRuns` in memory: the rows of the newest run, by commit."""
+
+    rows: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+
+    async def newest(self, commit: str) -> Sequence[Mapping[str, Any]]:
+        return self.rows.get(commit, [])
 
 
 @dataclass
@@ -137,6 +166,11 @@ def checks() -> Checks:
 
 
 @pytest.fixture
+def runs() -> Runs:
+    return Runs()
+
+
+@pytest.fixture
 def app(checks: Checks) -> Iterator[FastAPI]:
     built = create_app(Settings(env="development"))
     built.include_router(requirement_check_routes.router)
@@ -144,7 +178,7 @@ def app(checks: Checks) -> Iterator[FastAPI]:
 
 
 @pytest.fixture
-def client(app: FastAPI, checks: Checks) -> Iterator[TestClient]:
+def client(app: FastAPI, checks: Checks, runs: Runs) -> Iterator[TestClient]:
     with TestClient(app, raise_server_exceptions=False) as c:
         app.state.gate = GateWiring(
             authority=TokenAuthority(
@@ -161,6 +195,8 @@ def client(app: FastAPI, checks: Checks) -> Iterator[TestClient]:
         app.state.requirement_checks = checks
         app.state.requirement_register = REGISTER
         app.state.release_commit = COMMIT
+        app.state.acceptance_suite = SUITE
+        app.state.acceptance_runs = runs
         yield c
 
 
@@ -200,6 +236,48 @@ def test_the_screen_lists_every_area_and_opens_on_the_first_one_a_leaf_asks_chec
         ("FEAT-1.10", "requirement FEAT-1.10", None),
     ]
     assert body["release_commit"] == COMMIT
+
+
+def test_each_requirement_carries_its_proof_leaves_and_the_acceptance_checks_that_prove_them(
+    client: TestClient, runs: Runs
+) -> None:
+    """A row names the register's proof leaves, and beside them every acceptance check whose leaves
+    meet them, with its outcome on this release and nothing else. The check proving another leaf is
+    left out, which is the sibling showing evidence is chosen by leaf. Delete this and the Record
+    drawer shows a person no evidence, or somebody else's."""
+    runs.rows[COMMIT] = [
+        {
+            "check_name": "grant_is_refused",
+            "leaves": "M1.8.8",
+            "outcome": "failed",
+            "reason": "the refusal named the document",
+            "started_at": "2019-03-04T09:00:00+00:00",
+            "checked_at": "2019-03-04T09:00:05+00:00",
+        }
+    ]
+    row = read(client, "u_admin").json()["requirements"][0]
+    assert row["proof"] == ["M1.8.8"]
+    assert row["evidence"] == [
+        {
+            "name": "grant_is_refused",
+            "sentence": "A refusal names nothing.",
+            "leaves": ["M1.8.8"],
+            "outcome": "failed",
+            "checked_at": "2019-03-04T09:00:05+00:00",
+            "reason": "the refusal named the document",
+        }
+    ]
+
+
+def test_a_check_with_no_run_on_this_release_is_evidence_that_says_not_run(
+    client: TestClient,
+) -> None:
+    """A check this build declares and nothing ran on this release is listed as not run, never as
+    the last release's pass. Delete this and a row reads as proved by a run of different code."""
+    row = read(client, "u_admin").json()["requirements"][0]
+    assert [(one["name"], one["outcome"], one["checked_at"]) for one in row["evidence"]] == [
+        ("grant_is_refused", "not run", "")
+    ]
 
 
 def test_the_four_areas_the_leaves_name_are_the_register_s_own_words() -> None:

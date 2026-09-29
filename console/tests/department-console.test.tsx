@@ -12,16 +12,17 @@
  * `brain.navigation_routes.NavigationView`, and both menus the support file sends are read off
  * `brain.console.department_console`, so the menu these tests draw is the one the route serves.
  *
- * **The Department page asks three routes other screens already ask**, and each card is held to
- * drawing that route's answer, to failing on its own, and to saying in words what the design draws
- * that nothing serves.
+ * **The Department page asks routes other screens already ask**, on the page kit, and each block is
+ * held to drawing that route's answer, to failing on its own, and to being left out when its route
+ * says it is not this reader's. It is mounted through the application's own route table, so its
+ * view addresses are held too.
  *
- * Task ids: M27.7.29, M27.10.1
+ * Task ids: M27.7.29, M27.10.1, M27.16.1
  */
 
-import { MemoryRouter } from "react-router-dom";
+import { createMemoryRouter, MemoryRouter, RouterProvider } from "react-router-dom";
 import { render, waitFor } from "@testing-library/react";
-import { describe, expect, test } from "vitest";
+import { beforeAll, describe, expect, test } from "vitest";
 import {
   A_MENU_NOBODY_ANSWERED_OFFERS_ONLY_YOUR_OWN_WORK,
   menuFor,
@@ -29,14 +30,14 @@ import {
   type NavGroup,
 } from "../src/layout/navigationQuery";
 import {
-  AGENTS_CARD,
-  DEPARTMENT_HEADING,
-  GAPS_CARD,
-  NOT_DRAWN_HERE,
-  NOTHING_TO_SHOW,
-  USAGE_CARD,
-} from "../src/pages/Department";
+  AGENTS_HEADING,
+  KNOWLEDGE_HEADING,
+  NOT_A_DEPARTMENT_CONSOLE,
+  PROFILE_ELSEWHERE,
+  USAGE_HEADING,
+} from "../src/pages/department/DepartmentHomePage";
 import { fakeIdentityProvider, loadConsole, signIn } from "./support/auth";
+import { installRadixStubs } from "./support/radix";
 import {
   COMPANY_CONSOLE,
   NAVIGATION_ADDRESS,
@@ -245,7 +246,16 @@ describe("reading the answer", () => {
 });
 
 describe("the Department page", () => {
-  async function departmentPage(answers: Record<string, () => Response>): Promise<HTMLElement> {
+  beforeAll(() => {
+    installRadixStubs();
+  });
+
+  function json(body: unknown, status = 200): () => Response {
+    return () => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+  }
+
+  /** Mount the console at a Department address with a department's menu and these answers. */
+  async function departmentPage(address: string, answers: Record<string, () => Response>): Promise<HTMLElement> {
     const idp = fakeIdentityProvider({
       api(url) {
         const asked = new URL(url, "https://console.test").pathname;
@@ -253,118 +263,211 @@ describe("the Department page", () => {
       },
     });
     await signIn(await loadConsole({ idp }));
-    const { Department } = await import("../src/pages/Department");
-    const { container } = render(
-      <MemoryRouter initialEntries={["/department"]}>
-        <Department />
-      </MemoryRouter>,
-    );
-    // A loading sentence is a status paragraph; a failure notice is a status too, and is an answer.
+    const { routes } = await import("../src/App");
+    const router = createMemoryRouter(routes, { initialEntries: [address] });
+    const { container } = render(<RouterProvider router={router} />);
     await waitFor(() => {
-      if (container.querySelector('p[role="status"]')) {
+      if (!container.querySelector("main h1") || container.querySelector('main [data-slot="loading-state"]')) {
         throw new Error("the page has not been answered yet");
       }
     });
     return container;
   }
 
-  function json(body: unknown, status = 200): () => Response {
-    return () =>
-      new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
-  }
-
   const USAGE = {
     start: "2019-02-26T09:00:00Z",
     end: "2019-03-05T09:00:00Z",
-    departments: [{ department: "maintenance", questions: 926, people: 31 }],
-    people: [
-      { person: "u_one", questions: 900 },
-      { person: "u_two", questions: 26 },
+    departments: [
+      { department: "maintenance", questions: 926, people: 31 },
+      { department: "web", questions: 4, people: 2 },
     ],
-    questions: 926,
+    people: [{ person: "u_one", questions: 900 }],
+    questions: 930,
     machine_included: false,
     not_measured: [],
     tokens: [],
   };
 
-  test("each card draws its own route's answer and links to the screen it came from", async () => {
-    // What breaks if this is deleted: the page can draw a figure it computed, or a card with
-    // nothing from the API on it, and SCREEN 2's overview is a picture again.
-    const container = await departmentPage({
-      [NAVIGATION_ADDRESS]: json(departmentConsole(sentinel("scope"))),
+  const ORGANISATION = {
+    items: [
+      {
+        slug: "maintenance",
+        name: sentinel("department name"),
+        teams: [{ slug: "night", name: "Night shift", members: [] }],
+        members: [{ principal_id: "u_lead", display_name: "Lee Lead", disabled: false }],
+        lead: { principal_id: "u_lead", display_name: "Lee Lead", disabled: false },
+        shapeable: true,
+      },
+    ],
+    next_cursor: null,
+    unplaced: [],
+    truncated: false,
+    may_organise: true,
+    may_found: true,
+    may_draw_scopes: false,
+    staleness: null,
+    teams: "t",
+    leads: "l",
+    counted: "c",
+    organising: "o",
+    shaping: "s",
+    retiring_department: "Retiring it keeps its history.",
+    retiring_team: "r",
+    retiring_scope: "r",
+  };
+
+  const PEOPLE = {
+    items: [{ principal_id: "u_ada", display_name: sentinel("person"), department: "maintenance", department_name: sentinel("directory name"), standing: "live", packs: [] }],
+    next_cursor: null,
+    truncated: false,
+  };
+
+  const QUESTIONS = {
+    start: "2019-02-26T09:00:00Z",
+    end: "2019-03-05T09:00:00Z",
+    gaps: [],
+    nothing_connected: true,
+    answered_when_nothing_connected: sentinel("told"),
+    answered_when_nothing_found: "not found",
+    unanswered_are_recorded: false,
+  };
+
+  function everything(over: Record<string, () => Response> = {}): Record<string, () => Response> {
+    return {
+      [NAVIGATION_ADDRESS]: json(departmentConsole("maintenance")),
+      "/api/v1/govern/departments": json(ORGANISATION),
+      "/api/v1/govern/directory": json(PEOPLE),
       "/api/v1/report/usage": json(USAGE),
       "/api/v1/agents": json({ items: [{ agent_id: "site-health", display_name: sentinel("agent") }] }),
-      "/api/v1/report/questions": json({
-        start: "2019-02-26T09:00:00Z",
-        end: "2019-03-05T09:00:00Z",
-        gaps: [],
-        nothing_connected: true,
-        answered_when_nothing_connected: sentinel("told"),
-        answered_when_nothing_found: "not found",
-        unanswered_are_recorded: false,
-      }),
-    });
+      "/api/v1/knowledge/documents": json({ items: [{ item_id: "doc-1", title: sentinel("document"), level: "department", state: "published", verification: "verified", due: false, you_steward: false }], next_cursor: null }),
+      "/api/v1/report/questions": json(QUESTIONS),
+      ...over,
+    };
+  }
 
-    expect(container.querySelector("h1")?.textContent).toBe(DEPARTMENT_HEADING);
-    const text = container.textContent ?? "";
-    expect(text).toContain(sentinel("scope"));
-    expect(text).toContain("926");
+  function block(container: HTMLElement, heading: string): Element | undefined {
+    return [...container.querySelectorAll('[data-slot="section-card"]')].find((one) => one.querySelector("h2")?.textContent === heading);
+  }
+
+  test("the Dashboard draws each block from its own route, the department's own line of usage, and links to where each came from", async () => {
+    // What breaks if this is deleted: the page draws a figure it computed, the company's questions
+    // stand for one department's, or a block has nothing from the API on it.
+    const container = await departmentPage("/department", everything());
+    expect(container.querySelector("main h1")?.textContent).toBe(sentinel("department name"));
+    const figures = container.querySelector(`[aria-label="${USAGE_HEADING}"]`)?.textContent ?? "";
+    expect(figures).toContain("926");
+    expect(figures).toContain("31");
+    expect(figures).not.toContain("930");
+    const text = container.querySelector("main")?.textContent ?? "";
+    expect(text).toContain(sentinel("person"));
     expect(text).toContain(sentinel("agent"));
+    expect(text).toContain(sentinel("document"));
     expect(text).toContain(sentinel("told"));
-    expect(text).toContain(NOT_DRAWN_HERE);
-
-    const hrefs = [...container.querySelectorAll("a")].map((one) => one.getAttribute("href"));
-    expect(hrefs).toEqual(expect.arrayContaining(["/usage", "/agents", "/agents/site-health", "/questions"]));
-    const headings = [...container.querySelectorAll("h2")].map((one) => one.textContent);
-    expect(headings).toEqual([USAGE_CARD, AGENTS_CARD, "Your queues", GAPS_CARD]);
+    const hrefs = [...container.querySelectorAll("main a")].map((one) => one.getAttribute("href"));
+    expect(hrefs).toEqual(expect.arrayContaining(["/usage", "/agents/site-health", "/people/u_ada", "/library/doc-1", "/approvals"]));
+    expect(text).not.toContain("maintenance");
   });
 
-  test("a card whose route failed says so and the other cards still draw", async () => {
-    // What breaks if this is deleted: one refused read blanks the whole overview, or a failure is
-    // drawn as a department with no questions in it.
-    const container = await departmentPage({
-      [NAVIGATION_ADDRESS]: json(departmentConsole()),
-      "/api/v1/report/usage": json({ message: sentinel("refused"), trace_id: "t-1" }, 503),
-      "/api/v1/agents": json({ items: [{ agent_id: "site-health", display_name: sentinel("agent") }] }),
-      "/api/v1/report/questions": json({
-        start: "2019-02-26T09:00:00Z",
-        end: "2019-03-05T09:00:00Z",
-        gaps: [],
-        nothing_connected: false,
-        answered_when_nothing_connected: "unused",
-        answered_when_nothing_found: "unused",
-        unanswered_are_recorded: false,
-      }),
-    });
-
-    const text = container.textContent ?? "";
+  test("a block whose route failed says so in the API's words, and the other blocks still draw", async () => {
+    // What breaks if this is deleted: one refused read blanks the whole page, or a failure is drawn
+    // as a department with no questions in it.
+    const container = await departmentPage(
+      "/department",
+      everything({ "/api/v1/report/usage": json({ message: sentinel("refused"), trace_id: "t-1" }, 503) }),
+    );
+    const text = container.querySelector("main")?.textContent ?? "";
     expect(text).toContain(sentinel("refused"));
     expect(text).not.toContain("926");
     expect(text).toContain(sentinel("agent"));
   });
 
-  test("a usage answer with no axis offered is nothing to show, never a zero", async () => {
-    // What breaks if this is deleted: a reader offered no usage table is shown "Questions 0", which
-    // says their department asked nothing.
-    const container = await departmentPage({
-      [NAVIGATION_ADDRESS]: json(departmentConsole()),
-      "/api/v1/report/usage": json({ ...USAGE, departments: null, people: null, questions: null }),
-      "/api/v1/agents": json({ items: [] }),
-      "/api/v1/report/questions": json({
-        start: "2019-02-26T09:00:00Z",
-        end: "2019-03-05T09:00:00Z",
-        gaps: [],
-        nothing_connected: false,
-        answered_when_nothing_connected: "unused",
-        answered_when_nothing_found: "unused",
-        unanswered_are_recorded: false,
-      }),
-    });
-
-    const usage = [...container.querySelectorAll("section")].find(
-      (one) => one.querySelector("h2")?.textContent === USAGE_CARD,
+  test("a block whose route says it is not this reader's is left out, never drawn empty", async () => {
+    // What breaks if this is deleted: a department admin who may not open Knowledge shown a Knowledge
+    // block saying nothing is filed, which is a statement about documents they may not see.
+    const container = await departmentPage(
+      "/department",
+      everything({ "/api/v1/knowledge/documents": json({ message: "I could not find that.", trace_id: "t-2" }, 404) }),
     );
-    expect(usage?.textContent).toContain(NOTHING_TO_SHOW);
-    expect(usage?.querySelector("dl")).toBeNull();
+    expect(block(container, KNOWLEDGE_HEADING)).toBeUndefined();
+    expect(block(container, AGENTS_HEADING)).not.toBeUndefined();
+  });
+
+  test("a usage answer with no axis offered draws no figure, never a zero", async () => {
+    // What breaks if this is deleted: a reader offered no usage table is shown "0", which says their
+    // department asked nothing.
+    const container = await departmentPage(
+      "/department",
+      everything({ "/api/v1/report/usage": json({ ...USAGE, departments: null, people: null, questions: null }) }),
+    );
+    expect(container.querySelector(`[aria-label="${USAGE_HEADING}"]`)).toBeNull();
+  });
+
+  test("named from the directory when the Departments row is not the reader's, and the short name is only in Advanced", async () => {
+    // What breaks if this is deleted: a department admin who may not open Departments sees their
+    // department by its short name, or by no name at all.
+    const container = await departmentPage(
+      "/department/profile",
+      everything({ "/api/v1/govern/departments": json({ message: "I could not find that.", trace_id: "t-3" }, 404) }),
+    );
+    expect(container.querySelector("main h1")?.textContent).toBe(sentinel("directory name"));
+    expect(container.querySelector("main")?.textContent).toContain(PROFILE_ELSEWHERE);
+    const advanced = container.querySelector('main [data-slot="advanced"]')?.textContent ?? "";
+    expect(advanced).toContain("maintenance");
+    const outside = (container.querySelector("main")?.textContent ?? "").replace(advanced, "");
+    expect(outside).not.toContain("maintenance");
+    expect([...container.querySelectorAll("main button")].some((one) => one.textContent === "Rename")).toBe(false);
+  });
+
+  test("the Profile names the lead and teams and offers rename and retire where the API says the reader may", async () => {
+    // What breaks if this is deleted: the department's own acts missing from its page, or offered to
+    // a reader every route refuses.
+    const container = await departmentPage("/department/profile", everything({ "/api/v1/govern/scopes": json({ items: [], next_cursor: null }) }));
+    const text = container.querySelector("main")?.textContent ?? "";
+    expect(text).toContain("Lee Lead");
+    expect(text).toContain("Night shift");
+    const buttons = [...container.querySelectorAll("main button")].map((one) => one.textContent);
+    expect(buttons).toEqual(expect.arrayContaining(["Rename", "Retire"]));
+
+    const narrower = await departmentPage(
+      "/department/profile",
+      everything({
+        "/api/v1/govern/departments": json({ ...ORGANISATION, may_found: false, items: [{ ...ORGANISATION.items[0], shapeable: false }] }),
+        "/api/v1/govern/scopes": json({ items: [], next_cursor: null }),
+      }),
+    );
+    const fewer = [...narrower.querySelectorAll("main button")].map((one) => one.textContent);
+    expect(fewer).not.toContain("Rename");
+    expect(fewer).not.toContain("Retire");
+  });
+
+  test("About lists the audit trail's entries about this department alone, by who made them", async () => {
+    // What breaks if this is deleted: another department's history drawn on this one's page, or a
+    // change attributed to a reference nobody can read.
+    const entry = (subject: string, change: string) => ({
+      at: "2019-03-04T09:00:00Z",
+      action: "organisation",
+      actor_id: "u_ada",
+      subject_kind: "department",
+      subject_id: subject,
+      details: { change },
+    });
+    const container = await departmentPage(
+      "/department/about",
+      everything({
+        "/api/v1/audit": json({ items: [entry("maintenance", "renamed"), entry("maintenance_two", "retired")], next_cursor: null, order: "newest", actions: [], subject_kinds: [], actors: [] }),
+      }),
+    );
+    const rows = [...container.querySelectorAll("main tbody tr")].map((one) => one.textContent ?? "");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toContain("Renamed");
+    expect(rows[0]).toContain(sentinel("person"));
+  });
+
+  test("a company administrator who opens the address is sent to Departments", async () => {
+    // What breaks if this is deleted: the company console drawing one department it chose itself, or
+    // an empty page with nowhere to go.
+    const container = await departmentPage("/department", { [NAVIGATION_ADDRESS]: json(COMPANY_CONSOLE) });
+    expect(container.querySelector("main")?.textContent).toContain(NOT_A_DEPARTMENT_CONSOLE);
+    expect([...container.querySelectorAll("main a")].map((one) => one.getAttribute("href"))).toContain("/departments");
   });
 });

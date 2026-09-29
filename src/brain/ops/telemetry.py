@@ -175,8 +175,9 @@ unrecorded. See `A_TRACE_THAT_NAMES_TWO_SHAPES_NAMES_NONE`.
 (M3.4.2, M3.6.3).** The screen's score, the lane with the rule that chose it (`lane_basis`) and the
 agent with its stage come off `brain.gate.finish.FrontRecord`; the tier the executor classified and
 the step that settled it (`routed_tier`, `tier_basis`) come off the request's meter, where
-`brain.models.calls.ModelCalls.complete` noted them as it decided; the model and provider that
-answered were already here. Every one is a name, so the row says why a question ran where it did
+`brain.models.calls.ModelCalls.complete` noted them as it decided, or off the front half's own
+tier decision when no call was classified; the model and provider that answered were already
+here. Every one is a name, so the row says why a question ran where it did
 without holding a sentence, and nothing is recomputed afterwards by a classifier that may have
 changed. See `ROUTE_FIELDS`.
 
@@ -560,9 +561,10 @@ FRONT_HALF_FIELDS: Final[tuple[str, ...]] = (
     "lane_basis",
 )
 
-#: The tier the executor routed the request's model call to, and the step that settled it
-#: (M3.6.3). Their own slice because the front half does not decide them: the executor does,
-#: against the tier table it read, and notes them on the request's meter as it decides.
+#: The tier the request was routed to, and the step that settled it (M3.6.3). Their own slice
+#: because they are not the front half's alone: the executor classifies again against the tier
+#: table it read and notes its decision on the request's meter, and the front half's stands only
+#: where no call was classified (`brain.gate.answer.route_of`).
 ROUTE_FIELDS: Final[tuple[str, ...]] = ("routed_tier", "tier_basis")
 
 #: Every field a request record declares, in the order the record declares them.

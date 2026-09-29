@@ -111,6 +111,10 @@ and not only in front of the model. A cache hit enters none of them: nothing was
 **The route the model call took is read off the same meter (M3.6.3).** The executor notes the
 tier it classified on the request's `Meter` as it decides it, and `finish` hands `Meter.route` to
 the recorders beside the usage, so the row's tier is the one walked and never one re-derived.
+**A request no call was classified for carries the front half's tier**, which `FrontRecord` holds
+as ROUTE decided it. Until 2026-09-29 it carried none: the owner's install had four request rows,
+two with a routed lane, and not one with a tier, because no model call had been classified for
+either question the front half routed. See `THE_ROW_HOLDS_THE_LAST_ROUTING_DECISION_MADE`.
 
 **A record a connected source holds is answered from that source, read while the asker waits
 (M11.9.2, M11.5.1).** The index row the fast path found names the record; when the lane was handed
@@ -207,7 +211,7 @@ from brain.gate.provenance import (
 )
 from brain.gate.streaming import AnswerStream, Progress, at_tool_input_start, cache_hit
 from brain.knowledge.rows import RowRecord, RowRequest
-from brain.models.metering import Meter
+from brain.models.metering import Meter, ModelRoute
 
 log = structlog.get_logger(__name__)
 
@@ -274,6 +278,16 @@ ONE_SOURCE_OR_NONE: Final = (
     "which is what a connector's page counts as a question that read it; a request that read "
     "two would file one source's read under the other if it named either, so it names none, as "
     "a request answered by two models names no model."
+)
+
+#: Why the row's tier is the executor's when a call was classified and the front half's otherwise.
+THE_ROW_HOLDS_THE_LAST_ROUTING_DECISION_MADE: Final = (
+    "The front half classifies a tier at ROUTE before the lane runs, and the executor classifies "
+    "again from the messages it is about to send when a model is called. The row holds the "
+    "executor's when it classified a call, because that is where the call was sent, and the "
+    "front half's when it classified none: a question answered by a rule, abstained on before a "
+    "model or kept on the fast lane was still routed, and a row with no tier left that decision "
+    "to be inferred from the lane afterwards, which is what M3.6.3 forbids."
 )
 
 #: The lane a request that called no model is recorded under. See the constant above.
@@ -415,6 +429,21 @@ def served_from(answer: FastLaneAnswer, payload: ChannelPayload) -> str:
     return ""
 
 
+def route_of(meter: Meter, front: FrontRecord | None) -> ModelRoute | None:
+    """Where the request was routed and why: the executor's decision when it classified a call,
+    the front half's when it classified none, or None when neither routed it (a cache hit, or a
+    request that never passed the front half). See `THE_ROW_HOLDS_THE_LAST_ROUTING_DECISION_MADE`.
+
+    Asked of `Meter.classified` rather than of `Meter.route`, which is None for two calls that
+    disagree as well, and a disagreement is the executor's answer, not an absence of one.
+    """
+    if meter.classified():
+        return meter.route()
+    if front is None or front.routed_tier is None or front.tier_basis is None:
+        return None
+    return ModelRoute(tier=front.routed_tier, basis=front.tier_basis)
+
+
 async def answer_lane(
     question: str,
     *,
@@ -525,8 +554,8 @@ async def answer_lane(
                 agent_id=None
                 if model is None or model.agent is None
                 else model.agent.record.agent_id,
-                # Where the executor routed the model call, as it decided it (M3.6.3).
-                route=meter.route(),
+                # Where the request was routed, as it was decided (M3.6.3).
+                route=route_of(meter, front),
                 # The skills the model step offered (M27.15.9) and the one source read (M27.1.5).
                 skills=calls.skills,
                 connector=calls.connector,
