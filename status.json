@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-29T19:11:04.371347+00:00",
-  "commit": "9667c7b7",
-  "commit_subject": "A leash set to Autonomous on a tool that drafts, writes, sends or moves money is held on every run at the rung its side effect allows (#283)",
+  "generated_at": "2026-09-29T21:12:43.447128+00:00",
+  "commit": "b9b40e4e",
+  "commit_subject": "Email is a channel an install can connect: signed mail in, answers out by the install's own relay, and Connect Email one screen at a time (#285)",
   "total": 1584,
   "done": 469,
   "percent": 29.6,
@@ -42,9 +42,9 @@
       "done": 117,
       "percent": 44.2,
       "in_progress": 13,
-      "ready_for_testing": 2,
+      "ready_for_testing": 3,
       "blocked": 17,
-      "open": 116,
+      "open": 115,
       "acts": 0,
       "decided": 20
     },
@@ -1115,10 +1115,15 @@
       "why": "Wave 2 batch 2, Channels screen and identity binding (CH2)",
       "updated": "2026-09-28"
     },
+    "M10.5.6": {
+      "status": "READY FOR TESTING",
+      "why": "email is connectable (M10/channel-email): a signed envelope in, a reply out by the install's own relay, Connect Email steps with the receiving script, and an install check; the owner's real mail proves the vendor's half",
+      "updated": "2026-09-30"
+    },
     "M10.6.1": {
       "status": "IN PROGRESS",
-      "why": "the webhook and Lark wires are live (PR #105; L1, merged d426e3d3); every other vendor's wire comes with its own package",
-      "updated": "2026-09-28"
+      "why": "the webhook, Lark and email wires are live (PR #105; L1, merged d426e3d3; M10/channel-email); Slack, Teams, Telegram and WhatsApp each come with their own package",
+      "updated": "2026-09-30"
     },
     "M11.4.9": {
       "status": "IN PROGRESS",
