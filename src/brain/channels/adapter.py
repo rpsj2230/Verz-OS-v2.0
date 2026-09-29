@@ -273,6 +273,12 @@ GUIDE_NAME: Final = "GUIDE"
 SECRET_ASK: Final = "secret"  # noqa: S105  a field name, not a secret
 
 #: Why a channel's steps end with its record's form.
+A_SECRET_OF_SEVERAL_PARTS_IS_KEPT_WHOLE: Final = (
+    "A channel whose vendor needs more than one secret keeps them together in its one vault "
+    "slot, written as a whole: every part is given at once or none is, so a record never holds "
+    "one part new and another from before, and the route never reads a secret back to merge it."
+)
+
 A_CHANNEL_S_STEPS_END_WITH_ITS_OWN_FORM: Final = (
     "A channel's connect steps end on the screen that saves its record, and that screen asks for "
     "exactly the fields its wire takes and its secret, so a field the wire gains is a field the "
@@ -390,7 +396,7 @@ def channel_guides() -> Mapping[Channel, tuple[GuideStep, ...]]:
             msg = f"{module.__name__} declares connect steps and no wire they could set up"
             raise ChannelRegistryError(msg)
         steps = tuple(guide)
-        wanted = (*wire.tenant_fields, SECRET_ASK)
+        wanted = (*wire.tenant_fields, *(wire.secret_parts or (SECRET_ASK,)))
         if not steps or tuple(steps[-1].asks) != wanted:
             msg = (
                 f"{wire.channel}'s steps end asking for {list(steps[-1].asks) if steps else []}, "
@@ -524,6 +530,17 @@ class ChannelWire(Protocol):
     @property
     def tenant_fields(self) -> tuple[str, ...]:
         """The tenant identifiers a record for this channel must hold, by name."""
+        ...
+
+    @property
+    def secret_parts(self) -> tuple[str, ...]:
+        """The named values this channel's secret holds, or empty when it is one value.
+
+        A vendor that signs what it sends with one secret and takes its replies on another has
+        two, and both belong in the vault: the route keeps them together, as one JSON object in
+        the channel's one slot, and `verify` and `request_for` each read the part they need. See
+        `A_SECRET_OF_SEVERAL_PARTS_IS_KEPT_WHOLE`.
+        """
         ...
 
     def verify(self, arrived: Arrived, secret: str, now: datetime) -> Arrived:

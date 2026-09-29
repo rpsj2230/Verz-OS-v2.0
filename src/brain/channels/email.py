@@ -679,6 +679,11 @@ class EmailWire:
     def tenant_fields(self) -> tuple[str, ...]:
         return (ADDRESS,)
 
+    @property
+    def secret_parts(self) -> tuple[str, ...]:
+        """One secret, so no parts."""
+        return ()
+
     def verify(self, arrived: Arrived, secret: str, now: datetime) -> Arrived:
         """The webhook channel's signature over the time and the exact bytes, and nothing read."""
         verify_signed(

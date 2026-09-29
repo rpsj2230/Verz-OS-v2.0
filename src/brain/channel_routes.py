@@ -313,6 +313,8 @@ class ChannelView(BaseModel):
     steps: list[GuideStepView]
     #: The tenant fields its record takes.
     tenant_fields: list[str]
+    #: The parts its secret holds, each typed on its own; empty when the secret is one value.
+    secret_parts: list[str]
     configured: bool
     enabled: bool
     tenant: dict[str, str]
@@ -339,6 +341,8 @@ class ChannelAsked(BaseModel):
     enabled: bool
     tenant: dict[str, str] = Field(default_factory=dict, max_length=8)
     secret: str | None = Field(default=None, max_length=MAX_CREDENTIAL_CHARS)
+    #: For a channel whose secret has parts, every part at once, by name; see `secret_problems`.
+    secret_parts: dict[str, str] | None = Field(default=None, max_length=8)
 
 
 class SwitchAsked(BaseModel):
@@ -723,6 +727,39 @@ def tenant_problems(wire: ChannelWire, tenant: Mapping[str, str]) -> list[str]:
     return problems
 
 
+def secret_problems(wire: ChannelWire, body: ChannelAsked) -> list[str]:
+    """What is wrong with the secret asked: the wrong shape for this channel, or a part missing.
+
+    A channel with parts takes every part at once or none, and never a single `secret`; one with
+    none takes `secret` alone. See `brain.channels.adapter.A_SECRET_OF_SEVERAL_PARTS_IS_KEPT_WHOLE`.
+    """
+    parts = wire.secret_parts
+    if not parts:
+        return [] if body.secret_parts is None else ["this channel's secret is one value"]
+    if body.secret is not None:
+        return [f"this channel's secret is given as its parts: {', '.join(parts)}"]
+    if body.secret_parts is None:
+        return []
+    given = body.secret_parts
+    problems = [
+        f"{name} is not a part of this channel's secret" for name in given if name not in parts
+    ]
+    for name in parts:
+        value = given.get(name, "")
+        if not value.strip() or len(value) > MAX_CREDENTIAL_CHARS:
+            problems.append(f"{name} is needed with the others, as one line")
+    return problems
+
+
+def secret_to_keep(wire: ChannelWire, body: ChannelAsked) -> str | None:
+    """The value the channel's slot keeps: the secret, or its parts as one JSON object."""
+    if not wire.secret_parts or body.secret_parts is None:
+        return body.secret
+    return json.dumps(
+        {name: body.secret_parts[name] for name in wire.secret_parts}, separators=(",", ":")
+    )
+
+
 def _saved(name: str) -> str:
     try:
         return value_of(name)
@@ -789,6 +826,7 @@ async def _view(
         events_address=events_address_of(channel),
         steps=steps_of(channel),
         tenant_fields=list(wire.tenant_fields) if wire else [],
+        secret_parts=list(wire.secret_parts) if wire else [],
         configured=record is not None,
         enabled=record is not None and record.enabled,
         tenant=dict(record.tenant) if record else {},
@@ -944,15 +982,16 @@ async def configure(
 ) -> ChannelView | JSONResponse:
     """Keep this channel's record, and its secret first when one is given."""
     channel, wire = _managed_wire(name, asked)
-    problems = tenant_problems(wire, body.tenant)
+    problems = tenant_problems(wire, body.tenant) + secret_problems(wire, body)
     if problems:
         return _error(422, " ".join(problems))
     actor = asked.caller.principal.id
-    if body.secret is not None:
+    kept = secret_to_keep(wire, body)
+    if kept is not None:
         try:
             await credentials_of(request).keep(
                 channel_secret_slot(channel),
-                body.secret,
+                kept,
                 actor=actor,
                 trace_id=trace_of_request(),
                 ent_hash=asked.reach.ent_hash(),
